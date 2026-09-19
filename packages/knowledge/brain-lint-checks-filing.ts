@@ -56,57 +56,42 @@ export const CATEGORY_TO_BRAIN_SUBDIR: Record<string, string> = {
 
 // ---------- checkFrontmatter ----------
 
-export function checkFrontmatter(forgeRoot: string): Finding[] {
+/**
+ * The per-theme frontmatter checks (required fields, category whitelist,
+ * created_at/updated_at order) — the ONE implementation both the full-scan
+ * `checkFrontmatter` below and `lintThemeFiles`' per-KB own-theme lens
+ * (`brain-lint.ts`, Studio's list/detail routes) apply to a theme file. A
+ * second, independently-maintained copy in `lintThemeFiles` is exactly the
+ * drift the M1-D fix (CLI/Studio agreement) exists to rule out. `parsed` is
+ * `null` when the theme failed to parse at all (gray-matter threw).
+ */
+export function checkFrontmatterForFile(file: string, parsed: ReturnType<typeof parseTheme>): Finding[] {
+  if (!parsed) {
+    return [{ category: 'error', file, message: 'unparseable frontmatter (gray-matter failed)', check: 'checkFrontmatter' }];
+  }
   const findings: Finding[] = [];
-  const brainRoot = join(forgeRoot, 'brain');
-  for (const file of readThemeFiles(brainRoot)) {
-    const parsed = parseTheme(file);
-    if (!parsed) {
-      findings.push({
-        category: 'error',
-        file,
-        message: 'unparseable frontmatter (gray-matter failed)',
-        check: 'checkFrontmatter',
-      });
-      continue;
+  const { data } = parsed;
+  for (const field of REQUIRED_FRONTMATTER_FIELDS) {
+    if (data[field] === undefined || data[field] === null || data[field] === '') {
+      findings.push({ category: 'error', file, message: `missing required frontmatter field: ${field}`, check: 'checkFrontmatter' });
     }
-    const { data } = parsed;
-    for (const field of REQUIRED_FRONTMATTER_FIELDS) {
-      if (data[field] === undefined || data[field] === null || data[field] === '') {
-        findings.push({
-          category: 'error',
-          file,
-          message: `missing required frontmatter field: ${field}`,
-          check: 'checkFrontmatter',
-        });
-      }
-    }
-    if (data.category && !ALLOWED_CATEGORIES.has(String(data.category))) {
-      findings.push({
-        category: 'error',
-        file,
-        message: `category "${data.category}" not in whitelist {${[...ALLOWED_CATEGORIES].join('|')}}`,
-        check: 'checkFrontmatter',
-      });
-    }
-    if (data.created_at && data.updated_at) {
-      try {
-        const c = new Date(String(data.created_at)).getTime();
-        const u = new Date(String(data.updated_at)).getTime();
-        if (!Number.isNaN(c) && !Number.isNaN(u) && c > u) {
-          findings.push({
-            category: 'error',
-            file,
-            message: 'created_at > updated_at',
-            check: 'checkFrontmatter',
-          });
-        }
-      } catch {
-        /* ignore parse failure; not load-bearing */
-      }
+  }
+  if (data.category && !ALLOWED_CATEGORIES.has(String(data.category))) {
+    findings.push({ category: 'error', file, message: `category "${data.category}" not in whitelist {${[...ALLOWED_CATEGORIES].join('|')}}`, check: 'checkFrontmatter' });
+  }
+  if (data.created_at && data.updated_at) {
+    const c = new Date(String(data.created_at)).getTime();
+    const u = new Date(String(data.updated_at)).getTime();
+    if (!Number.isNaN(c) && !Number.isNaN(u) && c > u) {
+      findings.push({ category: 'error', file, message: 'created_at > updated_at', check: 'checkFrontmatter' });
     }
   }
   return findings;
+}
+
+export function checkFrontmatter(forgeRoot: string): Finding[] {
+  const brainRoot = join(forgeRoot, 'brain');
+  return readThemeFiles(brainRoot).flatMap((file) => checkFrontmatterForFile(file, parseTheme(file)));
 }
 
 // ---------- checkIndexSync ----------

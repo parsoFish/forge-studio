@@ -44,9 +44,9 @@ import {
   ALLOWED_CATEGORIES,
   CATEGORY_TO_BRAIN_SUBDIR,
   CATEGORY_TO_INDEX_FILE,
-  REQUIRED_FRONTMATTER_FIELDS,
   checkCategoryScope,
   checkFrontmatter,
+  checkFrontmatterForFile,
   checkIndexSync,
   checkProjectBrainIndexes,
   readIndexEntries,
@@ -284,26 +284,15 @@ export function lintThemeFiles(forgeRoot: string, files: string[]): Finding[] {
   for (const file of files) {
     const parsed = parseTheme(file);
     if (!parsed) {
-      findings.push({ category: 'error', file, message: 'unparseable frontmatter (gray-matter failed)', check: 'checkFrontmatter' });
+      findings.push(...checkFrontmatterForFile(file, null));
       continue;
     }
+    // checkFrontmatterForFile is the ONE frontmatter-check implementation
+    // (brain-lint-checks-filing.ts) — shared with the full-scan checkFrontmatter,
+    // never a second copy of the field/category/date-order rules here.
+    findings.push(...checkFrontmatterForFile(file, parsed));
     const { data } = parsed;
-    for (const field of REQUIRED_FRONTMATTER_FIELDS) {
-      if (data[field] === undefined || data[field] === null || data[field] === '') {
-        findings.push({ category: 'error', file, message: `missing required frontmatter field: ${field}`, check: 'checkFrontmatter' });
-      }
-    }
     const cat = String(data.category ?? '');
-    if (data.category && !ALLOWED_CATEGORIES.has(cat)) {
-      findings.push({ category: 'error', file, message: `category "${data.category}" not in whitelist {${[...ALLOWED_CATEGORIES].join('|')}}`, check: 'checkFrontmatter' });
-    }
-    if (data.created_at && data.updated_at) {
-      const c = new Date(String(data.created_at)).getTime();
-      const u = new Date(String(data.updated_at)).getTime();
-      if (!Number.isNaN(c) && !Number.isNaN(u) && c > u) {
-        findings.push({ category: 'error', file, message: 'created_at > updated_at', check: 'checkFrontmatter' });
-      }
-    }
     for (const link of extractLinks(parsed.content).relLinks) {
       if (!existsSync(resolve(dirname(file), link))) {
         findings.push({ category: 'error', file, message: `broken link: ${link}`, check: 'checkSourceLinks' });
