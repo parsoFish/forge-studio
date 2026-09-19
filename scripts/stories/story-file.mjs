@@ -14,6 +14,8 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { trackedProjectIds } from './tracked-projects.mjs';
+import { storyFixtureNames } from './sweep.mjs';
+import { FIXTURE_NAME } from './fixture-ground.mjs';
 import { fail, warn, requireNonEmptyString } from './story-schema-fail.mjs';
 import {
   MAX_DECLARED_WAIT_MS,
@@ -113,6 +115,31 @@ export function validateStory(raw) {
       if (rel.startsWith('/') || rel.split('/').includes('..')) {
         fail(`ground.seedIgnoredBorn[${i}]`, `expected a relative path inside the ground, got ${JSON.stringify(rel)}`);
       }
+    }
+  }
+
+  // M7-D — `ground.fixture` names a forge-owned FIXTURE ground provisioned
+  // from `tests/stories/grounds/<fixture>/seed/`, rather than a real project
+  // under `projects/`. Validated here on TWO counts, both namespace guards:
+  // the name itself must be a safe single path segment (`FIXTURE_NAME`, the
+  // same shape `fixture-ground.mjs` refuses on at provisioning time — this
+  // check exists so a bad name is caught at LOAD rather than after a costed
+  // run has booted a browser), and `ground.project` must be inside this
+  // story's own reserved sweep namespace (`storyFixtureNames`) — the guard
+  // that keeps a typo'd project from ever being provisioned over, or later
+  // swept as though it were this story's own fixture.
+  if (g.fixture !== undefined) {
+    requireNonEmptyString(g.fixture, 'ground.fixture');
+    if (!FIXTURE_NAME.test(g.fixture)) {
+      fail('ground.fixture', `expected a safe fixture name matching ${FIXTURE_NAME}, got ${JSON.stringify(g.fixture)}`);
+    }
+    const names = storyFixtureNames(raw.id);
+    if (!names.includes(g.project)) {
+      fail(
+        'ground.fixture',
+        `declares project ${JSON.stringify(g.project)}, which is not in this story's own fixture namespace ` +
+        `(${names.join(', ')}) — a fixture ground can only ever be provisioned into a project this story already owns`,
+      );
     }
   }
 
@@ -362,6 +389,11 @@ export function validateStory(raw) {
       ...(g.expectedChanges
         ? { expectedChanges: Object.freeze(g.expectedChanges.map((e) => Object.freeze({ path: e.path, change: e.change }))) }
         : {}),
+      // M7-D — named here too, for the same 7.6.82 reason: `fixture` is
+      // validated above and must ride in the frozen ground the runner reads,
+      // or the story would validate and then silently run against a real
+      // ground project with no fixture ever provisioned.
+      ...(g.fixture !== undefined ? { fixture: g.fixture } : {}),
     }),
     docs: Object.freeze({ kind: d.kind, title: d.title }),
     beats: Object.freeze(beats),

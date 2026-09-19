@@ -693,3 +693,47 @@ test('7.6.146: sweepProductFixtures clears the artefacts of the initiative it cl
     'and the wi container is emptied — residue.sh gates on this count, so leaving it scores 1');
   rmSync(root, { recursive: true, force: true });
 });
+
+/**
+ * M7-D — the trailing sweep must NOT remove a FIXTURE ground it is standing
+ * on top of when it runs.
+ *
+ * `sweepProductFixtures`'s existing contract removes every `story-<id>`
+ * project fixture unconditionally (`productFixturePathsFor`), because today
+ * that fixture is always the run's OWN debris. A fixture ground changes that:
+ * `run.mjs` provisions `projects/story-<id>` itself at the start of the run and
+ * `teardownFixtureGround` — not the trailing sweep — is what is meant to remove
+ * it, AFTER the fence and the verdict have both read it. `applyFence`'s
+ * `defer` already holds the ground's Brain 3 sub-wiki the same way ("held,
+ * not kept" — removed once the verdict is recorded, by a LATER, NAMED call,
+ * never folded into the general sweep). `keepProjects` is that same hold applied to
+ * the project directory itself: an opt-in list, so every story that has never
+ * heard of a fixture keeps today's behaviour exactly.
+ *
+ * The Brain 3 profile is NOT part of that hold — nothing provisions or owns it
+ * for a fixture ground, so it stays swept, unconditionally, same as today.
+ */
+test('M7-D: sweepProductFixtures KEEPS a project fixture named in keepProjects, but still sweeps its Brain 3 profile', () => {
+  const root = scratch();
+  const since = Date.now() - 60_000;
+
+  mkdirSync(join(root, 'projects', 'story-s8'), { recursive: true });
+  writeFileSync(join(root, 'projects', 'story-s8', 'marker.txt'), 'keep me');
+  mkdirSync(join(root, 'brain', 'projects', 'story-s8'), { recursive: true });
+  writeFileSync(join(root, 'brain', 'projects', 'story-s8', 'profile.md'), 'x');
+
+  const r = sweepProductFixtures('S8', root, {
+    sinceMs: since, evidenceDir: join(root, '_evidence'), keepProjects: ['story-s8'],
+  }) as any;
+
+  assert.equal(existsSync(join(root, 'projects', 'story-s8')), true,
+    'a fixture ground held by keepProjects must survive the trailing sweep — it is the run\'s own ground');
+  assert.equal(readFileSync(join(root, 'projects', 'story-s8', 'marker.txt'), 'utf8'), 'keep me');
+  assert.equal(existsSync(join(root, 'brain', 'projects', 'story-s8')), false,
+    'the Brain 3 profile is not held — nothing owns it for a fixture ground');
+  assert.ok(
+    r.lines.some((l: string) => l.includes('KEPT') && l.includes('projects/story-s8')),
+    `expected a KEPT line naming projects/story-s8. Got:\n${r.lines.join('\n')}`,
+  );
+  rmSync(root, { recursive: true, force: true });
+});

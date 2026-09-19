@@ -46,6 +46,7 @@ import {
 import { ownGroundManifest } from './ground-hash.mjs';
 import { suiteLockVerdict } from './lock-guard.mjs';
 import { sweepStoryResidue } from './sweep.mjs';
+import { provisionFixtureGrounds, teardownFixtureGround } from './fixture-ground.mjs';
 import { captureAndSweepAgentLogs } from './sweep-agent-logs.mjs';
 import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight } from './sweep-teardown.mjs';
 import {
@@ -271,6 +272,20 @@ async function main() {
   // What the leading sweep removed, so the teardown can put back anything the
   // run never regenerated (T1 ruling 594, half 2).
   const sweptPaths = [];
+  // The grounds `provisionFixtureGrounds` provisioned in THIS call.
+  // `runStory` tears down its own ground on every path it reaches, but a
+  // bridge refusal or throw before a later story's turn — or a throw inside
+  // an EARLIER story's own run — would otherwise leave an already-provisioned
+  // ground standing; declared outside the `try` so the abort backstop in
+  // `finally` can always see it.
+  let provisionedGrounds = [];
+  // Which of `provisionedGrounds`' stories actually STARTED. A story that
+  // started and then crashed
+  // mid-beats keeps its ground for evidence; only a ground whose story was
+  // NEVER ENTERED is the backstop's to remove. Written immediately before
+  // `runStory` is awaited (see the loop below) so there is no gap between
+  // "marked started" and "actually starting" a crash could hide inside.
+  const startedStoryIds = new Set();
   try {
     // 4. Leading sweep, before the bridge, so a run cannot inherit dead state.
     for (const s of stories) {
@@ -294,37 +309,77 @@ async function main() {
       }
     }
 
-    // 5. Bridge identity — never drive a bridge serving another tree.
-    const { probeBridgeIdentity } = await import(
-      pathToFileURL(join(ROOT, 'apps', 'forge', 'forge-watch.ts')).href
-    );
-    const identity = await probeBridgeIdentity(BRIDGE_HEALTH);
-    const decision = decideStoryBridge(identity, { ownRoot: ROOT, cwdOf: readProcCwd });
-
-    let uiUrl;
-    if (decision === 'refuse') {
-      throw refusalError(identity, readProcCwd(identity.pid), ROOT);
-    } else if (decision === 'boot') {
-      console.log('[stories] 4123 is free — booting our own bridge from this tree');
-      // 590(i): say whether this bridge can reach the community sources at all.
-      // A run whose refresh refuses for want of a credential and a run whose
-      // refresh refuses because the PRODUCT refused look identical in a beat's
-      // verdict; only this line separates them. The token itself is never
-      // printed — `note` carries the fact, never the value.
-      // ONE read of the credential per boot: the options are built here, the
-      // fact is logged from them, and the SAME object is what gets spawned.
-      const bridgeOpts = bridgeSpawnOptions(ROOT);
-      console.log(`[stories] ${bridgeOpts.note}`);
-      const booted = await bootOwnBridge(ROOT, bridgeOpts);
-      bridgeProc = booted.proc;
-      uiUrl = booted.uiUrl;
-    } else {
-      console.log(`[stories] reusing this tree's own bridge (pid ${identity.pid})`);
-      uiUrl = 'http://localhost:4124';
+    // 4b. Fixture grounds — AFTER the leading sweep (provisioning before it
+    //     would have the sweep remove the ground it just wrote) and BEFORE the
+    //     bridge identity probe (a beat can drive the browser to a fixture
+    //     ground only once it exists, and provisioning after the bridge is up
+    //     would race a driven browser against a `git init` still in flight).
+    //     A refusal here writes nothing FOR THE WHOLE BATCH
+    //     (`provisionFixtureGrounds`'s own contract) and must
+    //     cost nothing either: it stops the run before any story's beats,
+    //     same as every other preflight refusal above. ONE call for every
+    //     story, not a loop over the singular: a loop has no batch-level
+    //     rollback, so a LATER story's refusal left every EARLIER story's
+    //     ground standing.
+    const provisionResult = provisionFixtureGrounds(ROOT, stories);
+    provisionedGrounds = provisionResult.provisioned;
+    for (const p of provisionResult.provisioned) {
+      const fixture = stories.find((s) => s.id === p.storyId)?.ground?.fixture;
+      console.log(
+        `[stories] fixture ground: provisioned projects/${p.project} from ` +
+        `tests/stories/grounds/${fixture}/seed — digest ${p.digest}, commit ${p.commit}`,
+      );
+    }
+    if (provisionResult.refused !== null) {
+      console.error(`[stories] REFUSING ${provisionResult.refused.storyId}: ${provisionResult.refused.message}`);
+      exitCode = 1;
+      // A rollback `provisionFixtureGrounds` could not finish is named, not
+      // left for someone to notice by its absence.
+      for (const f of provisionResult.rollbackFailures) {
+        console.warn(
+          `[stories] fixture ground: could not roll back projects/${f.project}: ${f.error} — ` +
+          'the leading sweep of the next run that includes its story removes it',
+        );
+      }
     }
 
-    for (const story of stories) {
-      exitCode = (await runStory(story, uiUrl, startedMs, args.ceilingUsd)) || exitCode;
+    if (provisionResult.refused === null) {
+      // 5. Bridge identity — never drive a bridge serving another tree.
+      const { probeBridgeIdentity } = await import(
+        pathToFileURL(join(ROOT, 'apps', 'forge', 'forge-watch.ts')).href
+      );
+      const identity = await probeBridgeIdentity(BRIDGE_HEALTH);
+      const decision = decideStoryBridge(identity, { ownRoot: ROOT, cwdOf: readProcCwd });
+
+      let uiUrl;
+      if (decision === 'refuse') {
+        throw refusalError(identity, readProcCwd(identity.pid), ROOT);
+      } else if (decision === 'boot') {
+        console.log('[stories] 4123 is free — booting our own bridge from this tree');
+        // 590(i): say whether this bridge can reach the community sources at all.
+        // A run whose refresh refuses for want of a credential and a run whose
+        // refresh refuses because the PRODUCT refused look identical in a beat's
+        // verdict; only this line separates them. The token itself is never
+        // printed — `note` carries the fact, never the value.
+        // ONE read of the credential per boot: the options are built here, the
+        // fact is logged from them, and the SAME object is what gets spawned.
+        const bridgeOpts = bridgeSpawnOptions(ROOT);
+        console.log(`[stories] ${bridgeOpts.note}`);
+        const booted = await bootOwnBridge(ROOT, bridgeOpts);
+        bridgeProc = booted.proc;
+        uiUrl = booted.uiUrl;
+      } else {
+        console.log(`[stories] reusing this tree's own bridge (pid ${identity.pid})`);
+        uiUrl = 'http://localhost:4124';
+      }
+
+      for (const story of stories) {
+        // Marked IMMEDIATELY before the await — no code runs between this and
+        // `runStory` actually starting, so a crash inside it can never leave
+        // a gap where the story still reads as unstarted.
+        startedStoryIds.add(story.id);
+        exitCode = (await runStory(story, uiUrl, startedMs, args.ceilingUsd)) || exitCode;
+      }
     }
   } finally {
     // THE SWEEP'S PAIRED RESTORE. `demos/stories/<id>/` was deleted before the
@@ -385,6 +440,47 @@ async function main() {
     } catch (err) {
       // A teardown that throws loses the verdict the run just produced.
       console.warn(`[stories] run-end reap failed: ${err?.message ?? err}`);
+    }
+    // The fixture-ground abort backstop. `runStory` already tears down its OWN
+    // ground on every path it reaches ONCE STARTED (a green run, a red one, a
+    // spend halt) — so this only ever has work to do for a story whose ground
+    // was provisioned in THIS batch but whose own `runStory` was NEVER
+    // ENTERED: the bridge `refuse` throw, a `bootOwnBridge` failure, or an
+    // earlier story's `runStory` throwing before a later story's turn. A
+    // story that DID start and then crashed mid-beats keeps its ground —
+    // deleting it here would destroy evidence (`_architect/<sid>/…` and
+    // friends) before anything reads it.
+    // After the agent reap above, so nothing is still writing into a ground
+    // this might remove. Wrapped in its own try/catch, same as the reap
+    // block above and for the same reason: a throw here must not be able to
+    // skip `await release()` below it.
+    try {
+      for (const p of provisionedGrounds) {
+        if (startedStoryIds.has(p.storyId)) {
+          // A started story's own `runStory` tears its ground down on every
+          // path it reaches, so "started" alone does not mean the ground is
+          // still there. Only a ground still ON DISK gets the line — a report
+          // that speaks whether or not the thing it names is true is the
+          // `forge-e8dn` class.
+          if (existsSync(join(ROOT, 'projects', p.project))) {
+            console.log(
+              `[stories] fixture ground: projects/${p.project} LEFT for evidence — ` +
+              `the leading sweep of the next run that includes ${p.storyId} removes it`,
+            );
+          }
+          continue;
+        }
+        const t = teardownFixtureGround(ROOT, { storyId: p.storyId, project: p.project });
+        if (t.removed) console.log(`[stories] fixture ground: torn down projects/${p.project}`);
+        else if (t.error !== undefined) {
+          console.warn(
+            `[stories] fixture ground: could not tear down projects/${p.project}: ${t.error} — ` +
+            `the leading sweep of the next run that includes ${p.storyId} removes it`,
+          );
+        } else console.log(`[stories] fixture ground: projects/${p.project} already absent`);
+      }
+    } catch (err) {
+      console.warn(`[stories] fixture-ground backstop failed: ${err?.message ?? err}`);
     }
     if (bridgeProc !== null) {
       try {
