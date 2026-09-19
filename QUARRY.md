@@ -119,10 +119,10 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/brain-lint-checks-filing.ts | knowledge | verbatim | 326 |
 | packages/knowledge/brain-lint-checks-graph.ts | knowledge | verbatim | 247 |
 | packages/knowledge/brain-lint-checks-integrity.ts | knowledge | verbatim | 484 |
-| packages/knowledge/brain-lint-checks-truth.ts | knowledge | verbatim | 135 |
+| packages/knowledge/brain-lint-checks-truth.ts | knowledge | verbatim | 207 |
 | packages/knowledge/brain-lint-theme-paths.ts | knowledge | verbatim | 145 |
 | packages/knowledge/brain-lint-types.ts | knowledge | verbatim | 54 |
-| packages/knowledge/brain-lint.ts | knowledge | verbatim | 660 |
+| packages/knowledge/brain-lint.ts | knowledge | verbatim | 669 |
 | packages/flows/bridge-hooks.ts | flows | verbatim | 397 |
 | packages/flows/bridge-recovery.ts | flows | verbatim | 258 |
 | packages/sessions/bridge-studio-sessions-affordance-shell.ts | sessions | rewritten | 272 |

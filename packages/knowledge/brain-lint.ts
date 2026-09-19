@@ -67,7 +67,11 @@ import {
   danglingEdgeFindings,
   duplicateThemeFindings,
 } from './brain-lint-checks-graph.ts';
-import { brainTruthRates, checkThemeTruth, formatTruthfulnessLines } from './brain-lint-checks-truth.ts';
+import {
+  brainTruthRates,
+  checkThemeTruth,
+  formatTruthfulnessLines,
+} from './brain-lint-checks-truth.ts';
 
 // THE SPLIT KEPT THIS PATH (M4 step 4). 27 files across packages/, cli/, apps/
 // and scripts/ import `brain-lint.ts` directly — `packages/knowledge/index.ts`
@@ -127,9 +131,14 @@ export {
   duplicateThemeFindings,
 } from './brain-lint-checks-graph.ts';
 export {
-  brainTruthRates, checkThemeTruth, extractThemeReferences, formatTruthfulnessLines,
-  themeTruth, FORGE_PROVENANCE_ROOTS, type ThemeTruth, type BrainTruthRate,
+  brainTruthRates,
+  checkThemeTruth,
+  extractThemeReferences,
+  formatTruthfulnessLines,
+  themeTruth,
+  FORGE_PROVENANCE_ROOTS,
 } from './brain-lint-checks-truth.ts';
+export type { ThemeTruth, BrainTruthRate } from './brain-lint-checks-truth.ts';
 
 /**
  * R6-08 4on (F3 hardening) — the single source of truth for the 12 full-scope
