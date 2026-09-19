@@ -33,6 +33,13 @@ test('classifyFinding: AUTO tier — deterministic fixes', () => {
   assert.equal(classifyFinding(cf('checkCategoryScope', 'category "pattern" belongs in brain/cycles/themes/')).resolution, 'auto');
   assert.equal(classifyFinding(cf('checkFrontmatter', 'created_at > updated_at')).resolution, 'auto');
   assert.equal(classifyFinding(cf('checkFrontmatter', 'missing required frontmatter field: updated_at')).resolution, 'auto');
+  // forge-8vfn.5.1: a missing category index is derived data (heading + a
+  // link per theme) — brain-fix-auto.ts's ensureLinked already creates one
+  // on demand, so this is auto-tier, never dispatched to brain-fix (whose
+  // SKILL.md forbids it from creating files) and carries no fixHint.
+  const indexMissing = classifyFinding(cf('checkIndexSync', 'category index missing: brain/cycles/patterns.md'));
+  assert.equal(indexMissing.resolution, 'auto');
+  assert.equal(indexMissing.fixHint, undefined);
 });
 
 test('classifyFinding: AGENT tier — LLM-resolvable, carries a fixHint', () => {
@@ -43,7 +50,6 @@ test('classifyFinding: AGENT tier — LLM-resolvable, carries a fixHint', () => 
     ['checkSourceLinks', 'broken link: ../x.md'],
     ['checkStaleness', 'stale citation (missing): orchestrator/gone.ts'],
     ['checkLengthSoftCap', 'theme too long: 142 body lines (hard cap 100)'],
-    ['checkIndexSync', 'category index missing: brain/cycles/patterns.md'],
   ] as const) {
     const r = classifyFinding(cf(m[0], m[1]));
     assert.equal(r.resolution, 'agent', `${m[1]} → agent`);
