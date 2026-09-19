@@ -1146,7 +1146,24 @@ is what this contract reads — but it cannot be the only distinguisher.
   stands on. The badge is read-only ON PURPOSE: `apps/studio` imports contracts
   only (§0), so the derivation lives in `@forge/flows` and the builder renders
   its answer — a control here would be a second source of truth for the same
-  fact, which is what `flows-25` was. Each row is a real anchor —
+  fact, which is what `flows-25` was.
+
+  **`data-flow-kb` (forge-8vfn.5.12) is on the SAME `flow-header` root as
+  `data-goal-set`** — the flow's PERSISTED knowledge-base binding, not the
+  `[data-field="kb-select"]` dropdown's local (possibly-unsaved) value.
+  Resolved the same way `data-kickoff-kind` is: fall back to this flow's own
+  entry in the already-fetched roster (`flows`, a `fetchStudioFlows()` read —
+  persisted, independent of `state`) until a save in THIS mount reports a
+  fresher answer, then the value that save just wrote (unlike kickoff, the
+  server never derives or echoes `kb` back — what was SENT is what is now on
+  disk). `""` when unbound, **never absent** — the same ratified shape as a
+  minted id (rulings 409/422/436/438: `''` before, the real value after,
+  because an observer reading `data-*` in one pass cannot tell "no key" from
+  "not yet"), and it matches the select's OWN unbound sentinel
+  (`<option value="">— none —</option>`) rather than a second one. Before
+  this, S4 could open the Advanced panel and read the SELECT's current
+  value, but never a fact about what a reload would actually show — selecting
+  a different kb and never saving would have flipped it. Each row is a real anchor —
   `a[data-ledger-row="true"][data-run-id][data-run-status][data-run-when]
   [data-ledger-cost-usd][data-ledger-narrative][data-narrative-kinds]` — whose
   `href` is its `/flows/[id]/run/[runId]` detail page. Notes on the vocabulary,
@@ -1186,7 +1203,8 @@ is what this contract reads — but it cannot be the only distinguisher.
     `undefined` -> `flow`, any agent-sourced value -> `agent`) plus a
     visible `[data-ledger-kind-badge]` chip.
   BUILD renders
-  the flow-as-data canvas: `[data-component="flow-header"][data-goal-set]`
+  the flow-as-data canvas: `[data-component="flow-header"][data-goal-set]
+  [data-flow-kb]`
   + `[data-component="flow-builder-canvas"][data-node-count][data-edge-count]`,
   per-node `[data-flow-node][data-node-id][data-agent-ref]`, and
   `[data-action="save-flow"|"clear-canvas"|"auto-layout"]`. **Starter agents are
@@ -1248,10 +1266,27 @@ is what this contract reads — but it cannot be the only distinguisher.
   control mirrors the bridge's own rule — offered whenever `origin !== 'seed'`,
   the exact condition the server enforces with its 403 (review finding 12) —
   and a flow that is the trigger target of another flow refuses deletion with
-  a **409** naming the referring flows (review finding 6). A failed save renders the bridge's per-node
-  findings in `[data-component="flow-save-findings"][data-finding-count]`
-  with per-row `[data-finding-node][data-finding-check]` (flows-10 — no more
-  bare "validation failed"). The PUT merge carries `kickoff:` through, and a
+  a **409** naming the referring flows (review finding 6). **`[data-component="flow-save-findings"]`
+  renders the outcome of the LAST save ALWAYS, never nothing (forge-8vfn.5.12)**
+  — `[data-lint-state="unsaved"|"clean"|"findings"]` +
+  `[data-finding-count]`, the latter always present too (0 for
+  unsaved/clean). `"unsaved"` until a save is attempted this page load;
+  `"clean"` for a save that returned 200 (the bridge only 200s a flow that
+  passed validation); `"findings"` for a REJECTED save that carried
+  per-node findings, rendered as rows — `[data-finding-node][data-finding-check]`
+  (flows-10 — no more bare "validation failed"). Before this, an empty
+  finding list rendered NOTHING — the identical DOM shape whether nobody had
+  saved yet or the last save was clean, so no `expect.data` could assert a
+  clean save (assertions bind values, never absences). A rejected save with
+  NO findings (423 locked, a network failure, "Name your flow before
+  saving.") reports no lint verdict at all and leaves the standing one
+  alone — that failure is `SaveStatus`'s job, not this component's. The
+  value vocabulary reuses `"clean"`/`"findings"` from the existing hook/
+  community scan report's `HookScanVerdict` (`'blocked' | 'findings' |
+  'clean'`, `lib/hook-client.ts`, rendered as `[data-scan-verdict]` — see the
+  Community/Hooks entries) rather than inventing a second word for the same
+  fact; `"unsaved"` is this component's own third state, since a security
+  scan has no "not yet scanned" idle render to distinguish. The PUT merge carries `kickoff:` through, and a
   save that changes NOTHING the builder can edit is a **no-op** (`noop:
   true`, version unchanged, file bytes — comments included — untouched;
   flows-12). An authored (`origin: studio`) flow's BUILD header renders
@@ -3617,9 +3652,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   (POSTs `/api/architect/rerun`, no answers/round mutation);
   `[data-action="open-plan"]` — **W7-A3 (artifact-plan-22): rendered EXACTLY
   ONCE in every phase where the session has a PLAN.html** — into
-  `/artifact?run=_architect-<sid>&type=plan&mode=gate` at awaiting-verdict
-  ("Review the plan →"; the PLAN gate is still just another gate — M7-4,
-  ADR-031) and `…&mode=view` otherwise ("View the plan →"); the committed
+  `/artifact?run=_architect-<sid>&type=plan` with **no `mode`**: the artifact
+  page arms the gate from the session's live phase, so a link rendered one
+  summary poll before `awaiting-verdict` still opens the gate (6.11.48). Its
+  label is "Review the plan →" at awaiting-verdict (the PLAN gate is still
+  just another gate — M7-4, ADR-031) and "View the plan →" otherwise; the committed
   phase renders the shared **ArchitectCommittedView** inside
   `[data-section="architect-status"]`: `[data-section="architect-committed"]
   [data-commit-tone="building|claimed-stopped|claimed-stopping|claimed-unknown|

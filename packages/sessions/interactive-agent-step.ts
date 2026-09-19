@@ -191,9 +191,17 @@ export async function runAgentStyleStep(args: {
   onHeartbeat: () => void;
   onText: (text: string) => void;
   onThinking: (text: string) => void;
-  /** S9 beat 8 — called with the turn's own spend once it completes. The
-   *  emission belongs to the runner, which owns the log's identity. */
-  onTurnCost?: (costUsd: number) => void;
+  /**
+   * S9 beat 8 — called with the turn's own spend once it completes. The
+   * emission belongs to the runner, which owns the log's identity.
+   *
+   * forge-8vfn.22 — also carries the model TIER actually resolved for this
+   * turn (`readRequestedModelTier(status) ?? agentSpec.tier`, the same
+   * resolution `resolveSessionModel` performs internally) and the concrete
+   * model id, so the runner's event can name both without re-deriving either
+   * — this step is the only place both are in scope together.
+   */
+  onTurnCost?: (costUsd: number, modelTier: ModelTier, modelId: string) => void;
   /** 7.6.55 — threaded to `runAgentTurn`; the runner emits the row. The shape
    *  is IMPORTED rather than restated (7.6.73): this file's own copy said
    *  `'abort' | 'died'`, so the primitive gaining a third reason would have
@@ -212,7 +220,13 @@ export async function runAgentStyleStep(args: {
   // never `ctx.forgeRoot` — the agent/skill roster is part of the forge
   // install, not per-project/per-test data (see header note).
   const agentSpec = deriveAgentSpec(skillPathRelative(descriptor.agent));
-  const model = resolveSessionModel(agentSpec, readRequestedModelTier(status));
+  const requestedTier = readRequestedModelTier(status);
+  // forge-8vfn.22 — the ACTUAL tier this turn runs on: the operator's
+  // requested tier when one was validated, else the spec's own default
+  // (mirrors `resolveSessionModel`'s internal branch exactly, so `modelTier`
+  // and `model` below can never disagree).
+  const modelTier: ModelTier = requestedTier ?? agentSpec.tier;
+  const model = resolveSessionModel(agentSpec, requestedTier);
   const skill = readSkillPrompt(descriptor.agent);
 
   if (turnSpec.style === 'agent') {
@@ -260,7 +274,7 @@ export async function runAgentStyleStep(args: {
       onThinking,
       label: `interactive-${descriptor.id}-${ctx.sessionId}`,
       ...(args.onTurnEndedUnpriced ? { onTurnEndedUnpriced: args.onTurnEndedUnpriced } : {}),
-    }).then(({ costUsd }) => { if (costUsd !== null) args.onTurnCost?.(costUsd); });
+    }).then(({ costUsd }) => { if (costUsd !== null) args.onTurnCost?.(costUsd, modelTier, model); });
     // W7-C2 T1 review (P0-2, finding A5) — CONSUME-ONCE. `readOperatorFeedback`
     // runs on EVERY `step: agent` turn, not only the one a revise triggered,
     // and nothing used to clear feedback.md — so round 1's corrections kept
