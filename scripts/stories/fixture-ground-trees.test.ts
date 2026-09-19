@@ -144,5 +144,5 @@ test('siblingDirs THROWS, naming the tree, when git cannot list its worktrees â€
 test('realGroundDirs refuses a call with no `worktrees` â€” a default would fence the root alone and say nothing', () => {
   const root = scratch();
   assert.throws(() => realGroundDirs(root), /worktrees/);
-  assert.throws(() => realGroundDirs(root, { ownProject: null }), /worktrees/);
+  assert.throws(() => realGroundDirs(root, {}), /worktrees/);
 });

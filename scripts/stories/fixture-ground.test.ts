@@ -213,21 +213,13 @@ test('realGroundDirs lists every non-story, non-dot project directory across the
   const tree2 = scratch();
   makeProjectsEntries(join(tree2, 'projects'), ['gitweave/']);
 
-  const dirs = realGroundDirs(root, { ownProject: null, worktrees: [tree2] });
+  const dirs = realGroundDirs(root, { worktrees: [tree2] });
   const expected = [
     join(root, 'projects', 'gitpulse'),
     join(root, 'projects', 'mdtoc'),
     join(tree2, 'projects', 'gitweave'),
   ].sort();
   assert.deepEqual(dirs, expected);
-});
-
-test('realGroundDirs excludes the run\'s OWN ground project from the root\'s own entries', () => {
-  const root = scratch();
-  makeProjectsEntries(join(root, 'projects'), ['gitpulse/', 'mdtoc/']);
-
-  const dirs = realGroundDirs(root, { ownProject: 'mdtoc', worktrees: [] });
-  assert.deepEqual(dirs, [join(root, 'projects', 'gitpulse')]);
 });
 
 // ── realGroundDirs' skip must be ENOENT-only ─────────────────────────────
@@ -248,8 +240,8 @@ test('realGroundDirs skips a tree ONLY when its projects/ dir is ABSENT (ENOENT)
   mkdirSync(join(root, 'projects'), { recursive: true });
   const treeWithoutProjects = scratch(); // no projects/ dir created at all — genuine ENOENT
 
-  assert.doesNotThrow(() => realGroundDirs(root, { ownProject: null, worktrees: [treeWithoutProjects] }));
-  const dirs = realGroundDirs(root, { ownProject: null, worktrees: [treeWithoutProjects] });
+  assert.doesNotThrow(() => realGroundDirs(root, { worktrees: [treeWithoutProjects] }));
+  const dirs = realGroundDirs(root, { worktrees: [treeWithoutProjects] });
   assert.deepEqual(dirs, [], 'an absent projects/ dir contributes nothing, and is not an error');
 });
 
@@ -265,7 +257,7 @@ test('realGroundDirs THROWS, naming the tree, when projects/ exists but cannot b
 
   try {
     assert.throws(
-      () => realGroundDirs(root, { ownProject: null, worktrees: [] }),
+      () => realGroundDirs(root, { worktrees: [] }),
       new RegExp(escapeRegex(root)),
       'a projects/ dir that exists but cannot be read must THROW, naming the tree — silently skipping it would ' +
         'let a real ground go unfenced with nothing said',

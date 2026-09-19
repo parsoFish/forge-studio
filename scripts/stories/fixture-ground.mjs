@@ -26,7 +26,8 @@
  * commit message, and `FIXTURE_COMMIT_ENV` — so two stories that provision
  * the same seed get the same sha, whenever and by whomever it is run. The
  * host's git config that would otherwise take part is overridden on every
- * call (`FIXTURE_GIT_CONFIG`), and `git init` copies no template.
+ * call (`FIXTURE_GIT_CONFIG`), every call runs without the ambient `GIT_*`
+ * environment (`fixtureGitEnv`), and `git init` copies no template.
  */
 import { cpSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -53,16 +54,29 @@ export const FIXTURE_COMMIT_ENV = Object.freeze({
 /**
  * Host git config that would otherwise change the commit, overridden on every
  * provisioning call: blobs are the seed's own bytes (no line-ending
- * conversion); hooks come only from the repository's own `.git/hooks`, which
- * `--template=` leaves empty, so a host-wide `core.hooksPath` hook cannot
- * rewrite the message; no signature; no re-encoded message.
+ * conversion); no hook runs at all, so a host-wide `core.hooksPath` or
+ * template hook cannot rewrite the message; no signature; no re-encoded
+ * message.
  */
 const FIXTURE_GIT_CONFIG = Object.freeze([
   '-c', 'core.autocrlf=false',
-  '-c', 'core.hooksPath=.git/hooks',
+  '-c', 'core.hooksPath=/dev/null',
   '-c', 'commit.gpgsign=false',
   '-c', 'i18n.commitEncoding=UTF-8',
 ]);
+
+/**
+ * The environment for every provisioning git call: the ambient one with
+ * every `GIT_*` variable removed, then `FIXTURE_COMMIT_ENV`. An exported
+ * `GIT_DIR`, `GIT_WORK_TREE` or `GIT_INDEX_FILE` — a harness launched from a
+ * git hook exports them — would otherwise point these calls at another
+ * repository, and `GIT_CONFIG_*` would feed them config the `-c` list does
+ * not cover. Read at call time, so it is always the current environment.
+ */
+function fixtureGitEnv() {
+  const ambient = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+  return { ...ambient, ...FIXTURE_COMMIT_ENV };
+}
 
 export function fixtureSeedDir(root, fixture) {
   return join(root, FIXTURE_ROOT, fixture, 'seed');
@@ -89,6 +103,13 @@ function entryKind(d) {
  *     FIFO, a socket, a device). `cpSync` would copy a symlink as a symlink
  *     into a ground the run then treats as a trusted worktree. The walk reads
  *     each entry's own type and never follows one.
+ *   - an entry named `.git`, file or directory, at any depth. A seed `.git`
+ *     is git state the provisioner would inherit rather than create: a
+ *     gitfile's `gitdir:` points `git init`/`add`/`commit` at another
+ *     repository, and a `.git/` directory brings its own hooks and config
+ *     (`core.fsmonitor` runs on `git add`). A tracked seed cannot hold one,
+ *     since git refuses to track a `.git` path, so any that is there was put
+ *     there locally.
  */
 function listFiles(dir) {
   const files = [];
@@ -101,6 +122,12 @@ function listFiles(dir) {
     }
     for (const d of entries) {
       const path = join(abs, d.name);
+      if (d.name === '.git') {
+        throw new Error(
+          `provisionFixtureGround: seed entry ${path} is a .git ${d.isDirectory() ? 'directory' : 'entry'} — a seed ` +
+          'carries no git state of its own (the provisioner creates the repository); refusing before anything is written',
+        );
+      }
       if (d.isDirectory()) walk(path);
       else if (d.isFile()) files.push(relative(dir, path));
       else {
@@ -115,10 +142,11 @@ function listFiles(dir) {
   return files.sort();
 }
 
-/** `spawnSync` with an explicit argv, never a shell — named so every call
- *  site's failure reads as "what step" rather than a bare git exit code. */
+/** `spawnSync` with an explicit argv, never a shell, and `fixtureGitEnv()` —
+ *  named so every call site's failure reads as "what step" rather than a
+ *  bare git exit code. */
 function runGit(args, what, opts = {}) {
-  const res = spawnSync('git', args, { encoding: 'utf8', ...opts });
+  const res = spawnSync('git', args, { encoding: 'utf8', ...opts, env: fixtureGitEnv() });
   if (res.error !== undefined) {
     throw new Error(`provisionFixtureGround: ${what} could not run — ${res.error.message}`);
   }
@@ -203,11 +231,7 @@ export function provisionFixtureGround(root, { storyId, project, fixture }) {
       'git add',
       { input: `${files.join('\0')}\0` },
     );
-    runGit(
-      ['-C', dest, ...FIXTURE_GIT_CONFIG, 'commit', '-q', '--no-verify', '-m', `fixture: ${fixture}`],
-      'git commit',
-      { env: { ...process.env, ...FIXTURE_COMMIT_ENV } },
-    );
+    runGit(['-C', dest, ...FIXTURE_GIT_CONFIG, 'commit', '-q', '--no-verify', '-m', `fixture: ${fixture}`], 'git commit');
     const commit = runGit(['-C', dest, 'rev-parse', 'HEAD'], 'git rev-parse HEAD').trim();
 
     const seedDigest = groundManifest(seedDir)?.digest ?? null;
@@ -255,9 +279,8 @@ export function teardownFixtureGround(root, { storyId, project }) {
 /**
  * Every REAL ground in `root` and in each of `worktrees`: `<tree>/projects/<name>`
  * for every directory entry except a `story-`/`.`-prefixed name (a fixture or
- * a KB scaffold, never a real project) and, in `root` only, `ownProject` when
- * one is given (a fixture run's own ground is `story-` namespaced and already
- * left out, so the runner gives none).
+ * a KB scaffold, never a real project). A fixture run's own ground is
+ * `story-` namespaced, so it is always left out by that rule.
  *
  * `worktrees` is REQUIRED: a default of none would fence the root alone and
  * say nothing about every sibling it skipped. A tree with no `projects/` at
@@ -268,10 +291,10 @@ export function teardownFixtureGround(root, { storyId, project }) {
  * only, so the product never treats one as a project.
  *
  * @param {string} root
- * @param {{ownProject?: string|null, worktrees: string[]}} opts
+ * @param {{worktrees: string[]}} opts
  * @returns {string[]} sorted absolute directories
  */
-export function realGroundDirs(root, { ownProject = null, worktrees } = {}) {
+export function realGroundDirs(root, { worktrees } = {}) {
   if (!Array.isArray(worktrees)) {
     throw new TypeError(
       'realGroundDirs: `worktrees` is required — every sibling worktree to fence, or [] for none; a default ' +
@@ -293,7 +316,6 @@ export function realGroundDirs(root, { ownProject = null, worktrees } = {}) {
     }
     for (const entry of entries) {
       if (!entry.isDirectory() || entry.name.startsWith('story-') || entry.name.startsWith('.')) continue;
-      if (tree === root && entry.name === ownProject) continue;
       out.push(join(projectsDir, entry.name));
     }
   }
