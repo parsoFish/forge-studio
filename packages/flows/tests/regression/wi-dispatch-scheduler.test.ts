@@ -140,14 +140,19 @@ test('runConcurrentDispatch: cap 3 diamond (A -> B,C -> D) runs B/C concurrently
     dependsOn: (item) => item.depends_on,
     cap: 3,
     dispatch: async (item) => {
-      const start = Date.now();
+      // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is
+      // NOT MONOTONIC on this host, so an interval-overlap check built from
+      // its difference can read a concurrent dispatch as a serial one for a
+      // reason that has nothing to do with concurrency (same class of bug as
+      // T1 ruling 508 in developer-loop.wi-concurrent-dispatch.test.ts).
+      const start = performance.now();
       if (item.work_item_id === 'D') {
         // D must only ever be dispatched once both prerequisites are merged.
         assert.ok(tip.includes('B'), 'D dispatched before B reached the tip');
         assert.ok(tip.includes('C'), 'D dispatched before C reached the tip');
       }
       await sleep(item.work_item_id === 'A' ? 5 : item.work_item_id === 'D' ? 5 : 30);
-      const end = Date.now();
+      const end = performance.now();
       timings[item.work_item_id] = { start, end };
       tip.push(item.work_item_id);
     },
