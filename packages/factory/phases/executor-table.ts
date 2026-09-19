@@ -235,10 +235,7 @@ const execIntegrate: NodeExecutor = async (ctx) => {
   // outcome any more: a derivation either produced the artifacts or named the
   // reason it could not, and either way there is nothing to re-author.
   if (result.status === 'failed') {
-    throw new Error(
-      `delivery gate: integrate band failed (${result.reason}: ${result.detail}) — ` +
-        `the branch is not review-ready, so no PR is opened. Triage the failure before re-running.`,
-    );
+    throw new Error(integrateDeliveryFailure(result.reason, result.detail));
   }
 
   nodeLogger.emit({
@@ -651,4 +648,11 @@ export function createPhaseExecutor(opts: {
       return ctx.state.cycleOutcome;
     },
   };
+}
+
+/** The integrate band's delivery-gate failure message — ONE source, read by the
+ *  failure classifier's door so a reworded throw cannot strand its matcher
+ *  (forge-8vfn.8.2.1). */
+export function integrateDeliveryFailure(reason: string, detail: string): string {
+  return `delivery gate: integrate band failed (${reason}: ${detail}) — the branch is not review-ready, so no PR is opened. Triage the failure before re-running.`;
 }

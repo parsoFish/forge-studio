@@ -374,7 +374,7 @@ test('a config-red gate parks needs-operator and compiles NO gate-fix work item'
     // 4. No PR opens: the walk terminates inside the integrate band before the
     //    real integrate pipeline, adversarial review, or the verdict's openPr
     //    ever run.
-    assert.ok(!tracker.calls.includes('runDemoAgent'), 'the demo pipeline must not run on a config-red gate');
+    assert.ok(!tracker.calls.includes('runIntegrate'), 'the integrate band must not run on a config-red gate');
     assert.ok(!tracker.calls.includes('runAdversarialReview'), 'adversarial review must not run on a config-red gate');
     assert.ok(!tracker.calls.includes('openPrInline'), 'NO PR opens on a config-red gate (the preserved invariant)');
   } finally {
