@@ -112,6 +112,7 @@ async function cleanupFixtureRoot(root: string, attempts = 5, delayMs = 100): Pr
       return;
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
+      // Scoped to this ONE named teardown error, after this test's own assertions already passed — never a blind retry.
       if (code !== 'ENOTEMPTY' || attempt === attempts) throw err;
       await new Promise((resolveWait) => setTimeout(resolveWait, delayMs));
     }
