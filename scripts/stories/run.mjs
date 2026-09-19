@@ -46,6 +46,7 @@ import {
 import { ownGroundManifest } from './ground-hash.mjs';
 import { suiteLockVerdict, lockOrderVerdict, EXIT_LOCK_REFUSED } from './lock-guard.mjs';
 import { sweepStoryResidue } from './sweep.mjs';
+import { provisionFixtureGround } from './fixture-ground.mjs';
 import { captureAndSweepAgentLogs } from './sweep-agent-logs.mjs';
 import { restoreSweptCommitted, stopSchedulerCensusAndRelease, teardownExitCode } from './sweep-teardown.mjs';
 import {
@@ -305,37 +306,63 @@ async function main() {
       }
     }
 
-    // 5. Bridge identity — never drive a bridge serving another tree.
-    const { probeBridgeIdentity } = await import(
-      pathToFileURL(join(ROOT, 'apps', 'forge', 'forge-watch.ts')).href
-    );
-    const identity = await probeBridgeIdentity(BRIDGE_HEALTH);
-    const decision = decideStoryBridge(identity, { ownRoot: ROOT, cwdOf: readProcCwd });
-
-    let uiUrl;
-    if (decision === 'refuse') {
-      throw refusalError(identity, readProcCwd(identity.pid), ROOT);
-    } else if (decision === 'boot') {
-      console.log('[stories] 4123 is free — booting our own bridge from this tree');
-      // 590(i): say whether this bridge can reach the community sources at all.
-      // A run whose refresh refuses for want of a credential and a run whose
-      // refresh refuses because the PRODUCT refused look identical in a beat's
-      // verdict; only this line separates them. The token itself is never
-      // printed — `note` carries the fact, never the value.
-      // ONE read of the credential per boot: the options are built here, the
-      // fact is logged from them, and the SAME object is what gets spawned.
-      const bridgeOpts = bridgeSpawnOptions(ROOT);
-      console.log(`[stories] ${bridgeOpts.note}`);
-      const booted = await bootOwnBridge(ROOT, bridgeOpts);
-      bridgeProc = booted.proc;
-      uiUrl = booted.uiUrl;
-    } else {
-      console.log(`[stories] reusing this tree's own bridge (pid ${identity.pid})`);
-      uiUrl = 'http://localhost:4124';
+    // 4b. Fixture grounds — AFTER the leading sweep (provisioning before it
+    //     would have the sweep remove the ground it just wrote) and BEFORE the
+    //     bridge identity probe (a beat can drive the browser to a fixture
+    //     ground only once it exists, and provisioning after the bridge is up
+    //     would race a driven browser against a `git init` still in flight).
+    //     A refusal here writes nothing (`fixture-ground.mjs`'s own contract)
+    //     and must cost nothing either: it stops the run before any story's
+    //     beats, same as every other preflight refusal above.
+    let fixtureRefused = false;
+    for (const s of stories) {
+      if (typeof s.ground?.fixture !== 'string') continue;
+      try {
+        const prov = provisionFixtureGround(ROOT, { storyId: s.id, project: s.ground.project, fixture: s.ground.fixture });
+        console.log(
+          `[stories] fixture ground: provisioned projects/${s.ground.project} from ` +
+          `tests/stories/grounds/${s.ground.fixture}/seed — digest ${prov.digest}, commit ${prov.commit}`,
+        );
+      } catch (e) {
+        console.error(`[stories] REFUSING ${s.id}: ${e?.message ?? e}`);
+        exitCode = 1;
+        fixtureRefused = true;
+      }
     }
 
-    for (const story of stories) {
-      exitCode = (await runStory(story, uiUrl, startedMs, args.ceilingUsd)) || exitCode;
+    if (!fixtureRefused) {
+      // 5. Bridge identity — never drive a bridge serving another tree.
+      const { probeBridgeIdentity } = await import(
+        pathToFileURL(join(ROOT, 'apps', 'forge', 'forge-watch.ts')).href
+      );
+      const identity = await probeBridgeIdentity(BRIDGE_HEALTH);
+      const decision = decideStoryBridge(identity, { ownRoot: ROOT, cwdOf: readProcCwd });
+
+      let uiUrl;
+      if (decision === 'refuse') {
+        throw refusalError(identity, readProcCwd(identity.pid), ROOT);
+      } else if (decision === 'boot') {
+        console.log('[stories] 4123 is free — booting our own bridge from this tree');
+        // 590(i): say whether this bridge can reach the community sources at all.
+        // A run whose refresh refuses for want of a credential and a run whose
+        // refresh refuses because the PRODUCT refused look identical in a beat's
+        // verdict; only this line separates them. The token itself is never
+        // printed — `note` carries the fact, never the value.
+        // ONE read of the credential per boot: the options are built here, the
+        // fact is logged from them, and the SAME object is what gets spawned.
+        const bridgeOpts = bridgeSpawnOptions(ROOT);
+        console.log(`[stories] ${bridgeOpts.note}`);
+        const booted = await bootOwnBridge(ROOT, bridgeOpts);
+        bridgeProc = booted.proc;
+        uiUrl = booted.uiUrl;
+      } else {
+        console.log(`[stories] reusing this tree's own bridge (pid ${identity.pid})`);
+        uiUrl = 'http://localhost:4124';
+      }
+
+      for (const story of stories) {
+        exitCode = (await runStory(story, uiUrl, startedMs, args.ceilingUsd)) || exitCode;
+      }
     }
   } finally {
     // THE SWEEP'S PAIRED RESTORE. `demos/stories/<id>/` was deleted before the

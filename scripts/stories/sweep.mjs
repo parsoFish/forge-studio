@@ -111,7 +111,7 @@ export function sweepStoryResidue(storyId, root) {
  * The trailing half of §3.1's duty: the product fixtures this story minted, and
  * never its own artifact. Same removal, a narrower list.
  */
-export function sweepProductFixtures(storyId, root, { sinceMs, untilMs, groundProject, evidenceDir }) {
+export function sweepProductFixtures(storyId, root, { sinceMs, untilMs, groundProject, evidenceDir, keepProjects }) {
   // FAIL FAST RATHER THAN SKIP. The queue claim needs a window and somewhere to
   // capture to, and a default that quietly skipped it would print a clean
   // trailing sweep for a run that never looked at `_queue` — §15.507, a green
@@ -120,7 +120,22 @@ export function sweepProductFixtures(storyId, root, { sinceMs, untilMs, groundPr
   if (typeof sinceMs !== 'number' || typeof evidenceDir !== 'string' || evidenceDir === '') {
     throw new Error('sweepProductFixtures needs { sinceMs, evidenceDir } to claim this run\'s queue writes (forge-8vfn.7.6.74)');
   }
-  const r = removeAll(productFixturePathsFor(storyId, root));
+  // M7-D — a FIXTURE GROUND is the run's OWN ground, not its debris: `run.mjs`
+  // provisions `projects/story-<id>` before the beats run, and it is judged —
+  // by the fence and by the verdict this trailing sweep runs inside — before
+  // `teardownFixtureGround` removes it. Ruling 308 already carries the
+  // identical shape for the ground's Brain 3 sub-wiki ("held, not kept";
+  // `applyFence`'s `defer`); this is that same hold applied to the project
+  // directory. An OPT-IN list, so a story that has never heard of a fixture
+  // keeps today's unconditional removal exactly.
+  const keepPaths = new Set((keepProjects ?? []).map((name) => join(root, 'projects', name)));
+  const keptLines = [];
+  const paths = productFixturePathsFor(storyId, root).filter((p) => {
+    if (!keepPaths.has(p)) return true;
+    keptLines.push(`[stories] trailing sweep KEPT ${relative(root, p)} — a fixture ground is judged before it is torn down`);
+    return false;
+  });
+  const r = removeAll(paths);
   // THE CYCLE'S OWN WRITES, WHICH NO STORY-ID GLOB CAN REACH (`forge-8vfn.7.6.74`).
   // `productFixturePathsFor` finds `_queue/in-flight|failed/STORY-<id>.md` — two
   // states of six, both named after the STORY. A ground cycle mints its work
@@ -153,6 +168,7 @@ export function sweepProductFixtures(storyId, root, { sinceMs, untilMs, groundPr
     artefacts,
     lines: [
       ...r.removed.map((p) => `[stories] trailing sweep removed ${p}`),
+      ...keptLines,
       ...claim.lines,
       ...describeRunArtefactsClear(artefacts),
     ],
