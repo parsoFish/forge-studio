@@ -3230,7 +3230,18 @@ is what this contract reads — but it cannot be the only distinguisher.
   id — a wrong destination with no indication anything went wrong). The
   USER-tier `[data-action="apply-clause-decision"]` button genuinely
   dispatches + polls a preflight-fix agent (~90s bounded) and is labelled
-  "Apply with agent" accordingly.
+  "Apply with agent" accordingly. `forge-8vfn.8.3.1` (projects-45): its
+  `disabled` consults the SAME per-clause poll state the row's own
+  `data-agent-run-state`/`data-poll-state` already render, not just the
+  click-scoped `busy` flag — `busy` clears the instant the dispatch POST
+  resolves, while the polled agent run can still be `'watching'` or
+  `'timed-out'` (a poll ceiling is a fact about the watcher, not the run —
+  `pollDisplayState`'s header). Either non-terminal state keeps the button
+  disabled with `[data-disabled-reason]` (`disabledAttrs`,
+  `lib/disabled-reason.ts`) naming the still-running clause; only a real
+  terminal status re-enables it. Before this fix the button re-enabled the
+  moment the POST returned, so a second click could dispatch a second agent
+  onto the same clause.
   **`[data-section="contract-panel"]` (R4-12-F1)** —
   `ProjectContractPanel.tsx`, an async server component mounted client-side by
   the page's `ContractPanelMount`; it issues its OWN
