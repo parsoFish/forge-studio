@@ -60,11 +60,10 @@ import {
  * tenth of a second and places it against whatever else was on the box. The temp
  * tree is KEPT on that path — the one case where the artefacts are the finding.
  *
- * WHO KILLS IT REMAINS OPEN on the bead. OOM under three concurrent suites is a
- * candidate with no evidence; a sibling's reap sweeping planted pids is another.
- * 35/35 twice at loadavg 9.2 and 12.7 bounds the rate and says nothing about the
- * mechanism (§15.508) — which is why this change buys a better red rather than
- * claiming a cause.
+ * WHO KILLED IT — ANSWERED (m7-c, T1 ruling 1204): the reaper's own group signal,
+ * reported as a skip. See the last test in this file, which makes that window
+ * deterministic. The vanished-in-window branch below stays as the guard for a
+ * genuinely FOREIGN kill; after the fix, the reaper's own kills never reach it.
  */
 test('POSITIVE CONTROL: a re-parenting GRANDCHILD is dead after the reap — the S9 run-3 shape', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'story-reap-tree-'));
