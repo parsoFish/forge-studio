@@ -14,23 +14,28 @@
  *
  * `extractThemeReferences` · `themeTruth` · `brainTruthRates` ·
  * `checkThemeTruth` — plus the registry wiring (CHECK_NAMES/classifyFinding)
- * and the CLI's unconditional `truthfulness:` summary lines.
+ * and the CLI's unconditional `truthfulness:` summary lines. This file holds
+ * extraction + round-1 + fix-round-1 (T2 review rulings) coverage; the
+ * fix-round-2 (history-backed staleness) tests split into the sibling
+ * `brain-lint-truth-history.test.ts` at the 800-line cap — same split
+ * rationale as `brain-lint.test.ts` -> `brain-lint-{graph,filing,integrity,
+ * orchestration}.test.ts`. Shared fixtures (including the git-checkout
+ * helpers both files need) live in `./test-fixtures/brain-lint-truth.ts`.
  *
- * TEST-WRITER NOTE (immutable-gates): `packages/knowledge/brain-lint-checks-truth.ts`
- * does NOT exist yet. Every test below is RED right now because the import
- * itself fails to resolve — that is the correct RED reason at this stage;
- * see `.superpowers/d14-tests-report.md` for the exact failure recorded per
- * test. `writeTruthTheme`/`writeCheckoutFile` are LOCAL to this file
- * (deliberately not added to `./test-fixtures/brain-lint.ts`): they write
- * `status:`/`evidence:` frontmatter the shared `ThemeSpec` type does not
- * support, and per that file's own header comment a fixture used by only one
- * output file belongs to that file, not the shared one.
+ * TEST-WRITER NOTE (immutable-gates): the module started out not existing at
+ * all (round 1: `.superpowers/d14-tests-report.md`); fix round 1
+ * (`.superpowers/d14-fix1-tests-report.md`) pinned the T2 review rulings
+ * (provenance roots, prefix normalisation, `../` guard, antipattern
+ * evidence-only, `--project` scoping) below the "D14 FIX ROUND 1" marker;
+ * fix round 2 (`.superpowers/d14-fix2-tests-report.md`) rewrote the
+ * stale-producing cases in THIS file to be history-backed (git commit then
+ * delete, instead of a plain filesystem gap) and added its own new tests in
+ * the sibling file.
  */
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 import { CHECK_NAMES, classifyFinding } from '../../brain-lint.ts';
@@ -43,49 +48,9 @@ import {
 } from '../../brain-lint-checks-truth.ts';
 
 import { buildBrainFixture, cleanup } from './test-fixtures/brain-lint.ts';
+import { BT, writeTruthTheme, writeCheckoutFile, gitCheckout } from './test-fixtures/brain-lint-truth.ts';
 
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
-
-// ---------- local fixture writers (see file header: not shared) ----------
-
-const BT = '`';
-
-/** Write one project-brain theme with `status:`/`category:`/`evidence:`
- *  frontmatter the shared `ThemeSpec` type does not model (or does not model
- *  fully — `ThemeSpec.fm.category` exists but `writeTruthTheme` needs a
- *  `pattern` default to keep every OTHER call site in this file unchanged),
- *  at `<root>/brain/projects/<project>/themes/<slug>.md`. */
-function writeTruthTheme(
-  root: string,
-  project: string,
-  slug: string,
-  opts: { status?: 'current' | 'historical'; category?: string; evidence?: string[]; body?: string } = {},
-): string {
-  const dir = join(root, 'brain', 'projects', project, 'themes');
-  mkdirSync(dir, { recursive: true });
-  const file = join(dir, `${slug}.md`);
-  const lines = [
-    '---',
-    `title: ${slug}`,
-    'description: description text.',
-    `category: ${opts.category ?? 'pattern'}`,
-    'created_at: 2026-01-01T00:00:00Z',
-    'updated_at: 2026-01-01T00:00:00Z',
-  ];
-  if (opts.status) lines.push(`status: ${opts.status}`);
-  if (opts.evidence) lines.push(`evidence: [${opts.evidence.map((e) => JSON.stringify(e)).join(', ')}]`);
-  lines.push('---', '', opts.body ?? '# theme body\n');
-  writeFileSync(file, lines.join('\n') + '\n');
-  return file;
-}
-
-/** Create one file inside a managed project's ground clone,
- *  `<root>/projects/<project>/<relPath>` — a sibling of `<root>/brain/`. */
-function writeCheckoutFile(root: string, project: string, relPath: string): void {
-  const file = join(root, 'projects', project, relPath);
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, 'placeholder\n');
-}
 
 // ---------- 1. extraction: IS / IS-NOT examples ----------
 
@@ -161,13 +126,18 @@ test('extractThemeReferences: a path inside a fenced code block is ignored; the 
 
 // ---------- 4. themeTruth ----------
 
-test('themeTruth: a current theme citing one existing and one absent path -> missing is exactly the absent one', () => {
+test('themeTruth: a current theme citing one existing and one absent-but-ONCE-TRACKED path -> missing is exactly the absent one (T2 fix-round-2: history-backed, not a plain filesystem gap)', () => {
   const root = buildBrainFixture({ themes: [] });
   try {
     writeTruthTheme(root, 'proj-a', 'theme-one', {
       body: `Cites ${BT}src/exists.go${BT} and ${BT}src/missing.go${BT}.\n`,
     });
-    writeCheckoutFile(root, 'proj-a', 'src/exists.go');
+    gitCheckout(
+      root,
+      'proj-a',
+      { 'src/exists.go': 'package a\n', 'src/missing.go': 'package a\n' },
+      { deleteAfterCommit: ['src/missing.go'] },
+    );
 
     const results = themeTruth(root, 'proj-a');
     assert.equal(results.length, 1, `expected exactly one theme, got ${JSON.stringify(results)}`);
@@ -186,7 +156,7 @@ test('themeTruth: a current theme citing one existing and one absent path -> mis
 
 // ---------- 5. brainTruthRates: the pinned aggregate example ----------
 
-test('brainTruthRates: 1 historical + 1 current-no-refs + 1 current-all-present + 2 current-with-missing -> { themes:5, historical:1, unverifiable:1, verifiable:3, stale:2, rate:2/3, checkout:"present" }', () => {
+test('brainTruthRates: 1 historical + 1 current-no-refs + 1 current-all-present + 2 current-with-missing -> { themes:5, historical:1, unverifiable:1, verifiable:3, stale:2, rate:2/3, checkout:"present", history:"present" } (T2 fix-round-2: missing paths are COMMITTED then deleted, same expected numbers)', () => {
   const root = buildBrainFixture({ themes: [] });
   try {
     writeTruthTheme(root, 'proj-b', 'hist-1', { status: 'historical', body: `Cites ${BT}nope/nope.go${BT}.\n` });
@@ -195,9 +165,17 @@ test('brainTruthRates: 1 historical + 1 current-no-refs + 1 current-all-present 
     writeTruthTheme(root, 'proj-b', 'missing-1', { body: `Cites ${BT}gone/one.go${BT}.\n` });
     writeTruthTheme(root, 'proj-b', 'missing-2', { body: `Cites ${BT}ok/here2.go${BT} and ${BT}gone/two.go${BT}.\n` });
 
-    writeCheckoutFile(root, 'proj-b', 'ok/here.go');
-    writeCheckoutFile(root, 'proj-b', 'ok/here2.go');
-    // gone/one.go, gone/two.go, nope/nope.go deliberately absent.
+    // ok/here.go, ok/here2.go are committed and KEPT; gone/one.go,
+    // gone/two.go are committed then deleted (once-tracked, now gone — the
+    // history-backed "missing" shape). nope/nope.go (cited only by the
+    // historical theme, which is excluded from every count) is never tracked
+    // at all — irrelevant either way since historical themes never count.
+    gitCheckout(
+      root,
+      'proj-b',
+      { 'ok/here.go': 'x\n', 'ok/here2.go': 'x\n', 'gone/one.go': 'x\n', 'gone/two.go': 'x\n' },
+      { deleteAfterCommit: ['gone/one.go', 'gone/two.go'] },
+    );
 
     const rates = brainTruthRates(root);
     const row = rates.find((r) => r.project === 'proj-b');
@@ -205,6 +183,7 @@ test('brainTruthRates: 1 historical + 1 current-no-refs + 1 current-all-present 
     assert.deepEqual(row, {
       project: 'proj-b',
       checkout: 'present',
+      history: 'present',
       themes: 5,
       historical: 1,
       verifiable: 3,
@@ -258,15 +237,22 @@ test('brainTruthRates: checkout absent -> checkout:"absent", rate:null, and chec
 
 // ---------- 7. checkThemeTruth ----------
 
-test('checkThemeTruth: exactly one flag per stale CURRENT theme naming every missing path; a historical theme with a missing reference yields no finding', () => {
+test('checkThemeTruth: exactly one flag per stale CURRENT theme naming every missing path; a historical theme with a missing reference yields no finding (T2 fix-round-2: missing paths are COMMITTED then deleted, same expected numbers)', () => {
   const root = buildBrainFixture({ themes: [] });
   try {
     writeTruthTheme(root, 'proj-d', 'stale-one', { body: `Cites ${BT}gone/a.go${BT} and ${BT}gone/b.go${BT}.\n` });
     writeTruthTheme(root, 'proj-d', 'stale-two', { body: `Cites ${BT}gone/c.go${BT}.\n` });
     writeTruthTheme(root, 'proj-d', 'hist-missing', { status: 'historical', body: `Cites ${BT}gone/d.go${BT}.\n` });
     writeTruthTheme(root, 'proj-d', 'clean', { body: `Cites ${BT}ok/e.go${BT}.\n` });
-    writeCheckoutFile(root, 'proj-d', 'ok/e.go');
-    // gone/a.go, gone/b.go, gone/c.go, gone/d.go deliberately absent.
+    // gone/a.go, gone/b.go, gone/c.go are committed then deleted (once
+    // tracked, now gone). ok/e.go is committed and KEPT. gone/d.go (cited
+    // only by the historical theme, always excluded) is never tracked.
+    gitCheckout(
+      root,
+      'proj-d',
+      { 'gone/a.go': 'x\n', 'gone/b.go': 'x\n', 'gone/c.go': 'x\n', 'ok/e.go': 'x\n' },
+      { deleteAfterCommit: ['gone/a.go', 'gone/b.go', 'gone/c.go'] },
+    );
 
     const findings = checkThemeTruth(root).filter((f) => f.file.includes(join('projects', 'proj-d')));
     assert.equal(findings.length, 2, `expected exactly 2 findings (stale-one, stale-two — one per stale theme, not one per missing path), got ${JSON.stringify(findings)}`);
@@ -437,7 +423,7 @@ test('themeTruth: a projects/<project>/-prefixed self-citation is normalised —
   }
 });
 
-test('themeTruth: a projects/<OTHER-project>/-prefixed citation is NOT stripped — only the theme\'s OWN project prefix normalises (C2, kills over-eager stripping)', () => {
+test('themeTruth: a projects/<OTHER-project>/-prefixed citation is NOT stripped — only the theme\'s OWN project prefix normalises (C2, kills over-eager stripping; T2 fix-round-2: the resulting miss is history-backed, not a plain filesystem gap)', () => {
   const root = buildBrainFixture({ themes: [] });
   try {
     writeTruthTheme(root, 'proj-e2', 'cross-project-cite', {
@@ -446,8 +432,20 @@ test('themeTruth: a projects/<OTHER-project>/-prefixed citation is NOT stripped 
     // Even though the referenced file exists somewhere, it is NOT under
     // <cwd>/projects/proj-e2/ (this theme's own checkout root) once left
     // unstripped, so it must resolve as missing rather than silently
-    // matching a foreign project's tree.
+    // matching a foreign project's tree. The real file lives under its OWN
+    // project's checkout — irrelevant here, since proj-e2's own resolution
+    // never reaches it.
     writeCheckoutFile(root, 'some-other-project', 'src/a.ts');
+    // proj-e2's OWN checkout: the literal (unstripped) path was, at some
+    // point, committed there too — then deleted — so the "missing" verdict
+    // below is history-backed (once tracked under this exact literal path),
+    // not just a plain, never-real filesystem gap.
+    gitCheckout(
+      root,
+      'proj-e2',
+      { 'projects/some-other-project/src/a.ts': 'x\n' },
+      { deleteAfterCommit: ['projects/some-other-project/src/a.ts'] },
+    );
 
     const [t] = themeTruth(root, 'proj-e2');
     assert.deepEqual(
@@ -550,7 +548,7 @@ test('CLI: --project <p> scopes the truthfulness: lines to that project only (M2
 
 // ---------- item 8: the rate on a realistic body ----------
 
-test('themeTruth/brainTruthRates: a realistic corpus-shaped body (## Sources footer citing forge-provenance paths + one present and one absent project path) -> exactly one missing (the absent project path), stale 1/1', () => {
+test('themeTruth/brainTruthRates: a realistic corpus-shaped body (## Sources footer citing forge-provenance paths + one present and one absent project path) -> exactly one missing (the absent project path), stale 1/1 (T2 fix-round-2, item 4: the absent path was once committed)', () => {
   const root = buildBrainFixture({ themes: [] });
   try {
     writeTruthTheme(root, 'proj-i', 'realistic', {
@@ -563,9 +561,16 @@ test('themeTruth/brainTruthRates: a realistic corpus-shaped body (## Sources foo
         '',
       ].join('\n'),
     });
-    writeCheckoutFile(root, 'proj-i', 'src/present.go');
-    // src/absent.go deliberately absent; the two Sources citations are
+    // src/present.go is committed and KEPT; src/absent.go is committed then
+    // deleted (once tracked, now gone — the history-backed "missing" shape
+    // this whole fix round requires). The two Sources citations are
     // forge-provenance (C1) and never even reach `references`.
+    gitCheckout(
+      root,
+      'proj-i',
+      { 'src/present.go': 'x\n', 'src/absent.go': 'x\n' },
+      { deleteAfterCommit: ['src/absent.go'] },
+    );
 
     const [t] = themeTruth(root, 'proj-i');
     assert.deepEqual(
@@ -581,8 +586,9 @@ test('themeTruth/brainTruthRates: a realistic corpus-shaped body (## Sources foo
 
     const row = brainTruthRates(root).find((r) => r.project === 'proj-i');
     assert.ok(row, `expected a brainTruthRates row for proj-i, got nothing`);
+    assert.equal(row!.history, 'present', `proj-i is a real git checkout, got ${JSON.stringify(row)}`);
     assert.equal(row!.verifiable, 1, `1 current theme with references, got ${JSON.stringify(row)}`);
-    assert.equal(row!.stale, 1, `the one genuine code-path miss, got ${JSON.stringify(row)}`);
+    assert.equal(row!.stale, 1, `the one genuine, once-tracked code-path miss, got ${JSON.stringify(row)}`);
     assert.equal(
       row!.rate,
       1,
