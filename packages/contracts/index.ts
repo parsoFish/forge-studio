@@ -121,6 +121,21 @@ export const MAX_KICKOFF_COST_CEILING_USD = 500;
 export const DEFAULT_BRIDGE_PORT = 4123;
 
 // ---------------------------------------------------------------------------
+// KB drain — SSOT for `packages/knowledge/kb-drain-model.ts`
+// ---------------------------------------------------------------------------
+
+/**
+ * "Max 5 rounds" per the KB drain-to-green initiative brief — a round is a
+ * full fresh-lint→auto-drain→agent-turns→fresh-lint cycle
+ * (`packages/knowledge/bridge-studio-kb-drain.ts`'s `runKbDrain`). Previously
+ * hand-mirrored in `apps/studio/lib/kb-drain-view.ts` as
+ * `KB_DRAIN_MAX_ROUNDS_DISPLAY` with a "keep in sync by hand" comment and a
+ * parity test that only compared the mirror to itself (forge-8vfn.5.25.2) —
+ * this is the one definition both sides import.
+ */
+export const KB_DRAIN_MAX_ROUNDS = 5;
+
+// ---------------------------------------------------------------------------
 // Cycle outcome — SSOT for `orchestrator/cycle-context.ts`
 // ---------------------------------------------------------------------------
 

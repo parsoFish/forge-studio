@@ -26,8 +26,12 @@ import { KB_DRAIN_STALE_MS } from './kb-job-state.ts';
 // ---------------------------------------------------------------------------
 
 /** "max 5 rounds" per the initiative brief — a round is a full
- *  fresh-lint→auto-drain→agent-turns→fresh-lint cycle. */
-export const KB_DRAIN_MAX_ROUNDS = 5;
+ *  fresh-lint→auto-drain→agent-turns→fresh-lint cycle. Re-exported from
+ *  `@forge/contracts` (forge-8vfn.5.25.2) — that is the one definition, kept
+ *  here so this package's many existing `from './kb-drain-model.ts'`
+ *  importers do not all need to repoint at once; see its own doc comment
+ *  there for why. */
+export { KB_DRAIN_MAX_ROUNDS } from '@forge/contracts';
 
 /** Operator-confirmable default cost ceiling for one drain RUN (not one
  *  turn) — proposed at 2.00 USD, sized against a real per-finding
