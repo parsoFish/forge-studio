@@ -531,7 +531,17 @@ export function makeCycleTerminalDoor(forgeRoot, opts = null) {
     // boolean that stood for both. A declaration is consumed by the waiter it
     // declared, or by nothing.
     door.sawCycle = true;
+    // T1 1231 — BY IDENTITY, THE CYCLE PREDATES THE PRESS. DEC-2 threads one
+    // cycle id through the architect and develop runs, so the queue already
+    // reads the ARCHITECT run's terminal when the develop press lands (S10 run
+    // 22: green 0.5 s before the develop cycle started). A terminal counts only
+    // once the cycle has started a run at or after the anchor.
+    if (cycleOf !== null && !cycleStartedSince(dir, sinceMs)) {
+      door.lastSeen = `no run of the cycle has started since the anchor (${new Date(sinceMs).toISOString()})`;
+      return null;
+    }
     const terminal = channelTerminalState(forgeRoot, dir);
+    door.lastSeen = terminal === null ? 'the cycle is still open' : terminal.detail;
     // null = still open. `unknown` = the check could not be run. Neither is a
     // finished cycle, and they are kept apart from each other only in
     // `channelTerminalState`'s own reporting — here both mean "keep waiting".
@@ -539,7 +549,20 @@ export function makeCycleTerminalDoor(forgeRoot, opts = null) {
     return Object.freeze({ done: terminal.state === wantState, state: terminal.state, detail: terminal.detail });
   };
   door.sawCycle = false;
+  door.lastSeen = 'no cycle resolved yet';
   return door;
+}
+
+/** True when the cycle dir's events carry a `cycle.start` stamped at or after `sinceMs`. */
+function cycleStartedSince(dir, sinceMs) {
+  let raw;
+  try { raw = readFileSync(join(dir, 'events.jsonl'), 'utf8'); } catch { return false; }
+  return raw.split('\n').some((line) => {
+    try {
+      const ev = JSON.parse(line);
+      return ev?.message === 'cycle.start' && Date.parse(ev.started_at) >= sinceMs;
+    } catch { return false; }
+  });
 }
 
 /**
@@ -630,6 +653,11 @@ export function makeCycleTerminalWatch(forgeRoot, wantState, opts = null) {
   // Mirrors the door's own record rather than keeping a second copy: two flags
   // for one fact is how they drift.
   Object.defineProperty(watch, 'sawCycle', { get: () => door.sawCycle === true });
+  // T1 1231 — the declared terminal is a CONDITION of completion, read by
+  // `waitForConsequence`, not only an early-red exit.
+  Object.defineProperty(watch, 'reached', { get: () => terminalAt !== null });
+  Object.defineProperty(watch, 'wantState', { value: wantState });
+  Object.defineProperty(watch, 'lastSeen', { get: () => door.lastSeen });
   return watch;
 }
 
