@@ -55,6 +55,21 @@ test('post-merge tests are judged normally once the cycle reached merge', () => 
   assert.equal(post.pass, true);
 });
 
+test('the reflect row follows the flow: absent when the selected flow declares no on:merged reflect (M7-A --flow)', () => {
+  const base = {
+    finalStatus: 'done', manifestInDone: true,
+    wi: { total: 1, complete: 1, failed: 0 },
+    tests: { ran: true, ok: true, label: 'npm test' },
+    cost: 5, costCeiling: 35,
+  };
+  const noReflect = buildOutcomeChecks({ ...base, reflectTheme: undefined });
+  assert.equal(noReflect.find((c) => c.name === 'reflect wrote central project brain'), undefined,
+    'a flow with no reflect trigger cannot be failed for not reflecting — nor passed for it');
+  const withReflect = buildOutcomeChecks({ ...base, reflectTheme: { present: false, reason: 'none' } });
+  assert.equal(withReflect.find((c) => c.name === 'reflect wrote central project brain')?.pass, false,
+    'a flow that DOES declare reflect is still failed when no theme was written');
+});
+
 // ---------------------------------------------------------------------------
 // Defect B — `classifyReflectorProgress(logLines) → { state, detail }`
 //

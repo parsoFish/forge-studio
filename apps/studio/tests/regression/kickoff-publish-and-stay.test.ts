@@ -40,6 +40,12 @@ import { test, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+// The page under test is imported ONCE, at module scope (vi.mock is hoisted above it, so the
+// mocks still apply). Imported inside a test body, its transform + import was charged to that
+// test's 5 s budget — the first test in the file timed out on a CPU-starved host while every
+// later one (module cached) passed, and the timed-out body kept mounting into the next test.
+// Flake register F5/F6, reproduced by lane m7-c pinning vitest to one CPU beside four burners.
+import SessionKickoffPage from '@/app/sessions/[kind]/new/page';
 
 const MINTED = '2026-09-03T02-47-47-3412d9d3';
 
@@ -104,7 +110,6 @@ function setControlled(el: HTMLInputElement | HTMLTextAreaElement | HTMLSelectEl
 }
 
 test('396: the press publishes the minted id, offers a real anchor to it, and does NOT navigate', async () => {
-  const { default: SessionKickoffPage } = await import('@/app/sessions/[kind]/new/page');
 
   await act(async () => {
     root.render(React.createElement(SessionKickoffPage, { params: { kind: 'authoring' } }));

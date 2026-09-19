@@ -69,8 +69,10 @@ export const DEFAULT_PROJECT = 'gitpulse';
  *   project's own test-suite outcome
  * @param {number} params.cost this initiative's total spend in USD
  * @param {number} params.costCeiling the run's cost ceiling in USD
- * @param {{ present: boolean, reason: string }} params.reflectTheme whether the
- *   reflector wrote/updated a central project-brain theme this run
+ * @param {{ present: boolean, reason: string }} [params.reflectTheme] whether the
+ *   reflector wrote/updated a central project-brain theme this run — absent
+ *   means the row is not added (the selected flow declares no `on: merged`
+ *   reflect trigger, so nothing was ever going to reflect)
  * @param {{ present: boolean, reason: string }} [params.liveEvidence] optional —
  *   absent means the row is not added (not a live-resource project run)
  * @param {{ present: boolean, reason: string }} [params.releaseEvidence] optional
@@ -110,8 +112,12 @@ export function buildOutcomeChecks({
     postMergeTestsCheck,
     { name: `cost under ceiling ($${costCeiling})`, pass: cost <= costCeiling, detail: `$${cost.toFixed(2)} / $${costCeiling}` },
   ];
-  // S9: the reflect stage (3rd spine flow) must write the central project brain.
-  checks.push({ name: 'reflect wrote central project brain', pass: reflectTheme.present, detail: reflectTheme.reason });
+  // S9: the reflect stage (3rd spine flow) must write the central project brain —
+  // when the flow declares one. A flow without an `on: merged` reflect trigger
+  // gets no row, the same convention as the two optional rows below.
+  if (reflectTheme !== undefined) {
+    checks.push({ name: 'reflect wrote central project brain', pass: reflectTheme.present, detail: reflectTheme.reason });
+  }
   // Live-resource projects: assert the demo carries real REST evidence, so a
   // green-unit-gate-but-no-live-proof cycle fails the gate (demos-are-visual-evidence).
   if (liveEvidence !== undefined) {

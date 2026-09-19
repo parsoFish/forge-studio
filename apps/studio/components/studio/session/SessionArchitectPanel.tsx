@@ -139,12 +139,16 @@ export function SessionArchitectPanel({
         )}
 
         {/* The plan link — ONCE, whenever a PLAN.html exists (W7-A3,
-            artifact-plan-22): the gate at awaiting-verdict, read-only view in
-            every other phase. Playwright strict mode + the flows-run journey's
-            `open-plan` click both need this to be the only such element. */}
+            artifact-plan-22). Playwright strict mode + the stories' `open-plan`
+            press both need this to be the only such element. The href asks for
+            NO mode: the artifact page arms the gate from the session's live
+            phase. This panel renders from the summary poll while the page's
+            `data-session-phase` comes from the shell poll, so a mode baked in
+            here could be one poll stale (`forge-8vfn.6.11.48`). The label and
+            style below are copy, and may lag by that poll harmlessly. */}
         {session.planUrl && (
           <Link
-            href={architectPlanArtifactHref(session.sessionId, session.phase === 'awaiting-verdict' ? 'gate' : 'view')}
+            href={architectPlanArtifactHref(session.sessionId)}
             data-action="open-plan"
             style={session.phase === 'awaiting-verdict' ? btnLinkStyle : quietLinkStyle}
           >
