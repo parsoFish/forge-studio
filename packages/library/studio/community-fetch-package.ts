@@ -101,6 +101,8 @@ export interface FetchedPackage {
   files: PackageFile[];
   ref: string;
   resolvedUrl: string;
+  /** SKILL.md or hook.yaml — which manifest matched (forge-8vfn.7.6.88). */
+  kind: 'skill' | 'hook';
 }
 
 /** Why a fetch did not produce a package. Every arm is an EXPECTED failure and
@@ -126,6 +128,11 @@ interface TreeEntry {
  *  rather than describing them in prose that can drift from the code. */
 function candidateRoots(id: string): readonly string[] {
   return ['SKILL.md', `skills/${id}/SKILL.md`, `${id}/SKILL.md`];
+}
+
+/** forge-8vfn.7.6.88 — mirrors `candidateRoots`, and this repo's own `studio/hooks/<id>/hook.yaml`. */
+function candidateHookRoots(id: string): readonly string[] {
+  return ['hook.yaml', `hooks/${id}/hook.yaml`, `${id}/hook.yaml`];
 }
 
 /** The repo's whole tree at its default branch, for a caller that wants to see
@@ -208,12 +215,13 @@ async function fetchBlob(ctx: RequestCtx, owner: string, repo: string, entry: Tr
   }
 }
 
-/** SKILL.md first, then lexicographic — `readSkillPackage`'s AT-11 order, so a
- *  fetched package and a re-read one enumerate identically. */
-function packageOrder(a: PackageFile, b: PackageFile): number {
-  if (a.path === 'SKILL.md') return -1;
-  if (b.path === 'SKILL.md') return 1;
-  return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+/** The manifest first, then lexicographic — matches a re-read package's own order. */
+function packageOrder(manifestName: string): (a: PackageFile, b: PackageFile) => number {
+  return (a, b) => {
+    if (a.path === manifestName) return -1;
+    if (b.path === manifestName) return 1;
+    return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+  };
 }
 
 export async function fetchCommunitySkillPackage(ctx: RequestCtx, sourceUrl: string, id: string): Promise<FetchPackageOutcome> {
@@ -242,16 +250,21 @@ export async function fetchCommunitySkillPackage(ctx: RequestCtx, sourceUrl: str
       };
     }
 
-    const roots = candidateRoots(id);
-    const foundRoot = roots.find((candidate) => entries.some((e) => e.path === candidate));
+    // forge-8vfn.7.6.88: hook roots tried too (a `kinds: hooks` hub has no SKILL.md).
+    const skillRoots = candidateRoots(id);
+    const hookRoots = candidateHookRoots(id);
+    const has = (candidate: string) => entries.some((e) => e.path === candidate);
+    const foundSkillRoot = skillRoots.find(has);
+    const foundRoot = foundSkillRoot ?? hookRoots.find(has);
     if (foundRoot === undefined) {
       return {
         ok: false,
         reason: 'no-skill-package',
-        message: `"${owner}/${repo}" publishes no SKILL.md at any path forge looks for (${roots.join(', ')}) — there is no package here to install.`,
+        message: `"${owner}/${repo}" publishes no SKILL.md or hook.yaml at any path forge looks for (${[...skillRoots, ...hookRoots].join(', ')}) — there is no package here to install.`,
       };
     }
-    const prefix = foundRoot === 'SKILL.md' ? '' : foundRoot.slice(0, -'SKILL.md'.length);
+    const manifestName = foundSkillRoot !== undefined ? 'SKILL.md' : 'hook.yaml';
+    const prefix = foundRoot === manifestName ? '' : foundRoot.slice(0, -manifestName.length);
     const inPackage = entries.filter((e) => e.path.startsWith(prefix));
 
     if (inPackage.length > MAX_PACKAGE_FILES) {
@@ -283,7 +296,7 @@ export async function fetchCommunitySkillPackage(ctx: RequestCtx, sourceUrl: str
     }
     return {
       ok: true,
-      package: { files: files.sort(packageOrder), ref: sha, resolvedUrl: `https://github.com/${owner}/${repo}` },
+      package: { files: files.sort(packageOrder(manifestName)), ref: sha, resolvedUrl: `https://github.com/${owner}/${repo}`, kind: foundSkillRoot !== undefined ? 'skill' : 'hook' },
     };
   } catch (err) {
     if (err instanceof CommunityRefreshError) return { ok: false, reason: 'fetch-failed', kind: err.kind, message: err.message };
