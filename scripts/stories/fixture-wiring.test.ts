@@ -1,6 +1,6 @@
 /**
  * fixture-wiring.test.ts — the SOURCE-ORDER door for the fixture-ground
- * wiring in `run.mjs` / `run-story.mjs` (M7-D, D1 and its fix rounds).
+ * wiring in `run.mjs` / `run-story.mjs` (M7-D, bead `forge-1rk5.1`).
  *
  * WHY A STATIC TEXT CHECK, following `module-wiring.test.ts`'s own precedent:
  * `run.mjs` and `run-story.mjs` boot a bridge, bind the host-global Studio
@@ -10,52 +10,33 @@
  * answerable by reading it, the same move `module-wiring.test.ts` makes for
  * "does this name resolve".
  *
- * COMMENTS ARE STRIPPED before every match below — the D1 review's finding
- * (I3): "the fixture-wiring run-story door passes if a comment contains
- * `teardownFixtureGround(`, because it uses the first `indexOf`." A mention
- * in a doc comment must never satisfy a door that exists to prove the CODE
- * does the thing the comment claims.
+ * COMMENTS ARE STRIPPED before every match below: a mention of
+ * `teardownFixtureGround(` in a doc comment must never satisfy a door that
+ * exists to prove the CODE does the thing the comment claims.
  *
- * FIX ROUND 3 (this file) — three hardenings the D1 fix-round-2 re-review
- * (`d1-fix2-rereview.md`) asked for, none of which change what run.mjs /
- * run-story.mjs must DO — only how precisely and safely this door checks it:
+ * Three instruments make the doors precise:
  *
- *   1. `stripComments` is now STRING/TEMPLATE/REGEX-AWARE (re-review N5).
- *      The old version ran two regexes over the RAW source in sequence
- *      (block comments, then line comments), blind to context — so a `/*`
- *      appearing inside a `// … projects/*` remark started a "block comment"
- *      that swallowed real code up to the NEXT `*​/` anywhere later in the
- *      file. Measured: appending `/* harmless note *​/` after that remark in
- *      the real `run-story.mjs` turned the UNRELATED
- *      `snapshotRealGrounds ≥ 2` door red. The new version is a one-pass
- *      scanner that tracks whether it is inside a string, a template literal
- *      (including `${ … }` interpolation, which is CODE and can itself
- *      contain comments/strings/nested templates), or a regex literal, and
- *      only treats `//`/`/* *​/` as comments OUTSIDE all of those.
- *   2. The door's mutation-proofness is now a TEST IN ITS OWN RIGHT, not
- *      prose in a report: mutants (a) delete the if-block, (b) neuter it to
- *      `if (false)`, and (c) — new this round — replace the
- *      `realGroundFenceVerdict(` call itself with a stub `{ ok: true, moved:
- *      [] }`, reproducing the re-review's own "double computation" finding
- *      (§4): with two bindings sharing one name, stubbing only the GATING
- *      call left the door unable to tell which binding the `if` actually
- *      read, and it stayed green. `run.mjs`'s fix (one binding, function
- *      scope) closes that hole; mutant (c) pins it so it cannot reopen
- *      silently. All three mutants are built from the REAL file's own text
- *      via EXACT anchor replacement (`replaceAnchor`), which THROWS if its
- *      anchor is not found — a future refactor that moves or renames this
- *      code reds this test outright, rather than the mutant quietly
- *      reducing to a no-op that "passes" without ever having mutated
- *      anything.
- *   3. `fenceDoorVerdict`'s failure text now says EXACTLY what failed
- *      (re-review M-b): the old single message claimed a block was expected
- *      "immediately after" the `const N = realGroundFenceVerdict(`
- *      assignment, which is not what the code checks — it only requires the
- *      `if (!N.ok)` condition's OWN block to be adjacent to ITS OWN
- *      condition, not to the declaration. `locateFenceGuard` now returns a
- *      distinct, accurate reason for each of the three ways it can fail: no
- *      declaration, no matching `if`, or a condition not immediately
- *      followed by a `{ … }` block.
+ *   1. `stripComments` is STRING/TEMPLATE/REGEX-AWARE. Two blind regexes run
+ *      over the raw source in sequence (block comments, then line comments)
+ *      would read the `/*` in a `// … projects/*` remark as the start of a
+ *      block comment and swallow real code up to the next `*​/` anywhere
+ *      later in the file. This is a one-pass scanner that tracks whether it
+ *      is inside a string, a template literal (including `${ … }`
+ *      interpolation, which is CODE and can itself contain comments/strings/
+ *      nested templates), or a regex literal, and only treats `//`/`/* *​/`
+ *      as comments OUTSIDE all of those.
+ *   2. The fence door's mutation-proofness is a TEST IN ITS OWN RIGHT:
+ *      mutants (a) delete the if-block, (b) neuter it to `if (false)`, and
+ *      (c) replace the `realGroundFenceVerdict(` call itself with a stub
+ *      `{ ok: true, moved: [] }`. All three are built from the REAL file's
+ *      own text via EXACT anchor replacement (`replaceAnchor`), which THROWS
+ *      if its anchor is not found — a refactor that moves or renames this
+ *      code reds the test outright, rather than the mutant quietly reducing
+ *      to a no-op that "passes" without ever having mutated anything.
+ *   3. `fenceDoorVerdict`'s failure text says EXACTLY what failed:
+ *      `locateFenceGuard` returns a distinct, accurate reason for each of the
+ *      three ways it can fail — no declaration, no matching `if`, or a
+ *      condition not immediately followed by a `{ … }` block.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -65,7 +46,7 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-// ── Item 1 — a string/template/regex-aware comment stripper ────────────────
+// ── A string/template/regex-aware comment stripper ─────────────────────────
 //
 // A one-pass scanner, not two blind regexes. It tracks four literal kinds
 // that can contain comment-LOOKING text which must never be treated as a
@@ -247,7 +228,7 @@ const readSource = (file: string) => readFileSync(join(HERE, file), 'utf8');
 const readStripped = (file: string) => stripComments(readSource(file));
 const indexOfCall = (source: string, name: string) => source.indexOf(`${name}(`);
 
-// ── Item 1 — unit tests for the stripper itself ─────────────────────────────
+// ── Unit tests for the stripper itself ──────────────────────────────────────
 
 test('stripComments: strips // and /* */ in ordinary code, keeping newlines where // comments were', () => {
   assert.equal(stripComments('a();\n// a remark\nb();\n'), 'a();\n\nb();\n');
@@ -294,7 +275,7 @@ test('stripComments: comment-like text inside a regex literal is never stripped,
   assert.ok(!stripped.includes('also real'), `Got:\n${stripped}`);
 });
 
-test('stripComments: a /* inside a // comment does not start swallowing code — synthetic reproduction of N5', () => {
+test('stripComments: a /* inside a // comment does not start swallowing code — synthetic reproduction', () => {
   const src =
     'const keep = snapshotRealGrounds(a); // a remark about projects/* and other things\n' +
     'const also = snapshotRealGrounds(b); /* harmless note */\n';
@@ -307,26 +288,33 @@ test('stripComments: a /* inside a // comment does not start swallowing code —
   );
 });
 
-test('stripComments: the reviewer\'s EXACT reproduction (N5) against the REAL run-story.mjs — the snapshotRealGrounds ≥ 2 door must stay GREEN', () => {
-  // d1-fix2-rereview.md N5: "appending `/* harmless note */` … turned the
-  // unrelated `snapshotRealGrounds ≥ 2` door RED. The cause is the `/*`
-  // inside the `// … projects/*` comment …, which swallows code up to the
-  // next `*/`." Reproduced here against the real file's own current comment
-  // (not a stand-in), via the SAME exact-anchor-or-throw discipline as the
-  // mutation test below — if this anchor line ever moves, this test fails
-  // loudly rather than silently testing nothing.
-  const real = readSource('run-story.mjs');
-  const anchorLine = '  // M7-D — a FIXTURE run must never move a REAL ground: every `projects/*`';
-  const at = real.indexOf(anchorLine);
-  assert.ok(at !== -1, 'this test\'s own anchor line — the "projects/*" remark — moved in run-story.mjs; update the anchor');
-  const mutated = `${real.slice(0, at)}${anchorLine} /* harmless note */\n${real.slice(at + anchorLine.length + 1)}`;
+test('stripComments: a /* … */ appended to a // … projects/* remark, in multi-line source with a later */, keeps every call after it', () => {
+  // A synthetic source shaped like the fence's own code: a call, a `//`
+  // remark whose text contains `projects/*`, code after it, and a JSDoc
+  // `*/` further down — the shape in which a block-first stripper swallows
+  // the second call. The mutation appends `/* harmless note */` to the remark
+  // via the same exact-anchor-or-throw discipline as the mutation test below.
+  const anchorLine = '  // a FIXTURE run must never move a REAL ground: every `projects/*`';
+  const source = [
+    'const realBefore = snapshotRealGrounds(listBefore);',
+    anchorLine,
+    'runTheBeats();',
+    'const realAfter = snapshotRealGrounds(listAfter);',
+    '/** a later doc comment */',
+    'function later() {}',
+    '',
+  ].join('\n');
+  const mutated = replaceAnchor(source, anchorLine, `${anchorLine} /* harmless note */`);
 
-  const count = (stripComments(mutated).match(/snapshotRealGrounds\(/g) ?? []).length;
-  assert.ok(
-    count >= 2,
-    `expected snapshotRealGrounds( at least twice after stripping the mutated source — found ${count}. A ` +
-      'regression here means the old swallow-to-the-next-*/ bug is back.',
-  );
+  for (const [label, text] of [['unmutated', source], ['mutated', mutated]]) {
+    const count = (stripComments(text).match(/snapshotRealGrounds\(/g) ?? []).length;
+    assert.equal(
+      count,
+      2,
+      `${label}: expected both snapshotRealGrounds( calls to survive stripping — found ${count}. A regression ` +
+        'here means the swallow-to-the-next-*/ bug is back.',
+    );
+  }
 });
 
 test('comment-stripping does not eat real code — sanity check on this door\'s own instrument', () => {
@@ -352,7 +340,7 @@ test('run.mjs: provisionFixtureGrounds (the BATCH function, not the singular in 
   assert.ok(
     provisionAt !== -1,
     'run.mjs never calls provisionFixtureGrounds( (the batch form) — a loop over the singular has no ' +
-      'batch-level rollback on a later story\'s refusal (I3/M1)',
+      'batch-level rollback on a later story\'s refusal',
   );
   assert.ok(provisionAt > sweepAt, `provisionFixtureGrounds( (at ${provisionAt}) must run AFTER sweepStoryResidue( (at ${sweepAt})`);
   assert.ok(provisionAt < bridgeAt, `provisionFixtureGrounds( (at ${provisionAt}) must run BEFORE probeBridgeIdentity( (at ${bridgeAt})`);
@@ -388,7 +376,7 @@ test('run.mjs: the abort backstop tears down ONLY grounds whose story never star
     /\.has\(/.test(guardWindow),
     'expected the backstop\'s teardown to be guarded by a .has( check against the started-ids structure — ' +
       'found no .has( between finally and teardownFixtureGround(. Without it, a CRASHED story\'s ground is torn ' +
-      'down along with an unstarted one\'s, destroying the evidence ruling 356b exists to keep.',
+      'down along with an unstarted one\'s, destroying the evidence a crashed story leaves behind.',
   );
 
   assert.match(
@@ -411,7 +399,7 @@ test('run.mjs: the fixture-ground backstop sits inside its OWN try { … } catch
   assert.ok(
     tryAt !== -1,
     'expected a try { … } wrapping the fixture-ground backstop — a throw inside it must not be able to skip ' +
-      'await release() (N3: "wrap it anyway for the same reason as its neighbour", the reap block above it)',
+      'await release() (the same reason as the reap block above it)',
   );
   const tryBraceStart = source.indexOf('{', tryAt);
   const tryBraceEnd = matchingBraceEnd(source, tryBraceStart);
@@ -474,7 +462,7 @@ test('run-story.mjs: .summary is logged, teardown follows the LAST ownGroundMani
   assert.ok(
     source.includes('realGrounds'),
     'run-story.mjs never mentions realGrounds — the fence verdict\'s evidence must reach story.json for a ' +
-      'fixture run, not only the console (I3/M3)',
+      'fixture run, not only the console',
   );
 });
 
@@ -507,7 +495,7 @@ test('run-story.mjs: realGrounds carries ONLY moved into the artifact — hashed
   assert.match(objectLiteral, /\bmoved\s*:/, `realGrounds must carry moved. Found: ${objectLiteral}`);
 });
 
-// ── T2 ruling 1 / fix round 3 — THE MUTATION-PROOF FENCE DOOR ───────────────
+// ── THE MUTATION-PROOF FENCE DOOR ───────────────────────────────────────────
 //
 // Capture the variable `N` bound by `const N = realGroundFenceVerdict(`,
 // require the literal statement `if (!N.ok)`, and require THAT statement's
@@ -542,7 +530,7 @@ function matchingParenEnd(source: string, openIndex: number): number {
 }
 
 /**
- * Item 2 — replace the FIRST occurrence of `anchor` with `replacement`.
+ * Replace the FIRST occurrence of `anchor` with `replacement`.
  * THROWS if the anchor is not found, rather than returning `source`
  * unchanged: a mutation test built on a silent no-op would keep "passing"
  * forever, having stopped proving anything the moment a refactor renamed or
@@ -588,7 +576,7 @@ interface FenceGuardLocation {
 }
 
 /**
- * Item 3 — find `const N = realGroundFenceVerdict(` and the `if (!N.ok) { … }`
+ * Find `const N = realGroundFenceVerdict(` and the `if (!N.ok) { … }`
  * statement that follows it, in ALREADY COMMENT-STRIPPED source. Returns
  * EITHER the location, OR `{ error }` naming EXACTLY which of the three
  * checks failed — never one generic message for all three, and never a
@@ -627,8 +615,7 @@ function locateFenceGuard(strippedSource: string): FenceGuardLocation | { error:
 /** The door itself: does `source` contain a `const N = realGroundFenceVerdict(`
  *  whose `if (!N.ok) { … }` block itself contains `return 1`? Parametrised on
  *  SOURCE TEXT (not a fixed file) so the SAME instrument can be pointed at
- *  the real file, or at a mutated copy, from a test (T2 ruling 1: "parametrise
- *  the door's source path so the test can be pointed at a file"). */
+ *  the real file, or at a mutated copy, from a test. */
 function fenceDoorVerdict(source: string): { ok: boolean; reason: string } {
   const stripped = stripComments(source);
   const loc = locateFenceGuard(stripped);
@@ -656,7 +643,7 @@ test('run-story.mjs: if (!N.ok) { … return 1 … } — the fence\'s red must s
   assert.equal(
     v.ok,
     true,
-    `${v.reason}\n\nThe re-review's own mutation (d1-fix1-rereview.md, I3) found the FIRST return 1 after the ` +
+    `${v.reason}\n\nThe FIRST return 1 after the ` +
       'FIRST .ok in this file belongs to the unrelated own-ground undeclared-drift red — this door refuses that ' +
       'coincidence and requires the return to be structurally INSIDE the .ok check\'s own block.',
   );
@@ -680,9 +667,9 @@ test('the fence door\'s own instrument: GREEN on a correctly-shaped guard, RED w
 });
 
 /**
- * Item 2 — the door's mutation-proofness, pinned as a test in its own right
- * (M7-COMMON §6.5: "a door guarding a refusal ships with its mutation
- * transcript"; this round makes that transcript executable, not prose).
+ * The door's mutation-proofness, pinned as a test in its own right: a door
+ * guarding a refusal ships with its mutation transcript, and here that
+ * transcript is executable, not prose.
  *
  * Three mutants of the REAL `run-story.mjs`, each built via EXACT anchor
  * replacement (never a hand-typed guess, never a fuzzy regex substitution
@@ -695,17 +682,13 @@ test('the fence door\'s own instrument: GREEN on a correctly-shaped guard, RED w
  *       guessed) replaced with a hand-written verdict object literal,
  *       `{ ok: true, moved: [] }`.
  *
- * Mutant (c) is new this round. It reproduces the re-review's §4 finding
- * exactly: a round-2 draft computed `realGroundFenceVerdict` TWICE under the
- * same local name — once for the console/evidence, once more, later, only to
- * give the exit-code gate a literal `const N = realGroundFenceVerdict(` shape
- * to parse — and stubbing the SECOND (gating) call left the door green while
- * the run's actual exit code stopped reflecting reality, because the door
- * bound `N` from the FIRST declaration and never checked that the `if` it
- * found afterward read the SAME call. `run.mjs` now makes exactly ONE
- * `realGroundFenceVerdict(` call at function scope, which is what closes the
- * hole: stubbing the ONLY call removes the `const N = realGroundFenceVerdict(`
- * the door needs entirely, so `locateFenceGuard` cannot bind `N` at all.
+ * Mutant (c) pins why `run-story.mjs` makes exactly ONE
+ * `realGroundFenceVerdict(` call. With two bindings under one name, stubbing
+ * only the gating call would leave the door green while the run's exit code
+ * stopped reflecting reality: the door binds `N` from the FIRST declaration
+ * and never checks that the `if` it finds reads the SAME call. With one call,
+ * stubbing it removes the `const N = realGroundFenceVerdict(` the door needs,
+ * so `locateFenceGuard` cannot bind `N` at all.
  *
  * All three mutants must be RED; the real, unmutated file must be GREEN.
  */

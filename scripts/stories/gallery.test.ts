@@ -95,27 +95,25 @@ test('a story with no beats is not reported green', () => {
 });
 
 /**
- * D1 review, brief item 7 / M3 — the real-ground fence's verdict
- * (`realGroundFenceVerdict`, `fixture-ground.mjs`) went RED on the console
- * only: `run-story.mjs` never put it into the `result` object
- * `writeStoryJson` serialises, so a run that failed on this fence left no
- * record of it in its own artifact. `writeStoryJson` — the function that
- * actually builds `story.json`, found by grepping `story.json` in this
- * directory — is where that contract is pinned: carried through when given,
- * absent when not, so a non-fixture story's artifact is unchanged.
+ * The real-ground fence's verdict (`realGroundFenceVerdict`,
+ * `fixture-ground.mjs`) once went RED on the console only: `run-story.mjs`
+ * never put it into the `result` object `writeStoryJson` serialises, so a run
+ * that failed on this fence left no record of it in its own artifact.
+ * `writeStoryJson` — the function that actually builds `story.json` — is
+ * where that contract is pinned: carried through when given, absent when
+ * not, so a non-fixture story's artifact is unchanged.
  *
- * FIX ROUND 2, T2 ruling 2 (`forge-8vfn.26` class) — `realGrounds` carries
- * ONLY `moved`. The re-review's N1 finding: `hashed`/`trees` are FACTS ABOUT
- * THE CHECKOUT THAT RAN THE STORY (how many real grounds this host and its
- * sibling worktrees happen to hold), not about the product. `story.json` is
- * COMMITTED, so a fixture run on a stranger's clean checkout (1 hashed, 1
- * tree) would leave the SAME committed artifact dirty against a lane host
- * with sixteen worktrees (23 hashed, 16 trees) — the exact class
- * `artifact-paths.mjs`'s own header exists to prevent ("a story artifact
- * records the PRODUCT, never the checkout that ran it"). `moved` stays: it is
- * `[]` on every clean run, on every host, deterministically. The counts stay
- * on the console summary line, which `run-story.mjs` already prints
- * unconditionally (untouched this round).
+ * `realGrounds` carries ONLY `moved` (`forge-8vfn.26` class): `hashed` and
+ * `trees` are FACTS ABOUT THE CHECKOUT THAT RAN THE STORY (how many real
+ * grounds this host and its sibling worktrees happen to hold), not about the
+ * product. `story.json` is COMMITTED, so a fixture run on a stranger's clean
+ * checkout (1 hashed, 1 tree) would leave the SAME committed artifact dirty
+ * against a lane host with sixteen worktrees (23 hashed, 16 trees) — the
+ * exact class `artifact-paths.mjs`'s own header exists to prevent ("a story
+ * artifact records the PRODUCT, never the checkout that ran it"). `moved`
+ * stays: it is `[]` on every clean run, on every host, deterministically. The
+ * counts stay on the console summary line, which `run-story.mjs` prints
+ * unconditionally.
  */
 test('writeStoryJson carries realGrounds: { moved } through to story.json — no hashed, no trees (forge-8vfn.26 class)', () => {
   const root = mkdtempSync(join(tmpdir(), 'gallery-realgrounds-'));
@@ -132,8 +130,8 @@ test('writeStoryJson carries realGrounds: { moved } through to story.json — no
 });
 
 test('writeStoryJson does not itself invent hashed/trees on a realGrounds object that carries them — the shape discipline is the CALLER\'s, not smuggled back in by the builder', () => {
-  // A belt to N1's brace: even if a caller regressed and passed the D1 shape
-  // back in, the builder must not be the reason hashed/trees LOOK safe to
+  // A belt to the caller's brace: even if a caller regressed and passed
+  // `hashed`/`trees` back in, the builder must not be the reason hashed/trees LOOK safe to
   // reintroduce — it is a pure pass-through, so whatever the caller gives it
   // is whatever story.json gets. This is the CONTROL that proves the field
   // above is scoped by the CALLER's discipline (pinned as a wiring door in
