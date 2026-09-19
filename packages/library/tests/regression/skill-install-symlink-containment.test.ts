@@ -174,3 +174,63 @@ test('readSkillPackage refuses a symlinked skills/<id> — its own pin, not cove
     cleanup();
   }
 });
+
+// ---------------------------------------------------------------------------
+// forge-8vfn.5.35 — a symlinked leaf INSIDE an otherwise-contained package.
+//
+// `skills/<id>` is a real directory and `SKILL.md` is a real file (both
+// guards above pass) — but a NON-`SKILL.md` leaf under it is a symlink out
+// of the library. `walk()`'s old `Dirent.isFile()`/`isDirectory()` check does
+// not follow symlinks, so that entry was neither — silently SKIPPED, dropping
+// out of `contentHash` entirely. Not a redirect (the root guard already
+// closes that): a silent trust-gate bypass, since `skill-trust.ts`'s
+// `needs-review` fires only on a hash difference, and a dropped entry never
+// changes the hash.
+// ---------------------------------------------------------------------------
+
+function plantSkillWithSymlinkedLeaf(): { forgeRoot: string; outside: string; cleanup: () => void } {
+  const base = mkdtempSync(join(tmpdir(), 'forge-skill-leaf-escape-'));
+  const forgeRoot = join(base, 'root');
+  const outside = join(base, 'OUTSIDE');
+  mkdirSync(join(forgeRoot, 'skills', 'leafy-id'), { recursive: true });
+  mkdirSync(outside, { recursive: true });
+
+  writeFileSync(join(forgeRoot, 'skills', 'leafy-id', 'SKILL.md'), '---\nname: leafy\ndescription: d\n---\n\nbody\n', 'utf8');
+  writeFileSync(join(outside, 'exfil.txt'), 'exfiltrated content', 'utf8');
+  // An ordinary, contained package — only ONE non-SKILL.md leaf is a link.
+  symlinkSync(join(outside, 'exfil.txt'), join(forgeRoot, 'skills', 'leafy-id', 'notes.txt'), 'file');
+
+  return { forgeRoot, outside, cleanup: () => rmSync(base, { recursive: true, force: true }) };
+}
+
+test('readSkillPackage refuses a package containing a symlinked non-SKILL.md leaf that escapes the library, rather than silently dropping it from the hash', () => {
+  const { forgeRoot, cleanup } = plantSkillWithSymlinkedLeaf();
+  try {
+    assert.throws(
+      () => readSkillPackage(forgeRoot, 'leafy-id'),
+      /notes\.txt/,
+      'a symlinked leaf escaping the package must be refused BY NAME, not silently skipped',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('readSkillPackage still reads an ordinary package containing a REAL (non-symlinked) extra leaf, unchanged hash-relevant content', () => {
+  const base = mkdtempSync(join(tmpdir(), 'forge-skill-leaf-ok-'));
+  try {
+    const forgeRoot = join(base, 'root');
+    mkdirSync(join(forgeRoot, 'skills', 'plain-id'), { recursive: true });
+    writeFileSync(join(forgeRoot, 'skills', 'plain-id', 'SKILL.md'), '---\nname: plain\ndescription: d\n---\n\nbody\n', 'utf8');
+    writeFileSync(join(forgeRoot, 'skills', 'plain-id', 'notes.txt'), 'real, ordinary content', 'utf8');
+
+    const files = readSkillPackage(forgeRoot, 'plain-id');
+    assert.deepEqual(
+      files.map((f) => f.path),
+      ['SKILL.md', 'notes.txt'],
+      'an ordinary real leaf must still be walked and included, exactly as before this fix',
+    );
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
