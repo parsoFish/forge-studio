@@ -33,6 +33,7 @@ import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import type { CommunityRegistryItem, CommunityRegistrySource } from '@forge/contracts/studio/types.ts';
 import { communityRegistryPath, loadCommunityRegistry, serializeCommunityRegistry, COMMUNITY_REGISTRY_SCHEMA_VERSION } from './studio/community-registry.ts';
 import { CommunityRegistryLockError, lockCommunityRegistry } from './community-registry-lock.ts';
+import { HTTP_URL_RE } from './studio/community-source-url.ts';
 import { decodeIdOrRespond, REGISTRY_ROW_RE } from './bridge-studio-community.ts';
 
 // W7-B3 (community-23) — community-registry CRUD helpers. The registry
@@ -92,7 +93,7 @@ function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistr
   if (typeof category !== 'string') return { ok: false, error: category.error };
   const sourceUrl = requireString('sourceUrl');
   if (typeof sourceUrl !== 'string') return { ok: false, error: sourceUrl.error };
-  if (!/^https?:\/\//.test(sourceUrl)) return { ok: false, error: 'item.sourceUrl must be an http(s) URL' };
+  if (!HTTP_URL_RE.test(sourceUrl)) return { ok: false, error: 'item.sourceUrl must be an http(s) URL' };
   const provenance = requireString('provenance');
   if (typeof provenance !== 'string') return { ok: false, error: provenance.error };
 
