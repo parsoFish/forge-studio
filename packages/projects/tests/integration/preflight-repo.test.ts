@@ -285,6 +285,23 @@ test('C2 (HARD): a .gitignore that blanket-ignores .forge/ fails C2, naming .for
   }
 });
 
+test('C2 (HARD): a .gitignore that ignores ONLY .forge/quality_gate_cmd fails C2, naming it (TRACKED_CONFIG_PATHS single source)', () => {
+  // Isolation pin: the sidecar gate command is tracked config just like
+  // project.json/skills — ignoring it in isolation (not via a blanket
+  // `.forge/`) must still fail, proving TRACKED_CONFIG_PATHS is checked
+  // entry-by-entry, not just as a side effect of the blanket-ignore case.
+  const p = happyProject();
+  try {
+    writeFileSync(join(p.dir, '.gitignore'), ['node_modules/', 'dist/', ...SCRATCH_PATHS, '.forge/quality_gate_cmd'].join('\n'));
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c = clause(r, 'C2');
+    assert.equal(c.pass, false, `ignoring .forge/quality_gate_cmd must fail C2: ${c.detail}`);
+    assert.match(c.detail, /\.forge\/quality_gate_cmd/);
+  } finally {
+    p.cleanup();
+  }
+});
+
 test('C2 (HARD): the canonical stanza (SCRATCH_PATHS ignored, .forge/project.json + .forge/skills/ untouched) passes', () => {
   // The other half of the red-first pair: the stanza `fixScratchHygiene` /
   // `scaffoldContractArtifacts` / the three starters all write — ignore only

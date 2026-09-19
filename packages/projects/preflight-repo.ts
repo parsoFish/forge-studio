@@ -13,14 +13,15 @@ import { join } from 'node:path';
 import type { ClauseResult } from '@forge/kernel';
 
 // C2 policy (ruling 92, bead forge-8vfn.8.1.2): SCRATCH_PATHS (else every
-// cycle commits orchestration state into the PR — the W4 reviewer-confusion
-// bug) MUST be untracked+ignored — `.forge/work-items/` (regenerated per
-// cycle) and the onboard marker `.forge/.create-complete`, NOT `.forge/`
-// wholesale. TRACKED_CONFIG_PATHS is the inverse: `.forge/project.json` +
-// `.forge/skills/` are contract config every conformant project keeps — a
-// blanket `.forge/` ignore silently drops them, so it violates BOTH lists.
+// cycle commits orchestration state into the PR) MUST be untracked+ignored —
+// `.forge/work-items/` and `.forge/.create-complete`, NOT `.forge/` wholesale.
+// TRACKED_CONFIG_PATHS is the inverse and the ONE single source of what under
+// `.forge/` is tracked: `.forge/project.json`, `.forge/quality_gate_cmd`,
+// `.forge/skills/` — a blanket `.forge/` ignore drops them, violating BOTH
+// lists. `pr-branch-sync.ts`'s `stripForgeScratchFromBranch` reads this SAME
+// constant so scratch-strip and scratch-ignore can never disagree.
 export const SCRATCH_PATHS = ['.forge/work-items/', '.forge/.create-complete', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
-export const TRACKED_CONFIG_PATHS = ['.forge/project.json', '.forge/skills/'];
+export const TRACKED_CONFIG_PATHS = ['.forge/project.json', '.forge/quality_gate_cmd', '.forge/skills/'];
 
 // --- C2: scratch hygiene (HARD) ---
 

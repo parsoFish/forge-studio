@@ -62,7 +62,7 @@ import {
   type ProjectConfig,
 } from './project-config.ts';
 import { withStudioWrite } from './project-repo-tx.ts';
-import { runPreflight, type PreflightReport } from './preflight.ts';
+import { runPreflight, SCRATCH_PATHS, TRACKED_CONFIG_PATHS, type PreflightReport } from './preflight.ts';
 
 // ---------------------------------------------------------------------------
 // Types (Q5's proposal, refined — see the deviations noted per field below)
@@ -124,6 +124,18 @@ export type SkillMove = {
   to: string;
 };
 
+/** The `.gitignore` fix (ruling 92 follow-up, bead forge-8vfn.8.1.2): a blanket
+ *  `.forge/` line silently drops tracked contract config, and no `.gitignore`
+ *  change was ever part of what reset regenerates. A SEPARATE field, not a
+ *  `ContractSection` row — raw text, not JSON; `before`/`after` are the WHOLE
+ *  file. `undefined` only when no `.gitignore` exists — a different, out-of-
+ *  scope C2 failure. */
+export type GitignoreDrift = {
+  before: string | undefined;
+  after: string | undefined;
+  action: 'regenerate' | 'unchanged';
+};
+
 export type DriftReport = {
   projectDir: string;
   projectId: string;
@@ -156,6 +168,7 @@ export type DriftReport = {
   forgeRoot: string;
   rows: DriftRow[];
   skillMoves: SkillMove[];
+  gitignoreDrift: GitignoreDrift;
 };
 
 export type ResetResult = {
@@ -163,6 +176,8 @@ export type ResetResult = {
   /** Only the rows whose action was 'regenerate' or 'add'. */
   applied: DriftRow[];
   skillMovesApplied: SkillMove[];
+  /** True iff `.gitignore` was rewritten (drift.gitignoreDrift.action === 'regenerate'). */
+  gitignoreFixed: boolean;
   /** Re-run preflight after the write, same shape `runPreflight` returns. */
   preflight: PreflightReport;
 };
@@ -437,6 +452,42 @@ function computeSkillsDrift(
   return { row: { section: 'skills', before: skills, after: skills, action }, skillMoves: moves };
 }
 
+/** True iff ignore-pattern `line` covers `target` — the SAME ancestor-prefix
+ *  match `preflight-repo.ts`'s `checkC2` text-scan uses, so reset and C2 can
+ *  never disagree about which line is the violation. */
+function giLineCovers(line: string, target: string): boolean {
+  const pattern = line.trim().replace(/^\//, '').replace(/\/$/, '');
+  if (!pattern || pattern.startsWith('#')) return false;
+  const t = target.replace(/\/$/, '');
+  return pattern === t || t.startsWith(`${pattern}/`);
+}
+
+/** Ruling 92 follow-up: a line covering any `TRACKED_CONFIG_PATHS` entry
+ *  (typically a blanket `.forge/`) fails C2. Proposes replacing ONLY the
+ *  first such line with whichever `SCRATCH_PATHS` entries aren't already
+ *  present elsewhere — every other line, comments included, stays
+ *  byte-for-byte. Absent `.gitignore` is out of scope (a different failure). */
+function computeGitignoreDrift(projectDir: string): GitignoreDrift {
+  let raw: string;
+  try {
+    raw = readFileSync(resolve(projectDir, '.gitignore'), 'utf8');
+  } catch {
+    return { before: undefined, after: undefined, action: 'unchanged' };
+  }
+  const lines = raw.split('\n');
+  const offending = lines
+    .map((l, i) => (TRACKED_CONFIG_PATHS.some((p) => giLineCovers(l, p)) ? i : -1))
+    .filter((i) => i !== -1);
+  if (offending.length === 0) return { before: raw, after: raw, action: 'unchanged' };
+
+  const present = new Set(lines.map((l) => l.trim()));
+  const missing = SCRATCH_PATHS.filter((p) => !present.has(p));
+  const [firstOffender] = offending;
+  const rewritten = lines.flatMap((l, i) => (!offending.includes(i) ? [l] : i === firstOffender ? missing : []));
+  const after = rewritten.join('\n');
+  return { before: raw, after, action: after === raw ? 'unchanged' : 'regenerate' };
+}
+
 /**
  * PURE — reads `.forge/project.json` (via `loadProjectConfig`, so a
  * malformed / un-migrated config throws exactly as it does everywhere else
@@ -506,7 +557,9 @@ export function computeContractDrift(
   const { row: skillsRow, skillMoves } = computeSkillsDrift(dir, config?.skills, config?.artifactRoot);
   rows.push(skillsRow);
 
-  return { projectDir: dir, projectId, appType, forgeRoot, rows, skillMoves };
+  const gitignoreDrift = computeGitignoreDrift(dir);
+
+  return { projectDir: dir, projectId, appType, forgeRoot, rows, skillMoves, gitignoreDrift };
 }
 
 // ---------------------------------------------------------------------------
@@ -673,7 +726,23 @@ export function applyContractReset(projectDir: string, drift: DriftReport): Rese
     withStudioWrite(dir, 'forge-studio: reset project skill layout', () => undefined, movePaths);
   }
 
+  // .gitignore fix (ruling 92 follow-up) — independent of the two branches
+  // above, so its own scoped commit rather than folded into either.
+  const gitignoreFixed = drift.gitignoreDrift.action === 'regenerate';
+  if (gitignoreFixed) {
+    const giGuard = resolveGuardedPath(dir, ['.gitignore']);
+    if (!giGuard.ok) {
+      throw new PathGuardContainmentError(`reset: .gitignore containment check failed: ${giGuard.reason}`);
+    }
+    withStudioWrite(
+      dir,
+      'forge-studio: reset .gitignore (untrap tracked contract config)',
+      () => writeFileSync(giGuard.realPath, drift.gitignoreDrift.after as string, 'utf8'),
+      ['.gitignore'],
+    );
+  }
+
   const preflight = runPreflight(dir, { forgeRoot: drift.forgeRoot });
 
-  return { projectId: drift.projectId, applied, skillMovesApplied, preflight };
+  return { projectId: drift.projectId, applied, skillMovesApplied, gitignoreFixed, preflight };
 }

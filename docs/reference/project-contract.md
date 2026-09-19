@@ -326,15 +326,17 @@ Three categories must be covered:
    the pattern will ignore it the moment the dev-loop creates it).
 2. **Build artifacts and generated outputs:** compiled binaries, `dist/`,
    coverage, graph caches — anything a build writes that isn't source.
-3. **Tracked contract config, never ignored:** `.forge/project.json` and
-   `.forge/skills/` are the canonical, checked-in home for a project's
-   contract and its project-local skills (operator ruling 92,
-   bead forge-8vfn.8.1.2) — `.forge/` itself must NOT be ignored wholesale.
-   The check is the inverse of category 1's: the same git-truth probe, but a
-   VIOLATION if `git check-ignore -q` reports either path as ignored (a
-   blanket `.forge/` line silently drops both from every commit and every
-   `git clone`). Neither needs `git add --force` — they were never ignored
-   in the first place.
+3. **Tracked contract config, never ignored:** `.forge/project.json`, the
+   `.forge/quality_gate_cmd` sidecar, and `.forge/skills/` — `TRACKED_CONFIG_PATHS`,
+   the one single source `preflight-repo.ts` and `pr-branch-sync.ts`'s
+   scratch-strip both read — are the canonical, checked-in home for a
+   project's contract, its local gate command, and its project-local skills
+   (operator ruling 92, bead forge-8vfn.8.1.2) — `.forge/` itself must NOT be
+   ignored wholesale. The check is the inverse of category 1's: the same
+   git-truth probe, but a VIOLATION if `git check-ignore -q` reports any of
+   the three as ignored (a blanket `.forge/` line silently drops all of them
+   from every commit and every `git clone`). None need `git add --force` —
+   they were never ignored in the first place.
 
 The check uses **git-truth** — a `.gitignore` entry is a no-op on
 already-tracked files.
@@ -801,7 +803,7 @@ flow-ready — the flow engine will not accept it.
 | skills | `forge-onboard-project`, `demo` |
 | kb | `betterado` (Brain 3 at `brain/projects/betterado/` in the central forge repo) |
 | **C1 / C1b** | `testProcess.local.cmd` (via the `.forge/quality_gate_cmd` sidecar): `go test -tags all -count=1 ./...` scoped to changed packages. `testProcess.ci.cmd`: `make test && golangci-lint run ./... && make terrafmt-check`. `testProcess.ci.fixCmd`: `make fmt && make terrafmt` |
-| **C2** | `.gitignore` covers `.forge/work-items/`, `.forge/.create-complete`, compiled provider binary, `*.tfstate`, `.terraform/`. `.forge/project.json` and `.forge/skills/` stay trackable — never a blanket `.forge/` ignore |
+| **C2** | `.gitignore` covers `.forge/work-items/`, `.forge/.create-complete`, compiled provider binary, `*.tfstate`, `.terraform/`. `.forge/project.json`, `.forge/quality_gate_cmd`, and `.forge/skills/` stay trackable — never a blanket `.forge/` ignore |
 | **C4** | `roadmap.md` at project root. Brain seeded with `profile.md`, release substrate context, failure-mode themes |
 | C5 | `CLAUDE.md`: never run `go build ./...`, never edit tests to pass, user owns git |
 | C6 | GitHub remote at `parsoFish/terraform-provider-betterado` |
