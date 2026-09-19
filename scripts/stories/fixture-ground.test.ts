@@ -47,6 +47,7 @@ import {
   existsSync,
   rmSync,
   chmodSync,
+  symlinkSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -229,6 +230,51 @@ test('realGroundDirs excludes the run\'s OWN ground project from the root\'s own
 
   const dirs = realGroundDirs(root, { ownProject: 'mdtoc', worktrees: [] });
   assert.deepEqual(dirs, [join(root, 'projects', 'gitpulse')]);
+});
+
+// ── D1 round 4 (security review) — realGroundDirs' skip must be ENOENT-only ─
+//
+// `realGroundDirs`'s `catch { continue; }` around `readdirSync(projectsDir)`
+// today swallows EVERY readdir failure identically, silently skipping the
+// tree. That is correct for the common case — a sibling worktree with no
+// `projects/` dir at all — but wrong for any OTHER failure: a `projects/`
+// dir that exists but cannot be READ (permissions, a broken mount, an I/O
+// error) would silently vanish from the fence with nothing said, which is
+// exactly the shape a real ground escape could hide behind. Only ENOENT
+// (the dir is genuinely absent) may be swallowed; everything else must
+// THROW, naming the tree, so the run refuses rather than fencing a ground
+// it could not actually see.
+
+test('realGroundDirs skips a tree ONLY when its projects/ dir is ABSENT (ENOENT) — silently, with no throw', () => {
+  const root = scratch();
+  mkdirSync(join(root, 'projects'), { recursive: true });
+  const treeWithoutProjects = scratch(); // no projects/ dir created at all — genuine ENOENT
+
+  assert.doesNotThrow(() => realGroundDirs(root, { ownProject: null, worktrees: [treeWithoutProjects] }));
+  const dirs = realGroundDirs(root, { ownProject: null, worktrees: [treeWithoutProjects] });
+  assert.deepEqual(dirs, [], 'an absent projects/ dir contributes nothing, and is not an error');
+});
+
+test('realGroundDirs THROWS, naming the tree, when projects/ exists but cannot be read for a reason OTHER than absence', (t) => {
+  if (typeof process.getuid === 'function' && process.getuid() === 0) {
+    t.skip('running as root — permission bits are not enforced, so EACCES never occurs');
+    return;
+  }
+  const root = scratch();
+  const projectsDir = join(root, 'projects');
+  mkdirSync(projectsDir, { recursive: true });
+  chmodSync(projectsDir, 0o000);
+
+  try {
+    assert.throws(
+      () => realGroundDirs(root, { ownProject: null, worktrees: [] }),
+      new RegExp(escapeRegex(root)),
+      'a projects/ dir that exists but cannot be read must THROW, naming the tree — silently skipping it would ' +
+        'let a real ground go unfenced with nothing said',
+    );
+  } finally {
+    chmodSync(projectsDir, 0o755);
+  }
 });
 
 // ── 9. realGroundEscapes ───────────────────────────────────────────────────
@@ -436,4 +482,84 @@ test('M5: a seed containing an unreadable directory makes provisioning THROW nam
   } finally {
     chmodSync(join(seedDir, 'locked'), 0o755);
   }
+});
+
+// ── D1 round 4 (security review) ────────────────────────────────────────
+//
+// A tracked seed's own author controls its content, but the PROVISIONER
+// does not get to assume that content is innocent: `cpSync` follows a
+// symlink's OWN metadata (it does not dereference by default) and would
+// copy a seed-planted symlink straight into `projects/<project>` — a
+// destination this run then treats as a trusted git worktree. A symlink
+// (or a fifo, or a socket — anything that is not a plain file or a plain
+// directory) inside a seed is refused outright, before any write, naming
+// the offending path.
+
+test('provisioning refuses a seed containing a non-regular entry (a symlink to /etc), naming the path, before writing anything', () => {
+  const root = scratch();
+  const seedDir = seedFixture(root);
+  symlinkSync('/etc', join(seedDir, 'evil'));
+
+  assert.throws(
+    () => provisionFixtureGround(root, { storyId: 'S8', project: 'story-s8', fixture: 'demo-seed' }),
+    /evil/,
+    'a symlink inside the seed must be refused, naming it — cpSync would otherwise copy it straight into a ' +
+      'destination this run treats as a trusted git worktree',
+  );
+  assert.equal(
+    existsSync(join(root, 'projects', 'story-s8')),
+    false,
+    'a refused provision must write nothing — not even a partially-copied seed',
+  );
+});
+
+/**
+ * The SAME shape, but hermetic — the target is fully controlled by this test
+ * and GUARANTEED readable end-to-end, so the refusal cannot be confused with
+ * `/etc` happening to contain a subdirectory this user cannot read on THIS
+ * particular host (the sibling test above throws today for exactly that
+ * reason: `readdirSync(…, { recursive: true })` follows the symlink and
+ * fails trying to recurse into `/etc/credstore`, an ACCIDENT of this host's
+ * `/etc`, not a deliberate refusal of the symlink itself — the same generic
+ * "could not list" catch M5 already added, coincidentally triggered).
+ *
+ * Measured against today's code with a fully readable target: the recursive
+ * readdir follows the symlink and lists its target's OWN files as "seed
+ * files"; `cpSync` then COPIES them into the destination — a write has
+ * already happened — and only THEN does `git add` itself refuse
+ * (`fatal: pathspec '…' is beyond a symbolic link`), caught by
+ * `provisionFixtureGround`'s own self-cleanup. The end state looks clean,
+ * but "refuses before writing anything" was never true for this case; git's
+ * own safety net did the refusing, one step too late. This is the test that
+ * actually pins the ruling: it is RED until a DEDICATED pre-write check
+ * exists, independent of both M5's readdir-catch and git's own pathspec
+ * refusal.
+ */
+test('provisioning refuses a seed containing a non-regular entry (a symlink to a FULLY READABLE target), naming the path — never relying on git\'s own incidental refusal', () => {
+  const root = scratch();
+  const seedDir = seedFixture(root);
+  const readableTarget = join(root, 'readable-target');
+  mkdirSync(readableTarget, { recursive: true });
+  writeFileSync(join(readableTarget, 'harmless.txt'), 'nothing dangerous here\n');
+  symlinkSync(readableTarget, join(seedDir, 'evil'));
+
+  assert.throws(
+    () => provisionFixtureGround(root, { storyId: 'S8', project: 'story-s8', fixture: 'demo-seed' }),
+    (err: unknown) => {
+      const message = String((err as Error)?.message ?? err);
+      assert.match(message, /evil/, `expected the refusal to name 'evil', got: ${message}`);
+      assert.doesNotMatch(
+        message,
+        /beyond a symbolic link|git add exited/,
+        'the refusal must be OUR OWN pre-write validation, never git\'s own incidental safety net encountered ' +
+          `after cpSync has already copied the symlinked content in. Got: ${message}`,
+      );
+      return true;
+    },
+  );
+  assert.equal(
+    existsSync(join(root, 'projects', 'story-s8')),
+    false,
+    'a refused provision must write nothing — not even a partially-copied seed',
+  );
 });
