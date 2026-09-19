@@ -12,6 +12,20 @@ import { createGreenfieldProject, type ProjectStarter } from '@/lib/studio-clien
 // (a whole concern, not a line-count trim) to pay back the 7.6.27 ratchet bump.
 // ---------------------------------------------------------------------------
 
+// `forge-8vfn.6.11.37` — the create-failure message carried no `data-*`
+// handle, so a beat could only learn WHY a create failed with a CLI probe
+// (S2 run 6). Pulled into its own component: the failure lives in
+// `useState`, which a render-only pin can't reach, so this is the seam a
+// test targets directly.
+export function CreateError({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <p className="save-hint save-hint-dirty" data-section="create-error" style={{ marginTop: 8 }}>
+      {message}
+    </p>
+  );
+}
+
 export function CreateFromTemplate({ appTypes }: { appTypes: ProjectStarter[] }) {
   const router = useRouter();
   const [name, setName] = useState('');
@@ -71,7 +85,7 @@ export function CreateFromTemplate({ appTypes }: { appTypes: ProjectStarter[] })
               onboard form beside it already did. */}
           {!canSubmit && <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>Name, north star, and app type are required.</span>}
         </div>
-        {error && <p className="save-hint save-hint-dirty" style={{ marginTop: 8 }}>{error}</p>}
+        <CreateError message={error} />
       </div>
     </div>
   );
