@@ -310,10 +310,7 @@ export function runHookScript(input: RunHookScriptInput): HookRunResult {
     });
   }
 
-  // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is not
-  // monotonic on this host, so a duration built from its difference is not
-  // an honest history of how long the hook actually ran.
-  const start = performance.now();
+  const start = performance.now(); // monotonic: Date.now() steps back here (forge-8vfn.7.6.50)
   const result = spawnSync('bash', [scriptPath], {
     env: childEnv,
     cwd: dir,
