@@ -86,7 +86,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
@@ -101,7 +101,9 @@ import { assertMatchesJsonSnapshot } from '../../../../packages/kernel/tests/tes
 // §15.14: moved from orchestrator/ to apps/forge/, so the '..' chain was one
 // level short. Taken from kernel, which owns the constant.
 import { FORGE_ROOT } from '@forge/kernel';
-const FIXTURE_PATH = resolve(FORGE_ROOT, 'packages', 'kernel', 'tests', 'test-fixtures', 'spawn-capture', 'dispatch-decisions.json');
+// Beside its test (M7-A F7): the golden enumerates every flow the registry lists,
+// so a flow added as data changes it — it must not live in a frozen platform package.
+const FIXTURE_PATH = resolve(FORGE_ROOT, 'apps', 'forge', 'tests', 'test-fixtures', 'dispatch-decisions.json');
 
 /**
  * The branch `execAgent` (flow-runner.ts) takes for a resolved 'agent'-kind
@@ -201,5 +203,8 @@ test('dispatch decisions: every roster agent + every flow node, resolved via the
     flows,
   };
 
+  // The helper WRITES a golden that is missing and passes — right for a first
+  // capture, a silent green for a golden that MOVED under a stale path.
+  assert.ok(existsSync(FIXTURE_PATH) || process.env.UPDATE_SNAPSHOT, `the dispatch-decisions golden is missing at ${FIXTURE_PATH}`);
   assertMatchesJsonSnapshot(FIXTURE_PATH, fixture);
 });
