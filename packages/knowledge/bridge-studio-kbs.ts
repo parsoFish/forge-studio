@@ -35,7 +35,7 @@
 import { requireSessionStatusIo } from './kb-drain-model.ts';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { dirname, relative, resolve, sep } from 'node:path';
 import { resolveGuardedPath, guardedReadFile, provenanceOfOrigin, type Provenance } from '@forge/kernel';
 import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 import { resolveKbBrainDir } from './brain-paths.ts';
@@ -719,13 +719,25 @@ export function mintProjectBrainSeedingSession(
 ): string {
   const write = requireSessionStatusIo(guardedWriteSessionStatus, 'mintProjectBrainSeedingSession');
   const sessionId = newProjectBrainSessionId();
+  // forge-hph — same guard shape forge-8vfn.5.51/forge-4vt applied at the
+  // sibling /start routes (packages/sessions/bridge-studio-architect.ts and
+  // the project-brain start route): resolve through containment rather than
+  // a bare join(), which normalizes ".." instead of refusing it. Not a live
+  // escape today — `write()` below independently validates this same
+  // segment before anything is persisted — but that ordering is exactly the
+  // "accident of source order" forge-osz's own comment warns against relying
+  // on.
+  const guardedProject = resolveGuardedPath(projectsRoot, [sessionProject]);
+  if (!guardedProject.ok) {
+    throw new Error(`kb create: hand-off session project "${sessionProject}" failed containment`);
+  }
   const written = write<ProjectBrainSeedingSessionStatus>(
     projectsRoot,
     [sessionProject, '_project-brain', sessionId],
     {
       session_id: sessionId,
       project: sessionProject,
-      project_repo_path: join(projectsRoot, sessionProject),
+      project_repo_path: guardedProject.realPath,
       phase: 'briefing',
       prompt: '',
       updated_at: new Date().toISOString(),
