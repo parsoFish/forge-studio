@@ -22,7 +22,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -124,4 +124,27 @@ test('a beat with no declared terminal keeps today\'s semantics: it ends when it
   const verdict = await waitForConsequence(answeringPage() as never, BEAT as never, 5_000, null);
   assert.equal(verdict, null);
   assert.ok(Date.now() - began < 1_000, `no terminal, no extra wait: ${Date.now() - began} ms`);
+});
+
+test('D review (1): once the press\'s run is proven started, the door does not re-read the log every poll (latched)', { skip: process.getuid?.() === 0 ? 'root reads mode-000 files' : false }, () => {
+  const anchor = Date.now();
+  const { root, dir } = sharedCycle('ready-for-review', new Date(anchor - 300_000).toISOString());
+  appendFileSync(join(dir, 'events.jsonl'), `${JSON.stringify({ skill: 'cycle', event_type: 'start', message: 'cycle.start', started_at: new Date(anchor + 1_000).toISOString() })}\n`);
+  const door = makeCycleTerminalDoor(root, { cycleOf: INIT })!;
+  assert.equal(door(null, anchor, 'ready-for-review')?.done, true);
+  chmodSync(join(dir, 'events.jsonl'), 0o000);
+  try {
+    assert.equal(door(null, anchor, 'ready-for-review')?.done, true, 'a proven start stays proven — the multi-hour log is not re-scanned per poll');
+  } finally { chmodSync(join(dir, 'events.jsonl'), 0o644); }
+});
+
+test('D review (2): an UNREADABLE cycle log is named, never read as "not started" (§15.504)', { skip: process.getuid?.() === 0 ? 'root reads mode-000 files' : false }, () => {
+  const anchor = Date.now();
+  const { root, dir } = sharedCycle('ready-for-review', new Date(anchor - 300_000).toISOString());
+  chmodSync(join(dir, 'events.jsonl'), 0o000);
+  try {
+    const door = makeCycleTerminalDoor(root, { cycleOf: INIT })!;
+    assert.equal(door(null, anchor, 'ready-for-review'), null, 'UNKNOWN keeps waiting');
+    assert.match(door.lastSeen, /could not read .*events\.jsonl: EACCES/, 'and the bound will say WHY, not claim the product never started');
+  } finally { chmodSync(join(dir, 'events.jsonl'), 0o644); }
 });

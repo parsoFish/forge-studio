@@ -507,6 +507,7 @@ export function makeCycleTerminalDoor(forgeRoot, opts = null) {
   if (typeof forgeRoot !== 'string' || forgeRoot === '') return null;
   const logsDir = join(forgeRoot, '_logs');
   const cycleOf = typeof opts?.cycleOf === 'string' && opts.cycleOf !== '' ? opts.cycleOf : null;
+  let startedFor = null;
   const door = (runId, sinceMs, wantState) => {
     if (typeof wantState !== 'string' || wantState === '') return null;
     // The SAME channel resolution the stall door uses: the page's own run id
@@ -536,9 +537,16 @@ export function makeCycleTerminalDoor(forgeRoot, opts = null) {
     // reads the ARCHITECT run's terminal when the develop press lands (S10 run
     // 22: green 0.5 s before the develop cycle started). A terminal counts only
     // once the cycle has started a run at or after the anchor.
-    if (cycleOf !== null && !cycleStartedSince(dir, sinceMs)) {
-      door.lastSeen = `no run of the cycle has started since the anchor (${new Date(sinceMs).toISOString()})`;
-      return null;
+    // Latched once proven (D's review): a started run stays started, and a
+    // multi-hour develop log is not re-scanned on every poll.
+    if (cycleOf !== null && startedFor !== sinceMs) {
+      const s = cycleStartedSince(dir, sinceMs);
+      if (s.error !== null) { door.lastSeen = s.error; return null; }
+      if (!s.started) {
+        door.lastSeen = `no run of the cycle has started since the anchor (${new Date(sinceMs).toISOString()})`;
+        return null;
+      }
+      startedFor = sinceMs;
     }
     const terminal = channelTerminalState(forgeRoot, dir);
     door.lastSeen = terminal === null ? 'the cycle is still open' : terminal.detail;
@@ -553,16 +561,26 @@ export function makeCycleTerminalDoor(forgeRoot, opts = null) {
   return door;
 }
 
-/** True when the cycle dir's events carry a `cycle.start` stamped at or after `sinceMs`. */
+/**
+ * `started` when the cycle dir's events carry a `cycle.start` stamped at or
+ * after `sinceMs`. ENOENT = no log yet (not started); any other read error is
+ * NAMED in `error`, never read as "not started" (§15.504) — a bound that
+ * expires on an unreadable log must say so, not blame the product.
+ */
 function cycleStartedSince(dir, sinceMs) {
+  const path = join(dir, 'events.jsonl');
   let raw;
-  try { raw = readFileSync(join(dir, 'events.jsonl'), 'utf8'); } catch { return false; }
-  return raw.split('\n').some((line) => {
+  try { raw = readFileSync(path, 'utf8'); } catch (err) {
+    if (err?.code === 'ENOENT') return { started: false, error: null };
+    return { started: false, error: `could not read ${path}: ${err?.code ?? err?.message}` };
+  }
+  const started = raw.split('\n').some((line) => {
     try {
       const ev = JSON.parse(line);
       return ev?.message === 'cycle.start' && Date.parse(ev.started_at) >= sinceMs;
     } catch { return false; }
   });
+  return { started, error: null };
 }
 
 /**
