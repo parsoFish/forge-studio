@@ -125,6 +125,30 @@ const PARALLEL_LINT_CONTENTION_SIGNATURE =
   /(?:^|\berr(?:o|or)?\b[\s:=-]*)parallel golangci-lint is running/im;
 
 /**
+ * forge-f88z: the SAME blob-scan class W8-F3 fixed for the rate-limit and
+ * parallel-lint rules above, applied to the two remaining bare `.includes`
+ * checks over `gate_stdout_tail`/`gate_stderr_tail`. Both phrases are
+ * ordinary English a project's own test suite can legitimately print — a
+ * test NAME describing error-handling behaviour, a snapshot fixture — with
+ * no relation to whether THIS gate run actually failed at module resolution
+ * or a missing script. Terminal-to-terminal (both branches already return
+ * 'terminal'), so misclassifying buys no extra retries; the harm is a wrong
+ * `reason` misdirecting operator triage.
+ *
+ * Anchored to the runner's OWN error-line shape, never a bare substring
+ * anywhere in captured output:
+ *   - npm's own line always carries an `npm err(or)?` prefix before the
+ *     phrase, on the same line ("npm ERR! missing script: build", "npm
+ *     error Missing script: …", the pre-existing pinned "npm error: missing
+ *     script: …").
+ *   - Node's own module-loader exception is always `Error: Cannot find
+ *     module …`; a bundler's classic error is `Module not found: Error: …`
+ *     — either order, always paired with an explicit `error` marker.
+ */
+const GATE_MISSING_SCRIPT_RE = /\bnpm (?:err!?|error)\b[^\n]*missing script\b/i;
+const GATE_MODULE_NOT_FOUND_RE = /\berror:?\s*cannot find module\b|\bmodule not found:?\s*error\b/i;
+
+/**
  * N9 (2026-07 refinement, brain/cycles/themes/2026-07-04-rate-limit-crash-
  * prereq-failed-cascade.md): the CLI's rate/usage-limit death surfaces in
  * *reasoning/log* events ("You've hit your limit · resets 12:10am
@@ -301,8 +325,8 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     if (e.phase === 'orchestrator' && msg === 'cycle.resume-needs-rebase') { resumeNeedsRebase = true; ev(e); }
     if (msg === 'gate.fail') {
       const blob = (String(md.gate_stderr_tail ?? '') + ' ' + String(md.gate_stdout_tail ?? '')).toLowerCase();
-      if (blob.includes('missing script')) { gateMissingScript = true; ev(e); }
-      if (blob.includes('cannot find module') || blob.includes('module not found')) { worktreeNoDeps = true; ev(e); }
+      if (GATE_MISSING_SCRIPT_RE.test(blob)) { gateMissingScript = true; ev(e); }
+      if (GATE_MODULE_NOT_FOUND_RE.test(blob)) { worktreeNoDeps = true; ev(e); }
     }
     // G10: golangci-lint lock contention in any FAILED gate's captured output —
     // per-WI / code-fix-UWI gates (`gate.fail`, tails), the unifier's composed
