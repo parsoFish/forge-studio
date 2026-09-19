@@ -374,6 +374,71 @@ export function runLockVerdict(env = process.env, procRoot = '/proc') {
   });
 }
 
+/**
+ * THE ORDER CHECK — refuses a launch that holds the run-lock without ALSO
+ * holding the suite-lock, both via THIS PROCESS'S OWN ANCESTRY.
+ *
+ * Finding row 73 (2026-09-19 14:5x): a story-replica launcher took the
+ * run-lock and then queued for the suite-lock — the reverse of
+ * `with-locks.sh`'s ratified order (suite first, run-lock inside it). A build
+ * meanwhile held the suite-lock and waited on the run-lock: deadlock, nine
+ * suites queued behind it, bounded only by `flock -w 900`.
+ *
+ * ANCESTRY, NEVER MERE PRESENCE. `runLockVerdict` above already refuses a
+ * suite that starts while a STRANGER holds the run-lock — a different fact
+ * from THIS launch holding it. A run-lock some other lane's process holds is
+ * that guard's territory, left untouched here: this check fires only when one
+ * of `selfPids` — this process's own ancestor chain (`ancestorPids`) — is
+ * itself a run-lock holder, which is the shape a launch produces by taking
+ * the run-lock and then spawning the story runner as its own descendant
+ * (directly, or through `with-locks.sh <campaign> run --`, or a launcher that
+ * bypasses both and takes the lock by hand — the incident's own shape, opaque
+ * to any check that only reads command words).
+ *
+ * A launch with NEITHER lock set is unaffected: today's costless local runs
+ * and CI's smoke/proof keep running exactly as before. A launch holding only
+ * the suite-lock is fine too — suite-then-run is the point, not a mandate
+ * that every run go through the wrapper.
+ *
+ * @param {NodeJS.ProcessEnv} env
+ * @param {string} procRoot
+ * @param {Set<string>} selfPids  this process's own ancestor chain (`ancestorPids`)
+ * @returns {{ok: boolean, reason: string}}
+ */
+export function lockOrderVerdict(env = process.env, procRoot = '/proc', selfPids = ancestorPids(process.pid, { procRoot })) {
+  const runLockPath = env[RUN_LOCK_ENV];
+  if (!runLockPath) {
+    return { ok: true, reason: `lock order ok — ${RUN_LOCK_ENV} names no lock, so this launch holds none` };
+  }
+  const runHolders = lockHolders(runLockPath, procRoot) ?? [];
+  const runHeldBySelf = runHolders.some((h) => selfPids.has(String(h.pid)));
+  if (!runHeldBySelf) {
+    // Not held by THIS launch's own ancestry — a stranger's hold, or nobody's,
+    // is runLockVerdict's fact to report, not this check's to reinterpret.
+    return {
+      ok: true,
+      reason: `lock order ok — ${RUN_LOCK_ENV} (${runLockPath}) is not held by this launch's own ancestry`,
+    };
+  }
+  const suiteLockPath = env[SUITE_LOCK_ENV];
+  const suiteHolders = suiteLockPath ? (lockHolders(suiteLockPath, procRoot) ?? []) : [];
+  const suiteHeldBySelf = suiteHolders.some((h) => selfPids.has(String(h.pid)));
+  if (suiteHeldBySelf) {
+    return {
+      ok: true,
+      reason: `lock order ok — this launch holds both ${SUITE_LOCK_ENV} (${suiteLockPath}) and ${RUN_LOCK_ENV} (${runLockPath})`,
+    };
+  }
+  return {
+    ok: false,
+    reason:
+      `refusing to start: this launch holds ${RUN_LOCK_ENV} (${runLockPath}) but not ${SUITE_LOCK_ENV} ` +
+      `(${suiteLockPath || 'not set'}) — suite-lock first, run-lock inside it, is the one ratified order, ` +
+      'and a launch holding only the run-lock is exactly the shape that can wait for the suite-lock while ' +
+      'holding the run-lock. Launch through `with-locks.sh <campaign> both -- <cmd>`.',
+  };
+}
+
 /*
  * 7.6.93's two pure halves live HERE, not in `lock-state.mjs`, for the reason
  * `test-guard.mjs` records at the top of itself: **importing a CLI runs it.**
