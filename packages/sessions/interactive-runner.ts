@@ -264,10 +264,14 @@ export async function runInteractiveTurn(
         // them wrong in three different ways — that is one absent renderer, not
         // three bugs, so the correct copy moved out to where the others could
         // use it.
-        onTurnCost: (costUsd) => emitTurnCostRow(logger, {
+        onTurnCost: (costUsd, modelTier, modelId) => emitTurnCostRow(logger, {
           initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL,
           message: 'interactive.turn-cost',
-          metadata: { session_id: ctx.sessionId, session_kind: descriptor.id },
+          // forge-8vfn.22 — the tier/model the turn actually ran on, so a
+          // cost dashboard or operator reading the log can tell them apart;
+          // both come from `runAgentStyleStep`, the only place they're
+          // resolved (never re-derived here).
+          metadata: { session_id: ctx.sessionId, session_kind: descriptor.id, model_tier: modelTier, model: modelId },
         }, costUsd),
         // 7.6.55 (ruling 849) — the turn ENDED and was never priced. Without
         // this row the log has no terminal event at all and spend reads

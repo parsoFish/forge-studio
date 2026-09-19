@@ -8,16 +8,17 @@
  * plain function here instead, where it's directly unit-testable.
  */
 
+import { KB_DRAIN_MAX_ROUNDS } from '@forge/contracts';
 import type { KbDrainPerFinding, KbDrainProposedChange, KbDrainState } from './studio-client';
 
-/** Mirrors `packages/knowledge/bridge-studio-kb-drain.ts`'s `KB_DRAIN_MAX_ROUNDS` — a
- *  display-only constant (not imported: that module touches `node:fs` and
- *  forge-ui never cross-imports from `cli/`, this repo's own boundary
- *  convention — see every other client-side type mirror in
- *  `./studio-client.ts`'s header comment). Keep in sync by hand; a drift
- *  only ever shows a wrong "round N/5" label, never a wrong drain decision
- *  (the server is the sole authority on when to stop). */
-export const KB_DRAIN_MAX_ROUNDS_DISPLAY = 5;
+/** The same `KB_DRAIN_MAX_ROUNDS` `packages/knowledge/bridge-studio-kb-drain.ts`
+ *  runs by, imported from `@forge/contracts` (the one package apps/studio may
+ *  import) rather than hand-mirrored — forge-8vfn.5.25.2: the old local
+ *  literal here and its "parity" test could drift together to the same
+ *  wrong value and stay green, because the test only ever compared this
+ *  constant to itself. Aliased for the display-string call sites below;
+ *  still display-only (the server is the sole authority on when to stop). */
+export const KB_DRAIN_MAX_ROUNDS_DISPLAY = KB_DRAIN_MAX_ROUNDS;
 
 /** The states this module adds on top of the server's own `KbDrainState`:
  *  `'timed-out'` — the poll gave up watching while the run was still

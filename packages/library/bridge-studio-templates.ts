@@ -252,7 +252,7 @@ export async function handleTemplateCreate(req: IncomingMessage, res: ServerResp
       if (invalidContent) { sendJson(res, 400, { error: invalidContent }, origin); return true; }
 
       const dirSegments = WRITABLE_CATEGORY_DIRS[category];
-      const targetGuard = resolveGuardedPath(resolve(ctx.forgeRoot, ...dirSegments), [`${id}.md`]);
+      const targetGuard = resolveGuardedPath(ctx.forgeRoot, [...dirSegments, `${id}.md`]);
       if (!targetGuard.ok) { sendJson(res, 400, { error: 'path traversal detected' }, origin); return true; }
       if (targetGuard.exists) { sendJson(res, 409, { error: `template "${id}" already exists` }, origin); return true; }
       writeFileSync(targetGuard.realPath, content, 'utf8');
@@ -299,7 +299,7 @@ async function handleTemplateMutation(
     // The leaf is the entry's OWN definitionRef basename (server-derived),
     // still routed through the guard — containment discipline, not trust.
     const leaf = entry.definitionRef.split('/').pop() ?? `${id}.md`;
-    const targetGuard = resolveGuardedPath(resolve(ctx.forgeRoot, ...dirSegments), [leaf]);
+    const targetGuard = resolveGuardedPath(ctx.forgeRoot, [...dirSegments, leaf]);
     if (!targetGuard.ok || !targetGuard.exists) {
       sendJson(res, 404, { error: `unknown template "${id}"` }, origin);
       return true;
