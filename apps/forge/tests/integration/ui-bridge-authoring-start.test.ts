@@ -279,8 +279,11 @@ function writeStubCli(forgeRoot: string): void {
  *  over flakiness, it waits for a genuinely async, already-in-flight
  *  artifact with a hard ceiling. */
 async function waitForFile(path: string, timeoutMs = 5000): Promise<string> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
+  // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is not
+  // monotonic on this host, so an elapsed check built from its difference can
+  // go wrong mid-wait.
+  const start = performance.now();
+  while (performance.now() - start < timeoutMs) {
     if (existsSync(path)) return readFileSync(path, 'utf8');
     await new Promise((r) => setTimeout(r, 50));
   }
