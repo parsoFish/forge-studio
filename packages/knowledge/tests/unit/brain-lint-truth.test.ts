@@ -39,6 +39,7 @@ import {
   themeTruth,
   brainTruthRates,
   checkThemeTruth,
+  FORGE_PROVENANCE_ROOTS,
 } from '../../brain-lint-checks-truth.ts';
 
 import { buildBrainFixture, cleanup } from './test-fixtures/brain-lint.ts';
@@ -49,17 +50,16 @@ import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 const BT = '`';
 
-/** Write one project-brain theme with `status:` frontmatter the shared
- *  `ThemeSpec` type does not model, at
- *  `<root>/brain/projects/<project>/themes/<slug>.md`. (The `evidence:`
- *  override is pinned separately, directly against `extractThemeReferences`,
- *  which takes an already-parsed frontmatter object — no YAML round-trip
- *  needed there.) */
+/** Write one project-brain theme with `status:`/`category:`/`evidence:`
+ *  frontmatter the shared `ThemeSpec` type does not model (or does not model
+ *  fully — `ThemeSpec.fm.category` exists but `writeTruthTheme` needs a
+ *  `pattern` default to keep every OTHER call site in this file unchanged),
+ *  at `<root>/brain/projects/<project>/themes/<slug>.md`. */
 function writeTruthTheme(
   root: string,
   project: string,
   slug: string,
-  opts: { status?: 'current' | 'historical'; body?: string } = {},
+  opts: { status?: 'current' | 'historical'; category?: string; evidence?: string[]; body?: string } = {},
 ): string {
   const dir = join(root, 'brain', 'projects', project, 'themes');
   mkdirSync(dir, { recursive: true });
@@ -68,11 +68,12 @@ function writeTruthTheme(
     '---',
     `title: ${slug}`,
     'description: description text.',
-    'category: pattern',
+    `category: ${opts.category ?? 'pattern'}`,
     'created_at: 2026-01-01T00:00:00Z',
     'updated_at: 2026-01-01T00:00:00Z',
   ];
   if (opts.status) lines.push(`status: ${opts.status}`);
+  if (opts.evidence) lines.push(`evidence: [${opts.evidence.map((e) => JSON.stringify(e)).join(', ')}]`);
   lines.push('---', '', opts.body ?? '# theme body\n');
   writeFileSync(file, lines.join('\n') + '\n');
   return file;
@@ -315,17 +316,19 @@ test('registry: CHECK_NAMES includes checkThemeTruth, and classifyFinding stamps
 
 // ---------- 9. CLI: unconditional truthfulness: summary lines ----------
 
-function runBrainLintCli(fixtureRoot: string): { code: number | null; out: string } {
+function runBrainLintCli(fixtureRoot: string, extraArgs: string[] = []): { code: number | null; out: string } {
   // The standalone `packages/knowledge/brain-lint.ts` CLI entry (its own
   // `parseArgs`/`isCli` block) is driven directly rather than
   // `apps/forge/cli.ts brain lint`: `cmdBrainLint`
   // (apps/forge/cli-brain-lint.ts) hardcodes FORGE_ROOT with no `--cwd`/root
   // override, so it cannot be pointed at a fixture. This entry point can
   // (`--cwd <root>`), matching the brief's "ONLY if the CLI accepts a root"
-  // clause.
+  // clause. (I3, D14 review: the REAL operator CLI — `apps/forge/cli.ts brain
+  // lint`, which has no fixture door — gets its own regression-lock test in
+  // `apps/forge/tests/integration/brain-lint-truthfulness-cli.test.ts`.)
   const r = spawnSync(
     process.execPath,
-    ['--experimental-strip-types', 'packages/knowledge/brain-lint.ts', '--cwd', fixtureRoot],
+    ['--experimental-strip-types', 'packages/knowledge/brain-lint.ts', '--cwd', fixtureRoot, ...extraArgs],
     { cwd: FORGE_ROOT, encoding: 'utf8' },
   );
   return { code: r.status, out: (r.stdout ?? '') + (r.stderr ?? '') };
@@ -352,6 +355,238 @@ test('CLI (`packages/knowledge/brain-lint.ts --cwd <root>`): prints one "truthfu
       out,
       /truthfulness: proj-nocheckout — checkout absent, not judged/,
       `expected the checkout-absent truthfulness line, got:\n${out}`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
+// =====================================================================
+// D14 FIX ROUND 1 (.superpowers/d14-fix1-tests-brief.md) — pins T2's review
+// rulings that replace the original extraction model. Root cause (review C1):
+// the original model checked EVERY inline-code reference against the
+// managed project's ground clone, including forge-provenance citations
+// (`_logs/...`, `brain/cycles/_raw/...` in a theme's own `## Sources`
+// footer) that describe how FORGE learned the lesson, not a claim about the
+// PROJECT's code — driving betterado's measured stale rate to 99% against a
+// ~50% hand-sampled baseline. C1/C2/M1/M3 below correct the extraction/
+// verification model; M2 scopes the CLI's summary lines; the closing test
+// pins the corrected rate on a realistic corpus-shaped body.
+// =====================================================================
+
+// ---------- C1: forge-namespace references are provenance, not claims ----------
+
+test('FORGE_PROVENANCE_ROOTS: exports exactly the 4 roots, verbatim (C1)', () => {
+  assert.deepEqual(
+    [...FORGE_PROVENANCE_ROOTS],
+    ['_logs', '_queue', '_worktrees', 'brain'],
+    `FORGE_PROVENANCE_ROOTS must be exactly ['_logs','_queue','_worktrees','brain'], got ${JSON.stringify(FORGE_PROVENANCE_ROOTS)}`,
+  );
+});
+
+test('extractThemeReferences: a candidate whose FIRST path segment is a forge-provenance root is dropped for EVERY root in FORGE_PROVENANCE_ROOTS — it describes how forge learned the lesson, not the project (C1)', () => {
+  const provenanceCases = [
+    '_logs/2026-06-06T04-41-44_INIT-x/events.jsonl',
+    '_queue/done/INIT-x.md',
+    '_worktrees/m7-d/notes.md',
+    'brain/cycles/_raw/2026-06-06-x.md',
+  ];
+  for (const raw of provenanceCases) {
+    const refs = extractThemeReferences(`Cites ${BT}${raw}${BT}.\n`, {});
+    assert.equal(refs.length, 0, `expected "${raw}" (forge-provenance root) to be dropped, got ${JSON.stringify(refs)}`);
+  }
+});
+
+test('extractThemeReferences: a project-code path with no forge-provenance prefix is still kept (C1 control case)', () => {
+  const refs = extractThemeReferences(`Cites ${BT}azuredevops/x.go${BT}.\n`, {});
+  assert.deepEqual(refs, ['azuredevops/x.go'], `a non-provenance reference must be unaffected, got ${JSON.stringify(refs)}`);
+});
+
+test('extractThemeReferences: a provenance root name is only excluded as the FIRST path segment — an embedded occurrence elsewhere in the path is kept (kills a substring-match implementation)', () => {
+  const refs = extractThemeReferences(`Cites ${BT}orchestrator/brain/x.go${BT}.\n`, {});
+  assert.deepEqual(
+    refs,
+    ['orchestrator/brain/x.go'],
+    `"brain" must only be excluded as the FIRST segment, not anywhere in the path, got ${JSON.stringify(refs)}`,
+  );
+});
+
+// ---------- C2: a forge-root-relative project path is normalised ----------
+
+test('themeTruth: a projects/<project>/-prefixed self-citation is normalised — not missing, and references reports the STRIPPED form (C2)', () => {
+  const root = buildBrainFixture({ themes: [] });
+  try {
+    writeTruthTheme(root, 'proj-e', 'prefixed-cite', {
+      body: `Cites ${BT}projects/proj-e/src/a.ts${BT}.\n`,
+    });
+    writeCheckoutFile(root, 'proj-e', 'src/a.ts');
+
+    const [t] = themeTruth(root, 'proj-e');
+    assert.deepEqual(
+      t.references,
+      ['src/a.ts'],
+      `references must report the NORMALISED (projects/proj-e/-stripped) form, got ${JSON.stringify(t.references)}`,
+    );
+    assert.deepEqual(
+      t.missing,
+      [],
+      `the prefixed citation resolves to an existing file once normalised against <cwd>/projects/proj-e/ — must not be missing, got ${JSON.stringify(t.missing)}`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('themeTruth: a projects/<OTHER-project>/-prefixed citation is NOT stripped — only the theme\'s OWN project prefix normalises (C2, kills over-eager stripping)', () => {
+  const root = buildBrainFixture({ themes: [] });
+  try {
+    writeTruthTheme(root, 'proj-e2', 'cross-project-cite', {
+      body: `Cites ${BT}projects/some-other-project/src/a.ts${BT}.\n`,
+    });
+    // Even though the referenced file exists somewhere, it is NOT under
+    // <cwd>/projects/proj-e2/ (this theme's own checkout root) once left
+    // unstripped, so it must resolve as missing rather than silently
+    // matching a foreign project's tree.
+    writeCheckoutFile(root, 'some-other-project', 'src/a.ts');
+
+    const [t] = themeTruth(root, 'proj-e2');
+    assert.deepEqual(
+      t.references,
+      ['projects/some-other-project/src/a.ts'],
+      `a foreign-project prefix must be left AS-IS (only the theme's own project name strips), got ${JSON.stringify(t.references)}`,
+    );
+    assert.deepEqual(
+      t.missing,
+      ['projects/some-other-project/src/a.ts'],
+      `unstripped, this resolves under proj-e2's OWN checkout root, where it does not exist, got ${JSON.stringify(t.missing)}`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
+// ---------- M1: `../` never escapes ----------
+
+test('extractThemeReferences: a `../`-leading or `/../`-containing candidate never escapes the checkout root — dropped (M1)', () => {
+  const startsWithDotDot = extractThemeReferences(`Cites ${BT}../../secrets/x.go${BT}.\n`, {});
+  assert.equal(startsWithDotDot.length, 0, `a "../"-leading candidate must be dropped, got ${JSON.stringify(startsWithDotDot)}`);
+
+  const containsDotDot = extractThemeReferences(`Cites ${BT}foo/../bar/baz.go${BT}.\n`, {});
+  assert.equal(containsDotDot.length, 0, `a candidate containing "/../" (not just leading) must be dropped, got ${JSON.stringify(containsDotDot)}`);
+});
+
+test('extractThemeReferences: an ordinary nested path with no ".." segment is still kept (M1 control case, kills an overly-broad traversal filter)', () => {
+  const refs = extractThemeReferences(`Cites ${BT}foo/bar/baz.go${BT}.\n`, {});
+  assert.deepEqual(refs, ['foo/bar/baz.go'], `a path with no ".." must be unaffected, got ${JSON.stringify(refs)}`);
+});
+
+// ---------- M3: antipattern themes are judged only on declared evidence ----------
+
+test('themeTruth/brainTruthRates: an antipattern-category theme contributes body references to NOTHING — a body citation to an absent path is unverifiable (not stale); evidence: overrides normally, verifiable and judged (M3)', () => {
+  const root = buildBrainFixture({ themes: [] });
+  try {
+    writeTruthTheme(root, 'proj-f', 'anti-no-evidence', {
+      category: 'antipattern',
+      body: `Documents that ${BT}absent/path.ts${BT} does not exist.\n`,
+    });
+    writeTruthTheme(root, 'proj-f', 'anti-with-evidence', {
+      category: 'antipattern',
+      evidence: ['present/file.ts'],
+      body: `Also mentions ${BT}absent/path.ts${BT} in prose (must be ignored — evidence: is the complete set).\n`,
+    });
+    writeCheckoutFile(root, 'proj-f', 'present/file.ts');
+    // absent/path.ts deliberately absent — must never even be extracted.
+
+    const themes = themeTruth(root, 'proj-f');
+    const noEv = themes.find((t) => t.file.endsWith('anti-no-evidence.md'));
+    const withEv = themes.find((t) => t.file.endsWith('anti-with-evidence.md'));
+    assert.ok(noEv, `expected a ThemeTruth for anti-no-evidence.md, got ${JSON.stringify(themes)}`);
+    assert.ok(withEv, `expected a ThemeTruth for anti-with-evidence.md, got ${JSON.stringify(themes)}`);
+
+    assert.deepEqual(
+      noEv!.references,
+      [],
+      `an antipattern theme with no evidence: must contribute ZERO body references, got ${JSON.stringify(noEv!.references)}`,
+    );
+    assert.deepEqual(noEv!.missing, []);
+
+    assert.deepEqual(
+      withEv!.references,
+      ['present/file.ts'],
+      `evidence: still overrides for an antipattern theme, got ${JSON.stringify(withEv!.references)}`,
+    );
+    assert.deepEqual(withEv!.missing, []);
+
+    const row = brainTruthRates(root).find((r) => r.project === 'proj-f');
+    assert.ok(row, `expected a brainTruthRates row for proj-f, got nothing`);
+    assert.equal(row!.unverifiable, 1, `anti-no-evidence (0 refs) must count as unverifiable, got ${JSON.stringify(row)}`);
+    assert.equal(row!.verifiable, 1, `anti-with-evidence (evidence:, present) must count as verifiable, got ${JSON.stringify(row)}`);
+    assert.equal(row!.stale, 0, `neither theme is stale, got ${JSON.stringify(row)}`);
+  } finally {
+    cleanup(root);
+  }
+});
+
+// ---------- M2: --project scopes the truthfulness lines ----------
+
+test('CLI: --project <p> scopes the truthfulness: lines to that project only (M2)', () => {
+  const root = buildBrainFixture({ themes: [] });
+  try {
+    writeTruthTheme(root, 'proj-g', 'g-theme', { body: `Cites ${BT}ok/g.go${BT}.\n` });
+    writeCheckoutFile(root, 'proj-g', 'ok/g.go');
+    writeTruthTheme(root, 'proj-h', 'h-theme', { body: `Cites ${BT}ok/h.go${BT}.\n` });
+    writeCheckoutFile(root, 'proj-h', 'ok/h.go');
+
+    const { out } = runBrainLintCli(root, ['--project', 'proj-g']);
+    assert.match(out, /truthfulness: proj-g — /, `expected a truthfulness line for the named project, got:\n${out}`);
+    assert.ok(
+      !/truthfulness: proj-h — /.test(out),
+      `--project proj-g must NOT print proj-h's truthfulness line, got:\n${out}`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
+// ---------- item 8: the rate on a realistic body ----------
+
+test('themeTruth/brainTruthRates: a realistic corpus-shaped body (## Sources footer citing forge-provenance paths + one present and one absent project path) -> exactly one missing (the absent project path), stale 1/1', () => {
+  const root = buildBrainFixture({ themes: [] });
+  try {
+    writeTruthTheme(root, 'proj-i', 'realistic', {
+      body: [
+        `Uses ${BT}src/present.go${BT} but not ${BT}src/absent.go${BT} anymore.`,
+        '',
+        '## Sources',
+        `- ${BT}_logs/2026-06-06T04-41-44_INIT-x/events.jsonl${BT} (WI-5 gate events)`,
+        `- ${BT}brain/cycles/_raw/2026-06-06-x.md${BT} (cycle archive)`,
+        '',
+      ].join('\n'),
+    });
+    writeCheckoutFile(root, 'proj-i', 'src/present.go');
+    // src/absent.go deliberately absent; the two Sources citations are
+    // forge-provenance (C1) and never even reach `references`.
+
+    const [t] = themeTruth(root, 'proj-i');
+    assert.deepEqual(
+      t.references,
+      ['src/present.go', 'src/absent.go'],
+      `provenance citations must never appear in references at all — only the two genuine project-code paths, got ${JSON.stringify(t.references)}`,
+    );
+    assert.deepEqual(
+      t.missing,
+      ['src/absent.go'],
+      `exactly the absent project path should be missing — the provenance citations are excluded upstream, not just non-missing, got ${JSON.stringify(t.missing)}`,
+    );
+
+    const row = brainTruthRates(root).find((r) => r.project === 'proj-i');
+    assert.ok(row, `expected a brainTruthRates row for proj-i, got nothing`);
+    assert.equal(row!.verifiable, 1, `1 current theme with references, got ${JSON.stringify(row)}`);
+    assert.equal(row!.stale, 1, `the one genuine code-path miss, got ${JSON.stringify(row)}`);
+    assert.equal(
+      row!.rate,
+      1,
+      `stale 1 / verifiable 1 = rate 1 (100%) on THIS fixture — the point is it is no longer inflated by the 2 provenance citations that would have made it look like 3 missing out of 1 theme, got ${JSON.stringify(row)}`,
     );
   } finally {
     cleanup(root);
