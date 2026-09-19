@@ -43,7 +43,7 @@ import type { ArchitectStepArgs } from './architect-steps.ts';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { QueryFn } from '../interactive-session.ts';
-import type { EventLogger } from '@forge/kernel';
+import { PathGuardContainmentError, type EventLogger } from '@forge/kernel';
 import { archiveSessionDir } from './architect-plan.ts';
 import { requirePorts } from './architect-ports.ts';
 import { runKindTurn } from './kind-turn.ts';
@@ -203,7 +203,22 @@ export const architectKind: SessionKindVariant<
           message: 'plan-rejected — session archived',
           metadata: { session_id: input.sessionId, action: 'plan-rejected', archived_path: archivedPath },
         });
-      } catch {
+      } catch (err) {
+        // forge-8vfn.5.58: a genuine containment refusal must NEVER collapse
+        // into the same silent accept as "already archived or gone" — that
+        // was indistinguishable and logged nowhere. Only
+        // PathGuardContainmentError is a refusal; every other throw here
+        // (archiveSessionDir's "session dir not found" / "target already
+        // exists") IS the legitimate idempotent no-op and stays quiet.
+        if (err instanceof PathGuardContainmentError) {
+          plumbing.logger.emit({
+            initiative_id: plumbing.initiativeId, phase: 'architect', skill: 'architect-runner',
+            event_type: 'error', input_refs: [], output_refs: [],
+            message: 'plan-rejected — archiving the session was refused by path containment',
+            metadata: { session_id: input.sessionId, action: 'plan-rejected', error: err.message },
+          });
+          return { phase: 'rejected', wrote: [], archiveRefused: true };
+        }
         // Already archived or session dir gone — silently accept.
       }
       return { phase: 'rejected', wrote: [] };

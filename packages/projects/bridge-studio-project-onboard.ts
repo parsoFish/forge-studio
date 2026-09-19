@@ -55,7 +55,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import {
   sendJson,
@@ -305,19 +305,17 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
         sendJson(res, 409, { error: `project "${id}" already exists` }, origin); return true;
       }
       const repoPathRel = typeof b['repoPath'] === 'string' && b['repoPath'].trim() ? b['repoPath'].trim() : `projects/${id}`;
-      const projectRoot = resolve(ctx.forgeRoot, repoPathRel);
-      // Real per-segment IDENTITY containment (packages/flows/manifest-path-guard.ts's
-      // isContainedProjectRepoPath, itself built on cli/studio-path-guard.ts's
-      // resolveGuardedPath) — NOT a lexical resolve().startsWith() check. That
-      // shape is blind to a symlinked segment whose on-disk TARGET sits
-      // outside <forgeRoot>/projects even though its lexical location is
-      // inside forgeRoot (SEC-03 Defect 1, live-reproduced: leaf/nested dir
-      // symlink, cross-object alias under the same root, repoPath inside
-      // forgeRoot but outside projects/). Root is <forgeRoot>/projects, not
-      // forgeRoot itself: writeManifest already asserts project_repo_path
-      // under that same root, and discoverProjects only scans it — a project
-      // created outside projects/ could never run a cycle and would be
-      // invisible to the library.
+      // `repoPathRel` is request data (b['repoPath']): it reaches the guard as SEGMENTS under the trusted
+      // ctx.forgeRoot, never folded into `root` (5.33 / #289). Lexical resolve first collapses an escape-and-return.
+      const repoCandidate = resolve(ctx.forgeRoot, repoPathRel);
+      const repoSegments = relative(ctx.forgeRoot, repoCandidate).split(sep);
+      const repoRootGuard = resolveGuardedPath(ctx.forgeRoot, repoSegments);
+      if (!repoRootGuard.ok) {
+        sendJson(res, 400, { error: 'repo path must resolve inside the forge projects directory' }, origin); return true;
+      }
+      const projectRoot = repoRootGuard.realPath;
+      // SECOND layer, the POLICY gate (isContainedProjectRepoPath, same guard): under <forgeRoot>/projects
+      // specifically — writeManifest asserts that root and discoverProjects only scans it.
       // R4-17 round-4 (pin 7): the guard checks against `projectsDir` — the
       // root THIS handler already resolved four lines up and used for the
       // duplicate-id scan — instead of re-reading `forge.config.json` inside

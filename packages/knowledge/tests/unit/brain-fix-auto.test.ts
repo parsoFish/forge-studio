@@ -307,3 +307,43 @@ test('applyAutoFixes: a seeded KB with NO category index gets one created, then 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('classifyFinding + applyAutoFixes: index.missing (a forge sub-wiki category index absent) resolves at the AUTO tier and is created deterministically — it must never reach brain-fix, whose SKILL.md forbids that agent from creating files (forge-8vfn.5.1)', () => {
+  const root = brain();
+  try {
+    // brain() pre-creates every cycles/forge-dev category index; delete one
+    // to reproduce "category index missing" from checkIndexSync (distinct
+    // from the scratch-KB `orphan` case covered above, which has no index
+    // ever, and which already proves createCategoryIndex/ensureLinked work).
+    rmSync(join(root, 'brain', 'cycles', 'antipatterns.md'));
+    writeFileSync(
+      join(root, 'brain', 'cycles', 'themes', 'bar.md'),
+      theme({ title: 'Bar', description: 'a bar antipattern', category: 'antipattern', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' }),
+    );
+
+    const findings = runBrainLint({ cwd: root, scope: 'full' }).findings;
+    const missing = findings.find((f) => f.check === 'checkIndexSync' && /category index missing/.test(f.message));
+    assert.ok(missing, `precondition: antipatterns.md is missing; got ${JSON.stringify(findings.map((f) => f.kind))}`);
+    assert.equal(missing.kind, 'index.missing');
+
+    // The product decision (forge-8vfn.5.1): a missing category index is
+    // DERIVED data (heading + a link per theme of that category) a
+    // deterministic fixer can produce, so it must classify as auto-tier —
+    // never agent-tier, which would hand it to brain-fix under a fixHint
+    // that says "create it" while SKILL.md tells that same agent "do not
+    // create new files".
+    assert.equal(missing.resolution, 'auto', 'index.missing must be auto-tier so it is never dispatched to brain-fix');
+
+    const r = applyAutoFixes(root, findings);
+    assert.ok(
+      r.applied.some((a) => a.kind === 'index.missing'),
+      `the missing index must be created deterministically: ${JSON.stringify(r.skipped ?? [])}`,
+    );
+    const indexPath = join(root, 'brain', 'cycles', 'antipatterns.md');
+    assert.ok(existsSync(indexPath), 'antipatterns.md was (re-)created');
+    assert.match(readFileSync(indexPath, 'utf8'), /themes\/bar\.md/, 'and the theme that needed it is linked in');
+    assert.ok(!lintKinds(root).includes('index.missing'), 're-lint: index.missing cleared');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

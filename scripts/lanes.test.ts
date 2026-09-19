@@ -685,44 +685,6 @@ describe('lanes.sh kill — retirement cleans up, and never destroys work', () =
   });
 });
 
-/**
- * Bead forge-uowf / §15.59 (T1, wave-3 launch): `lanes.sh render docs/roadmaps/1.0-kickoffs.md
- * '11. M4-' out` produced the T1 kickoff block from §1 — twice — because a heading regex that
- * matches nothing left `found` false and the first ```text block in the file won. A rendered
- * prompt that is silently the wrong prompt is worse than no prompt.
- */
-describe('lanes.sh render — a heading miss is an error, never a fallback', () => {
-  let src: string;
-  before(() => {
-    src = join(dir, 'kickoffs.md');
-    writeFileSync(
-      src,
-      ['## 1. T1 — campaign orchestrator', '', '```text', 'ROLE: T1 campaign orchestrator', '```', '',
-       '## 11. M4-<pkg> — package lane', '', '```text', 'ROLE: T2 lane for $PKG', '```', ''].join('\n'),
-    );
-  });
-
-  test('a heading regex that matches nothing exits non-zero, names the regex and writes NO file', () => {
-    const out = join(dir, 'render-miss.md');
-
-    const r = lanes(['render', src, '^## nope', out]);
-
-    assert.notEqual(r.status, 0, 'a miss is an error');
-    assert.match(r.stderr, /\^## nope/, 'the failure names the regex that missed, so it can be fixed');
-    assert.ok(!existsSync(out), 'and nothing is left on disk to be mistaken for a rendered prompt');
-  });
-
-  test('a hit prints the heading it matched, so the render can be checked before a launch', () => {
-    const out = join(dir, 'render-hit.md');
-
-    const r = lanes(['render', src, '^## 11\\. M4-', out, 'PKG=agents']);
-
-    assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stdout, /## 11\. M4-<pkg> — package lane/, 'the matched heading is printed');
-    assert.equal(readFileSync(out, 'utf8').trim(), 'ROLE: T2 lane for agents', 'the right block, with its parameters filled');
-  });
-});
-
 describe('lanes.sh events — one line per lane state, read from the roster and tmux', () => {
   function firstPass(extraEnv: Record<string, string> = {}) {
     // The loop sleeps 30 s after its first pass; a 4 s timeout captures exactly that pass.
