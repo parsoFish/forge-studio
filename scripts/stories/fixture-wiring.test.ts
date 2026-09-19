@@ -16,16 +16,46 @@
  * in a doc comment must never satisfy a door that exists to prove the CODE
  * does the thing the comment claims.
  *
- * FIX ROUND 2, T2 ruling 1 — THE FENCE DOOR MUST GO RED WHEN THE GUARD IS
- * REMOVED. The re-review (`d1-fix1-rereview.md`, I3) mutated `run-story.mjs`
- * two ways — deleted the fence's red block, and neutered its `.ok` check to
- * `if (!fenceVerdict.ok) { void 0; }` — and EVERY pinned door, including the
- * round-1 token-order check this file used to carry, stayed green: that check
- * was satisfied by `run-story.mjs`'s `return 1` for the UNRELATED own-ground
- * undeclared-drift red, which happens to sit after the first `.ok` read in
- * the file. `fenceDoorVerdict` replaces it with a STRUCTURAL requirement: `if
- * (!N.ok)`'s own `{ … }` block, found by brace-matching rather than the next
- * `return 1` anywhere downstream, must itself contain `return 1`.
+ * FIX ROUND 3 (this file) — three hardenings the D1 fix-round-2 re-review
+ * (`d1-fix2-rereview.md`) asked for, none of which change what run.mjs /
+ * run-story.mjs must DO — only how precisely and safely this door checks it:
+ *
+ *   1. `stripComments` is now STRING/TEMPLATE/REGEX-AWARE (re-review N5).
+ *      The old version ran two regexes over the RAW source in sequence
+ *      (block comments, then line comments), blind to context — so a `/*`
+ *      appearing inside a `// … projects/*` remark started a "block comment"
+ *      that swallowed real code up to the NEXT `*​/` anywhere later in the
+ *      file. Measured: appending `/* harmless note *​/` after that remark in
+ *      the real `run-story.mjs` turned the UNRELATED
+ *      `snapshotRealGrounds ≥ 2` door red. The new version is a one-pass
+ *      scanner that tracks whether it is inside a string, a template literal
+ *      (including `${ … }` interpolation, which is CODE and can itself
+ *      contain comments/strings/nested templates), or a regex literal, and
+ *      only treats `//`/`/* *​/` as comments OUTSIDE all of those.
+ *   2. The door's mutation-proofness is now a TEST IN ITS OWN RIGHT, not
+ *      prose in a report: mutants (a) delete the if-block, (b) neuter it to
+ *      `if (false)`, and (c) — new this round — replace the
+ *      `realGroundFenceVerdict(` call itself with a stub `{ ok: true, moved:
+ *      [] }`, reproducing the re-review's own "double computation" finding
+ *      (§4): with two bindings sharing one name, stubbing only the GATING
+ *      call left the door unable to tell which binding the `if` actually
+ *      read, and it stayed green. `run.mjs`'s fix (one binding, function
+ *      scope) closes that hole; mutant (c) pins it so it cannot reopen
+ *      silently. All three mutants are built from the REAL file's own text
+ *      via EXACT anchor replacement (`replaceAnchor`), which THROWS if its
+ *      anchor is not found — a future refactor that moves or renames this
+ *      code reds this test outright, rather than the mutant quietly
+ *      reducing to a no-op that "passes" without ever having mutated
+ *      anything.
+ *   3. `fenceDoorVerdict`'s failure text now says EXACTLY what failed
+ *      (re-review M-b): the old single message claimed a block was expected
+ *      "immediately after" the `const N = realGroundFenceVerdict(`
+ *      assignment, which is not what the code checks — it only requires the
+ *      `if (!N.ok)` condition's OWN block to be adjacent to ITS OWN
+ *      condition, not to the declaration. `locateFenceGuard` now returns a
+ *      distinct, accurate reason for each of the three ways it can fail: no
+ *      declaration, no matching `if`, or a condition not immediately
+ *      followed by a `{ … }` block.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -35,27 +65,269 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-/** Block comments first (they can span lines and would otherwise swallow a
- *  following line-comment marker), then line comments. Not a general JS/TS
- *  parser — this codebase's own comment style (full-line `//…` and `/** … *​/`
- *  blocks, no `//` inside the string literals near these anchors) is all it
- *  has to survive, and it is verified against the real files below.
- *
- *  KNOWN FRAGILITY (re-review N5, not in this round's scope): a `/*`
- *  appearing inside a `//` line comment elsewhere in these files starts a
- *  "block comment" this regex does not close until the next real `*​/`, which
- *  can eat real code between them. N5's own measurement is that this only
- *  produces FALSE REDS, never a false green — the direction that makes a
- *  door merely fragile, not unsound — and it was checked directly (not
- *  assumed) not to affect any anchor either round touches. Left as
- *  documented debt, out of this round's four pinned items. */
+// ── Item 1 — a string/template/regex-aware comment stripper ────────────────
+//
+// A one-pass scanner, not two blind regexes. It tracks four literal kinds
+// that can contain comment-LOOKING text which must never be treated as a
+// comment: '...' / "..." strings, `...` template literals (whose `${ … }`
+// interpolations are CODE, tracked via a depth stack so they can nest to any
+// depth and themselves contain comments, strings or further templates), and
+// /…/ regex literals (disambiguated from division by the classic heuristic:
+// a `/` starts a regex unless the last significant character already emitted
+// is a value — an identifier/number character, `)` or `]`).
+//
+// Comments themselves are still dropped entirely (not replaced with
+// whitespace) — the same output shape the old two-regex version produced,
+// so every existing anchor-search door below is unaffected by this swap.
+
 function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const n = source.length;
+  let i = 0;
+  let out = '';
+  let braceDepth = 0;
+  // One entry per currently-open `${` interpolation, holding the braceDepth
+  // at which it was opened — lets a `}` tell whether it closes an
+  // interpolation (return to template text) or an ordinary code block.
+  const templateOpenDepths: number[] = [];
+
+  function prevSignificant(): string {
+    for (let j = out.length - 1; j >= 0; j -= 1) {
+      if (!/\s/.test(out[j])) return out[j];
+    }
+    return '';
+  }
+  function looksLikeRegexStart(): boolean {
+    const p = prevSignificant();
+    return p === '' || !/[A-Za-z0-9_$)\]]/.test(p);
+  }
+  function consumeQuoted(quote: string) {
+    out += source[i];
+    i += 1;
+    while (i < n && source[i] !== quote) {
+      if (source[i] === '\\' && i + 1 < n) {
+        out += source.slice(i, i + 2);
+        i += 2;
+        continue;
+      }
+      out += source[i];
+      i += 1;
+    }
+    if (i < n) {
+      out += source[i];
+      i += 1;
+    }
+  }
+  // Consumes template TEXT starting right after either the opening ` or a
+  // `${ … }`'s closing `}`. Returns when the template closes (` found) or
+  // when a NEW `${` opens (pushing state; the main loop resumes in CODE mode).
+  function consumeTemplateBody() {
+    while (i < n) {
+      if (source[i] === '\\' && i + 1 < n) {
+        out += source.slice(i, i + 2);
+        i += 2;
+        continue;
+      }
+      if (source[i] === '`') {
+        out += source[i];
+        i += 1;
+        return;
+      }
+      if (source[i] === '$' && source[i + 1] === '{') {
+        out += '${';
+        i += 2;
+        templateOpenDepths.push(braceDepth);
+        braceDepth += 1;
+        return;
+      }
+      out += source[i];
+      i += 1;
+    }
+  }
+
+  while (i < n) {
+    const c = source[i];
+    const c2 = i + 1 < n ? source[i + 1] : '';
+
+    if (c === '/' && c2 === '/') {
+      i += 2;
+      while (i < n && source[i] !== '\n') i += 1;
+      continue;
+    }
+    if (c === '/' && c2 === '*') {
+      const commentStart = i;
+      i += 2;
+      while (i < n && !(source[i] === '*' && source[i + 1] === '/')) i += 1;
+      if (i < n) {
+        i += 2; // consumed the closing */
+      } else {
+        // Unterminated block comment: never silently swallow to EOF — keep
+        // the raw, unstrippable text rather than guessing.
+        out += source.slice(commentStart, n);
+      }
+      continue;
+    }
+    if (c === '\'' || c === '"') {
+      consumeQuoted(c);
+      continue;
+    }
+    if (c === '`') {
+      out += c;
+      i += 1;
+      consumeTemplateBody();
+      continue;
+    }
+    if (c === '/' && looksLikeRegexStart()) {
+      let j = i + 1;
+      let inClass = false;
+      let closed = -1;
+      while (j < n) {
+        const cj = source[j];
+        if (cj === '\n') break;
+        if (cj === '\\') {
+          j += 2;
+          continue;
+        }
+        if (cj === '[') {
+          inClass = true;
+          j += 1;
+          continue;
+        }
+        if (cj === ']') {
+          inClass = false;
+          j += 1;
+          continue;
+        }
+        if (cj === '/' && !inClass) {
+          closed = j;
+          break;
+        }
+        j += 1;
+      }
+      if (closed !== -1) {
+        let end = closed + 1;
+        while (end < n && /[a-z]/i.test(source[end])) end += 1; // flags
+        out += source.slice(i, end);
+        i = end;
+        continue;
+      }
+      // No closing `/` before a newline or EOF — not a real regex literal
+      // (one cannot contain a raw newline); fall through and treat this `/`
+      // as an ordinary character below.
+    }
+    if (c === '{') {
+      braceDepth += 1;
+      out += c;
+      i += 1;
+      continue;
+    }
+    if (c === '}') {
+      if (
+        templateOpenDepths.length > 0 &&
+        templateOpenDepths[templateOpenDepths.length - 1] === braceDepth - 1
+      ) {
+        templateOpenDepths.pop();
+        braceDepth -= 1;
+        out += '}';
+        i += 1;
+        consumeTemplateBody();
+        continue;
+      }
+      braceDepth -= 1;
+      out += c;
+      i += 1;
+      continue;
+    }
+    out += c;
+    i += 1;
+  }
+  return out;
 }
 
 const readSource = (file: string) => readFileSync(join(HERE, file), 'utf8');
 const readStripped = (file: string) => stripComments(readSource(file));
 const indexOfCall = (source: string, name: string) => source.indexOf(`${name}(`);
+
+// ── Item 1 — unit tests for the stripper itself ─────────────────────────────
+
+test('stripComments: strips // and /* */ in ordinary code, keeping newlines where // comments were', () => {
+  assert.equal(stripComments('a();\n// a remark\nb();\n'), 'a();\n\nb();\n');
+  assert.equal(stripComments('a(); /* inline */ b();'), 'a();  b();');
+  assert.equal(stripComments('a();\n/* spans\nseveral\nlines */\nb();\n'), 'a();\n\nb();\n');
+});
+
+test('stripComments: comment-like text inside a string is never stripped', () => {
+  assert.equal(
+    stripComments("const url = 'http://localhost:4124'; // real comment\n"),
+    "const url = 'http://localhost:4124'; \n",
+  );
+  assert.equal(
+    stripComments('const s = "/* not a comment */ and // not one either"; // real\n'),
+    'const s = "/* not a comment */ and // not one either"; \n',
+  );
+  // Escaped quote inside the string must not end it early.
+  assert.equal(stripComments('const s = \'it\\\'s // fine\'; // real\n'), 'const s = \'it\\\'s // fine\'; \n');
+});
+
+test('stripComments: comment-like text inside a template literal, including inside ${…} interpolation, is never stripped', () => {
+  const src = 'const s = `path is ${a}/${b} not a comment // still not, nor /* this */`;\n// real comment\n';
+  const stripped = stripComments(src);
+  assert.ok(
+    stripped.includes('`path is ${a}/${b} not a comment // still not, nor /* this */`'),
+    `template body must survive intact. Got:\n${stripped}`,
+  );
+  assert.ok(!stripped.includes('real comment'), `the trailing real comment must still be stripped. Got:\n${stripped}`);
+});
+
+test('stripComments: a comment INSIDE a ${…} interpolation is a real comment and IS stripped, and the template resumes after it', () => {
+  const src = 'const s = `before ${x /* real comment in code */ + 1} after`;\n';
+  const stripped = stripComments(src);
+  assert.ok(stripped.includes('`before ${x  + 1} after`'), `Got:\n${stripped}`);
+  assert.ok(!stripped.includes('real comment in code'), `Got:\n${stripped}`);
+});
+
+test('stripComments: comment-like text inside a regex literal is never stripped, and division is never mistaken for a regex', () => {
+  const src = "const re = /http:\\/\\/example/; // a real comment\nconst n = a / b; // also real\n";
+  const stripped = stripComments(src);
+  assert.ok(stripped.includes('/http:\\/\\/example/'), `regex literal must survive intact. Got:\n${stripped}`);
+  assert.ok(!stripped.includes('a real comment'), `Got:\n${stripped}`);
+  assert.ok(stripped.includes('const n = a / b;'), `plain division must survive as code, not be read as a regex. Got:\n${stripped}`);
+  assert.ok(!stripped.includes('also real'), `Got:\n${stripped}`);
+});
+
+test('stripComments: a /* inside a // comment does not start swallowing code — synthetic reproduction of N5', () => {
+  const src =
+    'const keep = snapshotRealGrounds(a); // a remark about projects/* and other things\n' +
+    'const also = snapshotRealGrounds(b); /* harmless note */\n';
+  const stripped = stripComments(src);
+  assert.equal(
+    (stripped.match(/snapshotRealGrounds\(/g) ?? []).length,
+    2,
+    `both calls must survive stripping — the old stripper's "/*" inside "projects/*" would have swallowed ` +
+      `everything up to the next "*/" here. Got:\n${stripped}`,
+  );
+});
+
+test('stripComments: the reviewer\'s EXACT reproduction (N5) against the REAL run-story.mjs — the snapshotRealGrounds ≥ 2 door must stay GREEN', () => {
+  // d1-fix2-rereview.md N5: "appending `/* harmless note */` … turned the
+  // unrelated `snapshotRealGrounds ≥ 2` door RED. The cause is the `/*`
+  // inside the `// … projects/*` comment …, which swallows code up to the
+  // next `*/`." Reproduced here against the real file's own current comment
+  // (not a stand-in), via the SAME exact-anchor-or-throw discipline as the
+  // mutation test below — if this anchor line ever moves, this test fails
+  // loudly rather than silently testing nothing.
+  const real = readSource('run-story.mjs');
+  const anchorLine = '  // M7-D — a FIXTURE run must never move a REAL ground: every `projects/*`';
+  const at = real.indexOf(anchorLine);
+  assert.ok(at !== -1, 'this test\'s own anchor line — the "projects/*" remark — moved in run-story.mjs; update the anchor');
+  const mutated = `${real.slice(0, at)}${anchorLine} /* harmless note */\n${real.slice(at + anchorLine.length + 1)}`;
+
+  const count = (stripComments(mutated).match(/snapshotRealGrounds\(/g) ?? []).length;
+  assert.ok(
+    count >= 2,
+    `expected snapshotRealGrounds( at least twice after stripping the mutated source — found ${count}. A ` +
+      'regression here means the old swallow-to-the-next-*/ bug is back.',
+  );
+});
 
 test('comment-stripping does not eat real code — sanity check on this door\'s own instrument', () => {
   // If this ever failed it would mean `stripComments` is silently deleting
@@ -96,28 +368,6 @@ test('run.mjs: the finally block tears down any fixture ground still standing �
   assert.ok(teardownAt > finallyAt, `teardownFixtureGround( (at ${teardownAt}) must run inside the finally block (starts at ${finallyAt})`);
 });
 
-/**
- * T2 ruling 4 — CRASH EVIDENCE SURVIVES. The backstop must tear down ONLY a
- * ground whose story never STARTED (provisioned, then a bridge refusal or
- * throw BEFORE `runStory` was ever entered for it) — a ground whose story
- * DID start and then crashed mid-beat must be LEFT for the operator to
- * inspect (`_architect/<sid>/…` and friends), not deleted by the very
- * teardown that is supposed to be a cleanup, not an evidence-destroyer. This
- * is ruling 356b's class, one level up: "the ground was removed before
- * anything read its own state" (re-review N4).
- *
- * PINNED AS A SOURCE DOOR, not a behavioural test, for the same reason as
- * every other run.mjs/run-story.mjs check here: this cannot be driven
- * through a browser inside `npm test`. Two structural facts, searched for
- * directly rather than assumed:
- *
- *   - a started-ids Set/Map is WRITTEN immediately before `await runStory(`
- *     — "immediately before" so no code can run between marking a story
- *     started and actually starting it, which is what would let a crash
- *     inside `runStory` leave a gap where the story still looks unstarted;
- *   - the backstop's `teardownFixtureGround(` call is GUARDED by reading
- *     that same structure (a `.has(` check) — never unconditional.
- */
 test('run.mjs: the abort backstop tears down ONLY grounds whose story never started — a started story\'s ground is LEFT for evidence, named', () => {
   const source = readStripped('run.mjs');
 
@@ -137,7 +387,7 @@ test('run.mjs: the abort backstop tears down ONLY grounds whose story never star
   assert.ok(
     /\.has\(/.test(guardWindow),
     'expected the backstop\'s teardown to be guarded by a .has( check against the started-ids structure — ' +
-      'found no .has( between finally and teardownFixtureGround(. Without it, a CRASHED story\'s ground is town ' +
+      'found no .has( between finally and teardownFixtureGround(. Without it, a CRASHED story\'s ground is torn ' +
       'down along with an unstarted one\'s, destroying the evidence ruling 356b exists to keep.',
   );
 
@@ -228,19 +478,6 @@ test('run-story.mjs: .summary is logged, teardown follows the LAST ownGroundMani
   );
 });
 
-/**
- * T2 ruling 2 (`forge-8vfn.26` class, re-review N1) — `realGrounds` (the
- * object that reaches `story.json`, via `result`) must carry ONLY `moved`.
- * `hashed`/`trees` are facts about THIS HOST's worktree layout, not the
- * product; committing them makes a clean fixture run's `story.json` diff
- * against a stranger's checkout with a different worktree count.
- *
- * Scoped to the OBJECT LITERAL of the `realGrounds = { … }` ASSIGNMENT (found
- * by brace-matching, same technique as the fence door above), never the
- * whole file — `fenceVerdict.hashed`/`.trees` still exist and are read for
- * the CONSOLE summary line elsewhere in this function, unchanged this round,
- * and a whole-file substring search would false-red on that.
- */
 test('run-story.mjs: realGrounds carries ONLY moved into the artifact — hashed and trees stay on the console only (forge-8vfn.26 class)', () => {
   const source = readStripped('run-story.mjs');
   const verdictAt = source.indexOf('realGroundFenceVerdict(');
@@ -270,16 +507,13 @@ test('run-story.mjs: realGrounds carries ONLY moved into the artifact — hashed
   assert.match(objectLiteral, /\bmoved\s*:/, `realGrounds must carry moved. Found: ${objectLiteral}`);
 });
 
-// ── T2 ruling 1 — THE MUTATION-PROOF FENCE DOOR ────────────────────────────
+// ── T2 ruling 1 / fix round 3 — THE MUTATION-PROOF FENCE DOOR ───────────────
 //
-// Replaces the round-1 token-order check ("realGroundFenceVerdict( … .ok …
-// return 1", satisfied by the FIRST `return 1` anywhere after the FIRST
-// `.ok`, wherever either occurs) with a STRUCTURAL one: capture the variable
-// `N` bound by `const N = realGroundFenceVerdict(`, require the literal
-// statement `if (!N.ok)`, and require THAT statement's OWN `{ … }` block —
-// found by counting braces to its matching `}`, not by searching past it —
-// to itself contain `return 1`. A `return 1` anywhere else in the file,
-// however close, cannot satisfy this.
+// Capture the variable `N` bound by `const N = realGroundFenceVerdict(`,
+// require the literal statement `if (!N.ok)`, and require THAT statement's
+// OWN `{ … }` block — found by counting braces to its matching `}`, not by
+// searching past it — to itself contain `return 1`. A `return 1` anywhere
+// else in the file, however close, cannot satisfy this.
 
 /** The index of `source`'s matching `}` for the `{` at `openIndex`, or -1. */
 function matchingBraceEnd(source: string, openIndex: number): number {
@@ -294,6 +528,57 @@ function matchingBraceEnd(source: string, openIndex: number): number {
   return -1;
 }
 
+/** The index of `source`'s matching `)` for the `(` at `openIndex`, or -1. */
+function matchingParenEnd(source: string, openIndex: number): number {
+  let depth = 0;
+  for (let i = openIndex; i < source.length; i += 1) {
+    if (source[i] === '(') depth += 1;
+    else if (source[i] === ')') {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Item 2 — replace the FIRST occurrence of `anchor` with `replacement`.
+ * THROWS if the anchor is not found, rather than returning `source`
+ * unchanged: a mutation test built on a silent no-op would keep "passing"
+ * forever, having stopped proving anything the moment a refactor renamed or
+ * moved the code it targets. Fail loudly instead, so THAT test reds and
+ * says why.
+ */
+function replaceAnchor(source: string, anchor: string, replacement: string): string {
+  const at = source.indexOf(anchor);
+  if (at === -1) {
+    throw new Error(`replaceAnchor: anchor not found — ${JSON.stringify(anchor)}`);
+  }
+  return source.slice(0, at) + replacement + source.slice(at + anchor.length);
+}
+
+/**
+ * The span `[start, end)` of a call expression `calleeAnchor(...)` — from the
+ * start of `calleeAnchor` (which must end in `(`) through its balanced
+ * closing `)`. THROWS if the anchor, or a balanced close for it, cannot be
+ * found — same loud-failure discipline as `replaceAnchor`.
+ */
+function findCallSpan(source: string, calleeAnchor: string): { start: number; end: number } {
+  if (!calleeAnchor.endsWith('(')) {
+    throw new Error(`findCallSpan: calleeAnchor must end in "(" — got ${JSON.stringify(calleeAnchor)}`);
+  }
+  const start = source.indexOf(calleeAnchor);
+  if (start === -1) {
+    throw new Error(`findCallSpan: anchor not found — ${JSON.stringify(calleeAnchor)}`);
+  }
+  const openParen = start + calleeAnchor.length - 1;
+  const closeParen = matchingParenEnd(source, openParen);
+  if (closeParen === -1) {
+    throw new Error(`findCallSpan: no balanced closing ) for ${JSON.stringify(calleeAnchor)}`);
+  }
+  return { start, end: closeParen + 1 };
+}
+
 interface FenceGuardLocation {
   N: string;
   conditionStart: number;
@@ -302,24 +587,40 @@ interface FenceGuardLocation {
   braceEnd: number;
 }
 
-/** Find `const N = realGroundFenceVerdict(` and the `if (!N.ok) { … }`
- *  statement that follows it, in ALREADY COMMENT-STRIPPED source. `null`
- *  when either the declaration or the exact `if (!N.ok)` shape is absent, or
- *  the condition is not immediately followed by a `{ … }` block (whitespace
- *  only between them — a brace-less single-statement `if` does not count:
- *  the ruling's own words are "whose block (up to its matching `}`)"). */
-function locateFenceGuard(strippedSource: string): FenceGuardLocation | null {
+/**
+ * Item 3 — find `const N = realGroundFenceVerdict(` and the `if (!N.ok) { … }`
+ * statement that follows it, in ALREADY COMMENT-STRIPPED source. Returns
+ * EITHER the location, OR `{ error }` naming EXACTLY which of the three
+ * checks failed — never one generic message for all three, and never a
+ * claim this function does not actually verify (the old message said the
+ * block was required "immediately after" the DECLARATION; what is actually
+ * required is that the block sit immediately after its OWN condition,
+ * wherever in the file that condition is).
+ */
+function locateFenceGuard(strippedSource: string): FenceGuardLocation | { error: string } {
   const declMatch = /const\s+(\w+)\s*=\s*realGroundFenceVerdict\(/.exec(strippedSource);
-  if (declMatch === null) return null;
+  if (declMatch === null) {
+    return { error: 'no `const N = realGroundFenceVerdict(` declaration found anywhere in the file' };
+  }
   const N = declMatch[1];
   const ifMatch = new RegExp(`if\\s*\\(\\s*!\\s*${N}\\.ok\\s*\\)`).exec(strippedSource);
-  if (ifMatch === null) return null;
+  if (ifMatch === null) {
+    return { error: `found \`const ${N} = realGroundFenceVerdict(\`, but no \`if (!${N}.ok)\` anywhere in the file` };
+  }
   const conditionStart = ifMatch.index;
   const conditionEnd = conditionStart + ifMatch[0].length;
   const braceStart = strippedSource.indexOf('{', conditionEnd);
-  if (braceStart === -1 || strippedSource.slice(conditionEnd, braceStart).trim() !== '') return null;
+  if (braceStart === -1 || strippedSource.slice(conditionEnd, braceStart).trim() !== '') {
+    return {
+      error:
+        `found \`if (!${N}.ok)\`, but its condition is not immediately followed by a { … } block ` +
+        '(only whitespace is allowed between the condition and the opening brace — a brace-less single-statement if does not count)',
+    };
+  }
   const braceEnd = matchingBraceEnd(strippedSource, braceStart);
-  if (braceEnd === -1) return null;
+  if (braceEnd === -1) {
+    return { error: `found \`if (!${N}.ok) {\`, but its block's braces never balance to a matching }` };
+  }
   return { N, conditionStart, conditionEnd, braceStart, braceEnd };
 }
 
@@ -331,18 +632,15 @@ function locateFenceGuard(strippedSource: string): FenceGuardLocation | null {
 function fenceDoorVerdict(source: string): { ok: boolean; reason: string } {
   const stripped = stripComments(source);
   const loc = locateFenceGuard(stripped);
-  if (loc === null) {
-    return {
-      ok: false,
-      reason: 'no literal `if (!N.ok) { … }` block found immediately after a `const N = realGroundFenceVerdict(` assignment',
-    };
+  if ('error' in loc) {
+    return { ok: false, reason: loc.error };
   }
   const block = stripped.slice(loc.braceStart, loc.braceEnd + 1);
   if (!/\breturn\s+1\b/.test(block)) {
     return {
       ok: false,
       reason:
-        `the if (!${loc.N}.ok) block does not itself contain a return 1 — found: ` +
+        `found \`if (!${loc.N}.ok) { … }\`, but its own block does not contain a \`return 1\` — found: ` +
         `${JSON.stringify(block.length > 160 ? `${block.slice(0, 160)}…` : block)}`,
     };
   }
@@ -382,65 +680,75 @@ test('the fence door\'s own instrument: GREEN on a correctly-shaped guard, RED w
 });
 
 /**
- * MUTATION TRANSCRIPT — T2 ruling 1: "a door guarding a refusal ships with
- * its mutation transcript" (M7-COMMON §6.5).
+ * Item 2 — the door's mutation-proofness, pinned as a test in its own right
+ * (M7-COMMON §6.5: "a door guarding a refusal ships with its mutation
+ * transcript"; this round makes that transcript executable, not prose).
  *
- * Built from `run-story.mjs`'s OWN current text — never a hand-typed guess at
- * what the eventual fix will look like — by locating today's `const N =
- * realGroundFenceVerdict(` / `if (!N.ok) …`.
+ * Three mutants of the REAL `run-story.mjs`, each built via EXACT anchor
+ * replacement (never a hand-typed guess, never a fuzzy regex substitution
+ * that could silently match the wrong thing or nothing at all):
  *
- * TODAY'S SHAPE IS ITSELF BRACE-LESS — `if (!fenceVerdict.ok) realGroundMoved
- * = fenceVerdict.moved;`, no `{ }` at all — which is EXACTLY the shape this
- * whole door exists to refuse (there is no block for `return 1` to live
- * inside, so the door above is red for an even more direct reason than "the
- * block lacks a return"). So step (0) below MECHANICALLY wraps the existing
- * statement in `{ …; return 1; }` — the minimal realistic correction — to
- * build a "corrected" copy of the REAL file; steps (a) and (b) then mutate
- * THAT corrected copy:
+ *   (a) DELETE  — the whole `if (!N.ok) { … }` statement removed.
+ *   (b) NEUTER  — `if (!N.ok)` replaced with `if (false)`.
+ *   (c) STUB    — the `realGroundFenceVerdict(` CALL ITSELF (found by
+ *       balanced-paren matching, so its actual argument list never has to be
+ *       guessed) replaced with a hand-written verdict object literal,
+ *       `{ ok: true, moved: [] }`.
  *
- *   (0) CORRECTED — the brace-less statement wrapped in `{ …; return 1; }`;
- *   (a) DELETED — the whole `if (!N.ok) { … }` statement removed;
- *   (b) NEUTERED — `if (!N.ok)` replaced with `if (false)`.
+ * Mutant (c) is new this round. It reproduces the re-review's §4 finding
+ * exactly: a round-2 draft computed `realGroundFenceVerdict` TWICE under the
+ * same local name — once for the console/evidence, once more, later, only to
+ * give the exit-code gate a literal `const N = realGroundFenceVerdict(` shape
+ * to parse — and stubbing the SECOND (gating) call left the door green while
+ * the run's actual exit code stopped reflecting reality, because the door
+ * bound `N` from the FIRST declaration and never checked that the `if` it
+ * found afterward read the SAME call. `run.mjs` now makes exactly ONE
+ * `realGroundFenceVerdict(` call at function scope, which is what closes the
+ * hole: stubbing the ONLY call removes the `const N = realGroundFenceVerdict(`
+ * the door needs entirely, so `locateFenceGuard` cannot bind `N` at all.
  *
- * (0) must be GREEN; (a) and (b) must both be RED. This proves the
- * instrument discriminates a present guard from an absent or gutted one —
- * independent of whether `run-story.mjs` itself is fixed yet (the test just
- * above already pins that, separately, against the real, unmutated file).
+ * All three mutants must be RED; the real, unmutated file must be GREEN.
  */
-test('MUTATION TRANSCRIPT: the fence door is GREEN on a corrected copy of run-story.mjs and RED on both a deleted and a neutered guard', () => {
-  const stripped = readStripped('run-story.mjs');
-  const declMatch = /const\s+(\w+)\s*=\s*realGroundFenceVerdict\(/.exec(stripped);
-  assert.ok(declMatch !== null, 'expected to find `const N = realGroundFenceVerdict(` in run-story.mjs today');
-  const N = declMatch[1];
-  const ifMatch = new RegExp(`if\\s*\\(\\s*!\\s*${N}\\.ok\\s*\\)`).exec(stripped);
-  assert.ok(ifMatch !== null, `expected to find \`if (!${N}.ok)\` in run-story.mjs today`);
-  const conditionEnd = ifMatch.index + ifMatch[0].length;
+test('the fence door is a mutation-proof gate: RED on (a) deleted, (b) neutered and (c) stubbed guards, GREEN on the real file', () => {
+  const real = readStripped('run-story.mjs');
 
-  // (0) CORRECTED — wrap today's brace-less controlled statement in braces
-  // and append `return 1;`. `indexOf(';', …)` is enough here because the
-  // real statement (`realGroundMoved = fenceVerdict.moved`) contains no
-  // nested `;`, `{` or `}` of its own — verified by the assertion right
-  // after, which would fail loudly rather than silently mis-slice if that
-  // ever stopped being true.
-  const stmtEnd = stripped.indexOf(';', conditionEnd);
-  assert.ok(stmtEnd !== -1, 'expected the brace-less statement to end in a semicolon');
-  const corrected =
-    `${stripped.slice(0, conditionEnd)} { ${stripped.slice(conditionEnd, stmtEnd + 1)} return 1; }${stripped.slice(stmtEnd + 1)}`;
-  const correctedVerdict = fenceDoorVerdict(corrected);
-  assert.equal(correctedVerdict.ok, true, `(0) corrected must be GREEN: ${correctedVerdict.reason}`);
+  const realVerdict = fenceDoorVerdict(real);
+  assert.equal(realVerdict.ok, true, `the real, unmutated file must be GREEN: ${realVerdict.reason}`);
 
-  // Re-locate the guard IN THE CORRECTED COPY, which now has real braces, to
-  // build the two mutants from a properly-shaped baseline.
-  const correctedStripped = stripComments(corrected);
-  const loc = locateFenceGuard(correctedStripped);
-  assert.ok(loc !== null, 'expected the corrected copy to have a locatable if (!N.ok) { … } block');
-  const at = loc as FenceGuardLocation;
+  const loc = locateFenceGuard(real);
+  if ('error' in loc) {
+    throw new Error(`this test's own precondition failed — could not locate the real guard: ${loc.error}`);
+  }
 
-  const deleted = correctedStripped.slice(0, at.conditionStart) + correctedStripped.slice(at.braceEnd + 1);
+  const conditionText = real.slice(loc.conditionStart, loc.conditionEnd);
+  // The FULL CONTIGUOUS span from the condition through its block's closing
+  // `}` — sliced as ONE piece, not `conditionText` and the block text
+  // concatenated separately, which would silently drop whatever sits BETWEEN
+  // them (here, the single space in `if (!realFence.ok) {`) and make the
+  // anchor fail to match anything in `real` at all.
+  const guardText = real.slice(loc.conditionStart, loc.braceEnd + 1);
+
+  // (a) DELETE — remove `if (!N.ok) { … }` (condition + its own block) entirely.
+  const deleted = replaceAnchor(real, guardText, '');
   const deletedVerdict = fenceDoorVerdict(deleted);
-  assert.equal(deletedVerdict.ok, false, `(a) the if block deleted must be RED: got ok=${deletedVerdict.ok}`);
+  assert.equal(deletedVerdict.ok, false, `(a) deleting the if block must be RED, got GREEN: ${deletedVerdict.reason}`);
 
-  const neutered = `${correctedStripped.slice(0, at.conditionStart)}if (false)${correctedStripped.slice(at.conditionEnd)}`;
+  // (b) NEUTER — the exact captured condition text, replaced with `if (false)`.
+  const neutered = replaceAnchor(real, conditionText, 'if (false)');
   const neuteredVerdict = fenceDoorVerdict(neutered);
-  assert.equal(neuteredVerdict.ok, false, `(b) !N.ok neutered to false must be RED: got ok=${neuteredVerdict.ok}`);
+  assert.equal(neuteredVerdict.ok, false, `(b) neutering !N.ok to false must be RED, got GREEN: ${neuteredVerdict.reason}`);
+
+  // (c) STUB — the realGroundFenceVerdict( CALL (callee through its balanced
+  // closing paren, whatever its actual arguments are) replaced with a
+  // hand-written verdict.
+  const span = findCallSpan(real, 'realGroundFenceVerdict(');
+  const stubbed = real.slice(0, span.start) + '{ ok: true, moved: [] }' + real.slice(span.end);
+  const stubbedVerdict = fenceDoorVerdict(stubbed);
+  assert.equal(stubbedVerdict.ok, false, `(c) stubbing the realGroundFenceVerdict( call must be RED, got GREEN: ${stubbedVerdict.reason}`);
+});
+
+test('replaceAnchor and findCallSpan FAIL LOUDLY when their anchor is not found, rather than silently producing a no-op mutant', () => {
+  assert.throws(() => replaceAnchor('const x = 1;', 'NOPE_NOT_HERE', 'y'), /anchor not found/);
+  assert.throws(() => findCallSpan('const x = 1;', 'notACall('), /anchor not found/);
+  assert.throws(() => findCallSpan('foo(bar', 'foo('), /no balanced closing \)/);
 });
