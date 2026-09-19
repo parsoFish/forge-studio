@@ -47,7 +47,7 @@ const scratch = () => mkdtempSync(join(tmpdir(), 'fixture-ground-fix1-'));
 // distinct `<tree>` roots among the keys, a key being `<tree>/projects/<name>`;
 // `ok` = `moved.length === 0`; `summary` is the exact sentence the run logs.
 
-test('realGroundFenceVerdict: unchanged grounds are ok, with a summary naming 0 moved', () => {
+test('realGroundFenceVerdict: unchanged grounds are ok, with a summary naming 0 moved and 0 unreadable', () => {
   const before = new Map([
     [join('/root', 'projects', 'gitpulse'), 'abc123'],
     [join('/root', 'projects', 'mdtoc'), 'def456'],
@@ -57,9 +57,10 @@ test('realGroundFenceVerdict: unchanged grounds are ok, with a summary naming 0 
   const v = realGroundFenceVerdict(before, after);
   assert.equal(v.ok, true);
   assert.deepEqual(v.moved, []);
+  assert.deepEqual(v.unreadable, []);
   assert.equal(v.hashed, 2);
   assert.equal(v.trees, 1);
-  assert.equal(v.summary, 'real grounds: 2 hashed in 1 tree(s), 0 moved');
+  assert.equal(v.summary, 'real grounds: 2 hashed in 1 tree(s), 0 moved, 0 unreadable');
   assert.ok(Object.isFrozen(v), 'the verdict is frozen — nothing downstream can edit the record that gates the run');
 });
 
@@ -75,11 +76,20 @@ test('realGroundFenceVerdict: one MODIFIED ground is NOT ok, and moved names it'
   assert.match(v.summary, /1 moved/, v.summary);
 });
 
-test('realGroundFenceVerdict: a dir with a NULL digest in `before` is excluded from `hashed`', () => {
-  // `groundManifest` returns null on an unreadable dir (xargs exit 123, or
-  // output past the 64 MiB bound). A dir that never produced a digest was
-  // never actually HASHED, whatever the earlier hand-rolled `dirs.length`
-  // count claimed (review M2's sibling finding, generalised to this door).
+/**
+ * D1 round 4 (security review) — `realGroundFenceVerdict` must never call an
+ * UNHASHABLE real ground clean. `hashed`'s own exclusion of a null-digest dir
+ * (review M2's sibling finding) only kept the COUNT honest; it said nothing
+ * about `ok`, which before this ruling was driven by `moved.length === 0`
+ * alone — so a real ground `groundManifest` could not read at all (an
+ * unreadable file, output past the 64 MiB bound, a broken mount) compared
+ * `null` against `null` on both sides of `realGroundEscapes`, produced NO
+ * `moved` line, and the run sailed through believing the fence had looked.
+ * `unreadable` names every dir `before` LISTED (so it was meant to be
+ * fenced) but could not hash; `ok` is now false on EITHER `moved.length > 0`
+ * OR `unreadable.length > 0`.
+ */
+test('realGroundFenceVerdict: a dir with a NULL digest in `before` is excluded from `hashed`, reported in `unreadable`, and alone makes `ok` false', () => {
   const hashedDir = join('/root', 'projects', 'gitpulse');
   const unreadableDir = join('/root', 'projects', 'mdtoc');
   const before = new Map([[hashedDir, 'abc123'], [unreadableDir, null]]);
@@ -88,7 +98,14 @@ test('realGroundFenceVerdict: a dir with a NULL digest in `before` is excluded f
   const v = realGroundFenceVerdict(before, after);
   assert.equal(v.hashed, 1, 'a null-digest dir must not count toward hashed');
   assert.equal(v.trees, 1);
-  assert.equal(v.summary, 'real grounds: 1 hashed in 1 tree(s), 0 moved');
+  assert.deepEqual(v.unreadable, [unreadableDir], 'a dir before LISTED with a null digest is unreadable, named');
+  assert.equal(v.moved.length, 0, 'the ground did not MOVE — it was simply never readable, a different fact');
+  assert.equal(
+    v.ok,
+    false,
+    'realGroundFenceVerdict must never call an unhashable real ground clean, even with moved.length === 0',
+  );
+  assert.equal(v.summary, 'real grounds: 1 hashed in 1 tree(s), 0 moved, 1 unreadable');
 });
 
 test('realGroundFenceVerdict: trees counts DISTINCT <tree> roots among the keys, not the number of dirs', () => {
@@ -102,7 +119,7 @@ test('realGroundFenceVerdict: trees counts DISTINCT <tree> roots among the keys,
   const v = realGroundFenceVerdict(before, after);
   assert.equal(v.hashed, 3);
   assert.equal(v.trees, 2, 'two roots — /root and /tree2 — must count as 2, never as 3 (one per dir)');
-  assert.equal(v.summary, 'real grounds: 3 hashed in 2 tree(s), 0 moved');
+  assert.equal(v.summary, 'real grounds: 3 hashed in 2 tree(s), 0 moved, 0 unreadable');
 });
 
 // ── M1 — provisionFixtureGrounds(root, stories) ────────────────────────────
