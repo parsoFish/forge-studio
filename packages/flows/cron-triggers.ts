@@ -185,8 +185,8 @@ function makeFireFn(
  * Diff the declared cron triggers (scanned fresh from disk) against the live
  * armed set, stopping jobs no longer declared and arming jobs newly declared.
  * An unchanged declaration (same key already armed) is left untouched — no
- * re-arm, no job churn. Never throws: a broken flow or an invalid schedule is
- * reported via `notify` and skipped.
+ * re-arm, no job churn. A broken flow or an invalid schedule is reported via
+ * `notify` and skipped; a flow id under two discovery roots THROWS (the tick catches).
  */
 export function syncCronTriggers(deps: SyncCronTriggersDeps): SyncCronTriggersResult {
   const notify = deps.notify ?? (() => {});
