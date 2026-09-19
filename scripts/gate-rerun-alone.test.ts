@@ -73,8 +73,20 @@ function tree(runs: string[], files: Record<string, string>): string {
 }
 const camp = () => mkdtempSync(join(tmpdir(), 'gate-rerun-camp-'));
 
+// `NODE_TEST_CONTEXT` STRIPPED, NEVER INHERITED. This file's own subject is a
+// gate.sh that runs `node --test` on FIXTURE files — a nested test runner —
+// and when this file itself runs under `node --test` (the house convention;
+// see COMMON), node sets `NODE_TEST_CONTEXT=child-v8` in ITS OWN process.env.
+// Measured: a fixture spawned this way exits 0 with EMPTY stdout regardless
+// of whether its tests actually pass — the inherited var makes the nested
+// runner behave as a CHILD of a parent harness that does not exist here, and
+// it silently defers its verdict instead of reporting one. Every ALWAYS_RED
+// fixture in this file read as PASS until this was stripped; a genuinely
+// passing fixture was never affected, which is why it looked like only some
+// doors were red.
 function gate(d: string, c: string, extra: Record<string, string>) {
-  const r = spawnSync('bash', [GATE, d, c], { encoding: 'utf8', env: { ...process.env, ...extra } });
+  const { NODE_TEST_CONTEXT: _ntc, ...rest } = process.env;
+  const r = spawnSync('bash', [GATE, d, c], { encoding: 'utf8', env: { ...rest, ...extra } });
   return { out: r.stdout ?? '', status: r.status };
 }
 
