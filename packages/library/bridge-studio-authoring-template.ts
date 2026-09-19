@@ -120,11 +120,7 @@ export function finalizeTemplateFromLanded(
   if (invalidContent) return { ok: false, status: 400, error: invalidContent };
 
   // Layer 4 — CONTAINMENT: the SAME guarded choke point
-  // POST /api/studio/templates uses — never a fresh lexical join. forge-8vfn.5.33
-  // follow-up: dirSegments rides as SEGMENTS alongside the leaf, under the
-  // trusted forgeRoot — never pre-joined into a caller-built root (that would
-  // fold WRITABLE_CATEGORY_DIRS's own literal names past resolveGuardedPath's
-  // per-segment identity walk with no check at all).
+  // POST /api/studio/templates uses — never a fresh lexical join; dirSegments are SEGMENTS, never a caller-built root (5.33).
   const dirSegments = WRITABLE_CATEGORY_DIRS[category];
   const targetGuard = resolveGuardedPath(forgeRoot, [...dirSegments, `${id}.md`]);
   if (!targetGuard.ok) return { ok: false, status: 400, error: 'path traversal detected' };

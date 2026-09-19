@@ -305,18 +305,8 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
         sendJson(res, 409, { error: `project "${id}" already exists` }, origin); return true;
       }
       const repoPathRel = typeof b['repoPath'] === 'string' && b['repoPath'].trim() ? b['repoPath'].trim() : `projects/${id}`;
-      // forge-8vfn.5.33 follow-up (caller-built-root ratchet): `repoPathRel` is
-      // REQUEST-INFLUENCED (`b['repoPath']`), so it must reach `resolveGuardedPath`
-      // as SEGMENTS under the TRUSTED `ctx.forgeRoot` — never pre-joined into the
-      // `root` argument via a naked `resolve()` first (path-guard.ts's own CONTRACT
-      // section: `resolveGuardedPath` performs NO identity check on `root` itself,
-      // so folding an untrusted value into it is a total bypass — the #289
-      // incident's exact shape). `repoCandidate` is resolved lexically first (same
-      // as before — this is what correctly COLLAPSES an escape-and-return like
-      // "projects/../projects/<id>" into a genuinely-contained relative path, per
-      // the positive control below), then RE-EXPRESSED as segments relative to
-      // `ctx.forgeRoot`, so the per-segment identity walk actually runs over every
-      // component `repoPathRel` names — including a symlinked `projects/` sibling.
+      // `repoPathRel` is request data (b['repoPath']): it reaches the guard as SEGMENTS under the trusted
+      // ctx.forgeRoot, never folded into `root` (5.33 / #289). Lexical resolve first collapses an escape-and-return.
       const repoCandidate = resolve(ctx.forgeRoot, repoPathRel);
       const repoSegments = relative(ctx.forgeRoot, repoCandidate).split(sep);
       const repoRootGuard = resolveGuardedPath(ctx.forgeRoot, repoSegments);
@@ -324,15 +314,8 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
         sendJson(res, 400, { error: 'repo path must resolve inside the forge projects directory' }, origin); return true;
       }
       const projectRoot = repoRootGuard.realPath;
-      // Real per-segment IDENTITY containment, SECOND layer (packages/flows/
-      // manifest-path-guard.ts's isContainedProjectRepoPath, itself built on the
-      // SAME resolveGuardedPath) — this is the POLICY gate: `projectRoot` must
-      // land specifically under `<forgeRoot>/projects`, not merely somewhere
-      // under `forgeRoot` (which the guard above already proved safe, but does
-      // not by itself require). Root is <forgeRoot>/projects, not forgeRoot
-      // itself: writeManifest already asserts project_repo_path under that same
-      // root, and discoverProjects only scans it — a project created outside
-      // projects/ could never run a cycle and would be invisible to the library.
+      // SECOND layer, the POLICY gate (isContainedProjectRepoPath, same guard): under <forgeRoot>/projects
+      // specifically — writeManifest asserts that root and discoverProjects only scans it.
       // R4-17 round-4 (pin 7): the guard checks against `projectsDir` — the
       // root THIS handler already resolved four lines up and used for the
       // duplicate-id scan — instead of re-reading `forge.config.json` inside
