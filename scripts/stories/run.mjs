@@ -290,6 +290,13 @@ async function main() {
   // already-provisioned ground standing forever; declared outside the `try`
   // so the abort backstop in `finally` can always see it.
   let provisionedGrounds = [];
+  // Fix round 2, T2 ruling 4 (re-review N4) — which of `provisionedGrounds`'
+  // stories actually STARTED. A story that started and then crashed
+  // mid-beats keeps its ground for evidence; only a ground whose story was
+  // NEVER ENTERED is the backstop's to remove. Written immediately before
+  // `runStory` is awaited (see the loop below) so there is no gap between
+  // "marked started" and "actually starting" a crash could hide inside.
+  const startedStoryIds = new Set();
   try {
     // 4. Leading sweep, before the bridge, so a run cannot inherit dead state.
     for (const s of stories) {
@@ -337,6 +344,11 @@ async function main() {
     if (provisionResult.refused !== null) {
       console.error(`[stories] REFUSING ${provisionResult.refused.storyId}: ${provisionResult.refused.message}`);
       exitCode = 1;
+      // D1 re-review, N2 — a rollback `provisionFixtureGrounds` could not
+      // finish is named, not left for someone to notice by its absence.
+      for (const f of provisionResult.rollbackFailures) {
+        console.warn(`[stories] fixture ground: could not roll back projects/${f.project}: ${f.error} — the next leading sweep removes it`);
+      }
     }
 
     if (provisionResult.refused === null) {
@@ -370,6 +382,10 @@ async function main() {
       }
 
       for (const story of stories) {
+        // Marked IMMEDIATELY before the await — no code runs between this and
+        // `runStory` actually starting, so a crash inside it can never leave
+        // a gap where the story still reads as unstarted (T2 ruling 4).
+        startedStoryIds.add(story.id);
         exitCode = (await runStory(story, uiUrl, startedMs, args.ceilingUsd)) || exitCode;
       }
     }
@@ -429,20 +445,34 @@ async function main() {
       // A teardown that throws loses the verdict the run just produced.
       console.warn(`[stories] run-end reap failed: ${err?.message ?? err}`);
     }
-    // D1 review, M1 — the fixture-ground abort backstop. `runStory` already
-    // tears down its OWN ground on every path it reaches (a green run, a red
-    // one, a spend halt), so this is almost always a no-op reporting "already
-    // absent"; it exists for the story whose ground was provisioned in THIS
-    // batch but whose own `runStory` never ran — the bridge `refuse` throw, a
-    // `bootOwnBridge` failure, or an earlier story's `runStory` throwing.
+    // D1 review, M1 (re-review N3/N4, fix round 2 T2 ruling 4) — the
+    // fixture-ground abort backstop. `runStory` already tears down its OWN
+    // ground on every path it reaches ONCE STARTED (a green run, a red one, a
+    // spend halt) — so this only ever has work to do for a story whose ground
+    // was provisioned in THIS batch but whose own `runStory` was NEVER
+    // ENTERED: the bridge `refuse` throw, a `bootOwnBridge` failure, or an
+    // earlier story's `runStory` throwing before a later story's turn. A
+    // story that DID start and then crashed mid-beats keeps its ground —
+    // deleting it here would destroy evidence (`_architect/<sid>/…` and
+    // friends) before anything reads it, ruling 356b's class one level up.
     // After the agent reap above, so nothing is still writing into a ground
-    // this is about to remove.
-    for (const p of provisionedGrounds) {
-      const t = teardownFixtureGround(ROOT, { storyId: p.storyId, project: p.project });
-      if (t.removed) console.log(`[stories] fixture ground: torn down projects/${p.project}`);
-      else if (t.error !== undefined) {
-        console.warn(`[stories] fixture ground: could not tear down projects/${p.project}: ${t.error} — the next leading sweep removes it`);
-      } else console.log(`[stories] fixture ground: projects/${p.project} already absent`);
+    // this might remove. Wrapped in its own try/catch, same as the reap
+    // block above and for the same reason: a throw here must not be able to
+    // skip `await release()` below it.
+    try {
+      for (const p of provisionedGrounds) {
+        if (startedStoryIds.has(p.storyId)) {
+          console.log(`[stories] fixture ground: projects/${p.project} LEFT for evidence — the next leading sweep removes it`);
+          continue;
+        }
+        const t = teardownFixtureGround(ROOT, { storyId: p.storyId, project: p.project });
+        if (t.removed) console.log(`[stories] fixture ground: torn down projects/${p.project}`);
+        else if (t.error !== undefined) {
+          console.warn(`[stories] fixture ground: could not tear down projects/${p.project}: ${t.error} — the next leading sweep removes it`);
+        } else console.log(`[stories] fixture ground: projects/${p.project} already absent`);
+      }
+    } catch (err) {
+      console.warn(`[stories] fixture-ground backstop failed: ${err?.message ?? err}`);
     }
     if (bridgeProc !== null) {
       try {

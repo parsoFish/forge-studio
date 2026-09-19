@@ -306,9 +306,16 @@ export function realGroundFenceVerdict(before, after) {
  * A story with no `ground.fixture` is skipped, not provisioned — the caller
  * hands over its full story list rather than pre-filtering.
  *
+ * D1 re-review, N2 — a rollback that could not undo its own write is NAMED,
+ * not swallowed: `rollbackFailures` carries `{ project, error }` for every
+ * already-provisioned ground the rollback loop failed to remove (empty on a
+ * clean rollback, and always `[]` when nothing refused). A caller that
+ * discarded this would have a ground neither it nor `run.mjs`'s abort
+ * backstop knows about, printed nowhere.
+ *
  * @param {string} root
  * @param {Array<{id: string, ground?: {project?: string, fixture?: string}}>} stories
- * @returns {{provisioned: Array<{storyId: string, project: string, digest: string, commit: string}>, refused: {storyId: string, message: string}|null}} frozen
+ * @returns {{provisioned: Array<{storyId: string, project: string, digest: string, commit: string}>, refused: {storyId: string, message: string}|null, rollbackFailures: Array<{project: string, error: string}>}} frozen
  */
 export function provisionFixtureGrounds(root, stories) {
   const provisioned = [];
@@ -318,24 +325,31 @@ export function provisionFixtureGrounds(root, stories) {
     try {
       r = provisionFixtureGround(root, { storyId: s.id, project: s.ground.project, fixture: s.ground.fixture });
     } catch (e) {
-      // Undo everything THIS CALL already wrote before reporting the refusal.
-      // Each id here was already validated by a provision that just
-      // succeeded, so a rollback failure is not expected — best-effort
-      // regardless, because losing the refusal that caused it would be worse
-      // than a ground left behind for the next leading sweep to remove.
+      // Undo everything THIS CALL already wrote before reporting the
+      // refusal. Each id here was already validated by a provision that just
+      // succeeded, so a rollback failure is unusual — READ, not swallowed:
+      // a `teardownFixtureGround` that returns `{removed: false, error}` or
+      // itself throws is named in `rollbackFailures` rather than discarded.
+      const rollbackFailures = [];
       for (const p of provisioned) {
+        let t;
         try {
-          teardownFixtureGround(root, { storyId: p.storyId, project: p.project });
-        } catch {
-          /* see above — the refusal below is the fact that must survive */
+          t = teardownFixtureGround(root, { storyId: p.storyId, project: p.project });
+        } catch (te) {
+          rollbackFailures.push(Object.freeze({ project: p.project, error: te?.message ?? String(te) }));
+          continue;
+        }
+        if (!t.removed && t.error !== undefined) {
+          rollbackFailures.push(Object.freeze({ project: p.project, error: t.error }));
         }
       }
       return Object.freeze({
         provisioned: Object.freeze([]),
         refused: Object.freeze({ storyId: s.id, message: e?.message ?? String(e) }),
+        rollbackFailures: Object.freeze(rollbackFailures),
       });
     }
     provisioned.push(Object.freeze({ storyId: s.id, project: s.ground.project, digest: r.digest, commit: r.commit }));
   }
-  return Object.freeze({ provisioned: Object.freeze(provisioned), refused: null });
+  return Object.freeze({ provisioned: Object.freeze(provisioned), refused: null, rollbackFailures: Object.freeze([]) });
 }
