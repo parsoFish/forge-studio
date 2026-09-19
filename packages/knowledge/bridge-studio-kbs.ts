@@ -39,7 +39,7 @@ import { dirname, relative, resolve, sep } from 'node:path';
 import { resolveGuardedPath, guardedReadFile, provenanceOfOrigin, type Provenance } from '@forge/kernel';
 import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 import { tryGetKbBackend } from './kb-backend.ts';
-import { kbSites, unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
+import { kbSites, subDirs, unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
 import { type KbBinding } from '@forge/contracts/studio/types.ts';
 import type { KbDrainRunFixTurnFn, SessionStatusIoPort, GuardedWriteSessionStatusFn } from './bridge-studio-kb-drain.ts';
 
@@ -83,21 +83,6 @@ function countLayerFiles(dir: string): number {
     return readdirSync(dir).filter((f) => !f.startsWith('.')).length;
   } catch {
     return 0;
-  }
-}
-
-/** Sub-directory names of a dir (empty on any error). */
-export function subDirs(dir: string): string[] {
-  if (!existsSync(dir)) return [];
-  try {
-    return readdirSync(dir, { withFileTypes: true })
-      // Skip dot-prefixed dirs — a `.staging-<id>-*` brain leftover (SEC-05 4on
-      // reopen-1) must never surface as a phantom KB. Real kb/project ids are
-      // slug-safe (no leading dot).
-      .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-      .map((e) => e.name);
-  } catch {
-    return [];
   }
 }
 

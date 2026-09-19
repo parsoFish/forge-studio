@@ -28,7 +28,14 @@ import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 
 export type KbSite = { base: string; name: string };
 
-function subDirs(dir: string): string[] {
+/** Sub-directory names of a dir (empty on any error). Skips dot-prefixed
+ *  dirs — a `.staging-<id>-*` brain leftover (SEC-05 4on reopen-1) must never
+ *  surface as a phantom KB. Real kb/project ids are slug-safe (no leading
+ *  dot). Exported: `bridge-studio-kbs.ts` used to carry a byte-identical
+ *  second copy of this exact walk (its own `_logs` run-id listing in
+ *  `bridge-studio-kb-routes-maintenance.ts` was its only outside caller) —
+ *  one implementation, both repointed here. */
+export function subDirs(dir: string): string[] {
   if (!existsSync(dir)) return [];
   try {
     return readdirSync(dir, { withFileTypes: true })
