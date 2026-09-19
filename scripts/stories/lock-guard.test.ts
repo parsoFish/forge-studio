@@ -264,3 +264,62 @@ test('7.6.33: the refusal says who holds and HOW MANY wait', () => {
 test('7.6.33: no holder and no waiter reads as free, not as unknown', () => {
   assert.equal(describeLockOccupants([], []), 'nothing holds it');
 });
+
+/**
+ * T1 ruling 1211(b) — a story run that HOLDS the suite-lock itself is not in
+ * anyone's way. The recipe is `flock .suite-lock flock .run-lock … npm run
+ * stories`: the suite-lock is taken FIRST by the run's own ancestor, so every
+ * suite queued behind it is blocked by that hold and cannot write into
+ * `projects/` while the run hashes it. Refusing on those waiters made a story
+ * run unstartable whenever lanes queued suites back to back (m7-d, 2026-09-19:
+ * 9–11 openers at every 5-minute sample, no window for 45 minutes).
+ *
+ * The verdict is taken INSIDE a real `flock` hold, from a child process, with a
+ * real waiter queued on the same lock — the shape the runner actually sees.
+ */
+function verdictInsideHold(lock: string, holdAsAncestor: boolean): Promise<{ ok: boolean; reason: string }> {
+  const probe = `import('${join(REPO, 'scripts/stories/lock-guard.mjs')}').then((m) => {
+    setTimeout(() => { process.stdout.write(JSON.stringify(m.suiteLockVerdict({ ${JSON.stringify(SUITE_LOCK_ENV)}: ${JSON.stringify(lock)} }))); }, 800);
+  });`;
+  return new Promise((resolve, reject) => {
+    // Ancestor case: the probe runs UNDER the flock that holds the lock. Control
+    // case: a sibling process holds it and the probe runs outside any hold.
+    const holder = holdAsAncestor
+      ? spawn('flock', [lock, process.execPath, '--input-type=module', '-e', probe], { stdio: ['ignore', 'pipe', 'inherit'] })
+      : spawn('flock', [lock, 'sleep', '5'], { stdio: 'ignore' });
+    const probeProc = holdAsAncestor ? holder : spawn(process.execPath, ['--input-type=module', '-e', probe], { stdio: ['ignore', 'pipe', 'inherit'] });
+    // A real waiter, queued behind the hold before the probe reads.
+    setTimeout(() => { spawn('flock', ['-w', '10', lock, 'true'], { stdio: 'ignore' }); }, 200);
+    let out = '';
+    probeProc.stdout!.on('data', (d) => { out += d; });
+    probeProc.on('close', () => {
+      if (!holdAsAncestor) holder.kill('SIGKILL');
+      try { resolve(JSON.parse(out)); } catch (e) { reject(new Error(`probe printed no verdict: ${JSON.stringify(out)} (${e})`)); }
+    });
+  });
+}
+
+test('1211(b): a story run whose OWN ANCESTOR holds the suite-lock proceeds past queued waiters, and says why', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-selfhold-'));
+  const lock = join(dir, '.suite-lock');
+  writeFileSync(lock, '');
+  try {
+    const v = await verdictInsideHold(lock, true);
+    assert.equal(v.ok, true, `the run holds the lock itself; waiters cannot proceed while it does: ${v.reason}`);
+    assert.match(v.reason, /ancestor/, 'the reason names WHY the waiters do not matter, not a bare "ok"');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('1211(b) control: the SAME waiter still refuses a run when the hold belongs to someone else', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-otherhold-'));
+  const lock = join(dir, '.suite-lock');
+  writeFileSync(lock, '');
+  try {
+    const v = await verdictInsideHold(lock, false);
+    assert.equal(v.ok, false, `a hold that is not this run's ancestor is a suite in the way: ${v.reason}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
