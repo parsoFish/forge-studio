@@ -5270,10 +5270,16 @@ is what this contract reads — but it cannot be the only distinguisher.
   plus `[data-template-category]` and `[data-endpoints-verified="true"|"false"]`
   once the fetch resolves — the latter present ONLY when the template
   declares a producer and/or consumer (planning-only; absent, not `false`,
-  when nothing is declared). Non-ready states: `[data-component="fetch-error"]`
-  (bridge unreachable) and the shared not-found page (`main[data-page=
-  "not-found"][data-not-found-kind="template"]`, W7-A4 — unknown id, the
-  bridge 404s for it by design). The ready state renders
+  when nothing is declared). Non-ready states: the shared not-found page
+  (`main[data-page="not-found"][data-not-found-kind="template"]`, W7-A4 —
+  unknown id, reachable ONLY off a real bridge-answered 404, the bridge
+  404s for it by design); `forge-5rr` (projects-45): a non-404 failure (the
+  bridge unreachable, or reachable-and-refused) renders the shared
+  `PageLoadError` kit instead — `main[data-page="template-detail"]
+  [data-page-ready="true"][data-fetch-status="error"][data-load-error="true"]
+  [data-template-id]`, with `[data-action="retry-fetch"]` and a bridge-
+  recovery resubscribe, replacing the old dead-end `[data-component=
+  "fetch-error"]` banner with no retry path. The ready state renders
   `[data-section="definition"]` (format/provenance/definition-ref); for a
   malformed definition, `[data-section="parse-error"]` instead; planning-only,
   when a producer/consumer is declared, `[data-section="endpoints"]`

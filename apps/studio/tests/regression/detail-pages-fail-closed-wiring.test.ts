@@ -410,6 +410,18 @@ const EXEMPT_PAGES: Record<string, string> = {
     'tests/regression/session-kickoff-fail-closed-wiring.test.ts — both the zero-' +
     'network-calls not-found claim and the real mount-load failure banner are ' +
     'proven by mounting the real page.',
+  // forge-5rr (projects-45): the not-found claim was ALREADY correctly
+  // gated on a real bridge-answered 404 (`fetchTemplate`'s status-shaped,
+  // never-throwing read — same shape as `/community/[kind]/[id]`'s) — but,
+  // unlike its /connections|/hooks|/skills/[id] siblings, the error state
+  // had NO Retry at all (a static banner) and no bridge-recovery
+  // resubscribe. Fixed to use the shared PageLoadError +
+  // useBridgeRecoveryWhenFailed kit — EXEMPT here rather than COMPLIANT for
+  // the same non-throwing-read reason as its community sibling.
+  'app/templates/[id]/page.tsx':
+    'tests/regression/template-detail-fail-closed-wiring.test.ts — the 404-only-not-' +
+    'found guard, the PageLoadError render and the bridge-recovery resubscribe are ' +
+    'all pinned there for this page\'s non-throwing read shape.',
 };
 
 /**
@@ -421,11 +433,12 @@ const EXEMPT_PAGES: Record<string, string> = {
  * out to be an equally valid pattern on closer look — that look is exactly
  * what was NOT done here, per the brief's "report, don't fix" instruction.
  */
-const PENDING_PAGES: Record<string, string> = {
-  'app/templates/[id]/page.tsx':
-    'Renders NotFound; no FetchErrorState/PageLoadError/catch visible near the read ' +
-    'in a quick scan — unverified, possibly a genuine gap.',
-};
+// forge-5rr (projects-45): CLOSED — every candidate the W8-A2/WI-5 scan
+// derived is now COMPLIANT or EXEMPT. Kept as an explicit empty map (not
+// deleted) so the completeness test below still enforces the invariant: any
+// NEW page the derivation finds must be consciously categorized here before
+// it can pass.
+const PENDING_PAGES: Record<string, string> = {};
 
 test('the derived candidate list is EXACTLY the union of compliant + exempt + pending — a new page must be consciously categorized, never silently uncovered', () => {
   const accountedFor = [...COMPLIANT_PAGES, ...Object.keys(EXEMPT_PAGES), ...Object.keys(PENDING_PAGES)].sort();
