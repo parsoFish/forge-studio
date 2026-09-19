@@ -23,7 +23,7 @@ import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.t
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath, skillPathRelative, SLUG_RE } from '@forge/agents/skill-path.ts';
-import { resolveFinalizer, type FinalizerContext } from './interactive-finalizers.ts';
+import { resolveFinalizer, finalizerNeedsPackageId, type FinalizerContext } from './interactive-finalizers.ts';
 import { BASH_FENCE_MODES, bashFenceModeState, type SessionKindDescriptor, type TurnSpec, type TurnSpecPhase } from './studio/session-kinds.ts';
 import { runAgentTurn, runStructuredTurn, type QueryFn, type UnpricedTurnInfo } from './interactive-session.ts';
 import { hooksSpreadForAgent } from './kinds/kind-turn.ts';
@@ -393,17 +393,24 @@ export async function runFinalizeStep(args: {
     );
   }
 
-  // packageId — Finding 5(c): the "declared package id" the session status
-  // itself carries (`status.package_id`, when present as a string) is
-  // preferred over the raw request identity `ctx.sessionId`; either way the
-  // resolved value MUST be `SLUG_RE`-valid or this refuses loudly — never
-  // silently sanitized/invented (see header note design call #2).
-  const statusPackageId = (status as Record<string, unknown>).package_id;
-  const rawPackageId = typeof statusPackageId === 'string' ? statusPackageId : ctx.sessionId;
-  if (!SLUG_RE.test(rawPackageId)) {
-    throw new InteractiveRunnerError(
-      `runInteractiveTurn: finalize packageId "${rawPackageId}" is not a valid slug (must match ${SLUG_RE.source}) — refusing rather than silently accepting it into an oddly-named library directory.`,
-    );
+  // packageId — Finding 5(c), now GATED (bead 8vfn.6.6 item 3) on the
+  // resolved finalizer's OWN needsPackageId (never a new turnSpec field —
+  // the finalizer's contract already says whether it uses one). The
+  // "declared package id" the session status itself carries
+  // (`status.package_id`, when present as a string) is preferred over the
+  // raw request identity `ctx.sessionId`; either way the resolved value
+  // MUST be `SLUG_RE`-valid or this refuses loudly — never silently
+  // sanitized/invented (see header note design call #2).
+  let packageId: string | undefined;
+  if (finalizerNeedsPackageId(finalizerId)) {
+    const statusPackageId = (status as Record<string, unknown>).package_id;
+    const rawPackageId = typeof statusPackageId === 'string' ? statusPackageId : ctx.sessionId;
+    if (!SLUG_RE.test(rawPackageId)) {
+      throw new InteractiveRunnerError(
+        `runInteractiveTurn: finalize packageId "${rawPackageId}" is not a valid slug (must match ${SLUG_RE.source}) — refusing rather than silently accepting it into an oddly-named library directory.`,
+      );
+    }
+    packageId = rawPackageId;
   }
 
   // libraryRoot — Finding 5(a)/(b): a dedicated, NON-scanned root, never
@@ -421,11 +428,21 @@ export async function runFinalizeStep(args: {
   }
   const libraryRoot = libraryRootGuard.realPath;
 
+  // bead 8vfn.6.6 item 4 — status + two common projections off it, so a
+  // finalizer that needs session-scoped context (writeToRepoRoot) can reach
+  // it without a new per-kind port. Derived from the already-read status,
+  // never re-read.
+  const statusRecord = status as Record<string, unknown>;
+  const projectRepoPath = typeof statusRecord.project_repo_path === 'string' ? statusRecord.project_repo_path : undefined;
+  const project = typeof statusRecord.project === 'string' ? statusRecord.project : undefined;
   const finalizerCtx: FinalizerContext = {
     sessionDir,
     forgeRoot,
     libraryRoot,
-    packageId: rawPackageId,
+    status: statusRecord,
+    ...(packageId !== undefined ? { packageId } : {}),
+    ...(projectRepoPath !== undefined ? { project_repo_path: projectRepoPath } : {}),
+    ...(project !== undefined ? { project } : {}),
   };
 
   const wrote = await finalizerFn(finalizerCtx);
