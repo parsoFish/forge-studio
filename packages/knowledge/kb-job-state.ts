@@ -56,6 +56,23 @@ function listLogDirs(forgeRoot: string): string[] {
   }
 }
 
+/** Run ids under `_logs/` matching this kb's own `_kb-drain-<kbId>-drain-*`
+ *  prefix (SERVER-enumerated directory names, never a caller-supplied path).
+ *  Exported: `findLiveDrain` below and `kb-drain-store.ts`'s
+ *  `findKbDrainRuns` both used to carry their own copy of this exact
+ *  filter — one implementation, both callers. */
+export function kbDrainRunIdsFor(forgeRoot: string, kbId: string): string[] {
+  const dirPrefix = '_kb-drain-';
+  const runIdPrefix = `${kbId}-drain-`;
+  const ids: string[] = [];
+  for (const name of listLogDirs(forgeRoot)) {
+    if (!name.startsWith(dirPrefix)) continue;
+    const runId = name.slice(dirPrefix.length);
+    if (runId.startsWith(runIdPrefix)) ids.push(runId);
+  }
+  return ids;
+}
+
 /** The active drain run for `kbId`, if a LIVE one exists (state 'running'
  *  with a heartbeat-fresh `updatedAt`). A stale 'running' status is reported
  *  separately so the cancel route can force-terminate it. */
@@ -64,13 +81,8 @@ export function findLiveDrain(
   kbId: string,
   nowMs: number = Date.now(),
 ): { runId: string; live: boolean } | null {
-  const dirPrefix = '_kb-drain-';
-  const runIdPrefix = `${kbId}-drain-`;
-  for (const name of listLogDirs(forgeRoot)) {
-    if (!name.startsWith(dirPrefix)) continue;
-    const runId = name.slice(dirPrefix.length);
-    if (!runId.startsWith(runIdPrefix)) continue;
-    const status = readJsonFile(join(forgeRoot, '_logs', name, 'status.json'));
+  for (const runId of kbDrainRunIdsFor(forgeRoot, kbId)) {
+    const status = readJsonFile(join(forgeRoot, '_logs', `_kb-drain-${runId}`, 'status.json'));
     if (!status || status['state'] !== 'running') continue;
     const updatedMs = typeof status['updatedAt'] === 'string' ? new Date(status['updatedAt']).getTime() : NaN;
     const live = Number.isFinite(updatedMs) && nowMs - updatedMs <= KB_DRAIN_STALE_MS;

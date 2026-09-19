@@ -21,7 +21,7 @@ import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
 import { buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
 import { auditKbEdit, buildKbEditSoundnessCtx } from './kb-drain-edit-soundness.ts';
-import { parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs } from './kb-job-state.ts';
+import { parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs, kbDrainRunIdsFor } from './kb-job-state.ts';
 import {
   DEFAULT_KB_DRAIN_MAX_COST_USD,
   KB_DRAIN_MAX_ROUNDS,
@@ -84,29 +84,13 @@ export function readKbDrainStatus(forgeRoot: string, runId: string): KbDrainStat
   }
 }
 
-/** Every drain run recorded for `kbId`, discovered by enumerating `_logs/`
- *  (SERVER-enumerated directory names, never a caller-supplied path — same
- *  "server-enumerated names, holding no client string" class as
- *  `packages/flows/metrics.ts`'s `listCycles`) and filtering to this kb's own
- *  `_kb-drain-<kbId>-drain-*` prefix. Used by BOTH the 409-active check
- *  (`POST /drain`) and the active-or-latest reattach route
+/** Every drain run recorded for `kbId` — `kbDrainRunIdsFor` (kb-job-state.ts)
+ *  discovers the run ids, this reads each one's status. Used by BOTH the
+ *  409-active check (`POST /drain`) and the active-or-latest reattach route
  *  (`GET /drain`). */
 export function findKbDrainRuns(forgeRoot: string, kbId: string): Array<{ runId: string; status: KbDrainStatus }> {
-  const logsRoot = join(forgeRoot, '_logs');
-  if (!existsSync(logsRoot)) return [];
-  let entries: string[];
-  try {
-    entries = readdirSync(logsRoot);
-  } catch {
-    return [];
-  }
-  const dirPrefix = '_kb-drain-';
-  const runIdPrefix = `${kbId}-drain-`;
   const runs: Array<{ runId: string; status: KbDrainStatus }> = [];
-  for (const name of entries) {
-    if (!name.startsWith(dirPrefix)) continue;
-    const runId = name.slice(dirPrefix.length);
-    if (!runId.startsWith(runIdPrefix)) continue;
+  for (const runId of kbDrainRunIdsFor(forgeRoot, kbId)) {
     const status = readKbDrainStatus(forgeRoot, runId);
     if (status) runs.push({ runId, status });
   }
