@@ -12,7 +12,12 @@
 
 import { resolve } from 'node:path';
 
-import { runBrainLint, type Scope as BrainLintScope } from '@forge/knowledge/brain-lint.ts';
+import {
+  runBrainLint,
+  brainTruthRates,
+  formatTruthfulnessLines,
+  type Scope as BrainLintScope,
+} from '@forge/knowledge/brain-lint.ts';
 
 /** The repo root, derived the same way `cli.ts` derives it — this module is its sibling. */
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
@@ -76,5 +81,10 @@ export function cmdBrainLint(rest: string[]): void {
   console.log(
     `Summary: ${errors.length} error(s), ${flags.length} flag(s), ${fixes.length} auto-fix(es).`,
   );
+  // D14 (forge-mfv5.3.4) — unconditional per-project truthfulness lines,
+  // printed after the findings; never gated on findings existing.
+  for (const line of formatTruthfulnessLines(brainTruthRates(FORGE_ROOT))) {
+    console.log(line);
+  }
   process.exit(result.exitCode);
 }

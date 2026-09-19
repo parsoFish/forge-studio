@@ -3,7 +3,7 @@
  *
  * CLI: `forge brain lint [--scope <s>] [--project <name>] [--file <path>] [--cycle <id>] [--fix]`
  *
- * Implements 13 checks (per `brain/LINT.md`):
+ * Implements 14 checks (per `brain/LINT.md`):
  *
  *   1. checkFrontmatter        — required fields + category whitelist
  *   2. checkIndexSync          — themes appear in their category index exactly once
@@ -17,6 +17,7 @@
  *  11. checkCategoryScope      — theme category routes to the brain sub-wiki it lives in
  *  12. checkDanglingEdges      — `related_themes[]` entries that resolve to no theme file
  *  13. checkDuplicateThemes    — near-duplicate theme pairs (title collision / keyword Jaccard)
+ *  14. checkThemeTruth         — a project theme's cited code still exists in its ground clone (D14, forge-mfv5.3.4)
  *
  * Each check is a pure function `(forgeRoot) => Finding[]`. The CLI aggregates,
  * prints a human-readable report, and exits non-zero iff ≥1 error.
@@ -66,6 +67,11 @@ import {
   danglingEdgeFindings,
   duplicateThemeFindings,
 } from './brain-lint-checks-graph.ts';
+import {
+  brainTruthRates,
+  checkThemeTruth,
+  formatTruthfulnessLines,
+} from './brain-lint-checks-truth.ts';
 
 // THE SPLIT KEPT THIS PATH (M4 step 4). 27 files across packages/, cli/, apps/
 // and scripts/ import `brain-lint.ts` directly — `packages/knowledge/index.ts`
@@ -124,6 +130,14 @@ export {
   danglingEdgeFindings,
   duplicateThemeFindings,
 } from './brain-lint-checks-graph.ts';
+export {
+  brainTruthRates,
+  checkThemeTruth,
+  extractThemeReferences,
+  formatTruthfulnessLines,
+  themeTruth,
+} from './brain-lint-checks-truth.ts';
+export type { ThemeTruth, BrainTruthRate } from './brain-lint-checks-truth.ts';
 
 /**
  * R6-08 4on (F3 hardening) — the single source of truth for the 12 full-scope
@@ -151,6 +165,7 @@ const FULL_SCOPE_CHECKS: ReadonlyArray<readonly [name: string, fn: (cwd: string)
   ['checkReflectorLoss', checkReflectorLoss],
   ['checkDanglingEdges', checkDanglingEdges],
   ['checkDuplicateThemes', checkDuplicateThemes],
+  ['checkThemeTruth', checkThemeTruth],
 ];
 
 /**
@@ -203,6 +218,11 @@ export const CHECK_SCOPE: Readonly<Record<string, CheckScope>> = {
   checkReflectorLoss: 'global',
   checkDanglingEdges: 'themes',
   checkDuplicateThemes: 'themes',
+  // D14 (forge-mfv5.3.4) — checkThemeTruth walks brain/projects/<name>/themes
+  // exactly like checkProjectBrainIndexes (never the forge sub-wikis), so it
+  // shares that check's 'project-indexes' domain rather than the broader
+  // 'themes' one.
+  checkThemeTruth: 'project-indexes',
 };
 
 // ---------- lintThemeFiles (explicit file list, project-aware) ----------
@@ -410,6 +430,8 @@ export function classifyFinding(f: Finding): { kind: string; resolution: Resolut
       return { kind: 'edge.dangling', resolution: 'agent', fixHint: 'Repoint the related_themes entry at the correct existing slug (very often the same title carrying a date prefix), or drop the entry entirely if the target theme is genuinely gone.' };
     case 'checkDuplicateThemes':
       return { kind: 'theme.duplicate', resolution: 'agent', fixHint: 'Keep the richer file as survivor, fold in any unique facts from the other file, repoint related_themes/wikilinks/index entries at the survivor, then delete the loser.' };
+    case 'checkThemeTruth':
+      return { kind: 'truth.stale', resolution: 'agent', fixHint: 'Re-verify each cited path still exists in the project checkout and repoint or drop it, or mark the theme `status: historical` if the code it describes is genuinely gone.' };
     default:
       return { kind: 'unknown', resolution: 'user' };
   }
@@ -645,6 +667,11 @@ if (isCli) {
     const opts = parseArgs(process.argv.slice(2));
     const result = runBrainLint(opts);
     process.stdout.write(formatFindings(result.findings, opts.cwd) + '\n');
+    // D14 (forge-mfv5.3.4) — unconditional per-project truthfulness lines,
+    // printed after the findings; never gated on findings existing.
+    for (const line of formatTruthfulnessLines(brainTruthRates(opts.cwd))) {
+      process.stdout.write(line + '\n');
+    }
     process.exit(result.exitCode);
   } catch (err) {
     process.stderr.write(`brain-lint: ${err instanceof Error ? err.message : String(err)}\n`);
