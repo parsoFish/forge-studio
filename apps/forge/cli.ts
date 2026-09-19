@@ -541,7 +541,7 @@ export function runCreate(rest: string[], opts: { forgeRoot?: string } = {}): Cr
       manifest: {
         name,
         appType,
-        language: explicitLanguage ?? starter?.language ?? 'typescript',
+        language: explicitLanguage || starter?.language || 'typescript',
         northStar,
         ...(flag('architecture') ? { architecture: flag('architecture') as string } : {}),
       },
