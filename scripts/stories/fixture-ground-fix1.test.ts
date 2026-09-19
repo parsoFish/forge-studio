@@ -1,0 +1,147 @@
+/**
+ * fixture-ground-fix1.test.ts — the TWO new `fixture-ground.mjs` exports the
+ * D1 review's fix round decided (`realGroundFenceVerdict`,
+ * `provisionFixtureGrounds`), split into their own file rather than appended
+ * to `fixture-ground.test.ts` — the `story-file-fixture.test.ts` precedent,
+ * cut by SUBJECT.
+ *
+ * WHY A SEPARATE FILE AND NOT AN 800-LINE ONE. Both names are new,
+ * statically-imported exports that do not exist on `HEAD` yet. A static
+ * `import { realGroundFenceVerdict } from './fixture-ground.mjs'` for a name
+ * the module does not export fails at LINK time — the whole file refuses to
+ * load, and every test in it reports as one failure, not twelve. Keeping
+ * these two exports' tests apart from `fixture-ground.test.ts` (already
+ * 12/12 green) means that file's own tests are never collaterally reported
+ * red for a name they never touch.
+ *
+ * `realGroundFenceVerdict` exists because I3 in the review found no test
+ * covers the requirement that actually makes a fixture run's containment
+ * escape RED: deleting `run-story.mjs`'s `realGroundMoved.length > 0 -> return
+ * 1` block, or its unconditional summary line, or the `keepProjects` spread
+ * that keeps the fence's own subject alive long enough to be judged, all kept
+ * the nine pinned test files green. A hand-rolled inline check has no seam a
+ * test can hold; a pure function does.
+ *
+ * `provisionFixtureGrounds` exists because M1 found the batch has no
+ * atomicity: `run.mjs`'s loop provisions every fixture story regardless of an
+ * earlier refusal, and nothing tears down what a refusal-after-provisioning
+ * already wrote. "A refusal here writes nothing" was true for ONE story and
+ * false for a batch.
+ */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { realGroundFenceVerdict, provisionFixtureGrounds } from './fixture-ground.mjs';
+
+const scratch = () => mkdtempSync(join(tmpdir(), 'fixture-ground-fix1-'));
+
+// ── I3 — realGroundFenceVerdict(before, after) ─────────────────────────────
+//
+// `-> frozen { ok, moved, hashed, trees, summary }`: `moved` = `realGroundEscapes
+// (before, after)`; `hashed` = dirs in `before` with a NON-null digest (a dir
+// that produced no digest is not "hashed" — the review's own M-finding, so a
+// ground `groundManifest` could not read never inflates the count); `trees` =
+// distinct `<tree>` roots among the keys, a key being `<tree>/projects/<name>`;
+// `ok` = `moved.length === 0`; `summary` is the exact sentence the run logs.
+
+test('realGroundFenceVerdict: unchanged grounds are ok, with a summary naming 0 moved', () => {
+  const before = new Map([
+    [join('/root', 'projects', 'gitpulse'), 'abc123'],
+    [join('/root', 'projects', 'mdtoc'), 'def456'],
+  ]);
+  const after = new Map(before);
+
+  const v = realGroundFenceVerdict(before, after);
+  assert.equal(v.ok, true);
+  assert.deepEqual(v.moved, []);
+  assert.equal(v.hashed, 2);
+  assert.equal(v.trees, 1);
+  assert.equal(v.summary, 'real grounds: 2 hashed in 1 tree(s), 0 moved');
+  assert.ok(Object.isFrozen(v), 'the verdict is frozen — nothing downstream can edit the record that gates the run');
+});
+
+test('realGroundFenceVerdict: one MODIFIED ground is NOT ok, and moved names it', () => {
+  const dir = join('/root', 'projects', 'gitpulse');
+  const before = new Map([[dir, 'abc123']]);
+  const after = new Map([[dir, 'zzz999']]);
+
+  const v = realGroundFenceVerdict(before, after);
+  assert.equal(v.ok, false, 'a moved real ground must never read as ok');
+  assert.equal(v.moved.length, 1);
+  assert.ok(v.moved[0].includes(dir), `expected the moved line to name ${dir}. Got: ${v.moved[0]}`);
+  assert.match(v.summary, /1 moved/, v.summary);
+});
+
+test('realGroundFenceVerdict: a dir with a NULL digest in `before` is excluded from `hashed`', () => {
+  // `groundManifest` returns null on an unreadable dir (xargs exit 123, or
+  // output past the 64 MiB bound). A dir that never produced a digest was
+  // never actually HASHED, whatever the earlier hand-rolled `dirs.length`
+  // count claimed (review M2's sibling finding, generalised to this door).
+  const hashedDir = join('/root', 'projects', 'gitpulse');
+  const unreadableDir = join('/root', 'projects', 'mdtoc');
+  const before = new Map([[hashedDir, 'abc123'], [unreadableDir, null]]);
+  const after = new Map(before);
+
+  const v = realGroundFenceVerdict(before, after);
+  assert.equal(v.hashed, 1, 'a null-digest dir must not count toward hashed');
+  assert.equal(v.trees, 1);
+  assert.equal(v.summary, 'real grounds: 1 hashed in 1 tree(s), 0 moved');
+});
+
+test('realGroundFenceVerdict: trees counts DISTINCT <tree> roots among the keys, not the number of dirs', () => {
+  const before = new Map([
+    [join('/root', 'projects', 'gitpulse'), 'a'],
+    [join('/root', 'projects', 'mdtoc'), 'b'],
+    [join('/tree2', 'projects', 'gitweave'), 'c'],
+  ]);
+  const after = new Map(before);
+
+  const v = realGroundFenceVerdict(before, after);
+  assert.equal(v.hashed, 3);
+  assert.equal(v.trees, 2, 'two roots — /root and /tree2 — must count as 2, never as 3 (one per dir)');
+  assert.equal(v.summary, 'real grounds: 3 hashed in 2 tree(s), 0 moved');
+});
+
+// ── M1 — provisionFixtureGrounds(root, stories) ────────────────────────────
+//
+// `-> frozen { provisioned: Array<{storyId, project, digest, commit}>, refused:
+// {storyId, message} | null }`. Provisions IN ORDER, STOPS at the first
+// refusal, and on a refusal tears down every ground it ALREADY provisioned in
+// THIS call — "a refusal here writes nothing" restated at the batch's own
+// level, not just a single story's.
+
+test('provisionFixtureGrounds stops at the first refusal and tears down everything it already provisioned in this call', () => {
+  const root = scratch();
+
+  // The FIRST story's seed is entirely valid.
+  const goodSeedDir = join(root, 'tests', 'stories', 'grounds', 'demo-seed', 'seed');
+  mkdirSync(goodSeedDir, { recursive: true });
+  writeFileSync(join(goodSeedDir, 'README.md'), '# demo seed\n');
+  writeFileSync(join(root, 'tests', 'stories', 'grounds', 'demo-seed', 'PROVENANCE.md'), '# provenance\n');
+
+  // The SECOND story's seed deliberately has no PROVENANCE.md.
+  const badSeedDir = join(root, 'tests', 'stories', 'grounds', 'no-provenance', 'seed');
+  mkdirSync(badSeedDir, { recursive: true });
+  writeFileSync(join(badSeedDir, 'README.md'), '# x\n');
+
+  const stories = [
+    { id: 'S8', ground: { project: 'story-s8', fixture: 'demo-seed' } },
+    { id: 'S9', ground: { project: 'story-s9', fixture: 'no-provenance' } },
+  ];
+
+  const result = provisionFixtureGrounds(root, stories);
+
+  assert.deepEqual(result.provisioned, [], 'nothing survives a refusal anywhere in the batch');
+  assert.ok(result.refused !== null, 'the batch must report which story refused');
+  assert.equal(result.refused.storyId, 'S9', 'the refusal must name the SECOND story — the one that actually failed');
+  assert.match(result.refused.message, /PROVENANCE\.md/, result.refused.message);
+  assert.equal(
+    existsSync(join(root, 'projects', 'story-s8')),
+    false,
+    "the FIRST story's ground — already provisioned before the second refused — must be torn down too",
+  );
+  assert.ok(Object.isFrozen(result), 'the batch result is frozen');
+});
