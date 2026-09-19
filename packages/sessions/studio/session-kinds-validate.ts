@@ -104,6 +104,21 @@ const CHECK_LOAD_ERROR = 'session-kinds/load-error';
 const CHECK_SLUG = 'session-kinds/slug';
 const CHECK_DUPLICATE_ID = 'session-kinds/duplicate-id';
 const CHECK_UNKNOWN_AGENT = 'session-kinds/unknown-agent';
+const CHECK_RETIRED_KIND_ID = 'session-kinds/retired-kind-id';
+
+/**
+ * forge-boqn — ids stay reserved and are never reused, the same rule ADR
+ * numbers follow (docs/decisions/README.md). `CHECK_UNKNOWN_AGENT` above
+ * only catches a retired kind re-added under its OWN (now-deleted) agent
+ * id; one re-animated under any still-live agent (e.g. `creation-agent`)
+ * passed `forge studio lint` clean, with the class held only by
+ * `packages/sessions/tests/contract/session-kinds-repo.test.ts`'s exact-
+ * count pin — never by the operator-facing validator. Append here, never
+ * remove: retiring a kind twice must still be caught the second time.
+ */
+const RETIRED_SESSION_KIND_IDS: ReadonlySet<string> = new Set([
+  'community-refresh', // W6-CR-3, retired W8-B5b (superseded by `forge community refresh`)
+]);
 const CHECK_EMPTY_STAGES = 'session-kinds/empty-stages';
 const CHECK_UNKNOWN_STAGE = 'session-kinds/unknown-stage';
 const CHECK_DEFAULT_STAGE_NOT_IN_STAGES = 'session-kinds/default-stage-not-in-stages';
@@ -500,6 +515,16 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
 
     if (!SLUG_RE.test(d.id)) {
       findings.push(err(obj, CHECK_SLUG, `Session-kind id "${d.id}" does not match ${SLUG_RE}`));
+    }
+
+    if (RETIRED_SESSION_KIND_IDS.has(d.id)) {
+      findings.push(
+        err(
+          obj,
+          CHECK_RETIRED_KIND_ID,
+          `Session kind "${d.id}" is a RETIRED id — retired ids stay reserved and are never reused, even under a different, still-live agent`,
+        ),
+      );
     }
 
     if (!knownAgentIds.has(d.agent)) {
