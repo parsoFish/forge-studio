@@ -27,7 +27,7 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-import { pathUnderDir, resolveKbBrainDir } from './brain-paths.ts';
+import { pathUnderDir, requireKbBrainDir, resolveKbBrainDir } from './brain-paths.ts';
 import { isForgeBrainDir } from './brain-lint.ts';
 
 import {
@@ -264,11 +264,7 @@ export class FilesystemKbBackend implements KbBackend {
  * `brain/<kbId>/kb.yaml`) — same contract as the underlying functions.
  */
 export function getKbBackend(forgeRoot: string, kbId: string): KbBackend {
-  if (!resolveKbBrainDir(forgeRoot, kbId)) {
-    throw new Error(
-      `Unknown kbId: "${kbId}" — no brain/${kbId}/kb.yaml or brain/projects/${kbId}/kb.yaml found`,
-    );
-  }
+  requireKbBrainDir(forgeRoot, kbId); // throws on unknown kbId
   return new FilesystemKbBackend(forgeRoot, kbId);
 }
 

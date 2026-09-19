@@ -128,6 +128,21 @@ export function resolveKbBrainDir(forgeRoot: string, kbId: string): string | nul
   return null;
 }
 
+/**
+ * `resolveKbBrainDir`, but throws the one "Unknown kbId" message instead of
+ * returning `null` — for a caller whose own contract is "this kbId resolves
+ * or the call fails", never a silent unresolved path threaded further in.
+ * `kb-backend.ts` and `kb-graph.ts` each used to carry this exact check +
+ * message independently; one implementation, both repointed.
+ */
+export function requireKbBrainDir(forgeRoot: string, kbId: string): string {
+  const kbDir = resolveKbBrainDir(forgeRoot, kbId);
+  if (!kbDir) {
+    throw new Error(`Unknown kbId: "${kbId}" — no brain/${kbId}/kb.yaml or brain/projects/${kbId}/kb.yaml found`);
+  }
+  return kbDir;
+}
+
 
 // projectDemoRelDir moved to demo-paths.ts (plan 2.5 / N3) — the demo-artifact
 // path SSOT. This module keeps readArtifactRoot: artifactRoot also governs
