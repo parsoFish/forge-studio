@@ -137,22 +137,41 @@ export function themeTruth(cwd: string, project: string, hasHistoryOverride?: bo
   });
 }
 
+type ProjectTruthRow = Pick<BrainTruthRate, 'project' | 'checkout' | 'history'> & { themes: ThemeTruth[] };
+
+/** Process-lifetime memo, keyed by `cwd` — see `projectTruthRows` below for
+ *  why. Never invalidated: nothing in this module writes to `brain/projects/`
+ *  or a managed project's checkout, so within one process the rows for a
+ *  given `cwd` cannot change after the first walk. */
+const projectTruthRowsCache = new Map<string, ProjectTruthRow[]>();
+
 /** Every project's checkout + history status and per-theme truth, walked
  *  ONCE — the shared basis `brainTruthRates`/`checkThemeTruth` build on, so
- *  each is defined in one place and `isGitWorkTree` runs once per project. */
-function projectTruthRows(
-  cwd: string,
-): Array<Pick<BrainTruthRate, 'project' | 'checkout' | 'history'> & { themes: ThemeTruth[] }> {
+ *  each is defined in one place and `isGitWorkTree` runs once per project.
+ *
+ *  Memoised per `cwd` (module-level Map): `forge brain lint` calls this
+ *  TWICE in one process today — once via the `checkThemeTruth` registry
+ *  entry (`FULL_SCOPE_CHECKS`), once via the CLI's own unconditional
+ *  `truthfulness:` rate lines (`brainTruthRates`, called after `runBrainLint`
+ *  returns) — both walking the SAME git-backed rows for the SAME `cwd`. The
+ *  `git log --all` spawn inside `wasEverTracked` is the expensive part; this
+ *  cache halves it per invocation without changing what either caller sees. */
+function projectTruthRows(cwd: string): ProjectTruthRow[] {
+  const cached = projectTruthRowsCache.get(cwd);
+  if (cached) return cached;
   const projectsRoot = join(cwd, 'brain', 'projects');
-  if (!existsSync(projectsRoot)) return [];
-  return readdirSync(projectsRoot)
-    .filter((n) => !n.startsWith('.'))
-    .map((project) => {
-      const checkoutRoot = join(cwd, 'projects', project);
-      const checkout: BrainTruthRate['checkout'] = existsSync(checkoutRoot) ? 'present' : 'absent';
-      const history: BrainTruthRate['history'] = checkout === 'present' && isGitWorkTree(checkoutRoot) ? 'present' : 'absent';
-      return { project, checkout, history, themes: themeTruth(cwd, project, history === 'present') };
-    });
+  const rows = !existsSync(projectsRoot)
+    ? []
+    : readdirSync(projectsRoot)
+        .filter((n) => !n.startsWith('.'))
+        .map((project) => {
+          const checkoutRoot = join(cwd, 'projects', project);
+          const checkout: BrainTruthRate['checkout'] = existsSync(checkoutRoot) ? 'present' : 'absent';
+          const history: BrainTruthRate['history'] = checkout === 'present' && isGitWorkTree(checkoutRoot) ? 'present' : 'absent';
+          return { project, checkout, history, themes: themeTruth(cwd, project, history === 'present') };
+        });
+  projectTruthRowsCache.set(cwd, rows);
+  return rows;
 }
 
 /** One row per project, sorted by name. `verifiable`/`unverifiable`/`stale`
