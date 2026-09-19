@@ -49,6 +49,7 @@ import { run as runRalph, type AgentInvocation } from '@forge/agents/ralph/runne
 import { makeQualityGateFromCmd } from '@forge/agents/ralph/stop-conditions.ts';
 import { runConcurrentDispatch, type DispatchOutcome } from '@forge/flows/wi-dispatch-scheduler.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
+import { SCRATCH_PATHS } from '@forge/projects/preflight.ts';
 
 const MAX_RETRIES = 1;
 
@@ -100,7 +101,7 @@ function setup(initiativeId: string): Fixture {
   // `.gitignore` covers forge scratch — see the fan-in tests' own doc
   // comment for why this matters even in a single-agent-writes-a-file
   // fixture (ralph's autocommit `git add -A` would otherwise sweep it in).
-  writeFileSync(join(repo, '.gitignore'), '.forge/\nAGENT.md\nPROMPT.md\nfix_plan.md\n');
+  writeFileSync(join(repo, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
   // Tracked so both the cycle branch and a WI branch can independently
   // change it, forcing a real content conflict at merge-back time (same
   // shape `wi-merge-back.test.ts`'s own conflict test and
