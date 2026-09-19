@@ -1,20 +1,26 @@
 # Fixture grounds
 
-A fixture ground is a project the story harness provisions for one story run and removes afterwards. Stories
-move to fixtures one PR at a time, not all at once — each story's own `ground` declaration says which it uses
-TODAY: `ground.fixture` for a fixture, its absence for a real project. S2 creates its own project through the
-product rather than starting from either. Real projects (gitpulse, GitWeave, terraform-provider-betterado,
-trafficGame) are reserved for the real-ground gates, the capstones and the stranger run.
+A fixture ground is a project the story harness provisions for one story run and removes afterwards. Each story's
+own `ground` declaration says which kind it stands on: `ground.fixture` for a fixture, its absence for a real project.
+
+Today one story runs on a fixture: S8, on `node-library`. The rest still stand on real projects — S1 on gitweave, S3
+on terraform-provider-betterado, S4 and S10 on gitpulse, and S5–S7, S9, smoke, proof and ignored-born on the tracked
+`projects/mdtoc`. S2 creates its own `story-s2` project through the product rather than starting from either. Stories
+move to fixtures one PR at a time (bead `forge-1rk5.1`).
 
 ## Lifecycle of one run
 
 1. The story declares `ground: { project: 'story-<id>', fixture: '<name>', … }`. The project id must be in the
    story's own `story-<id>` namespace, so the leading and trailing sweeps already own it.
 2. After the leading sweep, the runner copies `tests/stories/grounds/<name>/seed/` to `projects/story-<id>`,
-   makes it its own git repository with one deterministic commit, and refuses unless the copy's method-C digest
-   equals the seed's. The seed is the pin; no `FORGE_GROUND_PIN` is needed.
-3. Every real ground (`projects/*` outside the `story-` namespace, in every worktree) is hashed before the beats
-   and again after them. Any change reds the run: a fixture run must never move a real ground.
+   makes it its own git repository with one commit, and refuses unless the copy's method-C digest equals the
+   seed's. The commit's sha depends only on the seed's files, the fixture name and a frozen author, committer and
+   date, so every story that provisions the same seed gets the same sha. The seed is the pin; no
+   `FORGE_GROUND_PIN` is needed. A seed may hold only regular files and directories.
+3. Every real ground (`projects/*` outside the `story-` namespace, in this tree and every other worktree of the
+   repository) is hashed before the beats and again after them. A ground that changed, appeared or vanished reds
+   the run, and so does one that could not be hashed. A worktree added or removed while the run was in progress is
+   named on its own line and not judged: its grounds came or went with the worktree, not with this run.
 4. The fixture's own drift is judged exactly as a real ground's is (produced, declared, ignored-born,
    undeclared), and only then is `projects/story-<id>` torn down.
 

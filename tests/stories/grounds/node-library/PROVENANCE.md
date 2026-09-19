@@ -29,6 +29,6 @@ test/fixtures/release-notes.md           test/unit.test.ts tsconfig.json
   as ignored-born rather than as a containment failure (bead `forge-8vfn.7.6.52`).
 - Provisioned as its OWN git repository (the harness runs `git init` on the copy). Its source is a plain
   directory inside this repo, where `git -C projects/mdtoc status` walks up and reports the forge worktree —
-  a dirty ground read clean (measured lesson §15.331). A provisioned fixture answers for itself.
+  a dirty ground read clean. A provisioned fixture answers for itself.
 
-**Stories served.** S8 (from PR D1); S5, S6, S7, S9 (from PR D2).
+**Stories served.** S8. S5, S6, S7 and S9 still stand on `projects/mdtoc` and are planned to move to this fixture.
