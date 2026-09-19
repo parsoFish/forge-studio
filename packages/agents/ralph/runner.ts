@@ -98,6 +98,15 @@ export type LoopInput = {
    */
   loopCapExhausted?: () => boolean;
   /**
+   * M7-A: true when a ceiling ABOVE this WI (the cycle's, shared with any
+   * concurrently-dispatched siblings) has been reached. Checked at the SAME
+   * point as `gateErrored`/`loopCapExhausted`; true stops the loop EARLY
+   * with `stop_reason: 'cost-budget'`. Re-checked every call, unlike the
+   * fixed `initiativeBudget.usd`/`state.costUsdSoFar` pair, so it can see
+   * OTHER work items' spend too. Absent ⇒ today's behaviour.
+   */
+  costCeilingCheck?: () => boolean;
+  /**
    * G1 rescope (2026-07-11, plan item 2.6): called when the post-iteration
    * autocommit safety net actually SWEPT uncommitted agent work into a
    * `forge-autocommit:` commit. The net stays (it closes the
@@ -312,6 +321,10 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
     // of re-invoking the agent against a gate it keeps failing the same way.
     if (input.loopCapExhausted?.()) {
       return finalize(state, startedAt, 'loop-cap-exhausted', agentMdPath, fixPlanPath, toolUseTotal);
+    }
+    // M7-A: the cycle's cost ceiling was reached — stop before another iteration.
+    if (input.costCeilingCheck?.()) {
+      return finalize(state, startedAt, 'cost-budget', agentMdPath, fixPlanPath, toolUseTotal);
     }
 
     state.iteration += 1;
