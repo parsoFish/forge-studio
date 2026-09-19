@@ -18,38 +18,63 @@
  * skipped, as are `*.test.ts`/`*.d.ts` files) and finds every call of an
  * exported `path-guard.ts` function whose FIRST parameter is named `root`
  * (discovered from `path-guard.ts` itself, not hardcoded, so a future guard
- * added there is covered with no edit here). A call is flagged when its root
- * argument is:
- *   (1) an inline expression built from a call (`resolve(...)`/`join(...)`/a
- *       helper), a template literal, or a `+` string concatenation, OR
- *   (2) a local `const`/`let` in the SAME function whose initializer is one
- *       of those same three shapes AND references one of that function's own
- *       PARAMETERS (single-hop only — see "cannot cover" below).
- * A bare identifier (a parameter passed straight through) or a plain
- * property access (`ctx.forgeRoot`) is NOT flagged — that is the canonical
- * safe shape this repo's own callers already use for a trusted root.
+ * added there is covered with no edit here). A call's root argument is first
+ * classed as either (1) an inline expression built from a call
+ * (`resolve(...)`/`join(...)`/a helper), a template literal, or a `+` string
+ * concatenation, or (2) a local `const`/`let` in the SAME function whose
+ * initializer is one of those same three shapes — anything else (a bare
+ * identifier with no such local declaration, i.e. a parameter passed
+ * straight through, or a plain property access like `ctx.forgeRoot`) is
+ * NEVER flagged, full stop.
  *
- * WHY THIS IS DELIBERATELY COARSE, NOT A SEMANTIC CHECK. The live sweep
- * below (control D) flags 69 real call sites, and a manual read of every one
- * shows the SAME idiom throughout: a config-derived helper call
- * (`skillsDir(forgeRoot)`, `hooksDir(ctx.forgeRoot)`, `join(forgeRoot,
- * '_logs')`) rather than a request-derived id folded into the root. This
- * ratchet cannot, and does not try to, tell those apart — it flags the
- * STRUCTURAL shape (root built by an expression, not passed as a bare
- * verified value) and leaves the trust judgment to a human, same as the
- * `adversarial-containment-review` skill's own ratchet guidance: "enumerate
- * the sinks ... allowlist what an audit has classified, and fail when a new
- * unguarded sink appears." The baseline below IS that allowlist, and it can
- * only shrink (checked both ways — see "why a multiset, not a count").
+ * REFINED RULE (v2 — forge-mlk follow-up): a call in class (1) or (2) is
+ * flagged only when the BUILT expression itself — the inline argument, or
+ * the local var's initializer — contains at least one "leaf" (a bare
+ * Identifier, or the final `.name` of a PropertyAccessExpression) whose name
+ * is NOT root-like. Root-like = the leaf's own name ends in `root`, `dir`,
+ * `directory`, `home`, or `base` (case-insensitive) — `forgeRoot`,
+ * `projectsDir`, `ctx.logsRoot`, `repoRoot` all qualify; `id`, `slug`,
+ * `projectId` do not. String/number literals are never leaves and never
+ * count. A call's own callee name (`resolve`, `join`, `skillsDir`, or a
+ * PropertyAccessExpression used AS a callee, e.g. `pathGuard.someHelper`) is
+ * excluded from leaf collection entirely — it names a transform, not data —
+ * so `join(forgeRoot, '_logs')` collects only the leaf `forgeRoot`
+ * (root-like → not flagged) while `join(forgeRoot, slug)` collects
+ * `forgeRoot` AND `slug` (`slug` is not root-like → flagged).
+ *
+ * WHY THIS IS THE #289 SHAPE, STRUCTURALLY, WITHOUT DATAFLOW. The #289
+ * incident's own call — `resolve(projectsDir, id)` as `root` — folds a
+ * NON-ROOT value (`id`) into an otherwise root-shaped expression; every
+ * benign call in this tree builds its root ONLY from root-named values and
+ * literals (`skillsDir(forgeRoot)`, `hooksDir(ctx.forgeRoot)`,
+ * `join(forgeRoot, '_logs')`). Naming convention, not true taint tracking, is
+ * what makes these distinguishable here — see the disclosed blind spot below
+ * before trusting that distinction further than it goes.
+ *
+ * DISCLOSED BLIND SPOT (the direct cost of a name-based rule, not an
+ * oversight): a variable whose OWN name is root-like but whose VALUE was
+ * built one hop further back from something that is not. Concretely —
+ *   `const dir = someHelper(id);`        // flagged: leaf 'id' is not root-like
+ *   `const rootDir = wrap(dir);`         // NOT flagged: the only leaf is 'dir',
+ *   `resolveGuardedPath(rootDir, [...])` // and 'dir' ends in "dir" — root-like
+ *                                        // by NAME even though ITS OWN value
+ *                                        // traces back to the request-derived `id`.
+ * This ratchet inspects only the DIRECT initializer's leaves, one hop, by
+ * name — it does not recurse into a leaf's own declaration to ask whether
+ * THAT was built from something untrusted. A renamed variable defeats it.
+ *
+ * WHY THE BASELINE IS SIX ROWS, NOT SIXTY-NINE. The unrefined v1 rule (any
+ * parameter reference, regardless of name) flagged 69 real call sites — a
+ * merge-conflict magnet every future config-root helper call would collide
+ * with (bead forge-mlk's exact complaint about a line-keyed allowlist). The
+ * name-based refinement collapses that to the sites that actually fold a
+ * non-root-like value into a built root; T2's report has the per-site
+ * judgement (config-derived vs. request-derived) for each of the six.
  *
  * WHAT THIS PROVABLY CANNOT COVER (stated up front, per the skill's own
  * "explicitly NOT general static analysis" instruction):
- *   - Dataflow beyond one hop: `const projectsDir = resolveProjectsDir(forgeRoot,
- *     ...); resolveGuardedPath(projectsDir, [id])` is NOT flagged, because
- *     `projectsDir`'s initializer references the LOCAL `forgeRoot`, not a
- *     function parameter directly — even when `forgeRoot` is itself later
- *     shown to trace back to one. True multi-hop taint tracking is out of
- *     scope for a structural ratchet.
+ *   - The disclosed blind spot above: a root-named variable that nonetheless
+ *     carries request data one hop back.
  *   - An aliased or namespace import (`import { resolveGuardedPath as guard }`,
  *     or `pathGuard.resolveGuardedPath(...)` under a name this scanner's
  *     callee-name match does not resolve back to the real export).
@@ -146,27 +171,50 @@ function findEnclosingFunction(
   return undefined;
 }
 
-function paramNamesOf(fn: ReturnType<typeof findEnclosingFunction>): ReadonlySet<string> {
-  const names = new Set<string>();
-  if (!fn) return names;
-  for (const p of fn.parameters) if (ts.isIdentifier(p.name)) names.add(p.name.text);
-  return names;
+/** A leaf's own name ends in one of these words (case-insensitive) → treated
+ *  as a trusted, root-shaped reference, never itself the reason to flag a
+ *  call. See the header's "REFINED RULE" + "DISCLOSED BLIND SPOT". */
+const ROOT_LIKE_NAME_RE = /(root|dir|directory|home|base)$/i;
+
+function isRootLikeName(name: string): boolean {
+  return ROOT_LIKE_NAME_RE.test(name);
 }
 
-/** Does `node` contain, anywhere in its subtree, an Identifier reference to one of `names`? */
-function referencesAnyParam(node: ts.Node, names: ReadonlySet<string>): boolean {
-  if (names.size === 0) return false;
-  let found = false;
+/**
+ * Every "leaf" reference inside `node` whose name is NOT root-like — a bare
+ * Identifier, or the final `.name` of a PropertyAccessExpression, that is
+ * used as a VALUE (never a call's own callee, which names a transform, not
+ * data — see header). Returns the list so a caller can report which leaf(s)
+ * triggered the flag; an empty list means every leaf found was root-like (or
+ * there were no leaves at all — a call built purely from literals).
+ */
+function nonRootLikeLeaves(node: ts.Node): string[] {
+  const leaves: string[] = [];
   function visit(n: ts.Node): void {
-    if (found) return;
-    if (ts.isIdentifier(n) && names.has(n.text)) {
-      found = true;
+    if (ts.isCallExpression(n)) {
+      // The callee itself (n.expression) is a transform's NAME, not data —
+      // deliberately never visited. Only the arguments carry values.
+      for (const a of n.arguments) visit(a);
       return;
     }
+    if (ts.isPropertyAccessExpression(n)) {
+      // ONE leaf per property access, keyed by its FINAL name segment only —
+      // per the header's rule ("root-like = the final name segment"). Does
+      // NOT separately recurse into `n.expression` (the object part, e.g.
+      // `ctx` in `ctx.forgeRoot`) — this is the documented single-hop scope.
+      if (!isRootLikeName(n.name.text)) leaves.push(n.getText());
+      return;
+    }
+    if (ts.isIdentifier(n)) {
+      if (!isRootLikeName(n.text)) leaves.push(n.text);
+      return;
+    }
+    // String/number/other literals and everything else (template spans,
+    // binary operands, spread elements, parens, ...): recurse into children.
     n.forEachChild(visit);
   }
   visit(node);
-  return found;
+  return leaves;
 }
 
 /** The three "built inline" shapes this ratchet treats as caller-built. */
@@ -209,18 +257,23 @@ export function scanSourceForCallerBuiltRoots(sf: ts.SourceFile, guardNames: Rea
       if (calleeName && guardNames.has(calleeName) && node.arguments.length > 0) {
         const arg = node.arguments[0]!;
         const fn = findEnclosingFunction(node);
-        const params = paramNamesOf(fn);
 
         let reason: string | undefined;
         const shape = callerBuiltShape(arg);
         if (shape) {
-          reason = `root arg is an inline ${shape}`;
+          const leaves = nonRootLikeLeaves(arg);
+          if (leaves.length > 0) {
+            reason = `root arg is an inline ${shape} with non-root-like leaf(s): ${leaves.join(', ')}`;
+          }
         } else if (ts.isIdentifier(arg)) {
           const decl = findLocalDecl(fn, arg.text);
           if (decl?.initializer) {
             const declShape = callerBuiltShape(decl.initializer);
-            if (declShape && referencesAnyParam(decl.initializer, params)) {
-              reason = `root arg is local var "${arg.text}" initialized by an ${declShape} referencing a function parameter`;
+            if (declShape) {
+              const leaves = nonRootLikeLeaves(decl.initializer);
+              if (leaves.length > 0) {
+                reason = `root arg is local var "${arg.text}" initialized by an ${declShape} with non-root-like leaf(s): ${leaves.join(', ')}`;
+              }
             }
           }
         }
@@ -296,6 +349,7 @@ test('control (a) [meta]: an inline caller-built root — resolveGuardedPath(res
   assert.equal(hits.length, 1, `expected exactly one hit, got: ${JSON.stringify(hits)}`);
   assert.equal(hits[0]!.argText, 'resolve(projectsDir, id)');
   assert.match(hits[0]!.reason, /inline call expression/);
+  assert.match(hits[0]!.reason, /non-root-like leaf\(s\): id/, '"id" is not root-like — that is what must trigger the flag');
 });
 
 test('control (b) [meta]: the local-variable form — const r = resolve(base, id); resolveGuardedPath(r, [...]) — is flagged', () => {
@@ -307,7 +361,8 @@ test('control (b) [meta]: the local-variable form — const r = resolve(base, id
   `);
   assert.equal(hits.length, 1, `expected exactly one hit, got: ${JSON.stringify(hits)}`);
   assert.equal(hits[0]!.argText, 'r');
-  assert.match(hits[0]!.reason, /local var "r" initialized by an call expression referencing a function parameter/);
+  assert.match(hits[0]!.reason, /local var "r" initialized by an call expression/);
+  assert.match(hits[0]!.reason, /non-root-like leaf\(s\): id/, '"id" is not root-like even though "base" is — that is what must trigger the flag');
 });
 
 test('control (c) [meta]: a config-root call — resolveGuardedPath(ctx.forgeRoot, [id]) — is NOT flagged', () => {
@@ -328,7 +383,7 @@ test('control (c2) [meta, non-regression]: a bare parameter passed straight thro
   assert.deepEqual(hits, [], `expected no hits for a bare trusted parameter, got: ${JSON.stringify(hits)}`);
 });
 
-test('control (c3) [meta, non-regression]: a local var whose initializer references only ANOTHER LOCAL (not a parameter) is NOT flagged — single-hop only, by design', () => {
+test('control (c3) [meta, non-regression]: config-derived helper chains built only from root-named values/literals are NOT flagged', () => {
   const hits = scanFixture(`
     function readAgent(ctx: { forgeRoot: string }) {
       const forgeRoot = resolve(ctx.forgeRoot);
@@ -336,11 +391,50 @@ test('control (c3) [meta, non-regression]: a local var whose initializer referen
       return resolveGuardedPath(projectsDir, ['id']);
     }
   `);
+  assert.deepEqual(hits, [], `expected no hits — every leaf ("ctx.forgeRoot", "forgeRoot") is root-like — got: ${JSON.stringify(hits)}`);
+});
+
+test('control (blind-spot) [meta, DISCLOSED LIMITATION, not a passing safety claim]: a root-NAMED local var whose value traces to non-root-like data ONE HOP BACK is NOT flagged', () => {
+  // Exactly the header's "DISCLOSED BLIND SPOT" example. `dir` is correctly
+  // flagged on its OWN line (leaf 'id' is not root-like) — but nothing here
+  // asserts that; this control exists to prove `rootDir` — the identifier
+  // this ratchet actually inspects at the resolveGuardedPath call site — is
+  // NOT flagged, because inspecting only rootDir's DIRECT initializer sees
+  // just the leaf 'dir', and 'dir' ends in "dir": root-like by name alone.
+  const hits = scanFixture(`
+    function readAgent(id: string) {
+      const dir = someHelper(id);
+      const rootDir = wrap(dir);
+      return resolveGuardedPath(rootDir, ['x']);
+    }
+  `);
   assert.deepEqual(
     hits,
     [],
-    `single-hop dataflow is an explicitly disclosed limitation, not a bug — got: ${JSON.stringify(hits)}`,
+    `this is the documented blind spot, not a bug: a root-named variable ("rootDir") built from another root-named variable ("dir") is never flagged, even when "dir" itself traces to non-root-like data — got: ${JSON.stringify(hits)}`,
   );
+});
+
+test('control (e) [meta, non-regression]: join(forgeRoot, "_logs") and skillsDir(ctx.forgeRoot) — root built only from root-like leaves/literals — are NOT flagged', () => {
+  const hits = scanFixture(`
+    function readLogs(forgeRoot: string) {
+      return resolveGuardedPath(join(forgeRoot, '_logs'), ['events.jsonl']);
+    }
+    function readSkill(ctx: { forgeRoot: string }, slugArg: string) {
+      return resolveGuardedPath(skillsDir(ctx.forgeRoot), [slugArg]);
+    }
+  `);
+  assert.deepEqual(hits, [], `expected no hits for either config-derived-helper call — got: ${JSON.stringify(hits)}`);
+});
+
+test('control (f) [meta]: join(forgeRoot, slug) — a non-root-like leaf folded alongside a root-like one — IS flagged', () => {
+  const hits = scanFixture(`
+    function readAgent(forgeRoot: string, slug: string) {
+      return resolveGuardedPath(join(forgeRoot, slug), ['SKILL.md']);
+    }
+  `);
+  assert.equal(hits.length, 1, `expected exactly one hit, got: ${JSON.stringify(hits)}`);
+  assert.match(hits[0]!.reason, /non-root-like leaf\(s\): slug/, '"slug" is not root-like — that is what must trigger the flag');
 });
 
 // ---------------------------------------------------------------------------
@@ -349,87 +443,55 @@ test('control (c3) [meta, non-regression]: a local var whose initializer referen
 
 /**
  * The FROZEN set of every caller-built-root hit in `packages/` + `apps/forge/`
- * at the time this ratchet was authored (forge-8vfn.5.33), one entry per
- * occurrence (a file+callee+argText combination repeated N times in the live
- * tree appears N times here — see the header's "why a multiset" note). This
- * baseline may only SHRINK: fixing one of these sites and not updating this
- * array fails the test (a stale entry), same as a genuinely new violation
- * appearing fails it. Every entry below was manually read at authoring time —
- * all 69 are the config-derived-helper idiom (`skillsDir(forgeRoot)`,
- * `hooksDir(ctx.forgeRoot)`, `join(forgeRoot, '_logs')`, or a local var built
- * from one), not a request-derived id folded into a root; T2 owns the final
- * call on any of these, per this file's header.
+ * at the time this refined rule was authored (forge-8vfn.5.33 + the
+ * forge-mlk follow-up), one entry per occurrence (a file+callee+argText
+ * combination repeated N times in the live tree appears N times here — see
+ * the header's "why a multiset" note). This baseline may only SHRINK: fixing
+ * one of these sites and not updating this array fails the test (a stale
+ * entry), same as a genuinely new violation appearing fails it.
+ *
+ * Six rows survive the name-based refinement (down from 69 under the
+ * unrefined v1 rule). Per-row judgement, T2 owns the final call on each:
+ *   - `packages/flows/cycle.ts::guardedReadFile::dirname(logFilePath)` —
+ *     CONFIG-DERIVED. `logFilePath` is `logger.logFilePath`, the cycle
+ *     logger's own internally-computed path, never request data.
+ *   - `packages/library/bridge-studio-authoring-template.ts` and
+ *     `packages/library/bridge-studio-templates.ts` (×2) —
+ *     `resolve(forgeRoot, ...dirSegments)` / `resolve(ctx.forgeRoot,
+ *     ...dirSegments)` — CONFIG-DERIVED. `dirSegments = WRITABLE_CATEGORY_DIRS[category]`,
+ *     a lookup into a fixed exported const map keyed by an already-validated
+ *     category enum — a false positive of the naming heuristic (the local is
+ *     a literal array, just not named `*Dir`/`*Root`).
+ *   - `packages/projects/bridge-studio-project-onboard.ts::resolveGuardedPath::projectRoot` —
+ *     REQUEST-DERIVED, reported not fixed. `projectRoot = resolve(ctx.forgeRoot,
+ *     repoPathRel)` where `repoPathRel` reads straight from the request body
+ *     (`b['repoPath']`, defaulting to `` `projects/${id}` ``) with no shape
+ *     validation before the `resolve()` call. A separate, purpose-built
+ *     check (`deps.isContainedProjectRepoPath`) runs before this
+ *     `resolveGuardedPath` call and is documented as a genuine per-segment
+ *     identity walk, not a lexical prefix test — so this may already be
+ *     mitigated — but it is a DIFFERENT function than `resolveGuardedPath`
+ *     itself, and this ratchet cannot verify its soundness. Flagging, not
+ *     fixing, per this file's header.
+ *   - `packages/projects/contract-stages.ts::guardedFile::projectDir` —
+ *     REQUEST-DERIVED, reported not fixed. `projectDir =
+ *     resolveContainedProjectDir(projectsRoot, projectId)`, and `projectId`
+ *     is a route parameter. `resolveContainedProjectDir` (same file, line
+ *     102) checks containment via `realpathSync` + a lexical
+ *     `.startsWith()` comparison — the "somewhere under root" shape
+ *     `path-guard.ts`'s own docstring names as insufficient (escape shape 3:
+ *     a symlinked id directory pointing at a DIFFERENT real object under the
+ *     SAME root passes a startsWith check while landing on the wrong
+ *     object) — not `resolveGuardedPath`'s per-segment IDENTITY walk. Worth
+ *     a closer look; not fixed here.
  */
 const BASELINE_CALLER_BUILT_ROOT_KEYS: readonly string[] = [
-  "apps/forge/bridge-studio-writes.ts::guardedFile::skillsRoot",
-  "apps/forge/bridge-studio-writes.ts::guardedWriteFile::skillsRoot",
-  "apps/forge/bridge-studio-writes.ts::resolveGuardedPath::flowsBase",
-  "apps/forge/bridge-studio-writes.ts::resolveGuardedPath::flowsBase",
-  "apps/forge/bridge-studio-writes.ts::resolveGuardedPath::resolve(ctx.forgeRoot, 'studio', 'flows')",
-  "apps/forge/bridge-studio-writes.ts::resolveGuardedPath::toSkillsDir(forgeRoot)",
-  "apps/forge/bridge-studio.ts::resolveGuardedPath::flowsBase",
-  "apps/forge/bridge-studio.ts::resolveGuardedPath::safeLogsBase",
-  "apps/forge/bridge-studio.ts::resolveGuardedPath::safeLogsBase",
-  "apps/forge/ui-bridge.ts::guardedWriteFile::join(forgeRoot, '_logs')",
-  "apps/forge/ui-bridge.ts::guardedWriteFile::join(forgeRoot, '_logs')",
-  "apps/forge/ui-bridge.ts::guardedWriteFile::join(forgeRoot, '_logs')",
-  "packages/agents/agent-dispatch-cmd.ts::resolveGuardedPath::projectsRoot",
-  "packages/agents/agent-run.ts::resolveGuardedPath::projectsRoot",
-  "packages/agents/agent-run.ts::resolveGuardedPath::projectsRoot",
-  "packages/agents/bridge-agents-studio.ts::resolveGuardedPath::resolve(ctx.forgeRoot, 'studio', 'flows')",
-  "packages/agents/bridge-agents-studio.ts::resolveGuardedPath::toSkillsDir(ctx.forgeRoot)",
   "packages/flows/cycle.ts::guardedReadFile::dirname(logFilePath)",
-  "packages/knowledge/bridge-studio-kb-routes-lifecycle.ts::resolveGuardedPath::brainBase",
-  "packages/knowledge/bridge-studio-kb-routes-lifecycle.ts::resolveGuardedPath::dirname(kbDir)",
-  "packages/knowledge/bridge-studio-kb-routes-lifecycle.ts::resolveGuardedPath::projectsRootForDelete",
-  "packages/knowledge/bridge-studio-kb-routes-maintenance.ts::resolveGuardedPath::brainRoot",
-  "packages/knowledge/bridge-studio-kb-routes-maintenance.ts::resolveGuardedPath::join(forgeRoot, '_logs')",
-  "packages/knowledge/kb-drain-edit-soundness.ts::guardedWriteFile::brainRoot",
-  "packages/knowledge/kb-drain-store.ts::guardedWriteFile::projectsRoot",
-  "packages/knowledge/kb-graph.ts::resolveGuardedPath::dirname(kbDir)",
-  "packages/library/bridge-studio-authoring-hook.ts::guardedFile::hooksDir(forgeRoot)",
-  "packages/library/bridge-studio-authoring-hook.ts::resolveGuardedPath::hooksDir(forgeRoot)",
   "packages/library/bridge-studio-authoring-template.ts::resolveGuardedPath::resolve(forgeRoot, ...dirSegments)",
-  "packages/library/bridge-studio-authoring.ts::resolveGuardedPath::projectsRoot",
-  "packages/library/bridge-studio-hooks.ts::resolveGuardedPath::hooksDir(ctx.forgeRoot)",
-  "packages/library/bridge-studio-hooks.ts::resolveGuardedPath::hooksDir(ctx.forgeRoot)",
-  "packages/library/bridge-studio-hooks.ts::resolveGuardedPath::hooksDir(ctx.forgeRoot)",
-  "packages/library/bridge-studio-hooks.ts::resolveGuardedPath::hooksDir(ctx.forgeRoot)",
-  "packages/library/bridge-studio-hooks.ts::resolveGuardedPath::hooksDir(ctx.forgeRoot)",
-  "packages/library/bridge-studio-hooks.ts::resolveGuardedPath::hooksDir(ctx.forgeRoot)",
-  "packages/library/bridge-studio-hooks.ts::resolveGuardedPath::hooksDir(ctx.forgeRoot)",
-  "packages/library/bridge-studio-hooks.ts::resolveGuardedPath::hooksDir(forgeRoot)",
-  "packages/library/bridge-studio-hooks.ts::resolveGuardedPath::hooksDir(forgeRoot)",
-  "packages/library/bridge-studio-instructions.ts::resolveGuardedPath::skillsDir(forgeRoot)",
-  "packages/library/bridge-studio-skills.ts::resolveGuardedPath::skillsDir(ctx.forgeRoot)",
-  "packages/library/bridge-studio-skills.ts::resolveGuardedPath::skillsDir(ctx.forgeRoot)",
-  "packages/library/bridge-studio-skills.ts::resolveGuardedPath::skillsDir(ctx.forgeRoot)",
-  "packages/library/bridge-studio-skills.ts::resolveGuardedPath::skillsDir(ctx.forgeRoot)",
-  "packages/library/bridge-studio-skills.ts::resolveGuardedPath::skillsDir(ctx.forgeRoot)",
   "packages/library/bridge-studio-templates.ts::resolveGuardedPath::resolve(ctx.forgeRoot, ...dirSegments)",
   "packages/library/bridge-studio-templates.ts::resolveGuardedPath::resolve(ctx.forgeRoot, ...dirSegments)",
-  "packages/library/skill-path.ts::guardedFile::skillsDir(root)",
-  "packages/library/studio/community-index.ts::guardedFile::vendoredBaseDir(forgeRoot, 'hook')",
-  "packages/library/studio/community-index.ts::guardedReadFile::vendoredBaseDir(forgeRoot, 'skill')",
-  "packages/library/studio/community-install.ts::guardedFile::hooksDir(forgeRoot)",
-  "packages/library/studio/community-install.ts::guardedFile::hooksDir(forgeRoot)",
-  "packages/library/studio/hook-package.ts::guardedFile::base",
-  "packages/library/studio/hook-package.ts::guardedFile::base",
-  "packages/library/studio/skill-install.ts::guardedFile::skillsDir(forgeRoot)",
-  "packages/library/studio/skill-install.ts::guardedFile::skillsDir(forgeRoot)",
-  "packages/library/studio/skill-package.ts::guardedFile::skillsDir(forgeRoot)",
-  "packages/library/studio/skill-package.ts::guardedFile::skillsDir(forgeRoot)",
   "packages/projects/bridge-studio-project-onboard.ts::resolveGuardedPath::projectRoot",
-  "packages/projects/project-preflight-read.ts::resolveGuardedPath::join(forgeRoot, '_logs')",
-  "packages/projects/reset.ts::guardedReadFile::startersRoot",
-  "packages/projects/reset.ts::guardedRename::dir",
-  "packages/projects/reset.ts::resolveGuardedPath::dir",
-  "packages/projects/reset.ts::resolveGuardedPath::dir",
-  "packages/sessions/bridge-studio-agent-capability.ts::resolveGuardedPath::skillsDir(forgeRoot)",
-  "packages/sessions/bridge-studio-kickoff.ts::guardedWriteFile::projectsRoot",
-  "packages/sessions/bridge-studio-session-cancel.ts::resolveGuardedPath::projectsRoot",
-  "packages/sessions/bridge-studio-sessions-affordances.ts::resolveGuardedPath::projectsRoot",
-  "packages/sessions/session-model-tier.ts::resolveGuardedPath::skillsDir(forgeRoot)",
+  "packages/projects/contract-stages.ts::guardedFile::projectDir",
 ].slice().sort();
 
 test('control (d): the live tree matches the frozen baseline EXACTLY — a new caller-built root fails this, and so does silently fixing one without shrinking the baseline', () => {
