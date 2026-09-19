@@ -348,12 +348,8 @@ async function cmdStudio(rest: string[]): Promise<void> {
 /** Parse the shared launcher flags and bring up the operator UI. Used by the
  *  canonical `forge studio` and the deprecated `forge watch` alias. */
 async function cmdStudioLauncher(rest: string[], logLabel = '[forge studio]'): Promise<void> {
-  // Preflight (J1): surface a missing API key (the SDK-verbs warning didn't
-  // cover `studio`) and ensure the queue/log layout exists so the bridge's
-  // architect-start has somewhere to write — idempotent, never throws.
-  // forge-8vfn.6.11.46: this also writes forge.config.json into a tree that
-  // lacks one — named explicitly rather than folded into an "ensure layout"
-  // call, so that fact is no longer hidden from the reader.
+  // Preflight (J1): warn on a missing API key, scaffold the queue/log layout,
+  // and write forge.config.json if this tree lacks one (forge-8vfn.6.11.46). Idempotent, never throws.
   assertEnv('warn');
   try {
     ensureLayoutDirs(FORGE_ROOT);
