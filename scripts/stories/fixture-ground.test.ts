@@ -46,9 +46,12 @@ import {
   readdirSync,
   existsSync,
   rmSync,
+  chmodSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { groundManifest } from './ground-hash.mjs';
 import {
@@ -60,6 +63,9 @@ import {
 } from './fixture-ground.mjs';
 
 const scratch = () => mkdtempSync(join(tmpdir(), 'fixture-ground-'));
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const MODULE_URL = pathToFileURL(join(HERE, 'fixture-ground.mjs')).href;
 
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -260,4 +266,174 @@ test('realGroundEscapes reports nothing for an unchanged snapshot pair', () => {
   const before = snapshotRealGrounds(dirs);
   const after = snapshotRealGrounds(dirs);
   assert.deepEqual(realGroundEscapes(before, after), []);
+});
+
+// ── D1 review, I1 ─────────────────────────────────────────────────────────
+//
+// `assertOwnNamespace` (`fixture-ground.mjs`) checks membership in
+// `storyFixtureNames(storyId)` but never calls `assertSafeStoryId` first.
+// `storyFixtureNames` does no id validation of its own — it just builds
+// `story-<id>` / `story-<id-lowercased>` — so a caller that passes an
+// UNVALIDATED storyId containing `..` can make `project` and the derived
+// name agree with each other while `join(root, 'projects', project)`
+// resolves somewhere else entirely. Reproduced below exactly as the review
+// measured it: `storyId: '/../mdtoc', project: 'story-/../mdtoc'` resolves
+// to `<root>/projects/mdtoc` — a REAL ground's own path — because
+// `join('projects', 'story-/../mdtoc')` normalises the embedded `..` before
+// the namespace check ever sees a mismatch.
+//
+// Both provisioning and teardown are exercised, and each asserts the
+// ARTIFACT, not only the throw (a fix that validates AFTER writing or
+// deleting would pass a throws-only assertion while still causing the
+// damage the guard exists to prevent).
+
+test('I1: teardownFixtureGround must not touch a real ground through a traversal-shaped storyId', () => {
+  const root = scratch();
+  mkdirSync(join(root, 'projects', 'mdtoc'), { recursive: true });
+  writeFileSync(join(root, 'projects', 'mdtoc', 'keep.txt'), 'real ground, do not touch\n');
+
+  try {
+    teardownFixtureGround(root, { storyId: '/../mdtoc', project: 'story-/../mdtoc' });
+  } catch (e) {
+    assert.match(
+      String((e as Error)?.message ?? e),
+      /unsafe story id/,
+      `expected the assertSafeStoryId refusal, got: ${(e as Error)?.message ?? e}`,
+    );
+  }
+  // Whether or not it threw, the artifact must be intact — a namespace guard
+  // that lets a half-safe call slip through and only THEN throws is no guard
+  // at all. Pre-fix this line itself is the failure: it throws ENOENT,
+  // because the traversal already deleted projects/mdtoc.
+  assert.equal(
+    readFileSync(join(root, 'projects', 'mdtoc', 'keep.txt'), 'utf8'),
+    'real ground, do not touch\n',
+    'projects/mdtoc must be byte-identical afterwards — the id-shaped bypass must never reach a real ground',
+  );
+});
+
+test('I1: provisionFixtureGround must not write into a real project name through a traversal-shaped storyId', () => {
+  const root = scratch();
+  seedFixture(root);
+
+  try {
+    provisionFixtureGround(root, { storyId: '/../mdtoc', project: 'story-/../mdtoc', fixture: 'demo-seed' });
+  } catch (e) {
+    assert.match(
+      String((e as Error)?.message ?? e),
+      /unsafe story id/,
+      `expected the assertSafeStoryId refusal, got: ${(e as Error)?.message ?? e}`,
+    );
+  }
+  assert.equal(
+    existsSync(join(root, 'projects', 'mdtoc')),
+    false,
+    'a traversal-shaped storyId must never resolve into projects/mdtoc — the bypass must never reach a real ground name',
+  );
+});
+
+// ── D1 review, "Determinism for the right reason" ──────────────────────────
+//
+// The round-1 determinism test provisions twice within about a second, and
+// git timestamps have 1-second resolution — so an implementation that
+// OMITTED `FIXTURE_COMMIT_ENV` entirely would usually still pass it by
+// accident (same wall-clock second, same author/committer identity from the
+// ambient git config). This test forces the two provisions to disagree on
+// wall-clock time by pinning `GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE` in the
+// AMBIENT environment to a date far from `FIXTURE_COMMIT_ENV`'s own
+// `2026-01-01T00:00:00Z` before the second provision — a real
+// `FIXTURE_COMMIT_ENV` must override the ambient env (git resolves the LAST
+// -c/env value), so the commit is unaffected either way; an implementation
+// that forgot to set it, or that merges rather than overrides, would produce
+// a DIFFERENT sha the second time.
+test('determinism holds even when the ambient GIT_AUTHOR_DATE/GIT_COMMITTER_DATE disagree with FIXTURE_COMMIT_ENV', () => {
+  const root = scratch();
+  seedFixture(root);
+
+  const first = provisionFixtureGround(root, { storyId: 'S8', project: 'story-s8', fixture: 'demo-seed' });
+  teardownFixtureGround(root, { storyId: 'S8', project: 'story-s8' });
+
+  const savedAuthorDate = process.env.GIT_AUTHOR_DATE;
+  const savedCommitterDate = process.env.GIT_COMMITTER_DATE;
+  try {
+    process.env.GIT_AUTHOR_DATE = '2099-12-31T23:59:59Z';
+    process.env.GIT_COMMITTER_DATE = '2099-12-31T23:59:59Z';
+    const second = provisionFixtureGround(root, { storyId: 'S8', project: 'story-s8', fixture: 'demo-seed' });
+    assert.equal(
+      second.commit,
+      first.commit,
+      'FIXTURE_COMMIT_ENV must override the ambient environment, not merely usually agree with it by ' +
+        'landing in the same wall-clock second',
+    );
+  } finally {
+    if (savedAuthorDate === undefined) delete process.env.GIT_AUTHOR_DATE; else process.env.GIT_AUTHOR_DATE = savedAuthorDate;
+    if (savedCommitterDate === undefined) delete process.env.GIT_COMMITTER_DATE; else process.env.GIT_COMMITTER_DATE = savedCommitterDate;
+  }
+});
+
+// ── D1 review, M5 ────────────────────────────────────────────────────────
+//
+// `listFiles` (`fixture-ground.mjs`) swallows a `readdirSync` failure with
+// `catch { return []; }`. For an UNREADABLE SUBDIRECTORY that is worse than
+// it looks: `readdirSync(dir, { recursive: true })` throws for the whole
+// walk (not just the one subtree), so `listFiles` returns an empty file list
+// for the ENTIRE seed — and `provisionFixtureGround` does not gate on that;
+// it copies the seed with `cpSync` regardless.
+//
+// THIS IS RUN IN A CHILD PROCESS, DELIBERATELY. Measured on this host and
+// this Node version: `cpSync(seedDir, dest, { recursive: true })` walking
+// INTO a permission-denied subdirectory does not raise a catchable JS
+// exception — it aborts the whole process (`std::filesystem::filesystem_error`,
+// SIGABRT), a Node bug independent of this module. Calling
+// `provisionFixtureGround` in-process here would take this entire test file
+// down with it. Isolating it in a child makes the crash itself part of the
+// evidence: `res.signal` is non-null today, and must be null once the fix
+// makes `listFiles` throw BEFORE `cpSync` ever runs.
+test('M5: a seed containing an unreadable directory makes provisioning THROW naming that path, never crash or provision a partial seed', (t) => {
+  if (typeof process.getuid === 'function' && process.getuid() === 0) {
+    t.skip('running as root — permission bits are not enforced, so EACCES never occurs');
+    return;
+  }
+  const root = scratch();
+  const seedDir = join(root, 'tests', 'stories', 'grounds', 'unreadable-seed', 'seed');
+  mkdirSync(join(seedDir, 'locked'), { recursive: true });
+  writeFileSync(join(seedDir, 'README.md'), '# x\n');
+  writeFileSync(join(seedDir, 'locked', 'secret.txt'), 'nope\n');
+  writeFileSync(join(root, 'tests', 'stories', 'grounds', 'unreadable-seed', 'PROVENANCE.md'), '# provenance\n');
+  chmodSync(join(seedDir, 'locked'), 0o000);
+
+  try {
+    const script = [
+      `import { provisionFixtureGround } from ${JSON.stringify(MODULE_URL)};`,
+      'try {',
+      `  provisionFixtureGround(${JSON.stringify(root)}, { storyId: 'S8', project: 'story-s8', fixture: 'unreadable-seed' });`,
+      "  console.error('DID NOT THROW');",
+      '  process.exit(2);',
+      '} catch (e) {',
+      '  console.error(e && e.message ? e.message : String(e));',
+      '  process.exit(1);',
+      '}',
+    ].join('\n');
+    const res = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' });
+
+    assert.equal(
+      res.signal,
+      null,
+      `provisioning must never CRASH the process — the child died by signal ${res.signal}. stderr:\n${res.stderr}`,
+    );
+    assert.equal(
+      res.status,
+      1,
+      `provisioning must THROW a catchable error (child exit 1), not silently succeed or crash. ` +
+        `Got status ${res.status}, signal ${res.signal}. stderr:\n${res.stderr}`,
+    );
+    assert.match(res.stderr, /locked/, `the thrown error must name the unreadable path. stderr:\n${res.stderr}`);
+    assert.equal(
+      existsSync(join(root, 'projects', 'story-s8')),
+      false,
+      'a refused provision must write nothing — no partially-copied seed left behind',
+    );
+  } finally {
+    chmodSync(join(seedDir, 'locked'), 0o755);
+  }
 });

@@ -15,7 +15,10 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderGalleryIndex, storyRowFrom } from './gallery.mjs';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { renderGalleryIndex, storyRowFrom, writeStoryJson } from './gallery.mjs';
 
 const rows = [
   { id: 'S5', title: 'Create an agent', status: 'red', beats: 4, greenBeats: 2, clip: 'S5/story.webm' },
@@ -89,4 +92,39 @@ test('a story with no beats is not reported green', () => {
   // a story that ran nothing would report as a passing story.
   const row = storyRowFrom({ story: { id: 'x', docs: { title: 't' } }, beats: [] });
   assert.notEqual(row.status, 'green');
+});
+
+/**
+ * D1 review, brief item 7 / M3 — the real-ground fence's verdict
+ * (`realGroundFenceVerdict`, `fixture-ground.mjs`) went RED on the console
+ * only: `run-story.mjs` never put it into the `result` object
+ * `writeStoryJson` serialises, so a run that failed on this fence left no
+ * record of it in its own artifact. The fix is `result.realGrounds = {
+ * hashed, trees, moved }` for a fixture run, and `writeStoryJson` — the
+ * function that actually builds `story.json`, found by grepping `story.json`
+ * in this directory — is where that contract is pinned: carried through when
+ * given, absent when not, so a non-fixture story's artifact is unchanged.
+ */
+test('writeStoryJson carries `realGrounds` through to story.json when the result declares it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'gallery-realgrounds-'));
+  writeStoryJson(
+    {
+      story: { id: 'S8', docs: { title: 'Onboard a node-library fixture' } },
+      beats: [],
+      realGrounds: { hashed: 3, trees: 2, moved: [] },
+    },
+    root,
+  );
+  const written = JSON.parse(readFileSync(join(root, 'demos', 'stories', 'S8', 'story.json'), 'utf8'));
+  assert.deepEqual(written.realGrounds, { hashed: 3, trees: 2, moved: [] });
+});
+
+test('writeStoryJson omits `realGrounds` for a story that never declared it — a non-fixture artifact is unchanged', () => {
+  const root = mkdtempSync(join(tmpdir(), 'gallery-realgrounds-'));
+  writeStoryJson(
+    { story: { id: 'smoke', docs: { title: 'Find a project from Home' } }, beats: [] },
+    root,
+  );
+  const written = JSON.parse(readFileSync(join(root, 'demos', 'stories', 'smoke', 'story.json'), 'utf8'));
+  assert.equal('realGrounds' in written, false, 'a story with no realGrounds field must not gain one');
 });
