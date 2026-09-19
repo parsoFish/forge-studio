@@ -332,3 +332,84 @@ test('POSITIVE CONTROL: a grandchild that left the group via setsid is reaped by
   }
   assert.equal(alive, false, 'a setsid grandchild survived — the descendant walk is not doing its job');
 });
+
+// ------------------------------------------- THE REAPER'S OWN GROUP SIGNAL (m7-c)
+
+/**
+ * WHO KILLED THE PLANT — the mechanism 7.6.94 left open, found by lane m7-c
+ * (2026-09-19, T1 ruling 1204). It was the reaper. Step 4 signals the GROUP
+ * first (`kill(-leader)`), then every claimed pid. The re-parented grandchild is
+ * a member of that group, so the group signal kills it; when init reaps it before
+ * the per-pid SIGTERM lands, that SIGTERM throws ESRCH and the pid was filed as
+ * SKIPPED ("already gone, nothing to reap"). Nothing escaped — the report lied
+ * about a kill the reaper made. Seen live at load 35 with MemAvailable flat
+ * (−41 MiB), which retires the OOM lead.
+ *
+ * The window is made DETERMINISTIC here rather than waited for under load: the
+ * injected `kill` pauses after every GROUP signal, long enough for the kernel to
+ * deliver it and init to reap the member, before the per-pid signals run. Before
+ * the fix this reports `reaped: []` with both pids skipped ESRCH, every time.
+ */
+test('the reaper\'s OWN group signal is a reap: a member it killed is REAPED, never skipped as already gone', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'story-reap-groupsig-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  // The dispatch shape, as the positive control above: a detached turn (own
+  // group) spawns the agent in that group and exits, so the agent re-parents.
+  const turn = spawn(
+    process.execPath,
+    [
+      '-e',
+      `const { spawn } = require('node:child_process');
+       const c = spawn(process.execPath, ['-e', 'setInterval(() => {}, 100)'], { cwd: process.cwd(), stdio: 'ignore' });
+       console.log(String(c.pid));
+       setTimeout(() => process.exit(0), 400);`,
+    ],
+    { cwd: root, detached: true, stdio: ['ignore', 'pipe', 'ignore'] },
+  );
+  const grandchild = await new Promise((resolve) => {
+    let buf = '';
+    turn.stdout.on('data', (d) => {
+      buf += d;
+      if (buf.includes('\n')) resolve(Number.parseInt(buf.trim(), 10));
+    });
+  });
+  t.after(() => {
+    for (const pid of [turn.pid, grandchild]) {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {
+        /* already reaped, which is the point */
+      }
+    }
+  });
+  const dir = join(root, '_logs', '_authoring-groupsig');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'turn.pid'), String(turn.pid));
+  await new Promise((r) => setTimeout(r, 700));
+  process.kill(grandchild, 0); // precondition: the member is alive before the reap (throws if not)
+
+  const pauseAfterGroupSignalMs = 300;
+  const kill = (pid, sig) => {
+    process.kill(pid, sig);
+    if (pid < 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, pauseAfterGroupSignalMs);
+  };
+  const report = await reapAgentRuns(collectAgentRuns(root, 0), { ownRoot: root, graceMs: 3000, pollMs: 25, kill });
+
+  let alive = true;
+  try {
+    process.kill(grandchild, 0);
+  } catch {
+    alive = false;
+  }
+  assert.equal(alive, false, `precondition of the property: the member is dead after the reap: ${JSON.stringify(report)}`);
+  const entry = report.reaped.find((r) => r.pid === grandchild);
+  assert.ok(entry, `the member the GROUP signal killed is reaped, not skipped as already gone: ${JSON.stringify(report)}`);
+  assert.equal(entry.signal, 'SIGTERM');
+  assert.ok(
+    !report.skipped.some((s) => s.pid === grandchild),
+    `and it is not ALSO listed as skipped: ${JSON.stringify(report.skipped)}`,
+  );
+  // The turn exited on its own before any signal: THAT pid is honestly "already gone".
+  assert.ok(report.skipped.some((s) => s.pid === turn.pid && /already gone/.test(s.reason)), `the turn that exited by itself stays skipped: ${JSON.stringify(report)}`);
+});
