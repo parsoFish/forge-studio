@@ -703,10 +703,10 @@ test('7.6.146: sweepProductFixtures clears the artefacts of the initiative it cl
  * that fixture is always the run's OWN debris. A fixture ground changes that:
  * `run.mjs` provisions `projects/story-<id>` itself at the start of the run and
  * `teardownFixtureGround` — not the trailing sweep — is what is meant to remove
- * it, AFTER the fence and the verdict have both read it. Ruling 308 already
- * carries the identical shape for the ground's Brain 3 sub-wiki ("held, not
- * kept" — removed once the verdict is recorded, by a LATER, NAMED call, never
- * folded into the general sweep). `keepProjects` is that same hold applied to
+ * it, AFTER the fence and the verdict have both read it. `applyFence`'s
+ * `defer` already holds the ground's Brain 3 sub-wiki the same way ("held,
+ * not kept" — removed once the verdict is recorded, by a LATER, NAMED call,
+ * never folded into the general sweep). `keepProjects` is that same hold applied to
  * the project directory itself: an opt-in list, so every story that has never
  * heard of a fixture keeps today's behaviour exactly.
  *

@@ -1,31 +1,23 @@
 /**
- * fixture-ground-fix1.test.ts — the TWO new `fixture-ground.mjs` exports the
- * D1 review's fix round decided (`realGroundFenceVerdict`,
- * `provisionFixtureGrounds`), split into their own file rather than appended
- * to `fixture-ground.test.ts` — the `story-file-fixture.test.ts` precedent,
- * cut by SUBJECT.
+ * fixture-ground-fix1.test.ts — two `fixture-ground.mjs` exports
+ * (`realGroundFenceVerdict`, `provisionFixtureGrounds`), in their own file
+ * rather than appended to `fixture-ground.test.ts` — the
+ * `story-file-fixture.test.ts` precedent, cut by SUBJECT. They were pinned
+ * before they existed, and a static import of a name the module does not
+ * export fails at LINK time, taking every test in the file down with it; a
+ * separate file kept `fixture-ground.test.ts` from being collaterally red.
  *
- * WHY A SEPARATE FILE AND NOT AN 800-LINE ONE. Both names are new,
- * statically-imported exports that do not exist on `HEAD` yet. A static
- * `import { realGroundFenceVerdict } from './fixture-ground.mjs'` for a name
- * the module does not export fails at LINK time — the whole file refuses to
- * load, and every test in it reports as one failure, not twelve. Keeping
- * these two exports' tests apart from `fixture-ground.test.ts` (already
- * 12/12 green) means that file's own tests are never collaterally reported
- * red for a name they never touch.
+ * `realGroundFenceVerdict` exists because no test covered the requirement
+ * that actually makes a fixture run's containment escape RED: deleting the
+ * inline `return 1` block in `run-story.mjs`, its unconditional summary line,
+ * or the `keepProjects` spread that keeps the fence's own subject alive long
+ * enough to be judged all kept every pinned test green. A hand-rolled inline
+ * check has no seam a test can hold; a pure function does.
  *
- * `realGroundFenceVerdict` exists because I3 in the review found no test
- * covers the requirement that actually makes a fixture run's containment
- * escape RED: deleting `run-story.mjs`'s `realGroundMoved.length > 0 -> return
- * 1` block, or its unconditional summary line, or the `keepProjects` spread
- * that keeps the fence's own subject alive long enough to be judged, all kept
- * the nine pinned test files green. A hand-rolled inline check has no seam a
- * test can hold; a pure function does.
- *
- * `provisionFixtureGrounds` exists because M1 found the batch has no
- * atomicity: `run.mjs`'s loop provisions every fixture story regardless of an
- * earlier refusal, and nothing tears down what a refusal-after-provisioning
- * already wrote. "A refusal here writes nothing" was true for ONE story and
+ * `provisionFixtureGrounds` exists because the batch had no atomicity:
+ * `run.mjs`'s loop provisioned every fixture story regardless of an earlier
+ * refusal, and nothing tore down what a refusal-after-provisioning had
+ * already written. "A refusal here writes nothing" was true for ONE story and
  * false for a batch.
  */
 import { test } from 'node:test';
@@ -38,14 +30,15 @@ import { realGroundFenceVerdict, provisionFixtureGrounds } from './fixture-groun
 
 const scratch = () => mkdtempSync(join(tmpdir(), 'fixture-ground-fix1-'));
 
-// ── I3 — realGroundFenceVerdict(before, after) ─────────────────────────────
+// ── realGroundFenceVerdict(before, after) ──────────────────────────────────
 //
-// `-> frozen { ok, moved, hashed, trees, summary }`: `moved` = `realGroundEscapes
-// (before, after)`; `hashed` = dirs in `before` with a NON-null digest (a dir
-// that produced no digest is not "hashed" — the review's own M-finding, so a
-// ground `groundManifest` could not read never inflates the count); `trees` =
-// distinct `<tree>` roots among the keys, a key being `<tree>/projects/<name>`;
-// `ok` = `moved.length === 0`; `summary` is the exact sentence the run logs.
+// `-> frozen { ok, moved, unreadable, hashed, trees, summary }`: `moved` =
+// the grounds that appeared, vanished or changed; `unreadable` = the listed
+// dirs with a null digest; `hashed` = dirs in `before` with a NON-null digest
+// (so a ground `groundManifest` could not read never inflates the count);
+// `trees` = distinct `<tree>` roots among the keys, a key being
+// `<tree>/projects/<name>`; `ok` = nothing moved and nothing unreadable;
+// `summary` is the exact sentence the run logs.
 
 test('realGroundFenceVerdict: unchanged grounds are ok, with a summary naming 0 moved and 0 unreadable', () => {
   const before = new Map([
@@ -77,15 +70,14 @@ test('realGroundFenceVerdict: one MODIFIED ground is NOT ok, and moved names it'
 });
 
 /**
- * D1 round 4 (security review) — `realGroundFenceVerdict` must never call an
- * UNHASHABLE real ground clean. `hashed`'s own exclusion of a null-digest dir
- * (review M2's sibling finding) only kept the COUNT honest; it said nothing
- * about `ok`, which before this ruling was driven by `moved.length === 0`
+ * `realGroundFenceVerdict` must never call an UNHASHABLE real ground clean.
+ * `hashed`'s own exclusion of a null-digest dir only kept the COUNT honest; it said nothing
+ * about `ok`, which was once driven by `moved.length === 0`
  * alone — so a real ground `groundManifest` could not read at all (an
  * unreadable file, output past the 64 MiB bound, a broken mount) compared
  * `null` against `null` on both sides of `realGroundEscapes`, produced NO
  * `moved` line, and the run sailed through believing the fence had looked.
- * `unreadable` names every dir `before` LISTED (so it was meant to be
+ * `unreadable` names every dir a snapshot LISTED (so it was meant to be
  * fenced) but could not hash; `ok` is now false on EITHER `moved.length > 0`
  * OR `unreadable.length > 0`.
  */
@@ -122,7 +114,7 @@ test('realGroundFenceVerdict: trees counts DISTINCT <tree> roots among the keys,
   assert.equal(v.summary, 'real grounds: 3 hashed in 2 tree(s), 0 moved, 0 unreadable');
 });
 
-// ── M1 — provisionFixtureGrounds(root, stories) ────────────────────────────
+// ── provisionFixtureGrounds(root, stories) ─────────────────────────────────
 //
 // `-> frozen { provisioned: Array<{storyId, project, digest, commit}>, refused:
 // {storyId, message} | null }`. Provisions IN ORDER, STOPS at the first
@@ -165,9 +157,8 @@ test('provisionFixtureGrounds stops at the first refusal and tears down everythi
 
 test('provisionFixtureGrounds: rollbackFailures is empty on a clean rollback', () => {
   // The SAME two-story refusal as above, unmodified — the default, common
-  // case, pinned so the new field's ABSENCE of failures is as much a
-  // contract as its presence (re-review N2: today this case is not even
-  // representable, since the field does not exist).
+  // case, pinned so the field's ABSENCE of failures is as much a contract as
+  // its presence.
   const root = scratch();
   const goodSeedDir = join(root, 'tests', 'stories', 'grounds', 'demo-seed', 'seed');
   mkdirSync(goodSeedDir, { recursive: true });
@@ -186,8 +177,7 @@ test('provisionFixtureGrounds: rollbackFailures is empty on a clean rollback', (
 });
 
 /**
- * T2 ruling 3 (re-review N2) — a rollback that could not undo its own write
- * must NAME it, not swallow it. `provisionFixtureGrounds`'s rollback loop
+ * A rollback that could not undo its own write must NAME it, not swallow it. `provisionFixtureGrounds`'s rollback loop
  * today calls `teardownFixtureGround` for each already-provisioned entry and
  * discards the result entirely — a `try { teardownFixtureGround(...) } catch
  * {}` that never even reads the return value, so a failed removal leaves a
@@ -213,7 +203,7 @@ test('provisionFixtureGrounds: rollbackFailures is empty on a clean rollback', (
  * hook is invisible to it), and a subsequent teardown then fails with
  * `EACCES: permission denied, rmdir '.../projects/story-s8'`.
  */
-test('provisionFixtureGrounds: rollbackFailures NAMES a teardown it could not undo, rather than swallowing it (N2)', (t) => {
+test('provisionFixtureGrounds: rollbackFailures NAMES a teardown it could not undo, rather than swallowing it', (t) => {
   if (typeof process.getuid === 'function' && process.getuid() === 0) {
     t.skip('running as root — permission bits are not enforced, so the forced EACCES never occurs');
     return;
@@ -253,7 +243,7 @@ test('provisionFixtureGrounds: rollbackFailures NAMES a teardown it could not un
       'the rollback of story-s8 must have FAILED (projects/ is locked) — if this is false, the hook did not ' +
         'fire before the rollback attempt and the test is not exercising what it claims to',
     );
-    assert.ok(Array.isArray(result.rollbackFailures), 'provisionFixtureGrounds never returns a rollbackFailures array — N2\'s swallow is still silent');
+    assert.ok(Array.isArray(result.rollbackFailures), 'provisionFixtureGrounds never returns a rollbackFailures array — a failed rollback is still swallowed silently');
     assert.equal(result.rollbackFailures.length, 1, `expected exactly one rollback failure. Got: ${JSON.stringify(result.rollbackFailures)}`);
     assert.equal(result.rollbackFailures[0].project, 'story-s8', JSON.stringify(result.rollbackFailures[0]));
     assert.match(

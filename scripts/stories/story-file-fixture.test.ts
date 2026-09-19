@@ -1,5 +1,5 @@
 /**
- * `ground.fixture` validation — split out of `story-file.test.ts` (M7-D, D1) when
+ * `ground.fixture` validation — split out of `story-file.test.ts` (M7-D) when
  * the three cases below took that file past the 800-line cap. The cut follows the
  * SUBJECT: everything here is about the fixture-ground field, and nothing in the
  * parent file is.

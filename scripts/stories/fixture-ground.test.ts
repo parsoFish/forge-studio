@@ -1,6 +1,6 @@
 /**
  * fixture-ground.test.ts — acceptance tests for `scripts/stories/fixture-ground.mjs`,
- * pinned BEFORE it exists (M7-D, D1).
+ * pinned BEFORE it existed (M7-D, bead `forge-1rk5.1`).
  *
  * WHAT THIS EXISTS FOR. Today a costed story can only point at a REAL project
  * under `projects/`, and a real ground is a moving target: the launcher pins a
@@ -25,16 +25,14 @@
  * DETERMINISM is the other half of the contract: two provisions of the same
  * seed must commit to the IDENTICAL sha, because a story's beats may assert
  * against that commit. `FIXTURE_COMMIT_ENV` freezes author/committer identity
- * and timestamp so the commit is a pure function of the seed's tree, not of
- * when or by whom it was made.
+ * and timestamp, so the commit depends on the seed's tree and the fixture
+ * name, never on when or by whom it was made.
  *
  * `realGroundDirs` / `snapshotRealGrounds` / `realGroundEscapes` are the other
  * side of the same coin: proof that provisioning and tearing down a FIXTURE
  * never touches a REAL ground, in this tree or a sibling worktree — the
  * `siblingGroundEscapes` idea in `ground-hash.mjs`, generalised to "every real
  * ground this story does not own", not just the one it declares.
- *
- * Every test below is expected RED right now: the module does not exist yet.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -232,7 +230,7 @@ test('realGroundDirs excludes the run\'s OWN ground project from the root\'s own
   assert.deepEqual(dirs, [join(root, 'projects', 'gitpulse')]);
 });
 
-// ── D1 round 4 (security review) — realGroundDirs' skip must be ENOENT-only ─
+// ── realGroundDirs' skip must be ENOENT-only ─────────────────────────────
 //
 // `realGroundDirs`'s `catch { continue; }` around `readdirSync(projectsDir)`
 // today swallows EVERY readdir failure identically, silently skipping the
@@ -314,7 +312,7 @@ test('realGroundEscapes reports nothing for an unchanged snapshot pair', () => {
   assert.deepEqual(realGroundEscapes(before, after), []);
 });
 
-// ── D1 review, I1 ─────────────────────────────────────────────────────────
+// ── A traversal-shaped storyId never reaches a real ground ────────────────
 //
 // `assertOwnNamespace` (`fixture-ground.mjs`) checks membership in
 // `storyFixtureNames(storyId)` but never calls `assertSafeStoryId` first.
@@ -322,8 +320,7 @@ test('realGroundEscapes reports nothing for an unchanged snapshot pair', () => {
 // `story-<id>` / `story-<id-lowercased>` — so a caller that passes an
 // UNVALIDATED storyId containing `..` can make `project` and the derived
 // name agree with each other while `join(root, 'projects', project)`
-// resolves somewhere else entirely. Reproduced below exactly as the review
-// measured it: `storyId: '/../mdtoc', project: 'story-/../mdtoc'` resolves
+// resolves somewhere else entirely. Reproduced below: `storyId: '/../mdtoc', project: 'story-/../mdtoc'` resolves
 // to `<root>/projects/mdtoc` — a REAL ground's own path — because
 // `join('projects', 'story-/../mdtoc')` normalises the embedded `..` before
 // the namespace check ever sees a mismatch.
@@ -333,7 +330,7 @@ test('realGroundEscapes reports nothing for an unchanged snapshot pair', () => {
 // deleting would pass a throws-only assertion while still causing the
 // damage the guard exists to prevent).
 
-test('I1: teardownFixtureGround must not touch a real ground through a traversal-shaped storyId', () => {
+test('teardownFixtureGround must not touch a real ground through a traversal-shaped storyId', () => {
   const root = scratch();
   mkdirSync(join(root, 'projects', 'mdtoc'), { recursive: true });
   writeFileSync(join(root, 'projects', 'mdtoc', 'keep.txt'), 'real ground, do not touch\n');
@@ -358,7 +355,7 @@ test('I1: teardownFixtureGround must not touch a real ground through a traversal
   );
 });
 
-test('I1: provisionFixtureGround must not write into a real project name through a traversal-shaped storyId', () => {
+test('provisionFixtureGround must not write into a real project name through a traversal-shaped storyId', () => {
   const root = scratch();
   seedFixture(root);
 
@@ -378,7 +375,7 @@ test('I1: provisionFixtureGround must not write into a real project name through
   );
 });
 
-// ── D1 review, "Determinism for the right reason" ──────────────────────────
+// ── Determinism for the right reason ───────────────────────────────────────
 //
 // The round-1 determinism test provisions twice within about a second, and
 // git timestamps have 1-second resolution — so an implementation that
@@ -417,7 +414,7 @@ test('determinism holds even when the ambient GIT_AUTHOR_DATE/GIT_COMMITTER_DATE
   }
 });
 
-// ── D1 review, M5 ────────────────────────────────────────────────────────
+// ── An unreadable seed directory ─────────────────────────────────────────
 //
 // `listFiles` (`fixture-ground.mjs`) swallows a `readdirSync` failure with
 // `catch { return []; }`. For an UNREADABLE SUBDIRECTORY that is worse than
@@ -435,7 +432,7 @@ test('determinism holds even when the ambient GIT_AUTHOR_DATE/GIT_COMMITTER_DATE
 // down with it. Isolating it in a child makes the crash itself part of the
 // evidence: `res.signal` is non-null today, and must be null once the fix
 // makes `listFiles` throw BEFORE `cpSync` ever runs.
-test('M5: a seed containing an unreadable directory makes provisioning THROW naming that path, never crash or provision a partial seed', (t) => {
+test('a seed containing an unreadable directory makes provisioning THROW naming that path, never crash or provision a partial seed', (t) => {
   if (typeof process.getuid === 'function' && process.getuid() === 0) {
     t.skip('running as root — permission bits are not enforced, so EACCES never occurs');
     return;
@@ -484,7 +481,7 @@ test('M5: a seed containing an unreadable directory makes provisioning THROW nam
   }
 });
 
-// ── D1 round 4 (security review) ────────────────────────────────────────
+// ── A seed holds only regular files and directories ──────────────────────
 //
 // A tracked seed's own author controls its content, but the PROVISIONER
 // does not get to assume that content is innocent: `cpSync` follows a
@@ -521,7 +518,7 @@ test('provisioning refuses a seed containing a non-regular entry (a symlink to /
  * reason: `readdirSync(…, { recursive: true })` follows the symlink and
  * fails trying to recurse into `/etc/credstore`, an ACCIDENT of this host's
  * `/etc`, not a deliberate refusal of the symlink itself — the same generic
- * "could not list" catch M5 already added, coincidentally triggered).
+ * "could not list" catch, coincidentally triggered).
  *
  * Measured against today's code with a fully readable target: the recursive
  * readdir follows the symlink and lists its target's OWN files as "seed
@@ -531,8 +528,8 @@ test('provisioning refuses a seed containing a non-regular entry (a symlink to /
  * `provisionFixtureGround`'s own self-cleanup. The end state looks clean,
  * but "refuses before writing anything" was never true for this case; git's
  * own safety net did the refusing, one step too late. This is the test that
- * actually pins the ruling: it is RED until a DEDICATED pre-write check
- * exists, independent of both M5's readdir-catch and git's own pathspec
+ * actually pins the refusal: it is RED until a DEDICATED pre-write check
+ * exists, independent of both the readdir catch and git's own pathspec
  * refusal.
  */
 test('provisioning refuses a seed containing a non-regular entry (a symlink to a FULLY READABLE target), naming the path — never relying on git\'s own incidental refusal', () => {
