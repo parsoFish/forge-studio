@@ -73,7 +73,7 @@ import { loadFlowDefinition, listFlowIds as listFlowIdsForAgents } from '@forge/
 import {
   DEFAULT_STALL_CEILING_MS, isTurnAlive, extractErrorMessage, killTrackedRun,
 } from '@forge/sessions/bridge-studio-lifecycle.ts';
-import { parseGuardedEventsJsonl } from '@forge/sessions/session-readability.ts';
+import { parseGuardedEventsJsonl, parseGuardedFirstEvent } from '@forge/sessions/session-readability.ts';
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/session-status-io.ts';
 import type { SessionStatusIoPort } from '@forge/knowledge/kb-drain-model.ts';
 import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
@@ -165,6 +165,7 @@ export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
       agentFacts: libraryAgentFacts,
       // Rank 4/5 reads the package may not import.
       parseGuardedEventsJsonl,
+      parseGuardedFirstEvent,
       isTurnAlive,
       extractErrorMessage,
       stallCeilingMs: DEFAULT_STALL_CEILING_MS,

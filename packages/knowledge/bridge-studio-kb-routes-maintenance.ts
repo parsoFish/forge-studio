@@ -211,6 +211,12 @@ export async function handleKbConsolidateActive(
   return false;
 }
 
+/** M7-C (forge-hqkm) — the ingest-activity feed's page size. Neither this
+ *  route nor its client passes a `limit`, so this is a named constant rather
+ *  than a caller-controlled bound: never open more cycles' `events.jsonl`
+ *  than needed to fill this many rows. */
+export const KB_INGEST_ACTIVITY_MAX_EVENTS = 50;
+
 /**
  * GET /api/studio/kbs/:id/ingest-activity — real reflect.kb-ingest events (R6-08 WI-2).
  *
@@ -239,6 +245,23 @@ export async function handleKbIngestActivity(
   // folded into the filesystem path. GET-only: no dispatch branch exists on
   // this URL pattern, so nothing here can trigger an ingest (see
   // scripts/check-kb-ingest-affordance.test.ts's standing ratchet).
+  //
+  // M7-C (forge-hqkm) — bounded per request, never the whole `_logs/` corpus:
+  // `listCycles` enumerates EVERY `_logs/` dir, including the families that
+  // can never carry a `reflect.kb-ingest` event (`runPostReflectionKbHealth`
+  // only ever runs from the reflector phase of a flow cycle) — `_agent-*`,
+  // `_brainfix-*`, `_<kind>-<sessionId>`, every one underscore-first, while a
+  // real cycle id is `<ISO-ts>_<initiativeId>` (alnum-first). Excluding that
+  // whole shape before any read is the cheapest possible filter — a dir name
+  // check, not a file open. What remains is sorted NEWEST FIRST — the ISO
+  // prefix makes a plain lexical compare chronological, the same idiom
+  // `findNewestCycleId` (packages/flows/run-model.ts) already uses — and
+  // capped at `KB_INGEST_ACTIVITY_MAX_EVENTS` matching rows: once the page is
+  // full, an older cycle's `events.jsonl` is never opened. (A cycle CAN carry
+  // more than one matching event — `forge reflect --rerun` re-runs the same
+  // cycle's reflector, appending a second pass to the same log — so a match
+  // never short-circuits the scan of ITS OWN file; the bound is on how many
+  // CYCLES get opened, not on lines read within one.)
   const ingestActivityMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/ingest-activity$/);
   if (ingestActivityMatch && method === 'GET') {
     try {
@@ -246,7 +269,11 @@ export async function handleKbIngestActivity(
       if (!KB_ID_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
 
       const events: Array<{ kb: string; freshThemes: number; impl: string; cycleId: string }> = [];
-      for (const cycleId of listCycles(ctx.logsRoot)) {
+      const cycleIds = listCycles(ctx.logsRoot)
+        .filter((id) => !id.startsWith('_'))
+        .sort((a, b) => b.localeCompare(a));
+      for (const cycleId of cycleIds) {
+        if (events.length >= KB_INGEST_ACTIVITY_MAX_EVENTS) break; // page filled — never open another cycle's log
         const raw = guardedReadFile(ctx.logsRoot, [cycleId, 'events.jsonl']);
         if (raw === null) continue;
         for (const line of raw.split('\n')) {
