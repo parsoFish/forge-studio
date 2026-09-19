@@ -77,17 +77,27 @@ if (verdict.ok) {
   process.exit(0);
 }
 
-const startedAt = Date.now();
-console.error(`[build-guard] WAITING on ${lockPath} — ${who()}; since ${new Date(startedAt).toISOString()}, bound ${Math.round(BOUND_MS / 60000)}m. A build is the heaviest job on this box and a story run is spending money (forge-8vfn.7.6.100).`);
+// MONOTONIC, not wall clock (forge-8vfn.7.6.50). `Date.now()` is NOT
+// monotonic on this host: `_1.0/reports/m7-c-clockprobe-1.log` measured the
+// `tsc` clocksource stepping the wall clock BACKWARDS by ~2.85s every ~29.6s,
+// independent of load — and this loop's own `Date.now()` diff went negative
+// under exactly that step ("free after -1s — proceeding",
+// scripts/build-guard.test.ts's sighting). `performance.now()` is monotonic
+// by specification, so every ELAPSED/deadline computation below uses it;
+// `Date.now()` is kept ONLY for the human "since" timestamp, which wants a
+// wall-clock date, not a duration.
+const startedAtWall = Date.now();
+const startedAt = performance.now();
+console.error(`[build-guard] WAITING on ${lockPath} — ${who()}; since ${new Date(startedAtWall).toISOString()}, bound ${Math.round(BOUND_MS / 60000)}m. A build is the heaviest job on this box and a story run is spending money (forge-8vfn.7.6.100).`);
 
 let saidAt = startedAt;
-while (Date.now() - startedAt < BOUND_MS) {
+while (performance.now() - startedAt < BOUND_MS) {
   if (runLockFree()) {
-    console.log(`[build-guard] ${lockPath} free after ${Math.round((Date.now() - startedAt) / 1000)}s — proceeding`);
+    console.log(`[build-guard] ${lockPath} free after ${Math.round((performance.now() - startedAt) / 1000)}s — proceeding`);
     process.exit(0);
   }
-  if (Date.now() - saidAt >= SAY_EVERY_MS) {
-    saidAt = Date.now();
+  if (performance.now() - saidAt >= SAY_EVERY_MS) {
+    saidAt = performance.now();
     console.error(`[build-guard] still WAITING ${Math.round((saidAt - startedAt) / 1000)}s — ${who()}`);
   }
   spawnSync('sleep', ['2']);
