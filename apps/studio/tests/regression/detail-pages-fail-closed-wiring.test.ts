@@ -363,6 +363,21 @@ const EXEMPT_PAGES: Record<string, string> = {
   'app/skills/[id]/page.tsx':
     'tests/regression/library-detail-fail-closed-wiring.test.ts — same contract as ' +
     '/connections/[id], pinned for this page\'s non-throwing read shape.',
+  // forge-5rr (projects-45): ALREADY fully closed under an earlier bead
+  // (forge-irn, W7-B5 — see both files' own headers) before this scan even
+  // ran. `fetchRunDetail` catches a transport throw into
+  // `resolution:'unresolved'` (no status, never the authoritative
+  // "not found"); a non-404 non-2xx status maps the same way (pinned at the
+  // pure-logic level, tests/unit/run-view-client.test.ts); the page's
+  // NotFound render is gated on `resolution === 'not-found'` alone; Retry is
+  // already wired; the live poll keeps watching an "unresolved" transient
+  // failure rather than giving up on the first blip. No production change
+  // this pass — verified with a mutation check, not assumed.
+  'app/agents/[id]/run/[runId]/page.tsx':
+    'tests/regression/agent-run-page-fail-closed-wiring.test.ts — the not-found-vs-' +
+    'unresolved split, the Retry wiring and the poll\'s transient-failure tolerance ' +
+    'are all pinned there; the underlying status-mapping is pinned at the pure-logic ' +
+    'level in tests/unit/run-view-client.test.ts.',
 };
 
 /**
@@ -375,10 +390,6 @@ const EXEMPT_PAGES: Record<string, string> = {
  * what was NOT done here, per the brief's "report, don't fix" instruction.
  */
 const PENDING_PAGES: Record<string, string> = {
-  'app/agents/[id]/run/[runId]/page.tsx':
-    'Renders NotFound for "no such run" AND an inline FetchErrorState for "unresolved" ' +
-    '— NOT the shared PageLoadError kit. Unverified whether the FetchErrorState branch ' +
-    'is reachable for a THROWN read or only a resolved-but-refused one.',
   'app/flows/[id]/run/[runId]/page.tsx':
     'Renders NotFound for an unknown run; no FetchErrorState/PageLoadError visible ' +
     'near the read in a quick scan — unverified.',
