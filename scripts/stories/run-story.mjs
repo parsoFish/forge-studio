@@ -177,12 +177,15 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // 7.6.51/7.6.71: set when a beat boundary ends the run on money — breached, or
   // gone blind — and the verdict below is RED in the halt's own words, not a beat's.
   let spendHalt = null;
-  // M7-D — set only for a fixture run (see `realBefore` above): `realGroundMoved`
-  // gates the CONTAINMENT FAILURE check below; `realGrounds` is the same
+  // M7-D — set only for a fixture run (see `realBefore` above). `realAfter`
+  // is hoisted (fix round 2) so the CONTAINMENT FAILURE check below can
+  // recompute `realGroundFenceVerdict` from the SAME two Maps AFTER the
+  // artifact has been written — the recompute is pure and in-memory (no
+  // filesystem I/O), so calling it twice costs nothing. `realGrounds` is the
   // fence verdict's evidence, carried into `result` so a run that reds on it
   // records WHY in its own `story.json`, not only on the console (D1 review
-  // I3/M3, brief item 7).
-  let realGroundMoved = [];
+  // I3/M3, brief item 7; fix round 2 narrows it to `{ moved }` only).
+  let realAfter = null;
   let realGrounds = null;
   const costs = story.ground?.realSpawn === true || (story.ground?.budget_usd ?? 0) > 0;
   // 7.6.52: BOTH NUMBERS PRINT BEFORE A DOLLAR IS SPENT, agreeing or not. A run
@@ -538,28 +541,34 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // read its own drift; tearing it down first would make that re-read see an
   // empty directory and report a false-clean run.
   //
-  // D1 review, I3 — the verdict is a REAL call to `realGroundFenceVerdict(`,
-  // not hand-rolled inline logic: deleting the D1 version's summary line, or
-  // its `.length > 0 -> return 1`, or the `keepProjects` spread above, all
-  // kept every pinned test green, because nothing exercised the requirement
-  // itself. `.ok` is read here — the actual gate `realGroundMoved.length > 0`
-  // below is exactly `!fenceVerdict.ok` restated, so the return the CONTAINMENT
-  // FAILURE section reaches really is driven by this verdict, not by an
-  // array length nobody connected to it.
+  // D1 review, I3 (fix round 2, T2 ruling 1) — this computes the verdict for
+  // the CONSOLE and for the ARTIFACT evidence only; it does NOT gate the exit
+  // code here. The actual `if (!fenceVerdict.ok) { … return 1 … }` — the
+  // literal, mutation-proof shape the door requires — lives further down,
+  // AFTER the artifact is written, recomputed from `realAfter` (hoisted
+  // above) rather than read off a variable this block set: a pure, in-memory
+  // recompute over two already-built Maps costs nothing, and it means a red
+  // run's `story.json` still carries this evidence instead of the return
+  // skipping the write that would have recorded it.
   if (realBefore !== null) {
     const dirs = realGroundDirs(ROOT, { ownProject: story.ground.project, worktrees: siblingDirs(ROOT) });
-    const realAfter = snapshotRealGrounds(dirs);
+    realAfter = snapshotRealGrounds(dirs);
     const fenceVerdict = realGroundFenceVerdict(realBefore, realAfter);
     for (const line of fenceVerdict.moved) console.error(`[stories] REAL GROUND MOVED ${line}`);
     // ALWAYS printed, even at zero — `forge-e8dn`'s own rule: a count that
     // prints only when it is bad is indistinguishable from a check that never
-    // ran, and this is the one line that proves the fence looked at all.
+    // ran, and this is the one line that proves the fence looked at all. The
+    // console keeps `hashed`/`trees` — only the ARTIFACT below narrows to
+    // `moved` (fix round 2, T2 ruling 2 / re-review N1).
     console.log(`[stories] ${fenceVerdict.summary}`);
-    if (!fenceVerdict.ok) realGroundMoved = fenceVerdict.moved;
-    // D1 review, M3/brief item 7 — the evidence rides into `story.json`, not
-    // only the console; set unconditionally (not just when red) so a CLEAN
-    // fixture run's artifact also states what it checked.
-    realGrounds = { hashed: fenceVerdict.hashed, trees: fenceVerdict.trees, moved: fenceVerdict.moved };
+    // D1 review, M3/brief item 7, narrowed by fix round 2 (T2 ruling 2,
+    // `forge-8vfn.26` class) — ONLY `moved` reaches `story.json`. `hashed`
+    // and `trees` count THIS HOST's worktrees, not the product: a clean
+    // fixture run on a stranger's checkout (1 hashed, 1 tree) would leave the
+    // SAME committed artifact dirty against a lane host with sixteen. Set
+    // unconditionally (not just when red) so a CLEAN fixture run's artifact
+    // also states what it checked — `moved` is simply `[]` there.
+    realGrounds = { moved: fenceVerdict.moved };
 
     // LAST: the fixture ground itself. `sweepProductFixtures` above kept it
     // (`keepProjects`) so the own-ground drift and this fence could both read
@@ -719,15 +728,29 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     );
     return 1;
   }
-  // M7-D — a FIXTURE run must never move a REAL ground. `realGroundMoved` is
-  // `[]` for a non-fixture story (`realBefore` was never computed), so this
-  // check is inert everywhere it does not apply.
-  if (realGroundMoved.length > 0) {
-    console.error(
-      `[stories] ${story.id}: CONTAINMENT FAILURE — ${realGroundMoved.length} real ground(s) moved during ` +
-      'this fixture run (named above as REAL GROUND MOVED). The run is RED regardless of its beats.',
-    );
-    return 1;
+  // M7-D — a FIXTURE run must never move a REAL ground. Fix round 2, T2
+  // ruling 1 — this is the literal, mutation-proof guard shape the door in
+  // `fixture-wiring.test.ts` requires: `const N = realGroundFenceVerdict(`
+  // bound to a name, `if (!N.ok)` immediately followed by a `{ … }` block
+  // that ITSELF contains `return 1` — not a nearby unrelated return the
+  // round-1 door was satisfied by (re-review I3). Recomputed from
+  // `realBefore`/`realAfter` (both already built above) rather than reading a
+  // variable the earlier block set: `realGroundFenceVerdict` is pure and
+  // in-memory, so the recompute costs nothing, and doing the gate HERE — after
+  // `result` above has already been written — means a red run's `story.json`
+  // still carries the `realGrounds` evidence instead of an early return
+  // skipping the write that would have recorded it. Guarded by
+  // `realBefore !== null`: a non-fixture story never had a `realAfter` to
+  // compare, and `realGroundFenceVerdict` requires two real Maps.
+  if (realBefore !== null) {
+    const fenceVerdict = realGroundFenceVerdict(realBefore, realAfter);
+    if (!fenceVerdict.ok) {
+      console.error(
+        `[stories] ${story.id}: CONTAINMENT FAILURE — ${fenceVerdict.moved.length} real ground(s) moved during ` +
+        'this fixture run (named above as REAL GROUND MOVED). The run is RED regardless of its beats.',
+      );
+      return 1;
+    }
   }
   const unowned = unownedEscapes(fence.escapes);
   const escaped = unowned.reduce((n, e) => n + e.paths.length, 0);
