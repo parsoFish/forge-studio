@@ -423,7 +423,12 @@ function runGateCapturing(
       return false;
     }
   }
-  const startedAt = Date.now();
+  // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is not
+  // monotonic on this host, so the timeout-vs-kill-signal classification
+  // below and the reported durationMs would be wrong independent of how long
+  // the gate command actually ran. No clock is injectable here (unlike
+  // RateLimitGate above) — plain substitution, no seam invented.
+  const startedAt = performance.now();
   let passed = false;
   let exitCode = 0;
   let stdout = '';
@@ -449,7 +454,7 @@ function runGateCapturing(
     // N10: killed by OUR OWN timeout — an environment failure (load, a hung
     // live call), not a work failure and not a broken gate. Node reports it as
     // code ETIMEDOUT (belt: any kill-signal death after the deadline elapsed).
-    const deadlineElapsed = options?.timeoutMs !== undefined && Date.now() - startedAt >= options.timeoutMs;
+    const deadlineElapsed = options?.timeoutMs !== undefined && performance.now() - startedAt >= options.timeoutMs;
     const killedBySignalRaw = !!e.signal && (e.status === null || e.status === undefined);
     if (e.code === 'ETIMEDOUT' || (killedBySignalRaw && deadlineElapsed)) {
       exitCode = -6; // synthetic — gate killed by timeout (environment, not work-failure)
@@ -464,7 +469,7 @@ function runGateCapturing(
         passed: false,
         timedOut: true,
         exitCode,
-        durationMs: Date.now() - startedAt,
+        durationMs: Math.round(performance.now() - startedAt),
         stdoutTail: tail(stdout, GATE_OUTPUT_MAX),
         stderrTail: tail(stderr, GATE_OUTPUT_MAX),
         command,
@@ -528,7 +533,7 @@ function runGateCapturing(
   onRun?.({
     passed,
     exitCode,
-    durationMs: Date.now() - startedAt,
+    durationMs: Math.round(performance.now() - startedAt),
     stdoutTail: tail(stdout, GATE_OUTPUT_MAX),
     stderrTail: tail(stderr, GATE_OUTPUT_MAX),
     command,

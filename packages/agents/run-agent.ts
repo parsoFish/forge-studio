@@ -417,7 +417,12 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
     },
   });
 
-  const startedAt = Date.now();
+  // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is not
+  // monotonic on this host, so the durationMs fallback below (when the spawn
+  // path reports none of its own) would not be an honest measurement. This
+  // is a distinct, narrower-scoped clock from ctx.heartbeatTimers below (that
+  // one is injectable for heartbeat since_ms; this one has no seam).
+  const startedAt = performance.now();
 
   // Step 2: harness safety — suppress the real spawn under dry-bridge / the
   // architect no-spawn seam, BEFORE any SDK call is made.
@@ -495,7 +500,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   }
 
   // Report + log the end event.
-  const durationMs = spawned.durationMs ?? Date.now() - startedAt;
+  const durationMs = spawned.durationMs ?? Math.round(performance.now() - startedAt);
 
   logger.emit({
     initiative_id: initiativeId,
