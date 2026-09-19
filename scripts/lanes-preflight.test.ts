@@ -26,6 +26,12 @@ const PREFIX = `lanespf${process.pid}-`;
 let dir: string;
 let rosterFile: string;
 let rosterCmd: string;
+// Fast, deterministic defaults for the three checks a test isn't exercising, so a case that
+// cares about (say) row 19b's DNS never also scans this host's REAL /proc or reads its own
+// ~/.claude.json — every call below still runs all five checks, since `preflight` always does.
+let defaultProcRoot: string;
+let defaultClaudeBin: string;
+let defaultClaudeJson: string;
 
 function envWithoutLanesVars(): NodeJS.ProcessEnv {
   return Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('LANES_')));
@@ -41,6 +47,10 @@ function lanes(args: string[], env: Record<string, string> = {}, timeoutMs = 150
       LANES_ROSTER_CMD: rosterCmd,
       LANES_SESSION_PREFIX: PREFIX,
       LANES_CONFIRM_TIMEOUT_S: '6',
+      LANES_PROC_ROOT: defaultProcRoot,
+      LANES_DNS_CMD: 'true',
+      LANES_CLAUDE_BIN: defaultClaudeBin,
+      LANES_CLAUDE_JSON: defaultClaudeJson,
       ...env,
     },
   });
@@ -105,6 +115,10 @@ before(() => {
   rosterFile = join(dir, 'roster.json');
   setRoster([]);
   rosterCmd = writeExec('roster', `#!/usr/bin/env bash\ncat '${rosterFile}'\n`);
+  defaultProcRoot = fakeProcRoot();
+  defaultClaudeBin = writeExec('default-claude', `#!/usr/bin/env bash\necho '9.9.9'\n`);
+  defaultClaudeJson = join(dir, 'default-claude.json');
+  writeFileSync(defaultClaudeJson, JSON.stringify({ lastOnboardingVersion: '9.9.9' }));
 });
 after(() => {
   if (dir) rmSync(dir, { recursive: true, force: true });
@@ -272,12 +286,15 @@ describe('lanes.sh preflight — row 71, T1 SOCKET', () => {
     const root = fakeProcRoot();
     setRoster([{ name: 't1', pid: 93003, kind: 'interactive', status: 'busy' }]);
     plantProc(root, 93003, { comm: 'claude', ppid: 1, rssKb: 1024 });
-    const realSockPath = join(dir, 'run-user-sock', '93003.sock');
-    mkdirSync(join(dir, 'run-user-sock'), { recursive: true });
+    // `os.tmpdir()` IS `/tmp` on this host, so a path under `dir` would (rightly) hit the /tmp
+    // branch — /dev/shm is a real, writable, non-/tmp mount, which is what this case is testing.
+    const shmDir = mkdtempSync(join('/dev/shm', 'lanes-preflight-'));
+    const realSockPath = join(shmDir, '93003.sock');
     writeFileSync(realSockPath, '');
     plantSocket(root, 93003, 555003, realSockPath);
 
     const r = lanes(['preflight', '--t1', 't1'], { LANES_PROC_ROOT: root });
+    rmSync(shmDir, { recursive: true, force: true });
 
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, new RegExp(`^preflight: T1 socket ${realSockPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} ok`, 'm'));
