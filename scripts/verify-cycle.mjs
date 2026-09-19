@@ -54,6 +54,8 @@
  *   --base-sha <sha>        base commit to reset the harness repo to (routine).
  *   --cost-ceiling <usd>    BINDS the run (threaded as FORGE_COST_CEILING_USD) and
  *                           fails the gate above it; the default only asserts.
+ *   --flow <id>             the flow stage 2 hands the plan to (default forge-develop);
+ *                           see verify-cycle-flow.mjs and verify-cycle-stage2.mjs.
  *   --require-live-evidence force the live-demo-evidence gate on (default: on for
  *                           known live-resource projects). --no-live-evidence opts out.
  *   --force-reset           allow resetting a repo with uncommitted changes.
@@ -78,21 +80,30 @@ import { harnessCeilingEnv } from './verify-cycle-ceiling.mjs';
 import { classifyServeStageOutcome } from './verify-cycle-stage-outcome.mjs';
 import { classifyCriticFindings } from './verify-cycle-plan-gate.mjs';
 import { sumRunCost } from './verify-cycle-cost.mjs';
+import { flowDeclaresMergedReflect, flowDefinition, knownFlowIds, resolveFlowSelection } from './verify-cycle-flow.mjs';
+import { createStageTwo } from './verify-cycle-stage2.mjs';
 import {
   DEFAULT_PROJECT,
   buildOutcomeChecks,
-  classifyReflectorProgress,
 } from './lib/verify-outcomes.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 const argv = process.argv.slice(2);
+const USAGE = [
+  'usage: node scripts/verify-cycle.mjs <run-handle> --project <name> [--idea-file <path>] [--base-sha <sha>] [--cost-ceiling <usd>] [--flow <id>] [--require-live-evidence|--no-live-evidence] [--force-reset] [--send-back]',
+  '  --flow <id>   the flow stage 2 hands the planned initiative to (default forge-develop); any flow under studio/flows/ except the plan flow',
+].join('\n');
+if (argv.includes('--help') || argv.includes('-h')) {
+  console.log(USAGE);
+  process.exit(0);
+}
 // The positional arg is the RUN HANDLE — it names the recording output dir and is
 // the default idea source (the corpus manifest body). The REAL initiativeId is
 // minted by the architect and discovered after the plan gate.
 const RUN_HANDLE = argv.find((a) => !a.startsWith('--'));
 if (!RUN_HANDLE) {
-  console.error('usage: node scripts/verify-cycle.mjs <run-handle> --project <name> [--idea-file <path>] [--base-sha <sha>] [--cost-ceiling <usd>] [--require-live-evidence|--no-live-evidence] [--force-reset] [--send-back]');
+  console.error(USAGE);
   process.exit(1);
 }
 function flag(name, def) {
@@ -119,6 +130,17 @@ const { ceilingUsd: COST_CEILING, bound: COST_CEILING_BINDS, env: COST_CEILING_E
 const REQUIRE_LIVE_EVIDENCE =
   argv.includes('--require-live-evidence') || (IS_LIVE_PROJECT && !argv.includes('--no-live-evidence'));
 const FORCE_RESET = argv.includes('--force-reset');
+// Stage 2's flow and door — validated here, before anything boots, so a typo
+// never falls back to the develop flow on a funded run.
+let FLOW;
+try {
+  FLOW = resolveFlowSelection(argv, knownFlowIds(FORGE_ROOT));
+} catch (err) {
+  console.error(`verify-cycle: ${err.message}`);
+  process.exit(2);
+}
+const FLOW_REFLECTS = flowDeclaresMergedReflect(flowDefinition(FLOW.flowId));
+const stageTwo = createStageTwo({ forgeRoot: FORGE_ROOT, flow: FLOW, flowReflects: FLOW_REFLECTS, bridgePost, log, sleep });
 
 const OUT_DIR = join(FORGE_ROOT, 'demos/verify', RUN_HANDLE);
 const VIDEO_DIR = join(OUT_DIR, 'video');
@@ -431,7 +453,7 @@ function assessOutcomes({ finalStatus, cost, repoPath, cycleId, initiativeId, pr
   // /api/cycles status read is unreliable once the cycle has completed + moved terminal (it
   // returned null even on cleanly-merged cycles). buildOutcomeChecks accepts either signal.
   const manifestInDone = existsSync(join(FORGE_ROOT, '_queue', 'done', `${initiativeId}.md`));
-  const reflectTheme = reflectWroteBrainTheme(project, runStartMs);
+  const reflectTheme = FLOW_REFLECTS ? reflectWroteBrainTheme(project, runStartMs) : undefined;
   // Live-resource projects: assert the demo carries real REST evidence, so a
   // green-unit-gate-but-no-live-proof cycle fails the gate (demos-are-visual-evidence).
   const liveEvidence = REQUIRE_LIVE_EVIDENCE ? liveEvidenceFromDemo(repoPath, initiativeId, cycleId) : undefined;
@@ -852,23 +874,6 @@ async function driveArchitect(page, watch, { project, idea, repoPath }) {
   return { initiatives: inits, sessionId };
 }
 
-/** Stage 2 hand-off — POST /api/develop/start to repoint the initiative onto
- *  forge-develop (same cycle_id, reusing the architect worktree + work items).
- *  plan-everything-before-kickoff: the endpoint is now batch-shaped
- *  ({initiativeIds: string[]} -> {ok, results}); this caller sends a single-
- *  id batch and unwraps the one result. */
-async function handoffToDevelop(bridgeUrl, initiativeIds) {
-  log(`hand-off — POST /api/develop/start [${initiativeIds.join(', ')}]…`);
-  const r = await bridgePost(bridgeUrl, '/api/develop/start', { initiativeIds });
-  if (!r.ok) throw new Error(`develop start failed (${r.status}): ${JSON.stringify(r.body)}`);
-  const results = r.body?.results ?? [];
-  for (const result of results) {
-    if (!result.ok) throw new Error(`develop start failed for ${result.initiativeId}: ${JSON.stringify(result)}`);
-    log(`develop run enqueued: ${result.initiativeId} (cycle_id ${result.cycleId ?? '?'})`);
-  }
-  return results;
-}
-
 /** Spawn `forge serve --once` for one spine stage, capturing phase-transition
  *  frames while it runs, and resolve when it exits. */
 async function runServeStage(page, label) {
@@ -902,43 +907,6 @@ async function runServeStage(page, label) {
   const outcome = classifyServeStageOutcome(captured);
   for (const e of outcome.errors) log(`serve stage (${label}) FAILED: ${e}`);
   return outcome;
-}
-
-/** Wait for the reflector to FINISH or DIE (`reflector.end` / `cycle.reflection-lost`).
- *  The bridge fires finalize→reflect detached after the approve; the old harness
- *  tore the bridge down ~3 s later, killing reflect mid-start. Bounded; true only
- *  when reflection genuinely `ended`.
- *
- *  M0-A round-2 defect B: scanning only for `reflector.end` meant a reflector that
- *  died loudly burned the FULL deadline and then logged the neutral "not seen
- *  before deadline" — slow-looking rather than dead (12 of run 1's 47 minutes).
- *  `classifyReflectorProgress` returns the moment the outcome is known, and a
- *  `lost` is always named with its cause. */
-async function waitForReflectorEnd(cycleId, deadlineMs) {
-  const logFile = join(FORGE_ROOT, '_logs', cycleId, 'events.jsonl');
-  let loggedStart = false;
-  while (Date.now() < deadlineMs) {
-    let lines = [];
-    try {
-      lines = readFileSync(logFile, 'utf8').split('\n');
-    } catch { /* log not yet present */ }
-    const progress = classifyReflectorProgress(lines);
-    if (progress.state === 'started' && !loggedStart) {
-      loggedStart = true;
-      log('reflector.start seen — waiting for reflector.end…');
-    }
-    if (progress.state === 'ended') {
-      log('reflector.end seen — reflection complete');
-      return true;
-    }
-    if (progress.state === 'lost') {
-      log(`reflection LOST (not merely slow) — ${progress.detail}`);
-      return false;
-    }
-    await sleep(3000);
-  }
-  log('reflector.end not seen before deadline');
-  return false;
 }
 
 let activeWatchProc = null;
@@ -983,6 +951,7 @@ function runBoundaryCheck() {
 }
 
 async function main() {
+  log(`stage 2 flow: ${FLOW.flowId} via ${FLOW.door === 'flow-run' ? `POST /api/flows/${FLOW.flowId}/run` : 'POST /api/develop/start'}; reflect ${FLOW_REFLECTS ? 'declared (on: merged)' : 'NOT declared — no reflect wait, no reflect gate row'}`);
   const runStartMs = Date.now();
 
   // Boundary baseline — captured before anything moves. A hard git failure
@@ -1061,7 +1030,7 @@ async function main() {
     await watch.stop?.();
     process.exit(1);
   }
-  await handoffToDevelop(watch.bridgeUrl, initiatives.map((i) => i.initiativeId));
+  await stageTwo.handoff(watch.bridgeUrl, initiatives.map((i) => i.initiativeId));
   const remaining = new Map(initiatives.map((i) => [i.initiativeId, i]));
   const approveFailures = new Map();
   let sendBackDone = !SEND_BACK;
@@ -1114,10 +1083,7 @@ async function main() {
         }
         continue;
       }
-      // The bridge merges + runs finalize/reflect detached — wait for
-      // reflector.end before counting this initiative as landed (S9).
-      log(`verdict approved for ${init.initiativeId} — waiting for finalize + reflector.end…`);
-      await waitForReflectorEnd(init.cycleId, Date.now() + 12 * 60_000);
+      await stageTwo.waitLanded(init, Date.now() + 12 * 60_000);
       await sleep(2000);
       await captureFrame(page, `final-state-${init.initiativeId}`);
       remaining.delete(init.initiativeId);
@@ -1208,6 +1174,7 @@ async function main() {
       workItems: r.wi,
     })),
     project: PROJECT,
+    flow: { id: FLOW.flowId, door: FLOW.door, reflectExpected: FLOW_REFLECTS },
     baseSha: BASE_SHA,
     costUsd: Number(totalCost.toFixed(4)),
     costCeilingUsd: COST_CEILING,
