@@ -24,7 +24,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -640,5 +640,44 @@ test('merge-conflict requeue through the REAL gate wiring: the iter-0 sharp-gate
     assert.equal(seen.length, 3, 'attempt 1 = one turn; attempt 2 = two turns');
   } finally {
     f.cleanup();
+  }
+});
+
+test('teardown survives a straggler still writing into origin.git (bd forge-8vfn.5.55, known-flakes #9)', async () => {
+  // `f.cleanup()` is `rmSync(root, {recursive:true,force:true})` — `force`
+  // suppresses ENOENT (already gone), never ENOTEMPTY. In CI this raced a
+  // git child (e.g. an auto-gc `receive-pack` decided to detach —
+  // `gc.autoDetach`'s own default) still writing into `origin.git` after
+  // this fixture's own `git` calls had already returned. Reproduced here
+  // with an INJECTED interleaving rather than hoping for CI load: a real,
+  // synchronized concurrent writer into the SAME `origin.git/objects/pack`
+  // directory `mergeAndPublish` pushes into, timed via a ready-file so the
+  // race lands deterministically (15/15 in isolation) instead of by chance.
+  const f = setup('INIT-2026-09-19-teardown-race');
+  try {
+    const packDir = join(f.origin, 'objects', 'pack');
+    const readyFile = join(f.root, '.straggler-ready');
+    const writerSrc = [
+      "const fs = require('node:fs');",
+      `fs.writeFileSync(${JSON.stringify(readyFile)}, 'ready');`,
+      'const end = Date.now() + 400;',
+      'let i = 0;',
+      `while (Date.now() < end) { try { fs.writeFileSync(${JSON.stringify(packDir)} + '/straggler-' + (i++), 'x'); } catch {} }`,
+    ].join('\n');
+    const straggler = spawn(process.execPath, ['-e', writerSrc], { detached: true, stdio: 'ignore' });
+    straggler.unref();
+
+    const deadline = Date.now() + 2000;
+    while (!existsSync(readyFile) && Date.now() < deadline) { /* spin — wait for the straggler to actually be running */ }
+    assert.ok(existsSync(readyFile), 'fixture precondition: the straggler must be running before teardown races it');
+
+    // Stand-in for whatever real assertions preceded teardown in the other
+    // scenarios above — the point under test is what happens NEXT.
+    assert.ok(existsSync(f.cycleWorktreePath));
+  } finally {
+    // Must not throw: this test's own assertions already passed, and a
+    // teardown-only ENOTEMPTY racing a straggler must not flip that to a
+    // failure (COMMON §15.74's second remedy shape).
+    await f.cleanup();
   }
 });
