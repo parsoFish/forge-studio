@@ -36,7 +36,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import matter from 'gray-matter';
 
-import { isStudioAgent, loadAgentDefinition, listStarterAgents } from '@forge/agents/studio/agent-registry.ts';
+import { isStudioAgent, isUnfilteredStudioAgent, loadAgentDefinition, listStarterAgents } from '@forge/agents/studio/agent-registry.ts';
 import { loadFlowDefinition, loadStarterFlow } from '@forge/flows/studio/flow-registry.ts';
 import { discoverProjects } from '@forge/kernel';
 import { loadKbDescriptor } from '@forge/knowledge/studio/kb-descriptor.ts';
@@ -175,9 +175,18 @@ export function runStudioLint(root: string): StudioLintResult {
         });
       }
 
+      // forge-e3v — `isStudio` (the ROSTER gate, library !== false) decides
+      // flow-composability (agentMap, below); `isUnfiltered` (WITHOUT that
+      // gate) decides whether this is a real, loadable agent def at all.
+      // Skipping validateAgent on the roster gate meant every library:false
+      // agent (brain-fix, creation-agent, instructions-creator,
+      // onboarding-agent) got NO surface/materials/loopStrategy/etc check —
+      // only validateLibraryFlag ran for them.
       let isStudio: boolean;
+      let isUnfiltered: boolean;
       try {
         isStudio = isStudioAgent(skillMdPath);
+        isUnfiltered = isUnfilteredStudioAgent(skillMdPath);
       } catch (err) {
         findings.push({
           level: 'error',
@@ -187,11 +196,11 @@ export function runStudioLint(root: string): StudioLintResult {
         });
         continue;
       }
-      if (!isStudio) continue; // legacy skill — fine
+      if (!isUnfiltered) continue; // not a loadable agent def at all — fine
 
       try {
         const def = loadAgentDefinition(skillMdPath);
-        agentMap.set(def.slug, def);
+        if (isStudio) agentMap.set(def.slug, def); // roster-only: a flow node may reference only a composable agent
         findings.push(...validateAgent(def, validModelIds, validGuardIds));
       } catch (err) {
         findings.push({
