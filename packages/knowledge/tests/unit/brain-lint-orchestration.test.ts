@@ -25,6 +25,7 @@ import {
 } from '../../brain-lint.ts';
 
 import { buildBrainFixture, cleanup, cf, writeProjectTheme } from './test-fixtures/brain-lint.ts';
+import { gitCheckout } from './test-fixtures/brain-lint-truth.ts';
 
 test('classifyFinding: AUTO tier — deterministic fixes', () => {
   assert.equal(classifyFinding(cf('checkIndexSync', 'not listed in category index: brain/cycles/patterns.md')).resolution, 'auto');
@@ -155,14 +156,22 @@ test('CHECK_NAMES drift guard: a maximal fixture tripping every check emits find
     // isolated) with a CURRENT theme citing a path absent from its ground
     // clone, and the clone itself PRESENT (checkout:'present' — an absent
     // clone would make checkThemeTruth a deliberate no-op, never firing).
+    // History-backed ruling (fix round 2): a plain (non-git) clone reports
+    // history:'absent' and checkThemeTruth never fires for it — so the cited
+    // path must be a REAL git history (committed, then deleted), not a
+    // never-real filesystem gap, or this fixture stops tripping the check.
     const truthThemesDir = join(root, 'brain', 'projects', 'max-truth-project', 'themes');
     mkdirSync(truthThemesDir, { recursive: true });
     writeFileSync(
       join(truthThemesDir, 'max-truth-theme.md'),
       '---\ntitle: Max Truth\ndescription: d\ncategory: pattern\ncreated_at: 2026-01-01\nupdated_at: 2026-01-01\n---\n\nCites `gone/max-truth-missing.go`.\n',
     );
-    mkdirSync(join(root, 'projects', 'max-truth-project'), { recursive: true });
-    writeFileSync(join(root, 'projects', 'max-truth-project', 'placeholder.txt'), 'present but unrelated\n');
+    gitCheckout(
+      root,
+      'max-truth-project',
+      { 'gone/max-truth-missing.go': 'present but unrelated\n' },
+      { deleteAfterCommit: ['gone/max-truth-missing.go'] },
+    );
 
     // checkReflectorLoss — a `_queue/done/` manifest with no matching archive
     // (brain/cycles/_raw/ is never created by buildBrainFixture, so ANY
