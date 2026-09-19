@@ -173,6 +173,42 @@ const FIXTURE_SESSION_KINDS_YAML = `
     phases:
       - { phase: analyzing, step: agent, next: awaiting-review }
       - { phase: awaiting-review, step: noop }
+- id: test-kind-structured
+  agent: project-brain-builder
+  title: Interactive Runner Test Kind (bead 8vfn.6.6 item 1 - structured style)
+  stages: [analyzing]
+  defaultStage: analyzing
+  artifact: { kind: file-package, label: "Test artifact" }
+  turnSpec:
+    kindDir: _interactivetest-structured
+    style: structured
+    schema: interview-qa
+    phases:
+      - { phase: analyzing, step: agent, writes: [staging], next: awaiting-review }
+      - { phase: awaiting-review, step: noop }
+- id: test-kind-structured-no-schema
+  agent: project-brain-builder
+  title: Interactive Runner Test Kind (structured style, no schema declared)
+  stages: [analyzing]
+  defaultStage: analyzing
+  artifact: { kind: file-package, label: "Test artifact" }
+  turnSpec:
+    kindDir: _interactivetest-structured-noschema
+    style: structured
+    phases:
+      - { phase: analyzing, step: agent, next: awaiting-review }
+- id: test-kind-structured-bad-schema
+  agent: project-brain-builder
+  title: Interactive Runner Test Kind (structured style, unresolvable schema id)
+  stages: [analyzing]
+  defaultStage: analyzing
+  artifact: { kind: file-package, label: "Test artifact" }
+  turnSpec:
+    kindDir: _interactivetest-structured-badschema
+    style: structured
+    schema: totally-not-a-real-schema-id
+    phases:
+      - { phase: analyzing, step: agent, next: awaiting-review }
 `;
 // NOTE (Finding 1 fixtures): both "-ghost-next-*" rows above declare a
 // `next` naming a phase absent from their OWN `phases` list. This is
