@@ -450,47 +450,35 @@ test('control (f) [meta]: join(forgeRoot, slug) — a non-root-like leaf folded 
  * one of these sites and not updating this array fails the test (a stale
  * entry), same as a genuinely new violation appearing fails it.
  *
- * Six rows survive the name-based refinement (down from 69 under the
- * unrefined v1 rule). Per-row judgement, T2 owns the final call on each:
+ * Two rows remain after two of the three forge-mlk follow-up fixes landed
+ * (down from six after the name-based refinement, sixty-nine before it).
+ * Per-row judgement, T2 owns the final call on each:
  *   - `packages/flows/cycle.ts::guardedReadFile::dirname(logFilePath)` —
  *     CONFIG-DERIVED. `logFilePath` is `logger.logFilePath`, the cycle
  *     logger's own internally-computed path, never request data.
- *   - `packages/library/bridge-studio-authoring-template.ts` and
- *     `packages/library/bridge-studio-templates.ts` (×2) —
- *     `resolve(forgeRoot, ...dirSegments)` / `resolve(ctx.forgeRoot,
- *     ...dirSegments)` — CONFIG-DERIVED. `dirSegments = WRITABLE_CATEGORY_DIRS[category]`,
- *     a lookup into a fixed exported const map keyed by an already-validated
- *     category enum — a false positive of the naming heuristic (the local is
- *     a literal array, just not named `*Dir`/`*Root`).
- *   - `packages/projects/bridge-studio-project-onboard.ts::resolveGuardedPath::projectRoot` —
- *     REQUEST-DERIVED, reported not fixed. `projectRoot = resolve(ctx.forgeRoot,
- *     repoPathRel)` where `repoPathRel` reads straight from the request body
- *     (`b['repoPath']`, defaulting to `` `projects/${id}` ``) with no shape
- *     validation before the `resolve()` call. A separate, purpose-built
- *     check (`deps.isContainedProjectRepoPath`) runs before this
- *     `resolveGuardedPath` call and is documented as a genuine per-segment
- *     identity walk, not a lexical prefix test — so this may already be
- *     mitigated — but it is a DIFFERENT function than `resolveGuardedPath`
- *     itself, and this ratchet cannot verify its soundness. Flagging, not
- *     fixing, per this file's header.
  *   - `packages/projects/contract-stages.ts::guardedFile::projectDir` —
- *     REQUEST-DERIVED, reported not fixed. `projectDir =
- *     resolveContainedProjectDir(projectsRoot, projectId)`, and `projectId`
- *     is a route parameter. `resolveContainedProjectDir` (same file, line
- *     102) checks containment via `realpathSync` + a lexical
- *     `.startsWith()` comparison — the "somewhere under root" shape
- *     `path-guard.ts`'s own docstring names as insufficient (escape shape 3:
- *     a symlinked id directory pointing at a DIFFERENT real object under the
- *     SAME root passes a startsWith check while landing on the wrong
- *     object) — not `resolveGuardedPath`'s per-segment IDENTITY walk. Worth
- *     a closer look; not fixed here.
+ *     REQUEST-DERIVED, PARKED, not fixed — a genuine conflict, not an
+ *     oversight. `projectDir = resolveContainedProjectDir(projectsRoot,
+ *     projectId)`; `resolveContainedProjectDir` (same file, line 102) checks
+ *     containment via `realpathSync` + a lexical `.startsWith()` — the
+ *     "somewhere under root" shape that accepts a symlinked id directory
+ *     pointing at a DIFFERENT real object under the SAME root (escape shape
+ *     3). That acceptance is NOT an oversight: `contract-stages.test.ts`'s
+ *     AT-28 ("FALSE-REJECTION CONTROL") requires EXACTLY this shape —
+ *     `projectId` a RELATIVE symlink resolving back inside `projectsRoot` —
+ *     to be ACCEPTED, and this module's own docstring states the conflict
+ *     explicitly: swapping in `resolveGuardedPath`'s stricter per-segment
+ *     IDENTITY check would reject AT-28's case outright. Replacing the
+ *     guard, as this row's shape suggests, breaks a deliberately-designed,
+ *     tested acceptance; T2 must rule on AT-28 (retire it, or accept the
+ *     row) before this one moves. Two rows fixed since the six-row baseline
+ *     (bridge-studio-project-onboard.ts's `projectRoot`, now routed through
+ *     `resolveGuardedPath(ctx.forgeRoot, repoSegments)`; the two
+ *     `WRITABLE_CATEGORY_DIRS`-as-root rows in `packages/library`, now
+ *     spread as segments) — see their own commits for detail.
  */
 const BASELINE_CALLER_BUILT_ROOT_KEYS: readonly string[] = [
   "packages/flows/cycle.ts::guardedReadFile::dirname(logFilePath)",
-  "packages/library/bridge-studio-authoring-template.ts::resolveGuardedPath::resolve(forgeRoot, ...dirSegments)",
-  "packages/library/bridge-studio-templates.ts::resolveGuardedPath::resolve(ctx.forgeRoot, ...dirSegments)",
-  "packages/library/bridge-studio-templates.ts::resolveGuardedPath::resolve(ctx.forgeRoot, ...dirSegments)",
-  "packages/projects/bridge-studio-project-onboard.ts::resolveGuardedPath::projectRoot",
   "packages/projects/contract-stages.ts::guardedFile::projectDir",
 ].slice().sort();
 
