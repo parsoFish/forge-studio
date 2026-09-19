@@ -54,6 +54,7 @@ import {
 import { runConcurrentDispatch, type DispatchOutcome } from '@forge/flows/wi-dispatch-scheduler.ts';
 import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '@forge/projects/project-config.ts';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import { resolveWiCostBudgetUsd, makeCostCeilingCheck, isCostCeilingHalt } from './dev-cost-bound.ts';
 
 /**
  * Wipe the Ralph scratch files (PROMPT.md / AGENT.md / fix_plan.md) so the
@@ -74,11 +75,9 @@ function wipeRalphScratch(worktreePath: string): void {
 }
 
 /**
- * Defaults for the live Ralph loop. Per CONTRACTS.md C19, the per-WI $1.0 USD
- * cap that previously lived here has been REMOVED — iteration cap is the
- * only bound on the dev-loop. Cost is still logged per event for telemetry,
- * but no $-threshold gate exists. The per-iteration turn cap stays as a
- * runtime safety bound (not a budget).
+ * Defaults for the live Ralph loop. Iteration cap bounds a WI's own turns;
+ * the cycle's cost ceiling is the CROSS-WI bound (dev-cost-bound.ts,
+ * `costCeilingCheck` below) — a runtime safety cap, not a quality gate.
  */
 const DEV_LIVE_DEFAULT_ITERATIONS_PER_WI = 5;
 // Per-iteration tool-call cap — a SAFETY BACKSTOP, not the working bound.
@@ -567,10 +566,8 @@ export async function runDeveloperLoop(
       iterationBudget: wi.estimated_iterations > 0
         ? Math.max(wi.estimated_iterations, DEV_LIVE_DEFAULT_ITERATIONS_PER_WI)
         : DEV_LIVE_DEFAULT_ITERATIONS_PER_WI,
-      // Per CONTRACTS.md C19: no $ cap. Carries through to the prompt header
-      // as Infinity so the agent sees "no $ ceiling — iteration cap is the
-      // only bound".
-      costBudgetUsd: Number.POSITIVE_INFINITY,
+      // M7-A: real remaining cycle budget (Infinity only if unconfigured).
+      costBudgetUsd: resolveWiCostBudgetUsd(input),
     });
 
     const tallyingQueryFn: QueryFn = ({ prompt, options }) => {
@@ -617,7 +614,6 @@ export async function runDeveloperLoop(
           return hooks !== undefined ? { hooks } : {};
         })(),
         maxTurnsPerIteration: DEV_LIVE_MAX_TURNS_PER_ITERATION,
-        // Per CONTRACTS.md C19: no $ cap on the per-WI Ralph.
         queryFn: tallyingQueryFn,
         // R2-03-F4: chain the node wedge-kill into this WI's Ralph iterations.
         ...(signal ? { externalSignal: signal } : {}),
@@ -670,9 +666,8 @@ export async function runDeveloperLoop(
           worktreePath: wiWorktree.path,
           initiativeBudget: {
             iterations: Math.max(wi.estimated_iterations, DEV_LIVE_DEFAULT_ITERATIONS_PER_WI),
-            // Per CONTRACTS.md C19: no $ cap. Pass Infinity so the runner's
-            // cost-budget stop condition never fires.
-            usd: Number.POSITIVE_INFINITY,
+            // M7-A: real remaining cycle budget; costCeilingCheck below is the cross-WI backstop.
+            usd: resolveWiCostBudgetUsd(input),
           },
           brainQueryResults: '',
           cycleId: logger.cycleId,
@@ -733,6 +728,8 @@ export async function runDeveloperLoop(
           // re-review #1: stop early if the gate command can't RUN (broken
           // gate) rather than iterating against it and burning the budget.
           gateErrored: () => lastGateErrored,
+          // M7-A: cross-WI cost-ceiling halt (dev-cost-bound.ts) — AC4.
+          costCeilingCheck: makeCostCeilingCheck(input),
           // G1 rescope (plan item 2.6): the autocommit safety net stays, but
           // when it fires the agent's commit-discipline failure becomes a
           // distinct, greppable event instead of being silently absorbed —
@@ -944,7 +941,8 @@ export async function runDeveloperLoop(
         }
       }
     } else {
-      finalStatus = 'failed';
+      // M7-A: a cost-ceiling halt settles 'pending' (resumable), not 'failed'.
+      finalStatus = isCostCeilingHalt(result) ? 'pending' : 'failed';
     }
     if (!requeueForMergeConflict && finalStatus !== 'complete') {
       writeWorkItemStatus(specPath, finalStatus);
@@ -989,6 +987,8 @@ export async function runDeveloperLoop(
         // it cascades to dependents the SAME way (see `settleWiOutcome`
         // below + prerequisiteBlockage's environment-failure class).
         ...(mergeConflict ? { failure_kind: 'merge-conflict', merge_detail: mergeDetail } : {}),
+        // M7-A: names the cost ceiling, reusing dispatchWi's failure_kind.
+        ...(isCostCeilingHalt(result) ? { failure_kind: 'cost-ceiling' } : {}),
       },
     });
 
@@ -1092,11 +1092,11 @@ export async function runDeveloperLoop(
         id: wi.work_item_id,
         status: finalStatus,
         result,
-        // A merge conflict cascades to dependents the SAME way an environment
-        // failure does (they stay pending, not failed) — prerequisiteBlockage
-        // generalizes over this single flag regardless of which non-work
-        // reason set it.
-        ...(environmentFailure || mergeConflict ? { environment: true } : {}),
+        // A merge conflict (or a cost-ceiling halt) cascades to dependents the
+        // SAME way an environment failure does (they stay pending, not
+        // failed) — prerequisiteBlockage generalizes over this single flag
+        // regardless of which non-work reason set it.
+        ...(environmentFailure || mergeConflict || isCostCeilingHalt(result) ? { environment: true } : {}),
       });
     }
     } finally {
@@ -1780,7 +1780,7 @@ export function writeMergeConflictFeedback(
  * branch sync. The unifier reuses the Ralph runner with:
  *
  *   - System prompt: `buildUnifierSystemPrompt()` (SKILL.md + Ralph discipline)
- *   - Iteration cap: diff-scaled (per CONTRACTS.md C19; no $ cap)
+ *   - Iteration cap: diff-scaled (the unifier node was later retired)
  *   - Quality gate: a composed `unifierQualityGate` checking all five
  *     gates (initiative, demo, pr-self-contained, branches-in-sync, delivery).
  *
