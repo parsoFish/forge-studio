@@ -305,7 +305,13 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
   for (;;) {
     const observed = await readObserved(page, beat, alsoWanted);
     const seen = resolveExpectations(beat.expect.data, observed);
-    if (wanted.every(([attr, want]) => Object.hasOwn(seen, attr) && answers(seen[attr], want))) return null;
+    // T1 1231 — a declared terminal is a CONDITION: the watch is read BEFORE
+    // completion, and a beat that declares one is not done until it is reached
+    // (S10 run 22 went green on its expectation 0.5 s before its cycle ran).
+    const watching = cycleWatch !== null && sessionScope === null;
+    const stop = watching ? cycleWatch(runId, anchorMs ?? startedAt) : null;
+    const terminalHeld = !watching || cycleWatch.reached !== false;
+    if (terminalHeld && wanted.every(([attr, want]) => Object.hasOwn(seen, attr) && answers(seen[attr], want))) return null;
     // `wait: { for: 'settle', key, while }` — T1 ruling 621(ii), bought by A's
     // S1 beat 3.
     //
@@ -320,7 +326,7 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
     // it is willing to sit through; the moment the key holds anything else,
     // this stops and lets the verdict say what it actually saw. A beat can
     // never silently wait out a value it should have failed on.
-    if (settle !== null) {
+    if (terminalHeld && settle !== null) {
       const got = seen[settle.key] ?? observed.data?.[settle.key];
       if (got !== undefined && got !== settle.while) return null;
     }
@@ -364,8 +370,7 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
     // fires at a fixed 180 s and would BE the verdict on a short bound. This
     // one carries no fixed interval — it reads what is on disk — so it is never
     // the bound, only an earlier exit.
-    if (cycleWatch !== null && sessionScope === null) {
-      const stop = cycleWatch(runId, anchorMs ?? startedAt);
+    if (watching) {
       if (stop !== null) {
         return Object.freeze({
           afterMs: Date.now() - startedAt,
@@ -432,7 +437,18 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
         return Object.freeze({ afterMs: Date.now() - startedAt, why, stoppedBy: 'runner' });
       }
     }
-    if (Date.now() >= deadline) return null;
+    if (Date.now() >= deadline) {
+      // Never null for an unreached terminal: the caller judges null on the LIVE
+      // page, and an expectation that answered from t = 0 would read green.
+      if (!terminalHeld) {
+        return Object.freeze({
+          afterMs: Date.now() - startedAt,
+          why: `the declared terminal ${cycleWatch.wantState} was never reached in ${timeoutMs} ms — last seen: ${cycleWatch.lastSeen}.`,
+          stoppedBy: 'runner',
+        });
+      }
+      return null;
+    }
     await new Promise((resolve) => setTimeout(resolve, CONSEQUENCE_POLL_MS));
   }
 }
