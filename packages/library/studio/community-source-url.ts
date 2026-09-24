@@ -55,6 +55,7 @@ export type CommunityUpstream =
 const GITHUB_SEGMENT_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 /** npm package-name grammar (unscoped part). Lowercase by npm's own rule. */
 const NPM_NAME_RE = /^[a-z0-9][a-z0-9._-]*$/;
+export const HTTP_URL_RE = /^https?:\/\//; // sourceUrl scheme guard (forge-p2zf), shared by the write route and lint
 
 /** True iff `url` parses AND its ORIGIN is exactly one of the three allowed
  *  API origins. Origin covers scheme + host + port, so `http://`, a

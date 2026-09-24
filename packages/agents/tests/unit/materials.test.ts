@@ -77,6 +77,11 @@ describe('MATERIAL_KINDS', () => {
     });
     assert.equal(MATERIAL_KINDS[0], 'images');
   });
+
+  it('(forge-ni3) is the SAME binding as @forge/contracts\' MATERIAL_KINDS, not a hand-kept mirror', async () => {
+    const { MATERIAL_KINDS: fromContracts } = await import('@forge/contracts');
+    assert.equal(MATERIAL_KINDS, fromContracts, 'materials.ts must re-export the contracts binding, never re-declare its own copy');
+  });
 });
 
 // ---------------------------------------------------------------------------

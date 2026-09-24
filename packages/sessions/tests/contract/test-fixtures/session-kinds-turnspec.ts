@@ -31,7 +31,11 @@ export function wellFormedTurnSpec(): Record<string, unknown> {
       // APPROVE): approve ALSO needs an operator-supplied `id` beyond
       // `verdict` itself — same lockstep reasoning.
       { phase: 'awaiting-review', step: 'noop', awaits: 'verdict', verdicts: ['approve', 'revise', 'reject'], requires: ['id'] },
-      { phase: 'committing', step: 'finalize', finalizer: 'copyStagingToLibrary', next: 'committed' },
+      // stagingDirName (forge-7m2): the real, live committing row now names
+      // the dir its finalizer reads FROM (the read-side twin of
+      // `analyzing`'s `writes: ['staging']` above) — kept in lockstep here
+      // so this literal stays a truthful mirror of the checked-in yaml.
+      { phase: 'committing', step: 'finalize', finalizer: 'copyStagingToLibrary', stagingDirName: 'staging', next: 'committed' },
       { phase: 'committed', step: 'terminal' },
       // W7-C2 — reject's terminal landing row.
       { phase: 'rejected', step: 'terminal' },

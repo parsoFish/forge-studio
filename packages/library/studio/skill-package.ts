@@ -11,8 +11,8 @@
  */
 
 import { createHash } from 'node:crypto';
-import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 import matter from 'gray-matter';
 
 // Every matter() parse call below passes a (possibly empty) options object.
@@ -96,19 +96,18 @@ export function readSkillPackage(forgeRoot: string, id: string): PackageFile[] {
   // safe only because of what its callers happen to do is a landmine, and this
   // one feeds `repinSkillPackage`'s `contentHash`.
   //
-  // RESIDUAL, and the consequence named rather than left as a mechanism: this
-  // guards the walk's ROOT. Entries INSIDE the package are classified with
-  // `Dirent`, which does not follow symlinks, so a symlinked leaf is neither
-  // file nor directory and is skipped. It cannot redirect a read — but it drops
-  // out of `contentHash`, and `contentHash` is a TRUST GATE: `skill-trust.ts`
-  // defines `needs-review` as "recomputed hash differs (someone edited the
-  // package after approval)". So a symlink added to an approved package evades
-  // the one mechanism built to catch post-approval tampering, and the skill
-  // stays `ready` with the extra content sitting beside it on disk. That is
-  // worse than "a file is missing from a hash", which is why it is written out
-  // here. `installSkillPackage`'s `walkPackageDir` realpaths every entry and
-  // REFUSES; bringing this walk to that standard is bead `forge-8vfn.5.35`,
-  // filed rather than folded in because it changes what a package hash means.
+  // forge-8vfn.5.35 (fixed): this used to guard only the walk's ROOT — entries
+  // INSIDE the package were classified with `Dirent`, which does not follow
+  // symlinks, so a symlinked leaf was neither file nor directory and was
+  // silently SKIPPED. It could not redirect a read, but it dropped out of
+  // `contentHash`, a TRUST GATE (`skill-trust.ts`'s `needs-review` fires only
+  // on a hash difference) — so a symlink added to an approved package evaded
+  // the one mechanism built to catch post-approval tampering. `walk()` below
+  // now realpaths every entry and REFUSES on escape, mirroring
+  // `installSkillPackage`'s `walkPackageDir`. This changes what the hash
+  // means for a package that DOES contain an escaping symlink (refused,
+  // where it used to be silently omitted) but leaves every ordinary
+  // package's hash unchanged.
   //
   // The SKILL.md probe rides the guard too, LEAF INCLUDED. The first version of
   // this fix kept `existsSync(join(dir, 'SKILL.md'))` on the guarded dir, and
@@ -124,14 +123,30 @@ export function readSkillPackage(forgeRoot: string, id: string): PackageFile[] {
     throw new Error(`readSkillPackage: no SKILL.md found for skill "${id}" inside the library (missing, or the path escapes every skill root)`);
   }
   const files: PackageFile[] = [];
+  const rootAbs = resolve(dir);
+  const boundary = rootAbs + sep;
   const walk = (absDir: string, relDir: string): void => {
     for (const entry of readdirSync(absDir, { withFileTypes: true })) {
       const absPath = join(absDir, entry.name);
       const relPath = relDir ? `${relDir}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) {
-        walk(absPath, relPath);
-      } else if (entry.isFile()) {
-        files.push({ path: relPath, body: readFileSync(absPath, 'utf8') });
+      let real: string;
+      try {
+        real = realpathSync(absPath);
+      } catch (e) {
+        throw new Error(`readSkillPackage: cannot resolve package entry "${relPath}" in skill "${id}" — ${(e as Error).message}`);
+      }
+      if (real !== rootAbs && !real.startsWith(boundary)) {
+        throw new Error(`readSkillPackage: package entry "${relPath}" in skill "${id}" escapes the package directory (traversal or symlink) — refusing to read`);
+      }
+      // TOCTOU: read only the validated `real` path below — re-touching `absPath`
+      // would follow a symlink a race could swap after the check above.
+      const st = statSync(real);
+      if (st.isDirectory()) {
+        walk(real, relPath);
+      } else if (st.isFile()) {
+        files.push({ path: relPath, body: readFileSync(real, 'utf8') });
+      } else {
+        throw new Error(`readSkillPackage: package entry "${relPath}" in skill "${id}" is neither a file nor a directory`);
       }
     }
   };

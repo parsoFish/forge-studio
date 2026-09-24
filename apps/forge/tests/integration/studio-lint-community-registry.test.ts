@@ -182,3 +182,31 @@ items:
     if (root) rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('forge studio lint: a "javascript:" registry sourceUrl surfaces a real community-registry/source-url-scheme finding from runStudioLint (forge-p2zf — the write route already rejects this same value at bridge-studio-community-crud.ts, the lint did not)', () => {
+  let root: string | undefined;
+  try {
+    root = buildBaseRoot();
+    writeRegistry(
+      root,
+      `meta:
+  schemaVersion: 2
+  lastRefresh: null
+sources: {}
+items:
+  - id: weirdrow
+    kind: skill
+    name: Weird Row
+    category: testing
+    sourceUrl: "javascript:alert(document.cookie)"
+    provenance: "Test Author"
+    signals: { attributedTo: "Test Author" }
+`,
+    );
+    const result = runStudioLint(root);
+    const hits = result.findings.filter((f) => f.level === 'error' && f.check === 'community-registry/source-url-scheme' && /weirdrow/.test(f.message));
+    assert.equal(hits.length, 1, `expected exactly 1 community-registry/source-url-scheme finding naming "weirdrow", got: ${JSON.stringify(result.findings)}`);
+  } finally {
+    if (root) rmSync(root, { recursive: true, force: true });
+  }
+});

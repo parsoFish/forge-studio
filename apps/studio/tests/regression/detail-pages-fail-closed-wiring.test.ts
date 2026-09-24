@@ -301,15 +301,14 @@ const EXEMPT_PAGES: Record<string, string> = {
   //   not-found OUTCOME…", "the transport-failure banner SURVIVES",
   //   "fetchRegistryItem carries the HTTP status through") and enumerated over
   //   every status shape in tests/regression/community-form.test.ts.
-  //   NOT covered — this page does NOT use the shared PageLoadError kit, and
-  //   has no bridge-recovery resubscribe and no Retry control. That is a real
-  //   (smaller) gap, disclosed here rather than papered over; it was out of
-  //   W8-B5/WI-6's brief, which was the false-absence claim.
+  //   forge-4sj CLOSED the second half: the page now uses the shared
+  //   PageLoadError kit (Retry + bridge-recovery resubscribe) for a non-404
+  //   edit-load failure, exactly like its `[kind]/[id]` sibling below —
+  //   pinned by the "forge-4sj: …" tests in community-surface-wiring.test.ts.
   'app/community/new/page.tsx':
     'tests/regression/community-surface-wiring.test.ts + tests/regression/community-form.test.ts — the 404-vs-' +
-    'transport-failure split (this file\'s defect class) is pinned there over every ' +
-    'status shape. NOT the shared PageLoadError kit: no bridge-recovery resubscribe ' +
-    'and no Retry control — disclosed gap, out of W8-B5/WI-6\'s scope.',
+    'transport-failure split AND the PageLoadError/useBridgeRecoveryWhenFailed retry wiring are both ' +
+    'pinned there, adapted for this page\'s non-throwing read shape (fetchRegistryItem never throws).',
   // forge-5rr (projects-45): the pending scan flagged this as the strongest
   // GENUINE gap of the eight — a closer look found the not-found branch
   // ALREADY correctly gated on a real bridge-answered 404 (never a transport
