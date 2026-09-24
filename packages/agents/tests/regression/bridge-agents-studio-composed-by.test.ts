@@ -99,6 +99,7 @@ function throwingAgentFacts(): AgentStudioRouteDeps['agentFacts'] {
 function makeDeps(): AgentStudioRouteDeps {
   return {
     listFlowIds: () => [],
+    flowPathForId: () => { throw new Error('unexpected flowPathForId call — no flow fixtures in this suite'); },
     loadFlowDefinition: () => { throw new Error('unexpected loadFlowDefinition call — no flow fixtures in this suite'); },
     agentFacts: throwingAgentFacts(),
   };

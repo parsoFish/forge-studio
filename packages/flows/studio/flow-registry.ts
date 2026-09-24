@@ -10,9 +10,10 @@
  * module, and `FlowDefinition` and its member types stay in `@forge/contracts`
  * — the Flow vocabulary is shared, only the parser is flows'.
  */
-import { readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import yaml from 'js-yaml';
+
+import { flowRoots, listIdsAcrossRoots } from '@forge/kernel/discovery-roots.ts';
 
 import type {
   FlowDefinition,
@@ -262,19 +263,16 @@ export function serializeFlowDefinition(def: FlowDefinition): string {
 }
 
 /**
- * List the ids of every registered flow (`studio/flows/<id>/flow.yaml`) —
- * directory presence only, no flow.yaml load/validate. Used by the R1-01 KB
- * binding cross-reference checks (the KB create route; studio-lint.ts reuses
- * its own already-computed flow-directory listing inline) so both share one
- * definition of "a registered flow id".
+ * List the ids of every registered flow — directory presence only, no
+ * flow.yaml load/validate — across EVERY flow root (SEAM F1, operator
+ * ruling item 81): `studio/flows/<id>/flow.yaml` AND every
+ * `packages/<pkg>/flows/<id>/flow.yaml`. Used by the R1-01 KB binding
+ * cross-reference checks (the KB create route; studio-lint.ts reuses its own
+ * already-computed flow-directory listing inline) so both share one
+ * definition of "a registered flow id". THROWS, naming both roots, if the
+ * same id is a real directory under more than one root — never "first root
+ * wins" (`listIdsAcrossRoots`, `@forge/kernel/discovery-roots.ts`).
  */
 export function listFlowIds(forgeRoot: string): string[] {
-  const flowsDir = join(resolve(forgeRoot), 'studio', 'flows');
-  try {
-    return readdirSync(flowsDir, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => e.name);
-  } catch {
-    return [];
-  }
+  return listIdsAcrossRoots(flowRoots(forgeRoot));
 }

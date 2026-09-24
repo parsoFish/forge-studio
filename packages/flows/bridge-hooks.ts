@@ -23,10 +23,11 @@
  * the next handler.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, pathOnly } from '@forge/kernel';
 import { listFlowIds, loadFlowDefinition } from './studio/flow-registry.ts';
+import { flowPathForId } from './flow-runner.ts';
 import type { FlowDefinition, FlowTrigger, WebhookTriggerConfig } from '@forge/contracts/studio/types.ts';
 import { WEBHOOK_FAMILY_KIND_IDS } from './flow-trigger.ts';
 import { verifyWebhookSignature } from './webhook-verify.ts';
@@ -96,7 +97,7 @@ function findWebhookTrigger(forgeRoot: string, hookId: string): ResolvedHook | n
   for (const flowId of listFlowIds(root)) {
     let flow: FlowDefinition;
     try {
-      flow = loadFlowDefinition(join(root, 'studio', 'flows', flowId, 'flow.yaml'));
+      flow = loadFlowDefinition(flowPathForId(flowId, root));
     } catch {
       continue;
     }
