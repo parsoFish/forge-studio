@@ -310,14 +310,14 @@ export function runHookScript(input: RunHookScriptInput): HookRunResult {
     });
   }
 
-  const start = Date.now();
+  const start = performance.now(); // monotonic: Date.now() steps back here (forge-8vfn.7.6.50)
   const result = spawnSync('bash', [scriptPath], {
     env: childEnv,
     cwd: dir,
     timeout: timeoutMs,
     encoding: 'utf8',
   });
-  const durationMs = Date.now() - start;
+  const durationMs = Math.round(performance.now() - start);
 
   if (result.error) {
     // W8-B6 FIX-3: spawnSync reports an exceeded `timeout` as an ordinary

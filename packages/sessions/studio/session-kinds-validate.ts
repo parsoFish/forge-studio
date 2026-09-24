@@ -23,7 +23,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { basename, join, sep } from 'node:path';
 import matter from 'gray-matter';
 
-import type { Finding } from '@forge/kernel';
+import { isSafeSegment, type Finding } from '@forge/kernel';
 import { listSkillMdDirs, skillsDir, SLUG_RE } from '@forge/agents/skill-path.ts';
 import { FINALIZERS } from '../interactive-finalizers.ts';
 
@@ -177,19 +177,6 @@ const CHECK_PANEL_REQUIRES_MISPLACED = 'session-kinds/panel-requires-misplaced';
 // ever produces.
 const CHECK_TURNSPEC_PANEL_EXCLUSIVE = 'session-kinds/turnspec-panel-exclusive';
 
-/** True if `seg` contains any C0 control character (codepoint 0-31
- *  inclusive), mirroring packages/kernel/path-guard.ts's own CONTROL_CHAR_RE
- *  scan for the same range — written here as an explicit codepoint scan,
- *  not a `/[\u0000-\u001f]/`-style character-class literal, so this source
- *  file itself never has to carry a raw control byte inside a regex
- *  literal. */
-function hasControlChar(seg: string): boolean {
-  for (let i = 0; i < seg.length; i++) {
-    if (seg.charCodeAt(i) <= 0x1f) return true;
-  }
-  return false;
-}
-
 /**
  * turnSpec.kindDir must be a safe single path segment — it becomes
  * `resolveGuardedPath(projectRoot, [kindDir, sessionId])` in the generic
@@ -201,22 +188,11 @@ function hasControlChar(seg: string): boolean {
  * reject every legitimate shipped value. This mirrors `isSafeSegment` in
  * packages/kernel/path-guard.ts EXACTLY (no separators, no "." or "..", no C0
  * control characters) — the same predicate `resolveGuardedPath` itself
- * relies on one layer further down. NOT imported from that module because
- * `isSafeSegment` is not exported there (an internal helper of a file this
- * initiative's file-boundary does not touch); kept in exact lockstep by
- * design — any future edit to isSafeSegment must be mirrored here too.
+ * relies on one layer further down — so it IS that predicate, imported from
+ * `@forge/kernel` (the hand-mirror it replaced drifted when 5.59 added DEL and
+ * encoded-traversal rejection; lane m7-c security review, 2026-09-19).
  */
-function isSafeKindDirSegment(seg: string): boolean {
-  return (
-    seg.length > 0 &&
-    seg !== '.' &&
-    seg !== '..' &&
-    !seg.includes('/') &&
-    !seg.includes('\\') &&
-    !seg.includes(sep) &&
-    !hasControlChar(seg)
-  );
-}
+const isSafeKindDirSegment = isSafeSegment;
 
 /** Check-id bundle for `validatePhaseTable` below — one per phase-row-level
  *  rule, so a caller (turnSpec vs panel) supplies its own check-id family

@@ -65,8 +65,11 @@ function broadcastEntries(): Entry[] {
 async function triggerQueueBroadcast(name: string, waitMs = 4000): Promise<Entry[]> {
   const before = broadcastEntries().length;
   writeFileSync(join(forgeRoot, '_queue', 'pending', name), 'id: x\n', 'utf8');
-  const deadline = Date.now() + waitMs;
-  while (Date.now() < deadline) {
+  // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is not
+  // monotonic on this host, so a deadline computed from its difference can
+  // move mid-wait.
+  const deadline = performance.now() + waitMs;
+  while (performance.now() < deadline) {
     const now = broadcastEntries();
     if (now.length > before) return now.slice(before);
     await new Promise((r) => setTimeout(r, 50));

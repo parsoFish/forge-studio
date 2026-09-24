@@ -124,6 +124,10 @@ export function classifyCrash(message: string, priorMessage: string | null): Cra
 const PARALLEL_LINT_CONTENTION_SIGNATURE =
   /(?:^|\berr(?:o|or)?\b[\s:=-]*)parallel golangci-lint is running/im;
 
+// forge-f88z: same blob-scan class W8-F3 fixed above — a project's own test NAME can legitimately print either phrase, so both are anchored to the runner's OWN error-line marker (npm err(or)? before the phrase; Error:/Module not found: Error: before "cannot find module"), never a bare substring. Terminal-to-terminal, so this buys no retries; the harm was a wrong `reason` misdirecting triage.
+const GATE_MISSING_SCRIPT_RE = /\bnpm (?:err!?|error)\b[^\n]*missing script\b/i;
+const GATE_MODULE_NOT_FOUND_RE = /\berror:?\s*cannot find module\b|\bmodule not found:?\s*error\b/i;
+
 /**
  * N9 (2026-07 refinement, brain/cycles/themes/2026-07-04-rate-limit-crash-
  * prereq-failed-cascade.md): the CLI's rate/usage-limit death surfaces in
@@ -301,8 +305,8 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     if (e.phase === 'orchestrator' && msg === 'cycle.resume-needs-rebase') { resumeNeedsRebase = true; ev(e); }
     if (msg === 'gate.fail') {
       const blob = (String(md.gate_stderr_tail ?? '') + ' ' + String(md.gate_stdout_tail ?? '')).toLowerCase();
-      if (blob.includes('missing script')) { gateMissingScript = true; ev(e); }
-      if (blob.includes('cannot find module') || blob.includes('module not found')) { worktreeNoDeps = true; ev(e); }
+      if (GATE_MISSING_SCRIPT_RE.test(blob)) { gateMissingScript = true; ev(e); }
+      if (GATE_MODULE_NOT_FOUND_RE.test(blob)) { worktreeNoDeps = true; ev(e); }
     }
     // G10: golangci-lint lock contention in any FAILED gate's captured output —
     // per-WI / code-fix-UWI gates (`gate.fail`, tails), the unifier's composed
