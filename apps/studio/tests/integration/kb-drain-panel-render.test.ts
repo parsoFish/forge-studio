@@ -185,6 +185,19 @@ test('a drain-gated finding renders its review-draft link (orch-01)', () => {
   expect(html).toContain('/sessions/kb-cleanup/2026-08-20T10-00-00-ab12?project=.kb-forge-dev');
 });
 
+test('M7-C U8 (bead forge-u8y2): a gated finding whose draftSession pointer the SERVER dropped (unreadable) renders NO /sessions/kb-cleanup link — per-row or sticky bar', () => {
+  const html = render({
+    displayState: 'needs-you', kbId: 'gitpulse',
+    // Same shape as the presence test above, minus `draftSession` — exactly
+    // what `withReadableDraftSessions` (packages/knowledge/kb-drain-model.ts) sends
+    // over the wire once the readability probe says the pointer resolves nowhere.
+    perFinding: [finding({ key: 'g', tier: 'agent', outcome: 'needs-you' })],
+  });
+  expect(html).not.toContain('data-action="open-drain-draft"');
+  expect(html).not.toContain('data-component="drain-pending-drafts-bar"');
+  expect(html).not.toContain('/sessions/kb-cleanup/');
+});
+
 test('cancelled terminal renders its own honest copy', () => {
   const html = render({ displayState: 'cancelled' });
   expect(html).toContain('data-drain-state="cancelled"');

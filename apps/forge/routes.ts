@@ -77,6 +77,11 @@ import {
 import { parseGuardedEventsJsonl, parseGuardedFirstEvent } from '@forge/sessions/session-readability.ts';
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/session-status-io.ts';
 import type { SessionStatusIoPort } from '@forge/knowledge/kb-drain-model.ts';
+// M7-C U8 (bead forge-u8y2, W8-F6 follow-up) — the real readability predicate
+// for `@forge/knowledge`'s own `sessionIsReadable` port (`kb-drain-model.ts`).
+// Bound DIRECTLY, no wrapper: that port's argument shape is declared to match
+// this function's exactly, for precisely this reason.
+import { sessionIsReadable } from '@forge/sessions/session-resolution.ts';
 import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
 
 /**
@@ -159,6 +164,10 @@ export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
       // streamed because this was never threaded through.
       ensureAgentRunTail: deps.ensureAgentRunTail,
       releaseAgentRunTail: deps.releaseAgentRunTail,
+      // M7-C U8 (bead forge-u8y2) — the runs ledger and the drain status's
+      // `draftSession` pointers never mint a `/sessions/kb-cleanup/<id>` link
+      // this bridge cannot actually serve.
+      sessionIsReadable,
     }),
     ...libraryRoutes({ agentFacts: libraryAgentFacts, isSdkAvailable, flowSource: libraryFlowSource, authoringSession: authoringSessionPort }),
     ...projectsRoutes({
