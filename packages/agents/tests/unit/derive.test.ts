@@ -64,6 +64,39 @@ test('deriveAgentSpec: reflector spec matches known-good literal', () => {
   });
 });
 
+// forge-o6aj: architect/brain-ingest denied only [Task, Agent] — the six
+// write/egress tools their SKILL.md does not grant (Write, Edit, MultiEdit,
+// NotebookEdit, WebFetch, WebSearch) stayed neither allowed nor denied. Full
+// closed-universe fence, matching project-manager/developer-loop/reflector
+// above: `allowedTools` ∪ `disallowedTools` must cover all twelve known tool
+// names (tool-fence.ts's own count), with nothing left unaccounted for.
+test('deriveAgentSpec: architect spec matches known-good literal (full tool-fence closure)', () => {
+  assert.deepEqual(deriveAgentSpec('skills/architect/SKILL.md'), {
+    phase: 'architect',
+    skill: 'skills/architect/SKILL.md',
+    tier: 'sonnet',
+    allowedTools: ['Read', 'Grep', 'Glob', 'Bash'],
+    disallowedTools: ['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Task', 'Agent'],
+    sdk: 'claude',
+  });
+});
+
+// brain-ingest genuinely writes (brain/_raw/, theme pages, category indexes,
+// brain/forge-dev/log.md — see its SKILL.md Outputs section), so Write/Edit
+// stay granted; Grep/Glob are never called in its documented process (it
+// delegates search to the composed brain-query skill) and close the fence
+// alongside the four tools it shares with architect.
+test('deriveAgentSpec: brain-ingest spec matches known-good literal (full tool-fence closure, Write/Edit kept)', () => {
+  assert.deepEqual(deriveAgentSpec('skills/brain-ingest/SKILL.md'), {
+    phase: 'brain',
+    skill: 'skills/brain-ingest/SKILL.md',
+    tier: 'haiku',
+    allowedTools: ['Read', 'Write', 'Edit', 'Bash'],
+    disallowedTools: ['Grep', 'Glob', 'MultiEdit', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Task', 'Agent'],
+    sdk: 'claude',
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Negative tests via in-memory tmp fixtures
 // ---------------------------------------------------------------------------

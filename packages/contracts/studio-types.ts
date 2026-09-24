@@ -151,6 +151,9 @@ export type AgentDefinition = {
   budgets: AgentBudgets;
   allowedTools: string[]; // frontmatter `allowed-tools`
   disallowedTools: string[]; // frontmatter `disallowed-tools`
+  /** forge-6gv.20 — composer-reachable escape hatch: `true` skips
+   *  skill-tool-fence/task-agent-not-disallowed; additive, no-op if unset. */
+  toolFenceExempt?: boolean; // frontmatter `tool-fence-exempt`
   body: string; // markdown process intent
   path: string; // absolute SKILL.md path
 };

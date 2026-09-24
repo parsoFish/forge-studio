@@ -37,12 +37,10 @@ export class StudioWritePathIgnoredError extends Error {
 /** Forge session/scratch dirs that must NEVER be committed into the project. */
 const SCRATCH_EXCLUDES = ['_instructions', '_demo', '_preflight-fix', '_architect', '_project-brain', '.forge/work-items'];
 
-function git(projectDir: string, args: string[], opts: { allowFail?: boolean } = {}): string {
+function git(projectDir: string, args: string[], opts: { allowFail?: boolean; raw?: boolean } = {}): string { // raw: porcelain's leading status column survives (a trim eats it)
   try {
-    return execFileSync('git', ['-C', projectDir, ...args], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim();
+    const out = execFileSync('git', ['-C', projectDir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    return opts.raw ? out : out.trim();
   } catch (err) {
     if (opts.allowFail) return '';
     throw err;
@@ -137,8 +135,10 @@ export function ensureStudioBranch(projectDir: string): void {
  *  every one of which means "nothing this caller may claim it wrote". */
 export function dirtyPaths(projectDir: string): string[] {
   if (!isGitRepo(projectDir)) return [];
-  const out = git(projectDir, ['status', '--porcelain', '-z'], { allowFail: true });
-  return out ? out.split('\0').filter(Boolean).map((e) => e.slice(3)) : [];
+  const entries = git(projectDir, ['status', '--porcelain', '-z'], { allowFail: true, raw: true }).split('\0');
+  const paths: string[] = [];
+  for (let i = 0; i < entries.length; i++) if (entries[i]) { paths.push(entries[i]!.slice(3)); if (/^[RC]/.test(entries[i]!)) i++; } // R/C: next -z field is the source
+  return paths;
 }
 
 export function commitStudioChange(projectDir: string, message: string, paths?: string[]): boolean {
