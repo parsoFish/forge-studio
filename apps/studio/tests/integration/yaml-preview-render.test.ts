@@ -13,14 +13,16 @@
  * only mean it is missing from the model, never a second hand-maintained
  * prop list drifting from it.
  *
- * SCOPE NOTE: the finding also named `description`/`library`/`surface`/
- * `executor`/`budgets` as omitted. Those five stay omitted here too —
- * `Agent` (lib/studio-client.ts) never parses them off the wire at all, and
- * that file is pinned at its 800-line file-size ratchet ceiling
- * (`scripts/baselines/file-size.json`: 2540/2540 — `check-file-size.mjs`
- * fails on ANY growth of a baselined file). Wiring them through needs that
- * file split first, a separate initiative; this fix covers the four fields
- * reachable without touching studio-client.ts (see final report).
+ * FOLLOW-UP (agents-15, forge-6gv.5.1): the finding also named
+ * `description`/`library`/`surface`/`executor`/`budgets` as omitted —
+ * `Agent` (lib/studio-client.ts) never parsed them off the wire at all, and
+ * that file was pinned at its 800-line file-size ratchet ceiling
+ * (2540/2540). The wire type + parser moved to `lib/agent-wire.ts`
+ * (`check-file-size.mjs` fails on ANY growth of a baselined file, so this
+ * needed room made first, not a line squeezed into the old file), and now
+ * parses all five. This suite covers them below, same discipline as the
+ * four fields above: read straight off `buildAgentPreviewModel`'s output,
+ * no second hand-maintained field list.
  *
  * Render harness matches tests/integration/run-panel-render.test.ts's
  * precedent: `renderToStaticMarkup` over `createElement`, no jsdom.
@@ -57,6 +59,14 @@ function fullState(): AgentBuilderState {
     phase: 'contract-check-phase',
     costCeilingEnforceable: false,
     fanout: { drivingArtifact: 'work-items', isolation: 'per-item-worktree', concurrencyCap: 3 },
+    // agents-15 (forge-6gv.5.1): the five fields Agent never parsed off the
+    // wire before the agent-wire.ts split — distinct text from `purpose`
+    // above so a match on one can't accidentally pass on the other.
+    description: 'Reusable contract-check guard for onboarding flows.',
+    library: true,
+    surface: 'flow-node',
+    executor: 'unifier',
+    budgets: { maxBudgetUsd: 12.5, maxTurns: 40 },
   };
 }
 
@@ -80,6 +90,35 @@ test('THE DEFECT: phase, fanout, allowed-tools and disallowed-tools all appear i
   expect(html).toMatch(/\bRead\b/);
   expect(html).toMatch(/\bBash\b/);
   expect(html).toMatch(/\bTask\b/);
+});
+
+test('agents-15 (forge-6gv.5.1): description, library, surface, executor and budgets all appear in the preview', () => {
+  const html = render(fullState());
+  expect(html).toMatch(/Reusable contract-check guard for onboarding flows\./);
+  expect(html).toMatch(/library:<\/span> <span class="yaml-val">true/);
+  expect(html).toMatch(/surface:<\/span> <span class="yaml-val">flow-node/);
+  expect(html).toMatch(/executor:<\/span> <span class="yaml-val">unifier/);
+  expect(html).toMatch(/maxBudgetUsd/);
+  expect(html).toMatch(/12\.5/);
+  expect(html).toMatch(/maxTurns/);
+  expect(html).toMatch(/\b40\b/);
+});
+
+test('description/library/surface/executor/budgets absent from the definition are not fabricated', () => {
+  const bare: AgentBuilderState = {
+    ...fullState(),
+    description: '',
+    library: undefined,
+    surface: '',
+    executor: '',
+    budgets: undefined,
+  };
+  const html = render(bare);
+  expect(html).not.toMatch(/Reusable contract-check guard for onboarding flows\./);
+  expect(html).not.toMatch(/yaml-key">library:/);
+  expect(html).not.toMatch(/yaml-key">surface:/);
+  expect(html).not.toMatch(/yaml-key">executor:/);
+  expect(html).not.toMatch(/maxBudgetUsd/);
 });
 
 test('fields absent from the definition are not fabricated (a bare agent renders no fanout block, no phase row)', () => {
