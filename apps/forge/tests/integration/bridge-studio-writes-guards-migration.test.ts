@@ -107,7 +107,10 @@ function makeSeedSkillMd(name: string, compositionBlock: string[]): string {
     '  strategy: fixed',
     '  model: claude-sonnet-4-5',
     'allowed-tools: []',
-    'disallowed-tools: []',
+    // forge-q4sz: PUT now 400s a save whose disallowed-tools omits the
+    // Task/Agent fence — unrelated to what this file is testing (the
+    // composition.guards round-trip), so the seed must start fenced.
+    'disallowed-tools: [Task, Agent]',
     'budgets: {}',
     '---',
     '',
