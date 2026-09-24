@@ -47,7 +47,7 @@
 
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, symlinkSync, unlinkSync, lstatSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, symlinkSync, unlinkSync, lstatSync, realpathSync, readFileSync } from 'node:fs';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -127,6 +127,38 @@ function installRealpathSwapOnNthMatch(triggerPath: string, n: number, onTrigger
   };
 }
 
+/** Patches `node:fs`'s `readFileSync` so the Nth call whose `path` argument
+ *  is EXACTLY `triggerPath` invokes `onTrigger()` AFTER returning that call's
+ *  real, pre-swap content — so the triggering read itself is unaffected,
+ *  exactly as a real racing writer would leave an already-in-flight read's
+ *  result untouched. Content-half twin of `installRealpathSwapOnNthMatch`
+ *  above (same bead, same mechanism, different fs sink). Returns an
+ *  uninstall function; callers MUST call it (in a `finally`). */
+function installReadFileSyncSwapOnNthMatch(triggerPath: string, n: number, onTrigger: () => void): () => void {
+  const require = createRequire(import.meta.url);
+  const fsCjs = require('node:fs') as unknown as { readFileSync: unknown };
+  const original = fsCjs.readFileSync as (...args: unknown[]) => unknown;
+  let seen = 0;
+  let fired = false;
+  const patched = (...args: unknown[]): unknown => {
+    const result = original(...args);
+    if (!fired && args[0] === triggerPath) {
+      seen += 1;
+      if (seen === n) {
+        fired = true;
+        onTrigger();
+      }
+    }
+    return result;
+  };
+  fsCjs.readFileSync = patched;
+  syncBuiltinESMExports();
+  return function uninstall(): void {
+    fsCjs.readFileSync = original;
+    syncBuiltinESMExports();
+  };
+}
+
 describe('TOCTOU (forge-8vfn.8.3.2): script swapped for an outside symlink between the approval gate and the exec read', () => {
   it("a real spawned child must NEVER run the swapped-in outside script — the gate's own revalidation must not be bypassable by a later unvalidated re-join", () => {
     const root = makeForgeRoot();
@@ -196,6 +228,189 @@ describe('TOCTOU (forge-8vfn.8.3.2): script swapped for an outside symlink betwe
       true,
       'runHookScript must refuse (throw) once the script path its own gate just revalidated is swapped before the exec read, rather than re-deriving ' +
         `and reading/spawning an unvalidated lexical re-join. Observed: ${result ? `returned normally, stdout=${JSON.stringify(result.stdout)}` : `threw "${caughtMessage}"`}.`,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// forge-8vfn.8.3.2 (content half) — the approval fingerprint
+// (`hookRunState` -> `snapshotHookPackage` -> `readHookPackage`),
+// `prepareHookRun`'s own `readFileSync(scriptPath)`, and (before this fix)
+// the exec itself were THREE separate opens of the SAME path, SAME inode —
+// no symlink involved. An overwrite landing between the gate's read (which
+// approves) and the exec read (which — before this fix — fed the real
+// `bash` spawn) changes what runs without changing what was approved.
+// ---------------------------------------------------------------------------
+
+describe('TOCTOU (forge-8vfn.8.3.2, content half): script content overwritten in place, same path/inode, between the gate read and the exec read', () => {
+  it('a real spawned child must NEVER execute bytes that differ from the fingerprint the approval gate just accepted', () => {
+    const root = makeForgeRoot();
+    const id = 'content-swap-hook';
+    const benignBody = '#!/usr/bin/env bash\necho BENIGN\n';
+    writeHookPackage(root, id, benignBody, NO_ENV);
+    approveHook({ forgeRoot: root, id });
+
+    const scriptRealPath = realpathSync(join(root, 'studio', 'hooks', id, 'scripts', 'run.sh'));
+    assert.ok(
+      existsSync(scriptRealPath) && !lstatSync(scriptRealPath).isSymbolicLink(),
+      'arrange: the approved script starts as a real, non-symlinked file',
+    );
+
+    const markerDir = mkdtempSync(join(tmpdir(), 'hook-runtime-toctou-content-marker-'));
+    createdDirs.push(markerDir);
+    const markerPath = join(markerDir, 'pwned.marker');
+    const maliciousBody = `#!/usr/bin/env bash\necho PWNED\necho PWNED > "${markerPath}"\n`;
+
+    // Trigger on the 1st readFileSync of THIS exact path — that is the
+    // gate's own read (hookRunState -> snapshotHookPackage -> readHookPackage),
+    // which must see and approve the ORIGINAL benign bytes. Overwriting
+    // in place, same path, right after that read returns, means the 2nd
+    // matching read — prepareHookRun's own, the one this fix hashes and
+    // executes — sees the MALICIOUS bytes instead.
+    let swapPerformed = false;
+    const uninstall = installReadFileSyncSwapOnNthMatch(scriptRealPath, 1, () => {
+      writeFileSync(scriptRealPath, maliciousBody, 'utf8'); // same path, same inode — an in-place overwrite, never a symlink
+      swapPerformed = true;
+    });
+
+    const logger = createLogger('toctou-content-cycle', makeLogsDir());
+    let threw = false;
+    let caughtMessage = '';
+    let result: HookRunResult | undefined;
+    try {
+      try {
+        result = runHookScript({ forgeRoot: root, id, logger, initiativeId: 'INIT-test' });
+      } catch (e) {
+        threw = true;
+        caughtMessage = (e as Error).message;
+      }
+    } finally {
+      uninstall();
+    }
+
+    // Prove the swap actually fired against the live filesystem — never
+    // trust a verdict behind a trigger that might have silently misfired.
+    assert.ok(
+      swapPerformed,
+      "arrange: the readFileSync trigger (1st matching call — the gate's own read) must have fired and overwritten the script in place — if false the whole test is vacuous",
+    );
+    assert.equal(
+      readFileSync(scriptRealPath, 'utf8'),
+      maliciousBody,
+      'arrange: the file on disk now genuinely holds the malicious bytes, same path, same inode',
+    );
+
+    // ---- THE SECURITY ASSERTIONS — these fail RED against the unfixed code ----
+    assert.equal(
+      existsSync(markerPath),
+      false,
+      'the overwritten bytes must NEVER actually execute — a real spawned bash process ran them and wrote the marker file',
+    );
+    if (result) {
+      assert.doesNotMatch(result.stdout ?? '', /PWNED/, "the malicious script's own output must never appear — it must never be spawned");
+    }
+    assert.equal(
+      threw,
+      true,
+      "runHookScript must refuse (throw) once the script's content differs from the ledger's approved fingerprint, rather than executing whatever a later, unverified read of the same path happens to find. " +
+        `Observed: ${result ? `returned normally, stdout=${JSON.stringify(result.stdout)}` : `threw "${caughtMessage}"`}.`,
+    );
+    if (threw) {
+      assert.match(
+        caughtMessage,
+        /fingerprint mismatch/,
+        'the refusal must name WHY — a fingerprint mismatch — not an unrelated failure that happens to also throw',
+      );
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// forge-8vfn.8.3.2 (content half, decisive window) — the overwrite lands
+// AFTER `prepareHookRun`'s own verified read, i.e. in the window that used to
+// be a THIRD open: each tail's own `spawn(Sync)('bash', [scriptPath])`. There
+// is nothing left to refuse against here — the bytes were verified before the
+// overwrite happened — so the required outcome is the OTHER honest one the
+// brief names: the APPROVED bytes still run, because exec now uses the bytes
+// already held in memory and never reopens the path. This is also the test
+// that kills the regression-shaped mutation "execute the path again instead
+// of the bytes": that mutation would have `bash` open `scriptPath` itself at
+// spawn time, pick up THIS overwrite, and run the malicious content instead.
+// ---------------------------------------------------------------------------
+
+describe('TOCTOU (forge-8vfn.8.3.2, content half): script overwritten AFTER the verified read — the approved bytes must still be what runs', () => {
+  it('a real spawned child runs the bytes prepareHookRun verified, never a later on-disk overwrite of the same path/inode', () => {
+    const root = makeForgeRoot();
+    const id = 'content-swap-post-read-hook';
+
+    const benignMarkerDir = mkdtempSync(join(tmpdir(), 'hook-runtime-toctou-benign-marker-'));
+    createdDirs.push(benignMarkerDir);
+    const benignMarkerPath = join(benignMarkerDir, 'benign.marker');
+    const benignBody = `#!/usr/bin/env bash\necho BENIGN > "${benignMarkerPath}"\n`;
+    writeHookPackage(root, id, benignBody, NO_ENV);
+    approveHook({ forgeRoot: root, id });
+
+    const scriptRealPath = realpathSync(join(root, 'studio', 'hooks', id, 'scripts', 'run.sh'));
+
+    const pwnedMarkerDir = mkdtempSync(join(tmpdir(), 'hook-runtime-toctou-pwned-marker-'));
+    createdDirs.push(pwnedMarkerDir);
+    const pwnedMarkerPath = join(pwnedMarkerDir, 'pwned.marker');
+    const maliciousBody = `#!/usr/bin/env bash\necho PWNED\necho PWNED > "${pwnedMarkerPath}"\n`;
+
+    // Trigger on the 2nd readFileSync match of this path — `prepareHookRun`'s
+    // OWN read (the gate's internal read, inside `hookRunState`, is the 1st).
+    // That 2nd read is the one this fix hashes, verifies, and holds in memory
+    // for exec — overwrite the file on disk right after it returns.
+    let swapPerformed = false;
+    const uninstall = installReadFileSyncSwapOnNthMatch(scriptRealPath, 2, () => {
+      writeFileSync(scriptRealPath, maliciousBody, 'utf8'); // same path, same inode
+      swapPerformed = true;
+    });
+
+    const logger = createLogger('toctou-content-post-read-cycle', makeLogsDir());
+    let threw = false;
+    let caughtMessage = '';
+    let result: HookRunResult | undefined;
+    try {
+      try {
+        result = runHookScript({ forgeRoot: root, id, logger, initiativeId: 'INIT-test' });
+      } catch (e) {
+        threw = true;
+        caughtMessage = (e as Error).message;
+      }
+    } finally {
+      uninstall();
+    }
+
+    assert.ok(
+      swapPerformed,
+      "arrange: the readFileSync trigger (2nd matching call — prepareHookRun's own verified read) must have fired and overwritten the script in place — if false the whole test is vacuous",
+    );
+    assert.equal(
+      readFileSync(scriptRealPath, 'utf8'),
+      maliciousBody,
+      'arrange: the file on disk now genuinely holds the malicious bytes, written after the verified read',
+    );
+
+    // ---- THE SECURITY ASSERTIONS — these fail RED against a "re-open the path at exec" implementation ----
+    assert.equal(
+      existsSync(pwnedMarkerPath),
+      false,
+      'the post-read on-disk overwrite must NEVER execute — a spawn that re-opens scriptPath at exec time would pick it straight up',
+    );
+    if (result) {
+      assert.doesNotMatch(result.stdout ?? '', /PWNED/, "the overwritten script's own output must never appear — it must never be spawned");
+    }
+    assert.equal(
+      threw,
+      false,
+      'there is nothing left to refuse against in this window — the bytes were already verified before the overwrite — so the approved bytes must ' +
+        `still run rather than the call refusing outright. Observed: threw "${caughtMessage}"`,
+    );
+    assert.equal(
+      existsSync(benignMarkerPath),
+      true,
+      'the ORIGINAL, approved bytes — captured in memory at the verified read — must actually execute: proof that exec runs those bytes directly and never reopens the path a third time',
     );
   });
 });
