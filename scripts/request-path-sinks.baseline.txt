@@ -52,9 +52,7 @@ packages/agents/find-session-project.ts existsSync 3
 packages/agents/find-session-project.ts readdirSync 1
 packages/agents/find-session-project.ts statSync 1
 packages/agents/materials-staging.ts mkdirSync 1
-packages/agents/materials-staging.ts statSync 2
-packages/agents/materials-staging.ts unlinkSync 1
-packages/agents/materials-staging.ts writeFileSync 2
+packages/agents/materials-staging.ts writeFileSync 1
 packages/agents/phases/agent-scope-guard.ts execFileSync 1
 packages/agents/phases/agent-scope-guard.ts readdirSync 1
 packages/agents/phases/agent-scope-guard.ts statSync 1
@@ -322,6 +320,9 @@ packages/flows/worktree.ts execFileSync 10
 packages/flows/worktree.ts existsSync 4
 packages/flows/worktree.ts mkdirSync 1
 packages/flows/worktree.ts rmSync 1
+packages/kernel/case-folding-probe.ts statSync 2
+packages/kernel/case-folding-probe.ts unlinkSync 1
+packages/kernel/case-folding-probe.ts writeFileSync 1
 packages/kernel/claude-cli-path.ts statSync 1
 packages/kernel/config.ts existsSync 2
 packages/kernel/config.ts readdirSync 1
@@ -562,12 +563,12 @@ packages/projects/project-contract-scaffold.ts realpathSync 3
 packages/projects/project-contract-scaffold.ts writeFileSync 4
 packages/projects/project-create.ts execFileSync 3
 packages/projects/project-create.ts existsSync 1
-packages/projects/project-create.ts lstatSync 2
+packages/projects/project-create.ts lstatSync 3
 packages/projects/project-create.ts mkdirSync 2
-packages/projects/project-create.ts readdirSync 2
+packages/projects/project-create.ts readdirSync 3
 packages/projects/project-create.ts readFileSync 2
 packages/projects/project-create.ts renameSync 2
-packages/projects/project-create.ts rmSync 3
+packages/projects/project-create.ts rmSync 4
 packages/projects/project-create.ts writeFileSync 3
 packages/projects/project-preflight-read.ts readFileSync 1
 packages/projects/project-repo-tx.ts execFileSync 1
