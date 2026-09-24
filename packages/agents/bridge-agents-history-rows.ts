@@ -26,7 +26,7 @@
  * mapping; and rows are deduped by `id` because `HistoryLedger` keys on it.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { deriveSessionCostUsd, resolveGuardedPath } from '@forge/kernel';
@@ -121,6 +121,42 @@ export function collectFlowNodeRows(deps: AgentHistoryDeps, forgeRoot: string, s
   return rows;
 }
 
+export const STANDALONE_HISTORY_MAX_ROWS = 50; // M7-C page size — no query param on either standalone route
+
+/** Sorts `entries` newest-first by `mtimeOf`, calling `mtimeOf` on each
+ *  entry EXACTLY ONCE — decorate (map each entry to `{entry, mtime}`, one
+ *  `mtimeOf` call apiece) -> sort (numeric compare on the already-computed
+ *  `mtime`, no further calls) -> undecorate (map back to the bare entries). Security
+ *  review (bead forge-omk0) measured the prior `entries.sort((a, b) =>
+ *  mtimeOf(b) - mtimeOf(a))` — a comparator-embedded stat — calling
+ *  `mtimeOf` ~21x n at n=4000 and ~29x n at n=50,000 (V8's sort invokes the
+ *  comparator ~2*n*log2(n) times), turning one guarded `statSync` per
+ *  candidate into a super-linear per-request cost. Exported (not just an
+ *  inline `.sort` closure) so a test can inject a COUNTING `mtimeOf` and
+ *  assert the call count directly — `resolveGuardedPath` + `statSync` are
+ *  not themselves injectable (imported straight from `@forge/kernel`/
+ *  `node:fs`), so this is the seam. */
+export function sortEntriesByMtimeDesc(entries: readonly string[], mtimeOf: (entry: string) => number): string[] {
+  return entries
+    .map((entry) => ({ entry, mtime: mtimeOf(entry) }))
+    .sort((a, b) => b.mtime - a.mtime)
+    .map((decorated) => decorated.entry);
+}
+
+/** `_agent-*` entries, NEWEST FIRST by directory mtime (M7-C) — metadata
+ *  only; a slug's unknown length rules out slicing a stamp from the name.
+ *  `entry` is an untrusted `readdirSync` NAME, so the stat goes through the
+ *  SAME `resolveGuardedPath` choke point `readStandaloneLivenessFacts` uses
+ *  for its own mtimes — never a raw `join(logsRoot, entry)`. */
+function standaloneEntriesNewestFirst(logsRoot: string, entries: readonly string[]): string[] {
+  const mtimeOf = (entry: string): number => {
+    const guarded = resolveGuardedPath(logsRoot, [entry]);
+    if (!guarded.ok || !guarded.exists) return -Infinity; // rejected/absent sorts last
+    try { return statSync(guarded.realPath).mtimeMs; } catch { return -Infinity; } // stat race after the guard sorts last, not an error
+  };
+  return sortEntriesByMtimeDesc(entries.filter((e) => e.startsWith(STANDALONE_RUN_DIR_PREFIX)), mtimeOf);
+}
+
 /**
  * Path 2 — standalone-dispatch rows. D5: `logsRoot` is enumerated via
  * `readdirSync`; the caller-supplied `slug` is a FILTER applied to each
@@ -139,6 +175,9 @@ export function collectFlowNodeRows(deps: AgentHistoryDeps, forgeRoot: string, s
  * a non-directory `entry` simply has no valid `events.jsonl` path beneath
  * it, so the guarded parse returns `null` for it exactly as it does for "no
  * events yet", with no separate check needed.
+ *
+ * M7-C (forge-omk0/forge-aug): capped+newest-first; `parseGuardedFirstEvent`
+ * cheaply rules out a DEFINITE non-match (one event, same rule) first.
  */
 export function collectStandaloneRows(deps: AgentHistoryDeps, logsRoot: string, slug: string): AgentHistoryRow[] {
   let entries: string[];
@@ -148,8 +187,18 @@ export function collectStandaloneRows(deps: AgentHistoryDeps, logsRoot: string, 
     entries = [];
   }
   const rows: AgentHistoryRow[] = [];
-  for (const entry of entries) {
-    if (!entry.startsWith(STANDALONE_RUN_DIR_PREFIX)) continue;
+  for (const entry of standaloneEntriesNewestFirst(logsRoot, entries)) {
+    if (rows.length >= STANDALONE_HISTORY_MAX_ROWS) break; // page filled — never read another dir's full log
+    // A DEFINITE non-match requires the first event to CARRY an identity
+    // field (`metadata.agent_slug` or top-level `skill`) that names some
+    // OTHER slug — `standaloneRunSlug` is null both when the guard/read
+    // failed AND when the first event genuinely carries neither field (a
+    // shape not verified against a real installation's logs), and both of
+    // those are INDETERMINATE, never a non-match, so they fall through to
+    // the full parse below.
+    const first = deps.parseGuardedFirstEvent(logsRoot, entry);
+    const firstIdentity = first !== null ? standaloneRunSlug([first]) : null;
+    if (firstIdentity !== null && firstIdentity !== slug) continue; // definite non-match — no full parse
     const parsed = deps.parseGuardedEventsJsonl(logsRoot, entry); // `entry` came from readdir, never from `slug`
     // No events at all (or a poisoned/rejected entry — indistinguishable by
     // design) -> nothing to prove identity against; honestly unattributable
@@ -300,16 +349,16 @@ export function collectRecentAgentRuns(
       linkKind: 'flow',
     });
   }
-  // Standalone dispatches — same guarded enumeration discipline as
-  // collectStandaloneRows (entry names come from readdir, never a caller).
+  // Standalone dispatches — same M7-C bound: newest first, capped at `limit`.
   let entries: string[];
   try {
     entries = existsSync(logsRoot) ? readdirSync(logsRoot) : [];
   } catch {
     entries = [];
   }
-  for (const entry of kind === 'flow' ? [] : entries) {
-    if (!entry.startsWith(STANDALONE_RUN_DIR_PREFIX)) continue;
+  let standaloneScanned = 0;
+  for (const entry of kind === 'flow' ? [] : standaloneEntriesNewestFirst(logsRoot, entries)) {
+    if (standaloneScanned++ >= limit) break;
     if (seenIds.has(entry)) continue; // same row-id contract as the flow half
     const parsed = deps.parseGuardedEventsJsonl(logsRoot, entry);
     if (parsed === null) continue;

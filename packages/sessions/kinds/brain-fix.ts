@@ -16,7 +16,7 @@ import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { skillPathRelative } from '@forge/agents/skill-path.ts';
 import { runBrainLint, lintThemeFiles, classify } from '@forge/knowledge/brain-lint.ts';
 import { guardAgentKbEdits, snapshotBrainTree, noKbEdits, type KbEditGateResult } from '@forge/knowledge/kb-drain-edit-soundness.ts';
-import { resolveKbBrainDir } from '@forge/knowledge/brain-paths.ts';
+import { tryGetKbBackend } from '@forge/knowledge';
 import { acquireBrainWriteLease, BrainWriteLeaseContentionError } from '@forge/knowledge/brain-write-lease.ts';
 
 import { writeRootFenceOptions } from '../session-write-fence.ts';
@@ -123,7 +123,12 @@ export const brainFixKind: FixTurnVariant<RunBrainFixInput, RunBrainFixResult, B
     // write, not permit them: an empty root list makes `canUseTool` refuse a
     // write matching no root. Fail closed. Arm 3 of
     // `tests/regression/fix-turn-capture.test.ts` pins that branch.
-    const guardedBrainDir = resolveKbBrainDir(input.forgeRoot, input.kbId);
+    // Resolved through `tryGetKbBackend`/`KbBackend.rootDir()` — the
+    // package's public door — rather than `resolveKbBrainDir` directly
+    // (M7-C KN1, bead forge-8vfn.23); `rootDir()` is the seam's one
+    // deliberate raw-path exception, precisely for a write-root fence like
+    // this one.
+    const guardedBrainDir = tryGetKbBackend(input.forgeRoot, input.kbId)?.rootDir() ?? null;
 
     // W8-B2/W8-F1 — the snapshot is the WHOLE brain, not the drained KB's own
     // dir. The audit was already brain-wide (`buildKbEditSoundnessCtx`

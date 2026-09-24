@@ -99,9 +99,9 @@ export interface KbBackend {
 
   // --- resolution + containment (H8) -------------------------------------
   // What the lint and health passes need from a KB. Each answers a question
-  // ABOUT this KB; none of them performs a lint, and none hands back the
-  // store's root — a caller that had the root could read around the seam,
-  // which is the bypass this group exists to remove.
+  // ABOUT this KB; none of them performs a lint, and (bar `rootDir`, below)
+  // none hands back the store's root — a caller that had the root could read
+  // around the seam, which is the bypass this group exists to remove.
 
   /**
    * Is `file` — absolute, or relative to the forge root — part of THIS KB?
@@ -133,6 +133,22 @@ export interface KbBackend {
 
   /** This KB's own theme documents modified at or after `sinceMs`, index pages excluded. */
   freshThemeFiles(sinceMs: number): string[];
+
+  /**
+   * This KB's guarded on-disk root, or null when it no longer resolves.
+   *
+   * THE ONE DELIBERATE EXCEPTION to this group's own rule above. Every other
+   * member answers a QUESTION about a file; three real callers (M7-C KN1)
+   * cannot ask a question at all — they must hand a real filesystem path to
+   * something outside this seam: an agent's write-root fence
+   * (`writeRootFenceOptions`, which spawns a subprocess that needs a literal
+   * root to allow-list), an `rmSync` on the KB's own directory (KB delete),
+   * and an EISDIR-safe write-boundary check that must reject the root itself
+   * as a write target (draft-apply), which `contains()` cannot express — it
+   * answers `true` for the root, by design (CONF-1c). A caller that only
+   * needs to ask "is this file inside the KB" uses `contains()`, not this.
+   */
+  rootDir(): string | null;
 }
 
 /**
@@ -234,6 +250,10 @@ export class FilesystemKbBackend implements KbBackend {
       }
     }
     return out;
+  }
+
+  rootDir(): string | null {
+    return this.dir();
   }
 }
 
