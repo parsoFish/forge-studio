@@ -44,19 +44,18 @@
  * mandate that every project bind one.
  */
 
-import { readFileSync } from 'node:fs';
-import { guardedFile } from '@forge/kernel';
+import { guardedFile, guardedReadFile } from '@forge/kernel';
 import type { ClauseResult } from '@forge/kernel';
 import type { ProjectConfig } from './project-config.ts';
 import { loadProjectConfig } from './project-config.ts';
 
-/** The one id → SKILL.md resolver for preflight and the loader: project-local,
- *  then forge-wide; `null` if neither. The id rides `guardedFile`'s containment. */
+/** THE one id → SKILL.md candidate pair — project-local, then forge-wide — shared by `resolveDeclaredSkillPath` + `loadDeclaredSkills`. */
+const declaredSkillCandidates = (dir: string, forgeRoot: string, id: string): { root: string; segments: readonly string[] }[] =>
+  [{ root: dir, segments: ['.forge', 'skills', id, 'SKILL.md'] }, { root: forgeRoot, segments: ['skills', id, 'SKILL.md'] }];
+
+/** The one id → SKILL.md resolver: project-local, then forge-wide; `null` if neither. */
 export function resolveDeclaredSkillPath(dir: string, forgeRoot: string, id: string): string | null {
-  return (
-    guardedFile(dir, ['.forge', 'skills', id, 'SKILL.md'], 'read') ??
-    guardedFile(forgeRoot, ['skills', id, 'SKILL.md'], 'read')
-  );
+  return declaredSkillCandidates(dir, forgeRoot, id).reduce<string | null>((r, c) => r ?? guardedFile(c.root, c.segments, 'read'), null);
 }
 
 /** Named, fail-fast: a declared skill id an agent was told to load that resolves nowhere. */
@@ -72,14 +71,15 @@ export class MissingDeclaredSkillError extends Error {
 
 export type DeclaredSkill = { id: string; path: string; text: string };
 
-/** Every skill the project declares, read for an agent's prompt (ADR 024, item 90).
- *  A declared id that resolves nowhere throws: a running agent has no later. */
+/** Every skill the project declares, read via `guardedReadFile` (ADR 024, item 90; never a raw `readFileSync`); throws if a declared id resolves nowhere. */
 export function loadDeclaredSkills(projectDir: string, forgeRoot: string): DeclaredSkill[] {
   const declared = loadProjectConfig(projectDir)?.skills ?? [];
   return declared.map((id) => {
-    const path = resolveDeclaredSkillPath(projectDir, forgeRoot, id);
-    if (path === null) throw new MissingDeclaredSkillError(id, projectDir, forgeRoot);
-    return { id, path, text: readFileSync(path, 'utf8') };
+    for (const { root, segments } of declaredSkillCandidates(projectDir, forgeRoot, id)) {
+      const text = guardedReadFile(root, segments);
+      if (text !== null) return { id, path: guardedFile(root, segments, 'read')!, text };
+    }
+    throw new MissingDeclaredSkillError(id, projectDir, forgeRoot);
   });
 }
 
