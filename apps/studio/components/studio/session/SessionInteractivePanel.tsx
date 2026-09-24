@@ -9,6 +9,7 @@ import { ActivityLog } from '@/components/studio/ActivityLog';
 import { ProvenanceStrip } from '@/components/studio/session/ProvenanceStrip';
 import { SessionQuestionFormAffordance } from '@/components/studio/session/SessionQuestionFormAffordance';
 import { SessionVerdictAffordance } from '@/components/studio/session/SessionVerdictAffordance';
+import type { GenerationSelection } from '@/lib/session-artifact-view';
 import { type AuthoringPackageKind, isAuthoringPackageKind } from '@/lib/authoring-package-shape';
 
 // ---------------------------------------------------------------------------
@@ -100,6 +101,8 @@ export function SessionInteractivePanel({
   onChanged,
   onPackageFinalized,
   finalized = null,
+  selectedGeneration = null,
+  onSelectGeneration = () => {},
 }: {
   /** The session-kind id (e.g. 'demo', 'onboarding') — the POST route's own
    *  `:kind` segment. */
@@ -151,9 +154,18 @@ export function SessionInteractivePanel({
    *  the object this session produced. Rendered as a PERMANENT link in the
    *  terminal state. */
   finalized?: { kind: string; id: string; exists: boolean } | null;
+  /** bead forge-8vfn.8.3.4 — the ONE generation selection, lifted to the
+   *  session page and shared verbatim with `GenerationGallery`
+   *  (`SessionArtifactPane`'s own `selectedGeneration` prop) so the two
+   *  controls can never disagree about which generation an approve locks.
+   *  Optional, defaulting to "nothing picked" / a no-op setter, so a DOM-pin
+   *  test that predates this (or any kind whose artifact is never a
+   *  generation-gallery) needs no update — the real page always passes the
+   *  live pair. */
+  selectedGeneration?: GenerationSelection;
+  onSelectGeneration?: (next: GenerationSelection) => void;
 }): JSX.Element {
   const [answerText, setAnswerText] = useState('');
-  const [pickedGeneration, setPickedGeneration] = useState<string>('');
   const [packageId, setPackageId] = useState('');
   const [notesText, setNotesText] = useState('');
   const [reviseOpen, setReviseOpen] = useState(false);
@@ -265,8 +277,9 @@ export function SessionInteractivePanel({
               key={affordance.id}
               affordance={affordance}
               artifact={artifact}
-              pickedGeneration={pickedGeneration}
-              setPickedGeneration={setPickedGeneration}
+              sessionId={sessionId}
+              selectedGeneration={selectedGeneration}
+              onSelectGeneration={onSelectGeneration}
               packageId={packageId}
               setPackageId={setPackageId}
               notesText={notesText}

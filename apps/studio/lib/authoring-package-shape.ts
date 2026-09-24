@@ -30,10 +30,13 @@
  * not a silent gap.
  *
  * WITHIN forge-ui itself there is no such boundary: every forge-ui
- * consumer of this rule (`SessionInteractivePanel.tsx`'s `draftShapeOf` /
- * `FinalizedLink` / the package-id field label, `session-verdict-gate.ts`'s
- * `DraftShape` type) imports THIS one module directly — a real single
- * source of truth on this side of the fence, not a third hand-copy.
+ * consumer of this rule (`SessionVerdictAffordance.tsx`'s `draftShapeOf` /
+ * the package-id field label, `SessionInteractivePanel.tsx`'s
+ * `FinalizedLink`, `session-verdict-gate.ts`'s `DraftShape` type) imports
+ * THIS one module directly — a real single source of truth on this side of
+ * the fence, not a third hand-copy. (`draftShapeOf`/the field label moved
+ * out of `SessionInteractivePanel.tsx` into `SessionVerdictAffordance.tsx`
+ * — bead forge-8vfn.8.3.4's file-size split — `FinalizedLink` stayed put.)
  */
 
 /** The set of package kinds an authoring session can drive to `committed`
@@ -69,7 +72,7 @@ export function isAuthoringPackageKind(value: unknown): value is AuthoringPackag
 
 /** Derives a drafted package's shape purely by file PRESENCE among the
  *  paths a `file-package` artifact carries — the ONE derivation
- *  `SessionInteractivePanel.tsx`'s `draftShapeOf` delegates to. `'unknown'`
+ *  `SessionVerdictAffordance.tsx`'s `draftShapeOf` delegates to. `'unknown'`
  *  when none of the marker filenames is present (still drafting, or a
  *  file-package artifact this rule does not describe at all — historically
  *  the now-retired community-refresh kind's registry.yaml + evidence.* draft,

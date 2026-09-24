@@ -90,7 +90,7 @@ test("SessionInteractivePanel's generation picker renders the CONTROLLED selecti
   expect(selectTag(html)).toContain('data-selected-generation="2"');
 });
 
-test("a selection made in a DIFFERENT session never leaks in — SessionInteractivePanel falls back to auto when selectedGeneration.sessionId does not match the panel's own sessionId", () => {
+test("a selection made in a DIFFERENT session never leaks in — SessionInteractivePanel falls back to the newest generation (the same default GenerationGallery uses) when selectedGeneration.sessionId does not match the panel's own sessionId", () => {
   const html = renderToStaticMarkup(
     React.createElement(SessionInteractivePanel, {
       kind: 'demo',
@@ -105,7 +105,7 @@ test("a selection made in a DIFFERENT session never leaks in — SessionInteract
       onSelectGeneration: () => {},
     } as never),
   );
-  expect(selectTag(html)).toContain('data-selected-generation=""');
+  expect(selectTag(html)).toContain('data-selected-generation="3"');
 });
 
 test('with no controlled selection at all, both controls default to the newest generation (#3) — the pre-existing, still-honoured default', () => {

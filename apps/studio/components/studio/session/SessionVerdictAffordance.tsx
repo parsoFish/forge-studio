@@ -3,6 +3,7 @@
 import { type SessionAffordance, type SessionArtifactPayload } from '@/lib/session-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
 import { deriveApproveGate } from '@/lib/session-verdict-gate';
+import { preferredGenerationFor, type GenerationSelection } from '@/lib/session-artifact-view';
 import {
   AUTHORING_PACKAGE_SHAPES,
   authoringPackageKindOf,
@@ -29,6 +30,18 @@ import { ErrorLine, sectionStyle, labelStyle, inputStyle } from './session-panel
 // client-side "file-package needs an id" assumption. `kind` itself is NEVER
 // sent in the body — the write route derives it server-side from the REAL
 // staged files.
+//
+// **Generation selection is LIFTED (bead forge-8vfn.8.3.4).** This picker
+// used to own a local `useState<string>('')`, independent of
+// `GenerationGallery`'s OWN local selection state — so the two controls
+// could disagree about which generation an approve would lock. Both are now
+// driven by the SAME `selectedGeneration`/`onSelectGeneration` pair, owned
+// by the session page (one `useState`, `lib/session-artifact-view.ts`'s
+// `GenerationSelection` shape) and threaded to `GenerationGallery` the same
+// way — `preferredGenerationFor` resolves it to a concrete number for THIS
+// session (`sessionId`), falling back to "auto (latest)" exactly as before
+// when nothing has been picked, or when the lifted value belongs to a
+// different session.
 // ---------------------------------------------------------------------------
 
 /** Detects a drafted authoring package's shape purely by file PRESENCE —
@@ -66,8 +79,9 @@ function generationOptions(artifact: SessionArtifactPayload | null): number[] {
 export function SessionVerdictAffordance({
   affordance,
   artifact,
-  pickedGeneration,
-  setPickedGeneration,
+  sessionId,
+  selectedGeneration,
+  onSelectGeneration,
   packageId,
   setPackageId,
   notesText,
@@ -82,10 +96,13 @@ export function SessionVerdictAffordance({
 }: {
   affordance: SessionAffordance;
   artifact: SessionArtifactPayload | null;
-  /** The empty string means "auto (latest)" — mirrors the `<select>`'s own
-   *  `value=""` option. */
-  pickedGeneration: string;
-  setPickedGeneration: (value: string) => void;
+  /** This session's id — `preferredGenerationFor` resolves `selectedGeneration`
+   *  against it, so a selection made in a different session never leaks in. */
+  sessionId: string;
+  /** The ONE lifted selection (bead forge-8vfn.8.3.4) — the SAME value
+   *  `GenerationGallery` reads/writes. `null` means "nothing picked yet". */
+  selectedGeneration: GenerationSelection;
+  onSelectGeneration: (next: GenerationSelection) => void;
   packageId: string;
   setPackageId: (value: string) => void;
   notesText: string;
@@ -101,6 +118,18 @@ export function SessionVerdictAffordance({
   const packageArtifact = artifact !== null && artifact.kind === 'file-package' ? artifact : null;
   const packageShape = packageArtifact ? draftShapeOf(packageArtifact.files) : null;
   const generations = generationOptions(artifact);
+  // `pickedGeneration` is `undefined` for "auto (latest)" — either nothing
+  // has been picked yet, or the lifted selection belongs to a different
+  // session (`preferredGenerationFor`'s own guard) — mirroring
+  // `generationGalleryView`'s identical fallback so the two controls' idea
+  // of "the current pick" can never diverge.
+  const pickedGeneration = preferredGenerationFor(selectedGeneration, sessionId);
+  // The resolved value for `data-selected-generation` — unlike the `<select>`
+  // itself (which must show the literal "auto" option when nothing was
+  // picked), this names the ACTUAL generation an approve would lock right
+  // now, mirroring `GenerationGallery`'s own `data-selected-generation`
+  // exactly so the two can be compared directly in a test or a story.
+  const resolvedGeneration = pickedGeneration ?? (generations.length > 0 ? generations[0] : null);
 
   const verdicts = affordance.meta?.verdicts ?? [];
   const requiresFields = affordance.meta?.requires ?? [];
@@ -113,9 +142,13 @@ export function SessionVerdictAffordance({
         <div style={{ marginBottom: 10 }}>
           <div style={labelStyle}>Generation to lock (optional — defaults to the latest)</div>
           <select
-            value={pickedGeneration}
-            onChange={(e) => setPickedGeneration(e.target.value)}
+            value={pickedGeneration !== undefined ? String(pickedGeneration) : ''}
+            onChange={(e) => {
+              const raw = e.target.value;
+              onSelectGeneration(raw === '' ? null : { sessionId, number: Number(raw) });
+            }}
             data-field="session-generation-pick"
+            data-selected-generation={resolvedGeneration ?? ''}
             style={inputStyle}
           >
             <option value="">auto (latest — #{generations[0]})</option>
@@ -174,7 +207,7 @@ export function SessionVerdictAffordance({
             onClick={() =>
               void submit(affordance, {
                 verdict: 'approve',
-                ...(pickedGeneration ? { generation: Number(pickedGeneration) } : {}),
+                ...(pickedGeneration !== undefined ? { generation: pickedGeneration } : {}),
                 ...(notesText.trim().length > 0 ? { notes: notesText.trim() } : {}),
                 ...gate.providedFields,
               })

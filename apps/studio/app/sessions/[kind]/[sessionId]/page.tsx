@@ -11,6 +11,7 @@ import { useCycleEvents } from '@/lib/use-cycle-events';
 import { useNowTicker } from '@/lib/use-now-ticker';
 import { fetchSessionShell, type SessionShellFetchResult } from '@/lib/session-client';
 import { deriveSessionShellViewState, selectStage, backToProjectLink, shouldPollSessionSummary } from '@/lib/session-shell-view';
+import type { GenerationSelection } from '@/lib/session-artifact-view';
 import {
   fetchArchitectSessions,
   listInstructionsSessions,
@@ -226,6 +227,19 @@ export default function SessionShellPage({
   const [stageOverride, setStageOverride] = useState<string | null>(null);
   // A different session must never inherit the previous one's stage choice.
   useEffect(() => { setStageOverride(null); }, [kind, sessionId]);
+
+  // bead forge-8vfn.8.3.4 — the ONE selected-generation state. It used to be
+  // TWO: `GenerationGallery` (via `SessionArtifactPane`) and
+  // `SessionInteractivePanel`'s verdict-approve generation picker each owned
+  // an independent `useState`, so they could disagree about which
+  // generation an approve would lock. Lifted here and threaded, verbatim,
+  // to both — selecting in the gallery sets it, the panel's picker shows
+  // and sets the same value, and both lock actions act on exactly that
+  // generation. `GenerationSelection`'s own `sessionId` tag (never an
+  // effect keyed on `[kind, sessionId]`, mirroring `preferredGenerationFor`'s
+  // existing cross-session guard) is what stops a pick made in one session
+  // from leaking into the next one this same page instance is reused for.
+  const [selectedGeneration, setSelectedGeneration] = useState<GenerationSelection>(null);
   const viewState = useMemo(() => {
     const base = deriveSessionShellViewState(shellResult);
     if (base.status === 'ready' && stageOverride !== null && stageOverride !== base.selectedStage) {
@@ -339,6 +353,8 @@ export default function SessionShellPage({
           legacy
           lifecycle={viewState.lifecycle}
           finalized={viewState.finalized}
+          selectedGeneration={selectedGeneration}
+          onSelectGeneration={setSelectedGeneration}
         />
       )
     : summary && summary.kind === 'architect' ? (
@@ -389,6 +405,8 @@ export default function SessionShellPage({
           legacy={viewState.legacy}
           lifecycle={viewState.lifecycle}
           finalized={viewState.finalized}
+          selectedGeneration={selectedGeneration}
+          onSelectGeneration={setSelectedGeneration}
           onChanged={refreshShell}
           // W8-B4 FIX-1 — was a hardcoded skill/hook two-way branch (the
           // SAME blind-spot class as SessionInteractivePanel.tsx's own
@@ -564,6 +582,8 @@ export default function SessionShellPage({
                 project={project ?? undefined}
                 sessionId={sessionId}
                 onFinalizeGeneration={onFinalizeGeneration}
+                selectedGeneration={selectedGeneration}
+                onSelectGeneration={setSelectedGeneration}
                 // W8-B3 (sessions-kinds-R08) — the settled phase, so the
                 // destination line can stop promising a verdict that has
                 // already been given. Both facts were already on the payload.
