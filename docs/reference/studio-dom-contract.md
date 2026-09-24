@@ -826,7 +826,16 @@ is what this contract reads — but it cannot be the only distinguisher.
   unfiltered set). **W7-B1 (home-sessions-12): the page stays LIVE** — the
   same `cycle-list-changed` bridge-WS signal Home refetches on, through the
   SAME `createDebouncedRefreshRuns` debounce (one subscribe, mount-only, no
-  page-level poll — `app/sessions/page.tsx`). **W7-B1 (crosscut-13 /
+  page-level poll — `app/sessions/page.tsx`). **sessions-kinds-16: a
+  terminal-sessions pointer** — the page's own lede says terminal sessions
+  "live on their artifacts" but named no path to any; a static (no fetch
+  dependency, renders in every state including loading)
+  `div[data-section="terminal-sessions-pointer"]` links to `/monitor` via
+  `a[data-action="open-monitor"]` — the SAME action `MonitorSummaryStrip.tsx`
+  already uses for this link — because Monitor's history ledger
+  (`lib/session-ledger.ts`'s `deriveSessionLedgerRows`) joins every spine
+  session regardless of phase, terminal included, unlike this page's own
+  active-only set. **W7-B1 (crosscut-13 /
   home-sessions-19): `section[data-section="sessions-kickoff"]` renders in
   BOTH the populated and the empty state** (only a FAILED read omits it) —
   one `a[data-action="kickoff-<kind>"]` per entry of
