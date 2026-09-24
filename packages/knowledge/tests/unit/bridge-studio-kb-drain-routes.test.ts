@@ -34,6 +34,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { dispatchRoute } from '@forge/kernel';
 import { knowledgeRoutes, type KnowledgeRouteContext } from '../../routes.ts';
+import { writeKbDrainStatus } from '../../bridge-studio-kb-drain.ts';
 
 const routes = knowledgeRoutes({
   sessionStatusIo: refusingSessionStatusIo,
@@ -394,6 +395,86 @@ test('knowledge-01: GET /drain/:runId re-arms the tail on every poll while runni
     assert.ok(released.includes(cycleId), 'the poll that FIRST observed the terminal state must release the tail');
   } finally {
     process.env.FORGE_ARCHITECT_NO_SPAWN = prevNoSpawn;
+    rmSync(iso.root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// M7-C U8 (bead forge-u8y2, W8-F6 follow-up) — a stored `/sessions/kb-cleanup/
+// <id>` pointer never reaches the wire when the injected `sessionIsReadable`
+// port says it resolves nowhere. `dispatchTo` above (built for the tail
+// tests) is reused here for a routes table wired with a stub probe instead.
+// ---------------------------------------------------------------------------
+
+function routesWithProbe(sessionIsReadable: (args: { kind: string; sessionId: string; project?: string | null }) => boolean) {
+  return knowledgeRoutes({
+    sessionStatusIo: refusingSessionStatusIo,
+    listFlowIds: () => ['forge-develop'],
+    listFlowBandIds: () => ['review-band', 'integrate-band'],
+    runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); },
+    sessionIsReadable,
+  });
+}
+
+test('M7-C U8: GET /api/studio/kbs/:id/runs drops a cleanup row the probe calls unreadable, keeps it when readable', async () => {
+  const iso = makeIsolatedBridge();
+  try {
+    seedCleanKb(iso.root, 'ledger-kb');
+    const sid = '2026-08-20T09-00-00-ab12';
+    const anchorDir = join(iso.root, 'projects', '.kb-ledger-kb', '_kb-cleanup', sid);
+    mkdirSync(anchorDir, { recursive: true });
+    writeFileSync(join(anchorDir, 'status.json'), JSON.stringify({ phase: 'awaiting-approval', kb_id: 'ledger-kb' }), 'utf8');
+
+    const seen: Array<{ kind: string; sessionId: string; project?: string | null }> = [];
+    const dropped = await dispatchTo(routesWithProbe((a) => { seen.push(a); return false; }), iso.root, '/api/studio/kbs/ledger-kb/runs', 'GET');
+    assert.equal(dropped.status, 200, JSON.stringify(dropped.json));
+    const droppedRuns = dropped.json['runs'] as Array<Record<string, unknown>>;
+    assert.equal(droppedRuns.some((r) => r['kind'] === 'cleanup'), false, `expected no cleanup row on the wire, got ${JSON.stringify(droppedRuns)}`);
+    assert.ok(seen.some((a) => a.kind === 'kb-cleanup' && a.sessionId === sid && a.project === '.kb-ledger-kb'), `probe must see the stored pointer, got ${JSON.stringify(seen)}`);
+
+    const kept = await dispatchTo(routesWithProbe(() => true), iso.root, '/api/studio/kbs/ledger-kb/runs', 'GET');
+    const keptRuns = kept.json['runs'] as Array<Record<string, unknown>>;
+    assert.ok(keptRuns.some((r) => r['kind'] === 'cleanup' && r['id'] === sid), `expected the cleanup row kept, got ${JSON.stringify(keptRuns)}`);
+  } finally {
+    rmSync(iso.root, { recursive: true, force: true });
+  }
+});
+
+function seedDrainStatusWithDraft(root: string, runId: string, kbId: string, draftSessionId: string, draftProject: string): void {
+  writeKbDrainStatus(root, runId, {
+    state: 'needs-you', round: 1, counts: { auto: 0, agent: 0, user: 1 },
+    perFinding: [{
+      key: 'f1', check: 'some-check', kind: 'prose', file: 'brain/x/themes/y.md', message: 'msg',
+      tier: 'agent', outcome: 'needs-you', round: 1,
+      draftSession: { id: draftSessionId, project: draftProject },
+    }],
+    costUsd: 0.01, updatedAt: new Date().toISOString(), kbId, startedAt: new Date().toISOString(),
+    maxRounds: 5, maxCostUsd: 2,
+  });
+}
+
+test('M7-C U8: GET /api/studio/kbs/:id/drain/:runId and GET .../drain drop draftSession the probe calls unreadable, keep it when readable', async () => {
+  const iso = makeIsolatedBridge();
+  try {
+    seedCleanKb(iso.root, 'draft-kb');
+    const runId = 'draft-kb-drain-abc123';
+    seedDrainStatusWithDraft(iso.root, runId, 'draft-kb', '2026-08-20T09-00-00-cd34', '.kb-draft-kb');
+
+    const droppingRoutes = routesWithProbe(() => false);
+    const droppedRun = await dispatchTo(droppingRoutes, iso.root, `/api/studio/kbs/draft-kb/drain/${runId}`, 'GET');
+    assert.equal(droppedRun.status, 200, JSON.stringify(droppedRun.json));
+    const droppedRunFindings = droppedRun.json['perFinding'] as Array<Record<string, unknown>>;
+    assert.equal(droppedRunFindings[0]['draftSession'], undefined, `expected draftSession dropped, got ${JSON.stringify(droppedRunFindings)}`);
+
+    const droppedStatus = await dispatchTo(droppingRoutes, iso.root, '/api/studio/kbs/draft-kb/drain', 'GET');
+    const droppedStatusFindings = droppedStatus.json['perFinding'] as Array<Record<string, unknown>>;
+    assert.equal(droppedStatusFindings[0]['draftSession'], undefined, `expected draftSession dropped on the reattach path too, got ${JSON.stringify(droppedStatusFindings)}`);
+
+    const keepingRoutes = routesWithProbe(() => true);
+    const keptRun = await dispatchTo(keepingRoutes, iso.root, `/api/studio/kbs/draft-kb/drain/${runId}`, 'GET');
+    const keptRunFindings = keptRun.json['perFinding'] as Array<Record<string, unknown>>;
+    assert.deepEqual(keptRunFindings[0]['draftSession'], { id: '2026-08-20T09-00-00-cd34', project: '.kb-draft-kb' });
+  } finally {
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
