@@ -44,9 +44,63 @@
  * mandate that every project bind one.
  */
 
+import { readFileSync } from 'node:fs';
 import { guardedFile } from '@forge/kernel';
 import type { ClauseResult } from '@forge/kernel';
 import type { ProjectConfig } from './project-config.ts';
+import { loadProjectConfig } from './project-config.ts';
+
+/**
+ * THE ONE resolver both `checkSkills` (existence-only) and `loadDeclaredSkills`
+ * (existence + content, ADR 024 item 90) read through — "one rule, never two
+ * copies". Same project-local-then-forge-wide order `SkillsBind`'s own
+ * `offeredSkills` derivation uses. Returns the resolved absolute path, or
+ * `null` if neither location has a `SKILL.md`. No slug validation: a declared
+ * skill id is project-authored, not slug-validated at parse time (see
+ * `project-config-validate.ts`'s `parseSkills`), so it rides the same
+ * containment guard every other per-id leaf read in this codebase does
+ * (`guardedFile`) rather than a second, redundant shape check.
+ */
+export function resolveDeclaredSkillPath(dir: string, forgeRoot: string, id: string): string | null {
+  return (
+    guardedFile(dir, ['.forge', 'skills', id, 'SKILL.md'], 'read') ??
+    guardedFile(forgeRoot, ['skills', id, 'SKILL.md'], 'read')
+  );
+}
+
+/** Named, fail-fast: a declared skill id an agent was told to load that resolves nowhere. */
+export class MissingDeclaredSkillError extends Error {
+  constructor(id: string, dir: string, forgeRoot: string) {
+    super(
+      `declared skill "${id}" does not resolve — no SKILL.md at ${dir}/.forge/skills/${id}/ (project-local) ` +
+        `or ${forgeRoot}/skills/${id}/ (forge-wide)`,
+    );
+    this.name = 'MissingDeclaredSkillError';
+  }
+}
+
+export type DeclaredSkill = { id: string; path: string; text: string };
+
+/**
+ * Every skill `projectDir`'s `.forge/project.json` declares, resolved through
+ * `resolveDeclaredSkillPath` and read — the loader half of the SKILLS clause,
+ * consumed by every agent builder (`runAgent`, `createClaudeAgent`) so a
+ * declared skill actually reaches the agent instead of being a fact preflight
+ * confirms and nothing else reads. No declared skills (or no project.json at
+ * all) → `[]`. A declared id that does not resolve THROWS
+ * `MissingDeclaredSkillError` naming it — fail fast, no silent skip; this is
+ * deliberately NOT the `checkSkills` behaviour (preflight reports a soft list
+ * of missing ids so the operator sees ALL of them at once) because a running
+ * agent has no "later" to catch up in.
+ */
+export function loadDeclaredSkills(projectDir: string, forgeRoot: string): DeclaredSkill[] {
+  const declared = loadProjectConfig(projectDir)?.skills ?? [];
+  return declared.map((id) => {
+    const path = resolveDeclaredSkillPath(projectDir, forgeRoot, id);
+    if (path === null) throw new MissingDeclaredSkillError(id, projectDir, forgeRoot);
+    return { id, path, text: readFileSync(path, 'utf8') };
+  });
+}
 
 export function checkSkills(dir: string, cfg: ProjectConfig | null, forgeRoot: string): ClauseResult {
   const base = { clause: 'SKILLS' as const, title: 'Declared skills resolve (project-local or forge-wide)', hard: true };
@@ -55,12 +109,7 @@ export function checkSkills(dir: string, cfg: ProjectConfig | null, forgeRoot: s
     return { ...base, pass: true, detail: 'no skills declared — nothing to resolve' };
   }
 
-  const missing = declared.filter((id) => {
-    const local = guardedFile(dir, ['.forge', 'skills', id, 'SKILL.md'], 'read');
-    if (local !== null) return false;
-    const forgeWide = guardedFile(forgeRoot, ['skills', id, 'SKILL.md'], 'read');
-    return forgeWide === null;
-  });
+  const missing = declared.filter((id) => resolveDeclaredSkillPath(dir, forgeRoot, id) === null);
 
   if (missing.length === 0) {
     return { ...base, pass: true, detail: `${declared.length} declared skill(s) all resolve` };
