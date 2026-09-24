@@ -77,39 +77,3 @@ export function rangeTiers(rangeModelIds: string[], catalog: Catalog): ModelTier
 
   return withCost.map((m) => m.tier);
 }
-
-/**
- * Pick the model id to spawn, given a range and the current escalation level.
- *
- * The range is ordered cheapest-first (by catalog cost). escalationLevel 0 =
- * cheapest; 1 = next tier up; etc. Clamped at the most-expensive in the range.
- *
- * @param rangeModelIds - model ids from AgentRuntime.range
- * @param catalog - the loaded studio catalog
- * @param escalationLevel - 0 = cheapest (default); bump on gate failure
- * @returns the model id to spawn with
- */
-export function resolveRangeModel(
-  rangeModelIds: string[],
-  catalog: Catalog,
-  escalationLevel = 0,
-): string {
-  if (rangeModelIds.length === 0) {
-    throw new Error('resolveRangeModel: range must contain at least one model id');
-  }
-
-  if (rangeModelIds.length === 1) {
-    return rangeModelIds[0];
-  }
-
-  // Sort by cost ascending (cheapest first)
-  const withCost = rangeModelIds.map((id) => {
-    const entry = findInCatalog(id, catalog);
-    return { id, cost: entry ? totalCost(entry) : 0 };
-  });
-  withCost.sort((a, b) => a.cost - b.cost);
-
-  // Clamp at the end
-  const idx = Math.min(escalationLevel, withCost.length - 1);
-  return withCost[idx].id;
-}
