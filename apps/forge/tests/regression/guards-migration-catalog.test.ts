@@ -47,7 +47,7 @@ import type { Catalog } from '@forge/contracts/studio/types.ts';
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
 const REAL_CATALOG_PATH = resolve(FORGE_ROOT, 'studio', 'catalog.yaml');
 
-const EXPECTED_GUARD_IDS = ['event-log', 'cost-guard', 'stall-watchdog', 'merge-gate', 'scratch-strip', 'wi-contract', 'reflection-close', 'demo-band', 'review-band', 'onboard-preflight'];
+const EXPECTED_GUARD_IDS = ['event-log', 'cost-guard', 'stall-watchdog', 'merge-gate', 'scratch-strip', 'wi-contract', 'reflection-close', 'integrate-band', 'review-band', 'onboard-preflight'];
 
 // R4-18 mechanical amendment (2026-08-10): a 5th band, 'onboard-preflight',
 // joins the vocabulary — EXPECTED_GUARD_IDS now names 10 ids, not 9. RED
@@ -85,7 +85,7 @@ function writeGuardsCatalogFixture(dir: string): string {
     // prove the derivation from BAND_GUARD_IDS overrides this, not trust it.
     '  - { id: wi-contract, name: WI contract band, desc: "Plan-agent band.", kind: toggle }',
     '  - { id: reflection-close, name: Reflection close band, desc: "Reflect-agent band." }',
-    '  - { id: demo-band, name: Demo band, desc: "Demo-agent band." }',
+    '  - { id: integrate-band, name: Demo band, desc: "Demo-agent band." }',
     '  - { id: review-band, name: Review band, desc: "Adversarial-review band." }',
   ];
   writeFileSync(path, lines.join('\n') + '\n');

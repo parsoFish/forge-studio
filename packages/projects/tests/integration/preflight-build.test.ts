@@ -26,7 +26,7 @@ import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
-import { runPreflight, type ClauseId } from '../../preflight.ts';
+import { runPreflight, SCRATCH_PATHS, type ClauseId } from '../../preflight.ts';
 
 function tmp(): string {
   return mkdtempSync(join(tmpdir(), 'forge-preflight-'));
@@ -44,7 +44,7 @@ function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void }
   );
   writeFileSync(
     join(dir, '.gitignore'),
-    ['node_modules/', 'dist/', '.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n'),
+    ['node_modules/', 'dist/', ...SCRATCH_PATHS].join('\n'),
   );
   writeFileSync(join(dir, 'roadmap.md'), '# Roadmap\n');
   // C8 coverage (R1-04-F1): the instruction file mentions the declared gate command.
@@ -94,7 +94,7 @@ test('ARTIFACTS (ADVISORY): a Go project whose .gitignore lacks any binary ignor
   try {
     // Make it a Go project; keep only forge-scratch ignores (no binary/build outputs).
     writeFileSync(join(p.dir, 'go.mod'), 'module example.com/x\n');
-    writeFileSync(join(p.dir, '.gitignore'), ['.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n'));
+    writeFileSync(join(p.dir, '.gitignore'), [...SCRATCH_PATHS].join('\n'));
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     const c = clause(r, 'ARTIFACTS');
     assert.equal(c.pass, false);
@@ -110,7 +110,7 @@ test('ARTIFACTS (ADVISORY): a Go project that ignores its binary outputs passes'
   const p = happyProject();
   try {
     writeFileSync(join(p.dir, 'go.mod'), 'module example.com/x\n');
-    writeFileSync(join(p.dir, '.gitignore'), ['/bin/', '*.test', '.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n'));
+    writeFileSync(join(p.dir, '.gitignore'), ['/bin/', '*.test', ...SCRATCH_PATHS].join('\n'));
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(clause(r, 'ARTIFACTS').pass, true);
   } finally {

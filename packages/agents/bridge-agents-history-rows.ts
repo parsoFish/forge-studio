@@ -27,7 +27,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 
 import { deriveSessionCostUsd, resolveGuardedPath } from '@forge/kernel';
 
@@ -40,6 +40,8 @@ import {
   type AgentHistoryRow,
   type AgentRunStateDeps,
 } from './bridge-agents-run-state.ts';
+import { listAgentDefinitions } from './studio/agent-registry.ts';
+import { skillsDir } from './skill-path.ts';
 
 /**
  * What the collectors need from above this package's rank, declared
@@ -58,6 +60,10 @@ export type AgentHistoryDeps = AgentRunStateDeps & {
    *  caller catches per flow so one bad file never sinks the mapping. Narrowed
    *  to the three fields read here; the host passes the real definition. */
   loadFlowDefinition(flowPath: string): { id: string; nodes: readonly { id: string; agent?: string }[] };
+  /** `listFlowIds`/`flowPathForId` — every flow root (SEAM F1): `studio/
+   *  flows` AND every `packages/<pkg>/flows`. */
+  listFlowIds(forgeRoot: string): readonly string[];
+  flowPathForId(flowId: string, forgeRoot: string): string;
   /** `loadSessionKinds` — allowed to THROW; a misconfigured studio must fail
    *  loudly rather than degrade to a stale mirror. Narrowed to the four fields
    *  read here (`legacyRoutes[0]` is the per-kind href template). */
@@ -66,12 +72,36 @@ export type AgentHistoryDeps = AgentRunStateDeps & {
   }[];
 };
 
+// forge-ewl: the node/phase key `slug`'s own runs are recorded under (SKILL.md `phase:`) — `undefined` for an unknown slug, never a throw. `reflector` is a one-entry hand mirror of packages/flows' CANONICAL_PHASE_OVERRIDES (rank 5, not importable here): its frontmatter phase 'reflector' differs from its canonical run.phases key 'reflect'; every OTHER phase agent's frontmatter already equals its node id verbatim. Pinned against real run history in tests/unit/bridge-agents-history-rows.test.ts.
+function agentOwnPhaseKey(forgeRoot: string, slug: string): string | undefined {
+  if (slug === 'reflector') return 'reflect';
+  try { return listAgentDefinitions(skillsDir(forgeRoot)).find((d) => d.slug === slug)?.phase; } catch { return undefined; }
+}
+
+// forge-dgj: resolve per (flowId, nodeId), never a bare nodeId — buildAgentSlugToNodeId is a FLAT, first-write-wins map, so two flows sharing a literal node id (dev/review/demo are all ordinary) silently attributed one flow's run to the other's agent; buildFlowNodeToSlug below is already scoped correctly and already proven (Control 3, W7-B5) for the sibling aggregate route.
+// forge-ewl: when NO live flow declares this slug at all (its flow retired — reflector/forge-reflect, W7-C1 — or it never had one — release-finalizer), fall back to the agent's own canonical phase key — but only when no LIVE flow node claims that key for a different agent, so the fallback can never reopen dgj's hole.
 export function collectFlowNodeRows(deps: AgentHistoryDeps, forgeRoot: string, slug: string): AgentHistoryRow[] {
-  const nodeId = deps.buildAgentSlugToNodeId(forgeRoot).get(slug);
-  if (!nodeId) return [];
+  const flowNodeToSlug = buildFlowNodeToSlug(deps, forgeRoot);
+  // Per-flow node id for this slug, plus every node id any live flow declares (any agent) — the set the ewl fallback must never intrude on.
+  const nodeIdByFlow = new Map<string, string>();
+  const liveNodeIds = new Set<string>();
+  for (const [flowId, nodes] of flowNodeToSlug) {
+    for (const [nodeId, declaredSlug] of nodes) {
+      liveNodeIds.add(nodeId);
+      if (declaredSlug === slug) nodeIdByFlow.set(flowId, nodeId);
+    }
+  }
+  let fallbackKey: string | undefined;
+  if (nodeIdByFlow.size === 0) {
+    const candidate = agentOwnPhaseKey(forgeRoot, slug);
+    if (candidate !== undefined && !liveNodeIds.has(candidate)) fallbackKey = candidate;
+  }
+  if (nodeIdByFlow.size === 0 && fallbackKey === undefined) return [];
   const rows: AgentHistoryRow[] = [];
   // ADR-044 P1: cached per-manifest derivation — see packages/flows/run-list-cache.ts.
   for (const run of deps.cachedListRuns(forgeRoot, Date.now())) {
+    const nodeId = nodeIdByFlow.get(run.flowId) ?? fallbackKey;
+    if (nodeId === undefined) continue; // this run's OWN flow never declared the slug, and no safe fallback applies
     const status = run.phases[nodeId];
     if (status === undefined) continue; // this run's flow never reached the node — no row, never fabricated
     rows.push({
@@ -206,10 +236,8 @@ function standaloneRunSlug(events: readonly Record<string, unknown>[]): string |
 function buildFlowNodeToSlug(deps: AgentHistoryDeps, forgeRoot: string): Map<string, Map<string, string>> {
   const byFlow = new Map<string, Map<string, string>>();
   try {
-    const flowsDir = join(resolve(forgeRoot), 'studio', 'flows');
-    if (!existsSync(flowsDir)) return byFlow;
-    for (const entry of readdirSync(flowsDir).sort()) {
-      const flowPath = join(flowsDir, entry, 'flow.yaml');
+    for (const entry of deps.listFlowIds(forgeRoot)) {
+      const flowPath = deps.flowPathForId(entry, forgeRoot);
       if (!existsSync(flowPath)) continue;
       let flow;
       try {

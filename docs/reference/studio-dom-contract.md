@@ -372,7 +372,13 @@ is what this contract reads — but it cannot be the only distinguisher.
   failure) and the body is this component. `/sessions/<kind>/<sid>` renders
   it inside `[data-section="session-error"]` (framed by the shell route's
   `errorKind`: `network-error`/`no-bridge` = unreachable, every other kind =
-  the bridge answered) with Retry (crosscut-09); the project page's contract
+  the bridge answered) with Retry (crosscut-09). `forge-5rr`: the SAME
+  page's per-kind SUMMARY read (a SEPARATE fetch from the shell read above —
+  architect/instructions/project-brain/demo's own list endpoint) renders it
+  inside `[data-section="session-summary-error"]`, with Retry
+  (`onRetry={refreshSummary}`) — reachable only for the two kinds
+  (architect, project-brain) with no generic-panel fallback, and only while
+  the summary itself never resolved; the project page's contract
   panel renders it inside `[data-section="contract-checklist-error"]` in the
   checklist's place — never a `data-checklist-row-count="0"` list on a
   404/409/500 (projects-03/crosscut-12); the `/hooks|/connections|/skills/[id]`
@@ -743,7 +749,17 @@ is what this contract reads — but it cannot be the only distinguisher.
     always rendered including at zero (a tile that appears and vanishes
     makes "nothing is running" indistinguishable from "the strip broke"):
     `[data-summary-tile="live"|"needs-you"|"failed"|"queued"][data-count]`.
-    Pinned by `lib/monitor-summary-strip-render.test.ts`.
+    Pinned by `lib/monitor-summary-strip-render.test.ts`. **forge-6gv.28:**
+    `data-monitor-ready` is `deriveSummaryReady({homeDataReady, agentRowsReady})`
+    (`lib/monitor-view.ts`), NOT the page's own `data-page-ready` — the
+    merged everything-ledger's standalone-agent half resolves in a SECOND,
+    independent effect after `homeDataReady` settles, and the counts above
+    are computed over that same merged list. Before this fix both callers
+    fed `data-monitor-ready` from `homeDataReady` alone, so a reader could
+    see `data-page-ready="true"` and `data-monitor-ready="true"` while the
+    live/total counts were still missing the agent half — a declared
+    readiness flag that did not cover one of the two reads its own headline
+    is derived from.
   - `section[data-section="scheduler"]` — the shared `SchedulerCard` (full
     contract under the Home entry above); its own component owns its read,
     so Monitor adds no extra fetch or interval here.
@@ -1067,7 +1083,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   routes match `INIT_ID_RE`, so a harness driving the API keys on this one) —
   each beside
   `[data-component="run-control-detail"][data-control=<id>]` saying what it does
-  (Resume re-enters at the demo node against the preserved branch; Requeue
+  (Resume re-enters at the integrate node against the preserved branch; Requeue
   re-runs from the start on a fresh worktree; Abandon deletes worktree and
   branch). Before this the monitor carried Resume alone, with no disclosure and
   no else branch — a refused POST was invisible. Abandon confirms in the DOM
@@ -1104,7 +1120,13 @@ is what this contract reads — but it cannot be the only distinguisher.
   [data-pinned-selection="true"]`, so collapse hides the pile, never the
   selection; the HistoryLedger row carries the same `data-run-id` on a LINK,
   so journeys select via the rail-scoped selector) and the phase drawer skips the log
-  fetch for a `pending` node (no 404 per hex click on a queued run). MONITOR renders the run's hex
+  fetch for a `pending` node (no 404 per hex click on a queued run). forge-7wc: a
+  rejected log fetch (idle/terminal node) renders
+  `[data-component="phase-log-error"]` with the failure's own message — a
+  state distinct from, and checked before, the drawer's existing "no log
+  lines for this phase" genuinely-empty copy, so a failed fetch can never
+  read as an empty log (`lib/phase-log-panel-view.ts`'s
+  `derivePhaseLogPanelState`). MONITOR renders the run's hex
   topology (`FlowTopology.tsx`): each node is
   `[data-mon-node][data-node-id][data-status][data-hex-kind]`
   (`data-hex-kind` is `phase | wi`); phase hexes carry `data-phase-cost-usd`,
@@ -1951,7 +1973,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   [data-item-id][data-page-ready]` plus, **present ONLY once the item
   resolves** (`[data-item-kind][data-install-state]` are ABSENT while
   loading, on a fetch error, and for an unknown kind/id — an unvalidated
-  route param is never asserted as fact before the server confirms it):
+  route param is never asserted as fact before the server confirms it).
+  `forge-5rr` (projects-45): a non-404 read failure (bridge down, or
+  reachable-and-refused) renders the SHARED `PageLoadError` kit instead of
+  the page's own chrome — `main[data-page="community-detail"]
+  [data-page-ready="true"][data-fetch-status="error"][data-load-error="true"]
+  [data-item-id]`, with `[data-action="retry-fetch"]` (Retry re-runs the
+  read) and a bridge-recovery resubscribe that refills automatically once
+  the bridge is back — replacing the old dead-end banner with no retry path
+  short of a manual reload. The not-found claim itself stays reachable ONLY
+  off a real, bridge-answered HTTP 404 (`fetchCommunityItemDetail`'s own
+  `status`) — never off this transport-failure branch.
   `[data-section="hub-signals"]` (`[data-hub-id]` present only for a matched
   hub, a signal-attribution attribute present only when the source record
   actually carries signals — D4/D5, no invented hub name or signal figure
@@ -2960,11 +2992,25 @@ is what this contract reads — but it cannot be the only distinguisher.
   else, so before this the drawer — and the `[data-run-link]` inside it — was
   unreachable to a beat, and S10 beats 9–21 all failed on "no real-nav path to
   the run page". Pressing it opens the drawer for that initiative; the drawer's
-  run links are `[data-run-link][data-run-cycle-id][data-run-active]` with
-  `href="/flows/forge-develop/run/<cycleId>"`. **`data-run-active="true"` means
-  NEWEST, not running** (`cycle-grouping.ts:48-62` sorts by cycle id and takes
-  the head; it is not a liveness check) — and the route is keyed by CYCLE id,
-  never by initiative id.
+  run links are `[data-run-link][data-run-cycle-id][data-run-active]
+  [data-run-live]` with `href="/flows/forge-develop/run/<cycleId>"`.
+  `cycle-grouping.ts:48-62` sorts by cycle id and takes the head as the
+  "active" cycle, which is NEWEST, not a liveness check on its own —
+  `data-run-active="true"` means NEWEST (index 0) and nothing else; it
+  is unconditional on that cycle's own status, because `S10.story.mjs`
+  binds its `<cycleId>` off `[data-run-active="true"][data-run-cycle-id]`
+  and a beat must still find that link after the newest run concludes.
+  **forge-6gv.13.1:** the LABEL is what carries the liveness fact instead —
+  index 0 reads "active run" only when the initiative's own `status` is
+  NON-terminal (reusing `lib/cycle-cost-cache.ts`'s
+  `COST_TERMINAL_CYCLE_STATUSES` — merged/done/failed), else "last run"
+  (an older attempt, index > 0, always reads "prior run" and carries
+  `data-run-active="false"`), so a newest cycle that has already concluded
+  (an old failed or done attempt) is never mislabelled "active run" even
+  though it still carries `data-run-active="true"`. `data-run-live="true"`
+  duplicates that same liveness fact (NEWEST **and** non-terminal) as a
+  boolean for a caller that wants it without parsing the label text — and
+  the route is keyed by CYCLE id, never by initiative id.
 
   **REFRESH SEMANTICS — the roadmap is LIVE (`forge-8vfn.7.6.27`).** The page
   subscribes to the bridge socket and re-reads on `cycle-list-changed` (every
@@ -3027,7 +3073,8 @@ is what this contract reads — but it cannot be the only distinguisher.
   now-line's chip, horizontally synced to pan/zoom, vertically fixed. Inside
   the open drawer, the card's real work items (`[data-work-item-id]`) and a
   per-node run dig-in `[data-section="initiative-runs"]` with one
-  `[data-run-link][data-run-cycle-id][data-run-active="true"|"false"]`
+  `[data-run-link][data-run-cycle-id][data-run-active="true"|"false"]
+  [data-run-live="true"|"false"]`
   (href `/flows/forge-develop/run/<cycleId>`) for the active cycle plus every
   Every roadmap node carries `[data-blocked-clauses]` — the failing hard-clause
   NAMES from a claim the SCHEDULER made and then REFUSED (`SKILLS`, comma-joined;
@@ -3161,7 +3208,13 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-field="create-name"]` / `[data-field="create-north-star"]` /
   `[data-field="create-app-type"]` (a `<select>` of curated app types) and a
   `[data-action="create-project"]` button — scaffolds a contract-green project
-  from a framework template and navigates to its page.
+  from a framework template and navigates to its page. **A failed create
+  carries its own handle (`forge-8vfn.6.11.37`):** `[data-section="create-
+  error"]`, a paragraph rendered by the extracted `CreateError` component
+  (`components/studio/CreateFromTemplate.tsx`) that carries the failure
+  message and nothing else when there is none — before this, the message
+  rendered as bare text with no `data-*` at all, so a beat needed a CLI probe
+  to learn why a create failed (S2 run 6).
   **Amended 2026-09-06 (bead `forge-8vfn.6.11.4`, operator ruling 301):** the
   starters are named for a STYLE — `api`, `cli`, `webapp` — and
   `GET /api/studio/projects/starters` answers `{appTypes: [{id, label,
@@ -3265,7 +3318,18 @@ is what this contract reads — but it cannot be the only distinguisher.
   id — a wrong destination with no indication anything went wrong). The
   USER-tier `[data-action="apply-clause-decision"]` button genuinely
   dispatches + polls a preflight-fix agent (~90s bounded) and is labelled
-  "Apply with agent" accordingly.
+  "Apply with agent" accordingly. `forge-8vfn.8.3.1` (projects-45): its
+  `disabled` consults the SAME per-clause poll state the row's own
+  `data-agent-run-state`/`data-poll-state` already render, not just the
+  click-scoped `busy` flag — `busy` clears the instant the dispatch POST
+  resolves, while the polled agent run can still be `'watching'` or
+  `'timed-out'` (a poll ceiling is a fact about the watcher, not the run —
+  `pollDisplayState`'s header). Either non-terminal state keeps the button
+  disabled with `[data-disabled-reason]` (`disabledAttrs`,
+  `lib/disabled-reason.ts`) naming the still-running clause; only a real
+  terminal status re-enables it. Before this fix the button re-enabled the
+  moment the POST returned, so a second click could dispatch a second agent
+  onto the same clause.
   **`[data-section="contract-panel"]` (R4-12-F1)** —
   `ProjectContractPanel.tsx`, an async server component mounted client-side by
   the page's `ContractPanelMount`; it issues its OWN
@@ -3719,6 +3783,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   -04, crosscut-21/-25, 2026-08-21):** `NewIdeaBox` is the ONE self-contained
   architect kickoff form, rendered by BOTH `/architect/new` and
   `/sessions/architect/new` (the two entries converge — no more bounce link).
+  **crosscut-R12 (forge-6gv.2.1):** the ROOT identity converges too —
+  `/sessions/architect/new` declares `data-page="architect-new"`, matching
+  `/architect/new` exactly, never the generic per-kind `"session-kickoff"`
+  every OTHER `/sessions/<kind>/new` still declares (that page's shared
+  branch this early return never reaches).
   Contract: `[data-section="new-idea"][data-new-idea-ready]
   [data-roster-state="loading"|"ok"|"error"][data-architect-session-id]`;
   `data-architect-session-id` is PRESENT FROM FIRST PAINT as `""` and carries the
@@ -4616,7 +4685,17 @@ is what this contract reads — but it cannot be the only distinguisher.
     `[data-action="view-architect-session"]`); the KB hand-off was one of the
     six sites that kept the old shape. Rendered only when `seedSession` is
     present in the query. Harness coverage: `tests/stories/S6.story.mjs`
-    beats 4-7.
+    beats 4-7. `knowledge-38` (forge-6gv.6.1): the banner's TEXT is no longer
+    a hardcoded "…is running for it" claim off the query param's mere
+    presence — `startProjectBrain` always mints a fresh session at phase
+    `'briefing'` (idle, waiting for the operator's brief), so that claim was
+    wrong on every single KB creation. The banner now fetches the session's
+    real phase (`fetchProjectBrainSessions`) and renders
+    `lib/kb-seed-banner.ts`'s `kbSeedBannerCopy` derivation, carrying two new
+    attributes: `data-seed-session-phase` (the real phase, or `''` before
+    the read lands / if it fails — never a guessed value) and
+    `data-seed-session-running="true"|"false"` (true only for `'analyzing'`/
+    `'committing'` — the phases where an agent is genuinely doing something).
   - **KB selector zero-state (W6-IA-4 sweep finding C4#2).**
     `KbSelector.tsx`'s `#kb-select` used to render a genuinely empty
     `<select>` (zero `<option>`s) whenever the roster was empty — nothing to
@@ -4675,8 +4754,13 @@ is what this contract reads — but it cannot be the only distinguisher.
     the shared `[data-component="fetch-error"]` + Retry (which drops the cached
     rejected fetch) in the graph's place — never "No KB data available." under
     a root that advertises `ok`; force-graph
-    root `#kb-svg[data-kb-id][data-node-count][data-edge-count][data-selected-node]`,
-    per-node `[data-node-id][data-layer="theme"|"index"|"guidance"]` with a
+    root `#kb-svg[data-kb-id][data-node-count][data-edge-count][data-selected-node]`.
+    A zero-node graph (`data-node-count="0"`) overlays
+    `[data-component="kb-graph-empty"]` — "No data yet for this knowledge
+    base." — over the still-live canvas and controls (forge-0b0: before this
+    a genuinely empty KB rendered the identical inert canvas a broken graph
+    would, with nothing telling the operator which one they were looking
+    at). Per-node `[data-node-id][data-layer="theme"|"index"|"guidance"]` with a
     `[data-hit]` inner hit-circle (click target — the outer `<g>`'s bbox
     centre is pushed off-centre by the label). Node click opens the article
     pane (`[data-node-article-body]`); the KB selector is `#kb-select`, one
@@ -5280,10 +5364,16 @@ is what this contract reads — but it cannot be the only distinguisher.
   plus `[data-template-category]` and `[data-endpoints-verified="true"|"false"]`
   once the fetch resolves — the latter present ONLY when the template
   declares a producer and/or consumer (planning-only; absent, not `false`,
-  when nothing is declared). Non-ready states: `[data-component="fetch-error"]`
-  (bridge unreachable) and the shared not-found page (`main[data-page=
-  "not-found"][data-not-found-kind="template"]`, W7-A4 — unknown id, the
-  bridge 404s for it by design). The ready state renders
+  when nothing is declared). Non-ready states: the shared not-found page
+  (`main[data-page="not-found"][data-not-found-kind="template"]`, W7-A4 —
+  unknown id, reachable ONLY off a real bridge-answered 404, the bridge
+  404s for it by design); `forge-5rr` (projects-45): a non-404 failure (the
+  bridge unreachable, or reachable-and-refused) renders the shared
+  `PageLoadError` kit instead — `main[data-page="template-detail"]
+  [data-page-ready="true"][data-fetch-status="error"][data-load-error="true"]
+  [data-template-id]`, with `[data-action="retry-fetch"]` and a bridge-
+  recovery resubscribe, replacing the old dead-end `[data-component=
+  "fetch-error"]` banner with no retry path. The ready state renders
   `[data-section="definition"]` (format/provenance/definition-ref); for a
   malformed definition, `[data-section="parse-error"]` instead; planning-only,
   when a producer/consumer is declared, `[data-section="endpoints"]`

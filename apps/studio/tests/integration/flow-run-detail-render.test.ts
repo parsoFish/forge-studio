@@ -103,7 +103,7 @@ function developFlow(): Flow {
     goal: 'Build the initiative.',
     nodes: [
       { id: 'dev', agent: 'developer-ralph' },
-      { id: 'demo', agent: 'demo-agent', resumable: true },
+      { id: 'integrate', agent: 'demo-agent', resumable: true },
       { id: 'adversarial-review', agent: 'adversarial-review' },
       { id: 'review', gate: 'verdict' },
     ],
@@ -134,7 +134,7 @@ function archivedRun(over: Partial<Run> = {}): Run {
 function rows(): FlowRunTimelineRow[] {
   return [
     { nodeId: 'dev', agent: 'developer-ralph', status: 'complete', costUsd: 3.5, note: '4 files · +120 · 2 commits', artifacts: [] },
-    { nodeId: 'demo', agent: 'demo-agent', status: 'pending', costUsd: 0, note: null, artifacts: [] },
+    { nodeId: 'integrate', agent: 'demo-agent', status: 'pending', costUsd: 0, note: null, artifacts: [] },
     { nodeId: 'adversarial-review', agent: 'adversarial-review', status: 'pending', costUsd: 0, note: null, artifacts: [] },
     { nodeId: 'review', agent: null, status: 'pending', costUsd: 0, note: null, artifacts: [] },
   ];
@@ -230,8 +230,8 @@ test('every flow node gets exactly one timeline row, in the flow definition orde
   expect(html).toContain('data-section="run-timeline"');
   const at = (id: string) => html.indexOf(`data-node-id="${id}"`);
   expect(at('dev')).toBeGreaterThan(-1);
-  expect(at('demo')).toBeGreaterThan(at('dev'));
-  expect(at('adversarial-review')).toBeGreaterThan(at('demo'));
+  expect(at('integrate')).toBeGreaterThan(at('dev'));
+  expect(at('adversarial-review')).toBeGreaterThan(at('integrate'));
   expect(at('review')).toBeGreaterThan(at('adversarial-review'));
 });
 
@@ -248,7 +248,7 @@ test("each row carries its OWN node id, status and cost on one element", () => {
   expect(dev).toContain('data-status="complete"');
   expect(dev).toContain('data-phase-cost-usd="3.50"');
 
-  const demo = rowMarkup(html, 'demo');
+  const demo = rowMarkup(html, 'integrate');
   expect(demo).toContain('data-status="pending"');
   expect(demo).toContain('data-phase-cost-usd="0.00"');
 });
@@ -257,7 +257,7 @@ test('no row ever carries the run-level total as its cost', () => {
   // KILLS: `data-phase-cost-usd={run.costUsd}` on rows. 4.10 is the RUN's
   // total (measured); it must appear on no row at all.
   const html = render();
-  for (const id of ['dev', 'demo', 'adversarial-review', 'review']) {
+  for (const id of ['dev', 'integrate', 'adversarial-review', 'review']) {
     expect(rowMarkup(html, id)).not.toContain('data-phase-cost-usd="4.10"');
   }
 });
@@ -281,7 +281,7 @@ test('a node with no note emits NO note attribute rather than an empty or invent
   const html = render();
 
   expect(rowMarkup(html, 'dev')).toContain('data-node-note="4 files · +120 · 2 commits"');
-  expect(rowMarkup(html, 'demo')).not.toContain('data-node-note');
+  expect(rowMarkup(html, 'integrate')).not.toContain('data-node-note');
 });
 
 test('the note rendered is the one the derivation produced, not re-derived in the view', () => {

@@ -93,6 +93,27 @@ export function isSessionLive(session: SessionIndexRow): boolean {
 }
 
 /**
+ * forge-6gv.28 — is this `MonitorSummary` actually SETTLED?
+ *
+ * `useEverythingLedger` merges the flow-run half (immediate, from
+ * `useStudioHomeData`) with a standalone-agent half fetched in a SECOND,
+ * independent effect (`agentRowsReady`). Both `/monitor` and Home fed
+ * `MonitorSummaryStrip`'s `ready` prop (and therefore `data-monitor-ready`)
+ * from `homeDataReady` alone — a declared readiness flag that did not cover
+ * one of the two reads its own headline (`buildMonitorSummary`, computed
+ * over `ledger.rows`) is derived from. A journey reading the summary right
+ * after `data-page-ready="true"` could see live/total counts UNDER the real
+ * figure, with `data-monitor-ready="true"` vouching for them as settled.
+ *
+ * Both must be true: home data unready already means every count is
+ * provisional; the agent half unready means the merged rows are missing a
+ * whole source. Pure — the caller supplies both facts, never re-derived.
+ */
+export function deriveSummaryReady(input: { homeDataReady: boolean; agentRowsReady: boolean }): boolean {
+  return input.homeDataReady && input.agentRowsReady;
+}
+
+/**
  * Build the aggregate counts from ALREADY-FETCHED data.
  *
  * `ledgerRows` must be the SAME merged list the surface renders — that

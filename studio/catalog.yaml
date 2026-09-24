@@ -181,7 +181,7 @@ guards:
   - { id: scratch-strip, name: Scratch strip, desc: Base-guard strips scratch files pre-PR. }
   - { id: wi-contract, name: WI contract band, desc: "Plan-agent band: work-item validation, spec compile, decompose checkpoint (ADR-039)." }
   - { id: reflection-close, name: Reflection close band, desc: "Reflect-agent band: merged-guard, retention/lint/recap, merged→done promote (ADR-039)." }
-  - { id: demo-band, name: Demo band, desc: "Demo-agent band: demo pipeline, pr-description authoring + dev-loop close gates (ADR-039, R4-10-F1)." }
+  - { id: integrate-band, name: Integrate band, desc: "Demo-agent band: integrate pipeline, pr-description authoring + dev-loop close gates (ADR-039, R4-10-F1)." }
   - { id: review-band, name: Review band, desc: "Adversarial-review band: critique pipeline, findings artifact for the verdict gate (ADR-039, R4-10-F1)." }
   - { id: onboard-preflight, name: Onboard preflight band, desc: "Contract-check band: runs the real forge↔project contract preflight orchestrator-side, no agent spawn (ADR-036/039, R4-18)." }
 # Curated showcase community skills MOVED to studio/community/registry.yaml

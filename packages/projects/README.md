@@ -16,12 +16,12 @@ are the **legacy** door, kept working and not recommended for new code.
 `contract.test.ts` asserts this list against what the index actually exports, in
 both directions, and is required to FAIL against an empty index.
 
-### Values (30)
+### Values (31)
 
 | area | exports |
 |---|---|
 | config | `loadProjectConfig` · `readAgentInstructionsFile` · `resolveProjectIdForRepo` |
-| preflight | `runPreflight` · `formatPreflightReport` · `buildVerdictEvent` · `SCRATCH_PATHS` · `SCAFFOLD_BUILD_OUTPUT_IGNORES` · `runContractComplianceLoop` · `formatComplianceReport` |
+| preflight | `runPreflight` · `formatPreflightReport` · `buildVerdictEvent` · `SCRATCH_PATHS` · `TRACKED_CONFIG_PATHS` · `SCAFFOLD_BUILD_OUTPUT_IGNORES` · `runContractComplianceLoop` · `formatComplianceReport` |
 | contract stages | `deriveContractStages` · `resolveContainedProjectDir` |
 | create | `scaffoldGreenfieldProject` · `listProjectStarters` · `projectStartersDir` |
 | repo transactions | `ensureStudioBranch` · `commitStudioChange` · `withStudioWrite` |

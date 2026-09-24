@@ -14,7 +14,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, realpathSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, realpathSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
@@ -601,6 +601,47 @@ test('AT-4on-10 (RED) [SEC-05 4on] a stale `.staging-<id>-<rand>` orphan is swep
     assert.ok(!existsSync(stagingBrain), `a stale brain/projects/.staging-${id}-deadbeef orphan survived the create — the reconcile must sweep it`);
     assert.ok(!existsSync(join(stagingProj, 'STAGING_SENTINEL.txt')), 'the projects staging SENTINEL must be gone (swept, not adopted)');
     assert.ok(!existsSync(join(stagingBrain, 'STAGING_SENTINEL.txt')), 'the brain staging SENTINEL must be gone (swept, not adopted)');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// forge-9fp — AT-4on-10's sweep above is THIS id's prefix only
+// (`.staging-<id>-*`), so it only runs when id `X` is retried. A hard-kill
+// during create-X's staging leaves a `.staging-X-*` orphan that a create for
+// a DIFFERENT id never touches — invisible everywhere (dot-dir filter on
+// every walker) but accumulating on disk forever. Bound + guarded: a create
+// for ANY id also sweeps every OTHER id's stale `.staging-*` leftover, but
+// only past an age bound, so a concurrent create's own live staging dir
+// (freshly `mkdirSync`'d, well under the bound) is never touched.
+test('forge-9fp: a create for id X also sweeps a STALE `.staging-<other-id>-*` leftover, but never a FRESH one (a concurrent create in flight)', () => {
+  const forgeRoot = isolatedForgeRoot();
+  const id = 'my-tool';
+  const staleProj = join(forgeRoot, 'projects', '.staging-other-project-deadbeef');
+  const staleBrain = join(forgeRoot, 'brain', 'projects', '.staging-other-project-deadbeef');
+  const liveProj = join(forgeRoot, 'projects', '.staging-third-project-cafef00d');
+  try {
+    // A stale cross-id leftover — planted, then backdated well past the
+    // sweep's age bound (an hour), simulating a hard-kill days ago.
+    mkdirSync(staleProj, { recursive: true });
+    writeFileSync(join(staleProj, 'STAGING_SENTINEL.txt'), 'stale cross-id leftover\n', 'utf8');
+    mkdirSync(staleBrain, { recursive: true });
+    writeFileSync(join(staleBrain, 'STAGING_SENTINEL.txt'), 'stale cross-id leftover\n', 'utf8');
+    const old = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2h ago
+    utimesSync(staleProj, old, old);
+    utimesSync(staleBrain, old, old);
+
+    // A FRESH cross-id staging dir — stands in for a concurrent create's own
+    // in-flight staging (mkdirSync'd moments ago). Must survive untouched.
+    mkdirSync(liveProj, { recursive: true });
+    writeFileSync(join(liveProj, 'LIVE_SENTINEL.txt'), 'concurrent create, still staging\n', 'utf8');
+
+    const out = scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot });
+    assert.equal(out.id, id, 'the fresh create must still succeed');
+
+    assert.ok(!existsSync(staleProj), 'the stale cross-id projects/.staging-* leftover must be swept');
+    assert.ok(!existsSync(staleBrain), 'the stale cross-id brain/projects/.staging-* leftover must be swept');
+    assert.ok(existsSync(liveProj), 'a FRESH cross-id staging dir must survive — it may be a concurrent create still in flight');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }
