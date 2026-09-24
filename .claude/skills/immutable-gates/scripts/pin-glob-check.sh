@@ -87,6 +87,12 @@ for f in "$G"/$GLOB.sha256; do
     hits_for_pattern=0
     while IFS= read -r hit; do
       [ -n "$hit" ] || continue
+      # A pin lists FILES. `ls -1 -d` also prints every DIRECTORY a glob such as
+      # a bare `**` passes through, and a directory is never a line in a
+      # `.sha256` — so a complete manifest read as drift naming its own subdirs,
+      # and M7-D globbed `**/*.*` to work around it (findings row 72). A glob
+      # that matches only directories matches no file: it stays DEAD below.
+      [ -d "$R/$hit" ] && continue
       hits_for_pattern=1
       # Seen through THIS manifest's globs already? Then it is the same file,
       # not a second one. Checked with grep's own status for the same reason the
