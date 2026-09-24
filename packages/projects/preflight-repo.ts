@@ -18,7 +18,31 @@ import type { ClauseResult } from '@forge/kernel';
 // source (also read by `pr-branch-sync.ts` + `reset.ts`) of what under
 // `.forge/` is tracked: `.forge/project.json`, `.forge/quality_gate_cmd`,
 // `.forge/skills/` — a blanket `.forge/` ignore violates BOTH lists.
-export const SCRATCH_PATHS = ['.forge/work-items/', '.forge/.create-complete', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
+//
+// Ruling 92 follow-up (bead forge-8vfn.8.1.2, operator item 92): item 92 made
+// `.forge/skills/`, `.forge/project.json` and `.forge/quality_gate_cmd`
+// TRACKED, which retired the old blanket `.forge/` ignore projects used to
+// carry. Two more runtime outputs forge writes inside a project repo lost
+// that blanket-ignore coverage as a result and are added here:
+// `.forge/live-evidence/` (acceptance-test read-backs, `demo-model.ts`) and
+// `.forge/preflight.json` (preflight output). A THIRD candidate,
+// `.forge/demo/` (the Studio demo-builder's DEMO.html/fragments/
+// demo.lock.json/history, `demo-session-store.ts`'s `DEMO_REL_DIR`), is
+// DELIBERATELY OMITTED — `packages/sessions/kinds/demo-builder.ts`'s
+// `withStudioRepo` commits it ON PURPOSE (`commitStudioChange`, pinned by
+// `demo-commit-scope.test.ts` AT-7.3.6-2), so ignoring it here would silently
+// stop the demo-builder from ever persisting a demo again. See the M7-A
+// worker report for the full conflict; needs an explicit operator ruling
+// before `.forge/demo/` can join this list.
+export const SCRATCH_PATHS = [
+  '.forge/work-items/',
+  '.forge/.create-complete',
+  '.forge/live-evidence/',
+  '.forge/preflight.json',
+  'AGENT.md',
+  'PROMPT.md',
+  'fix_plan.md',
+];
 export const TRACKED_CONFIG_PATHS = ['.forge/project.json', '.forge/quality_gate_cmd', '.forge/skills/'];
 
 /** `git -C dir rev-parse --git-dir` — shared so `reset.ts`'s gitignore drift
@@ -72,8 +96,7 @@ function checkC2(dir: string): ClauseResult {
       return {
         ...base,
         pass: false,
-        detail:
-          'not a git repo and no .gitignore — forge scratch (.forge/work-items/, .forge/.create-complete, AGENT.md, PROMPT.md, fix_plan.md) would be committed into the PR',
+        detail: `not a git repo and no .gitignore — forge scratch (${SCRATCH_PATHS.join(', ')}) would be committed into the PR`,
       };
     }
     const lines = readFileSync(giPath, 'utf8')
