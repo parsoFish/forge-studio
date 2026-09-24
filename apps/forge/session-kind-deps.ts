@@ -19,6 +19,7 @@ import {
 } from '@forge/flows/manifest.ts';
 import { promoteManifests } from '@forge/flows/promote-manifests.ts';
 import { isCanonicalInitiativeId } from '@forge/flows/initiative-id.ts';
+import { isContainedProjectRepoPath } from '@forge/flows/manifest-path-guard.ts';
 import type { ArchitectManifestPorts } from '@forge/sessions/kinds/architect-ports.ts';
 import type { ParseManifestPort } from '@forge/sessions/studio/session-transcript.ts';
 
@@ -50,6 +51,10 @@ export const parseManifestPort: ParseManifestPort = parseManifest;
  */
 export const AGENT_DISPATCH_DEPS = {
   band: bandAgentDeps,
-  sessionKind: { manifestPorts: architectManifestPorts },
+  // isContainedProjectRepoPath — bead 8vfn.6.6 review: writeToRepoRoot and
+  // instructions' runFinalizeStep both re-validate status.json's untrusted
+  // project_repo_path through this SAME shipped guard before using it as a
+  // write root (mirrors ContainmentCheck's HTTP-route binding, apps/forge/routes.ts).
+  sessionKind: { manifestPorts: architectManifestPorts, isContainedProjectRepoPath },
 } as const;
 

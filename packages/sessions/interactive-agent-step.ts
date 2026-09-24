@@ -23,7 +23,7 @@ import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.t
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath, skillPathRelative, SLUG_RE, loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
-import { resolveFinalizer, finalizerNeedsPackageId, type FinalizerContext, type QueuePorts } from './interactive-finalizers.ts';
+import { resolveFinalizer, finalizerNeedsPackageId, type FinalizerContext, type QueuePorts, type ProjectRepoPathGuard } from './interactive-finalizers.ts';
 import { BASH_FENCE_MODES, bashFenceModeState, type SessionKindDescriptor, type TurnSpec, type TurnSpecPhase } from './studio/session-kinds.ts';
 import { runAgentTurn, runStructuredTurn, type QueryFn, type UnpricedTurnInfo } from './interactive-session.ts';
 import { hooksSpreadForAgent } from './kinds/kind-turn.ts';
@@ -124,6 +124,8 @@ export type RunInteractiveTurnCtx = {
   promptContext?: (args: { descriptor: SessionKindDescriptor; phaseRow: TurnSpecPhase; status: InteractiveTurnStatus }) => readonly string[];
   /** promoteToQueue's manifest ports, bound at apps/forge (see QueuePorts). Absent ⇒ promoteToQueue refuses. */
   manifestPorts?: QueuePorts;
+  /** writeToRepoRoot's project_repo_path re-validation, bound at apps/forge (see ProjectRepoPathGuard). Absent ⇒ writeToRepoRoot refuses. */
+  isContainedProjectRepoPath?: ProjectRepoPathGuard;
 };
 
 export type RunInteractiveTurnResult = {
@@ -451,6 +453,8 @@ export async function runFinalizeStep(args: {
   // it without a new per-kind port. Derived from the already-read status,
   // never re-read.
   const statusRecord = status as Record<string, unknown>;
+  // Structural parse only — UNTRUSTED, forgeable status.json content;
+  // writeToRepoRoot is the one place that re-validates it (isContainedProjectRepoPath) before using it as a write root.
   const projectRepoPath = typeof statusRecord.project_repo_path === 'string' ? statusRecord.project_repo_path : undefined;
   const project = typeof statusRecord.project === 'string' ? statusRecord.project : undefined;
   const finalizerCtx: FinalizerContext = {
@@ -461,6 +465,7 @@ export async function runFinalizeStep(args: {
     projectRoot: ctx.projectRoot, // commitToCentralBrain's inputs + promoteToQueue's ports below — call-time ctx seams.
     sessionId: ctx.sessionId,
     ...(ctx.manifestPorts !== undefined ? { manifestPorts: ctx.manifestPorts } : {}),
+    ...(ctx.isContainedProjectRepoPath !== undefined ? { isContainedProjectRepoPath: ctx.isContainedProjectRepoPath } : {}),
     ...(packageId !== undefined ? { packageId } : {}),
     ...(projectRepoPath !== undefined ? { project_repo_path: projectRepoPath } : {}),
     ...(project !== undefined ? { project } : {}),

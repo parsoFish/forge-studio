@@ -179,6 +179,9 @@ const CHECK_TURNSPEC_PANEL_EXCLUSIVE = 'session-kinds/turnspec-panel-exclusive';
 // doneField/nextOnDone/ceiling (interview ceiling + fall-through) are turnSpec-ONLY — panel never dispatches, no panel-* counterpart.
 const CHECK_TURNSPEC_DONEFIELD_COREQUIRED = 'session-kinds/turnspec-donefield-corequired';
 const CHECK_TURNSPEC_DANGLING_NEXT_ON_DONE = 'session-kinds/turnspec-dangling-next-on-done';
+// review finding — doneField/nextOnDone/ceiling are read only inside runAgentStyleStep (step:'agent' phases); on
+// any other step they are declared-data-fails-open (silently inert at runtime).
+const CHECK_TURNSPEC_DONEFIELD_NOT_AGENT_STEP = 'session-kinds/turnspec-donefield-not-agent-step';
 
 /**
  * turnSpec.kindDir must be a safe single path segment — it becomes
@@ -676,6 +679,10 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
           if (hasNextOnDone && !doneNames.includes(phase.nextOnDone!)) {
             findings.push(err(obj, CHECK_TURNSPEC_DANGLING_NEXT_ON_DONE,
               `Session kind "${d.id}" turnSpec.phases phase "${phase.phase}" nextOnDone "${phase.nextOnDone}" is not a member of its own declared phases [${doneNames.join(', ')}]`));
+          }
+          if ((hasDone || hasNextOnDone || phase.ceiling !== undefined) && phase.step !== 'agent') {
+            findings.push(err(obj, CHECK_TURNSPEC_DONEFIELD_NOT_AGENT_STEP,
+              `Session kind "${d.id}" turnSpec.phases phase "${phase.phase}" declares doneField/nextOnDone/ceiling on step "${phase.step}" — only meaningful on step "agent" (runAgentStyleStep never reads them otherwise).`));
           }
         }
       }

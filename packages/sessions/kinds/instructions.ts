@@ -478,6 +478,14 @@ function runFinalizeStep(args: {
 }): RunInstructionsTurnResult {
   const { status, plumbing, writeStatus, input } = args;
   const { logger, initiativeId, sessionDir } = plumbing;
+  // UNTRUSTED status.json content — re-validate before using it as a write
+  // root, the IDENTICAL gap writeToRepoRoot (interactive-finalizers.ts) closes.
+  if (!input.isContainedProjectRepoPath) {
+    throw new Error('instructions runner: cannot finalize — isContainedProjectRepoPath is required (bound at apps/forge) — refusing to trust an unvalidated project_repo_path.');
+  }
+  if (!input.isContainedProjectRepoPath(status.project_repo_path, { forgeRoot: plumbing.forgeRoot })) {
+    throw new Error(`instructions runner: cannot finalize — project_repo_path "${status.project_repo_path}" failed containment.`);
+  }
   const draftPath = join(sessionDir, DRAFT_FILENAME);
   // SEC-04 leaf: route the draft READ through the guard (leaf included) — a
   // symlinked AGENTS.draft.md pointing out of root collapses to null (no

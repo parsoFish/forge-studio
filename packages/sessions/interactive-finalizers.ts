@@ -122,7 +122,6 @@ import {
   closeSync,
   constants as fsConstants,
   readFileSync,
-  writeFileSync,
 } from 'node:fs';
 import { join, dirname } from 'node:path';
 
@@ -163,6 +162,10 @@ export type QueuePorts = {
   mintAndPersistManifestCycleId: (manifestPath: string, initiativeId: string) => string;
 };
 
+/** `@forge/flows/manifest-path-guard.ts`'s `isContainedProjectRepoPath`, rank
+ *  5 above this package — injected, never imported, same reason as QueuePorts. */
+export type ProjectRepoPathGuard = (p: string, opts: { forgeRoot: string; projectsRoot?: string }) => boolean;
+
 export type FinalizerContext = {
   /** Trusted — the caller already SEC-04-guarded this. */
   sessionDir: string;
@@ -177,7 +180,8 @@ export type FinalizerContext = {
    *  projections off it, so a finalizer that (unlike copyStagingToLibrary)
    *  needs session-scoped context can reach it without a new per-kind port. */
   status?: Record<string, unknown>;
-  /** Trusted — the project the session's own status names. */
+  /** UNTRUSTED status.json content — writeToRepoRoot MUST re-validate via
+   *  isContainedProjectRepoPath before using it as a write root. */
   project_repo_path?: string;
   project?: string;
   /** commitToCentralBrain's own inputs (mirrors kinds/project-brain.ts). */
@@ -185,6 +189,8 @@ export type FinalizerContext = {
   sessionId?: string;
   /** See QueuePorts. Absent ⇒ promoteToQueue refuses (no silent no-op). */
   manifestPorts?: QueuePorts;
+  /** See ProjectRepoPathGuard. Absent ⇒ writeToRepoRoot refuses (no silent trust). */
+  isContainedProjectRepoPath?: ProjectRepoPathGuard;
 };
 
 export type FinalizerFn = (ctx: FinalizerContext) => string[] | Promise<string[]>;
@@ -343,27 +349,26 @@ function readValidatedStagedFile(srcRealPath: string, relLabel: string): Buffer 
 
 /**
  * Write `buf` to `destPath` with the SAME fd-based discipline as the read
- * side, closing the SYMMETRIC destination-side gap: `resolveGuardedPath`
- * verified `destPath` at Phase-1 check time, but re-opening it BY NAME at
- * write time (a plain `writeFileSync`) would happily follow a symlink an
- * attacker plants at that exact leaf in the window between the check and
- * this write. `O_EXCL` refuses to open through anything that already exists
- * at that leaf — symlink or otherwise — so this only ever creates a brand
- * new destination file, never overwrites one; `O_NOFOLLOW` is
- * belt-and-suspenders for the identical reason as the read side. Closes the
- * fd in `finally` on every path.
+ * side, closing the SYMMETRIC destination-side gap: re-opening `destPath`
+ * BY NAME at write time (a plain `writeFileSync`) would happily follow a
+ * symlink an attacker plants at that leaf between the check and this
+ * write; `O_NOFOLLOW` refuses that either way. `mode: 'exclusive'`
+ * (copyStagingToLibrary's never-overwrite contract) ALSO adds `O_EXCL` —
+ * only ever creates a brand-new file. `mode: 'truncate'` (writeToRepoRoot —
+ * AGENTS.md legitimately gets re-written on every re-run, so O_EXCL would
+ * break the normal case) uses `O_TRUNC` instead: still refuses a symlinked
+ * leaf, but overwrites a genuine regular file in place. Closes the fd in
+ * `finally` on every path.
  */
-function writeValidatedLibraryFile(destPath: string, buf: Buffer, relLabel: string): void {
+function writeValidatedLibraryFile(destPath: string, buf: Buffer, relLabel: string, mode: 'exclusive' | 'truncate' = 'exclusive'): void {
   let fd: number;
+  const modeFlag = mode === 'exclusive' ? fsConstants.O_CREAT | fsConstants.O_EXCL : fsConstants.O_CREAT | fsConstants.O_TRUNC;
   try {
-    fd = openSync(
-      destPath,
-      fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW,
-    );
+    fd = openSync(destPath, fsConstants.O_WRONLY | fsConstants.O_NOFOLLOW | modeFlag);
   } catch (err) {
     throw new InteractiveFinalizerError(
-      `copyStagingToLibrary: destination for "${relLabel}" could not be created at write time — already exists or ` +
-        `was swapped for a symlink since its Phase-1 check: ${(err as NodeJS.ErrnoException).message}`,
+      `writeValidatedLibraryFile: destination for "${relLabel}" could not be opened at write time (mode=${mode}) — ` +
+        `already exists as a symlink or changed since its Phase-1 check: ${(err as NodeJS.ErrnoException).message}`,
     );
   }
   try {
@@ -433,21 +438,27 @@ export function copyStagingToLibrary(ctx: FinalizerContext): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// writeToRepoRoot — bead 8vfn.6.6 items 2+4: generalizes the REAL finalize
-// step instructions' own kinds/instructions.ts runFinalizeStep performs
-// today (write the approved draft under the project's repo root, committed
-// on the studio branch), onto the shared staging-tree walk above. Unlike
-// copyStagingToLibrary, `project_repo_path` is a SINGLE trusted project root
-// being updated in place (the same trust level instructions' own real
-// finalize step already assumes — a plain writeFileSync, no fd hardening),
-// not a shared/multi-tenant library root, so this reuses the plain
-// containment-checked copy shape rather than the fd-based TOCTOU dance.
+// writeToRepoRoot — generalizes instructions.ts's own real finalize step
+// (write the approved draft under the project's repo root, committed on the
+// studio branch). UNLIKE libraryRoot (trusted, config-derived),
+// `project_repo_path` is UNTRUSTED status.json content — MUST be
+// re-validated through the injected isContainedProjectRepoPath before it is
+// used as a resolveGuardedPath ROOT or handed to withStudioWrite (git
+// checkout -b), per path-guard.ts's CONTRACT ("root must never be
+// request-derived"). Leaf write reuses writeValidatedLibraryFile in
+// 'truncate' mode — see that function's own doc for why not 'exclusive'.
 // ---------------------------------------------------------------------------
 
 export function writeToRepoRoot(ctx: FinalizerContext): string[] {
   const { sessionDir, project_repo_path: repoPath, project } = ctx;
   if (repoPath === undefined) {
     throw new InteractiveFinalizerError('writeToRepoRoot: FinalizerContext.project_repo_path is required.');
+  }
+  if (!ctx.isContainedProjectRepoPath) {
+    throw new InteractiveFinalizerError('writeToRepoRoot: FinalizerContext.isContainedProjectRepoPath is required (bound at apps/forge) — refusing to trust an unvalidated root.');
+  }
+  if (!ctx.isContainedProjectRepoPath(repoPath, { forgeRoot: ctx.forgeRoot })) {
+    throw new InteractiveFinalizerError(`writeToRepoRoot: project_repo_path "${repoPath}" failed containment — refusing to use it as a write root.`);
   }
   const staged = discoverStagingEntries(sessionDir);
   return withStudioWrite(repoPath, `forge-studio: commit ${project ?? 'session'} output`, () => {
@@ -460,7 +471,7 @@ export function writeToRepoRoot(ctx: FinalizerContext): string[] {
         );
       }
       mkdirSync(dirname(destGuard.realPath), { recursive: true });
-      writeFileSync(destGuard.realPath, readFileSync(entry.srcRealPath));
+      writeValidatedLibraryFile(destGuard.realPath, readFileSync(entry.srcRealPath), entry.relParts.join('/'), 'truncate');
       wrote.push(destGuard.realPath);
     }
     return wrote;
