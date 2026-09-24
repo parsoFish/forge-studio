@@ -47,8 +47,8 @@ packages/agents/bridge-agents-slug.ts mkdirSync 1
 packages/agents/bridge-agents-studio.ts existsSync 3
 packages/agents/bridge-agents-studio.ts mkdirSync 1
 packages/agents/bridge-agents-studio.ts readFileSync 2
-packages/agents/bridge-agents-studio.ts rmSync 1
-packages/agents/bridge-agents-studio.ts writeFileSync 1
+packages/agents/bridge-agents-studio.ts rmSync 2
+packages/agents/bridge-agents-studio.ts writeFileSync 2
 packages/agents/find-session-project.ts existsSync 3
 packages/agents/find-session-project.ts readdirSync 1
 packages/agents/find-session-project.ts statSync 1
@@ -295,7 +295,7 @@ packages/flows/run-model.ts existsSync 3
 packages/flows/run-model.ts readdirSync 2
 packages/flows/run-model.ts readFileSync 2
 packages/flows/run-model.ts statSync 1
-packages/flows/scheduler-dispatch.ts existsSync 4
+packages/flows/scheduler-dispatch.ts existsSync 3
 packages/flows/scheduler-dispatch.ts readFileSync 3
 packages/flows/scheduler-dispatch.ts writeFileSync 1
 packages/flows/scheduler.ts appendFileSync 1
@@ -477,6 +477,7 @@ packages/library/instruction-seed-match.ts readFileSync 2
 packages/library/skill-path.ts readdirSync 1
 packages/library/skill-staging.ts mkdirSync 1
 packages/library/skill-staging.ts writeFileSync 1
+packages/library/studio-lint-tool-fence.ts readFileSync 1
 packages/library/studio/artifact-registry.ts readdirSync 3
 packages/library/studio/artifact-registry.ts readFileSync 3
 packages/library/studio/community-fetch-package.ts existsSync 1
@@ -551,7 +552,7 @@ packages/projects/preflight-repo.ts execFileSync 1
 packages/projects/preflight-repo.ts existsSync 1
 packages/projects/preflight-repo.ts lstatSync 1
 packages/projects/preflight-repo.ts readFileSync 1
-packages/projects/preflight-repo.ts spawnSync 3
+packages/projects/preflight-repo.ts spawnSync 4
 packages/projects/preflight.ts existsSync 4
 packages/projects/preflight.ts readdirSync 1
 packages/projects/preflight.ts readFileSync 1
@@ -574,9 +575,10 @@ packages/projects/project-repo-tx.ts execFileSync 1
 packages/projects/project-repo-tx.ts existsSync 1
 packages/projects/project-repo-tx.ts realpathSync 2
 packages/projects/reset.ts mkdirSync 2
-packages/projects/reset.ts readFileSync 1
+packages/projects/reset.ts readFileSync 2
+packages/projects/reset.ts spawnSync 1
 packages/projects/reset.ts statSync 1
-packages/projects/reset.ts writeFileSync 1
+packages/projects/reset.ts writeFileSync 2
 packages/sessions/bash-fence.ts realpathSync 1
 packages/sessions/bridge-studio-architect.ts readFileSync 1
 packages/sessions/bridge-studio-demo.ts existsSync 1

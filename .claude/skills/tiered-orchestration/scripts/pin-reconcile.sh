@@ -206,6 +206,31 @@ set_counts_fields() {
   sed -i '/^# head= NOT advanced to /d; /head-not-advanced=/d' "$counts"
 }
 
+# forge-8vfn.6.9.3 — A FROZEN MANIFEST IS RETIRED, NOT LIVE. Every CLOSED
+# milestone's gate manifests move out of this directory (ledger 463/464), so a
+# habitual wide glob (`M*`) no longer reaches one BY POSITION — but a manifest
+# can also be retired IN PLACE, before it is moved, and the hazard this bead
+# names (rehashing a frozen record twice in one M5-B session) is exactly that
+# window. `<name>.frozen` beside `<name>.sha256` marks it, and a glob that
+# reaches it is refused WHOLESALE, before the dirty-path check below and
+# before any manifest the same run also matches is touched — the same
+# "writing nothing" guarantee that check already gives, and for the same
+# reason: a partial write depending on iteration order is worse than a full
+# refusal.
+frozen=""
+for f in "$G"/$GLOB.sha256; do
+  [ -f "$f" ] || continue
+  n=$(basename "$f" .sha256)
+  [ -f "$G/$n.frozen" ] && frozen="$frozen $n"
+done
+if [ -n "$frozen" ]; then
+  echo "pin-reconcile.sh: REFUSING —$frozen carries a .frozen marker beside its .sha256: retired, not live." >&2
+  echo "  A glob that reaches a frozen manifest is reaching a retirement record, not something this" >&2
+  echo "  run rehashes. Nothing was written, for any manifest this glob matched. Narrow the glob to" >&2
+  echo "  exclude it, or un-freeze it deliberately if it belongs live again." >&2
+  exit 2
+fi
+
 # 7.6.85 (T1 891, from C's hazard report) — REFUSE A DIRTY PATH THIS RUN WILL READ.
 #
 # Everything below reads the WORKING TREE: `sha256sum -c` for a manifest this

@@ -146,9 +146,9 @@ function bandSkillMd(slug: string, band: string): string {
 
 /**
  * A `forge-develop`-shaped flow.yaml whose two agent-bearing nodes declare
- * `demo-band` + `review-band` — mirrors the REAL shipped `studio/flows/
+ * `integrate-band` + `review-band` — mirrors the REAL shipped `studio/flows/
  * forge-develop/flow.yaml`'s derived band vocabulary (confirmed live via
- * `listFlowBandIds(repoRoot, 'forge-develop')` -> `['demo-band',
+ * `listFlowBandIds(repoRoot, 'forge-develop')` -> `['integrate-band',
  * 'review-band']`, packages/flows/flow-band-vocab.ts), so the `bands` field this test
  * pins on `GET /api/studio/flows` is checked against a REAL, non-fabricated
  * band vocabulary shape, not an arbitrary made-up one.
@@ -165,7 +165,7 @@ function makeForgeDevelopFlowYaml(): string {
     'origin: seed',
     'disposable: true',
     'nodes:',
-    '  - id: demo',
+    '  - id: integrate',
     '    agent: demo-agent',
     '  - id: adversarial-review',
     '    agent: adversarial-review',
@@ -250,13 +250,13 @@ before(async () => {
 
   // ---- studio/flows/forge-develop/flow.yaml + its band-guard skills -------
   // (R1-06 WI-2 group A) — a REAL, non-empty derivable band vocabulary
-  // {demo-band, review-band} for the GET /api/studio/flows `bands:` field pin.
+  // {integrate-band, review-band} for the GET /api/studio/flows `bands:` field pin.
   mkdirSync(join(forgeRoot, 'studio', 'flows', 'forge-develop'), { recursive: true });
   writeFileSync(
     join(forgeRoot, 'studio', 'flows', 'forge-develop', 'flow.yaml'),
     makeForgeDevelopFlowYaml(),
   );
-  for (const [slug, band] of [['demo-agent', 'demo-band'], ['adversarial-review', 'review-band']] as const) {
+  for (const [slug, band] of [['demo-agent', 'integrate-band'], ['adversarial-review', 'review-band']] as const) {
     const skillDir = join(forgeRoot, 'skills', slug);
     mkdirSync(skillDir, { recursive: true });
     writeFileSync(join(skillDir, 'SKILL.md'), bandSkillMd(slug, band));
@@ -822,10 +822,10 @@ test('GET /api/studio/flows list still works alongside the single-flow route', a
 // (~:679) passes those rows straight through with no per-flow band
 // derivation at all — no `bands` key is ever attached, so every row's
 // `.bands` is `undefined`, not `[]` for a bandless flow and not
-// `['demo-band','review-band']` for the forge-develop fixture below.
+// `['integrate-band','review-band']` for the forge-develop fixture below.
 // ---------------------------------------------------------------------------
 
-test('(RED) GET /api/studio/flows: forge-develop row carries bands: ["demo-band","review-band"] — its REAL derived band vocabulary', async () => {
+test('(RED) GET /api/studio/flows: forge-develop row carries bands: ["integrate-band","review-band"] — its REAL derived band vocabulary', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/flows`);
   assert.equal(res.status, 200);
   const body = (await res.json()) as { flows: Array<{ id: string; bands?: string[] }> };
@@ -833,8 +833,8 @@ test('(RED) GET /api/studio/flows: forge-develop row carries bands: ["demo-band"
   assert.ok(develop, 'forge-develop must appear in the flows list');
   assert.deepEqual(
     [...(develop!.bands ?? [])].sort(),
-    ['demo-band', 'review-band'],
-    `expected forge-develop's bands to be derived from its real demo-band/review-band ` +
+    ['integrate-band', 'review-band'],
+    `expected forge-develop's bands to be derived from its real integrate-band/review-band ` +
       `guard nodes (listFlowBandIds) — got ${JSON.stringify(develop!.bands)}`,
   );
 });

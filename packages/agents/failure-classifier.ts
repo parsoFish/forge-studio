@@ -124,6 +124,10 @@ export function classifyCrash(message: string, priorMessage: string | null): Cra
 const PARALLEL_LINT_CONTENTION_SIGNATURE =
   /(?:^|\berr(?:o|or)?\b[\s:=-]*)parallel golangci-lint is running/im;
 
+// forge-f88z: same blob-scan class W8-F3 fixed above — a project's own test NAME can legitimately print either phrase, so both are anchored to the runner's OWN error-line marker (npm err(or)? before the phrase; Error:/Module not found: Error: before "cannot find module"), never a bare substring. Terminal-to-terminal, so this buys no retries; the harm was a wrong `reason` misdirecting triage.
+const GATE_MISSING_SCRIPT_RE = /\bnpm (?:err!?|error)\b[^\n]*missing script\b/i;
+const GATE_MODULE_NOT_FOUND_RE = /\berror:?\s*cannot find module\b|\bmodule not found:?\s*error\b/i;
+
 /**
  * N9 (2026-07 refinement, brain/cycles/themes/2026-07-04-rate-limit-crash-
  * prereq-failed-cascade.md): the CLI's rate/usage-limit death surfaces in
@@ -256,7 +260,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // R4-10-F1: the demo + adversarial-review nodes replaced the unifier on the
   // live develop flow; their delivery-gate throws must be diagnosed accurately,
   // not swept into the retired unifier / reviewer-Ralph vocabulary below.
-  let demoPipelineFailed = false, adversarialReviewFailed = false;
+  let integrateBandFailed = false, adversarialReviewFailed = false;
   let uwiLoopCapExhausted = false;
   let rateLimited = false, brainSkipped = false, trivialPass = false;
   let gateErrored = false, gateTimedOut = false, transientLint = false;
@@ -301,8 +305,8 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     if (e.phase === 'orchestrator' && msg === 'cycle.resume-needs-rebase') { resumeNeedsRebase = true; ev(e); }
     if (msg === 'gate.fail') {
       const blob = (String(md.gate_stderr_tail ?? '') + ' ' + String(md.gate_stdout_tail ?? '')).toLowerCase();
-      if (blob.includes('missing script')) { gateMissingScript = true; ev(e); }
-      if (blob.includes('cannot find module') || blob.includes('module not found')) { worktreeNoDeps = true; ev(e); }
+      if (GATE_MISSING_SCRIPT_RE.test(blob)) { gateMissingScript = true; ev(e); }
+      if (GATE_MODULE_NOT_FOUND_RE.test(blob)) { worktreeNoDeps = true; ev(e); }
     }
     // G10: golangci-lint lock contention in any FAILED gate's captured output —
     // per-WI / code-fix-UWI gates (`gate.fail`, tails), the unifier's composed
@@ -378,12 +382,12 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     if (e.phase === 'orchestrator' && e.event_type === 'error') {
       if (msg.includes('developer-loop') && msg.includes('total failure')) { devLoopTotalFailure = true; ev(e); }
       // R4-10-F1: the successor nodes' delivery-gate throws (flow-runner.ts
-      // execDemo/execAdversarialReview) carry these exact prefixes. Match them
+      // execIntegrate/execAdversarialReview) carry these exact prefixes. Match them
       // FIRST — both contain 'review'+'failed' (from "review-ready" / "review
       // pipeline failed") and would otherwise mis-trip the reviewer-Ralph /
       // unifier-no-demo branches for a node that isn't the unifier or reviewer.
-      if (msg.includes('delivery gate: demo pipeline failed')) {
-        demoPipelineFailed = true; ev(e);
+      if (msg.includes('delivery gate: integrate band failed')) {
+        integrateBandFailed = true; ev(e);
       } else if (msg.includes('adversarial review pipeline failed')) {
         adversarialReviewFailed = true; ev(e);
       // F1.I1: distinguish unifier-no-demo from generic reviewer failure.
@@ -526,7 +530,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   if (unifierNotPassed) return T('terminal', 'unifier did not pass its composed gate (tests / demo / self-contained PR / branch-sync) — branch not review-ready, PR creation blocked at the delivery gate', evidence);
   // R4-10-F1: the successor nodes' own delivery-gate failures — checked before
   // the reviewer-Ralph rule so a demo/adversarial failure reads accurately.
-  if (demoPipelineFailed) return T('terminal', 'the demo pipeline failed (author-invalid / capture tooling / scope violation / budget) — the branch is not review-ready and no PR opened; triage the demo-agent failure (see the demo.* error events), then re-run', evidence);
+  if (integrateBandFailed) return T('terminal', 'the integrate band failed to derive the delivery bundle — the branch is not review-ready and no PR opened; the error event carries the band\'s own reason', evidence);
   if (adversarialReviewFailed) return T('terminal', 'the adversarial-review pipeline failed to produce a findings artifact (spawn / scope / budget) — the verdict gate has nothing to render; triage the review-agent failure (see the review.* error events), then re-run', evidence);
   if (reviewFailed) return T('terminal', 'reviewer-Ralph failed to converge', evidence);
 

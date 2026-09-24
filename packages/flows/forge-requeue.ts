@@ -15,7 +15,7 @@
  *
  * Resume modes (ADR 019) PRESERVE the worktree + branch instead of wiping
  * them, so the resumed cycle runs against the salvaged per-WI work:
- *   - `--resume-from=demo` re-enters at the post-develop `demo` node (the
+ *   - `--resume-from=integrate` re-enters at the post-develop `integrate` node (the
  *     successor develop flow's `resumable` re-entry point, R4-10-F6).
  *
  * N7 (plan 2.9): when no explicit resume flag is given, the requeue INFERS
@@ -23,7 +23,7 @@
  * worktree/branch state (`inferRequeueResume`): an environment-classified
  * failure (rate-limit death, gate timeout — G3/N9) whose branch still
  * carries committed WI work resumes from that state instead of wiping it —
- * all WIs complete ⇒ `resume_from: demo`; some incomplete ⇒ preserve the
+ * all WIs complete ⇒ `resume_from: integrate`; some incomplete ⇒ preserve the
  * worktree with no marker (the scheduler's preserved-work-items reuse path
  * re-runs the dev-loop in place). Everything else re-runs fresh from main.
  *
@@ -57,12 +57,12 @@ export type RequeueOptions = {
   resetRetries?: boolean;
   /**
    * ADR 019 (successor develop flow, R4-10-F6): resume the next cycle at the
-   * post-develop `demo` node instead of a full re-run. Sets `resume_from: demo`
+   * post-develop `integrate` node instead of a full re-run. Sets `resume_from: integrate`
    * on the manifest AND preserves the worktree (the per-WI commits live there) —
    * so step 5's worktree removal is skipped. Use after a post-develop-band
    * failure with all WIs complete, to salvage the WI work.
    */
-  resumeFromDemo?: boolean;
+  resumeFromIntegrate?: boolean;
 };
 
 export type RequeueResult = {
@@ -79,7 +79,7 @@ export type RequeueResult = {
   previousFailureModesAfter: string[];
   /**
    * N7: how the resume position was decided — the operator's explicit
-   * `--resume-from=demo`, or the inference over the prior failure
+   * `--resume-from=integrate`, or the inference over the prior failure
    * classification + preserved worktree/branch state. Surfaced so the
    * bridge/CLI can show WHY the worktree was preserved or wiped.
    */
@@ -165,12 +165,12 @@ export function runRequeue(
   );
 
   // ADR 019 + N7: decide the resume position. An explicit
-  // `--resume-from=demo` is the operator's override; otherwise infer from
+  // `--resume-from=integrate` is the operator's override; otherwise infer from
   // the prior failure classification + the preserved worktree/branch state
   // (environment failure with salvageable committed work resumes; everything
   // else re-runs fresh from main — the pre-N7 behaviour).
-  const resumeDecision: RequeueResumeDecision = opts.resumeFromDemo
-    ? { resume: true, resume_from: 'demo', reason: 'operator-requested --resume-from=demo' }
+  const resumeDecision: RequeueResumeDecision = opts.resumeFromIntegrate
+    ? { resume: true, resume_from: 'integrate', reason: 'operator-requested --resume-from=integrate' }
     : inferRequeueResume({
         forgeRoot,
         cycleId: manifest.cycle_id,
@@ -189,14 +189,14 @@ export function runRequeue(
     retry_count: retryCountAfter,
     previous_failure_modes: previousFailureModesAfter,
     // ADR 019: stamp the resume marker so the scheduler runs the cycle from the
-    // preserved worktree — `demo` re-enters at the post-develop `demo` node
+    // preserved worktree — `integrate` re-enters at the post-develop `integrate` node
     // (successor develop flow, R4-10-F6). A fresh (non-resume) requeue CLEARS any
     // resume marker (e.g. one a send-back stamped, ADR 040) so the re-run is a true
     // full cycle. N7's in-place dev-loop resume deliberately stamps NOTHING: the
     // scheduler's preserved-work-items reuse path detects it from the worktree itself.
     resume_from:
-      resumeDecision.resume && resumeDecision.resume_from === 'demo'
-        ? ('demo' as const)
+      resumeDecision.resume && resumeDecision.resume_from === 'integrate'
+        ? ('integrate' as const)
         : undefined,
   };
 

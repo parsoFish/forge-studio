@@ -21,9 +21,10 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { resolveDispatchableAgent } from '../../agent-dispatch.ts';
+import { resolveDispatchableAgent, BandGuardDispatchRefusedError } from '../../agent-dispatch.ts';
 import { listAgentDefinitions, loadAgentDefinition } from '../../studio/agent-registry.ts';
 import { agentCapabilityDescriptor, FORGE_ROOT } from '../../studio/derive.ts';
+import { resolveBandGuard } from '../../agent-bands.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 const ROOT = FORGE_ROOT;
@@ -67,6 +68,43 @@ test('resolveDispatchableAgent: a non-interactive runnable agent resolves', () =
   const defs = listAgentDefinitions(SKILLS);
   const def = resolveDispatchableAgent('project-scoped-review', defs);
   assert.equal(def.slug, 'project-scoped-review');
+});
+
+// ---------------------------------------------------------------------------
+// forge-zlu — band-guard agent defs (contract-check / project-manager /
+// reflector) must be refused for STANDALONE dispatch. resolveDispatchableAgent
+// refused only unknown slugs and surface:'interactive' defs; band-guard
+// membership was never checked, so `forge agent dispatch contract-check` /
+// `POST /api/agents/contract-check/run` reached `runAgent` and bare-spawned a
+// band-guard def, bypassing the band pipeline its own SKILL.md declares
+// (composition.guards: onboard-preflight/wi-contract/reflection-close) — the
+// WI validation / decompose checkpointing / retention that pipeline provides
+// never runs. Driven over the REAL roster, like the file's other pins.
+// ---------------------------------------------------------------------------
+
+test('resolveDispatchableAgent: a band-guard agent (contract-check/project-manager/reflector) is refused standalone dispatch', () => {
+  const defs = listAgentDefinitions(SKILLS);
+  for (const slug of ['contract-check', 'project-manager', 'reflector']) {
+    const def = defs.find((d) => d.slug === slug);
+    assert.ok(def, `expected ${slug} in the real roster`);
+    assert.notEqual(resolveBandGuard(def!), undefined, `arrange: ${slug} must genuinely declare a band guard or this pin is vacuous`);
+    let threw: unknown;
+    try {
+      resolveDispatchableAgent(slug, defs);
+    } catch (err) {
+      threw = err;
+    }
+    assert.ok(threw instanceof BandGuardDispatchRefusedError, `expected a typed BandGuardDispatchRefusedError refusing "${slug}" — got: ${threw}`);
+    assert.match((threw as Error).message, new RegExp(`"${slug}"`), 'must name the slug');
+  }
+});
+
+test('resolveDispatchableAgent: a band-guard agent still refuses even with no other refusal reason (non-interactive, in-roster)', () => {
+  const defs = listAgentDefinitions(SKILLS);
+  const def = defs.find((d) => d.slug === 'project-manager');
+  assert.ok(def, 'expected project-manager in the real roster');
+  assert.notEqual(def!.surface, 'interactive', 'arrange: must be refused for band-guard reasons, not interactivity');
+  assert.throws(() => resolveDispatchableAgent('project-manager', defs), BandGuardDispatchRefusedError);
 });
 
 test('resolveDispatchableAgent: the R4-02 onboarding-agent is dispatchable (both entry points reach it)', () => {
@@ -229,12 +267,21 @@ test('COMPLEMENT PIN: over the REAL, live-loaded roster, resolveDispatchableAgen
   // the refusal, by a test that cannot be emptied by a roster change.
   //
   // `resolveInteractiveAgent` is still NOT resurrected, exactly as before.
+  //
+  // forge-zlu ADDENDUM: the resolver grew a SECOND refusal axis — band-guard
+  // membership (`resolveBandGuard`) — independent of interactivity (every
+  // band-guard def in the roster today is `surface: unattended`, not
+  // interactive). The per-def expectation below is widened to
+  // `!(interactive || bandGuarded)` rather than adding a second loop, since
+  // both are "resolveDispatchableAgent must refuse this def" axes over the
+  // exact same roster walk.
   const defs = listAgentDefinitions(SKILLS);
   assert.ok(defs.length > 0, 'precondition: the real roster must be non-empty for this test to mean anything');
   let sawInteractive = false;
   let sawNonInteractive = false;
   for (const def of defs) {
     const interactive = agentCapabilityDescriptor(def).interactive;
+    const bandGuarded = resolveBandGuard(def) !== undefined;
     if (interactive) sawInteractive = true;
     else sawNonInteractive = true;
     let dispatchableAccepted = false;
@@ -246,12 +293,21 @@ test('COMPLEMENT PIN: over the REAL, live-loaded roster, resolveDispatchableAgen
     }
     assert.equal(
       dispatchableAccepted,
-      !interactive,
-      `${def.slug}: resolveDispatchableAgent must accept exactly the non-interactive defs ` +
-        `(interactive=${interactive}, accepted=${dispatchableAccepted})`,
+      !(interactive || bandGuarded),
+      `${def.slug}: resolveDispatchableAgent must accept exactly the non-interactive, non-band-guarded defs ` +
+        `(interactive=${interactive}, bandGuarded=${bandGuarded}, accepted=${dispatchableAccepted})`,
     );
   }
   assert.ok(sawNonInteractive, 'precondition: the real roster must contain at least one non-interactive def for this pin to be non-vacuous');
+  // forge-zlu: a measured manifest of today's band-guarded roster members —
+  // same discipline as the interactive-membership assertion below. A future
+  // agent joining this set is exactly the event that should force a look at
+  // this test, not a silent pass.
+  assert.deepEqual(
+    defs.filter((d) => resolveBandGuard(d) !== undefined).map((d) => d.slug).sort(),
+    ['adversarial-review', 'contract-check', 'demo-agent', 'project-manager', 'reflector'],
+    'measured fact: this is the real roster\'s band-guarded membership today — if it changed, resolveDispatchableAgent\'s refusal now covers a different set; update this line deliberately',
+  );
   // W8-B5b: the roster contains NO interactive def (community-refresh, the
   // only one that ever did, was retired — see this test's header). This is a
   // MEASURED FACT about the roster's contents, not a boundary check, and it is
