@@ -104,11 +104,18 @@ const CYCLES = [
     // correctly all along, so it must be UNTOUCHED by the fix. Without it,
     // "classify the PM set-error shape" could be satisfied by a predicate that
     // classifies everything as an invalid-WI failure.
+    //
+    // 8.2.1: this log's message ('delivery gate: demo pipeline failed') is one
+    // the product has not thrown since the band became `integrate`, and no
+    // resume can re-emit it (a resume runs today's executor). The classifier now
+    // matches the message the product DOES throw, so this row keeps only its
+    // 507 job — the PM rule must not swallow a different failure — and no
+    // longer pins a verdict for a message that cannot recur.
     file: '2026-08-03T01-16-00_INIT-2026-08-03-init-coupling-change-coupling-command.jsonl',
-    what: 'gitpulse coupling subcommand: the delivery gate\'s demo pipeline failed (author-invalid)',
+    what: 'gitpulse coupling subcommand: a delivery-gate failure from before the integrate rename',
     wasBeforeTheFix: 'the demo pipeline failed (author-invalid / capture tooling / scope violation / budget)',
     kind: 'terminal',
-    reasonMatches: /^the demo pipeline failed/,
+    reasonMatches: /^(?!PM emitted schema-invalid WIs)/,
   },
 ] as const;
 
