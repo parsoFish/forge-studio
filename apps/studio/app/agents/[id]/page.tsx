@@ -81,6 +81,7 @@ import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 import { disabledAttrs } from '@/lib/disabled-reason';
 import { attachUnsavedChangesGuard } from '@/lib/unsaved-changes-guard';
+import { standaloneBlockedReasonFor } from '@/lib/run-panel-gating';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -860,9 +861,10 @@ export default function AgentBuilderPage() {
             declaredMaterialKinds={state.materials}
             defaultCostCeilingUsd={state.declaredMaxBudgetUsd ?? defaultCostCeilingUsd}
             costCeilingEnforceable={state.costCeilingEnforceable}
-            standaloneBlockedReason={state.runtime.loopStrategy === 'ralph'
-              ? 'This agent is a multi-iteration (ralph) loop — it runs inside the develop flow, never as a standalone dispatch. Start it through its flow instead.'
-              : null}
+            standaloneBlockedReason={standaloneBlockedReasonFor({
+              loopStrategy: state.runtime.loopStrategy,
+              guards: state.guards,
+            })}
             unreadyConnectionIds={(connectionsUnready ?? []).map((c) => c.id)}
             sessionEntryHref={sessionEntryHrefForAgent(state.slug)}
             standingTriggers={standingTriggers}
