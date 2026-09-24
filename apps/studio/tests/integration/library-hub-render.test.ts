@@ -49,6 +49,8 @@ function makeHook(id: string, overrides: Partial<Extract<HookLibraryEntry, { ok:
     carriedByDerivation: { source: 'agents', scanned: 0 },
     permissions: { env: [], read: [], network: false },
     trust: 'approved', scanVerdict: 'clean', runnable: true,
+    // forge-8vfn.8.3.7: server-attested, mandatory on every real entry.
+    origin: 'ootb',
     ...overrides,
   };
 }

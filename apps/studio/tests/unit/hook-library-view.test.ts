@@ -149,6 +149,8 @@ function okEntry(overrides: Partial<HookLibraryEntryOk> & { id: string }): HookL
     scanVerdict: 'clean',
     trust: 'needs-review',
     runnable: false,
+    // forge-8vfn.8.3.7: server-attested, mandatory on every real entry.
+    origin: 'ootb',
     ...overrides,
   };
 }
