@@ -34,7 +34,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -380,9 +380,16 @@ test('7.6.143: a cycle born BEFORE the anchor is invisible to the anchor form an
   );
 
   const byIdentity = makeCycleTerminalDoor(root, { cycleOf: initiative })!;
+  // T1 1231 (S10 run 22): FOUND is not DONE. By identity the cycle predates the
+  // press, and the queue still reads the PREVIOUS run's terminal; it counts
+  // only once the cycle has started a run at or after the anchor.
+  assert.equal(byIdentity(null, anchorAfterBirth, 'ready-for-review'), null, 'no run since the anchor — nothing has terminated for this press');
+  assert.equal(byIdentity.sawCycle, true, 'resolved by the initiative the press named, the cycle is found whatever its birth time');
+  appendFileSync(join(logs, `2026-09-18T10-21-56_${initiative}`, 'events.jsonl'),
+    `${JSON.stringify({ event_type: 'start', message: 'cycle.start', started_at: new Date(anchorAfterBirth + 1_000).toISOString() })}\n`);
   const seen = byIdentity(null, anchorAfterBirth, 'ready-for-review');
-  assert.notEqual(seen, null, 'resolved by the initiative the press named, the cycle is found whatever its birth time');
-  assert.equal(seen!.done, true, `the product published the state the beat waits for: ${seen?.detail}`);
+  assert.notEqual(seen, null);
+  assert.equal(seen!.done, true, `the press's own run published the state the beat waits for: ${seen?.detail}`);
 });
 
 /** Identity resolution must not invent a cycle. An initiative with no dispatch
