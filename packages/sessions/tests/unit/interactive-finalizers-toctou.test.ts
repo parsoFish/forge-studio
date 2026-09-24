@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { deriveSessionArtifact } from '../../studio/session-transcript.ts';
+import { loadSessionKinds } from '../../studio/session-kinds.ts';
 import type { SessionKindDescriptor } from '../../studio/session-kinds.ts';
 
 // ---------------------------------------------------------------------------
@@ -290,8 +291,28 @@ test(
 // never left uncommitted.
 // ===========================================================================
 // M4 row 5: PACKAGE_DIRNAME travelled with deriveFilePackage; re-pointed, not relaxed (§15.93).
+//
+// forge-7m2 (2026-09-25): this ratchet used to compare TWO hardcoded
+// production literals — session-artifact-derivers.ts's PACKAGE_DIRNAME
+// constant, and TWO regex-matched call sites inside
+// interactive-finalizers.ts's discoverStagingEntries. The fix retired the
+// finalizer's hardcoded literal entirely: `copyStagingToLibrary` now reads
+// `FinalizerContext.stagingDirName`, threaded from the AUTHORED
+// `stagingDirName` field on the `authoring` kind's `committing` turnSpec
+// phase row (`studio/session-kinds.yaml`, ADR-043 amendment 2026-09-25) —
+// there is no longer a second production TEXT LITERAL to regex-extract from
+// interactive-finalizers.ts (see this ratchet's own prior-round doc comment
+// on `FINALIZER_STAGING_SITES` for why removing a now-vacuous site,
+// deliberately and with a comment saying why, is exactly what that comment
+// told a future maintainer to do). The remaining drift risk is real and
+// distinct: the YAML's authored value (the write side AND the finalize
+// side's single source of truth) vs. session-artifact-derivers.ts's
+// PACKAGE_DIRNAME (the read-side artifact-rendering constant, which has no
+// yaml counterpart to source from — `deriveFilePackage` is not turnSpec-
+// driven). This ratchet now compares THOSE two, loading the yaml through the
+// REAL `loadSessionKinds` (never a hand-rolled YAML scan) exactly the way
+// production does.
 const TRANSCRIPT_SOURCE_PATH = join(REPO_ROOT, 'packages', 'sessions', 'studio', 'session-artifact-derivers.ts');
-const FINALIZERS_SOURCE_PATH = join(REPO_ROOT, 'packages', 'sessions', 'interactive-finalizers.ts');
 
 /** Extracts session-transcript.ts's `PACKAGE_DIRNAME` module-private constant
  *  declaration from its real, checked-in source text. Anchored on the exact
@@ -307,92 +328,51 @@ function extractTranscriptPackageDirname(source: string): string | null {
   return m ? m[2] : null;
 }
 
-/** One call site in interactive-finalizers.ts that hardcodes the staging
- *  dirname literal, keyed by a human-readable label naming the site. */
-type FinalizerStagingSite = { readonly label: string; readonly re: RegExp };
-
-/** The two real, current call sites in interactive-finalizers.ts that
- *  hardcode the staging dirname (located by reading the file — see its
- *  module header's CONTAINMENT section and `discoverStagingEntries`). Each
- *  regex is anchored on the surrounding variable/call names ACTUALLY PRESENT
- *  at that site (`nextRelParts`, `stagingRoot = join(...)`), not merely on
- *  the word "staging" — this is deliberately what keeps these regexes from
- *  also matching interactive-finalizers.ts's OWN prose comments, several of
- *  which literally reproduce `resolveGuardedPath(sessionDir, ['staging',
- *  ...relParts])` as backtick-quoted example text (using `relParts`, never
- *  `nextRelParts` — the real destructured loop variable at the real call
- *  site), or the standalone phrase "'staging' child" in another comment.
- *  Verified empirically before this test was written: each regex matches
- *  EXACTLY ONCE against the real file (`.matchAll` count === 1), proving
- *  neither pattern is accidentally loose enough to also catch a lookalike
- *  comment. Robust to quote style and incidental whitespace at each site;
- *  NOT robust to the call sites being restructured entirely — an intentional
- *  restructure must update these patterns, which is the point of a ratchet
- *  (fail LOUD the moment its target shape moves, never silently stop
- *  checking). */
-const FINALIZER_STAGING_SITES: readonly FinalizerStagingSite[] = [
-  {
-    label: `discoverStagingEntries's resolveGuardedPath(sessionDir, [<literal>, ...nextRelParts]) call in ${FINALIZERS_SOURCE_PATH}`,
-    re: /resolveGuardedPath\(\s*sessionDir\s*,\s*\[\s*(['"])([^'"]*)\1\s*,\s*\.\.\.nextRelParts\s*\]\s*\)/,
-  },
-  {
-    label: `discoverStagingEntries's "const stagingRoot = join(sessionDir, <literal>)" in ${FINALIZERS_SOURCE_PATH}`,
-    re: /const\s+stagingRoot\s*=\s*join\(\s*sessionDir\s*,\s*(['"])([^'"]*)\1\s*\)/,
-  },
-];
-
-/** Extracts EVERY staging-dirname literal from interactive-finalizers.ts's
- *  real, checked-in source text, one entry per `FINALIZER_STAGING_SITES` row
- *  that actually matched. A site whose pattern does not match is OMITTED,
- *  never defaulted to a placeholder — callers must check the returned
- *  array's length against `FINALIZER_STAGING_SITES.length` to detect a
- *  failed (vacuous) extraction at any individual site. */
-function extractFinalizerStagingLiterals(source: string): Array<{ label: string; value: string }> {
-  const out: Array<{ label: string; value: string }> = [];
-  for (const site of FINALIZER_STAGING_SITES) {
-    const m = source.match(site.re);
-    if (m) out.push({ label: site.label, value: m[2] });
-  }
-  return out;
+/** Loads the REAL `studio/session-kinds.yaml` through the REAL
+ *  `loadSessionKinds` (never a hand-rolled parse) and returns the
+ *  `authoring` kind's `committing` turnSpec phase row's authored
+ *  `stagingDirName`, or `null` if the descriptor, its turnSpec, the
+ *  `committing` row, or the field itself is missing — callers must treat
+ *  `null` as a FAILED extraction, never as "the value is empty". */
+function extractAuthoringStagingDirName(): string | null {
+  const descriptor = loadSessionKinds(REPO_ROOT).find((d) => d.id === 'authoring');
+  const committingRow = descriptor?.turnSpec?.phases.find((p) => p.phase === 'committing');
+  return committingRow?.stagingDirName ?? null;
 }
 
 /** Today's independently-verified staging-dirname value — used ONLY to prove
- *  the extraction regexes above are targeting the RIGHT declarations (not
- *  merely matching something that happens to parse), never as a third source
- *  of truth the ratchet's own cross-file-agreement assertion depends on
- *  (that assertion below compares the extracted values only to EACH OTHER).
- *  A deliberate, coordinated rename of the shared dirname across both
- *  production files must update this constant in the SAME commit — that is
- *  expected maintenance, not the drift this ratchet exists to catch. */
+ *  the extractions above are targeting the RIGHT declarations (not merely
+ *  matching something that happens to parse), never as a third source of
+ *  truth the ratchet's own cross-source agreement assertion depends on (that
+ *  assertion below compares the extracted values only to EACH OTHER). A
+ *  deliberate, coordinated rename of the shared dirname across both sources
+ *  must update this constant in the SAME commit — that is expected
+ *  maintenance, not the drift this ratchet exists to catch. */
 const EXPECTED_STAGING_DIRNAME_TODAY = 'staging';
 
-test('RATCHET: every staging-dirname literal in session-transcript.ts (PACKAGE_DIRNAME) and interactive-finalizers.ts (its two hardcoded call sites) is the IDENTICAL string', () => {
+test('RATCHET: session-artifact-derivers.ts\'s PACKAGE_DIRNAME and studio/session-kinds.yaml\'s authoring.committing.stagingDirName are the IDENTICAL string', () => {
   const transcriptSource = readFileSync(TRANSCRIPT_SOURCE_PATH, 'utf8');
-  const finalizersSource = readFileSync(FINALIZERS_SOURCE_PATH, 'utf8');
 
   const transcriptValue = extractTranscriptPackageDirname(transcriptSource);
   assert.ok(
     transcriptValue !== null && transcriptValue.length > 0,
     `NON-VACUOUS CHECK FAILED (the single most important assertion in this test): could not find ` +
       `"const PACKAGE_DIRNAME = '...'" anywhere in ${TRANSCRIPT_SOURCE_PATH}. An extraction that silently matches ` +
-      'nothing would make this ratchet vacuously pass no matter what either production file says. If ' +
-      'PACKAGE_DIRNAME was renamed or its declaration shape changed, UPDATE THIS TEST\'S REGEX to match the new ' +
-      'shape — do not delete this check.',
+      'nothing would make this ratchet vacuously pass no matter what either source says. If PACKAGE_DIRNAME was ' +
+      'renamed or its declaration shape changed, UPDATE THIS TEST\'S REGEX to match the new shape — do not delete ' +
+      'this check.',
   );
 
-  const finalizerLiterals = extractFinalizerStagingLiterals(finalizersSource);
-  assert.equal(
-    finalizerLiterals.length,
-    FINALIZER_STAGING_SITES.length,
-    `NON-VACUOUS CHECK FAILED: expected to extract a literal from all ${FINALIZER_STAGING_SITES.length} known ` +
-      `call sites in ${FINALIZERS_SOURCE_PATH}, but only matched ${finalizerLiterals.length} ` +
-      `(matched: ${JSON.stringify(finalizerLiterals.map((l) => l.label))}). A site whose regex silently stops ` +
-      'matching is a site this ratchet has gone BLIND to — either that call site was restructured (update this ' +
-      'test\'s regex for it) or it was deleted (remove its row from FINALIZER_STAGING_SITES deliberately, with a ' +
-      'comment saying why).',
+  const yamlValue = extractAuthoringStagingDirName();
+  assert.ok(
+    yamlValue !== null && yamlValue.length > 0,
+    'NON-VACUOUS CHECK FAILED: studio/session-kinds.yaml\'s "authoring" descriptor must declare a "committing" ' +
+      'turnSpec phase row with a non-empty "stagingDirName" — could not find one via the REAL loadSessionKinds. ' +
+      'An extraction that silently finds nothing would make this ratchet vacuously pass no matter what either ' +
+      'source says.',
   );
 
-  // Prove the regexes are targeting the RIGHT declarations, not merely
+  // Prove the extractions are targeting the RIGHT declarations, not merely
   // matching something that happens to parse: every extracted value must
   // equal today's independently-verified on-disk value.
   assert.equal(
@@ -403,40 +383,29 @@ test('RATCHET: every staging-dirname literal in session-transcript.ts (PACKAGE_D
       'extraction regex is matching the wrong thing, or the value genuinely changed (update ' +
       'EXPECTED_STAGING_DIRNAME_TODAY here too, in the SAME commit as the production rename).',
   );
-  for (const { label, value } of finalizerLiterals) {
-    assert.equal(
-      value,
-      EXPECTED_STAGING_DIRNAME_TODAY,
-      `extracted literal at ${label} (${JSON.stringify(value)}) does not match the independently-verified current ` +
-        `value (${JSON.stringify(EXPECTED_STAGING_DIRNAME_TODAY)}) — either the extraction regex is matching the ` +
-        'wrong thing, or the value genuinely changed (update EXPECTED_STAGING_DIRNAME_TODAY here too, in the SAME ' +
-        'commit).',
-    );
-  }
-
-  // THE RATCHET: every extracted literal — session-transcript.ts's
-  // PACKAGE_DIRNAME AND both of interactive-finalizers.ts's call sites — must
-  // be the IDENTICAL string. This is the assertion that fails LOUD the
-  // moment either module's dirname literal moves out of sync with the
-  // other — the exact defect class that already shipped once (R4-22: the
-  // finalizer said 'staging' while the derivation side still said 'package',
-  // both suites green throughout, because neither suite read the other's
-  // literal).
-  const allExtracted: Array<{ label: string; value: string }> = [
-    { label: `PACKAGE_DIRNAME in ${TRANSCRIPT_SOURCE_PATH}`, value: transcriptValue as string },
-    ...finalizerLiterals,
-  ];
-  const distinctValues = [...new Set(allExtracted.map((e) => e.value))];
   assert.equal(
-    distinctValues.length,
-    1,
-    'STAGING-DIRNAME LITERALS HAVE DRIFTED APART:\n' +
-      allExtracted.map((e) => `  - ${e.label}: ${JSON.stringify(e.value)}`).join('\n') +
-      '\nFIX: either make every site above use the SAME string, or — better — introduce one shared, exported ' +
-      'source-of-truth constant both modules import (this ratchet is deliberately written WITHOUT demanding that ' +
-      'export today, since a new orchestrator/ export is operator-ask-first per this project\'s ADR-042 surface ' +
-      'cap; if you are adding that export now, simplify this test to import it directly instead of scanning ' +
-      'source text).',
+    yamlValue,
+    EXPECTED_STAGING_DIRNAME_TODAY,
+    `studio/session-kinds.yaml's authoring.committing.stagingDirName (${JSON.stringify(yamlValue)}) does not match ` +
+      `the independently-verified current value (${JSON.stringify(EXPECTED_STAGING_DIRNAME_TODAY)}) — either the ` +
+      'wrong row is being read, or the value genuinely changed (update EXPECTED_STAGING_DIRNAME_TODAY here too, ' +
+      'in the SAME commit).',
+  );
+
+  // THE RATCHET: session-artifact-derivers.ts's PACKAGE_DIRNAME AND
+  // session-kinds.yaml's authored stagingDirName must be the IDENTICAL
+  // string. This is the assertion that fails LOUD the moment either source
+  // moves out of sync with the other — the exact defect class that already
+  // shipped once (R4-22: the finalizer said 'staging' while the derivation
+  // side still said 'package', both suites green throughout, because
+  // neither suite read the other's value).
+  assert.equal(
+    yamlValue,
+    transcriptValue,
+    'STAGING-DIRNAME VALUES HAVE DRIFTED APART:\n' +
+      `  - PACKAGE_DIRNAME in ${TRANSCRIPT_SOURCE_PATH}: ${JSON.stringify(transcriptValue)}\n` +
+      `  - studio/session-kinds.yaml authoring.committing.stagingDirName: ${JSON.stringify(yamlValue)}\n` +
+      'FIX: make both sides declare the SAME string.',
   );
 });
 
