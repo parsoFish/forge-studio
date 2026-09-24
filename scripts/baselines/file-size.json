@@ -34,8 +34,6 @@
   "apps/studio/tests/unit/session-client.test.ts": 1257,
   "packages/factory/phases/developer-loop.ts": 1937,
   "packages/factory/tests/unit/reflector.test.ts": 866,
-  "packages/flows/run-model-derive.ts": 988,
-  "packages/flows/scheduler.ts": 1031,
   "packages/flows/tests/integration/run-model.test.ts": 1457,
   "packages/flows/tests/integration/wi-spec-compile.test.ts": 1059,
   "packages/flows/tests/regression/manifest-path-fields.test.ts": 1029,
