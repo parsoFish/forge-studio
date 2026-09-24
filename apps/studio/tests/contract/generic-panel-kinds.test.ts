@@ -60,7 +60,7 @@ function parseGenericPanelKinds(): Set<string> {
  * panel consumer at all (there is none such today, but the shape allows it).
  */
 function coveredKindIds(kinds: readonly { id: string; turnSpec?: unknown; panel?: unknown }[], bespoke: ReadonlySet<string>): string[] {
-  return kinds.filter((d) => d.turnSpec !== undefined && !bespoke.has(d.id)).map((d) => d.id);
+  return kinds.filter((d) => (d.turnSpec !== undefined || d.panel !== undefined) && !bespoke.has(d.id)).map((d) => d.id);
 }
 
 test('every turnSpec- or panel-declared session kind is wired into GENERIC_PANEL_KINDS (derived from SESSION_KINDS, so community-refresh left it when W8-B5b WI-3 retired the descriptor)', () => {
