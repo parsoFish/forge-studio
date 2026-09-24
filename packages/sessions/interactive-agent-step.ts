@@ -15,9 +15,9 @@
  * work rather than staying behind, because everything that constructs or
  * returns them is here.
  */
-import { readFileSync, readdirSync, lstatSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, lstatSync, mkdirSync, rmSync } from 'node:fs';
 
-import { type EventLogger, type Phase, resolveGuardedPath } from '@forge/kernel';
+import { type EventLogger, type Phase, resolveGuardedPath, guardedWriteFile } from '@forge/kernel';
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
@@ -340,7 +340,7 @@ export async function runAgentStyleStep(args: {
           `runInteractiveTurn: session kind "${descriptor.id}" phase "${phaseRow.phase}" structured turn produced no output to persist under its declared writes dir.`,
         );
       }
-      writeFileSync(`${writeRoots[0]}/output.json`, JSON.stringify(output, null, 2));
+      if (guardedWriteFile(writeRoots[0]!, ['output.json'], JSON.stringify(output, null, 2)) === null) throw new InteractiveRunnerError(`runInteractiveTurn: ${phaseRow.phase}'s output.json failed containment under its writes dir (the agent's own dir — a planted symlink) — refusing to write through it.`);
     }
     if (operatorFeedback !== null) clearOperatorFeedback(sessionDir);
   } else {
