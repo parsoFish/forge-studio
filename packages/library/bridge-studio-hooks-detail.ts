@@ -216,13 +216,10 @@ export async function handleHookDetail(req: IncomingMessage, res: ServerResponse
       const runState = hookRunState(ctx.forgeRoot, id);
       const ledgerEntry = readHookApprovalLedger(ctx.forgeRoot).get(id);
       const declinedEntry = readHookDeclinedLedger(ctx.forgeRoot).get(id);
-      // forge-8vfn.5.16 (M7-C U2, T2 review of 95cb287f) — last-fire facts,
-      // BOUNDED (mtime-ordered, not lexical — full rationale: docs/
-      // reference/request-path-sinks.md's "M7-C U2" section). Wire field is
-      // `recentFireCount`, not `fireCount`: honestly a window count. The
-      // guarded mtime read and the guarded tail read are @forge/kernel's
-      // (T2's follow-up review moved them down so agents/sessions can share
-      // them too) — this route only supplies WHICH root/segments.
+      // forge-8vfn.5.16 (M7-C U2) — last-fire facts, BOUNDED via
+      // @forge/kernel's guarded-scan.ts (rationale: docs/reference/
+      // request-path-sinks.md's "M7-C U2" section). recentFireCount, not
+      // fireCount: honestly a window count.
       const fireSummary = scanHookFireSummary(
         id,
         {
@@ -236,10 +233,8 @@ export async function handleHookDetail(req: IncomingMessage, res: ServerResponse
       sendJson(res, 200, {
         ok: true,
         ...hookWireFields(entry, runState, ledgerEntry, declinedEntry),
-        // recentFireCount is always present (0 = "scanned the window, found
-        // none", the same idiom data-hook-carried-by-count already uses);
-        // lastFireAt/lastFireOutcome stay ABSENT — never fabricated — for a
-        // hook with no fire in the scanned window.
+        // Always present (0 = scanned, found none, like carriedByCount);
+        // lastFireAt/lastFireOutcome stay ABSENT for no fire in the window.
         recentFireCount: fireSummary?.fireCount ?? 0,
         ...(fireSummary ? { lastFireAt: fireSummary.lastFireAt, lastFireOutcome: fireSummary.lastFireOutcome } : {}),
         // W7-B4 (library-09): the approval RECORD the resolved-state panel

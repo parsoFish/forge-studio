@@ -1,14 +1,8 @@
 /**
- * forge-8vfn.5.16 (M7-C U2) — pure reducer over a run's raw event stream,
- * folding every `message:"hook.fire"` event (emitted by
- * `packages/agents/studio/hook-dispatch.ts`'s `emitHookFire`) that names ONE
- * hook down into "did this hook ever fire, when did it last fire, with what
- * outcome, and how many times total".
- *
- * No DOM, no network, no filesystem — the caller (`bridge-studio-hooks-
- * detail.ts`'s `handleHookDetail`) does the guarded log scan and hands this
- * function the parsed events. Kept separate from that route so the folding
- * logic is unit-testable without a real forge root.
+ * forge-8vfn.5.16 (M7-C U2) — folds a run's `hook.fire` events (`packages/
+ * agents/studio/hook-dispatch.ts`'s `emitHookFire`) into "did this hook
+ * fire, when last, what outcome, how many times". No DOM/network/fs — the
+ * route does the guarded scan; this stays unit-testable without one.
  */
 import { selectRecentEntries, type EventLogEntry } from '@forge/kernel';
 
@@ -26,13 +20,9 @@ function isHookFireOutcome(value: unknown): value is HookFireOutcome {
   return typeof value === 'string' && (KNOWN_OUTCOMES as readonly string[]).includes(value);
 }
 
-/**
- * `events` is whatever set the caller collected (possibly BOUNDED — see
- * `scanHookFireSummary`) — filters on `message`/`hookId` itself. `null` when
- * no match — never a fabricated all-zero summary. `fireCount` counts fires
- * WITHIN `events`; naming that honestly on the wire (`recentFireCount` vs
- * all-time) is the caller's job, not this pure function's.
- */
+/** `events` is whatever the caller collected (possibly BOUNDED). `null` when
+ *  no match — never a fabricated summary. `fireCount` is within `events`;
+ *  naming that honestly (`recentFireCount` vs all-time) is the caller's job. */
 export function deriveHookFireSummary(events: readonly EventLogEntry[], hookId: string): HookFireSummary | null {
   const fires = events.filter((e) => e.message === 'hook.fire' && (e.metadata as Record<string, unknown> | undefined)?.['hookId'] === hookId);
   if (fires.length === 0) return null;
@@ -49,33 +39,24 @@ export function deriveHookFireSummary(events: readonly EventLogEntry[], hookId: 
   };
 }
 
-// Bounded scan — T2 review of 95cb287f (forge-8vfn.5.16), same class #834
-// (forge-hqkm/omk0) fixed elsewhere. The generic sort+bound+tail-read
-// mechanics live in @forge/kernel's guarded-scan.ts (moved there, T2's
-// follow-up review) — this file keeps only the hook-specific page size and
-// fold. Full rationale: docs/reference/request-path-sinks.md's "M7-C U2"
-// section.
+// Bounded scan (T2 review of 95cb287f, same class as #834). Generic
+// sort+bound+tail-read mechanics live in @forge/kernel/guarded-scan.ts;
+// full rationale: docs/reference/request-path-sinks.md's "M7-C U2" section.
 
 /** Page size — never open more cycle dirs than this per request. */
 export const HOOK_FIRE_SCAN_MAX_CYCLES = 50;
 
-/** The IO a route wires with guarded fs primitives (`@forge/kernel`'s
- *  `guardedMtime`/`guardedReadFileTail`), and a test wires with counting
- *  fakes to prove `scanHookFireSummary` is bounded. */
+/** IO a route wires with guarded kernel primitives, a test with fakes. */
 export type HookFireScanDeps = {
-  /** Cheap directory-name enumeration (e.g. `listCycles`); never reads. */
   listCycleIds: () => readonly string[];
-  /** Directory mtime, guarded; `null` when unknown (sorts last). */
+  /** Guarded directory mtime; `null` when unknown (sorts last). */
   mtimeOf: (cycleId: string) => number | null;
-  /** A BOUNDED read of one cycle's `events.jsonl`; `null` when
-   *  absent/rejected. */
+  /** A BOUNDED read of one cycle's `events.jsonl`; `null` when absent. */
   readTail: (cycleId: string) => string | null;
 };
 
-/** Selects the newest `maxCycles` (via `@forge/kernel`'s
- *  `selectRecentEntries`), reads at most that many via `readTail`, and
- *  folds through `deriveHookFireSummary`. A fire only in an
- *  older-than-window cycle is invisible by design. */
+/** Newest `maxCycles` first, reads at most that many, folds the result. A
+ *  fire only in an older-than-window cycle is invisible by design. */
 export function scanHookFireSummary(
   hookId: string,
   deps: HookFireScanDeps,
