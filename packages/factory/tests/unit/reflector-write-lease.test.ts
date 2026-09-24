@@ -27,10 +27,15 @@ import { join, resolve } from 'node:path';
 import { runReflector } from '../../phases/reflector.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
-import { acquireBrainWriteLease } from '@forge/knowledge/brain-write-lease.ts';
+import { acquireIsolatedReflectorLease } from '../test-fixtures/reflector-lease-test-fixture.ts';
 
 // Same forge root the reflector code itself resolves to (orchestrator/phases/ ⇒ ..).
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
+
+// forge-ler4 cross-file flake fix (mechanism: reflector-lease-test-fixture.ts):
+// this file deliberately holds the lease externally to test contention, so
+// BOTH the external hold and `runReflector`'s own acquire below route
+// through this file's own private lock.
 
 function uniqueCycleId(suffix: string): string {
   const ts = Date.now().toString(36);
@@ -128,10 +133,11 @@ async function* fakeSdkQueryShouldNotRun(): AsyncIterable<unknown> {
 test('forge-ler4: runReflector REFUSES (reflection_status:failed, cause brain-write-lease-contention) when another writer already holds the brain-write lease', async () => {
   const h = setupHarness('contention');
   try {
-    const release = await acquireBrainWriteLease(FORGE_ROOT);
+    const release = await acquireIsolatedReflectorLease(FORGE_ROOT);
     try {
       const result = await runReflector(makeInput(h), h.logger, {
         sdkQuery: fakeSdkQueryShouldNotRun,
+        acquireBrainWriteLease: acquireIsolatedReflectorLease,
       });
       assert.equal(
         result.reflection_status,
@@ -165,6 +171,7 @@ test('forge-ler4: once the lease is free, runReflector proceeds normally', async
     const result = await runReflector(makeInput(h), h.logger, {
       sdkQuery: fakeSdkQueryClean,
       brainLint: () => ({ findings: [], exitCode: 0 }),
+      acquireBrainWriteLease: acquireIsolatedReflectorLease,
     });
     assert.equal(result.reflection_status, 'closed');
   } finally {

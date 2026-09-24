@@ -71,6 +71,18 @@ export type ReflectorDeps = {
   sdkQuery?: ReflectorSdkQuery;
   /** R4-09-F5 — injectable per-KB post-cycle health dispatcher (for tests). */
   kbHealth?: typeof runPostReflectionKbHealth;
+  /**
+   * forge-ler4 — injectable brain-write-lease acquirer (tests only).
+   * `forgeRoot` is deliberately NOT injectable (always `import.meta.dirname`
+   * — see reflector-spawn-capture.test.ts's header), so every test that
+   * reaches the real lease resolves the SAME real repo `brain/`. A test file
+   * can supply `(forgeRoot) => acquireBrainWriteLease(forgeRoot, { lockfilePath:
+   * <private path> })` so it never contends with another reflector test file
+   * running in a DIFFERENT `node --test` worker. Production default:
+   * unset ⇒ the real `acquireBrainWriteLease` against the real forgeRoot,
+   * unchanged.
+   */
+  acquireBrainWriteLease?: typeof acquireBrainWriteLease;
 };
 
 /**
@@ -226,9 +238,10 @@ export async function runReflector(
 
   // forge-ler4 — one brain-writing turn at a time (design.md "Brain-write
   // lease"). Covers the SDK spawn plus its post-exit brain writes.
+  const acquireLease = deps.acquireBrainWriteLease ?? acquireBrainWriteLease;
   let releaseLease: (() => Promise<void>) | undefined;
   try {
-    releaseLease = await acquireBrainWriteLease(forgeRoot);
+    releaseLease = await acquireLease(forgeRoot);
   } catch (err) {
     if (!(err instanceof BrainWriteLeaseContentionError)) throw err;
     emitReflectionLost(logger, {
