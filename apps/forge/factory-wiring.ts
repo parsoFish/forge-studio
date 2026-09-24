@@ -39,13 +39,13 @@ export type InstalledFactory = {
   /** True for a string the installed class table knows (`band-agent-deps.ts`). */
   isChangeClass(value: string): boolean;
   /** The band pipeline: the one read-only review agent (spec §5 item 5). */
-  runAdversarialReview: typeof import('@forge/factory/phases/adversarial-review.ts')['runAdversarialReview'];
+  runAdversarialReview: typeof import('@forge/stations/phases/adversarial-review.ts')['runAdversarialReview'];
   /** The release-finalize phase behind the verdict hook. */
-  runReleaseFinalize: typeof import('@forge/factory/phases/release-finalize.ts')['runReleaseFinalize'];
+  runReleaseFinalize: typeof import('@forge/stations/phases/release-finalize.ts')['runReleaseFinalize'];
   /** Feedback reconciliation at bridge boot. */
-  reconcileReflectFeedback: typeof import('@forge/factory/reflect-reconcile.ts')['reconcileReflectFeedback'];
+  reconcileReflectFeedback: typeof import('@forge/stations/reflect-reconcile.ts')['reconcileReflectFeedback'];
   /** The reflector re-run the feedback route fires. */
-  rerunReflector: typeof import('@forge/factory/reflector-rerun.ts')['rerunReflector'];
+  rerunReflector: typeof import('@forge/stations/reflector-rerun.ts')['rerunReflector'];
 };
 
 
@@ -75,14 +75,14 @@ export async function resolveInstalledFactory(): Promise<InstalledFactory | null
   try {
     const [executorTable, executorDeps, reflector, classProfiles, review, releaseFinalize, reflectReconcile, reflectorRerun] =
       await Promise.all([
-        import('@forge/factory/phases/executor-table.ts'),
-        import('@forge/factory/phases/executor-deps.ts'),
-        import('@forge/factory/phases/reflector.ts'),
+        import('@forge/stations/phases/executor-table.ts'),
+        import('@forge/stations/phases/executor-deps.ts'),
+        import('@forge/stations/phases/reflector.ts'),
         import('@forge/factory/class-profiles.ts'),
-        import('@forge/factory/phases/adversarial-review.ts'),
-        import('@forge/factory/phases/release-finalize.ts'),
-        import('@forge/factory/reflect-reconcile.ts'),
-        import('@forge/factory/reflector-rerun.ts'),
+        import('@forge/stations/phases/adversarial-review.ts'),
+        import('@forge/stations/phases/release-finalize.ts'),
+        import('@forge/stations/reflect-reconcile.ts'),
+        import('@forge/stations/reflector-rerun.ts'),
       ]);
     resolved = {
       phaseWiring: {

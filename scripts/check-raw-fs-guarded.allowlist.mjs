@@ -98,8 +98,8 @@ export const ALLOWLIST = [
   // bead's note (which called hook-runtime's leaf "fixed scripts/run.sh"; it is
   // a parsed definition field). All three are in packages this lane does not
   // own: recorded as residuals with owners named, never edited from here.
-  { file: 'packages/factory/reflector-rerun.ts', line: 95, sink: 'readFileSync',
-    reason: 'SERVER-ENUMERATED PATH (M4-flows 5.36, owner factory/M5-A): `manifestPath` is not caller-supplied — it is `candidates.find((p) => existsSync(p))` over a server-built list of queue-state paths, and the function THROWS when none exists, so the read can only ever open a path this module itself composed from queueRoot + the resolved initiativeId. The taint token is the local binding, not request bytes.' },
+  { file: 'packages/stations/reflector-rerun.ts', line: 95, sink: 'readFileSync',
+    reason: 'SERVER-ENUMERATED PATH (M4-flows 5.36, owner factory/M5-A; F3 re-attribution: reflector-rerun.ts moved packages/factory -> packages/stations verbatim, same guard, unchanged): `manifestPath` is not caller-supplied — it is `candidates.find((p) => existsSync(p))` over a server-built list of queue-state paths, and the function THROWS when none exists, so the read can only ever open a path this module itself composed from queueRoot + the resolved initiativeId. The taint token is the local binding, not request bytes.' },
   // packages/library/studio/hook-runtime.ts's `readFileSync(scriptPath)` row
   // RETIRED here, not line-drift-remapped (forge-9a3): the approval gate,
   // this read and the env fence were extracted verbatim into a new,

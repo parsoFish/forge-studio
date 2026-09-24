@@ -26,7 +26,7 @@ import type { DemoStep } from '@forge/contracts/studio-types.ts';
 import type { MergeGateEvidence } from '@forge/flows/cycle-helpers.ts';
 
 import type { DemoModel, DemoModelCheckpoint, TestResultRow } from '../demo-model.ts';
-import type { GateProfile } from '../class-profiles.ts';
+import type { GateProfile } from '@forge/factory/class-profiles.ts';
 
 /**
  * One gate the orchestrator ran at the merge boundary, and what it produced —

@@ -15,7 +15,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { underDecomposedFlag } from '../../phases/pm-class-set-rules.ts';
-import { CLASS_PROFILES } from '../../class-profiles.ts';
+import { CLASS_PROFILES } from '@forge/factory/class-profiles.ts';
 import type { InitiativeManifest } from '@forge/flows/manifest.ts';
 import type { WorkItem } from '@forge/flows/work-item.ts';
 

@@ -19,7 +19,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { runProjectManager, type PmQueryFn } from '@forge/factory/phases/project-manager.ts';
+import { runProjectManager, type PmQueryFn } from '@forge/stations/phases/project-manager.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import type { CycleInput } from '../../cycle-context.ts';
 import { classifyCycleFailure } from '@forge/agents/failure-classifier.ts';

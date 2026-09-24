@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import type { MergeGateResult } from '@forge/flows/cycle-helpers.ts';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import type { EventLogger } from '@forge/kernel';
-import type { GateProfile } from '../class-profiles.ts';
+import type { GateProfile } from '@forge/factory/class-profiles.ts';
 import { guardedFile } from '@forge/kernel';
 
 import type { DocsGateFinding } from '../gates/docs-gate.ts';

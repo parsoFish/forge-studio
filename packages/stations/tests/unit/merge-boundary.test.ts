@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { runClassMergeBoundary, type MergeBoundaryDeps } from '../../phases/merge-boundary.ts';
-import { CLASS_PROFILES } from '../../class-profiles.ts';
+import { CLASS_PROFILES } from '@forge/factory/class-profiles.ts';
 import type { MergeGateResult } from '@forge/flows/cycle-helpers.ts';
 
 const INPUT = { initiativeId: 'INIT-x', worktreePath: '/wt', projectRepoPath: '/repo' } as never;

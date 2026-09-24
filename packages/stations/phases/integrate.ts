@@ -43,7 +43,7 @@ import {
 import { loadProjectConfig } from '@forge/projects/project-config.ts';
 
 import { renderDemoBundle, stripScratchFromDiffStat } from '../demo-model.ts';
-import { profileFor } from '../class-profiles.ts';
+import { profileFor } from '@forge/factory/class-profiles.ts';
 import { judgeCaptureNonce, readStampedNonce } from './capture-nonce.ts';
 import { deriveDemoModel, type DerivedDemoInput } from './derive-demo-model.ts';
 import { derivePrBody, PR_BODY_SECTIONS } from './derive-pr-body.ts';

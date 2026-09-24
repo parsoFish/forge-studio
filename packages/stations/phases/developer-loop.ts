@@ -34,7 +34,7 @@ import {
   writeWorkItemStatus,
   type WorkItem,
 } from '@forge/flows/work-item.ts';
-import { hollowGateGuardFor, profileFor, readChangeClass } from '../class-profiles.ts';
+import { hollowGateGuardFor, profileFor, readChangeClass } from '@forge/factory/class-profiles.ts';
 import { type QueryFn, type ClaudeAgentOptions } from '@forge/agents/ralph/claude-agent.ts';
 import { getAdapter, resolveSdkId } from '@forge/agents/_adapters/registry.ts';
 import type { AgentInvocation } from '@forge/agents/_adapters/types.ts';

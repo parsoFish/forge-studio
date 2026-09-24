@@ -16,7 +16,7 @@
  * for `docs` and `config`.
  */
 
-import { profileFor } from '../class-profiles.ts';
+import { profileFor } from '@forge/factory/class-profiles.ts';
 import type { InitiativeManifest } from '@forge/flows/manifest.ts';
 import type { WorkItem } from '@forge/flows/work-item.ts';
 

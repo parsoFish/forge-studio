@@ -26,7 +26,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { profileFor, type ChangeClass } from '../class-profiles.ts';
+import { profileFor, type ChangeClass } from '@forge/factory/class-profiles.ts';
 import { reviewCeilingUsd, changedLinesFromNumstat } from './review-budget.ts';
 import { writeRootFenceOptions } from '@forge/sessions/session-write-fence.ts';
 import { projectBrainDir } from '@forge/knowledge/brain-paths.ts';
