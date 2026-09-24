@@ -1608,21 +1608,34 @@ is what this contract reads — but it cannot be the only distinguisher.
   `main[data-page="hook-detail"][data-hook-id][data-page-ready][data-hook-event][data-hook-verdict][data-hook-trust][data-hook-runnable][data-package-hash]`
   — the last five are ABSENT while loading, on a fetch error and for an unknown
   id; no verdict is ever fabricated. **`forge-8vfn.5.16` (M7-C U2) —
-  `data-hook-fire-count`, present alongside the five once loaded (`0` = "every
-  cycle's log was scanned, no fire found" — the same idiom
+  `data-hook-recent-fire-count`, present alongside the five once loaded (`0` =
+  "the scanned window was checked, no fire found" — the same idiom
   `data-hook-carried-by-count` already uses), plus
   `data-hook-last-fire-at`/`data-hook-last-fire-outcome` (`"ran"|"refused"|
-  "timeout"|"error"`), present ONLY once the hook has actually fired at least
-  once — never fabricated for a hook that has never run. This is the FIRST
+  "timeout"|"error"`), present ONLY once the hook has fired within that window
+  — never fabricated for a hook that has never run. This is the FIRST
   `data-hook-*` attribute on this page naming an EXECUTION rather than the
   hook's definition or trust: every fire (`packages/agents/studio/hook-
   dispatch.ts`'s `emitHookFire`) appends one `message:"hook.fire"` event to the
   firing cycle's own log; the route (`packages/library/bridge-studio-hooks-
-  detail.ts`) scans every cycle's `events.jsonl` (the same guarded
-  `listCycles`/`guardedReadFile` pattern the pre-existing ingest-activity route
-  uses) and folds it through `packages/library/studio/hook-fire-summary.ts`'s
+  detail.ts`) folds it through `packages/library/studio/hook-fire-summary.ts`'s
   `deriveHookFireSummary` (latest-by-`started_at` wins the outcome; the count
-  is every matching fire, not just the latest).** It reuses the shared
+  is every matching fire within scope, not just the latest). **T2 review of
+  `95cb287f` — BOUNDED, not every cycle.** A hook can fire from any agent
+  spawn (flow cycles, one-shot `_agent-*` runs, interactive session kinds,
+  bridge writes), so recency can't be read off the cycle id the way the
+  ingest-activity route's `reflect.kb-ingest` scan does (that event only ever
+  comes from a flow cycle's ISO-prefixed id); the scan instead orders cycles
+  by directory mtime (`scanHookFireSummary`'s injectable
+  `selectRecentCycles`, mirroring `sortEntriesByMtimeDesc`,
+  `packages/agents/bridge-agents-history-rows.ts`, M7-C #834) and opens at
+  most `HOOK_FIRE_SCAN_MAX_CYCLES` (50) cycle dirs, reading at most
+  `HOOK_FIRE_SCAN_TAIL_BYTES` (64KB) of each one's `events.jsonl` (the whole
+  file when smaller). The wire field and this attribute are named
+  `recentFireCount`/`data-hook-recent-fire-count`, not `fireCount`/
+  `data-hook-fire-count`, precisely because of the bound: a fire recorded
+  only in a cycle older than the scanned window is honestly invisible here,
+  never claimed as "never fired".** It reuses the shared
   `[data-component="file-package"]` renderer R3-01 built, and adds the
   **SECURITY SCAN** panel
   `[data-section="scan-report"][data-scan-verdict][data-finding-count][data-critical-count]`
