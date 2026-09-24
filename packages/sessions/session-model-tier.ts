@@ -29,19 +29,22 @@
 
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
-import { skillsDir } from '@forge/agents/skill-path.ts';
-import { resolveGuardedPath } from '@forge/kernel';
+import { guardedSkillMdPath } from '@forge/library/skill-path.ts';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';
 
 export function fixedTierForSessionKind(forgeRoot: string, descriptor: SessionKindDescriptor): string | null {
   // The agent slug comes from the session-kind registry (authored, validated
   // by validateSessionKinds' unknown-agent check), never from a request — but
   // it is routed through the same guarded choke point as every other
-  // SKILL.md read so there is one path, not two.
-  const guard = resolveGuardedPath(skillsDir(forgeRoot), [descriptor.agent, 'SKILL.md']);
-  if (!guard.ok || !guard.exists) return null;
+  // SKILL.md read so there is one path, not two. SEAM F1: `guardedSkillMdPath`
+  // now searches every skill root, `skills/` AND every `packages/<pkg>/skills/`
+  // — and, unlike the bare `resolveGuardedPath` this replaced, it slug-shape-
+  // validates first and THROWS on a malformed one (R06: an unresolvable/
+  // traversal-shaped agent must still degrade to null, never throw here).
   try {
-    const capability = agentCapabilityDescriptor(loadAgentDefinition(guard.realPath), forgeRoot);
+    const mdPath = guardedSkillMdPath(descriptor.agent, forgeRoot);
+    if (mdPath === null) return null;
+    const capability = agentCapabilityDescriptor(loadAgentDefinition(mdPath), forgeRoot);
     return capability.fixedTier ?? null;
   } catch {
     return null;

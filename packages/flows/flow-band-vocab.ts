@@ -13,9 +13,10 @@
  * (orchestrator/studio/registry.ts, orchestrator/skill-path.ts) rather than
  * re-parsing yaml/frontmatter here.
  */
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
 import { loadFlowDefinition } from './studio/flow-registry.ts';
+import { flowPathForId } from './flow-runner.ts';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';
@@ -44,7 +45,7 @@ import { skillPath } from '@forge/agents/skill-path.ts';
  */
 export function listFlowBandIds(forgeRoot: string, flowId: string): string[] {
   const root = resolve(forgeRoot);
-  const flowYamlPath = join(root, 'studio', 'flows', flowId, 'flow.yaml');
+  const flowYamlPath = flowPathForId(flowId, root);
 
   let nodes: ReturnType<typeof loadFlowDefinition>['nodes'];
   try {

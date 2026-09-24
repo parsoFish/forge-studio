@@ -179,17 +179,20 @@ function nodeMatchesDeclared(node: FlowNode, declared: string): boolean {
 
 /** The Flow kind's loaders, as library's own port (ruling 113) — `@forge/flows`
  *  is rank 5 and this package is rank 2. Bound at `apps/forge`; never a
- *  module-level setter, never a default. `design.md` carries the why. */
+ *  module-level setter, never a default. `design.md` carries the why.
+ *  `flowPathForId` joined the port at SEAM F1: a flow may now live under a
+ *  PACKAGE root too, and only `@forge/flows` knows every root. */
 export type FlowSource = {
   listFlowIds(forgeRoot: string): readonly string[];
   loadFlowDefinition(flowYamlPath: string): FlowDefinition;
+  flowPathForId(flowId: string, forgeRoot: string): string;
 };
 
 function buildFlowEdgeIndex(root: string, flows: FlowSource): { scanned: number; byArtifact: Map<string, ResolvedEdge[]> } {
   const flowIds = flows.listFlowIds(root);
   const byArtifact = new Map<string, ResolvedEdge[]>();
   for (const flowId of flowIds) {
-    const flowYamlPath = join(root, 'studio', 'flows', flowId, 'flow.yaml');
+    const flowYamlPath = flows.flowPathForId(flowId, root);
     let flow: FlowDefinition;
     try {
       flow = flows.loadFlowDefinition(flowYamlPath);
