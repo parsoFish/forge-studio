@@ -526,13 +526,12 @@ function KnowledgePageInner() {
       {seedSessionParam && (
         <div data-component="kb-seed-banner" data-seed-session-id={seedSessionParam} data-seed-session-phase={seedBanner.phase ?? ''} data-seed-session-running={seedBanner.running ? 'true' : 'false'} style={{ padding: '8px 20px', background: 'rgba(74,222,128,.07)', borderBottom: '1px solid rgba(74,222,128,.25)', fontSize: 12.5, color: 'var(--c-kb)' }}>
           {seedBanner.text}{' '}
-          <Link
-            data-action="open-seed-session"
-            href={`/sessions/project-brain/${encodeURIComponent(seedSessionParam)}${seedProjectParam ? `?project=${encodeURIComponent(seedProjectParam)}` : ''}`}
-            style={{ color: 'var(--c-kb)', fontWeight: 600 }}
-          >
-            watch the seeding session →
-          </Link>
+          {/* forge-t4pp — no link for an id useKbSeedSessionPhase never found (its OWN predicate, reused, not a second check). */}
+          {seedBanner.phase !== null && (
+            <Link data-action="open-seed-session" href={`/sessions/project-brain/${encodeURIComponent(seedSessionParam)}${seedProjectParam ? `?project=${encodeURIComponent(seedProjectParam)}` : ''}`} style={{ color: 'var(--c-kb)', fontWeight: 600 }}>
+              watch the seeding session →
+            </Link>
+          )}
         </div>
       )}
 

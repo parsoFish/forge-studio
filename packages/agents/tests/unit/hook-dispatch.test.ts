@@ -263,6 +263,47 @@ describe('sdkHooksForAgent: a bound + approved hook actually fires', () => {
 });
 
 // ---------------------------------------------------------------------------
+// forge-9a3 — dispatch must not block forge serve's event loop while a hook
+// runs. `runHookScript` (sync) used `spawnSync`, which blocks the ENTIRE JS
+// thread — including its own timers — for the hook's whole duration; every
+// `PostToolUse` fire (one per tool call) stalled the scheduler and the Studio
+// bridge for as long as the hook took. The door: schedule a `setTimeout(…,
+// 50)` immediately after starting a hook that sleeps ~1.5s, and prove the
+// timer fires WELL BEFORE the hook resolves. Against the sync tail this is
+// RED by construction — `spawnSync` blocks synchronously inside the very
+// call that starts the fire, so the timer cannot even be SCHEDULED until
+// after the 1.5s block already elapsed, let alone fire first.
+// ---------------------------------------------------------------------------
+
+describe('sdkHooksForAgent: does not block the event loop while a hook runs (forge-9a3)', () => {
+  it('a setTimeout(…,50) scheduled right after dispatch fires well before a ~1.5s hook finishes (kills: dispatch calling the SYNCHRONOUS runHookScript)', async () => {
+    const root = makeRoot('hook-dispatch-responsive-');
+    writeHook(root, 'slow-hook', { on: 'SessionEnd', script: '#!/usr/bin/env bash\nsleep 1.5\nexit 0\n' });
+    approveHook({ forgeRoot: root, id: 'slow-hook' });
+    const skill = writeAgent(root, 'slow-agent', ['slow-hook']);
+    const { logger } = makeLogger('c-responsive');
+
+    const hooks = sdkHooksForAgent({ skill, logger, initiativeId: 'INIT-t', forgeRoot: root });
+
+    const order: string[] = [];
+    const hookPromise = fire(hooks, 'SessionEnd').then(() => {
+      order.push('hook');
+    });
+    const timerPromise = new Promise<void>((resolve) => setTimeout(resolve, 50)).then(() => {
+      order.push('timer');
+    });
+
+    await Promise.all([hookPromise, timerPromise]);
+
+    assert.deepEqual(
+      order,
+      ['timer', 'hook'],
+      'a 50ms timer scheduled right after dispatch must resolve before a 1.5s hook does — proves the event loop was never blocked by a synchronous spawn',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 3 — the approval gate holds AT DISPATCH, not merely at authoring time.
 // ---------------------------------------------------------------------------
 

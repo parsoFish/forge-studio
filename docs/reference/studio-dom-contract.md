@@ -826,7 +826,16 @@ is what this contract reads — but it cannot be the only distinguisher.
   unfiltered set). **W7-B1 (home-sessions-12): the page stays LIVE** — the
   same `cycle-list-changed` bridge-WS signal Home refetches on, through the
   SAME `createDebouncedRefreshRuns` debounce (one subscribe, mount-only, no
-  page-level poll — `app/sessions/page.tsx`). **W7-B1 (crosscut-13 /
+  page-level poll — `app/sessions/page.tsx`). **sessions-kinds-16: a
+  terminal-sessions pointer** — the page's own lede says terminal sessions
+  "live on their artifacts" but named no path to any; a static (no fetch
+  dependency, renders in every state including loading)
+  `div[data-section="terminal-sessions-pointer"]` links to `/monitor` via
+  `a[data-action="open-monitor"]` — the SAME action `MonitorSummaryStrip.tsx`
+  already uses for this link — because Monitor's history ledger
+  (`lib/session-ledger.ts`'s `deriveSessionLedgerRows`) joins every spine
+  session regardless of phase, terminal included, unlike this page's own
+  active-only set. **W7-B1 (crosscut-13 /
   home-sessions-19): `section[data-section="sessions-kickoff"]` renders in
   BOTH the populated and the empty state** (only a FAILED read omits it) —
   one `a[data-action="kickoff-<kind>"]` per entry of
@@ -1868,10 +1877,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   the shared `NotFound`** (`data-not-found-kind="registry item"`), not the
   full edit form under a red banner. Gated on the load OUTCOME
   (`registryEditLoadOutcome`), never on "some load error happened": only a
-  real HTTP 404 may claim the row does not exist. A transport failure — the
-  bridge was never reached, so there is no status at all — keeps
-  `[data-component="fetch-error"]`, because a down bridge is not evidence of
-  absence (the same rule `bridge-result.ts` holds for every other read).
+  real HTTP 404 may claim the row does not exist. **forge-4sj: a non-404
+  edit-load failure** — the bridge was never reached, so there is no status
+  at all, or it answered but refused — renders the shared `PageLoadError`
+  kit (`main[data-page="community-registry-form"][data-form-mode="edit"]`,
+  `[data-component="page-load-error"]`, `[data-component="fetch-error"]`
+  inside it, `[data-action="retry-fetch"]`) instead of the form, with
+  `useBridgeRecoveryWhenFailed` resubscribing while failed — the SAME kit
+  `/community/[kind]/[id]` already uses, because a down bridge is not
+  evidence of absence (the same rule `bridge-result.ts` holds for every
+  other read). The prior ad-hoc inline banner above a half-populated form is
+  gone.
 
   **Refresh entry (W6-CR-3, 2026-08-15; replaced by W8-B5, retired-session-kind
   cutover W8-B5b WI-3).** The interactive community-refresh session kind
@@ -4667,8 +4683,20 @@ is what this contract reads — but it cannot be the only distinguisher.
     renders the id in TWO places: on the page root
     (`main[data-page="knowledge"][data-seed-session-id="<sid>"]`) and on
     `[data-component="kb-seed-banner"][data-seed-session-id="<sid>"]`, which
-    wraps `a[data-action="open-seed-session"]`. Both are present deliberately.
-    The banner carries it because that is the control it belongs to; the ROOT
+    wraps `a[data-action="open-seed-session"]` **once `seedBanner.phase !==
+    null`** (forge-t4pp: `seedSession` is an unvalidated URL param — a
+    hand-typed or stale id must never mint a link whose target 404s; reuses
+    `useKbSeedSessionPhase`'s own `.find((s) => s.session_id ===
+    seedSessionId)` lookup, already run to derive the banner's copy, as the
+    session-id validity predicate — `phase` is `null` for "not yet checked",
+    "the read failed" and "no such session" alike, and a real value only
+    once a genuine match was found). The banner `[data-component]` and its
+    `[data-seed-session-id]`/`[data-seed-session-phase]`/
+    `[data-seed-session-running]` attributes are unconditional on
+    `seedSession` being present; only the LINK inside is gated. The root's
+    `[data-seed-session-id]` is likewise unconditional (it announces which id
+    is being checked, not that a link exists for it). The banner carries it
+    because that is the control it belongs to; the ROOT
     carries it because `scripts/stories/beats.mjs`'s `resolveExpectations`
     reads the page root FIRST and only searches descendants for the keys the
     root does not answer — and S6 run 2 (2026-09-02) reported this key "absent
