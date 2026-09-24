@@ -68,6 +68,7 @@ import {
 import {
   parseAgentToState,
   buildAgentPutBody,
+  buildAgentPreviewModel,
   duplicateAgentState,
   EMPTY_STATE,
   BLANK_STATE,
@@ -80,6 +81,8 @@ import { useDocumentTitle } from '@/lib/document-title';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 import { disabledAttrs } from '@/lib/disabled-reason';
+import { attachUnsavedChangesGuard } from '@/lib/unsaved-changes-guard';
+import { standaloneBlockedReasonFor } from '@/lib/run-panel-gating';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -408,6 +411,13 @@ export default function AgentBuilderPage() {
     void loadHistory();
     return () => { cancelled = true; };
   }, [slugParam, isNew, historyNonce]);
+
+  // agents-48: beforeunload covers tab close / reload / full top-nav
+  // navigations — handleSelectAgent below already confirms the in-page
+  // agent switcher, but that was the ONLY guarded exit; every other way to
+  // leave discarded unsaved edits with no warning at all, despite the
+  // "Unsaved changes" indicator. Mirrors projects/[id]/page.tsx's own effect.
+  useEffect(() => attachUnsavedChangesGuard(window, dirty), [dirty]);
 
   // ---- agent selector change (with dirty guard) ----
   function handleSelectAgent(newSlug: string) {
@@ -852,31 +862,17 @@ export default function AgentBuilderPage() {
             declaredMaterialKinds={state.materials}
             defaultCostCeilingUsd={state.declaredMaxBudgetUsd ?? defaultCostCeilingUsd}
             costCeilingEnforceable={state.costCeilingEnforceable}
-            standaloneBlockedReason={state.runtime.loopStrategy === 'ralph'
-              ? 'This agent is a multi-iteration (ralph) loop — it runs inside the develop flow, never as a standalone dispatch. Start it through its flow instead.'
-              : null}
+            standaloneBlockedReason={standaloneBlockedReasonFor({
+              loopStrategy: state.runtime.loopStrategy,
+              guards: state.guards,
+            })}
             unreadyConnectionIds={(connectionsUnready ?? []).map((c) => c.id)}
             sessionEntryHref={sessionEntryHrefForAgent(state.slug)}
             standingTriggers={standingTriggers}
             onRunDispatched={() => setHistoryNonce((n) => n + 1)} onRunSettled={() => setHistoryNonce((n) => n + 1)}
           />
 
-          <YamlPreview
-            slug={state.slug}
-            name={state.name}
-            purpose={state.purpose}
-            skills={state.skills}
-            tools={state.tools}
-            mcps={state.mcps}
-            guards={state.guards}
-            hooks={state.hooks}
-            materials={state.materials}
-            process={state.process}
-            interactivity={state.interactivity}
-            runtime={state.runtime}
-            brainAccess={state.brainAccess}
-            catalog={catalog}
-          />
+          <YamlPreview definition={buildAgentPreviewModel(state)} catalog={catalog} />
           <ReadinessPanel state={readinessState} />
           {/* W7-C1 (agents-27): the dispatch-provenance note keeps an agent
               dispatched OUTSIDE the flow graph (release-finalizer's merge

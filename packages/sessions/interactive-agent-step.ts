@@ -383,11 +383,18 @@ export async function runFinalizeStep(args: {
   }
   const libraryRoot = libraryRootGuard.realPath;
 
+  // forge-7m2 — AUTHORED data (the SAME `writes:`-style field as an
+  // `agent`-step phase, just meaningful on a `finalize` row instead): the
+  // committing phase row names the dir its finalizer reads FROM, exactly as
+  // an earlier `agent`-step row names the dir it writes INTO. Omitted
+  // (never defaulted) when the row doesn't declare one — a finalizer that
+  // needs it (copyStagingToLibrary) refuses loudly at that point instead.
   const finalizerCtx: FinalizerContext = {
     sessionDir,
     forgeRoot,
     libraryRoot,
     packageId: rawPackageId,
+    ...(phaseRow.stagingDirName !== undefined ? { stagingDirName: phaseRow.stagingDirName } : {}),
   };
 
   const wrote = await finalizerFn(finalizerCtx);

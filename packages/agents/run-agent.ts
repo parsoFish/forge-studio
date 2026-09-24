@@ -59,6 +59,7 @@ import { getAdapter, resolveSdkId } from './_adapters/registry.ts';
 import type { QueryFn } from './_adapters/types.ts';
 import { unreadyConnectionsFor, formatUnreadyConnections } from './studio/connection-run-gate.ts';
 import type { ProbeResult } from '@forge/library/studio/connection-probe.ts';
+import { loadAndComposeProjectSkills } from './project-skills.ts';
 
 /**
  * A `runId` is used verbatim as the log directory name — `createLogger`
@@ -540,9 +541,12 @@ async function runOneShotSpawn(
   runMarker: string,
   turnSink?: ReturnType<typeof makeToolEventSink>,
 ): Promise<RunAgentResult> {
+  // ADR 024 item 90 — a bound project's declared skills; see project-skills.ts.
+  const composedSystemPrompt = loadAndComposeProjectSkills(ctx, FORGE_ROOT, def.slug);
+
   const options: Record<string, unknown> = {
     cwd: ctx.cwd ?? ctx.workdir,
-    ...(ctx.systemPrompt !== undefined ? { systemPrompt: ctx.systemPrompt } : {}),
+    ...(composedSystemPrompt !== undefined ? { systemPrompt: composedSystemPrompt } : {}),
     model: modelForSpec(spec),
     permissionMode: ctx.permissionMode ?? 'acceptEdits',
     allowedTools: [...spec.allowedTools],
