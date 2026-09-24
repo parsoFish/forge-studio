@@ -13,19 +13,50 @@
  * harness run and again AFTER; {@link compareBoundary} diffs the two;
  * {@link formatBoundaryReport} renders the result for the harness's own log.
  *
- * Two rules baked into the diff, both required by the R5-01-F3 spec:
+ * Three rules baked into the diff, all required by the R5-01-F3 spec (the
+ * third added by ruling 1263 / bead forge-92r7, findings row 20):
  *   - gh degrade rule: a missing/unauthenticated `gh` records `prs: null`
  *     and PR-state checking is SKIPPED (not failed) — git checks stay hard,
  *     but a gh outage must never crash the harness on its own.
  *   - pre-existing-dirt rule: only NEW dirt (a path dirty in `current` that
  *     was clean in `baseline`) is a violation, so a legitimately-dirty
  *     operator tree never false-positives.
+ *   - scoped-judgment rule: `gh pr list` captures every open PR on the
+ *     account, so a SIBLING lane merging or opening its own PR during this
+ *     run's window used to read as THIS run's containment violation. Only
+ *     PRs whose head ref carries one of {@link JUDGED_PR_HEAD_REF_PREFIXES}
+ *     — the run's own branches — are judged for `pr-state-changed`; every
+ *     other head ref is recorded in the result's `context` array instead:
+ *     visible, never a violation. The guard stays hard for the judged set.
  */
 import { spawnSync } from 'node:child_process';
 
 /** Page size for the open-PR capture — far above any realistic open-PR count
  *  on a single-operator repo, so the snapshot is never silently truncated. */
 const GH_PR_LIST_LIMIT = 200;
+
+/**
+ * Head-ref prefixes that mark a PR as belonging to a harness/product-owned
+ * run: forge's own feature branches (`forge/…`), cycle branches
+ * (`cycle/…`), and initiative branches (`INIT-…`). Only a PR whose
+ * headRefName starts with one of these is JUDGED by {@link compareBoundary}
+ * for a `pr-state-changed` violation; every other head ref — a lane branch
+ * like `m7/x`, a `t1-*` branch, an operator branch — is recorded in the
+ * result's `context` array instead (ruling 1263 / bead forge-92r7). The
+ * boundary check exists to catch the product mutating ITS OWN PRs behind
+ * the harness's back (the 2026-07-16 self-merge shape), not a sibling
+ * lane's unrelated work landing in the same run window.
+ */
+export const JUDGED_PR_HEAD_REF_PREFIXES = ['forge/', 'cycle/', 'INIT-'];
+
+/**
+ * @param {string | undefined} headRefName
+ * @returns {boolean}
+ */
+function isJudgedHeadRef(headRefName) {
+  if (typeof headRefName !== 'string') return false;
+  return JUDGED_PR_HEAD_REF_PREFIXES.some((prefix) => headRefName.startsWith(prefix));
+}
 
 /**
  * @typedef {{ number: number, state: string, headRefName: string }} PrRecord
@@ -35,6 +66,7 @@ const GH_PR_LIST_LIMIT = 200;
  *   | { type: 'tree-dirtied', path: string, before: null, after: string }
  *   | { type: 'pr-state-changed', prNumber: number, before: PrRecord | null, after: PrRecord | null }
  * } BoundaryViolation
+ * @typedef {{ clean: boolean, violations: BoundaryViolation[], context: BoundaryViolation[], prsSkipped: boolean }} BoundaryResult
  */
 
 /**
@@ -131,7 +163,7 @@ function parsePorcelainPaths(statusPorcelain) {
  * @param {BoundarySnapshot} baseline
  * @param {BoundarySnapshot} current
  * @param {{ ignorePathPrefixes?: string[] }} [options]
- * @returns {{ clean: boolean, violations: BoundaryViolation[], prsSkipped: boolean }}
+ * @returns {BoundaryResult}
  */
 export function compareBoundary(baseline, current, options = {}) {
   const { ignorePathPrefixes = [] } = options;
@@ -143,6 +175,7 @@ export function compareBoundary(baseline, current, options = {}) {
   const isIgnored = (path) => ignorePathPrefixes.includes(path)
     || dirPrefixes.some((prefix) => path.startsWith(prefix));
   const violations = [];
+  const context = [];
 
   if (baseline.headSha !== current.headSha) {
     violations.push({ type: 'head-moved', before: baseline.headSha, after: current.headSha });
@@ -166,24 +199,36 @@ export function compareBoundary(baseline, current, options = {}) {
       const changed = !before || !after
         || before.state !== after.state
         || before.headRefName !== after.headRefName;
-      if (changed) violations.push({ type: 'pr-state-changed', prNumber, before, after });
+      if (!changed) continue;
+      const entry = { type: 'pr-state-changed', prNumber, before, after };
+      // Scoped-judgment rule (ruling 1263): only the run's own branches are
+      // judged; a sibling lane's PR moving in the same window is context.
+      const headRefName = after?.headRefName ?? before?.headRefName;
+      if (isJudgedHeadRef(headRefName)) {
+        violations.push(entry);
+      } else {
+        context.push(entry);
+      }
     }
   }
 
-  return { clean: violations.length === 0, violations, prsSkipped };
+  return { clean: violations.length === 0, violations, context, prsSkipped };
 }
 
 /**
  * Render the human-readable boundary report. Callers print this
  * unconditionally — success or failure — same "the video always finishes"
- * philosophy the rest of the harness follows.
- * @param {{ clean: boolean, violations: BoundaryViolation[], prsSkipped: boolean }} result
+ * philosophy the rest of the harness follows. `context` (PR changes on
+ * non-judged head refs — ruling 1263) defaults to `[]` so a result built
+ * before that field existed still renders.
+ * @param {{ clean: boolean, violations: BoundaryViolation[], context?: BoundaryViolation[], prsSkipped: boolean }} result
  * @param {{ label?: string }} [options]
  * @returns {string}
  */
 export function formatBoundaryReport(result, options = {}) {
   const { label = 'post-run boundary' } = options;
-  const { clean, violations, prsSkipped } = result;
+  const { clean, violations, context = [], prsSkipped } = result;
+  const describePr = (pr) => (pr ? `#${pr.number} ${pr.state} (${pr.headRefName})` : '(absent)');
   const lines = [`[${label}] ${clean ? 'CLEAN' : `${violations.length} VIOLATION(S)`}`];
   for (const violation of violations) {
     if (violation.type === 'head-moved') {
@@ -191,11 +236,18 @@ export function formatBoundaryReport(result, options = {}) {
     } else if (violation.type === 'tree-dirtied') {
       lines.push(`  ✗ tree-dirtied: new dirt at ${violation.path} (${violation.after.trim()})`);
     } else {
-      const describe = (pr) => (pr ? `#${pr.number} ${pr.state} (${pr.headRefName})` : '(absent)');
-      lines.push(`  ✗ pr-state-changed: ${describe(violation.before)} -> ${describe(violation.after)}`);
+      lines.push(`  ✗ pr-state-changed: ${describePr(violation.before)} -> ${describePr(violation.after)}`);
     }
   }
   lines.push(`  pr-state: ${prsSkipped ? 'skipped (gh unavailable)' : 'checked'}`);
+  if (context.length > 0) {
+    lines.push(`  context: ${context.length} sibling PR change(s) not judged (not this run's branches)`);
+    for (const entry of context) {
+      if (entry.type === 'pr-state-changed') {
+        lines.push(`  · pr-state-changed (context): ${describePr(entry.before)} -> ${describePr(entry.after)}`);
+      }
+    }
+  }
   return lines.join('\n');
 }
 
@@ -222,7 +274,7 @@ export function formatBoundaryReport(result, options = {}) {
  *   soft-assert function
  * @param {(repoRoot: string) => PrRecord[] | null} [params.ghPrList] override
  *   for the AFTER capture (testing)
- * @returns {{ clean: boolean, violations: BoundaryViolation[], prsSkipped: boolean } | null}
+ * @returns {BoundaryResult | null}
  *   the compare result, or `null` if the check itself failed to run
  */
 export function runBoundaryCheck({ baseline, repoRoot, ignorePathPrefixes, check, ghPrList = defaultGhPrList }) {
