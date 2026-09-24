@@ -10,9 +10,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
+const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const MIN_BUNDLED_CLI = [2, 1, 280] as const;
 
 function parse(v: string): number[] {
@@ -29,11 +30,12 @@ function atLeast(v: number[], floor: readonly number[]): boolean {
 }
 
 test('the pinned SDK bundles a Claude Code CLI at or above the model floor', () => {
-  const require = createRequire(import.meta.url);
-  // `./package.json` is not an exported subpath, so find the package root from its entry.
-  let dir = dirname(require.resolve('@anthropic-ai/claude-agent-sdk'));
-  while (!existsSync(join(dir, 'package.json'))) dir = dirname(dir);
-  const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { version: string; claudeCodeVersion?: string };
+  // Read the installed manifest as a FILE, never resolve the module: a module
+  // reference outside pinned-sdk-query.ts is what pinned-sdk-query.enforce.test.ts
+  // refuses, and this door needs the bytes on disk, not the SDK.
+  const pkgPath = join(REPO_ROOT, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'package.json');
+  assert.ok(existsSync(pkgPath), `SDK not installed at ${pkgPath}`);
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version: string; claudeCodeVersion?: string };
   assert.ok(pkg.claudeCodeVersion, `SDK ${pkg.version} declares no bundled claudeCodeVersion`);
   assert.ok(
     atLeast(parse(pkg.claudeCodeVersion), MIN_BUNDLED_CLI),
