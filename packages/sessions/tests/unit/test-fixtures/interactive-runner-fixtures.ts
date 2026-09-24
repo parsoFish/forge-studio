@@ -1,5 +1,5 @@
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadSessionKinds, type SessionKindDescriptor } from '../../../studio/session-kinds.ts';

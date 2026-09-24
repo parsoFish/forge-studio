@@ -17,7 +17,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
 
-import { reqString, optString, reqNumber, reqObject, oneOf, loadYamlWithRaw } from '@forge/kernel/studio/yaml-fields.ts';
+import { reqString, optString, reqNumber, reqObject, oneOf, loadYamlWithRaw } from '@forge/kernel';
 import type {
   CommunitySkill,
   CommunityRegistry,

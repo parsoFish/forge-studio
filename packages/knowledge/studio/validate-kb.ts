@@ -13,8 +13,8 @@
 
 import type { KbDescriptor } from '@forge/contracts';
 import { KB_BACKENDS } from '@forge/contracts';
-import { type Finding, err } from '@forge/kernel/findings.ts';
-import { KB_ID_RE } from '@forge/kernel/ids.ts';
+import { type Finding, err } from '@forge/kernel';
+import { KB_ID_RE } from '@forge/kernel';
 
 export function validateKb(kb: KbDescriptor): Finding[] {
   const findings: Finding[] = [];

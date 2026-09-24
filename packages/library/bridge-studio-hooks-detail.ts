@@ -25,7 +25,7 @@ import {
   sendJson, allowedOrigin, sanitizeError, pathOnly, listCycles,
   guardedMtime, guardedReadFileTail, type StudioContext, type RouteContext,
 } from '@forge/kernel';
-import { assertSkillSlug } from '@forge/kernel/ids.ts';
+import { assertSkillSlug } from '@forge/kernel';
 import { scanHookFireSummary, HOOK_FIRE_SCAN_MAX_CYCLES } from './studio/hook-fire-summary.ts';
 import {
   hooksDir,

@@ -208,7 +208,7 @@ test('agentsUsing answers one id over the same index', () =>
 // The library-side half of that pair moved out with the inversion — see the
 // note below.
 // ---------------------------------------------------------------------------
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 
 // The two PARITY tests that stood here compared this index against library's

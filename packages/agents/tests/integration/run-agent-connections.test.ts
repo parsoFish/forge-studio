@@ -88,7 +88,7 @@ import { listAgentDefinitions } from '../../studio/agent-registry.ts';
 import type { StreamQueryFn } from '../../pinned-sdk-query.ts';
 import type { AgentDefinition } from '@forge/contracts';
 import type { ProbeResult } from '@forge/library/studio/connection-probe.ts';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 const ROOT = FORGE_ROOT;
 

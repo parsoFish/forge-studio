@@ -24,7 +24,7 @@ import { basename, join, sep } from 'node:path';
 import matter from 'gray-matter';
 
 import { isSafeSegment, type Finding } from '@forge/kernel';
-import { skillRoots } from '@forge/kernel/discovery-roots.ts';
+import { skillRoots } from '@forge/kernel';
 import { listSkillMdDirs, SLUG_RE } from '@forge/agents/skill-path.ts';
 import { FINALIZERS } from '../interactive-finalizers.ts';
 

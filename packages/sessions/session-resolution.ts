@@ -88,7 +88,7 @@ export const COMMUNITY_REFRESH_PROJECT_ANCHOR = '.community-registry';
 
 // W6-B9 reviewer fix — the general invariant this file's own KB-seeding
 // carve-out comment (below) and W6-CR-3's comment (above) both already
-// state: `discoverProjects` (@forge/kernel/project-layout.ts) filters EVERY
+// state: `discoverProjects` (@forge/kernel) filters EVERY
 // dot-prefixed directory out of the real project list, categorically — not
 // just `.kb-<id>` (KB_SEEDING_ANCHOR_PREFIX) or `.community-registry`
 // (COMMUNITY_REFRESH_PROJECT_ANCHOR, above). A project id starting with "."

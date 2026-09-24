@@ -116,7 +116,7 @@ import {
   type StudioContext,
   type RouteContext,
 } from '@forge/kernel';
-import { isReservedId } from '@forge/kernel/ids.ts';
+import { isReservedId } from '@forge/kernel';
 import {
   hookDir,
   hooksDir,

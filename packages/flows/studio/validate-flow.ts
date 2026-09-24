@@ -12,8 +12,8 @@
 
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 import { FLOW_KICKOFF_KINDS } from '@forge/contracts';
-import { type Finding, err } from '@forge/kernel/findings.ts';
-import { SLUG_RE } from '@forge/kernel/ids.ts';
+import { type Finding, err } from '@forge/kernel';
+import { SLUG_RE } from '@forge/kernel';
 import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
 import { isSafeProjectName } from '../manifest-path-guard.ts';
 import { findFanOutViolations } from '../flow-fanout.ts';

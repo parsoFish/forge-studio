@@ -43,7 +43,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
 
-import { reqString, reqObject, stringArray, optString } from '@forge/kernel/studio/yaml-fields.ts';
+import { reqString, reqObject, stringArray, optString } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Closed vocabularies (frozen — rows-as-data, mirrors TRIGGER_KINDS)

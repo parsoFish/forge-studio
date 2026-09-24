@@ -30,7 +30,7 @@ import { runPreflight } from '@forge/projects/preflight.ts';
 import { loadFlowDefinition } from './studio/flow-registry.ts';
 import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
 import { validateFlow } from './studio/validate-flow.ts';
-import { skillRoots } from '@forge/kernel/discovery-roots.ts';
+import { skillRoots } from '@forge/kernel';
 import type { AgentDefinition } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------

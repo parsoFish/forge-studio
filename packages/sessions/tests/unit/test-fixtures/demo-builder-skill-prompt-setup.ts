@@ -21,7 +21,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 import { demoSessionDir } from '../../../kinds/demo-builder.ts';
 import { DEMO_SKILL_REL_PATH, DEMO_HTML_REL_PATH, type DemoBuilderStatus } from '../../../kinds/demo-session-store.ts';
 import { type QueryFn } from '../../../interactive-session.ts';

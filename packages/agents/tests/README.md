@@ -51,7 +51,7 @@ general dumping ground for shared helpers.
 ## Two things a mover has to know
 
 **Anchors.** Files here are two levels below the package root. Anything that
-needs the repo root imports `FORGE_ROOT` from `@forge/kernel/ids.ts` — never
+needs the repo root imports `FORGE_ROOT` from `@forge/kernel` — never
 `'..'` counted from `import.meta.url`, which is correct at exactly one depth
 and wrong at every other (COMMON §15.14). `tests/regression/anchor-depth.test.ts`
 holds that proof, including the correction that the failure is a loud `ENOENT`

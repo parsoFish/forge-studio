@@ -17,7 +17,7 @@ import { MATERIAL_KINDS } from './materials.ts';
 import type { AgentDefinition } from '@forge/contracts';
 
 /**
- * The forge install root, re-exported from `@forge/kernel/ids.ts` so the
+ * The forge install root, re-exported from `@forge/kernel` so the
  * repository has exactly ONE definition of it (M4-agents). This module used
  * to compute its own by counting `'..'` from its location, which was a second
  * source of truth AND depth-coupled: any move of this file resolved it short,
@@ -33,7 +33,7 @@ import type { AgentDefinition } from '@forge/contracts';
 // Imported AND re-exported: a bare `export { X } from '...'` re-export
 // creates no local binding, and this module uses FORGE_ROOT itself as a
 // default parameter below.
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 export { FORGE_ROOT };
 
 const TIER_BY_MODEL: Record<string, ModelTier> = Object.fromEntries(

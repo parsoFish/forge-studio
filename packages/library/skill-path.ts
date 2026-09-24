@@ -29,9 +29,9 @@
 import { readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
-import { FORGE_ROOT, assertSkillSlug } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT, assertSkillSlug } from '@forge/kernel';
 import { guardedFile } from '@forge/kernel';
-import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
+import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel';
 
 /** The `skills/` directory under a given root (default: the real repo root).
  *  The one place the literal `skills` directory name is constructed. */

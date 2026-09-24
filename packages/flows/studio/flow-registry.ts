@@ -13,7 +13,7 @@
 import { join, resolve } from 'node:path';
 import yaml from 'js-yaml';
 
-import { flowRoots, listIdsAcrossRoots } from '@forge/kernel/discovery-roots.ts';
+import { flowRoots, listIdsAcrossRoots } from '@forge/kernel';
 
 import type {
   FlowDefinition,
@@ -31,7 +31,7 @@ import {
   optNumber,
   optBool,
   loadYaml,
-} from '@forge/kernel/studio/yaml-fields.ts';
+} from '@forge/kernel';
 
 /**
  * The curated starter flow (plan → dev → review + verdict gate) the New-Flow
@@ -271,7 +271,7 @@ export function serializeFlowDefinition(def: FlowDefinition): string {
  * already-computed flow-directory listing inline) so both share one
  * definition of "a registered flow id". THROWS, naming both roots, if the
  * same id is a real directory under more than one root — never "first root
- * wins" (`listIdsAcrossRoots`, `@forge/kernel/discovery-roots.ts`).
+ * wins" (`listIdsAcrossRoots`, `@forge/kernel`).
  */
 export function listFlowIds(forgeRoot: string): string[] {
   return listIdsAcrossRoots(flowRoots(forgeRoot));

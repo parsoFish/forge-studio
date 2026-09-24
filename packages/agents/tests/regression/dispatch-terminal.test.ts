@@ -28,7 +28,7 @@ import {
 } from '../../dispatch-terminal.ts';
 import { makeToolEventSink } from '../../tool-event-emit.ts';
 import { createLogger } from '@forge/kernel';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 // §15.14 + §15.93: HERE is interpolated into SUBPROCESS IMPORT STRINGS, which
 // tsc cannot see — so a move that broke them would typecheck clean and fail

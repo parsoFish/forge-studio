@@ -12,7 +12,7 @@
  * owns agents removes the hop rather than relocating it.
  *
  * WHAT IS GENERIC AND WHAT IS NOT. Reading a frontmatter document is generic
- * and lives in `@forge/kernel/studio-object.ts`; deciding what a valid one
+ * and lives in `@forge/kernel`; deciding what a valid one
  * MEANS is this kind's, so every field name below stays here —
  * `runtime`, `library`, `provenance`, `quarantined`, `brainAccess`,
  * `composition`, `budgets`, `fanout`, `materials`. Kernel names none of them,
@@ -24,8 +24,8 @@
  */
 import { join, dirname, basename, resolve } from 'node:path';
 
-import { readFrontmatter, loadStudioObject, type FrontmatterDoc } from '@forge/kernel/studio-object.ts';
-import { reqString, optString, optNumber, optBool, stringArray, reqObject, oneOf } from '@forge/kernel/studio/yaml-fields.ts';
+import { readFrontmatter, loadStudioObject, type FrontmatterDoc } from '@forge/kernel';
+import { reqString, optString, optNumber, optBool, stringArray, reqObject, oneOf } from '@forge/kernel';
 import { listSkillMdDirs } from '../skill-path.ts';
 import { parseMaterials } from './materials.ts';
 import type {

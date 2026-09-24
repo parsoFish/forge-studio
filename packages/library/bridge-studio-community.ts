@@ -74,7 +74,7 @@ import { existsSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, isDryBridge, refuseDryBridge, type StudioContext, type RouteContext } from '@forge/kernel';
-import { assertSkillSlug } from '@forge/kernel/ids.ts';
+import { assertSkillSlug } from '@forge/kernel';
 import {
   hubCountsFrom,
   listCommunityHubs,

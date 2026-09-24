@@ -33,7 +33,7 @@ import assert from 'node:assert/strict';
 
 import { loadSessionKinds } from '../../studio/session-kinds.ts';
 import { isTerminalPhase } from '../../session-resolution.ts';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 const kinds = loadSessionKinds(FORGE_ROOT);
 const byId = (id: string) => {

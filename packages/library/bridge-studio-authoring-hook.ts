@@ -22,7 +22,7 @@ import {
   type HookLifecycleEvent,
   type HookPermissionManifest,
 } from './studio/hook-library.ts';
-import { reqString, optString, oneOf } from '@forge/kernel/studio/yaml-fields.ts';
+import { reqString, optString, oneOf } from '@forge/kernel';
 import { INTERACTIVE_LIBRARY_DIRNAME, type InstallOutcome } from './bridge-studio-authoring-types.ts';
 
 function parseFinalizeHookPermissions(raw: unknown): HookPermissionManifest | { error: string } {

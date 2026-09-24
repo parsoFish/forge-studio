@@ -37,7 +37,7 @@ import type { AgentDefinition } from '@forge/contracts';
 
 import { listSkillMdDirs } from '../skill-path.ts';
 import { isStudioAgent, loadAgentDefinition } from './agent-registry.ts';
-import { skillRoots } from '@forge/kernel/discovery-roots.ts';
+import { skillRoots } from '@forge/kernel';
 
 /** The composable kinds an agent can name. A connection spans two fields. */
 export type AgentUsageKind = 'skill' | 'hook' | 'connection';

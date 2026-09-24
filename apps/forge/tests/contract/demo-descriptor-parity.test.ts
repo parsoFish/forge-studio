@@ -35,7 +35,7 @@ import { deriveDemoModel } from '@forge/factory/phases/derive-demo-model.ts';
 // carve spec's ruling-36 exception (which names only `agents-md-compose.ts`).
 import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
 import type { DemoStep } from '@forge/contracts';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 
 /** The ONE shared fixture: element-bearing capture/verify/present steps, deliberately

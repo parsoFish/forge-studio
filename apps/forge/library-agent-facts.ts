@@ -37,7 +37,7 @@ import type { AgentFacts, ComposingAgent } from '@forge/library/studio/agent-fac
 import { agentUsageIndex } from '@forge/agents/studio/agent-usage.ts';
 import { isStudioAgent, loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { listSkillMdDirs } from '@forge/agents/skill-path.ts';
-import { skillRoots } from '@forge/kernel/discovery-roots.ts';
+import { skillRoots } from '@forge/kernel';
 
 /** Studio agents across every skill root (SEAM F1), tolerating a malformed one. */
 function resilientRoster(forgeRoot: string): AgentDefinition[] {

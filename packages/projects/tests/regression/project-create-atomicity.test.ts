@@ -25,7 +25,7 @@ import {
   projectStartersDir,
   type CreationManifest,
 } from '../../project-create.ts';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 /** A temp forge root with the real project starters copied in + a brain/projects dir.
  *  Duplicated from project-create.test.ts (small + self-contained — see the

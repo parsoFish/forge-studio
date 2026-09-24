@@ -19,7 +19,7 @@
  * loader in registry.ts).
  */
 
-import { reqString, optString, oneOf } from '@forge/kernel/studio/yaml-fields.ts';
+import { reqString, optString, oneOf } from '@forge/kernel';
 import type {
   CatalogCapability,
   CatalogConfigVar,

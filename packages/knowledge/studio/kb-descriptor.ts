@@ -16,7 +16,7 @@ import type {
   KbProcesses,
   KbUsagePolicy,
 } from '@forge/contracts';
-import { reqString, optString, oneOf, reqObject, loadYaml } from '@forge/kernel/studio/yaml-fields.ts';
+import { reqString, optString, oneOf, reqObject, loadYaml } from '@forge/kernel';
 
 /**
  * Thrown when a `binding.band` key is declared where it carries no meaning

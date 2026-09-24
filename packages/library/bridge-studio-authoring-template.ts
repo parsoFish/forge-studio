@@ -12,7 +12,7 @@
 import { writeFileSync } from 'node:fs';
 import matter from 'gray-matter';
 import { resolveGuardedPath, guardedReadFile } from '@forge/kernel';
-import { isReservedId } from '@forge/kernel/ids.ts';
+import { isReservedId } from '@forge/kernel';
 import { listTemplateIds } from './studio/template-library.ts';
 import {
   writableCategoryOrReason,

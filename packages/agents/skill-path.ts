@@ -4,7 +4,7 @@
  *
  * M4-library PR 2 split that module three ways, because it was three things
  * wearing one name:
- *   - the id vocabulary and the ONE slug guard  → `@forge/kernel/ids.ts`
+ *   - the id vocabulary and the ONE slug guard  → `@forge/kernel`
  *     (`orchestrator/studio/validate.ts` re-exported them to validate PROJECTS
  *     and KNOWLEDGE BASES, so they were never any one kind's);
  *   - the `skills/` tree layout                 → `@forge/library/skill-path.ts`
@@ -25,7 +25,7 @@ import { readFileSync } from 'node:fs';
 import { skillPath } from '@forge/library/skill-path.ts';
 
 /** The id vocabulary and the one slug guard — definition in `@forge/kernel`. */
-export * from '@forge/kernel/ids.ts';
+export * from '@forge/kernel';
 /** The `skills/` tree layout — definition in `@forge/library`. */
 export * from '@forge/library/skill-path.ts';
 

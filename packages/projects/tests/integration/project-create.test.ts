@@ -28,7 +28,7 @@ import {
 } from '../../project-create.ts';
 import { loadProjectConfig } from '../../project-config.ts';
 import { discoverProjects } from '@forge/kernel';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 /** A temp forge root with the real project starters copied in + a brain/projects dir. */
 import { runPreflight, SCRATCH_PATHS } from '../../preflight.ts';

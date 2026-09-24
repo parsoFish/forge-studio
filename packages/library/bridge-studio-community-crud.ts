@@ -29,7 +29,7 @@ import { randomBytes } from 'node:crypto';
 import { dirname, join } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext, type RouteContext } from '@forge/kernel';
-import { assertSkillSlug } from '@forge/kernel/ids.ts';
+import { assertSkillSlug } from '@forge/kernel';
 import type { CommunityRegistryItem, CommunityRegistrySource } from '@forge/contracts';
 import { communityRegistryPath, loadCommunityRegistry, serializeCommunityRegistry, COMMUNITY_REGISTRY_SCHEMA_VERSION } from './studio/community-registry.ts';
 import { CommunityRegistryLockError, lockCommunityRegistry } from './community-registry-lock.ts';

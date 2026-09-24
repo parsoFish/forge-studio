@@ -95,7 +95,7 @@ describe('library/skill-path — the slug guard is INHERITED, not re-implemented
   }
 
   test('the guard is kernel\'s single definition, not a second copy', async () => {
-    const kernel = await import('@forge/kernel/ids.ts');
+    const kernel = await import('@forge/kernel');
     const lib = await import('../../skill-path.ts');
     // library must not re-export a slug regex of its own; the one rule lives
     // in kernel and library composes it.

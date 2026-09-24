@@ -16,7 +16,7 @@ import { buildKbGraph, getKbNodeArticle, listPendingGuidance, deleteGuidanceFile
 
 // Resolve forge root relative to this test file's location
 // Depth-INDEPENDENT — see the note in kb-backend.test.ts.
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // buildKbGraph — cycles kb (Brain 2: themes + _raw)

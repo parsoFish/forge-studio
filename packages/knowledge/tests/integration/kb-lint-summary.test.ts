@@ -54,7 +54,7 @@ import { attachKbLintSummaries, computeKbLintChecks, scopeFindingsToKb } from '.
 import type { KbLintSummary } from '../../kb-lint-summary.ts';
 
 // Depth-INDEPENDENT — see the note in kb-backend.test.ts.
-import { FORGE_ROOT as ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT as ROOT } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Shared fixture helpers

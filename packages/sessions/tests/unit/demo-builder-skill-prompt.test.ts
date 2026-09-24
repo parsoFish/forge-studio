@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 import { runDemoBuilderTurn } from '../../kinds/demo-builder.ts';
 import { demoTaskLines } from '../../kinds/demo-generate.ts';
 import type { DemoBuilderStatus } from '../../kinds/demo-session-store.ts';

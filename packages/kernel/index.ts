@@ -74,3 +74,11 @@ export * from './log-cycles.ts';
 /** Package-owned discovery roots (SEAM F1) — `flowRoots`/`skillRoots`, plus
  *  the generic multi-root id resolvers every per-kind resolver is built on. */
 export * from './discovery-roots.ts';
+/** The `FORGE_CLAUDE_CLI` env seam and its typed refusal — the one place
+ *  that resolves which `claude` binary a spawn uses. */
+export * from './claude-cli-path.ts';
+/** Frontmatter-doc parsing for a studio object's on-disk file. */
+export * from './studio-object.ts';
+/** The shared YAML-field readers (`reqString`, `optString`, `loadYaml`, …)
+ *  every studio registry parses its catalog files with. */
+export * from './studio/yaml-fields.ts';

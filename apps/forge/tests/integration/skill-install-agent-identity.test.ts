@@ -245,15 +245,15 @@ describe('SLUG_RE relocation regression guard', () => {
     // `orchestrator/skill-path.ts` and `orchestrator/studio/validate.ts`; the
     // latter is deleted by ruling 159's split, and the surviving re-export of
     // the id vocabulary is `@forge/agents/skill-path.ts`'s
-    // `export * from '@forge/kernel/ids.ts'`. Same assertion, same reason: a
+    // `export * from '@forge/kernel'`. Same assertion, same reason: a
     // second regex with a matching source would pass a `.source` comparison
     // and diverge on the next edit.
-    const idsModule = (await import('@forge/kernel/ids.ts')) as Record<string, unknown>;
+    const idsModule = (await import('@forge/kernel')) as Record<string, unknown>;
     const skillPathModule = (await import('@forge/agents/skill-path.ts')) as Record<string, unknown>;
 
     const fromKernel = idsModule['SLUG_RE'] as RegExp | undefined;
     const fromSkillPath = skillPathModule['SLUG_RE'] as RegExp;
 
-    assert.equal(fromKernel, fromSkillPath, '@forge/kernel/ids.ts must define SLUG_RE and @forge/agents/skill-path.ts must RE-EXPORT that object — not a second regex with a matching source');
+    assert.equal(fromKernel, fromSkillPath, '@forge/kernel must define SLUG_RE and @forge/agents/skill-path.ts must RE-EXPORT that object — not a second regex with a matching source');
   });
 });

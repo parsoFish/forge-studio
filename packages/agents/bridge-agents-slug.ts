@@ -40,7 +40,7 @@ import {
 } from '@forge/kernel';
 import type { AgentDefinition } from '@forge/contracts';
 
-import { skillRoots } from '@forge/kernel/discovery-roots.ts';
+import { skillRoots } from '@forge/kernel';
 import { isSafeRunId } from './run-agent.ts';
 import { resolveDispatchableAgent } from './agent-dispatch.ts';
 import { listAgentDefinitions } from './studio/agent-registry.ts';

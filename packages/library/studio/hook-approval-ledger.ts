@@ -29,8 +29,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
 
-import { assertSkillSlug } from '@forge/kernel/ids.ts';
-import { reqString, optString } from '@forge/kernel/studio/yaml-fields.ts';
+import { assertSkillSlug } from '@forge/kernel';
+import { reqString, optString } from '@forge/kernel';
 import { loadHookDefinition } from './hook-library.ts';
 import {
   readHookPackage,

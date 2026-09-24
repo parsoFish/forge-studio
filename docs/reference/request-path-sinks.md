@@ -1078,7 +1078,7 @@ every one of these sites resolves a path from a **slug-validated** id —
 `assertSkillSlug` refuses `/`, `\`, `.`, `..`, the empty string and anything
 over 100 characters before a join happens — and the walk sites take a
 **directory** argument that is composed from a fixed root, never from request
-bytes. `assertSkillSlug` itself moved to `@forge/kernel/ids.ts` in the same PR;
+bytes. `assertSkillSlug` itself moved to `@forge/kernel` in the same PR;
 `packages/kernel/tests/unit/ids.test.ts` pins which shapes it rejects, so the move cannot
 quietly widen it.
 

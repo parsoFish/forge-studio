@@ -23,7 +23,7 @@ import { readFileSync } from 'node:fs';
 
 
 import { allowedOrigin, sendJson } from '@forge/kernel';
-import { guardedFile, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel/path-guard.ts';
+import { guardedFile, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel';
 
 import { readAgentInstructionsFile } from '@forge/projects/project-config.ts';
 

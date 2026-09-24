@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import matter from 'gray-matter';
 
 import { ARTIFACT_KINDS, DEMO_STEP_KINDS, INSTRUCTION_SEED_KINDS, INSTRUCTION_SEED_SCOPES } from '@forge/contracts';
-import { reqString, optString, stringArray, oneOf } from '@forge/kernel/studio/yaml-fields.ts';
+import { reqString, optString, stringArray, oneOf } from '@forge/kernel';
 import type { ArtifactTemplate, DemoElementDefinition, InstructionSeed } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------

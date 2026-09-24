@@ -55,7 +55,7 @@ import {
   type RouteContext,
 } from '@forge/kernel';
 import { resolveGuardedPath } from '@forge/kernel';
-import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
+import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel';
 import { skillPath, skillsDir, guardedSkillMdPath } from './skill-path.ts';
 import { stageSkillPackage } from './skill-staging.ts';
 import { SLUG_RE, isReservedId } from '@forge/kernel';

@@ -25,7 +25,7 @@ import matter from 'gray-matter';
 // (skill-install.ts and skill-trust.ts point here rather than repeat it.)
 
 import { guardedFile } from '@forge/kernel';
-import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
+import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Types (WI-1 pinned shapes — orchestrator/studio/skill-library.test.ts)

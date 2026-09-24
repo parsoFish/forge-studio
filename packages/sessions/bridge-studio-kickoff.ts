@@ -31,8 +31,8 @@ import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 
 import { allowedOrigin, createLogger, defaultConfigPath, loadConfig, resolveProjectsDir, sanitizeError, sendJson, KB_ID_RE, SAFE_ID_RE } from '@forge/kernel';
-import { isSafeRunId } from '@forge/kernel/log-cycles.ts';
-import { guardedReadDir, guardedWriteFile } from '@forge/kernel/path-guard.ts';
+import { isSafeRunId } from '@forge/kernel';
+import { guardedReadDir, guardedWriteFile } from '@forge/kernel';
 import { readAnswersBody, type AffordanceRouteContext } from './bridge-studio-sessions-affordance-shell.ts';
 import { activeJobReason, deriveKbActiveJob } from '@forge/knowledge/kb-job-state.ts';
 import { computeAgentCleanupFindings, loadKbDescriptors, KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge/bridge-studio-kbs.ts';

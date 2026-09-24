@@ -152,7 +152,7 @@ import {
   HOOK_ENV_CREDENTIAL_EXCLUSIONS,
   MAX_ENV_OVERRIDE_KEYS,
   buildChildEnv,
-} from '@forge/kernel/spawn-env.ts';
+} from '@forge/kernel';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import { scanHookPackage } from '../../studio/hook-scan.ts';
 import { approveHook, overrideHookBlock } from '../../studio/hook-approval-ledger.ts';

@@ -28,7 +28,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { allowedOrigin, parseQuery, pathOnly, sanitizeError, sendJson } from '@forge/kernel';
-import { resolveGuardedPath } from '@forge/kernel/path-guard.ts';
+import { resolveGuardedPath } from '@forge/kernel';
 
 import { readSessionCostUsd } from './session-readability.ts';
 import { listArchitectSessions } from './kinds/architect.ts';

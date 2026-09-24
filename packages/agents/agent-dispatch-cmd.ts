@@ -27,7 +27,7 @@ import { isSafeRunId } from './run-agent.ts';
 import { installDispatchSignalGuard, recordDispatchTerminal } from './dispatch-terminal.ts';
 import { isStandaloneBandAgent, dispatchStandaloneBand, type BandAgentDeps } from './band-agent-run.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
-import { skillRoots } from '@forge/kernel/discovery-roots.ts';
+import { skillRoots } from '@forge/kernel';
 
 /**
  * R4-17, D7 — writes the TERMINAL phase (`complete`/`failed`) into

@@ -99,7 +99,7 @@ import { isSafeRunId } from '@forge/agents/run-agent.ts';
 import { SAFE_AGENT_SLUG_RE } from '@forge/agents/bridge-agents-slug.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, isSafeSubPath } from '@forge/kernel';
-import { flowRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
+import { flowRoots, resolveIdAcrossRoots } from '@forge/kernel';
 import {
   installedExample as example, peekInstalledFactory,
   resolveInstalledFactory, type InstalledFactory } from './factory-wiring.ts';

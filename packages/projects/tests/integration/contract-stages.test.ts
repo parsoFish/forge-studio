@@ -54,7 +54,7 @@ import { tmpdir } from 'node:os';
 
 import { deriveContractStages, type ContractStageRow, type DeriveContractStagesResult } from '../../contract-stages.ts';
 import { projectBrainDir } from '@forge/kernel';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 const REPO_ROOT = FORGE_ROOT;
 const STAGE_ORDER = ['contract', 'instructions', 'secrets', 'demo', 'roadmap'] as const;

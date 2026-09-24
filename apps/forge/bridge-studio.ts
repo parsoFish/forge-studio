@@ -40,7 +40,7 @@ import { flowPathForId } from '@forge/flows/flow-runner.ts';
 import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { resolveGuardedPath } from '@forge/kernel';
-import { flowRoots, resolveIdAcrossRoots, listIdsAcrossRoots } from '@forge/kernel/discovery-roots.ts';
+import { flowRoots, resolveIdAcrossRoots, listIdsAcrossRoots } from '@forge/kernel';
 import type { FlowDefinition } from '@forge/contracts';
 import { SLUG_RE, PROJECT_ID_RE } from '@forge/kernel';
 import { projectKbBindings } from '@forge/knowledge/kb-sites.ts';

@@ -50,7 +50,7 @@ import {
   SLUG_RE, isReservedId, AGENT_PROVENANCE, resolveDefaultKickoffCeilingUsd,
   loadConfig, defaultConfigPath, type RouteContext,
 } from '@forge/kernel';
-import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
+import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import { checkHookComposition, listHookIds } from '@forge/library/studio/hook-library.ts';

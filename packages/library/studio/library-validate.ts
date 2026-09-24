@@ -21,7 +21,7 @@
  */
 
 import type { ArtifactTemplate, Catalog, CommunityRegistry, InstructionSeed } from '@forge/contracts';
-import { SLUG_RE } from '@forge/kernel/ids.ts';
+import { SLUG_RE } from '@forge/kernel';
 import { type Finding, err, flag } from '@forge/kernel';
 import { communitySourceKey, HTTP_URL_RE } from './community-source-url.ts';
 

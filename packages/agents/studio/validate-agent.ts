@@ -12,8 +12,8 @@
 
 import type { AgentDefinition } from '@forge/contracts';
 import { FANOUT_ISOLATION_KINDS } from '@forge/contracts';
-import { type Finding, err, flag } from '@forge/kernel/findings.ts';
-import { SLUG_RE } from '@forge/kernel/ids.ts';
+import { type Finding, err, flag } from '@forge/kernel';
+import { SLUG_RE } from '@forge/kernel';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './agent-registry.ts';
 import { MATERIAL_KINDS } from './materials.ts';
 import { BAND_CANONICAL_SLUG } from '../agent-bands.ts';

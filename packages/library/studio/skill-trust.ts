@@ -92,7 +92,7 @@ export interface SkillLibraryEntry {
   reference?: boolean;
 }
 
-/** Lint finding shape shared with `@forge/kernel/findings.ts` — reused,
+/** Lint finding shape shared with `@forge/kernel` — reused,
  *  not re-invented, so `forge studio lint` renders every finding uniformly. */
 export type LintFinding = Finding;
 

@@ -42,7 +42,7 @@ import { AGENT_RUNNERS } from '../../agent-run.ts';
 import { SESSION_KIND_RUNNERS } from '@forge/sessions/kinds/registry.ts';
 import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
 import { readSessionStatus } from '@forge/sessions/interactive-session.ts';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 import {
   run,
   withCwd,

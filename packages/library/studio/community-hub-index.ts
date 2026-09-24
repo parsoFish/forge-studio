@@ -18,7 +18,7 @@
  *     or it is skipped, never sanitised into something that looks valid.
  */
 
-import { assertSkillSlug } from '@forge/kernel/ids.ts';
+import { assertSkillSlug } from '@forge/kernel';
 
 import {
   CommunityRefreshError,

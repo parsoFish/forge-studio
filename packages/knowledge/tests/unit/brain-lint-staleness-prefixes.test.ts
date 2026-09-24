@@ -32,7 +32,7 @@ import {
   STALENESS_PREFIXES,
   STALENESS_PREFIX_EXCLUSIONS,
 } from '../../brain-lint.ts';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 /**
  * A forge sub-wiki theme (`brain/cycles/themes/…`) citing `cited`. Only a FORGE

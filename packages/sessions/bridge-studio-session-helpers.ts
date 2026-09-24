@@ -29,8 +29,8 @@ import type { OutgoingHttpHeaders } from 'node:http';
 
 import type { ModelTier } from '@forge/agents/phase-agent.ts';
 import { MAX_EXACT_ID_LENGTH, PROJECT_ID_RE } from '@forge/kernel';
-import { discoverProjects } from '@forge/kernel/project-layout.ts';
-import { isSafeSegment, resolveGuardedPath } from '@forge/kernel/path-guard.ts';
+import { discoverProjects } from '@forge/kernel';
+import { isSafeSegment, resolveGuardedPath } from '@forge/kernel';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { resolveSessionModel } from '@forge/agents/phase-agent.ts';
 import { skillPathRelative } from '@forge/library/skill-path.ts';
