@@ -743,7 +743,17 @@ is what this contract reads — but it cannot be the only distinguisher.
     always rendered including at zero (a tile that appears and vanishes
     makes "nothing is running" indistinguishable from "the strip broke"):
     `[data-summary-tile="live"|"needs-you"|"failed"|"queued"][data-count]`.
-    Pinned by `lib/monitor-summary-strip-render.test.ts`.
+    Pinned by `lib/monitor-summary-strip-render.test.ts`. **forge-6gv.28:**
+    `data-monitor-ready` is `deriveSummaryReady({homeDataReady, agentRowsReady})`
+    (`lib/monitor-view.ts`), NOT the page's own `data-page-ready` — the
+    merged everything-ledger's standalone-agent half resolves in a SECOND,
+    independent effect after `homeDataReady` settles, and the counts above
+    are computed over that same merged list. Before this fix both callers
+    fed `data-monitor-ready` from `homeDataReady` alone, so a reader could
+    see `data-page-ready="true"` and `data-monitor-ready="true"` while the
+    live/total counts were still missing the agent half — a declared
+    readiness flag that did not cover one of the two reads its own headline
+    is derived from.
   - `section[data-section="scheduler"]` — the shared `SchedulerCard` (full
     contract under the Home entry above); its own component owns its read,
     so Monitor adds no extra fetch or interval here.
