@@ -34,16 +34,91 @@
  * its own segment, a `sourceId` that is itself a PRE-PLANTED SYMLINK escaping
  * `stagingRoot` is caught by the guard's per-segment identity check and
  * refused here, before any write.
+ *
+ * SECOND PRECONDITION (forge-gp4): `stagingRoot` itself MUST already exist —
+ * this function never creates it. `resolveGuardedPath` realpath-resolves the
+ * root before walking any segment, so a not-yet-created `stagingRoot` is
+ * refused with `SkillStagingError` (a clean typed error, never a raw fs
+ * crash — see the PRECONDITION test in `skill-staging-case.test.ts`), not
+ * silently tolerated. This mirrors `stageMaterials`'s own documented contract
+ * for `runDir` rather than defensively `mkdirSync`-ing here: the real caller
+ * (`bridge-studio-skills.ts`) already creates `stagingRoot` before every call,
+ * so a self-creating Phase 1 would trade a genuinely zero-side-effect check
+ * phase for a redundant one.
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { mkdirSync, writeFileSync, statSync, unlinkSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { randomBytes } from 'node:crypto';
 
 import { resolveGuardedPath, guardedFile } from '@forge/kernel';
 
 export class SkillStagingError extends Error {}
 
 type SkillEntry = { path: string; contentBase64: string };
+
+/**
+ * Injectable seam for volume case-behaviour detection (forge-gp4, mirroring
+ * `materials-staging.ts`'s `CaseFoldingProbe`/bead forge-qn8) — lets the
+ * folding code path be driven deterministically in tests on a case-sensitive
+ * dev machine that cannot naturally produce a folding volume. `dir` is
+ * always `stagingRoot` (real at call time — see the SECOND PRECONDITION
+ * above) today.
+ */
+export type CaseFoldingProbe = (dir: string) => boolean;
+
+/** Marker-name prefix for `detectVolumeCaseFolding`'s throwaway probe entry
+ *  — namespaced and unlikely to collide with a real staged package entry. */
+const CASE_PROBE_PREFIX = '.forge-case-probe-';
+
+/** Flips the case of every ASCII letter in `s` — the exact shape of the real
+ *  bug (`SKILL.md` vs `skill.md`), never any other change. */
+function flipAsciiCase(s: string): string {
+  return s.replace(/[a-zA-Z]/g, (c) => (c === c.toUpperCase() ? c.toLowerCase() : c.toUpperCase()));
+}
+
+/**
+ * The REAL, default `CaseFoldingProbe` — a verbatim mirror of
+ * `materials-staging.ts`'s `detectVolumeCaseFolding` (see that function's own
+ * docstring for the full method/rationale): create a throwaway marker under
+ * `dir`, stat it, stat its case-flipped spelling, and compare `{dev, ino}`.
+ * `ENOENT` on the flipped spelling → case-sensitive (`false`); any other stat
+ * failure is indeterminate and defaults CONSERVATIVELY to `true` (folding),
+ * never silently to `false`. If the marker itself cannot be created, this
+ * throws `SkillStagingError` rather than silently falling back to a literal
+ * comparison — a duplicate-target check that might silently be wrong is
+ * worse than one that refuses to run.
+ */
+export function detectVolumeCaseFolding(dir: string): boolean {
+  const marker = `${CASE_PROBE_PREFIX}${randomBytes(8).toString('hex')}-AbCdEf`;
+  const markerPath = join(dir, marker);
+  const flippedPath = join(dir, flipAsciiCase(marker));
+
+  let markerStat: ReturnType<typeof statSync>;
+  try {
+    writeFileSync(markerPath, '');
+    markerStat = statSync(markerPath);
+  } catch (err) {
+    throw new SkillStagingError(
+      `skill: case-folding probe could not run — refusing to stage without a reliable duplicate-target check: ${(err as Error).message}`,
+    );
+  }
+
+  try {
+    const flippedStat = statSync(flippedPath);
+    return flippedStat.dev === markerStat.dev && flippedStat.ino === markerStat.ino;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code === 'ENOENT') return false;
+    return true; // indeterminate read-back — conservative default, see docstring
+  } finally {
+    try {
+      unlinkSync(markerPath);
+    } catch {
+      /* best-effort cleanup only — the folding decision above is already made */
+    }
+  }
+}
 
 /**
  * Stage one skill-install request's package entries under
@@ -81,6 +156,29 @@ type SkillEntry = { path: string; contentBase64: string };
  * directory between calls, so cross-call reuse of a `sourceId` is not this
  * module's concern.
  *
+ * VOLUME CASE-BEHAVIOUR DETECTION (forge-gp4, mirroring bead forge-qn8's fix
+ * in `stageMaterials`) — in CREATE mode (the common case: a fresh install,
+ * neither file exists yet), `resolveGuardedPath` performs no `realpathSync`
+ * on the non-existent leaf and reassembles the tail LITERALLY, so the dedup
+ * key above would be a literal string. Two distinct entry `path`s that the
+ * underlying filesystem folds to one directory entry (`SKILL.md` vs
+ * `skill.md` on a case-insensitive volume — default macOS APFS, exFAT, an
+ * SMB/NTFS mount) would then produce two different literal keys, pass the
+ * check, and collide at `writeFileSync`, second write silently winning. The
+ * fix DETECTS the volume's case behaviour (`detectVolumeCaseFolding` above)
+ * rather than guessing from `process.platform` (a case-sensitive volume can
+ * be mounted on macOS and a folding one on Linux), probed ONCE per call
+ * against `stagingRoot` itself (real at call time — see the SECOND
+ * PRECONDITION above), and folds the dedup key with `.toLowerCase()` ONLY
+ * when the probe reports folding — otherwise the key stays exactly the
+ * literal `realPath`, so a case-sensitive volume still accepts `SKILL.md`
+ * and `skill.md` as two distinct, legitimate targets. The WHOLE resolved
+ * path is folded, not just the leaf filename: case-folding applies to every
+ * path-segment lookup identically on a folding volume, so a directory
+ * segment differing only in case (`Scripts/x` vs `scripts/x`) collides on
+ * disk exactly the same way a leaf does — isolating just the basename would
+ * miss that half of the class.
+ *
  * Throws `SkillStagingError` on any refusal (mirrors the established
  * throw-not-return convention of `stageMaterials` and this route's sibling
  * resolvers — no separate result/error channel). The thrown message names no
@@ -91,12 +189,20 @@ export function stageSkillPackage(
   stagingRoot: string,
   sourceId: string,
   entries: ReadonlyArray<SkillEntry>,
+  options: { probeCaseFolding?: CaseFoldingProbe } = {},
 ): string {
+  // Probed ONCE per call (not per entry — the same volume backs every entry
+  // staged in one call) against `stagingRoot` itself.
+  const probeCaseFolding = options.probeCaseFolding ?? detectVolumeCaseFolding;
+  const volumeFoldsCase = probeCaseFolding(stagingRoot);
+
   // Phase 1 — resolve + verify every path, AND refuse a duplicate resolved
-  // target within this call. Zero side effects. `sourceId` and each entry
-  // `path` arrive as their OWN segments (never folded into `stagingRoot`), so
-  // the per-segment identity walk applies to both — a symlinked `sourceId`
-  // escaping the staging root is refused here, not written through.
+  // target within this call. Zero side effects (the case-folding probe above
+  // is a throwaway, self-cleaning marker — see its own docstring — not a
+  // package write). `sourceId` and each entry `path` arrive as their OWN
+  // segments (never folded into `stagingRoot`), so the per-segment identity
+  // walk applies to both — a symlinked `sourceId` escaping the staging root
+  // is refused here, not written through.
   const resolved: Array<{ realPath: string; bytes: Buffer }> = [];
   const seenTargets = new Set<string>();
   for (const entry of entries) {
@@ -107,10 +213,14 @@ export function stageSkillPackage(
       // forwarded — this message names neither it nor any filesystem path.
       throw new SkillStagingError(`skill: refused to stage "${entry.path}" — containment check failed`);
     }
-    if (seenTargets.has(result.realPath)) {
+    // Keyed by the case-FOLDED realPath only when the probe says this volume
+    // folds case; otherwise keyed literally, exactly as before this fix — so
+    // a case-sensitive volume never sees a false "duplicate".
+    const dedupeKey = volumeFoldsCase ? result.realPath.toLowerCase() : result.realPath;
+    if (seenTargets.has(dedupeKey)) {
       throw new SkillStagingError(`skill: refused to stage "${entry.path}" — duplicate target within one call`);
     }
-    seenTargets.add(result.realPath);
+    seenTargets.add(dedupeKey);
     resolved.push({ realPath: result.realPath, bytes: Buffer.from(entry.contentBase64, 'base64') });
   }
 
