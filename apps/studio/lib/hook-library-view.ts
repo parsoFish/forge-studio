@@ -139,6 +139,12 @@ export type HookDetailView = {
   /** W7-B4 (library-09): the recorded approval — present iff a live ledger
    *  entry exists; the resolved-state panel renders it. */
   approval?: HookDetail['approval'];
+  /** forge-8vfn.5.16 (M7-C U2) — always present; 0 = "scanned every cycle,
+   *  found no fire". */
+  fireCount: number;
+  /** Present iff the hook has fired at least once; never fabricated. */
+  lastFireAt?: HookDetail['lastFireAt'];
+  lastFireOutcome?: HookDetail['lastFireOutcome'];
 };
 
 export function buildHookDetailView(detail: HookDetail): HookDetailView {
@@ -158,5 +164,8 @@ export function buildHookDetailView(detail: HookDetail): HookDetailView {
     files: detail.files,
     scan: buildHookScanPanel(detail.scan),
     ...(detail.approval !== undefined ? { approval: detail.approval } : {}),
+    fireCount: detail.fireCount,
+    ...(detail.lastFireAt !== undefined ? { lastFireAt: detail.lastFireAt } : {}),
+    ...(detail.lastFireOutcome !== undefined ? { lastFireOutcome: detail.lastFireOutcome } : {}),
   };
 }
