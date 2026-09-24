@@ -22,7 +22,7 @@ import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { skillPath, skillPathRelative, SLUG_RE } from '@forge/agents/skill-path.ts';
+import { skillPath, skillPathRelative, SLUG_RE, loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
 import { resolveFinalizer, finalizerNeedsPackageId, type FinalizerContext } from './interactive-finalizers.ts';
 import { BASH_FENCE_MODES, bashFenceModeState, type SessionKindDescriptor, type TurnSpec, type TurnSpecPhase } from './studio/session-kinds.ts';
 import { runAgentTurn, runStructuredTurn, type QueryFn, type UnpricedTurnInfo } from './interactive-session.ts';
@@ -118,6 +118,12 @@ export type RunInteractiveTurnCtx = {
   logsRoot?: string;
   /** Logger override (tests). */
   logger?: EventLogger;
+  /** bead 8vfn.6.6 item 5 — call-time seam, never a turnSpec field: picks a
+   *  loadSkillTurnPrompt turn section instead of the whole SKILL.md. */
+  turnId?: (args: { descriptor: SessionKindDescriptor; phaseRow: TurnSpecPhase; status: InteractiveTurnStatus }) => string | undefined;
+  /** Extra prompt lines a caller injects (seed matching + provenance
+   *  footer); appended after the operator-feedback section. */
+  promptContext?: (args: { descriptor: SessionKindDescriptor; phaseRow: TurnSpecPhase; status: InteractiveTurnStatus }) => readonly string[];
 };
 
 export type RunInteractiveTurnResult = {
@@ -237,7 +243,11 @@ export async function runAgentStyleStep(args: {
   // and `model` below can never disagree).
   const modelTier: ModelTier = requestedTier ?? agentSpec.tier;
   const model = resolveSessionModel(agentSpec, requestedTier);
-  const skill = readSkillPrompt(descriptor.agent);
+  const skill = readSkillPrompt(descriptor.agent, ctx.turnId?.({ descriptor, phaseRow, status }));
+  const extraContext = ctx.promptContext?.({ descriptor, phaseRow, status }) ?? [];
+  // bead 8vfn.6.6 item 5 — captured by the structured branch below, read by
+  // the shared tail's doneField/ceiling check; null for the agent style.
+  let doneOutput: Record<string, unknown> | null = null;
 
   if (turnSpec.style === 'agent') {
     // bead forge-eip (W6-CR-3) — a REAL write-root fence, derived from THIS
@@ -256,7 +266,7 @@ export async function runAgentStyleStep(args: {
     // and crash the session with "produced no files".
     const writeRoots = resolveWriteRoots(sessionDir, phaseRow.writes ?? []);
     const operatorFeedback = readOperatorFeedback(sessionDir);
-    const prompt = buildTurnPrompt(descriptor, phaseRow, status, skill, writeRoots, operatorFeedback);
+    const prompt = buildTurnPrompt(descriptor, phaseRow, status, skill, writeRoots, operatorFeedback, extraContext);
     // W7-B3 (community-13): the turn budget comes from the agent's OWN
     // SKILL.md `budgets.maxTurns` — the same declared field every unattended
     // agent already carries (run-agent.ts reads it for one-shot spawns). A
@@ -313,7 +323,7 @@ export async function runAgentStyleStep(args: {
     }
     const writeRoots = resolveWriteRoots(sessionDir, phaseRow.writes ?? []);
     const operatorFeedback = readOperatorFeedback(sessionDir);
-    const prompt = buildTurnPrompt(descriptor, phaseRow, status, skill, writeRoots, operatorFeedback);
+    const prompt = buildTurnPrompt(descriptor, phaseRow, status, skill, writeRoots, operatorFeedback, extraContext);
     const { output, costUsd } = await runStructuredTurn({
       queryFn, prompt, schema, model,
       allowedTools: agentSpec.allowedTools, disallowedTools: agentSpec.disallowedTools,
@@ -322,6 +332,7 @@ export async function runAgentStyleStep(args: {
       label: `interactive-${descriptor.id}-${ctx.sessionId}`,
       ...(args.onTurnEndedUnpriced ? { onTurnEndedUnpriced: args.onTurnEndedUnpriced } : {}),
     });
+    doneOutput = output as Record<string, unknown> | null;
     if (costUsd !== null) args.onTurnCost?.(costUsd, modelTier, model);
     if (writeRoots.length > 0) {
       if (output === null) {
@@ -356,9 +367,20 @@ export async function runAgentStyleStep(args: {
   // Finding 1 fix: validate `next` BEFORE persisting it — see
   // assertNextPhaseKnown's own doc comment.
   assertNextPhaseKnown(descriptor, turnSpec, phaseRow);
-  const nextPhase = phaseRow.next ?? status.phase;
-  if (phaseRow.next) {
-    writeStatus(ctx.projectRoot, dirSegments, { ...status, phase: phaseRow.next });
+  let nextPhase = phaseRow.next ?? status.phase;
+  // bead 8vfn.6.6 item 5 — interview ceiling + interview->draft fall-through
+  // (structured turns): doneField true, OR status.round hitting ceiling,
+  // jumps to nextOnDone instead of next.
+  if (phaseRow.doneField !== undefined && phaseRow.nextOnDone !== undefined) {
+    const round = (status as Record<string, unknown>).round;
+    const ceilingHit = phaseRow.ceiling !== undefined && typeof round === 'number' && round >= phaseRow.ceiling;
+    if (ceilingHit || doneOutput?.[phaseRow.doneField] === true) {
+      assertNextPhaseKnown(descriptor, turnSpec, phaseRow, phaseRow.nextOnDone);
+      nextPhase = phaseRow.nextOnDone;
+    }
+  }
+  if (nextPhase !== status.phase) {
+    writeStatus(ctx.projectRoot, dirSegments, { ...status, phase: nextPhase });
   }
   return { phase: nextPhase, wrote, artifacts: {} };
 }
@@ -471,12 +493,15 @@ export async function runFinalizeStep(args: {
  * declares no `next` at all (a legitimate terminal/awaiting row) is a no-op
  * here — this only fires when `next` IS declared but names nothing real.
  */
-export function assertNextPhaseKnown(descriptor: SessionKindDescriptor, turnSpec: TurnSpec, phaseRow: TurnSpecPhase): void {
-  if (!phaseRow.next) return;
-  const known = turnSpec.phases.some((p) => p.phase === phaseRow.next);
+export function assertNextPhaseKnown(descriptor: SessionKindDescriptor, turnSpec: TurnSpec, phaseRow: TurnSpecPhase, nextOverride?: string): void {
+  // bead 8vfn.6.6 item 5 — `nextOverride` lets the nextOnDone target reuse
+  // this same ghost-phase guard, rather than a second copy of it.
+  const next = nextOverride ?? phaseRow.next;
+  if (!next) return;
+  const known = turnSpec.phases.some((p) => p.phase === next);
   if (!known) {
     throw new InteractiveRunnerError(
-      `runInteractiveTurn: session kind "${descriptor.id}" turnSpec phase "${phaseRow.phase}" declares next "${phaseRow.next}", which is not a phase present in turnSpec.phases — refusing to persist a ghost phase to status.json.`,
+      `runInteractiveTurn: session kind "${descriptor.id}" turnSpec phase "${phaseRow.phase}" declares next "${next}", which is not a phase present in turnSpec.phases — refusing to persist a ghost phase to status.json.`,
     );
   }
 }
@@ -590,7 +615,9 @@ function listWrittenFiles(sessionDir: string, writesDirs: readonly string[]): st
 /** Read `skills/<agentId>/SKILL.md` from the real forge install (default
  *  root — see header note). Falls back to a generic prompt if unreadable,
  *  matching `kinds/project-brain.ts`'s own skill-prompt load. */
-function readSkillPrompt(agentId: string): string {
+function readSkillPrompt(agentId: string, turnId?: string): string {
+  // bead 8vfn.6.6 item 5 — mode-conditional turn id (ctx.turnId, call-time).
+  if (turnId !== undefined) return loadSkillTurnPrompt({ name: agentId, turnId });
   const path = skillPath(agentId);
   try {
     return readFileSync(path, 'utf8');
@@ -620,6 +647,7 @@ function buildTurnPrompt(
   skill: string,
   writeRoots: readonly string[],
   feedback: string | null,
+  extraContext: readonly string[] = [],
 ): string {
   const writes = phaseRow.writes ?? [];
   return [
@@ -640,6 +668,8 @@ function buildTurnPrompt(
     // demo-builder-runner.ts's own feedback.md sections, so the generic
     // spine's revise turn actually carries the words that triggered it.
     ...(feedback !== null ? ['', 'Operator revision feedback on the previous draft (apply it):', feedback] : []),
+    // bead 8vfn.6.6 item 5 — ctx.promptContext's lines (seed matching etc.).
+    ...(extraContext.length > 0 ? ['', ...extraContext] : []),
     '',
     'Session status (read-only context):',
     '```json',

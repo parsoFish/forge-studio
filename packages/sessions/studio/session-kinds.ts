@@ -43,7 +43,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
 
-import { reqString, reqObject, stringArray, optString } from '@forge/kernel/studio/yaml-fields.ts';
+import { reqString, reqObject, stringArray, optString, optNumber } from '@forge/kernel/studio/yaml-fields.ts';
 
 // ---------------------------------------------------------------------------
 // Closed vocabularies (frozen — rows-as-data, mirrors TRIGGER_KINDS)
@@ -363,6 +363,13 @@ export type TurnSpecPhase = {
    *  no `requires` needs nothing beyond `verdict` itself, so the write
    *  route's generic check simply has nothing to enforce. */
   readonly requires?: readonly string[];
+  /** bead 8vfn.6.6 item 5: doneField names a structured-turn output key;
+   *  true (or status.round >= ceiling) advances to nextOnDone instead of
+   *  next, same-turn (interactive-runner.ts). Unvalidated by
+   *  validateSessionKinds — same carve-out as `writes` above. */
+  readonly doneField?: string;
+  readonly nextOnDone?: string;
+  readonly ceiling?: number;
 };
 
 /** The additive-optional producer/state-machine half of a session-kind
@@ -476,6 +483,9 @@ function parseTurnSpecPhase(raw: unknown, file: string, descIndex: number, phase
   const awaits = optString(p, 'awaits');
   const verdicts = p.verdicts !== undefined ? stringArray(p, 'verdicts', file) : undefined;
   const requires = p.requires !== undefined ? stringArray(p, 'requires', file) : undefined;
+  const doneField = optString(p, 'doneField');
+  const nextOnDone = optString(p, 'nextOnDone');
+  const ceiling = optNumber(p, 'ceiling');
   return {
     phase,
     step,
@@ -485,6 +495,9 @@ function parseTurnSpecPhase(raw: unknown, file: string, descIndex: number, phase
     ...(awaits !== undefined ? { awaits } : {}),
     ...(verdicts !== undefined ? { verdicts } : {}),
     ...(requires !== undefined ? { requires } : {}),
+    ...(doneField !== undefined ? { doneField } : {}),
+    ...(nextOnDone !== undefined ? { nextOnDone } : {}),
+    ...(ceiling !== undefined ? { ceiling } : {}),
   };
 }
 
