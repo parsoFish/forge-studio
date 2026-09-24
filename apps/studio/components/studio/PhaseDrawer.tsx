@@ -6,6 +6,8 @@ import type { Run, Flow, PhaseLogLine } from '@/lib/studio-client';
 import { drawerHeaderMeta } from '@/lib/phase-drawer-meta';
 import { usePhaseLog } from '@/lib/use-phase-log';
 import { derivePhaseLogPanelState } from '@/lib/phase-log-panel-view';
+import { useCycleEvents } from '@/lib/use-cycle-events';
+import { deriveBrainReadSummary } from '@/lib/brain-read-view';
 
 // ---------------------------------------------------------------------------
 // PhaseDrawer — right slide-in panel showing per-phase detail.
@@ -253,6 +255,15 @@ function DrawerBody({
   // flip does not re-run the identity effect (Effect 2 owns live refresh).
   const pendingNode = status === 'pending';
 
+  // forge-8vfn.5.16 (M7-C U2) — the planner's brain READ, on its own
+  // surface: distinct from the plain-text "brain reads: N" line below (a
+  // raw tool-use COUNT with no KB attribution, rendered for the dev node)
+  // and from the Knowledge page's Ingest Activity tab (the reflector's
+  // WRITE side). `useCycleEvents` guards an empty cycleId itself (the
+  // effect stays inert until a real id arrives).
+  const cycleEvents = useCycleEvents(cycleId);
+  const brainReadSummary = deriveBrainReadSummary(cycleEvents);
+
   // forge-7wc: the log panel's own fetch lifecycle (identity fetch + live
   // refresh, including the fix for Effect 1's swallowed rejections) lives in
   // `usePhaseLog` — see that hook's header for the full defect writeup.
@@ -396,6 +407,25 @@ function DrawerBody({
               item (correct behaviour, not a bug)
             </div>
           )}
+        </DrawerSection>
+      )}
+
+      {/* ---- BRAIN READS (forge-8vfn.5.16, M7-C U2) ---- the planner's own
+           read, naming the KB and how much, not a bare count. Scoped to the
+           project-manager node ('pm' — studio/flows/forge-architect/flow.yaml)
+           since that is the phase real brain.read events carry today. */}
+      {!isWi && nodeId === 'pm' && brainReadSummary.length > 0 && (
+        <DrawerSection title="Brain reads">
+          {brainReadSummary.map((row) => (
+            <div
+              key={row.kbId}
+              data-brain-read-kb={row.kbId}
+              data-brain-read-count={row.count}
+              style={{ fontSize: 12.5, color: 'var(--dim)', marginBottom: 4 }}
+            >
+              {row.kbId}: {row.count} theme{row.count === 1 ? '' : 's'} read
+            </div>
+          ))}
         </DrawerSection>
       )}
 
