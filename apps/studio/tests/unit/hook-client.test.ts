@@ -169,7 +169,7 @@ const WELL_FORMED_DETAIL = {
   ...WELL_FORMED_OK_ENTRY,
   packageHash: 'sha256:' + 'a'.repeat(64),
   // forge-8vfn.5.16 (M7-C U2): required on every detail payload.
-  fireCount: 0,
+  recentFireCount: 0,
   files: [
     { path: 'hook.yaml', body: 'id: pre-pr-security-review\non: PreToolUse\n', hash: 'sha256:' + 'b'.repeat(64) },
     { path: 'scripts/run.sh', body: '#!/usr/bin/env bash\necho ok\n', hash: 'sha256:' + 'c'.repeat(64) },
@@ -207,7 +207,7 @@ test('parseHookDetail: an unrecognised scan.verdict THROWS', () => {
 });
 
 // ---------------------------------------------------------------------------
-// forge-8vfn.5.16 (M7-C U2) — last-fire facts. fireCount is REQUIRED (the
+// forge-8vfn.5.16 (M7-C U2) — last-fire facts. recentFireCount is REQUIRED (the
 // route always sends it, 0 = "scanned, found none" — same idiom as
 // carriedByCount); lastFireAt/lastFireOutcome are legitimately ABSENT for a
 // hook that has never fired, but a PRESENT-and-malformed pair must still
@@ -215,15 +215,15 @@ test('parseHookDetail: an unrecognised scan.verdict THROWS', () => {
 // already gets above.
 // ---------------------------------------------------------------------------
 
-test('parseHookDetail: fireCount is required and must be a number — never defaulted to 0', () => {
-  const { fireCount: _drop, ...missing } = { ...WELL_FORMED_DETAIL, fireCount: 3 };
+test('parseHookDetail: recentFireCount is required and must be a number — never defaulted to 0', () => {
+  const { recentFireCount: _drop, ...missing } = { ...WELL_FORMED_DETAIL, recentFireCount: 3 };
   expect(() => parseHookDetail(missing)).toThrow();
-  expect(() => parseHookDetail({ ...WELL_FORMED_DETAIL, fireCount: '3' })).toThrow();
+  expect(() => parseHookDetail({ ...WELL_FORMED_DETAIL, recentFireCount: '3' })).toThrow();
 });
 
-test('parseHookDetail: never-fired (fireCount:0, no lastFireAt/lastFireOutcome) round-trips with both absent', () => {
-  const parsed = parseHookDetail({ ...WELL_FORMED_DETAIL, fireCount: 0 });
-  expect(parsed.fireCount).toBe(0);
+test('parseHookDetail: never-fired (recentFireCount:0, no lastFireAt/lastFireOutcome) round-trips with both absent', () => {
+  const parsed = parseHookDetail({ ...WELL_FORMED_DETAIL, recentFireCount: 0 });
+  expect(parsed.recentFireCount).toBe(0);
   expect(parsed.lastFireAt).toBeUndefined();
   expect(parsed.lastFireOutcome).toBeUndefined();
 });
@@ -231,17 +231,17 @@ test('parseHookDetail: never-fired (fireCount:0, no lastFireAt/lastFireOutcome) 
 test('parseHookDetail: a real last fire round-trips lastFireAt + a recognised lastFireOutcome verbatim', () => {
   const parsed = parseHookDetail({
     ...WELL_FORMED_DETAIL,
-    fireCount: 5,
+    recentFireCount: 5,
     lastFireAt: '2026-09-25T12:00:00.000Z',
     lastFireOutcome: 'refused',
   });
-  expect(parsed.fireCount).toBe(5);
+  expect(parsed.recentFireCount).toBe(5);
   expect(parsed.lastFireAt).toBe('2026-09-25T12:00:00.000Z');
   expect(parsed.lastFireOutcome).toBe('refused');
 });
 
 test('parseHookDetail: an unrecognised lastFireOutcome value THROWS — never coerced to a known one', () => {
   expect(() =>
-    parseHookDetail({ ...WELL_FORMED_DETAIL, fireCount: 1, lastFireAt: '2026-09-25T12:00:00.000Z', lastFireOutcome: 'succeeded' }),
+    parseHookDetail({ ...WELL_FORMED_DETAIL, recentFireCount: 1, lastFireAt: '2026-09-25T12:00:00.000Z', lastFireOutcome: 'succeeded' }),
   ).toThrow();
 });

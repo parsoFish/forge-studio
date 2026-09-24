@@ -160,10 +160,14 @@ export type HookDetail = HookLibraryEntryOk & {
   packageHash: string;
   scan: HookScanReport;
   approval?: HookApprovalRecord;
-  /** forge-8vfn.5.16 (M7-C U2) — always present; 0 = "scanned every cycle,
-   *  found no fire", the same idiom carriedByCount already uses. */
-  fireCount: number;
-  /** Present iff the hook has fired at least once; never fabricated. */
+  /** forge-8vfn.5.16 (M7-C U2) — always present; 0 = "scanned the recent
+   *  window, found no fire", the same idiom carriedByCount already uses.
+   *  T2 review of 95cb287f: the route's scan is BOUNDED (newest
+   *  HOOK_FIRE_SCAN_MAX_CYCLES cycle dirs), so this is honestly a count
+   *  within that window, never an all-time claim — named accordingly. */
+  recentFireCount: number;
+  /** Present iff the hook has fired within the scanned (recent) window;
+   *  never fabricated. */
   lastFireAt?: string;
   lastFireOutcome?: HookFireOutcome;
 };
@@ -347,7 +351,7 @@ export function parseHookDetail(raw: unknown): HookDetail {
       ...(reasonRaw !== undefined ? { reason: reasonRaw } : {}),
     };
   }
-  // fireCount is REQUIRED (the route always sends it — never defaulted to 0
+  // recentFireCount is REQUIRED (the route always sends it — never defaulted to 0
   // by this parser, which would hide a bridge that forgot to send it).
   // lastFireAt/lastFireOutcome are legitimately absent for a never-fired
   // hook, but if lastFireOutcome IS present it must be one of the four real
@@ -363,7 +367,7 @@ export function parseHookDetail(raw: unknown): HookDetail {
     packageHash: reqString(r, 'packageHash'),
     scan: parseHookScanReport(r['scan']),
     ...(approval !== undefined ? { approval } : {}),
-    fireCount: reqNumber(r, 'fireCount'),
+    recentFireCount: reqNumber(r, 'recentFireCount'),
     ...(r['lastFireAt'] !== undefined ? { lastFireAt: reqString(r, 'lastFireAt') } : {}),
     ...(rawOutcome !== undefined ? { lastFireOutcome: rawOutcome as HookFireOutcome } : {}),
   };

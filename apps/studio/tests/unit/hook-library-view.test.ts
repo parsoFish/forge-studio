@@ -317,7 +317,7 @@ function detailFixture(overrides: Partial<HookDetail> = {}): HookDetail {
     ],
     scan: { verdict: 'clean', findings: [] },
     // forge-8vfn.5.16 (M7-C U2): required on every detail payload.
-    fireCount: 0,
+    recentFireCount: 0,
     ...overrides,
   };
 }
@@ -342,18 +342,18 @@ test('buildHookDetailView: an unbound hook (carriedBy empty) still reports a rea
 // forge-8vfn.5.16 (M7-C U2) — last-fire facts carry through unchanged; a
 // never-fired hook's view model must not fabricate a lastFireAt/
 // lastFireOutcome that the detail payload never sent.
-test('buildHookDetailView: a never-fired hook carries fireCount:0 and no lastFireAt/lastFireOutcome', () => {
-  const view = buildHookDetailView(detailFixture({ fireCount: 0 }));
-  expect(view.fireCount).toBe(0);
+test('buildHookDetailView: a never-fired hook carries recentFireCount:0 and no lastFireAt/lastFireOutcome', () => {
+  const view = buildHookDetailView(detailFixture({ recentFireCount: 0 }));
+  expect(view.recentFireCount).toBe(0);
   expect(view.lastFireAt).toBeUndefined();
   expect(view.lastFireOutcome).toBeUndefined();
 });
 
-test('buildHookDetailView: a fired hook carries fireCount + lastFireAt + lastFireOutcome through verbatim', () => {
+test('buildHookDetailView: a fired hook carries recentFireCount + lastFireAt + lastFireOutcome through verbatim', () => {
   const view = buildHookDetailView(
-    detailFixture({ fireCount: 7, lastFireAt: '2026-09-25T12:00:00.000Z', lastFireOutcome: 'ran' }),
+    detailFixture({ recentFireCount: 7, lastFireAt: '2026-09-25T12:00:00.000Z', lastFireOutcome: 'ran' }),
   );
-  expect(view.fireCount).toBe(7);
+  expect(view.recentFireCount).toBe(7);
   expect(view.lastFireAt).toBe('2026-09-25T12:00:00.000Z');
   expect(view.lastFireOutcome).toBe('ran');
 });
