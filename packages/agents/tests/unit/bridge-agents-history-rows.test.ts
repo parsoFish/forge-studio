@@ -121,6 +121,11 @@ function makeDeps(runs: AgentFlowRun[]): AgentHistoryDeps {
     cachedListRuns: () => runs,
     buildAgentSlugToNodeId: buildAgentSlugToNodeIdFixture,
     loadFlowDefinition,
+    listFlowIds: (forgeRoot: string) => {
+      const flowsDir = join(forgeRoot, 'studio', 'flows');
+      return existsSync(flowsDir) ? readdirSync(flowsDir).sort() : [];
+    },
+    flowPathForId: (flowId: string, forgeRoot: string) => join(forgeRoot, 'studio', 'flows', flowId, 'flow.yaml'),
     loadSessionKinds: () => { throw new Error('unexpected loadSessionKinds call'); },
   };
 }

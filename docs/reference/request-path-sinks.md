@@ -24,7 +24,7 @@ against the tables by counting; a count of line references could not be.
 
 | | Rows |
 |---|---|
-| Classified rows below | 68 |
+| Classified rows below | 69 |
 | — `guarded` | 18 |
 | — guarded, new in M7-C (the standalone-history bounded scan's guarded mtime sort + guarded first-event bounded head read, forge-omk0/forge-aug) | 2 |
 | — guarded, new in M4-projects (S3 "Rebuild contract" — `reset.ts` becomes bridge-reachable, no new mechanism) | 1 |
@@ -41,6 +41,7 @@ against the tables by counting; a count of line references could not be.
 | — not request-derived, new in M5-B (the minted-remote manifest, bead `forge-8vfn.6.11.29`; the starter presentation manifest, bead `forge-8vfn.6.11.4`; the pinned gh identity, bead `forge-8vfn.6.11.35`) | 3 |
 | — not request-derived, new in M6-A (the unpriced-row emit sidecar, bead `forge-8vfn.7.6.103`) | 1 |
 | — not request-derived, new in M6-A (the SDK spawn's named CLI, bead `forge-8vfn.7.6.116`) | 1 |
+| — not request-derived, new in SEAM F1 (package-owned discovery roots, operator ruling item 81) | 1 |
 | `[unver]` items, listed separately and never counted safe | 7 |
 | bd issues filed | 4 (1 closed: `forge-d1f` by SEC-02; `forge-q80` PARTLY addressed by SEC-03 — its `POST /api/studio/projects` items are fixed, its `packageDir`/zip-slip and community-index items are not, so it stays open) |
 
@@ -2430,6 +2431,51 @@ beside them. **The gate is on the REQUESTED set, not the resolved one** — a
 caller whose roots all fail to resolve gets every `Read` denied rather than
 ungated, so a fence that cannot resolve its roots fails closed instead of
 silently becoming no fence.
+
+### Extended in SEAM F1 (operator ruling item 81) — package-owned discovery roots
+
+| file | sink | before | after |
+|---|---|---|---|
+| `packages/kernel/discovery-roots.ts` | `readdirSync` | 0 | 1 |
+| `apps/forge/bridge-studio-writes.ts` | `existsSync` | 1 | 2 |
+| `packages/agents/bridge-agents-studio.ts` | `existsSync` | 3 | 4 |
+
+**Three sinks, all not request-derived, all enumeration- or already-guarded-path
+checks.** SEAM F1 adds a second flow/skill discovery root, `packages/<pkg>/
+flows` and `packages/<pkg>/skills` beside `studio/flows` and `skills/` (see
+`packages/kernel/discovery-roots.ts`'s own module docstring for the design).
+
+**`discovery-roots.ts`'s `readdirSync`** is `realSubdirNames`'s ONE call site,
+used to list (a) `<forgeRoot>/packages`'s own immediate subdirectory names and
+(b) each of THOSE directories' own immediate subdirectory names (looking for a
+`flows`/`skills` leaf). Both arguments are built from the server's own
+`forgeRoot` plus names the function's OWN prior `readdirSync` call already
+enumerated off disk — never a request/caller-supplied string. No id from any
+route reaches this call.
+
+**The two `existsSync` calls** are the SAME shape in two different files —
+`apps/forge/bridge-studio-writes.ts`'s `DELETE /api/studio/flows/:id` route's
+sibling-trigger scan, and `packages/agents/bridge-agents-studio.ts`'s `DELETE
+/api/studio/agents/:slug` route's referencing-flow scan. Both loop over
+`listFlowIds(forgeRoot)` — a full, server-side directory enumeration across
+every flow root, never filtered or built from the request's own `:id`/`:slug`
+— and for each enumerated id call `flowPathForId(id, forgeRoot)`
+(`@forge/flows/flow-runner.ts`), which resolves it through
+`resolveIdAcrossRoots` → `guardedFile` (the SAME containment guard
+`resolveGuardedPath` is built on) BEFORE this `existsSync` ever runs. The
+`existsSync` itself is a redundant, read-only existence probe on a path that
+was either already realpath-verified by the guard, or — for the rare "not
+found in any root" branch — a literal join under the trusted PRIMARY root
+(`roots[0]`, never a caller-supplied root), which `existsSync` truthfully
+reports absent. Neither call reads or writes through the probed path. The
+request's own `:id`/`:slug` is compared by STRING EQUALITY (`otherId === id`
+/ implicit via the slug match above it) to skip the object being deleted, and
+is never itself joined into a path here.
+
+`scripts/check-request-path-sinks.mjs` flagged all three as new/grown the
+moment `flowRoots`/`listFlowIds`/`flowPathForId` started searching a second
+root; the sinks are pre-existing shapes (an enumerate-then-check loop, a
+readdir walk) reached through one more path each.
 
 ### Added in M7-A (bead forge-8vfn.8.1.2, operator ruling 92) — the `.gitignore` drift mechanism's three new sinks, all guard-terminal
 
