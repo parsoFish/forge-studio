@@ -27,25 +27,57 @@ import { spawnSync } from 'node:child_process';
 const NUL = '\u0000';
 import { portableArtifact, portableFenceEscapes, portableReapEntries, portableSweepPaths } from './artifact-paths.mjs';
 
-/** Derive one index row from a completed run result. */
-export function storyRowFrom(result) {
+/**
+ * Derive one index row from a completed run result.
+ *
+ * `clip` is EXISTENCE-CHECKED, not assumed (forge-8vfn.2.34): the webm is
+ * gitignored (`.gitignore:191-195`), so a fresh clone or CI has none, and a
+ * row that always claimed one made every generated index link to a file
+ * nobody cloning the repo has. The check is INJECTED — `{ root, exists }`, the
+ * file's existing seam style (`bridge.mjs`'s
+ * `bridgeGhToken({ exec = defaultGhTokenExec } = {})`) — so a test can control
+ * it without a real recording. The DEFAULT (`exists` always true) reproduces
+ * today's unconditional behaviour exactly: every existing caller keeps
+ * behaving the same until it deliberately opts into the real check by passing
+ * `root`.
+ */
+export function storyRowFrom(result, { root = null, exists = () => true } = {}) {
   const beats = result.beats ?? [];
   const greenBeats = beats.filter((b) => b.status === 'green').length;
   // An empty story is not green: `every` is vacuously true on an empty array,
   // which would report a story that ran nothing as a passing story.
   const status = beats.length > 0 && greenBeats === beats.length ? 'green' : 'red';
+  const clipRelative = `${result.story.id}/story.webm`;
+  const clipCheckPath = root === null ? clipRelative : join(root, 'demos', 'stories', clipRelative);
+  const firstFrameRelative = beats[0]?.frame;
   return Object.freeze({
     id: result.story.id,
     title: result.story.docs.title,
     status,
     beats: beats.length,
     greenBeats,
-    clip: `${result.story.id}/story.webm`,
+    clip: exists(clipCheckPath) ? clipRelative : null,
+    // The clip-less fallback's picture: the first frame this run actually
+    // captured, so a checkout without the (gitignored) recording still shows
+    // something real rather than a broken player.
+    firstFrame:
+      typeof firstFrameRelative === 'string' && firstFrameRelative !== ''
+        ? `${result.story.id}/${firstFrameRelative}`
+        : null,
   });
 }
 
 const esc = (s) =>
   String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** The row's media: a `<video>` when its clip exists, else the first captured
+ *  frame, else a note — never a `<video>` pointed at a file that isn't there
+ *  (forge-8vfn.2.34; the clip is gitignored, so most checkouts have none). */
+function mediaFor(row) {
+  if (row.clip) return `<video src="${esc(row.clip)}" autoplay loop muted playsinline></video>`;
+  if (row.firstFrame) return `<img src="${esc(row.firstFrame)}" alt="${esc(row.title)} — first frame">`;
+  return `<p class="no-clip">no clip recorded on this checkout</p>`;
+}
 
 /** Render the index page. Pure — sorted by id so regeneration is stable. */
 export function renderGalleryIndex(rows) {
@@ -55,7 +87,7 @@ export function renderGalleryIndex(rows) {
       (r) => `  <section class="story ${esc(r.status)}">
     <h2>${esc(r.id)} — ${esc(r.title)}</h2>
     <p class="verdict ${esc(r.status)}">${esc(r.status)} · ${r.greenBeats}/${r.beats} beats green</p>
-    <video src="${esc(r.clip)}" autoplay loop muted playsinline></video>
+    ${mediaFor(r)}
   </section>`,
     )
     .join('\n');
@@ -72,7 +104,8 @@ export function renderGalleryIndex(rows) {
   .story.red { border-left-color: #cf222e; }
   .verdict.green { color: #1a7f37; }
   .verdict.red { color: #cf222e; font-weight: 600; }
-  video { max-width: 100%; border-radius: 4px; }
+  video, img { max-width: 100%; border-radius: 4px; }
+  .no-clip { color: #666; font-style: italic; }
 </style>
 </head>
 <body>
