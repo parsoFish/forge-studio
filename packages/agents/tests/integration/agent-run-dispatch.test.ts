@@ -7,7 +7,7 @@
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -110,6 +110,46 @@ test('cmdAgentDispatch: happy path under the no-spawn seam → suppressed, no ex
   } finally {
     if (prior === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
     else process.env.FORGE_ARCHITECT_NO_SPAWN = prior;
+    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Bead forge-8vfn.8.3.3 (M7-C G2a follow-up to forge-8vfn.5.64) —
+// `dispatchAgentRun`'s OWN run record (packages/agents/agent-dispatch.ts's
+// `logsRoot`) used to default to the module-level `FORGE_ROOT` constant
+// regardless of the `forgeRoot` its caller, `cmdAgentDispatch`, was given —
+// so a dispatch against ANY other forge root still wrote `_logs/<runId>`
+// into the REAL repository, a live-tree-plant hazard `node --test`'s
+// concurrent file execution makes real (bead forge-8vfn.5.64's incident).
+// This test uses its OWN standalone tmp forgeRoot (deliberately NOT
+// `FIXTURE_FORGE_ROOT`, so a regression back to the module-level default
+// cannot accidentally satisfy it) and asserts the run directory on the
+// FILESYSTEM: it must exist under the CALLER's forgeRoot, and must NOT
+// exist under the real repo root.
+// ---------------------------------------------------------------------------
+
+test('cmdAgentDispatch: bead forge-8vfn.8.3.3 — a dispatch run\'s own record lands under the CALLER\'s forgeRoot/_logs/, never the real repo\'s _logs/, when forgeRoot differs from the default', async () => {
+  const prior = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
+  const ownForgeRoot = mkdtempSync(join(tmpdir(), 'agent-run-dispatch-logsroot-'));
+  symlinkSync(join(ROOT, 'skills'), join(ownForgeRoot, 'skills'), 'dir');
+  const runId = '_agent-cli-logsroot-threading-test';
+  try {
+    const r = await run(['project-scoped-review', '--run-id', runId], ownForgeRoot);
+    assert.equal(r.exitCode, null, 'no exit on a successful (suppressed) dispatch');
+    assert.equal(
+      existsSync(join(ownForgeRoot, '_logs', runId)), true,
+      `the run's own record must be written under the forgeRoot cmdAgentDispatch was actually given (${join(ownForgeRoot, '_logs', runId)})`,
+    );
+    assert.equal(
+      existsSync(join(ROOT, '_logs', runId)), false,
+      `the run must NOT plant its record into the real repository's _logs/ — got ${join(ROOT, '_logs', runId)} exists`,
+    );
+  } finally {
+    if (prior === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    else process.env.FORGE_ARCHITECT_NO_SPAWN = prior;
+    rmSync(ownForgeRoot, { recursive: true, force: true });
     rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
   }
 });
