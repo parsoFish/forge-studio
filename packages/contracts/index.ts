@@ -19,6 +19,12 @@
 
 /** The Studio object model (ADR 027) — pure types, moved here with history. */
 export * from './studio-types.ts';
+/** The initiative manifest shape — the SSOT flows, factory and sessions all
+ *  read and write (M4-sessions s3, T1 ruling 81). */
+export * from './manifest-types.ts';
+/** `isRunnableSource` — the ONE rule for whether `enqueueFlowRun` claims a
+ *  manifest for a flow, plus the develop flow's id (forge-8vfn.7.6.132). */
+export * from './runnable-source.ts';
 
 // ── Work items ──
 

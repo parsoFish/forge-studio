@@ -31,7 +31,7 @@ import { buildNodeMapping, buildAgentSlugToNodeId } from '@forge/flows/run-model
 import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
 import { eventToNodeId } from '@forge/flows/run-model-derive.ts';
 import { listPlannedInitiatives } from '@forge/flows/planned-initiatives.ts';
-import { isRunnableSource, DEVELOP_FLOW_ID } from '@forge/contracts/runnable-source.ts';
+import { isRunnableSource, DEVELOP_FLOW_ID } from '@forge/contracts';
 import { checkInitiativeDeps } from '@forge/flows/scheduler.ts';
 import type { Run } from '@forge/flows/run-model.ts';
 import type { EventLogEntry } from '@forge/kernel';
@@ -41,7 +41,7 @@ import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { resolveGuardedPath } from '@forge/kernel';
 import { flowRoots, resolveIdAcrossRoots, listIdsAcrossRoots } from '@forge/kernel/discovery-roots.ts';
-import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
+import type { FlowDefinition } from '@forge/contracts';
 import { SLUG_RE, PROJECT_ID_RE } from '@forge/kernel';
 import { projectKbBindings } from '@forge/knowledge/kb-sites.ts';
 import { parseManifest, initiativeTitle } from '@forge/flows/manifest.ts';

@@ -43,7 +43,7 @@ import { REFLECTION_LOST_EVENT } from './cycle-context.ts';
 import { classifyCrash } from '@forge/agents/failure-classifier.ts';
 import type { ClosureResult } from './cycle-context.ts';
 import type { CycleInput, ReviewerOutcome } from './cycle-context.ts';
-import type { AgentDefinition, FlowTrigger, TriggerTarget } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition, FlowTrigger, TriggerTarget } from '@forge/contracts';
 
 export type FinalizeStatus = 'finalized' | 'still-open' | 'no-worktree' | 'error';
 export type FinalizeResult = { initiativeId: string; status: FinalizeStatus; detail?: string };

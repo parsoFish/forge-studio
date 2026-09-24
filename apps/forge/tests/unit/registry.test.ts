@@ -19,7 +19,7 @@ import { loadKbDescriptor, serializeKbDescriptor, resolveKbProcesses } from '@fo
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import { loadCommunityRegistry, communitySkillsFromRegistry, communityRegistryPath, resolveCommunitySource } from '@forge/library/studio/community-registry.ts';
 import { listPlainSkills } from '@forge/library/studio/skill-registry.ts';
-import type { KbBinding, KbDescriptor } from '@forge/contracts/studio/types.ts';
+import type { KbBinding, KbDescriptor } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // Fixtures

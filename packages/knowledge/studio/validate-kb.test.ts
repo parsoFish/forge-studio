@@ -6,7 +6,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { KbDescriptor } from '@forge/contracts/studio/types.ts';
+import type { KbDescriptor } from '@forge/contracts';
 import { validateKb } from './validate-kb.ts';
 
 

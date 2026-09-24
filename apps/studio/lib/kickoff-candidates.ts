@@ -23,7 +23,7 @@
  * same table the monitor's launch UI dispatches on (see `flows-25`).
  */
 import type { Run } from './studio-client';
-import { isRunnableSource } from '@forge/contracts/runnable-source.ts';
+import { isRunnableSource } from '@forge/contracts';
 
 /**
  * `orchestrator/run-model.ts`'s `FALLBACK_FLOW_ID`, re-declared client-side by

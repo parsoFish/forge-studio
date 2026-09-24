@@ -13,7 +13,7 @@ import { parseManifest } from '@forge/flows/manifest.ts';
 import { REFLECTION_LOST_EVENT, type CycleInput, type CycleOutcome } from '@forge/flows/cycle-context.ts';
 import { classifyCrash } from '@forge/agents/failure-classifier.ts';
 import { REPO_RE, type TriggerPayload } from '@forge/flows/trigger-payload.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 import { enqueueGateFixWorkItems } from '@forge/flows/gate-fix-loop.ts';
 import { writeMergeGateConfigErrorMarker } from '@forge/flows/fix-work-items.ts';
 import { resolveBandGuard, BAND_CANONICAL_SLUG } from '@forge/agents/agent-bands.ts';

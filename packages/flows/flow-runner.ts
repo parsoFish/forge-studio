@@ -38,7 +38,7 @@ import { resolve, basename } from 'node:path';
 import { readFileSync } from 'node:fs';
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
 import { type ClosureResult, type CycleInput, type CycleOutcome, type ReviewerOutcome } from './cycle-context.ts';
-import type { FlowDefinition, FlowNode, AgentBudgets, AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { FlowDefinition, FlowNode, AgentBudgets, AgentDefinition } from '@forge/contracts';
 import { CostTracker, WedgeDetector, RateLimitGate, type CeilingSource } from './flow-budgets.ts';
 // §15.43: all three were reached through `orchestrator/studio/registry.ts`,
 // which only re-exports them. Imported from their real owners instead — every

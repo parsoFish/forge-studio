@@ -19,7 +19,7 @@ import { join, relative, resolve, sep } from 'node:path';
 import { resolveGuardedPath, guardedFile, guardedReadFile } from '@forge/kernel';
 import { loadKbDescriptor, resolveKbProcesses } from './studio/kb-descriptor.ts';
 import { tryGetKbBackend } from './kb-backend.ts';
-import { type KbDescriptor } from '@forge/contracts/studio/types.ts';
+import { type KbDescriptor } from '@forge/contracts';
 import { resolutionCounts, applyAutoFixesUntilStable, type Finding } from './brain-lint.ts';
 import { listCycles } from '@forge/kernel';
 import { regenerateBrainIndex } from './brain-index.ts';

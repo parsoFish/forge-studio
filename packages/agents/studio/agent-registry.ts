@@ -34,7 +34,7 @@ import type {
   AgentDefinition,
   AgentFanout,
   AgentRuntime,
-} from '@forge/contracts/studio/types.ts';
+} from '@forge/contracts';
 
 
 const BRAIN_ACCESS = ['mandatory', 'advisory', 'none'] as const;

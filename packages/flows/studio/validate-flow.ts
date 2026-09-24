@@ -10,8 +10,8 @@
  * bridge's flow PUT route, `forge studio lint` and `claim-validator.ts`.
  */
 
-import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
-import { FLOW_KICKOFF_KINDS } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
+import { FLOW_KICKOFF_KINDS } from '@forge/contracts';
 import { type Finding, err } from '@forge/kernel/findings.ts';
 import { SLUG_RE } from '@forge/kernel/ids.ts';
 import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';

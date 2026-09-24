@@ -43,7 +43,7 @@ import { normalizeProjectId } from '@forge/kernel';
 import { listFlowIds, loadFlowDefinition } from './studio/flow-registry.ts';
 import { flowPathForId } from './flow-runner.ts';
 import { stageFlowRunRequest } from './flow-run-requests.ts';
-import type { TriggerTarget } from '@forge/contracts/studio/types.ts';
+import type { TriggerTarget } from '@forge/contracts';
 
 /**
  * Module-level default armed register — one Node process, one live set of

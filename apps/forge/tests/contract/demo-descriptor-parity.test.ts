@@ -34,7 +34,7 @@ import { deriveDemoModel } from '@forge/factory/phases/derive-demo-model.ts';
 // `registry.ts`) for a NEW `package-layer-order` violation not covered by the
 // carve spec's ruling-36 exception (which names only `agents-md-compose.ts`).
 import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
-import type { DemoStep } from '@forge/contracts/studio/types.ts';
+import type { DemoStep } from '@forge/contracts';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 

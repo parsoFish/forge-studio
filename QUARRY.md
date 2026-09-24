@@ -455,7 +455,6 @@ operator-ratified new cap — never a silent raise.
 | packages/library/studio/skill-trust.ts | library | verbatim | 461 |
 | packages/agents/studio/skill-md-fidelity.ts | agents | verbatim | 224 |
 | packages/library/studio/template-library.ts | library | verbatim | 610 |
-| packages/contracts/studio/types.ts | contracts | verbatim | 738 |
 | packages/flows/studio/flow-registry.ts | flows | verbatim | 280 |
 | packages/flows/studio/validate-flow.ts | flows | rewritten | 283 |
 | packages/flows/studio/flow-kickoff.ts | flows | rewritten | 137 |

@@ -30,7 +30,7 @@
  * wider status satisfies both shapes structurally and passes straight through.
  */
 import { guardedReadFile, guardedWriteFile, guardedReadDir } from '@forge/kernel';
-import type { KbBinding } from '@forge/contracts/studio/types.ts';
+import type { KbBinding } from '@forge/contracts';
 
 import { loadKbDescriptor, serializeKbDescriptor } from './studio/kb-descriptor.ts';
 import { regenerateBrainIndex } from './brain-index.ts';

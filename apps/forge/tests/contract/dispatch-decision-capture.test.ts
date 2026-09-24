@@ -95,7 +95,7 @@ import { listFlowIds, loadFlowDefinition } from '@forge/flows/studio/flow-regist
 import { resolveBandGuard, BAND_GUARD_IDS, BAND_CANONICAL_SLUG, type BandGuardId } from '@forge/agents/agent-bands.ts';
 import { resolveNodeKind, flowPathForId } from '@forge/flows/flow-runner.ts';
 import { skillsDir, listSkillMdDirs } from '@forge/agents/skill-path.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 import { assertMatchesJsonSnapshot } from '../../../../packages/kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 
 // §15.14: moved from orchestrator/ to apps/forge/, so the '..' chain was one

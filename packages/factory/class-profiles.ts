@@ -30,7 +30,7 @@
 
 import { readFileSync } from 'node:fs';
 
-import type { InitiativeManifest } from '@forge/contracts/manifest-types.ts';
+import type { InitiativeManifest } from '@forge/contracts';
 import { CHANGE_CLASSES, parseManifest } from '@forge/flows/manifest.ts';
 import type { RequiredPathsSource } from '@forge/flows/work-item.ts';
 

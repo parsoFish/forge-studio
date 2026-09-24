@@ -65,7 +65,7 @@ import {
   readQualityGateSidecar,
   injectSidecarIntoTestProcess,
 } from '@forge/projects/project-config.ts';
-import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 
 /** forge-3oq: the ONE provenance vocabulary this roster stamps every project
  *  with — Studio has no OOTB-project concept and `discoverProjects` is a

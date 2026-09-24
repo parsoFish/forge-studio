@@ -25,7 +25,7 @@
  */
 import { join } from 'node:path';
 
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 import type { AgentFacts, ComposingAgent } from '@forge/library/studio/agent-facts.ts';
 // DEEP imports, not the `@forge/agents` barrel, and the reason is measured:
 // importing the door pulls every module it re-exports into

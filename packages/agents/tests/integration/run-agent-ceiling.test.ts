@@ -72,7 +72,7 @@ import { MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { dispatchAgentRun } from '../../agent-dispatch.ts';
 import { listAgentDefinitions } from '../../studio/agent-registry.ts';
 import type { StreamQueryFn } from '../../pinned-sdk-query.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 const ROOT = FORGE_ROOT;

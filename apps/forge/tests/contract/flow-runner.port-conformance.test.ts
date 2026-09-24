@@ -23,7 +23,7 @@ import type { PhaseExecutor } from '@forge/kernel';
 import type { NodeExecContext } from '@forge/flows/flow-node-context.ts';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import type { EventLogger } from '@forge/kernel';
-import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
+import type { FlowDefinition } from '@forge/contracts';
 
 function makeInput(): CycleInput {
   return {

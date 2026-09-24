@@ -28,7 +28,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 
-import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 
 import { deriveFlowKickoff } from '../../studio/flow-kickoff.ts';
 import { loadFlowDefinition } from '../../studio/flow-registry.ts';

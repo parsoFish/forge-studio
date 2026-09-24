@@ -11,7 +11,7 @@
  * It depends on `architect-session.ts` alone.
  */
 
-import type { InitiativeManifest } from '@forge/contracts/manifest-types.ts';
+import type { InitiativeManifest } from '@forge/contracts';
 import { type ArchitectStatus, type DraftInitiative } from './architect-session.ts';
 
 

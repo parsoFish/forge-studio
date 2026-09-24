@@ -31,7 +31,7 @@ import { loadFlowDefinition } from './studio/flow-registry.ts';
 import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
 import { validateFlow } from './studio/validate-flow.ts';
 import { skillRoots } from '@forge/kernel/discovery-roots.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // Public types

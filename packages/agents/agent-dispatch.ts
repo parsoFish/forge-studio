@@ -36,7 +36,7 @@ import { createLogger } from '@forge/kernel';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 import { fireAgentCompleteTriggers } from '@forge/flows/flow-trigger.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
-import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 
 /** One reference to an already-staged kickoff material — a relative path
  *  (e.g. `materials/photo.png`) plus its derived kind. NEVER carries bytes:

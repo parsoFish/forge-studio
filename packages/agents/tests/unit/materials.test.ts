@@ -28,7 +28,7 @@ import {
   MAX_MATERIAL_BYTES,
   MAX_MATERIALS_TOTAL_BYTES,
 } from '../../studio/materials.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // Fixture helper

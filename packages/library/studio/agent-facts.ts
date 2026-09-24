@@ -9,7 +9,7 @@
  * `design.md` §"Agent facts arrive by injection" carries the rest: why there
  * are two members, which paths take which, and why no path takes both.
  */
-import type { AgentComposition } from '@forge/contracts/studio/types.ts';
+import type { AgentComposition } from '@forge/contracts';
 
 /** The library object kinds an agent composes. Deliberately no `guard`. */
 export type ComposableKind = 'skill' | 'hook' | 'connection';

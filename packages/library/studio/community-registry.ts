@@ -24,7 +24,7 @@ import type {
   CommunityRegistryItem,
   CommunityRegistrySource,
   CommunityRegistrySignals,
-} from '@forge/contracts/studio/types.ts';
+} from '@forge/contracts';
 import { communitySourceKey } from './community-source-url.ts';
 import { extractLeadingCommentBlock, findCommentLinesInBlock } from './yaml-comments.ts';
 

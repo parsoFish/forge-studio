@@ -11,7 +11,7 @@
 
 import matter from 'gray-matter';
 
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 
 /**
  * Build the frontmatter `data` record for an AgentDefinition (ADR-027 fixed

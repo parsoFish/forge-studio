@@ -33,7 +33,7 @@
  */
 import { join } from 'node:path';
 
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 
 import { listSkillMdDirs } from '../skill-path.ts';
 import { isStudioAgent, loadAgentDefinition } from './agent-registry.ts';

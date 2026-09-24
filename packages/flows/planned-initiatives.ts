@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { parseManifest } from './manifest.ts';
-import { isRunnableSource } from '@forge/contracts/runnable-source.ts';
+import { isRunnableSource } from '@forge/contracts';
 import { getPaths, listPending, listReadyForReview } from './queue.ts';
 import { checkInitiativeDeps } from './scheduler.ts';
 

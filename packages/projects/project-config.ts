@@ -43,9 +43,9 @@ import { guardedReadFile } from '@forge/kernel';
 import { REPO_RE } from '@forge/flows/trigger-payload.ts';
 import { defaultConfigPath, discoverProjects, loadConfig, resolveProjectsDir } from '@forge/kernel';
 
-export type { DemoStep, DemoStepKind } from '@forge/contracts/studio/types.ts';
-export { DEMO_STEP_KINDS } from '@forge/contracts/studio/types.ts';
-export type { ReleaseStep, ReleaseConfig, BuildProcess } from '@forge/contracts/studio/types.ts';
+export type { DemoStep, DemoStepKind } from '@forge/contracts';
+export { DEMO_STEP_KINDS } from '@forge/contracts';
+export type { ReleaseStep, ReleaseConfig, BuildProcess } from '@forge/contracts';
 
 export type {
   LoggingConfig,

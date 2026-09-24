@@ -67,7 +67,7 @@ import type { ProbeState, ProbeResult } from './connection-probe.ts';
 import { communityRegistryPath, communitySkillsFromRegistry, loadCommunityRegistry } from './community-registry.ts';
 import { reqString, loadYaml } from '@forge/kernel/studio/yaml-fields.ts';
 import { guardedFile, guardedReadFile } from '@forge/kernel';
-import type { CommunitySkill } from '@forge/contracts/studio/types.ts';
+import type { CommunitySkill } from '@forge/contracts';
 import type { Finding } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------

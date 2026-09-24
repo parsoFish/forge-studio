@@ -22,7 +22,7 @@ import type {
   FlowKickoffKind,
   FlowNode,
   FlowTrigger,
-} from '@forge/contracts/studio/types.ts';
+} from '@forge/contracts';
 
 import {
   reqString,

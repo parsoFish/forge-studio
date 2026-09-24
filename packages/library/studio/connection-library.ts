@@ -55,7 +55,7 @@ import type {
   CatalogConnectionEntry,
   CatalogInstallMethod,
   CatalogProbeSpec,
-} from '@forge/contracts/studio/types.ts';
+} from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // D2 — CONNECTION_KINDS is closed at exactly two values, structural (which

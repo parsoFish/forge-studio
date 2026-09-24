@@ -66,7 +66,7 @@ import type { Finding } from '@forge/kernel/findings.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { listSkillMdDirs, listSkillDirs, skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
 import { lintSkillTrust, lintSkillRefs } from '@forge/library/studio/skill-trust.ts';
-import type { AgentDefinition, KbDescriptor } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition, KbDescriptor } from '@forge/contracts';
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { kbReadPolicyViolation } from '@forge/knowledge/kb-read-policy.ts';
 import { unroutableKbReason } from '@forge/knowledge/kb-sites.ts';

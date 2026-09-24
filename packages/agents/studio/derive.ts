@@ -14,7 +14,7 @@ import { rangeTiers } from '../model-range.ts';
 import { loadAgentDefinition } from './agent-registry.ts';
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import { MATERIAL_KINDS } from './materials.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 
 /**
  * The forge install root, re-exported from `@forge/kernel/ids.ts` so the

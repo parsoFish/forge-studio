@@ -189,7 +189,7 @@ import { runAgent } from '@forge/agents/run-agent.ts';
 import { MAX_KICKOFF_COST_CEILING_USD, DEFAULT_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 import type { DispatchAgentRunOpts, DispatchAgentRunResult } from '@forge/agents/agent-dispatch.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };

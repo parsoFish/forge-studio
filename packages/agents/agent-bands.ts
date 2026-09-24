@@ -15,7 +15,7 @@
  * known band ids without pulling in the flow engine.
  */
 
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 
 /**
  * The band-selecting guard ids. Every id here also has a display row in

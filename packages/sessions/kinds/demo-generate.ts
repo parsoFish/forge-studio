@@ -14,7 +14,7 @@ import type { KindTurnInput, KindTurnPlumbing } from './kind-turn.ts';
 import { resolveSessionModel, type PhaseAgentSpec } from '@forge/agents/phase-agent.ts';
 import { loadProjectConfig } from '@forge/projects/project-config.ts';
 import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
-import type { DemoStep, DemoElementDefinition } from '@forge/contracts/studio/types.ts';
+import type { DemoStep, DemoElementDefinition } from '@forge/contracts';
 import { loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
 import {
   DEMO_FRAGMENTS_REL_DIR,

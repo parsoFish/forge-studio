@@ -37,8 +37,8 @@ import { isCanonicalInitiativeId } from './initiative-id.ts';
 // bundle can import it — this file reaches node:fs/node:path and webpack
 // refuses those schemes in the browser graph. Re-exported here so the rule
 // still reads beside the code that implements it.
-export { isRunnableSource, DEVELOP_FLOW_ID } from '@forge/contracts/runnable-source.ts';
-import { DEVELOP_FLOW_ID } from '@forge/contracts/runnable-source.ts';
+export { isRunnableSource, DEVELOP_FLOW_ID } from '@forge/contracts';
+import { DEVELOP_FLOW_ID } from '@forge/contracts';
 
 /** Matches studio flow-id slugs; a path-traversal guard on the flow ref.
  *  EXPORTED (W8-F5, bead forge-6gv.23): this guard used to live at ONE of the

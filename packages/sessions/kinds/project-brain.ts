@@ -33,7 +33,7 @@ import {
   commitProjectBrain,
   listStagedThemes,
 } from '@forge/knowledge/project-brain-build.ts';
-import type { KbBinding } from '@forge/contracts/studio/types.ts';
+import type { KbBinding } from '@forge/contracts';
 
 import { runAgentTurn } from '../interactive-session.ts';
 import { runKindTurn, type KindTurnInput, type SessionKindVariant } from './kind-turn.ts';

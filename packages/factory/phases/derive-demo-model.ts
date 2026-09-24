@@ -22,7 +22,7 @@
  * produce deep-equal models.
  */
 
-import type { DemoStep } from '@forge/contracts/studio-types.ts';
+import type { DemoStep } from '@forge/contracts';
 import type { MergeGateEvidence } from '@forge/flows/cycle-helpers.ts';
 
 import type { DemoModel, DemoModelCheckpoint, TestResultRow } from '../demo-model.ts';

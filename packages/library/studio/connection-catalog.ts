@@ -26,7 +26,7 @@ import type {
   CatalogConnectionEntry,
   CatalogInstallMethod,
   CatalogProbeSpec,
-} from '@forge/contracts/studio/types.ts';
+} from '@forge/contracts';
 
 /**
  * Parse a `tools:`/`mcps:` `install:` block (R3-04 D13) — a CLOSED

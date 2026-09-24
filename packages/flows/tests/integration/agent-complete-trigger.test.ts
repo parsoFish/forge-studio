@@ -66,7 +66,7 @@ import { join } from 'node:path';
 import { listFlowRunRequests } from '../../flow-run-requests.ts';
 import { dispatchAgentRun } from '@forge/agents/agent-dispatch.ts';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
-import type { FlowTrigger } from '@forge/contracts/studio/types.ts';
+import type { FlowTrigger } from '@forge/contracts';
 
 // Bead forge-8vfn.5.53: anchored on kernel's FORGE_ROOT, not the process cwd.
 // This test dispatches a REAL agent run, and the agent roster is discovered

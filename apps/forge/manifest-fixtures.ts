@@ -19,7 +19,7 @@
  * sits under `apps/forge/`, which `check-owner` quarries, so it carries a
  * QUARRY row like any other file here.
  */
-import type { InitiativeManifest } from '@forge/contracts/manifest-types.ts';
+import type { InitiativeManifest } from '@forge/contracts';
 
 /**
  * A manifest with every required field populated, so `serializeManifest`

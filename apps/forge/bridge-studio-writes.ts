@@ -48,7 +48,7 @@ import { discoverProjects } from '@forge/kernel';
 import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
 import { flowRoots, resolveIdAcrossRoots, skillRoots } from '@forge/kernel/discovery-roots.ts';
 import { resolveGuardedPath, guardedFile, guardedWriteFile } from '@forge/kernel';
-import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 import { SLUG_RE, isReservedId } from '@forge/kernel/ids.ts';
 import { validateFlow } from '@forge/flows/studio/validate-flow.ts';
 import { readArtifactRoot } from '@forge/knowledge/brain-paths.ts';

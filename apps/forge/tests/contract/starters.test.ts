@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 // Handoff P11a, closed by MOVING rather than converting. This test validates
 // the starter FIXTURES against three packages at once — the Agent kind
 // (agents), the Flow kind (flows) and the Catalog kind (library) — so no single

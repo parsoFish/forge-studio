@@ -28,7 +28,7 @@ import { resolve } from 'node:path';
 import { sendJson, allowedOrigin, pathOnly } from '@forge/kernel';
 import { listFlowIds, loadFlowDefinition } from './studio/flow-registry.ts';
 import { flowPathForId } from './flow-runner.ts';
-import type { FlowDefinition, FlowTrigger, WebhookTriggerConfig } from '@forge/contracts/studio/types.ts';
+import type { FlowDefinition, FlowTrigger, WebhookTriggerConfig } from '@forge/contracts';
 import { WEBHOOK_FAMILY_KIND_IDS } from './flow-trigger.ts';
 import { verifyWebhookSignature } from './webhook-verify.ts';
 import {

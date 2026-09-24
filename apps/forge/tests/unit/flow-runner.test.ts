@@ -20,10 +20,10 @@ import { writeWorkItem, readWorkItemsFromDir, type WorkItem } from '@forge/flows
 import { parseManifest } from '@forge/flows/manifest.ts';
 import { WedgeKillError, CostCeilingError } from '@forge/flows/flow-budgets.ts';
 import { loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
-import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
+import type { FlowDefinition } from '@forge/contracts';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import { discoverProjects, type EventLogger } from '@forge/kernel';
-import type { AgentBudgets, AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentBudgets, AgentDefinition } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // Helpers

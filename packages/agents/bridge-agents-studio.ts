@@ -51,7 +51,7 @@ import {
   loadConfig, defaultConfigPath, type RouteContext,
 } from '@forge/kernel';
 import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
-import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import { checkHookComposition, listHookIds } from '@forge/library/studio/hook-library.ts';
 import { removeInstallLedgerEntry } from '@forge/library/studio/skill-install-ledger.ts';

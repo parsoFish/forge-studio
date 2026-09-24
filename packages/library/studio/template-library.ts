@@ -23,7 +23,7 @@ import { listProjectStarters } from '@forge/kernel';
 import { discoverProjects, type DiscoveredProject } from '@forge/kernel';
 import { loadArtifactTemplate, loadDemoElement } from './artifact-registry.ts';
 import type { PackageFile } from './skill-package.ts';
-import type { ArtifactKind, DemoStepKind, FlowDefinition, FlowNode } from '@forge/contracts/studio/types.ts';
+import type { ArtifactKind, DemoStepKind, FlowDefinition, FlowNode } from '@forge/contracts';
 import type { Finding } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------

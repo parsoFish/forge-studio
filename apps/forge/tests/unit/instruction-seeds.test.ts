@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { listInstructionSeeds, loadInstructionSeed } from '@forge/library/studio/artifact-registry.ts';
-import { INSTRUCTION_SEED_KINDS, INSTRUCTION_SEED_SCOPES } from '@forge/contracts/studio/types.ts';
+import { INSTRUCTION_SEED_KINDS, INSTRUCTION_SEED_SCOPES } from '@forge/contracts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
 

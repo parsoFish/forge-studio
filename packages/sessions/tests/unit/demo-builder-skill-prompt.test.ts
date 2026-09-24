@@ -11,7 +11,7 @@ import { demoTaskLines } from '../../kinds/demo-generate.ts';
 import type { DemoBuilderStatus } from '../../kinds/demo-session-store.ts';
 import { type QueryFn } from '../../interactive-session.ts';
 import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
-import type { DemoStep } from '@forge/contracts/studio/types.ts';
+import type { DemoStep } from '@forge/contracts';
 import { splitSkillTurnSections } from '@forge/agents/skill-path.ts';
 
 // ---------------------------------------------------------------------------

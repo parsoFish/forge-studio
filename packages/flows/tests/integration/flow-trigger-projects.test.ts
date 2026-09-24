@@ -57,7 +57,7 @@ import {
   listFlowRunRequests,
   type FlowRunRequest,
 } from '../../flow-run-requests.ts';
-import type { FlowTrigger } from '@forge/contracts/studio/types.ts';
+import type { FlowTrigger } from '@forge/contracts';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

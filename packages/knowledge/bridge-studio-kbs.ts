@@ -40,7 +40,7 @@ import { resolveGuardedPath, guardedReadFile, provenanceOfOrigin, type Provenanc
 import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 import { tryGetKbBackend } from './kb-backend.ts';
 import { kbSites, unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
-import { type KbBinding } from '@forge/contracts/studio/types.ts';
+import { type KbBinding } from '@forge/contracts';
 import type { KbDrainRunFixTurnFn, SessionStatusIoPort, GuardedWriteSessionStatusFn } from './bridge-studio-kb-drain.ts';
 
 import { classify, CHECK_NAMES, type Finding } from './brain-lint.ts';

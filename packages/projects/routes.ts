@@ -108,7 +108,7 @@
  * both assert every entry carries one.
  */
 import { pathOnly, type RouteContext, type RouteTable } from '@forge/kernel';
-import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 
 import { createProjectsListHandler, createStudioStartersHandler, handleProjectsStarters } from './project-roster.ts';
 import {

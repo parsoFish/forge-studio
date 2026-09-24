@@ -21,7 +21,7 @@ import {
 } from '@forge/kernel';
 import { loadKbDescriptor, serializeKbDescriptor } from './studio/kb-descriptor.ts';
 import { tryGetKbBackend } from './kb-backend.ts';
-import { KB_BINDING_KINDS, type KbBinding } from '@forge/contracts/studio/types.ts';
+import { KB_BINDING_KINDS, type KbBinding } from '@forge/contracts';
 import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
 import { KB_ID_RE, isReservedId, sendJson, allowedOrigin, sanitizeError, pathOnly, type RouteContext } from '@forge/kernel';
 import { KB_SEEDING_ANCHOR_PREFIX, loadKbDescriptors, mintProjectBrainSeedingSession } from './bridge-studio-kbs.ts';

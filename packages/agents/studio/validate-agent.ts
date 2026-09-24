@@ -10,8 +10,8 @@
  * bridge's agent PUT route and `forge studio lint`, both in `apps/forge`.
  */
 
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
-import { FANOUT_ISOLATION_KINDS } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
+import { FANOUT_ISOLATION_KINDS } from '@forge/contracts';
 import { type Finding, err, flag } from '@forge/kernel/findings.ts';
 import { SLUG_RE } from '@forge/kernel/ids.ts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './agent-registry.ts';

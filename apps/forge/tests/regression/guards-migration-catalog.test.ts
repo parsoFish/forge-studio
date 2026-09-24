@@ -42,7 +42,7 @@ import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import { validateCatalog } from '@forge/library/studio/library-validate.ts';
 import { loadYaml } from '@forge/kernel/studio/yaml-fields.ts';
 import { BAND_GUARD_IDS } from '@forge/agents/agent-bands.ts';
-import type { Catalog } from '@forge/contracts/studio/types.ts';
+import type { Catalog } from '@forge/contracts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
 const REAL_CATALOG_PATH = resolve(FORGE_ROOT, 'studio', 'catalog.yaml');

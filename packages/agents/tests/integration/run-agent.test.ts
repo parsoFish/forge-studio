@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { runAgent } from '../../run-agent.ts';
 import { listAgentDefinitions } from '../../studio/agent-registry.ts';
 import type { StreamQueryFn } from '../../pinned-sdk-query.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 import type { EventLogger, EventLogEntry } from '@forge/kernel';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 

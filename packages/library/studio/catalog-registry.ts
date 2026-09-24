@@ -12,7 +12,7 @@
 
 import { BAND_GUARD_IDS } from '@forge/contracts';
 import { reqString, optString, optNumber, loadYaml } from '@forge/kernel/studio/yaml-fields.ts';
-import type { Catalog, CatalogGuardEntry, CatalogModel, CatalogSdk } from '@forge/contracts/studio/types.ts';
+import type { Catalog, CatalogGuardEntry, CatalogModel, CatalogSdk } from '@forge/contracts';
 import { parseConnectionEntries } from './connection-catalog.ts';
 
 // ---------------------------------------------------------------------------

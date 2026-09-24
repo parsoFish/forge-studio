@@ -38,7 +38,7 @@ import {
   allowedOrigin, createLogger, guardedFile, sanitizeError, sendJson,
   MAX_KICKOFF_COST_CEILING_USD, PROJECT_ID_RE, type RouteContext,
 } from '@forge/kernel';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 
 import { skillRoots } from '@forge/kernel/discovery-roots.ts';
 import { isSafeRunId } from './run-agent.ts';

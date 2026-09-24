@@ -63,7 +63,7 @@ import { runAgent } from '../../run-agent.ts';
 import { listAgentDefinitions } from '../../studio/agent-registry.ts';
 import { skillsDir } from '../../skill-path.ts';
 import type { StreamQueryFn } from '../../pinned-sdk-query.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 import { FORGE_ROOT as KERNEL_FORGE_ROOT } from '@forge/kernel';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 

@@ -35,7 +35,7 @@ import { BAND_GUARD_IDS, BAND_CANONICAL_SLUG, PLATFORM_GUARD_IDS, resolveBandGua
 import { runPreflight, SCRATCH_PATHS } from '@forge/projects/preflight.ts';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import type { EventLogger } from '@forge/kernel';
-import type { FlowNode } from '@forge/contracts/studio/types.ts';
+import type { FlowNode } from '@forge/contracts';
 
 // §15.14: this file moved from orchestrator/ to apps/forge/, so a hand-counted
 // '..' chain now lands in apps/. Anchored on kernel's FORGE_ROOT instead.

@@ -103,7 +103,7 @@ import { tmpdir } from 'node:os';
 
 import { deriveSessionTranscript } from '../../../studio/session-transcript.ts';
 import type { SessionKindDescriptor } from '../../../studio/session-kinds.ts';
-import type { InitiativeManifest } from '@forge/contracts/manifest-types.ts';
+import type { InitiativeManifest } from '@forge/contracts';
 
 /**
  * The injected manifest parser, as a REFUSING stub (M4 ruling 83 / 91).
