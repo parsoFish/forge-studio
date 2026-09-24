@@ -20,6 +20,20 @@ import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel'
 
 export const STUDIO_BRANCH = 'forge-studio';
 
+/** Thrown when `commitStudioChange` is handed a path to commit that git still
+ *  ignores, so `git add` silently skipped it. That skip once committed a skill
+ *  relocation as nine deletions and nothing added (forge project reset). */
+export class StudioWritePathIgnoredError extends Error {
+  readonly paths: string[];
+  constructor(paths: string[]) {
+    super(
+      `commitStudioChange: git refused to stage the following explicitly-listed path(s) — still ignored by .gitignore: ${paths.join(', ')}`,
+    );
+    this.name = 'StudioWritePathIgnoredError';
+    this.paths = paths;
+  }
+}
+
 /** Forge session/scratch dirs that must NEVER be committed into the project. */
 const SCRATCH_EXCLUDES = ['_instructions', '_demo', '_preflight-fix', '_architect', '_project-brain', '.forge/work-items'];
 
@@ -139,6 +153,12 @@ export function commitStudioChange(projectDir: string, message: string, paths?: 
   ensureStudioBranch(projectDir);
   if (paths !== undefined) {
     git(projectDir, ['add', '--', ...paths], { allowFail: true });
+    // ls-files lists only files that exist, so a move's deleted source never
+    // shows here; an existing-but-ignored listed path does.
+    const ignored = git(projectDir, ['ls-files', '--others', '--ignored', '--exclude-standard', '--', ...paths], { allowFail: true })
+      .split('\n').filter(Boolean);
+    const stillIgnored = paths.filter((p) => ignored.some((f) => f === p || f.startsWith(`${p.replace(/\/$/, '')}/`)));
+    if (stillIgnored.length > 0) throw new StudioWritePathIgnoredError(stillIgnored);
   } else {
     git(projectDir, ['add', '-A', '--', '.', ...SCRATCH_EXCLUDES.map((s) => `:(exclude)${s}`)], { allowFail: true });
   }

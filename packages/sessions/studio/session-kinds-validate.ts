@@ -24,7 +24,8 @@ import { basename, join, sep } from 'node:path';
 import matter from 'gray-matter';
 
 import { isSafeSegment, type Finding } from '@forge/kernel';
-import { listSkillMdDirs, skillsDir, SLUG_RE } from '@forge/agents/skill-path.ts';
+import { skillRoots } from '@forge/kernel/discovery-roots.ts';
+import { listSkillMdDirs, SLUG_RE } from '@forge/agents/skill-path.ts';
 import { FINALIZERS } from '../interactive-finalizers.ts';
 
 import {
@@ -75,7 +76,7 @@ function allowedIdsSummary(rows: readonly { readonly id: string }[]): string {
 
 function discoverRuntimeAgentIds(forgeRoot: string): Set<string> {
   const ids = new Set<string>();
-  for (const dir of listSkillMdDirs(skillsDir(forgeRoot))) {
+  for (const dir of skillRoots(forgeRoot).flatMap(listSkillMdDirs)) {
     const skillMdPath = join(dir, 'SKILL.md');
     try {
       const raw = readFileSync(skillMdPath, 'utf8');

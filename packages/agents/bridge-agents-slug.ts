@@ -40,7 +40,7 @@ import {
 } from '@forge/kernel';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
-import { skillsDir } from './skill-path.ts';
+import { skillRoots } from '@forge/kernel/discovery-roots.ts';
 import { isSafeRunId } from './run-agent.ts';
 import { resolveDispatchableAgent } from './agent-dispatch.ts';
 import { listAgentDefinitions } from './studio/agent-registry.ts';
@@ -294,7 +294,7 @@ export const handleAgentRunStart = (deps: AgentSlugRouteDeps): Handler => async 
     // Resolve + validate against the live roster (unknown/interactive → 400).
     let def: ReturnType<typeof resolveDispatchableAgent>;
     try {
-      def = resolveDispatchableAgent(slug, listAgentDefinitions(skillsDir(ctx.forgeRoot)));
+      def = resolveDispatchableAgent(slug, listAgentDefinitions(skillRoots(ctx.forgeRoot)));
     } catch (err) {
       sendJson(res, 400, { error: sanitizeError(err) }, origin);
       return true;
