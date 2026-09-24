@@ -493,12 +493,12 @@ export const PROJECTS_ROOT_FOLD_ALLOWLIST = [
       "resolvePreflightProjectDir dual-mode name-or-path resolver — target is a project NAME or an explicit path, both existsSync-checked; out of the folded-untrusted-name class. The AUDIT is unchanged; only the root it folds into moved. RE-POINTED 2026-09-06 (bead forge-8vfn.6.11.26): the site was `resolve('projects', target)`, a hardcoded literal that ignored FORGE_PROJECTS_DIR and forge.config.json's projectsDir, so `forge preflight` acted on a different projects root than every other consumer. It now folds into `resolveProjectsDir`'s answer. Written as a NAMED const deliberately: the inline-call form `join(resolveProjectsDir(...), target)` was measured INVISIBLE to scanProjectsRootFold (0 findings), which would have retired this audited sink from the scanner's view rather than re-pointing it. Measured: exactly one occurrence in the real tree, apps/forge/cli.ts (`? asPath : join(projectsDir, target)`), inside resolvePreflightProjectDir — the earlier citation `orchestrator/cli.ts:791` predated the M4 host carve.",
   },
   {
-    file: 'packages/flows/scheduler.ts',
+    file: 'packages/flows/scheduler-run-one.ts',
     folded: 'm.project',
     site: "resolve('projects', m.project)",
     count: 1,
     reason:
-      "scheduler manifest fallback (m.project_repo_path || resolve(projects,m.project)); the resulting repo path is contained at the write choke point by isContainedProjectRepoPath (packages/flows/manifest-path-guard.ts). Measured: exactly one occurrence in the real tree, orchestrator/scheduler.ts:897 (`projectRepoPath: m.project_repo_path || resolve('projects', m.project),`).",
+      "scheduler manifest fallback (m.project_repo_path || resolve(projects,m.project)); the resulting repo path is contained at the write choke point by isContainedProjectRepoPath (packages/flows/manifest-path-guard.ts). Measured: exactly one occurrence in the real tree, packages/flows/scheduler-run-one.ts:430 (`projectRepoPath: m.project_repo_path || resolve('projects', m.project),`) — moved here from scheduler.ts (bead forge-8vfn.15, the per-initiative dispatch split); same audit, same code, new home.",
   },
   {
     file: 'packages/agents/find-session-project.ts',
