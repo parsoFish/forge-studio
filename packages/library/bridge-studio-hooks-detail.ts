@@ -21,8 +21,12 @@ import { writeFileSync } from 'node:fs';
 import { resolveGuardedPath } from '@forge/kernel';
 import yaml from 'js-yaml';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext, type RouteContext } from '@forge/kernel';
+import {
+  sendJson, allowedOrigin, sanitizeError, pathOnly, listCycles,
+  guardedMtime, guardedReadFileTail, type StudioContext, type RouteContext,
+} from '@forge/kernel';
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
+import { scanHookFireSummary, HOOK_FIRE_SCAN_MAX_CYCLES } from './studio/hook-fire-summary.ts';
 import {
   hooksDir,
   listHookLibrary,
@@ -42,6 +46,10 @@ import { hookRunState, readHookApprovalLedger, readHookDeclinedLedger } from './
 // maintained views that can drift.
 import { readHookPackage, hashHookPackage, hashHookScript } from './studio/hook-package.ts';
 import { decodeIdSegment, locateHook, parseCreatePermissions, hookWireFields, HOOK_ID_RE } from './bridge-studio-hooks.ts';
+
+/** Bytes of one cycle's `events.jsonl` the last-fire scan reads when the
+ *  file is too big to read whole (mirrors `STDERR_TAIL_BYTES`). */
+const HOOK_FIRE_SCAN_TAIL_BYTES = 64 * 1024;
 
 /**
  * PUT /api/studio/hooks/:id — edit (W7-B4, library-08).
@@ -208,10 +216,27 @@ export async function handleHookDetail(req: IncomingMessage, res: ServerResponse
       const runState = hookRunState(ctx.forgeRoot, id);
       const ledgerEntry = readHookApprovalLedger(ctx.forgeRoot).get(id);
       const declinedEntry = readHookDeclinedLedger(ctx.forgeRoot).get(id);
+      // forge-8vfn.5.16 (M7-C U2) — last-fire facts, BOUNDED via
+      // @forge/kernel's guarded-scan.ts (rationale: docs/reference/
+      // request-path-sinks.md's "M7-C U2" section). recentFireCount, not
+      // fireCount: honestly a window count.
+      const fireSummary = scanHookFireSummary(
+        id,
+        {
+          listCycleIds: () => listCycles(ctx.logsRoot),
+          mtimeOf: (cycleId) => guardedMtime(ctx.logsRoot, [cycleId]),
+          readTail: (cycleId) => guardedReadFileTail(ctx.logsRoot, [cycleId, 'events.jsonl'], HOOK_FIRE_SCAN_TAIL_BYTES),
+        },
+        HOOK_FIRE_SCAN_MAX_CYCLES,
+      );
 
       sendJson(res, 200, {
         ok: true,
         ...hookWireFields(entry, runState, ledgerEntry, declinedEntry),
+        // Always present (0 = scanned, found none, like carriedByCount);
+        // lastFireAt/lastFireOutcome stay ABSENT for no fire in the window.
+        recentFireCount: fireSummary?.fireCount ?? 0,
+        ...(fireSummary ? { lastFireAt: fireSummary.lastFireAt, lastFireOutcome: fireSummary.lastFireOutcome } : {}),
         // W7-B4 (library-09): the approval RECORD the resolved-state panel
         // renders — approvedAt + the distinct overridden act + its reason.
         // Present iff a live ledger entry exists; never fabricated.
