@@ -176,28 +176,7 @@ export function detectUndeclaredEnvRefs(scriptBody: string, permissions: HookPer
   return extractEnvVarNames(scriptBody).filter((name) => !declared.has(name) && !alwaysPresent.has(name));
 }
 
-// ---------------------------------------------------------------------------
-// writePrivateScriptCopy — forge-8vfn.8.3.2 (content half, revised after T2
-// review): the hash-verified bytes are written to a fresh, private,
-// READ-ONLY file BEFORE either tail spawns anything, and `bash` executes
-// THAT file — never the original `scriptPath` again, and never the bytes fed
-// on stdin either (see the exec-args doc comment below for why stdin is
-// off the table).
-//
-// `mkdtempSync` under `os.tmpdir()`: a fresh, unpredictable directory name
-// only this process ever learns — nothing external can pre-plant anything at
-// a path it does not yet know. `chmodSync(dir, 0o700)` makes the directory's
-// permissions a GUARANTEE rather than an assumption (measured 0700 by
-// default on this host, but umask/OS defaults are not a security boundary to
-// lean on silently). `writeFileSync(path, body, { mode: 0o500, flag: 'wx' })`:
-// `wx` is `O_CREAT | O_EXCL` — refuses to write through anything already at
-// that path, defence in depth on top of the directory's own uniqueness;
-// `0o500` (r-x for the owner only, no write bit) makes the file immutable —
-// including to THIS process — the instant the write returns, so nothing
-// after this point can alter what `bash` is about to read, forge's own code
-// included.
-// ---------------------------------------------------------------------------
-
+// Copies the verified bytes to a private, read-only file — design.md "Hook exec".
 const PRIVATE_SCRIPT_FILENAME = 'hook-script.sh';
 
 function writePrivateScriptCopy(scriptBody: string): PrivateScriptCopy {
@@ -213,13 +192,8 @@ function writePrivateScriptCopy(scriptBody: string): PrivateScriptCopy {
   return { dir, path };
 }
 
-/** Best-effort cleanup of a hook's private script copy — called from a
- *  `finally` in BOTH tails, on every exit path (success, timeout,
- *  spawn-failed). NEVER throws: a `finally` block that throws overrides
- *  whatever the `try` block was about to return or throw, which would let a
- *  cleanup failure mask a genuine hook result — the worse of the two
- *  failure modes. Not silently swallowed either (CLAUDE.md: never silently
- *  swallow an error) — a failure is its own logged, structured event. */
+/** Called from a `finally` in both tails; never throws (would mask a real
+ *  result) — a cleanup failure is its own logged event instead. */
 function cleanupPrivateScriptDir(dir: string, id: string, logger: EventLogger, initiativeId: string): void {
   try {
     rmSync(dir, { recursive: true, force: true });
@@ -287,10 +261,7 @@ const HOOK_SPAWN_MAX_BUFFER_BYTES = 1024 * 1024;
 // (forge-9a3); `runHookScript`/`runHookScriptAsync` are thin tails differing
 // only in HOW they spawn `bash`.
 
-/** A fresh, private, read-only copy of the hash-verified script bytes — see
- *  `writePrivateScriptCopy` below. `dir` is what cleanup removes (the WHOLE
- *  temp directory, not just `path`), so a stray sibling the write step might
- *  ever leave behind can never survive it either. */
+/** `dir` is what `cleanupPrivateScriptDir` removes (the whole temp dir). */
 interface PrivateScriptCopy {
   dir: string;
   path: string;
@@ -302,9 +273,7 @@ interface PreparedHookRun {
   dir: string;
   childEnv: NodeJS.ProcessEnv;
   undeclaredEnvRefs: string[];
-  /** The ONE thing either spawn tail executes — never `scriptPath` again
-   *  (forge-8vfn.8.3.2, content half). Callers MUST remove `.dir` once the
-   *  spawn has settled, on every exit path — see `cleanupPrivateScriptDir`. */
+  /** The ONE thing either tail executes — callers must clean up `.dir`. */
   privateScript: PrivateScriptCopy;
 }
 
@@ -351,29 +320,13 @@ function prepareHookRun(input: { forgeRoot: string; id: string; logger: EventLog
 
   const def = loadHookDefinition(id, forgeRoot);
   const dir = hookDir(id, forgeRoot);
-  // Re-resolve HERE, at prepare time, and use THIS call's returned real path
-  // for both the read below and the spawn in the caller — never a second,
-  // unvalidated `join(dir, def.script)` re-derivation (forge-8vfn.8.3.2,
-  // second half). `loadHookDefinition` above already calls
-  // `resolveHookScriptPath` once, but only for its throw side effect; the
-  // validated real path it computes is discarded, which is exactly the gap
-  // this closes — a symlink swapped between that discarded check and a raw
-  // re-join would have re-resolved outside the hook dir, unnoticed. This
-  // call is the last validation before either tail ever reads or spawns the
-  // script, minimising (never fully eliminating) the residual TOCTOU window.
+  // Re-resolved HERE (not re-derived from a discarded earlier check) so a
+  // symlink swap has no window — forge-8vfn.8.3.2; design.md "Hook exec".
   const scriptPath = resolveHookScriptPath(dir, def.script);
   const scriptBody = readFileSync(scriptPath, 'utf8');
 
-  // forge-8vfn.8.3.2 (content half): the approval fingerprint (`hookRunState`
-  // above, via `snapshotHookPackage -> readHookPackage`), this `readFileSync`,
-  // and each tail's own `spawn(Sync)('bash', [scriptPath])` were THREE
-  // separate opens of the same path — nothing stopped the bytes from
-  // changing in place between the gate's read and the exec read. Hashing
-  // THIS read's bytes with `hashHookScript` — the ledger's own hashing
-  // function, reused rather than reimplemented — and comparing against the
-  // ledger's stored `scriptHash` (the value the gate just accepted, not a
-  // fresh live rescan) closes that window for THIS read: a change landing
-  // between the gate and here is refused.
+  // Re-hash THIS read and compare to the ledger's stored scriptHash — closes
+  // the gate-to-here TOCTOU window (forge-8vfn.8.3.2; design.md "Hook exec").
   const approvedScriptHash = readHookApprovalLedger(forgeRoot).get(id)?.scriptHash;
   const liveScriptHash = hashHookScript(scriptBody);
   if (liveScriptHash !== approvedScriptHash) {
@@ -383,11 +336,7 @@ function prepareHookRun(input: { forgeRoot: string; id: string; logger: EventLog
     );
   }
 
-  // Closing the window PAST this point — between this verified read and
-  // exec — needs more than a hash check (there would be nothing left to
-  // check against): the verified bytes are copied to a private, read-only
-  // file THIS process alone knows the path of, and that copy is what either
-  // tail executes. See `writePrivateScriptCopy`'s own doc comment.
+  // Closes the window PAST this read — see writePrivateScriptCopy.
   const privateScript = writePrivateScriptCopy(scriptBody);
 
   // Emitted unconditionally (CLAUDE.md: "emit structured events on every
@@ -478,42 +427,7 @@ function finalizeHookOutcome(id: string, timeoutMs: number, durationMs: number, 
   };
 }
 
-// ---------------------------------------------------------------------------
-// hookExecArgs / hookExecEnv — BOTH tails execute `prepared.privateScript`
-// (the hash-verified bytes' own private, read-only copy, above) — never
-// `scriptPath` again, and never the bytes on stdin either.
-//
-// T2 REVIEW FINDING (2026-09-25), CORRECTING THE FIRST CUT OF THIS FIX: that
-// first cut fed the script to `bash -s` on stdin. `bash -s` reads its own
-// COMMANDS incrementally from that same stdin stream while executing them —
-// proven empirically: `read -r line || true; echo "next command"` inside a
-// `-s`-fed script consumes the NEXT SOURCE LINE as `read`'s data instead of
-// executing it, silently deleting whatever command followed a stdin-reading
-// builtin (`read`, `cat`/`jq` with no file arg, `while read …`). That is a
-// correctness regression on top of a hook's own logic having nothing to do
-// with the TOCTOU this bead closes, and it is silent — the hook merely does
-// less than it says, with no error. Feeding the script by FILE keeps stdin
-// exactly what it always was (an empty, unread pipe unless a caller supplies
-// `input`, which nothing does today) — see the new
-// `describe('a hook's own stdin must stay untouched…')` pin.
-//
-// `bash -c 'source "$<ENV>"' <realScriptPath>`, not `bash <privateCopyPath>`
-// directly: bash's `$0` rule (verified empirically, and this is the SECOND
-// correction the first cut of this fix got wrong) is that an EXPLICIT script
-// path or `-c` name argument always wins for `$0` — `BASH_ARGV0` is only ever
-// consulted as a FALLBACK when bash has no such explicit source, so
-// `BASH_ARGV0=<real> bash <privateCopyPath>` is silently ignored and `$0`
-// becomes the PRIVATE copy's path, breaking `$(dirname "$0")`-relative
-// sibling sourcing (PIN D). The `-c` wrapper's trailing positional arg IS
-// such an explicit source, so `$0` = the real `scriptPath` genuinely, and
-// `source` (not a nested `bash <path>`) runs the private copy in the SAME
-// shell/stdio — no subshell, no second process, stdin untouched. The private
-// path travels by an ENV VAR set directly on the spawn's own env object
-// (never through `buildHookChildEnv`'s manifest-derived overrides — this is
-// forge's own spawn directive, never parent- or hook-supplied data) rather
-// than a positional parameter, so a hook script's own `$1`.. stay exactly as
-// unset as they always were.
-// ---------------------------------------------------------------------------
+// Both tails exec prepared.privateScript via `bash -c 'source "$<var>"' <realScriptPath>` — design.md "Hook exec".
 
 const HOOK_VERIFIED_SCRIPT_ENV_VAR = 'FORGE_HOOK_VERIFIED_SCRIPT_PATH';
 
@@ -542,11 +456,7 @@ export function runHookScript(input: RunHookScriptInput): HookRunResult {
     const outcome = { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '', error: result.error as NodeJS.ErrnoException | undefined };
     return finalizeHookOutcome(id, timeoutMs, durationMs, outcome, prepared.undeclaredEnvRefs, logger, initiativeId);
   } finally {
-    // Runs on EVERY exit path — success, refusal-after-prepare (none exist:
-    // prepareHookRun's own throws happen before the private copy is made),
-    // timeout, spawn-failed. Never in the `try`'s own failure path: see
-    // `cleanupPrivateScriptDir`'s doc comment for why a `finally` must never
-    // let a cleanup failure mask the real outcome.
+    // Every exit path — see cleanupPrivateScriptDir's doc comment.
     cleanupPrivateScriptDir(prepared.privateScript.dir, id, logger, initiativeId);
   }
 }
@@ -558,11 +468,8 @@ function spawnBashAsync(execArgs: string[], cwd: string, env: NodeJS.ProcessEnv,
   return new Promise((resolve) => {
     // `detached: true` makes `bash` the leader of its own process group (pid
     // === pgid) so a group-targeted signal reaches every descendant too.
-    // Same `-c 'source "$<ENV>"' <realScriptPath>` scheme as the sync tail
-    // (see `hookExecArgs`/`hookExecEnv`'s doc comment) — executes the
-    // private, verified copy directly. Stdin is NOT touched here (no
-    // `input`, no `.stdin.write/.end`) — it stays exactly what it always
-    // was, an unread pipe, unless a future caller supplies real input.
+    // Same exec scheme as the sync tail (hookExecArgs/hookExecEnv) — stdin
+    // is not touched here either.
     const child = spawn('bash', execArgs, { env, cwd, detached: true });
     const buf = { stdout: '', stderr: '' };
     let overflowed = false;
