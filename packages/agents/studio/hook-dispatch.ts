@@ -17,18 +17,22 @@
  * in-process map of async callbacks. So forge does not need (and must not
  * invent) a lifecycle-event bus: it hands the SDK a callback per bound hook,
  * and the callback spawns the hook script through the existing, already-gated
- * `runHookScript`.
+ * `runHookScriptAsync` (forge-9a3 — the ASYNC tail; see hook-runtime.ts's
+ * header for why there are two).
  *
  * ## Nothing here relaxes the runtime's two guards
  *
- * `runHookScript` refuses to spawn anything that is not GENUINELY RUNNABLE
- * (approved, with the approval still covering the current script/permissions/
- * trigger bytes) and strips the child env down to the manifest-granted set
- * over the narrow `HOOK_ENV_BASE_ALLOWLIST`. Dispatch calls it **unmodified**,
- * passes **no** `parentEnv` override (so the child env is built from the real
- * `process.env` by the same narrow allowlist), and never pre-checks or caches
- * runnability. The gate is therefore re-evaluated from its source of truth on
- * every single fire — an approval revoked mid-run stops the very next fire.
+ * `runHookScriptAsync` refuses to spawn anything that is not GENUINELY
+ * RUNNABLE (approved, with the approval still covering the current
+ * script/permissions/trigger bytes) and strips the child env down to the
+ * manifest-granted set over the narrow `HOOK_ENV_BASE_ALLOWLIST` — both via
+ * `prepareHookRun`, the ONE gate+fence step it shares with the sync
+ * `runHookScript`, never a second copy of either. Dispatch calls it
+ * **unmodified**, passes **no** `parentEnv` override (so the child env is
+ * built from the real `process.env` by the same narrow allowlist), and never
+ * pre-checks or caches runnability. The gate is therefore re-evaluated from
+ * its source of truth on every single fire — an approval revoked mid-run
+ * stops the very next fire.
  *
  * ## Derived, never stored
  *
@@ -95,19 +99,22 @@
  *
  * ## HONEST LIMITS, stated rather than left to be inferred
  *
- * **1. The spawn is SYNCHRONOUS, so a firing hook blocks the event loop.**
- * `runHookScript` uses `spawnSync` with a 30s cap (`hook-runtime.ts:194`), and
- * this module calls it unmodified — deliberately, because splitting that
- * primitive would mean a second spawn path beside its approval gate and env
- * fence, and duplicating a security gate to gain responsiveness is the wrong
- * trade. The consequence is real and belongs stated here rather than
- * discovered: inside `forge serve`, a `PostToolUse` hook fires on every tool
- * call and stalls the daemon — scheduler and Studio bridge included — for the
- * hook's whole duration. A well-behaved hook returns in milliseconds; a slow
- * or hanging one makes the bridge look wedged for up to 30 seconds. No shipped
- * agent binds a hook today, so nothing currently pays this. Making the spawn
- * non-blocking means giving `hook-runtime.ts` an async tail that SHARES the one
- * approval gate rather than copying it; filed as its own piece of work.
+ * **1. FIXED (forge-9a3, 2026-09-25) — the spawn used to be SYNCHRONOUS, so a
+ * firing hook blocked the event loop.** `runHookScript` used `spawnSync` with
+ * a 30s cap, and this module called it unmodified — so inside `forge serve` a
+ * `PostToolUse` hook, firing on every tool call, stalled the daemon —
+ * scheduler and Studio bridge included — for the hook's whole duration. Filed
+ * rather than fixed in W8-B6, because the wrong fix is a second spawn path
+ * beside the approval gate and env fence, and duplicating a security gate to
+ * gain responsiveness is the wrong trade. The fix: `hook-runtime.ts` extracted
+ * that gate + fence + pre-spawn logging into ONE shared `prepareHookRun` step
+ * and gave it a second, async tail — `runHookScriptAsync`, built on
+ * `child_process.spawn` with the same timeout budget and outcome shape. This
+ * module now calls that tail, so a firing hook no longer blocks `forge
+ * serve`'s scheduler or bridge. `runHookScript` (sync) is untouched and still
+ * has no production caller of its own; it exists for any future caller that
+ * genuinely needs synchronous semantics, proven by its own unmodified test
+ * suite.
  *
  * **2. Hook stdout is captured and logged but is NOT injected into the agent's
  * context (`hookSpecificOutput.additionalContext`). Doing so would route
@@ -144,7 +151,7 @@ import type { EventLogger } from '@forge/kernel';
 import { FORGE_ROOT } from './derive.ts';
 import { loadAgentDefinition } from './agent-registry.ts';
 import { loadHookDefinition, parseHookMatcher, type HookLifecycleEvent, type HookMatcherParse } from '@forge/library/studio/hook-library.ts';
-import { HookRunError, runHookScript, type HookRunFailureReason } from '@forge/library/studio/hook-runtime.ts';
+import { HookRunError, runHookScriptAsync, type HookRunFailureReason, type HookRunResult } from '@forge/library/studio/hook-runtime.ts';
 
 // ---------------------------------------------------------------------------
 // Structural mirrors of the SDK's hook option types. Deliberately declared
@@ -322,12 +329,20 @@ function makeCallback(
 
     if (!hookMatcherMatches(parseHookMatcher(matcher), input)) return { continue: true };
 
-    let result: ReturnType<typeof runHookScript>;
+    let result: HookRunResult;
     try {
-      // No `parentEnv` override: `runHookScript` defaults to the real
+      // No `parentEnv` override: `runHookScriptAsync` defaults to the real
       // `process.env` and narrows it through `buildHookChildEnv`. Dispatch
       // must never widen what a hook child can see.
-      result = runHookScript({ forgeRoot, id: hookId, logger, initiativeId });
+      //
+      // forge-9a3: ASYNC, not the sync `runHookScript` — dispatch awaiting the
+      // sync tail is exactly the defect this fixed: `spawnSync` blocks forge
+      // serve's whole event loop (scheduler + Studio bridge) for the hook's
+      // duration, and `PostToolUse` fires per tool call. Both tails share the
+      // SAME approval gate and env fence (`prepareHookRun` in
+      // hook-runtime.ts) — nothing about which tail is called here weakens
+      // either guard.
+      result = await runHookScriptAsync({ forgeRoot, id: hookId, logger, initiativeId });
     } catch (e) {
       const { failure, description } = describeHookRunFailure(e);
       emitHookError(logger, initiativeId, hookId, `Hook "${hookId}" ${description} — not fired: ${(e as Error).message}`, {
