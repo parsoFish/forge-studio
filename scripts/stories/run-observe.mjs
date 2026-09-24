@@ -25,6 +25,70 @@ export function readRunEvents(dir) {
   }
 }
 
+/** How much of `stderr.log`'s tail a snapshot carries — generous enough to
+ *  hold a crash reason, small enough never to flood a beat's console line. */
+const STDERR_SNAPSHOT_TAIL_BYTES = 2000;
+
+/** Injectable seams for `readDispatchSnapshot`, so a test never touches a
+ *  real `/proc` or a real file. */
+const DEFAULT_SNAPSHOT_SEAMS = {
+  readPid(dir) {
+    try {
+      const n = Number(readFileSync(join(dir, 'turn.pid'), 'utf8').trim());
+      return Number.isInteger(n) && n > 0 ? n : null;
+    } catch {
+      return null;
+    }
+  },
+  isAlive(pid) {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  readStderrTail(dir) {
+    try {
+      const text = readFileSync(join(dir, 'stderr.log'), 'utf8');
+      return text.length > STDERR_SNAPSHOT_TAIL_BYTES ? text.slice(-STDERR_SNAPSHOT_TAIL_BYTES) : text;
+    } catch {
+      return '';
+    }
+  },
+  // No on-disk convention records an SDK child's exit code today — this is a
+  // seam for the day one exists, and `classifyUnmeasuredDispatch` already
+  // reports `null` as "unrecorded" rather than a false 0.
+  readExitCode() {
+    return null;
+  },
+};
+
+/**
+ * ONE read of a dispatch directory's liveness signals — the read half of the
+ * UNMEASURED discriminator (bead `forge-8vfn.7.6.76`). `classifyUnmeasuredDispatch`
+ * (`spend.mjs`) is the pure judgement over two of these; this is the impure
+ * half that takes one.
+ *
+ * `eventLines` reuses `readRunEvents` rather than a second parse, so "many
+ * lines" always means what the spend accounting already means by it.
+ *
+ * @param {string} dir
+ * @param {Partial<typeof DEFAULT_SNAPSHOT_SEAMS>} [seams]
+ * @returns {{pid: number|null, alive: boolean, eventLines: number, stderrTail: string, exitCode: number|null}}
+ */
+export function readDispatchSnapshot(dir, seams = {}) {
+  const s = { ...DEFAULT_SNAPSHOT_SEAMS, ...seams };
+  const pid = s.readPid(dir);
+  return {
+    pid,
+    alive: pid !== null && s.isAlive(pid),
+    eventLines: readRunEvents(dir).length,
+    stderrTail: s.readStderrTail(dir),
+    exitCode: s.readExitCode(dir),
+  };
+}
+
 /**
  * One dispatched run's EMIT FAILURES — `forge-8vfn.7.6.103`, T1 1037/1039.
  *
