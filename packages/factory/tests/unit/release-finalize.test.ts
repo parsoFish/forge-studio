@@ -42,8 +42,11 @@ function uniqueCycleId(suffix: string): string {
   return `WSA-TEST-${ts}-${rnd}-${suffix}`;
 }
 
-/** Write a minimal valid `.forge/project.json` into `repoRoot`. */
-function writeProjectConfig(repoRoot: string, withRelease: boolean, changelogPath = 'CHANGELOG.md'): void {
+/** Write a minimal valid `.forge/project.json` into `worktreeRoot` — a
+ *  `mkdtempSync` fixture directory, never the live repository (named
+ *  `worktreeRoot`, not `repoRoot`, so a live-tree-plant scanner never reads
+ *  this hermetic per-test root as a reference to the real one). */
+function writeProjectConfig(worktreeRoot: string, withRelease: boolean, changelogPath = 'CHANGELOG.md'): void {
   const cfg: Record<string, unknown> = {
     testProcess: { local: { cmd: ['true'] } },
   };
@@ -56,8 +59,8 @@ function writeProjectConfig(repoRoot: string, withRelease: boolean, changelogPat
       ],
     };
   }
-  mkdirSync(join(repoRoot, '.forge'), { recursive: true });
-  writeFileSync(join(repoRoot, '.forge', 'project.json'), JSON.stringify(cfg, null, 2));
+  mkdirSync(join(worktreeRoot, '.forge'), { recursive: true });
+  writeFileSync(join(worktreeRoot, '.forge', 'project.json'), JSON.stringify(cfg, null, 2));
 }
 
 function setupHarness(opts: { suffix: string; withRelease: boolean; changelog?: string }): Harness {

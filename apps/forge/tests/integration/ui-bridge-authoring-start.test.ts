@@ -265,9 +265,21 @@ function writeStubCli(forgeRoot: string): void {
   writeFileSync(
     join(forgeRoot, 'apps', 'forge', 'cli.ts'),
     [
-      "import { writeFileSync } from 'node:fs';",
+      "import { writeFileSync, renameSync } from 'node:fs';",
       "import { join } from 'node:path';",
-      `writeFileSync(join(import.meta.dirname, '..', '..', '${ARGV_CAPTURE_FILENAME}'), JSON.stringify(process.argv.slice(2)));`,
+      // Write-then-rename, not a direct write to the final name: a plain
+      // `writeFileSync` truncates the target before its content lands, so a
+      // concurrent poller (`waitForFile` below) can `existsSync` it and read
+      // a partial/empty file mid-write — proven as a deterministic 20/20 red
+      // via a chunked-write door, root-caused to `JSON.parse` on a
+      // half-written file (forge-8vfn.5.55, AT-10 register row). `rename(2)`
+      // on the same filesystem is atomic on POSIX: the final filename never
+      // exists until the whole record is already on disk, so a reader sees
+      // nothing or the whole record — never a partial one.
+      `const __tmp = join(import.meta.dirname, '..', '..', '${ARGV_CAPTURE_FILENAME}.tmp');`,
+      `const __dest = join(import.meta.dirname, '..', '..', '${ARGV_CAPTURE_FILENAME}');`,
+      `writeFileSync(__tmp, JSON.stringify(process.argv.slice(2)));`,
+      `renameSync(__tmp, __dest);`,
       '',
     ].join('\n'),
   );

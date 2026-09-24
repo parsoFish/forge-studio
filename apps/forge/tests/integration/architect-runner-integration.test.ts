@@ -1139,7 +1139,7 @@ test('ADR-024: architectAgentSpec derives phase, tier, and tool lists from SKILL
   assert.equal(architectAgentSpec.phase, 'architect');
   assert.equal(architectAgentSpec.tier, 'sonnet');
   assert.deepEqual([...architectAgentSpec.allowedTools], ['Read', 'Grep', 'Glob', 'Bash']);
-  assert.deepEqual([...architectAgentSpec.disallowedTools], ['Task', 'Agent']);
+  assert.deepEqual([...architectAgentSpec.disallowedTools], ['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Task', 'Agent'], 'forge-o6aj: runner writes PLAN.md/manifests from structured output — architect itself never needs write/egress tools');
   assert.equal(architectAgentSpec.skill, 'skills/architect/SKILL.md');
 });
 

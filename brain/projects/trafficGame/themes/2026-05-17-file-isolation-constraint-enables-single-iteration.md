@@ -19,7 +19,7 @@ keywords:
   - developer-ralph
 created_at: 2026-05-17T14:30:00.000Z
 updated_at: 2026-05-17T14:30:00.000Z
-related_themes: []
+related_themes: [spec-driven-work-items, dependency-ordered-work]
 status: historical
 ---
 
