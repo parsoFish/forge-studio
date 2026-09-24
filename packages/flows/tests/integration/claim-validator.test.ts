@@ -33,6 +33,7 @@ import {
   type ClaimValidationResult,
 } from '../../claim-validator.ts';
 import { readOnDiskFlowVersion, checkFlowVersionSeam } from '../../flow-runner.ts';
+import { SCRATCH_PATHS } from '@forge/projects/preflight.ts';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -94,13 +95,10 @@ function setupContractReadyProject(dir: string): void {
     join(dir, 'package.json'),
     JSON.stringify({ name: 'test-project', scripts: { test: 'node test.mjs' } }),
   );
-  // C2: scratch hygiene — .gitignore covers all scratch paths
+  // C2: scratch hygiene — .gitignore covers all scratch paths (single-sourced
+  // from SCRATCH_PATHS, not a hand-copied list — see preflight-repo.test.ts).
   // The preflight C2 check runs git commands; if not a repo, it does text-scan.
-  // We write a .gitignore that covers all scratch paths.
-  writeFileSync(
-    join(dir, '.gitignore'),
-    '.forge/work-items/\nAGENT.md\nPROMPT.md\nfix_plan.md\n',
-  );
+  writeFileSync(join(dir, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
   // C4: roadmap.md stays in the project repo; Brain 3 is forge-owned + CENTRAL
   // (ADR 035) at <forgeRoot>/brain/projects/<name>/. The project dir is
   // <forgeRoot>/projects/<name>, so the central brain is two levels up.
@@ -163,7 +161,7 @@ test('validateClaimable: missing roadmap.md (C4 fail) → refused, non-terminal'
       join(projectDir, 'package.json'),
       JSON.stringify({ name: 'test', scripts: { test: 'node t.mjs' } }),
     );
-    writeFileSync(join(projectDir, '.gitignore'), '.forge/work-items/\nAGENT.md\nPROMPT.md\nfix_plan.md\n');
+    writeFileSync(join(projectDir, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
 
     const result = validateClaimable('INIT-c4-fail', projectDir, forgeRoot, flowPath);
 
@@ -190,7 +188,7 @@ test('validateClaimable: missing quality gate (C1 fail) → refused, non-termina
       join(projectDir, 'package.json'),
       JSON.stringify({ name: 'test', scripts: {} }),
     );
-    writeFileSync(join(projectDir, '.gitignore'), '.forge/work-items/\nAGENT.md\nPROMPT.md\nfix_plan.md\n');
+    writeFileSync(join(projectDir, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
     writeFileSync(join(projectDir, 'roadmap.md'), '# Roadmap\n');
     mkdirSync(join(projectDir, 'brain'), { recursive: true });
     writeFileSync(join(projectDir, 'brain', 'profile.md'), '# Profile\n');
@@ -314,7 +312,7 @@ test('validateClaimable: spin-guard reset via clearPendingRefusalLog', () => {
     mkdirSync(projectDir, { recursive: true });
     // No C4 → will be refused
     writeFileSync(join(projectDir, 'package.json'), JSON.stringify({ name: 'x', scripts: { test: 'node t.mjs' } }));
-    writeFileSync(join(projectDir, '.gitignore'), '.forge/work-items/\nAGENT.md\nPROMPT.md\nfix_plan.md\n');
+    writeFileSync(join(projectDir, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
 
     const id = 'INIT-spin-test';
     const r1 = validateClaimable(id, projectDir, forgeRoot, flowPath);
@@ -482,7 +480,7 @@ test('isNonTerminalRefused: true after non-terminal refusal, false after clear',
     mkdirSync(projectDir, { recursive: true });
     // Missing C4 (no roadmap.md) → non-terminal refusal
     writeFileSync(join(projectDir, 'package.json'), JSON.stringify({ name: 'x', scripts: { test: 'node t.mjs' } }));
-    writeFileSync(join(projectDir, '.gitignore'), '.forge/work-items/\nAGENT.md\nPROMPT.md\nfix_plan.md\n');
+    writeFileSync(join(projectDir, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
 
     const id = 'INIT-skip-set-test';
 
@@ -563,7 +561,7 @@ test('FORGE_SKIP_CONTRACT_CHECK=1: non-contract-ready project is NOT refused on 
       join(projectDir, 'package.json'),
       JSON.stringify({ name: 'test', scripts: { test: 'node t.mjs' } }),
     );
-    writeFileSync(join(projectDir, '.gitignore'), '.forge/work-items/\nAGENT.md\nPROMPT.md\nfix_plan.md\n');
+    writeFileSync(join(projectDir, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
     // roadmap.md + brain/profile.md intentionally absent (C4 fail)
 
     const result = validateClaimable('INIT-skip-contract', projectDir, forgeRoot, flowPath);
@@ -618,7 +616,7 @@ test('FORGE_SKIP_CONTRACT_CHECK unset: contract refusal fires as before', () => 
       join(projectDir, 'package.json'),
       JSON.stringify({ name: 'test', scripts: { test: 'node t.mjs' } }),
     );
-    writeFileSync(join(projectDir, '.gitignore'), '.forge/work-items/\nAGENT.md\nPROMPT.md\nfix_plan.md\n');
+    writeFileSync(join(projectDir, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
     // roadmap.md absent → C4 fails → should refuse
 
     const result = validateClaimable('INIT-normal-contract', projectDir, forgeRoot, flowPath);
