@@ -1,11 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   fireFlowTriggers,
   SHIPPED_TRIGGER_KIND_IDS,
   TRIGGER_KIND_IDS,
   TRIGGER_KINDS,
+  WEBHOOK_FAMILY_KIND_IDS,
   type FlowTriggerEvent,
 } from '../../flow-trigger.ts';
 import type { FlowTrigger } from '@forge/contracts/studio/types.ts';
@@ -232,4 +234,20 @@ test('(green-on-arrival) [forge-f9g] a caller that never mentions eventProject g
     ['downstream'],
     'omitting eventProject entirely must opt OUT of fire-time gating — this is the flow-runner\'s flow-complete contract (T1 round-4 ruling): scope is enforced only at drainFlowRunRequests for that path',
   );
+});
+
+test('(RED) [forge-g99] WEBHOOK_FAMILY_KIND_IDS is exactly webhook/pr-merged/issue-raised, ONE definition', () => {
+  assert.deepEqual([...WEBHOOK_FAMILY_KIND_IDS].sort(), ['issue-raised', 'pr-merged', 'webhook']);
+});
+
+test('(RED) [forge-g99] bridge-hooks.ts and validate-triggers.ts import the shared constant, neither hand-declares its own copy', () => {
+  const hooksSrc = readFileSync(new URL('../../bridge-hooks.ts', import.meta.url), 'utf8');
+  const validateSrc = readFileSync(new URL('../../studio/validate-triggers.ts', import.meta.url), 'utf8');
+  for (const [label, src] of [['bridge-hooks.ts', hooksSrc], ['studio/validate-triggers.ts', validateSrc]] as const) {
+    assert.ok(
+      !/const\s+WEBHOOK_FAMILY_KIND_IDS\s*=/.test(src),
+      `${label} must not re-declare WEBHOOK_FAMILY_KIND_IDS — import the single definition from flow-trigger.ts`,
+    );
+    assert.ok(src.includes('WEBHOOK_FAMILY_KIND_IDS'), `${label} must still reference the shared constant`);
+  }
 });

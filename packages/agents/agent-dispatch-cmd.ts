@@ -26,8 +26,8 @@ import { dispatchAgentRun } from './agent-dispatch.ts';
 import { isSafeRunId } from './run-agent.ts';
 import { installDispatchSignalGuard, recordDispatchTerminal } from './dispatch-terminal.ts';
 import { isStandaloneBandAgent, dispatchStandaloneBand, type BandAgentDeps } from './band-agent-run.ts';
-import { skillsDir } from './skill-path.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
+import { skillRoots } from '@forge/kernel/discovery-roots.ts';
 
 /**
  * R4-17, D7 — writes the TERMINAL phase (`complete`/`failed`) into
@@ -462,7 +462,7 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string, deps?:
 
     const out = await dispatch({
       slug,
-      skillsDir: skillsDir(forgeRoot),
+      skillsDir: skillRoots(forgeRoot),
       runId,
       project,
       inputs: Object.keys(inputs).length > 0 ? inputs : undefined,
