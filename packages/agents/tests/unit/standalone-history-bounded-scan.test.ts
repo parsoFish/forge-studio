@@ -120,6 +120,45 @@ test('M7-C RED-A: collectStandaloneRows returns exactly the newest PAGE matches,
   }
 });
 
+test('M7-C RED-C: a first event with NEITHER identity field is INDETERMINATE, not a definite non-match — a run whose identity lands only on a LATER event must still be found', () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'm7c-ambiguous-'));
+  const logsRoot = join(forgeRoot, '_logs');
+  mkdirSync(logsRoot, { recursive: true });
+  try {
+    const runId = '_agent-ambiguous-late-identity';
+    const dir = join(logsRoot, runId);
+    mkdirSync(dir, { recursive: true });
+    // First event carries no `metadata.agent_slug` and no top-level `skill`
+    // at all — a shape the "every dispatch route writes the slug on its t0
+    // marker" claim did not verify against a real installation's logs.
+    // Identity lands only on the SECOND event.
+    writeFileSync(
+      join(dir, 'events.jsonl'),
+      `${JSON.stringify({ event_id: 'e0', event_type: 'start' })}\n` +
+        `${JSON.stringify({ event_id: 'e1', event_type: 'log', metadata: { agent_slug: 'target' } })}\n`,
+    );
+
+    const deps: AgentHistoryDeps = {
+      projectsRoot: forgeRoot,
+      cachedListRuns: () => [],
+      buildAgentSlugToNodeId: () => new Map(),
+      loadFlowDefinition: () => ({ id: 'none', nodes: [] }),
+      loadSessionKinds: () => [],
+      parseGuardedFirstEvent: firstEventTracking(new Set()),
+      parseGuardedEventsJsonl: fullParseTracking(new Set(), { full: [] }),
+      isTurnAlive: () => false,
+      extractErrorMessage: () => '',
+      stallCeilingMs: 10 * 60 * 1000,
+    };
+
+    const rows = collectStandaloneRows(deps, logsRoot, 'target');
+    assert.equal(rows.length, 1, `expected the run to be found via its SECOND event's identity, got ${rows.length}: ${JSON.stringify(rows)}`);
+    assert.equal(rows[0]?.id, runId);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
 test("M7-C RED-B: collectRecentAgentRuns's standalone half never opens more than `limit` dirs' full logs, newest first", () => {
   const forgeRoot = mkdtempSync(join(tmpdir(), 'm7c-recent-'));
   const logsRoot = join(forgeRoot, '_logs');
