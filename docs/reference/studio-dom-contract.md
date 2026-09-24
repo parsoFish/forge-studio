@@ -1604,7 +1604,15 @@ is what this contract reads — but it cannot be the only distinguisher.
   `main[data-page="hook-library"][data-page-ready][data-hook-count][data-needs-review-count]`,
   per card
   `[data-card-type="hook"][data-hook-id][data-hook-event][data-hook-verdict][data-hook-trust][data-hook-carried-by-count]`.
-  `data-hook-carried-by-count` is DERIVED from every real agent's
+  **`forge-8vfn.8.3.7`** — every card also renders the shared `ProvenanceBadge`
+  (`components/ProvenanceBadge.tsx`) against the hook's server-attested
+  `origin` (`'ootb' | 'operator'`, a NEW field — distinct from any other
+  `provenance` name in this codebase): a hook created through `POST
+  /api/studio/hooks` (or landed by the authoring-session finalize route)
+  reads `'operator'` and renders no badge (the unbadged default); a
+  shipped hook.yaml (no `origin:` key on disk) reads `'ootb'` and renders
+  `[data-provenance="ootb"]`. Same on `/hooks/[id]` below. Never client-
+  inferred. `data-hook-carried-by-count` is DERIVED from every real agent's
   `composition.hooks` and the derivation names its own scan, so an empty count
   reads "scanned N, found none" and never "unknown". **W7-B3 (library-11)
   retires the old "no Local/Community split" carve-out** — the community
@@ -5507,7 +5515,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   Per card: `[data-card-type="template"][data-template-id][data-template-category="demo-output"|"planning"|"project-scaffold"]`,
   `[data-template-preview="html"|"video"|"shots"|"mock"|"doc"|"scaffold"]`
   (a CSS-approximation preview kind, class `tpl-preview-<kind>`; omitted only
-  when the definition failed to parse), `[data-template-used-by-count]`. The
+  when the definition failed to parse), `[data-template-used-by-count]`.
+  **`forge-8vfn.8.3.7`** — every card also renders the shared `ProvenanceBadge`
+  against the template's server-attested `origin` (`'ootb' | 'operator'`, a
+  NEW field distinct from the existing `provenance` field above, which means
+  the category's on-disk source directory, an unrelated fact): a template
+  created through `POST /api/studio/templates` (fresh content or
+  `duplicateOf`, or landed by the authoring-session finalize route) reads
+  `'operator'` and renders no badge; a shipped definition (no `origin:`
+  frontmatter key) reads `'ootb'` and renders `[data-provenance="ootb"]`; a
+  `project-scaffold` entry (no create route at all) always reads `'ootb'`.
+  Same on `/templates/[id]` below. Never client-inferred. The
   search box is `[data-field="template-search"]` (case-insensitive match on
   name + description); a bridge-unreachable state renders
   `[data-component="fetch-error"]`, never conflated with a genuinely empty
