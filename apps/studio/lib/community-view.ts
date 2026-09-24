@@ -474,9 +474,10 @@ export function freshnessBadge(fetchedAt: string | null, nowMs: number): Freshne
 
 /**
  * W7-B3 (community-16 / community-03): the registry-LEVEL freshness line —
- * `meta.lastRefresh` is stamped only by `commitRegistryDraft` (an approved
- * agent refresh actually landing). `null` — and an unparsable stamp — read
- * as the honest "never", never a fabricated or NaN age.
+ * `meta.lastRefresh` is stamped only by the deterministic refresh route
+ * (`refreshCommunityRegistry`, community-refresh-api.ts / community-refresh-run.ts)
+ * actually landing a write. `null` — and an unparsable stamp — read as the
+ * honest "never", never a fabricated or NaN age.
  */
 export function lastRefreshLabel(lastRefresh: string | null, nowMs: number): string {
   if (lastRefresh === null) return 'never refreshed — every row is still the hand-curated seed';

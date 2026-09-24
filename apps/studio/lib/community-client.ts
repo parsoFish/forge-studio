@@ -269,7 +269,7 @@ function errorFrom(data: unknown, fallback: string): string {
 // ---------------------------------------------------------------------------
 
 export type CommunityIndexMeta = {
-  /** commitRegistryDraft's stamp — null = no agent refresh ever committed. */
+  /** The deterministic refresh route's stamp — null = no refresh ever landed a write. */
   lastRefresh: string | null;
   /** Uncommitted changes on the repo-tracked registry file; null = git did
    *  not answer (not a repo) — an unknown, never a fabricated "clean". */

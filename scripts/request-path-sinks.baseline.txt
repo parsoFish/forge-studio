@@ -524,6 +524,8 @@ packages/library/studio/skill-install.ts statSync 1
 packages/library/studio/skill-install.ts writeFileSync 4
 packages/library/studio/skill-package.ts readdirSync 1
 packages/library/studio/skill-package.ts readFileSync 1
+packages/library/studio/skill-package.ts realpathSync 1
+packages/library/studio/skill-package.ts statSync 1
 packages/library/studio/skill-registry.ts readFileSync 1
 packages/library/studio/skill-trust.ts readFileSync 3
 packages/library/studio/template-library.ts readdirSync 5
