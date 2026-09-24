@@ -137,18 +137,35 @@ describe('path-shaped citations in code comments', () => {
   });
 
   test('a KNOWN_ROOT name one level INSIDE another path is not a false-positive citation', () => {
-    // `components/studio/artifact/X.tsx` is not a recognised citation at all
-    // (`components` is not a KNOWN_ROOT) — a checker that anchored the root
-    // with a plain `\b` would still match the nested `studio/artifact/X.tsx`
-    // substring (preceded by `/`, which still satisfies `\b`) and flag it as
-    // a dead citation of its own. Regression for exactly that defect, found
-    // via this guard's own sweep of the real tree.
+    // historical: the fixture's `components/…/X.tsx` path is not a recognised
+    // citation at all (`components` is not a KNOWN_ROOT) — a checker that
+    // anchored the root with a plain `\b` would still match the nested
+    // `studio/…/X.tsx` substring (preceded by `/`, which still satisfies
+    // `\b`) and flag it as a dead citation of its own. Regression for exactly
+    // that defect, found via this guard's own sweep of the real tree.
     const { root, cleanup } = fixture({
       'packages/foo/bar.ts': `// see components/studio/artifact/X.tsx for the component\n`,
     });
     try {
       const { code, out } = run(root, noBaseline(root));
       assert.equal(code, 0, `must not misread a nested root as its own citation:\n${out}`);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('a markdown-relative-link prefix ("./cli/foo.ts") still matches — not the same shape as nesting', () => {
+    // A `/` right before the root is not ALWAYS a nested path — a markdown
+    // relative link (`(./cli/foo.ts)`) puts one there too, and the fix for
+    // the nesting false-positive above must not blind the checker to this,
+    // by far the more common shape of citation in this repo's own docs.
+    const { root, cleanup } = fixture({
+      'docs/guide.md': `See [it](./packages/ghost/dead-module.ts) for details.\n`,
+    });
+    try {
+      const { code, out } = run(root, noBaseline(root));
+      assert.equal(code, 1, `a ./-relative citation of a dead path must still be caught:\n${out}`);
+      assert.match(out, /packages\/ghost\/dead-module\.ts/, out);
     } finally {
       cleanup();
     }
