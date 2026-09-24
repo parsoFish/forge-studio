@@ -72,7 +72,7 @@ function lanes(args: string[], env: Record<string, string> = {}, timeoutMs = 300
       LANES_MEMINFO: meminfo(9 * 1024 * 1024),
       LANES_ROSTER_CMD: rosterCmd,
       LANES_CWD: repo,
-      LANES_WORKTREE_ROOT: join(dir, 'wt'),
+      LANES_WORKTREE_ROOT: join(dir, 'wt'), LANES_PROC_ROOT: join(dir, 'no-proc'), LANES_DNS_CMD: 'true', LANES_CLAUDE_JSON: join(dir, 'no-claude.json'), // nonexistent-but-guarded: no test scans real /proc, DNS, or ~/.claude.json
       ...env,
     },
   });
@@ -141,7 +141,7 @@ echo $! > '${join(dir, `${name}.detachedpid`)}'
   return writeExec(
     name,
     `#!/usr/bin/env bash
-printf '%s\\0' "$@" > '${argvFile}'
+if [ "$1" = --version ]; then echo '0.0.0 (test)'; exit 0; fi; printf '%s\\0' "$@" > '${argvFile}' # row 40
 printenv > '${join(dir, `${name}.env`)}'
 SESS=""; while [ $# -gt 0 ]; do [ "$1" = -n ] && SESS="$2"; shift; done
 export SESS ROSTER='${rosterFile}'
