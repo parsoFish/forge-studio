@@ -49,13 +49,21 @@ import type { ClauseResult } from '@forge/kernel';
 import type { ProjectConfig } from './project-config.ts';
 import { loadProjectConfig } from './project-config.ts';
 
-/** THE one id → SKILL.md candidate pair — project-local, then forge-wide — shared by `resolveDeclaredSkillPath` + `loadDeclaredSkills`. */
-const declaredSkillCandidates = (dir: string, forgeRoot: string, id: string): { root: string; segments: readonly string[] }[] =>
-  [{ root: dir, segments: ['.forge', 'skills', id, 'SKILL.md'] }, { root: forgeRoot, segments: ['skills', id, 'SKILL.md'] }];
+/** Where a declared skill id may live, in lookup order: project-local, then forge-wide. */
+function skillCandidates(dir: string, forgeRoot: string, id: string): { root: string; segments: string[] }[] {
+  return [
+    { root: dir, segments: ['.forge', 'skills', id, 'SKILL.md'] },
+    { root: forgeRoot, segments: ['skills', id, 'SKILL.md'] },
+  ];
+}
 
-/** The one id → SKILL.md resolver: project-local, then forge-wide; `null` if neither. */
+/** The first candidate that resolves through `guardedFile`, or `null`. */
 export function resolveDeclaredSkillPath(dir: string, forgeRoot: string, id: string): string | null {
-  return declaredSkillCandidates(dir, forgeRoot, id).reduce<string | null>((r, c) => r ?? guardedFile(c.root, c.segments, 'read'), null);
+  for (const { root, segments } of skillCandidates(dir, forgeRoot, id)) {
+    const path = guardedFile(root, segments, 'read');
+    if (path !== null) return path;
+  }
+  return null;
 }
 
 /** Named, fail-fast: a declared skill id an agent was told to load that resolves nowhere. */
@@ -71,13 +79,15 @@ export class MissingDeclaredSkillError extends Error {
 
 export type DeclaredSkill = { id: string; path: string; text: string };
 
-/** Every skill the project declares, read via `guardedReadFile` (ADR 024, item 90; never a raw `readFileSync`); throws if a declared id resolves nowhere. */
+/** Every skill the project declares, read for an agent's prompt (ADR 024, item 90).
+ *  A declared id that resolves nowhere throws: a running agent has no later. */
 export function loadDeclaredSkills(projectDir: string, forgeRoot: string): DeclaredSkill[] {
   const declared = loadProjectConfig(projectDir)?.skills ?? [];
   return declared.map((id) => {
-    for (const { root, segments } of declaredSkillCandidates(projectDir, forgeRoot, id)) {
+    for (const { root, segments } of skillCandidates(projectDir, forgeRoot, id)) {
       const text = guardedReadFile(root, segments);
-      if (text !== null) return { id, path: guardedFile(root, segments, 'read')!, text };
+      const path = guardedFile(root, segments, 'read');
+      if (text !== null && path !== null) return { id, path, text };
     }
     throw new MissingDeclaredSkillError(id, projectDir, forgeRoot);
   });

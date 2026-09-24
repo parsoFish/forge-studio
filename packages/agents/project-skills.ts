@@ -27,38 +27,53 @@ export function composeProjectSkills(systemPrompt: string | undefined, skills: r
   return systemPrompt !== undefined ? `${systemPrompt}\n\n${section}` : section;
 }
 
+type OneShotSkillsCtx = {
+  bindings?: { project?: { repoPath: string }; initiative?: { id: string } };
+  systemPrompt?: string;
+  logger?: EventLogger;
+  runId: string;
+  logsRoot?: string;
+};
+
 /** `runOneShotSpawn`'s item-90 wiring, collapsed to one call: load + compose,
  *  and — for a non-empty load only — emit `project_skills_loaded`. Absent
  *  `ctx.bindings.project` ⇒ no lookup, so a non-project run's systemPrompt
  *  (and the golden spawn-capture fixtures) stay byte-identical. */
-export function loadAndComposeProjectSkills(
-  ctx: { bindings?: { project?: { repoPath: string }; initiative?: { id: string } }; systemPrompt?: string; logger?: EventLogger; runId: string; logsRoot?: string },
-  forgeRoot: string,
-  agentSlug: string,
-): string | undefined {
+export function loadAndComposeProjectSkills(ctx: OneShotSkillsCtx, forgeRoot: string, agentSlug: string): string | undefined {
   const skills = ctx.bindings?.project ? loadDeclaredSkills(ctx.bindings.project.repoPath, forgeRoot) : [];
   if (skills.length > 0) {
     const logger = ctx.logger ?? createLogger(ctx.runId, ctx.logsRoot ?? join(forgeRoot, '_logs'));
     logger.emit({
-      initiative_id: ctx.bindings?.initiative?.id ?? ctx.runId, phase: 'orchestrator', skill: agentSlug,
-      event_type: 'log', input_refs: [], output_refs: [],
-      message: 'project_skills_loaded', metadata: { ids: skills.map((s) => s.id) },
+      initiative_id: ctx.bindings?.initiative?.id ?? ctx.runId,
+      phase: 'orchestrator',
+      skill: agentSlug,
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: 'project_skills_loaded',
+      metadata: { ids: skills.map((s) => s.id) },
     });
   }
   return composeProjectSkills(ctx.systemPrompt, skills);
 }
 
-/** `makeAgentWithTelemetry`'s item-90 wiring, collapsed to one call: the
- *  `onProjectSkillsLoaded` callback, emitting the same `project_skills_loaded`
- *  shape every other `sinkCtx`-scoped event here already uses. */
+/** `makeAgentWithTelemetry`'s `onProjectSkillsLoaded` callback: the same
+ *  `project_skills_loaded` event, scoped like the loop's other sink events. */
 export function makeProjectSkillsLoadedSink(
   logger: EventLogger,
   sinkCtx: { initiativeId: string; parentEventId: string; phase: Phase; skill: string; workItemId?: string },
 ): (ids: string[]) => void {
-  return (ids) =>
-    void logger.emit({
-      initiative_id: sinkCtx.initiativeId, parent_event_id: sinkCtx.parentEventId, phase: sinkCtx.phase, skill: sinkCtx.skill,
-      event_type: 'log', input_refs: [], output_refs: [],
-      message: 'project_skills_loaded', metadata: { ...(sinkCtx.workItemId ? { work_item_id: sinkCtx.workItemId } : {}), ids },
+  return (ids) => {
+    logger.emit({
+      initiative_id: sinkCtx.initiativeId,
+      parent_event_id: sinkCtx.parentEventId,
+      phase: sinkCtx.phase,
+      skill: sinkCtx.skill,
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: 'project_skills_loaded',
+      metadata: { ...(sinkCtx.workItemId ? { work_item_id: sinkCtx.workItemId } : {}), ids },
     });
+  };
 }
