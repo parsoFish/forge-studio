@@ -145,6 +145,11 @@ export type HookApprovalRecord = {
   reason?: string;
 };
 
+/** forge-8vfn.5.16 (M7-C U2) — the same four outcomes `emitHookFire`
+ *  (packages/agents/studio/hook-dispatch.ts) records for a dispatch attempt. */
+export type HookFireOutcome = 'ran' | 'refused' | 'timeout' | 'error';
+const HOOK_FIRE_OUTCOMES: readonly HookFireOutcome[] = ['ran', 'refused', 'timeout', 'error'];
+
 export type HookDetail = HookLibraryEntryOk & {
   files: HookPackageFile[];
   /** Whole-package sha256 fingerprint (`hashHookPackage`, hook-package.ts) —
@@ -155,6 +160,16 @@ export type HookDetail = HookLibraryEntryOk & {
   packageHash: string;
   scan: HookScanReport;
   approval?: HookApprovalRecord;
+  /** forge-8vfn.5.16 (M7-C U2) — always present; 0 = "scanned the recent
+   *  window, found no fire", the same idiom carriedByCount already uses.
+   *  T2 review of 95cb287f: the route's scan is BOUNDED (newest
+   *  HOOK_FIRE_SCAN_MAX_CYCLES cycle dirs), so this is honestly a count
+   *  within that window, never an all-time claim — named accordingly. */
+  recentFireCount: number;
+  /** Present iff the hook has fired within the scanned (recent) window;
+   *  never fabricated. */
+  lastFireAt?: string;
+  lastFireOutcome?: HookFireOutcome;
 };
 
 // ---------------------------------------------------------------------------
@@ -336,12 +351,25 @@ export function parseHookDetail(raw: unknown): HookDetail {
       ...(reasonRaw !== undefined ? { reason: reasonRaw } : {}),
     };
   }
+  // recentFireCount is REQUIRED (the route always sends it — never defaulted to 0
+  // by this parser, which would hide a bridge that forgot to send it).
+  // lastFireAt/lastFireOutcome are legitimately absent for a never-fired
+  // hook, but if lastFireOutcome IS present it must be one of the four real
+  // outcomes — never coerced.
+  const rawOutcome = r['lastFireOutcome'];
+  if (rawOutcome !== undefined && !(HOOK_FIRE_OUTCOMES as readonly string[]).includes(rawOutcome as string)) {
+    throw new Error(`unrecognised lastFireOutcome: ${JSON.stringify(rawOutcome)}`);
+  }
+
   return {
     ...entry,
     files: files.map(parseHookPackageFile),
     packageHash: reqString(r, 'packageHash'),
     scan: parseHookScanReport(r['scan']),
     ...(approval !== undefined ? { approval } : {}),
+    recentFireCount: reqNumber(r, 'recentFireCount'),
+    ...(r['lastFireAt'] !== undefined ? { lastFireAt: reqString(r, 'lastFireAt') } : {}),
+    ...(rawOutcome !== undefined ? { lastFireOutcome: rawOutcome as HookFireOutcome } : {}),
   };
 }
 

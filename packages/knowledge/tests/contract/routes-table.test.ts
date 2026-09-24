@@ -57,6 +57,12 @@ const routes = knowledgeRoutes({
   runFixTurn: async () => {
     throw new Error('unexpected brain-fix dispatch in this test');
   },
+  // M7-C U8 (bead forge-u8y2): REQUIRED, same shape as `runFixTurn` above.
+  // This file inspects table METADATA only (path/method/order) — no handler
+  // in this table is ever invoked.
+  sessionIsReadable: () => {
+    throw new Error('unexpected session-readability probe call in this test');
+  },
 });
 
 /** The 17 routes the two handlers dispatch at the pin (161c5abb), in the
