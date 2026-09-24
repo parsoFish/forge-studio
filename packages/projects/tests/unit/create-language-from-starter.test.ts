@@ -52,7 +52,7 @@ function forgeRootWithUndeclaredStarter(starterId: string): string {
   return forgeRoot;
 }
 
-test('6.11.33 (RED): a REAL starter that declares no language refuses the create, naming the starter', async () => {
+test('6.11.33: a REAL starter that declares no language refuses the create, naming the starter', async () => {
   const forgeRoot = forgeRootWithUndeclaredStarter('bare-lang');
   try {
     const { handleProjectsCreate } = makeOnboardHandlers({} as never);

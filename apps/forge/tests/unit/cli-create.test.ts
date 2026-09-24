@@ -117,7 +117,7 @@ test('runCreate: unknown app-type -> caught scaffold error, exit 1, process stay
   assert.equal(typeof process.pid, 'number');
 });
 
-test('6.11.33 (RED): a REAL starter that declares no language refuses, naming the starter (exit 1)', () => {
+test('6.11.33: a REAL starter that declares no language refuses, naming the starter (exit 1)', () => {
   const root = freshRoot();
   try {
     const tplDir = join(root, 'studio', 'starters', 'projects', 'bare-lang');
