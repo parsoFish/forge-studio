@@ -23,101 +23,40 @@
  * guarantee, silently.
  */
 
-import { mkdirSync, writeFileSync, statSync, unlinkSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
-import { resolveGuardedPath } from '@forge/kernel';
+import {
+  resolveGuardedPath,
+  detectVolumeCaseFolding as probeVolumeCaseFolding,
+  CaseFoldingProbeError,
+} from '@forge/kernel';
+import type { CaseFoldingProbe } from '@forge/kernel';
 
 export class MaterialsStagingError extends Error {}
 
 type MaterialEntry = { filename: string; bytes: Buffer };
 
-/**
- * Injectable seam for volume case-behaviour detection (bead forge-qn8) — see
- * `detectVolumeCaseFolding` below for the real implementation and the
- * `stageMaterials` docstring's "VOLUME CASE-BEHAVIOUR DETECTION" section for
- * why this exists. `dir` is always `runDir` (real, caller-created) today;
- * kept as a parameter rather than hardcoding `runDir` so a future caller
- * probing a different root is not forced to reshape this type.
- */
-export type CaseFoldingProbe = (dir: string) => boolean;
-
-/** Marker-name prefix for `detectVolumeCaseFolding`'s throwaway probe entry
- *  — deliberately namespaced and unlikely to collide with a legitimate
- *  material filename. */
-const CASE_PROBE_PREFIX = '.forge-case-probe-';
-
-/** Flips the case of every ASCII letter in `s`. Used to build a spelling of
- *  the probe marker that is GUARANTEED to differ from the original only by
- *  letter case — the exact shape of the real bug (`Notes.md` vs
- *  `notes.md`), never by any other change. */
-function flipAsciiCase(s: string): string {
-  return s.replace(/[a-zA-Z]/g, (c) => (c === c.toUpperCase() ? c.toLowerCase() : c.toUpperCase()));
-}
+export type { CaseFoldingProbe };
 
 /**
- * The REAL, default `CaseFoldingProbe` — detects, by direct filesystem
- * evidence rather than a `process.platform` guess (a case-sensitive volume
- * can be mounted on macOS, and a case-folding one on Linux), whether `dir`
- * folds case for directory-entry lookups.
- *
- * Method: create a throwaway marker entry under `dir`, `statSync` it to
- * capture its `{dev, ino}`, then `statSync` the SAME name with every letter
- * case-flipped:
- *   - Both stats resolve to the same `{dev, ino}` → the two spellings are
- *     the SAME directory entry → the volume folds case → returns `true`.
- *   - The flipped spelling raises `ENOENT` → the two spellings are genuinely
- *     distinct, unrelated (absent) slots → the volume is case-sensitive →
- *     returns `false`.
- *   - The flipped-spelling stat fails for any OTHER reason (EACCES,
- *     ENOTDIR, ...) → indeterminate. Deliberate, documented choice: default
- *     CONSERVATIVE and report `true` (folding), so `stageMaterials` catches
- *     MORE potential duplicates rather than fewer on an inconclusive read —
- *     never silently treated as "assume case-sensitive", which would
- *     silently reopen the exact bug this function exists to close.
- *
- * If the marker itself cannot even be CREATED (EACCES, ENOSPC, a read-only
- * mount, ...), the probe cannot run at all — this throws
- * `MaterialsStagingError` rather than silently falling back to a literal,
- * un-folded comparison (this repo forbids silent fallbacks; a
- * duplicate-target check that might silently be wrong is worse than one
- * that refuses to run).
+ * The default `CaseFoldingProbe` (bead forge-qn8) — a thin wrapper around
+ * `@forge/kernel`'s `detectVolumeCaseFolding` (the shared probe mechanism
+ * every staging module now imports; see that module's own docstring for the
+ * method and its conservative-on-failure default) that translates a
+ * probe-cannot-run failure into this module's own typed
+ * `MaterialsStagingError`, matching the established throw-not-return
+ * convention rather than letting a bare kernel error escape uncaught. `dir`
+ * is always `runDir` (real, caller-created) today.
  */
 export function detectVolumeCaseFolding(dir: string): boolean {
-  const marker = `${CASE_PROBE_PREFIX}${randomBytes(8).toString('hex')}-AbCdEf`;
-  const markerPath = join(dir, marker);
-  const flippedPath = join(dir, flipAsciiCase(marker));
-
-  let markerStat: ReturnType<typeof statSync>;
   try {
-    writeFileSync(markerPath, '');
-    markerStat = statSync(markerPath);
+    return probeVolumeCaseFolding(dir);
   } catch (err) {
-    throw new MaterialsStagingError(
-      `materials: case-folding probe could not run — refusing to stage without a reliable duplicate-target check: ${(err as Error).message}`,
-    );
-  }
-
-  try {
-    const flippedStat = statSync(flippedPath);
-    return flippedStat.dev === markerStat.dev && flippedStat.ino === markerStat.ino;
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException)?.code;
-    if (code === 'ENOENT') return false;
-    // Indeterminate read-back (not "cannot run" — the marker itself exists
-    // fine). See this function's docstring: deliberate conservative default.
-    return true;
-  } finally {
-    // Best-effort cleanup of the throwaway marker. Nothing downstream
-    // depends on this succeeding — the folding decision above is already
-    // made — so a failure here is swallowed deliberately, not silently
-    // masking a functional result.
-    try {
-      unlinkSync(markerPath);
-    } catch {
-      /* best-effort only */
+    if (err instanceof CaseFoldingProbeError) {
+      throw new MaterialsStagingError(`materials: ${err.message}`);
     }
+    throw err;
   }
 }
 
@@ -158,57 +97,41 @@ export function detectVolumeCaseFolding(dir: string): boolean {
  * `realpathSync` and identity-compares, so the collision surfaces as two
  * equal `realPath` values (or is rejected outright by the guard).
  *
- * VOLUME CASE-BEHAVIOUR DETECTION (bead forge-qn8 — this paragraph used to
- * document this as a deliberately-open gap; it is now the record of the
- * fix). In CREATE mode — the common case, where neither file exists yet —
- * `resolveGuardedPath` performs NO `realpathSync` on the non-existent leaf
- * and reassembles the tail LITERALLY (`studio-path-guard.ts`, the walk stops
- * at the first absent segment). So the dedup key would be a literal string
- * there, and two DISTINCT filenames that the underlying filesystem folds to
+ * VOLUME CASE-BEHAVIOUR DETECTION (bead forge-qn8) — in CREATE mode, the
+ * common case where neither file exists yet, `resolveGuardedPath` performs
+ * no `realpathSync` on the non-existent leaf and reassembles the tail
+ * LITERALLY, so two DISTINCT filenames the underlying filesystem folds to
  * one directory entry — `Notes.md` vs `notes.md` on a case-insensitive
  * volume (default macOS APFS, exFAT, an SMB/NTFS mount — and this matters
  * because materials stage into operator-chosen project dirs, not only the
- * ext4 dev box this was first measured on) — would produce two different
- * keys, pass a literal-string check, and collide at `writeFileSync`, second
- * write silently winning. Blindly lower-casing the key would be wrong in
- * the OPPOSITE direction: on a genuinely case-sensitive filesystem
- * `Notes.md` and `notes.md` are two legitimate distinct files, and folding
- * them unconditionally would be a fails-closed false rejection of valid
- * input — trading one defect for another. Note also that even in EXISTS
- * mode, `realpathSync` does not necessarily normalise case on a
- * case-folding volume — it returns the path as spelled, where directory
- * entries merely match case-insensitively — so this fix applies uniformly
- * to both modes, not only CREATE.
+ * ext4 dev box this was first measured on) — would pass a literal-string
+ * check as distinct and collide at `writeFileSync`, second write silently
+ * winning. Blindly lower-casing the key would be wrong in the OPPOSITE
+ * direction: on a genuinely case-sensitive filesystem the two names are
+ * legitimate distinct files, and folding them unconditionally would be a
+ * fails-closed false rejection. Even in EXISTS mode, `realpathSync` does not
+ * necessarily normalise case on a folding volume — directory entries merely
+ * match case-insensitively — so the fix applies uniformly to both modes.
  *
- * The fix actually DETECTS the volume's case behaviour rather than guessing
- * from `process.platform` — a case-sensitive volume can be mounted on
- * macOS, and a case-folding one on Linux, so a platform guess would be
- * wrong in both directions. See `detectVolumeCaseFolding` above for the
- * mechanism (create a marker, stat it, stat its case-flipped spelling,
- * compare `{dev, ino}`). It is probed ONCE per `stageMaterials` call,
- * against `runDir` itself (always real at call time — every caller
- * `mkdirSync`s it before calling; see the tests' own `freshRunDir`), never
- * once per entry — the same volume backs every entry staged in one call, so
- * re-probing per entry would pay the same cost N times for the same answer.
- * `seenTargets` below is keyed by the case-folded `realPath` ONLY when the
- * probe reports folding; otherwise it stays keyed by the literal
- * `realPath`, exactly as before the fix — so a case-sensitive volume still
- * accepts `Notes.md` and `notes.md` as two distinct, legitimate targets,
- * and nothing here can produce a false "duplicate" refusal on one.
+ * The fix DETECTS the volume's case behaviour rather than guessing from
+ * `process.platform` (a case-sensitive volume can be mounted on macOS, a
+ * folding one on Linux) — see `@forge/kernel`'s `detectVolumeCaseFolding`
+ * for the mechanism (create a marker, stat it, stat its case-flipped
+ * spelling, compare `{dev, ino}`) and its conservative-on-failure default.
+ * It is probed ONCE per `stageMaterials` call, against `runDir` itself
+ * (always real at call time — every caller `mkdirSync`s it first), never
+ * once per entry. `seenTargets` is keyed by the case-folded `realPath` ONLY
+ * when the probe reports folding; otherwise it stays keyed literally,
+ * exactly as before the fix — a case-sensitive volume still accepts
+ * `Notes.md` and `notes.md` as two distinct, legitimate targets.
  *
  * The probe is injectable via a third, optional `options.probeCaseFolding`
- * parameter (real default: `detectVolumeCaseFolding`) — the seam that lets
- * this behaviour be exercised deterministically in tests on a
- * case-sensitive dev machine (WSL2/ext4) that cannot naturally produce a
- * folding volume. If the default probe cannot even create its baseline
- * marker (EACCES, ENOSPC, a read-only mount, ...), it throws
- * `MaterialsStagingError` rather than silently falling back to the old
- * literal comparison — this repo forbids silent fallbacks, and a
- * duplicate-target check that might silently be WRONG is worse than one
- * that refuses to run. An indeterminate READ-BACK (the marker exists, but
- * stat-ing its flipped spelling fails for a reason other than `ENOENT`)
- * defaults conservatively to "folds" — see `detectVolumeCaseFolding`'s own
- * docstring for that deliberate, documented choice.
+ * parameter (real default: this module's own `detectVolumeCaseFolding`
+ * above, which wraps the kernel probe's failure into `MaterialsStagingError`
+ * rather than letting it fall back to the old literal comparison — this
+ * repo forbids silent fallbacks) — the seam that lets this behaviour be
+ * exercised deterministically in tests on a case-sensitive dev machine
+ * (WSL2/ext4) that cannot naturally produce a folding volume.
  *
  * The check is scoped to entries within ONE call only
  * — re-staging the same filename across two SEPARATE `stageMaterials` calls

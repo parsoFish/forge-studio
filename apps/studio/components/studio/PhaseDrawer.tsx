@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { fetchPhaseLog } from '@/lib/studio-client';
 import type { Run, Flow, PhaseLogLine } from '@/lib/studio-client';
-import { phaseLogRefreshSignal } from '@/lib/phase-log-refresh';
 import { drawerHeaderMeta } from '@/lib/phase-drawer-meta';
+import { usePhaseLog } from '@/lib/use-phase-log';
+import { derivePhaseLogPanelState } from '@/lib/phase-log-panel-view';
 
 // ---------------------------------------------------------------------------
 // PhaseDrawer — right slide-in panel showing per-phase detail.
@@ -247,89 +247,20 @@ function DrawerBody({
   wiId?: string;
   wiItem: NonNullable<Run['workItems']>[number] | null;
 }) {
-  const [logLines, setLogLines] = useState<PhaseLogLine[]>([]);
-  const [stderrOnly, setStderrOnly] = useState(false);
-  const [logLoading, setLogLoading] = useState(false);
-
   // W7-A3 (flows-15): a node that never started has no log — don't fire a
   // guaranteed-404 fetch (console error per hex click on a queued run). Keyed
   // on the pending BOOLEAN, not the raw status, so a later active→complete
   // flip does not re-run the identity effect (Effect 2 owns live refresh).
   const pendingNode = status === 'pending';
 
-  // Effect 1 — identity: clear + fetch on identity change (new node / filter toggle)
-  useEffect(() => {
-    const signal = { cancelled: false };
-    if (pendingNode) {
-      setLogLines([]);
-      setLogLoading(false);
-      return () => { signal.cancelled = true; };
-    }
-    setLogLoading(true);
-    setLogLines([]);
-    void (async () => {
-      try {
-        const lines = await fetchPhaseLog(cycleId, nodeId, stderrOnly, isWi ? wiId : undefined);
-        if (!signal.cancelled) setLogLines(lines);
-      } finally {
-        if (!signal.cancelled) setLogLoading(false);
-      }
-    })();
-    return () => { signal.cancelled = true; };
-  }, [cycleId, nodeId, stderrOnly, isWi, wiId, pendingNode]);
+  // forge-7wc: the log panel's own fetch lifecycle (identity fetch + live
+  // refresh, including the fix for Effect 1's swallowed rejections) lives in
+  // `usePhaseLog` — see that hook's header for the full defect writeup.
+  const { logLines, logLoading, logError, stderrOnly, setStderrOnly } = usePhaseLog({
+    run, nodeId, cycleId, isWi, wiId, pendingNode,
+  });
 
   const lastProgressAt = meta?.lastProgressAt;
-  // R6-01 WI-1 F1: the log-refresh effect keys off lastEventAt (via this
-  // signal), not lastProgressAt — lastProgressAt only advances on
-  // tool_use/file_change/test_run/iteration (PROGRESS_EVENT_TYPES), so a node
-  // narrating purely via 'log'/'error' events never refetched its log pane.
-  // lastProgressAt itself is UNCHANGED and still drives the liveness dot/text
-  // below — this amendment does not widen its semantics.
-  const logRefreshSignal = phaseLogRefreshSignal(run, nodeId);
-
-  // R6-01 WI-1 F2: the (identity, signal) pair the lines currently on screen
-  // were fetched for. Written ONLY inside Effect 2 (never during render —
-  // StrictMode double-invokes render, so a render-phase write would record a
-  // fetch that never happened).
-  const lastFetchedRef = useRef<{ identity: string; signal: string } | null>(null);
-
-  // Effect 2 — live refresh: re-fetch IN PLACE (no flicker) whenever a NEW
-  // event has been attributed to this node since the lines on screen were
-  // fetched, keyed on logRefreshSignal so we refetch on each new attributed
-  // event (any type), not just tool-progress ticks.
-  //
-  // The guard is "has the signal moved since our last fetch", NOT "is the node
-  // still running". `refreshActiveRun` (app/flows/[id]/page.tsx) refetches the
-  // WHOLE Run on every WebSocket event for the active run, so a node's FINAL
-  // event advances lastEventAt AND flips that node's own status to
-  // complete/failed in the SAME React render. A `status === 'complete' ||
-  // 'failed'` early-return therefore already reads terminal by the time this
-  // body runs, and drops precisely the line that says how — or, for a failed
-  // node, WHY — the node ended. A terminal node still cannot spin: the signal
-  // is run.phaseMeta[nodeId].lastEventAt, which stops advancing once no further
-  // event is attributed to the node, so the deps stop changing and the ref
-  // comparison short-circuits any run that does happen.
-  useEffect(() => {
-    const identity = JSON.stringify([cycleId, nodeId, stderrOnly, isWi, wiId ?? null]);
-    const prev = lastFetchedRef.current;
-    lastFetchedRef.current = { identity, signal: logRefreshSignal };
-    // First run for this identity. Effect 1's deps ARE this identity, so it
-    // re-ran in this same commit and has already cleared + fetched this node's
-    // log at this same signal value — fetching again here would double-fetch
-    // the same content (and race Effect 1's setLogLines).
-    if (prev === null || prev.identity !== identity) return;
-    // Same identity and nothing new since the lines on screen were fetched.
-    if (prev.signal === logRefreshSignal) return;
-    const signal = { cancelled: false };
-    void (async () => {
-      try {
-        const lines = await fetchPhaseLog(cycleId, nodeId, stderrOnly, isWi ? wiId : undefined);
-        // Replace lines in place — do NOT setLogLines([]) first to avoid flicker.
-        if (!signal.cancelled) setLogLines(lines);
-      } catch { /* best-effort */ }
-    })();
-    return () => { signal.cancelled = true; };
-  }, [logRefreshSignal, cycleId, nodeId, stderrOnly, isWi, wiId]);
   const livenessColor = useLivenessColor(lastProgressAt, status);
   const livenessText = useLivenessText(lastProgressAt, status);
 
@@ -549,22 +480,27 @@ function DrawerBody({
             lineHeight: 1.65,
           }}
         >
-          {logLines.length === 0 && !logLoading ? (
-            <div
-              style={{
-                padding: '16px 0',
-                color: 'var(--faint)',
-                fontStyle: 'italic',
-                fontSize: 12,
-              }}
-            >
-              no log lines for this phase
-            </div>
-          ) : (
-            logLines.slice(0, 200).map((line, i) => (
-              <LogRow key={i} line={line} />
-            ))
-          )}
+          {(() => {
+            // forge-7wc: error is a state DISTINCT from empty (never merged
+            // into it — see phase-log-panel-view.ts's header for why).
+            const panelState = derivePhaseLogPanelState({ loading: logLoading, error: logError, lineCount: logLines.length });
+            if (panelState.kind === 'loading') return null; // the "loading…" indicator above already says so
+            if (panelState.kind === 'error') {
+              return (
+                <div data-component="phase-log-error" style={{ padding: '16px 0', color: 'var(--red)', fontSize: 12 }}>
+                  {panelState.message}
+                </div>
+              );
+            }
+            if (panelState.kind === 'empty') {
+              return (
+                <div style={{ padding: '16px 0', color: 'var(--faint)', fontStyle: 'italic', fontSize: 12 }}>
+                  no log lines for this phase
+                </div>
+              );
+            }
+            return logLines.slice(0, 200).map((line, i) => <LogRow key={i} line={line} />);
+          })()}
         </div>
       </DrawerSection>
 

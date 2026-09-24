@@ -62,6 +62,7 @@ function guardInput(root: string): ArtifactGuardInput {
   return {
     initiativeId: 'INIT-2026-06-16-x',
     manifestPath: join(root, '_queue', 'in-flight', 'INIT-2026-06-16-x.md'),
+    projectRepoPath: join(root, 'project'),
     worktreePath: join(root, 'wt'),
     cycleId: 'CY-1',
   };
@@ -108,6 +109,15 @@ test('resolveRequiredFile: demo path follows artifactRoot when the worktree decl
     got,
     resolve(input.worktreePath, 'forge', 'history', 'INIT-2026-06-16-x', 'demo', 'demo.json'),
   );
+  rmSync(root, { recursive: true, force: true });
+});
+
+test('resolveRequiredFile: project-repo-relative path resolves against projectRepoPath, not the worktree', () => {
+  const root = tmp();
+  const input = guardInput(root);
+  const got = resolveRequiredFile('project/AGENTS.md', input, root);
+  assert.equal(got, resolve(input.projectRepoPath, 'AGENTS.md'));
+  assert.notEqual(got, resolve(input.worktreePath, 'AGENTS.md'));
   rmSync(root, { recursive: true, force: true });
 });
 
