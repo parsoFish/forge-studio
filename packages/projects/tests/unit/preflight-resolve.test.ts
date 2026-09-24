@@ -49,5 +49,6 @@ test('every USER-tier clause carries a target (config key / file / operator-owne
     const c = classifyClause(clause(id));
     assert.equal(c.resolution, 'user', `${id} must be user`);
     assert.ok(c.target, `${id} must carry a target`);
+    if (c.target.kind === 'config') assert.ok(c.target.shape.startsWith('{') || c.target.shape.startsWith('['), `${id}'s config target must state its JSON value shape`);
   }
 });

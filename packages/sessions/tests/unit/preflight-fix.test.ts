@@ -166,6 +166,8 @@ test('C1b prompt names the config path, the testProcess.ci key and the current f
     assert.match(spawn.prompt, /\.forge\/project\.json/, 'must name the config file path');
     assert.match(spawn.prompt, /testProcess\.ci/, 'must name the target key');
     assert.match(spawn.prompt, /"cmd":\s*\[\s*\n?\s*"npm"/, 'must include the CURRENT file content');
+    // A real dispatch given only the key wrote `"ci": ["python", …]` — a bare argv the loader rejects.
+    assert.match(spawn.prompt, /shape `\{"cmd": \[/, 'must state the value shape the loader accepts');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }
