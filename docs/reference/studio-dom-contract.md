@@ -4675,8 +4675,13 @@ is what this contract reads — but it cannot be the only distinguisher.
     the shared `[data-component="fetch-error"]` + Retry (which drops the cached
     rejected fetch) in the graph's place — never "No KB data available." under
     a root that advertises `ok`; force-graph
-    root `#kb-svg[data-kb-id][data-node-count][data-edge-count][data-selected-node]`,
-    per-node `[data-node-id][data-layer="theme"|"index"|"guidance"]` with a
+    root `#kb-svg[data-kb-id][data-node-count][data-edge-count][data-selected-node]`.
+    A zero-node graph (`data-node-count="0"`) overlays
+    `[data-component="kb-graph-empty"]` — "No data yet for this knowledge
+    base." — over the still-live canvas and controls (forge-0b0: before this
+    a genuinely empty KB rendered the identical inert canvas a broken graph
+    would, with nothing telling the operator which one they were looking
+    at). Per-node `[data-node-id][data-layer="theme"|"index"|"guidance"]` with a
     `[data-hit]` inner hit-circle (click target — the outer `<g>`'s bbox
     centre is pushed off-centre by the label). Node click opens the article
     pane (`[data-node-article-body]`); the KB selector is `#kb-select`, one
