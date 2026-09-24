@@ -66,7 +66,7 @@ function targetLines(projectDir: string, clauseId: ClauseId): string[] {
     target.kind === 'config'
       ? [PROJECT_CONFIG_REL_PATH, guardedReadFile(projectDir, PROJECT_CONFIG_REL_PATH.split('/'))]
       : resolveFileTarget(projectDir, target.candidates);
-  const key = target.kind === 'config' ? ` — declare \`${target.keyPath}\`; preserve every other key, write valid JSON` : '';
+  const key = target.kind === 'config' ? ` — declare \`${target.keyPath}\` with the value shape \`${target.shape}\`; preserve every other key, write valid JSON` : '';
   return [
     '',
     `**Target:** ${path}${key}.`,

@@ -20,7 +20,7 @@ export type ClauseResolution = 'auto' | 'agent' | 'user';
 export type ClauseRoute = 'instructions' | 'demo-builder' | 'brain-fix' | 'preflight-fix';
 
 /** Where a USER-tier clause's fix lands (forge-8vfn.6.11.31) — the ONE map the preflight-fix runner reads instead of the agent guessing: a `.forge/project.json` key path, a named file (first existing candidate wins), or `operator` (not a file edit — the agent makes no change). */
-export type ClauseTarget = { kind: 'config'; keyPath: string } | { kind: 'file'; candidates: readonly string[] } | { kind: 'operator'; reason: string };
+export type ClauseTarget = { kind: 'config'; keyPath: string; shape: string } | { kind: 'file'; candidates: readonly string[] } | { kind: 'operator'; reason: string };
 
 export type ClauseClassification = {
   resolution: ClauseResolution;
@@ -46,20 +46,20 @@ const TABLE: Record<ClauseId, ClauseClassification> = {
   'DEMO-ALIGN': { resolution: 'agent', route: 'demo-builder', fixHint: 'Align capture steps with the declared test process (or keep the divergence deliberately — advisory).' },
 
   // USER — needs an operator decision; no safe auto/agent fix. `target` (forge-8vfn.6.11.31) says exactly where the fix lands — read by the preflight-fix runner so the agent is TOLD the file, never left to guess.
-  C1: { resolution: 'user', fixHint: 'Declare a single fast, deterministic test command (testProcess.local.cmd, the .forge/quality_gate_cmd sidecar, or package.json "test").', target: { kind: 'config', keyPath: 'testProcess.local.cmd' } },
+  C1: { resolution: 'user', fixHint: 'Declare a single fast, deterministic test command (testProcess.local.cmd, the .forge/quality_gate_cmd sidecar, or package.json "test").', target: { kind: 'config', keyPath: 'testProcess.local.cmd', shape: '["<argv0>", "<arg>", …]' } },
   // R1-03-F1: the CI net + acceptance tier are operator-declared gate policy.
-  C1b: { resolution: 'user', fixHint: 'Declare testProcess.ci ({cmd, fixCmd?, unsetEnv?}) — the full CI mirror that keeps a red whole-module baseline from ever shipping.', target: { kind: 'config', keyPath: 'testProcess.ci' } },
-  C7: { resolution: 'user', fixHint: 'External-resource projects declare testProcess.acceptance ({match, required, requiresEnv}) so merges are backed by a live acceptance test.', target: { kind: 'config', keyPath: 'testProcess.acceptance' } },
+  C1b: { resolution: 'user', fixHint: 'Declare testProcess.ci ({cmd, fixCmd?, unsetEnv?}) — the full CI mirror that keeps a red whole-module baseline from ever shipping.', target: { kind: 'config', keyPath: 'testProcess.ci', shape: '{"cmd": ["<argv0>", …], "fixCmd"?: ["…"], "unsetEnv"?: ["ENV_NAME"]}' } },
+  C7: { resolution: 'user', fixHint: 'External-resource projects declare testProcess.acceptance ({match, required, requiresEnv}) so merges are backed by a live acceptance test.', target: { kind: 'config', keyPath: 'testProcess.acceptance', shape: '{"match": "<substring of a WI gate>", "required": true, "requiresEnv"?: ["ENV_NAME"]}' } },
   C5: { resolution: 'user', fixHint: 'Declare locked-core constraints (CLAUDE.md / AGENTS.md / CONSTRAINTS.md).', target: { kind: 'file', candidates: ['CLAUDE.md', 'CONSTRAINTS.md'] } },
   C6: { resolution: 'user', fixHint: 'Add a GitHub remote so forge can open + merge PRs.', target: { kind: 'operator', reason: 'Add a GitHub `origin` remote (git remote add) — the skill must never add a remote itself; this is the operator\'s to do.' } },
   // R1-04-F2: release substrate is operator-owned (creating a changelog/version file blind is presumptuous).
-  C10: { resolution: 'user', fixHint: 'Add the missing release substrate (changelogPath / versionFile / docsDir) or correct the releaseProcess declaration.', target: { kind: 'config', keyPath: 'releaseProcess' } },
+  C10: { resolution: 'user', fixHint: 'Add the missing release substrate (changelogPath / versionFile / docsDir) or correct the releaseProcess declaration.', target: { kind: 'config', keyPath: 'releaseProcess', shape: '{"steps": [ …release steps ], "versionFile"?: "…", "changelogPath"?: "…", "docsDir"?: "…"}' } },
   // R1-04-F3: the build process is operator-declared project policy.
-  BUILD: { resolution: 'user', fixHint: 'Declare buildProcess.local (the compile/package command) and buildProcess.remote (the CI workflow) so a broken build is its own obligation.', target: { kind: 'config', keyPath: 'buildProcess' } },
+  BUILD: { resolution: 'user', fixHint: 'Declare buildProcess.local (the compile/package command) and buildProcess.remote (the CI workflow) so a broken build is its own obligation.', target: { kind: 'config', keyPath: 'buildProcess', shape: '{"local"?: ["<argv0>", …], "remote"?: "<CI workflow path>"}' } },
   // forge-8vfn.5.13: an unresolved binding needs a JUDGMENT call (rebind to
   // the right id, author the missing skill, or drop the stale declaration) —
   // none of which is a safe deterministic edit or a single agentic runner.
-  SKILLS: { resolution: 'user', fixHint: 'Rebind each unresolved skill id to a real project-local (.forge/skills/<id>) or forge-wide (skills/<id>) skill, or remove the stale declaration.', target: { kind: 'config', keyPath: 'skills' } },
+  SKILLS: { resolution: 'user', fixHint: 'Rebind each unresolved skill id to a real project-local (.forge/skills/<id>) or forge-wide (skills/<id>) skill, or remove the stale declaration.', target: { kind: 'config', keyPath: 'skills', shape: '["<skill-id>", …]' } },
   // forge-8vfn.5.21: running an installer (network access, lockfile resolution, arbitrary postinstall scripts) is not a safe surgical file edit the way C2/ARTIFACTS/C4's fixers are — the operator runs it.
   DEPS: { resolution: 'user', fixHint: 'Run npm ci (or npm install) in the project\'s own ground checkout so node_modules is provisioned before the next claim.', target: { kind: 'operator', reason: 'Run npm ci (or npm install) in the project\'s own ground checkout — the agent has no Bash tool and cannot run installers.' } },
 };
