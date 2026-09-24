@@ -11,10 +11,14 @@ import { postArchitectAnswers, type ArchitectQuestion } from '@/lib/bridge-clien
  *  reusable by any other kind's bespoke interview form (W6-B9: instructions,
  *  its one-time second consumer, migrated onto the generic
  *  `SessionInteractivePanel`'s single-box `question-form` affordance
- *  instead — see that file's own header note — so architect is this
- *  component's only consumer today; the parameterisation stays, since
- *  architect is permanently bespoke, ADR-043 amendment §4, and any FUTURE
- *  bespoke kind would want the same interview-round UI). */
+ *  instead — see that file's own header note). architect is NOT this
+ *  component's only consumer: W7-C2 (bead forge-lzv) re-added
+ *  `SessionInteractivePanel` as a second, load-bearing consumer, rendering
+ *  one control per pending question for its generic `question-form`
+ *  affordance (`components/studio/session/SessionInteractivePanel.tsx`).
+ *  The parameterisation stays for both — architect is permanently bespoke
+ *  (ADR-043 amendment §4), and any FUTURE bespoke kind would want the same
+ *  interview-round UI. */
 export type QuestionFormSubmitFn = (input: {
   project: string;
   sessionId: string;

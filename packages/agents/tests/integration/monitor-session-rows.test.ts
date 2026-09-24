@@ -57,6 +57,8 @@ function deps(projectsRoot: string): AgentHistoryDeps {
     cachedListRuns: () => [],
     buildAgentSlugToNodeId: () => new Map(),
     loadFlowDefinition: () => ({ id: 'none', nodes: [] }),
+    listFlowIds: () => [],
+    flowPathForId: (flowId: string, forgeRoot: string) => join(forgeRoot, 'studio', 'flows', flowId, 'flow.yaml'),
     loadSessionKinds: () => [{ id: KIND, agent: SLUG, title: 'Authoring session', legacyRoutes: [] }],
     parseGuardedEventsJsonl: (logsRoot, entry) => {
       const p = join(logsRoot, entry, 'events.jsonl');
