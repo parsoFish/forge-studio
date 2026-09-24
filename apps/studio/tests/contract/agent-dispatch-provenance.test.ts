@@ -19,7 +19,7 @@
  *     `reflection`, must never inherit the reflector's "dispatched after
  *     every confirmed merge" note (a fabricated provenance).
  */
-import { test, expect } from 'vitest';
+import { test, expect, beforeAll } from 'vitest';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,6 +46,20 @@ function readRosterPhases(): Map<string, string> {
   return out;
 }
 
+// Both tests below read the same real roster off disk. Doing that inline
+// duplicated the whole `skills/` scan (readdir + a stat + a read per slug)
+// inside EACH timed test body. It never measured over ~1s under CPU
+// starvation here (`taskset -c 0` + busy loops on core 0, 8 runs, both
+// tests always <50ms) — this file has no dynamic import or real-time wait,
+// so it is not the same defect class as bridge-client-read-fail-closed's
+// cold `import()`. Still, per #807's principle (cold/repeated setup does
+// not belong inside a timed test body), the scan is done ONCE here and
+// shared, halving the file's total synchronous fs work under load.
+let phases: Map<string, string>;
+beforeAll(() => {
+  phases = readRosterPhases();
+});
+
 // The note is PHASE-derived by design (never a per-slug list), so every
 // roster skill declaring one of the three outside-the-flow-graph phases gets
 // it: changelog-semver + doc-updater declare `release-finalize` because they
@@ -61,7 +75,6 @@ const EXPECT_NOTE = new Set([
 ]);
 
 test('roster parity: exactly the finalization-chain trio + project-scoped-review + reflector get a dispatch-provenance note from their REAL declared phase', () => {
-  const phases = readRosterPhases();
   // Guard the ground itself: each expected agent exists and declares a phase.
   for (const slug of EXPECT_NOTE) {
     expect(phases.has(slug), `skills/${slug}/SKILL.md declares a phase`).toBe(true);
@@ -74,7 +87,6 @@ test('roster parity: exactly the finalization-chain trio + project-scoped-review
 });
 
 test('roster parity: brain-fix / project-brain-builder (declared phase "reflection") never inherit the reflector note', () => {
-  const phases = readRosterPhases();
   for (const slug of ['brain-fix', 'project-brain-builder']) {
     const phase = phases.get(slug);
     if (phase === undefined) continue; // slug renamed/removed — the exact-set test above still holds the line

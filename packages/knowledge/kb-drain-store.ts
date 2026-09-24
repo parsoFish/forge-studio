@@ -15,7 +15,7 @@ import type { GuardedWriteSessionStatusFn } from './kb-drain-model.ts';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { resolveKbBrainDir } from './brain-paths.ts';
+import { tryGetKbBackend } from './kb-backend.ts';
 import { loadConfig, defaultConfigPath, resolveProjectsDir, guardedWriteFile } from '@forge/kernel';
 import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
@@ -25,7 +25,9 @@ import { parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs } from './kb-jo
 import {
   DEFAULT_KB_DRAIN_MAX_COST_USD,
   KB_DRAIN_MAX_ROUNDS,
+  KB_CLEANUP_SESSION_KIND,
   type KbDrainStatus,
+  type SessionReadabilityProbe,
 } from './kb-drain-model.ts';
 
 // ---------------------------------------------------------------------------
@@ -181,7 +183,10 @@ export function whenFromSessionId(sessionId: string): string {
   return `${m[1]}T${m[2]}:${m[3]}:${m[4]}.000Z`;
 }
 
-export function listKbRuns(forgeRoot: string, kbId: string): KbRunRow[] {
+/** `sessionIsReadable` REQUIRED (M7-C U8, bead forge-u8y2 — see design.md). A
+ *  'cleanup' row IS its session pointer (no other fact worth keeping), so an
+ *  unreadable one is dropped WHOLE, never emptied. */
+export function listKbRuns(forgeRoot: string, kbId: string, sessionIsReadable: SessionReadabilityProbe): KbRunRow[] {
   const rows: KbRunRow[] = [];
 
   // Drain runs — status.json is the record.
@@ -217,11 +222,13 @@ export function listKbRuns(forgeRoot: string, kbId: string): KbRunRow[] {
 
   // kb-cleanup sessions — anchored under the KB's own session project
   // (binding.ref for a project KB, the `.kb-<id>` anchor otherwise).
-  const brainDir = resolveKbBrainDir(forgeRoot, kbId);
+  // M7-C KN1 (bead forge-8vfn.5.25.3): `descriptorPath()` is the KbBackend
+  // seam's own kb.yaml resolution, resolved per call same as before.
+  const descriptorPath = tryGetKbBackend(forgeRoot, kbId)?.descriptorPath() ?? null;
   let anchor = `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`;
-  if (brainDir) {
+  if (descriptorPath) {
     try {
-      const kb = loadKbDescriptor(join(brainDir, 'kb.yaml'));
+      const kb = loadKbDescriptor(descriptorPath);
       if (kb.binding.kind === 'project') anchor = kb.binding.ref;
     } catch {
       // fall through to the dot anchor
@@ -249,6 +256,9 @@ export function listKbRuns(forgeRoot: string, kbId: string): KbRunRow[] {
     // (project-bound KBs share the project dir) — filter on the session's
     // own kb_id when it carries one.
     if (sessionKbId !== null && sessionKbId !== kbId) continue;
+    // M7-C U8 (bead forge-u8y2) — never mint a row for a session pointer that
+    // resolves nowhere. Same predicate, same reason, as `withReadableDraftSessions`.
+    if (!sessionIsReadable({ projectsRoot, logsRoot, kind: KB_CLEANUP_SESSION_KIND, sessionId: sid, project: anchor })) continue;
     rows.push({ kind: 'cleanup', id: sid, when: whenFromSessionId(sid), status: phase, costUsd: null, detail: null, project: anchor });
   }
 

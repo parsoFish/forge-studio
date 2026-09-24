@@ -55,7 +55,7 @@ import { splitFrontmatter, diffKbSnapshot, snapshotKbFiles, type KbEditChange } 
 import { collectThemeSlugTargets, extractLinks } from './brain-lint.ts';
 import { parseThemeRaw } from './theme-frontmatter.ts';
 import { resolveGuardedPath, guardedWriteFile } from '@forge/kernel';
-import { resolveKbBrainDir } from './brain-paths.ts';
+import { tryGetKbBackend } from './kb-backend.ts';
 
 /**
  * What makes a structurally-shaped edit unsound.
@@ -657,7 +657,14 @@ export function guardAgentKbEdits(
   let ctx: KbEditSoundnessCtx;
   try {
     root = realBrainRoot(brainRoot);
-    kbBrainDir = resolveKbBrainDir(forgeRoot, kbId);
+    // M7-C KN1 (bead forge-8vfn.5.25.3): resolved through the KbBackend
+    // seam. `rootDir()` is its one deliberate raw-path exception — kept
+    // here deliberately (not `contains()`) so `inKbScope`'s lexical
+    // prefix check below is BYTE-IDENTICAL to before: this is a security
+    // audit gate, and `contains()` answers `true` for the KB root itself
+    // (CONF-1c), which is a different question than the one this scope
+    // check has always asked.
+    kbBrainDir = tryGetKbBackend(forgeRoot, kbId)?.rootDir() ?? null;
     changes = diffKbSnapshot(brainRoot, snapshot as Map<string, string>);
     ctx = buildKbEditSoundnessCtx(forgeRoot, brainRoot);
   } catch (err) {

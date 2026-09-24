@@ -56,6 +56,12 @@ const routes = knowledgeRoutes({
   runFixTurn: async () => {
     throw new Error('unexpected brain-fix dispatch in this test');
   },
+  // M7-C U8 (bead forge-u8y2): REQUIRED, same shape as `runFixTurn` above.
+  // The `/drain` dispatches here never seed a real run (no perFinding to
+  // filter): 'chosen' is null and the probe is never reached.
+  sessionIsReadable: () => {
+    throw new Error('unexpected session-readability probe call in this test');
+  },
 });
 
 type Captured = { status: number | null; body: string };

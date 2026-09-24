@@ -66,7 +66,8 @@
 #      LANES_T1 · LANES_CLAUDE_BIN · LANES_WORKTREE_ROOT ($HOME) · LANES_CONFIRM_TIMEOUT_S (60) ·
 #      LANES_BASE_REF (parsoFish/main) · LANES_MEM_FLOOR_GIB (4) · LANES_INSTALL_CMD ·
 #      LANES_MEMINFO · LANES_PROC_ROOT (/proc) · LANES_DNS_CMD · LANES_CLAUDE_JSON
-#      ($HOME/.claude.json) — all but the first two pairs are test seams.
+#      ($HOME/.claude.json) · LANES_RETIRE_TERM_WAIT_S (10) · LANES_RETIRE_KILL_WAIT_S (10) —
+#      all but the first two pairs are test seams.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -144,13 +145,36 @@ self_chain() {
   done
   printf '%s' "$chain"
 }
-# retire_pid <pid> <why> → TERM, wait <=10s, KILL, verify /proc/<pid> is gone. Prints the pid.
+# wait_dead <pid> <ceiling-s> → poll /proc/<pid> every 0.5s until it is actually gone, or the
+# ceiling elapses. Returns 0 the moment /proc/<pid> disappears, 1 if the ceiling ran out first.
+wait_dead() {
+  local pid="$1" ceiling_s="$2" waited=0 steps
+  steps=$(( ceiling_s * 2 ))
+  while [ "$waited" -lt "$steps" ] && [ -d "/proc/$pid" ]; do sleep 0.5; waited=$((waited + 1)); done
+  [ -d "/proc/$pid" ] && return 1
+  return 0
+}
+# retire_pid <pid> <why> → TERM, wait for it to actually exit (bounded), KILL, wait again
+# (bounded), verify /proc/<pid> is gone. Prints the pid.
+#
+# scripts/lanes.test.ts:311 (register row F3). The KILL branch used to be `kill -KILL; sleep 1` —
+# one fixed second, then a SINGLE check, never revisited. SIGTERM/SIGKILL land on the target
+# near-instantly regardless of host load; what load actually delays is the REAPER — a killed
+# process stays a zombie in /proc until its parent (often a subreaper such as PID 1, once the
+# lane's own tmux/bash tree is gone) is scheduled to call wait() on it, and a starved reaper can
+# miss a fixed 1 s window the same way `waitGone`'s window, further downstream in the test, can
+# be missed. The fix is the same shape on both ends of that gap: this function now POLLS for the
+# actual exit after KILL too, instead of a blind sleep-then-check, bounded by a generous ceiling
+# that is not the thing being tested (LANES_RETIRE_KILL_WAIT_S, default 10s — matching the
+# pre-existing TERM wait, now LANES_RETIRE_TERM_WAIT_S and factored into wait_dead() so both
+# waits share one implementation).
 retire_pid() {
   local pid="$1" why="$2"
   kill -TERM "$pid" 2>/dev/null || true
-  local waited=0
-  while [ "$waited" -lt 20 ] && [ -d "/proc/$pid" ]; do sleep 0.5; waited=$((waited + 1)); done
-  if [ -d "/proc/$pid" ]; then kill -KILL "$pid" 2>/dev/null || true; sleep 1; fi
+  if ! wait_dead "$pid" "${LANES_RETIRE_TERM_WAIT_S:-10}"; then
+    kill -KILL "$pid" 2>/dev/null || true
+    wait_dead "$pid" "${LANES_RETIRE_KILL_WAIT_S:-10}" || true
+  fi
   if [ -d "/proc/$pid" ]; then echo "COULD NOT RETIRE pid $pid ($why) — still alive after TERM+KILL" >&2; return 1; fi
   echo "retired pid $pid ($why)"
 }
@@ -756,9 +780,15 @@ cmd_launch() {
   # honest "not configured" line rather than a silent non-exclusion.
   tmux send-keys -t "$s" "LANES_LANE='$lane' LANES_T1='$t1' FORGE_SUITE_LOCK='$camp/.suite-lock' FORGE_RUN_LOCK='$camp/.run-lock' FORGE_CLAUDE_CLI='$cli' $bin -n '$s' --session-id $sid --model $model --permission-mode $pm $settings --strict-mcp-config --mcp-config '$mcp' --append-system-prompt \"\$(cat '$proto')\" \"\$(cat '$prompt')\"; exit" Enter
   # Confirmed by effect: Claude Code lists the session. A pane showing text proves nothing.
+  #
+  # scripts/lanes.test.ts:528 (register row "lanes.test.ts:528" — roster-confirm window missed
+  # under load). A 2 s poll spends up to 2 s of every window as dead time: a registration that
+  # lands between two checks, including one that lands just before the deadline, is caught only
+  # if a poll happens to fall after it. Poll at the same granularity retire_pid's wait_dead()
+  # uses (0.5 s) so the window is spent watching for the event, not sleeping past it.
   local deadline=$(( $(date +%s) + ${LANES_CONFIRM_TIMEOUT_S:-60} )) row=""
   while [ "$(date +%s)" -lt "$deadline" ]; do
-    row="$(roster_row "$s")"; [ -n "$row" ] && break; sleep 2
+    row="$(roster_row "$s")"; [ -n "$row" ] && break; sleep 0.5
   done
   if [ -z "$row" ]; then
     # No row at all is ALSO the trust-dialog state, measured 2026-09-04: a lane launched into a

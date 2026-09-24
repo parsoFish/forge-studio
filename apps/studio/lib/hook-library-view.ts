@@ -139,6 +139,14 @@ export type HookDetailView = {
   /** W7-B4 (library-09): the recorded approval — present iff a live ledger
    *  entry exists; the resolved-state panel renders it. */
   approval?: HookDetail['approval'];
+  /** forge-8vfn.5.16 (M7-C U2) — always present; 0 = "scanned the recent
+   *  window, found no fire" (T2 review of 95cb287f: the route's scan is
+   *  bounded, so this is a count within that window, not all-time). */
+  recentFireCount: number;
+  /** Present iff the hook has fired within the scanned (recent) window;
+   *  never fabricated. */
+  lastFireAt?: HookDetail['lastFireAt'];
+  lastFireOutcome?: HookDetail['lastFireOutcome'];
 };
 
 export function buildHookDetailView(detail: HookDetail): HookDetailView {
@@ -158,5 +166,8 @@ export function buildHookDetailView(detail: HookDetail): HookDetailView {
     files: detail.files,
     scan: buildHookScanPanel(detail.scan),
     ...(detail.approval !== undefined ? { approval: detail.approval } : {}),
+    recentFireCount: detail.recentFireCount,
+    ...(detail.lastFireAt !== undefined ? { lastFireAt: detail.lastFireAt } : {}),
+    ...(detail.lastFireOutcome !== undefined ? { lastFireOutcome: detail.lastFireOutcome } : {}),
   };
 }

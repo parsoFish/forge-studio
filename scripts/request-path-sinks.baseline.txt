@@ -41,6 +41,7 @@ packages/agents/band-agent-run.ts readFileSync 1
 packages/agents/bridge-agents-history-rows.ts existsSync 5
 packages/agents/bridge-agents-history-rows.ts readdirSync 4
 packages/agents/bridge-agents-history-rows.ts readFileSync 1
+packages/agents/bridge-agents-history-rows.ts statSync 1
 packages/agents/bridge-agents-run-state.ts statSync 1
 packages/agents/bridge-agents-slug.ts mkdirSync 1
 packages/agents/bridge-agents-studio.ts existsSync 4
@@ -335,6 +336,8 @@ packages/kernel/config.ts readFileSync 2
 packages/kernel/discovery-roots.ts readdirSync 1
 packages/kernel/gh-identity.ts exec 3
 packages/kernel/gh-identity.ts execFileSync 1
+packages/kernel/guarded-scan.ts openSync 1
+packages/kernel/guarded-scan.ts statSync 2
 packages/kernel/init.ts execSync 1
 packages/kernel/init.ts existsSync 2
 packages/kernel/init.ts mkdirSync 1
@@ -398,8 +401,6 @@ packages/knowledge/bridge-studio-kb-routes-maintenance.ts mkdirSync 2
 packages/knowledge/bridge-studio-kb-routes-maintenance.ts openSync 1
 packages/knowledge/bridge-studio-kb-routes-maintenance.ts readFileSync 1
 packages/knowledge/bridge-studio-kb-routes-maintenance.ts spawn 1
-packages/knowledge/bridge-studio-kb-routes-read.ts existsSync 1
-packages/knowledge/bridge-studio-kb-routes-read.ts readdirSync 1
 packages/knowledge/bridge-studio-kbs.ts existsSync 2
 packages/knowledge/bridge-studio-kbs.ts mkdirSync 2
 packages/knowledge/bridge-studio-kbs.ts readdirSync 2
@@ -515,8 +516,10 @@ packages/library/studio/hook-package.ts readdirSync 1
 packages/library/studio/hook-package.ts readFileSync 1
 packages/library/studio/hook-package.ts statSync 1
 packages/library/studio/hook-runtime.ts readFileSync 1
+packages/library/studio/hook-runtime.ts rmSync 2
 packages/library/studio/hook-runtime.ts spawn 1
 packages/library/studio/hook-runtime.ts spawnSync 1
+packages/library/studio/hook-runtime.ts writeFileSync 1
 packages/library/studio/skill-install-ledger.ts existsSync 1
 packages/library/studio/skill-install-ledger.ts mkdirSync 2
 packages/library/studio/skill-install-ledger.ts readFileSync 1
@@ -654,7 +657,9 @@ packages/sessions/kinds/instructions.ts mkdirSync 1
 packages/sessions/kinds/instructions.ts writeFileSync 1
 packages/sessions/kinds/kind-turn.ts rmSync 1
 packages/sessions/kinds/project-brain.ts mkdirSync 1
+packages/sessions/session-readability.ts openSync 1
 packages/sessions/session-readability.ts readFileSync 1
+packages/sessions/session-readability.ts statSync 1
 packages/sessions/session-resolution.ts readdirSync 1
 packages/sessions/session-status-io.ts mkdirSync 2
 packages/sessions/session-status-io.ts readFileSync 2

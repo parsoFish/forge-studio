@@ -100,6 +100,38 @@ existing opts bag), `mintKbCleanupDraftSession` and
 rather than writing a session status through an unguarded path — the discipline
 `runFixTurn`'s absence already follows.
 
+## The session-readability port (M7-C U8, bead forge-u8y2)
+
+`SessionReadabilityProbe` (`kb-drain-model.ts`) is how the runs ledger
+(`listKbRuns`'s cleanup rows) and the drain status
+(`withReadableDraftSessions`'s `perFinding[].draftSession`) reach the real
+`sessionIsReadable` (`packages/sessions/session-resolution.ts`) without importing
+`@forge/sessions` (rank 2 may not import rank 4) — same rank problem, same
+shape, as the session-status port above. It is declared STRUCTURALLY rather
+than imported, shaped to match the real function argument-for-argument
+(`projectsRoot, logsRoot, kind, sessionId, project?`) so the assembly
+(`apps/forge/routes.ts`) binds it directly, no wrapper to drift out of step.
+`project` is a HINT, not a claim — `sessionIsReadable` only trusts a real
+`_<kind>/<sessionId>` dir it finds under it, same as that function's own
+`?project=` handling.
+
+**REQUIRED on `KnowledgeRouteDeps`, and on `withReadableDraftSessions`,
+`listKbRuns` and all three raw route handlers — no optional-with-a-permissive-
+default anywhere in the chain.** The first cut made the port OPTIONAL
+(mirroring `KbDrainTailDeps`'s legitimate optionality) with an implicit
+"keep every pointer" default when absent; a code-review round called that out
+as the exact fail-open fallback shape CLAUDE.md forbids, and the shape that
+let these pointers go unchecked in the first place (W8-F6). Every route test
+that constructs `knowledgeRoutes({...})` now declares one explicitly: a stub
+that throws where the test never reaches the runs/drain routes, `() => true`
+where it drives the real polling path. `handleStudioKbDrainRoutes` — the
+pre-carve dispatcher kept alive only to give `runFixTurn` et al. an optional-
+parameter excuse — turned out to have no live caller anywhere in the repo
+(checked by grep, not assumed) and was deleted in the same pass, which is
+what let the three raw handlers' own trailing parameter go required too: with
+no caller left that supplies fewer arguments, there is nothing left for an
+absent-probe refusal helper to guard against.
+
 ## Brain-write lease (forge-ler4)
 
 `brain-write-lease.ts` is the ONE lock a brain-writing turn takes, so the

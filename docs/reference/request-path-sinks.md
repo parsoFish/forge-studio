@@ -24,8 +24,10 @@ against the tables by counting; a count of line references could not be.
 
 | | Rows |
 |---|---|
-| Classified rows below | 68 |
-| — `guarded` | 17 |
+| Classified rows below | 72 |
+| — `guarded` | 20 |
+| — guarded, new in M7-C (the standalone-history bounded scan's guarded mtime sort + guarded first-event bounded head read, forge-omk0/forge-aug) | 2 |
+| — guarded, new in M7-C U2 (T2 review of `95cb287f`, forge-8vfn.5.16 — the hook-fire scan's bound, `statSync`/`openSync` in `packages/kernel/guarded-scan.ts`) | 2 |
 | — guarded, new in M4-projects (S3 "Rebuild contract" — `reset.ts` becomes bridge-reachable, no new mechanism) | 1 |
 | — fixed in this sweep (all were `unguarded`) | 12 |
 | — fixed later in SEC-02 (`forge-d1f`) | 3 |
@@ -105,8 +107,10 @@ had fixed it and the row still said otherwise.
 | `packages/sessions/bridge-studio-sessions.ts` (`findSessionProject`) | `readdirSync` | none — enumerates the config-derived `projectsRoot` (trusted root, never request data); the request-derived `sessionId` only SELECTS via `resolveGuardedPath(projectsRoot, [name, '_<kind>', sessionId])` per candidate | guarded `[exec]` | **New in W7-A2** (deep links without `?project=`, cancel without `body.project`). Mirrors `collectStudioSessionIndexRows`' own trusted-root enumeration exactly; every enumerated name is additionally re-validated by `invalidProjectReason` before the guarded probe. Zero hits → 404, ≥2 → 409 (never naming the candidates). Verified `[exec]` by `packages/sessions/tests/integration/bridge-studio-lifecycle.test.ts` (dot-anchor resolution, not-found, ambiguous). |
 | `packages/sessions/kinds/architect-steps.ts` (`runDraftStep`, bead `forge-8vfn.7.6.17`) | `rmSync` 1 -> 2 | none — the deleted names are `readdirSync` entries of this session's OWN `manifests/` dir, never request data | guarded `[read]` | **New in M6-D (ruling 629).** `runDraftRounds` calls `runDraftStep` once per completeness-critic round and `promoteManifests` promotes every `*.md` it finds, so a round that renamed or dropped an initiative left the previous round's manifest behind to be queued beside its replacement — four queue entries for two initiatives, measured in two captured runs. The step now clears the directory first: **this round's drafts are the session's drafts.** CONTAINMENT: the root is `paths.manifestsDir`, which `sessionPaths` derives for the session the turn is already running (`withPaths`, the same value every other write in this step uses); nothing from a request reaches it. The names come from `readdirSync` of that directory — entries that exist there because this same step wrote them — and only those ending `.md` are removed, one file at a time, never `recursive`. A directory entry name cannot contain `/`, so `join` cannot escape the dir it was listed from, and a symlinked entry would be unlinked, not followed (`rmSync` on a symlink removes the link). The other `rmSync` in this file (the stale `edge-cases.json` leaf) is unchanged. Verified `[exec]` by `apps/forge/tests/integration/architect-draft-round-manifests.test.ts`: two draft rounds where round 2 echoes round 1's ids leave exactly one manifest per initiative, and a SHRINKING re-draft leaves no orphan. |
 | `packages/sessions/session-readability.ts` (`parseGuardedEventsJsonl`, `resolveLegacySession`) | `resolveGuardedPath` (the guard's own `realPath` is the only thing `readFileSync` ever sees) | `GET /api/studio/sessions/:kind/:sessionId` (the LEGACY arm), and the four pre-existing `apps/forge/ui-bridge.ts` call sites that now import this helper instead of holding a private copy | guarded `[exec]` | **New in W8-F6 (bead forge-6gv.27).** `parseGuardedEventsJsonl` MOVED here verbatim from `apps/forge/ui-bridge.ts` (rows above) so the legacy-session read path and those four call sites share ONE guarded parse rather than two copies — the sink is not new, it relocated, and `check-request-path-sinks` records it as `apps/forge/ui-bridge.ts readFileSync 8 -> 7` plus this file at 1. `resolveLegacySession` resolves `<logsRoot>/_<kind>-<sessionId>` and its `events.jsonl` leaf through `resolveGuardedPath` with `logsRoot` (fixed, config-derived) as `root` and the log-dir NAME and the literal `events.jsonl` as their OWN `segments[]` elements — never folded into `root`. `_${kind}-${sessionId}` is ONE directory-entry name (the hyphen is a character in the name, not a separator), so the per-segment identity walk plus the `nlink === 1` leaf check close the symlinked-dir, symlinked-leaf and hardlinked-leaf shapes in one place. Every rejection returns the same bare `{ok:false}` / `null` a genuinely-absent log dir returns — no reason string escapes, so this is not an existence oracle outside `logsRoot`. Verified `[exec]` by `packages/sessions/tests/unit/session-readability.test.ts` AT-F6-18/19/20 (directory symlink, `events.jsonl` file symlink, hardlinked `events.jsonl` respectively — each plants a secret marker OUTSIDE the guarded root and asserts the marker's total absence from the returned value AND the outside file's byte-identity before/after) and AT-F6-21/22 (a `..` and a `/`-embedding `sessionId`, called directly because a real HTTP client normalises both away before the server sees them), plus `packages/sessions/bridge-studio-sessions.test.ts` AT-F6-R7, which drives the symlinked-leaf escape over the REAL wire and asserts the marker never appears anywhere in the raw 404 response text. |
+| `packages/sessions/session-readability.ts` (`parseGuardedFirstEvent`) | `openSync` + `statSync` (+ `readSync`) | same `_logs/` entry NAMES as `parseGuardedEventsJsonl`'s row above, via the `AgentRunStateDeps.parseGuardedFirstEvent` injection | guarded `[read]` | **New in M7-C (forge-omk0/forge-aug), and the reason the baseline grows here.** A bounded HEAD read of just a standalone run's first event — the cheap pre-filter `collectStandaloneRows` (`packages/agents/bridge-agents-history-rows.ts`) uses to skip a full `parseGuardedEventsJsonl` for a run whose first event definitely does not name the queried slug. Same shape as `guardedReadFileTail` (`bridge-studio-lifecycle.ts`, row below) but from offset 0 instead of `size - maxBytes`: `openSync`/`statSync`/`readSync` all operate on `resolveGuardedPath(root, [entryName, 'events.jsonl']).realPath`, nothing else — a rejected or absent path returns `null` before any fd is opened, and the fd is closed in `finally`. `null` is INDETERMINATE (never a definite non-match) at every call site — a truncated/rejected read falls through to the full guarded parse, so this can only ever SKIP work, never wrongly exclude a real match. Verified `[read]` by `packages/agents/tests/unit/standalone-history-bounded-scan.test.ts` (a forbidden dir's `parseGuardedFirstEvent`/`parseGuardedEventsJsonl` both throw if invoked, and the assertions require neither is). |
 | `packages/sessions/bridge-studio-architect.ts` (`GET /api/architect/file/:project/:sessionId/*name`) | `resolveGuardedPath` (the guard's own `realPath` is the only thing `readFileSync` ever sees) | `project` / `sessionId` / the trailing file NAME, each its own `segments[]` element under the fixed `projectsRoot` | guarded `[exec]` | **New in M4's session-routes carve — the sink is not new, it RELOCATED.** The five `/api/architect/*` arms moved verbatim out of `apps/forge/ui-bridge.ts` into this package, and `check-request-path-sinks` records the move as `apps/forge/ui-bridge.ts readFileSync 7 -> 6` plus this file at 1: one sink leaves, one arrives, the population is conserved. Nothing about the guard changed in the move — the route still resolves through `resolveGuardedPath` and reads only `guarded.realPath`, so the per-segment identity walk and the `nlink === 1` leaf check still close the symlinked-dir, symlinked-leaf and hardlinked-leaf shapes at the same choke point. Worth stating because a relocation is exactly when a guard silently stops applying: the walker proved it still reaches this module (it reported the new pair rather than a bare disappearance from the host), and `check-raw-fs-guarded` independently scanned 65 modules where it scanned 64 before. |
 | `packages/agents/bridge-agents-{run-state,history-rows,slug}.ts` (the five carved `/api/agents/*` routes) | `resolveGuardedPath` / `guardedReadFile` (unchanged choke points), plus root-level `existsSync`/`readdirSync` enumeration | `_logs/` and `projects/` entry NAMES read by `readdirSync` (never a route's own `slug` or `runId`, per D5), and the server-minted `runId` for the run-dir `mkdirSync` | guarded `[exec]` | **New in M4's agents-routes carve — every one of these sinks RELOCATED; not one is new.** The five handlers and the sixteen helper declarations behind them moved verbatim out of `apps/forge/ui-bridge.ts` into `packages/agents`, and the walker records the move as a conserved population, kind for kind: `apps/forge/ui-bridge.ts` `existsSync` 18→12, `readdirSync` 9→4, `mkdirSync` 3→2, `readFileSync` 3→2, `statSync` 5→4 — **−14 in the host** — against `bridge-agents-history-rows.ts` `existsSync` +6 / `readdirSync` +5 / `readFileSync` +1, `bridge-agents-run-state.ts` `statSync` +1 and `bridge-agents-slug.ts` `mkdirSync` +1 — **+14 in the package**. Host-minus-package is **0**, which is the evidence the carve is a MOVE rather than a copy (COMMON §15.73); the guard reported the shrink as five *tightenable* lines, which are green from one direction and are exactly where a half-updated baseline hides (§15.72), so both directions were read. Nothing about any guard changed in transit: `parseGuardedEventsJsonl` is now INJECTED rather than imported (the package is rank 3 and may not reach `@forge/sessions`), but it is the same function, supplied at `apps/forge/routes.ts` — and `resolveGuardedPath`/`guardedReadFile` are imported from `@forge/kernel` DIRECTLY and deliberately not injected, because an injected containment guard is a guard a caller can replace. The rows above describing these sinks under `apps/forge/ui-bridge.ts` remain accurate about the behaviour; only the file holding them changed. |
+| `packages/agents/bridge-agents-history-rows.ts` (`standaloneEntriesNewestFirst`, serving `GET /api/agents/:slug/history` and the standalone half of `GET /api/agents/runs/recent`) | `statSync` 0 -> 1 | `_logs/` entry NAMES read by `readdirSync` (never a route's own `slug`, per D5) | guarded `[read]` | **New in M7-C (forge-omk0/forge-aug), and the reason the baseline grows here.** Before this, `collectStandaloneRows` and `collectRecentAgentRuns`'s standalone half walked EVERY `_agent-*` dir per request with no cap; this orders candidates NEWEST-FIRST by directory mtime so the page-size cap (`STANDALONE_HISTORY_MAX_ROWS`/`limit`) drops the OLDEST dirs rather than an arbitrary readdir-order slice. `entry` is an untrusted `readdirSync` NAME, so the stat goes through `resolveGuardedPath(logsRoot, [entry])` — the SAME choke point `readStandaloneLivenessFacts`'s `guardedMtime` closure (`bridge-agents-run-state.ts`) already uses for this file's OTHER mtimes (`events.jsonl`/`stderr.log`/`turn.pid`) — never a raw `join(logsRoot, entry)`; a rejected or absent entry sorts LAST (never prioritised over a dir whose age is actually known), so a poisoned entry can at most be scanned late, never elevate itself. Reads metadata only, no bytes. Verified `[read]` by `packages/agents/tests/unit/standalone-history-bounded-scan.test.ts` (a page's worth of matching + noise dirs, plus a forbidden oldest dir whose reads throw if ever opened — the cap+order bound is what keeps it unopened). |
 | `packages/agents/bridge-agents-studio.ts` (`GET /api/studio/agents`, `PUT`/`DELETE /api/studio/agents/:slug`) | `resolveGuardedPath` / `guardedFile` / `guardedWriteFile` (unchanged choke points) | URL param `slug`, gated by `SLUG_RE` + `isReservedId` before any path is built | guarded `[exec]` | **New in M4's agents-routes carve, second family — again a RELOCATION, not a new sink.** The roster GET moved from `apps/forge/bridge-studio.ts` and the upsert/delete block from `apps/forge/bridge-studio-writes.ts`; the walker records the move as a conserved population: `apps/forge/bridge-studio-writes.ts` `existsSync` 4→1, `readFileSync` 3→1, `mkdirSync` 3→2, `rmSync` 2→1, `writeFileSync` 2→1 — **−8 in the host** — against `bridge-agents-studio.ts` +3/+2/+1/+1/+1 = **+8 in the package**. Host-minus-package **0**. `PUT` and `DELETE` still share ONE handler and therefore ONE slug validation and ONE `resolveGuardedPath` containment check, exactly as the single `if (agentMatch)` block did: splitting them into two handlers would have duplicated a containment guard, which COMMON §15.47 names as a security-invariant breach rather than a smaller change. The body reaches the handler as `ctx.readBody()` (T1 ruling 30) and the DELETE arm never calls it, matching the host's own control flow. This carve minted **no** boundary row: everything the block needed was already a `packages/agents` export, a `@forge/kernel` export, or a legal rank-3 → rank-2 `@forge/library` import — only `validateAgent` and the Flow-kind pair are injected, and they are the two halves of the registry split still outstanding. **forge-q4sz — `rmSync` 1→2, `writeFileSync` 1→2, the reason the baseline grows here.** The PUT arm now calls `lintSkillToolFence` AFTER its existing write and, on an error-level fence finding, reverts: `writeFileSync(skillMdPath, originalRaw, 'utf8')` (restore, when the slug pre-existed) or `rmSync(skillDirPath, {recursive:true,force:true})` (undo a brand-new create) — the identical `skillMdPath`/`skillDirPath` this row's ONE containment check already produced earlier in the SAME handler, never re-derived from `slug`. Same guard, same mechanism, one more call site each. |
 | `packages/library/studio-lint-tool-fence.ts` (`lintSkillToolFence`, called from `packages/agents/bridge-agents-studio.ts`'s `PUT /api/studio/agents/:slug`) | `readFileSync` 0 → 1 | none — the request's `slug` is used only AFTER this read, as a `.filter(f => f.object === \`skill:${slug}\`)` predicate over the returned findings | **not request-derived** `[read]` | **forge-q4sz, and the reason this file's baseline grows here.** `lintSkillToolFence(forgeRoot)` walks the ENTIRE roster via `listSkillDirs(forgeRoot)` (a disk enumeration — `readdirSync` over `skills/`, server-owned, not caller input) and reads every `<dir>/SKILL.md` unconditionally; the caller's `slug` never reaches this function at all — it is applied by the CALLER, afterward, only to select which of the returned findings matter. Same shape as the enumeration rows above (`queue.ts`, `config.ts`): the read's own path has no request-derived component, so there is no escape shape to plant. Was already reachable this way from `apps/forge/studio-lint.ts`'s CLI verb; new only in that a bridge route now also triggers the same whole-roster walk. |
 | `packages/sessions/bridge-studio-instructions.ts` (`GET /api/instructions/file/:project/:sessionId/*name`) | `resolveGuardedPath` (only `guarded.realPath` reaches `readFileSync`) | `project` / `sessionId` / the trailing file NAME, each its own `segments[]` element under the fixed `projectsRoot` | guarded `[exec]` | **M4 session-routes carve — relocated, not new.** The instructions family moved verbatim into this package and the walker records it as `apps/forge/ui-bridge.ts readFileSync 6 -> 5` plus this file at 1: conserved, one for one. The guard is untouched by the move — same `resolveGuardedPath` choke point, same per-segment identity walk and `nlink === 1` leaf check. Its sibling row for the architect family, immediately above, was the same relocation one commit earlier. |
@@ -2600,3 +2604,128 @@ hand-editing the affected lines, NOT by `--write`: the checker also reports
 one pre-existing, unrelated tightenable line in
 `packages/flows/scheduler-dispatch.ts` (`existsSync 4 -> 3`) that neither
 split touched; sweeping it in would mix another lane's slack into this one.
+
+### Extended in M7-C — `hook-runtime.ts`'s private verified-script copy (bead `forge-8vfn.8.3.2`, content half)
+
+`packages/library/studio/hook-runtime.ts` gained `writeFileSync` 0 → 1 and
+`rmSync` 0 → 2 (`writePrivateScriptCopy`'s own error-path cleanup, and
+`cleanupPrivateScriptDir`, called from a `finally` in both `runHookScript` and
+`runHookScriptAsync`). **not request-derived** `[read+write]` — no
+caller-supplied value reaches either sink.
+
+The fix closes a three-opens TOCTOU on the hook's OWN script path: the
+approval fingerprint (`hookRunState`), `prepareHookRun`'s verified read, and
+(before this fix) each spawn tail's own `spawn(Sync)('bash', [scriptPath])`
+were three separate reads of the same request-adjacent path (a hook id is
+operator-supplied, but only ever through the approval workflow, never a
+route that spawns unapproved hooks — see this file's existing `hook-runtime.ts`
+rows above). The bytes `prepareHookRun` reads and hashes are now copied,
+once, to a FRESH path this process alone names:
+`mkdtempSync(join(os.tmpdir(), 'forge-hook-verified-'))` — a server-generated
+random directory name, never a request field, never a caller-supplied
+component of any kind — followed by `writeFileSync(join(dir,
+'hook-script.sh'), scriptBody, { mode: 0o500, flag: 'wx' })`, where `dir` is
+that same mkdtemp'd path and the leaf is the module-level constant
+`PRIVATE_SCRIPT_FILENAME`. `cleanupPrivateScriptDir`'s `rmSync` removes that
+SAME `dir`, never a path built from any other input. Both `bash` invocations
+that used to open `scriptPath` a third time now `source` this private copy
+instead (`hookExecArgs`), so the private path is also the thing that closes
+the vulnerability, not merely a new sink that happens to be safe.
+
+Classified `[read+write]` because the write's CONTENT (`scriptBody`) is the
+hash-verified script — already established as safe-to-execute by the
+fingerprint check immediately above it in `prepareHookRun` — and the read
+side is the two-pin proof in `hook-runtime-toctou.test.ts` (a real spawned
+child) that nothing reachable from this path can be substituted between the
+verified read and exec. **The precondition that would make this live** is a
+route accepting a caller-supplied temp-file path or filename for
+`writePrivateScriptCopy`/`cleanupPrivateScriptDir` to act on — neither
+function takes one; both derive their own path from `mkdtempSync`'s return
+value alone. Pinned by the two existing content-TOCTOU pins plus a third new
+one (stdin-untouched) in `hook-runtime-toctou.test.ts`.
+`scripts/request-path-sinks.baseline.txt` accepts the new counts via
+`--write` in the same commit that adds this section, per this document's own
+rule.
+
+### M7-C U2 (T2 review of `95cb287f`, forge-8vfn.5.16) — bounding the hook-fire scan, two new `statSync`/`openSync` sinks in `packages/kernel/guarded-scan.ts` (guarded)
+
+`GET /api/studio/hooks/:id` used to open every `_logs/<cycleId>/events.jsonl`
+on disk (via `listCycles` + `guardedReadFile`, already-classified sinks) to
+answer one request — the same unbounded scan class M7-C #834
+(forge-hqkm/omk0) fixed for `packages/knowledge/bridge-studio-kb-routes-
+maintenance.ts`'s ingest-activity route and `packages/agents/bridge-agents-
+history-rows.ts`'s standalone-history routes. Fixed by bounding the scan to
+the newest `HOOK_FIRE_SCAN_MAX_CYCLES` (50) cycle dirs, ordered by directory
+mtime rather than the cycle id string — a hook can fire from ANY agent spawn
+(flow cycles, one-shot `_agent-*` runs, interactive session kinds, bridge
+writes), unlike `reflect.kb-ingest`, which only ever comes from a flow
+cycle's ISO-prefixed, lexically-sortable id, so `#834`'s lexical-sort variant
+does not apply here and the mtime-ordered variant is used instead.
+
+**Relocated one commit later, T2's follow-up review: the guard mechanics are
+not hook-specific**, so the two closures that first landed inline in
+`bridge-studio-hooks-detail.ts` moved DOWN into a new kernel module,
+`packages/kernel/guarded-scan.ts` (`guardedMtime`, `selectRecentEntries`,
+`guardedReadFileTail`), mirroring `case-folding-probe.ts`'s own precedent
+(moved down from `agents`/`library` for the identical reason — see that
+module's row in this table's M4 section). `packages/library` may not import
+`packages/agents` (rank 2 importing rank 3 would invert the allow-graph), so
+`packages/agents/bridge-agents-history-rows.ts`'s own independent
+`sortEntriesByMtimeDesc` (that PR, #834, is still open) is NOT repointed to
+this module here — a follow-up once #834 lands. The two sink NAMES this
+row classifies therefore now live in `packages/kernel/guarded-scan.ts`
+(`statSync` 0 → 2, `openSync` 0 → 1; `readSync`/`closeSync` are not in
+`check-raw-fs-guarded.mjs`'s tracked six and add no row) rather than in the
+route:
+
+- **`guardedMtime(root, segments)`** (`statSync` ×1 of 2) —
+  `resolveGuardedPath(root, segments)` then `statSync(guarded.realPath).
+  mtimeMs`; `null` on rejection/absence/stat-race (the CALLER, e.g.
+  `selectRecentEntries`, decides a `null` sorts last — this primitive
+  states no opinion). Mirrors `packages/agents/bridge-agents-run-state.ts`'s
+  `guardedMtime` closure exactly (same guard-then-stat shape). The route's
+  own call site, `guardedMtime(ctx.logsRoot, [cycleId])`, passes `cycleId` —
+  a `listCycles`-enumerated NAME (a `readdirSync` entry of the trusted,
+  fixed `ctx.logsRoot`), never a route URL param — the same
+  "server-enumerated names, holding no client string" trust class
+  `findKbDrainRuns` and `packages/flows/metrics.ts`'s `listCycles` already
+  establish elsewhere in this table.
+- **`guardedReadFileTail(root, segments, maxBytes)`** (`statSync` ×1 of 2,
+  for file `size`; `openSync` ×1) — `resolveGuardedPath(root, segments)`,
+  then a BOUNDED positional read of the last `maxBytes` (the route's own
+  call site passes `HOOK_FIRE_SCAN_TAIL_BYTES`, 64KB; the whole file when
+  smaller) off `guarded.realPath` — byte-for-byte the same shape as the
+  pre-existing, unexported `guardedReadFileTail` (`packages/sessions/
+  bridge-studio-lifecycle.ts`, row above in this table), independently
+  implemented here rather than imported (that file is rank 4;
+  `packages/kernel` is rank 0 and may not import UP). `fd` is closed in
+  `finally`. Byte-bounded ONLY — unlike the route's first, one-commit-ago
+  version, this primitive does NOT trim a truncated leading partial JSONL
+  line: `scanHookFireSummary`'s per-line `JSON.parse` already discards a
+  malformed fragment via its own `catch`, so a generic kernel primitive has
+  no JSONL opinion to encode, and a future non-JSONL caller is not handed
+  line-oriented behaviour it never asked for.
+
+Both are injected into `scanHookFireSummary`
+(`packages/library/studio/hook-fire-summary.ts`) via the route's
+`HookFireScanDeps` object — the SAME seam a unit test wires with
+counting/scripted fakes to prove the bound without touching a real forge
+root — so nothing about the guard is bypassable by the caller;
+`resolveGuardedPath` itself is never passed through the deps bag.
+
+**Confirmed, not just classified.** `check-raw-fs-guarded.mjs` reports 0
+unguarded request-derived raw fs sinks with both sites in scope. `check-
+request-path-sinks.mjs` recorded the two sinks' relocation (tightened to 0
+in `bridge-studio-hooks-detail.ts`, grown to the same two counts in
+`packages/kernel/guarded-scan.ts`) and was re-run with `--write` in the same
+commit that updates this section, per this document's own rule. Pinned by
+`packages/kernel/tests/unit/guarded-scan.test.ts` (direct coverage of
+`guardedMtime`/`selectRecentEntries`/`guardedReadFileTail` — real temp
+directories, real files, an absent/rejected-entry case for each),
+`packages/library/tests/unit/hook-fire-summary.test.ts` (the bound proven
+via counting fakes against the injected `HookFireScanDeps` seam), and
+`packages/library/tests/integration/bridge-studio-hooks-fire-activity.test.ts`
+(the bound proven behaviorally end-to-end through the real kernel functions,
+over real files with real directory mtimes via `utimesSync` — 5 real fires
+recorded only in cycles older than the 50-cycle window are confirmed
+invisible on the wire).

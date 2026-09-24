@@ -580,3 +580,71 @@ describe('sdkHooksForAgent: the declared matcher is enforced in forge syntax', (
     assert.equal(existsSync(named), true, 'a bare tool-name matcher fires on the tool name alone');
   });
 });
+
+// ---------------------------------------------------------------------------
+// 5 — M7-C U2 (forge-8vfn.5.16): a hook FIRE is itself an event, not just its
+// failure modes. Every existing test above only pins the diagnostic 'error'
+// events for the non-zero-exit / refusal branches; NONE of them assert a
+// record exists that an operator (or a story beat) could use to answer "did
+// this hook actually run, and when" — the exact gap the bead names.
+// ---------------------------------------------------------------------------
+
+describe('sdkHooksForAgent: a hook fire is recorded as ONE event (M7-C U2, forge-8vfn.5.16)', () => {
+  it('a clean (exit 0) fire appends exactly one message:"hook.fire" event, outcome ran (kills: the swallowed exitCode===0 return that logs nothing at all)', async () => {
+    const root = makeRoot('hook-dispatch-fireevt-ran-');
+    const marker = join(makeRoot('hook-dispatch-fireevt-ran-mark-'), 'fired.txt');
+    writeHook(root, 'fireevt-ran-hook', { on: 'SessionEnd', script: touchScript(marker) });
+    approveHook({ forgeRoot: root, id: 'fireevt-ran-hook' });
+    const skill = writeAgent(root, 'fireevt-ran-agent', ['fireevt-ran-hook']);
+    const { logger, entries } = makeLogger('c-fireevt-ran');
+
+    const hooks = sdkHooksForAgent({ skill, logger, initiativeId: 'INIT-t', forgeRoot: root });
+    await fire(hooks, 'SessionEnd');
+
+    const fires = entries().filter((e) => e.message === 'hook.fire');
+    assert.equal(fires.length, 1, `expected exactly one hook.fire event, got ${JSON.stringify(fires)}`);
+    const md = fires[0]!.metadata as Record<string, unknown>;
+    assert.equal(md['hookId'], 'fireevt-ran-hook');
+    assert.equal(md['event'], 'SessionEnd');
+    assert.equal(md['outcome'], 'ran');
+    assert.equal(md['exitCode'], 0);
+    assert.equal(typeof md['durationMs'], 'number');
+  });
+
+  it('an approval-gate refusal STILL appends a hook.fire event, outcome refused (kills: only the diagnostic error being logged, leaving no fire-count signal at all)', async () => {
+    const root = makeRoot('hook-dispatch-fireevt-refused-');
+    const marker = join(makeRoot('hook-dispatch-fireevt-refused-mark-'), 'must-not-exist.txt');
+    writeHook(root, 'fireevt-refused-hook', { on: 'SessionEnd', script: touchScript(marker) });
+    // deliberately NOT approved
+    const skill = writeAgent(root, 'fireevt-refused-agent', ['fireevt-refused-hook']);
+    const { logger, entries } = makeLogger('c-fireevt-refused');
+
+    const hooks = sdkHooksForAgent({ skill, logger, initiativeId: 'INIT-t', forgeRoot: root });
+    await fire(hooks, 'SessionEnd');
+
+    const fires = entries().filter((e) => e.message === 'hook.fire');
+    assert.equal(fires.length, 1, `expected exactly one hook.fire event, got ${JSON.stringify(fires)}`);
+    assert.equal((fires[0]!.metadata as Record<string, unknown>)['outcome'], 'refused');
+    assert.equal(existsSync(marker), false, 'unrelated to the fix: the script itself must still never run');
+  });
+
+  it('exit 2 (BLOCKED) is still outcome "ran" — the script executed and chose to block, which is not the same as never firing (kills: conflating blocked with refused/absent)', async () => {
+    const root = makeRoot('hook-dispatch-fireevt-blocked-');
+    writeHook(root, 'fireevt-blocked-hook', {
+      on: 'PreToolUse',
+      script: '#!/usr/bin/env bash\necho "no" >&2\nexit 2\n',
+    });
+    approveHook({ forgeRoot: root, id: 'fireevt-blocked-hook' });
+    const skill = writeAgent(root, 'fireevt-blocked-agent', ['fireevt-blocked-hook']);
+    const { logger, entries } = makeLogger('c-fireevt-blocked');
+
+    const hooks = sdkHooksForAgent({ skill, logger, initiativeId: 'INIT-t', forgeRoot: root });
+    await fire(hooks, 'PreToolUse', { tool_name: 'Bash', tool_input: { command: 'x' } });
+
+    const fires = entries().filter((e) => e.message === 'hook.fire');
+    assert.equal(fires.length, 1, `expected exactly one hook.fire event, got ${JSON.stringify(fires)}`);
+    const md = fires[0]!.metadata as Record<string, unknown>;
+    assert.equal(md['outcome'], 'ran', 'the script really executed to completion; "ran" is about execution, not the verdict it returned');
+    assert.equal(md['exitCode'], 2);
+  });
+});
