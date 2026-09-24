@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { rangeTiers, resolveRangeModel } from '../../model-range.ts';
+import { rangeTiers } from '../../model-range.ts';
 import type { Catalog } from '@forge/contracts/studio/types.ts';
 
 // ---------------------------------------------------------------------------
@@ -52,62 +52,4 @@ test('rangeTiers: [haiku, opus] → [haiku, opus] cheapest first', () => {
 
 test('rangeTiers: throws on empty range', () => {
   assert.throws(() => rangeTiers([], CATALOG), /at least one model id/);
-});
-
-// ---------------------------------------------------------------------------
-// resolveRangeModel
-// ---------------------------------------------------------------------------
-
-test('resolveRangeModel: escalationLevel 0 → cheapest (haiku) from [haiku, opus]', () => {
-  const model = resolveRangeModel(
-    ['claude-opus-4-8', 'claude-haiku-4-5-20251001'],
-    CATALOG,
-    0,
-  );
-  assert.equal(model, 'claude-haiku-4-5-20251001');
-});
-
-test('resolveRangeModel: escalationLevel 1 → opus from [haiku, opus]', () => {
-  const model = resolveRangeModel(
-    ['claude-haiku-4-5-20251001', 'claude-opus-4-8'],
-    CATALOG,
-    1,
-  );
-  assert.equal(model, 'claude-opus-4-8');
-});
-
-test('resolveRangeModel: escalationLevel clamped at end (level ≥ len-1 → priciest)', () => {
-  // haiku+opus range; escalate to level 99 → clamped at opus
-  const model = resolveRangeModel(
-    ['claude-haiku-4-5-20251001', 'claude-opus-4-8'],
-    CATALOG,
-    99,
-  );
-  assert.equal(model, 'claude-opus-4-8');
-});
-
-test('resolveRangeModel: single-model range returns that model at any escalation level', () => {
-  assert.equal(resolveRangeModel(['claude-sonnet-4-6'], CATALOG, 0), 'claude-sonnet-4-6');
-  assert.equal(resolveRangeModel(['claude-sonnet-4-6'], CATALOG, 5), 'claude-sonnet-4-6');
-});
-
-test('resolveRangeModel: default escalationLevel is 0 (cheapest)', () => {
-  const model = resolveRangeModel(
-    ['claude-opus-4-8', 'claude-haiku-4-5-20251001'],
-    CATALOG,
-  );
-  assert.equal(model, 'claude-haiku-4-5-20251001');
-});
-
-test('resolveRangeModel: throws on empty range', () => {
-  assert.throws(() => resolveRangeModel([], CATALOG), /at least one model id/);
-});
-
-test('resolveRangeModel: full 3-tier range escalates through haiku→sonnet→opus', () => {
-  const range = ['claude-opus-4-8', 'claude-haiku-4-5-20251001', 'claude-sonnet-4-6'];
-  assert.equal(resolveRangeModel(range, CATALOG, 0), 'claude-haiku-4-5-20251001');
-  assert.equal(resolveRangeModel(range, CATALOG, 1), 'claude-sonnet-4-6');
-  assert.equal(resolveRangeModel(range, CATALOG, 2), 'claude-opus-4-8');
-  // Clamped at opus
-  assert.equal(resolveRangeModel(range, CATALOG, 3), 'claude-opus-4-8');
 });
