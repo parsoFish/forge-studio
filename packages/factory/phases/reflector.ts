@@ -61,6 +61,7 @@ import {
 import { writeCycleRecap } from '../cycle-recap.ts';
 import { cyclesThemesDir, projectThemesDir } from '@forge/knowledge/brain-paths.ts';
 import { runPostReflectionKbHealth } from '@forge/knowledge/kb-health.ts';
+import { acquireBrainWriteLease, BrainWriteLeaseContentionError } from '@forge/knowledge/brain-write-lease.ts';
 import { getPaths, type QueuePaths } from '@forge/flows/queue.ts';
 
 // The live turn/budget caps (60 turns / $1.50 — bench 5-fixture median was
@@ -271,184 +272,46 @@ export async function runReflector(
     mode: reflectMode,
   });
 
-  const toolUseSummary: ReflectorToolUseSummary = {
-    brainReads: 0,
-    themeWrites: 0,
-    retroWrites: 0,
-    bashCalls: 0,
-  };
-  let costUsd = 0;
-  let durationMs = 0;
-  let resultSubtype: string | undefined;
-
+  // forge-ler4 — one brain-writing turn at a time. The lease covers exactly
+  // the window this function's brain writes span: the SDK spawn (below) plus
+  // its post-exit brain writes (retention patch, per-KB health) — see
+  // `runReflectorBrainWrites` and `brain-write-lease.ts`'s own doc for the
+  // race this closes and why the window ends where it does.
+  let releaseLease: (() => Promise<void>) | undefined;
   try {
-    // R4-01-F2: the spawn goes through the generic one-shot primitive.
-    // `lifecycle: 'caller'` — this pipeline owns the event lifecycle (the
-    // reflector.start/end pair around this call); runAgent emits nothing and
-    // returns the totals. Options (model/tools from the derived spec, caps
-    // from the SKILL.md `budgets`) are pinned byte-identical to the previous
-    // inline build by the golden spawn-capture suite. Per-message telemetry
-    // stays here via the onMessage observer (ADR-036: judgments never move
-    // into the primitive).
-    const def = loadAgentDefinition(skillPath('reflector'));
-    // R4-01 review: the caps moved from undeletable code constants to
-    // frontmatter data — fail loud if an edit removes them (mirrors the PM
-    // pipeline's maxTurns guard; an uncapped unattended reflector re-opens
-    // the silent-spend vector the old constants closed).
-    if (def.budgets.maxTurns === undefined || def.budgets.maxBudgetUsd === undefined) {
-      throw new Error(
-        'reflector SKILL.md must declare budgets.maxTurns and budgets.maxBudgetUsd (R4-01-F2 — the live caps are frontmatter data)',
-      );
-    }
-    const spawn = await runAgent(def, {
-      runId: cycleId,
-      workdir: forgeRoot,
-      cwd: forgeRoot,
-      prompt,
-      systemPrompt,
-      lifecycle: 'caller',
-      onMessage: (msg) => {
-        if (typeof msg !== 'object' || msg === null) return;
-        const m = msg as {
-          type?: string;
-          message?: { content?: Array<{ type?: string; name?: string; input?: unknown }> };
-        };
-        if (m.type === 'assistant') tallyReflectorToolUse(m.message, toolUseSummary);
-      },
-      queryFn: deps.sdkQuery,
-    });
-    costUsd = spawn.costUsd;
-    durationMs = spawn.durationMs ?? 0;
-    resultSubtype = spawn.resultSubtype;
+    releaseLease = await acquireBrainWriteLease(forgeRoot);
   } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    logger.emit({
-      initiative_id: input.initiativeId,
-      parent_event_id: start.event_id,
-      phase: 'reflection',
-      skill: 'reflector',
-      event_type: 'error',
-      input_refs: [logger.logFilePath],
-      output_refs: [],
-      message: 'reflector.crashed',
-      metadata: { error: errMsg },
-    });
-    // 2.10: classify the crash (G3 classifier) so the loss carries whether a
-    // rerun could succeed (transient environment pressure vs deterministic).
-    const crash = classifyCrash(errMsg, null);
+    if (!(err instanceof BrainWriteLeaseContentionError)) throw err;
     emitReflectionLost(logger, {
       initiativeId: input.initiativeId,
       parentEventId: start.event_id,
-      cause: 'crash',
-      detail: errMsg,
-      extraMetadata: { crash_kind: crash.kind, crash_reason: crash.reason },
+      cause: 'brain-write-lease-contention',
+      detail: err.message,
     });
     return { reflection_status: 'failed', lint_status: 'skipped' };
   }
 
-  // 2.10: a non-success SDK result means the reflector died mid-run
-  // (budget/turn exhaustion, execution error) — its outputs are incomplete
-  // and the reflection is LOST, not closed. Previously this fell through: a
-  // budget-exhausted reflector that had already read the brain cleared the
-  // F-13 gate and closed silently (the July silent-loss pattern). Same
-  // precedent as release-finalize's non-success handling.
-  if (resultSubtype !== undefined && resultSubtype !== 'success') {
-    const cause =
-      resultSubtype === 'error_max_budget_usd'
-        ? 'budget-exhausted'
-        : resultSubtype === 'error_max_turns'
-          ? 'max-turns'
-          : 'error';
-    emitReflectionLost(logger, {
-      initiativeId: input.initiativeId,
-      parentEventId: start.event_id,
-      cause,
-      detail: `reflector SDK run ended with result subtype "${resultSubtype}" — reflection outputs are incomplete`,
-      extraMetadata: { result_subtype: resultSubtype, cost_usd: costUsd, duration_ms: durationMs },
-    });
-    return { reflection_status: 'failed', lint_status: 'skipped' };
-  }
-
-  // F-13: brain-first gate for reflector. Log-and-continue style — reflector
-  // failures don't propagate (the merge already happened). The
-  // reflection_status field surfaces the failure to telemetry.
-  if (
-    !recordBrainGateResult('reflection', 'reflector', toolUseSummary.brainReads, {
-      initiativeId: input.initiativeId,
-      logger,
-      parentEventId: start.event_id,
-    })
-  ) {
-    emitReflectionLost(logger, {
-      initiativeId: input.initiativeId,
-      parentEventId: start.event_id,
-      cause: 'brain-gate-failed',
-      detail: 'F-13 brain-first gate failed (zero brain reads) — reflection abandoned before retention/lint/recap',
-    });
-    return { reflection_status: 'failed', lint_status: 'skipped' };
-  }
-
-  // S6A — retention tagging. Compute retention tier from the cycle's events
-  // + the themes the reflector just wrote, then patch the archive's
-  // frontmatter (overwriting the agent's placeholder).
-  const retention = computeAndApplyRetention({
-    forgeRoot,
-    projectName,
-    cycleId,
-    cycleArchivePath,
-    themesDir,
-    logFilePath: logger.logFilePath,
-    sinceMs: startedAtMs,
-  });
-  logger.emit({
-    initiative_id: input.initiativeId,
-    parent_event_id: start.event_id,
-    phase: 'reflection',
-    skill: 'reflector',
-    event_type: 'log',
-    input_refs: [cycleArchivePath],
-    output_refs: [cycleArchivePath],
-    message: 'reflector.retention-assigned',
-    metadata: {
-      retention: retention.retention,
-      cited_by_count: retention.citedBy.length,
-      archive_patched: retention.patched,
-    },
-  });
-
-  // R4-09-F5 — per-KB post-cycle health. Run each TOUCHED KB's declared
-  // processes (ingest = regenerate the index so fresh themes are discoverable;
-  // consolidate = deterministic auto-fix of index/route/date gaps) BEFORE the
-  // authoritative lint below, so `lint_status` reflects the consolidate fixes.
-  // The candidate KBs a reflect run may write: its project KB, the flow/cycles
-  // KB (always touched — the cycle archive lands there), and forge-dev.
-  const kbHealthFn = deps.kbHealth ?? runPostReflectionKbHealth;
+  let brainWrites: Awaited<ReturnType<typeof runReflectorBrainWrites>>;
   try {
-    kbHealthFn({
+    brainWrites = await runReflectorBrainWrites({
+      input,
+      logger,
+      deps,
+      startEventId: start.event_id,
       forgeRoot,
       cycleId,
-      candidateKbIds: ['cycles', 'forge-dev', projectName],
-      sinceMs: startedAtMs,
-      logger,
-      initiativeId: input.initiativeId,
-      parentEventId: start.event_id,
+      projectName,
+      systemPrompt,
+      prompt,
+      cycleArchivePath,
+      themesDir,
+      startedAtMs,
     });
-  } catch (kbErr) {
-    // Best-effort like the rest of the post-agent pipeline — a KB-health crash
-    // must never abort the cycle close (the index regen also lives here, so a
-    // failure loses the regen; runPostReflectionLint below still runs).
-    logger.emit({
-      initiative_id: input.initiativeId,
-      parent_event_id: start.event_id,
-      phase: 'reflection',
-      skill: 'reflector',
-      event_type: 'error',
-      input_refs: [],
-      output_refs: [],
-      message: 'reflector.kb-health-failed',
-      metadata: { error: kbErr instanceof Error ? kbErr.message : String(kbErr) },
-    });
+  } finally {
+    await releaseLease();
   }
+  if (!brainWrites.ok) return { reflection_status: 'failed', lint_status: 'skipped' };
+  const { costUsd, durationMs, resultSubtype, retention, toolUseSummary } = brainWrites;
 
   // S6A — brain-lint trigger. Run AFTER themes + archive are written (and after
   // the KB-health consolidate above) so the cycle-touched-themes scope sees the
@@ -542,6 +405,231 @@ export async function runReflector(
     },
   });
   return { reflection_status: 'closed', lint_status: lintStatus };
+}
+
+/**
+ * forge-ler4 — every brain write `runReflector` makes: the SDK spawn (which
+ * writes theme files directly) plus the two orchestrator-side brain writes
+ * that follow it (the retention frontmatter patch, per-KB health's
+ * ingest/consolidate). Extracted so `runReflector` can wrap exactly this span
+ * — and nothing before or after it — in the brain-write lease; everything
+ * past this function's return (lint with `fix:false`, user-questions.json,
+ * the recap, the final event) reads or writes only `_logs/`, never `brain/`.
+ *
+ * Every early-return path below is a LOSS — same `reflection_status:'failed'`
+ * either way — so the caller only needs to know ok vs not-ok; the specific
+ * cause is already on the `cycle.reflection-lost` event this function (via
+ * `emitReflectionLost`) emits before returning.
+ */
+async function runReflectorBrainWrites(opts: {
+  input: CycleInput;
+  logger: EventLogger;
+  deps: ReflectorDeps;
+  startEventId: string | undefined;
+  forgeRoot: string;
+  cycleId: string;
+  projectName: string;
+  systemPrompt: string;
+  prompt: string;
+  cycleArchivePath: string;
+  themesDir: string;
+  startedAtMs: number;
+}): Promise<
+  | {
+      ok: true;
+      costUsd: number;
+      durationMs: number;
+      resultSubtype: string | undefined;
+      retention: ReturnType<typeof computeAndApplyRetention>;
+      toolUseSummary: ReflectorToolUseSummary;
+    }
+  | { ok: false }
+> {
+  const {
+    input, logger, deps, startEventId, forgeRoot, cycleId, projectName,
+    systemPrompt, prompt, cycleArchivePath, themesDir, startedAtMs,
+  } = opts;
+
+  const toolUseSummary: ReflectorToolUseSummary = {
+    brainReads: 0,
+    themeWrites: 0,
+    retroWrites: 0,
+    bashCalls: 0,
+  };
+  let costUsd = 0;
+  let durationMs = 0;
+  let resultSubtype: string | undefined;
+
+  try {
+    // R4-01-F2: the spawn goes through the generic one-shot primitive.
+    // `lifecycle: 'caller'` — this pipeline owns the event lifecycle (the
+    // reflector.start/end pair around this call); runAgent emits nothing and
+    // returns the totals. Options (model/tools from the derived spec, caps
+    // from the SKILL.md `budgets`) are pinned byte-identical to the previous
+    // inline build by the golden spawn-capture suite. Per-message telemetry
+    // stays here via the onMessage observer (ADR-036: judgments never move
+    // into the primitive).
+    const def = loadAgentDefinition(skillPath('reflector'));
+    // R4-01 review: the caps moved from undeletable code constants to
+    // frontmatter data — fail loud if an edit removes them (mirrors the PM
+    // pipeline's maxTurns guard; an uncapped unattended reflector re-opens
+    // the silent-spend vector the old constants closed).
+    if (def.budgets.maxTurns === undefined || def.budgets.maxBudgetUsd === undefined) {
+      throw new Error(
+        'reflector SKILL.md must declare budgets.maxTurns and budgets.maxBudgetUsd (R4-01-F2 — the live caps are frontmatter data)',
+      );
+    }
+    const spawn = await runAgent(def, {
+      runId: cycleId,
+      workdir: forgeRoot,
+      cwd: forgeRoot,
+      prompt,
+      systemPrompt,
+      lifecycle: 'caller',
+      onMessage: (msg) => {
+        if (typeof msg !== 'object' || msg === null) return;
+        const m = msg as {
+          type?: string;
+          message?: { content?: Array<{ type?: string; name?: string; input?: unknown }> };
+        };
+        if (m.type === 'assistant') tallyReflectorToolUse(m.message, toolUseSummary);
+      },
+      queryFn: deps.sdkQuery,
+    });
+    costUsd = spawn.costUsd;
+    durationMs = spawn.durationMs ?? 0;
+    resultSubtype = spawn.resultSubtype;
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: startEventId,
+      phase: 'reflection',
+      skill: 'reflector',
+      event_type: 'error',
+      input_refs: [logger.logFilePath],
+      output_refs: [],
+      message: 'reflector.crashed',
+      metadata: { error: errMsg },
+    });
+    // 2.10: classify the crash (G3 classifier) so the loss carries whether a
+    // rerun could succeed (transient environment pressure vs deterministic).
+    const crash = classifyCrash(errMsg, null);
+    emitReflectionLost(logger, {
+      initiativeId: input.initiativeId,
+      parentEventId: startEventId,
+      cause: 'crash',
+      detail: errMsg,
+      extraMetadata: { crash_kind: crash.kind, crash_reason: crash.reason },
+    });
+    return { ok: false };
+  }
+
+  // 2.10: a non-success SDK result means the reflector died mid-run
+  // (budget/turn exhaustion, execution error) — its outputs are incomplete
+  // and the reflection is LOST, not closed. Previously this fell through: a
+  // budget-exhausted reflector that had already read the brain cleared the
+  // F-13 gate and closed silently (the July silent-loss pattern). Same
+  // precedent as release-finalize's non-success handling.
+  if (resultSubtype !== undefined && resultSubtype !== 'success') {
+    const cause =
+      resultSubtype === 'error_max_budget_usd'
+        ? 'budget-exhausted'
+        : resultSubtype === 'error_max_turns'
+          ? 'max-turns'
+          : 'error';
+    emitReflectionLost(logger, {
+      initiativeId: input.initiativeId,
+      parentEventId: startEventId,
+      cause,
+      detail: `reflector SDK run ended with result subtype "${resultSubtype}" — reflection outputs are incomplete`,
+      extraMetadata: { result_subtype: resultSubtype, cost_usd: costUsd, duration_ms: durationMs },
+    });
+    return { ok: false };
+  }
+
+  // F-13: brain-first gate for reflector. Log-and-continue style — reflector
+  // failures don't propagate (the merge already happened). The
+  // reflection_status field surfaces the failure to telemetry.
+  if (
+    !recordBrainGateResult('reflection', 'reflector', toolUseSummary.brainReads, {
+      initiativeId: input.initiativeId,
+      logger,
+      parentEventId: startEventId,
+    })
+  ) {
+    emitReflectionLost(logger, {
+      initiativeId: input.initiativeId,
+      parentEventId: startEventId,
+      cause: 'brain-gate-failed',
+      detail: 'F-13 brain-first gate failed (zero brain reads) — reflection abandoned before retention/lint/recap',
+    });
+    return { ok: false };
+  }
+
+  // S6A — retention tagging. Compute retention tier from the cycle's events
+  // + the themes the reflector just wrote, then patch the archive's
+  // frontmatter (overwriting the agent's placeholder).
+  const retention = computeAndApplyRetention({
+    forgeRoot,
+    projectName,
+    cycleId,
+    cycleArchivePath,
+    themesDir,
+    logFilePath: logger.logFilePath,
+    sinceMs: startedAtMs,
+  });
+  logger.emit({
+    initiative_id: input.initiativeId,
+    parent_event_id: startEventId,
+    phase: 'reflection',
+    skill: 'reflector',
+    event_type: 'log',
+    input_refs: [cycleArchivePath],
+    output_refs: [cycleArchivePath],
+    message: 'reflector.retention-assigned',
+    metadata: {
+      retention: retention.retention,
+      cited_by_count: retention.citedBy.length,
+      archive_patched: retention.patched,
+    },
+  });
+
+  // R4-09-F5 — per-KB post-cycle health. Run each TOUCHED KB's declared
+  // processes (ingest = regenerate the index so fresh themes are discoverable;
+  // consolidate = deterministic auto-fix of index/route/date gaps) BEFORE the
+  // authoritative lint below, so `lint_status` reflects the consolidate fixes.
+  // The candidate KBs a reflect run may write: its project KB, the flow/cycles
+  // KB (always touched — the cycle archive lands there), and forge-dev.
+  const kbHealthFn = deps.kbHealth ?? runPostReflectionKbHealth;
+  try {
+    kbHealthFn({
+      forgeRoot,
+      cycleId,
+      candidateKbIds: ['cycles', 'forge-dev', projectName],
+      sinceMs: startedAtMs,
+      logger,
+      initiativeId: input.initiativeId,
+      parentEventId: startEventId,
+    });
+  } catch (kbErr) {
+    // Best-effort like the rest of the post-agent pipeline — a KB-health crash
+    // must never abort the cycle close (the index regen also lives here, so a
+    // failure loses the regen; runPostReflectionLint below still runs).
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: startEventId,
+      phase: 'reflection',
+      skill: 'reflector',
+      event_type: 'error',
+      input_refs: [],
+      output_refs: [],
+      message: 'reflector.kb-health-failed',
+      metadata: { error: kbErr instanceof Error ? kbErr.message : String(kbErr) },
+    });
+  }
+
+  return { ok: true, costUsd, durationMs, resultSubtype, retention, toolUseSummary };
 }
 
 /**
