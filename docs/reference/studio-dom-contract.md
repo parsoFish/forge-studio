@@ -116,6 +116,42 @@ the bound expires — `beats.mjs:41-44`'s "absent from the page" against 438's
 bound-naming branch — and in one key having had two shapes across three sibling
 surfaces, which is the thing a contract exists to prevent.
 
+**`SessionMinted`'s kind union grew to `architect | demo | instructions |
+project-brain` (`forge-8vfn.5.10`).** M1-G swept architect and demo; three more
+project-builder sites (all on `/projects/[id]`) still `router.push`ed a session
+id from inside the click that minted it — `Instructions.tsx` (the standing-
+instructions launcher, `data-instructions-session-id` /
+`[data-action="launch-instructions"]`), `KbBind.tsx` (the project-brain
+builder, `data-project-brain-session-id` /
+`[data-action="create-project-brain"]`), and `ContractResolutionPanel.tsx`'s
+own `instructions`-route agent-tier resolve button (same
+`data-instructions-session-id` key as `Instructions.tsx` — the two surfaces
+mint independently and can legitimately disagree, since only one names the
+session actually reachable from wherever the operator is standing). Each now
+publishes its own distinctly-named key (ruling 307: this panel can render
+inside the onboarding SESSION page, whose root also carries a generic
+`data-session-id`) and renders `SessionMinted`'s real anchor
+(`[data-action="view-instructions-session"|"view-project-brain-session"]`)
+rather than navigating from the click. `ContractResolutionPanel`'s
+`brain-fix` route is NOT one of these — it navigates to an EXISTING, already-
+bound KB's health tab (`brainFixHref`, `/knowledge?id=<boundKbId>&tab=health`),
+never a `/sessions/` route, and mints nothing from the click; `SessionMinted`
+cannot express that href and the acceptance criterion this closes is scoped to
+`/sessions/` navigations only.
+
+**Neither new anchor carries `?project=`** — the pre-fix `Instructions.tsx`
+and `ContractResolutionPanel` targets never did, and `KbBind.tsx`'s did but
+lost it here on purpose: the session shell resolves `project` itself off each
+kind's own per-kind summary route (`listInstructionsSessions` /
+`fetchProjectBrainSessions`,
+`app/sessions/[kind]/[sessionId]/page.tsx`), and the story runner matches a
+minted anchor's `href` EXACTLY (`scripts/stories/beats.mjs`) — a query string
+renders a link a human can click and no beat can ever find
+(`authoring-launcher-mint.test.ts` pins the same rule for the authoring
+launcher). The `demo` kind's three existing `SessionMinted` call sites still
+carry `?project=` and are unchanged by this fix — a pre-existing instance of
+the same class, left for a future PR.
+
 **An action repeated per instance carries the instance in its own name (M1-G,
 `forge-8vfn.5.6`).** `[data-action="select-stage-<stage>"]`, like
 `browse-<name>` and `new-skill` before it. A reader resolves `[data-action=…]`
