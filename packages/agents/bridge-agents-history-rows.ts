@@ -93,6 +93,15 @@ export function collectFlowNodeRows(deps: AgentHistoryDeps, forgeRoot: string, s
 
 export const STANDALONE_HISTORY_MAX_ROWS = 50; // M7-C page size — no query param on either standalone route
 
+/** Sorts `entries` newest-first by `mtimeOf`, extracted as a pure, exported
+ *  helper (not just an inline `.sort` closure) so a test can inject a
+ *  COUNTING `mtimeOf` and assert the call count directly — `resolveGuardedPath`
+ *  + `statSync` are not themselves injectable (they're imported straight from
+ *  `@forge/kernel`/`node:fs`), so this is the seam. */
+export function sortEntriesByMtimeDesc(entries: readonly string[], mtimeOf: (entry: string) => number): string[] {
+  return entries.slice().sort((a, b) => mtimeOf(b) - mtimeOf(a));
+}
+
 /** `_agent-*` entries, NEWEST FIRST by directory mtime (M7-C) — metadata
  *  only; a slug's unknown length rules out slicing a stamp from the name.
  *  `entry` is an untrusted `readdirSync` NAME, so the stat goes through the
@@ -104,7 +113,7 @@ function standaloneEntriesNewestFirst(logsRoot: string, entries: readonly string
     if (!guarded.ok || !guarded.exists) return -Infinity; // rejected/absent sorts last
     try { return statSync(guarded.realPath).mtimeMs; } catch { return -Infinity; } // stat race after the guard sorts last, not an error
   };
-  return entries.filter((e) => e.startsWith(STANDALONE_RUN_DIR_PREFIX)).sort((a, b) => mtimeOf(b) - mtimeOf(a));
+  return sortEntriesByMtimeDesc(entries.filter((e) => e.startsWith(STANDALONE_RUN_DIR_PREFIX)), mtimeOf);
 }
 
 /**
