@@ -21,9 +21,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -364,4 +364,80 @@ test('CONF-8a kb-lint-summary.ts and kb-health.ts resolve no KB brain directory 
     const hits = src.split('\n').filter((l) => l.includes('resolveKbBrainDir') && !l.trimStart().startsWith('*'));
     assert.deepEqual(hits, [], `${rel} must reach a KB's store through KbBackend, not resolveKbBrainDir`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// §9 The bypass ratchet, WHOLE-PACKAGE (M7-C KN1, bead forge-8vfn.5.25.3).
+// §8 above is the two-file census H8 closed; the bead's own census found 16
+// more per-KB reads still resolving their own brain dir, split across
+// bridge-studio-kbs.ts/-kb-drain.ts/-kb-routes-*.ts and kb-drain-edit-
+// soundness.ts — re-derived here as a repo walk rather than restating that
+// list, because a named list only shrinks by hand and says nothing about a
+// NEW site appearing somewhere the list never named.
+//
+// EXEMPT is deliberately two files, not zero: `kb-backend.ts` IS the seam
+// (its three calls resolve what `dir()`/`getKbBackend`/`tryGetKbBackend`
+// hand back), and `kb-graph.ts` is the seam's own backing engine —
+// `buildGraph`/`getNodeArticle`/`listPendingGuidance`/`deleteGuidanceFile`
+// delegate to it 1:1, so a call there is the seam's implementation, not a
+// caller reaching around it. `brain-paths.ts` (the resolver's definition) is
+// out of PKG_DIR's walk already, checked separately by name.
+// ---------------------------------------------------------------------------
+
+const SEAM_MODULE = 'brain-paths.ts';
+// `index.ts` is exempted alongside the seam itself for the same reason: its
+// only appearance is `export { resolveKbBrainDir } from './brain-paths.ts'`
+// — re-exporting the seam's own resolver by NAME on the public door (so a
+// permitted external caller can still reach it), never a call of it. A
+// genuine bypass call could not live in index.ts anyway — the file is pure
+// re-exports, asserted by contract.test.ts.
+const SEAM_INTERNAL = new Set(['kb-backend.ts', 'kb-graph.ts', 'index.ts']);
+
+/** Every `.ts` production-source file directly under `PKG_DIR`, one level of
+ *  `studio/` included — this package keeps no deeper production nesting —
+ *  skipping `tests/`. */
+function knowledgeSourceFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        if (entry.name === 'tests' || entry.name === 'node_modules') continue;
+        walk(join(dir, entry.name));
+        continue;
+      }
+      if (!entry.name.endsWith('.ts') || entry.name.endsWith('.test.ts')) continue;
+      out.push(join(dir, entry.name));
+    }
+  };
+  walk(PKG_DIR);
+  return out;
+}
+
+test('CONF-9 (RATCHET): no file in @forge/knowledge outside the seam itself (kb-backend.ts, kb-graph.ts, brain-paths.ts) calls resolveKbBrainDir', () => {
+  const files = knowledgeSourceFiles();
+  assert.ok(files.length > 20, `sanity: expected a real package tree, found only ${files.length} source files`);
+
+  const offenders = files
+    .filter((f) => !SEAM_INTERNAL.has(basename(f)) && basename(f) !== SEAM_MODULE)
+    .flatMap((f) => {
+      const src = readFileSync(f, 'utf8');
+      const rel = relative(PKG_DIR, f);
+      return src
+        .split('\n')
+        .map((line, idx) => ({ line, idx }))
+        .filter(({ line }) => {
+          const t = line.trimStart();
+          return line.includes('resolveKbBrainDir') && !t.startsWith('*') && !t.startsWith('//') && !t.startsWith('/*');
+        })
+        .map(({ line, idx }) => `${rel}:${idx + 1}: ${line.trim()}`);
+    });
+
+  assert.deepEqual(
+    offenders,
+    [],
+    'these lines resolve a KB brain directory directly instead of going through KbBackend — repoint them ' +
+      '(getKbBackend/tryGetKbBackend + contains/ownsTheme/placement/descriptorPath/freshThemeFiles/rootDir), the ' +
+      'same cure bead forge-8vfn.5.25.3 applied to the other 14:\n' +
+      offenders.join('\n'),
+  );
 });
