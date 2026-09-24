@@ -234,3 +234,89 @@ test('readSkillPackage still reads an ordinary package containing a REAL (non-sy
     rmSync(base, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// TOCTOU — the walk's own realpath validation is re-derived from a stale raw
+// path at the point of USE, not carried forward from the point of CHECK.
+//
+// `walk()` in both `readSkillPackage` and `installSkillPackage`'s
+// `walkPackageDir` computes `real = realpathSync(absPath)`, checks
+// containment against `real`, then re-touches the RAW `absPath` for the
+// actual `statSync`/`readFileSync`/recursion. `statSync`/`readFileSync`
+// follow whatever a symlink resolves to AT THE MOMENT THEY RUN — so a
+// symlink swapped between the two calls sends the classification and the
+// bytes to a DIFFERENT target than the one the containment check just
+// approved. A validated identity that is never the identity actually
+// touched is not a containment guard; it is a check with a gap after it.
+//
+// NO WIRE-OBSERVABLE ORACLE, NO WORKING SPY. A genuine race is
+// non-deterministic and unsuitable for CI. `node:test`'s `mock.method`
+// cannot redefine these modules' named ESM imports either — the same
+// empirically-verified limitation `apps/forge/tests/regression/
+// instructions-start-read-guard.test.ts` and
+// `packages/factory/tests/regression/demo-builder-start-read-guard.test.ts`
+// document and route around with a SOURCE-STRUCTURAL pin instead. This is
+// that same pattern applied here: the only honest RED-at-base assertion is
+// that every touch AFTER the containment check goes through the validated
+// `real` binding, never a second look at the raw, possibly-swapped
+// `absPath`. A wrong implementation — one that re-touches `absPath` after
+// validating `real` — is exactly what these assertions fail against today.
+// ---------------------------------------------------------------------------
+
+test('readSkillPackage: every touch after realpath validation uses the validated `real` path, never the raw `absPath` again (TOCTOU)', () => {
+  const src = readFileSync(join(import.meta.dirname, '..', '..', 'studio', 'skill-package.ts'), 'utf8');
+  assert.match(
+    src,
+    /if \(real !== rootAbs && !real\.startsWith\(boundary\)\)/,
+    'sanity: the containment check this pin sits right after has moved or been renamed — locate it before trusting the assertions below',
+  );
+  assert.doesNotMatch(
+    src,
+    /statSync\(absPath\)/,
+    'statSync must not re-touch the raw, possibly-symlinked absPath after realpath validation — classify the already-validated `real` path instead (TOCTOU)',
+  );
+  assert.doesNotMatch(
+    src,
+    /walk\(absPath, relPath\)/,
+    'recursion into a directory entry must descend through the validated `real` path, not the raw absPath (TOCTOU)',
+  );
+  assert.doesNotMatch(
+    src,
+    /readFileSync\(absPath, 'utf8'\)/,
+    'the file read must not re-touch the raw absPath after realpath validation — read the validated `real` path instead (TOCTOU)',
+  );
+  assert.match(src, /statSync\(real\)/, 'expected statSync to classify the validated real path');
+  assert.match(src, /walk\(real, relPath\)/, 'expected recursion to descend through the validated real path');
+  assert.match(src, /readFileSync\(real, 'utf8'\)/, 'expected the file read to read the validated real path');
+});
+
+test('installSkillPackage/walkPackageDir: every touch after realpath validation uses the validated `real` path, and the entry it hands back carries that real path, never the raw `absPath` (TOCTOU)', () => {
+  const src = readFileSync(join(import.meta.dirname, '..', '..', 'studio', 'skill-install.ts'), 'utf8');
+  assert.match(
+    src,
+    /if \(real !== rootAbs && !real\.startsWith\(boundary\)\)/,
+    'sanity: the containment check this pin sits right after has moved or been renamed — locate it before trusting the assertions below',
+  );
+  assert.doesNotMatch(
+    src,
+    /statSync\(absPath\)/,
+    'statSync must not re-touch the raw, possibly-symlinked absPath after realpath validation — classify the already-validated `real` path instead (TOCTOU)',
+  );
+  assert.doesNotMatch(
+    src,
+    /walk\(absPath, relPath\)/,
+    'recursion into a directory entry must descend through the validated `real` path, not the raw absPath (TOCTOU)',
+  );
+  assert.doesNotMatch(
+    src,
+    /readFileSync\(entry\.absPath\)/,
+    'installSkillPackage\'s file read must not re-touch a raw absPath carried on the walked entry — the entry must carry the validated real path instead (TOCTOU)',
+  );
+  assert.match(src, /statSync\(real\)/, 'expected statSync to classify the validated real path');
+  assert.match(src, /walk\(real, relPath\)/, 'expected recursion to descend through the validated real path');
+  assert.match(
+    src,
+    /readFileSync\(entry\.realPath\)/,
+    'expected installSkillPackage to read the walked entry\'s validated real path (RawPackageEntry.realPath), not a raw absPath',
+  );
+});
