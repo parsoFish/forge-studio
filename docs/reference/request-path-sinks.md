@@ -19,45 +19,34 @@ before adding a row.
 
 **A ROW is the auditable unit.** Where several `file:line` locations share one
 mechanism and one fix, they are listed inside a single row — the `file:line`
-column names each of them. These counts are row counts, so they can be checked
-against the tables by counting; a count of line references could not be.
+column names each of them.
 
-| | Rows |
-|---|---|
-| Classified rows below | 70 |
-| — `guarded` | 19 |
-| — guarded, new in M7-C (the standalone-history bounded scan's guarded mtime sort + guarded first-event bounded head read, forge-omk0/forge-aug) | 2 |
-| — guarded, new in M4-projects (S3 "Rebuild contract" — `reset.ts` becomes bridge-reachable, no new mechanism) | 1 |
-| — fixed in this sweep (all were `unguarded`) | 12 |
-| — fixed later in SEC-02 (`forge-d1f`) | 3 |
-| — fixed later in R4-16 (the four `/start` routes' `projectRepoPath`) | 1 |
-| — fixed later in SEC-03 | 4 |
-| — guarded, new in R4-17 (the onboarding session's contract-stages surface) | 2 |
-| — guarded, new in R4-21 T3 (the `deriveFilePackage` recursive walk + the authoring-session start route) | 2 |
-| — guarded, new in W6-B4 (the generic session-affordance write endpoint) | 1 |
-| — `unguarded`, filed for follow-up | 10 |
-| — `accidentally-safe` (accident named on each) | 9 |
-| — not request-derived, new in M5-A (the PM's rejected-set quarantine, bead `forge-8vfn.6.1`; the class read moved out of `executor-deps.ts`, spec §5 item 9) | 2 |
-| — not request-derived, new in M5-B (the minted-remote manifest, bead `forge-8vfn.6.11.29`; the starter presentation manifest, bead `forge-8vfn.6.11.4`; the pinned gh identity, bead `forge-8vfn.6.11.35`) | 3 |
-| — not request-derived, new in M6-A (the unpriced-row emit sidecar, bead `forge-8vfn.7.6.103`) | 1 |
-| — not request-derived, new in M6-A (the SDK spawn's named CLI, bead `forge-8vfn.7.6.116`) | 1 |
-| — not request-derived, new in SEAM F1 (package-owned discovery roots, operator ruling item 81) | 1 |
-| `[unver]` items, listed separately and never counted safe | 7 |
-| bd issues filed | 4 (1 closed: `forge-d1f` by SEC-02; `forge-q80` PARTLY addressed by SEC-03 — its `POST /api/studio/projects` items are fixed, its `packageDir`/zip-slip and community-index items are not, so it stays open) |
+**Counts are DERIVED by the checker, not hand-maintained here.** This section
+used to carry a hand-typed table (`Classified rows below | 70`, `— guarded |
+19`, …) plus a hand-typed `[exec]`/`[read]` marker tally, and every PR edited
+both of them on top of appending its own new section further down this file —
+measured as the single highest-conflict edit across M7-C, six collisions in
+one day (bead-adjacent finding, M7-C sinks-doc-derived lane). Removing the
+count rather than trying to make it agree with the rows below is the
+deliberate choice, over parsing this doc's freeform narrative prose into a
+verified table: `node scripts/check-request-path-sinks.mjs` now scans this
+file's own classification rows directly and prints the live count —
+`countDocClassifications` in `scripts/check-request-path-sinks.mjs`, informed
+by this file's own header warning against an audit that overstates its own
+rigour. It counts every 5-column table row (`file:line | op | field | class |
+evidence`) by its own `class` cell (`guarded` / `unguarded` /
+`accidentally-safe` / `not request-derived` / other), plus the
+`[exec]`/`[read]`/`[unver]` verification markers wherever they appear —
+informational only, never a gate, and by construction it can never drift from
+what is actually written below it. Its total will not match this section's
+old hand-typed figures: it counts differently (every classified row across
+both tables, not a curated hand-tally), on purpose.
 
-Verification markers, counted as ROWS CARRYING a marker (not as marker
-occurrences — a row may carry more than one where it covers several routes):
-**30 rows carry `[exec]`** (live repro executed), **24 carry `[read]`**
-(classified by reading), and exactly **one row carries both** (the
-`/demo/`+`/fragment/` row, where the escape is `[exec]` and the
-no-plant-primitive-found reasoning is `[read]`). 30 + 24 − 1 = **53**, the
-classified-row total. Reconciled by recounting every row, not by arithmetic on
-the previous revision's figures.
-
-**Two count defects in the previous revision, found by that recount and stated
+**Two count defects in an earlier revision, found by a manual recount and stated
 rather than quietly overwritten** — the same failure mode SEC-01's adversarial
-review found in this exact document before, which is why the recount is
-mandatory: it claimed 24 `[exec]` / 25 `[read]` for the pre-SEC-03 49 rows
+review found in this exact document before, and exactly the class of error a
+hand-typed count invites (why this section no longer keeps one): it claimed 24
+`[exec]` / 25 `[read]` for the pre-SEC-03 49 rows
 (the two were transposed — the real figures were 25 / 24), and it claimed 10
 `[unver]` items when the `[unver]` bullet list had only 6. SEC-02 moved three
 `forge-d1f` rows from `[read]` to `[exec]` by reproducing each escape live
