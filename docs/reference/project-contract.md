@@ -318,17 +318,25 @@ Forge commits with `git add -A`; the project's `.gitignore` is the sole guard.
 
 Three categories must be covered:
 
-1. **Forge scratch:** `.forge/work-items/`, `AGENT.md`, `PROMPT.md`, `fix_plan.md`
-   must be untracked *and* ignored (git-truth check: `git ls-files
-   --error-unmatch` + `git check-ignore -q`; a *directory* scratch path is
-   probed via a sentinel child so a dir-only ignore pattern like
-   `.forge/work-items/` counts before the dir exists — the pattern will
-   ignore it the moment the dev-loop creates it).
+1. **Forge scratch:** `.forge/work-items/`, `.forge/.create-complete`,
+   `AGENT.md`, `PROMPT.md`, `fix_plan.md` must be untracked *and* ignored
+   (git-truth check: `git ls-files --error-unmatch` + `git check-ignore -q`;
+   a *directory* scratch path is probed via a sentinel child so a dir-only
+   ignore pattern like `.forge/work-items/` counts before the dir exists —
+   the pattern will ignore it the moment the dev-loop creates it).
 2. **Build artifacts and generated outputs:** compiled binaries, `dist/`,
    coverage, graph caches — anything a build writes that isn't source.
-3. **Force-tracked contract config:** `.forge/project.json` lives inside the
-   ignored `.forge/` dir and must be explicitly tracked despite the ignore
-   (`git add --force .forge/project.json`).
+3. **Tracked contract config, never ignored:** `.forge/project.json`, the
+   `.forge/quality_gate_cmd` sidecar, and `.forge/skills/` — `TRACKED_CONFIG_PATHS`,
+   the one single source `preflight-repo.ts` and `pr-branch-sync.ts`'s
+   scratch-strip both read — are the canonical, checked-in home for a
+   project's contract, its local gate command, and its project-local skills
+   (operator ruling 92, bead forge-8vfn.8.1.2) — `.forge/` itself must NOT be
+   ignored wholesale. The check is the inverse of category 1's: the same
+   git-truth probe, but a VIOLATION if `git check-ignore -q` reports any of
+   the three as ignored (a blanket `.forge/` line silently drops all of them
+   from every commit and every `git clone`). None need `git add --force` —
+   they were never ignored in the first place.
 
 The check uses **git-truth** — a `.gitignore` entry is a no-op on
 already-tracked files.
@@ -647,8 +655,11 @@ retain the default `"."` (no migration required).
 - `_architect/` — architect session state
 - `demo/<initiative-id>/` — demo output written during the demo-agent run
 - `.forge/work-items/` — per-cycle PM output
+- `.forge/.create-complete` — the onboarding/create completion marker
 
 These are excluded by the project's `.gitignore` (C2 enforces this).
+`.forge/project.json` and `.forge/skills/` are the opposite case — tracked
+contract config C2 requires **not** be ignored (see C2 above).
 
 ---
 
@@ -792,7 +803,7 @@ flow-ready — the flow engine will not accept it.
 | skills | `forge-onboard-project`, `demo` |
 | kb | `betterado` (Brain 3 at `brain/projects/betterado/` in the central forge repo) |
 | **C1 / C1b** | `testProcess.local.cmd` (via the `.forge/quality_gate_cmd` sidecar): `go test -tags all -count=1 ./...` scoped to changed packages. `testProcess.ci.cmd`: `make test && golangci-lint run ./... && make terrafmt-check`. `testProcess.ci.fixCmd`: `make fmt && make terrafmt` |
-| **C2** | `.gitignore` covers `.forge/work-items/`, compiled provider binary, `*.tfstate`, `.terraform/`. `.forge/project.json` force-tracked |
+| **C2** | `.gitignore` covers `.forge/work-items/`, `.forge/.create-complete`, compiled provider binary, `*.tfstate`, `.terraform/`. `.forge/project.json`, `.forge/quality_gate_cmd`, and `.forge/skills/` stay trackable — never a blanket `.forge/` ignore |
 | **C4** | `roadmap.md` at project root. Brain seeded with `profile.md`, release substrate context, failure-mode themes |
 | C5 | `CLAUDE.md`: never run `go build ./...`, never edit tests to pass, user owns git |
 | C6 | GitHub remote at `parsoFish/terraform-provider-betterado` |
