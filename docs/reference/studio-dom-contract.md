@@ -1877,10 +1877,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   the shared `NotFound`** (`data-not-found-kind="registry item"`), not the
   full edit form under a red banner. Gated on the load OUTCOME
   (`registryEditLoadOutcome`), never on "some load error happened": only a
-  real HTTP 404 may claim the row does not exist. A transport failure — the
-  bridge was never reached, so there is no status at all — keeps
-  `[data-component="fetch-error"]`, because a down bridge is not evidence of
-  absence (the same rule `bridge-result.ts` holds for every other read).
+  real HTTP 404 may claim the row does not exist. **forge-4sj: a non-404
+  edit-load failure** — the bridge was never reached, so there is no status
+  at all, or it answered but refused — renders the shared `PageLoadError`
+  kit (`main[data-page="community-registry-form"][data-form-mode="edit"]`,
+  `[data-component="page-load-error"]`, `[data-component="fetch-error"]`
+  inside it, `[data-action="retry-fetch"]`) instead of the form, with
+  `useBridgeRecoveryWhenFailed` resubscribing while failed — the SAME kit
+  `/community/[kind]/[id]` already uses, because a down bridge is not
+  evidence of absence (the same rule `bridge-result.ts` holds for every
+  other read). The prior ad-hoc inline banner above a half-populated form is
+  gone.
 
   **Refresh entry (W6-CR-3, 2026-08-15; replaced by W8-B5, retired-session-kind
   cutover W8-B5b WI-3).** The interactive community-refresh session kind
