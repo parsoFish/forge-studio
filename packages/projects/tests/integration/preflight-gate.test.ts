@@ -27,7 +27,7 @@ import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
-import { runPreflight, formatPreflightReport, type ClauseId } from '../../preflight.ts';
+import { runPreflight, formatPreflightReport, SCRATCH_PATHS, type ClauseId } from '../../preflight.ts';
 
 function tmp(): string {
   return mkdtempSync(join(tmpdir(), 'forge-preflight-'));
@@ -45,7 +45,7 @@ function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void }
   );
   writeFileSync(
     join(dir, '.gitignore'),
-    ['node_modules/', 'dist/', '.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n'),
+    ['node_modules/', 'dist/', ...SCRATCH_PATHS].join('\n'),
   );
   writeFileSync(join(dir, 'roadmap.md'), '# Roadmap\n');
   // C8 coverage (R1-04-F1): the instruction file mentions the declared gate command.
