@@ -20,9 +20,8 @@ function isHookFireOutcome(value: unknown): value is HookFireOutcome {
   return typeof value === 'string' && (KNOWN_OUTCOMES as readonly string[]).includes(value);
 }
 
-/** `events` is whatever the caller collected (possibly BOUNDED). `null` when
- *  no match — never a fabricated summary. `fireCount` is within `events`;
- *  naming that honestly (`recentFireCount` vs all-time) is the caller's job. */
+/** `events` may be BOUNDED. `null` on no match, never a fabricated summary;
+ *  naming `fireCount` honestly (`recentFireCount` vs all-time) is the caller's job. */
 export function deriveHookFireSummary(events: readonly EventLogEntry[], hookId: string): HookFireSummary | null {
   const fires = events.filter((e) => e.message === 'hook.fire' && (e.metadata as Record<string, unknown> | undefined)?.['hookId'] === hookId);
   if (fires.length === 0) return null;
@@ -39,9 +38,8 @@ export function deriveHookFireSummary(events: readonly EventLogEntry[], hookId: 
   };
 }
 
-// Bounded scan (T2 review of 95cb287f, same class as #834). Generic
-// sort+bound+tail-read mechanics live in @forge/kernel/guarded-scan.ts;
-// full rationale: docs/reference/request-path-sinks.md's "M7-C U2" section.
+// Bounded scan (T2 review of 95cb287f). Mechanics: @forge/kernel/guarded-
+// scan.ts; rationale: request-path-sinks.md's "M7-C U2" section.
 
 /** Page size — never open more cycle dirs than this per request. */
 export const HOOK_FIRE_SCAN_MAX_CYCLES = 50;
@@ -69,11 +67,8 @@ export function scanHookFireSummary(
     if (raw === null) continue;
     for (const line of raw.split('\n')) {
       if (!line.trim()) continue;
-      try {
-        events.push(JSON.parse(line) as EventLogEntry);
-      } catch {
-        continue; // a truncated leading line from a tail read is expected, not an error
-      }
+      // A truncated leading line from a tail read is expected, not an error.
+      try { events.push(JSON.parse(line) as EventLogEntry); } catch { continue; }
     }
   }
   return deriveHookFireSummary(events, hookId);
