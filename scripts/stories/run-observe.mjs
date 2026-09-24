@@ -164,6 +164,24 @@ export function collectSpendDirs(root, sinceMs) {
  *
  * @returns {{spend: ReturnType<typeof summariseRunSpend>, verdict: ReturnType<typeof spendCeilingVerdict>, unpriced: ReturnType<typeof endedUnpricedTurns>, stop: ReturnType<typeof ceilingHaltVerdict>, lines: string[]}}
  */
+/**
+ * Bead `forge-8vfn.7.6.92` — THE LAST JUDGEMENT, made where the spend is last read.
+ *
+ * The beat loop asks `spendSoFar` at every boundary; a turn that ENDS after the
+ * last one — unpriced, or past the ceiling — used to be printed by the final
+ * spend column and never judged, so the run read as complete with an unpriced
+ * end in its own ledger. Same rows, same verdict (`ceilingHaltVerdict` via
+ * `spendSoFar`), read once more. A run the loop already halted is not judged
+ * twice: its first headline is the one that explains it.
+ *
+ * @returns {{ stop: ReturnType<typeof ceilingHaltVerdict> | null, lines: string[] }}
+ */
+export function finalSpendHalt({ root, startedMs, realSpawn, ceilingUsd, alreadyHalted }) {
+  if (alreadyHalted) return { stop: null, lines: [] };
+  const { stop, lines } = spendSoFar({ root, startedMs, realSpawn, ceilingUsd, label: 'at the final spend read' });
+  return { stop: stop.halt ? stop : null, lines };
+}
+
 export function spendSoFar({ root, startedMs, realSpawn, ceilingUsd, label }) {
   // COLLECTED BY `collectSpendDirs`, NOT BY THE REAPER'S COLLECTOR
   // (`forge-rzrs`): `collectAgentRuns` gates on `turn.pid`/markers — the

@@ -70,7 +70,7 @@ test('flows-49: each control renders its own disclosure of what it does', () => 
   for (const id of ['resume', 'requeue', 'abandon']) {
     expect(html, id).toContain(`data-component="run-control-detail" data-control="${id}"`);
   }
-  expect(html).toMatch(/demo node/i);
+  expect(html).toMatch(/integrate node/i);
   expect(html).toMatch(/from the start/i);
 });
 

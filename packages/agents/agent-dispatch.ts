@@ -21,6 +21,7 @@ import { readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 import { listAgentDefinitions } from './studio/agent-registry.ts';
+import { resolveBandGuard } from './agent-bands.ts';
 // §15.43: `normalizeProjectId` is a kernel export this file was taking via a
 // legacy re-export detour — imported from its real owner instead of moved.
 import { normalizeProjectId } from '@forge/kernel';
@@ -77,14 +78,19 @@ export type DispatchAgentRunResult = {
   result: RunAgentResult;
 };
 
+/** forge-zlu: a band-guard def refused standalone dispatch — named/exported so a caller can `instanceof` it apart from the plain-Error unknown-slug/interactive refusals below. */
+export class BandGuardDispatchRefusedError extends Error {}
+
 /**
- * Resolve a dispatchable (non-interactive, in-roster) agent by slug, or throw
- * a clear boundary error for the two rejection classes the generic run host
- * must refuse — unknown slug and interactive agent. Enforced HERE (not only in
- * the UI): the "not interactive" fact the builder surfaces is backed by a real
- * runtime guard, so a hand-crafted request can't drive an interactive agent
- * through the generic host. Both the CLI and the bridge route surface this
- * same message.
+ * Resolve a dispatchable (non-interactive, in-roster, non-band-guarded) agent
+ * by slug, or throw a clear boundary error for the rejection classes the
+ * generic run host must refuse — unknown slug, interactive agent, and
+ * band-guard agent. Enforced HERE (not only in the UI): the "not interactive"
+ * fact the builder surfaces is backed by a real runtime guard, so a
+ * hand-crafted request can't drive an interactive agent through the generic
+ * host. Both the CLI and the bridge route surface this same message.
+ *
+ * BAND-GUARD REFUSAL (forge-zlu): refuses EVERY band-guard def uniformly, including adversarial-review — its own intended standalone path is the separate `/api/agents/band-run` gate (`STANDALONE_BAND_SLUGS`, band-agent-run.ts), which never calls this resolver, so refusing it here too cannot touch that path and avoids re-deriving the same exception list.
  */
 export function resolveDispatchableAgent(slug: string, defs: AgentDefinition[]): AgentDefinition {
   const def = defs.find((d) => d.slug === slug);
@@ -96,6 +102,14 @@ export function resolveDispatchableAgent(slug: string, defs: AgentDefinition[]):
     throw new Error(
       `dispatchAgentRun: agent "${slug}" is interactive (surface: ${def.surface ?? 'interactive'}) — ` +
         `interactive agents run through their bespoke session page, not the generic run host`,
+    );
+  }
+  const band = resolveBandGuard(def);
+  if (band !== undefined) {
+    throw new BandGuardDispatchRefusedError(
+      `dispatchAgentRun: agent "${slug}" declares band guard "${band}" — band-guard agents run through their ` +
+        `flow band's pipeline (WI validation / checkpointing / retention), never as a bare standalone dispatch. ` +
+        `Dispatch it through the flow that carries that band instead.`,
     );
   }
   return def;

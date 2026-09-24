@@ -123,7 +123,7 @@ test('runRequeue: removes orphan worktree dir if present', () => {
   }
 });
 
-test('runRequeue --resume-from=demo: stamps resume_from AND preserves the worktree', () => {
+test('runRequeue --resume-from=integrate: stamps resume_from AND preserves the worktree', () => {
   const root = setupForgeRoot();
   try {
     const file = 'INIT-2026-05-24-rq-test.md';
@@ -132,20 +132,20 @@ test('runRequeue --resume-from=demo: stamps resume_from AND preserves the worktr
     mkdirSync(wt, { recursive: true });
     writeFileSync(join(wt, 'wi-work.txt'), 'salvageable per-WI commits live here');
 
-    const r = runRequeue('INIT-2026-05-24-rq-test', { forgeRoot: root, resumeFromDemo: true });
+    const r = runRequeue('INIT-2026-05-24-rq-test', { forgeRoot: root, resumeFromIntegrate: true });
 
     // ADR 019: worktree is the salvaged work — it must NOT be removed.
     assert.equal(r.worktreeRemoved, false);
-    assert.equal(existsSync(wt), true, 'worktree must be preserved on resume-from-demo');
+    assert.equal(existsSync(wt), true, 'worktree must be preserved on resume-from-integrate');
     // resume_from stamped into the moved manifest.
     const moved = readFileSync(join(root, '_queue', 'pending', file), 'utf8');
-    assert.match(moved, /^resume_from:\s*demo\s*$/m);
+    assert.match(moved, /^resume_from:\s*integrate\s*$/m);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('runRequeue --resume-from=demo: preserves worktree + branch, stamps resume_from: demo, clears legacy pr-feedback (ADR 026)', () => {
+test('runRequeue --resume-from=integrate: preserves worktree + branch, stamps resume_from: integrate, clears legacy pr-feedback (ADR 026)', () => {
   const root = setupForgeRoot();
   try {
     const file = 'INIT-2026-05-24-rq-test.md';
@@ -157,19 +157,19 @@ test('runRequeue --resume-from=demo: preserves worktree + branch, stamps resume_
     const feedback = join(root, '_queue', 'failed', 'INIT-2026-05-24-rq-test.pr-feedback.md');
     writeFileSync(feedback, '# Send-back feedback\n\nlegacy file\n');
 
-    const r = runRequeue('INIT-2026-05-24-rq-test', { forgeRoot: root, resumeFromDemo: true });
+    const r = runRequeue('INIT-2026-05-24-rq-test', { forgeRoot: root, resumeFromIntegrate: true });
 
     // (a) worktree is the salvaged work — it must NOT be removed.
     assert.equal(r.worktreeRemoved, false);
-    assert.equal(existsSync(wt), true, 'worktree must be preserved on resume-from-demo');
+    assert.equal(existsSync(wt), true, 'worktree must be preserved on resume-from-integrate');
     // (b) the forge/<id> branch must NOT be deleted (no project repo here, so
     //     branchDeleted is false regardless — assert the preservation contract).
-    assert.equal(r.branchDeleted, false, 'branch must be preserved on resume-from-demo');
+    assert.equal(r.branchDeleted, false, 'branch must be preserved on resume-from-integrate');
     // (c) the retired pr-feedback.md is cleared — it is no longer read.
     assert.equal(existsSync(feedback), false, 'legacy pr-feedback.md must be cleared');
-    // (d) resume_from: demo stamped into the moved manifest.
+    // (d) resume_from: integrate stamped into the moved manifest.
     const moved = readFileSync(join(root, '_queue', 'pending', file), 'utf8');
-    assert.match(moved, /^resume_from:\s*demo\s*$/m);
+    assert.match(moved, /^resume_from:\s*integrate\s*$/m);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -206,8 +206,8 @@ test('runRequeue: a full (non-resume) requeue CLEARS a stamped resume_from (ADR 
   const root = setupForgeRoot();
   try {
     const id = 'INIT-2026-05-24-rq-test';
-    // A manifest a crash-recovery requeue stamped with resume_from: demo.
-    const withResume = MANIFEST(root).replace(/^---$/m, '---\nresume_from: demo');
+    // A manifest a crash-recovery requeue stamped with resume_from: integrate.
+    const withResume = MANIFEST(root).replace(/^---$/m, '---\nresume_from: integrate');
     writeFileSync(join(root, '_queue', 'failed', `${id}.md`), withResume);
 
     runRequeue(id, { forgeRoot: root }); // full re-run, no --resume-from
@@ -358,7 +358,7 @@ test('runRequeue N7: environment failure + preserved branch work + incomplete WI
   }
 });
 
-test('runRequeue N7: environment failure with ALL WIs complete → stamps resume_from: demo', () => {
+test('runRequeue N7: environment failure with ALL WIs complete → stamps resume_from: integrate', () => {
   const root = setupForgeRoot();
   try {
     const repo = n7ProjectRepo(root, true);
@@ -369,11 +369,11 @@ test('runRequeue N7: environment failure with ALL WIs complete → stamps resume
     const r = runRequeue(N7_INIT, { forgeRoot: root });
 
     assert.equal(r.resumeDecision.resume, true);
-    if (r.resumeDecision.resume) assert.equal(r.resumeDecision.resume_from, 'demo');
+    if (r.resumeDecision.resume) assert.equal(r.resumeDecision.resume_from, 'integrate');
     assert.equal(r.worktreeRemoved, false);
     assert.equal(existsSync(wt), true);
     const moved = readFileSync(join(root, '_queue', 'pending', `${N7_INIT}.md`), 'utf8');
-    assert.match(moved, /^resume_from:\s*demo\s*$/m);
+    assert.match(moved, /^resume_from:\s*integrate\s*$/m);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

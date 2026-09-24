@@ -55,10 +55,11 @@ import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/ty
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import { checkHookComposition, listHookIds } from '@forge/library/studio/hook-library.ts';
 import { removeInstallLedgerEntry } from '@forge/library/studio/skill-install-ledger.ts';
-import { listSkillLibrary } from '@forge/library/studio/skill-trust.ts';
+import { lintSkillToolFence } from '@forge/library/studio-lint-tool-fence.ts';
 import type { AgentFacts } from '@forge/library/studio/agent-facts.ts';
 
 import { PLATFORM_GUARD_IDS } from './agent-bands.ts';
+import { agentsUsing } from './studio/agent-usage.ts';
 import { skillsDir as toSkillsDir } from './skill-path.ts';
 import { MAX_MATERIALS_LENGTH } from './studio/materials.ts';
 import { agentCapabilityDescriptor } from './studio/derive.ts';
@@ -263,10 +264,8 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
         }, origin);
         return true;
       }
-      // Defence in depth: even for a real agent, never delete one that
-      // something still composes. Same `usedBy` derivation the library
-      // listing renders — one source of truth, no second scan.
-      const composedBy = listSkillLibrary(ctx.forgeRoot, deps.agentFacts).find((e) => e.id === slug)?.usedBy ?? [];
+      // forge-8vfn.19: listSkillLibrary excludes studio agents (AT-5), so this always found undefined; ask agents' own reverse index (ruling 13) directly.
+      const composedBy = agentsUsing('skill', slug, ctx.forgeRoot);
       if (composedBy.length > 0) {
         sendJson(res, 409, {
           error: `agent "${slug}" is still composed by ${composedBy.length} agent(s): ${composedBy.join(', ')} — unbind it from their builders first`,
@@ -618,6 +617,18 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
       mkdirSync(skillDirPath, { recursive: true });
     }
     writeFileSync(skillMdPath, serialized, 'utf8');
+
+    // forge-q4sz: reuse the SAME lint (never re-implement it) against the file just written; 400 + restore, like every other check above that never wrote at all.
+    const fenceFindings = lintSkillToolFence(ctx.forgeRoot).filter((f) => f.object === `skill:${slug}`);
+    if (fenceFindings.some((f) => f.level === 'error')) {
+      if (pathGuard.exists) {
+        writeFileSync(skillMdPath, originalRaw as string, 'utf8');
+      } else {
+        rmSync(skillDirPath, { recursive: true, force: true });
+      }
+      sendJson(res, 400, { error: 'validation failed', findings: [...findings, ...fenceFindings] }, origin);
+      return true;
+    }
 
     const flagFindings = findings.filter((f) => f.level === 'flag');
     sendJson(res, 200, { ok: true, slug, findings: flagFindings }, origin);
