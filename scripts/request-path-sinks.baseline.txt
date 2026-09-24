@@ -330,6 +330,8 @@ packages/kernel/config.ts readFileSync 2
 packages/kernel/discovery-roots.ts readdirSync 1
 packages/kernel/gh-identity.ts exec 3
 packages/kernel/gh-identity.ts execFileSync 1
+packages/kernel/guarded-scan.ts openSync 1
+packages/kernel/guarded-scan.ts statSync 2
 packages/kernel/init.ts execSync 1
 packages/kernel/init.ts existsSync 2
 packages/kernel/init.ts mkdirSync 1
@@ -456,8 +458,6 @@ packages/library/bridge-studio-community.ts existsSync 2
 packages/library/bridge-studio-community.ts rmSync 1
 packages/library/bridge-studio-community.ts spawnSync 1
 packages/library/bridge-studio-connections.ts spawnSync 1
-packages/library/bridge-studio-hooks-detail.ts openSync 1
-packages/library/bridge-studio-hooks-detail.ts statSync 2
 packages/library/bridge-studio-hooks-detail.ts writeFileSync 2
 packages/library/bridge-studio-hooks.ts mkdirSync 1
 packages/library/bridge-studio-hooks.ts rmSync 1
