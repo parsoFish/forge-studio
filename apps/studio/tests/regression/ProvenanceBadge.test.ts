@@ -47,10 +47,18 @@ test('ootb renders the ootb badge with a machine-readable data-provenance', () =
   expect(html).toContain('ootb');
 });
 
-test('vision renders a dim "planned" badge (unchanged — a badge component concern, not a wire-provenance value)', () => {
-  const html = render('vision');
-  expect(html).toContain('data-provenance="vision"');
-  expect(html).toContain('planned');
+test('the "vision" token is removed (forge-r2j) — no wire producer ever emits it; an out-of-union probe renders nothing, same as any other unrecognised value', () => {
+  // 'vision' used to widen ProvenanceBadgeValue past the wire's real
+  // Provenance ('ootb'|'operator'|'unknown', studio-client.ts) for a future
+  // caller with no current producer — declared data with no source, the
+  // exact antipattern this file's own header already refuses for
+  // provenanceOfFlowOrigin. `parseProvenance` (studio-client.ts) and every
+  // real call site (LibraryCard.tsx) only ever produce the three real wire
+  // tokens, so the cast below is the only way to probe the removed value at
+  // all — same "red-while-present" convention as the pin two tests below.
+  const html = render('vision' as unknown as ProvenanceBadgeModule.ProvenanceBadgeValue);
+  expect(html).toBe('');
+  expect(html).not.toContain('data-provenance="vision"');
 });
 
 test('operator-authored (and null/undefined) render NOTHING — no fabricated badge', () => {

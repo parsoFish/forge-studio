@@ -21,7 +21,7 @@ import {
   gateAttentionStatusDot,
   type HomeAttentionItem,
 } from '@/lib/home-view';
-import { buildMonitorSummary } from '@/lib/monitor-view';
+import { buildMonitorSummary, deriveSummaryReady } from '@/lib/monitor-view';
 import type { SessionIndexRow } from '@/lib/studio-client';
 import type { CancelOutcome } from '@/lib/session-lifecycle-client';
 
@@ -86,6 +86,12 @@ export default function MonitorPage() {
     sessions,
     attentionCount: attentionItems.length,
   });
+  // forge-6gv.28: the summary strip's OWN readiness — distinct from the
+  // page's `ready` (data-page-ready), which settles before the merged
+  // ledger's agent half does. `summary` above is computed over `ledger.rows`,
+  // which is missing that half until `ledger.agentRowsReady` — so the strip
+  // must not vouch for its counts as settled until both have.
+  const summaryReady = deriveSummaryReady({ homeDataReady: ready, agentRowsReady: ledger.agentRowsReady });
 
   const sessionsStrip = buildHomeSessionsStrip(sessions, MONITOR_SESSION_CARDS);
   const [lastCancel, setLastCancel] = useState<{ row: SessionIndexRow; outcome: CancelOutcome } | null>(null);
@@ -123,7 +129,7 @@ export default function MonitorPage() {
 
       {/* The headline counts, derived from the rows below — never a second
           count computed from a different source. */}
-      <MonitorSummaryStrip summary={summary} variant="monitor" ready={ready} />
+      <MonitorSummaryStrip summary={summary} variant="monitor" ready={summaryReady} />
 
       {/* The daemon that turns queued work into runs. Its own component owns
           its read; Monitor adds no fetch and no interval. */}
