@@ -20,13 +20,31 @@
  *
  * RUN: cd forge-ui && npx vitest run lib/bridge-client-read-fail-closed.test.ts
  */
-import { test, expect, vi, beforeEach, afterEach } from 'vitest';
+import { test, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 
 type FakeWindow = { location: { protocol: string; hostname: string }; __FORGE_BRIDGE_PORT__?: number | null };
 
 const HAD_WINDOW = 'window' in globalThis;
 const ORIGINAL_WINDOW = (globalThis as { window?: FakeWindow }).window;
 const ORIGINAL_FETCH = globalThis.fetch;
+
+// PR #807's fix, applied here: every test needs its OWN fresh module
+// instance (`vi.resetModules()` below — `correctionAttempted` and the URL
+// cache are module state), so we can't collapse to one static top-level
+// import the way #807 did for a page component. But the COLD part — the
+// module's first-ever transform + evaluation — doesn't need to repeat per
+// test; measured under CPU starvation (`taskset -c 0` + busy loops), only
+// the first `import()` in the file paid a ~550-900ms cost while every
+// later one (after `resetModules()`) was <5ms, because vitest's transform
+// cache survives `resetModules()` — only the module REGISTRY is cleared.
+// Left inside a test body, that one-time cost was charged against that
+// test's 5000ms budget (`testTimeout`) and this class of test timed out
+// under load. A `beforeAll` warm-up import pays it once, against the
+// hook's own (larger, 10000ms `hookTimeout`) budget, before any test's
+// clock starts — never a raised timeout.
+beforeAll(async () => {
+  await import('../../lib/bridge-client.ts');
+});
 
 beforeEach(() => {
   vi.resetModules();
