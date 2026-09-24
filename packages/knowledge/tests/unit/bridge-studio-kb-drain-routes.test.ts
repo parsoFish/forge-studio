@@ -38,7 +38,7 @@ import { knowledgeRoutes, type KnowledgeRouteContext } from '../../routes.ts';
 const routes = knowledgeRoutes({
   sessionStatusIo: refusingSessionStatusIo,
   listFlowIds: () => ['forge-develop'],
-  listFlowBandIds: () => ['review-band', 'demo-band'],
+  listFlowBandIds: () => ['review-band', 'integrate-band'],
   // M4 ruling 86: the real fix turn is injected by the assembly, so route
   // tests declare one. It THROWS: no assertion in this file expects a fix turn
   // to be dispatched, and a stub that returned a plausible result would let a
@@ -328,7 +328,7 @@ test('knowledge-01: POST /drain arms the live tail for the cycle the instant the
   const tailRoutes = knowledgeRoutes({
     sessionStatusIo: refusingSessionStatusIo,
     listFlowIds: () => ['forge-develop'],
-    listFlowBandIds: () => ['review-band', 'demo-band'],
+    listFlowBandIds: () => ['review-band', 'integrate-band'],
     runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); },
     ensureAgentRunTail: (cycleId) => armed.push(cycleId),
     releaseAgentRunTail: () => {},
@@ -355,7 +355,7 @@ test('knowledge-01: GET /drain/:runId re-arms the tail on every poll while runni
   const tailRoutes = knowledgeRoutes({
     sessionStatusIo: refusingSessionStatusIo,
     listFlowIds: () => ['forge-develop'],
-    listFlowBandIds: () => ['review-band', 'demo-band'],
+    listFlowBandIds: () => ['review-band', 'integrate-band'],
     runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); },
     ensureAgentRunTail: (cycleId) => armed.push(cycleId),
     releaseAgentRunTail: (cycleId) => released.push(cycleId),

@@ -81,17 +81,21 @@ gate).
 
 ### Step 5 — Hermetic change-capture (C2)
 `.gitignore` so `git add -A` captures only intended source: forge scratch (the
-exact path list is `forge preflight`'s C2 check, ADR 017), build artifacts +
-generated output (binaries, bundles, coverage), and force-track required config
-inside an ignored dir (`.forge/project.json`). Acceptance: clean build ⇒
-`git status` shows nothing but intended source.
+exact path list — `SCRATCH_PATHS` — is `forge preflight`'s C2 check, ADR 017),
+build artifacts + generated output (binaries, bundles, coverage). Never a
+blanket `.forge/` line: `.forge/project.json`, `.forge/quality_gate_cmd`, and
+`.forge/skills/` (`TRACKED_CONFIG_PATHS`) must stay trackable — C2 fails a
+`.gitignore` that ignores any of them, no `git add --force` needed (operator
+ruling 92). Acceptance: clean build ⇒ `git status` shows nothing but intended
+source.
 
-### Step 6 — Project-action skills (under `<artifactRoot>/skills/`)
+### Step 6 — Project-action skills (under `.forge/skills/<id>/`)
 Capture the project's recurring actions as skills forge agents read by path:
-e.g. scaffold a resource, explore an API, run the demo, refactor a schema. Bind
-them via `skills` in `.forge/project.json` and reference their paths in the
-agent-instruction file. These are the "consistent actions forge takes" on this
-project.
+e.g. scaffold a resource, explore an API, run the demo, refactor a schema. The
+resolver scans the fixed path `.forge/skills/<id>/SKILL.md` — one level deep,
+regardless of `artifactRoot`. Bind them via `skills` in `.forge/project.json`
+and reference their paths in the agent-instruction file. These are the
+"consistent actions forge takes" on this project.
 
 ### Step 7 — Prime the brain & roadmap (C4)
 Author `roadmap.md` (project root); the brain profile is **forge-owned and central**

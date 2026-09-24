@@ -10,7 +10,7 @@
  * verbatim from `orchestrator/band-agent-run.test.ts` when that file was
  * carved (M4-agents, exit row 4).
  *
- * It was the DEMO arm until spec §5 item 4 deleted the LLM demo node; the review
+ * It was the DEMO arm until spec §5 item 4 deleted the LLM integrate node; the review
  * band is the one that still spawns, so it is the one whose parity can be
  * proven. The claim is unchanged — the production binding runs the REAL pipeline
  * in-process, and the same artifact a flow run produces lands on disk.
