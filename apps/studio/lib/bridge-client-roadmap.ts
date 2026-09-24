@@ -197,10 +197,10 @@ export async function fetchRecovery(initiativeId: string): Promise<RecoveryInspe
   return bridgeReadOr404<RecoveryInspect>(`/api/recovery/${encodeURIComponent(initiativeId)}`);
 }
 
-/** Requeue a stuck initiative back to pending/ (optionally reset retries / resume-from-demo). */
+/** Requeue a stuck initiative back to pending/ (optionally reset retries / resume-from-integrate). */
 export async function recoveryRequeue(
   initiativeId: string,
-  opts: { resetRetries?: boolean; resumeFromDemo?: boolean } = {},
+  opts: { resetRetries?: boolean; resumeFromIntegrate?: boolean } = {},
 ): Promise<{ ok: boolean; error?: string }> {
   return bridgePost(`/api/recovery/${encodeURIComponent(initiativeId)}/requeue`, opts);
 }

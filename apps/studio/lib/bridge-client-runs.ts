@@ -295,7 +295,7 @@ export async function startRun(
   return { ok: r.ok, error: r.error, runId: r.data?.runId as string | undefined };
 }
 
-/** Resume a failed run (wraps forge requeue --resume-from=demo). */
+/** Resume a failed run (wraps forge requeue --resume-from=integrate). */
 export async function resumeRun(runId: string): Promise<{ ok: boolean; error?: string }> {
   return bridgePost(`/api/runs/${encodeURIComponent(runId)}/resume`);
 }
