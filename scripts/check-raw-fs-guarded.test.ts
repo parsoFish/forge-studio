@@ -973,3 +973,70 @@ test('G10 (CALIBRATION): the sweep\'s bare-id list is the measured seven — the
     assert.ok(!model.bareTaint.has(excluded), `${excluded} is deliberately tier-1-only (see the header's disclosed limits)`);
   }
 });
+
+// =============================================================================
+// Group I — the ONE-LEVEL INTERPROCEDURAL hop (bead forge-8vfn.5.63). The
+// def-use walk is bounded to ONE function; a sink moved verbatim into a
+// same-module helper — the helper's own param unresolved, nothing about its
+// NAME taints it — went dark (measured live: hook-runtime.ts's
+// readFileSync(scriptPath), retired from the allowlist as a documented blind
+// spot when the read moved into a private prepareHookRun step). This closes
+// that ONE hop: check-raw-fs-guarded.interproc.mjs's isParamTaintedViaCallers.
+// =============================================================================
+
+test('I1 (RED): route → helper(requestDerived) → sink(arg) — invisible today, a finding after the one-level hop', () => {
+  const text = fn(
+    'export function handleRoute(body) {',
+    '  return helperRead(body.project);',
+    '}',
+    'function helperRead(arg) {',
+    "  return readFileSync(join(logsRoot, arg, 'x.json'), 'utf8');",
+    '}',
+  );
+  const findings = analyzeModule(text, 'cli/ui-bridge.ts');
+  assert.equal(findings.length, 1, `expected the helper's sink to be found, got ${JSON.stringify(findings)}`);
+  assert.equal(findings[0].sink, 'readFileSync');
+  assert.match(findings[0].why, /body\.project/, 'the why names the ORIGINAL request source, not just the local param');
+});
+
+test('I2 (GREEN twin — no over-fire): the SAME helper called with a NON-tainted argument is not a finding', () => {
+  const text = fn(
+    'export function handleRoute() {',
+    "  return helperRead('template');",
+    '}',
+    'function helperRead(arg) {',
+    "  return readFileSync(join(logsRoot, arg, 'x.json'), 'utf8');",
+    '}',
+  );
+  assert.deepEqual(analyzeModule(text, 'cli/ui-bridge.ts'), []);
+});
+
+test('I3 (CALIBRATION): the hop is bounded to ONE level — a second hop is NOT bridged', () => {
+  // Kills: an unbounded interprocedural walk. helperA's own param is itself
+  // unresolved (it came from ITS caller, helperB) — chasing THAT is a second
+  // hop, explicitly out of scope (bead 5.63's "one level").
+  const text = fn(
+    'export function handleRoute(body) {',
+    '  return helperB(body.project);',
+    '}',
+    'function helperB(mid) {',
+    '  return helperA(mid);',
+    '}',
+    'function helperA(arg) {',
+    "  return readFileSync(join(logsRoot, arg, 'x.json'), 'utf8');",
+    '}',
+  );
+  assert.deepEqual(analyzeModule(text, 'cli/ui-bridge.ts'), [], 'a second hop is this lint\'s disclosed blind spot, not a silent guess');
+});
+
+test('I4 (GREEN — no crash, disclosed miss): a DESTRUCTURED helper parameter is not resolved positionally', () => {
+  const text = fn(
+    'export function handleRoute(body) {',
+    '  return helperRead({ arg: body.project });',
+    '}',
+    'function helperRead({ arg }) {',
+    "  return readFileSync(join(logsRoot, arg, 'x.json'), 'utf8');",
+    '}',
+  );
+  assert.deepEqual(analyzeModule(text, 'cli/ui-bridge.ts'), []);
+});
