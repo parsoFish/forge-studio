@@ -89,6 +89,7 @@ import type { BridgeIdentity } from './forge-watch.ts';
 import { finalizeMergedReadyForReview } from '@forge/flows/finalize-merged.ts';
 import type { EventLogEntry } from '@forge/kernel';
 import { makeRecordingBroadcast } from './bridge-broadcast-log.ts';
+import { makeTrailingCoalescer } from './broadcast-coalescer.ts';
 type RerunReflectorFn = InstalledFactory['rerunReflector'];
 import { isSafeRunId } from '@forge/agents/run-agent.ts';
 // M4 agents carve: the slug refusal `spawnAgentDispatch` applies is the SAME
@@ -272,6 +273,8 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // "did `cycle-list-changed` fire, and was anyone listening?" is answerable
   // from bytes. See `bridge-broadcast-log.ts` for why it opens at boot.
   const broadcast = makeRecordingBroadcast<WsOutbound>(clients, forgeRoot);
+  // R27 (forge-6gv.5.2): collapses watchQueue's 6-dir fan-out into one trailing broadcast — see broadcast-coalescer.ts.
+  const queueChangeCoalescer = makeTrailingCoalescer(() => broadcast({ type: 'cycle-list-changed' }));
 
   const scanCycles = opts.scanCycles ?? ((): { live: Cycle[]; recent: Cycle[] } => {
     // The cycle ID is the _logs/<dir> name (timestamp + initiative ID); the
@@ -495,8 +498,10 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       if (!existsSync(d)) continue;
       try {
         const w = fsWatch(d, { persistent: false }, () => {
-          broadcast({ type: 'cycle-list-changed' });
-          // A new cycle may have appeared; pick up its log if so.
+          queueChangeCoalescer.trigger();
+          // A new cycle may have appeared; pick up its log if so — kept
+          // uncoalesced so a live tail arms promptly regardless of the WS
+          // broadcast cadence above.
           startTailsForLive();
         });
         queueWatchers.push(w);
@@ -697,6 +702,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   watchDemo();
 
   const close = async (): Promise<void> => {
+    queueChangeCoalescer.close();
     for (const w of queueWatchers) { try { w.close(); } catch { /* ignore */ } }
     for (const w of architectWatchers) { try { w.close(); } catch { /* ignore */ } }
     for (const w of instructionsWatchers) { try { w.close(); } catch { /* ignore */ } }
