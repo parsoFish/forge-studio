@@ -39,6 +39,7 @@ import { deriveSessionCostUsd, guardedReadFile, resolveGuardedPath } from '@forg
 export type AgentRunStateDeps = {
   /** `parseGuardedEventsJsonl` — `null` for "no events observed", never a throw. */
   parseGuardedEventsJsonl(logsRoot: string, runEntryName: string): readonly Record<string, unknown>[] | null;
+  parseGuardedFirstEvent(logsRoot: string, runEntryName: string): Record<string, unknown> | null; // M7-C: bounded head read; null = indeterminate
   /** `isTurnAlive(pid, ownershipMark)` — the same ownership proof the cancel route trusts. */
   isTurnAlive(pid: number, ownershipMark: string): boolean;
   /** `extractErrorMessage` — the crash-message extraction sessions already use. */

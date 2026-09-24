@@ -26,7 +26,7 @@ writes lands in a **git-tracked path inside the forge repo itself**:
 | Flow | `studio/flows/<id>/flow.yaml` (`apps/forge/bridge-studio-writes.ts`, the flow save route) | tracked |
 | Hook | `studio/hooks/<id>/{hook.yaml,scripts/run.sh}` (`packages/library/bridge-studio-hooks.ts`, create + edit routes) | tracked |
 | Knowledge base | `brain/<id>/{kb.yaml,themes/,_raw/}` (`packages/knowledge/bridge-studio-kbs.ts`, the KB create route) | tracked |
-| Community registry rows | `studio/community/registry.yaml` (`apps/forge/bridge-studio-writes.ts` CRUD + `commitRegistryDraft` in `orchestrator/interactive-finalizers.ts`) | tracked |
+| Community registry rows | `studio/community/registry.yaml` (`packages/library/bridge-studio-community-crud.ts` CRUD + `runCommunityRefresh` in `packages/library/community-refresh-run.ts`, dispatched via `POST /api/studio/community/refresh`) | tracked |
 | Templates / demo elements | `studio/artifact-templates/<id>.md`, `studio/demo-elements/<id>.md` (`packages/library/bridge-studio-templates.ts`) | tracked |
 | Skill packages, installs, approvals | `skills/<id>/**` (`packages/library/bridge-studio-skills.ts`, `installSkillPackage` / `approveSkillDraft` in `orchestrator/studio/skill-library.ts`, `installCommunityHookPackage` in `orchestrator/studio/community-install.ts`) | tracked |
 | Per-machine install ledger + hook approvals | `studio/installed-skills.yaml`, `studio/hook-approvals.yaml` | tracked directory, files **not** gitignored |

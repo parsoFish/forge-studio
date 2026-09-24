@@ -48,7 +48,7 @@ import { dirname, join, resolve, sep } from 'node:path';
 import { FORGE_ROOT } from '@forge/kernel';
 
 import { add, list, remove, selfHealWorktreeState, type WorktreeHandle } from './worktree.ts';
-import { linkProjectDeps } from './scheduler.ts';
+import { linkProjectDeps } from './scheduler-run-one.ts'; // bead forge-8vfn.15: moved from scheduler.ts
 import { createLogger } from '@forge/kernel';
 
 export type WiWorktreeHandle = {
