@@ -280,3 +280,52 @@ its explicit list, so `kinds/demo-generate.ts` was ADDED beside its parent
 there, never swapped in — see `docs/reference/request-path-sinks.md`
 §"Relocated in M6-A row 5" for the conserved per-kind sink census.
 
+## `kinds/architect-brain-read.ts` observes `onToolUse`, never `queryFn`
+
+Bead `forge-8vfn.8.3.5` (M7-C ABR). ARCH-1's `brain-query` marker
+(`architect.ts`'s `architectPreamble`) fires unconditionally once per turn,
+before any tool call, so it can never name which KB the architect actually
+read — `deriveBrainReadSummary` (`apps/studio/lib/brain-read-view.ts`)
+deliberately refuses to fabricate a per-KB row from it. `forge-8vfn.5.16`
+(M7-C U2) gave the project-manager a real `brain.read` event from its
+deterministic pre-fetch; the architect has no pre-fetch of its own — it reads
+brain/ paths via its own Read/Grep/Glob tool calls, mid-conversation. This
+module is that fix, same event shape, `reader: 'architect'`.
+
+**Where it hooks in, and why there.** `kind-turn.ts`'s `preamble` and
+`onMissingStatus` are already ruling 78's whole shared-driver hook budget (see
+"The two drivers, and why there are two" above), and `architect-steps.ts` sits
+near the 800-line file cap, so neither is touched. `withBrainReadTracking`
+instead wraps each phase's `KindStepHandler` from OUTSIDE, at `architect.ts`'s
+`steps:` table (`withBrainReadTracking(withPaths(...))`).
+
+**Why `onToolUse`, not `queryFn`.** The first cut of this module substituted
+`plumbing.queryFn` with a wrapping closure to observe the SDK message stream —
+which tripped bead 5.50's lock (`run-query-marker.enforce.test.ts`): every
+production `queryFn:` value must be a caller-supplied pass-through
+(`<obj>.queryFn`/`.sdkQuery`/`undefined`/`resolveRunQuery(...)`), because a
+substituted query returns an INJECTED query verbatim and carries no
+`FORGE_AGENT_RUN_MARKER` — an unsweepable spawn. `onToolUse` is the correct
+seam instead: it is the SAME live tool-telemetry callback every architect
+sub-turn (interview / explore / draft / the completeness critic) already
+threads through unchanged — `runStructuredTurn`'s own message-stream loop
+calls it for every tool_use block regardless — so wrapping it once observes
+the whole turn without constructing or injecting anything queryFn-shaped.
+Every call is forwarded to the original `onToolUse` unchanged first, so the
+shared live-telemetry sink still sees everything; only then is the call
+tallied.
+
+**Why `inputSummary`, not the raw tool input.** `ToolUseLiveDetail` (the
+argument `onToolUse` receives) carries `inputSummary` — `summarizeToolInput`'s
+output — not the raw SDK block input; `filePath` is populated only for
+file-MODIFYING tools (Write/Edit/MultiEdit/NotebookEdit), never for the
+read-only Read/Grep/Glob this module tallies. For Read and Glob,
+`inputSummary` IS the path (`summarizeToolInput` returns `extractPath(input)`
+verbatim, truncated at 200 chars). For Grep it is `` `${pattern} @ ${path}` ``
+when a `path` arg was given, else just the pattern — `pathFromToolUseDetail`
+takes the tail after `summary.lastIndexOf(' @ ')`, a display-string heuristic
+(not a structured field) pinned by a mutation test
+(`tests/unit/architect-brain-read.test.ts`, AT-8.3.5-1b) rather than proven
+safe against every possible Grep pattern; a pattern containing the literal
+`" @ "` substring would defeat it, judged acceptable for this telemetry.
+

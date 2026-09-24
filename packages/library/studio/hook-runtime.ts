@@ -70,14 +70,16 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { HOOK_ENV_BASE_ALLOWLIST, HOOK_ENV_CREDENTIAL_EXCLUSIONS, buildChildEnv } from '@forge/kernel/spawn-env.ts';
 import type { EventLogger } from '@forge/kernel';
-import { hookDir, loadHookDefinition, type HookDefinition, type HookPermissionManifest } from './hook-library.ts';
+import { hookDir, loadHookDefinition, resolveHookScriptPath, type HookDefinition, type HookPermissionManifest } from './hook-library.ts';
 import { extractEnvVarNames, scanHookPackage, type HookScanReport } from './hook-scan.ts';
-import { hookRunState } from './hook-approval-ledger.ts';
+import { hookRunState, readHookApprovalLedger } from './hook-approval-ledger.ts';
+import { hashHookScript } from './hook-package.ts';
 
 // ---------------------------------------------------------------------------
 // buildHookChildEnv — composes spawn-env.ts's buildChildEnv over the
@@ -174,6 +176,41 @@ export function detectUndeclaredEnvRefs(scriptBody: string, permissions: HookPer
   return extractEnvVarNames(scriptBody).filter((name) => !declared.has(name) && !alwaysPresent.has(name));
 }
 
+// Copies the verified bytes to a private, read-only file — design.md "Hook exec".
+const PRIVATE_SCRIPT_FILENAME = 'hook-script.sh';
+
+function writePrivateScriptCopy(scriptBody: string): PrivateScriptCopy {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-hook-verified-'));
+  chmodSync(dir, 0o700);
+  const path = join(dir, PRIVATE_SCRIPT_FILENAME);
+  try {
+    writeFileSync(path, scriptBody, { mode: 0o500, flag: 'wx' });
+  } catch (err) {
+    rmSync(dir, { recursive: true, force: true });
+    throw err;
+  }
+  return { dir, path };
+}
+
+/** Called from a `finally` in both tails; never throws (would mask a real
+ *  result) — a cleanup failure is its own logged event instead. */
+function cleanupPrivateScriptDir(dir: string, id: string, logger: EventLogger, initiativeId: string): void {
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch (err) {
+    logger.emit({
+      phase: 'orchestrator',
+      skill: `hook:${id}`,
+      event_type: 'error',
+      initiative_id: initiativeId,
+      input_refs: [],
+      output_refs: [],
+      message: `Hook "${id}"'s private verified-script directory "${dir}" could not be removed after the run — ${(err as Error).message}`,
+      metadata: { kind: 'hook-private-script-cleanup-failed', hookId: id, dir },
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // runHookScript — real spawn, real stdio capture, bounded cwd + timeout.
 // ---------------------------------------------------------------------------
@@ -224,12 +261,20 @@ const HOOK_SPAWN_MAX_BUFFER_BYTES = 1024 * 1024;
 // (forge-9a3); `runHookScript`/`runHookScriptAsync` are thin tails differing
 // only in HOW they spawn `bash`.
 
+/** `dir` is what `cleanupPrivateScriptDir` removes (the whole temp dir). */
+interface PrivateScriptCopy {
+  dir: string;
+  path: string;
+}
+
 interface PreparedHookRun {
   def: HookDefinition;
   scriptPath: string;
   dir: string;
   childEnv: NodeJS.ProcessEnv;
   undeclaredEnvRefs: string[];
+  /** The ONE thing either tail executes — callers must clean up `.dir`. */
+  privateScript: PrivateScriptCopy;
 }
 
 function prepareHookRun(input: { forgeRoot: string; id: string; logger: EventLogger; initiativeId: string; parentEnv: NodeJS.ProcessEnv }): PreparedHookRun {
@@ -275,8 +320,24 @@ function prepareHookRun(input: { forgeRoot: string; id: string; logger: EventLog
 
   const def = loadHookDefinition(id, forgeRoot);
   const dir = hookDir(id, forgeRoot);
-  const scriptPath = join(dir, def.script);
+  // Re-resolved HERE (not re-derived from a discarded earlier check) so a
+  // symlink swap has no window — forge-8vfn.8.3.2; design.md "Hook exec".
+  const scriptPath = resolveHookScriptPath(dir, def.script);
   const scriptBody = readFileSync(scriptPath, 'utf8');
+
+  // Re-hash THIS read and compare to the ledger's stored scriptHash — closes
+  // the gate-to-here TOCTOU window (forge-8vfn.8.3.2; design.md "Hook exec").
+  const approvedScriptHash = readHookApprovalLedger(forgeRoot).get(id)?.scriptHash;
+  const liveScriptHash = hashHookScript(scriptBody);
+  if (liveScriptHash !== approvedScriptHash) {
+    throw new HookRunError(
+      'not-runnable',
+      `runHookScript: hook "${id}"'s script content changed between the approval gate's check and this read (fingerprint mismatch: expected ${approvedScriptHash ?? '(no approval on record)'}, read ${liveScriptHash}) — refusing to spawn bytes that were never approved`,
+    );
+  }
+
+  // Closes the window PAST this read — see writePrivateScriptCopy.
+  const privateScript = writePrivateScriptCopy(scriptBody);
 
   // Emitted unconditionally (CLAUDE.md: "emit structured events on every
   // invocation") — the mismatch event below is CONDITIONAL, so a hook run
@@ -319,7 +380,7 @@ function prepareHookRun(input: { forgeRoot: string; id: string; logger: EventLog
     });
   }
 
-  return { def, scriptPath, dir, childEnv, undeclaredEnvRefs };
+  return { def, scriptPath, dir, childEnv, undeclaredEnvRefs, privateScript };
 }
 
 /** The shape both spawn tails reduce their real child-process result to,
@@ -366,26 +427,50 @@ function finalizeHookOutcome(id: string, timeoutMs: number, durationMs: number, 
   };
 }
 
-// Tail 1 — SYNCHRONOUS, unchanged in signature and behaviour.
+// Both tails exec prepared.privateScript via `bash -c 'source "$<var>"' <realScriptPath>` — design.md "Hook exec".
+
+const HOOK_VERIFIED_SCRIPT_ENV_VAR = 'FORGE_HOOK_VERIFIED_SCRIPT_PATH';
+
+function hookExecArgs(realScriptPath: string): string[] {
+  return ['-c', `source "$${HOOK_VERIFIED_SCRIPT_ENV_VAR}"`, realScriptPath];
+}
+
+function hookExecEnv(childEnv: NodeJS.ProcessEnv, privateScriptPath: string): NodeJS.ProcessEnv {
+  return { ...childEnv, [HOOK_VERIFIED_SCRIPT_ENV_VAR]: privateScriptPath };
+}
+
+// Tail 1 — SYNCHRONOUS.
 export function runHookScript(input: RunHookScriptInput): HookRunResult {
   const { forgeRoot, id, logger, initiativeId, parentEnv = process.env, timeoutMs = HOOK_SPAWN_TIMEOUT_MS } = input;
   const prepared = prepareHookRun({ forgeRoot, id, logger, initiativeId, parentEnv });
 
-  const start = performance.now(); // monotonic: Date.now() steps back here (forge-8vfn.7.6.50)
-  const result = spawnSync('bash', [prepared.scriptPath], { env: prepared.childEnv, cwd: prepared.dir, timeout: timeoutMs, encoding: 'utf8' });
-  const durationMs = Math.round(performance.now() - start);
-  const outcome = { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '', error: result.error as NodeJS.ErrnoException | undefined };
-  return finalizeHookOutcome(id, timeoutMs, durationMs, outcome, prepared.undeclaredEnvRefs, logger, initiativeId);
+  try {
+    const start = performance.now(); // monotonic: Date.now() steps back here (forge-8vfn.7.6.50)
+    const result = spawnSync('bash', hookExecArgs(prepared.scriptPath), {
+      env: hookExecEnv(prepared.childEnv, prepared.privateScript.path),
+      cwd: prepared.dir,
+      timeout: timeoutMs,
+      encoding: 'utf8',
+    });
+    const durationMs = Math.round(performance.now() - start);
+    const outcome = { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '', error: result.error as NodeJS.ErrnoException | undefined };
+    return finalizeHookOutcome(id, timeoutMs, durationMs, outcome, prepared.undeclaredEnvRefs, logger, initiativeId);
+  } finally {
+    // Every exit path — see cleanupPrivateScriptDir's doc comment.
+    cleanupPrivateScriptDir(prepared.privateScript.dir, id, logger, initiativeId);
+  }
 }
 
 // spawnBashAsync — async spawn wrapper: manual timeout + manual BOUNDED
 // capture, reduced to the same HookSpawnOutcome shape as spawnSync's result.
 
-function spawnBashAsync(scriptPath: string, cwd: string, env: NodeJS.ProcessEnv, timeoutMs: number): Promise<HookSpawnOutcome> {
+function spawnBashAsync(execArgs: string[], cwd: string, env: NodeJS.ProcessEnv, timeoutMs: number): Promise<HookSpawnOutcome> {
   return new Promise((resolve) => {
     // `detached: true` makes `bash` the leader of its own process group (pid
     // === pgid) so a group-targeted signal reaches every descendant too.
-    const child = spawn('bash', [scriptPath], { env, cwd, detached: true });
+    // Same exec scheme as the sync tail (hookExecArgs/hookExecEnv) — stdin
+    // is not touched here either.
+    const child = spawn('bash', execArgs, { env, cwd, detached: true });
     const buf = { stdout: '', stderr: '' };
     let overflowed = false;
     let timedOut = false;
@@ -452,11 +537,19 @@ export async function runHookScriptAsync(input: RunHookScriptInput): Promise<Hoo
   const { forgeRoot, id, logger, initiativeId, parentEnv = process.env, timeoutMs = HOOK_SPAWN_TIMEOUT_MS } = input;
   const prepared = prepareHookRun({ forgeRoot, id, logger, initiativeId, parentEnv });
 
-  const start = performance.now(); // monotonic: Date.now() steps back here (forge-8vfn.7.6.50)
-  const outcome = await spawnBashAsync(prepared.scriptPath, prepared.dir, prepared.childEnv, timeoutMs);
-  const durationMs = Math.round(performance.now() - start);
-
-  return finalizeHookOutcome(id, timeoutMs, durationMs, outcome, prepared.undeclaredEnvRefs, logger, initiativeId);
+  try {
+    const start = performance.now(); // monotonic: Date.now() steps back here (forge-8vfn.7.6.50)
+    const outcome = await spawnBashAsync(
+      hookExecArgs(prepared.scriptPath),
+      prepared.dir,
+      hookExecEnv(prepared.childEnv, prepared.privateScript.path),
+      timeoutMs,
+    );
+    const durationMs = Math.round(performance.now() - start);
+    return finalizeHookOutcome(id, timeoutMs, durationMs, outcome, prepared.undeclaredEnvRefs, logger, initiativeId);
+  } finally {
+    cleanupPrivateScriptDir(prepared.privateScript.dir, id, logger, initiativeId);
+  }
 }
 
 // ---------------------------------------------------------------------------
