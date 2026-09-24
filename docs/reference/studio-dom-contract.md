@@ -4683,8 +4683,20 @@ is what this contract reads — but it cannot be the only distinguisher.
     renders the id in TWO places: on the page root
     (`main[data-page="knowledge"][data-seed-session-id="<sid>"]`) and on
     `[data-component="kb-seed-banner"][data-seed-session-id="<sid>"]`, which
-    wraps `a[data-action="open-seed-session"]`. Both are present deliberately.
-    The banner carries it because that is the control it belongs to; the ROOT
+    wraps `a[data-action="open-seed-session"]` **once `seedBanner.phase !==
+    null`** (forge-t4pp: `seedSession` is an unvalidated URL param — a
+    hand-typed or stale id must never mint a link whose target 404s; reuses
+    `useKbSeedSessionPhase`'s own `.find((s) => s.session_id ===
+    seedSessionId)` lookup, already run to derive the banner's copy, as the
+    session-id validity predicate — `phase` is `null` for "not yet checked",
+    "the read failed" and "no such session" alike, and a real value only
+    once a genuine match was found). The banner `[data-component]` and its
+    `[data-seed-session-id]`/`[data-seed-session-phase]`/
+    `[data-seed-session-running]` attributes are unconditional on
+    `seedSession` being present; only the LINK inside is gated. The root's
+    `[data-seed-session-id]` is likewise unconditional (it announces which id
+    is being checked, not that a link exists for it). The banner carries it
+    because that is the control it belongs to; the ROOT
     carries it because `scripts/stories/beats.mjs`'s `resolveExpectations`
     reads the page root FIRST and only searches descendants for the keys the
     root does not answer — and S6 run 2 (2026-09-02) reported this key "absent
