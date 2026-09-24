@@ -24,8 +24,9 @@ against the tables by counting; a count of line references could not be.
 
 | | Rows |
 |---|---|
-| Classified rows below | 67 |
-| — `guarded` | 16 |
+| Classified rows below | 68 |
+| — `guarded` | 17 |
+| — guarded, new in M7-C U2 (T2 review of `95cb287f`, forge-8vfn.5.16 — the hook-fire scan's bound, `statSync`/`openSync` in `bridge-studio-hooks-detail.ts`) | 2 |
 | — guarded, new in M4-projects (S3 "Rebuild contract" — `reset.ts` becomes bridge-reachable, no new mechanism) | 1 |
 | — fixed in this sweep (all were `unguarded`) | 12 |
 | — fixed later in SEC-02 (`forge-d1f`) | 3 |
@@ -2541,3 +2542,69 @@ tests (SECURITY/FAIL-OPEN/ONE-NOTION-WITH-C2) and
 tests. `scripts/request-path-sinks.baseline.txt` accepts the new counts via
 `--write` in the same commit that adds this section, per this document's own
 rule.
+
+### M7-C U2 (T2 review of `95cb287f`, forge-8vfn.5.16) — bounding the hook-fire scan, two new `statSync`/`openSync` sinks in `bridge-studio-hooks-detail.ts` (guarded)
+
+`GET /api/studio/hooks/:id` used to open every `_logs/<cycleId>/events.jsonl`
+on disk (via `listCycles` + `guardedReadFile`, already-classified sinks) to
+answer one request — the same unbounded scan class M7-C #834
+(forge-hqkm/omk0) fixed for `packages/knowledge/bridge-studio-kb-routes-
+maintenance.ts`'s ingest-activity route and `packages/agents/bridge-agents-
+history-rows.ts`'s standalone-history routes. Fixed by bounding the scan to
+the newest `HOOK_FIRE_SCAN_MAX_CYCLES` (50) cycle dirs, ordered by directory
+mtime rather than the cycle id string — a hook can fire from ANY agent spawn
+(flow cycles, one-shot `_agent-*` runs, interactive session kinds, bridge
+writes), unlike `reflect.kb-ingest`, which only ever comes from a flow
+cycle's ISO-prefixed, lexically-sortable id, so `#834`'s lexical-sort variant
+does not apply here and the mtime-ordered variant (`sortEntriesByMtimeDesc`,
+`packages/agents/bridge-agents-history-rows.ts`) is mirrored instead —
+`packages/library` may not import `packages/agents` (rank 2 importing rank
+3 would invert the allow-graph), so the comparator is a local, independent
+implementation (`packages/library/studio/hook-fire-summary.ts`'s
+`selectRecentCycles`), not a shared one.
+
+Two new sink NAMES in this file (`bridge-studio-hooks-detail.ts`
+`statSync` 0 → 2, `openSync` 0 → 1; `readSync`/`closeSync` are not in
+`check-raw-fs-guarded.mjs`'s tracked six and add no row):
+
+- **`guardedCycleMtime`** (`statSync` ×1 of 2) — `resolveGuardedPath(ctx.
+  logsRoot, [cycleId])` (the cycle DIR, `cycleId` its own `segments[]`
+  element, never folded into `root`) then `statSync(guarded.realPath).
+  mtimeMs`; a rejected/absent/stat-race entry sorts LAST (`-Infinity`),
+  mirroring `packages/agents/bridge-agents-run-state.ts`'s `guardedMtime`
+  closure exactly (same guard-then-stat shape, same fail-last discipline).
+  `cycleId` here is a `listCycles`-enumerated NAME (a `readdirSync` entry of
+  the trusted, fixed `ctx.logsRoot`), never a route URL param — the same
+  "server-enumerated names, holding no client string" trust class
+  `findKbDrainRuns` and `packages/flows/metrics.ts`'s `listCycles` already
+  establish elsewhere in this table.
+- **`guardedEventsTail`** (`statSync` ×1 of 2, for file `size`; `openSync`
+  ×1) — `resolveGuardedPath(ctx.logsRoot, [cycleId, 'events.jsonl'])`, then
+  a BOUNDED positional read of the last `HOOK_FIRE_SCAN_TAIL_BYTES` (64KB,
+  the whole file when smaller) off `guarded.realPath` — byte-for-byte the
+  same shape as `guardedReadFileTail` (`packages/sessions/bridge-studio-
+  lifecycle.ts`, row above in this table), independently implemented here
+  for the identical rank-boundary reason (`packages/library` rank 2,
+  `packages/sessions` rank 4). `fd` is closed in `finally`; a truncated
+  tail's leading partial JSON line is dropped (kept only when `start===0`,
+  i.e. the whole file was read).
+
+Both closures are injected into `scanHookFireSummary`
+(`hook-fire-summary.ts`) as `HookFireScanDeps` — the SAME seam a unit test
+wires with counting/scripted fakes to prove the bound without touching a
+real forge root — so nothing about the guard is bypassable by the caller;
+`resolveGuardedPath` is imported directly from `@forge/kernel` in the route,
+never passed through the deps bag.
+
+**Confirmed, not just classified.** `check-raw-fs-guarded.mjs` reports 0
+unguarded request-derived raw fs sinks with both sites in scope (`89`
+request-handling modules scanned, unchanged count — no new module entered
+the scan, an existing one gained sinks). `check-request-path-sinks.mjs`
+recorded the two new (file, sink) rows and was re-run with `--write` in the
+same commit that adds this section, per this document's own rule. Pinned by
+`packages/library/tests/unit/hook-fire-summary.test.ts` (the bound proven
+via counting fakes against the injected `HookFireScanDeps` seam) and
+`packages/library/tests/integration/bridge-studio-hooks-fire-activity.test.ts`
+(the bound proven behaviorally over real files with real directory mtimes
+via `utimesSync` — 5 real fires recorded only in cycles older than the
+50-cycle window are confirmed invisible on the wire).

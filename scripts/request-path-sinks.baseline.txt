@@ -456,6 +456,8 @@ packages/library/bridge-studio-community.ts existsSync 2
 packages/library/bridge-studio-community.ts rmSync 1
 packages/library/bridge-studio-community.ts spawnSync 1
 packages/library/bridge-studio-connections.ts spawnSync 1
+packages/library/bridge-studio-hooks-detail.ts openSync 1
+packages/library/bridge-studio-hooks-detail.ts statSync 2
 packages/library/bridge-studio-hooks-detail.ts writeFileSync 2
 packages/library/bridge-studio-hooks.ts mkdirSync 1
 packages/library/bridge-studio-hooks.ts rmSync 1
