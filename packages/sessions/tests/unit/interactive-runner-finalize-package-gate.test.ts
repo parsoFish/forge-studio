@@ -10,7 +10,7 @@ import { loadFixtureDescriptor, logger, setup } from './test-fixtures/interactiv
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { runInteractiveTurn } from '../../interactive-runner.ts';
 import { writeSessionStatus } from '../../interactive-session.ts';
 import { neverCalledQueryFn } from './test-fixtures/interactive-runner-fixtures.ts';
@@ -20,6 +20,16 @@ import { neverCalledQueryFn } from './test-fixtures/interactive-runner-fixtures.
 const INSTRUCTIONS_SHAPED_ID = '2026-09-19T00-00-00-a1b2c3d4';
 
 type Status = { session_id: string; phase: string; updated_at: string; project_repo_path?: string; project?: string };
+
+/** The shipped isContainedProjectRepoPath guard's contract, stubbed — see
+ *  bridge-studio-session-helpers.test.ts's own `contained` for why it is
+ *  never imported for real (rank-5 @forge/flows, above this package). */
+function containedUnder(allowedRoot: string): (candidate: string, opts: { forgeRoot: string; projectsRoot?: string }) => boolean {
+  return (candidate: string) => {
+    const real = resolve(candidate);
+    return real === allowedRoot || real.startsWith(`${allowedRoot}${sep}`);
+  };
+}
 
 test('committing + finalizer:writeToRepoRoot reaches the finalizer with a real instructions-shaped (non-slug) session id — needsPackageId:false skips the gate', async () => {
   const { forgeRoot, projectRoot, logsRoot } = setup();
@@ -37,6 +47,7 @@ test('committing + finalizer:writeToRepoRoot reaches the finalizer with a real i
   const result = await runInteractiveTurn(descriptor, {
     sessionId: INSTRUCTIONS_SHAPED_ID, projectRoot, forgeRoot, logsRoot,
     queryFn: neverCalledQueryFn(), logger: logger(logsRoot, INSTRUCTIONS_SHAPED_ID),
+    isContainedProjectRepoPath: containedUnder(repoRoot),
   });
 
   assert.equal(result.phase, 'committed');

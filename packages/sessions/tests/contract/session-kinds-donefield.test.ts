@@ -113,6 +113,27 @@ describe('validateSessionKinds — doneField/nextOnDone/ceiling (bead 8vfn.6.6 i
     }
   });
 
+  it('doneField/nextOnDone/ceiling declared on a NON-agent step (step:noop) -> error, even when otherwise consistent (review finding: declared-data-fails-open — runAgentStyleStep never reads these off a noop/finalize/terminal row)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const turnSpec = wellFormedTurnSpec();
+    const phases = analyzingPhase(turnSpec);
+    const idx = phases.findIndex((p) => p.phase === 'awaiting-review');
+    assert.ok(phases[idx].step === 'noop', 'fixture precondition: awaiting-review must be a step:noop row');
+    // Otherwise fully CONSISTENT (co-required pair present, nextOnDone resolves) — isolates the not-agent-step check.
+    phases[idx] = { ...phases[idx], doneField: 'done', nextOnDone: 'committed' };
+    writeSessionKindsYaml(root, [turnSpecDescriptor(turnSpec)]);
+
+    const findings = turnspecFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/turnspec-donefield-not-agent-step');
+    assert.ok(f, `expected a session-kinds/turnspec-donefield-not-agent-step finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('awaiting-review'), 'message must name the offending phase');
+    assert.ok(f.message.includes('noop'), 'message must name the offending step');
+    const corequired = findings.find((x) => x.check === 'session-kinds/turnspec-donefield-corequired');
+    assert.equal(corequired, undefined, 'the co-requirement check must NOT also fire — this pair is otherwise consistent, isolating the not-agent-step assertion');
+  });
+
   it('panel.phases carrying doneField/nextOnDone produces NO donefield-* finding at all (turnSpec-only; panel never dispatches)', () => {
     const root = makeForgeRoot();
     writeAgentSkill(root, 'fixture-agent');
