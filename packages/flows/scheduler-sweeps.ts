@@ -1,13 +1,6 @@
 /**
- * Scheduler background sweeps — the periodic/startup work `serve()` dispatches
- * alongside admission (bead forge-8vfn.15 size split): finalize (F-W5-7),
- * drain (ADR 026), flow-trigger (Stage C), cron sync (ADR-041), and periodic
- * crash-recovery (F-08/ADR 012). Every function is BEST-EFFORT — none may
- * throw out of a `setInterval` tick or the startup path that calls them, so
- * each wraps its body in try/catch. `runRecoverySweep` is NOT shared with
- * `serve()`'s own startup recovery (deliberately inline in scheduler.ts):
- * startup must throw on a real failure, this must never throw out of the
- * interval. `cleanupRecoveredWorktrees` is the cleanup both share.
+ * Scheduler background sweeps (bead forge-8vfn.15 size split — see design.md).
+ * Every function is BEST-EFFORT: none may throw out of a `setInterval` tick.
  */
 
 import { readFileSync, existsSync } from 'node:fs';

@@ -1,8 +1,6 @@
 /**
- * Lineage derivation — the artifact-readiness map, the run's PR link, and the
- * gate note: "what documents/links has this run produced." Split out of
- * run-model-derive.ts (bead forge-8vfn.15; see that file's doc comment for
- * the full seam map).
+ * Lineage derivation: "what has this run produced" (bead forge-8vfn.15 size
+ * split — see design.md).
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';

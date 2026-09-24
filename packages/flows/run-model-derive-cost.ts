@@ -1,8 +1,6 @@
 /**
- * Per-node metadata derivation — cost, model, retries, progress/wedge,
- * iterations, and the dev/unifier/adversarial-review node's own special
- * fields (delivered, gateChecks, findings). Split out of run-model-derive.ts
- * (bead forge-8vfn.15; see that file's doc comment for the full seam map).
+ * Per-node metadata derivation: "what did this run cost" (bead forge-8vfn.15
+ * size split — see design.md).
  */
 import type { EventLogEntry } from '@forge/kernel';
 import { sumAuthoritativeCostUsd } from '@forge/kernel';

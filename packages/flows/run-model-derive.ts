@@ -1,16 +1,7 @@
 /**
- * Forge Studio — Run Derivation Helpers (M1-1, ADR-027/028)
- *
- * Pure derivation functions extracted from run-model.ts; internal to the run
- * aggregator (aggregateRun / listRuns / buildNodeMapping / Run types live in
- * run-model.ts). THIS FILE IS A DOOR, not the implementation (bead
- * forge-8vfn.15 — 988 lines against the 800-line cap, split by
- * responsibility): status.ts ("what state is this run in" — phase/WI status,
- * gate identity, failure, reflection-loss, stop-on-budget), cost.ts ("what
- * did this cost" — per-node metadata), lineage.ts ("what did it produce" —
- * artifacts, PR link, gate note), node-id.ts (the shared `eventToNodeId`
- * leaf). Re-exported here unchanged so every `from './run-model-derive.ts'`
- * and deep `@forge/flows/run-model-derive.ts` import keeps resolving.
+ * Forge Studio — Run Derivation Helpers (M1-1, ADR-027/028). A DOOR, not the
+ * implementation (bead forge-8vfn.15 size split — see design.md): re-exports
+ * status/cost/lineage/node-id.ts unchanged so every existing import resolves.
  */
 
 export {

@@ -1,11 +1,6 @@
 /**
- * Scheduler per-initiative dispatch (bead forge-8vfn.15 size split). `runOne`
- * runs ONE claimed initiative end to end: validate the claim, pick a
- * worktree strategy, link project deps, run the cycle, dispatch the terminal
- * status, then clean up (or preserve) the worktree. `linkProjectDeps` is also
- * reused by `wi-worktree.ts`'s per-WI bootstrap; `makeProgressTee` builds the
- * stdout formatter `serve()` threads into `runCycle`; `annotateManifest` is
- * the frontmatter writer, re-exported from scheduler.ts for its own test.
+ * Scheduler per-initiative dispatch: `runOne` runs ONE claimed initiative
+ * end to end (bead forge-8vfn.15 size split — see design.md).
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, lstatSync, symlinkSync, appendFileSync, readdirSync } from 'node:fs';

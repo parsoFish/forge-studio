@@ -1,14 +1,6 @@
 /**
- * The unattended scheduler (ADR 011): the daemon loop and admission logic —
- * claim pending initiatives in dependency order, run the startup/periodic
- * recovery sweeps, and hand each claim to `runOne` to dispatch. Past 1,000
- * lines it was split by responsibility (bead forge-8vfn.15): this file keeps
- * `serve` + admission; scheduler-sweeps.ts holds the background sweeps
- * `serve` dispatches; scheduler-run-one.ts holds the per-initiative dispatch
- * (`runOne`). All three re-export through here — no outside importer changes.
- *
- * `forge serve` runs this forever. `forge serve --once` claims one initiative
- * and exits — used in tests and for one-shot runs.
+ * The unattended scheduler (ADR 011): `serve`'s daemon loop + admission.
+ * Size split across this file + scheduler-sweeps.ts + scheduler-run-one.ts — see design.md.
  */
 
 import { readFileSync, existsSync, mkdirSync } from 'node:fs';

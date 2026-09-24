@@ -1,8 +1,6 @@
 /**
- * Status derivation — per-node phase status, per-WI status, the gate node's
- * identity, failure attribution, lost-reflection detection, and the
- * cost-ceiling stop outcome. Split out of run-model-derive.ts (bead
- * forge-8vfn.15; see that file's doc comment for the full seam map).
+ * Status derivation: "what state is this run in" (bead forge-8vfn.15 size
+ * split — see design.md).
  */
 import { REFLECTION_LOST_EVENT } from './cycle-context.ts';
 import type { EventLogEntry } from '@forge/kernel';

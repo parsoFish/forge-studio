@@ -1,9 +1,6 @@
 /**
- * `eventToNodeId` — the one low-level helper every other `run-model-derive-*`
- * module calls to attribute an event to a flow node. Its own leaf module
- * (bead forge-8vfn.15: "eventToNodeId lives in the failure block and is used
- * by three others — misplaced, not shared by accident") so status/cost/
- * lineage derivation import it without importing each other.
+ * `eventToNodeId`: the shared attribution leaf (bead forge-8vfn.15 size
+ * split — see design.md).
  */
 import type { EventLogEntry } from '@forge/kernel';
 
