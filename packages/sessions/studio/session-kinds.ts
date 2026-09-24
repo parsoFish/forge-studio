@@ -364,6 +364,25 @@ export type TurnSpecPhase = {
    *  no `requires` needs nothing beyond `verdict` itself, so the write
    *  route's generic check simply has nothing to enforce. */
   readonly requires?: readonly string[];
+  /** forge-7m2 — the staging dirname a `step: finalize` phase's finalizer
+   *  reads FROM (the read-side twin of `writes:`, which names the dir an
+   *  `agent`-step phase writes INTO): AUTHORED data, like `writes:`/
+   *  `awaits:`/`verdicts:`/`requires:` above, never inferred from `phase`'s
+   *  name or hardcoded in the finalizer itself. Threaded by `runFinalizeStep`
+   *  (`interactive-agent-step.ts`) into `FinalizerContext.stagingDirName`
+   *  (`interactive-finalizers.ts`) — the SAME single source of truth a
+   *  session kind's earlier `agent`-step phase already names via its own
+   *  `writes: [<dirname>]` (e.g. authoring's `committing` row declares
+   *  `stagingDirName: staging`, matching `analyzing`'s `writes: [staging]`).
+   *  Meaningful ONLY on a `step: finalize` row whose finalizer consumes a
+   *  staging area (`copyStagingToLibrary`); `writeToRepoRoot`/
+   *  `recordLockedDemo` ignore it. Structural only here (like `writes`): no
+   *  closed vocabulary of legal dirnames exists to validate against —
+   *  `validateSessionKinds` does not touch it, same discipline as `writes`'s
+   *  own EXPIRY CONDITION above. Omitted (not defaulted) when absent —
+   *  `copyStagingToLibrary` itself refuses loudly rather than falling back
+   *  to a literal. */
+  readonly stagingDirName?: string;
 };
 
 /** The additive-optional producer/state-machine half of a session-kind
@@ -477,6 +496,9 @@ function parseTurnSpecPhase(raw: unknown, file: string, descIndex: number, phase
   const awaits = optString(p, 'awaits');
   const verdicts = p.verdicts !== undefined ? stringArray(p, 'verdicts', file) : undefined;
   const requires = p.requires !== undefined ? stringArray(p, 'requires', file) : undefined;
+  // forge-7m2 — same omit-don't-default discipline as every other optional
+  // field above.
+  const stagingDirName = optString(p, 'stagingDirName');
   return {
     phase,
     step,
@@ -486,6 +508,7 @@ function parseTurnSpecPhase(raw: unknown, file: string, descIndex: number, phase
     ...(awaits !== undefined ? { awaits } : {}),
     ...(verdicts !== undefined ? { verdicts } : {}),
     ...(requires !== undefined ? { requires } : {}),
+    ...(stagingDirName !== undefined ? { stagingDirName } : {}),
   };
 }
 
