@@ -477,6 +477,25 @@ export function deriveSessionShellViewState(result: SessionShellFetchResult | nu
   };
 }
 
+/**
+ * forge-d5ib (W8-F6 follow-up) — should the page's per-kind summary poll
+ * run? A LEGACY session's working files are gone (`legacy: true` — only the
+ * central event log survives), so the bespoke per-kind summary endpoint,
+ * which reads the same project-side `status.json` the shell route no longer
+ * needs, can only ever resolve to nothing: an architect legacy session polls
+ * `fetchArchitectSessions()` forever, always empty. The legacy `kindPanel`
+ * branch never reads `summary` at all, so this is purely wasted poll
+ * traffic — harmless, never wrong, but a poll effect with no reader.
+ *
+ * `false` ONLY for a settled `ready` state whose session is legacy;
+ * `loading`/`no-session`/`error` all still poll (a session that has not yet
+ * resolved, or failed to, is not known to be legacy — polling is the honest
+ * default until proven otherwise).
+ */
+export function shouldPollSessionSummary(state: SessionShellViewState): boolean {
+  return !(state.status === 'ready' && state.legacy);
+}
+
 // ---------------------------------------------------------------------------
 // Pseudo-project anchors (W6-B9 reviewer fix) — a project id starting with
 // "." is NEVER a real registered project: `discoverProjects`

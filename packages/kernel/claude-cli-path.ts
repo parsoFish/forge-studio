@@ -37,6 +37,29 @@
  * what they derived; this module only checks and refuses. A product that
  * searched `PATH` itself would be choosing a binary on the operator's behalf,
  * which is how the wrong one gets chosen quietly.
+ *
+ * RE-MEASURED at the `forge-8vfn.7.6.117` SDK bump (0.1.77 → 0.3.281,
+ * 2026-09-25): the override is STILL NEEDED, even though the immediate
+ * symptom is currently gone. The bumped SDK no longer vendors a single
+ * frozen `cli.js` — `node_modules/@anthropic-ai/claude-agent-sdk` now ships
+ * `sdk.mjs` plus a platform-specific native binary pulled in through
+ * `optionalDependencies` (e.g. `@anthropic-ai/claude-agent-sdk-linux-x64`),
+ * and when `pathToClaudeCodeExecutable` is unset the SDK resolves to THAT
+ * binary itself. Measured on this host: its `claudeCodeVersion` is
+ * `2.1.281` (`node_modules/@anthropic-ai/claude-agent-sdk/manifest.json`),
+ * matching the operator's own installed CLI (`claude --version` → `2.1.281
+ * (Claude Code)`), and running that bundled binary directly (`claude
+ * --version`, no query, no spend) exits 0 with no Consumer Terms block. So
+ * today, removing the override would not reproduce forge-8vfn.7.6.116.
+ *
+ * It would reproduce it EVENTUALLY, which is why the override stays. That
+ * parity is a byproduct of bumping the SDK today, not a property the SDK
+ * guarantees — the bundled binary is only ever as fresh as forge's OWN
+ * dependency pin, and letting forge's own pin go stale for ~8 months
+ * (0.1.77, installed 2026-01) is exactly what produced the original
+ * incident. Pointing at `FORGE_CLAUDE_CLI` keeps spawn capability coupled to
+ * the operator's continuously-updated CLI instead of to forge's own bump
+ * cadence, which is the whole point of "derivation is the launcher's job."
  */
 import { accessSync, constants, statSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
