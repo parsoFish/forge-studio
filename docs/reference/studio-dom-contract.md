@@ -116,6 +116,42 @@ the bound expires — `beats.mjs:41-44`'s "absent from the page" against 438's
 bound-naming branch — and in one key having had two shapes across three sibling
 surfaces, which is the thing a contract exists to prevent.
 
+**`SessionMinted`'s kind union grew to `architect | demo | instructions |
+project-brain` (`forge-8vfn.5.10`).** M1-G swept architect and demo; three more
+project-builder sites (all on `/projects/[id]`) still `router.push`ed a session
+id from inside the click that minted it — `Instructions.tsx` (the standing-
+instructions launcher, `data-instructions-session-id` /
+`[data-action="launch-instructions"]`), `KbBind.tsx` (the project-brain
+builder, `data-project-brain-session-id` /
+`[data-action="create-project-brain"]`), and `ContractResolutionPanel.tsx`'s
+own `instructions`-route agent-tier resolve button (same
+`data-instructions-session-id` key as `Instructions.tsx` — the two surfaces
+mint independently and can legitimately disagree, since only one names the
+session actually reachable from wherever the operator is standing). Each now
+publishes its own distinctly-named key (ruling 307: this panel can render
+inside the onboarding SESSION page, whose root also carries a generic
+`data-session-id`) and renders `SessionMinted`'s real anchor
+(`[data-action="view-instructions-session"|"view-project-brain-session"]`)
+rather than navigating from the click. `ContractResolutionPanel`'s
+`brain-fix` route is NOT one of these — it navigates to an EXISTING, already-
+bound KB's health tab (`brainFixHref`, `/knowledge?id=<boundKbId>&tab=health`),
+never a `/sessions/` route, and mints nothing from the click; `SessionMinted`
+cannot express that href and the acceptance criterion this closes is scoped to
+`/sessions/` navigations only.
+
+**Neither new anchor carries `?project=`** — the pre-fix `Instructions.tsx`
+and `ContractResolutionPanel` targets never did, and `KbBind.tsx`'s did but
+lost it here on purpose: the session shell resolves `project` itself off each
+kind's own per-kind summary route (`listInstructionsSessions` /
+`fetchProjectBrainSessions`,
+`app/sessions/[kind]/[sessionId]/page.tsx`), and the story runner matches a
+minted anchor's `href` EXACTLY (`scripts/stories/beats.mjs`) — a query string
+renders a link a human can click and no beat can ever find
+(`authoring-launcher-mint.test.ts` pins the same rule for the authoring
+launcher). The `demo` kind's three existing `SessionMinted` call sites still
+carry `?project=` and are unchanged by this fix — a pre-existing instance of
+the same class, left for a future PR.
+
 **An action repeated per instance carries the instance in its own name (M1-G,
 `forge-8vfn.5.6`).** `[data-action="select-stage-<stage>"]`, like
 `browse-<name>` and `new-skill` before it. A reader resolves `[data-action=…]`
@@ -826,7 +862,16 @@ is what this contract reads — but it cannot be the only distinguisher.
   unfiltered set). **W7-B1 (home-sessions-12): the page stays LIVE** — the
   same `cycle-list-changed` bridge-WS signal Home refetches on, through the
   SAME `createDebouncedRefreshRuns` debounce (one subscribe, mount-only, no
-  page-level poll — `app/sessions/page.tsx`). **W7-B1 (crosscut-13 /
+  page-level poll — `app/sessions/page.tsx`). **sessions-kinds-16: a
+  terminal-sessions pointer** — the page's own lede says terminal sessions
+  "live on their artifacts" but named no path to any; a static (no fetch
+  dependency, renders in every state including loading)
+  `div[data-section="terminal-sessions-pointer"]` links to `/monitor` via
+  `a[data-action="open-monitor"]` — the SAME action `MonitorSummaryStrip.tsx`
+  already uses for this link — because Monitor's history ledger
+  (`lib/session-ledger.ts`'s `deriveSessionLedgerRows`) joins every spine
+  session regardless of phase, terminal included, unlike this page's own
+  active-only set. **W7-B1 (crosscut-13 /
   home-sessions-19): `section[data-section="sessions-kickoff"]` renders in
   BOTH the populated and the empty state** (only a FAILED read omits it) —
   one `a[data-action="kickoff-<kind>"]` per entry of
@@ -1868,10 +1913,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   the shared `NotFound`** (`data-not-found-kind="registry item"`), not the
   full edit form under a red banner. Gated on the load OUTCOME
   (`registryEditLoadOutcome`), never on "some load error happened": only a
-  real HTTP 404 may claim the row does not exist. A transport failure — the
-  bridge was never reached, so there is no status at all — keeps
-  `[data-component="fetch-error"]`, because a down bridge is not evidence of
-  absence (the same rule `bridge-result.ts` holds for every other read).
+  real HTTP 404 may claim the row does not exist. **forge-4sj: a non-404
+  edit-load failure** — the bridge was never reached, so there is no status
+  at all, or it answered but refused — renders the shared `PageLoadError`
+  kit (`main[data-page="community-registry-form"][data-form-mode="edit"]`,
+  `[data-component="page-load-error"]`, `[data-component="fetch-error"]`
+  inside it, `[data-action="retry-fetch"]`) instead of the form, with
+  `useBridgeRecoveryWhenFailed` resubscribing while failed — the SAME kit
+  `/community/[kind]/[id]` already uses, because a down bridge is not
+  evidence of absence (the same rule `bridge-result.ts` holds for every
+  other read). The prior ad-hoc inline banner above a half-populated form is
+  gone.
 
   **Refresh entry (W6-CR-3, 2026-08-15; replaced by W8-B5, retired-session-kind
   cutover W8-B5b WI-3).** The interactive community-refresh session kind
@@ -4072,7 +4124,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   `runFinalize`) — this route validates the body shape and hands off, it
   never reimplements a finalizer.
 - **`SessionInteractivePanel` — the generic interaction panel (W6-B6,
-  2026-08-15; W6-B8 and W6-B9 extend it).** `components/studio/session/SessionInteractivePanel.tsx`.
+  2026-08-15; W6-B8 and W6-B9 extend it).** `components/studio/session/SessionInteractivePanel.tsx`
+  — the orchestrator; the `question-form` and `verdict` affordance kinds'
+  own markup live in sibling `SessionQuestionFormAffordance.tsx` /
+  `SessionVerdictAffordance.tsx` (bead forge-8vfn.8.3.4's file-size split —
+  same DOM contract, no behaviour change).
   Renders EXCLUSIVELY from the read route's own `affordances[]` — never
   re-derives an affordance from `phase`. Wired into the session shell for
   **`demo`, `onboarding`, `kb-cleanup`, `authoring`, and `instructions`
@@ -4198,7 +4254,12 @@ is what this contract reads — but it cannot be the only distinguisher.
   additions, both
   keyed off `artifact.kind` (never `kind`): for `demo` (a real
   `generation-gallery` with at least one generation), a generation picker
-  (`[data-field="session-generation-pick"]`); for `authoring` (a real
+  (`[data-field="session-generation-pick"][data-selected-generation]` —
+  bead forge-8vfn.8.3.4: `data-selected-generation` names the generation an
+  approve would ACTUALLY lock right now, the same fact
+  `GenerationGallery`'s own root attribute of the same name carries, because
+  both now read the ONE selection lifted onto the session page — see
+  "Generation gallery" below); for `authoring` (a real
   `file-package`, W6-B8), a package-id field
   (`[data-field="session-package-id"]`, labelled "Skill id (directory name)"
   or "Hook id (directory name)" per the draft's shape — detected purely by
@@ -4529,13 +4590,29 @@ is what this contract reads — but it cannot be the only distinguisher.
   itself reversed): `/sessions/demo/<sid>` renders the REAL
   `SessionArtifactPane`, fed by
   `GET /api/studio/sessions/demo/<sid>?project=<p>` — the same read route,
-  one mount now instead of two. `finalize-generation` (the gallery's own
-  per-item button) renders honestly DISABLED here (`onFinalizeGeneration` is
-  not wired on this page — `title="Not available from this view"`); the
-  session-shell's own way to finalize a chosen generation is the generic
-  verdict-approve's `[data-field="session-generation-pick"]` picker (posts
+  one mount now instead of two. **W7-B1** wires `finalize-generation` (the
+  gallery's own per-item button) for a live, non-terminal demo session on
+  THIS page too (session page's `onFinalizeGeneration`, the SAME
+  `demoBuilderLock` POST) — a terminal (locked/abandoned) session keeps it
+  honestly disabled instead. The generic verdict-approve's
+  `[data-field="session-generation-pick"]` picker (posts
   `{verdict:'approve', generation:<n>}` through the SAME affordance route
-  `handleDemoVerdict` already answers), not a second, redundant call path.
+  `handleDemoVerdict` already answers) is the OTHER way to lock a chosen
+  generation — not a second, redundant call path, but, until **bead
+  forge-8vfn.8.3.4**, a second, independent SELECTION: the gallery's own
+  per-item picker and the picker's `<select>` each carried their own local
+  `useState`, so the two could disagree about which generation an approve
+  would lock (select generation B in the gallery, approve from the panel,
+  and it could lock generation A). **Both are now driven by ONE selection**
+  (`lib/session-artifact-view.ts`'s `GenerationSelection`), owned by the
+  session page and threaded verbatim into `GenerationGallery` (via
+  `SessionArtifactPane`'s own `selectedGeneration`/`onSelectGeneration`) and
+  into `SessionInteractivePanel`'s verdict-approve picker (same two prop
+  names) — picking a generation in EITHER control moves both, and either
+  lock action (the gallery's `finalize-generation` or the picker's
+  `verdict-approve`) acts on exactly that generation. The picker's `<select>`
+  now also carries `[data-selected-generation]`, mirroring the gallery's own
+  root attribute exactly, so the two can be read and compared directly:
   Contract:
   `[data-section="generation-gallery"][data-generation-count][data-selected-generation]`,
   per selector button
@@ -4546,21 +4623,24 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-section="generation-feedback"][data-has-feedback="true"|"false"]`,
   the per-item viewer `[data-action="view-generation-item"]` (serving from
   `GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename>`), the
-  (on this page, honestly disabled) chooser
-  `[data-action="finalize-generation"][data-generation-number]`, and an
-  honest `[data-generation-empty="true"]` naming what was scanned rather than a
-  bare pane. `data-generation-number` is the snapshot's OWN recorded iteration,
-  never an array position, so a corrupt snapshot leaves a visible gap instead
-  of silently renumbering its successors. **The selection is poll-stable**: the
-  panel refetches on ONE 3s interval (never a second cycle — two independent
-  polls is the race this campaign already diagnosed once), and the view is
-  re-derived with the operator's chosen generation NUMBER preserved across the
-  new payload, because a selection that dies every 3 seconds cannot be acted
-  on. The real way to lock a CHOSEN generation on this page is
-  `verdict-approve`'s generation picker — server-side (`handleDemoVerdict`)
-  it restores that snapshot's sample AND its generator skill into the project
-  repo before the same lock runs, so `demo.lock.json`'s
-  `demo_html`/`demo_skill` pair always comes from one generation.
+  finalize chooser `[data-action="finalize-generation"][data-generation-number]`
+  (disabled, with its reason, on a terminal session — never a silent
+  no-handler swallow), and an honest `[data-generation-empty="true"]` naming
+  what was scanned rather than a bare pane. `data-generation-number` is the
+  snapshot's OWN recorded iteration, never an array position, so a corrupt
+  snapshot leaves a visible gap instead of silently renumbering its
+  successors. **The selection is poll-stable**: the page refetches the shell
+  on ONE 3s interval (never a second cycle — two independent polls is the
+  race this campaign already diagnosed once), and the view is re-derived
+  with the operator's chosen generation NUMBER preserved across the new
+  payload (looked up BY VALUE via `preferredGenerationFor`, never an array
+  position), because a selection that dies every 3 seconds cannot be acted
+  on. Locking a CHOSEN generation via `verdict-approve` — server-side
+  (`handleDemoVerdict`) it restores that snapshot's sample AND its generator
+  skill into the project repo before the same lock runs, so
+  `demo.lock.json`'s `demo_html`/`demo_skill` pair always comes from one
+  generation — now locks the SAME generation the gallery shows selected,
+  because there is only one selection left to disagree with.
 - **Contract build-out — the onboarding/creation session's artifact (R4-17,
   2026-08-06).** The `onboarding` session-kind descriptor (`studio/
   session-kinds.yaml`, D1: ONE descriptor reused for both the `/projects/[id]`
@@ -4667,8 +4747,20 @@ is what this contract reads — but it cannot be the only distinguisher.
     renders the id in TWO places: on the page root
     (`main[data-page="knowledge"][data-seed-session-id="<sid>"]`) and on
     `[data-component="kb-seed-banner"][data-seed-session-id="<sid>"]`, which
-    wraps `a[data-action="open-seed-session"]`. Both are present deliberately.
-    The banner carries it because that is the control it belongs to; the ROOT
+    wraps `a[data-action="open-seed-session"]` **once `seedBanner.phase !==
+    null`** (forge-t4pp: `seedSession` is an unvalidated URL param — a
+    hand-typed or stale id must never mint a link whose target 404s; reuses
+    `useKbSeedSessionPhase`'s own `.find((s) => s.session_id ===
+    seedSessionId)` lookup, already run to derive the banner's copy, as the
+    session-id validity predicate — `phase` is `null` for "not yet checked",
+    "the read failed" and "no such session" alike, and a real value only
+    once a genuine match was found). The banner `[data-component]` and its
+    `[data-seed-session-id]`/`[data-seed-session-phase]`/
+    `[data-seed-session-running]` attributes are unconditional on
+    `seedSession` being present; only the LINK inside is gated. The root's
+    `[data-seed-session-id]` is likewise unconditional (it announces which id
+    is being checked, not that a link exists for it). The banner carries it
+    because that is the control it belongs to; the ROOT
     carries it because `scripts/stories/beats.mjs`'s `resolveExpectations`
     reads the page root FIRST and only searches descendants for the keys the
     root does not answer — and S6 run 2 (2026-09-02) reported this key "absent

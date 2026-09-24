@@ -38,6 +38,7 @@ import { parseStandingTriggers, type StandingTrigger } from './standing-triggers
 // third client-side mirror. The import is one-way (session-client never imports
 // back from here).
 import { parseContractStageRow, type ContractStageRow } from './session-client';
+import { MATERIAL_KINDS, type MaterialKind } from '@forge/contracts';
 // agents-15 (forge-6gv.5.1): the Agent wire type + its parse function(s) and
 // agent-only helpers live in their own module now, split out so this file
 // can grow the fields the Definition Preview needs
@@ -2173,19 +2174,11 @@ export async function deleteKb(id: string): Promise<{ ok: boolean; error?: strin
 // materials + instructions-draft (R2-09 D1/D8/D9)
 // ---------------------------------------------------------------------------
 
-/**
- * The closed, frozen materials vocabulary (R2-09 D1-D4). Mirrors
- * orchestrator/studio/materials.ts's `MATERIAL_KINDS` verbatim — forge-ui
- * cannot import orchestrator TS directly (see the `SHIPPED_TRIGGER_KINDS`
- * mirror above for the same hand-kept-mirror convention), so this is the
- * SINGLE named constant every forge-ui consumer of the vocabulary imports;
- * do not re-declare the list anywhere else client-side. Order is
- * significant (surfaced verbatim in the builder's materials toggles and the
- * YAML preview) — keep it in lockstep with the server list if it ever
- * changes.
- */
-export const MATERIAL_KINDS = ['images', 'documents', 'audio', 'data-files'] as const;
-export type MaterialKind = (typeof MATERIAL_KINDS)[number];
+// The closed, frozen materials vocabulary (R2-09 D1-D4) — moved to
+// @forge/contracts (forge-ni3): studio may import only @forge/contracts, so
+// this is that ONE definition, re-exported here so this file's existing
+// consumers (agent-builder-view.ts et al.) need no change.
+export { MATERIAL_KINDS, type MaterialKind };
 
 /**
  * Parse a raw `materials` field (server AgentDefinition.materials shape,

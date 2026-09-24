@@ -105,7 +105,48 @@ test('E9: NotFound is gated on the not-found OUTCOME, never on the presence of a
 });
 
 test('E9: the transport-failure banner SURVIVES — a bridge that is down still renders the error surface', () => {
-  expect(read(FORM_PAGE)).toMatch(/data-component="fetch-error"/);
+  // forge-4sj: the ad-hoc inline `data-component="fetch-error"` div is
+  // retired in favour of the shared PageLoadError kit (it renders
+  // FetchErrorState — and that data-component attribute — internally); the
+  // source-level fact this page must still carry is that it uses the kit.
+  expect(read(FORM_PAGE)).toMatch(/<PageLoadError/);
+});
+
+// ---------------------------------------------------------------------------
+// forge-4sj — `/community/new`(?edit=) was EXEMPT in
+// detail-pages-fail-closed-wiring.test.ts because fetchRegistryItem never
+// throws (the same status-shaped read as the detail page's
+// fetchCommunityItemDetail), but the exemption's own note disclosed a real
+// gap: no shared PageLoadError kit, no bridge-recovery resubscribe, no
+// Retry — a non-404 edit-load failure left an ad-hoc dead-end banner ABOVE a
+// half-empty form instead of the same retryable, self-healing error state
+// every other detail page gets. Mirrors the detail page's own three PageLoadError
+// tests above almost verbatim (same non-throwing read shape, same kit).
+// ---------------------------------------------------------------------------
+
+test('forge-4sj: the registry form imports the shared PageLoadError kit + bridge-recovery hook', () => {
+  const src = read(FORM_PAGE);
+  expect(src).toMatch(/import \{ PageLoadError \} from '@\/components\/PageLoadError'/);
+  expect(src).toMatch(/import \{ useBridgeRecoveryWhenFailed \} from '@\/lib\/use-bridge-status'/);
+});
+
+test('forge-4sj: a non-404 edit-load failure renders the shared PageLoadError with Retry — never the form half-populated behind an ad-hoc banner', () => {
+  const src = stripComments(read(FORM_PAGE));
+  expect(src).toMatch(/useState<\{ error: string; status\?: number \} \| null>\(null\)/);
+  expect(src).toMatch(/setLoadError\(\{ error: r\.error \?\? [^,]+, status: r\.status \}\)/);
+  expect(src).toMatch(/<PageLoadError[\s\S]{0,200}page="community-registry-form"/);
+  expect(src).toMatch(/<PageLoadError[\s\S]{0,400}onRetry=\{reload\}/);
+  // The error branch must be a real early RETURN — never the form rendered
+  // underneath an inline banner (the exact gap this bead closes).
+  const errIdx = src.indexOf('<PageLoadError');
+  const formIdx = src.indexOf('data-page="community-registry-form"\n');
+  expect(errIdx).toBeGreaterThan(0);
+  expect(formIdx).toBeGreaterThan(errIdx);
+});
+
+test('forge-4sj: a failed edit load re-fills on bridge recovery ONLY while it is the failed state', () => {
+  const src = stripComments(read(FORM_PAGE));
+  expect(src).toMatch(/useBridgeRecoveryWhenFailed\(\s*loadError !== null,\s*reload,?\s*\)/);
 });
 
 test('E9: fetchRegistryItem carries the HTTP status through, so 404 is distinguishable from "never reached"', () => {

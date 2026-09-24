@@ -457,9 +457,10 @@ packages/library/bridge-studio-community.ts existsSync 2
 packages/library/bridge-studio-community.ts rmSync 1
 packages/library/bridge-studio-community.ts spawnSync 1
 packages/library/bridge-studio-connections.ts spawnSync 1
+packages/library/bridge-studio-hooks-detail.ts writeFileSync 2
 packages/library/bridge-studio-hooks.ts mkdirSync 1
 packages/library/bridge-studio-hooks.ts rmSync 1
-packages/library/bridge-studio-hooks.ts writeFileSync 4
+packages/library/bridge-studio-hooks.ts writeFileSync 2
 packages/library/bridge-studio-skills.ts existsSync 1
 packages/library/bridge-studio-skills.ts mkdirSync 2
 packages/library/bridge-studio-skills.ts readFileSync 2
@@ -505,11 +506,12 @@ packages/library/studio/hook-approval-ledger.ts readFileSync 1
 packages/library/studio/hook-approval-ledger.ts writeFileSync 1
 packages/library/studio/hook-library.ts existsSync 2
 packages/library/studio/hook-library.ts readdirSync 1
-packages/library/studio/hook-library.ts realpathSync 1
+packages/library/studio/hook-library.ts realpathSync 2
 packages/library/studio/hook-package.ts readdirSync 1
 packages/library/studio/hook-package.ts readFileSync 1
 packages/library/studio/hook-package.ts statSync 1
 packages/library/studio/hook-runtime.ts readFileSync 1
+packages/library/studio/hook-runtime.ts spawn 1
 packages/library/studio/hook-runtime.ts spawnSync 1
 packages/library/studio/skill-install-ledger.ts existsSync 1
 packages/library/studio/skill-install-ledger.ts mkdirSync 2
@@ -523,6 +525,8 @@ packages/library/studio/skill-install.ts statSync 1
 packages/library/studio/skill-install.ts writeFileSync 4
 packages/library/studio/skill-package.ts readdirSync 1
 packages/library/studio/skill-package.ts readFileSync 1
+packages/library/studio/skill-package.ts realpathSync 1
+packages/library/studio/skill-package.ts statSync 1
 packages/library/studio/skill-registry.ts readFileSync 1
 packages/library/studio/skill-trust.ts readFileSync 3
 packages/library/studio/template-library.ts readdirSync 5
@@ -592,8 +596,8 @@ packages/sessions/bridge-studio-kickoff.ts writeFileSync 5
 packages/sessions/bridge-studio-lifecycle.ts openSync 1
 packages/sessions/bridge-studio-lifecycle.ts readFileSync 1
 packages/sessions/bridge-studio-lifecycle.ts statSync 2
-packages/sessions/bridge-studio-session-index.ts existsSync 8
-packages/sessions/bridge-studio-session-index.ts readdirSync 8
+packages/sessions/bridge-studio-session-index.ts existsSync 9
+packages/sessions/bridge-studio-session-index.ts readdirSync 10
 packages/sessions/bridge-studio-session-index.ts readFileSync 1
 packages/sessions/interactive-agent-step.ts lstatSync 1
 packages/sessions/interactive-agent-step.ts mkdirSync 2
