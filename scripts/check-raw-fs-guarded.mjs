@@ -154,8 +154,14 @@ import { fileURLToPath } from 'node:url';
 import { findReachableModules, listEntryModules, DISPATCH_ENTRY_MODULES } from './check-request-path-sinks.mjs';
 // Ruling 106: the audited-residual LEDGER (ALLOWLIST + the fold rows, with
 // their charters and line-drift history) lives in its own data module. Both
-// are re-exported below so every consumer's import path is unchanged.
-import { ALLOWLIST, PROJECTS_ROOT_FOLD_ALLOWLIST } from './check-raw-fs-guarded.allowlist.mjs';
+// are re-exported below so every consumer's import path is unchanged. Bead
+// forge-mlk: `applyAllowlist` (the content-keyed matcher) moved there too —
+// it is tightly coupled to the row shape it matches against.
+import { ALLOWLIST, PROJECTS_ROOT_FOLD_ALLOWLIST, applyAllowlist } from './check-raw-fs-guarded.allowlist.mjs';
+// Bead forge-mlk (anchor computation) + forge-8vfn.5.63 (the one-level
+// interprocedural taint hop) share one function-boundary parse — see that
+// module's header for why it is not folded back into this (baselined) file.
+import { parseFunctions, anchorFor } from './check-raw-fs-guarded.interproc.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -595,9 +601,18 @@ function offsetToLine(starts, off) {
 }
 
 /** Extract the balanced first argument text starting at `open` (index of the
- *  char right after the sink's `(`), from the CLEANED text. Returns the arg
- *  substring (trimmed) or null. */
-function argAt(cleaned, open, index) {
+ *  char right after the sink's `(`). Boundaries are found on the CLEANED text
+ *  (so a comma inside a string/template can't shift the split); the returned
+ *  substring is sliced from `origText` when given (bead forge-mlk: string
+ *  literals matter for the content-key anchor and for display — `cleaned`
+ *  has already blanked them to spaces, which collapsed `join(dir,'a.json')`
+ *  and `join(dir,'b.json')` onto the same anchor), else from `cleaned` (the
+ *  structural callers — governingIdents/isGuardTerminal — don't care either
+ *  way since literals never produce identifiers). `cleaned` and `origText`
+ *  are the same length (cleanStructure is character-for-character
+ *  length-preserving), so one set of offsets indexes both. */
+function argAt(cleaned, open, index, origText = null) {
+  const src = origText ?? cleaned;
   let depth = 0;
   let i = open;
   const n = cleaned.length;
@@ -610,7 +625,7 @@ function argAt(cleaned, open, index) {
       if (depth === 0) break; // closing ) of the sink call
       depth -= 1;
     } else if (c === ',' && depth === 0) {
-      if (argIdx === index) return cleaned.slice(start, i).trim();
+      if (argIdx === index) return src.slice(start, i).trim();
       argIdx += 1;
       start = i + 1;
     }
@@ -619,7 +634,7 @@ function argAt(cleaned, open, index) {
   // the sink's path positions describe (a 1-arg rmSync-style call, or a
   // malformed/multi-line shape the cleaner collapsed). Absent, not empty.
   if (argIdx !== index) return '';
-  return cleaned.slice(start, i).trim();
+  return src.slice(start, i).trim();
 }
 
 /** Governing identifiers / member-expressions of a path expression: every
@@ -799,6 +814,9 @@ export function analyzeModule(text, relFile, model = {}) {
   const cleanedLines = cleaned.split('\n');
   const origLines = text.split('\n');
   const starts = lineStarts(cleaned);
+  // Bead forge-mlk: one function-boundary parse, reused for every finding's
+  // content-key anchor (and, when wired, the interprocedural hop).
+  const funcs = parseFunctions(cleaned, starts);
   const findings = [];
   const sinkRe = new RegExp(`(?<![.\\w$])(${RAW_FS_SINKS.join('|')})\\s*\\(`, 'g');
   let m;
@@ -838,58 +856,22 @@ export function analyzeModule(text, relFile, model = {}) {
       : taintTok
         ? `request/project-derived path via "${taintTok}" reaches raw ${sink} unguarded`
         : `leaf-append onto unresolved dir-shaped param "${dirParamBase}" — the caller's dir may be contained but the appended leaf rides raw (route the FULL path incl. leaf through guardedFile / the guarded sibling)`;
-    findings.push({ file: relFile, line: lineIdx + 1, sink, path: path.replace(/\s+/g, ' ').slice(0, 120), kind, why });
+    // Original (unblanked) text for the anchor/display — see argAt's header:
+    // two literal leaves (`'a.json'` vs `'b.json'`) must stay DISTINGUISHABLE
+    // here even though the CLEANED `path` blanks them to spaces for the
+    // structural (governingIdents/isGuardTerminal) checks above.
+    const origPath = argAt(cleaned, openIdx, argIndex, text);
+    const normPath = origPath.replace(/\s+/g, ' ').slice(0, 120).trim();
+    findings.push({ file: relFile, line: lineIdx + 1, sink, path: normPath, kind, why, anchor: anchorFor(funcs, lineIdx, normPath) });
     }
   }
   return findings;
 }
 
 
-export { ALLOWLIST, PROJECTS_ROOT_FOLD_ALLOWLIST };
-
-function keyOf(f) {
-  return `${f.file}:${f.line}`;
-}
-
-/**
- * Suppress findings that carry an EXPLICIT allowlist entry (file+line). Returns
- * { kept, suppressed, stale, mistargeted }:
- *  - kept        = findings that FAIL the build (no valid allowlist entry).
- *  - suppressed  = findings cleared by a valid, reasoned entry.
- *  - stale       = allowlist entries matching NO finding (line drift / a fixed
- *                  sink) — reported as a warning, never a failure (fail-safe: a
- *                  stale entry cannot hide a real finding, it only lingers).
- *  - mistargeted = an entry whose line HAS a finding but of a DIFFERENT sink
- *                  than recorded — the finding is KEPT (fails closed), because a
- *                  drifted entry must not silently bless a different sink.
- * An entry with an empty/whitespace reason is rejected (its finding is kept).
- */
-export function applyAllowlist(findings, allowlist = ALLOWLIST) {
-  const byKey = new Map(allowlist.map((a) => [`${a.file}:${a.line}`, a]));
-  const kept = [];
-  const suppressed = [];
-  const mistargeted = [];
-  const usedKeys = new Set();
-  for (const f of findings) {
-    const a = byKey.get(keyOf(f));
-    if (!a) { kept.push(f); continue; }
-    if (!a.reason || !a.reason.trim()) {
-      kept.push({ ...f, why: `${f.why} [ALLOWLIST ENTRY AT ${keyOf(f)} HAS NO REASON — rejected]` });
-      continue;
-    }
-    const auditedSinks = a.sinks ?? (a.sink ? [a.sink] : null);
-    if (auditedSinks && !auditedSinks.includes(f.sink)) {
-      // The line drifted onto a different sink than was audited — do NOT bless it.
-      mistargeted.push({ entry: a, found: f });
-      kept.push({ ...f, why: `${f.why} [allowlist entry at ${keyOf(f)} audited "${auditedSinks.join('|')}", found "${f.sink}" — mistargeted, not suppressed]` });
-      continue;
-    }
-    usedKeys.add(keyOf(f));
-    suppressed.push({ ...f, reason: a.reason });
-  }
-  const stale = allowlist.filter((a) => !usedKeys.has(`${a.file}:${a.line}`));
-  return { kept, suppressed, stale, mistargeted };
-}
+// Bead forge-mlk: `applyAllowlist` itself (the content-keyed matcher) now
+// lives with the data it matches — see check-raw-fs-guarded.allowlist.mjs.
+export { ALLOWLIST, PROJECTS_ROOT_FOLD_ALLOWLIST, applyAllowlist };
 
 // ===========================================================================
 // PROJECTS-ROOT-FOLD RULE (SEC-07, hardened) — the dimension the def-use scan

@@ -373,69 +373,12 @@ test('A8: a sink-shaped call on a comment line is not counted', () => {
 });
 
 // =============================================================================
-// Group B — runLint + the allowlist contract
-// =============================================================================
-
-/** A synthetic tainted finding, as analyzeModule would emit it. */
-const taintedFinding = (file = 'cli/ui-bridge.ts', line = 42, sink = 'writeFileSync') => ({
-  file, line, sink, path: `join(projectsRoot, body.project, 'x.json')`, kind: 'tainted',
-  why: 'request/project-derived path via "body.project" reaches raw writeFileSync unguarded',
-});
-
-test('B1: a finding with no allowlist entry is KEPT (fails the build)', () => {
-  const { kept, suppressed } = applyAllowlist([taintedFinding()], []);
-  assert.equal(kept.length, 1);
-  assert.equal(suppressed.length, 0);
-});
-
-test('B2: a finding with a valid, reasoned allowlist entry (file+line+sink) is suppressed', () => {
-  const f = taintedFinding();
-  const { kept, suppressed } = applyAllowlist([f], [
-    { file: f.file, line: f.line, sink: f.sink, reason: 'AUDITED: trusted-constant residual, boolean probe' },
-  ]);
-  assert.equal(kept.length, 0);
-  assert.equal(suppressed.length, 1);
-  assert.match(suppressed[0].reason, /AUDITED/);
-});
-
-test('B3: an allowlist entry with an empty reason does NOT suppress (never a silent skip)', () => {
-  const f = taintedFinding();
-  const { kept, suppressed } = applyAllowlist([f], [{ file: f.file, line: f.line, sink: f.sink, reason: '   ' }]);
-  assert.equal(suppressed.length, 0);
-  assert.equal(kept.length, 1);
-  assert.match(kept[0].why, /NO REASON/);
-});
-
-test('B4: a MISTARGETED entry (line drifted onto a different sink) does NOT suppress', () => {
-  // Kills: a file+line-only match that would silently bless whatever sink now
-  // sits on the audited line after an unrelated edit shifted the code.
-  const f = taintedFinding('cli/ui-bridge.ts', 42, 'writeFileSync');
-  const { kept, suppressed, mistargeted } = applyAllowlist([f], [
-    { file: f.file, line: f.line, sink: 'existsSync', reason: 'AUDITED: was a boolean probe here' },
-  ]);
-  assert.equal(suppressed.length, 0);
-  assert.equal(kept.length, 1);
-  assert.equal(mistargeted.length, 1);
-});
-
-test('B4b: a `sinks` array entry suppresses ANY listed sink on that line', () => {
-  const a = taintedFinding('cli/bridge-studio-writes.ts', 919, 'existsSync');
-  const b = { ...taintedFinding('cli/bridge-studio-writes.ts', 919, 'mkdirSync'), kind: 'tainted' };
-  const { kept, suppressed } = applyAllowlist([a, b], [
-    { file: 'cli/bridge-studio-writes.ts', line: 919, sinks: ['existsSync', 'mkdirSync'], reason: 'AUDITED: both ride the same containment proof' },
-  ]);
-  assert.equal(kept.length, 0);
-  assert.equal(suppressed.length, 2);
-});
-
-test('B5: an allowlist entry matching NO finding is STALE (reported, never fails)', () => {
-  const { kept, stale } = applyAllowlist([], [
-    { file: 'cli/ui-bridge.ts', line: 99999, sink: 'existsSync', reason: 'AUDITED: a residual that has since been fixed/moved' },
-  ]);
-  assert.equal(kept.length, 0, 'a stale entry cannot create a failure');
-  assert.equal(stale.length, 1);
-});
-
+// Group B/H — runLint + the CONTENT-KEYED allowlist contract (suppress /
+// reason-required / mistargeted / stale / ambiguous / count) MOVED to
+// check-raw-fs-guarded.allowlist.test.ts (bead forge-mlk): `applyAllowlist`
+// itself now lives in check-raw-fs-guarded.allowlist.mjs, beside the ANCHOR
+// scheme its behavior is entirely about — tested code lives beside its test,
+// the same principle that already put the row-shape contract (C4) there.
 // =============================================================================
 // Group D — a synthetic NEW unguarded request sink in a REAL handling module
 // TRIPS the lint through the real pipeline + real allowlist (charter RED)
