@@ -182,7 +182,7 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/library-flow-source.ts | apps/forge | rewritten | 14 |
 | apps/forge/library-authoring-session.ts | apps/forge | rewritten | 30 |
 | apps/forge/library-agent-facts.ts | apps/forge | rewritten | 58 |
-| apps/forge/dry-bridge.ts | kernel | rewritten | 428 |
+| apps/forge/dry-bridge.ts | kernel | rewritten | 331 |
 | packages/flows/flow-band-vocab.ts | flows | verbatim | 67 |
 | packages/flows/forge-metrics.ts | flows | verbatim | 782 |
 | packages/flows/forge-requeue.ts | flows | verbatim | 273 |

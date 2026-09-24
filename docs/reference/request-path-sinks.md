@@ -2598,3 +2598,37 @@ hand-editing the affected lines, NOT by `--write`: the checker also reports
 one pre-existing, unrelated tightenable line in
 `packages/flows/scheduler-dispatch.ts` (`existsSync 4 -> 3`) that neither
 split touched; sweeping it in would mix another lane's slack into this one.
+
+### M7-C (bead forge-8vfn.5.30) — three new sinks, not request-derived: `dry-bridge.ts` derives carved routes' classification from their own `RouteEntry`
+
+| file | sink | count | classification |
+|---|---|---|---|
+| `apps/forge/dry-bridge.ts` | `readdirSync` | 1 | **not request-derived** |
+| `apps/forge/dry-bridge.ts` | `existsSync` | 1 | **not request-derived** |
+| `apps/forge/dry-bridge.ts` | `readFileSync` | 1 | **not request-derived** |
+
+**What the sinks are.** `BRIDGE_ROUTE_CLASSIFICATION` used to hand-declare a
+row for every carved route, duplicating the `RouteEntry.dryClassification`
+each `packages/<pkg>/routes.ts` already states (bead forge-8vfn.5.30: "the
+hand-written dry table is redundant for every carved route"). The new
+`deriveCarvedRouteClassification` reads that fact straight from each
+`routes.ts`'s own SOURCE TEXT — `readdirSync(REPO_ROOT/packages)` to
+enumerate package directories, `existsSync` to test for a `routes.ts` in
+each, `readFileSync` to read the ones that exist — rather than importing and
+invoking the route-table factories, which need real bridge deps (session
+ports, spawn closures) a classification table has no business constructing.
+Mirrors `dry-bridge-coverage.test.ts`'s own `extractRouteTableCandidates`.
+
+**Why `not request-derived`, not merely `guarded`.** No governing identifier
+in the read path originates from a request. `REPO_ROOT` is derived once from
+`import.meta.url` (the module's own on-disk location); the package directory
+names come from `readdirSync` of that fixed root, the same "server-enumerated
+names, holding no client string" shape `check-raw-fs-guarded.mjs`'s header
+names as the reason it is a taint TRIGGER rather than a prove-trusted
+polarity. There is no `req`/`body`/`params`/`url` anywhere in the call chain
+— `deriveCarvedRouteClassification` takes one optional parameter
+(`handRows`), itself a `RouteClassification[]` literal, never a request
+value. Confirmed, not just classified: `check-raw-fs-guarded.mjs` scans
+`apps/forge/dry-bridge.ts` (it is reachable — `bridge-studio-writes.ts`
+imports `isDryBridge` from it) and reports 0 unguarded request-derived raw
+fs sinks with these three sites in scope.
