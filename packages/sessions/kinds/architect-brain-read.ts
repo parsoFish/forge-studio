@@ -1,20 +1,8 @@
 /**
  * The architect's OWN `brain.read` event — forge-8vfn.8.3.5 (M7-C ABR).
- * ARCH-1's `brain-query` marker fires per turn before any tool call, so it
- * can't name a KB. U2 (forge-8vfn.5.16) gave the PM a real `brain.read` from
- * its deterministic pre-fetch; the architect has none — it reads brain/ via
- * its own tool calls mid-conversation. Same event shape, `reader: 'architect'`.
- *
- * `kind-turn.ts`'s hooks are already ruling 78's whole budget, and
- * `architect-steps.ts` is near the file cap, so neither is touched.
- * `withBrainReadTracking` wraps each phase's `KindStepHandler` from OUTSIDE,
- * at `architect.ts`'s `steps:` table. It observes through `onToolUse` — the
- * EXISTING live tool-telemetry callback every sub-turn (interview/explore/
- * draft/critic) already threads through unchanged (`runStructuredTurn`'s own
- * loop calls it for every tool_use block) — never `queryFn`: bead 5.50's lock
- * (`run-query-marker.enforce.test.ts`) requires every production `queryFn` be
- * a caller-supplied pass-through, on pain of a spawned child losing its
- * sweep marker, so this module must never construct or inject one.
+ * Full rationale (why `onToolUse` and not `queryFn`, why `inputSummary`):
+ * `packages/sessions/design.md` §"kinds/architect-brain-read.ts observes
+ * onToolUse, never queryFn".
  */
 import type { EventLogger } from '@forge/kernel';
 import { deriveKbIdFromBrainPath } from '@forge/knowledge/brain-paths.ts';
