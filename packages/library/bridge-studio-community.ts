@@ -112,7 +112,7 @@ const INSTALL_TIMEOUT_MS = 120_000;
 /**
  * W7-B3 (community-16 / community-03) — the registry-level `meta` block on
  * the list payload:
- *   - `lastRefresh`: the commitRegistryDraft stamp, straight from
+ *   - `lastRefresh`: the deterministic refresh's stamp (community-refresh-run.ts), straight from
  *     studio/community/registry.yaml's own `meta.lastRefresh` — never
  *     re-derived from item rows. A missing registry file is the honest
  *     fresh-root `null`.

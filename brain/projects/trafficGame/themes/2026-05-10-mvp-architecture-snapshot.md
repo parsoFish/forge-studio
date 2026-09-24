@@ -18,7 +18,7 @@ keywords:
   - mvp
 created_at: 2026-05-10T15:30:00.000Z
 updated_at: 2026-05-17T00:00:00.000Z
-related_themes: []
+related_themes: [karpathy-three-layer-wiki]
 ---
 
 # trafficGame — MVP architecture snapshot (May 2026)

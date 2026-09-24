@@ -48,7 +48,7 @@ import { tmpdir } from 'node:os';
  * owned by another user all mean "cannot attribute this one", not "no live
  * process" — so each is skipped and the walk continues.
  */
-export function liveProcessRoots(dirs) {
+export function liveProcessRoots(dirs, deps = {}) {
   const live = new Map();
   if (dirs.length === 0) return live;
   // `/proc/<pid>/cwd` is a link to the REAL path, so a root reached through a
@@ -57,26 +57,11 @@ export function liveProcessRoots(dirs) {
   // cannot be realpathed — a tree that is gone cannot own a process anyway.
   const real = (d) => { try { return realpathSync(d); } catch { return resolve(d); } };
   const roots = dirs.map((d) => ({ dir: d, resolved: real(d) }));
-  let pids = [];
-  try {
-    pids = readdirSync('/proc', { withFileTypes: true })
-      .filter((e) => /^[0-9]+$/.test(e.name))
-      .map((e) => e.name);
-  } catch {
-    return live; // no /proc: nothing can be attributed, so nothing is excused
-  }
-  for (const pid of pids) {
-    if (Number(pid) === process.pid) continue;
-    let cwd = '';
-    try {
-      cwd = readlinkSync(join('/proc', pid, 'cwd'));
-    } catch {
-      continue; // gone, or another user's — not evidence either way
-    }
+  for (const { pid, cwd } of livePidCwds(deps)) {
     for (const { dir, resolved } of roots) {
       if (live.has(dir)) continue;
       if (cwd === resolved || cwd.startsWith(`${resolved}${sep}`)) {
-        live.set(dir, { pid: Number(pid), cwd, via: 'cwd' });
+        live.set(dir, { pid, cwd, via: 'cwd' });
         break;
       }
     }
@@ -121,24 +106,60 @@ export function sessionScratchRoots(cwd) {
   return bases.map((b) => join(b, `claude-${process.getuid?.() ?? 0}`, encoded));
 }
 
-/** Every live process's pid and cwd, read once. Never throws (see `liveProcessRoots`). */
-function liveProcessCwds() {
-  const out = [];
-  let pids = [];
-  try {
-    pids = readdirSync('/proc', { withFileTypes: true })
-      .filter((e) => /^[0-9]+$/.test(e.name))
-      .map((e) => e.name);
-  } catch {
-    return out;
-  }
-  for (const pid of pids) {
-    if (Number(pid) === process.pid) continue;
+/**
+ * How many EXTRA attempts an UNKNOWN `/proc/<pid>/cwd` read gets before this
+ * walk gives up on that pid. Bounded and small on purpose: a read that will
+ * never recover (a permission this host will never grant) must still resolve
+ * quickly, not spin the walk out on a single pid.
+ */
+const UNKNOWN_READ_RETRIES = 2;
+
+/**
+ * Every live process's pid and cwd, read once — the shared walk behind both
+ * `liveProcessRoots` and `liveSessionOwners`. Never throws (see `liveProcessRoots`).
+ *
+ * Bead `forge-po2h`. THREE STATES, NOT TWO (§15.504), the same split
+ * `readEmitFailures` (`run-observe.mjs`) draws for the identical shape:
+ * `ENOENT`/`ESRCH` on a `/proc/<pid>/cwd` read is the process having exited
+ * (or never existed) between `readdirSync('/proc')` and this read — genuine
+ * ABSENCE, skipped immediately, never retried, because retrying a confirmed-
+ * gone pid cannot succeed and only costs time. Any OTHER error — `EACCES`, or
+ * a syscall failure this process cannot attribute to the target pid at all —
+ * is UNKNOWN, not absence: a signal that may exist and be unreadable must
+ * never be spelled as "no live process" on the strength of one failed read, so
+ * it is retried a small, bounded number of times before this pid is given up
+ * on. The asymmetry is deliberate: a lost owner turns an UNATTRIBUTABLE escape
+ * into an UNOWNED one, which reds a funded run, and that is the direction that
+ * must never be reached by a read this process could have simply tried again.
+ *
+ * @param {{listPids?: () => string[], readCwd?: (pid: string) => string}} [deps] injection seam for the test
+ */
+function livePidCwds(deps = {}) {
+  const listPids = deps.listPids ?? (() => {
     try {
-      out.push({ pid: Number(pid), cwd: readlinkSync(join('/proc', pid, 'cwd')) });
+      return readdirSync('/proc', { withFileTypes: true })
+        .filter((e) => /^[0-9]+$/.test(e.name))
+        .map((e) => e.name);
     } catch {
-      continue; // gone, or another user's — not evidence either way
+      return []; // no /proc: nothing can be attributed, so nothing is excused
     }
+  });
+  const readCwd = deps.readCwd ?? ((pid) => readlinkSync(join('/proc', pid, 'cwd')));
+  const out = [];
+  for (const pid of listPids()) {
+    if (Number(pid) === process.pid) continue;
+    let cwd;
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        cwd = readCwd(pid);
+        break;
+      } catch (err) {
+        if (err?.code === 'ENOENT' || err?.code === 'ESRCH') { cwd = undefined; break; } // gone: not evidence either way
+        if (attempt >= UNKNOWN_READ_RETRIES) { cwd = undefined; break; } // still UNKNOWN after retrying: skipped, same as gone
+      }
+    }
+    if (cwd === undefined) continue;
+    out.push({ pid: Number(pid), cwd });
   }
   return out;
 }
@@ -174,15 +195,16 @@ function liveProcessCwds() {
  * and a path pattern on its own must never satisfy this guard.
  *
  * @param {string[]} dirs
+ * @param {{listPids?: () => string[], readCwd?: (pid: string) => string}} [deps] injection seam for the test
  * @returns {Map<string,{pid:number,cwd:string,via:'appeared',ownerRoot:string}>}
  */
-export function liveSessionOwners(dirs) {
+export function liveSessionOwners(dirs, deps = {}) {
   const owned = new Map();
   if (dirs.length === 0) return owned;
   const real = (d) => { try { return realpathSync(d); } catch { return resolve(d); } };
   const targets = dirs.map((d) => ({ dir: d, resolved: real(d) }));
   const under = (child, root) => child === root || child.startsWith(`${root}${sep}`);
-  for (const { pid, cwd } of liveProcessCwds()) {
+  for (const { pid, cwd } of livePidCwds(deps)) {
     // `.git` is present as a directory in a checkout and as a FILE in a linked
     // worktree, so `existsSync` is the test that covers both — and `/tmp`,
     // `$HOME` and `/` fail it, which is the whole point.

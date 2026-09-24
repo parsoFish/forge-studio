@@ -12,7 +12,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { writeFileSync, rmSync, mkdtempSync, readFileSync } from 'node:fs';
+import { writeFileSync, rmSync, mkdtempSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -66,16 +66,44 @@ test('it inspects a real population, not an empty set', () => {
   assert.deepEqual(json.stale, []);
 });
 
+/**
+ * Plants a fabricated N-line file under a `mkdtempSync` + `git init` root of
+ * its own and returns the CLI args that point the checker at it — bead
+ * forge-8vfn.5.64. This used to `writeFileSync(join(ROOT, rel))` real files
+ * (`__cap_probe__.mjs`, `__headroom_probe__.mjs`) and `rmSync` them again in
+ * a `finally`; `node --test` runs `scripts/*.test.ts` files concurrently, so
+ * a probe planted and removed there raced every other scanner reading the
+ * tree at that moment (`lineCount`'s own doc, above, names the CI failure).
+ * `git init` (not just a bare mkdtemp dir) because `codeFiles()` shells out
+ * to `git ls-files`, and an EMPTY (not the real) baseline so the fixture's
+ * tiny population never collides with the real baseline's paths.
+ */
+function capFixture(rel: string, lines: number): { args: string[]; cleanup: () => void } {
+  const root = mkdtempSync(join(tmpdir(), 'cap-probe-'));
+  execFileSync('git', ['init', '-q'], { cwd: root });
+  const victim = join(root, rel);
+  mkdirSync(dirname(victim), { recursive: true });
+  // `lineCount` counts newline-terminated lines, so N joined lines + a trailing
+  // newline is N lines on disk.
+  writeFileSync(victim, `${Array.from({ length: lines }, (_, i) => `// line ${i}`).join('\n')}\n`);
+  const baseline = join(root, 'empty-baseline.json');
+  writeFileSync(baseline, '{}\n');
+  return {
+    args: ['--root', root, '--baseline', baseline],
+    cleanup: () => rmSync(root, { recursive: true, force: true }),
+  };
+}
+
 test('it FAILS on a NEW file over the cap (the defect it exists for)', () => {
-  const victim = join(ROOT, 'scripts/__cap_probe__.mjs');
-  writeFileSync(victim, `${Array.from({ length: 900 }, (_, i) => `// line ${i}`).join('\n')}\n`);
+  const rel = 'scripts/__cap_probe__.mjs';
+  const { args, cleanup } = capFixture(rel, 900);
   try {
-    const { code, out } = run();
+    const { code, out } = run(args);
     assert.equal(code, 1, `a new 900-line file must fail the cap — got exit 0:\n${out}`);
     assert.match(out, /scripts\/__cap_probe__\.mjs/);
     assert.match(out, /over the 800-line cap and not baselined/);
   } finally {
-    rmSync(victim, { force: true });
+    cleanup();
   }
 });
 
@@ -173,18 +201,15 @@ test('a baselined file that is genuinely GONE still reports stale — the fix ch
  * The notice is NOT a verdict: nothing in it can fail a run, and these doors
  * assert that as hard as they assert the listing.
  */
-function planted(lines: number, body: (rel: string) => void): void {
+function planted(lines: number, body: (rel: string, args: string[]) => void): void {
   const rel = 'scripts/__headroom_probe__.mjs';
-  const victim = join(ROOT, rel);
-  // `lineCount` counts newline-terminated lines, so N joined lines + a trailing
-  // newline is N lines on disk.
-  writeFileSync(victim, `${Array.from({ length: lines }, (_, i) => `// line ${i}`).join('\n')}\n`);
-  try { body(rel); } finally { rmSync(victim, { force: true }); }
+  const { args, cleanup } = capFixture(rel, lines);
+  try { body(rel, args); } finally { cleanup(); }
 }
 
 test('7.6.107: a file 5 under the cap is NOTICED, with its headroom, and nothing fails', () => {
-  planted(795, (rel) => {
-    const { code, out } = run();
+  planted(795, (rel, args) => {
+    const { code, out } = run(args);
     assert.equal(code, 0, `a file UNDER the cap has broken no rule — the notice must not fail a run:\n${out}`);
     assert.match(out, /check-file-size: HEADROOM —/, out);
     assert.match(out, new RegExp(`${rel.replace('/', '\\/')}: 795 lines — 5 line\\(s\\) left`), out);
@@ -194,8 +219,8 @@ test('7.6.107: a file 5 under the cap is NOTICED, with its headroom, and nothing
 });
 
 test('7.6.107: a file 25 under the cap is NOT noticed — the window is 20, not "nearly"', () => {
-  planted(775, (rel) => {
-    const { code, out } = run();
+  planted(775, (rel, args) => {
+    const { code, out } = run(args);
     assert.equal(code, 0);
     assert.doesNotMatch(out, new RegExp(rel.replace('/', '\\/')), `775 is outside the 20-line window:\n${out}`);
   });
@@ -204,16 +229,16 @@ test('7.6.107: a file 25 under the cap is NOT noticed — the window is 20, not 
 test('7.6.107: a file AT the cap says it has no room left, and still does not fail', () => {
   // The row that matters most, and the one the campaign already has two of:
   // exactly 800 is legal, silent before this, and one line from red.
-  planted(800, (rel) => {
-    const { code, out } = run();
+  planted(800, (rel, args) => {
+    const { code, out } = run(args);
     assert.equal(code, 0, `800 is at the cap, not over it — it must not fail:\n${out}`);
     assert.match(out, new RegExp(`${rel.replace('/', '\\/')}: 800 lines — NO room left`), out);
   });
 });
 
 test('7.6.107: the notice reaches --json as data, and a file over the cap is NOT in it twice', () => {
-  planted(900, (rel) => {
-    const { code, out } = run(['--json']);
+  planted(900, (rel, args) => {
+    const { code, out } = run(['--json', ...args]);
     assert.equal(code, 1, 'a 900-line file is still a violation');
     const json = JSON.parse(out) as {
       headroomWindow: number;
@@ -270,8 +295,8 @@ describe('7.6.108: "could not measure" has its own exit code', () => {
   });
 
   test('a real violation still exits 1 — the fix must not soften the cap', () => {
-    planted(900, () => {
-      const { code } = run();
+    planted(900, (_rel, args) => {
+      const { code } = run(args);
       assert.equal(code, 1, 'a 900-line file is a violation and keeps red\'s number');
     });
   });
@@ -280,7 +305,7 @@ describe('7.6.108: "could not measure" has its own exit code', () => {
     // The point of the bead: a caller branches on the code, never on prose.
     const cannotMeasure = runDetached().code;
     let violation = 0;
-    planted(900, () => { violation = run().code; });
+    planted(900, (_rel, args) => { violation = run(args).code; });
     const clean = run().code;
     assert.notEqual(cannotMeasure, violation, 'UNKNOWN must not share a code with a violation');
     assert.notEqual(cannotMeasure, clean, 'UNKNOWN must not share a code with a pass');

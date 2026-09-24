@@ -252,9 +252,9 @@ function serializeCommunityRegistrySource(src: CommunityRegistrySource): Record<
 }
 
 /**
- * W7-B3 — the ONE serializer for the whole registry document, shared by
- * `commitRegistryDraft` (orchestrator/interactive-finalizers.ts) and the
- * Studio CRUD routes (apps/forge/bridge-studio-writes.ts). Pure: takes the parsed
+ * W7-B3 — the ONE serializer for the whole registry document, shared by the
+ * deterministic refresh writer (community-refresh-run.ts) and the Studio
+ * CRUD routes (bridge-studio-community-crud.ts). Pure: takes the parsed
  * shape, returns the YAML text; the CALLER owns the temp-then-rename write.
  * Symmetric with `loadCommunityRegistry` above so a round-trip
  * (serialize → load) is the natural structural validation.
