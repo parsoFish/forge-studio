@@ -58,6 +58,7 @@ import {
   groundChanges,
   groundIgnoreFromGit,
   seedIgnoredBorn,
+  beatWindowChangesFrom,
 } from './ground-hash.mjs';
 import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
 import { captureAndClearMintedSessions, describeGroundClear, captureAndClearMintedLogs, describeLogsClear } from './ground-clear.mjs';
@@ -106,6 +107,14 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // the agent COMMITTED its writes so the ground's own `git status` reported
   // nothing at all (§15.327). Hence a hash, never a status.
   const ownGroundBefore = ownGroundManifest(ROOT, story.ground?.project ?? null);
+  // `forge-8vfn.7.6.140` — the beat numbers any declaration actually names, so
+  // the loop below hashes the ground ONLY at a boundary some licence needs it
+  // (a story with no `beat:` declarations pays nothing extra), and the
+  // manifest captured at each — keyed 1-indexed to match `beat: <n>`.
+  const licensedBeatNumbers = new Set(
+    (story.ground?.expectedChanges ?? []).map((d) => d.beat).filter((b) => typeof b === 'number'),
+  );
+  const groundBeatBoundaries = new Map();
   const seeded = story.ground?.seedIgnoredBorn ? seedIgnoredBorn(join(ROOT, 'projects', story.ground.project), story.ground.seedIgnoredBorn) : []; // 7.6.52 — after the pre-run hash, deliberately
   const logsDir = join(ROOT, '_logs');
   const logsBefore = readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name);
@@ -177,6 +186,14 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     // had not worked once since the commit that introduced it.
     const pressedAt = new Map();
     for (const [i, beat] of story.beats.entries()) {
+      // `forge-8vfn.7.6.140` — THE BOUNDARY WHERE A BEAT-SCOPED LICENCE OPENS,
+      // captured at the moment this beat STARTS and before anything in it can
+      // run. `classifyOwnGroundDrift` reduces this (via `beatWindowChangesFrom`)
+      // to "what changed from here to the end of the run" — never taken twice
+      // for the same beat, and never taken for a beat no declaration named.
+      if (ownGroundBefore !== null && licensedBeatNumbers.has(i + 1)) {
+        groundBeatBoundaries.set(i + 1, ownGroundManifest(ROOT, story.ground.project));
+      }
       // Bead `forge-8vfn.6.11.22` — an agent-scale wait samples the agent's own
       // process as it polls, so an unsatisfied one says what that process was
       // doing instead of leaving it to be reconstructed afterwards by hand.
@@ -397,14 +414,22 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name),
       logsDir,
     );
+    // Read ONCE and shared: `beatWindowChangesFrom` below needs the same
+    // end-of-run manifest `groundChanges` compares against, and hashing the
+    // ground a second time here would let the two readings disagree about
+    // what "the end of the run" was.
+    const ownGroundAfter = ownGroundManifest(ROOT, story.ground.project);
     const split = classifyOwnGroundDrift(
-      groundChanges(ownGroundBefore, ownGroundManifest(ROOT, story.ground.project)),
+      groundChanges(ownGroundBefore, ownGroundAfter),
       minted,
       mintedSessionWrites(minted, logsDir, groundDir),
       groundIgnoreFromGit(groundDir),
       // 7.6.136 — the ground changes this story DECLARES its product makes,
       // read from the PINNED story file so the licence cannot widen at runtime.
       story.ground?.expectedChanges ?? [],
+      // 7.6.140 — narrows a declaration that named `beat: <n>` to the window
+      // from that beat's own boundary (captured live, above) to this manifest.
+      beatWindowChangesFrom(groundBeatBoundaries, ownGroundAfter),
     );
     ownGroundDrift.produced = split.produced;
     ownGroundDrift.undeclared = split.undeclared;
