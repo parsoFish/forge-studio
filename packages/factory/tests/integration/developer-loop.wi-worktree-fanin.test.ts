@@ -34,6 +34,7 @@ import { gitNetDelta, prerequisiteBlockage, settleWiOutcome, type WiOutcome } fr
 import { topologicalOrder, writeWorkItem, writeWorkItemStatus, type WorkItem } from '@forge/flows/work-item.ts';
 import { run as runRalph, type AgentInvocation } from '@forge/agents/ralph/runner.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
+import { SCRATCH_PATHS } from '@forge/projects/preflight.ts';
 
 function sh(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, stdio: 'pipe', encoding: 'utf8' });
@@ -90,13 +91,15 @@ function setup(initiativeId: string): Fixture {
   sh(repo, ['config', 'user.name', 'forge-test']);
   writeFileSync(join(repo, 'README.md'), 'base\n');
   // Per the forge-project-contract (C2), every onboarded project's
-  // `.gitignore` covers `.forge/` — `.forge/work-items/*.md` is the PM's
-  // per-cycle scratch, never meant to be tracked. Without this, ralph's
-  // autocommit safety net (`git add -A`, which itself respects .gitignore)
-  // would sweep the per-WI worktree's COPY of the spec file into the WI
-  // branch's commit, and the merge-back would then collide with the SAME
-  // untracked file still sitting in the cycle worktree.
-  writeFileSync(join(repo, '.gitignore'), '.forge/\n');
+  // `.gitignore` covers SCRATCH_PATHS — never a blanket `.forge/`, which
+  // would also hide the TRACKED .forge/project.json + .forge/skills/
+  // (operator ruling 92). `.forge/work-items/*.md` is the PM's per-cycle
+  // scratch, never meant to be tracked. Without this, ralph's autocommit
+  // safety net (`git add -A`, which itself respects .gitignore) would sweep
+  // the per-WI worktree's COPY of the spec file into the WI branch's
+  // commit, and the merge-back would then collide with the SAME untracked
+  // file still sitting in the cycle worktree.
+  writeFileSync(join(repo, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
   sh(repo, ['add', '.']);
   sh(repo, ['commit', '-q', '-m', 'base']);
 

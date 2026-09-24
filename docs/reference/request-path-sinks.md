@@ -2427,3 +2427,70 @@ beside them. **The gate is on the REQUESTED set, not the resolved one** — a
 caller whose roots all fail to resolve gets every `Read` denied rather than
 ungated, so a fence that cannot resolve its roots fails closed instead of
 silently becoming no fence.
+
+### Added in M7-A (bead forge-8vfn.8.1.2, operator ruling 92) — the `.gitignore` drift mechanism's three new sinks, all guard-terminal
+
+| file | sink | before | after |
+|---|---|---|---|
+| `packages/projects/preflight-repo.ts` | `spawnSync` | 3 | 4 |
+| `packages/projects/reset.ts` | `readFileSync` | 1 | 2 |
+| `packages/projects/reset.ts` | `spawnSync` | 0 | 1 |
+| `packages/projects/reset.ts` | `writeFileSync` | 1 | 2 |
+
+**Why these exist.** C2 (`checkC2`) gained an inverse check: `.forge/project.json`,
+`.forge/quality_gate_cmd` and `.forge/skills/` must NOT be git-ignored (a
+blanket `.forge/` line used to hide them). `forge project reset` gained the
+matching fix — `computeGitignoreDrift` proposes replacing an offending
+`.gitignore` line with the canonical scratch stanza, and `applyContractReset`
+writes it — so C2 and `reset` never disagree about what counts as tracked.
+
+**`preflight-repo.ts` `checkC2`'s new `spawnSync`** (`preflight-repo.ts:161`,
+`git -C dir check-ignore -q trackedConfigProbe(p)`, inside the new
+`TRACKED_CONFIG_PATHS` loop) is **guarded `[exec]`** — same trust boundary as
+the pre-existing `checkC2`/`checkC1` rows already in this document (search
+"bridge preflight routes (via the validated project dir)"): `dir` is
+`runPreflight`'s already-route-validated project dir, resolved once and handed
+identically to every clause. The only other argv component, `p`, comes from
+the server-constant `TRACKED_CONFIG_PATHS` array (never from the request);
+`trackedConfigProbe(p)` appends a fixed literal suffix. Nothing request-derived
+reaches argv beyond the directory the caller already validated.
+
+**`reset.ts`'s new `readFileSync`** (`reset.ts:496`, inside
+`computeGitignoreDrift`) reads `guarded.realPath` from a FRESH
+`resolveGuardedPath(projectDir, ['.gitignore'])` call — a guard beyond the
+route's existing project-root guard (see the "M4-projects" section above for
+that guard). A rejected/escaping `.gitignore` (e.g. a symlink outside the
+project) **throws** `PathGuardContainmentError` before this line is ever
+reached — the read never runs on an unproven path. Security-review follow-up:
+this replaces a raw, symlink-following `readFileSync(resolve(projectDir,
+'.gitignore'))` the first version of this mechanism shipped with, closed
+before it ever reached `main`.
+
+**`reset.ts`'s new `spawnSync`** (`reset.ts:475`, inside `gitTruthOffenders`,
+`git -C dir check-ignore -v --no-index trackedConfigProbe(p)`) is **guarded
+`[exec]`** — `dir` is `computeContractDrift`'s `projectDir`, the SAME
+already-guarded project root the "M4-projects" section's `statSync`/
+`mkdirSync`/`readFileSync`/`writeFileSync` rows document (the bridge route
+resolves the URL's `:id` via `resolveGuardedPath` before `computeContractDrift`
+ever runs). `p` and its `trackedConfigProbe(p)` transform are the SAME
+server-constant argv component the `checkC2` row above describes — never
+request text.
+
+**`reset.ts`'s new `writeFileSync`** (`reset.ts:758`, inside
+`applyContractReset`'s new `.gitignore` branch) writes `giGuard.realPath` from
+`resolveGuardedPath(dir, ['.gitignore'])` — `dir` is the same already-guarded
+project root the pre-existing `writeFileSync` row (the `.forge/project.json`
+write) in the "M4-projects" section uses. The content, `drift.gitignoreDrift.after`,
+is computed server-side by `computeGitignoreDrift` from the file's own
+(guard-read) text plus the server-constant `SCRATCH_PATHS` — never echoed from
+the request.
+
+**Confirmed, not just classified.** `check-raw-fs-guarded.mjs` (the
+dataflow-aware sibling this document's intro defers to) reports 0 unguarded
+request-derived raw fs sinks with all four of these sites in scope. Pinned by
+`packages/projects/tests/integration/reset-drift-report.test.ts`'s six new
+tests (SECURITY/FAIL-OPEN/ONE-NOTION-WITH-C2) and
+`packages/projects/tests/integration/preflight-repo.test.ts`'s two new C2
+tests. `scripts/request-path-sinks.baseline.txt` accepts the new counts via
+`--write` in the same commit that adds this section, per this document's own
+rule.
