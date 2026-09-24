@@ -345,6 +345,24 @@ for (const headRefName of ['forge/INIT-42', 'cycle/x', 'INIT-42']) {
   });
 }
 
+test('compareBoundary: a product PR re-pointed to a non-product head ref is still judged (either side judged)', () => {
+  withTmpRepo((dir) => {
+    const baseline = captureBoundaryBaseline({
+      repoRoot: dir,
+      ghPrList: () => [{ number: 8, state: 'OPEN', headRefName: 'forge/INIT-8' }],
+    });
+    const current = captureBoundaryBaseline({
+      repoRoot: dir,
+      ghPrList: () => [{ number: 8, state: 'OPEN', headRefName: 'm7/x' }],
+    });
+
+    const result = compareBoundary(baseline, current);
+
+    assert.equal(result.clean, false);
+    assert.deepEqual(result.context, []);
+  });
+});
+
 test('compareBoundary: gh-degrade — prs:null on either snapshot skips PR checks without throwing', () => {
   withTmpRepo((dir) => {
     const baseline = captureBoundaryBaseline({ repoRoot: dir, ghPrList: () => null });
