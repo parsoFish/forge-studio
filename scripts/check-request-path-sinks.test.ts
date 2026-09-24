@@ -396,7 +396,7 @@ test('M7 row 25: --write REFUSES to raise an undocumented row — never-raise-wi
   const docPath = join(root, 'docs/reference/request-path-sinks.md');
   try {
     mkdirSync(dirname(docPath), { recursive: true });
-    writeFileSync(docPath, '# empty doc — no row classifies orchestrator/reached.ts\n');
+    writeFileSync(docPath, '# empty doc — nothing classified yet\n');
     runCheck({ root, baselinePath, docPath, write: true });
 
     // Grow a row without ever touching the doc.

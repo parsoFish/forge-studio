@@ -136,6 +136,7 @@ import { fileURLToPath } from 'node:url';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const DEFAULT_BASELINE_PATH = join(FORGE_ROOT, 'scripts/request-path-sinks.baseline.txt');
+export const DEFAULT_DOC_PATH = join(FORGE_ROOT, 'docs/reference/request-path-sinks.md');
 
 /**
  * The trees this walk may enter. `packages/` and `apps/` joined in M2: the
@@ -694,11 +695,50 @@ function printFailureGuidance(failures) {
   }
 }
 
+/**
+ * Whether `relFile` has ANY classification text in the audit doc — a coarse,
+ * FILE-level check, not a per-sink one (M7 findings row 25's "unless the doc
+ * classification exists" clause). The doc's rows are freeform narrative
+ * prose keyed to file paths (see docs/reference/request-path-sinks.md), not
+ * a machine-parseable (file, sink) index, so per-sink matching would be
+ * exactly the kind of audit that overstates its own rigour the header warns
+ * against. Coarse is a deliberate, stated trade: false-negative-safe (a file
+ * the doc has never mentioned always refuses) at the cost of not catching a
+ * SECOND, undocumented sink kind added to an ALREADY-documented file — the
+ * same "prove-or-warn" model the rest of this ratchet uses.
+ */
+export function docClassifiesFile(docText, relFile) {
+  return docText.includes(relFile);
+}
+
 /** `--write`'s own body, split out so runCheck stays readable. Prints every
  *  row the regenerated baseline changes (bead forge-8vfn.5.19 problem 2) —
  *  `grown`/`dropped` are compareBaseline(newRows, priorRows)'s own output,
- *  reused rather than re-derived. Writes and returns 0. */
-function writeBaseline({ baselinePath, rows, grown, dropped, reachableCount, totalCalls }) {
+ *  reused rather than re-derived.
+ *
+ *  M7 findings row 25's other half: --write must never RAISE a row (a grown
+ *  or brand-new pair) unless the audit doc already classifies that file —
+ *  otherwise --write is exactly the tool that lets an undocumented growth
+ *  sail into the baseline unread. Tightening (dropping) never needs doc
+ *  backing, per this ratchet's own existing rule that a lower count is never
+ *  a regression, so only `grown` is gated. Refuses (no write) and returns 1
+ *  if any grown row's file lacks doc coverage — EXCEPT when no baseline
+ *  existed yet (`hadPriorBaseline` false): the very first --write is
+ *  establishing ground truth wholesale, not raising anything incrementally,
+ *  so every row in it reads as "new" against an empty prior baseline and the
+ *  gate would otherwise block the initial capture entirely. */
+function writeBaseline({ baselinePath, docPath, rows, grown, dropped, reachableCount, totalCalls, hadPriorBaseline }) {
+  const docText = existsSync(docPath) ? readFileSync(docPath, 'utf8') : '';
+  const undocumented = hadPriorBaseline ? grown.filter((g) => !docClassifiesFile(docText, g.file)) : [];
+  if (undocumented.length) {
+    console.error(
+      `check-request-path-sinks: --write REFUSED — ${undocumented.length} row(s) would RAISE the baseline with no classification in ${docPath}:`
+    );
+    for (const u of undocumented) console.error(`  ✗ ${u.file} ${u.sink}: ${u.baselineCount} -> ${u.count}`);
+    console.error('  Add a row to docs/reference/request-path-sinks.md classifying the new/grown site first (M7 findings row 25 — --write never raises an undocumented row).');
+    return 1;
+  }
+
   if (grown.length || dropped.length) {
     console.log(
       `check-request-path-sinks: --write is changing ${grown.length + dropped.length} existing row(s) — read every line before committing (bead forge-8vfn.5.19: --write regenerates the WHOLE baseline, it is not a re-key):`
@@ -718,7 +758,7 @@ function writeBaseline({ baselinePath, rows, grown, dropped, reachableCount, tot
  * injectable so tests can point this at a temp fixture tree instead of the
  * real repo. Returns a process exit code; never calls process.exit itself.
  */
-export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PATH, write = false } = {}) {
+export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PATH, docPath = DEFAULT_DOC_PATH, write = false } = {}) {
   const { reachable, rows: sinkRows } = analyze(root);
   // Combine the raw-sink rows with the caller-count dimension into ONE row
   // stream. Both key on (file, sink, count) and flow through compareBaseline /
@@ -737,9 +777,10 @@ export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PA
     // 22->20, orchestrator/fix-work-items.ts's three rows deleted outright).
     // Fix: print every row that changes, so nothing is silently absorbed —
     // a human reads this before committing the regenerated file.
-    const priorRows = existsSync(baselinePath) ? parseBaseline(readFileSync(baselinePath, 'utf8')) : [];
+    const hadPriorBaseline = existsSync(baselinePath);
+    const priorRows = hadPriorBaseline ? parseBaseline(readFileSync(baselinePath, 'utf8')) : [];
     const { failures: grown, tighten: dropped } = compareBaseline(rows, priorRows);
-    return writeBaseline({ baselinePath, rows, grown, dropped, reachableCount: reachable.length, totalCalls });
+    return writeBaseline({ baselinePath, docPath, rows, grown, dropped, reachableCount: reachable.length, totalCalls, hadPriorBaseline });
   }
 
   if (!existsSync(baselinePath)) {
@@ -751,12 +792,18 @@ export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PA
   const baselineRows = parseBaseline(readFileSync(baselinePath, 'utf8'));
   const { failures, tighten } = compareBaseline(rows, baselineRows);
 
+  // M7 findings row 25: growth-only baselines never tighten themselves — a
+  // stale-HIGH row (baseline above the real count, e.g. "pr.ts execFileSync
+  // baselined 5, real 2") used to pass forever because `tighten` was
+  // informational-only. It now FAILS, with the exact figure, same as growth.
   if (tighten.length) {
-    console.log(`check-request-path-sinks: ${tighten.length} tightenable line${tighten.length === 1 ? '' : 's'} (sink count dropped or a sink disappeared — never a regression):`);
+    console.error(
+      `check-request-path-sinks: FAIL (${tighten.length} stale baseline row${tighten.length === 1 ? '' : 's'} — real count below baseline; M7 findings row 25, a stale-HIGH row must not pass forever)`
+    );
     for (const t of tighten) {
-      console.log(`  tighten: ${t.file} ${t.sink} ${t.baselineCount} -> ${t.count}`);
+      console.error(`  ✗ stale: ${t.file} ${t.sink}: baseline ${t.baselineCount} -> now ${t.count}`);
     }
-    console.log('  These do not fail the check. Run --write if you want the baseline to reflect them.');
+    console.error('  Run: node scripts/check-request-path-sinks.mjs --write   (tightening never needs doc backing — a lower count is never a regression)');
   }
 
   if (failures.length) {
@@ -767,8 +814,9 @@ export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PA
       console.error(`  ✗ ${f.file} ${f.sink}: baseline ${f.baselineCount} -> now ${f.count}`);
     }
     printFailureGuidance(failures);
-    return 1;
   }
+
+  if (tighten.length || failures.length) return 1;
 
   console.log(
     `check-request-path-sinks: PASS — ${reachable.length} reachable modules, ${rows.length} (file,sink) rows, ${totalCalls} total sink calls, baseline ${baselineRows.length} lines`
