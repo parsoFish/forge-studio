@@ -149,3 +149,38 @@ exist before they may legitimately write anything under it, so the lease does
 not create it — a lease that then fails to acquire must not leave a directory
 behind the refusal.
 
+**Stale-lock reclaim.** `BRAIN_WRITE_LEASE_STALE_MS` (15s) is the bound: a
+live holder self-refreshes the lock's mtime every `stale / 2` ms
+(`proper-lockfile`'s own `update` mechanism) for as long as it holds the
+lease, so 15s only needs to cover the gap BETWEEN refreshes, not a whole
+multi-minute spawn. A holder that crashes instead of releasing stops
+refreshing; the NEXT `acquireBrainWriteLease` call sees an mtime older than
+the bound and reclaims the lock (removes it, then acquires) instead of
+refusing forever. Covered by
+`packages/knowledge/tests/unit/brain-write-lease.test.ts`'s stale-lock test
+(mkdir's an orphaned lock directory, backdates its mtime past the bound with
+`utimesSync`, then asserts the next acquire succeeds).
+
+**Test-only lock relocation.** `acquireBrainWriteLease(forgeRoot, {
+lockfilePath })` lets a caller point the PHYSICAL lock file somewhere
+private while `forgeRoot` still names the conceptual target `proper-lockfile`
+validates exists — production call sites pass nothing and get the unchanged
+default (`${brainRootDir(forgeRoot)}.lock`). `runReflector` resolves its OWN
+`forgeRoot` from `import.meta.dirname`, deliberately not injectable (always
+the real repo checkout — `reflector-spawn-capture.test.ts`'s own header), so
+every test that reaches it targets the SAME real `brain/`. Reproduced
+pre-fix: `reflector.test.ts` + `reflector-write-lease.test.ts` +
+`reflector-spawn-capture.test.ts` run together in one `node --test`
+invocation (each test FILE is its own process) — 8/10 reds,
+`'failed' !== 'closed'` (brain-write-lease-contention). `ReflectorDeps`
+carries the fix as `acquireBrainWriteLease` (mirrors its existing
+`sdkQuery`/`brainLint`/`kbHealth` injectables); each of those three test
+files now wires it to `reflector-lease-test-fixture.ts`'s
+`acquireIsolatedReflectorLease`, which gives that FILE its own private
+physical lock. Proven at the disk level in
+`brain-write-lease.test.ts` (custom path used, default path left untouched)
+rather than by holding two concurrent leases in one process — that hits
+`proper-lockfile`'s own per-process `locks` bookkeeping singleton
+(`lib/lockfile.js`) and breaks `release()`, an artifact that never occurs
+across `node --test`'s per-file worker processes.
+

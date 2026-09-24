@@ -35,20 +35,7 @@ export class BrainWriteLeaseContentionError extends Error {
   }
 }
 
-/**
- * Test-only escape hatch (forge-ler4 cross-file flake fix): `lockfilePath`
- * points the PHYSICAL lock file somewhere private while `forgeRoot` still
- * names the conceptual target (`proper-lockfile` still validates that
- * `brain/` exists there). Some callers — `runReflector` chief among them —
- * derive `forgeRoot` from their own module location rather than accepting
- * it as an argument (see `reflector.ts` + `reflector-spawn-capture.test.ts`'s
- * header for why), so every test that reaches them resolves the SAME real
- * repo `brain/`. Without a way to relocate the physical lock, two such
- * tests in DIFFERENT `node --test` worker files contend on that one real
- * lock. Left unset (the production default on every real call site), this
- * changes nothing: the lock stays at proper-lockfile's own default,
- * `${brainRootDir(forgeRoot)}.lock`.
- */
+/** Test-only lock relocation (design.md, forge-ler4); unset ⇒ unchanged. */
 export type BrainWriteLeaseOptions = { lockfilePath?: string };
 
 /**
@@ -62,18 +49,10 @@ export type BrainWriteLeaseOptions = { lockfilePath?: string };
  * exist, and creating it here on a lease that then fails would leave a
  * directory behind the refusal.
  */
-export async function acquireBrainWriteLease(
-  forgeRoot: string,
-  opts: BrainWriteLeaseOptions = {},
-): Promise<() => Promise<void>> {
-  const target = brainRootDir(forgeRoot);
-  const lockfilePath = opts.lockfilePath ?? `${target}.lock`;
+export async function acquireBrainWriteLease(forgeRoot: string, opts: BrainWriteLeaseOptions = {}): Promise<() => Promise<void>> {
+  const target = brainRootDir(forgeRoot), lockfilePath = opts.lockfilePath ?? `${target}.lock`;
   try {
-    return await lockfile.lock(target, {
-      stale: BRAIN_WRITE_LEASE_STALE_MS,
-      retries: { ...BRAIN_WRITE_LEASE_RETRIES },
-      lockfilePath,
-    });
+    return await lockfile.lock(target, { stale: BRAIN_WRITE_LEASE_STALE_MS, retries: { ...BRAIN_WRITE_LEASE_RETRIES }, lockfilePath });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ELOCKED') {
       throw new BrainWriteLeaseContentionError(
