@@ -417,6 +417,9 @@ else
         ;;
       STRANGER:*)
         echo "suite-lock: WAITING on stranger pid(s) ${SUITE_LOCK_STATE#STRANGER:} — another lane's suite holds it"
+        # A kernel that lists the inherited-fd hold (CI's does; WSL2's does not)
+        # lands here, not below — so the sidecar is read on both paths.
+        read_suite_lock_holder || true
         wait_for_suite_lock
         ;;
       *)

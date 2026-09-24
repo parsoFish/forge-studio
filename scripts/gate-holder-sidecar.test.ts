@@ -143,7 +143,7 @@ describe('forge-8vfn.7.6.79 — the sidecar names gate.sh\'s own unnameable hold
     // plants a stale one. `lock-state.test.ts` names this exact idiom. 20s, to
     // outlast `waitUntilHeld`'s own budget under host contention (measured
     // flaky at 5s — see that function's comment).
-    const holder = spawn('bash', ['-c', `exec 9>"${lock}"; flock -n 9 || exit 7; sleep 20`], { stdio: 'ignore' });
+    const holder = spawn('bash', ['-c', `exec 9>"${lock}"; flock -w 5 9 || exit 7; sleep 20`], { stdio: 'ignore' });
     try {
       assert.ok(waitUntilHeld(lock), 'the fixture holder must actually hold the lock before the gate under test runs');
 
