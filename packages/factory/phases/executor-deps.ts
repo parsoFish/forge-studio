@@ -47,7 +47,7 @@ export type FlowRunnerDeps = {
   /**
    * The integrate band (spec §5 item 4): derive the demo bundle and the PR body
    * from the acceptance criteria, the gate evidence and the diff, render, and
-   * capture where the class says so. Wrapped by execDemo, which runs the
+   * capture where the class says so. Wrapped by execIntegrate, which runs the
    * close-contract gates before it and hands it their evidence. Synchronous and
    * signal-free by construction — it waits on no model, so there is nothing for
    * a wedge timer to abort.
@@ -73,7 +73,7 @@ export type FlowRunnerDeps = {
    * Branch delivery ground-truth (commits-ahead / files-changed / insertions),
    * emitted as the reflector's `dev-loop.delivered` grounding event and fed to
    * `assertNonEmptyDelivery`. Formerly returned by the unifier phase; the demo
-   * node computes it now (execDemo). Injectable so hermetic tests need no git.
+   * node computes it now (execIntegrate). Injectable so hermetic tests need no git.
    */
   computeDeliveryStats: (
     input: CycleInput,
@@ -84,7 +84,7 @@ export type FlowRunnerDeps = {
    * R4-10-F2 merge-boundary full-suite gate: runs testProcess.local (the
    * relocated composedUnifierGate.initiative_gate — the full suite, unscoped) +
    * testProcess.ci on the integrated branch tip, and RETURNS the verdict (never
-   * throws) so execDemo can drive the bounded gate-fix loop. Injectable so
+   * throws) so execIntegrate can drive the bounded gate-fix loop. Injectable so
    * hermetic tests need no real suite run.
    */
   runMergeBoundaryGate: (input: CycleInput, logger: EventLogger) => MergeGateResult;

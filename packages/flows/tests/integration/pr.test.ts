@@ -259,6 +259,44 @@ test('stripForgeScratchFromBranch: drops .forge/ scratch but keeps protected pro
   }
 });
 
+// forge-8vfn.8.1.2 follow-up (operator ruling 92): TRACKED_CONFIG_PATHS'
+// `.forge/skills/` entry is a DIRECTORY — every FILE under it (a WI's
+// project-local skill) must survive the strip, not just the literal
+// `.forge/skills/` path itself, which `git ls-files` never even returns.
+test('stripForgeScratchFromBranch: keeps a project-local skill under .forge/skills/, still drops real .forge/ scratch', () => {
+  const { proj, cleanup } = makeRepoWithOrigin();
+  try {
+    mkdirSync(join(proj, '.forge', 'skills', 'my-skill'), { recursive: true });
+    writeFileSync(join(proj, '.forge', 'skills', 'my-skill', 'SKILL.md'), '# my-skill\n');
+    writeFileSync(join(proj, '.forge', 'quality_gate_cmd'), 'npm test\n');
+    writeFileSync(join(proj, '.forge', 'pr-description.md'), 'scratch draft\n');
+    sh(proj, 'git', [
+      'add',
+      '.forge/skills/my-skill/SKILL.md',
+      '.forge/quality_gate_cmd',
+      '.forge/pr-description.md',
+    ]);
+    sh(proj, 'git', ['commit', '-q', '-m', 'add project-local skill + gate sidecar + scratch']);
+
+    const stripped = stripForgeScratchFromBranch(proj);
+    assert.deepEqual(stripped, ['.forge/pr-description.md'], 'only the real scratch path is stripped');
+
+    assert.equal(
+      sh(proj, 'git', ['ls-files', '--', '.forge/skills/my-skill/SKILL.md']).trim(),
+      '.forge/skills/my-skill/SKILL.md',
+      'the project-local skill file must survive the strip',
+    );
+    assert.equal(
+      sh(proj, 'git', ['ls-files', '--', '.forge/quality_gate_cmd']).trim(),
+      '.forge/quality_gate_cmd',
+      'the gate sidecar must survive the strip',
+    );
+    assert.equal(sh(proj, 'git', ['ls-files', '--', '.forge/pr-description.md']).trim(), '', '.forge scratch dropped');
+  } finally {
+    cleanup();
+  }
+});
+
 // ---- G10 / G1: confirmPrMerged is the ONLY merge signal ----
 
 /**

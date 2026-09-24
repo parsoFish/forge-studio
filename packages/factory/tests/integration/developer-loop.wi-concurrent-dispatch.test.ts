@@ -50,6 +50,7 @@ import { topologicalOrder, writeWorkItem, writeWorkItemStatus, type WorkItem } f
 import { run as runRalph, type AgentInvocation } from '@forge/agents/ralph/runner.ts';
 import { runConcurrentDispatch } from '@forge/flows/wi-dispatch-scheduler.ts';
 import { resolveDevWiConcurrency } from '@forge/kernel';
+import { SCRATCH_PATHS } from '@forge/projects/preflight.ts';
 
 function sh(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, stdio: 'pipe', encoding: 'utf8' });
@@ -102,16 +103,18 @@ function setup(initiativeId: string): Fixture {
   sh(repo, ['config', 'user.email', 't@forge']);
   sh(repo, ['config', 'user.name', 'forge-test']);
   writeFileSync(join(repo, 'README.md'), 'base\n');
-  // Per the forge-project-contract (docs/reference/project-contract.md:185), every
-  // onboarded project's `.gitignore` covers forge scratch: `.forge/`,
-  // `AGENT.md`, `PROMPT.md`, `fix_plan.md`. Without the latter three, ralph's
-  // autocommit safety net (`git add -A`) sweeps them into the WI branch's
-  // commit — harmless when strictly serial (each worktree always forks from
-  // the latest merged tip), but under real concurrent dispatch two SIBLING
-  // worktrees forking from the SAME base each regenerate + commit their own
-  // copy independently, which then collides at fan-in. A properly onboarded
-  // project's gitignore is what keeps these out of the tracked tree at all.
-  writeFileSync(join(repo, '.gitignore'), '.forge/\nAGENT.md\nPROMPT.md\nfix_plan.md\n');
+  // Per the forge-project-contract (docs/reference/project-contract.md, C2),
+  // every onboarded project's `.gitignore` covers forge scratch (SCRATCH_PATHS
+  // — never a blanket `.forge/`, which would also hide the tracked
+  // .forge/project.json + .forge/skills/, operator ruling 92). Without
+  // AGENT.md/PROMPT.md/fix_plan.md ignored, ralph's autocommit safety net
+  // (`git add -A`) sweeps them into the WI branch's commit — harmless when
+  // strictly serial (each worktree always forks from the latest merged tip),
+  // but under real concurrent dispatch two SIBLING worktrees forking from the
+  // SAME base each regenerate + commit their own copy independently, which
+  // then collides at fan-in. A properly onboarded project's gitignore is what
+  // keeps these out of the tracked tree at all.
+  writeFileSync(join(repo, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
   sh(repo, ['add', '.']);
   sh(repo, ['commit', '-q', '-m', 'base']);
 

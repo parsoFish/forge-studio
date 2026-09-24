@@ -11,8 +11,8 @@
  *  the project roadmap canvas. The flows pillar could not reach them.
  *
  *  `flows-49` (S2): Resume never disclosed what it does. The bridge's resume
- *  route calls `runRequeue(..., { resumeFromDemo: true })`, i.e. it re-enters
- *  the successor band at the DEMO node against the preserved branch — a
+ *  route calls `runRequeue(..., { resumeFromIntegrate: true })`, i.e. it re-enters
+ *  the successor band at the INTEGRATE node against the preserved branch — a
  *  materially different act from a fresh requeue, which wipes the worktree and
  *  branch and re-runs from the start. Two buttons that read "Resume" and
  *  "Requeue" with no further text are not a choice an operator can make.
@@ -62,9 +62,9 @@ test('flows-28: every control names the bridge action it drives, and abandon is 
 
 test('flows-49: resume and requeue disclose that they are DIFFERENT acts', () => {
   const byId = Object.fromEntries(deriveRunControls(run('failed')).map((c) => [c.id, c]));
-  // The resume route is `runRequeue(..., { resumeFromDemo: true })`: it re-enters
-  // at the demo node against the preserved branch.
-  expect(byId.resume.detail).toMatch(/demo/i);
+  // The resume route is `runRequeue(..., { resumeFromIntegrate: true })`: it re-enters
+  // at the integrate node against the preserved branch.
+  expect(byId.resume.detail).toMatch(/integrate/i);
   expect(byId.resume.detail).toMatch(/preserv/i);
   // A fresh requeue wipes the worktree + branch and re-runs from the start.
   expect(byId.requeue.detail).toMatch(/from the start|fresh/i);
@@ -169,7 +169,7 @@ const STOP_ON_BUDGET: NonNullable<Run['stopOnBudget']> = {
   resumable: true,
   completedWorkItems: 6,
   totalWorkItems: 6,
-  stoppedBeforeNode: 'demo',
+  stoppedBeforeNode: 'integrate',
 };
 
 test('WI-1a-5: a run with stopOnBudget renders the budget stop, never the stale failNote', () => {
@@ -186,7 +186,7 @@ test('WI-1a-5: a run with stopOnBudget renders the budget stop, never the stale 
   expect(text).toContain('$80.83');
   expect(text).toContain('$52.00');
   expect(text).toContain('6 of 6 work items complete');
-  expect(text).toContain('resumable before demo');
+  expect(text).toContain('resumable before integrate');
 });
 
 test('WI-1a-5: a run with a real failure and NO stopOnBudget still renders failNote', () => {

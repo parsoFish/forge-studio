@@ -8,7 +8,7 @@
  *      createAgent loop handles a well-formed stream correctly — it is the
  *      same contract the example adapter satisfies, making both adapters
  *      interchangeable from the runner's perspective.
- *   C. The registry: getAdapter, listAdapters, registeredSdkIds, isSdkAvailable.
+ *   C. The registry: getAdapter, registeredSdkIds, isSdkAvailable.
  */
 
 import { describe, test } from 'node:test';
@@ -22,7 +22,7 @@ import { exampleAdapter } from '../../_adapters/example/index.ts';
 import { claudeAdapter } from '../../_adapters/claude/index.ts';
 import { geminiAdapter } from '../../_adapters/gemini/index.ts';
 import { makeAiderAdapter, type AiderRunner } from '../../_adapters/aider/index.ts';
-import { getAdapter, listAdapters, registeredSdkIds, isSdkAvailable } from '../../_adapters/registry.ts';
+import { getAdapter, registeredSdkIds, isSdkAvailable } from '../../_adapters/registry.ts';
 import type { QueryFn } from '../../_adapters/types.ts';
 
 // ---------------------------------------------------------------------------
@@ -192,14 +192,6 @@ describe('adapter registry', () => {
 
   test('getAdapter("") throws', () => {
     assert.throws(() => getAdapter(''), (err: unknown) => err instanceof Error);
-  });
-
-  test('listAdapters() returns an array containing claude + example adapters', () => {
-    const adapters = listAdapters();
-    assert.ok(Array.isArray(adapters), 'listAdapters returns an array');
-    const ids = adapters.map((a) => a.id);
-    assert.ok(ids.includes('claude'), 'list includes claude');
-    assert.ok(ids.includes('example'), 'list includes example');
   });
 
   test('registeredSdkIds() returns the live + flywheel adapters', () => {

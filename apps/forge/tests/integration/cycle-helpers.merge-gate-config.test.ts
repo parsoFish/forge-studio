@@ -4,7 +4,7 @@
  * One file, two tests:
  *   1. cycle-helpers.ts: `runMergeBoundaryGate` must return a RED `config`
  *      result on an unreadable `project.json`, never `{ ok: true }`.
- *   2. flow-runner.ts: `execDemo` must park the initiative needs-operator on
+ *   2. flow-runner.ts: `execIntegrate` must park the initiative needs-operator on
  *      a `config` red — never compile a gate-fix work item (a dev agent
  *      cannot fix the operator's project config), never open a PR.
  *
@@ -274,12 +274,12 @@ function makeMockDeps(tracker: { calls: string[] }): TestDeps {
 
 test('a config-red gate parks needs-operator and compiles NO gate-fix work item', async () => {
   /**
-   * Kills: execDemo treating a `config` red exactly like a `local`/`ci` red —
+   * Kills: execIntegrate treating a `config` red exactly like a `local`/`ci` red —
    * compiling a gate-fix WORK ITEM the develop agent can never actually turn
    * green (the operator's own `.forge/project.json` is not part of the
    * initiative's diff), and leaving no marker a human can find, instead of
    * parking the initiative needs-operator. Drives the REAL `forge-develop`
-   * flow (dev → demo → adversarial-review → verdict) with
+   * flow (dev → integrate → adversarial-review → verdict) with
    * `deps.runMergeBoundaryGate` stubbed to the config-red shape — exactly as
    * flow-runner.test.ts's "R4-10-F2: a RED merge-boundary full-suite gate"
    * test drives the local/ci sibling scenario.
@@ -371,10 +371,10 @@ test('a config-red gate parks needs-operator and compiles NO gate-fix work item'
     );
     assert.ok(configErrorEvent, 'expected an error event named merge-gate.config-error');
 
-    // 4. No PR opens: the walk terminates inside the demo band before the
-    //    real demo pipeline, adversarial review, or the verdict's openPr
+    // 4. No PR opens: the walk terminates inside the integrate band before the
+    //    real integrate pipeline, adversarial review, or the verdict's openPr
     //    ever run.
-    assert.ok(!tracker.calls.includes('runDemoAgent'), 'the demo pipeline must not run on a config-red gate');
+    assert.ok(!tracker.calls.includes('runIntegrate'), 'the integrate band must not run on a config-red gate');
     assert.ok(!tracker.calls.includes('runAdversarialReview'), 'adversarial review must not run on a config-red gate');
     assert.ok(!tracker.calls.includes('openPrInline'), 'NO PR opens on a config-red gate (the preserved invariant)');
   } finally {
