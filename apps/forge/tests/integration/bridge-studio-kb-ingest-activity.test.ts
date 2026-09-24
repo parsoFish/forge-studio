@@ -143,6 +143,79 @@ test('R6-08 WI-2 RED-F (risk #3, real-source): events from TWO different cycle d
   );
 });
 
+// M7-C (forge-hqkm) — the scan behind this route walked EVERY `_logs/`
+// dir (measured 3151ms blocking on a real 354-dir/567MB checkout: no cap, no
+// order, and no shape filter, so hundreds of `_agent-*`/`_brainfix-*`/
+// `_<kind>-<sessionId>` dirs — which can NEVER carry a `reflect.kb-ingest`
+// event — were opened on every request too). PAGE mirrors
+// `KB_INGEST_ACTIVITY_MAX_EVENTS` as a LITERAL, never an import, so this
+// file's imports stay valid whether or not that export exists yet.
+const PAGE = 50;
+
+/** A cycle id in the REAL shape `newCycleId`/`mintAndPersistManifestCycleId`
+ *  (packages/flows/cycle.ts, manifest.ts) mint: a fixed-width ISO prefix
+ *  (`YYYY-MM-DDTHH-mm-ss`) + `_<label>` — the same shape `findNewestCycleId`
+ *  (packages/flows/run-model.ts) already sorts lexically as chronological. */
+function realCycleId(mtimeMs: number, label: string): string {
+  const iso = new Date(mtimeMs).toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  return `${iso}_${label}`;
+}
+
+test('M7-C RED-H: ingest-activity returns exactly the newest PAGE matching cycles, dropping an excess match and one that would be found in an underscore-prefixed (non-cycle) dir', async () => {
+  // Self-contained bridge + forgeRoot (never the shared module-level one
+  // above): the assertions below need an EXACT count of matching cycles, and
+  // a shared _logs/ would also carry RED-E/RED-F's own non-ISO-shaped
+  // fixture ids ('cycle-a' etc.), which is a test-fixture concern, not a
+  // production one — real cycle ids are always the ISO-prefixed shape below.
+  const rootH = mkdtempSync(join(tmpdir(), 'bridge-kb-ingest-activity-h-'));
+  try {
+    mkdirSync(join(rootH, '_logs'), { recursive: true });
+    const kbDirH = join(rootH, 'brain', 'projects', KB_ID);
+    mkdirSync(join(kbDirH, 'themes'), { recursive: true });
+    writeFileSync(join(kbDirH, 'kb.yaml'), KB_YAML);
+
+    const now = Date.parse('2026-09-19T00:00:00.000Z');
+    const newestCycleIds: string[] = [];
+    for (let i = 0; i < PAGE; i += 1) {
+      const id = realCycleId(now - i * 60_000, `m7c-page-${i}`);
+      const dir = join(rootH, '_logs', id);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'events.jsonl'), `${JSON.stringify({ message: 'reflect.kb-ingest', metadata: { kb: KB_ID, fresh_themes: 1, impl: 'builtin' } })}\n`);
+      newestCycleIds.push(id);
+    }
+    // The (PAGE+1)-th newest matching cycle — older than every cycle above,
+    // must be dropped by the page cap.
+    const excessCycleId = realCycleId(now - PAGE * 60_000 - 3_600_000, 'm7c-excess');
+    const excessDir = join(rootH, '_logs', excessCycleId);
+    mkdirSync(excessDir, { recursive: true });
+    writeFileSync(join(excessDir, 'events.jsonl'), `${JSON.stringify({ message: 'reflect.kb-ingest', metadata: { kb: KB_ID, fresh_themes: 1, impl: 'builtin' } })}\n`);
+    // A genuinely matching event sitting in an underscore-prefixed dir — a
+    // shape `runPostReflectionKbHealth` never produces in practice, but if
+    // the shape filter were absent this WOULD be counted (real, valid JSON).
+    const shapeDir = join(rootH, '_logs', '_brainfix-m7c-shape-check');
+    mkdirSync(shapeDir, { recursive: true });
+    writeFileSync(join(shapeDir, 'events.jsonl'), `${JSON.stringify({ message: 'reflect.kb-ingest', metadata: { kb: KB_ID, fresh_themes: 1, impl: 'builtin' } })}\n`);
+
+    const { url, close } = await startBridge({ forgeRoot: rootH, port: 0 });
+    try {
+      const res = await fetch(`${url}/api/studio/kbs/${KB_ID}/ingest-activity`);
+      const json = (await res.json()) as { events?: Array<{ cycleId?: string }> };
+      assert.equal(res.status, 200, `expected 200, got ${res.status}: ${JSON.stringify(json)}`);
+      const events = json.events;
+      assert.ok(Array.isArray(events), `events must be an array — got ${JSON.stringify(json)}`);
+      const returnedIds = events!.map((e) => e.cycleId);
+      assert.equal(events!.length, PAGE, `expected exactly ${PAGE} events, got ${events!.length}: ${JSON.stringify(returnedIds)}`);
+      assert.deepEqual(new Set(returnedIds), new Set(newestCycleIds), 'must be exactly the newest PAGE cycles');
+      assert.ok(!returnedIds.includes(excessCycleId), `the excess (${PAGE + 1}-th newest) cycle must be dropped by the page cap`);
+      assert.ok(!returnedIds.includes('_brainfix-m7c-shape-check'), 'an underscore-prefixed dir must never be scanned, even with a genuinely matching event inside it');
+    } finally {
+      await close();
+    }
+  } finally {
+    rmSync(rootH, { recursive: true, force: true });
+  }
+});
+
 test('R6-08 WI-2 RED-G (risk #4, stricter-than-ratchet): the /ingest-activity route is GET-only (no POST branch on its URL pattern) — source-text, across the whole KB surface', () => {
   let total = 0;
   for (const path of BRIDGE_KBS_PATHS) {

@@ -922,7 +922,7 @@ export const PROJECTS_ROOT_FOLD_MODULES = [
   'packages/agents/find-session-project.ts',
   'apps/forge/cli.ts',
   'packages/agents/agent-dispatch.ts',
-  'packages/flows/scheduler.ts',
+  'packages/flows/scheduler-run-one.ts', // bead forge-8vfn.15: moved from scheduler.ts
 ];
 
 // ---------------------------------------------------------------------------
