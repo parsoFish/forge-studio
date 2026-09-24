@@ -149,7 +149,17 @@ const knowledgeSessionStatusIo: SessionStatusIoPort = {
 
 export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
   return [
-    ...knowledgeRoutes({ listFlowIds, listFlowBandIds, runFixTurn: realKbDrainFixTurn, sessionStatusIo: knowledgeSessionStatusIo }),
+    ...knowledgeRoutes({
+      listFlowIds,
+      listFlowBandIds,
+      runFixTurn: realKbDrainFixTurn,
+      sessionStatusIo: knowledgeSessionStatusIo,
+      // knowledge-01 (forge-6gv.6.1): the SAME tail registry the agent-run
+      // routes already arm/release — a live KB drain's activity drawer never
+      // streamed because this was never threaded through.
+      ensureAgentRunTail: deps.ensureAgentRunTail,
+      releaseAgentRunTail: deps.releaseAgentRunTail,
+    }),
     ...libraryRoutes({ agentFacts: libraryAgentFacts, isSdkAvailable, flowSource: libraryFlowSource, authoringSession: authoringSessionPort }),
     ...projectsRoutes({
       seedBrain: seedProjectBrain,

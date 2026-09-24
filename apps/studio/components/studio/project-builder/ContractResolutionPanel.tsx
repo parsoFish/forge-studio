@@ -8,6 +8,7 @@ import { startInstructions, startDemoBuilder } from '@/lib/bridge-client';
 import { SessionMinted } from '@/components/studio/session/SessionMinted';
 import { agentResolveLabel, brainFixHref, isAgentRouteBlocked, BRAIN_FIX_UNBOUND_HINT } from '@/lib/contract-resolution-view';
 import { pollPreflightFix, pollDisplayState, type PolledPreflightFixStatus } from '@/lib/agent-dispatch';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 /**
  * Stage D — guided contract-resolution panel. Mirrors LintResolutionPanel for
@@ -272,6 +273,25 @@ export function ContractResolutionPanel({
           {user.map((c) => {
             const status = runStatus[c.id];
             const clausePollState = pollDisplayState(status ?? null);
+            // forge-8vfn.8.3.1: `busy` clears the instant the dispatch POST
+            // resolves (`submitUser`, above) — but the dispatched agent keeps
+            // going behind `startPoll`, tracked separately in `runStatus`.
+            // Without also consulting that, the button re-enabled the moment
+            // the POST returned while the row still showed
+            // `data-agent-run-state="running"`, and a second click dispatched
+            // a SECOND agent onto the same clause. 'watching' and 'timed-out'
+            // both mean "not known to be done" — a poll ceiling is a fact
+            // about the WATCHER, not the run (pollDisplayState's header) — so
+            // both keep the control disabled; only a real terminal status
+            // frees it.
+            const clauseRunning = clausePollState === 'watching' || clausePollState === 'timed-out';
+            const applyDisabledReason = busy !== null
+              ? `${busyReason(busy)} — one clause at a time`
+              : clauseRunning
+                ? `${busyReason(`user:${c.id}`)} — one clause at a time`
+                : (notes[c.id] ?? '').trim() === ''
+                  ? 'state the decision (or your reasoning) first'
+                  : null;
             return (
               <div key={c.id} data-user-clause data-user-clause-id={c.id} {...(clausePollState ? { 'data-poll-state': clausePollState } : {})} style={{ marginBottom: 10 }}>
                 <ClauseRow c={c} status={status} />
@@ -290,11 +310,10 @@ export function ContractResolutionPanel({
                     data-action="apply-clause-decision"
                     data-apply-clause-id={c.id}
                     style={btn}
-                    disabled={busy !== null || (notes[c.id] ?? '').trim() === ''}
-                    title={busy !== null ? `${busyReason(busy)} — one clause at a time` : (notes[c.id] ?? '').trim() === '' ? 'state the decision (or your reasoning) first' : undefined}
+                    {...disabledAttrs(applyDisabledReason)}
                     onClick={() => void submitUser(c)}
                   >
-                    {busy === `user:${c.id}` ? 'Applying…' : 'Apply with agent'}
+                    {busy === `user:${c.id}` || clauseRunning ? 'Applying…' : 'Apply with agent'}
                   </button>
                   {clausePollState === 'timed-out' && (
                     <button

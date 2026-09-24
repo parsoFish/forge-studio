@@ -336,3 +336,39 @@ test('E5 (client half): the add form posts NO retired repo-fact key — not even
     ).not.toMatch(new RegExp(`\\b${retired}\\s*:`));
   }
 });
+
+// ---------------------------------------------------------------------------
+// forge-5rr (projects-45): the detail page's own `fetchCommunityItemDetail`
+// NEVER throws — it is the status-shaped `{ok, item?, status?, error?}` read,
+// unlike the throwing `studioRead*` reads `detail-pages-fail-closed-wiring.
+// test.ts`'s `expectFailClosedPrimitives` is written for. That is why this
+// page cannot satisfy that shared assertion textually (there is no
+// `catch (err)`) and is EXEMPT there rather than COMPLIANT — but it is the
+// SAME crosscut-08 defect class underneath: a `not-found` claim must be
+// reachable ONLY off a real, bridge-answered 404, never off a transport
+// failure, AND (the gap this pass actually closes) a down bridge must be a
+// retryable, self-healing error state, not a dead-end banner (crosscut-22).
+// ---------------------------------------------------------------------------
+
+test('community detail: the not-found claim is reachable ONLY off a genuine HTTP 404 — never a transport failure', () => {
+  const src = stripComments(read(DETAIL_PAGE));
+  expect(src).toMatch(/if \(r\.status === 404\) \{\s*setState\('not-found'\);/);
+  // The failure mode this guards against: collapsing `!r.ok` alone (true
+  // for BOTH an unreachable bridge and a real 404) into 'not-found'.
+  expect(src).not.toMatch(/if \(!r\.ok\) \{\s*setState\('not-found'\)/);
+});
+
+test('community detail: a non-404 failure (bridge down or answered-but-refused) renders the shared PageLoadError, not an ad-hoc dead-end banner', () => {
+  const src = stripComments(read(DETAIL_PAGE));
+  expect(src).toMatch(/import \{ PageLoadError \} from '@\/components\/PageLoadError'/);
+  expect(src).toMatch(/import \{ useBridgeRecoveryWhenFailed \} from '@\/lib\/use-bridge-status'/);
+  expect(src).toMatch(/useState<\{ error: string; status\?: number \} \| null>\(null\)/);
+  expect(src).toMatch(/setLoadError\(\{ error: r\.error \?\? [^,]+, status: r\.status \}\)/);
+  expect(src).toMatch(/<PageLoadError[\s\S]{0,200}page="community-detail"/);
+  expect(src).toMatch(/<PageLoadError[\s\S]{0,400}onRetry=\{reload\}/);
+});
+
+test('community detail: a failed load re-fills on bridge recovery ONLY while it is the failed state (never re-loads over a healthy page)', () => {
+  const src = stripComments(read(DETAIL_PAGE));
+  expect(src).toMatch(/useBridgeRecoveryWhenFailed\(\s*loadError !== null,\s*reload,?\s*\)/);
+});
