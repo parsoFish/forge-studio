@@ -164,6 +164,11 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // 7.6.51/7.6.71: set when a beat boundary ends the run on money — breached, or
   // gone blind — and the verdict below is RED in the halt's own words, not a beat's.
   let spendHalt = null;
+  // `forge-8vfn.7.6.76` — declared OUTSIDE the `try` below, unlike `pressedAt`:
+  // `finalSpendHalt` reads it AFTER that block closes, and a Map scoped to the
+  // block it is declared in would not exist by then. One Map for the whole
+  // run either way — never a module-level Map (this box runs four lanes).
+  const unmeasuredSnapshots = new Map();
   const costs = story.ground?.realSpawn === true || (story.ground?.budget_usd ?? 0) > 0;
   // 7.6.52: BOTH NUMBERS PRINT BEFORE A DOLLAR IS SPENT, agreeing or not. A run
   // whose funded and declared ceilings differ must say so up front rather than
@@ -230,6 +235,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
           realSpawn: story.ground?.realSpawn === true,
           ceilingUsd: ceiling?.usd,
           label: `after beat ${i + 1}`,
+          unmeasuredSnapshots,
         });
         for (const l of lines) console.log(l);
         if (stop.halt) { // 7.6.71 (849(d)): a BREACH stops on a number; a turn that ENDED unpriced stops because the ceiling above it went blind
@@ -323,7 +329,10 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // is judged here, by the same verdict the boundaries use; a halt makes the
   // run RED in its own words rather than letting it read as complete.
   if (costs) {
-    const late = finalSpendHalt({ root: ROOT, startedMs, realSpawn: story.ground?.realSpawn === true, ceilingUsd: ceiling?.usd, alreadyHalted: spendHalt !== null });
+    const late = finalSpendHalt({
+      root: ROOT, startedMs, realSpawn: story.ground?.realSpawn === true, ceilingUsd: ceiling?.usd,
+      alreadyHalted: spendHalt !== null, unmeasuredSnapshots,
+    });
     for (const l of late.lines) console.log(l);
     if (late.stop) {
       console.error(`[stories] ${late.stop.headline} after the last beat boundary — ${late.stop.reason} (${ceiling.reason}).`);

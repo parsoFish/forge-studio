@@ -9,8 +9,8 @@
  */
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { EMIT_FAILED_SIDECAR } from '@forge/sessions/turn-cost-rows.ts';
-import { summariseRunSpend, spendCeilingVerdict, endedUnpricedTurns, ceilingHaltVerdict } from './spend.mjs';
-import { join } from 'node:path';
+import { summariseRunSpend, spendCeilingVerdict, endedUnpricedTurns, ceilingHaltVerdict, classifyUnmeasuredDispatch } from './spend.mjs';
+import { join, basename } from 'node:path';
 
 /** One dispatched run's event rows, or [] — an unreadable log is UNMEASURED,
  *  never a silent zero (bead `forge-8vfn.6.11.8`). */
@@ -240,13 +240,25 @@ export function collectSpendDirs(root, sinceMs) {
  *
  * @returns {{ stop: ReturnType<typeof ceilingHaltVerdict> | null, lines: string[] }}
  */
-export function finalSpendHalt({ root, startedMs, realSpawn, ceilingUsd, alreadyHalted }) {
+export function finalSpendHalt({ root, startedMs, realSpawn, ceilingUsd, alreadyHalted, unmeasuredSnapshots = new Map(), snapshotSeams }) {
   if (alreadyHalted) return { stop: null, lines: [] };
-  const { stop, lines } = spendSoFar({ root, startedMs, realSpawn, ceilingUsd, label: 'at the final spend read' });
+  const { stop, lines } = spendSoFar({
+    root, startedMs, realSpawn, ceilingUsd, label: 'at the final spend read', unmeasuredSnapshots, snapshotSeams,
+  });
   return { stop: stop.halt ? stop : null, lines };
 }
 
-export function spendSoFar({ root, startedMs, realSpawn, ceilingUsd, label }) {
+/**
+ * @param {Map<string, ReturnType<typeof readDispatchSnapshot>>} [unmeasuredSnapshots]
+ *   THE RUN LOOP'S OWN STATE, bead `forge-8vfn.7.6.76` — never a module-level
+ *   `Map`, which two concurrent runs (this box runs four lanes) would share.
+ *   Defaulted here only for a caller with one call site (tests, mainly); the
+ *   production caller creates ONE and passes the SAME instance to every beat
+ *   boundary, exactly as `pressedAt` already does for the press anchor — a
+ *   fresh default per call would forget growth between beats, which is the
+ *   whole fact this mechanism exists to see.
+ */
+export function spendSoFar({ root, startedMs, realSpawn, ceilingUsd, label, unmeasuredSnapshots = new Map(), snapshotSeams }) {
   // COLLECTED BY `collectSpendDirs`, NOT BY THE REAPER'S COLLECTOR
   // (`forge-rzrs`): `collectAgentRuns` gates on `turn.pid`/markers — the
   // directories it could KILL — and a cycle's phase dir has neither, so S10
@@ -268,6 +280,20 @@ export function spendSoFar({ root, startedMs, realSpawn, ceilingUsd, label }) {
   const stop = ceilingHaltVerdict({ spend, ceilingUsd, unpriced, emitFailures });
   const lines = [`[stories] spend ${label}: ${v.reason}`];
   for (const n of spend.notes ?? []) lines.push(`[stories] spend: ${n}`);
+  // `forge-8vfn.7.6.76` — THE ARM ITSELF, PRINTED. A classifier only reachable
+  // by import does not close this bead: every dir that MIGHT be why nothing
+  // has priced gets read now, judged against its own previous read (absent on
+  // the first call, which `classifyUnmeasuredDispatch` already treats as
+  // growth from zero), and the previous-read Map is updated so the NEXT beat
+  // boundary compares against THIS one.
+  if (spend.measured === false) {
+    for (const dir of dirs) {
+      const current = readDispatchSnapshot(dir, snapshotSeams);
+      const arm = classifyUnmeasuredDispatch(current, unmeasuredSnapshots.get(dir));
+      lines.push(`[stories] spend ${label}: UNMEASURED ${basename(dir)} — ${arm.detail}`);
+      unmeasuredSnapshots.set(dir, current);
+    }
+  }
   // PRINTED EVERY BEAT once it is true, not only at the halt: the run that
   // went blind should say so in the transcript at the beat it happened, and a
   // guard that speaks only when it fires reads like one that never ran.
