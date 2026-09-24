@@ -108,6 +108,14 @@ export type RoadmapInitiative = {
    * the canvas's projected zone with an honest "no date" marker instead.
    */
   completedAt?: string;
+  /**
+   * M7 findings row 59: forge-architect and forge-develop both terminate at
+   * the SAME status word (`ready-for-review`), so `status` alone cannot
+   * tell a card apart. Sourced from `manifest.flow_id` via
+   * `buildProjectRoadmap` (apps/forge/bridge-studio.ts) — absent (never
+   * fabricated) for a manifest that carries no `flow_id`.
+   */
+  flowId?: string;
 };
 
 export type ProjectRoadmap = {

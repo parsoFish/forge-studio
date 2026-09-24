@@ -78,6 +78,7 @@ function buildRoadmap(): ProjectRoadmap {
         dependsOnInitiatives: [],
         workItems: [wi('WI-A1')],
         completedAt: '2026-06-05T09:00:00.000Z',
+        flowId: 'forge-architect',
       }),
       initiative({
         initiativeId: 'INIT-B',
@@ -353,6 +354,14 @@ test('[W6-RV-2] AT6: a done card carries data-completed-at, honestly matching Ru
   expect(tagContaining(html, 'data-initiative-id="INIT-A"')).toContain('data-completed-at="2026-06-05T09:00:00.000Z"');
   // Never fabricated for a card with no completedAt.
   expect(tagContaining(html, 'data-initiative-id="INIT-B"')).not.toContain('data-completed-at');
+});
+
+test('[M7 findings row 59] AT6b: the card carries data-initiative-flow-id beside data-initiative-status — forge-architect and forge-develop both terminate at "ready-for-review", so the status word alone cannot tell them apart', () => {
+  const html = render();
+  const tagA = tagContaining(html, 'data-initiative-id="INIT-A"');
+  expect(tagA).toContain('data-initiative-flow-id="forge-architect"');
+  // Never fabricated for a card whose roadmap entry carries no flowId.
+  expect(tagContaining(html, 'data-initiative-id="INIT-B"')).not.toContain('data-initiative-flow-id');
 });
 
 // ---------------------------------------------------------------------------
