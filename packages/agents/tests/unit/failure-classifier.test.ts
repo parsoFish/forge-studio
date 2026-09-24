@@ -621,18 +621,18 @@ test('classifyCycleFailure: pm.empty-decomposition unchanged — still terminal'
 
 // ── R4-10-F1: the successor nodes' delivery-gate failures classify accurately ──
 
-test('classifyCycleFailure: execDemo delivery-gate throw → terminal "demo pipeline failed" (NOT reviewer-Ralph)', () => {
+test('classifyCycleFailure: the integrate band\'s delivery-gate throw → terminal "integrate band failed" (NOT reviewer-Ralph)', () => {
   const events = [
     ev({
       phase: 'orchestrator',
       skill: 'cycle',
       event_type: 'error',
-      message: 'delivery gate: demo pipeline failed (author-invalid: demo.json never validated) — the branch is not review-ready, so no PR is opened.',
+      message: 'delivery gate: integrate band failed (render-failed: the derived bundle never rendered) — the branch is not review-ready, so no PR is opened.',
     }),
   ];
   const c = classifyCycleFailure(events);
   assert.equal(c.kind, 'terminal');
-  assert.match(c.reason, /demo pipeline failed/i);
+  assert.match(c.reason, /integrate band failed/i);
   assert.doesNotMatch(c.reason, /reviewer-Ralph/i);
 });
 
