@@ -135,11 +135,13 @@ export function readSkillPackage(forgeRoot: string, id: string): PackageFile[] {
       if (real !== rootAbs && !real.startsWith(boundary)) {
         throw new Error(`readSkillPackage: package entry "${relPath}" in skill "${id}" escapes the package directory (traversal or symlink) — refusing to read`);
       }
-      const st = statSync(absPath); // follows the symlink to the real target's kind
+      // TOCTOU: read only the validated `real` path below — re-touching `absPath`
+      // would follow a symlink a race could swap after the check above.
+      const st = statSync(real);
       if (st.isDirectory()) {
-        walk(absPath, relPath);
+        walk(real, relPath);
       } else if (st.isFile()) {
-        files.push({ path: relPath, body: readFileSync(absPath, 'utf8') });
+        files.push({ path: relPath, body: readFileSync(real, 'utf8') });
       } else {
         throw new Error(`readSkillPackage: package entry "${relPath}" in skill "${id}" is neither a file nor a directory`);
       }

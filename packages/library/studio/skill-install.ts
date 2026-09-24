@@ -68,7 +68,7 @@ const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
 // installSkillPackage — validate the WHOLE package, then write (AT-21)
 // ---------------------------------------------------------------------------
 
-type RawPackageEntry = { relPath: string; absPath: string };
+type RawPackageEntry = { relPath: string; realPath: string };
 
 /** Walk a package directory, resolving every entry through realpath so a
  *  symlink (or, in principle, a literal `../` component) that escapes the
@@ -99,11 +99,13 @@ function walkPackageDir(packageDir: string): RawPackageEntry[] {
           `installSkillPackage: package entry "${relPath}" escapes the package directory (traversal or symlink) — refusing to install`,
         );
       }
-      const st = statSync(absPath); // follows the symlink to the real target's kind
+      // TOCTOU: read only the validated `real` path below — re-touching `absPath`
+      // would follow a symlink a race could swap after the check above.
+      const st = statSync(real);
       if (st.isDirectory()) {
-        walk(absPath, relPath);
+        walk(real, relPath);
       } else if (st.isFile()) {
-        out.push({ relPath, absPath });
+        out.push({ relPath, realPath: real });
       } else {
         throw new Error(`installSkillPackage: package entry "${relPath}" is neither a file nor a directory`);
       }
@@ -165,7 +167,7 @@ export function installSkillPackage(input: InstallInput): InstallResult {
   const files: PackageFile[] = [];
   let totalBytes = 0;
   for (const entry of rawEntries) {
-    const buf = readFileSync(entry.absPath);
+    const buf = readFileSync(entry.realPath);
     totalBytes += buf.length;
     if (totalBytes > MAX_PACKAGE_BYTES) {
       throw new Error(`installSkillPackage: package "${id}" exceeds the ${MAX_PACKAGE_BYTES}-byte cap`);
