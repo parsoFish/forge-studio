@@ -142,6 +142,78 @@ test('it FAILS on a baseline entry whose file is gone', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// forge-8vfn.5.61 — SLACK: a ceiling above the live file passes green today,
+// with no hint that it could be tightened, so a shrunk file's exemption never
+// shrinks with it (declared-data-fails-open).
+// ---------------------------------------------------------------------------
+
+/** A real baselined row and its true, live line count — the same derivation
+ *  the GREW test above uses, so slack is measured against reality, not the
+ *  baseline's own (possibly already-slack) number. */
+function aBaselinedRow(): { path: string; actual: number } {
+  const real = JSON.parse(readFileSync(BASELINE, 'utf8')) as Record<string, number>;
+  const [path] = Object.entries(real)[0]!;
+  const actual = readFileSync(join(ROOT, path), 'utf8').split('\n').length - 1;
+  return { path, actual };
+}
+
+test('it FAILS on a baseline entry with SLACK — ceiling above the live file, with the exact figure', () => {
+  const real = JSON.parse(readFileSync(BASELINE, 'utf8')) as Record<string, number>;
+  const { path, actual } = aBaselinedRow();
+  withBaseline({ ...real, [path]: actual + 50 }, (b) => {
+    const { code, out } = run(['--baseline', b]);
+    assert.equal(code, 1, `a ceiling above the live file must fail — got exit 0:\n${out}`);
+    assert.match(out, /slack/);
+    assert.ok(out.includes(path), `the offender is named: ${out}`);
+    assert.ok(out.includes(`ceiling ${actual + 50}`), `the ceiling figure must be exact — got:\n${out}`);
+    assert.ok(out.includes(`${actual} lines`), `the live figure must be exact — got:\n${out}`);
+    assert.match(out, /tighten: \d+/, 'a tighten hint, the thing this bead says is missing today');
+  });
+});
+
+test('it does NOT double-count slack as "grown" — one row, one finding', () => {
+  const real = JSON.parse(readFileSync(BASELINE, 'utf8')) as Record<string, number>;
+  const { path, actual } = aBaselinedRow();
+  withBaseline({ ...real, [path]: actual + 50 }, (b) => {
+    const json = JSON.parse(execFileSync('node', [CHECKER, '--json', '--baseline', b], { cwd: ROOT, encoding: 'utf8' }).toString()) as {
+      slack: { path: string }[];
+      grown: { path: string }[];
+    };
+    assert.ok(json.slack.some((s) => s.path === path));
+    assert.ok(!json.grown.some((s) => s.path === path), 'slack and grown are opposite directions, never both');
+  });
+});
+
+test('--write tightens a slack ceiling to the live size, and only that', () => {
+  const real = JSON.parse(readFileSync(BASELINE, 'utf8')) as Record<string, number>;
+  const entries = Object.entries(real);
+  const [slackPath, slackActual] = [entries[0]![0], readFileSync(join(ROOT, entries[0]![0]), 'utf8').split('\n').length - 1];
+  // A second real row, GROWN beyond its ceiling — never a genuine state on
+  // main, but --write must not "fix" a violation by raising the ceiling to
+  // match it; the fixture proves that boundary without needing a real one.
+  const grownPath = entries[1]![0];
+  const grownActual = readFileSync(join(ROOT, grownPath), 'utf8').split('\n').length - 1;
+
+  withBaseline({ ...real, [slackPath]: slackActual + 30, [grownPath]: grownActual - 5 }, (b) => {
+    const before = run(['--baseline', b]);
+    assert.equal(before.code, 1, `the doctored baseline must start red:\n${before.out}`);
+
+    const written = run(['--baseline', b, '--write']);
+    assert.equal(written.code, 0, `--write must exit 0 — got:\n${written.out}`);
+    assert.match(written.out, /check-file-size: WROTE/);
+
+    const rewritten = JSON.parse(readFileSync(b, 'utf8')) as Record<string, number>;
+    assert.equal(rewritten[slackPath], slackActual, 'the slack row is tightened to the live size');
+    assert.equal(rewritten[grownPath], grownActual - 5, 'a GROWN row is never touched — --write only ever lowers a ceiling');
+
+    const after = run(['--baseline', b]);
+    assert.equal(after.code, 1, '--write does not silently launder a real violation; the grown row still fails');
+    assert.match(after.out, /grew/);
+    assert.doesNotMatch(after.out, /slack/, 'the tightened row no longer has slack');
+  });
+});
+
 
 // ---------------------------------------------------------------------------
 // known-flakes #6 — a file that vanishes between the glob and the read
