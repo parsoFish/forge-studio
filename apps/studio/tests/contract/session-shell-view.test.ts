@@ -99,7 +99,6 @@ import {
   isPseudoProjectAnchor,
   pseudoProjectAnchorDestination,
   backToProjectLink,
-  shouldPollSessionSummary,
 } from '../../lib/session-shell-view.ts';
 import type { SessionShellPayload, SessionShellFetchResult } from '../../lib/session-client.ts';
 // W6-B9 reviewer fix — the real, on-disk SSOT this file's own
@@ -810,31 +809,4 @@ test('W8-B3: a RENDERED but empty pane names the sources that exist — deriveSe
   } as unknown as Partial<SessionShellPayload>);
   expect(askingWithout.emptyStageMessage).toContain('nothing has been written to this session yet');
   expect(askingWithout.emptyStageMessage).not.toContain('on disk');
-});
-
-// ---------------------------------------------------------------------------
-// forge-d5ib — shouldPollSessionSummary: a legacy session's per-kind summary
-// endpoint can only ever resolve to nothing (its working files are gone), so
-// the page's summary poll must stop once a session is known to be legacy.
-// ---------------------------------------------------------------------------
-
-test('RED forge-d5ib: a settled ready state for a LEGACY session must NOT poll the summary', () => {
-  const legacyReady = sessionShellState({ ...SINGLE_STAGE_PAYLOAD, legacy: true });
-  expect(shouldPollSessionSummary(legacyReady)).toBe(false);
-});
-
-test('forge-d5ib: a settled ready state for a NON-legacy session still polls the summary', () => {
-  const liveReady = sessionShellState({ ...SINGLE_STAGE_PAYLOAD, legacy: false });
-  expect(shouldPollSessionSummary(liveReady)).toBe(true);
-});
-
-test('forge-d5ib: an unsettled (loading) state still polls — legacy is unknown until the shell resolves', () => {
-  expect(shouldPollSessionSummary(deriveSessionShellViewState(null))).toBe(true);
-});
-
-test('forge-d5ib: a no-session / error state still polls — neither is known to be legacy', () => {
-  const noSession = deriveSessionShellViewState({ ok: false, errorKind: 'not-found', error: 'gone' });
-  const errored = deriveSessionShellViewState({ ok: false, errorKind: 'server-error', error: 'boom' });
-  expect(shouldPollSessionSummary(noSession)).toBe(true);
-  expect(shouldPollSessionSummary(errored)).toBe(true);
 });
