@@ -53,7 +53,7 @@ export { TOGGLE_GUARD_IDS, PLATFORM_GUARD_IDS } from '@forge/contracts';
 export const BAND_CANONICAL_SLUG: Readonly<Record<BandGuardId, string>> = {
   'wi-contract': 'project-manager',
   'reflection-close': 'reflector',
-  'demo-band': 'demo-agent',
+  'integrate-band': 'demo-agent',
   'review-band': 'adversarial-review',
   'onboard-preflight': 'contract-check',
 };

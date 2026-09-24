@@ -9,9 +9,9 @@
  * PENDING fix WIs and an UNMERGED PR, re-claims the manifest threading the SAME
  * `cycle_id` (mechanism B) and re-enters `runCycle({ resumeFrom: 'develop' })`:
  * the dev-loop RUNS (prior WIs fast-exit via the iter-0 already-complete
- * shortcut, fix WIs build), then the develop flow's demo node re-authors
+ * shortcut, fix WIs build), then the develop flow's integrate node re-authors
  * demo.json + the PR description against the fixed branch and the spine
- * re-presents (R4-10-F1 — no re-armed unifier UWI; the demo node owns the
+ * re-presents (R4-10-F1 — no re-armed unifier UWI; the integrate node owns the
  * re-demo). One cycleId ⇒ one `_logs` dir ⇒ cost/status lineage + WI hexes
  * never fork.
  *
@@ -124,7 +124,7 @@ export async function drainPendingFixWorkItems(
       // SEC-02 round 4: the sibling of `finalize-merged`'s round-3 guard, and
       // the highest-consequence instance in this WI — an UNATTENDED daemon
       // sweep that builds a full `CycleInput` and re-enters an entire cycle
-      // (`runCycle({resumeFrom:'develop'})`: dev-loop, PM, demo,
+      // (`runCycle({resumeFrom:'develop'})`: dev-loop, PM, integrate,
       // adversarial-review) against these two values, plus `spawnSync('git',
       // …, {cwd: worktreePath})`. The check must precede the `existsSync`
       // probe below, because every later use — `hasReviewCapExhaustedMarker`,
@@ -169,7 +169,7 @@ export async function drainPendingFixWorkItems(
 
       // Operator territory — never auto-retry. The cap marker was already
       // notified loudly at rejection time by whichever writer set it (the
-      // verdict handler for a review-fix send-back, or the demo node's
+      // verdict handler for a review-fix send-back, or the integrate node's
       // demo-fix loop, R4-10-F1 — both fire notify()); don't re-notify every
       // sweep, just report the parked status. Both writers respect the marker,
       // so its presence means no fresh fix WI was enqueued behind it.
@@ -232,11 +232,11 @@ export async function drainPendingFixWorkItems(
         continue;
       }
 
-      // R4-10-F1: no UWI re-arm — the develop flow's demo node re-authors
+      // R4-10-F1: no UWI re-arm — the develop flow's integrate node re-authors
       // demo.json + the PR description against the fixed branch on every
-      // re-entry (resume_from:'develop' runs dev→demo→adversarial-review→verdict).
+      // re-entry (resume_from:'develop' runs dev→integrate→adversarial-review→verdict).
       // The unifier node (and its static UWI-1) is off the live flow; the
-      // re-demo is the demo node's own job now, not a re-armed unifier mission.
+      // re-demo is the integrate node's own job now, not a re-armed unifier mission.
 
       // Heartbeat the claimed manifest so a daemon crash mid-drain leaves a
       // STALE heartbeat the recovery sweep reclaims — and resumes correctly

@@ -158,7 +158,7 @@ export function parseManifest(content: string): InitiativeManifest {
     const deps = (data.depends_on_initiatives as unknown[]).filter((s): s is string => typeof s === 'string');
     if (deps.length > 0) manifest.depends_on_initiatives = deps;
   }
-  if (data.resume_from === 'demo' || data.resume_from === 'develop') {
+  if (data.resume_from === 'integrate' || data.resume_from === 'develop') {
     manifest.resume_from = data.resume_from;
   }
   if (
@@ -231,7 +231,7 @@ export function serializeManifest(m: InitiativeManifest): string {
   if (m.depends_on_initiatives && m.depends_on_initiatives.length > 0) {
     data.depends_on_initiatives = m.depends_on_initiatives;
   }
-  if (m.resume_from === 'demo' || m.resume_from === 'develop') {
+  if (m.resume_from === 'integrate' || m.resume_from === 'develop') {
     data.resume_from = m.resume_from;
   }
   if (typeof m.review_rounds === 'number') {
@@ -536,20 +536,20 @@ export function persistManifestSpecs(manifestPath: string, specs: string[]): voi
 }
 
 /**
- * ADR 019 (successor develop flow, R4-10-F6): stamp `resume_from: demo` on the
+ * ADR 019 (successor develop flow, R4-10-F6): stamp `resume_from: integrate` on the
  * manifest when a cycle has every WI `complete` but the post-develop band has not
  * yet finished, so that if the daemon CRASHES the recovery sweep can move the
  * manifest to pending and the scheduler resumes it correctly (reuse the worktree,
- * skip PM + dev-loop, re-enter at the `demo` node) instead of re-running a full
+ * skip PM + dev-loop, re-enter at the `integrate` node) instead of re-running a full
  * cycle. Idempotent + best-effort. `forge requeue` (full re-run) clears it.
- * (Was `persistManifestResumeFromUnifier` / `resume_from: unifier` pre-cutover.)
+ * (Was `persistManifestResumeFromDemo` pre-rename (8vfn.6.10.18); `persistManifestResumeFromUnifier` pre-cutover.)
  */
-export function persistManifestResumeFromDemo(manifestPath: string): void {
+export function persistManifestResumeFromIntegrate(manifestPath: string): void {
   try {
     if (!existsSync(manifestPath)) return;
     const m = parseManifest(readFileSync(manifestPath, 'utf8'));
-    if (m.resume_from === 'demo') return;
-    writeFileSync(manifestPath, serializeManifest({ ...m, resume_from: 'demo' }));
+    if (m.resume_from === 'integrate') return;
+    writeFileSync(manifestPath, serializeManifest({ ...m, resume_from: 'integrate' }));
   } catch {
     /* best-effort — must not fail the verdict request */
   }
@@ -560,7 +560,7 @@ export function persistManifestResumeFromDemo(manifestPath: string): void {
  * (absent ⇒ 1) in a single read-modify-write, invoked by the review verdict
  * handler each time review feedback compiles into fix work-items and the
  * cycle re-dispatches the develop agent. The CALLER holds the manifest's
- * proper-lockfile lock — same contract as `persistManifestResumeFromDemo`
+ * proper-lockfile lock — same contract as `persistManifestResumeFromIntegrate`
  * — this function does no locking of its own.
  *
  * Unlike the other `persistManifest*` helpers, this one is deliberately NOT
@@ -570,7 +570,7 @@ export function persistManifestResumeFromDemo(manifestPath: string): void {
  * response from what's actually on disk).
  *
  * Always overwrites `resume_from` regardless of its prior value — an
- * operator-driven send-back supersedes a stale `resume_from: 'demo'`
+ * operator-driven send-back supersedes a stale `resume_from: 'integrate'`
  * crash-recovery stamp; the newer, more specific intent wins.
  */
 export function persistManifestSendBack(manifestPath: string): { round: number } {

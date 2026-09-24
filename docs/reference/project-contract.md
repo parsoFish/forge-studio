@@ -680,7 +680,7 @@ consistently locatable; the durable plan/verdict record is forge-owned and centr
 > the [ADR-036 amendment](../decisions/036-orchestrator-owned-gate-execution.md)
 > (APPROVED 2026-07-24), and this spec is now live: `runMergeBoundaryGate`
 > (`packages/flows/cycle-helpers.ts`) runs the full-suite gate at the develop
-> flow's merge boundary — inside the integrate band (`execDemo`, in
+> flow's merge boundary — inside the integrate band (`execIntegrate`, in
 > `packages/factory/phases/executor-table.ts` since M2-B),
 > BEFORE integrate runs, on the integrated branch tip. A red baseline compiles a
 > `gate-fix` work item (`packages/flows/gate-fix-loop.ts`) + stamps the send-back,

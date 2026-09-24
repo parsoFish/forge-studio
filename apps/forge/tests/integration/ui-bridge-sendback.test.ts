@@ -253,7 +253,7 @@ test('send-back cap exhaustion: round cap reached → 409 parked needs-operator,
   }
 });
 
-test('send-back with a REVIEW-CAP-EXHAUSTED marker present → 409 parked needs-operator, no new WI (R4-10-F1: honour the demo node\'s marker)', async () => {
+test('send-back with a REVIEW-CAP-EXHAUSTED marker present → 409 parked needs-operator, no new WI (R4-10-F1: honour the integrate node\'s marker)', async () => {
   // The demo-fix loop (demo-fix-loop.ts) is a SECOND writer of the shared
   // marker, and the drain skips any marker-bearing manifest before reading
   // pending WIs — so a send-back that enqueued a WI here (its own per-WI cap
