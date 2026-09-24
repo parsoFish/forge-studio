@@ -29,15 +29,26 @@
  * `project-config-validate.ts`'s `parseSkills`, so it rides the same
  * containment guard every other per-id leaf read in this codebase does).
  *
- * DELIBERATELY NOT a fix for the artifactRoot skill-layout mismatch the bead
- * ALSO reports (terraform-provider-betterado's skills living under
- * `forge/skills/<id>/` because its `artifactRoot` is `"forge"`, not
- * `.forge/skills/<id>/`) — the bead is explicit that "the defect is not the
- * layout"; a project on a non-default artifactRoot still correctly reads
- * `pass: false` here today, exactly the honest signal this clause exists to
- * produce. Closing the layout mismatch itself is a separate, larger change
- * (S3 beat 6, blocked on the not-yet-built Rebuild control) — deliberately
- * out of scope here.
+ * THIRD RESOLUTION SOURCE (M7 findings row 21, closing the gap this file
+ * used to defer): a bound id ALSO resolves at `<artifactRoot>/skills/<id>/
+ * SKILL.md` — the exact terraform-provider-betterado shape (`artifactRoot:
+ * "forge"`, skills living under `forge/skills/<id>/`). This used to read
+ * `pass: false` here, deferred as "a separate, larger change (S3 beat 6,
+ * blocked on the not-yet-built Rebuild control)". The Rebuild control has
+ * since shipped (`reset.ts`'s `computeContractDrift`/`applyContractReset`,
+ * Studio's `RebuildContractPanel`) and its own `computeSkillsDrift` already
+ * treats this exact location as "the one evidenced alternate" (see that
+ * function's header) — this clause was the one place still blind to it,
+ * refusing a claim the Rebuild control would happily relocate. Resolving it
+ * here does not replace the Rebuild control: a project may leave a skill
+ * living under `artifactRoot` indefinitely (this clause now passes it) or
+ * run "Rebuild contract" to physically move it to the canonical
+ * `.forge/skills/<id>/` path — both are valid. `artifactRoot` is read off
+ * the already-validated `cfg.artifactRoot` (parsed once by
+ * `project-config.ts`'s `parseArtifactRoot`, which already rejects an
+ * absolute value, a backslash, or a `..` segment) — never re-parsed here —
+ * and, like every other per-id leaf read in this file, rides `guardedFile`'s
+ * containment guard, never a raw join.
  *
  * No `skills` declared at all is not a gap — it PASSES trivially. This
  * clause exists to catch a binding that LIES (declared, but dead), not to
@@ -48,18 +59,40 @@ import { guardedFile } from '@forge/kernel';
 import type { ClauseResult } from '@forge/kernel';
 import type { ProjectConfig } from './project-config.ts';
 
+/**
+ * Splits an optional `artifactRoot` into path segments for `guardedFile`.
+ * Mirrors `reset.ts`'s private `artifactRootSegments` (same semantics, not
+ * imported: `reset.ts` imports `runPreflight` from `preflight.ts`, which
+ * imports `checkSkills` from this file, so an import the other way would
+ * cycle). `artifactRoot` itself is never re-parsed from disk here — it
+ * arrives already validated on `cfg.artifactRoot`.
+ */
+function artifactRootSegments(artifactRoot: string | undefined): string[] {
+  if (!artifactRoot) return [];
+  return artifactRoot.split('/').filter((s) => s.length > 0 && s !== '.');
+}
+
 export function checkSkills(dir: string, cfg: ProjectConfig | null, forgeRoot: string): ClauseResult {
-  const base = { clause: 'SKILLS' as const, title: 'Declared skills resolve (project-local or forge-wide)', hard: true };
+  const base = {
+    clause: 'SKILLS' as const,
+    title: 'Declared skills resolve (project-local, forge-wide, or under artifactRoot)',
+    hard: true,
+  };
   const declared = cfg?.skills ?? [];
   if (declared.length === 0) {
     return { ...base, pass: true, detail: 'no skills declared — nothing to resolve' };
   }
 
+  const artifactSegs = artifactRootSegments(cfg?.artifactRoot);
+
   const missing = declared.filter((id) => {
     const local = guardedFile(dir, ['.forge', 'skills', id, 'SKILL.md'], 'read');
     if (local !== null) return false;
     const forgeWide = guardedFile(forgeRoot, ['skills', id, 'SKILL.md'], 'read');
-    return forgeWide === null;
+    if (forgeWide !== null) return false;
+    if (artifactSegs.length === 0) return true;
+    const underArtifactRoot = guardedFile(dir, [...artifactSegs, 'skills', id, 'SKILL.md'], 'read');
+    return underArtifactRoot === null;
   });
 
   if (missing.length === 0) {
@@ -70,7 +103,8 @@ export function checkSkills(dir: string, cfg: ProjectConfig | null, forgeRoot: s
     pass: false,
     detail:
       `${missing.length} of ${declared.length} declared skill(s) do not resolve — no SKILL.md at ` +
-      `.forge/skills/<id>/ (project-local) or <forgeRoot>/skills/<id>/ (forge-wide): ${missing.join(', ')}. ` +
-      'An agent dispatched against this project silently loses these bindings.',
+      '.forge/skills/<id>/ (project-local), <forgeRoot>/skills/<id>/ (forge-wide)' +
+      `${artifactSegs.length > 0 ? `, or ${artifactSegs.join('/')}/skills/<id>/ (artifactRoot)` : ''}: ` +
+      `${missing.join(', ')}. An agent dispatched against this project silently loses these bindings.`,
   };
 }
