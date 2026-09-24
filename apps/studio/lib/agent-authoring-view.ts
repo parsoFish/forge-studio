@@ -23,7 +23,7 @@
  * objects, never mutates its input.
  */
 
-import type { Agent, AgentCapabilityDescriptor, AgentRuntime } from './studio-client';
+import type { Agent, AgentCapabilityDescriptor, AgentRuntime, AgentFanout } from './studio-client';
 // Explicit `.ts` extension (moduleResolution: "bundler" tolerates it, and
 // Next/vitest already resolve `./authoring-package-shape`-style extension-
 // less siblings fine either way) — this is a VALUE import (unlike the
@@ -64,6 +64,23 @@ export type AgentBuilderState = {
    *  rather than let either side win. */
   declaredMaxBudgetUsd?: number;
   costCeilingEnforceable: boolean;
+  /**
+   * agents-15 — SKILL.md-authored, read-only in the builder UI (same class
+   * as `phase`/`allowedTools` above): never edited here, only carried
+   * through load → Definition Preview so the preview can show the
+   * definition as it will actually be saved (the server preserves it
+   * unchanged from `existing` when the PUT body omits it — see
+   * `buildAgentPutBody`, which does not send it for exactly that reason).
+   * `description`/`library`/`surface`/`executor`/`budgets` are the SAME
+   * class of field but are NOT carried here: `Agent` (studio-client.ts)
+   * never parsed them off the wire in the first place, and that file is at
+   * its 800-line ratchet ceiling (`scripts/baselines/file-size.json`,
+   * 2540/2540 — `check-file-size.mjs` fails on ANY growth, exempted or not)
+   * — wiring them needs that file split first, which is its own initiative,
+   * not a line this cluster fix can add. Reported as a gap, not silently
+   * dropped.
+   */
+  fanout?: AgentFanout;
 };
 
 export const DEFAULT_AGENT_RUNTIME: AgentRuntime = {
@@ -103,6 +120,7 @@ export function parseAgentToState(raw: Agent): AgentBuilderState {
     capability: raw.capability,
     costCeilingEnforceable: raw.costCeilingEnforceable === true,
     declaredMaxBudgetUsd: raw.declaredMaxBudgetUsd,
+    fanout: raw.fanout,
   };
 }
 
@@ -148,6 +166,28 @@ export function buildAgentPutBody(state: AgentBuilderState, opts: { create: bool
       range: state.runtime.range,
       loopStrategy: state.runtime.loopStrategy,
     },
+  };
+}
+
+/**
+ * agents-15 — the Definition Preview's ONE data source. Spreads
+ * `buildAgentPutBody`'s own return value (so every field that function
+ * sends on save — today's composition/runtime/materials/allowedTools/
+ * disallowedTools, and whatever future field a save-path change adds —
+ * reaches the preview with no second hand-maintained list to keep in
+ * sync), then attaches the read-only pass-through fields `buildAgentPutBody`
+ * deliberately does NOT send (they are not editable in the builder, so
+ * sending them risks nothing today, but the preview must still show them:
+ * the server round-trips them unchanged into the saved SKILL.md either
+ * way). `slug` rides too — the PUT route param, not a body field, but part
+ * of the definition being previewed.
+ */
+export function buildAgentPreviewModel(state: AgentBuilderState): Record<string, unknown> {
+  return {
+    slug: state.slug,
+    ...buildAgentPutBody(state, { create: false }),
+    phase: state.phase,
+    fanout: state.fanout,
   };
 }
 

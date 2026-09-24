@@ -68,6 +68,7 @@ import {
 import {
   parseAgentToState,
   buildAgentPutBody,
+  buildAgentPreviewModel,
   duplicateAgentState,
   EMPTY_STATE,
   BLANK_STATE,
@@ -871,22 +872,7 @@ export default function AgentBuilderPage() {
             onRunDispatched={() => setHistoryNonce((n) => n + 1)} onRunSettled={() => setHistoryNonce((n) => n + 1)}
           />
 
-          <YamlPreview
-            slug={state.slug}
-            name={state.name}
-            purpose={state.purpose}
-            skills={state.skills}
-            tools={state.tools}
-            mcps={state.mcps}
-            guards={state.guards}
-            hooks={state.hooks}
-            materials={state.materials}
-            process={state.process}
-            interactivity={state.interactivity}
-            runtime={state.runtime}
-            brainAccess={state.brainAccess}
-            catalog={catalog}
-          />
+          <YamlPreview definition={buildAgentPreviewModel(state)} catalog={catalog} />
           <ReadinessPanel state={readinessState} />
           {/* W7-C1 (agents-27): the dispatch-provenance note keeps an agent
               dispatched OUTSIDE the flow graph (release-finalizer's merge
