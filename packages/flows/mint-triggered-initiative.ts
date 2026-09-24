@@ -18,6 +18,7 @@ import { defaultConfigPath, guardedFile, loadConfig, resolveProjectsDir, resolve
 import { writeManifest, mintAndPersistManifestCycleId, readManifestCycleId, type InitiativeManifest } from './manifest.ts';
 import { getPaths } from './queue.ts';
 import { loadFlowDefinition } from './studio/flow-registry.ts';
+import { flowPathForId } from './flow-runner.ts';
 import type { FlowRunRequest } from './flow-run-requests.ts';
 import { FLOW_ID_RE } from './enqueue-flow-run.ts';
 
@@ -135,7 +136,7 @@ export function mintTriggeredInitiative(
     if (!FLOW_ID_RE.test(flowId ?? '')) {
       return { status: 'error', detail: `target ref ${JSON.stringify(flowId ?? '')} is not a valid flow id slug` };
     }
-    const flow = loadFlowDefinition(join(forgeRoot, 'studio', 'flows', flowId, 'flow.yaml'));
+    const flow = loadFlowDefinition(flowPathForId(flowId, forgeRoot));
     if (!flow.project) {
       return { status: 'no-project', detail: `flow "${flowId}" has no project binding — external triggers need one (lint: trigger-cron/trigger-webhook/trigger-agent-complete)` };
     }
