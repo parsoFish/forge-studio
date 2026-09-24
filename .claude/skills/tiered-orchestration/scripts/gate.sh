@@ -463,6 +463,65 @@ else
   fi
 fi
 
+# ---- host contention, bracketed (M7 findings row 15) --------------------------------------
+# §2.6's finding: the suite-lock serialises gates against EACH OTHER but not
+# against CPU — a costed story run (bridge + chromium + agents) held under
+# `.run-lock` shares the box with a gate's steps, and a run measured load
+# 8–12 during which three unrelated tests timed out; one of those surfaced as
+# TEN misleading FAILs from a single mount timeout. This does not fix the
+# contention — it NAMES it, so a reader of a red gate can tell "this measured
+# something real" from "the host was starved" without re-deriving it from
+# `_1.0/reports/`.
+#
+# `load_avg()` reports `load1 load5 load15`, the same shape `run-observe.mjs`
+# already uses for a story's per-beat host record (`hostState()`), matched
+# rather than invented a second time. `FORGE_LOADAVG_FILE` is the test seam,
+# same idiom as `FORGE_PROC_LOCKS`: `/proc/loadavg` cannot be made to hold a
+# chosen number, so a door proving the threshold and the stamp fire correctly
+# points here instead.
+load_avg() {
+  awk '{print $1, $2, $3}' "${FORGE_LOADAVG_FILE:-/proc/loadavg}" 2>/dev/null
+}
+
+# THE THRESHOLD IS NAMED, not buried in a comparison a reader has to re-derive
+# (§15.92's lesson one layer up): 2x nproc is generous headroom — this box
+# idles under 3 on 12 cores — so crossing it means "something else is plainly
+# running", not routine background noise. Overridable, same idiom as
+# `FORGE_SUITE_LOCK_WAIT` below, for a host whose own idle load differs.
+GATE_LOAD_THRESHOLD_MULT="${FORGE_GATE_LOAD_THRESHOLD_MULT:-2}"
+GATE_NPROC="$(nproc 2>/dev/null || echo 1)"
+GATE_LOAD_THRESHOLD="$(awk -v m="$GATE_LOAD_THRESHOLD_MULT" -v n="$GATE_NPROC" 'BEGIN{printf "%.2f", m*n}')"
+
+# True (exit 0) iff the 1-minute figure in a `load_avg()` string exceeds the
+# threshold. An unreadable/empty reading short-circuits to false: an UNKNOWN
+# load must never manufacture a PROVISIONAL stamp.
+load_over_threshold() {
+  local one="${1%% *}"
+  [ -n "$one" ] || return 1
+  awk -v v="$one" -v t="$GATE_LOAD_THRESHOLD" 'BEGIN{exit !(v > t)}'
+}
+
+# THE RUN-LOCK'S HOLDER, reusing the ONE classifier this file already has
+# rather than a second `/proc/locks` reader (this file's own §15.480-era
+# lesson). `gate.sh` never takes `.run-lock` itself — `with-locks.sh`'s header
+# states the opposite: `gate.sh` REFUSES UNDER it — so ANCESTOR is reachable
+# only if a caller mis-wraps a gate inside its own run-lock hold, exactly the
+# shape `with-locks.sh` refuses at launch.
+runlock_holder() {
+  if [ -z "${FORGE_RUN_LOCK:-}" ]; then
+    echo "NOT CONFIGURED"
+  else
+    suite_lock_state "$FORGE_RUN_LOCK"
+  fi
+}
+
+GATE_LOAD_START="$(load_avg)"
+GATE_RUNLOCK_HOLDER_START="$(runlock_holder)"
+echo "GATE_LOAD_START=${GATE_LOAD_START:-UNKNOWN}"
+echo "GATE_RUNLOCK_HOLDER_START=$GATE_RUNLOCK_HOLDER_START"
+GATE_LOAD_PROVISIONAL=0
+load_over_threshold "$GATE_LOAD_START" && GATE_LOAD_PROVISIONAL=1
+
 LOGS="${CAMP:+$CAMP/reports}"; [ -n "$LOGS" ] && mkdir -p "$LOGS" || LOGS="$(mktemp -d)"
 echo "logs: $LOGS"
 fail=0
@@ -575,6 +634,21 @@ if [ "$PIN1" != "$PIN0" ]; then
   echo "GATE_TREE_MOVED: head ${PIN0%% *} -> ${PIN1%% *}, porcelain ${PIN0##* } -> ${PIN1##* } — the tree changed while this gate ran (§15.540), so every verdict above is about a tree that no longer exists. UNKNOWN, not red: commit or revert, then re-gate."
   exit 3
 fi
+# ---- host contention, the END bracket (M7 findings row 15) ---------------------------------
+GATE_LOAD_END="$(load_avg)"
+GATE_RUNLOCK_HOLDER_END="$(runlock_holder)"
+echo "GATE_LOAD_END=${GATE_LOAD_END:-UNKNOWN}"
+echo "GATE_RUNLOCK_HOLDER_END=$GATE_RUNLOCK_HOLDER_END"
+load_over_threshold "$GATE_LOAD_END" && GATE_LOAD_PROVISIONAL=1
+# A STAMP FOR THE READER, NEVER A LAUNDERING (M7 findings row 15): the exit
+# code below is computed exactly as it always was, from `fail`/`refused`
+# alone, and this line changes neither — it only tells a reader that host
+# contention was observed at one end of this gate or the other, so a red (or
+# a green) here may be about the host as much as the tree.
+if [ "$GATE_LOAD_PROVISIONAL" -eq 1 ]; then
+  echo "GATE_VERDICT=PROVISIONAL reason=load>${GATE_LOAD_THRESHOLD} (threshold ${GATE_LOAD_THRESHOLD_MULT}x nproc=${GATE_NPROC}, observed start=${GATE_LOAD_START:-UNKNOWN} end=${GATE_LOAD_END:-UNKNOWN})"
+fi
+
 # A real failure outranks a refusal: a gate that both lost a step AND was
 # refused another is red, not "try again later".
 if [ "$fail" -ne 0 ]; then exit "$fail"; fi
