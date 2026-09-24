@@ -43,72 +43,41 @@
  * see the PRECONDITION test in `skill-staging-case.test.ts`.
  */
 
-import { mkdirSync, writeFileSync, statSync, unlinkSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
-import { resolveGuardedPath, guardedFile } from '@forge/kernel';
+import {
+  resolveGuardedPath,
+  guardedFile,
+  detectVolumeCaseFolding as probeVolumeCaseFolding,
+  CaseFoldingProbeError,
+} from '@forge/kernel';
+import type { CaseFoldingProbe } from '@forge/kernel';
 
 export class SkillStagingError extends Error {}
 
 type SkillEntry = { path: string; contentBase64: string };
 
-/** Injectable seam for volume case-behaviour detection (forge-gp4, mirroring
- *  `materials-staging.ts`'s `CaseFoldingProbe`/bead forge-qn8) — drives the
- *  folding code path deterministically in tests on a case-sensitive dev
- *  machine. `dir` is always `stagingRoot` (real at call time). */
-export type CaseFoldingProbe = (dir: string) => boolean;
-
-/** Marker-name prefix for `detectVolumeCaseFolding`'s throwaway probe entry
- *  — namespaced and unlikely to collide with a real staged package entry. */
-const CASE_PROBE_PREFIX = '.forge-case-probe-';
-
-/** Flips the case of every ASCII letter in `s` — the exact shape of the real
- *  bug (`SKILL.md` vs `skill.md`), never any other change. */
-function flipAsciiCase(s: string): string {
-  return s.replace(/[a-zA-Z]/g, (c) => (c === c.toUpperCase() ? c.toLowerCase() : c.toUpperCase()));
-}
+export type { CaseFoldingProbe };
 
 /**
- * The REAL, default `CaseFoldingProbe` — a verbatim mirror of
- * `materials-staging.ts`'s `detectVolumeCaseFolding` (see that function's own
- * docstring for the full method/rationale): create a throwaway marker under
- * `dir`, stat it, stat its case-flipped spelling, and compare `{dev, ino}`.
- * `ENOENT` on the flipped spelling → case-sensitive (`false`); any other stat
- * failure is indeterminate and defaults CONSERVATIVELY to `true` (folding),
- * never silently to `false`. If the marker itself cannot be created, this
- * throws `SkillStagingError` rather than silently falling back to a literal
- * comparison — a duplicate-target check that might silently be wrong is
- * worse than one that refuses to run.
+ * The default `CaseFoldingProbe` (forge-gp4, mirroring `materials-staging.ts`'s
+ * bead forge-qn8) — a thin wrapper around `@forge/kernel`'s
+ * `detectVolumeCaseFolding` (the shared probe mechanism every staging module
+ * now imports; see that module's own docstring for the method and its
+ * conservative-on-failure default) that translates a probe-cannot-run
+ * failure into this module's own typed `SkillStagingError`, matching the
+ * established throw-not-return convention rather than letting a bare kernel
+ * error escape uncaught. `dir` is always `stagingRoot` (real at call time).
  */
 export function detectVolumeCaseFolding(dir: string): boolean {
-  const marker = `${CASE_PROBE_PREFIX}${randomBytes(8).toString('hex')}-AbCdEf`;
-  const markerPath = join(dir, marker);
-  const flippedPath = join(dir, flipAsciiCase(marker));
-
-  let markerStat: ReturnType<typeof statSync>;
   try {
-    writeFileSync(markerPath, '');
-    markerStat = statSync(markerPath);
+    return probeVolumeCaseFolding(dir);
   } catch (err) {
-    throw new SkillStagingError(
-      `skill: case-folding probe could not run — refusing to stage without a reliable duplicate-target check: ${(err as Error).message}`,
-    );
-  }
-
-  try {
-    const flippedStat = statSync(flippedPath);
-    return flippedStat.dev === markerStat.dev && flippedStat.ino === markerStat.ino;
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException)?.code;
-    if (code === 'ENOENT') return false;
-    return true; // indeterminate read-back — conservative default, see docstring
-  } finally {
-    try {
-      unlinkSync(markerPath);
-    } catch {
-      /* best-effort cleanup only — the folding decision above is already made */
+    if (err instanceof CaseFoldingProbeError) {
+      throw new SkillStagingError(`skill: ${err.message}`);
     }
+    throw err;
   }
 }
 
