@@ -168,6 +168,8 @@ test('parseHookLibraryEntry: not a plain object (array, null, string, number) TH
 const WELL_FORMED_DETAIL = {
   ...WELL_FORMED_OK_ENTRY,
   packageHash: 'sha256:' + 'a'.repeat(64),
+  // forge-8vfn.5.16 (M7-C U2): required on every detail payload.
+  fireCount: 0,
   files: [
     { path: 'hook.yaml', body: 'id: pre-pr-security-review\non: PreToolUse\n', hash: 'sha256:' + 'b'.repeat(64) },
     { path: 'scripts/run.sh', body: '#!/usr/bin/env bash\necho ok\n', hash: 'sha256:' + 'c'.repeat(64) },
