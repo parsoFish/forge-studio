@@ -507,3 +507,45 @@ export function requireSessionStatusIo<T>(fn: T | undefined, caller: string): T 
   }
   return fn;
 }
+
+/** M7-C U8 (bead forge-u8y2, W8-F6 follow-up) — the ONE readability predicate
+ *  a `/sessions/<kind>/<sessionId>` link may be minted from. Declared
+ *  STRUCTURALLY (rank-2 `@forge/knowledge` may not import rank-4
+ *  `@forge/sessions`, even for a type) but shaped to match the REAL
+ *  `sessionIsReadable` (packages/sessions/session-resolution.ts) argument-for-
+ *  argument, so the assembly (apps/forge/routes.ts) binds that function
+ *  directly, no wrapper to drift out of step. `project` is a HINT, not a
+ *  claim — same as that function's own `?project=` handling. */
+export type SessionReadabilityProbe = (args: {
+  projectsRoot: string;
+  logsRoot: string;
+  kind: string;
+  sessionId: string;
+  project?: string | null;
+}) => boolean;
+
+/** `_kb-cleanup` (session-resolution.ts's `kindDirName`) — the ONE session
+ *  kind this package mints pointers for (`draftSession` below, and
+ *  `listKbRuns`'s cleanup rows). */
+export const KB_CLEANUP_SESSION_KIND = 'kb-cleanup';
+
+/** Drops `draftSession` from any per-finding row the probe says resolves
+ *  nowhere — mirrors `withReadableSessionPointers` (apps/forge/bridge-studio.ts).
+ *  `probe` OPTIONAL: never a silent drop for existing direct-handler tests
+ *  that do not wire it (today's unfiltered behaviour, unchanged); the real
+ *  bridge (`KnowledgeRouteDeps`, routes.ts) always supplies one. */
+export function withReadableDraftSessions(
+  perFinding: readonly KbDrainPerFinding[],
+  probe: SessionReadabilityProbe | undefined,
+  projectsRoot: string,
+  logsRoot: string,
+): KbDrainPerFinding[] {
+  if (!probe) return [...perFinding];
+  return perFinding.map((f) => {
+    const d = f.draftSession;
+    if (d === undefined) return f;
+    if (probe({ projectsRoot, logsRoot, kind: KB_CLEANUP_SESSION_KIND, sessionId: d.id, project: d.project })) return f;
+    const { draftSession: _unreadable, ...rest } = f;
+    return rest;
+  });
+}

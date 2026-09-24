@@ -25,7 +25,9 @@ import { parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs } from './kb-jo
 import {
   DEFAULT_KB_DRAIN_MAX_COST_USD,
   KB_DRAIN_MAX_ROUNDS,
+  KB_CLEANUP_SESSION_KIND,
   type KbDrainStatus,
+  type SessionReadabilityProbe,
 } from './kb-drain-model.ts';
 
 // ---------------------------------------------------------------------------
@@ -181,7 +183,11 @@ export function whenFromSessionId(sessionId: string): string {
   return `${m[1]}T${m[2]}:${m[3]}:${m[4]}.000Z`;
 }
 
-export function listKbRuns(forgeRoot: string, kbId: string): KbRunRow[] {
+/** `sessionIsReadable` OPTIONAL (M7-C U8, bead forge-u8y2) — existing direct
+ *  callers keep today's unfiltered behaviour; `handleKbRuns` always supplies
+ *  the real predicate. A 'cleanup' row IS its session pointer (no other fact
+ *  worth keeping), so an unreadable one is dropped WHOLE, never emptied. */
+export function listKbRuns(forgeRoot: string, kbId: string, sessionIsReadable?: SessionReadabilityProbe): KbRunRow[] {
   const rows: KbRunRow[] = [];
 
   // Drain runs — status.json is the record.
@@ -251,6 +257,9 @@ export function listKbRuns(forgeRoot: string, kbId: string): KbRunRow[] {
     // (project-bound KBs share the project dir) — filter on the session's
     // own kb_id when it carries one.
     if (sessionKbId !== null && sessionKbId !== kbId) continue;
+    // M7-C U8 (bead forge-u8y2) — never mint a row for a session pointer that
+    // resolves nowhere. Same predicate, same reason, as `withReadableDraftSessions`.
+    if (sessionIsReadable && !sessionIsReadable({ projectsRoot, logsRoot, kind: KB_CLEANUP_SESSION_KIND, sessionId: sid, project: anchor })) continue;
     rows.push({ kind: 'cleanup', id: sid, when: whenFromSessionId(sid), status: phase, costUsd: null, detail: null, project: anchor });
   }
 

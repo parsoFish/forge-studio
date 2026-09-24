@@ -80,13 +80,14 @@ import {
 import {
   handleKbDrainCancel,
   handleKbActiveJob,
-  handleKbRuns,
+  createKbRunsHandler,
   createKbDrainRunHandler,
   createKbDrainStartHandler,
-  handleKbDrainStatus,
+  createKbDrainStatusHandler,
   type KbDrainTailDeps,
 } from './kb-drain-routes.ts';
 import type { KbDrainRunFixTurnFn } from './bridge-studio-kb-drain.ts';
+import type { SessionReadabilityProbe } from './kb-drain-model.ts';
 
 /**
  * The context these handlers receive. `StudioContext` moved to `@forge/kernel`
@@ -152,6 +153,12 @@ export type KnowledgeRouteDeps = KbCreateDeps & KbDrainTailDeps & {
    * the drift check between the two sides.
    */
   runFixTurn: KbDrainRunFixTurnFn;
+  /** M7-C U8 (bead forge-u8y2) — same rank problem as `runFixTurn`
+   *  (`@forge/sessions`' `sessionIsReadable` bound here). OPTIONAL, matching
+   *  `KbDrainTailDeps`: absent is a safe default (today's pre-fix, unfiltered
+   *  behaviour) for the many existing route tests; only the real assembly
+   *  (`apps/forge/routes.ts`) supplies the real predicate. */
+  sessionIsReadable?: SessionReadabilityProbe;
 };
 
 export function knowledgeRoutes(deps: KnowledgeRouteDeps): RouteTable<KnowledgeRouteContext> {
@@ -164,7 +171,10 @@ export function knowledgeRoutes(deps: KnowledgeRouteDeps): RouteTable<KnowledgeR
   // are OPTIONAL on `KnowledgeRouteDeps` — every existing caller (every route
   // test in this package) supplies neither and stays unaffected; only the
   // real assembly (`apps/forge/routes.ts`) supplies the real implementations.
+  // M7-C U8: `sessionIsReadable` rides the same `deps` object, same reason.
   const handleKbDrainRun = createKbDrainRunHandler(deps);
+  const handleKbRuns = createKbRunsHandler(deps);
+  const handleKbDrainStatus = createKbDrainStatusHandler(deps);
   return [
   {
     method: 'GET',

@@ -11,13 +11,14 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 
-import { isSafeRunId } from '@forge/kernel';
+import { isSafeRunId, resolveProjectsDir, loadConfig, defaultConfigPath } from '@forge/kernel';
 import { tryGetKbBackend } from './kb-backend.ts';
 import { createLogger } from '@forge/kernel';
 import { KB_ID_RE } from '@forge/kernel';
 import { enqueueConsolidate } from './bridge-studio-kb-consolidate.ts';
 import { deriveKbActiveJob, activeJobReason, KB_DRAIN_STALE_MS } from './kb-job-state.ts';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
+import { withReadableDraftSessions, type SessionReadabilityProbe } from './kb-drain-model.ts';
 import {
   writeKbDrainStatus,
   readKbDrainStatus,
@@ -29,6 +30,14 @@ import {
   runKbDrain,
   type KbDrainRunFixTurnFn,
 } from './bridge-studio-kb-drain.ts';
+
+/** M7-C U8 — `projectsRoot`/`logsRoot`, derived the SAME way `kb-drain-store.ts`'s `listKbRuns` does. */
+function readabilityRoots(forgeRoot: string): { projectsRoot: string; logsRoot: string } {
+  return {
+    projectsRoot: resolveProjectsDir(forgeRoot, loadConfig(defaultConfigPath(forgeRoot))),
+    logsRoot: join(forgeRoot, '_logs'),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -172,6 +181,7 @@ export async function handleKbRuns(
   ctx: StudioContext,
   rawUrl: string,
   method: string,
+  sessionIsReadable?: SessionReadabilityProbe,
 ): Promise<boolean> {
   // Normalisation rationale: `bridge-studio-kb-routes-lifecycle.ts`'s first copy.
   const url = pathOnly(rawUrl);
@@ -190,7 +200,7 @@ export async function handleKbRuns(
         sendJson(res, 400, { error: 'invalid kb id' }, origin);
         return true;
       }
-      sendJson(res, 200, { ok: true, runs: listKbRuns(ctx.forgeRoot, kbId) }, origin);
+      sendJson(res, 200, { ok: true, runs: listKbRuns(ctx.forgeRoot, kbId, sessionIsReadable) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -198,6 +208,12 @@ export async function handleKbRuns(
   }
 
   return false;
+}
+
+/** M7-C U8 — same factory shape as `createKbDrainRunHandler` below. */
+export function createKbRunsHandler(deps: { sessionIsReadable?: SessionReadabilityProbe }) {
+  return (req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string) =>
+    handleKbRuns(req, res, ctx, rawUrl, method, deps.sessionIsReadable);
 }
 
 /**
@@ -234,6 +250,7 @@ export async function handleKbDrainRun(
   rawUrl: string,
   method: string,
   tail?: KbDrainTailDeps,
+  sessionIsReadable?: SessionReadabilityProbe,
 ): Promise<boolean> {
   // Normalisation rationale: `bridge-studio-kb-routes-lifecycle.ts`'s first copy.
   const url = pathOnly(rawUrl);
@@ -269,18 +286,20 @@ export async function handleKbDrainRun(
     // stops being tailed for the rest of the Studio session.
     if (status.state === 'running') tail?.ensureAgentRunTail?.(kbDrainCycleId(runId));
     else tail?.releaseAgentRunTail?.(kbDrainCycleId(runId));
-    sendJson(res, 200, { ok: true, runId, ...status }, origin);
+    // M7-C U8 — never mint a link for a `draftSession` pointer that resolves nowhere.
+    const { projectsRoot, logsRoot } = readabilityRoots(ctx.forgeRoot);
+    const perFinding = withReadableDraftSessions(status.perFinding, sessionIsReadable, projectsRoot, logsRoot);
+    sendJson(res, 200, { ok: true, runId, ...status, perFinding }, origin);
     return true;
   }
 
   return false;
 }
 
-/** knowledge-01: the same factory shape as `createKbDrainStartHandler`,
- *  below — the tail deps are supplied by the assembly, never imported. */
-export function createKbDrainRunHandler(deps: KbDrainTailDeps) {
+/** knowledge-01 / M7-C U8: same factory shape as `createKbDrainStartHandler` below. */
+export function createKbDrainRunHandler(deps: KbDrainTailDeps & { sessionIsReadable?: SessionReadabilityProbe }) {
   return (req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string) =>
-    handleKbDrainRun(req, res, ctx, rawUrl, method, deps);
+    handleKbDrainRun(req, res, ctx, rawUrl, method, deps, deps.sessionIsReadable);
 }
 
 /**
@@ -398,6 +417,7 @@ export async function handleKbDrainStatus(
   ctx: StudioContext,
   rawUrl: string,
   method: string,
+  sessionIsReadable?: SessionReadabilityProbe,
 ): Promise<boolean> {
   // Normalisation rationale: `bridge-studio-kb-routes-lifecycle.ts`'s first copy.
   const url = pathOnly(rawUrl);
@@ -418,7 +438,10 @@ export async function handleKbDrainStatus(
         sendJson(res, 200, { ok: true, runId: null }, origin);
         return true;
       }
-      sendJson(res, 200, { ok: true, runId: chosen.runId, ...chosen.status }, origin);
+      // M7-C U8 — same drop as `handleKbDrainRun`, for the reattach path.
+      const { projectsRoot, logsRoot } = readabilityRoots(ctx.forgeRoot);
+      const perFinding = withReadableDraftSessions(chosen.status.perFinding, sessionIsReadable, projectsRoot, logsRoot);
+      sendJson(res, 200, { ok: true, runId: chosen.runId, ...chosen.status, perFinding }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -426,4 +449,10 @@ export async function handleKbDrainStatus(
   }
 
   return false;
+}
+
+/** M7-C U8: same factory shape as `createKbRunsHandler` above. */
+export function createKbDrainStatusHandler(deps: { sessionIsReadable?: SessionReadabilityProbe }) {
+  return (req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string) =>
+    handleKbDrainStatus(req, res, ctx, rawUrl, method, deps.sessionIsReadable);
 }

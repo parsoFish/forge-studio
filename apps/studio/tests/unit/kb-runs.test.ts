@@ -44,3 +44,19 @@ test('rows come back newest-first regardless of input order', () => {
   ]);
   expect(rows.map((r) => r.id)).toEqual(['new', 'old']);
 });
+
+test('M7-C U8 (bead forge-u8y2): a cleanup run whose session pointer the SERVER dropped (unreadable) is simply ABSENT from `runs` — no row, no /sessions/kb-cleanup href, handled gracefully alongside its siblings', () => {
+  // `LedgerRow.href` is a required string (history-ledger.ts) and every
+  // 'cleanup' row's ONLY fact worth keeping IS its session pointer — so
+  // `listKbRuns` (packages/knowledge/kb-drain-store.ts) drops the whole row
+  // rather than one it cannot link from, never an `id`-less row this mapper
+  // would have to special-case.
+  const rows = toKbRunLedgerRows('forge-dev', [
+    drainRun,
+    { kind: 'cleanup', id: 'kept-session', when: '2026-08-19T00:00:00.000Z', status: 'awaiting-approval', costUsd: null, detail: null, project: '.kb-forge-dev' },
+    // The dropped session ('unreadable-session') is never in this array at all.
+  ]);
+  expect(rows.some((r) => r.href.includes('/sessions/kb-cleanup/unreadable-session'))).toBe(false);
+  expect(rows.some((r) => r.href.includes('/sessions/kb-cleanup/kept-session'))).toBe(true);
+  expect(rows).toHaveLength(2);
+});
