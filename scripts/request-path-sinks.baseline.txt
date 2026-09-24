@@ -294,7 +294,7 @@ packages/flows/run-model.ts existsSync 3
 packages/flows/run-model.ts readdirSync 2
 packages/flows/run-model.ts readFileSync 2
 packages/flows/run-model.ts statSync 1
-packages/flows/scheduler-dispatch.ts existsSync 4
+packages/flows/scheduler-dispatch.ts existsSync 3
 packages/flows/scheduler-dispatch.ts readFileSync 3
 packages/flows/scheduler-dispatch.ts writeFileSync 1
 packages/flows/scheduler.ts appendFileSync 1
@@ -520,6 +520,8 @@ packages/library/studio/skill-install.ts statSync 1
 packages/library/studio/skill-install.ts writeFileSync 4
 packages/library/studio/skill-package.ts readdirSync 1
 packages/library/studio/skill-package.ts readFileSync 1
+packages/library/studio/skill-package.ts realpathSync 1
+packages/library/studio/skill-package.ts statSync 1
 packages/library/studio/skill-registry.ts readFileSync 1
 packages/library/studio/skill-trust.ts readFileSync 3
 packages/library/studio/template-library.ts readdirSync 5
