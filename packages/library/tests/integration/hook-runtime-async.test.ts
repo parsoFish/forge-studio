@@ -32,7 +32,7 @@
 
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
@@ -79,6 +79,24 @@ function writeHookPackage(root: string, id: string, scriptBody: string, permissi
 }
 
 const NO_ENV: HookPermissionManifest = { env: [], read: [], network: false };
+
+/** Polls `process.kill(pid, 0)` (a liveness probe — sends no real signal)
+ *  until it throws ESRCH (the pid is gone) or `timeoutMs` elapses, in which
+ *  case it throws so the caller's assertion fails with a real reason rather
+ *  than silently timing out the whole test. */
+async function waitForProcessDeath(pid: number, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      process.kill(pid, 0);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ESRCH') return;
+      throw err;
+    }
+    if (Date.now() >= deadline) throw new Error(`pid ${pid} is still alive ${timeoutMs}ms after the tail settled`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
 
 // ---------------------------------------------------------------------------
 // The approval gate — mirrors hook-runtime.test.ts's "BLOCKER 1" pin, run
@@ -151,6 +169,52 @@ describe('runHookScriptAsync: mirrors runHookScript — ONE gate, ONE env fence,
         return true;
       },
     );
+  });
+
+  it('a timed-out hook does not leak a grandchild — the whole process GROUP dies, not only the bash child (forge-9a3)', async () => {
+    const root = makeForgeRoot();
+    const pidDir = mkdtempSync(join(tmpdir(), 'hook-runtime-async-orphan-'));
+    createdDirs.push(pidDir);
+    const pidFilePath = join(pidDir, 'grandchild.pid');
+
+    // The grandchild backgrounds itself (`&`) BEFORE `wait` blocks bash —
+    // by the time the timeout fires, its PID is already on disk. `wait`
+    // keeps bash alive (and its stdio pipes open) until killed, matching a
+    // real hook that spawns work and waits on it.
+    writeHookPackage(
+      root,
+      'async-orphan-hook',
+      `#!/usr/bin/env bash\nsleep 30 &\necho $! > ${JSON.stringify(pidFilePath)}\nwait\n`,
+      NO_ENV,
+    );
+    approveHook({ forgeRoot: root, id: 'async-orphan-hook' });
+    const logger = createLogger('async-orphan-cycle', makeLogsDir());
+
+    let grandchildPid: number | undefined;
+    try {
+      await assert.rejects(
+        () => runHookScriptAsync({ forgeRoot: root, id: 'async-orphan-hook', logger, initiativeId: 'INIT-test', timeoutMs: 200 }),
+        (e: unknown) => {
+          assert.ok(e instanceof HookRunError, `expected a HookRunError, got ${Object.prototype.toString.call(e)}`);
+          assert.equal((e as HookRunError).reason, 'timeout');
+          return true;
+        },
+      );
+
+      assert.ok(existsSync(pidFilePath), 'the script must have written the grandchild PID before the tail settled');
+      grandchildPid = parseInt(readFileSync(pidFilePath, 'utf8').trim(), 10);
+      assert.ok(Number.isInteger(grandchildPid) && grandchildPid > 0, `expected a real PID in ${pidFilePath}, got ${grandchildPid}`);
+
+      await waitForProcessDeath(grandchildPid, 1000);
+    } finally {
+      if (grandchildPid !== undefined) {
+        try {
+          process.kill(grandchildPid, 'SIGKILL');
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== 'ESRCH') throw err;
+        }
+      }
+    }
   });
 
   it('a hook that finishes inside its budget resolves normally via the async tail — the timeout path must not fire for an ordinary run', async () => {
