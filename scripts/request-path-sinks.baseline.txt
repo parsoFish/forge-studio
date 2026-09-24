@@ -593,8 +593,8 @@ packages/sessions/bridge-studio-kickoff.ts writeFileSync 5
 packages/sessions/bridge-studio-lifecycle.ts openSync 1
 packages/sessions/bridge-studio-lifecycle.ts readFileSync 1
 packages/sessions/bridge-studio-lifecycle.ts statSync 2
-packages/sessions/bridge-studio-session-index.ts existsSync 8
-packages/sessions/bridge-studio-session-index.ts readdirSync 8
+packages/sessions/bridge-studio-session-index.ts existsSync 9
+packages/sessions/bridge-studio-session-index.ts readdirSync 10
 packages/sessions/bridge-studio-session-index.ts readFileSync 1
 packages/sessions/interactive-agent-step.ts lstatSync 1
 packages/sessions/interactive-agent-step.ts mkdirSync 2
