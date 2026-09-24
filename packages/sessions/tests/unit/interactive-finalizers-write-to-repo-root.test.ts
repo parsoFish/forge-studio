@@ -51,8 +51,21 @@ test('writeToRepoRoot copies the session\'s staged tree into FinalizerContext.pr
 
 test('writeToRepoRoot refuses loudly when FinalizerContext.project_repo_path is absent', async () => {
   const { sessionDir } = scratch('finalizer-write-repo-root-missing-');
+  // writeToRepoRoot is SYNCHRONOUS (its precondition guard throws before any
+  // await — matches copyStagingToLibrary's own documented "Synchronous"
+  // contract; the runner's `await finalizerFn(ctx)` call site works either
+  // way). `() => Promise.resolve(writeToRepoRoot(...))` evaluates
+  // `writeToRepoRoot(...)` BEFORE `Promise.resolve` ever runs, so its throw
+  // propagates as a plain synchronous exception — confirmed directly against
+  // node:assert, `assert.rejects` does NOT catch that shape; it re-threw the
+  // original error uncaught rather than validating it against the pattern
+  // (the "not ok" failure this test produced on the branch, `error:
+  // 'writeToRepoRoot: FinalizerContext.project_repo_path is required.'`,
+  // was this bug, not the finalizer). `async () => writeToRepoRoot(...)`
+  // wraps the SAME synchronous throw inside an async function body, which
+  // converts it into a rejected promise the way assert.rejects expects.
   await assert.rejects(
-    () => Promise.resolve(writeToRepoRoot({ sessionDir, forgeRoot: '/tmp', libraryRoot: '/tmp' })),
+    async () => writeToRepoRoot({ sessionDir, forgeRoot: '/tmp', libraryRoot: '/tmp' }),
     /project_repo_path/,
   );
 });
