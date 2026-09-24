@@ -176,10 +176,6 @@ export function detectUndeclaredEnvRefs(scriptBody: string, permissions: HookPer
   return extractEnvVarNames(scriptBody).filter((name) => !declared.has(name) && !alwaysPresent.has(name));
 }
 
-// M7-C PKG: +57 for pinning the whole package (net file growth, 566 -> 623
-// lines; measured under ruling 666's standing ≤100-line authority — see
-// packages/library's own row in scripts/check-package-caps.mjs).
-//
 // Copies EVERY verified file into a private, read-only tree, preserving the
 // package's own relative layout — M7-C PKG (forge-8vfn.8.3.6); design.md
 // "Hook exec". Not just the entry script: a sibling a hook `source`s via
