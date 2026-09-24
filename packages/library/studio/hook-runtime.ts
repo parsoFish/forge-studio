@@ -50,18 +50,19 @@
  * *** module cannot keep — so it is left out entirely rather than added as a
  * *** field nothing verifies.
  *
- * `runHookScript` refuses to spawn anything that is not GENUINELY RUNNABLE —
- * `hookRunState(...).runnable`, i.e. approved, with the approval still covering
- * the current script, permissions and trigger hashes.
+ * `runHookScript` (sync) and `runHookScriptAsync` (async, forge-9a3 — see
+ * `prepareHookRun`'s comment for why there are two) refuse to spawn anything
+ * that is not GENUINELY RUNNABLE — `hookRunState(...).runnable`, i.e.
+ * approved, with the approval still covering the current script, permissions
+ * and trigger hashes.
  *
  * A refusal, a spawn failure and a TIMEOUT are three different outcomes, and
- * since W8-B6 FIX-3 they are reported as three. `runHookScript` throws a
- * `HookRunError` carrying a typed `reason`
- * (`'not-runnable' | 'timeout' | 'spawn-failed'`), so a caller distinguishes
- * "the approval gate said no" from "the operator's script hung and, because
- * this spawn is synchronous, stalled the daemon for the whole budget" —
- * without string-matching a message. Both used to surface as "refused or
- * failed to spawn", which is prose that answers neither question.
+ * since W8-B6 FIX-3 they are reported as three (for either tail — the mapping
+ * lives once, in `finalizeHookOutcome`). Both throw a `HookRunError` carrying
+ * a typed `reason` (`'not-runnable' | 'timeout' | 'spawn-failed'`), so a
+ * caller distinguishes "the approval gate said no" from "the operator's
+ * script hung and stalled its caller for the whole budget" — without
+ * string-matching a message.
  *
  * It did not always. The gate used to read `verdict === 'blocked' && !runnable`,
  * so `runnable`/`needsReview` were consulted ONLY for an already-blocked hook,
@@ -73,13 +74,13 @@
  * defers to a caller which does not exist is not a gate.
  */
 
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { HOOK_ENV_BASE_ALLOWLIST, HOOK_ENV_CREDENTIAL_EXCLUSIONS, buildChildEnv } from '@forge/kernel/spawn-env.ts';
 import type { EventLogger } from '@forge/kernel';
-import { hookDir, loadHookDefinition, type HookPermissionManifest } from './hook-library.ts';
+import { hookDir, loadHookDefinition, type HookDefinition, type HookPermissionManifest } from './hook-library.ts';
 import { extractEnvVarNames, scanHookPackage, type HookScanReport } from './hook-scan.ts';
 import { hookRunState } from './hook-approval-ledger.ts';
 
@@ -202,11 +203,10 @@ export interface RunHookScriptInput {
   parentEnv?: NodeJS.ProcessEnv;
   /**
    * Wall-clock budget for this one invocation, defaulting to
-   * `HOOK_SPAWN_TIMEOUT_MS` (30s). Additive and optional: no production caller
-   * passes it — `hook-dispatch.ts` deliberately calls `runHookScript`
-   * unmodified, so every dispatched hook gets the standard budget — and it
-   * exists so the timeout path can be exercised in milliseconds rather than
-   * making a test suite wait 30 seconds to prove one branch.
+   * `HOOK_SPAWN_TIMEOUT_MS` (30s). Additive and optional: no production
+   * caller passes it, so every dispatched hook gets the standard budget —
+   * it exists so the timeout path can be exercised in milliseconds rather
+   * than making a test suite wait 30 seconds to prove one branch.
    */
   timeoutMs?: number;
 }
@@ -223,8 +223,27 @@ export interface HookRunResult {
 /** Bounded wall-clock budget for a single hook invocation. */
 const HOOK_SPAWN_TIMEOUT_MS = 30_000;
 
-export function runHookScript(input: RunHookScriptInput): HookRunResult {
-  const { forgeRoot, id, logger, initiativeId, parentEnv = process.env, timeoutMs = HOOK_SPAWN_TIMEOUT_MS } = input;
+/** Bound on captured stdout/stderr for the ASYNC tail, matching `spawnSync`'s
+ *  own documented `maxBuffer` default — confirmed empirically (a 20MB
+ *  producer truncates spawnSync's capture at ~1MB, `ENOBUFS`), not assumed. */
+const HOOK_SPAWN_MAX_BUFFER_BYTES = 1024 * 1024;
+
+// prepareHookRun — THE shared gate + env fence + pre-spawn logging step
+// (forge-9a3: the fix for `runHookScript` being the ONLY, blocking spawn
+// tail — see this file's own header and hook-dispatch.ts's). The ONE place
+// either guard runs; `runHookScript`/`runHookScriptAsync` below are thin
+// tails differing only in HOW they spawn `bash`.
+
+interface PreparedHookRun {
+  def: HookDefinition;
+  scriptPath: string;
+  dir: string;
+  childEnv: NodeJS.ProcessEnv;
+  undeclaredEnvRefs: string[];
+}
+
+function prepareHookRun(input: { forgeRoot: string; id: string; logger: EventLogger; initiativeId: string; parentEnv: NodeJS.ProcessEnv }): PreparedHookRun {
+  const { forgeRoot, id, logger, initiativeId, parentEnv } = input;
 
   // BLOCKER 1 (2026-08-04, third adversarial review, FIX-FIRST): the gate
   // used to be `verdict === 'blocked' && !runnable`, which only ever
@@ -310,32 +329,31 @@ export function runHookScript(input: RunHookScriptInput): HookRunResult {
     });
   }
 
-  const start = performance.now(); // monotonic: Date.now() steps back here (forge-8vfn.7.6.50)
-  const result = spawnSync('bash', [scriptPath], {
-    env: childEnv,
-    cwd: dir,
-    timeout: timeoutMs,
-    encoding: 'utf8',
-  });
-  const durationMs = Math.round(performance.now() - start);
+  return { def, scriptPath, dir, childEnv, undeclaredEnvRefs };
+}
 
-  if (result.error) {
-    // W8-B6 FIX-3: spawnSync reports an exceeded `timeout` as an ordinary
-    // `result.error` — same field a genuine spawn failure (ENOENT, EACCES)
-    // arrives in — so both used to be thrown as "failed to spawn". They are
-    // opposite problems with opposite fixes: one means the operator's hook
-    // package is broken, the other means their script hung and, because the
-    // spawn is synchronous, stalled the daemon for the whole budget. The
-    // discriminator is `code`, and the reason travels as a TYPED field rather
-    // than as words in a message a caller would have to re-parse.
-    const code = (result.error as NodeJS.ErrnoException).code;
+/** The shape both spawn tails reduce their real child-process result to,
+ *  before handing it to the ONE outcome mapper below. */
+interface HookSpawnOutcome {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+  error?: NodeJS.ErrnoException;
+}
+
+// finalizeHookOutcome — the ONE place a raw spawn result becomes either a
+// thrown HookRunError or a returned HookRunResult (forge-9a3; shared by both
+// tails, so the timeout/spawn-failed mapping — W8-B6 FIX-3 — cannot drift).
+function finalizeHookOutcome(id: string, timeoutMs: number, durationMs: number, outcome: HookSpawnOutcome, undeclaredEnvRefs: string[], logger: EventLogger, initiativeId: string): HookRunResult {
+  if (outcome.error) {
+    const code = outcome.error.code;
     if (code === 'ETIMEDOUT') {
       throw new HookRunError(
         'timeout',
-        `runHookScript: hook "${id}" exceeded its ${timeoutMs}ms wall-clock budget and was killed — it did not refuse to run, it ran too long (${result.error.message})`,
+        `runHookScript: hook "${id}" exceeded its ${timeoutMs}ms wall-clock budget and was killed — it did not refuse to run, it ran too long (${outcome.error.message})`,
       );
     }
-    throw new HookRunError('spawn-failed', `runHookScript: failed to spawn hook "${id}" — ${result.error.message}`);
+    throw new HookRunError('spawn-failed', `runHookScript: failed to spawn hook "${id}" — ${outcome.error.message}`);
   }
 
   logger.emit({
@@ -346,17 +364,99 @@ export function runHookScript(input: RunHookScriptInput): HookRunResult {
     input_refs: [],
     output_refs: [],
     duration_ms: durationMs,
-    message: `Hook "${id}" finished (exit ${result.status})`,
+    message: `Hook "${id}" finished (exit ${outcome.status})`,
   });
 
   return {
     hookId: id,
-    exitCode: result.status,
-    stdout: result.stdout ?? '',
-    stderr: result.stderr ?? '',
+    exitCode: outcome.status,
+    stdout: outcome.stdout,
+    stderr: outcome.stderr,
     durationMs,
     undeclaredEnvRefs,
   };
+}
+
+// Tail 1 — SYNCHRONOUS, unchanged in signature and behaviour (same gate via
+// prepareHookRun, same env fence, same spawnSync call, same messages).
+export function runHookScript(input: RunHookScriptInput): HookRunResult {
+  const { forgeRoot, id, logger, initiativeId, parentEnv = process.env, timeoutMs = HOOK_SPAWN_TIMEOUT_MS } = input;
+  const prepared = prepareHookRun({ forgeRoot, id, logger, initiativeId, parentEnv });
+
+  const start = performance.now(); // monotonic: Date.now() steps back here (forge-8vfn.7.6.50)
+  const result = spawnSync('bash', [prepared.scriptPath], { env: prepared.childEnv, cwd: prepared.dir, timeout: timeoutMs, encoding: 'utf8' });
+  const durationMs = Math.round(performance.now() - start);
+  const outcome = { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '', error: result.error as NodeJS.ErrnoException | undefined };
+  return finalizeHookOutcome(id, timeoutMs, durationMs, outcome, prepared.undeclaredEnvRefs, logger, initiativeId);
+}
+
+// spawnBashAsync — the async tail's spawn wrapper: manual timeout (same
+// budget) + manual BOUNDED capture (spawn() streams, doesn't buffer),
+// reduced to the same HookSpawnOutcome shape spawnSync's result is above.
+
+function spawnBashAsync(scriptPath: string, cwd: string, env: NodeJS.ProcessEnv, timeoutMs: number): Promise<HookSpawnOutcome> {
+  return new Promise((resolve) => {
+    const child = spawn('bash', [scriptPath], { env, cwd });
+    const buf = { stdout: '', stderr: '' };
+    let overflowed = false;
+    let timedOut = false;
+    let settled = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+    }, timeoutMs);
+
+    const settle = (status: number | null, error?: NodeJS.ErrnoException): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ status, stdout: buf.stdout, stderr: buf.stderr, error });
+    };
+
+    // Appends up to HOOK_SPAWN_MAX_BUFFER_BYTES total, then kills the child.
+    const onData = (key: 'stdout' | 'stderr') => (chunk: Buffer) => {
+      if (overflowed) return;
+      const next = buf[key] + chunk.toString('utf8');
+      buf[key] = next.length > HOOK_SPAWN_MAX_BUFFER_BYTES ? next.slice(0, HOOK_SPAWN_MAX_BUFFER_BYTES) : next;
+      if (next.length > HOOK_SPAWN_MAX_BUFFER_BYTES) {
+        overflowed = true;
+        child.kill('SIGTERM');
+      }
+    };
+    child.stdout?.on('data', onData('stdout'));
+    child.stderr?.on('data', onData('stderr'));
+
+    child.on('error', (err) => settle(null, err as NodeJS.ErrnoException));
+
+    // A forcible kill signals `bash` only, not its process group — a script's
+    // grandchild (e.g. `sleep 30`) survives it, still holding bash's inherited
+    // pipes open, so `close` (below) never fires on a killed run (proven
+    // empirically: still pending 15s after a 200ms-budget kill). spawnSync's
+    // own `timeout` doesn't wait for that either — same parity, via `exit`.
+    child.on('exit', (code) => {
+      if (timedOut) settle(code, Object.assign(new Error('spawn bash ETIMEDOUT'), { code: 'ETIMEDOUT' }) as NodeJS.ErrnoException);
+      else if (overflowed) settle(code, Object.assign(new Error('spawn bash ENOBUFS'), { code: 'ENOBUFS' }) as NodeJS.ErrnoException);
+      // else: an ordinary exit falls through to `close` below, so output
+      // capture reflects everything written, not just what arrived by now.
+    });
+
+    child.on('close', (code) => settle(code));
+  });
+}
+
+// Tail 2 — ASYNC. Same gate + env fence (prepareHookRun), same outcome shape
+// (finalizeHookOutcome). hook-dispatch.ts awaits this, not the sync tail.
+
+export async function runHookScriptAsync(input: RunHookScriptInput): Promise<HookRunResult> {
+  const { forgeRoot, id, logger, initiativeId, parentEnv = process.env, timeoutMs = HOOK_SPAWN_TIMEOUT_MS } = input;
+  const prepared = prepareHookRun({ forgeRoot, id, logger, initiativeId, parentEnv });
+
+  const start = performance.now(); // monotonic: Date.now() steps back here (forge-8vfn.7.6.50)
+  const outcome = await spawnBashAsync(prepared.scriptPath, prepared.dir, prepared.childEnv, timeoutMs);
+  const durationMs = Math.round(performance.now() - start);
+
+  return finalizeHookOutcome(id, timeoutMs, durationMs, outcome, prepared.undeclaredEnvRefs, logger, initiativeId);
 }
 
 // ---------------------------------------------------------------------------

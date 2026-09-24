@@ -507,6 +507,7 @@ packages/library/studio/hook-package.ts readdirSync 1
 packages/library/studio/hook-package.ts readFileSync 1
 packages/library/studio/hook-package.ts statSync 1
 packages/library/studio/hook-runtime.ts readFileSync 1
+packages/library/studio/hook-runtime.ts spawn 1
 packages/library/studio/hook-runtime.ts spawnSync 1
 packages/library/studio/skill-install-ledger.ts existsSync 1
 packages/library/studio/skill-install-ledger.ts mkdirSync 2
