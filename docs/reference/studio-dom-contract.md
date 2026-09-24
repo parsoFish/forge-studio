@@ -3740,6 +3740,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   -04, crosscut-21/-25, 2026-08-21):** `NewIdeaBox` is the ONE self-contained
   architect kickoff form, rendered by BOTH `/architect/new` and
   `/sessions/architect/new` (the two entries converge — no more bounce link).
+  **crosscut-R12 (forge-6gv.2.1):** the ROOT identity converges too —
+  `/sessions/architect/new` declares `data-page="architect-new"`, matching
+  `/architect/new` exactly, never the generic per-kind `"session-kickoff"`
+  every OTHER `/sessions/<kind>/new` still declares (that page's shared
+  branch this early return never reaches).
   Contract: `[data-section="new-idea"][data-new-idea-ready]
   [data-roster-state="loading"|"ok"|"error"][data-architect-session-id]`;
   `data-architect-session-id` is PRESENT FROM FIRST PAINT as `""` and carries the
