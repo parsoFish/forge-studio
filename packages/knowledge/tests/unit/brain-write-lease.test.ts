@@ -11,14 +11,16 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
   acquireBrainWriteLease,
   BrainWriteLeaseContentionError,
+  BRAIN_WRITE_LEASE_STALE_MS,
 } from '../../brain-write-lease.ts';
+import { brainRootDir } from '../../kb-drain-edit-soundness.ts';
 
 function buildForgeRoot(): string {
   const forgeRoot = mkdtempSync(join(tmpdir(), 'brain-write-lease-test-'));
@@ -57,6 +59,58 @@ test('forge-ler4: once released, a following acquire succeeds — the lease is n
     await release1();
     const release2 = await acquireBrainWriteLease(forgeRoot);
     await release2();
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// forge-ler4 follow-up: `runReflector` derives its OWN forgeRoot from
+// `import.meta.dirname` (never injectable — reflector-spawn-capture.test.ts's
+// own header explains why), so every reflector test that reaches the real
+// lease necessarily targets the SAME real repo `brain/`. Two SEPARATE
+// `node --test` worker processes (one per test FILE) acquiring that same
+// default lock concurrently is exactly the cross-file contention this bead's
+// prior worker reproduced (reflector.test.ts + reflector-write-lease.test.ts
+// + reflector-spawn-capture.test.ts run together: 8/10 reds, `'failed' !==
+// 'closed'`). The structural fix is `lockfilePath` — `acquireBrainWriteLease`
+// lets a caller point the PHYSICAL lock file somewhere private while still
+// validating the same conceptual `forgeRoot`/brain target, so each reflector
+// test file can hold its own lock and never see another file's turn.
+test('forge-ler4: acquireBrainWriteLease(forgeRoot, { lockfilePath }) uses a PRIVATE physical lock, so two callers pointed at DIFFERENT lockfilePaths on the SAME forgeRoot never contend', async () => {
+  const forgeRoot = buildForgeRoot();
+  try {
+    const lockA = join(forgeRoot, 'lease-a.lock');
+    const lockB = join(forgeRoot, 'lease-b.lock');
+    const releaseA = await acquireBrainWriteLease(forgeRoot, { lockfilePath: lockA });
+    try {
+      // Must NOT throw BrainWriteLeaseContentionError — lockB is a distinct
+      // physical lock from lockA even though both target the same forgeRoot.
+      const releaseB = await acquireBrainWriteLease(forgeRoot, { lockfilePath: lockB });
+      await releaseB();
+    } finally {
+      await releaseA();
+    }
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('forge-ler4: a lock directory left behind by a killed process (mtime older than BRAIN_WRITE_LEASE_STALE_MS, never refreshed) is reclaimed, not refused forever', async () => {
+  const forgeRoot = buildForgeRoot();
+  try {
+    // Simulate a holder that crashed instead of releasing: the lockfile
+    // exists on disk (proper-lockfile's lock is a directory, created via an
+    // atomic mkdir) but nothing is alive to keep refreshing its mtime every
+    // `stale / 2` ms the way a live holder does.
+    const orphanedLockPath = `${brainRootDir(forgeRoot)}.lock`;
+    mkdirSync(orphanedLockPath);
+    const longDead = new Date(Date.now() - BRAIN_WRITE_LEASE_STALE_MS - 5_000);
+    utimesSync(orphanedLockPath, longDead, longDead);
+
+    // A fresh acquire must reclaim the stale lock rather than reporting
+    // contention — the crashed holder must never wedge brain/ forever.
+    const release = await acquireBrainWriteLease(forgeRoot);
+    await release();
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }
