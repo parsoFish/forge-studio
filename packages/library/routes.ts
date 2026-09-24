@@ -85,17 +85,18 @@ import {
 import {
   handleHooksList,
   handleHookCreate,
+  handleHookDelete,
+  HOOK_ID_RE,
+} from './bridge-studio-hooks.ts';
+import {
   handleHookApprove,
   handleHookOverride,
   handleHookRevokeApproval,
-  handleHookUpdate,
-  handleHookDelete,
-  handleHookDetail,
   HOOK_APPROVE_RE,
   HOOK_OVERRIDE_RE,
   HOOK_REVOKE_RE,
-  HOOK_ID_RE,
-} from './bridge-studio-hooks.ts';
+} from './bridge-studio-hooks-approval.ts';
+import { handleHookUpdate, handleHookDetail } from './bridge-studio-hooks-detail.ts';
 import { handleHookDecline, HOOK_DECLINE_RE } from './bridge-studio-hooks-decline.ts';
 import { handleAuthoringFinalize, FINALIZE_URL } from './bridge-studio-authoring.ts';
 import {
@@ -237,8 +238,10 @@ export function libraryRoutes(deps: LibraryRouteDeps): RouteTable<LibraryRouteCo
     handler: (req, res, ctx, url, method) => handleSkillDetail(req, res, ctx, url, method, agentFacts),
   },
 
-  // ---- bridge-studio-hooks.ts (8 routes, was :275 :286 :389 :430 :475 :500 :595 :630)
-  // + bridge-studio-hooks-decline.ts (1 route, NEW — forge-8vfn.5.2)
+  // ---- bridge-studio-hooks.ts (list/create/delete, 3 routes)
+  // + bridge-studio-hooks-approval.ts (approve/override/revoke-approval, 3 routes — carved forge-8vfn.5.39)
+  // + bridge-studio-hooks-detail.ts (detail/update, 2 routes — carved forge-8vfn.5.39)
+  // + bridge-studio-hooks-decline.ts (1 route — forge-8vfn.5.2)
   {
     method: 'GET',
     path: '/api/studio/hooks',

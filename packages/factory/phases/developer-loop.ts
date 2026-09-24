@@ -39,6 +39,7 @@ import { type QueryFn, type ClaudeAgentOptions } from '@forge/agents/ralph/claud
 import { getAdapter, resolveSdkId } from '@forge/agents/_adapters/registry.ts';
 import type { AgentInvocation } from '@forge/agents/_adapters/types.ts';
 import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
+import { makeProjectSkillsLoadedSink } from '@forge/agents/project-skills.ts';
 import { run as runRalph, type LoopResult } from '@forge/agents/ralph/runner.ts';
 import { matchesRateLimitSignature } from '@forge/agents/failure-classifier.ts';
 import { createWiWorktree, removeWiWorktree } from '@forge/flows/wi-worktree.ts';
@@ -184,13 +185,10 @@ export function resolveGitIdentity(sinkCtx: { phase: 'developer-loop' | 'unifier
  * Behavior-preserving: the sink and agent options are forwarded unchanged;
  * net effect is fewer lines at each call site.
  *
- * Change B — `onUsageDelta` is wired inside so every agent emits per-turn
- * token-usage log events. The callback emits a `log` event with
- * `usage_delta` message carrying raw token counts (no pricing table —
- * the authoritative `cost_usd` continues to come from the iteration `result`
- * event; this is additive mid-turn granularity only).
+ * Change B — `onUsageDelta` is also wired inside, emitting a per-turn
+ * `usage_delta` log event (detail on the callback itself, below).
  */
-function makeAgentWithTelemetry(
+export function makeAgentWithTelemetry(
   logger: EventLogger,
   sinkCtx: {
     initiativeId: string;
@@ -199,7 +197,7 @@ function makeAgentWithTelemetry(
     skill: string;
     workItemId?: string;
   },
-  agentOpts: Omit<ClaudeAgentOptions, 'onToolUse' | 'onHeartbeat' | 'onUsageDelta' | 'onReasoning'>,
+  agentOpts: Omit<ClaudeAgentOptions, 'onToolUse' | 'onHeartbeat' | 'onUsageDelta' | 'onReasoning' | 'onProjectSkillsLoaded'>,
   // Runtime selection (ADR-029). Now threaded from the SKILL.md runtime.sdk via
   // the phase agent spec (devAgentSpec/unifierAgentSpec), resolved through
   // resolveSdkId at the caller so a free-text/unavailable id falls back to
@@ -225,6 +223,8 @@ function makeAgentWithTelemetry(
     onToolUse: toolSink.onToolUse,
     onHeartbeat: toolSink.onHeartbeat,
     ...(onReasoning !== undefined ? { onReasoning } : {}),
+    // Item 90: the project's declared skills reached this agent's prompt.
+    onProjectSkillsLoaded: makeProjectSkillsLoadedSink(logger, sinkCtx),
     onUsageDelta: (u) => {
       // Change B: emit per-turn token deltas as a lightweight log event so
       // the operator UI and future tooling can track mid-iteration usage.

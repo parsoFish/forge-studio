@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runPreflightFixTurn, type QueryFn } from '../../kinds/preflight-fix.ts';
+import { runPreflightFixTurn, preflightFixKind, type QueryFn } from '../../kinds/preflight-fix.ts';
 import { REDACTED_THINKING_MARKER } from '../../interactive-session.ts';
 
 function setup(): { forgeRoot: string; projectDir: string; logsRoot: string } {
@@ -135,6 +135,39 @@ test('W6-B1: reasoning + thinking blocks are forwarded to the log (kind: reasoni
 
     const readToolUses = events.filter((e) => e.event_type === 'tool_use' && e.metadata?.tool === 'Read');
     assert.equal(readToolUses.length, READ_CALLS, 'sampler opts {readOnlySampleRate:1, cap:200} — every Read emitted, none sampled out');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// forge-8vfn.6.11.31: the agent had to guess where a clause's fix belongs (8
+// Read calls, 0 writes). The prompt must now name the target file + its
+// current content so the agent edits on its first turn.
+test('C1b prompt names the config path, the testProcess.ci key and the current file content', () => {
+  const { forgeRoot, projectDir } = setup();
+  try {
+    mkdirSync(join(projectDir, '.forge'), { recursive: true });
+    writeFileSync(
+      join(projectDir, '.forge', 'project.json'),
+      JSON.stringify({ testProcess: { local: { cmd: ['npm', 'test'] } } }, null, 2),
+    );
+
+    const { spawn } = preflightFixKind.prepare({
+      input: {
+        runId: 'test-c1b-target',
+        forgeRoot,
+        projectDir,
+        clause: 'C1b',
+        instruction: 'declare testProcess.ci as python -m pytest tests/',
+      },
+      skillPrompt: '',
+    });
+
+    assert.match(spawn.prompt, /\.forge\/project\.json/, 'must name the config file path');
+    assert.match(spawn.prompt, /testProcess\.ci/, 'must name the target key');
+    assert.match(spawn.prompt, /"cmd":\s*\[\s*\n?\s*"npm"/, 'must include the CURRENT file content');
+    // A real dispatch given only the key wrote `"ci": ["python", …]` — a bare argv the loader rejects.
+    assert.match(spawn.prompt, /shape `\{"cmd": \[/, 'must state the value shape the loader accepts');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }
