@@ -22,7 +22,7 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { REFLECTION_LOST_EVENT } from './cycle-context.ts';
 import type { EventLogEntry } from '@forge/kernel';
-import type { RunStatus, RunPhaseStatus, RunPhaseMeta, Run } from './run-view-types.ts';
+import type { RunStatus, RunPhaseStatus, RunPhaseMeta, Run } from '@forge/contracts';
 import { costStreamFacts, sumAuthoritativeCostUsd } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
