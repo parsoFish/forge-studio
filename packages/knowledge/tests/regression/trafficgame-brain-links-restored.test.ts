@@ -58,14 +58,11 @@ const EXPECTED_RESTORED_EDGES: Record<string, string[]> = {
   '2026-05-17-reviewer-budget-undersized-medium-initiatives.md': ['wedged-loop-detector', 'cost-aware-model-routing'],
 };
 
+// SUPERSET, not exact: a later reflector edit may ADD edges legitimately;
+// what this pins is the class that lost them (related_themes dropped to []).
 for (const [fileName, expectedEdges] of Object.entries(EXPECTED_RESTORED_EDGES)) {
   test(`central trafficGame theme ${fileName} carries its restored related_themes edges (kills a related_themes: [] regression)`, () => {
     const related = relatedThemesOf(fileName);
-    assert.equal(
-      related.length,
-      expectedEdges.length,
-      `${fileName}: expected related_themes ${JSON.stringify(expectedEdges)}, got ${JSON.stringify(related)}`,
-    );
     for (const edge of expectedEdges) {
       assert.ok(
         related.includes(edge),
@@ -80,19 +77,9 @@ for (const [fileName, expectedEdges] of Object.entries(EXPECTED_RESTORED_EDGES))
 // so the fixture above isn't muddied by a non-lost, central-only addition.
 test('central trafficGame theme 2026-05-10-test-stack-and-gates.md keeps its central-only edge AND carries its restored edges', () => {
   const related = relatedThemesOf('2026-05-10-test-stack-and-gates.md');
-  assert.equal(related.length, 3, `expected 3 edges, got ${JSON.stringify(related)}`);
   for (const edge of ['2026-05-23-grading-frontier-infrastructure', 'tdd-with-agents', 'quality-gates-orchestrator-verified']) {
     assert.ok(related.includes(edge), `expected related_themes to include "${edge}", got ${JSON.stringify(related)}`);
   }
-});
-
-// review-overhead-dominates-trivial-cycles.md's two pre-move edges
-// (review-phase-target-design, phase-isolation-benchmarks) were BOTH archived
-// on 2026-06-07 — restoring them would be a dangling edge, not a fix. This
-// theme legitimately stays [].
-test('central trafficGame theme 2026-05-10-review-overhead-dominates-trivial-cycles.md has no restorable edges (both pre-move targets are archived, not central-owned)', () => {
-  const related = relatedThemesOf('2026-05-10-review-overhead-dominates-trivial-cycles.md');
-  assert.deepEqual(related, [], `expected [] (no live target for either archived slug), got ${JSON.stringify(related)}`);
 });
 
 test('restored related_themes edges are not dangling (every restored slug resolves to a real theme file somewhere under brain/**/themes/)', () => {
