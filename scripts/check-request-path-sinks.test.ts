@@ -298,7 +298,7 @@ test('ratchet: an INCREASED count for an existing pair FAILS', () => {
   }
 });
 
-test('ratchet: a DECREASED count PASSES and is reported as tightenable (never fails)', () => {
+test('M7 row 25: a DECREASED count (stale-HIGH baseline) FAILS — tighten is no longer silent', () => {
   const root = makeFixture();
   const baselinePath = baselinePathFor(root);
   try {
@@ -317,7 +317,9 @@ test('ratchet: a DECREASED count PASSES and is reported as tightenable (never fa
     );
     runCheck({ root, baselinePath, write: true });
 
-    // Now drop back to one call.
+    // Now drop back to one call — nothing else changes. A stale-HIGH row like
+    // this ("pr.ts execFileSync baselined 5, real 2") passed forever before
+    // this fix, because tighten was informational-only.
     writeFileSync(
       join(root, 'orchestrator/reached.ts'),
       [
@@ -330,14 +332,122 @@ test('ratchet: a DECREASED count PASSES and is reported as tightenable (never fa
       ].join('\n')
     );
 
-    const code = runCheck({ root, baselinePath });
-    assert.equal(code, 0);
-
     const { rows } = analyze(root);
     const baselineRows = parseBaseline(readFileSync(baselinePath, 'utf8'));
     const { failures, tighten } = compareBaseline(rows, baselineRows);
     assert.equal(failures.length, 0);
     assert.ok(tighten.some((t) => t.file === 'orchestrator/reached.ts' && t.sink === 'writeFileSync'));
+
+    let err = '';
+    const origErr = console.error;
+    console.error = (...args: unknown[]) => { err += args.join(' ') + '\n'; };
+    let code;
+    try {
+      code = runCheck({ root, baselinePath });
+    } finally {
+      console.error = origErr;
+    }
+    assert.equal(code, 1, 'a stale-HIGH baseline row must FAIL, not pass forever (M7 findings row 25)');
+    assert.match(err, /orchestrator\/reached\.ts writeFileSync:\s*baseline 2 -> now 1/, 'the exact figure must be printed');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('M7 row 25: --write is the one-command fix for a stale-HIGH row', () => {
+  const root = makeFixture();
+  const baselinePath = baselinePathFor(root);
+  try {
+    writeFileSync(
+      join(root, 'orchestrator/reached.ts'),
+      [
+        "import { existsSync, writeFileSync } from 'node:fs';",
+        'export function readReached() {',
+        "  writeFileSync('/tmp/out', 'x');",
+        "  writeFileSync('/tmp/out2', 'y');",
+        "  return existsSync('/tmp/out');",
+        '}',
+        '',
+      ].join('\n')
+    );
+    runCheck({ root, baselinePath, write: true });
+    writeFileSync(
+      join(root, 'orchestrator/reached.ts'),
+      [
+        "import { existsSync, writeFileSync } from 'node:fs';",
+        'export function readReached() {',
+        "  writeFileSync('/tmp/out', 'x');",
+        "  return existsSync('/tmp/out');",
+        '}',
+        '',
+      ].join('\n')
+    );
+    assert.equal(runCheck({ root, baselinePath }), 1, 'precondition: stale row currently fails');
+    assert.equal(runCheck({ root, baselinePath, write: true }), 0, '--write must resolve it (tighten never needs doc backing)');
+    assert.equal(runCheck({ root, baselinePath }), 0, 'and the check must now pass clean');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('M7 row 25: --write REFUSES to raise an undocumented row — never-raise-without-doc-backing', () => {
+  const root = makeFixture();
+  const baselinePath = baselinePathFor(root);
+  const docPath = join(root, 'docs/reference/request-path-sinks.md');
+  try {
+    mkdirSync(dirname(docPath), { recursive: true });
+    writeFileSync(docPath, '# empty doc — no row classifies orchestrator/reached.ts\n');
+    runCheck({ root, baselinePath, docPath, write: true });
+
+    // Grow a row without ever touching the doc.
+    writeFileSync(
+      join(root, 'orchestrator/reached.ts'),
+      [
+        "import { existsSync, writeFileSync } from 'node:fs';",
+        'export function readReached() {',
+        "  writeFileSync('/tmp/out', 'x');",
+        "  writeFileSync('/tmp/out2', 'y');",
+        "  return existsSync('/tmp/out');",
+        '}',
+        '',
+      ].join('\n')
+    );
+
+    const before = readFileSync(baselinePath, 'utf8');
+    const code = runCheck({ root, baselinePath, docPath, write: true });
+    assert.equal(code, 1, '--write must refuse an undocumented grown row rather than silently raising the baseline');
+    assert.equal(readFileSync(baselinePath, 'utf8'), before, 'the baseline file must be untouched on refusal');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('M7 row 25: --write ACCEPTS a grown row once the doc classifies the file', () => {
+  const root = makeFixture();
+  const baselinePath = baselinePathFor(root);
+  const docPath = join(root, 'docs/reference/request-path-sinks.md');
+  try {
+    mkdirSync(dirname(docPath), { recursive: true });
+    writeFileSync(docPath, '# empty doc\n');
+    runCheck({ root, baselinePath, docPath, write: true });
+
+    writeFileSync(
+      join(root, 'orchestrator/reached.ts'),
+      [
+        "import { existsSync, writeFileSync } from 'node:fs';",
+        'export function readReached() {',
+        "  writeFileSync('/tmp/out', 'x');",
+        "  writeFileSync('/tmp/out2', 'y');",
+        "  return existsSync('/tmp/out');",
+        '}',
+        '',
+      ].join('\n')
+    );
+    // Now classify it.
+    writeFileSync(docPath, '| orchestrator/reached.ts | writeFileSync 1 -> 2 | classified | guarded [read] |\n');
+
+    assert.equal(runCheck({ root, baselinePath, docPath, write: true }), 0);
+    assert.equal(runCheck({ root, baselinePath, docPath }), 0);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
