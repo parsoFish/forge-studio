@@ -82,6 +82,7 @@ Each was rebuilt by hand in a gitignored campaign dir for three campaigns runnin
 | `watch-heartbeats.sh <heartbeat-dir>` | out-of-process stall watcher (cron): gap · stamp/mtime mismatch · liveness stamped without a live job | `scripts/watch-heartbeats.test.ts` |
 | `ci-terminal.sh <pr> <sha>` · `--wait` · `classify <want> <got> < rows` | is this head terminal, and which way — the merge predicate. `classify` is a pure function of `name\|status\|conclusion` rows | `scripts/ci-terminal.test.ts` |
 | `gate.sh <worktree> [campaign]` · `--list` | every gate the tree's own `ci.yml` names, run in its order; what it did not run, named | `scripts/gate.test.ts` |
+| `gh-slot.sh <slot-file> -- <gh args…>` | one shared `gh` serialisation slot (flock, bounded wait, exit code passed through); reads call `gh` bare, never through the slot | `scripts/gh-slot.test.ts` |
 | `pin-reconcile.sh <repo> <campaign> <glob> <from> <to> "<label>"` | rehash only the pin entries a merge touched, and append the amendment | — |
 | `prod-lines.mjs [root]` | production lines per package, by that root's own `check-owner.mjs` definition | — |
 | `boundary-share.mjs [pkg]` | who owns each `boundaries.json` row | — |
