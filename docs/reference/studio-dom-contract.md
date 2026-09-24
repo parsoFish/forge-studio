@@ -1144,7 +1144,23 @@ is what this contract reads — but it cannot be the only distinguisher.
   `data-hex-kind="phase"`. The phase DRAWER opened from a WI hex reports that
   same per-WI cost (W7-B7 flows-14, `lib/phase-drawer-meta.ts`) — the pooled
   dev-phase cost/model/retries are never attributed to a single work item
-  (model + retries rows are omitted in WI mode). A single **flowLineage** run threads across
+  (model + retries rows are omitted in WI mode). **`forge-8vfn.5.16` (M7-C
+  U2) — the `pm` node's drawer (`studio/flows/forge-architect/flow.yaml`)
+  additionally renders a "Brain reads" section, per KB touched:
+  `[data-brain-read-kb][data-brain-read-count]`. Distinct from the
+  pre-existing plain-text "brain reads: N" line inside the Progress section
+  (a raw tool-use COUNT with no KB attribution, rendered only for the `dev`
+  node) and from `/knowledge`'s Ingest Activity tab (the reflector's WRITE
+  side, `reflect.kb-ingest`) — this is the planner's own READ, on the record.
+  Source: `packages/factory/phases/project-manager.ts` emits one
+  `message:"brain.read"` event per KB `readPmBrainContext`'s deterministic
+  pre-fetch touched (`metadata: {kbId, themeCount, reader, runId}`);
+  `PhaseDrawer.tsx` reads the run's live event stream via `useCycleEvents`
+  and folds it through `lib/brain-read-view.ts`'s `deriveBrainReadSummary`
+  (never fabricates a row from the architect's own unconditional per-turn
+  `brain-query` marker, which shares the `event_type` but carries no
+  `kbId`). The section renders only when at least one row exists — absent,
+  not an empty state, when the KB list is empty.** A single **flowLineage** run threads across
   chained flow definitions (`forge-architect` → `forge-develop`; W7-C1
   retired the reflect flow wrapper — reflection is a standalone post-merge
   agent run) — each renders only its own slice of nodes, so
@@ -1591,7 +1607,22 @@ is what this contract reads — but it cannot be the only distinguisher.
   `/hooks/[id]` is
   `main[data-page="hook-detail"][data-hook-id][data-page-ready][data-hook-event][data-hook-verdict][data-hook-trust][data-hook-runnable][data-package-hash]`
   — the last five are ABSENT while loading, on a fetch error and for an unknown
-  id; no verdict is ever fabricated. It reuses the shared
+  id; no verdict is ever fabricated. **`forge-8vfn.5.16` (M7-C U2) —
+  `data-hook-fire-count`, present alongside the five once loaded (`0` = "every
+  cycle's log was scanned, no fire found" — the same idiom
+  `data-hook-carried-by-count` already uses), plus
+  `data-hook-last-fire-at`/`data-hook-last-fire-outcome` (`"ran"|"refused"|
+  "timeout"|"error"`), present ONLY once the hook has actually fired at least
+  once — never fabricated for a hook that has never run. This is the FIRST
+  `data-hook-*` attribute on this page naming an EXECUTION rather than the
+  hook's definition or trust: every fire (`packages/agents/studio/hook-
+  dispatch.ts`'s `emitHookFire`) appends one `message:"hook.fire"` event to the
+  firing cycle's own log; the route (`packages/library/bridge-studio-hooks-
+  detail.ts`) scans every cycle's `events.jsonl` (the same guarded
+  `listCycles`/`guardedReadFile` pattern the pre-existing ingest-activity route
+  uses) and folds it through `packages/library/studio/hook-fire-summary.ts`'s
+  `deriveHookFireSummary` (latest-by-`started_at` wins the outcome; the count
+  is every matching fire, not just the latest).** It reuses the shared
   `[data-component="file-package"]` renderer R3-01 built, and adds the
   **SECURITY SCAN** panel
   `[data-section="scan-report"][data-scan-verdict][data-finding-count][data-critical-count]`
