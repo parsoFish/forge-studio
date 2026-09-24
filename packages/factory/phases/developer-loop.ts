@@ -190,7 +190,7 @@ export function resolveGitIdentity(sinkCtx: { phase: 'developer-loop' | 'unifier
  * the authoritative `cost_usd` continues to come from the iteration `result`
  * event; this is additive mid-turn granularity only).
  */
-function makeAgentWithTelemetry(
+export function makeAgentWithTelemetry(
   logger: EventLogger,
   sinkCtx: {
     initiativeId: string;
