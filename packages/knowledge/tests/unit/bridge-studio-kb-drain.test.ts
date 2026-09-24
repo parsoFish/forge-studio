@@ -29,6 +29,7 @@ import {
 } from '../../bridge-studio-kb-drain.ts';
 import type { Finding, AutoFixStableResult } from '../../brain-lint.ts';
 import { noKbEdits } from '../../kb-drain-edit-soundness.ts';
+import { readKbDrainStatus } from '../../kb-drain-store.ts';
 // M4 ruling 86: the fix-turn port is THIS package's own declaration now —
 // the drain is the consumer, so the shape it needs is its own vocabulary.
 import type { KbDrainFixTurnInput, KbDrainFixTurnResult } from '../../bridge-studio-kb-drain.ts';
@@ -181,6 +182,34 @@ test('runKbDrain: COST-CEILING stops dispatching mid-round the moment cumulative
   assert.equal(status.state, 'cost-ceiling', JSON.stringify(status));
   assert.equal(turnCalls, 1, 'expected the SECOND finding to never be dispatched once the ceiling was reached');
   assert.equal(status.costUsd, 1.5);
+});
+
+test('runKbDrain: knowledge-48 — status.counts reflects the round\'s REAL post-auto-fix backlog during agent turns, never the stale pre-round value (0-0-0 for round 1) while cost climbs', async () => {
+  const { root, brainDir } = makeDrainRoot('counts-kb');
+  const f1 = fixtureFinding(brainDir, 'counts-1', 'agent');
+  const f2 = fixtureFinding(brainDir, 'counts-2', 'agent');
+  let sawDuringFirstTurn: KbDrainStatus['counts'] | null = null;
+  const opts: KbDrainOpts = {
+    lint: scriptedLint([[f1, f2], []]),
+    applyAutoFixes: () => ({ ...EMPTY_AUTO_RESULT, remaining: [f1, f2] }),
+    runFixTurn: async (input) => {
+      if (sawDuringFirstTurn === null) {
+        // The auto-fix pass's own persist (BEFORE this — the first — turn
+        // even starts) must already carry the round's real backlog.
+        const mid = readKbDrainStatus(root, 'counts-kb-drain-t1');
+        sawDuringFirstTurn = mid?.counts ?? null;
+      }
+      return { runId: input.runId, cleared: false, costUsd: 0.05, editAudit: noKbEdits() };
+    },
+  };
+  const status = await runKbDrain(root, 'counts-kb', 'counts-kb-drain-t1', opts);
+  assert.deepEqual(
+    sawDuringFirstTurn,
+    { auto: 0, agent: 2, user: 0 },
+    `expected the mid-round status to already show the real backlog (2 agent findings still open), not the stale/seed 0-0-0 — got ${JSON.stringify(sawDuringFirstTurn)}`,
+  );
+  // Sanity: cost DID climb across both turns while that backlog count held.
+  assert.equal(status.costUsd, 0.1, JSON.stringify(status));
 });
 
 test('runKbDrain: default maxCostUsd is DEFAULT_KB_DRAIN_MAX_COST_USD when opts.maxCostUsd is omitted', async () => {
