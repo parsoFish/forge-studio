@@ -35,7 +35,6 @@ import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const UI = join(ROOT, 'apps', 'studio');
 
 /**
  * Audited residuals: file + the button's `data-action` (NOT a line number —
@@ -78,36 +77,58 @@ function buttonTags(src) {
 
 const PRIMARY = /btn-primary|primaryBtn|launchButtonStyle/;
 
-const offenders = [];
-let checked = 0;
-for (const file of [...tsxFiles(join(UI, 'app')), ...tsxFiles(join(UI, 'components'))]) {
-  const src = readFileSync(file, 'utf8');
-  for (const { tag, line } of buttonTags(src)) {
-    const dynamicDisable = /\bdisabled=\{/.test(tag) || /\{\.\.\.disabledAttrs\(/.test(tag);
-    if (!dynamicDisable || !PRIMARY.test(tag)) continue;
-    checked += 1;
-    if (/data-disabled-reason/.test(tag) || /\{\.\.\.disabledAttrs\(/.test(tag)) continue;
-    const action = tag.match(/data-action=\{?["'`]?([a-z0-9-]+)/i)?.[1] ?? '(no data-action)';
-    const rel = relative(ROOT, file);
-    if (ALLOWLIST.some((r) => r.file === rel && r.action === action)) continue;
-    offenders.push({ file: rel, line, action });
+/**
+ * Scans `<root>/apps/studio/{app,components}` for a disabled primary CTA with
+ * no reason. Takes its root as a parameter (bead forge-8vfn.5.64) so a test
+ * can drive it against a `mkdtempSync` fixture instead of planting a real
+ * `.tsx` file in the live tree — `node --test` runs `scripts/*.test.ts` files
+ * concurrently, and a probe planted and removed there raced every other
+ * scanner reading the tree at the same moment (`check-file-size.mjs`'s own
+ * `lineCount` doc names this file's `__ratchet_probe__.tsx` as the trigger).
+ */
+export function audit(root) {
+  const ui = join(root, 'apps', 'studio');
+  const offenders = [];
+  let checked = 0;
+  for (const file of [...tsxFiles(join(ui, 'app')), ...tsxFiles(join(ui, 'components'))]) {
+    const src = readFileSync(file, 'utf8');
+    for (const { tag, line } of buttonTags(src)) {
+      const dynamicDisable = /\bdisabled=\{/.test(tag) || /\{\.\.\.disabledAttrs\(/.test(tag);
+      if (!dynamicDisable || !PRIMARY.test(tag)) continue;
+      checked += 1;
+      if (/data-disabled-reason/.test(tag) || /\{\.\.\.disabledAttrs\(/.test(tag)) continue;
+      const action = tag.match(/data-action=\{?["'`]?([a-z0-9-]+)/i)?.[1] ?? '(no data-action)';
+      const rel = relative(root, file);
+      if (ALLOWLIST.some((r) => r.file === rel && r.action === action)) continue;
+      offenders.push({ file: rel, line, action });
+    }
   }
+  return { checked, offenders };
 }
 
-if (process.argv.includes('--json')) {
-  console.log(JSON.stringify({ checked, offenders }, null, 2));
-} else if (offenders.length > 0) {
-  console.error(`check-disabled-reason: FAIL — ${offenders.length} of ${checked} disabled primary CTA(s) give the operator no reason:\n`);
-  for (const o of offenders) console.error(`  ✗ ${o.file}:${o.line} [${o.action}] — disabled with no data-disabled-reason`);
-  console.error(`
+function main(argv) {
+  const { checked, offenders } = audit(ROOT);
+  if (argv.includes('--json')) {
+    console.log(JSON.stringify({ checked, offenders }, null, 2));
+  } else if (offenders.length > 0) {
+    console.error(`check-disabled-reason: FAIL — ${offenders.length} of ${checked} disabled primary CTA(s) give the operator no reason:\n`);
+    for (const o of offenders) console.error(`  ✗ ${o.file}:${o.line} [${o.action}] — disabled with no data-disabled-reason`);
+    console.error(`
 Each must be either:
   1. Spread from the ONE derivation:
        {...disabledAttrs(cond ? 'why the operator cannot do this yet' : null)}
      (apps/studio/lib/disabled-reason.ts — drives disabled + title + data-disabled-reason together).
   2. Or added to the ALLOWLIST in scripts/check-disabled-reason.mjs (file + data-action + reason).`);
-  // `process.exitCode`, never `process.exit()` — the offender list above is
-  // unbounded and `process.exit()` truncates a piped stdout mid-line.
-  process.exitCode = 1;
-} else {
-  console.log(`check-disabled-reason: PASS — ${checked} disabled primary CTA(s), every one carries its reason, ${ALLOWLIST.length} allowlisted residual(s)`);
+    // `process.exitCode`, never `process.exit()` — the offender list above is
+    // unbounded and `process.exit()` truncates a piped stdout mid-line.
+    process.exitCode = 1;
+  } else {
+    console.log(`check-disabled-reason: PASS — ${checked} disabled primary CTA(s), every one carries its reason, ${ALLOWLIST.length} allowlisted residual(s)`);
+  }
+}
+
+// Run only when executed directly — the test imports `audit` and must not
+// trigger a full scan on import.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main(process.argv.slice(2));
 }

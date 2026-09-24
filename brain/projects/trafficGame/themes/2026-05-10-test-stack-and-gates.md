@@ -22,7 +22,7 @@ keywords:
   - fixed-timestep
 created_at: 2026-05-10T15:30:00.000Z
 updated_at: 2026-05-10T15:30:00.000Z
-related_themes: [2026-05-23-grading-frontier-infrastructure]
+related_themes: [2026-05-23-grading-frontier-infrastructure, tdd-with-agents, quality-gates-orchestrator-verified]
 ---
 
 # trafficGame — test stack and quality gates
