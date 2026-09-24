@@ -349,7 +349,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/phases/gitignored-creates.ts | flows | rewritten | 58 |
 | packages/flows/plan-gate-class-check.ts | flows | rewritten | 59 |
 | packages/factory/phases/pm-binding.ts | factory | verbatim | 386 |
-| packages/factory/phases/project-manager.ts | factory | verbatim | 859 |
+| packages/factory/phases/project-manager.ts | factory | verbatim | 726 |
 | packages/flows/phases/ralph-spec-lint.ts | flows | verbatim | 469 |
 | packages/factory/phases/reflector-binding.ts | factory | verbatim | 262 |
 | packages/factory/phases/reflector.ts | factory | verbatim | 682 |

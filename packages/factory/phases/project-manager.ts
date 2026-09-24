@@ -200,6 +200,33 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       tree_listing: Boolean(projectContext.treeListing),
     },
   });
+  // forge-8vfn.5.16 (M7-C U2) — the planner's brain READ, on the record.
+  // `pm.context-injected` above lists raw paths; this names the KB each one
+  // belongs to and how many files were read from it, so an operator (or a
+  // story beat) can point at ONE event and say "the planner read KB X, N
+  // files" rather than re-deriving it from a path list. Scoped to
+  // brainContext (the deterministic pre-fetch every real pass performs) —
+  // NOT the agent-driven ad hoc tool-use reads pm.brain-query already
+  // counts, whose Read/Grep/Glob inputs are too varied (globs, directories)
+  // to attribute to one KB reliably.
+  const brainReadKbs = new Map<string, number>();
+  for (const b of brainContext) {
+    const kbId = b.path.match(/^brain\/(?:projects\/)?([^/]+)\//)?.[1];
+    if (kbId) brainReadKbs.set(kbId, (brainReadKbs.get(kbId) ?? 0) + 1);
+  }
+  for (const [kbId, themeCount] of brainReadKbs) {
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: parentEventId,
+      phase: 'project-manager',
+      skill: 'project-manager',
+      event_type: 'brain-query',
+      input_refs: brainContext.filter((b) => b.path.startsWith(`brain/${kbId}/`) || b.path.startsWith(`brain/projects/${kbId}/`)).map((b) => b.path),
+      output_refs: [],
+      message: 'brain.read',
+      metadata: { kbId, themeCount, reader: 'project-manager', runId: input.initiativeId },
+    });
+  }
 
   // R4-01-F2 (ADR-039): the spawn goes through the generic one-shot primitive
   // with `lifecycle: 'caller'` — this pipeline owns the event lifecycle and
