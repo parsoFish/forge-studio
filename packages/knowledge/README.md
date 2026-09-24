@@ -13,11 +13,11 @@ kept working and not recommended. Collapsing to one door is bead `forge-8vfn.5.3
 `tests/contract/contract.test.ts` asserts this list against what the index actually
 exports, in both directions, and is required to FAIL against an empty index.
 
-### Values (35)
+### Values (36)
 
 | area | exports |
 |---|---|
-| brain paths | `cycleArchivePath` · `cycleArchiveRelPath` · `cyclesRawDir` · `cyclesThemesDir` · `projectBrainDir` · `projectThemesDir` · `readArtifactRoot` · `resolveKbBrainDir` |
+| brain paths | `cycleArchivePath` · `cycleArchiveRelPath` · `cyclesRawDir` · `cyclesThemesDir` · `deriveKbIdFromBrainPath` · `projectBrainDir` · `projectThemesDir` · `readArtifactRoot` · `resolveKbBrainDir` |
 | brain index | `loadBrainIndex` · `regenerateBrainIndex` |
 | brain lint | `CHECK_NAMES` · `classify` · `classifyFinding` · `lintThemeFiles` · `runBrainLint` |
 | KB descriptors | `loadKbDescriptor` · `serializeKbDescriptor` · `projectKbBindings` · `unroutableKbReason` · `kbReadPolicyViolation` |

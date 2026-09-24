@@ -31,6 +31,7 @@ export {
   cycleArchiveRelPath,
   cyclesRawDir,
   cyclesThemesDir,
+  deriveKbIdFromBrainPath,
   projectBrainDir,
   projectThemesDir,
   readArtifactRoot,
