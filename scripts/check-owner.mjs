@@ -307,9 +307,15 @@ export function rewriteQuarry(root, markdown) {
 
     if (cells.length === 4 && QUARRIED_TREES.some((t) => cells[0].startsWith(`${t}/`))) {
       const measured = measuredByPath.get(cells[0]);
-      if (measured !== undefined && String(measured) !== cells[3]) {
+      // A handful of rows carry a "ceiling re-keyed" rationale note glued onto
+      // the loc cell after the number (no separating pipe) — e.g.
+      // `664 **Ceiling re-keyed +4 (…):** …`. `parseQuarry` already reads only
+      // the LEADING integer (`Number.parseInt`), so the comparison and the
+      // rewrite below do the same: touch the number, never the prose after it.
+      const locMatch = cells[3].match(/^(\d+)(.*)$/s);
+      if (measured !== undefined && locMatch && measured !== Number.parseInt(locMatch[1], 10)) {
         locRows += 1;
-        return `| ${cells[0]} | ${cells[1]} | ${cells[2]} | ${measured} |`;
+        return `| ${cells[0]} | ${cells[1]} | ${cells[2]} | ${measured}${locMatch[2]} |`;
       }
       return line;
     }

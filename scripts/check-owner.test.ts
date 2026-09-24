@@ -271,6 +271,34 @@ test('--write recomputes loc, the disposition summary and the package columns fr
   );
 });
 
+test('--write fixes the loc NUMBER on a row that carries a ceiling-rekey note, and keeps the note', () => {
+  // A handful of real rows glue a rationale note onto the loc cell with no
+  // separating pipe — `664 **Ceiling re-keyed +4 (…):** …` — because a past
+  // `--write`-shaped bug (caught before it reached QUARRY.md) compared the
+  // FULL cell string to a bare number and overwrote the whole cell, silently
+  // deleting the note. This fixture reproduces that shape without depending
+  // on which real row still carries one today.
+  const subject = aQuarriedProductionFile();
+  withQuarry(
+    (rows) => rows.map((l) => (
+      l.trim().startsWith(`| ${subject} |`)
+        ? l.replace(/\|\s*(\d+)\s*\|$/, '| $1 **A note that must survive --write.** |')
+        : l
+    )),
+    (q, b) => {
+      const written = run(['--quarry', q, '--baseline', b, '--write']);
+      assert.equal(written.code, 0, written.out);
+
+      const after = readFileSync(q, 'utf8');
+      assert.ok(after.includes('A note that must survive --write.'), `the note must survive an unrelated --write — got:\n${after}`);
+      const afterCell = after.split('\n').find((l) => l.trim().startsWith(`| ${subject} |`))!;
+      // Only the leading digits may ever change; the note stays attached
+      // verbatim, whether or not the number itself needed correcting.
+      assert.match(afterCell, /^\| [^|]+ \| [^|]+ \| [^|]+ \| \d+ \*\*A note that must survive --write\.\*\* \|$/, afterCell);
+    },
+  );
+});
+
 test('an UNTRACKED production file is still unowned — a file cannot dodge the gate by not being committed', () => {
   // The tree is PLANTED, not assumed. `orchestrator/` is empty as of M6-C, but
   // it stays in check-owner's QUARRIED_TREES so a file reappearing there is
