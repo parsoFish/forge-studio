@@ -44,10 +44,8 @@ import { hookRunState, readHookApprovalLedger, readHookDeclinedLedger } from './
 import { readHookPackage, hashHookPackage, hashHookScript } from './studio/hook-package.ts';
 import { decodeIdSegment, locateHook, parseCreatePermissions, hookWireFields, HOOK_ID_RE } from './bridge-studio-hooks.ts';
 
-/** M7-C U2 review — how much of one cycle's `events.jsonl` the last-fire
- *  scan reads when the file is too big to read whole (mirrors
- *  `STDERR_TAIL_BYTES`, `packages/sessions/bridge-studio-lifecycle.ts`, a
- *  larger magnitude since JSONL rows are denser than a stderr stream). */
+/** Bytes of one cycle's `events.jsonl` the last-fire scan reads when the
+ *  file is too big to read whole (mirrors `STDERR_TAIL_BYTES`). */
 const HOOK_FIRE_SCAN_TAIL_BYTES = 64 * 1024;
 
 /**
@@ -216,19 +214,9 @@ export async function handleHookDetail(req: IncomingMessage, res: ServerResponse
       const ledgerEntry = readHookApprovalLedger(ctx.forgeRoot).get(id);
       const declinedEntry = readHookDeclinedLedger(ctx.forgeRoot).get(id);
       // forge-8vfn.5.16 (M7-C U2, T2 review of 95cb287f) — last-fire facts,
-      // BOUNDED. A hook can fire from ANY agent spawn (flow cycles,
-      // one-shot `_agent-*` runs, interactive session kinds, bridge
-      // writes), so — unlike the ingest-activity route's `reflect.kb-
-      // ingest` scan, which only ever comes from a flow cycle's ISO-
-      // prefixed, lexically-sortable id — recency here cannot be read off
-      // the cycle id string and comes from directory mtime instead
-      // (mirrors `sortEntriesByMtimeDesc`, M7-C #834). Opens at most
-      // `HOOK_FIRE_SCAN_MAX_CYCLES` cycle dirs, newest-first, and reads at
-      // most `HOOK_FIRE_SCAN_TAIL_BYTES` of each one's `events.jsonl` (the
-      // whole file when smaller — same shape as `guardedReadFileTail`,
-      // `packages/sessions/bridge-studio-lifecycle.ts`). The wire field is
-      // named `recentFireCount`, not `fireCount`: a fire recorded only in a
-      // cycle older than the scanned window is honestly invisible.
+      // BOUNDED (mtime-ordered, not lexical — full rationale: docs/
+      // reference/request-path-sinks.md's "M7-C U2" section). Wire field is
+      // `recentFireCount`, not `fireCount`: honestly a window count.
       const guardedCycleMtime = (cycleId: string): number => {
         const guarded = resolveGuardedPath(ctx.logsRoot, [cycleId]);
         if (!guarded.ok || !guarded.exists) return -Infinity; // rejected/absent sorts last
