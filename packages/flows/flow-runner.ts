@@ -602,12 +602,18 @@ export async function runFlow({
     costTracker.checkCeiling({ throw: true, nextNodeId: nextNodeId ?? undefined });
   }
 
-  // Fire `on: flow-complete` triggers on terminal SUCCESS only (failures
-  // exit via throw before reaching here), through the generic declaration-driven
-  // path. `on: merged` triggers — e.g. forge-develop's reflect trigger — are NOT
-  // fired here: the develop flow terminates at `ready-for-review` (PR open),
-  // before the operator merges, so finalize-merged fires those post-merge.
-  await fireFlowTriggers(flow, 'flow-complete', {
+  // Fire `on: flow-complete` triggers on terminal SUCCESS only — failures exit
+  // via throw before reaching here, and forge-8vfn.5.20 closes the THIRD way
+  // out: `state.terminateEarly` (execDemo on a red merge-boundary gate,
+  // execOnboardPreflight on a red contract) breaks the walk above and routes
+  // the manifest to `ready-for-review` via `runClosure` — a parked, unshippable
+  // branch, not a completed one. Firing here would stage a downstream run
+  // against exactly that branch. Through the generic declaration-driven path.
+  // `on: merged` triggers — e.g. forge-develop's reflect trigger — are NOT
+  // fired here regardless: the develop flow terminates at `ready-for-review`
+  // (PR open), before the operator merges, so finalize-merged fires those
+  // post-merge.
+  if (!state.terminateEarly) await fireFlowTriggers(flow, 'flow-complete', {
     onFire: (trigger) => {
       logger.emit({
         initiative_id: input.initiativeId,

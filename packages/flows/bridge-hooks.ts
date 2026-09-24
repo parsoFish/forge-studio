@@ -29,6 +29,7 @@ import { sendJson, allowedOrigin, pathOnly } from '@forge/kernel';
 import { listFlowIds, loadFlowDefinition } from './studio/flow-registry.ts';
 import { flowPathForId } from './flow-runner.ts';
 import type { FlowDefinition, FlowTrigger, WebhookTriggerConfig } from '@forge/contracts/studio/types.ts';
+import { WEBHOOK_FAMILY_KIND_IDS } from './flow-trigger.ts';
 import { verifyWebhookSignature } from './webhook-verify.ts';
 import {
   extractPushPayload,
@@ -83,16 +84,6 @@ function firstHeader(
 }
 
 type ResolvedHook = { flow: FlowDefinition; trigger: FlowTrigger; webhook: WebhookTriggerConfig };
-
-/**
- * The `on:` kinds that resolve via a `webhook:` config block sharing the
- * SAME `POST /api/hooks/:hookId` namespace (R2-08-F3: `pr-merged` /
- * `issue-raised` are their OWN `on:` values — ADR-027's amendment — never a
- * sub-event under `on: webhook`, but they reuse the existing receiver, so a
- * hook id must be resolvable regardless of which of the three kinds declared
- * it).
- */
-const WEBHOOK_FAMILY_KIND_IDS = new Set(['webhook', 'pr-merged', 'issue-raised']);
 
 /**
  * Scan every registered flow for the `on: webhook` / `on: pr-merged` /
