@@ -2976,16 +2976,25 @@ is what this contract reads — but it cannot be the only distinguisher.
   else, so before this the drawer — and the `[data-run-link]` inside it — was
   unreachable to a beat, and S10 beats 9–21 all failed on "no real-nav path to
   the run page". Pressing it opens the drawer for that initiative; the drawer's
-  run links are `[data-run-link][data-run-cycle-id][data-run-active]` with
-  `href="/flows/forge-develop/run/<cycleId>"`. `cycle-grouping.ts:48-62` sorts
-  by cycle id and takes the head as the "active" cycle, which is NEWEST, not
-  a liveness check on its own — **forge-6gv.13.1:** `data-run-active="true"`
-  (and the "active run" label; index 0 otherwise reads "last run") therefore
-  also requires the initiative's own `status` to be NON-terminal (reusing
-  `lib/cycle-cost-cache.ts`'s `COST_TERMINAL_CYCLE_STATUSES` — merged/done/
-  failed), so a newest cycle that has already concluded (an old failed or
-  done attempt) is never mislabelled "active run" — and the route is keyed by
-  CYCLE id, never by initiative id.
+  run links are `[data-run-link][data-run-cycle-id][data-run-active]
+  [data-run-live]` with `href="/flows/forge-develop/run/<cycleId>"`.
+  `cycle-grouping.ts:48-62` sorts by cycle id and takes the head as the
+  "active" cycle, which is NEWEST, not a liveness check on its own —
+  `data-run-active="true"` means NEWEST (index 0) and nothing else; it
+  is unconditional on that cycle's own status, because `S10.story.mjs`
+  binds its `<cycleId>` off `[data-run-active="true"][data-run-cycle-id]`
+  and a beat must still find that link after the newest run concludes.
+  **forge-6gv.13.1:** the LABEL is what carries the liveness fact instead —
+  index 0 reads "active run" only when the initiative's own `status` is
+  NON-terminal (reusing `lib/cycle-cost-cache.ts`'s
+  `COST_TERMINAL_CYCLE_STATUSES` — merged/done/failed), else "last run"
+  (an older attempt, index > 0, always reads "prior run" and carries
+  `data-run-active="false"`), so a newest cycle that has already concluded
+  (an old failed or done attempt) is never mislabelled "active run" even
+  though it still carries `data-run-active="true"`. `data-run-live="true"`
+  duplicates that same liveness fact (NEWEST **and** non-terminal) as a
+  boolean for a caller that wants it without parsing the label text — and
+  the route is keyed by CYCLE id, never by initiative id.
 
   **REFRESH SEMANTICS — the roadmap is LIVE (`forge-8vfn.7.6.27`).** The page
   subscribes to the bridge socket and re-reads on `cycle-list-changed` (every
@@ -3048,7 +3057,8 @@ is what this contract reads — but it cannot be the only distinguisher.
   now-line's chip, horizontally synced to pan/zoom, vertically fixed. Inside
   the open drawer, the card's real work items (`[data-work-item-id]`) and a
   per-node run dig-in `[data-section="initiative-runs"]` with one
-  `[data-run-link][data-run-cycle-id][data-run-active="true"|"false"]`
+  `[data-run-link][data-run-cycle-id][data-run-active="true"|"false"]
+  [data-run-live="true"|"false"]`
   (href `/flows/forge-develop/run/<cycleId>`) for the active cycle plus every
   Every roadmap node carries `[data-blocked-clauses]` — the failing hard-clause
   NAMES from a claim the SCHEDULER made and then REFUSED (`SKILLS`, comma-joined;

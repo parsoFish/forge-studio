@@ -209,26 +209,36 @@ export function InitiativeDetail({
       )}
 
       {/* R4-13 run dig-in: active + prior (completed) cycles, joined on cycleId.
-          forge-6gv.13.1: index 0 is the MOST RECENT attempt, not necessarily
-          a CURRENTLY RUNNING one — `status` is the same cycle's own status
-          (RoadmapInitiative/Cycle share one vocabulary), so a terminal
-          status there (reusing this repo's existing merged/done/failed SSOT,
-          lib/cycle-cost-cache.ts — "no further spend" and "no longer active"
-          are the same fact) reads "last run" instead of a lie. */}
+          `data-run-active` means NEWEST (idx === 0), UNCHANGED since R4-13 —
+          `cycle-grouping.ts` sorts by cycle id and takes the head; it is not
+          a liveness check, and S10.story.mjs binds its `<cycleId>` off
+          `[data-run-active="true"][data-run-cycle-id]`, so this attribute's
+          meaning must stay stable for a newest run regardless of status.
+          forge-6gv.13.1: what was wrong was the LABEL, not the attribute —
+          "active run" unconditionally on idx 0 misdescribed an 18-day-old
+          FAILED cycle. The label now also checks `status` (this cycle's own
+          status, reusing the existing merged/done/failed SSOT,
+          lib/cycle-cost-cache.ts): idx 0 reads "active run" only when
+          non-terminal, else "last run" (an older attempt still reads "prior
+          run" either way). `data-run-live` is a NEW, separate attribute
+          carrying that same liveness fact (newest AND non-terminal) for any
+          caller that wants it without re-deriving from the label text. */}
       {runCycleIds.length > 0 && (() => {
         const newestIsActive = !COST_TERMINAL_CYCLE_STATUSES.has(status);
         return (
           <div data-section="initiative-runs" style={{ display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid var(--line)', paddingTop: 8 }}>
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>Runs</div>
             {runCycleIds.map((cycleId, idx) => {
-              const isActive = idx === 0 && newestIsActive;
-              const label = isActive ? 'active run' : idx === 0 ? 'last run' : 'prior run';
+              const isNewest = idx === 0;
+              const isLive = isNewest && newestIsActive;
+              const label = isNewest ? (newestIsActive ? 'active run' : 'last run') : 'prior run';
               return (
                 <Link
                   key={cycleId}
                   data-run-link
                   data-run-cycle-id={cycleId}
-                  data-run-active={isActive ? 'true' : 'false'}
+                  data-run-active={isNewest ? 'true' : 'false'}
+                  data-run-live={isLive ? 'true' : 'false'}
                   href={`/flows/forge-develop/run/${cycleId}`}
                   style={{ fontSize: 11, color: 'var(--c-dev, #4ca3f5)', textDecoration: 'underline' }}
                 >

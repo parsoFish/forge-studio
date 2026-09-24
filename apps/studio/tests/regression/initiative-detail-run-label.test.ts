@@ -75,10 +75,20 @@ test('an OLDER attempt (idx > 0) still reads "prior run", regardless of the newe
   expect(html).toContain('CY-1');
 });
 
-test('data-run-active mirrors the same terminal check, not just idx === 0', () => {
+test('data-run-active stays "true" on a terminal newest run — the label and data-run-live carry the terminal fact, not the attribute', () => {
+  // T2 review (forge-6gv.13.1): S10.story.mjs binds `<cycleId>` off
+  // `[data-run-active="true"][data-run-cycle-id]` and documents
+  // data-run-active="true" as meaning NEWEST, NOT RUNNING. Gating this
+  // attribute on `status` would strand that story beat the moment the
+  // newest run concludes. The terminal fact belongs on the label and on
+  // the new, separate `data-run-live` attribute instead.
   const failedHtml = render({ status: 'failed', runCycleIds: ['CY-1'] });
-  expect(failedHtml).toContain('data-run-active="false"');
+  expect(failedHtml).toContain('data-run-active="true"');
+  expect(failedHtml).toContain('data-run-live="false"');
+  expect(failedHtml).toContain('last run');
 
   const liveHtml = render({ status: 'in-flight', runCycleIds: ['CY-1'] });
   expect(liveHtml).toContain('data-run-active="true"');
+  expect(liveHtml).toContain('data-run-live="true"');
+  expect(liveHtml).toContain('active run');
 });
