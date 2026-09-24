@@ -16,7 +16,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
-import { collectSpendDirs, spendSoFar } from './run-observe.mjs';
+import { collectSpendDirs, spendSoFar, readDispatchSnapshot } from './run-observe.mjs';
 import { collectAgentRuns } from './reap.mjs';
 
 function root() {
@@ -155,5 +155,59 @@ describe('spendSoFar: the beat boundary reads a verdict, not a sentence', () => 
     assert.equal(r.verdict.breached, false);
     assert.equal(r.verdict.known, true);
     assert.match(r.lines[0]!, /after beat 4: \$0\.6000 of \$35\.00/);
+  });
+});
+
+/**
+ * `readDispatchSnapshot` — the read half of the UNMEASURED discriminator
+ * (bead `forge-8vfn.7.6.76`). `classifyUnmeasuredDispatch` (`spend.mjs`) is
+ * the pure judgement over two of these; this is what takes ONE, with every
+ * fs/pid touch injected so no test reads a real `/proc`.
+ */
+describe('readDispatchSnapshot: one read, every seam injected', () => {
+  test('7.6.76: eventLines reuses readRunEvents — "many lines" means what the spend accounting means by it', () => {
+    const r = root();
+    const dir = dispatch(r, '_architect-2026-09-12T07-00-00-aaaaaaaa');
+    writeFileSync(join(dir, 'events.jsonl'), '{"a":1}\n{"a":2}\n{"a":3}\n');
+    const s = readDispatchSnapshot(dir, { readPid: () => null, isAlive: () => false, readStderrTail: () => '' });
+    assert.equal(s.eventLines, 3);
+  });
+
+  test('7.6.76: a pid the injected isAlive reports as live is alive; the seam is never a real /proc', () => {
+    const r = root();
+    const dir = dispatch(r, '_architect-2026-09-12T07-00-00-bbbbbbbb');
+    writeFileSync(join(dir, 'turn.pid'), '999999\n');
+    const calls: number[] = [];
+    const s = readDispatchSnapshot(dir, {
+      isAlive: (pid: number) => { calls.push(pid); return true; },
+      readStderrTail: () => '',
+    });
+    assert.equal(s.pid, 999999);
+    assert.equal(s.alive, true);
+    assert.deepEqual(calls, [999999], 'isAlive must be asked about the pid readPid actually found');
+  });
+
+  test('7.6.76: no turn.pid at all is pid: null and never asked to isAlive', () => {
+    const r = root();
+    const dir = dispatch(r, '_architect-2026-09-12T07-00-00-cccccccc');
+    let asked = false;
+    const s = readDispatchSnapshot(dir, { isAlive: () => { asked = true; return true; }, readStderrTail: () => '' });
+    assert.equal(s.pid, null);
+    assert.equal(s.alive, false);
+    assert.equal(asked, false, 'a pid that was never found is never asked whether it is alive');
+  });
+
+  test('7.6.76: the stderr tail seam is what the snapshot carries, verbatim', () => {
+    const r = root();
+    const dir = dispatch(r, '_architect-2026-09-12T07-00-00-dddddddd');
+    const s = readDispatchSnapshot(dir, { isAlive: () => false, readStderrTail: () => 'FATAL: worker exited' });
+    assert.equal(s.stderrTail, 'FATAL: worker exited');
+  });
+
+  test('7.6.76: an unrecorded exit code reads as null, not a false 0 — no on-disk convention exists yet', () => {
+    const r = root();
+    const dir = dispatch(r, '_architect-2026-09-12T07-00-00-eeeeeeee');
+    const s = readDispatchSnapshot(dir, { isAlive: () => false, readStderrTail: () => '' });
+    assert.equal(s.exitCode, null);
   });
 });
