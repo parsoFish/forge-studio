@@ -10,7 +10,7 @@ import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorSta
 import { useCycleEvents } from '@/lib/use-cycle-events';
 import { useNowTicker } from '@/lib/use-now-ticker';
 import { fetchSessionShell, type SessionShellFetchResult } from '@/lib/session-client';
-import { deriveSessionShellViewState, selectStage, backToProjectLink } from '@/lib/session-shell-view';
+import { deriveSessionShellViewState, selectStage, backToProjectLink, shouldPollSessionSummary } from '@/lib/session-shell-view';
 import {
   fetchArchitectSessions,
   listInstructionsSessions,
@@ -166,12 +166,6 @@ export default function SessionShellPage({
 
   const refreshSummary = useMemo(() => makeCoalescedRefresh(refreshSummaryNow), [refreshSummaryNow]);
 
-  useEffect(() => {
-    refreshSummary();
-    const poll = setInterval(refreshSummary, SUMMARY_POLL_MS);
-    return () => clearInterval(poll);
-  }, [refreshSummary]);
-
   // project-brain's staged-theme review — fetched only while awaiting-review,
   // mirroring the retired page exactly.
   useEffect(() => {
@@ -246,6 +240,21 @@ export default function SessionShellPage({
     }
     return base;
   }, [shellResult, stageOverride]);
+
+  // forge-d5ib (W8-F6 follow-up): a LEGACY session's per-kind summary
+  // endpoint reads the same project-side status.json the shell route no
+  // longer needs, so it can only ever resolve to nothing — polling it
+  // forever is wasted traffic the legacy kindPanel branch never reads
+  // anyway. Gated on `viewState` (not `summary`/`shellResult` directly) so
+  // it reads the SAME settled/legacy verdict the rest of the page renders
+  // from — see `shouldPollSessionSummary`'s own doc comment for why every
+  // OTHER state (loading/no-session/error) still polls.
+  useEffect(() => {
+    if (!shouldPollSessionSummary(viewState)) return;
+    refreshSummary();
+    const poll = setInterval(refreshSummary, SUMMARY_POLL_MS);
+    return () => clearInterval(poll);
+  }, [refreshSummary, viewState]);
 
   // W7-B1 (sessions-kinds-07) — the artifact pane is wired for real on this
   // page now: `project`/`sessionId` thread through (generation "view →"
