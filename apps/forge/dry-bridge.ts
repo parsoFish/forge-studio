@@ -46,10 +46,6 @@
  * `createLogger` pattern rather than inventing a new logging path.
  */
 
-import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 // The env gate and the typed refusal moved to `@forge/kernel` (M4-knowledge
 // s5): five packages consumed them and could only reach them by importing
 // `cli/`. Re-exported here so this file's own callers, and the classification
@@ -66,6 +62,15 @@ export {
   type DryBridgeRefusalInput,
 } from '@forge/kernel';
 import type { DryBridgeAction } from '@forge/kernel';
+
+// bead forge-8vfn.5.30: the SAME route-table factories `apps/forge/routes.ts`
+// calls to assemble the real bridge — called here with stub deps purely to
+// read each row's `dryClassification` (see `classificationStubDeps` below).
+import { knowledgeRoutes, type KnowledgeRouteDeps } from '@forge/knowledge/routes.ts';
+import { libraryRoutes, type LibraryRouteDeps } from '@forge/library/routes.ts';
+import { projectsRoutes, type ProjectsRouteDeps } from '@forge/projects/routes.ts';
+import { agentsRoutes, type AgentsRouteDeps } from '@forge/agents/routes.ts';
+import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions/routes.ts';
 
 
 export type DryBridgeClassification = 'refuse' | 'stub-actions' | 'exempt-local' | 'read-only';
@@ -223,73 +228,61 @@ export const HAND_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
 ] as const;
 
 // ---------------------------------------------------------------------------
-// Derivation — every OTHER carved route's row comes straight from its
-// `RouteEntry.dryClassification`, read from each package's `routes.ts`
-// SOURCE rather than by importing + invoking the route-table factories
-// (which need real bridge deps — session ports, spawn closures — a
-// classification table has no business constructing). Mirrors
-// `dry-bridge-coverage.test.ts`'s own `extractRouteTableCandidates`
-// (comment-stripped, line-based regex scan — no AST dependency); GET routes
-// are skipped (blanket-covered by the wildcard read-only row), and a route
-// whose exact (method, route) already has a `HAND_ROUTE_CLASSIFICATION` row
-// (the op-suffixed KB-maintenance rows) is skipped so the union never
-// carries two rows that both claim to be the SAME table entry.
+// Derivation — every OTHER carved route's row comes straight from its own
+// `RouteEntry.dryClassification`, by calling each package's route-table
+// FACTORY (the same function `apps/forge/routes.ts` calls to assemble the
+// real bridge) and reading the field off the real, typed result — never a
+// text oracle over source. Each factory needs a `deps` object, but
+// `dryClassification` is a literal on every row, independent of `deps`
+// content; only the `matches`/`handler` closures a factory also produces
+// ever read `deps`, and neither is invoked here. `classificationStubDeps`
+// supplies a harmless stand-in, exactly as every package's own
+// `tests/contract/routes-table.test.ts` already does to inspect its table's
+// shape. GET routes are skipped (blanket-covered by the wildcard read-only
+// row), and a route whose exact (method, route) already has a
+// `HAND_ROUTE_CLASSIFICATION` row (the op-suffixed KB-maintenance rows) is
+// skipped so the union never carries two rows claiming the same table entry.
 // ---------------------------------------------------------------------------
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-
-/** Strip `//` and block comments so a prose mention of `dryClassification:`
- *  can never be mistaken for the real field. Duplicated locally rather than
- *  imported from the test's copy — matching that file's own precedent of not
- *  sharing a cross-cutting helper module for a single small function. */
-function stripComments(source: string): string {
-  let out = '';
-  let state: 'code' | 'line' | 'block' | 'single' | 'double' | 'template' = 'code';
-  for (let i = 0; i < source.length; i += 1) {
-    const ch = source[i];
-    const next = source[i + 1];
-    if (state === 'code') {
-      if (ch === '/' && next === '/') { state = 'line'; out += '  '; i += 1; }
-      else if (ch === '/' && next === '*') { state = 'block'; out += '  '; i += 1; }
-      else if (ch === "'") { state = 'single'; out += ch; }
-      else if (ch === '"') { state = 'double'; out += ch; }
-      else if (ch === '`') { state = 'template'; out += ch; }
-      else out += ch;
-    } else if (state === 'line') {
-      out += ch === '\n' ? '\n' : ' ';
-      if (ch === '\n') state = 'code';
-    } else if (state === 'block') {
-      out += ch === '\n' ? '\n' : ' ';
-      if (ch === '*' && next === '/') { out += ' '; i += 1; state = 'code'; }
-    } else {
-      out += ch;
-      if (ch === '\\') { out += next ?? ''; i += 1; }
-      else if ((state === 'single' && ch === "'") || (state === 'double' && ch === '"') || (state === 'template' && ch === '`')) {
-        state = 'code';
-      }
-    }
-  }
-  return out;
+/**
+ * A stand-in for a route-table factory's `deps` parameter whose every
+ * property access returns a harmless no-op function. Only `method`/`path`/
+ * `dryClassification` — literals on each produced row — are ever read off
+ * the result; `matches`/`handler` (the only fields a factory ever reads
+ * `deps` to build) are never called.
+ */
+function classificationStubDeps<T>(): T {
+  return new Proxy({}, { get: () => () => undefined }) as T;
 }
 
-const ROUTE_TABLE_ENTRY_RE =
-  /method:\s*'(GET|POST|PUT|PATCH|DELETE)'\s*,\s*\n?\s*path:\s*'([^']+)'[\s\S]*?dryClassification:\s*'(refuse|stub-actions|exempt-local)'/g;
+type CarvedRouteMeta = { readonly method: string; readonly path: string; readonly dryClassification: string };
 
-/** Every `packages/<pkg>/routes.ts` on disk, auto-discovered so a package that
- *  carves its routes tomorrow is picked up with no edit here — mirrors
- *  `dry-bridge-coverage.test.ts`'s own `DISPATCH_SCAN_DIRS` reasoning. */
-function discoverRouteTableFiles(): readonly string[] {
-  return readdirSync(join(REPO_ROOT, 'packages'), { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .map((e) => join('packages', e.name, 'routes.ts'))
-    .filter((rel) => existsSync(join(REPO_ROOT, rel)))
-    .sort();
+/** Project a factory's real `RouteEntry[]` down to the three fields this
+ *  module needs, immediately discarding `matches`/`handler` so no caller
+ *  here ever holds a value built from stub `deps`. */
+function projectRouteMeta(entries: readonly { method: string; path: string; dryClassification: string }[]): CarvedRouteMeta[] {
+  return entries.map((e) => ({ method: e.method, path: e.path, dryClassification: e.dryClassification }));
 }
+
+/** Every carved route across every package, via the SAME factories the real
+ *  bridge assembly (`apps/forge/routes.ts`) calls. */
+function allCarvedRouteMeta(): CarvedRouteMeta[] {
+  return [
+    ...projectRouteMeta(knowledgeRoutes(classificationStubDeps<KnowledgeRouteDeps>())),
+    ...projectRouteMeta(libraryRoutes(classificationStubDeps<LibraryRouteDeps>())),
+    ...projectRouteMeta(projectsRoutes(classificationStubDeps<ProjectsRouteDeps>())),
+    ...projectRouteMeta(agentsRoutes(classificationStubDeps<AgentsRouteDeps>())),
+    ...projectRouteMeta(sessionsRoutes(classificationStubDeps<SessionsRouteDeps>())),
+  ];
+}
+
+const VALID_CLASSIFICATIONS = new Set<string>(['refuse', 'stub-actions', 'exempt-local']);
+const VALID_METHODS = new Set<string>(['POST', 'PUT', 'DELETE']); // GET is blanket-covered; PATCH: no carved route uses it today
 
 /**
  * Every carved route's classification, read straight from its `RouteEntry`.
  * Exported (not just used to build `BRIDGE_ROUTE_CLASSIFICATION`) so the
- * coverage test can assert on it directly without re-implementing the scan.
+ * coverage test can assert on it directly without re-deriving.
  */
 export function deriveCarvedRouteClassification(
   handRows: readonly RouteClassification[] = HAND_ROUTE_CLASSIFICATION,
@@ -297,24 +290,18 @@ export function deriveCarvedRouteClassification(
   const handKeys = new Set(handRows.map((r) => `${r.method} ${r.route}`));
   const seen = new Set<string>();
   const out: RouteClassification[] = [];
-  for (const relFile of discoverRouteTableFiles()) {
-    const clean = stripComments(readFileSync(join(REPO_ROOT, relFile), 'utf8'));
-    ROUTE_TABLE_ENTRY_RE.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = ROUTE_TABLE_ENTRY_RE.exec(clean))) {
-      const [, method, rawPath, classification] = m;
-      if (method === 'GET') continue; // blanket-covered by the read-only wildcard row
-      const route = rawPath.replace(/:[A-Za-z_][A-Za-z0-9_]*/g, ':id');
-      const key = `${method} ${route}`;
-      if (handKeys.has(key) || seen.has(key)) continue;
-      seen.add(key);
-      out.push({
-        method: method as RouteClassification['method'],
-        route,
-        classification: classification as DryBridgeClassification,
-        reason: `derived from ${relFile}'s RouteEntry.dryClassification (${rawPath})`,
-      });
-    }
+  for (const entry of allCarvedRouteMeta()) {
+    if (!VALID_METHODS.has(entry.method) || !VALID_CLASSIFICATIONS.has(entry.dryClassification)) continue;
+    const route = entry.path.replace(/:[A-Za-z_][A-Za-z0-9_]*/g, ':id');
+    const key = `${entry.method} ${route}`;
+    if (handKeys.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      method: entry.method as RouteClassification['method'],
+      route,
+      classification: entry.dryClassification as DryBridgeClassification,
+      reason: `derived from its RouteEntry.dryClassification (path '${entry.path}')`,
+    });
   }
   return out;
 }

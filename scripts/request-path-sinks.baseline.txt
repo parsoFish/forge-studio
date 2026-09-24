@@ -11,9 +11,6 @@ apps/forge/bridge-studio-writes.ts writeFileSync 1
 apps/forge/bridge-studio.ts existsSync 6
 apps/forge/bridge-studio.ts readdirSync 4
 apps/forge/bridge-studio.ts readFileSync 4
-apps/forge/dry-bridge.ts existsSync 1
-apps/forge/dry-bridge.ts readdirSync 1
-apps/forge/dry-bridge.ts readFileSync 1
 apps/forge/forge-watch.ts execSync 4
 apps/forge/forge-watch.ts existsSync 1
 apps/forge/forge-watch.ts readdirSync 1
