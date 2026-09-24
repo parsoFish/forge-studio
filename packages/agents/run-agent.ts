@@ -59,6 +59,8 @@ import { getAdapter, resolveSdkId } from './_adapters/registry.ts';
 import type { QueryFn } from './_adapters/types.ts';
 import { unreadyConnectionsFor, formatUnreadyConnections } from './studio/connection-run-gate.ts';
 import type { ProbeResult } from '@forge/library/studio/connection-probe.ts';
+import { loadDeclaredSkills } from '@forge/projects/preflight-skills.ts';
+import { composeProjectSkills } from './project-skills.ts';
 
 /**
  * A `runId` is used verbatim as the log directory name — `createLogger`
@@ -540,9 +542,30 @@ async function runOneShotSpawn(
   runMarker: string,
   turnSink?: ReturnType<typeof makeToolEventSink>,
 ): Promise<RunAgentResult> {
+  // ADR 024 item 90 — a bound project's declared `.forge/project.json`
+  // `skills[]` folds into the system prompt every one-shot agent receives.
+  // Absent `ctx.bindings.project` ⇒ no lookup at all, so a non-project run's
+  // systemPrompt (and the golden spawn-capture fixtures) stay byte-identical.
+  const project = ctx.bindings?.project;
+  const projectSkills = project ? loadDeclaredSkills(project.repoPath, FORGE_ROOT) : [];
+  const composedSystemPrompt = composeProjectSkills(ctx.systemPrompt, projectSkills);
+  if (projectSkills.length > 0) {
+    const logger = ctx.logger ?? createLogger(ctx.runId, ctx.logsRoot ?? join(FORGE_ROOT, '_logs'));
+    logger.emit({
+      initiative_id: ctx.bindings?.initiative?.id ?? ctx.runId,
+      phase: 'orchestrator',
+      skill: def.slug,
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: 'project_skills_loaded',
+      metadata: { ids: projectSkills.map((s) => s.id) },
+    });
+  }
+
   const options: Record<string, unknown> = {
     cwd: ctx.cwd ?? ctx.workdir,
-    ...(ctx.systemPrompt !== undefined ? { systemPrompt: ctx.systemPrompt } : {}),
+    ...(composedSystemPrompt !== undefined ? { systemPrompt: composedSystemPrompt } : {}),
     model: modelForSpec(spec),
     permissionMode: ctx.permissionMode ?? 'acceptEdits',
     allowedTools: [...spec.allowedTools],
