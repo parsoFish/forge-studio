@@ -188,6 +188,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/forge-requeue.ts | flows | verbatim | 273 |
 | apps/forge/forge-watch.ts | apps/forge | verbatim | 739 |
 | packages/knowledge/kb-drain-edit-soundness.ts | knowledge | verbatim | 747 |
+| packages/knowledge/brain-write-lease.ts | knowledge | verbatim | 64 |
 | packages/knowledge/kb-drain-structural.ts | knowledge | verbatim | 230 |
 | packages/knowledge/kb-job-state.ts | knowledge | verbatim | 208 |
 | packages/knowledge/kb-drain-routes.ts | knowledge | verbatim | 395 |
@@ -348,7 +349,8 @@ operator-ratified new cap — never a silent raise.
 | packages/factory/phases/project-manager.ts | factory | verbatim | 859 |
 | packages/flows/phases/ralph-spec-lint.ts | flows | verbatim | 469 |
 | packages/factory/phases/reflector-binding.ts | factory | verbatim | 262 |
-| packages/factory/phases/reflector.ts | factory | verbatim | 981 |
+| packages/factory/phases/reflector.ts | factory | verbatim | 682 |
+| packages/factory/phases/reflector-brain-writes.ts | factory | verbatim | 376 |
 | packages/factory/phases/release-finalize.ts | factory | verbatim | 299 |
 | packages/flows/phases/wi-spec-compile.ts | flows | verbatim | 509 |
 | packages/agents/pinned-sdk-query.ts | agents | verbatim | 87 |

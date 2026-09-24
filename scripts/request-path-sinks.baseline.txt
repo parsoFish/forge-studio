@@ -131,11 +131,13 @@ packages/factory/phases/project-manager.ts readFileSync 2
 packages/factory/phases/project-manager.ts rmSync 1
 packages/factory/phases/project-manager.ts writeFileSync 1
 packages/factory/phases/reflector-binding.ts readFileSync 1
-packages/factory/phases/reflector.ts existsSync 7
+packages/factory/phases/reflector-brain-writes.ts existsSync 2
+packages/factory/phases/reflector-brain-writes.ts readdirSync 1
+packages/factory/phases/reflector-brain-writes.ts readFileSync 2
+packages/factory/phases/reflector-brain-writes.ts statSync 1
+packages/factory/phases/reflector.ts existsSync 5
 packages/factory/phases/reflector.ts mkdirSync 7
-packages/factory/phases/reflector.ts readdirSync 1
-packages/factory/phases/reflector.ts readFileSync 5
-packages/factory/phases/reflector.ts statSync 1
+packages/factory/phases/reflector.ts readFileSync 3
 packages/factory/phases/reflector.ts writeFileSync 8
 packages/factory/phases/release-finalize.ts execFileSync 1
 packages/factory/phases/release-finalize.ts existsSync 1
@@ -294,7 +296,7 @@ packages/flows/run-model.ts existsSync 3
 packages/flows/run-model.ts readdirSync 2
 packages/flows/run-model.ts readFileSync 2
 packages/flows/run-model.ts statSync 1
-packages/flows/scheduler-dispatch.ts existsSync 4
+packages/flows/scheduler-dispatch.ts existsSync 3
 packages/flows/scheduler-dispatch.ts readFileSync 3
 packages/flows/scheduler-dispatch.ts writeFileSync 1
 packages/flows/scheduler.ts appendFileSync 1
