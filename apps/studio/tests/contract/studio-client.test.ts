@@ -1338,9 +1338,9 @@ test('RED (R1-06 WI-2 group B, T1 Q3): bootstrapKb must be REMOVED from studio-c
 const BANDED_FLOWS: Pick<Flow, 'id' | 'name' | 'bands'>[] = [
   // Mirrors the REAL shipped forge-develop flow's derived band vocabulary
   // (confirmed live via listFlowBandIds(repoRoot, 'forge-develop') ->
-  // ['demo-band', 'review-band'], packages/flows/flow-band-vocab.ts) — same ground
+  // ['integrate-band', 'review-band'], packages/flows/flow-band-vocab.ts) — same ground
   // truth apps/forge/tests/integration/bridge-studio-flows.test.ts's companion route pin uses.
-  { id: 'forge-develop', name: 'Forge Develop', bands: ['demo-band', 'review-band'] },
+  { id: 'forge-develop', name: 'Forge Develop', bands: ['integrate-band', 'review-band'] },
   { id: 'forge-architect', name: 'Forge Architect', bands: [] },
 ];
 
@@ -1352,8 +1352,8 @@ test('RED (R1-06 WI-2 group A): deriveKbBandOptions is not exported from ./studi
   ).toBe('function');
 });
 
-test('deriveKbBandOptions("flow", flows, "forge-develop") returns exactly that flow\'s REAL bands: ["demo-band","review-band"]', () => {
-  expect(deriveKbBandOptions('flow', BANDED_FLOWS, 'forge-develop')).toEqual(['demo-band', 'review-band']);
+test('deriveKbBandOptions("flow", flows, "forge-develop") returns exactly that flow\'s REAL bands: ["integrate-band","review-band"]', () => {
+  expect(deriveKbBandOptions('flow', BANDED_FLOWS, 'forge-develop')).toEqual(['integrate-band', 'review-band']);
 });
 
 test('deriveKbBandOptions("flow", flows, ref) for a bound flow with NO bands returns [] — present-but-empty, not undefined/null', () => {
