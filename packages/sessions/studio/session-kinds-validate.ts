@@ -176,6 +176,13 @@ const CHECK_PANEL_REQUIRES_MISPLACED = 'session-kinds/panel-requires-misplaced';
 // both are present, so this is the ONLY finding a doubly-declared descriptor
 // ever produces.
 const CHECK_TURNSPEC_PANEL_EXCLUSIVE = 'session-kinds/turnspec-panel-exclusive';
+// bead 8vfn.6.6 item 5 (closed by item 3's coordinator follow-up) —
+// doneField/nextOnDone/ceiling (interview ceiling + same-turn fall-through,
+// interactive-agent-step.ts) are turnSpec-ONLY (panel never dispatches, so
+// they are structurally meaningless there — no panel-* counterpart exists,
+// mirroring style/schema's own turnSpec-only checks above).
+const CHECK_TURNSPEC_DONEFIELD_COREQUIRED = 'session-kinds/turnspec-donefield-corequired';
+const CHECK_TURNSPEC_DANGLING_NEXT_ON_DONE = 'session-kinds/turnspec-dangling-next-on-done';
 
 /**
  * turnSpec.kindDir must be a safe single path segment — it becomes
@@ -661,6 +668,27 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
         // `writes` (each phase's optional staging-area list) is deliberately
         // NOT validated anywhere in this block — see TurnSpecPhase's own
         // EXPIRY CONDITION doc comment above for why and when.
+
+        // bead 8vfn.6.6 item 5/3 — doneField/nextOnDone/ceiling: doneField
+        // and nextOnDone are co-required (the runner only ever consults
+        // either when BOTH are present, interactive-agent-step.ts), ceiling
+        // is meaningless without doneField, and a declared nextOnDone must
+        // resolve — the same ghost-phase class `next` is guarded against
+        // above, but `next`'s own phaseNameSet lives inside validatePhaseTable
+        // and is not reachable here, so this re-derives it from ts.phases.
+        const doneNames = ts.phases.map((p) => p.phase);
+        for (const phase of ts.phases) {
+          const hasDone = phase.doneField !== undefined;
+          const hasNextOnDone = phase.nextOnDone !== undefined;
+          if (hasDone !== hasNextOnDone || (phase.ceiling !== undefined && !hasDone)) {
+            findings.push(err(obj, CHECK_TURNSPEC_DONEFIELD_COREQUIRED,
+              `Session kind "${d.id}" turnSpec.phases phase "${phase.phase}" declares doneField/nextOnDone/ceiling inconsistently — doneField and nextOnDone must be declared TOGETHER, and ceiling is meaningless without doneField.`));
+          }
+          if (hasNextOnDone && !doneNames.includes(phase.nextOnDone!)) {
+            findings.push(err(obj, CHECK_TURNSPEC_DANGLING_NEXT_ON_DONE,
+              `Session kind "${d.id}" turnSpec.phases phase "${phase.phase}" nextOnDone "${phase.nextOnDone}" is not a member of its own declared phases [${doneNames.join(', ')}]`));
+          }
+        }
       }
 
       // panel (W6-B3, ADR-043 2026-08-15 amendment §2): additive-optional,
