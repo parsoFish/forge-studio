@@ -372,7 +372,13 @@ is what this contract reads — but it cannot be the only distinguisher.
   failure) and the body is this component. `/sessions/<kind>/<sid>` renders
   it inside `[data-section="session-error"]` (framed by the shell route's
   `errorKind`: `network-error`/`no-bridge` = unreachable, every other kind =
-  the bridge answered) with Retry (crosscut-09); the project page's contract
+  the bridge answered) with Retry (crosscut-09). `forge-5rr`: the SAME
+  page's per-kind SUMMARY read (a SEPARATE fetch from the shell read above —
+  architect/instructions/project-brain/demo's own list endpoint) renders it
+  inside `[data-section="session-summary-error"]`, with Retry
+  (`onRetry={refreshSummary}`) — reachable only for the two kinds
+  (architect, project-brain) with no generic-panel fallback, and only while
+  the summary itself never resolved; the project page's contract
   panel renders it inside `[data-section="contract-checklist-error"]` in the
   checklist's place — never a `data-checklist-row-count="0"` list on a
   404/409/500 (projects-03/crosscut-12); the `/hooks|/connections|/skills/[id]`
@@ -1967,7 +1973,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   [data-item-id][data-page-ready]` plus, **present ONLY once the item
   resolves** (`[data-item-kind][data-install-state]` are ABSENT while
   loading, on a fetch error, and for an unknown kind/id — an unvalidated
-  route param is never asserted as fact before the server confirms it):
+  route param is never asserted as fact before the server confirms it).
+  `forge-5rr` (projects-45): a non-404 read failure (bridge down, or
+  reachable-and-refused) renders the SHARED `PageLoadError` kit instead of
+  the page's own chrome — `main[data-page="community-detail"]
+  [data-page-ready="true"][data-fetch-status="error"][data-load-error="true"]
+  [data-item-id]`, with `[data-action="retry-fetch"]` (Retry re-runs the
+  read) and a bridge-recovery resubscribe that refills automatically once
+  the bridge is back — replacing the old dead-end banner with no retry path
+  short of a manual reload. The not-found claim itself stays reachable ONLY
+  off a real, bridge-answered HTTP 404 (`fetchCommunityItemDetail`'s own
+  `status`) — never off this transport-failure branch.
   `[data-section="hub-signals"]` (`[data-hub-id]` present only for a matched
   hub, a signal-attribution attribute present only when the source record
   actually carries signals — D4/D5, no invented hub name or signal figure
@@ -3302,7 +3318,18 @@ is what this contract reads — but it cannot be the only distinguisher.
   id — a wrong destination with no indication anything went wrong). The
   USER-tier `[data-action="apply-clause-decision"]` button genuinely
   dispatches + polls a preflight-fix agent (~90s bounded) and is labelled
-  "Apply with agent" accordingly.
+  "Apply with agent" accordingly. `forge-8vfn.8.3.1` (projects-45): its
+  `disabled` consults the SAME per-clause poll state the row's own
+  `data-agent-run-state`/`data-poll-state` already render, not just the
+  click-scoped `busy` flag — `busy` clears the instant the dispatch POST
+  resolves, while the polled agent run can still be `'watching'` or
+  `'timed-out'` (a poll ceiling is a fact about the watcher, not the run —
+  `pollDisplayState`'s header). Either non-terminal state keeps the button
+  disabled with `[data-disabled-reason]` (`disabledAttrs`,
+  `lib/disabled-reason.ts`) naming the still-running clause; only a real
+  terminal status re-enables it. Before this fix the button re-enabled the
+  moment the POST returned, so a second click could dispatch a second agent
+  onto the same clause.
   **`[data-section="contract-panel"]` (R4-12-F1)** —
   `ProjectContractPanel.tsx`, an async server component mounted client-side by
   the page's `ContractPanelMount`; it issues its OWN
@@ -4658,7 +4685,17 @@ is what this contract reads — but it cannot be the only distinguisher.
     `[data-action="view-architect-session"]`); the KB hand-off was one of the
     six sites that kept the old shape. Rendered only when `seedSession` is
     present in the query. Harness coverage: `tests/stories/S6.story.mjs`
-    beats 4-7.
+    beats 4-7. `knowledge-38` (forge-6gv.6.1): the banner's TEXT is no longer
+    a hardcoded "…is running for it" claim off the query param's mere
+    presence — `startProjectBrain` always mints a fresh session at phase
+    `'briefing'` (idle, waiting for the operator's brief), so that claim was
+    wrong on every single KB creation. The banner now fetches the session's
+    real phase (`fetchProjectBrainSessions`) and renders
+    `lib/kb-seed-banner.ts`'s `kbSeedBannerCopy` derivation, carrying two new
+    attributes: `data-seed-session-phase` (the real phase, or `''` before
+    the read lands / if it fails — never a guessed value) and
+    `data-seed-session-running="true"|"false"` (true only for `'analyzing'`/
+    `'committing'` — the phases where an agent is genuinely doing something).
   - **KB selector zero-state (W6-IA-4 sweep finding C4#2).**
     `KbSelector.tsx`'s `#kb-select` used to render a genuinely empty
     `<select>` (zero `<option>`s) whenever the roster was empty — nothing to
@@ -5327,10 +5364,16 @@ is what this contract reads — but it cannot be the only distinguisher.
   plus `[data-template-category]` and `[data-endpoints-verified="true"|"false"]`
   once the fetch resolves — the latter present ONLY when the template
   declares a producer and/or consumer (planning-only; absent, not `false`,
-  when nothing is declared). Non-ready states: `[data-component="fetch-error"]`
-  (bridge unreachable) and the shared not-found page (`main[data-page=
-  "not-found"][data-not-found-kind="template"]`, W7-A4 — unknown id, the
-  bridge 404s for it by design). The ready state renders
+  when nothing is declared). Non-ready states: the shared not-found page
+  (`main[data-page="not-found"][data-not-found-kind="template"]`, W7-A4 —
+  unknown id, reachable ONLY off a real bridge-answered 404, the bridge
+  404s for it by design); `forge-5rr` (projects-45): a non-404 failure (the
+  bridge unreachable, or reachable-and-refused) renders the shared
+  `PageLoadError` kit instead — `main[data-page="template-detail"]
+  [data-page-ready="true"][data-fetch-status="error"][data-load-error="true"]
+  [data-template-id]`, with `[data-action="retry-fetch"]` and a bridge-
+  recovery resubscribe, replacing the old dead-end `[data-component=
+  "fetch-error"]` banner with no retry path. The ready state renders
   `[data-section="definition"]` (format/provenance/definition-ref); for a
   malformed definition, `[data-section="parse-error"]` instead; planning-only,
   when a producer/consumer is declared, `[data-section="endpoints"]`
