@@ -311,10 +311,37 @@ if git -C "$R" rev-parse --verify --quiet parsoFish/main >/dev/null 2>&1; then
 else
   echo "GATE_CHECKOUT_UNKNOWN: no parsoFish/main ref in $R — staleness not checked, so this log does not say whether its tooling is current"
 fi
-# A wall-clock delta is a proxy, and a proxy that can report an impossible number is a broken
-# measurement, not a fast step (§15.48: `real 0m0.000s` for 2 s of work). If the clock stepped
-# under us the duration is reported as `?s`, never as a plausible-looking lie.
-secs() { local d=$(( $(date +%s) - $1 )); if [ "$d" -lt 0 ]; then echo "?s (clock stepped)"; else echo "${d}s"; fi; }
+# A wall-clock delta is a proxy, and `date +%s` is not a safe one on this host:
+# `_1.0/reports/m7-c-clockprobe-1.log` measured CLOCK_REALTIME stepping
+# BACKWARDS ~2.85s every ~29.6s regardless of load (WSL2's clocksource). A step
+# landing between a step's `t0=$(date +%s)` and this function's own `date +%s`
+# read a negative delta and printed `?s (clock stepped)` — the mechanism behind
+# the flake register's `gate-refusal.test.ts:132` (699's REFUSED-line door
+# expects `\(\d+s\)` and intermittently got `?s`; reproduced on demand in
+# `gate-elapsed-clock.test.ts`). `build-guard.mjs` hit the SAME clock on the
+# SAME host and fixed it by reading `performance.now()` instead of
+# `Date.now()` (forge-8vfn.7.6.50); the bash equivalent of a monotonic clock
+# is `/proc/uptime`'s FIRST field — seconds since boot, kernel jiffies, never
+# adjusted by NTP or a manual step — never `$EPOCHREALTIME`, which is still
+# wall-clock and would carry the exact same bug forward.
+#
+# `FORGE_UPTIME_FILE` is the test seam, same idiom as `FORGE_PROC_LOCKS` above:
+# `/proc/uptime` cannot be made to hold a chosen value, so a door proving the
+# step no longer reaches `secs()` points at the wall clock (`date +%s` on
+# PATH) instead, in `gate-elapsed-clock.test.ts`.
+#
+# A monotonic source cannot go backward by construction, so the
+# `?s (clock stepped)` fallback is dropped rather than kept as dark code — a
+# check that can no longer fire is the "state that looks like nothing to
+# report" trap this file already names at §15.92.
+now_ticks() { awk '{print $1}' "${FORGE_UPTIME_FILE:-/proc/uptime}" 2>/dev/null; }
+secs() {
+  local now d
+  now="$(now_ticks)"
+  [ -n "$now" ] || { echo "?s (uptime unreadable)"; return; }
+  d="$(awk -v a="$1" -v b="$now" 'BEGIN{printf "%d", b - a}')"
+  echo "${d}s"
+}
 
 # T1 ruling 639 / bead `forge-8vfn.7.6.13`. `npm test` refuses while a story run
 # holds the run-lock, and it learns WHICH lock from the environment — the guard
@@ -460,7 +487,7 @@ while IFS= read -r cmd; do
   # The wrapper's own PASS/FAIL line was always per-lane and always correct;
   # it is the STEP log that lied, which is the harder kind to notice.
   log="$LOGS/gate-$(basename "$R")-$name.log"
-  t0=$(date +%s)
+  t0=$(now_ticks)
   # Written to a temp file and renamed: `rename(2)` is atomic within a
   # filesystem, so a reader either sees the previous complete log or this one,
   # never a half-written file — and a gate already executing this script keeps
