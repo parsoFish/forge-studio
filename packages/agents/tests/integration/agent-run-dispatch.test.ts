@@ -110,7 +110,7 @@ test('cmdAgentDispatch: happy path under the no-spawn seam → suppressed, no ex
   } finally {
     if (prior === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
     else process.env.FORGE_ARCHITECT_NO_SPAWN = prior;
-    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(join(FIXTURE_FORGE_ROOT, '_logs', runId), { recursive: true, force: true });
   }
 });
 
@@ -150,7 +150,6 @@ test('cmdAgentDispatch: bead forge-8vfn.8.3.3 — a dispatch run\'s own record l
     if (prior === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
     else process.env.FORGE_ARCHITECT_NO_SPAWN = prior;
     rmSync(ownForgeRoot, { recursive: true, force: true });
-    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
   }
 });
 
@@ -194,7 +193,7 @@ test('cmdAgentDispatch: R4-17 AT-D7-1 — with --session-dir, a SUCCESSFUL dispa
   } finally {
     if (prior === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
     else process.env.FORGE_ARCHITECT_NO_SPAWN = prior;
-    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(join(FIXTURE_FORGE_ROOT, '_logs', runId), { recursive: true, force: true });
     rmSync(sessionDir, { recursive: true, force: true });
   }
 });
@@ -227,7 +226,7 @@ test('cmdAgentDispatch: R4-17 AT-D7-3 (D6 — byte-identical without the flag) �
   } finally {
     if (prior === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
     else process.env.FORGE_ARCHITECT_NO_SPAWN = prior;
-    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(join(FIXTURE_FORGE_ROOT, '_logs', runId), { recursive: true, force: true });
     rmSync(untouchedDir, { recursive: true, force: true });
   }
 });
@@ -291,7 +290,7 @@ test('cmdAgentDispatch: R4-17 AT-D7-5 (item 3, ACCEPT control): a --session-dir 
   } finally {
     if (prior === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
     else process.env.FORGE_ARCHITECT_NO_SPAWN = prior;
-    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(join(FIXTURE_FORGE_ROOT, '_logs', runId), { recursive: true, force: true });
     rmSync(sessionDir, { recursive: true, force: true });
   }
 });
@@ -325,7 +324,7 @@ test('cmdAgentDispatch: W7-FIX-A2 sticky-cancel — a SUCCESSFUL dispatch whose 
   } finally {
     if (prior === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
     else process.env.FORGE_ARCHITECT_NO_SPAWN = prior;
-    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(join(FIXTURE_FORGE_ROOT, '_logs', runId), { recursive: true, force: true });
     rmSync(sessionDir, { recursive: true, force: true });
   }
 });
@@ -438,7 +437,7 @@ test('cmdAgentDispatch: R4-17 AT-D7-6 (pin 4, item 1, ACCEPT — FORGE_PROJECTS_
     else process.env.FORGE_ARCHITECT_NO_SPAWN = priorSpawn;
     if (priorProjectsDir === undefined) delete process.env.FORGE_PROJECTS_DIR;
     else process.env.FORGE_PROJECTS_DIR = priorProjectsDir;
-    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(join(FIXTURE_FORGE_ROOT, '_logs', runId), { recursive: true, force: true });
     rmSync(customProjectsRoot, { recursive: true, force: true });
   }
 });
@@ -562,8 +561,6 @@ test('cmdAgentDispatch: R4-17 AT-D7-9 (pin 4, item 1, ACCEPT — forge.config.js
     process.chdir(originalCwd);
     if (priorSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
     else process.env.FORGE_ARCHITECT_NO_SPAWN = priorSpawn;
-    rmSync(join(ROOT, '_logs', runIdFromUnrelatedCwd), { recursive: true, force: true });
-    rmSync(join(ROOT, '_logs', runIdFromConfigForgeRoot), { recursive: true, force: true });
     rmSync(configForgeRoot, { recursive: true, force: true });
     rmSync(configuredProjectsRoot, { recursive: true, force: true });
     rmSync(unrelatedCwd, { recursive: true, force: true });
@@ -614,7 +611,6 @@ test('cmdAgentDispatch: bead forge-c6h CHARACTERIZATION (today\'s bug, pinned on
   } finally {
     if (priorSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
     else process.env.FORGE_ARCHITECT_NO_SPAWN = priorSpawn;
-    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
     rmSync(configForgeRoot, { recursive: true, force: true });
     rmSync(mismatchedProjectsDir, { recursive: true, force: true });
   }
@@ -647,7 +643,6 @@ test('cmdAgentDispatch: bead forge-c6h FIX — the SAME mismatched-config setup,
   } finally {
     if (priorSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
     else process.env.FORGE_ARCHITECT_NO_SPAWN = priorSpawn;
-    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
     rmSync(configForgeRoot, { recursive: true, force: true });
     rmSync(mismatchedProjectsDir, { recursive: true, force: true });
   }
@@ -721,7 +716,7 @@ test('cmdAgentDispatch: --projects-root ACCEPT control — a valid absolute, exi
   } finally {
     if (prior === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
     else process.env.FORGE_ARCHITECT_NO_SPAWN = prior;
-    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(join(FIXTURE_FORGE_ROOT, '_logs', runId), { recursive: true, force: true });
     rmSync(sessionDir, { recursive: true, force: true });
   }
 });
