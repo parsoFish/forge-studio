@@ -36,6 +36,22 @@ export class BrainWriteLeaseContentionError extends Error {
 }
 
 /**
+ * Test-only escape hatch (forge-ler4 cross-file flake fix): `lockfilePath`
+ * points the PHYSICAL lock file somewhere private while `forgeRoot` still
+ * names the conceptual target (`proper-lockfile` still validates that
+ * `brain/` exists there). Some callers — `runReflector` chief among them —
+ * derive `forgeRoot` from their own module location rather than accepting
+ * it as an argument (see `reflector.ts` + `reflector-spawn-capture.test.ts`'s
+ * header for why), so every test that reaches them resolves the SAME real
+ * repo `brain/`. Without a way to relocate the physical lock, two such
+ * tests in DIFFERENT `node --test` worker files contend on that one real
+ * lock. Left unset (the production default on every real call site), this
+ * changes nothing: the lock stays at proper-lockfile's own default,
+ * `${brainRootDir(forgeRoot)}.lock`.
+ */
+export type BrainWriteLeaseOptions = { lockfilePath?: string };
+
+/**
  * Take the brain-write lease. Resolves to the release function; throws
  * `BrainWriteLeaseContentionError` when another writer holds it, and
  * re-throws anything else (a real I/O fault) unchanged — the caller must
@@ -46,17 +62,22 @@ export class BrainWriteLeaseContentionError extends Error {
  * exist, and creating it here on a lease that then fails would leave a
  * directory behind the refusal.
  */
-export async function acquireBrainWriteLease(forgeRoot: string): Promise<() => Promise<void>> {
+export async function acquireBrainWriteLease(
+  forgeRoot: string,
+  opts: BrainWriteLeaseOptions = {},
+): Promise<() => Promise<void>> {
   const target = brainRootDir(forgeRoot);
+  const lockfilePath = opts.lockfilePath ?? `${target}.lock`;
   try {
     return await lockfile.lock(target, {
       stale: BRAIN_WRITE_LEASE_STALE_MS,
       retries: { ...BRAIN_WRITE_LEASE_RETRIES },
+      lockfilePath,
     });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ELOCKED') {
       throw new BrainWriteLeaseContentionError(
-        `brain-write-lease: brain/ is locked by another writer (${target}.lock) — the daemon's reflector or a Studio KB job (drain/consolidate/brain-fix) is mid-turn. Refused rather than risking a misattributed write; retry once it releases.`,
+        `brain-write-lease: brain/ is locked by another writer (${lockfilePath}) — the daemon's reflector or a Studio KB job (drain/consolidate/brain-fix) is mid-turn. Refused rather than risking a misattributed write; retry once it releases.`,
       );
     }
     throw err;

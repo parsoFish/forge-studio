@@ -11,7 +11,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, mkdirSync, utimesSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, utimesSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -76,20 +76,35 @@ test('forge-ler4: once released, a following acquire succeeds — the lease is n
 // lets a caller point the PHYSICAL lock file somewhere private while still
 // validating the same conceptual `forgeRoot`/brain target, so each reflector
 // test file can hold its own lock and never see another file's turn.
-test('forge-ler4: acquireBrainWriteLease(forgeRoot, { lockfilePath }) uses a PRIVATE physical lock, so two callers pointed at DIFFERENT lockfilePaths on the SAME forgeRoot never contend', async () => {
+//
+// This is proven at the disk level (custom path used INSTEAD of the default,
+// never touching it) rather than by holding two concurrent in-process leases
+// on the same forgeRoot: `proper-lockfile`'s `lock()`/`unlock()` bookkeeping
+// (`lib/lockfile.js`'s module-level `locks` map) is keyed by the canonical
+// TARGET path only, one entry per process — a second successful acquire
+// against the same target (even with a different `lockfilePath`) overwrites
+// the first's bookkeeping entry and breaks its later `release()`. That
+// collision is a same-PROCESS artifact of the high-level wrapper; it does
+// not occur in the real fix, where each `node --test` worker file is its own
+// process with its own independent `locks` map.
+test('forge-ler4: acquireBrainWriteLease(forgeRoot, { lockfilePath }) holds its lock at the CUSTOM path, leaving the default target-derived lock path untouched', async () => {
   const forgeRoot = buildForgeRoot();
   try {
-    const lockA = join(forgeRoot, 'lease-a.lock');
-    const lockB = join(forgeRoot, 'lease-b.lock');
-    const releaseA = await acquireBrainWriteLease(forgeRoot, { lockfilePath: lockA });
+    const customLockPath = join(forgeRoot, 'private.lock');
+    const defaultLockPath = `${brainRootDir(forgeRoot)}.lock`;
+    assert.ok(!existsSync(defaultLockPath), 'sanity: no default lock exists yet');
+
+    const release = await acquireBrainWriteLease(forgeRoot, { lockfilePath: customLockPath });
     try {
-      // Must NOT throw BrainWriteLeaseContentionError — lockB is a distinct
-      // physical lock from lockA even though both target the same forgeRoot.
-      const releaseB = await acquireBrainWriteLease(forgeRoot, { lockfilePath: lockB });
-      await releaseB();
+      assert.ok(existsSync(customLockPath), 'the lease must be held at the CUSTOM lockfilePath');
+      assert.ok(
+        !existsSync(defaultLockPath),
+        'holding the override must NOT create the default target-derived lock — a caller using the default path (e.g. another test FILE / process) must see it as free',
+      );
     } finally {
-      await releaseA();
+      await release();
     }
+    assert.ok(!existsSync(customLockPath), 'release must remove the custom lock');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }
