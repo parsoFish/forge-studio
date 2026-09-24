@@ -67,7 +67,7 @@ async function runWithWedge<T>(
 /** architect: silent DAG marker — runCycle already emitted the synthetic events. */
 const execArchitect: NodeExecutor = async () => { /* marker only */ };
 
-/** pm: skip + rebase on any resume ('demo' crash recovery, ADR-019;
+/** pm: skip + rebase on any resume ('integrate' crash recovery, ADR-019;
  *  'develop' fix-loop re-entry, ADR-040); otherwise run the project manager. */
 const execPm: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, nodeId } = ctx;
@@ -90,11 +90,11 @@ const execPm: NodeExecutor = async (ctx) => {
 };
 
 /**
- * dev: the per-WI developer loop. The post-develop band (demo → adversarial-review)
- * are their own nodes. On a `resumeFrom: 'demo'` run (ADR-019 crash recovery),
+ * dev: the per-WI developer loop. The post-develop band (integrate → adversarial-review)
+ * are their own nodes. On a `resumeFrom: 'integrate'` run (ADR-019 crash recovery),
  * runDeveloperLoop self-no-ops the per-WI work (toRun=[]) and STILL emits the
  * dev-loop start/end{resumed:true} events — so the dev hex resolves to complete and
- * the `demo` node (declared `resumable`) is the resume target. We do NOT
+ * the `integrate` node (declared `resumable`) is the resume target. We do NOT
  * short-circuit here: skipping the call would drop those phase-boundary events and
  * leave the dev hex stuck active on a resume cycle.
  */
@@ -104,20 +104,21 @@ const execDev: NodeExecutor = async (ctx) => {
 };
 
 /**
- * demo (the `demo-band`, ADR-039) — the INTEGRATE band of spec §5 item 4.
+ * integrate (the `integrate-band`, ADR-039) — the INTEGRATE band of spec §5 item 4.
  *
  * Boundary commit, sync invariant, empty-branch guard, the merge-boundary gate
  * that fails loud on a config error, and then `runIntegrate`, which DERIVES the
  * demo bundle and the PR body from the acceptance criteria, this gate's own
- * evidence and the diff. Nothing here spawns a model: the LLM demo node and its
+ * evidence and the diff. Nothing here spawns a model: the LLM integrate node and its
  * authoring retries were deleted with the fix loop they fed.
  *
- * The band keeps its `demo` identity — node id, band guard, slug and
- * `resume_from: 'demo'` are unchanged (T1 ruling 245), so the run model resolves
- * this node's hex exactly as before and no golden, story or API field moves. The
- * NAME lags the spec's word `integrate`; the rename is priced separately.
+ * The STATION identity now matches the spec's word (forge-8vfn.6.10.18,
+ * operator item 85): node id, band guard, `resume_from`, the requeue API
+ * field and the CLI flag are all `integrate`. The agent slug (`demo-agent`)
+ * and the demo ARTIFACT it produces (`demo.json`, `DEMO.md`) intentionally
+ * keep the word `demo` — they name the artifact, not the station.
  */
-const execDemo: NodeExecutor = async (ctx) => {
+const execIntegrate: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, nodeId, state } = ctx;
   const start = nodeLogger.emit({
     initiative_id: input.initiativeId,
@@ -126,7 +127,7 @@ const execDemo: NodeExecutor = async (ctx) => {
     event_type: 'start',
     input_refs: [input.worktreePath],
     output_refs: [],
-    metadata: { agent_phase: 'demo', agent_slug: 'demo-agent', node_id: nodeId },
+    metadata: { agent_phase: 'integrate', agent_slug: 'demo-agent', node_id: nodeId },
   });
 
   // Close-contract prep (items 4,5): commit stragglers + push/sync so the
@@ -167,8 +168,8 @@ const execDemo: NodeExecutor = async (ctx) => {
       metadata: { reason: gate.reason, origin: 'gate-fix' },
     });
     state.terminateEarly = true;
-    // `status: 'failed'` so the demo hex renders as a failed/blocked state, not
-    // the green 'complete' a real demo earns — the demo never ran here; the
+    // `status: 'failed'` so the integrate hex renders as a failed/blocked state, not
+    // the green 'complete' a real integrate run earns — it never ran here; the
     // merge-boundary gate could not even read the project config
     // (endMetaIndicatesFailure keys on `status:'failed'`, run-model-derive.ts).
     nodeLogger.emit({
@@ -179,7 +180,7 @@ const execDemo: NodeExecutor = async (ctx) => {
       event_type: 'end',
       input_refs: [],
       output_refs: [],
-      metadata: { agent_phase: 'demo', agent_slug: 'demo-agent', node_id: nodeId, status: 'failed', demo_status: 'gate-config-error' },
+      metadata: { agent_phase: 'integrate', agent_slug: 'demo-agent', node_id: nodeId, status: 'failed', integrate_status: 'gate-config-error' },
     });
     return;
   }
@@ -208,8 +209,8 @@ const execDemo: NodeExecutor = async (ctx) => {
       },
     });
     state.terminateEarly = true;
-    // `status: 'failed'` so the demo hex renders as a failed/blocked state, not
-    // the green 'complete' a real demo earns — the demo never ran here; the
+    // `status: 'failed'` so the integrate hex renders as a failed/blocked state, not
+    // the green 'complete' a real integrate run earns — it never ran here; the
     // merge-boundary gate blocked the band on a red full-suite baseline
     // (endMetaIndicatesFailure keys on `status:'failed'`, run-model-derive.ts).
     nodeLogger.emit({
@@ -220,7 +221,7 @@ const execDemo: NodeExecutor = async (ctx) => {
       event_type: 'end',
       input_refs: [],
       output_refs: [],
-      metadata: { agent_phase: 'demo', agent_slug: 'demo-agent', node_id: nodeId, status: 'failed', demo_status: 'gate-red' },
+      metadata: { agent_phase: 'integrate', agent_slug: 'demo-agent', node_id: nodeId, status: 'failed', integrate_status: 'gate-red' },
     });
     return;
   }
@@ -234,10 +235,7 @@ const execDemo: NodeExecutor = async (ctx) => {
   // outcome any more: a derivation either produced the artifacts or named the
   // reason it could not, and either way there is nothing to re-author.
   if (result.status === 'failed') {
-    throw new Error(
-      `delivery gate: integrate band failed (${result.reason}: ${result.detail}) — ` +
-        `the branch is not review-ready, so no PR is opened. Triage the failure before re-running.`,
-    );
+    throw new Error(integrateDeliveryFailure(result.reason, result.detail));
   }
 
   nodeLogger.emit({
@@ -248,7 +246,7 @@ const execDemo: NodeExecutor = async (ctx) => {
     event_type: 'end',
     input_refs: [],
     output_refs: [result.demoJsonPath],
-    metadata: { agent_phase: 'demo', agent_slug: 'demo-agent', node_id: nodeId, demo_status: result.status },
+    metadata: { agent_phase: 'integrate', agent_slug: 'demo-agent', node_id: nodeId, integrate_status: result.status },
   });
 };
 
@@ -258,7 +256,7 @@ const execDemo: NodeExecutor = async (ctx) => {
  * `review-findings` artifact for the verdict gate. Finding CONTENT is an
  * operator signal weighed at the verdict (ADR-021), never an auto-block; but a
  * pipeline FAILURE produced NO findings, so it fails loud (symmetric with the
- * demo delivery gate) rather than open a PR the operator would review blind.
+ * integrate delivery gate) rather than open a PR the operator would review blind.
  */
 const execAdversarialReview: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, nodeId } = ctx;
@@ -353,7 +351,7 @@ const execReflect: NodeExecutor = async (ctx) => {
  * `gate: contract` node of an onboard-shaped flow (authorable — the OOTB
  * wrapper was retired in W7-C1). Runs the REAL forge↔project
  * contract preflight (`runPreflight`, `packages/projects/preflight.ts`) DIRECTLY,
- * orchestrator-side — mirrors `execDemo`'s shape (start event, do the real
+ * orchestrator-side — mirrors `execIntegrate`'s shape (start event, do the real
  * work, end event carrying `status`) but spawns NO agent at all.
  *
  * ADR-036: the orchestrator runs gates, the agent never self-certifies. That
@@ -377,7 +375,7 @@ const execReflect: NodeExecutor = async (ctx) => {
  *
  * On a red report (`report.ok === false`) this sets `state.terminateEarly`
  * — runFlow's own terminateEarly branch then routes the manifest to
- * `ready-for-review` via `runClosure`, exactly as `execDemo`'s merge-boundary
+ * `ready-for-review` via `runClosure`, exactly as `execIntegrate`'s merge-boundary
  * gate does. On green, the walk proceeds normally (no further nodes in this
  * 2-node flow, but the shape generalises).
  */
@@ -622,7 +620,7 @@ const registerBand = (id: BandGuardId, exec: NodeExecutor): void => AGENT_BANDS.
 
 registerBand('wi-contract', execPm);
 registerBand('reflection-close', execReflect);
-registerBand('demo-band', execDemo);
+registerBand('integrate-band', execIntegrate);
 registerBand('review-band', execAdversarialReview);
 registerBand('onboard-preflight', execOnboardPreflight);
 
@@ -650,4 +648,11 @@ export function createPhaseExecutor(opts: {
       return ctx.state.cycleOutcome;
     },
   };
+}
+
+/** The integrate band's delivery-gate failure message — ONE source, read by the
+ *  failure classifier's door so a reworded throw cannot strand its matcher
+ *  (forge-8vfn.8.2.1). */
+export function integrateDeliveryFailure(reason: string, detail: string): string {
+  return `delivery gate: integrate band failed (${reason}: ${detail}) — the branch is not review-ready, so no PR is opened. Triage the failure before re-running.`;
 }

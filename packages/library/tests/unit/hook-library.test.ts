@@ -20,7 +20,7 @@
  *   preceding PR, #76 / commit 7984a548) stays the platform dispatch-key
  *   vocabulary — at that PR's landing, 5 toggle ids (event-log, cost-guard,
  *   stall-watchdog, merge-gate, scratch-strip) + 4 band ids (wi-contract,
- *   reflection-close, demo-band, review-band), all listed in
+ *   reflection-close, integrate-band, review-band), all listed in
  *   studio/catalog.yaml's `guards:` section (R4-18 later added a 5th band,
  *   onboard-preflight — see PLATFORM_GUARD_IDS in agent-bands.ts for the
  *   current 10-id set). composition.hooks is REINTRODUCED by this round meaning ONLY
@@ -603,7 +603,7 @@ describe('lintHookComposition: guard id under composition.hooks is an ERROR', ()
   // R4-18 mechanical amendment (2026-08-10): 'onboard-preflight' joins the
   // sweep — RED until PLATFORM_GUARD_IDS (which lintHookComposition reads
   // from) picks it up, since this loop must cover every legacy value.
-  for (const guardId of ['event-log', 'cost-guard', 'stall-watchdog', 'merge-gate', 'scratch-strip', 'wi-contract', 'reflection-close', 'demo-band', 'review-band', 'onboard-preflight']) {
+  for (const guardId of ['event-log', 'cost-guard', 'stall-watchdog', 'merge-gate', 'scratch-strip', 'wi-contract', 'reflection-close', 'integrate-band', 'review-band', 'onboard-preflight']) {
     it(`"${guardId}" under composition.hooks is flagged`, () => {
       const root = makeForgeRoot();
       writeAgentSkillMd(root, `agent-with-${guardId}-as-hook`, { hooks: [guardId] });
