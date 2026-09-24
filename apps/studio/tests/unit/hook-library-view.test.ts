@@ -334,6 +334,11 @@ test('buildHookDetailView: carries id/on/trust/runnable through, plus a derived 
   expect(view.scan.verdict).toBe('clean');
 });
 
+test('forge-8vfn.8.3.7: buildHookDetailView carries the server-attested origin through verbatim (ootb and operator)', () => {
+  expect(buildHookDetailView(detailFixture({ origin: 'ootb' })).origin).toBe('ootb');
+  expect(buildHookDetailView(detailFixture({ origin: 'operator' })).origin).toBe('operator');
+});
+
 test('buildHookDetailView: an unbound hook (carriedBy empty) still reports a real derivation, not an unknown state', () => {
   const view = buildHookDetailView(detailFixture({ carriedBy: [] }));
   expect(view.carriedBy).toEqual([]);
