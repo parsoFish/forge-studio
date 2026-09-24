@@ -201,3 +201,30 @@ test('7.6.95: a launcher whose NAME contains "gate" is NOT refused', () => {
   assert.notEqual(r.status, GUARANTEED, `a launcher must not be refused for its name: ${r.stderr}`);
   assert.doesNotMatch(r.stderr, /REFUSING/);
 });
+
+/**
+ * M7 findings row 74 (T1 1245): the story runner was listed under REFUSES UNDER
+ * .run-lock, but its guard ACCEPTS a run-lock its own ancestor holds (ruling 683:
+ * the ratified costed launch is `flock <run-lock> … npm run stories`) — so the table
+ * refused the one launch that works (it blocked a lane's replica launch). What the
+ * runner refuses today is ANY suite-lock holder, its own caller included, until D1b
+ * makes that check ancestor-aware. The table says what the runner actually does.
+ */
+test('row 74: run -- the story runner PROCEEDS (its guard accepts its own ancestor\'s run-lock)', () => {
+  const d = camp();
+  const r = run(d, 'run', '--', 'echo', 'npm', 'run', 'stories', '--', '--story', 'smoke');
+  assert.notEqual(r.status, GUARANTEED, `the ratified costed launch must not be refused: ${r.stderr}`);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /\.run-lock taken/);
+});
+
+test('row 74: both / suite -- the story runner is REFUSED, naming the suite guard (until D1b)', () => {
+  for (const mode of ['both', 'suite']) {
+    const d = camp();
+    const r = run(d, mode, '--', 'echo', 'npm', 'run', 'stories', '--', '--story', 'smoke');
+    assert.equal(r.status, GUARANTEED, `${mode}: ${r.stderr}`);
+    assert.match(r.stderr, /suite-lock/, `${mode}: the reason names the lock the runner refuses under`);
+    assert.match(r.stderr, /D1b/, `${mode}: and says when that changes`);
+    assert.ok(takeable(d, '.suite-lock') && takeable(d, '.run-lock'), `${mode}: nothing was taken`);
+  }
+});
