@@ -26,6 +26,45 @@ import { spawnSync } from 'node:child_process';
  *  it is at the use site, which the escape never did. */
 const NUL = '\u0000';
 import { portableArtifact, portableFenceEscapes, portableReapEntries, portableSweepPaths } from './artifact-paths.mjs';
+import { shortDigest } from './artifact-staleness.mjs';
+
+/** `git rev-parse HEAD` in `root`, or `null` when it cannot be read (a
+ *  refusal here would stop every run over a checkout mid-rebase or shallow
+ *  in a way this artifact's provenance does not need to be strict about —
+ *  the READER (`artifact-staleness.mjs`) already treats a missing/unknown
+ *  sha as its own named case rather than a crash). */
+function defaultGitSha(root) {
+  const res = spawnSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
+  return res.error === undefined && res.status === 0 ? res.stdout.trim() : null;
+}
+
+/** Whether `root`'s working tree has uncommitted changes, or `null` when that
+ *  cannot be determined. */
+function defaultGitDirty(root) {
+  const res = spawnSync('git', ['-C', root, 'status', '--porcelain'], { encoding: 'utf8' });
+  return res.error === undefined && res.status === 0 ? res.stdout.trim().length > 0 : null;
+}
+
+/**
+ * Findings row 56 + row 14 (T1 ruling 1283, option B) — whatever spend figure
+ * the RUN ALREADY carries into this writer. MEASURED: today's `result` from
+ * `run-story.mjs` is the literal `{ story, beats, reap, sweep, fence }` —
+ * `summariseRunSpend`'s result is computed there but never attached to it,
+ * and this brief forbids editing that file to add it. Rather than reach past
+ * that boundary, this reads `result.spend` IF a future caller ever adds it
+ * (kept forward-compatible with `summariseRunSpend`'s own `{measured, usd,
+ * label}` shape) and writes the HONEST GAP otherwise — never a bare `$0`,
+ * which would read as "nothing was spent" when nobody looked
+ * (`spend.mjs`'s own UNMEASURED case exists to prevent exactly that
+ * conflation).
+ */
+function spendFieldFor(result) {
+  const s = result.spend;
+  if (s !== null && typeof s === 'object' && typeof s.usd !== 'undefined') {
+    return Object.freeze({ usd: s.usd, unmeasured: s.measured === false ? (s.label ?? true) : false });
+  }
+  return Object.freeze({ usd: null, unmeasured: 'not passed to the artifact writer' });
+}
 
 /**
  * Derive one index row from a completed run result.
@@ -121,7 +160,7 @@ ${cards}
 /** Write one story's data. Returns the id it wrote, so a caller can build the
  *  set of entries THIS RUN produced from what was actually written rather than
  *  from the stories it meant to run (T1 ruling 1009(c)). */
-export function writeStoryJson(result, root) {
+export function writeStoryJson(result, root, { gitSha = defaultGitSha, gitDirty = defaultGitDirty, readStoryBytes = readFileSync } = {}) {
   const dir = join(root, 'demos', 'stories', result.story.id);
   mkdirSync(dir, { recursive: true });
   // forge-8vfn.26: the artifact records the PRODUCT, never the checkout that ran
@@ -159,6 +198,15 @@ export function writeStoryJson(result, root) {
   if (portable.sweep && typeof portable.sweep === 'object') {
     portable = { ...portable, sweep: portableSweepPaths(portable.sweep, root) };
   }
+  // Findings row 56 + row 14, T1 ruling 1283 (option B) — provenance, so a
+  // committed artifact can be told apart from one written against a DIFFERENT
+  // checkout state or a DIFFERENT version of the story that produced it.
+  portable = {
+    ...portable,
+    git: Object.freeze({ sha: gitSha(root), dirty: gitDirty(root) }),
+    spend: spendFieldFor(result),
+    storyDigest: shortDigest(readStoryBytes(join(root, 'tests', 'stories', `${result.story.id}.story.mjs`))),
+  };
   writeFileSync(join(dir, 'story.json'), `${JSON.stringify(portableArtifact(portable, root), null, 2)}\n`);
   return result.story.id;
 }
