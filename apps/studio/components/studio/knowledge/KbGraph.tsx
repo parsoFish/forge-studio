@@ -306,6 +306,23 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
         </g>
       </svg>
 
+      {/* forge-0b0: a zero-node KB used to render this same canvas — svg,
+          zoom/layout/tension controls, legend — with nothing telling the
+          operator that is the expected empty state rather than a broken
+          graph. Overlaid, not a replacement: the controls stay live so
+          switching KBs from an empty one still works. */}
+      {nodeCount === 0 && (
+        <div
+          data-component="kb-graph-empty"
+          style={{
+            position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+            textAlign: 'center', color: 'var(--faint)', fontSize: 13, pointerEvents: 'none', zIndex: 3,
+          }}
+        >
+          No data yet for this knowledge base.
+        </div>
+      )}
+
       {/* Zoom / fit controls (top-right) */}
       <div
         data-component="topology-controls"

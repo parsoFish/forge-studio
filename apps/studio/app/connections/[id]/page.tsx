@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
 import { FetchErrorState } from '@/components/FetchErrorState';
+import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import {
   fetchConnectionDetail,
   probeConnection,
@@ -103,6 +104,10 @@ export default function ConnectionDetailPage() {
     setActionError(null);
     if (id) void load(id);
   }, [id, load]);
+
+  // forge-5rr: refill ONLY while in the failed state — never re-load over
+  // the operator's in-flight probe/install/preview state (crosscut-22).
+  useBridgeRecoveryWhenFailed(state === 'error', () => { if (id) void load(id); });
 
   async function handleProbe() {
     if (!connection) return;
