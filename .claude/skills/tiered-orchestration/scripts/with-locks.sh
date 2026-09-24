@@ -106,8 +106,14 @@ ts() { date -u +%H:%M:%S; }
 #
 # Two facts about the campaign's own commands, neither deducible from the other:
 #
-#   REFUSES UNDER .run-lock    gate.sh · npm test · the story runner · builds
-#                              and tsc (7.6.100's guard, `bf019f23`)
+#   REFUSES UNDER .run-lock    gate.sh · npm test · builds and tsc (7.6.100's
+#                              guard, `bf019f23`)
+#   REFUSES UNDER .suite-lock  the story runner — its suite guard refuses ANY
+#                              holder, its own caller included, until D1b makes
+#                              it ancestor-aware; it ACCEPTS a run-lock its own
+#                              ancestor holds (ruling 683), so `run` is its
+#                              launch today and `both` becomes it after D1b
+#                              (M7 findings row 74)
 #   TAKES .suite-lock ITSELF   gate.sh (#694)
 #
 # So `run`/`both` around any of the first group is a guaranteed refusal, and
@@ -127,11 +133,17 @@ refuse_guaranteed_failure() {
   # appears inside plenty of paths, and refusing a launcher for its filename
   # would be this bead's own defect pointing the other way.
   case "$words" in
-    *" gate.sh "*|*"/gate.sh "*|*" npm test "*|*" npm run stories "*|*" --story "*|*" npm run build "*|*" tsc "*|*"/tsc "*)
+    *" gate.sh "*|*"/gate.sh "*|*" npm test "*|*" npm run build "*|*" tsc "*|*"/tsc "*)
       case "$MODE" in
         run|both)
           why="holding .run-lock guarantees this command's refusal — its guard refuses when the run-lock is held, awaited or merely OPEN"
           fix="run it unheld and retry on the guard's own refusal" ;;
+      esac ;;
+    *" npm run stories "*|*" --story "*)
+      case "$MODE" in
+        suite|both)
+          why="the story runner's suite guard refuses ANY .suite-lock holder, its own caller included, until D1b makes it ancestor-aware"
+          fix="launch it under 'run' (its guard accepts its own ancestor's run-lock, ruling 683)" ;;
       esac ;;
   esac
   # TAKES .suite-lock itself. Only `gate.sh`, and the remedy is different.

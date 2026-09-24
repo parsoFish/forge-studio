@@ -25,7 +25,7 @@
  * owns — though see the SWEEP note below, because for a KB it does not
  * actually reach. The binding is `{kind: 'flow', ref: 'forge-develop', band:
  * 'review-band'}`: `review-band` is a REAL derived band read off the live
- * form's own `[data-field="kb-binding-band"]` options (`demo-band`,
+ * form's own `[data-field="kb-binding-band"]` options (`integrate-band`,
  * `review-band`), never a hardcoded guess, and it is the band CLAUDE.md
  * already grants the reviewer an advisory read of — so the scope this story
  * binds is one the product genuinely consumes. The flow reaches a real

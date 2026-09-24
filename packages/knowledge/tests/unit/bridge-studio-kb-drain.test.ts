@@ -416,7 +416,7 @@ test('writeKbDrainStatus is atomic (temp+rename): no leftover .tmp file after a 
 const routes = knowledgeRoutes({
   sessionStatusIo: refusingSessionStatusIo,
   listFlowIds: () => ['forge-develop'],
-  listFlowBandIds: () => ['review-band', 'demo-band'],
+  listFlowBandIds: () => ['review-band', 'integrate-band'],
   // M4 ruling 86: the real fix turn is injected by the assembly, so route
   // tests declare one. It THROWS: no assertion in this file expects a fix turn
   // to be dispatched, and a stub that returned a plausible result would let a
