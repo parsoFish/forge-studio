@@ -12,7 +12,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
 
 import { isSafeRunId } from '@forge/kernel';
-import { resolveKbBrainDir } from './brain-paths.ts';
+import { tryGetKbBackend } from './kb-backend.ts';
 import { createLogger } from '@forge/kernel';
 import { KB_ID_RE } from '@forge/kernel';
 import { enqueueConsolidate } from './bridge-studio-kb-consolidate.ts';
@@ -326,7 +326,7 @@ export async function handleKbDrainStart(
         sendJson(res, 400, { error: 'invalid kb id' }, origin);
         return true;
       }
-      if (!resolveKbBrainDir(ctx.forgeRoot, kbId)) {
+      if (tryGetKbBackend(ctx.forgeRoot, kbId) === null) {
         sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin);
         return true;
       }
