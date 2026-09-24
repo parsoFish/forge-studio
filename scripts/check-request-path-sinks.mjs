@@ -188,9 +188,61 @@ export const SINK_NAMES = [
   'exec',
 ];
 
-// `(?<![.\\w$])` — unqualified calls only. See the header's "ONLY UNQUALIFIED
-// CALLS ARE COUNTED" limit for the measurement behind this trade.
-const SINK_MATCHERS = SINK_NAMES.map((name) => ({ name, re: new RegExp(`(?<![.\\w$])${name}\\s*\\(`, 'g') }));
+/**
+ * IMPORT-BOUND SINK MATCHING (bead forge-8vfn.5.19, problem 1).
+ *
+ * Measured false positive: `const exec = executors[kind] ?? execUnknown;
+ * await exec(ctx)` in packages/factory/phases/executor-table.ts was reported
+ * as a new 'exec' sink purely because the CALL SITE NAME matched — 'exec' is
+ * a local const, never node:child_process's. Had a lane run --write there, a
+ * fake sink would have entered the baseline permanently.
+ *
+ * Fix: a sink name only counts when THIS FILE's own imports bind that local
+ * name to the real node:fs/node:child_process export of the same name —
+ * never a bare-name match against a local function, a destructured
+ * property, or a parameter. `sinkRegexesFor` below is built PER FILE, same
+ * discipline as `callRegexesFor` for the designated-caller dimension: the set
+ * of names a call site may use is a property of that file's imports, not a
+ * fixed literal.
+ *
+ * Deliberately NOT extended to member calls (`fs.readFileSync(...)`) even
+ * though such a call, if `fs` is a real `node:fs` namespace import, DOES
+ * resolve to a real sink — the header's "ONLY UNQUALIFIED CALLS ARE COUNTED"
+ * trade stays in force; see that measurement. This fix closes the
+ * false-positive direction (an unrelated local counted as a sink), not the
+ * false-negative one (a real sink invisible because it's namespace-qualified
+ * or aliased through a re-export) — both pre-existing, disclosed limits.
+ */
+const SINK_MODULE_RES = [/^node:fs$/, /^fs$/, /^node:child_process$/, /^child_process$/];
+
+/** Local names each SINK_NAME is callable under IN THIS FILE, restricted to
+ *  names actually imported from a real node:fs / node:child_process module
+ *  specifier (aliased or not) — never a same-named local declaration, a
+ *  destructure off some other object, or a parameter. Returns a
+ *  Map<localName, canonicalSinkName>. */
+function importedSinkLocals(text) {
+  const bound = new Map();
+  const sinkNameSet = new Set(SINK_NAMES);
+  for (const m of text.matchAll(/(?:^|\n)\s*import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g)) {
+    if (!SINK_MODULE_RES.some((re) => re.test(m[2]))) continue;
+    for (const part of m[1].split(',')) {
+      const [imported, local] = part.split(/\s+as\s+/).map((x) => x.trim());
+      if (sinkNameSet.has(imported)) bound.set(local || imported, imported);
+    }
+  }
+  return bound;
+}
+
+/** Call-site regexes for THIS file: one per (localName -> canonicalSink)
+ *  binding, matched unqualified exactly as before (`(?<![.\w$])`). A file
+ *  with no fs/child_process import at all yields an empty array — cheap,
+ *  and correct: nothing in it can be a real sink call. */
+function sinkRegexesFor(text) {
+  return [...importedSinkLocals(text).entries()].map(([local, canonical]) => ({
+    canonical,
+    re: new RegExp(`(?<![.\\w$])${local}\\s*\\(`, 'g'),
+  }));
+}
 
 function isCommentLine(line) {
   const t = line.trimStart();
@@ -533,16 +585,19 @@ export function countSinks(root, reachableFiles) {
   for (const relFile of reachableFiles) {
     const absFile = join(root, relFile);
     if (!existsSync(absFile)) continue;
-    const lines = readFileSync(absFile, 'utf8').split('\n');
+    const text = readFileSync(absFile, 'utf8');
+    const matchers = sinkRegexesFor(text);
+    if (!matchers.length) continue; // no fs/child_process import at all — nothing here can be a real sink
+    const lines = text.split('\n');
     const counts = new Map();
     for (const line of lines) {
       if (isCommentLine(line)) continue;
-      for (const { name, re } of SINK_MATCHERS) {
+      for (const { canonical, re } of matchers) {
         re.lastIndex = 0;
         let m;
         let n = 0;
         while ((m = re.exec(line))) n += 1;
-        if (n > 0) counts.set(name, (counts.get(name) ?? 0) + n);
+        if (n > 0) counts.set(canonical, (counts.get(canonical) ?? 0) + n);
       }
     }
     for (const [sink, count] of counts) rows.push({ file: relFile, sink, count });
@@ -639,6 +694,25 @@ function printFailureGuidance(failures) {
   }
 }
 
+/** `--write`'s own body, split out so runCheck stays readable. Prints every
+ *  row the regenerated baseline changes (bead forge-8vfn.5.19 problem 2) —
+ *  `grown`/`dropped` are compareBaseline(newRows, priorRows)'s own output,
+ *  reused rather than re-derived. Writes and returns 0. */
+function writeBaseline({ baselinePath, rows, grown, dropped, reachableCount, totalCalls }) {
+  if (grown.length || dropped.length) {
+    console.log(
+      `check-request-path-sinks: --write is changing ${grown.length + dropped.length} existing row(s) — read every line before committing (bead forge-8vfn.5.19: --write regenerates the WHOLE baseline, it is not a re-key):`
+    );
+    for (const g of grown) console.log(`  raise:  ${g.file} ${g.sink}: ${g.baselineCount} -> ${g.count}`);
+    for (const d of dropped) console.log(`  ${d.count === 0 ? 'remove' : 'lower '}: ${d.file} ${d.sink}: ${d.baselineCount} -> ${d.count}`);
+  }
+  writeFileSync(baselinePath, formatBaseline(rows));
+  console.log(
+    `check-request-path-sinks: baseline written — ${reachableCount} reachable modules, ${rows.length} (file,sink) rows, ${totalCalls} total sink calls`
+  );
+  return 0;
+}
+
 /**
  * Run the check (or `--write` the baseline). Root and baseline path are
  * injectable so tests can point this at a temp fixture tree instead of the
@@ -656,11 +730,16 @@ export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PA
   const totalCalls = rows.reduce((sum, r) => sum + r.count, 0);
 
   if (write) {
-    writeFileSync(baselinePath, formatBaseline(rows));
-    console.log(
-      `check-request-path-sinks: baseline written — ${reachable.length} reachable modules, ${rows.length} (file,sink) rows, ${totalCalls} total sink calls`
-    );
-    return 0;
+    // bead forge-8vfn.5.19, problem 2: --write is not a re-key — it
+    // regenerates the WHOLE baseline from the current tree, so accepting one
+    // intended row silently rewrites every other row that has drifted since
+    // the baseline was last written (measured: cli/brain-lint.ts existsSync
+    // 22->20, orchestrator/fix-work-items.ts's three rows deleted outright).
+    // Fix: print every row that changes, so nothing is silently absorbed —
+    // a human reads this before committing the regenerated file.
+    const priorRows = existsSync(baselinePath) ? parseBaseline(readFileSync(baselinePath, 'utf8')) : [];
+    const { failures: grown, tighten: dropped } = compareBaseline(rows, priorRows);
+    return writeBaseline({ baselinePath, rows, grown, dropped, reachableCount: reachable.length, totalCalls });
   }
 
   if (!existsSync(baselinePath)) {
