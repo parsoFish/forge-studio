@@ -1,5 +1,5 @@
 {
-  "prompt": "# Preflight-Fix\n\nApply the operator decision.\n\n\n## Fix task\n\n**Project (cwd):** <PROJECT>\n**Preflight clause:** C5\n**Current failure:** no constraints doc found\n**Operator decision:** forge honours git ownership; never edit tests to pass.\n\nApply ONLY the minimal edit that clears this clause, per the operator decision. Touch nothing else, then stop.",
+  "prompt": "# Preflight-Fix\n\nApply the operator decision.\n\n\n## Fix task\n\n**Project (cwd):** <PROJECT>\n**Preflight clause:** C5\n**Current failure:** no constraints doc found\n**Operator decision:** forge honours git ownership; never edit tests to pass.\n\n**Target:** CLAUDE.md.\n**Current content:** does not exist yet — create it.\n\nApply ONLY the minimal edit that clears this clause, per the operator decision. Touch nothing else, then stop.",
   "options": {
     "cwd": "<PROJECT>",
     "model": "claude-haiku-4-5-20251001",

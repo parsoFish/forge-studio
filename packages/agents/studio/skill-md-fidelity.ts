@@ -17,9 +17,9 @@ import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
  * Build the frontmatter `data` record for an AgentDefinition (ADR-027 fixed
  * key order: name, description, library?, phase?, surface?, executor?,
  * purpose, composition, runtime, fanout?, materials?, brainAccess,
- * interactivity, allowed-tools, disallowed-tools, budgets). Pure — the same
- * projection backs both the full re-serialize path and the D5 byte-fidelity
- * comparison in serializeAgentDefinition.
+ * interactivity, allowed-tools, disallowed-tools, tool-fence-exempt?,
+ * budgets). Pure — the same projection backs both the full re-serialize path
+ * and the D5 byte-fidelity comparison in serializeAgentDefinition.
  */
 function projectAgentFrontmatter(def: AgentDefinition): Record<string, unknown> {
   const data: Record<string, unknown> = {};
@@ -61,6 +61,8 @@ function projectAgentFrontmatter(def: AgentDefinition): Record<string, unknown> 
   data['interactivity'] = def.interactivity;
   data['allowed-tools'] = def.allowedTools;
   data['disallowed-tools'] = def.disallowedTools;
+  // forge-6gv.20 — emitted only when declared (byte-identical otherwise).
+  if (def.toolFenceExempt !== undefined) data['tool-fence-exempt'] = def.toolFenceExempt;
 
   // Omit budgets keys that are undefined
   const budgets: Record<string, unknown> = {};

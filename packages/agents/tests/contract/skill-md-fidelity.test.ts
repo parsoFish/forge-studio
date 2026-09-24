@@ -90,3 +90,21 @@ test('enumeration pin holds on the byte-preserving fast path too (originalRaw su
   const { data } = matter(second);
   assert.strictEqual('allowed-tools' in data, 'disallowed-tools' in data);
 });
+
+// forge-6gv.20 — a composed agent has no way to declare a deliberate spawn
+// need, because the composer always writes both tool keys and the lint's
+// documented escape hatch ("declare neither key + a hand comment") cannot
+// survive a re-serialize. `toolFenceExempt` must round-trip through the
+// composer so the escape hatch is reachable to a composed agent, not just a
+// hand-authored SKILL.md.
+test('serializeAgentDefinition: toolFenceExempt: true is emitted as tool-fence-exempt: true', () => {
+  const out = serializeAgentDefinition(minimalDef({ toolFenceExempt: true, disallowedTools: [] }));
+  const { data } = matter(out);
+  assert.strictEqual(data['tool-fence-exempt'], true);
+});
+
+test('serializeAgentDefinition: toolFenceExempt absent emits no tool-fence-exempt key at all (additive — no forced key on every agent)', () => {
+  const out = serializeAgentDefinition(minimalDef());
+  const { data } = matter(out);
+  assert.strictEqual('tool-fence-exempt' in data, false);
+});
