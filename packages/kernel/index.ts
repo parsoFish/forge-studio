@@ -27,6 +27,11 @@ export * from './gh-identity.ts';
 export * from './init.ts';
 /** The realpath containment guard every request-derived path passes through. */
 export * from './path-guard.ts';
+/** The direct-filesystem case-folding probe shared by every staging module
+ *  that dedupes entries by resolved path before writing them (forge-qn8,
+ *  forge-gp4) — moved down from `agents`/`library` (M7-C) so both rank-3
+ *  packages import ONE mechanism instead of each carrying a verbatim copy. */
+export * from './case-folding-probe.ts';
 
 /** The project-contract report shape the `ProjectGate` port carries (SPEC.md §6). */
 export * from './project-contract.ts';
