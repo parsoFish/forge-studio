@@ -145,6 +145,96 @@ test('it FAILS when QUARRY.md is absent — ownership has no other source', () =
   assert.match(out, /does not exist/);
 });
 
+// ---------------------------------------------------------------------------
+// forge-8vfn.5.18 — the NUMBERS: disposition summary, per-row loc, per-
+// package columns. `check-owner` verified every file had exactly one row;
+// nothing verified the row said anything TRUE.
+// ---------------------------------------------------------------------------
+
+test('it FAILS on a row LOC that disagrees with the real file — the defect this bead is about', () => {
+  const subject = aQuarriedProductionFile();
+  withQuarry(
+    (rows) => rows.map((l) => (l.trim().startsWith(`| ${subject} |`) ? l.replace(/\|\s*\d+\s*\|$/, '| 999999 |') : l)),
+    (q, b) => {
+      const { code, out } = run(['--quarry', q, '--baseline', b]);
+      assert.equal(code, 1, `a wrong row loc must fail — got exit 0:\n${out}`);
+      assert.ok(
+        out.includes(`loc drift: ${subject} — QUARRY says 999999`),
+        `the row and the QUARRY number must be named — got:\n${out}`,
+      );
+    },
+  );
+});
+
+test('it FAILS on a disposition summary count that disagrees with the per-file table', () => {
+  withQuarry(
+    (rows) => rows.map((l) => (l.trim().startsWith('| `verbatim`') ? l.replace(/\|\s*\d+\s*\|$/, '| 999999 |') : l)),
+    (q, b) => {
+      const { code, out } = run(['--quarry', q, '--baseline', b]);
+      assert.equal(code, 1, `a wrong disposition summary count must fail — got exit 0:\n${out}`);
+      assert.ok(
+        out.includes('disposition summary drift: `verbatim` — header says 999999'),
+        `the disposition and the header number must be named — got:\n${out}`,
+      );
+    },
+  );
+});
+
+test('it FAILS on a per-package "files" column that disagrees with the rows', () => {
+  withQuarry(
+    (rows) => rows.map((l) => (l.trim().startsWith('| `kernel` |') ? l.replace(/^(\|\s*`kernel`\s*\|)\s*\d+\s*\|/, '$1 999999 |') : l)),
+    (q, b) => {
+      const { code, out } = run(['--quarry', q, '--baseline', b]);
+      assert.equal(code, 1, `a wrong package files column must fail — got exit 0:\n${out}`);
+      assert.ok(
+        out.includes('package table drift: `kernel` files — header says 999999'),
+        `the package and the header number must be named — got:\n${out}`,
+      );
+    },
+  );
+});
+
+test('it FAILS on the **total** row when it disagrees with the sum of the packages', () => {
+  withQuarry(
+    (rows) => rows.map((l) => (l.trim().startsWith('| **total**') ? l.replace(/(\|\s*\*\*total\*\*\s*\|\s*\*\*)\d+(\*\*\s*\|)/, '$1999999$2') : l)),
+    (q, b) => {
+      const { code, out } = run(['--quarry', q, '--baseline', b]);
+      assert.equal(code, 1, `a wrong total row must fail — got exit 0:\n${out}`);
+      assert.ok(
+        out.includes('package table drift: `total` files — header says 999999'),
+        `the total row and the header number must be named — got:\n${out}`,
+      );
+    },
+  );
+});
+
+test('--write recomputes loc, the disposition summary and the package columns from the rows, then the checker passes', () => {
+  const subject = aQuarriedProductionFile();
+  withQuarry(
+    (rows) => rows.map((l) => {
+      if (l.trim().startsWith(`| ${subject} |`)) return l.replace(/\|\s*\d+\s*\|$/, '| 999999 |');
+      if (l.trim().startsWith('| `verbatim`')) return l.replace(/\|\s*\d+\s*\|$/, '| 999999 |');
+      if (l.trim().startsWith('| `kernel` |')) return l.replace(/^(\|\s*`kernel`\s*\|)\s*\d+\s*\|/, '$1 999999 |');
+      return l;
+    }),
+    (q, b) => {
+      const before = run(['--quarry', q, '--baseline', b]);
+      assert.equal(before.code, 1, `the doctored quarry must start red:\n${before.out}`);
+
+      const written = run(['--quarry', q, '--baseline', b, '--write']);
+      assert.equal(written.code, 0, `--write must exit 0 — got:\n${written.out}`);
+      assert.match(written.out, /check-owner: WROTE/);
+
+      const after = run(['--quarry', q, '--baseline', b]);
+      assert.equal(after.code, 0, `the checker must pass after --write — got:\n${after.out}`);
+      assert.match(after.out, /check-owner: PASS/);
+
+      const rewritten = readFileSync(q, 'utf8');
+      assert.ok(!rewritten.includes('999999'), `every doctored number must have been recomputed — got:\n${rewritten}`);
+    },
+  );
+});
+
 test('an UNTRACKED production file is still unowned — a file cannot dodge the gate by not being committed', () => {
   // The tree is PLANTED, not assumed. `orchestrator/` is empty as of M6-C, but
   // it stays in check-owner's QUARRIED_TREES so a file reappearing there is
