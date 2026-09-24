@@ -331,11 +331,13 @@ describe('TOCTOU (forge-8vfn.8.3.2, content half): script content overwritten in
 // be a THIRD open: each tail's own `spawn(Sync)('bash', [scriptPath])`. There
 // is nothing left to refuse against here — the bytes were verified before the
 // overwrite happened — so the required outcome is the OTHER honest one the
-// brief names: the APPROVED bytes still run, because exec now uses the bytes
-// already held in memory and never reopens the path. This is also the test
-// that kills the regression-shaped mutation "execute the path again instead
-// of the bytes": that mutation would have `bash` open `scriptPath` itself at
-// spawn time, pick up THIS overwrite, and run the malicious content instead.
+// brief names: the APPROVED bytes still run, because exec now uses a private,
+// read-only COPY of those bytes (written right after verification — see
+// `writePrivateScriptCopy`) and never reopens `scriptPath` again. This is
+// also the test that kills the regression-shaped mutation "execute the path
+// again instead of the bytes": that mutation would have `bash` open
+// `scriptPath` itself at spawn time, pick up THIS overwrite, and run the
+// malicious content instead.
 // ---------------------------------------------------------------------------
 
 describe('TOCTOU (forge-8vfn.8.3.2, content half): script overwritten AFTER the verified read — the approved bytes must still be what runs', () => {
@@ -359,8 +361,9 @@ describe('TOCTOU (forge-8vfn.8.3.2, content half): script overwritten AFTER the 
 
     // Trigger on the 2nd readFileSync match of this path — `prepareHookRun`'s
     // OWN read (the gate's internal read, inside `hookRunState`, is the 1st).
-    // That 2nd read is the one this fix hashes, verifies, and holds in memory
-    // for exec — overwrite the file on disk right after it returns.
+    // That 2nd read is the one this fix hashes, verifies, and copies to a
+    // private file for exec — overwrite the ORIGINAL file on disk right
+    // after it returns.
     let swapPerformed = false;
     const uninstall = installReadFileSyncSwapOnNthMatch(scriptRealPath, 2, () => {
       writeFileSync(scriptRealPath, maliciousBody, 'utf8'); // same path, same inode
@@ -410,7 +413,57 @@ describe('TOCTOU (forge-8vfn.8.3.2, content half): script overwritten AFTER the 
     assert.equal(
       existsSync(benignMarkerPath),
       true,
-      'the ORIGINAL, approved bytes — captured in memory at the verified read — must actually execute: proof that exec runs those bytes directly and never reopens the path a third time',
+      'the ORIGINAL, approved bytes — copied to a private file at the verified read — must actually execute: proof that exec runs the private copy and never reopens the original path a third time',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// forge-8vfn.8.3.2 (content half, T2 review 2026-09-25) — the FIRST cut of
+// this fix fed the verified script to `bash -s` on stdin, closing the TOCTOU
+// but opening a correctness regression: `bash -s` reads its own commands
+// INCREMENTALLY from that same stdin stream as it executes them, so a hook
+// command that itself reads stdin (`read`, `cat`/`jq` with no file arg,
+// `while read …`) does not get an empty pipe — it consumes the SCRIPT'S OWN
+// remaining source lines as if they were input data, silently deleting
+// whatever command followed. Confirmed empirically (not assumed) before this
+// pin was written: `bash -xs` tracing a two-`echo`-plus-`read` script showed
+// the line immediately after `read` never reached the trace at all — `read`
+// ate it. Stdin must stay exactly what it was on main: an empty, unread pipe
+// unless a caller supplies real `input` (nothing does today).
+// ---------------------------------------------------------------------------
+
+describe("a hook's own stdin must stay untouched by the exec mechanism (forge-8vfn.8.3.2, content half)", () => {
+  it('a `read` inside a hook gets an empty line, never the next line of the hook\'s own script source', () => {
+    const root = makeForgeRoot();
+    const id = 'stdin-untouched-hook';
+
+    const markerDir = mkdtempSync(join(tmpdir(), 'hook-runtime-toctou-stdin-marker-'));
+    createdDirs.push(markerDir);
+    const markerPath = join(markerDir, 'read.marker');
+    // The decisive shape: a `read` immediately followed by another command.
+    // Under the FIRST cut's `bash -s`, `read` consumes THIS NEXT LINE — the
+    // `echo` — as its own input, and the echo never runs at all.
+    const scriptBody = `#!/usr/bin/env bash\nread -r line || true\necho "got:$line" > "${markerPath}"\n`;
+    writeHookPackage(root, id, scriptBody, NO_ENV);
+    approveHook({ forgeRoot: root, id });
+
+    const logger = createLogger('stdin-untouched-cycle', makeLogsDir());
+    // No stdin `input` supplied — `runHookScript`'s real, current contract:
+    // nothing feeds the child's stdin. If the exec mechanism itself were
+    // feeding the script text on stdin (the regression), `read` would find
+    // SOMETHING there regardless of what this test does or does not supply.
+    const result = runHookScript({ forgeRoot: root, id, logger, initiativeId: 'INIT-test' });
+
+    assert.equal(result.exitCode, 0, 'sanity: the hook must actually run to completion');
+    assert.ok(
+      existsSync(markerPath),
+      "the marker file must exist at all — under the bash -s regression, `read` swallows the `echo` line as its own input and the echo NEVER RUNS, so the file is never created",
+    );
+    assert.equal(
+      readFileSync(markerPath, 'utf8'),
+      'got:\n',
+      'the `read` must see an empty, already-EOF stdin (no caller supplied input) — a non-empty or missing marker means the exec mechanism is feeding the script through the same stream the script itself reads from',
     );
   });
 });

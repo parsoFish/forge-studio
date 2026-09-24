@@ -2541,3 +2541,45 @@ tests (SECURITY/FAIL-OPEN/ONE-NOTION-WITH-C2) and
 tests. `scripts/request-path-sinks.baseline.txt` accepts the new counts via
 `--write` in the same commit that adds this section, per this document's own
 rule.
+
+### Extended in M7-C — `hook-runtime.ts`'s private verified-script copy (bead `forge-8vfn.8.3.2`, content half)
+
+`packages/library/studio/hook-runtime.ts` gained `writeFileSync` 0 → 1 and
+`rmSync` 0 → 2 (`writePrivateScriptCopy`'s own error-path cleanup, and
+`cleanupPrivateScriptDir`, called from a `finally` in both `runHookScript` and
+`runHookScriptAsync`). **not request-derived** `[read+write]` — no
+caller-supplied value reaches either sink.
+
+The fix closes a three-opens TOCTOU on the hook's OWN script path: the
+approval fingerprint (`hookRunState`), `prepareHookRun`'s verified read, and
+(before this fix) each spawn tail's own `spawn(Sync)('bash', [scriptPath])`
+were three separate reads of the same request-adjacent path (a hook id is
+operator-supplied, but only ever through the approval workflow, never a
+route that spawns unapproved hooks — see this file's existing `hook-runtime.ts`
+rows above). The bytes `prepareHookRun` reads and hashes are now copied,
+once, to a FRESH path this process alone names:
+`mkdtempSync(join(os.tmpdir(), 'forge-hook-verified-'))` — a server-generated
+random directory name, never a request field, never a caller-supplied
+component of any kind — followed by `writeFileSync(join(dir,
+'hook-script.sh'), scriptBody, { mode: 0o500, flag: 'wx' })`, where `dir` is
+that same mkdtemp'd path and the leaf is the module-level constant
+`PRIVATE_SCRIPT_FILENAME`. `cleanupPrivateScriptDir`'s `rmSync` removes that
+SAME `dir`, never a path built from any other input. Both `bash` invocations
+that used to open `scriptPath` a third time now `source` this private copy
+instead (`hookExecArgs`), so the private path is also the thing that closes
+the vulnerability, not merely a new sink that happens to be safe.
+
+Classified `[read+write]` because the write's CONTENT (`scriptBody`) is the
+hash-verified script — already established as safe-to-execute by the
+fingerprint check immediately above it in `prepareHookRun` — and the read
+side is the two-pin proof in `hook-runtime-toctou.test.ts` (a real spawned
+child) that nothing reachable from this path can be substituted between the
+verified read and exec. **The precondition that would make this live** is a
+route accepting a caller-supplied temp-file path or filename for
+`writePrivateScriptCopy`/`cleanupPrivateScriptDir` to act on — neither
+function takes one; both derive their own path from `mkdtempSync`'s return
+value alone. Pinned by the two existing content-TOCTOU pins plus a third new
+one (stdin-untouched) in `hook-runtime-toctou.test.ts`.
+`scripts/request-path-sinks.baseline.txt` accepts the new counts via
+`--write` in the same commit that adds this section, per this document's own
+rule.
