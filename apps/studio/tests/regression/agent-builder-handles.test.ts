@@ -40,6 +40,12 @@ import { test, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+// The page under test is imported ONCE, at module scope (vi.mock is hoisted above it, so the
+// mocks still apply). Imported inside a test body, its transform + import was charged to that
+// test's 5 s budget — the first test in the file timed out on a CPU-starved host while every
+// later one (module cached) passed, and the timed-out body kept mounting into the next test.
+// Flake register F5/F6, reproduced by lane m7-c pinning vitest to one CPU beside four burners.
+import AgentBuilderPage from '@/app/agents/[id]/page';
 
 /** The two skills and two tools S5 composes, read off the catalog it is given. */
 const SKILLS = [
@@ -129,7 +135,6 @@ afterEach(() => {
 
 /** Mount the real builder page and let its four loads settle. */
 async function mountBuilder() {
-  const { default: AgentBuilderPage } = await import('@/app/agents/[id]/page');
   root = createRoot(container);
   await act(async () => {
     root.render(React.createElement(AgentBuilderPage));

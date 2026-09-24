@@ -47,8 +47,8 @@ export class WedgeKillError extends Error {
   readonly nodeId: string;
   readonly lastProgressAt: number;
   readonly wedgeKillMs: number;
-  constructor(nodeId: string, lastProgressAt: number, wedgeKillMs: number) {
-    const sinceMs = Date.now() - lastProgressAt;
+  constructor(nodeId: string, lastProgressAt: number, wedgeKillMs: number, nowMs: number) {
+    const sinceMs = nowMs - lastProgressAt; // the injected now — a fresh Date.now() here discarded it (forge-8vfn.7.6.50)
     super(
       `wedge-kill: node "${nodeId}" received agent_heartbeat events but no tool ` +
         `progress for ${wedgeKillMs}ms (last progress ${Math.round(sinceMs / 1000)}s ago) — ` +
@@ -468,11 +468,7 @@ export class WedgeDetector {
   }
 
   buildKillError(nowMs: number): WedgeKillError {
-    return new WedgeKillError(
-      this.nodeId,
-      this.lastProgressAt ?? nowMs,
-      this.wedgeKillMs ?? 0,
-    );
+    return new WedgeKillError(this.nodeId, this.lastProgressAt ?? nowMs, this.wedgeKillMs ?? 0, nowMs);
   }
 }
 

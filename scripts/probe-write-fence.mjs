@@ -53,7 +53,10 @@ const toolUses = [];
 console.log(`[probe] model=${model}`);
 console.log(`[probe] writeRoot=${writeRoot}`);
 console.log(`[probe] outside=${outsidePath}`);
-const started = Date.now();
+// performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is not
+// monotonic on this host, so a duration built from its difference can be
+// wrong independent of how long the turn actually took.
+const started = performance.now();
 let costUsd = 0;
 try {
   const result = await runAgentTurn({
@@ -73,7 +76,7 @@ try {
 } catch (err) {
   console.log(`[probe] turn threw: ${err instanceof Error ? err.message : String(err)}`);
 }
-const elapsedMs = Date.now() - started;
+const elapsedMs = Math.round(performance.now() - started);
 const outsideExists = existsSync(outsidePath);
 const insideExists = existsSync(insidePath);
 console.log(`[probe] tool_use: ${JSON.stringify(toolUses)}`);

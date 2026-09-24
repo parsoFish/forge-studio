@@ -304,3 +304,42 @@ test('7.6.102: DRIFT outranks DEAD — both are printed, the exit is 1', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+/**
+ * M7 findings row 72 (D, ruling 1204): a bare `**` matches DIRECTORIES too
+ * (`ls -1 -d` lists them), and a directory is never a line in a `.sha256`, so a
+ * complete manifest over a nested tree was reported as DRIFT naming its own
+ * subdirectories. M7-D worked around it by globbing `**\/*.*` — a tool hand-
+ * worked-around by its users is a defect in the tool. A pin lists FILES; only
+ * files are matches.
+ */
+test('row 72: a bare ** over a nested tree counts FILES, never the directories it passes through', () => {
+  const { root, repo, camp } = plant({
+    files: ['pkg/a.ts', 'pkg/sub/b.ts', 'pkg/sub/deeper/c.ts'],
+    listed: ['pkg/a.ts', 'pkg/sub/b.ts', 'pkg/sub/deeper/c.ts'],
+    globs: ['pkg/**'],
+  });
+  try {
+    const { code, out } = run(repo, camp);
+    assert.equal(code, 0, `a manifest listing every FILE under pkg/** is complete. Output: ${out}`);
+    assert.doesNotMatch(out, /pkg\/sub\b(?!\/)/, `no directory is ever named as unlisted. Output: ${out}`);
+    assert.match(out, /\b3 file/, `and the count is the three files, not files + directories. Output: ${out}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('row 72: a glob that matches ONLY directories matches no file — it is DEAD, not a pass', () => {
+  const { root, repo, camp } = plant({
+    files: ['pkg/sub/b.ts'],
+    listed: ['pkg/sub/b.ts'],
+    globs: ['pkg/sub/b.ts', 'pkg/*'],
+  });
+  try {
+    const { code, out } = run(repo, camp);
+    assert.equal(code, 6, `pkg/* expands to the directory pkg/sub only — a glob describing no file is dead. Output: ${out}`);
+    assert.match(out, /pkg\/\*/, `the dead glob is named verbatim. Output: ${out}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -28,6 +28,7 @@ import { createWiWorktree, removeWiWorktree } from '@forge/flows/wi-worktree.ts'
 import { writeGateFeedback } from '../../phases/developer-loop.ts';
 import { makeQualityGateFromCmd, type GateRunInfo } from '@forge/agents/ralph/stop-conditions.ts';
 import { run as runRalph, type AgentInvocation } from '@forge/agents/ralph/runner.ts';
+import { SCRATCH_PATHS } from '@forge/projects/preflight.ts';
 
 const DISTINCTIVE_FAILURE = 'DISTINCTIVE_GATE_FAIL_7f3ac2: fixed.marker missing — fix required';
 
@@ -61,10 +62,12 @@ function setup(): Fixture {
   sh(repo, ['config', 'user.email', 't@forge']);
   sh(repo, ['config', 'user.name', 'forge-test']);
   writeFileSync(join(repo, 'README.md'), 'base\n');
-  // Contract C2: `.forge/` is gitignored on every onboarded project. Without
-  // this, ralph's autocommit safety net (`git add -A`) would sweep
-  // `.forge/last-gate-failure.md` itself into the WI branch's commit.
-  writeFileSync(join(repo, '.gitignore'), '.forge/\n');
+  // Contract C2 (SCRATCH_PATHS) plus `.forge/last-gate-failure.md`
+  // specifically — never a blanket `.forge/`, which would also hide the
+  // TRACKED .forge/project.json + .forge/skills/ (operator ruling 92).
+  // Without the gate-failure entry, ralph's autocommit safety net
+  // (`git add -A`) would sweep it into the WI branch's commit.
+  writeFileSync(join(repo, '.gitignore'), [...SCRATCH_PATHS, '.forge/last-gate-failure.md'].join('\n') + '\n');
   sh(repo, ['add', '.']);
   sh(repo, ['commit', '-q', '-m', 'base']);
   const worktreesRoot = join(root, '_worktrees');

@@ -3,7 +3,7 @@
  *
  * Before this module, `forge requeue` (and the bridge recovery route) always
  * wiped the failed cycle's worktree + branch for a fresh-from-main re-run
- * unless the operator explicitly passed `--resume-from=demo` — even when
+ * unless the operator explicitly passed `--resume-from=integrate` — even when
  * the failure was ENVIRONMENTAL (rate-limit death mid-WI, gate timeout,
  * lint-lock contention) and the branch carried perfectly good committed WI
  * work. That is the destroy-per-WI-work failure mode: the operator either
@@ -17,8 +17,8 @@
  *     AND the initiative branch carries commits beyond main
  *     AND the preserved `.forge/work-items/` specs are readable
  *       → RESUME:
- *           · every WI `complete`  → `resume_from: demo` (ADR 019 — the
- *             post-develop band re-runs at the `demo` node against the
+ *           · every WI `complete`  → `resume_from: integrate` (ADR 019 — the
+ *             post-develop band re-runs at the `integrate` node against the
  *             preserved branch; no WI is rebuilt)
  *           · some WIs incomplete  → NO marker; the worktree + branch are
  *             preserved and the scheduler's preserved-work-items reuse path
@@ -42,11 +42,11 @@ export type RequeueResumeDecision =
   | {
       resume: true;
       /**
-       * `'demo'` → stamp `resume_from: demo` (ADR 019). `null` →
+       * `'integrate'` → stamp `resume_from: integrate` (ADR 019). `null` →
        * preserve the worktree with NO marker; the scheduler's preserved
        * work-items reuse path re-runs the dev-loop in place.
        */
-      resume_from: 'demo' | null;
+      resume_from: 'integrate' | null;
       reason: string;
     };
 
@@ -161,8 +161,8 @@ export function decideRequeueResume(args: {
   if (args.workItems.complete === args.workItems.total) {
     return {
       resume: true,
-      resume_from: 'demo',
-      reason: `environment failure with all ${args.workItems.total} WIs complete on the preserved branch — resume from the demo node (ADR 019)`,
+      resume_from: 'integrate',
+      reason: `environment failure with all ${args.workItems.total} WIs complete on the preserved branch — resume from the integrate node (ADR 019)`,
     };
   }
   return {

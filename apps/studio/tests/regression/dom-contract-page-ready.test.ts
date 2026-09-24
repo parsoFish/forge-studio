@@ -20,6 +20,13 @@ vi.mock('next/navigation', () => ({
 
 import * as React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+// The page under test is imported ONCE, at module scope (vi.mock is hoisted above it, so the
+// mocks still apply). Imported inside a test body, its transform + import was charged to that
+// test's 5 s budget — the first test in the file timed out on a CPU-starved host while every
+// later one (module cached) passed, and the timed-out body kept mounting into the next test.
+// Flake register F5/F6, reproduced by lane m7-c pinning vitest to one CPU beside four burners.
+import ProjectBuilderPage from '@/app/projects/[id]/page';
+import ArchitectNewPage from '@/app/architect/new/page';
 
 /** The `<main ...>` open tag, so an attribute assertion is scoped to the root. */
 function mainOpenTag(html: string): string {
@@ -29,13 +36,11 @@ function mainOpenTag(html: string): string {
 }
 
 test('/projects/new: the route root is NOT ready before its curated-starter fetch settles', async () => {
-  const { default: ProjectBuilderPage } = await import('@/app/projects/[id]/page');
   const html = renderToStaticMarkup(React.createElement(ProjectBuilderPage, { params: { id: 'new' } }));
   expect(mainOpenTag(html)).toContain('data-page-ready="false"');
 });
 
 test('/projects/new: BOTH doors live inside the one page root, so the contract is readable where it is anchored', async () => {
-  const { default: ProjectBuilderPage } = await import('@/app/projects/[id]/page');
   const html = renderToStaticMarkup(React.createElement(ProjectBuilderPage, { params: { id: 'new' } }));
 
   expect(html.match(/<main /g)).toHaveLength(1);
@@ -49,7 +54,6 @@ test('/projects/new: BOTH doors live inside the one page root, so the contract i
 });
 
 test('[forge-8vfn.5.3] /projects/new: the onboard door carries its own error sentinel (data-fetch-status / data-load-error), separate from the page root\'s starter-fetch sentinel', async () => {
-  const { default: ProjectBuilderPage } = await import('@/app/projects/[id]/page');
   const html = renderToStaticMarkup(React.createElement(ProjectBuilderPage, { params: { id: 'new' } }));
 
   const sectionStart = html.indexOf('data-section="project-onboard"');
@@ -66,7 +70,6 @@ test('[forge-8vfn.5.3] /projects/new: the onboard door carries its own error sen
 });
 
 test('/architect/new: the root cannot say ready while the roster it renders says loading', async () => {
-  const { default: ArchitectNewPage } = await import('@/app/architect/new/page');
   const html = renderToStaticMarkup(React.createElement(ArchitectNewPage));
   expect(html).toContain('data-roster-state="loading"');
   expect(mainOpenTag(html)).toContain('data-page-ready="false"');

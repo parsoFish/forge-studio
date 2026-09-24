@@ -22,7 +22,7 @@ export type NodeRunState = {
   reviewerOutcome: ReviewerOutcome;
   closure: ClosureResult | null;
   /**
-   * R4-10-F2: set by execDemo when the merge-boundary full-suite gate is RED —
+   * R4-10-F2: set by execIntegrate when the merge-boundary full-suite gate is RED —
    * the branch is not shippable, so the DAG walk stops here and runFlow routes
    * the manifest to `ready-for-review` (no PR opened; the preserved invariant).
    * The fix-loop drain re-enters `resume_from:'develop'` off the compiled

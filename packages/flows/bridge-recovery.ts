@@ -9,7 +9,7 @@
  *                                     branch / commits / diff-stat / PR draft)
  *   POST /api/recovery/:id/abandon  → move it to failed/ + clean worktree + branch
  *   POST /api/recovery/:id/requeue  → move it back to pending/ (resetRetries /
- *                                     resumeFromDemo), wrapping runRequeue
+ *                                     resumeFromIntegrate), wrapping runRequeue
  *   POST /api/initiatives           → enqueue a fresh manifest from a spec body
  *                                     (recovery-grade; the architect flow is the
  *                                     canonical authoring path)
@@ -210,7 +210,7 @@ export async function handleRecoveryRoutes(
     return true;
   }
 
-  // POST /api/recovery/:id/requeue {resetRetries?, resumeFromDemo?}
+  // POST /api/recovery/:id/requeue {resetRetries?, resumeFromIntegrate?}
   const requeueMatch = url.match(/^\/api\/recovery\/([^/]+)\/requeue$/);
   if (method === 'POST' && requeueMatch) {
     if (isDryBridge()) {
@@ -223,7 +223,7 @@ export async function handleRecoveryRoutes(
       const body = (await ctx.readBody().catch(() => ({}))) as Record<string, unknown>;
       const result = runRequeue(id, {
         resetRetries: body['resetRetries'] === true,
-        resumeFromDemo: body['resumeFromDemo'] === true,
+        resumeFromIntegrate: body['resumeFromIntegrate'] === true,
         forgeRoot: ctx.forgeRoot,
         projectsRoot: ctx.projectsRoot,
       });

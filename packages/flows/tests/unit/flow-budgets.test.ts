@@ -227,6 +227,28 @@ describe('WedgeDetector', () => {
     assert.strictEqual(err.nodeId, 'pm');
     assert.ok(typeof err.lastProgressAt === 'number');
   });
+
+  /**
+   * forge-8vfn.7.6.50: `buildKillError(nowMs)` already receives the caller's
+   * injected "now" — every other WedgeDetector method takes `nowMs` as a
+   * parameter and never reads the wall clock itself. `WedgeKillError`'s
+   * constructor broke that: it called `Date.now()` directly instead of using
+   * the `nowMs` it was handed, so the message's "Xs ago" was always measured
+   * against the REAL current wall clock, not the (possibly fake, possibly
+   * historical) nowMs the caller supplied. `detector.onHeartbeat(0)` then
+   * `detector.buildKillError(6_000)` should report "6s ago"; it actually
+   * reports the live epoch in seconds — e.g. "1789778103s ago".
+   */
+  it("wedgeKillError's message uses the injected nowMs, not a fresh Date.now() read", () => {
+    const detector = new WedgeDetector({ wedgeKillMs: 5_000, nodeId: 'pm' });
+    detector.onHeartbeat(0);
+    const err = detector.buildKillError(6_000);
+    assert.match(
+      err.message,
+      /last progress 6s ago/,
+      `must report the injected 6s gap (nowMs=6000, lastProgressAt=0), not a live wall-clock read:\n${err.message}`,
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -236,9 +258,12 @@ describe('WedgeDetector', () => {
 describe('RateLimitGate', () => {
   it('waitIfNeeded returns immediately when no resetsAt is recorded', async () => {
     const gate = new RateLimitGate({ now: () => 1000 });
-    const start = Date.now();
+    // performance.now(), not Date.now() (forge-8vfn.7.6.50): this measures
+    // the TEST's own wall-clock cost, a local duration unrelated to the
+    // gate's injected `now` above — Date.now() is not monotonic on this host.
+    const start = performance.now();
     await gate.waitIfNeeded();
-    const elapsed = Date.now() - start;
+    const elapsed = performance.now() - start;
     // Should not sleep — resolve in < 50ms
     assert.ok(elapsed < 50, `expected no sleep, got ${elapsed}ms`);
   });
@@ -246,22 +271,26 @@ describe('RateLimitGate', () => {
   it('does not wait when now() is past resetsAt', async () => {
     const gate = new RateLimitGate({ now: () => 5000 });
     gate.recordRateLimit(3000); // resetsAt in the past
-    const start = Date.now();
+    const start = performance.now();
     await gate.waitIfNeeded();
-    const elapsed = Date.now() - start;
+    const elapsed = performance.now() - start;
     assert.ok(elapsed < 50, `expected no sleep, got ${elapsed}ms`);
   });
 
   it('waits until resetsAt when resetsAt is in the future (small delta)', async () => {
     // Use real Date.now() but set resetsAt 60ms in the future.
     // This verifies the gate actually sleeps rather than resolving immediately.
+    // resetsAt stays on Date.now(): it feeds RateLimitGate's own injected
+    // clock, which defaults to Date.now() because a real rate-limit reset
+    // time is an externally-supplied absolute wall-clock deadline (from the
+    // SDK), not a locally-measured duration.
     const gate = new RateLimitGate(); // no injected clock → real Date.now()
     const resetsAt = Date.now() + 60;
     gate.recordRateLimit(resetsAt);
 
-    const start = Date.now();
+    const start = performance.now();
     await gate.waitIfNeeded();
-    const elapsed = Date.now() - start;
+    const elapsed = performance.now() - start;
 
     // Should have waited ~60ms — give generous slack for CI jitter
     assert.ok(elapsed >= 50, `expected ~60ms wait, got ${elapsed}ms`);
@@ -276,9 +305,9 @@ describe('RateLimitGate', () => {
     await gate.waitIfNeeded(); // first call waits
 
     // Second call: resetsAt cleared → should resolve immediately
-    const start = Date.now();
+    const start = performance.now();
     await gate.waitIfNeeded();
-    const elapsed = Date.now() - start;
+    const elapsed = performance.now() - start;
     assert.ok(elapsed < 50, `expected immediate return, got ${elapsed}ms`);
   });
 

@@ -69,7 +69,7 @@ describe('dispatch-hijack proof: resolveBandGuard reads ONLY composition.guards'
     const base = makeAgentDef('another-innocent-agent', []);
     const hijacked = {
       ...base,
-      composition: { ...base.composition, hooks: ['wi-contract', 'reflection-close', 'demo-band', 'review-band'] },
+      composition: { ...base.composition, hooks: ['wi-contract', 'reflection-close', 'integrate-band', 'review-band'] },
     } as unknown as AgentDefinition;
     assert.equal(resolveBandGuard(hijacked), undefined);
   });

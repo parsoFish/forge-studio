@@ -97,6 +97,9 @@ export type LoopInput = {
    * 16-restart / $84.56 unifier spins).
    */
   loopCapExhausted?: () => boolean;
+  /** M7-A: the cycle's (cross-WI) cost ceiling is reached — re-read every
+   *  iteration, so a sibling's spend counts; true stops with 'cost-budget'. */
+  costCeilingCheck?: () => boolean;
   /**
    * G1 rescope (2026-07-11, plan item 2.6): called when the post-iteration
    * autocommit safety net actually SWEPT uncommitted agent work into a
@@ -312,6 +315,10 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
     // of re-invoking the agent against a gate it keeps failing the same way.
     if (input.loopCapExhausted?.()) {
       return finalize(state, startedAt, 'loop-cap-exhausted', agentMdPath, fixPlanPath, toolUseTotal);
+    }
+    // M7-A: the cycle's cost ceiling was reached — stop before another iteration.
+    if (input.costCeilingCheck?.()) {
+      return finalize(state, startedAt, 'cost-budget', agentMdPath, fixPlanPath, toolUseTotal);
     }
 
     state.iteration += 1;
