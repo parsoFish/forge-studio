@@ -324,11 +324,18 @@ Forge commits with `git add -A`; the project's `.gitignore` is the sole guard.
 Three categories must be covered:
 
 1. **Forge scratch:** `.forge/work-items/`, `.forge/.create-complete`,
-   `AGENT.md`, `PROMPT.md`, `fix_plan.md` must be untracked *and* ignored
-   (git-truth check: `git ls-files --error-unmatch` + `git check-ignore -q`;
-   a *directory* scratch path is probed via a sentinel child so a dir-only
-   ignore pattern like `.forge/work-items/` counts before the dir exists —
-   the pattern will ignore it the moment the dev-loop creates it).
+   `.forge/live-evidence/`, `.forge/preflight.json`, `AGENT.md`, `PROMPT.md`,
+   `fix_plan.md` must be untracked *and* ignored (git-truth check: `git
+   ls-files --error-unmatch` + `git check-ignore -q`; a *directory* scratch
+   path is probed via a sentinel child so a dir-only ignore pattern like
+   `.forge/work-items/` counts before the dir exists — the pattern will
+   ignore it the moment the dev-loop creates it). `.forge/live-evidence/`
+   (acceptance-test read-backs) and `.forge/preflight.json` (preflight
+   output) joined this list under operator item 92, once item 92 itself
+   retired the blanket `.forge/` ignore projects used to carry — see
+   `SCRATCH_PATHS` in `packages/projects/preflight-repo.ts` for the single
+   source and why a third runtime output, `.forge/demo/` (the Studio
+   demo-builder's own machinery), is deliberately NOT on this list yet.
 2. **Build artifacts and generated outputs:** compiled binaries, `dist/`,
    coverage, graph caches — anything a build writes that isn't source.
 3. **Tracked contract config, never ignored:** `.forge/project.json`, the
@@ -661,6 +668,8 @@ retain the default `"."` (no migration required).
 - `demo/<initiative-id>/` — demo output written during the demo-agent run
 - `.forge/work-items/` — per-cycle PM output
 - `.forge/.create-complete` — the onboarding/create completion marker
+- `.forge/live-evidence/` — acceptance-test read-backs (operator item 92)
+- `.forge/preflight.json` — preflight output (operator item 92)
 
 These are excluded by the project's `.gitignore` (C2 enforces this).
 `.forge/project.json` and `.forge/skills/` are the opposite case — tracked
