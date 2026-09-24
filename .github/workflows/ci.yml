@@ -101,6 +101,14 @@ jobs:
       - name: Per-package LOC caps (QUARRY.md, bead 5.18)
         run: node scripts/check-package-caps.mjs
 
+      # A dead repo-path citation in a comment or doc — one that named a file
+      # since moved or deleted — is the exact silent-rot shape brain-lint and
+      # check-docs-claims already close for their own scopes; this closes it
+      # for code comments and general prose (bead forge-8vfn.13). Baselines
+      # today's findings and may only shrink; `--write` never adds a new one.
+      - name: Stale path citations ratchet (bead forge-8vfn.13)
+        run: node scripts/check-stale-path-citations.mjs
+
       # ADR 048 clause 3 — deleting the example package leaves the platform
       # running, proven by execution. The deletion happens in a throwaway `git
       # worktree` and the checkout is asserted untouched either side (bead
