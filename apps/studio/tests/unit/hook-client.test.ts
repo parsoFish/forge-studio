@@ -203,3 +203,43 @@ test('parseHookDetail: scan missing, non-object, or with a non-array findings TH
 test('parseHookDetail: an unrecognised scan.verdict THROWS', () => {
   expect(() => parseHookDetail({ ...WELL_FORMED_DETAIL, scan: { verdict: 'suspicious', findings: [] } })).toThrow();
 });
+
+// ---------------------------------------------------------------------------
+// forge-8vfn.5.16 (M7-C U2) — last-fire facts. fireCount is REQUIRED (the
+// route always sends it, 0 = "scanned, found none" — same idiom as
+// carriedByCount); lastFireAt/lastFireOutcome are legitimately ABSENT for a
+// hook that has never fired, but a PRESENT-and-malformed pair must still
+// throw rather than be silently coerced — the same discipline `approval`
+// already gets above.
+// ---------------------------------------------------------------------------
+
+test('parseHookDetail: fireCount is required and must be a number — never defaulted to 0', () => {
+  const { fireCount: _drop, ...missing } = { ...WELL_FORMED_DETAIL, fireCount: 3 };
+  expect(() => parseHookDetail(missing)).toThrow();
+  expect(() => parseHookDetail({ ...WELL_FORMED_DETAIL, fireCount: '3' })).toThrow();
+});
+
+test('parseHookDetail: never-fired (fireCount:0, no lastFireAt/lastFireOutcome) round-trips with both absent', () => {
+  const parsed = parseHookDetail({ ...WELL_FORMED_DETAIL, fireCount: 0 });
+  expect(parsed.fireCount).toBe(0);
+  expect(parsed.lastFireAt).toBeUndefined();
+  expect(parsed.lastFireOutcome).toBeUndefined();
+});
+
+test('parseHookDetail: a real last fire round-trips lastFireAt + a recognised lastFireOutcome verbatim', () => {
+  const parsed = parseHookDetail({
+    ...WELL_FORMED_DETAIL,
+    fireCount: 5,
+    lastFireAt: '2026-09-25T12:00:00.000Z',
+    lastFireOutcome: 'refused',
+  });
+  expect(parsed.fireCount).toBe(5);
+  expect(parsed.lastFireAt).toBe('2026-09-25T12:00:00.000Z');
+  expect(parsed.lastFireOutcome).toBe('refused');
+});
+
+test('parseHookDetail: an unrecognised lastFireOutcome value THROWS — never coerced to a known one', () => {
+  expect(() =>
+    parseHookDetail({ ...WELL_FORMED_DETAIL, fireCount: 1, lastFireAt: '2026-09-25T12:00:00.000Z', lastFireOutcome: 'succeeded' }),
+  ).toThrow();
+});
