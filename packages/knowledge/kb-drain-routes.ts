@@ -200,12 +200,40 @@ export async function handleKbRuns(
   return false;
 }
 
+/**
+ * knowledge-01 (forge-6gv.6.1): the host's live-tail activator/releaser —
+ * same shape `bridge-agents-runs.ts` uses for standalone agent runs — OPTIONAL
+ * because the six other `KnowledgeRouteDeps` callers (every route test in
+ * this package) supply neither and must keep working unchanged. Without
+ * this, a live drain's `events.jsonl` is written correctly (`emitProgress`
+ * already tags every transition `metadata.kind:'progress'`, including
+ * `turn-start` — pinned in `activity-log-view.test.ts`) but the bridge never
+ * arms a WS tail for its cycle, so `useCycleEvents`' one-shot snapshot fetch
+ * on mount never updates again: the activity drawer freezes at whatever
+ * existed the instant the panel opened (knowledge-01), which in practice
+ * means turn-start rows the drain DOES emit correctly never reach an
+ * already-open panel (knowledge-34 — a symptom of this SAME missing
+ * plumbing, not a separate display defect).
+ */
+export type KbDrainTailDeps = {
+  ensureAgentRunTail?: (cycleId: string) => void;
+  releaseAgentRunTail?: (cycleId: string) => void;
+};
+
+/** `_kb-drain-<runId>` — the SAME cycle id `runKbDrain`'s own `emitProgress`
+ *  writes under (bridge-studio-kb-drain.ts) and `useCycleEvents` derives
+ *  client-side; the ONE naming rule, never a second hand-kept copy. */
+function kbDrainCycleId(runId: string): string {
+  return `_kb-drain-${runId}`;
+}
+
 export async function handleKbDrainRun(
   req: IncomingMessage,
   res: ServerResponse,
   ctx: StudioContext,
   rawUrl: string,
   method: string,
+  tail?: KbDrainTailDeps,
 ): Promise<boolean> {
   // Normalisation rationale: `bridge-studio-kb-routes-lifecycle.ts`'s first copy.
   const url = pathOnly(rawUrl);
@@ -234,11 +262,25 @@ export async function handleKbDrainRun(
       sendJson(res, 404, { error: 'unknown drain run' }, origin);
       return true;
     }
+    // knowledge-01: re-armed on EVERY poll (the panel polls this route) so a
+    // WS reconnect — which resets every tail — recovers on the next tick,
+    // mirroring `bridge-agents-runs.ts`'s own standalone-run convention
+    // exactly. Released once terminal so a finished drain's immutable log
+    // stops being tailed for the rest of the Studio session.
+    if (status.state === 'running') tail?.ensureAgentRunTail?.(kbDrainCycleId(runId));
+    else tail?.releaseAgentRunTail?.(kbDrainCycleId(runId));
     sendJson(res, 200, { ok: true, runId, ...status }, origin);
     return true;
   }
 
   return false;
+}
+
+/** knowledge-01: the same factory shape as `createKbDrainStartHandler`,
+ *  below — the tail deps are supplied by the assembly, never imported. */
+export function createKbDrainRunHandler(deps: KbDrainTailDeps) {
+  return (req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string) =>
+    handleKbDrainRun(req, res, ctx, rawUrl, method, deps);
 }
 
 /**
@@ -256,9 +298,9 @@ export async function handleKbDrainRun(
  * no turn injected hits `runKbDrain`'s own named refusal, which is the right
  * outcome for a path nothing is supposed to reach.
  */
-export function createKbDrainStartHandler(deps: { runFixTurn: KbDrainRunFixTurnFn }) {
+export function createKbDrainStartHandler(deps: { runFixTurn: KbDrainRunFixTurnFn } & KbDrainTailDeps) {
   return (req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string) =>
-    handleKbDrainStart(req, res, ctx, rawUrl, method, deps.runFixTurn);
+    handleKbDrainStart(req, res, ctx, rawUrl, method, deps.runFixTurn, deps.ensureAgentRunTail);
 }
 
 export async function handleKbDrainStart(
@@ -268,6 +310,7 @@ export async function handleKbDrainStart(
   rawUrl: string,
   method: string,
   runFixTurn?: KbDrainRunFixTurnFn,
+  ensureAgentRunTail?: (cycleId: string) => void,
 ): Promise<boolean> {
   // Normalisation rationale: `bridge-studio-kb-routes-lifecycle.ts`'s first copy.
   const url = pathOnly(rawUrl);
@@ -330,6 +373,11 @@ export async function handleKbDrainStart(
         message: 'kb-drain.queued',
         metadata: { kind: 'progress', kbId, runId },
       });
+
+      // knowledge-01: arm the live tail the instant the run exists — the
+      // panel's first poll (immediately after this 200) needs the socket
+      // already subscribed, not racing its own arrival on the next tick.
+      ensureAgentRunTail?.(kbDrainCycleId(runId));
 
       enqueueConsolidate(kbId, async () => {
         await runKbDrain(ctx.forgeRoot, kbId, runId, runFixTurn ? { runFixTurn } : {});

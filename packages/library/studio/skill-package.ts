@@ -24,8 +24,8 @@ import matter from 'gray-matter';
 // empty-data success. Passing {} opts out of the cache entirely.
 // (skill-install.ts and skill-trust.ts point here rather than repeat it.)
 
-import { skillsDir } from '../skill-path.ts';
 import { guardedFile } from '@forge/kernel';
+import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
 
 // ---------------------------------------------------------------------------
 // Types (WI-1 pinned shapes — orchestrator/studio/skill-library.test.ts)
@@ -114,10 +114,13 @@ export function readSkillPackage(forgeRoot: string, id: string): PackageFile[] {
   // `check-raw-fs-guarded` caught it in the same commit — appending a leaf below
   // a guarded value re-opens the class one segment lower, which is the whole
   // lesson. The guard found the residual inside the containment fix itself.
-  const dir = guardedFile(skillsDir(forgeRoot), [id], 'readdir');
-  const md = dir === null ? null : guardedFile(skillsDir(forgeRoot), [id, 'SKILL.md'], 'read');
-  if (dir === null || md === null) {
-    throw new Error(`readSkillPackage: no SKILL.md found for skill "${id}" inside the library (missing, or the path escapes skills/)`);
+  // SEAM F1: search every skill root — `skills/` AND every
+  // `packages/<pkg>/skills/` — for whichever one actually carries `id`, then
+  // guard THAT root's own `readdir` (never a second, unguarded join off it).
+  const match = resolveIdAcrossRoots(skillRoots(forgeRoot), id, ['SKILL.md']);
+  const dir = match === null ? null : guardedFile(match.root, [id], 'readdir');
+  if (match === null || dir === null) {
+    throw new Error(`readSkillPackage: no SKILL.md found for skill "${id}" inside the library (missing, or the path escapes every skill root)`);
   }
   const files: PackageFile[] = [];
   const rootAbs = resolve(dir);

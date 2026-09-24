@@ -15,11 +15,12 @@
  * the fallback phase→node table are what these derivations fall back TO.
  * `run-model.ts` imports them back.
  */
-import { readdirSync, existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
-import { loadFlowDefinition } from './studio/flow-registry.ts';
-import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
+import { loadFlowDefinition, listFlowIds } from './studio/flow-registry.ts';
+import { flowPathForId } from './flow-runner.ts';
+import { skillRoots } from '@forge/kernel/discovery-roots.ts';
 
 // A run's flow id comes from its manifest's `flow_id` (architect → forge-architect,
 // develop → forge-develop). This constant
@@ -87,10 +88,7 @@ export const FALLBACK_PHASE_TO_NODE: Record<string, string | null> = {
  */
 export function buildNodeMapping(root: string): Map<string, string | null> {
   try {
-    const flowsDir = join(resolve(root), 'studio', 'flows');
-    const skillsDir = toSkillsDir(resolve(root));
-
-    const agents = listAgentDefinitions(skillsDir);
+    const agents = listAgentDefinitions(skillRoots(resolve(root)));
     // Index agents by slug for O(1) lookup
     const agentBySlug = new Map(agents.map((a) => [a.slug, a]));
 
@@ -101,10 +99,10 @@ export function buildNodeMapping(root: string): Map<string, string | null> {
       mapping.set(phase, nodeId);
     }
 
-    // Derive from every seed flow's nodes (union; first-write-wins per phase).
-    const flowDirs = existsSync(flowsDir) ? readdirSync(flowsDir) : [];
-    for (const entry of flowDirs) {
-      const flowPath = join(flowsDir, entry, 'flow.yaml');
+    // Derive from every flow's nodes, across every flow root (SEAM F1;
+    // union; first-write-wins per phase).
+    for (const entry of listFlowIds(root)) {
+      const flowPath = flowPathForId(entry, root);
       if (!existsSync(flowPath)) continue;
       let flow;
       try {
@@ -166,10 +164,8 @@ export function buildNodeMapping(root: string): Map<string, string | null> {
 export function buildAgentSlugToNodeId(root: string): Map<string, string> {
   const mapping = new Map<string, string>();
   try {
-    const flowsDir = join(resolve(root), 'studio', 'flows');
-    const flowDirs = existsSync(flowsDir) ? readdirSync(flowsDir).sort() : [];
-    for (const entry of flowDirs) {
-      const flowPath = join(flowsDir, entry, 'flow.yaml');
+    for (const entry of listFlowIds(root)) {
+      const flowPath = flowPathForId(entry, root);
       if (!existsSync(flowPath)) continue;
       let flow;
       try {
@@ -198,10 +194,8 @@ export function buildAgentSlugToNodeId(root: string): Map<string, string> {
 export function buildFlowNodeSets(root: string): Map<string, Set<string>> {
   const result = new Map<string, Set<string>>();
   try {
-    const flowsDir = join(resolve(root), 'studio', 'flows');
-    const flowDirs = existsSync(flowsDir) ? readdirSync(flowsDir).sort() : [];
-    for (const entry of flowDirs) {
-      const flowPath = join(flowsDir, entry, 'flow.yaml');
+    for (const entry of listFlowIds(root)) {
+      const flowPath = flowPathForId(entry, root);
       if (!existsSync(flowPath)) continue;
       try {
         const flow = loadFlowDefinition(flowPath);
