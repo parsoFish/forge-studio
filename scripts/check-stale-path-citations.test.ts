@@ -2,8 +2,9 @@
  * check-stale-path-citations — proof the ratchet BITES.
  *
  * Bead forge-8vfn.13: a code comment or prose sentence that cites a repo path
- * (`cli/foo.ts`) or a retired module's bare basename (`instructions-runner`)
- * and that path/basename no longer exists anywhere in the tree is a finding.
+ * (e.g. a retired `packages/x/legacy-loader.ts`) or a retired module's bare
+ * basename (`legacy-loader`), where the path/basename no longer exists
+ * anywhere in the tree, is a finding.
  * `historical:` on the line, or a `(now at <path>)` annotation, suppresses.
  * A JSON baseline ratchets today's findings so the lint lands green and only
  * a NEW dead citation fails; `--write` may only ever SHRINK that baseline.
