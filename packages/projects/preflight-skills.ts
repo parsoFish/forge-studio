@@ -55,9 +55,10 @@
  * mandate that every project bind one.
  */
 
-import { guardedFile } from '@forge/kernel';
+import { guardedFile, guardedReadFile } from '@forge/kernel';
 import type { ClauseResult } from '@forge/kernel';
 import type { ProjectConfig } from './project-config.ts';
+import { loadProjectConfig } from './project-config.ts';
 
 /**
  * Splits an optional `artifactRoot` into path segments for `guardedFile`.
@@ -65,11 +66,66 @@ import type { ProjectConfig } from './project-config.ts';
  * imported: `reset.ts` imports `runPreflight` from `preflight.ts`, which
  * imports `checkSkills` from this file, so an import the other way would
  * cycle). `artifactRoot` itself is never re-parsed from disk here — it
- * arrives already validated on `cfg.artifactRoot`.
+ * arrives already validated on `cfg.artifactRoot` (`project-config.ts`'s
+ * `parseArtifactRoot`, which already rejects an absolute value, a
+ * backslash, or a `..` segment).
  */
 function artifactRootSegments(artifactRoot: string | undefined): string[] {
   if (!artifactRoot) return [];
   return artifactRoot.split('/').filter((s) => s.length > 0 && s !== '.');
+}
+
+/** Where a declared skill id may live, in lookup order: project-local, then
+ *  forge-wide, then (M7 findings row 21) under the project's own declared
+ *  `artifactRoot` — the terraform-provider-betterado shape
+ *  (`artifactRoot: "forge"`, skills living under `forge/skills/<id>/`). */
+function skillCandidates(dir: string, forgeRoot: string, id: string, artifactRoot?: string): { root: string; segments: string[] }[] {
+  const candidates = [
+    { root: dir, segments: ['.forge', 'skills', id, 'SKILL.md'] },
+    { root: forgeRoot, segments: ['skills', id, 'SKILL.md'] },
+  ];
+  const artifactSegs = artifactRootSegments(artifactRoot);
+  if (artifactSegs.length > 0) {
+    candidates.push({ root: dir, segments: [...artifactSegs, 'skills', id, 'SKILL.md'] });
+  }
+  return candidates;
+}
+
+/** The first candidate that resolves through `guardedFile`, or `null`. */
+export function resolveDeclaredSkillPath(dir: string, forgeRoot: string, id: string, artifactRoot?: string): string | null {
+  for (const { root, segments } of skillCandidates(dir, forgeRoot, id, artifactRoot)) {
+    const path = guardedFile(root, segments, 'read');
+    if (path !== null) return path;
+  }
+  return null;
+}
+
+/** Named, fail-fast: a declared skill id an agent was told to load that resolves nowhere. */
+export class MissingDeclaredSkillError extends Error {
+  constructor(id: string, dir: string, forgeRoot: string) {
+    super(
+      `declared skill "${id}" does not resolve — no SKILL.md at ${dir}/.forge/skills/${id}/ (project-local) ` +
+        `or ${forgeRoot}/skills/${id}/ (forge-wide)`,
+    );
+    this.name = 'MissingDeclaredSkillError';
+  }
+}
+
+export type DeclaredSkill = { id: string; path: string; text: string };
+
+/** Every skill the project declares, read for an agent's prompt (ADR 024, item 90).
+ *  A declared id that resolves nowhere throws: a running agent has no later. */
+export function loadDeclaredSkills(projectDir: string, forgeRoot: string): DeclaredSkill[] {
+  const cfg = loadProjectConfig(projectDir);
+  const declared = cfg?.skills ?? [];
+  return declared.map((id) => {
+    for (const { root, segments } of skillCandidates(projectDir, forgeRoot, id, cfg?.artifactRoot)) {
+      const text = guardedReadFile(root, segments);
+      const path = guardedFile(root, segments, 'read');
+      if (text !== null && path !== null) return { id, path, text };
+    }
+    throw new MissingDeclaredSkillError(id, projectDir, forgeRoot);
+  });
 }
 
 export function checkSkills(dir: string, cfg: ProjectConfig | null, forgeRoot: string): ClauseResult {
@@ -83,17 +139,11 @@ export function checkSkills(dir: string, cfg: ProjectConfig | null, forgeRoot: s
     return { ...base, pass: true, detail: 'no skills declared — nothing to resolve' };
   }
 
+  // Resolves through the SAME `resolveDeclaredSkillPath` `loadDeclaredSkills`
+  // reads through — one rule, never two copies (declared-skills.test.ts's
+  // own header names this invariant).
   const artifactSegs = artifactRootSegments(cfg?.artifactRoot);
-
-  const missing = declared.filter((id) => {
-    const local = guardedFile(dir, ['.forge', 'skills', id, 'SKILL.md'], 'read');
-    if (local !== null) return false;
-    const forgeWide = guardedFile(forgeRoot, ['skills', id, 'SKILL.md'], 'read');
-    if (forgeWide !== null) return false;
-    if (artifactSegs.length === 0) return true;
-    const underArtifactRoot = guardedFile(dir, [...artifactSegs, 'skills', id, 'SKILL.md'], 'read');
-    return underArtifactRoot === null;
-  });
+  const missing = declared.filter((id) => resolveDeclaredSkillPath(dir, forgeRoot, id, cfg?.artifactRoot) === null);
 
   if (missing.length === 0) {
     return { ...base, pass: true, detail: `${declared.length} declared skill(s) all resolve` };
