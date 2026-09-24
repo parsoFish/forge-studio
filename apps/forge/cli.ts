@@ -694,7 +694,12 @@ async function cmdDemoBuilderRun(rest: string[]): Promise<void> {
 // help — DEC-6 retires cycle management from the CLI, not the contract check, and
 // the operator runs `forge preflight <project>` directly. The forge-onboard-project
 // skill runs it too. Neither is operator cycle-management, so both stay dispatchable.
-function flagValue(rest: string[], flag: string): string | undefined {
+// Named apart from the shared `flagValue` above (bead 6.11.33's consolidation
+// deliberately left this one alone): unlike that one, the flag NAME here
+// already carries its own `--` prefix (call sites pass '--dir', '--project',
+// …), and a missing/adjacent value is a hard usage error for `forge demo`
+// (console.error + exit 2) rather than a silent `undefined`.
+function demoFlagValue(rest: string[], flag: string): string | undefined {
   const i = rest.indexOf(flag);
   if (i < 0) return undefined;
   const v = rest[i + 1];
@@ -722,7 +727,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
     // Resolve the demo dir against the caller's worktree (INVOCATION_CWD), honouring
     // the project's artifactRoot (legacy `demo/<id>` or `<artifactRoot>/history/<id>/demo`).
     // An explicit --dir overrides; otherwise the worktree root is INVOCATION_CWD.
-    const dirFlag = flagValue(rest, '--dir');
+    const dirFlag = demoFlagValue(rest, '--dir');
     const demoDir = dirFlag ?? worktreeDemoDir(INVOCATION_CWD, initiativeId);
     const worktreeRoot = dirFlag ? resolve(dirFlag, '..', '..') : INVOCATION_CWD;
     const { renderDemoBundle } = (await requireFactoryDemo('forge demo render')).model;
@@ -749,7 +754,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
       console.error('forge demo capture: usage: demo capture <initiative-id> [--project <name>] [--dir <demoDir>] [--base <ref>] [--changed <ref>]');
       process.exit(2);
     }
-    const projectArg = flagValue(rest, '--project');
+    const projectArg = demoFlagValue(rest, '--project');
     // CONTAINMENT (SEC-07): an escaping `--project` must be refused BEFORE it is
     // resolved into a repo path — a folded `resolve('projects', projectArg)` gives
     // the guard nothing to vet (packages/kernel/path-guard.ts's CONTRACT). The
@@ -767,15 +772,15 @@ async function cmdDemo(rest: string[]): Promise<void> {
     } else {
       projectRepoPath = INVOCATION_CWD;
     }
-    const dirFlag = flagValue(rest, '--dir');
+    const dirFlag = demoFlagValue(rest, '--dir');
     const demoDir = dirFlag ?? worktreeDemoDir(projectRepoPath, initiativeId);
     const jsonPath = join(demoDir, 'demo.json');
     if (!existsSync(jsonPath)) {
       console.error(`forge demo capture: ${jsonPath} not found — author demo.json first. Skipping (best-effort).`);
       return;
     }
-    const baseRef = flagValue(rest, '--base') ?? 'main';
-    const changedRef = flagValue(rest, '--changed') ?? 'HEAD';
+    const baseRef = demoFlagValue(rest, '--base') ?? 'main';
+    const changedRef = demoFlagValue(rest, '--changed') ?? 'HEAD';
     try {
       const { captureCheckpoints, model: demoModel } = await requireFactoryDemo('forge demo capture');
       const { collectCapturedMedia, mergeCapturedMedia, renderDemoBundle, stampCaptureNonce } = demoModel;
