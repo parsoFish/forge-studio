@@ -207,6 +207,19 @@ test('CONF-5b freshThemeFiles(): index pages and non-markdown are excluded even 
 });
 
 // ---------------------------------------------------------------------------
+// §5b rootDir() — the one deliberate raw-path exception (M7-C KN1)
+// ---------------------------------------------------------------------------
+
+test('CONF-5c rootDir(): the KB\'s own guarded root, null once its descriptor is gone — kills an implementation that caches the root at construction (mirrors CONF-4b) or that returns the brain ROOT rather than the KB\'s own dir', () => {
+  withFixture((fx) => {
+    const backend = getKbBackend(fx.root, 'alpha');
+    assert.equal(backend.rootDir(), fx.alpha);
+    rmSync(join(fx.alpha, 'kb.yaml'));
+    assert.equal(backend.rootDir(), null, 'a KB whose kb.yaml disappeared must stop resolving a root too');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // §6 tryGetKbBackend — the non-throwing resolver the lint/health sites need
 // ---------------------------------------------------------------------------
 
@@ -238,6 +251,7 @@ function stubBackend(over: Partial<KbBackend>): KbBackend {
     placement: () => 'other',
     descriptorPath: () => null,
     freshThemeFiles: () => [],
+    rootDir: () => null,
   };
   return { ...base, ...over };
 }
