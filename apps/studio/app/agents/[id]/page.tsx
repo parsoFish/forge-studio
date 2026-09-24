@@ -80,6 +80,7 @@ import { useDocumentTitle } from '@/lib/document-title';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 import { disabledAttrs } from '@/lib/disabled-reason';
+import { attachUnsavedChangesGuard } from '@/lib/unsaved-changes-guard';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -408,6 +409,13 @@ export default function AgentBuilderPage() {
     void loadHistory();
     return () => { cancelled = true; };
   }, [slugParam, isNew, historyNonce]);
+
+  // agents-48: beforeunload covers tab close / reload / full top-nav
+  // navigations — handleSelectAgent below already confirms the in-page
+  // agent switcher, but that was the ONLY guarded exit; every other way to
+  // leave discarded unsaved edits with no warning at all, despite the
+  // "Unsaved changes" indicator. Mirrors projects/[id]/page.tsx's own effect.
+  useEffect(() => attachUnsavedChangesGuard(window, dirty), [dirty]);
 
   // ---- agent selector change (with dirty guard) ----
   function handleSelectAgent(newSlug: string) {
