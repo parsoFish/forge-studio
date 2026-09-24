@@ -70,16 +70,16 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { HOOK_ENV_BASE_ALLOWLIST, HOOK_ENV_CREDENTIAL_EXCLUSIONS, buildChildEnv } from '@forge/kernel/spawn-env.ts';
 import type { EventLogger } from '@forge/kernel';
-import { hookDir, loadHookDefinition, resolveHookScriptPath, type HookDefinition, type HookPermissionManifest } from './hook-library.ts';
+import { hookDir, loadHookDefinition, type HookDefinition, type HookPermissionManifest } from './hook-library.ts';
 import { extractEnvVarNames, scanHookPackage, type HookScanReport } from './hook-scan.ts';
 import { hookRunState, readHookApprovalLedger } from './hook-approval-ledger.ts';
-import { hashHookScript } from './hook-package.ts';
+import { readHookPackage, hashHookPackage, canonicalHookYamlBody, normalizeHookEntryPath, type HookPackageFile } from './hook-package.ts';
 
 // ---------------------------------------------------------------------------
 // buildHookChildEnv — composes spawn-env.ts's buildChildEnv over the
@@ -176,20 +176,48 @@ export function detectUndeclaredEnvRefs(scriptBody: string, permissions: HookPer
   return extractEnvVarNames(scriptBody).filter((name) => !declared.has(name) && !alwaysPresent.has(name));
 }
 
-// Copies the verified bytes to a private, read-only file — design.md "Hook exec".
-const PRIVATE_SCRIPT_FILENAME = 'hook-script.sh';
-
-function writePrivateScriptCopy(scriptBody: string): PrivateScriptCopy {
-  const dir = mkdtempSync(join(tmpdir(), 'forge-hook-verified-'));
-  chmodSync(dir, 0o700);
-  const path = join(dir, PRIVATE_SCRIPT_FILENAME);
+// M7-C PKG: +57 for pinning the whole package (net file growth, 566 -> 623
+// lines; measured under ruling 666's standing ≤100-line authority — see
+// packages/library's own row in scripts/check-package-caps.mjs).
+//
+// Copies EVERY verified file into a private, read-only tree, preserving the
+// package's own relative layout — M7-C PKG (forge-8vfn.8.3.6); design.md
+// "Hook exec". Not just the entry script: a sibling a hook `source`s via
+// `$(dirname "$0")/lib.sh` must resolve inside this pinned copy too, or it is
+// read live from the mutable original for the whole run (the bug this fix
+// closes). No symlink can appear in `files` — `readHookPackage`'s own walk
+// already refuses any non-regular-file/non-directory dirent — so every write
+// below is a genuine regular file, never a recreated link.
+function writePrivatePackageCopy(files: readonly HookPackageFile[], entryRelPath: string): PrivatePackageCopy {
+  const root = mkdtempSync(join(tmpdir(), 'forge-hook-verified-'));
+  chmodSync(root, 0o700);
   try {
-    writeFileSync(path, scriptBody, { mode: 0o500, flag: 'wx' });
+    const madeDirs = new Set<string>();
+    for (const file of files) {
+      const relDir = dirname(file.path);
+      if (relDir !== '.') {
+        let cur = root;
+        for (const seg of relDir.split('/')) {
+          cur = join(cur, seg);
+          if (!madeDirs.has(cur)) {
+            mkdirSync(cur, { recursive: true });
+            chmodSync(cur, 0o700);
+            madeDirs.add(cur);
+          }
+        }
+      }
+      // `wx` = O_CREAT|O_EXCL, same immutability argument as the single-file
+      // predecessor: the file cannot be written through, including by this
+      // same process, the instant the write returns. Mode mirrors the
+      // package's OWN recorded executable bit (also part of `hashHookPackage`'s
+      // fingerprint input) rather than a fixed mode for every file.
+      writeFileSync(join(root, file.path), file.body, { mode: file.executable ? 0o500 : 0o400, flag: 'wx' });
+    }
   } catch (err) {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
     throw err;
   }
-  return { dir, path };
+  return { dir: root, entryPath: join(root, normalizeHookEntryPath(entryRelPath)) };
 }
 
 /** Called from a `finally` in both tails; never throws (would mask a real
@@ -261,20 +289,23 @@ const HOOK_SPAWN_MAX_BUFFER_BYTES = 1024 * 1024;
 // (forge-9a3); `runHookScript`/`runHookScriptAsync` are thin tails differing
 // only in HOW they spawn `bash`.
 
-/** `dir` is what `cleanupPrivateScriptDir` removes (the whole temp dir). */
-interface PrivateScriptCopy {
+/** `dir` is what `cleanupPrivateScriptDir` removes (the whole temp tree);
+ *  `entryPath` is the private copy's own entry script, what either tail
+ *  actually execs — M7-C PKG (forge-8vfn.8.3.6). */
+interface PrivatePackageCopy {
   dir: string;
-  path: string;
+  entryPath: string;
 }
 
 interface PreparedHookRun {
   def: HookDefinition;
-  scriptPath: string;
+  /** The REAL hook package directory — still the child's `cwd` (unchanged by
+   *  this fix; only the EXEC target and its siblings are pinned). */
   dir: string;
   childEnv: NodeJS.ProcessEnv;
   undeclaredEnvRefs: string[];
-  /** The ONE thing either tail executes — callers must clean up `.dir`. */
-  privateScript: PrivateScriptCopy;
+  /** The pinned copy either tail execs — callers must clean up `.dir`. */
+  privatePackage: PrivatePackageCopy;
 }
 
 function prepareHookRun(input: { forgeRoot: string; id: string; logger: EventLogger; initiativeId: string; parentEnv: NodeJS.ProcessEnv }): PreparedHookRun {
@@ -320,24 +351,58 @@ function prepareHookRun(input: { forgeRoot: string; id: string; logger: EventLog
 
   const def = loadHookDefinition(id, forgeRoot);
   const dir = hookDir(id, forgeRoot);
-  // Re-resolved HERE (not re-derived from a discarded earlier check) so a
-  // symlink swap has no window — forge-8vfn.8.3.2; design.md "Hook exec".
-  const scriptPath = resolveHookScriptPath(dir, def.script);
-  const scriptBody = readFileSync(scriptPath, 'utf8');
 
-  // Re-hash THIS read and compare to the ledger's stored scriptHash — closes
-  // the gate-to-here TOCTOU window (forge-8vfn.8.3.2; design.md "Hook exec").
-  const approvedScriptHash = readHookApprovalLedger(forgeRoot).get(id)?.scriptHash;
-  const liveScriptHash = hashHookScript(scriptBody);
-  if (liveScriptHash !== approvedScriptHash) {
+  // Re-read the WHOLE package HERE — not the entry script alone, and not
+  // reusing the gate's own read inside hookRunState — so a swap after the
+  // gate's check has no window over ANY file in the package, not only the
+  // entry script (M7-C PKG, forge-8vfn.8.3.6; design.md "Hook exec").
+  // `readHookPackage`'s own guardedFile walk realpaths and identity-checks
+  // every leaf, so a symlink swap on the entry OR a sibling is refused here
+  // exactly as the single-file `resolveHookScriptPath` re-check refused it
+  // for the entry alone before this fix.
+  let files: HookPackageFile[];
+  try {
+    files = readHookPackage(forgeRoot, id);
+  } catch (err) {
     throw new HookRunError(
       'not-runnable',
-      `runHookScript: hook "${id}"'s script content changed between the approval gate's check and this read (fingerprint mismatch: expected ${approvedScriptHash ?? '(no approval on record)'}, read ${liveScriptHash}) — refusing to spawn bytes that were never approved`,
+      `runHookScript: hook "${id}"'s package could not be re-read for verification — refusing to spawn: ${(err as Error).message}`,
     );
   }
 
-  // Closes the window PAST this read — see writePrivateScriptCopy.
-  const privateScript = writePrivateScriptCopy(scriptBody);
+  // Re-hash THIS read's WHOLE package and compare to the ledger's stored
+  // packageHash — closes the gate-to-here TOCTOU window for every file, not
+  // only the entry script (M7-C PKG, forge-8vfn.8.3.6; design.md "Hook
+  // exec"). `packageHash` strictly subsumes the entry-only `scriptHash` check
+  // this replaces (hook-package.ts's `hashHookPackage` doc), so a second,
+  // narrower re-check would be redundant, not additional safety. Canonicalized
+  // identically to the ledger's own `snapshotHookPackage` (only hook.yaml's
+  // body — see `canonicalHookYamlBody`) so a cosmetic hook.yaml reorder is not
+  // mistaken for a real edit here either.
+  const approvedPackageHash = readHookApprovalLedger(forgeRoot).get(id)?.packageHash;
+  const filesForPackageHash = files.map((f) => (f.path === 'hook.yaml' ? { ...f, body: canonicalHookYamlBody(f.body) } : f));
+  const livePackageHash = hashHookPackage(filesForPackageHash);
+  if (livePackageHash !== approvedPackageHash) {
+    throw new HookRunError(
+      'not-runnable',
+      `runHookScript: hook "${id}"'s package content changed between the approval gate's check and this read (fingerprint mismatch: expected ${approvedPackageHash ?? '(no approval on record)'}, read ${livePackageHash}) — refusing to spawn a package that was never approved`,
+    );
+  }
+
+  const entryFile = files.find((f) => normalizeHookEntryPath(f.path) === normalizeHookEntryPath(def.script));
+  if (!entryFile) {
+    throw new HookRunError(
+      'not-runnable',
+      `runHookScript: hook "${id}" declares script "${def.script}" but no such file exists in its package — refusing to spawn`,
+    );
+  }
+  const scriptBody = entryFile.body;
+
+  // Closes the window PAST this read — copies EVERY verified file (not only
+  // the entry) into a private tree so a sibling sourced via
+  // `$(dirname "$0")/lib.sh` resolves against pinned bytes for the whole run —
+  // see writePrivatePackageCopy.
+  const privatePackage = writePrivatePackageCopy(files, def.script);
 
   // Emitted unconditionally (CLAUDE.md: "emit structured events on every
   // invocation") — the mismatch event below is CONDITIONAL, so a hook run
@@ -380,7 +445,7 @@ function prepareHookRun(input: { forgeRoot: string; id: string; logger: EventLog
     });
   }
 
-  return { def, scriptPath, dir, childEnv, undeclaredEnvRefs, privateScript };
+  return { def, dir, childEnv, undeclaredEnvRefs, privatePackage };
 }
 
 /** The shape both spawn tails reduce their real child-process result to,
@@ -427,17 +492,14 @@ function finalizeHookOutcome(id: string, timeoutMs: number, durationMs: number, 
   };
 }
 
-// Both tails exec prepared.privateScript via `bash -c 'source "$<var>"' <realScriptPath>` — design.md "Hook exec".
-
-const HOOK_VERIFIED_SCRIPT_ENV_VAR = 'FORGE_HOOK_VERIFIED_SCRIPT_PATH';
-
-function hookExecArgs(realScriptPath: string): string[] {
-  return ['-c', `source "$${HOOK_VERIFIED_SCRIPT_ENV_VAR}"`, realScriptPath];
-}
-
-function hookExecEnv(childEnv: NodeJS.ProcessEnv, privateScriptPath: string): NodeJS.ProcessEnv {
-  return { ...childEnv, [HOOK_VERIFIED_SCRIPT_ENV_VAR]: privateScriptPath };
-}
+// Both tails exec `prepared.privatePackage.entryPath` directly — `bash
+// <path>` sets $0 to the argv path it is given, so `$(dirname "$0")`
+// resolves INSIDE the pinned copy (every sibling was copied alongside it)
+// rather than the mutable original directory. No `-c`, no `source`, no env-
+// var indirection: those existed only to fake $0 back to the real path for a
+// copy that held the entry script alone — M7-C PKG (forge-8vfn.8.3.6);
+// design.md "Hook exec". Stdin stays untouched exactly as before (a plain
+// `bash <path>` reads the script from that file, never from stdin).
 
 // Tail 1 — SYNCHRONOUS.
 export function runHookScript(input: RunHookScriptInput): HookRunResult {
@@ -446,8 +508,8 @@ export function runHookScript(input: RunHookScriptInput): HookRunResult {
 
   try {
     const start = performance.now(); // monotonic: Date.now() steps back here (forge-8vfn.7.6.50)
-    const result = spawnSync('bash', hookExecArgs(prepared.scriptPath), {
-      env: hookExecEnv(prepared.childEnv, prepared.privateScript.path),
+    const result = spawnSync('bash', [prepared.privatePackage.entryPath], {
+      env: prepared.childEnv,
       cwd: prepared.dir,
       timeout: timeoutMs,
       encoding: 'utf8',
@@ -457,7 +519,7 @@ export function runHookScript(input: RunHookScriptInput): HookRunResult {
     return finalizeHookOutcome(id, timeoutMs, durationMs, outcome, prepared.undeclaredEnvRefs, logger, initiativeId);
   } finally {
     // Every exit path — see cleanupPrivateScriptDir's doc comment.
-    cleanupPrivateScriptDir(prepared.privateScript.dir, id, logger, initiativeId);
+    cleanupPrivateScriptDir(prepared.privatePackage.dir, id, logger, initiativeId);
   }
 }
 
@@ -468,8 +530,8 @@ function spawnBashAsync(execArgs: string[], cwd: string, env: NodeJS.ProcessEnv,
   return new Promise((resolve) => {
     // `detached: true` makes `bash` the leader of its own process group (pid
     // === pgid) so a group-targeted signal reaches every descendant too.
-    // Same exec scheme as the sync tail (hookExecArgs/hookExecEnv) — stdin
-    // is not touched here either.
+    // Same exec scheme as the sync tail above — stdin is not touched here
+    // either.
     const child = spawn('bash', execArgs, { env, cwd, detached: true });
     const buf = { stdout: '', stderr: '' };
     let overflowed = false;
@@ -539,16 +601,11 @@ export async function runHookScriptAsync(input: RunHookScriptInput): Promise<Hoo
 
   try {
     const start = performance.now(); // monotonic: Date.now() steps back here (forge-8vfn.7.6.50)
-    const outcome = await spawnBashAsync(
-      hookExecArgs(prepared.scriptPath),
-      prepared.dir,
-      hookExecEnv(prepared.childEnv, prepared.privateScript.path),
-      timeoutMs,
-    );
+    const outcome = await spawnBashAsync([prepared.privatePackage.entryPath], prepared.dir, prepared.childEnv, timeoutMs);
     const durationMs = Math.round(performance.now() - start);
     return finalizeHookOutcome(id, timeoutMs, durationMs, outcome, prepared.undeclaredEnvRefs, logger, initiativeId);
   } finally {
-    cleanupPrivateScriptDir(prepared.privateScript.dir, id, logger, initiativeId);
+    cleanupPrivateScriptDir(prepared.privatePackage.dir, id, logger, initiativeId);
   }
 }
 
