@@ -113,7 +113,7 @@ export type HookLibraryEntryMalformed = {
 export type HookLibraryEntry = HookLibraryEntryOk | HookLibraryEntryMalformed;
 
 export type HookScanFinding = {
-  category: 'network-egress' | 'env-read' | 'file-read' | 'obfuscation';
+  category: 'network-egress' | 'env-read' | 'file-read' | 'obfuscation' | 'unpinned-source';
   severity: 'critical' | 'info';
   message: string;
   match: string;
@@ -267,7 +267,7 @@ export function parseHookLibraryEntry(raw: unknown): HookLibraryEntry {
 function parseHookScanFinding(raw: unknown): HookScanFinding {
   const r = asRecord(raw);
   const category = r['category'];
-  if (category !== 'network-egress' && category !== 'env-read' && category !== 'file-read' && category !== 'obfuscation') {
+  if (category !== 'network-egress' && category !== 'env-read' && category !== 'file-read' && category !== 'obfuscation' && category !== 'unpinned-source') {
     throw new Error(`unrecognised hook finding category: ${JSON.stringify(category)}`);
   }
   const severity = r['severity'];
