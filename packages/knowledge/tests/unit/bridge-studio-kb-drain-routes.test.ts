@@ -296,3 +296,104 @@ test('drain vs consolidate are mutually GATED per kb (W7-B2, knowledge-05): conc
     rmSync(iso.root, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// knowledge-01 (forge-6gv.6.1) — the WS tail is armed for a live drain's
+// cycle, so an already-open activity drawer actually streams instead of
+// freezing at whatever `events.jsonl` held on first mount. `ensureAgentRunTail`
+// / `releaseAgentRunTail` are OPTIONAL on `KnowledgeRouteDeps` — every OTHER
+// `knowledgeRoutes({...})` call in this file (this file's own shared `routes`
+// above included) supplies neither and is completely unaffected; these tests
+// build their OWN routes table with spies to observe the calls.
+// ---------------------------------------------------------------------------
+
+/** A local dispatch helper parameterised on the routes table — the shared
+ *  `dispatch`/`postJson`/`getJson` above are closed over the file's ONE
+ *  shared `routes` const, which carries no tail deps. */
+async function dispatchTo(
+  tailRoutes: ReturnType<typeof knowledgeRoutes>,
+  root: string,
+  path: string,
+  method: string,
+): Promise<{ status: number; json: Record<string, unknown> }> {
+  const { res, captured } = mockRes();
+  const ctx: KnowledgeRouteContext = { forgeRoot: root, logsRoot: join(root, '_logs'), readBody: async () => ({}) };
+  const matched = await dispatchRoute(tailRoutes, mockReq(), res, ctx, path, method);
+  assert.ok(matched, `no carved route claimed ${method} ${path}`);
+  return { status: captured.status ?? 0, json: JSON.parse(captured.body || '{}') as Record<string, unknown> };
+}
+
+test('knowledge-01: POST /drain arms the live tail for the cycle the instant the run exists — before the panel\'s own first poll', async () => {
+  const armed: string[] = [];
+  const tailRoutes = knowledgeRoutes({
+    sessionStatusIo: refusingSessionStatusIo,
+    listFlowIds: () => ['forge-develop'],
+    listFlowBandIds: () => ['review-band', 'demo-band'],
+    runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); },
+    ensureAgentRunTail: (cycleId) => armed.push(cycleId),
+    releaseAgentRunTail: () => {},
+  });
+  const iso = makeIsolatedBridge();
+  const prevNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
+  try {
+    seedCleanKb(iso.root, 'clean-tail-start');
+    const dispatch = await dispatchTo(tailRoutes, iso.root, '/api/studio/kbs/clean-tail-start/drain', 'POST');
+    assert.equal(dispatch.status, 200, JSON.stringify(dispatch.json));
+    const runId = dispatch.json['runId'] as string;
+    assert.deepEqual(armed, [`_kb-drain-${runId}`],
+      'expected exactly one ensureAgentRunTail call, for this run\'s own cycle id');
+  } finally {
+    process.env.FORGE_ARCHITECT_NO_SPAWN = prevNoSpawn;
+    rmSync(iso.root, { recursive: true, force: true });
+  }
+});
+
+test('knowledge-01: GET /drain/:runId re-arms the tail on every poll while running, then RELEASES it once the run reaches a terminal state', async () => {
+  const armed: string[] = [];
+  const released: string[] = [];
+  const tailRoutes = knowledgeRoutes({
+    sessionStatusIo: refusingSessionStatusIo,
+    listFlowIds: () => ['forge-develop'],
+    listFlowBandIds: () => ['review-band', 'demo-band'],
+    runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); },
+    ensureAgentRunTail: (cycleId) => armed.push(cycleId),
+    releaseAgentRunTail: (cycleId) => released.push(cycleId),
+  });
+  const iso = makeIsolatedBridge();
+  const prevNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
+  try {
+    seedCleanKb(iso.root, 'clean-tail-poll');
+    const dispatch = await dispatchTo(tailRoutes, iso.root, '/api/studio/kbs/clean-tail-poll/drain', 'POST');
+    const runId = dispatch.json['runId'] as string;
+    const cycleId = `_kb-drain-${runId}`;
+
+    // Immediately after dispatch the run is still 'running' (enqueueConsolidate
+    // defers its real work by CONSOLIDATE_DISPATCH_DEFER_MS = 50ms — reliable
+    // by construction, the same reasoning the concurrent-dispatch test above
+    // relies on for its own synchronous check-then-write window).
+    armed.length = 0; // the START dispatch above already armed once — isolate the POLL's own arm.
+    const firstPoll = await dispatchTo(tailRoutes, iso.root, `/api/studio/kbs/clean-tail-poll/drain/${runId}`, 'GET');
+    assert.equal(firstPoll.json['state'], 'running', JSON.stringify(firstPoll.json));
+    assert.deepEqual(armed, [cycleId], 'a poll against a RUNNING drain must re-arm the tail');
+    // Not `assert.deepEqual(released, [], …)`: @types/node types deepEqual as
+    // an assertion function (`asserts actual is T`), so it would narrow
+    // `released` itself to `never[]` for the rest of this scope, breaking the
+    // `.includes(cycleId)` check below with a real (if confusing) type error.
+    assert.equal(released.length, 0, 'must not release a tail that is still live');
+
+    let terminalJson: Record<string, unknown> | null = null;
+    for (let i = 0; i < 60; i++) {
+      const poll = await dispatchTo(tailRoutes, iso.root, `/api/studio/kbs/clean-tail-poll/drain/${runId}`, 'GET');
+      if (poll.json['state'] !== 'running') { terminalJson = poll.json; break; }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    assert.ok(terminalJson, 'drain run never reached a terminal state within budget');
+    assert.equal(terminalJson!['state'], 'green', JSON.stringify(terminalJson));
+    assert.ok(released.includes(cycleId), 'the poll that FIRST observed the terminal state must release the tail');
+  } finally {
+    process.env.FORGE_ARCHITECT_NO_SPAWN = prevNoSpawn;
+    rmSync(iso.root, { recursive: true, force: true });
+  }
+});
