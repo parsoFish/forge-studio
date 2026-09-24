@@ -23,7 +23,7 @@ import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.t
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath, skillPathRelative, SLUG_RE, loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
-import { resolveFinalizer, finalizerNeedsPackageId, type FinalizerContext } from './interactive-finalizers.ts';
+import { resolveFinalizer, finalizerNeedsPackageId, type FinalizerContext, type QueuePorts } from './interactive-finalizers.ts';
 import { BASH_FENCE_MODES, bashFenceModeState, type SessionKindDescriptor, type TurnSpec, type TurnSpecPhase } from './studio/session-kinds.ts';
 import { runAgentTurn, runStructuredTurn, type QueryFn, type UnpricedTurnInfo } from './interactive-session.ts';
 import { hooksSpreadForAgent } from './kinds/kind-turn.ts';
@@ -124,6 +124,10 @@ export type RunInteractiveTurnCtx = {
   /** Extra prompt lines a caller injects (seed matching + provenance
    *  footer); appended after the operator-feedback section. */
   promptContext?: (args: { descriptor: SessionKindDescriptor; phaseRow: TurnSpecPhase; status: InteractiveTurnStatus }) => readonly string[];
+  /** bead 8vfn.6.6 item 2 — promoteToQueue's manifest ports, bound at
+   *  apps/forge (see interactive-finalizers.ts's QueuePorts doc). Absent ⇒
+   *  promoteToQueue refuses rather than silently promoting nothing. */
+  manifestPorts?: QueuePorts;
 };
 
 export type RunInteractiveTurnResult = {
@@ -462,6 +466,12 @@ export async function runFinalizeStep(args: {
     forgeRoot,
     libraryRoot,
     status: statusRecord,
+    // bead 8vfn.6.6 item 2 — commitToCentralBrain's own inputs, and the
+    // manifest ports promoteToQueue needs (a call-time seam on ctx, never a
+    // turnSpec field — mirrors ctx.turnId/ctx.promptContext's own shape).
+    projectRoot: ctx.projectRoot,
+    sessionId: ctx.sessionId,
+    ...(ctx.manifestPorts !== undefined ? { manifestPorts: ctx.manifestPorts } : {}),
     ...(packageId !== undefined ? { packageId } : {}),
     ...(projectRepoPath !== undefined ? { project_repo_path: projectRepoPath } : {}),
     ...(project !== undefined ? { project } : {}),

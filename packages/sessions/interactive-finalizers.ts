@@ -1,13 +1,16 @@
 /**
  * `FINALIZERS` — the deep-frozen registry of finalize-phase steps a generic
  * interactive runner invokes at its `committing` stage (ADR-043 §2/§5,
- * R4-22 WI-2). Seeded incrementally; THIS WI ships exactly ONE entry,
- * `copyStagingToLibrary` — the COPY primitive that installs the package an
- * interactive agent drafted into a session's `staging/` dir into the real
- * library under a trusted, config-derived containment root. Later WIs add
- * `promoteToQueue`, `writeToRepoRoot`, `commitToCentralBrain`, and the demo
- * snapshot-restore lock (ADR-043 §5) as their own rows — none of them exist
- * yet, and `resolveFinalizer` must resolve them to `undefined` until they do.
+ * R4-22 WI-2). Seeded incrementally: `copyStagingToLibrary` — the COPY
+ * primitive that installs the package an interactive agent drafted into a
+ * session's `staging/` dir into the real library under a trusted,
+ * config-derived containment root; `writeToRepoRoot` (bead 8vfn.6.6 items
+ * 2+4); `promoteToQueue` / `commitToCentralBrain` (bead 8vfn.6.6 item 2) —
+ * both CALL the real product functions their legacy-kind analogues
+ * (architect / project-brain) already use, never re-implementing them. The
+ * demo snapshot-restore lock stays PANEL-only (ADR-043 2026-08-14 amendment
+ * §1 — demo never migrates onto turnSpec), so `resolveFinalizer` never needs
+ * to resolve it.
  *
  * Scope discipline: this is the generic COPY primitive only. It does not
  * validate frontmatter, enforce skill/hook-specific semantics, or otherwise
@@ -128,6 +131,11 @@ import { join, dirname } from 'node:path';
 
 import { resolveGuardedPath } from '@forge/kernel';
 import { withStudioWrite } from '@forge/projects/project-repo-tx.ts';
+// bead 8vfn.6.6 item 2 — @forge/knowledge is rank 2, below this package
+// (rank 4), so commitToCentralBrain imports it directly (unlike
+// promoteToQueue's @forge/flows dependency, which is ABOVE this package
+// and must be injected — see QueuePorts).
+import { commitProjectBrain, type ProjectBrainCommitInput } from '@forge/knowledge/project-brain-build.ts';
 
 // ---------------------------------------------------------------------------
 // Error contract (ADR-042's third boundary — a pure function with an
@@ -152,7 +160,17 @@ export class InteractiveFinalizerError extends Error {
 // ---------------------------------------------------------------------------
 
 // bead 8vfn.6.6 item 2 — widened from 'copyStagingToLibrary' alone.
-export type FinalizerId = 'copyStagingToLibrary' | 'writeToRepoRoot';
+export type FinalizerId = 'copyStagingToLibrary' | 'writeToRepoRoot' | 'promoteToQueue' | 'commitToCentralBrain';
+
+/** bead 8vfn.6.6 item 2 — the two @forge/flows functions promoteToQueue
+ *  needs. `packages/flows` is rank 5, ABOVE this package (rank 4), so the
+ *  FUNCTIONS are injected (mirrors kinds/architect-ports.ts's own
+ *  ArchitectManifestPorts exactly), never imported here — see
+ *  FinalizerContext.manifestPorts. */
+export type QueuePorts = {
+  promoteManifests: (manifestsDir: string, opts: { queueRoot: string }) => { writtenManifestPaths: string[]; writtenInitiativeIds: string[] };
+  mintAndPersistManifestCycleId: (manifestPath: string, initiativeId: string) => string;
+};
 
 export type FinalizerContext = {
   /** Trusted — the caller already SEC-04-guarded this. */
@@ -171,6 +189,14 @@ export type FinalizerContext = {
   /** Trusted — the project the session's own status names. */
   project_repo_path?: string;
   project?: string;
+  /** bead 8vfn.6.6 item 2 — commitToCentralBrain's own inputs (mirrors
+   *  kinds/project-brain.ts's commitProjectBrain call). Optional, like every
+   *  other per-finalizer field here — only commitToCentralBrain needs them. */
+  projectRoot?: string;
+  sessionId?: string;
+  /** bead 8vfn.6.6 item 2 — see QueuePorts. Absent ⇒ promoteToQueue refuses
+   *  (no silent no-op — the no-fallback rule architect-ports.ts also states). */
+  manifestPorts?: QueuePorts;
 };
 
 export type FinalizerFn = (ctx: FinalizerContext) => string[] | Promise<string[]>;
@@ -454,6 +480,67 @@ export function writeToRepoRoot(ctx: FinalizerContext): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// promoteToQueue — bead 8vfn.6.6 item 2: generalizes the REAL finalize step
+// architect's own kinds/architect.ts performs today (promoteManifests +
+// mintAndPersistManifestCycleId over <sessionDir>/manifests/), CALLING the
+// injected @forge/flows functions (QueuePorts) rather than re-implementing
+// promotion. Needs no packageId — the queue keys off each manifest's OWN
+// initiative_id.
+// ---------------------------------------------------------------------------
+
+export function promoteToQueue(ctx: FinalizerContext): string[] {
+  if (!ctx.manifestPorts) {
+    throw new InteractiveFinalizerError(
+      'promoteToQueue: FinalizerContext.manifestPorts is required (bound at apps/forge — see architect-ports.ts) — refusing rather than silently promoting nothing.',
+    );
+  }
+  const { promoteManifests, mintAndPersistManifestCycleId } = ctx.manifestPorts;
+  const manifestsDir = join(ctx.sessionDir, 'manifests');
+  const queueRoot = join(ctx.forgeRoot, '_queue');
+  let result: { writtenManifestPaths: string[]; writtenInitiativeIds: string[] };
+  try {
+    result = promoteManifests(manifestsDir, { queueRoot });
+  } catch (err) {
+    throw new InteractiveFinalizerError(`promoteToQueue: ${(err as Error).message}`);
+  }
+  for (let i = 0; i < result.writtenManifestPaths.length; i++) {
+    const initId = result.writtenInitiativeIds[i];
+    if (initId) mintAndPersistManifestCycleId(result.writtenManifestPaths[i], initId);
+  }
+  return result.writtenManifestPaths;
+}
+
+// ---------------------------------------------------------------------------
+// commitToCentralBrain — bead 8vfn.6.6 item 2: generalizes the REAL commit
+// step kinds/project-brain.ts's own `committing` phase performs today, by
+// CALLING commitProjectBrain (@forge/knowledge — rank 2, directly
+// importable, unlike promoteToQueue's rank-5 flows dependency) rather than
+// re-implementing the theme copy + regenerateBrainIndex it already does.
+// ---------------------------------------------------------------------------
+
+export function commitToCentralBrain(ctx: FinalizerContext): string[] {
+  if (ctx.project === undefined || ctx.projectRoot === undefined || ctx.sessionId === undefined) {
+    throw new InteractiveFinalizerError(
+      'commitToCentralBrain: FinalizerContext.project/projectRoot/sessionId are all required.',
+    );
+  }
+  const statusRecord = ctx.status ?? {};
+  const kbId = typeof statusRecord.kb_id === 'string' ? statusRecord.kb_id : undefined;
+  const kbBinding = statusRecord.kb_binding as ProjectBrainCommitInput['kb_binding'];
+  const committed = commitProjectBrain({
+    projectRoot: ctx.projectRoot,
+    sessionId: ctx.sessionId,
+    forgeRoot: ctx.forgeRoot,
+    status: {
+      project: ctx.project,
+      ...(kbId !== undefined ? { kb_id: kbId } : {}),
+      ...(kbBinding !== undefined ? { kb_binding: kbBinding } : {}),
+    },
+  });
+  return committed.wrote;
+}
+
+// ---------------------------------------------------------------------------
 // FINALIZERS registry — deep-frozen (each row individually, BEFORE the outer
 // array — Object.freeze is SHALLOW, so freezing only the outer container
 // would leave each row object mutable). Copied verbatim from
@@ -467,6 +554,8 @@ export function writeToRepoRoot(ctx: FinalizerContext): string[] {
 export const FINALIZERS: readonly FinalizerRow[] = Object.freeze([
   Object.freeze({ id: 'copyStagingToLibrary', run: copyStagingToLibrary, needsPackageId: true }),
   Object.freeze({ id: 'writeToRepoRoot', run: writeToRepoRoot, needsPackageId: false }),
+  Object.freeze({ id: 'promoteToQueue', run: promoteToQueue, needsPackageId: false }),
+  Object.freeze({ id: 'commitToCentralBrain', run: commitToCentralBrain, needsPackageId: false }),
 ] as const);
 
 /** bead 8vfn.6.6 item 3 — total lookup over FINALIZERS' own needsPackageId,
