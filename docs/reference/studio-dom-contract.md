@@ -1104,7 +1104,13 @@ is what this contract reads — but it cannot be the only distinguisher.
   [data-pinned-selection="true"]`, so collapse hides the pile, never the
   selection; the HistoryLedger row carries the same `data-run-id` on a LINK,
   so journeys select via the rail-scoped selector) and the phase drawer skips the log
-  fetch for a `pending` node (no 404 per hex click on a queued run). MONITOR renders the run's hex
+  fetch for a `pending` node (no 404 per hex click on a queued run). forge-7wc: a
+  rejected log fetch (idle/terminal node) renders
+  `[data-component="phase-log-error"]` with the failure's own message — a
+  state distinct from, and checked before, the drawer's existing "no log
+  lines for this phase" genuinely-empty copy, so a failed fetch can never
+  read as an empty log (`lib/phase-log-panel-view.ts`'s
+  `derivePhaseLogPanelState`). MONITOR renders the run's hex
   topology (`FlowTopology.tsx`): each node is
   `[data-mon-node][data-node-id][data-status][data-hex-kind]`
   (`data-hex-kind` is `phase | wi`); phase hexes carry `data-phase-cost-usd`,
