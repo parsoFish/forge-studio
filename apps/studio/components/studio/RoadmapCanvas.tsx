@@ -558,7 +558,7 @@ function RoadmapCanvasNode({
   dimmed: boolean;
   onSelect: (id: string) => void;
 }) {
-  const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy, blockedClauses, completedAt } = initiative;
+  const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy, blockedClauses, completedAt, flowId } = initiative;
   const colour = STATUS_COLOR[queueStatusToColor(status)];
   const planPhase = workItems !== undefined ? 'planned' : status === 'in-flight' ? 'claimed' : 'pending';
 
@@ -579,7 +579,7 @@ function RoadmapCanvasNode({
       data-initiative-ready={String(ready)}
       data-blocked-by={blockedBy.join(',')} data-blocked-clauses={(blockedClauses ?? []).join(',')}
       data-initiative-collapsed="true"
-      {...(completedAt !== undefined ? { 'data-completed-at': completedAt } : {})}
+      {...(completedAt !== undefined ? { 'data-completed-at': completedAt } : {})} {...(flowId !== undefined ? { 'data-initiative-flow-id': flowId } : {})}
       onClick={() => onSelect(initiativeId)}
       style={{
         position: 'absolute', left: position.x, top: position.y, width: position.w, height: position.h,

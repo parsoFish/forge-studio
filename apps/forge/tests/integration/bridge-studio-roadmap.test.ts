@@ -184,6 +184,10 @@ type RoadmapBody = {
       workItems?: Array<{ id: string }>;
       completedAt?: string;
       blockedClauses?: string[];
+      // M7 findings row 59: forge-architect and forge-develop both terminate
+      // at the same status word (`ready-for-review`), so the card needs the
+      // flow id BESIDE the status to be distinguishable in the UI.
+      flowId?: string;
     }>;
     unparseable?: Array<{ path: string; message: string }>;
   };
@@ -202,6 +206,12 @@ test('roadmap: pending initiative with no deps → ready=true, blockedBy=[]', as
   assert.ok(a, 'INIT-A present in roadmap');
   assert.equal(a!.ready, true);
   assert.deepEqual(a!.blockedBy, []);
+  // M7 findings row 59: the card must carry its own flow id (read straight
+  // off the manifest, the same field `canStartDevelopment` already derives
+  // from) so the UI can render it beside the status — the status word alone
+  // (`ready-for-review`) cannot distinguish a forge-architect card from a
+  // forge-develop one.
+  assert.equal(a!.flowId, 'forge-develop', 'the roadmap initiative must carry its own flow_id');
 });
 
 test('roadmap: pending initiative with unmet build-flow dep → ready=false, blockedBy=[dep]', async () => {

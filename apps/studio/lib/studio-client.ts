@@ -38,6 +38,7 @@ import { parseStandingTriggers, type StandingTrigger } from './standing-triggers
 // third client-side mirror. The import is one-way (session-client never imports
 // back from here).
 import { parseContractStageRow, type ContractStageRow } from './session-client';
+import { parseSessionLifecycle, type SessionLifecycle } from './session-lifecycle-client';
 import { MATERIAL_KINDS, type MaterialKind } from '@forge/contracts';
 // agents-15 (forge-6gv.5.1): the Agent wire type + its parse function(s) and
 // agent-only helpers live in their own module now, split out so this file
@@ -1712,19 +1713,24 @@ export async function fetchLatestStandaloneRun(slug: string): Promise<Standalone
  *  `writeSessionTerminalPhase`, packages/agents/agent-run.ts) already carries the
  *  `runId` pollable via {@link getAgentRunStatus} — this finds the most
  *  recent `_onboarding/<sessionId>` for the project and reads it back.
- *  `sessionId: null` means this project has never run onboarding. */
+ *  `sessionId: null` means this project has never run onboarding.
+ *
+ *  forge-6gv.13.1: `phase` is RAW (a leaked run reads 'running' forever);
+ *  `lifecycle` is the server's additive DERIVED companion — same canonical
+ *  staleness rule as every session surface, hard-parsed when present. */
 export async function fetchActiveOnboarding(
   projectId: string,
-): Promise<{ ok: boolean; sessionId: string | null; runId: string | null; phase: string | null; error?: string }> {
-  const r = await studioGet<{ ok?: boolean; sessionId?: string | null; runId?: string | null; phase?: string | null }>(
+): Promise<{ ok: boolean; sessionId: string | null; runId: string | null; phase: string | null; lifecycle: SessionLifecycle | null; error?: string }> {
+  const r = await studioGet<{ ok?: boolean; sessionId?: string | null; runId?: string | null; phase?: string | null; lifecycle?: unknown }>(
     `/api/studio/projects/${encodeURIComponent(projectId)}/onboarding/active`,
   );
-  if (!r.ok) return { ok: false, sessionId: null, runId: null, phase: null, error: r.error };
+  if (!r.ok) return { ok: false, sessionId: null, runId: null, phase: null, lifecycle: null, error: r.error };
   return {
     ok: r.data.ok !== false,
     sessionId: r.data.sessionId ?? null,
     runId: r.data.runId ?? null,
     phase: r.data.phase ?? null,
+    lifecycle: r.data.lifecycle == null ? null : parseSessionLifecycle(r.data.lifecycle),
   };
 }
 

@@ -37,6 +37,7 @@ created_at: 2026-05-10T12:00:00Z
 iteration_budget: 5
 cost_budget_usd: 1.5
 class: code
+flow_id: forge-develop
 phase: done
 quality_gate_cmd:
   - npm
@@ -182,6 +183,11 @@ test('buildCycleReport: emits all load-bearing sections for a successful cycle',
     // Header
     assert.match(md, /Cycle Report/);
     assert.match(md, /Status:.*merged/);
+    // M7 findings row 59: both seed flows terminate at the SAME status word
+    // (`ready-for-review`), so the flow id must sit beside the status —
+    // never merely elsewhere in the header — or a reader cannot tell which
+    // flow produced this report.
+    assert.match(md, /Status:.*merged.*forge-develop/, 'the flow id must render beside the status word, not just anywhere in the report');
     assert.match(md, /Reflection:.*closed/);
     assert.match(md, /github\.com\/x\/y\/pull\/1/);
     assert.match(md, /Total cost.*\$0\.45/);

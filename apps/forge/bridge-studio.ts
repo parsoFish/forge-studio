@@ -866,6 +866,15 @@ export type RoadmapInitiative = {
    * the card in the canvas's projected zone with an honest "no date" marker.
    */
   completedAt?: string;
+  /**
+   * M7 findings row 59: forge-architect and forge-develop both terminate at
+   * the SAME status word (`ready-for-review`), so `status` alone cannot
+   * tell a reader which flow produced it. Read straight off the manifest
+   * already in hand (`manifest.flow_id`, the same field
+   * `canStartDevelopment` derives from below) — never fabricated, absent
+   * when the manifest carries no `flow_id` (a legacy/hand-authored one).
+   */
+  flowId?: string;
 };
 
 export type ProjectRoadmap = {
@@ -1027,6 +1036,7 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
       ...(blockedClauses.length > 0 ? { blockedClauses } : {}),
       ...(workItems !== undefined ? { workItems } : {}),
       ...(completedAt !== undefined ? { completedAt } : {}),
+      ...(manifest.flow_id ? { flowId: manifest.flow_id } : {}),
     };
   });
 
