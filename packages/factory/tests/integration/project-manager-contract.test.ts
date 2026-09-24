@@ -510,3 +510,33 @@ test('ADR-037: WI with neither creates nor verification_artifact → compileErro
     rmSync(h.dir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// forge-8vfn.5.16 (M7-C U2) — the planner's brain READ, not the reflector's
+// KB WRITE (reflect.kb-ingest). readPmBrainContext's deterministic pre-fetch
+// (project-manager.ts's `forgeRoot` resolves to the REAL repo root, not a
+// test fixture — so PM_ALWAYS_RELEVANT_THEMES' four brain/cycles/themes/*.md
+// files are genuinely read on every real pass, this test included) must
+// produce an on-the-record `brain.read` event naming the KB and how many
+// files were read from it — the class fix for "no planner read is ever
+// visible", distinct from the pre-existing pm.context-injected raw-path
+// list and the unconditional per-turn architect 'brain-query' marker.
+// ---------------------------------------------------------------------------
+
+test('a PM pass emits brain.read naming the KB it read (cycles) and a real theme count', async () => {
+  const h = setupHarness(BASE_CONFIG);
+  try {
+    const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }]);
+    await runProjectManager(h.input, h.logger, { queryFn });
+    const events = readEvents(h.logger);
+    const reads = events.filter((e) => e.message === 'brain.read');
+    assert.equal(reads.length, 1, `expected exactly one brain.read event (one per KB touched), got ${JSON.stringify(reads)}`);
+    const md = reads[0]!.metadata as Record<string, unknown>;
+    assert.equal(md['kbId'], 'cycles');
+    assert.equal(md['themeCount'], 4, 'PM_ALWAYS_RELEVANT_THEMES names exactly 4 brain/cycles/themes/*.md files');
+    assert.equal(md['reader'], 'project-manager');
+    assert.equal(md['runId'], h.input.initiativeId);
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+  }
+});
