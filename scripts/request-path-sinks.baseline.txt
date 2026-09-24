@@ -294,7 +294,7 @@ packages/flows/run-model.ts existsSync 3
 packages/flows/run-model.ts readdirSync 2
 packages/flows/run-model.ts readFileSync 2
 packages/flows/run-model.ts statSync 1
-packages/flows/scheduler-dispatch.ts existsSync 4
+packages/flows/scheduler-dispatch.ts existsSync 3
 packages/flows/scheduler-dispatch.ts readFileSync 3
 packages/flows/scheduler-dispatch.ts writeFileSync 1
 packages/flows/scheduler.ts appendFileSync 1
@@ -589,8 +589,8 @@ packages/sessions/bridge-studio-kickoff.ts writeFileSync 5
 packages/sessions/bridge-studio-lifecycle.ts openSync 1
 packages/sessions/bridge-studio-lifecycle.ts readFileSync 1
 packages/sessions/bridge-studio-lifecycle.ts statSync 2
-packages/sessions/bridge-studio-session-index.ts existsSync 8
-packages/sessions/bridge-studio-session-index.ts readdirSync 8
+packages/sessions/bridge-studio-session-index.ts existsSync 9
+packages/sessions/bridge-studio-session-index.ts readdirSync 10
 packages/sessions/bridge-studio-session-index.ts readFileSync 1
 packages/sessions/interactive-agent-step.ts lstatSync 1
 packages/sessions/interactive-agent-step.ts mkdirSync 2
