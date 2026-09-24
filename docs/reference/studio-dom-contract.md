@@ -4124,7 +4124,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   `runFinalize`) — this route validates the body shape and hands off, it
   never reimplements a finalizer.
 - **`SessionInteractivePanel` — the generic interaction panel (W6-B6,
-  2026-08-15; W6-B8 and W6-B9 extend it).** `components/studio/session/SessionInteractivePanel.tsx`.
+  2026-08-15; W6-B8 and W6-B9 extend it).** `components/studio/session/SessionInteractivePanel.tsx`
+  — the orchestrator; the `question-form` and `verdict` affordance kinds'
+  own markup live in sibling `SessionQuestionFormAffordance.tsx` /
+  `SessionVerdictAffordance.tsx` (bead forge-8vfn.8.3.4's file-size split —
+  same DOM contract, no behaviour change).
   Renders EXCLUSIVELY from the read route's own `affordances[]` — never
   re-derives an affordance from `phase`. Wired into the session shell for
   **`demo`, `onboarding`, `kb-cleanup`, `authoring`, and `instructions`
@@ -4250,7 +4254,12 @@ is what this contract reads — but it cannot be the only distinguisher.
   additions, both
   keyed off `artifact.kind` (never `kind`): for `demo` (a real
   `generation-gallery` with at least one generation), a generation picker
-  (`[data-field="session-generation-pick"]`); for `authoring` (a real
+  (`[data-field="session-generation-pick"][data-selected-generation]` —
+  bead forge-8vfn.8.3.4: `data-selected-generation` names the generation an
+  approve would ACTUALLY lock right now, the same fact
+  `GenerationGallery`'s own root attribute of the same name carries, because
+  both now read the ONE selection lifted onto the session page — see
+  "Generation gallery" below); for `authoring` (a real
   `file-package`, W6-B8), a package-id field
   (`[data-field="session-package-id"]`, labelled "Skill id (directory name)"
   or "Hook id (directory name)" per the draft's shape — detected purely by
@@ -4581,13 +4590,29 @@ is what this contract reads — but it cannot be the only distinguisher.
   itself reversed): `/sessions/demo/<sid>` renders the REAL
   `SessionArtifactPane`, fed by
   `GET /api/studio/sessions/demo/<sid>?project=<p>` — the same read route,
-  one mount now instead of two. `finalize-generation` (the gallery's own
-  per-item button) renders honestly DISABLED here (`onFinalizeGeneration` is
-  not wired on this page — `title="Not available from this view"`); the
-  session-shell's own way to finalize a chosen generation is the generic
-  verdict-approve's `[data-field="session-generation-pick"]` picker (posts
+  one mount now instead of two. **W7-B1** wires `finalize-generation` (the
+  gallery's own per-item button) for a live, non-terminal demo session on
+  THIS page too (session page's `onFinalizeGeneration`, the SAME
+  `demoBuilderLock` POST) — a terminal (locked/abandoned) session keeps it
+  honestly disabled instead. The generic verdict-approve's
+  `[data-field="session-generation-pick"]` picker (posts
   `{verdict:'approve', generation:<n>}` through the SAME affordance route
-  `handleDemoVerdict` already answers), not a second, redundant call path.
+  `handleDemoVerdict` already answers) is the OTHER way to lock a chosen
+  generation — not a second, redundant call path, but, until **bead
+  forge-8vfn.8.3.4**, a second, independent SELECTION: the gallery's own
+  per-item picker and the picker's `<select>` each carried their own local
+  `useState`, so the two could disagree about which generation an approve
+  would lock (select generation B in the gallery, approve from the panel,
+  and it could lock generation A). **Both are now driven by ONE selection**
+  (`lib/session-artifact-view.ts`'s `GenerationSelection`), owned by the
+  session page and threaded verbatim into `GenerationGallery` (via
+  `SessionArtifactPane`'s own `selectedGeneration`/`onSelectGeneration`) and
+  into `SessionInteractivePanel`'s verdict-approve picker (same two prop
+  names) — picking a generation in EITHER control moves both, and either
+  lock action (the gallery's `finalize-generation` or the picker's
+  `verdict-approve`) acts on exactly that generation. The picker's `<select>`
+  now also carries `[data-selected-generation]`, mirroring the gallery's own
+  root attribute exactly, so the two can be read and compared directly:
   Contract:
   `[data-section="generation-gallery"][data-generation-count][data-selected-generation]`,
   per selector button
@@ -4598,21 +4623,24 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-section="generation-feedback"][data-has-feedback="true"|"false"]`,
   the per-item viewer `[data-action="view-generation-item"]` (serving from
   `GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename>`), the
-  (on this page, honestly disabled) chooser
-  `[data-action="finalize-generation"][data-generation-number]`, and an
-  honest `[data-generation-empty="true"]` naming what was scanned rather than a
-  bare pane. `data-generation-number` is the snapshot's OWN recorded iteration,
-  never an array position, so a corrupt snapshot leaves a visible gap instead
-  of silently renumbering its successors. **The selection is poll-stable**: the
-  panel refetches on ONE 3s interval (never a second cycle — two independent
-  polls is the race this campaign already diagnosed once), and the view is
-  re-derived with the operator's chosen generation NUMBER preserved across the
-  new payload, because a selection that dies every 3 seconds cannot be acted
-  on. The real way to lock a CHOSEN generation on this page is
-  `verdict-approve`'s generation picker — server-side (`handleDemoVerdict`)
-  it restores that snapshot's sample AND its generator skill into the project
-  repo before the same lock runs, so `demo.lock.json`'s
-  `demo_html`/`demo_skill` pair always comes from one generation.
+  finalize chooser `[data-action="finalize-generation"][data-generation-number]`
+  (disabled, with its reason, on a terminal session — never a silent
+  no-handler swallow), and an honest `[data-generation-empty="true"]` naming
+  what was scanned rather than a bare pane. `data-generation-number` is the
+  snapshot's OWN recorded iteration, never an array position, so a corrupt
+  snapshot leaves a visible gap instead of silently renumbering its
+  successors. **The selection is poll-stable**: the page refetches the shell
+  on ONE 3s interval (never a second cycle — two independent polls is the
+  race this campaign already diagnosed once), and the view is re-derived
+  with the operator's chosen generation NUMBER preserved across the new
+  payload (looked up BY VALUE via `preferredGenerationFor`, never an array
+  position), because a selection that dies every 3 seconds cannot be acted
+  on. Locking a CHOSEN generation via `verdict-approve` — server-side
+  (`handleDemoVerdict`) it restores that snapshot's sample AND its generator
+  skill into the project repo before the same lock runs, so
+  `demo.lock.json`'s `demo_html`/`demo_skill` pair always comes from one
+  generation — now locks the SAME generation the gallery shows selected,
+  because there is only one selection left to disagree with.
 - **Contract build-out — the onboarding/creation session's artifact (R4-17,
   2026-08-06).** The `onboarding` session-kind descriptor (`studio/
   session-kinds.yaml`, D1: ONE descriptor reused for both the `/projects/[id]`
