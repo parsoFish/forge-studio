@@ -95,6 +95,15 @@ function declareSkills(dir: string, skills: string[]): void {
   writeFileSync(cfgPath, JSON.stringify(raw));
 }
 
+/** Merge `artifactRoot` into an already-written `.forge/project.json` — same
+ *  layering pattern as `declareSkills`. */
+function declareArtifactRoot(dir: string, artifactRoot: string): void {
+  const cfgPath = join(dir, '.forge', 'project.json');
+  const raw = JSON.parse(readFileSync(cfgPath, 'utf8')) as Record<string, unknown>;
+  raw.artifactRoot = artifactRoot;
+  writeFileSync(cfgPath, JSON.stringify(raw));
+}
+
 function clause(report: ReturnType<typeof runPreflight>, id: ClauseId) {
   const c = report.clauses.find((x) => x.clause === id);
   assert.ok(c, `clause ${id} present`);
@@ -178,6 +187,34 @@ test('SKILLS (HARD): a mix of one resolving + one dead id still fails the clause
     assert.equal(clause(r, 'SKILLS').pass, false);
     assert.match(clause(r, 'SKILLS').detail, /1 of 2/);
     assert.doesNotMatch(clause(r, 'SKILLS').detail, /reflector/, 'the resolved id must not be named among the missing ones');
+    assert.match(clause(r, 'SKILLS').detail, /ghost-skill/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('SKILLS (HARD): a declared id that resolves ONLY under a non-default artifactRoot (<artifactRoot>/skills/<id>/SKILL.md) — the exact terraform-provider-betterado shape (M7 findings row 21) — passes', () => {
+  const p = happyProject();
+  try {
+    declareSkills(p.dir, ['ado-api-explorer']);
+    declareArtifactRoot(p.dir, 'forge');
+    mkdirSync(join(p.dir, 'forge', 'skills', 'ado-api-explorer'), { recursive: true });
+    writeFileSync(join(p.dir, 'forge', 'skills', 'ado-api-explorer', 'SKILL.md'), '# ado-api-explorer\n');
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r, 'SKILLS').pass, true, clause(r, 'SKILLS').detail);
+    assert.equal(r.ok, true);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('SKILLS (HARD): a declared id absent from BOTH the canonical location and a non-default artifactRoot still fails, naming the id', () => {
+  const p = happyProject();
+  try {
+    declareSkills(p.dir, ['ghost-skill']);
+    declareArtifactRoot(p.dir, 'forge');
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r, 'SKILLS').pass, false);
     assert.match(clause(r, 'SKILLS').detail, /ghost-skill/);
   } finally {
     p.cleanup();

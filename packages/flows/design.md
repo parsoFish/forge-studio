@@ -147,3 +147,46 @@ Re-deriving per call would trade it for a `gh api user` round trip on every `pr-
 which is the worse deal; `__resetGhRunnerCache` is the escape hatch if a caller ever
 legitimately needs one.
 
+
+## Size splits (M7-C, bead forge-8vfn.15) — scheduler.ts and run-model-derive.ts
+
+Both files sat over the 800-line cap on a baseline exemption; the bead calls
+for real seams, not a cap-driven move.
+
+**`scheduler.ts` (1,031 lines) → three modules, by what each one decides.**
+`scheduler.ts` keeps the daemon loop and admission: `serve`'s poll/claim
+cycle and `checkInitiativeDeps` decide WHETHER and WHEN to claim an
+initiative. `scheduler-sweeps.ts` holds the startup/periodic background
+sweeps `serve` dispatches alongside admission (recovery, finalize, drain,
+flow-trigger, cron sync) — every function is best-effort and none may throw
+out of a `setInterval` tick, which is a different discipline from admission's
+own code. `runRecoverySweep` there is deliberately NOT reused by `serve()`'s
+inline startup recovery: startup must throw on a real failure, the interval
+version must never throw out of the timer. `scheduler-run-one.ts` holds
+`runOne` — what happens to ONE already-claimed initiative (worktree
+strategy, `runCycle`, terminal-status dispatch) — plus `linkProjectDeps`
+(reused by `wi-worktree.ts`), `makeProgressTee`, and `annotateManifest`. All
+three re-export through `scheduler.ts`, so no importer outside this package
+changed.
+
+**`run-model-derive.ts` (988 lines) → a door plus four modules, one per
+question a Studio run view asks.** "What state is this run in" —
+`run-model-derive-status.ts`: phase/WI status, gate identity, failure
+attribution, reflection-loss, stop-on-budget. "What did this run cost, and
+how is it progressing" — `run-model-derive-cost.ts`: per-node cost, model,
+retries, progress/wedge, iterations. "What has this run produced" —
+`run-model-derive-lineage.ts`: artifact readiness, PR link, gate note. The
+shared low-level attribution helper `eventToNodeId`, used by three of the
+above, got its own leaf — `run-model-derive-node-id.ts` — per the bead's own
+measurement that it was "misplaced [inside the failure-info block], not
+shared by accident." `run-model-derive.ts` is now a pure door re-exporting
+the same 28 names the combined file exported, so every existing import
+(including the deep `@forge/flows/run-model-derive.ts` import in
+`apps/forge/bridge-studio.ts`) keeps resolving unchanged.
+
+Both splits are pure transfers: every function body, and the large majority
+of the original inline comments, moved verbatim. The measured growth is
+module-doc headers (one to two lines each, pointing back here) plus the
+per-file import lines ESM requires for each new module boundary — see
+QUARRY.md's flows row for the exact figure (ruling 666, "M7-C F2: split
+headers/imports for forge-8vfn.15").
