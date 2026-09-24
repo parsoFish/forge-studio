@@ -551,7 +551,7 @@ packages/projects/preflight-repo.ts execFileSync 1
 packages/projects/preflight-repo.ts existsSync 1
 packages/projects/preflight-repo.ts lstatSync 1
 packages/projects/preflight-repo.ts readFileSync 1
-packages/projects/preflight-repo.ts spawnSync 3
+packages/projects/preflight-repo.ts spawnSync 4
 packages/projects/preflight.ts existsSync 4
 packages/projects/preflight.ts readdirSync 1
 packages/projects/preflight.ts readFileSync 1
@@ -574,9 +574,10 @@ packages/projects/project-repo-tx.ts execFileSync 1
 packages/projects/project-repo-tx.ts existsSync 1
 packages/projects/project-repo-tx.ts realpathSync 2
 packages/projects/reset.ts mkdirSync 2
-packages/projects/reset.ts readFileSync 1
+packages/projects/reset.ts readFileSync 2
+packages/projects/reset.ts spawnSync 1
 packages/projects/reset.ts statSync 1
-packages/projects/reset.ts writeFileSync 1
+packages/projects/reset.ts writeFileSync 2
 packages/sessions/bash-fence.ts realpathSync 1
 packages/sessions/bridge-studio-architect.ts readFileSync 1
 packages/sessions/bridge-studio-demo.ts existsSync 1
