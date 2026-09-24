@@ -335,7 +335,7 @@ Three categories must be covered:
    retired the blanket `.forge/` ignore projects used to carry — see
    `SCRATCH_PATHS` in `packages/projects/preflight-repo.ts` for the single
    source and why a third runtime output, `.forge/demo/` (the Studio
-   demo-builder's own machinery), is deliberately NOT on this list yet.
+   demo-builder's own machinery), is deliberately NOT on this list: the demo-builder commits it (operator ruling, M7).
 2. **Build artifacts and generated outputs:** compiled binaries, `dist/`,
    coverage, graph caches — anything a build writes that isn't source.
 3. **Tracked contract config, never ignored:** `.forge/project.json`, the
