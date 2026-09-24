@@ -100,3 +100,87 @@ existing opts bag), `mintKbCleanupDraftSession` and
 rather than writing a session status through an unguarded path — the discipline
 `runFixTurn`'s absence already follows.
 
+## Brain-write lease (forge-ler4)
+
+`brain-write-lease.ts` is the ONE lock a brain-writing turn takes, so the
+daemon's reflector and a Studio KB job (drain / consolidate / `forge brain
+fix`) can never have their writes to the SAME `brain/` tree misattributed to
+each other.
+
+**The race.** `kb-drain-edit-soundness.ts`'s `guardAgentKbEdits` decides what a
+turn wrote by diffing a filesystem snapshot taken before the turn against the
+tree after it, and a turn takes minutes. Any OTHER process's brain/ write
+inside that window is indistinguishable from the turn's own; for a path
+INSIDE the turn's own KB the gate disposes of it on snapshot evidence alone
+(`revertChange` — an rmSync for a file the write CREATED). Meanwhile
+`orchestrator/phases/reflector.ts` writes brain themes from the daemon on
+exactly the same tree, and `deriveKbActiveJob` (kb-job-state.ts) gates KB jobs
+PER-KB — it takes no account of the reflector at all. An operator clicking
+"Drain to green" while a cycle reflects is entirely reachable, and nothing
+serialises the two. See `kb-drain-edit-soundness.ts`'s own
+`outOfScopeNotDisposed` for the operator-facing half of this.
+
+**Why `proper-lockfile`.** Already a direct dependency and this repo's
+established primitive for exactly this shape — one directory locked, ELOCKED
+translated to a named error class: `community-registry-lock.ts` (the same
+two-writer mutex problem), the verdict lock in
+`packages/flows/bridge-studio-runs.ts`, `packages/flows/drain-fix-loop.ts`,
+`packages/flows/manifest.ts`. Nothing new is introduced. Retry budget and
+stale-mtime constants mirror `community-registry-lock.ts`'s exactly, for the
+same reasons stated there.
+
+**Scope.** The lease wraps ONE brain-writing turn at a time: the reflector's
+own SDK spawn plus its post-exit brain writes (retention frontmatter patch,
+per-KB health), and — the shared choke point for the drain's round loop,
+`runBrainConsolidateNow`, and `forge brain fix` alike — `runBrainFixTurn`
+(`packages/sessions/kinds/brain-fix.ts`). W8-F1's own precedent: "guarding a
+call site closes a door; guarding the turn closes the class." It does NOT
+additionally wrap the drain's own extra re-audit around its injectable
+`runFixTurn` seam (`bridge-studio-kb-drain.ts` — defence against a
+test-stubbed turn bypassing the real gate): that diff runs synchronously
+around the lease-protected call with no `await` in between, so its residual
+window is microseconds of glue code, not the minutes-long spawn this bead is
+about.
+
+**Lock target.** `brainRootDir(forgeRoot)` — the SAME `<forgeRoot>/brain` the
+edit-soundness gate snapshots, reused rather than re-derived so the two can
+never disagree about which tree they mean. Both writers already require it to
+exist before they may legitimately write anything under it, so the lease does
+not create it — a lease that then fails to acquire must not leave a directory
+behind the refusal.
+
+**Stale-lock reclaim.** `BRAIN_WRITE_LEASE_STALE_MS` (15s) is the bound: a
+live holder self-refreshes the lock's mtime every `stale / 2` ms
+(`proper-lockfile`'s own `update` mechanism) for as long as it holds the
+lease, so 15s only needs to cover the gap BETWEEN refreshes, not a whole
+multi-minute spawn. A holder that crashes instead of releasing stops
+refreshing; the NEXT `acquireBrainWriteLease` call sees an mtime older than
+the bound and reclaims the lock (removes it, then acquires) instead of
+refusing forever. Covered by
+`packages/knowledge/tests/unit/brain-write-lease.test.ts`'s stale-lock test
+(mkdir's an orphaned lock directory, backdates its mtime past the bound with
+`utimesSync`, then asserts the next acquire succeeds).
+
+**Test-only lock relocation.** `acquireBrainWriteLease(forgeRoot, {
+lockfilePath })` lets a caller point the PHYSICAL lock file somewhere
+private while `forgeRoot` still names the conceptual target `proper-lockfile`
+validates exists — production call sites pass nothing and get the unchanged
+default (`${brainRootDir(forgeRoot)}.lock`). `runReflector` resolves its OWN
+`forgeRoot` from `import.meta.dirname`, deliberately not injectable (always
+the real repo checkout — `reflector-spawn-capture.test.ts`'s own header), so
+every test that reaches it targets the SAME real `brain/`. Reproduced
+pre-fix: `reflector.test.ts` + `reflector-write-lease.test.ts` +
+`reflector-spawn-capture.test.ts` run together in one `node --test`
+invocation (each test FILE is its own process) — 8/10 reds,
+`'failed' !== 'closed'` (brain-write-lease-contention). `ReflectorDeps`
+carries the fix as `acquireBrainWriteLease` (mirrors its existing
+`sdkQuery`/`brainLint`/`kbHealth` injectables); each of those three test
+files now wires it to `reflector-lease-test-fixture.ts`'s
+`acquireIsolatedReflectorLease`, which gives that FILE its own private
+physical lock. Proven at the disk level in
+`brain-write-lease.test.ts` (custom path used, default path left untouched)
+rather than by holding two concurrent leases in one process — that hits
+`proper-lockfile`'s own per-process `locks` bookkeeping singleton
+(`lib/lockfile.js`) and breaks `release()`, an artifact that never occurs
+across `node --test`'s per-file worker processes.
+

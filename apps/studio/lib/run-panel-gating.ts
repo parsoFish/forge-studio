@@ -15,6 +15,8 @@
  * on the surface — with no reason on any of them.
  */
 
+import { BAND_GUARD_IDS } from '@forge/contracts';
+
 /** Terminal-or-idle states a run can be reported in. Only 'running' means
  *  "something is happening right now"; everything else is history. */
 const IN_FLIGHT_STATE = 'running';
@@ -108,3 +110,40 @@ function runStateOf(i: {
 deriveRunGating.runStateOf = runStateOf;
 
 export { runStateOf };
+
+/**
+ * agents-25: the facts `standaloneBlockedReasonFor` needs from an
+ * AgentDefinition — a subset of `AgentBuilderState`/`AgentRuntime`, kept
+ * local so this module stays independent of the studio-client types.
+ */
+export type StandaloneDispatchFacts = {
+  loopStrategy: string | undefined;
+  guards: string[];
+};
+
+const RALPH_LOOP_BLOCKED_REASON =
+  'This agent is a multi-iteration (ralph) loop — it runs inside the develop flow, never as a standalone dispatch. Start it through its flow instead.';
+
+const BAND_GUARD_BLOCKED_REASON =
+  "This agent declares a band guard — it is a declaration-only / executor-driven def that runs inside its flow band's pipeline (work-item validation, checkpointing, retention), never as a bare standalone dispatch. Start it through the flow that carries that band instead.";
+
+/**
+ * Why a Run dispatched through the generic standalone host would always be
+ * refused, or `null` when the server would allow it. Mirrors the server's
+ * OWN refusal — `resolveDispatchableAgent` / `BandGuardDispatchRefusedError`
+ * (packages/agents/agent-dispatch.ts) — for the two facts knowable from an
+ * agent's own definition before any dispatch is attempted: a ralph loop, or
+ * a declared band guard (`BAND_GUARD_IDS`, the SAME closed vocabulary the
+ * server checks `composition.guards` against — imported from
+ * `@forge/contracts` rather than re-declared, so the two can never drift).
+ * The server's third refusal class (interactive agents) is a separate,
+ * already-surfaced fact (`RunPanel`'s own `interactive` prop) — not
+ * repeated here.
+ */
+export function standaloneBlockedReasonFor(def: StandaloneDispatchFacts): string | null {
+  if (def.loopStrategy === 'ralph') return RALPH_LOOP_BLOCKED_REASON;
+  if (def.guards.some((g) => (BAND_GUARD_IDS as readonly string[]).includes(g))) {
+    return BAND_GUARD_BLOCKED_REASON;
+  }
+  return null;
+}
