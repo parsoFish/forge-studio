@@ -36,15 +36,11 @@
  * refused here, before any write.
  *
  * SECOND PRECONDITION (forge-gp4): `stagingRoot` itself MUST already exist —
- * this function never creates it. `resolveGuardedPath` realpath-resolves the
- * root before walking any segment, so a not-yet-created `stagingRoot` is
- * refused with `SkillStagingError` (a clean typed error, never a raw fs
- * crash — see the PRECONDITION test in `skill-staging-case.test.ts`), not
- * silently tolerated. This mirrors `stageMaterials`'s own documented contract
- * for `runDir` rather than defensively `mkdirSync`-ing here: the real caller
- * (`bridge-studio-skills.ts`) already creates `stagingRoot` before every call,
- * so a self-creating Phase 1 would trade a genuinely zero-side-effect check
- * phase for a redundant one.
+ * this function never creates it (mirrors `stageMaterials`'s own contract for
+ * `runDir`, rather than a defensive `mkdirSync` here; the real caller,
+ * `bridge-studio-skills.ts`, already creates it before every call). A
+ * not-yet-created root is refused with `SkillStagingError`, never tolerated —
+ * see the PRECONDITION test in `skill-staging-case.test.ts`.
  */
 
 import { mkdirSync, writeFileSync, statSync, unlinkSync } from 'node:fs';
@@ -57,14 +53,10 @@ export class SkillStagingError extends Error {}
 
 type SkillEntry = { path: string; contentBase64: string };
 
-/**
- * Injectable seam for volume case-behaviour detection (forge-gp4, mirroring
- * `materials-staging.ts`'s `CaseFoldingProbe`/bead forge-qn8) — lets the
- * folding code path be driven deterministically in tests on a case-sensitive
- * dev machine that cannot naturally produce a folding volume. `dir` is
- * always `stagingRoot` (real at call time — see the SECOND PRECONDITION
- * above) today.
- */
+/** Injectable seam for volume case-behaviour detection (forge-gp4, mirroring
+ *  `materials-staging.ts`'s `CaseFoldingProbe`/bead forge-qn8) — drives the
+ *  folding code path deterministically in tests on a case-sensitive dev
+ *  machine. `dir` is always `stagingRoot` (real at call time). */
 export type CaseFoldingProbe = (dir: string) => boolean;
 
 /** Marker-name prefix for `detectVolumeCaseFolding`'s throwaway probe entry
@@ -157,27 +149,17 @@ export function detectVolumeCaseFolding(dir: string): boolean {
  * module's concern.
  *
  * VOLUME CASE-BEHAVIOUR DETECTION (forge-gp4, mirroring bead forge-qn8's fix
- * in `stageMaterials`) — in CREATE mode (the common case: a fresh install,
- * neither file exists yet), `resolveGuardedPath` performs no `realpathSync`
- * on the non-existent leaf and reassembles the tail LITERALLY, so the dedup
- * key above would be a literal string. Two distinct entry `path`s that the
- * underlying filesystem folds to one directory entry (`SKILL.md` vs
- * `skill.md` on a case-insensitive volume — default macOS APFS, exFAT, an
- * SMB/NTFS mount) would then produce two different literal keys, pass the
- * check, and collide at `writeFileSync`, second write silently winning. The
- * fix DETECTS the volume's case behaviour (`detectVolumeCaseFolding` above)
- * rather than guessing from `process.platform` (a case-sensitive volume can
- * be mounted on macOS and a folding one on Linux), probed ONCE per call
- * against `stagingRoot` itself (real at call time — see the SECOND
- * PRECONDITION above), and folds the dedup key with `.toLowerCase()` ONLY
- * when the probe reports folding — otherwise the key stays exactly the
- * literal `realPath`, so a case-sensitive volume still accepts `SKILL.md`
- * and `skill.md` as two distinct, legitimate targets. The WHOLE resolved
- * path is folded, not just the leaf filename: case-folding applies to every
- * path-segment lookup identically on a folding volume, so a directory
- * segment differing only in case (`Scripts/x` vs `scripts/x`) collides on
- * disk exactly the same way a leaf does — isolating just the basename would
- * miss that half of the class.
+ * in `stageMaterials`) — in CREATE mode, `resolveGuardedPath` reassembles a
+ * non-existent leaf's tail LITERALLY, so two entry `path`s the filesystem
+ * folds to one directory entry (`SKILL.md` vs `skill.md` on a case-insensitive
+ * volume) would pass the literal check as distinct and collide at
+ * `writeFileSync`. The fix DETECTS the volume's case behaviour
+ * (`detectVolumeCaseFolding` above, never a `process.platform` guess), probed
+ * ONCE per call against `stagingRoot`, and folds the dedup key with
+ * `.toLowerCase()` ONLY when the probe reports folding — a case-sensitive
+ * volume still accepts both as distinct targets. The WHOLE resolved path is
+ * folded, not just the leaf: a directory segment differing only in case
+ * collides on disk the same way a leaf does.
  *
  * Throws `SkillStagingError` on any refusal (mirrors the established
  * throw-not-return convention of `stageMaterials` and this route's sibling
