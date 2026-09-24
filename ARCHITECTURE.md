@@ -66,7 +66,7 @@ flowchart TB
         direction LR
         PM["2 · project-manager<br/>node kind: agent · wi-contract band hook (ADR 039)"]
         DV["3 · developer-loop<br/>node kind: agent · loopStrategy:'ralph' · Ralph × N worktrees<br/>runtime adapter: getAdapter(sdkId)"]
-        UN["4 · demo + adversarial-review<br/>node kind: agent · demo-band + review-band hooks (ADR 039)<br/>orchestrator/phases/demo-agent.ts, orchestrator/phases/adversarial-review.ts"]
+        UN["4 · integrate + adversarial-review<br/>node kind: agent · integrate-band + review-band hooks (ADR 039)<br/>orchestrator/phases/demo-agent.ts, orchestrator/phases/adversarial-review.ts"]
         RFL["reflector<br/>node kind: agent · reflection-close band hook (ADR 039)"]
     end
 
