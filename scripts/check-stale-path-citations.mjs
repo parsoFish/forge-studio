@@ -86,9 +86,20 @@ const CITED_EXTENSIONS = ['ts', 'tsx', 'mjs', 'js', 'cjs', 'md', 'json'];
  * A path-shaped token. `:line` is not captured — `\b` after the extension
  * already stops the match cleanly before a trailing `:42`, so the digits are
  * simply left unconsumed on the line rather than needing their own group.
+ *
+ * historical: the root is anchored with `(?<![\w/])`, NOT a plain `\b`,
+ * because a plain `\b` also matches a KNOWN_ROOTS name sitting one level deep
+ * inside some other path — a fictional `components/studio/artifact/X.tsx`
+ * has a `/` right before `studio`, and `\b` is satisfied there too (word char
+ * after non-word char), so the match starts mid-path. Found by this file's
+ * own sweep: a `--write` replace against that partial match corrupted a real
+ * citation. Requiring the character before the root to be neither a word
+ * char NOR `/` means a root only starts a match at the true start of a path —
+ * string start, whitespace, a quote/backtick/paren, or a line-start comment
+ * marker — never one level inside a longer path.
  */
 const PATH_TOKEN_RE = new RegExp(
-  `\\b(?:${KNOWN_ROOTS.join('|')})(?:/[A-Za-z0-9_.-]+)+\\.(?:${CITED_EXTENSIONS.join('|')})\\b`,
+  `(?<![\\w/])(?:${KNOWN_ROOTS.join('|')})(?:/[A-Za-z0-9_.-]+)+\\.(?:${CITED_EXTENSIONS.join('|')})\\b`,
   'g',
 );
 
@@ -294,7 +305,7 @@ function maskUrls(text) {
  * checked against `rawLine` — the historical:/"(now at ...)" marker may sit
  * outside the matched comment span but still governs the whole physical line.
  * A path match is masked out of the working copy before the stem pass runs,
- * so `packages/x/legacy-loader.ts` is one finding, not two.
+ * so a citation combining both shapes is one finding, not two.
  */
 function collectLineFindings(relPath, lineNo, rawLine, text, fullSet, stemRe, out) {
   if (isSuppressed(rawLine)) return;

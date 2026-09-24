@@ -136,6 +136,24 @@ describe('path-shaped citations in code comments', () => {
     }
   });
 
+  test('a KNOWN_ROOT name one level INSIDE another path is not a false-positive citation', () => {
+    // `components/studio/artifact/X.tsx` is not a recognised citation at all
+    // (`components` is not a KNOWN_ROOT) — a checker that anchored the root
+    // with a plain `\b` would still match the nested `studio/artifact/X.tsx`
+    // substring (preceded by `/`, which still satisfies `\b`) and flag it as
+    // a dead citation of its own. Regression for exactly that defect, found
+    // via this guard's own sweep of the real tree.
+    const { root, cleanup } = fixture({
+      'packages/foo/bar.ts': `// see components/studio/artifact/X.tsx for the component\n`,
+    });
+    try {
+      const { code, out } = run(root, noBaseline(root));
+      assert.equal(code, 0, `must not misread a nested root as its own citation:\n${out}`);
+    } finally {
+      cleanup();
+    }
+  });
+
   test('a block comment spanning lines is scanned on every line it covers', () => {
     const { root, cleanup } = fixture({
       'packages/foo/bar.ts': `/*\n packages/ghost/dead-module.ts\n */\nexport const x = 1;\n`,
