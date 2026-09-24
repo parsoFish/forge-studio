@@ -28,13 +28,16 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, utimesSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawn, type ChildProcess } from 'node:child_process';
 
 import { startBridge } from '../../ui-bridge.ts';
 import { sessionLogDirName, DEFAULT_STALL_CEILING_MS } from '@forge/sessions/bridge-studio-lifecycle.ts';
+
+const REPO_ROOT_FOR_YAML = fileURLToPath(new URL('../../../..', import.meta.url));
 
 const DEAD_PROJECT = 'leaked-run-dead-proj';
 const DEAD_SID = '2026-09-25T00-00-00-dead';
@@ -73,6 +76,10 @@ before(async () => {
   mkdirSync(join(forgeRoot, '_logs'), { recursive: true });
   mkdirSync(join(forgeRoot, 'projects', DEAD_PROJECT), { recursive: true });
   mkdirSync(join(forgeRoot, 'projects', ALIVE_PROJECT), { recursive: true });
+  // The REAL registry — the route's lifecycle derivation resolves the
+  // 'onboarding' descriptor off this file (findSessionKindDescriptorSafe).
+  mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), readFileSync(join(REPO_ROOT_FOR_YAML, 'studio', 'session-kinds.yaml'), 'utf8'));
 
   const staleMs = Date.now() - (DEFAULT_STALL_CEILING_MS + 5 * 60_000);
 
