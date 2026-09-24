@@ -234,27 +234,21 @@ export async function runInteractiveTurn(
       result = { phase: status.phase, wrote: [], artifacts: {} };
       break;
 
-    case 'agent': {
-      // bead 8vfn.6.6 item 5 — factored so a same-turn fall-through hop
-      // (below) reuses the SAME turn-cost/unpriced emitters as the primary
-      // call (S9 beat 8 / 7.6.73: one shared renderer, not a re-derived copy).
+    case 'agent': { // factored so a same-turn fall-through hop (below) reuses the primary call's turn-cost/unpriced emitters.
       const runAgentPhase = (row: TurnSpecPhase, st: InteractiveTurnStatus) => runAgentStyleStep({
         descriptor, turnSpec, phaseRow: row, ctx, sessionDir, dirSegments, status: st,
         queryFn: ctx.queryFn, logger, onToolUse: sink.onToolUse, onHeartbeat, onText, onThinking,
-        // forge-8vfn.22 — the tier/model the turn actually ran on.
-        onTurnCost: (costUsd, modelTier, modelId) => emitTurnCostRow(logger, {
+        onTurnCost: (costUsd, modelTier, modelId) => emitTurnCostRow(logger, { // forge-8vfn.22 — the tier/model the turn actually ran on.
           initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL, message: 'interactive.turn-cost',
           metadata: { session_id: ctx.sessionId, session_kind: descriptor.id, model_tier: modelTier, model: modelId },
         }, costUsd),
-        // 7.6.55 (ruling 849) — cost_usd stays ABSENT, not zero, when unpriced.
-        onTurnEndedUnpriced: (info) => emitTurnEndedUnpricedRow(logger, {
+        onTurnEndedUnpriced: (info) => emitTurnEndedUnpricedRow(logger, { // 7.6.55 (ruling 849) — cost_usd stays ABSENT, not zero, when unpriced.
           initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL, message: 'interactive.turn-ended-unpriced',
           metadata: { session_id: ctx.sessionId, session_kind: descriptor.id },
         }, info),
       });
       result = await runAgentPhase(phaseRow, status);
-      // Same-turn fall-through: landed exactly on its own nextOnDone; run
-      // that phase's step too, in THIS call (interview -> draft, one hop).
+      // Same-turn fall-through: landed on its own nextOnDone; run that phase's step too, in THIS call (one hop).
       if (phaseRow.nextOnDone !== undefined && result.phase === phaseRow.nextOnDone) {
         const hopRow = turnSpec.phases.find((p) => p.phase === result.phase);
         if (hopRow?.step === 'agent') {

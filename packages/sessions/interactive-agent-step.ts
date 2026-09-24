@@ -118,15 +118,11 @@ export type RunInteractiveTurnCtx = {
   logsRoot?: string;
   /** Logger override (tests). */
   logger?: EventLogger;
-  /** bead 8vfn.6.6 item 5 — call-time seam, never a turnSpec field: picks a
-   *  loadSkillTurnPrompt turn section instead of the whole SKILL.md. */
+  /** Call-time seam, never a turnSpec field: picks a loadSkillTurnPrompt turn section instead of the whole SKILL.md. */
   turnId?: (args: { descriptor: SessionKindDescriptor; phaseRow: TurnSpecPhase; status: InteractiveTurnStatus }) => string | undefined;
-  /** Extra prompt lines a caller injects (seed matching + provenance
-   *  footer); appended after the operator-feedback section. */
+  /** Extra prompt lines a caller injects (seed matching + provenance footer); appended after operator feedback. */
   promptContext?: (args: { descriptor: SessionKindDescriptor; phaseRow: TurnSpecPhase; status: InteractiveTurnStatus }) => readonly string[];
-  /** bead 8vfn.6.6 item 2 — promoteToQueue's manifest ports, bound at
-   *  apps/forge (see interactive-finalizers.ts's QueuePorts doc). Absent ⇒
-   *  promoteToQueue refuses rather than silently promoting nothing. */
+  /** promoteToQueue's manifest ports, bound at apps/forge (see QueuePorts). Absent ⇒ promoteToQueue refuses. */
   manifestPorts?: QueuePorts;
 };
 
@@ -249,9 +245,7 @@ export async function runAgentStyleStep(args: {
   const model = resolveSessionModel(agentSpec, requestedTier);
   const skill = readSkillPrompt(descriptor.agent, ctx.turnId?.({ descriptor, phaseRow, status }));
   const extraContext = ctx.promptContext?.({ descriptor, phaseRow, status }) ?? [];
-  // bead 8vfn.6.6 item 5 — captured by the structured branch below, read by
-  // the shared tail's doneField/ceiling check; null for the agent style.
-  let doneOutput: Record<string, unknown> | null = null;
+  let doneOutput: Record<string, unknown> | null = null; // set by the structured branch; read by the tail's doneField/ceiling check.
 
   if (turnSpec.style === 'agent') {
     // bead forge-eip (W6-CR-3) — a REAL write-root fence, derived from THIS
@@ -372,9 +366,7 @@ export async function runAgentStyleStep(args: {
   // assertNextPhaseKnown's own doc comment.
   assertNextPhaseKnown(descriptor, turnSpec, phaseRow);
   let nextPhase = phaseRow.next ?? status.phase;
-  // bead 8vfn.6.6 item 5 — interview ceiling + interview->draft fall-through
-  // (structured turns): doneField true, OR status.round hitting ceiling,
-  // jumps to nextOnDone instead of next.
+  // Interview ceiling + fall-through: doneField true, or status.round at ceiling, jumps to nextOnDone instead of next.
   if (phaseRow.doneField !== undefined && phaseRow.nextOnDone !== undefined) {
     const round = (status as Record<string, unknown>).round;
     const ceilingHit = phaseRow.ceiling !== undefined && typeof round === 'number' && round >= phaseRow.ceiling;
@@ -466,10 +458,7 @@ export async function runFinalizeStep(args: {
     forgeRoot,
     libraryRoot,
     status: statusRecord,
-    // bead 8vfn.6.6 item 2 — commitToCentralBrain's own inputs, and the
-    // manifest ports promoteToQueue needs (a call-time seam on ctx, never a
-    // turnSpec field — mirrors ctx.turnId/ctx.promptContext's own shape).
-    projectRoot: ctx.projectRoot,
+    projectRoot: ctx.projectRoot, // commitToCentralBrain's inputs + promoteToQueue's ports below — call-time ctx seams.
     sessionId: ctx.sessionId,
     ...(ctx.manifestPorts !== undefined ? { manifestPorts: ctx.manifestPorts } : {}),
     ...(packageId !== undefined ? { packageId } : {}),
@@ -504,9 +493,7 @@ export async function runFinalizeStep(args: {
  * here — this only fires when `next` IS declared but names nothing real.
  */
 export function assertNextPhaseKnown(descriptor: SessionKindDescriptor, turnSpec: TurnSpec, phaseRow: TurnSpecPhase, nextOverride?: string): void {
-  // bead 8vfn.6.6 item 5 — `nextOverride` lets the nextOnDone target reuse
-  // this same ghost-phase guard, rather than a second copy of it.
-  const next = nextOverride ?? phaseRow.next;
+  const next = nextOverride ?? phaseRow.next; // nextOverride lets nextOnDone reuse this same ghost-phase guard.
   if (!next) return;
   const known = turnSpec.phases.some((p) => p.phase === next);
   if (!known) {
@@ -626,8 +613,7 @@ function listWrittenFiles(sessionDir: string, writesDirs: readonly string[]): st
  *  root — see header note). Falls back to a generic prompt if unreadable,
  *  matching `kinds/project-brain.ts`'s own skill-prompt load. */
 function readSkillPrompt(agentId: string, turnId?: string): string {
-  // bead 8vfn.6.6 item 5 — mode-conditional turn id (ctx.turnId, call-time).
-  if (turnId !== undefined) return loadSkillTurnPrompt({ name: agentId, turnId });
+  if (turnId !== undefined) return loadSkillTurnPrompt({ name: agentId, turnId }); // mode-conditional turn id (ctx.turnId).
   const path = skillPath(agentId);
   try {
     return readFileSync(path, 'utf8');
@@ -678,8 +664,7 @@ function buildTurnPrompt(
     // demo-builder-runner.ts's own feedback.md sections, so the generic
     // spine's revise turn actually carries the words that triggered it.
     ...(feedback !== null ? ['', 'Operator revision feedback on the previous draft (apply it):', feedback] : []),
-    // bead 8vfn.6.6 item 5 — ctx.promptContext's lines (seed matching etc.).
-    ...(extraContext.length > 0 ? ['', ...extraContext] : []),
+    ...(extraContext.length > 0 ? ['', ...extraContext] : []), // ctx.promptContext's lines (seed matching etc.).
     '',
     'Session status (read-only context):',
     '```json',

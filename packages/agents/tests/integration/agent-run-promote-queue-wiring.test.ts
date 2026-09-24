@@ -41,14 +41,24 @@ import {
   PROMOTE_QUEUE_ID,
   setupPromoteQueueFixture,
 } from '../test-fixtures/interactive-runner-log-observer.ts';
-import type { QueuePorts } from '@forge/sessions/interactive-finalizers.ts';
+
+// Deliberately NOT importing QueuePorts from `@forge/sessions/interactive-
+// finalizers.ts` (rank 4) — this is a rank-3 packages/agents test, and
+// deps.sessionKind is OPAQUE at this layer by design (see
+// AgentDispatchDeps's own doc, agent-dispatch-cmd.ts): a rank-3 file must
+// never import a rank-4 package's types either. Mirrored structurally, not
+// by name.
+type FakeQueuePorts = {
+  promoteManifests: (manifestsDir: string, opts: { queueRoot: string }) => { writtenManifestPaths: string[]; writtenInitiativeIds: string[] };
+  mintAndPersistManifestCycleId: (manifestPath: string, initiativeId: string) => string;
+};
 
 test('promoteToQueue is reachable end-to-end: cmdAgentRun forwards deps.sessionKind (manifestPorts) into runInteractiveTurn, and the REAL finalizer registry calls them', async () => {
   const fx = setupPromoteQueueFixture();
   try {
     const promoteCalls: { manifestsDir: string; queueRoot: string }[] = [];
     const mintCalls: { manifestPath: string; initiativeId: string }[] = [];
-    const manifestPorts: QueuePorts = {
+    const manifestPorts: FakeQueuePorts = {
       promoteManifests: (manifestsDir, opts) => {
         promoteCalls.push({ manifestsDir, queueRoot: opts.queueRoot });
         return { writtenManifestPaths: ['/fake/_queue/pending/init-1.md'], writtenInitiativeIds: ['init-1'] };

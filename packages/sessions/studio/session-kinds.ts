@@ -363,12 +363,8 @@ export type TurnSpecPhase = {
    *  no `requires` needs nothing beyond `verdict` itself, so the write
    *  route's generic check simply has nothing to enforce. */
   readonly requires?: readonly string[];
-  /** bead 8vfn.6.6 item 5: doneField names a structured-turn output key;
-   *  true (or status.round >= ceiling) advances to nextOnDone instead of
-   *  next, same-turn (interactive-runner.ts). doneField/nextOnDone are
-   *  co-required and nextOnDone's dangling-phase shape is checked by
-   *  validateSessionKinds (item 3) — turnSpec-only, no panel counterpart
-   *  (panel never dispatches, so these fields have no meaning there). */
+  /** doneField names a structured-turn output key; true (or status.round >= ceiling) advances to nextOnDone
+   *  instead of next, same-turn. Co-required + validated (validateSessionKinds), turnSpec-only. */
   readonly doneField?: string;
   readonly nextOnDone?: string;
   readonly ceiling?: number;

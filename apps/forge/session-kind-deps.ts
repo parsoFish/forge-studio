@@ -22,7 +22,11 @@ import { isCanonicalInitiativeId } from '@forge/flows/initiative-id.ts';
 import type { ArchitectManifestPorts } from '@forge/sessions/kinds/architect-ports.ts';
 import type { ParseManifestPort } from '@forge/sessions/studio/session-transcript.ts';
 
-/** Bound once; the same object is handed to every architect turn. */
+/** Bound once; the same object is handed to every architect turn. bead
+ *  8vfn.6.6 item 2 follow-up: `promoteManifests`/`mintAndPersistManifestCycleId`
+ *  are also the exact two functions the turnSpec-driven `promoteToQueue`
+ *  finalizer's `QueuePorts` needs — no second binding; `AGENT_DISPATCH_DEPS`
+ *  below carries this SAME object down `runTurnSpecAgent`'s fork too. */
 export const architectManifestPorts: ArchitectManifestPorts = {
   parseManifest,
   serializeManifest,
@@ -37,7 +41,10 @@ export const parseManifestPort: ParseManifestPort = parseManifest;
 /**
  * The agent-dispatch deps, defined ONCE (G1 P1) and beside the ports they
  * carry. Every path that can reach `cmdAgentRun` must pass this — the four
- * legacy `cmd<X>Run` delegates as well as the generic `case 'agent'` arm.
+ * legacy `cmd<X>Run` delegates as well as the generic `case 'agent'` arm, AND
+ * (bead 8vfn.6.6 item 2 follow-up) `cmdAgentRun`'s ADR-043 §3 turnSpec fork
+ * (`runTurnSpecAgent`), which now forwards `deps.sessionKind` into
+ * `runInteractiveTurn`'s ctx the SAME way the legacy branch always has.
  * `spawn-deps-parity.test.ts` is the structural control and carries the full
  * account of the defect it closes.
  */
