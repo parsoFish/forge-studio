@@ -3045,8 +3045,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-roadmap-node][data-initiative-id][data-action="open-initiative-<id>"]
   [data-initiative-status]` (+
   `[data-develop-state][data-plan-state][data-initiative-ready][data-blocked-by]
-  [data-initiative-collapsed="true"][data-completed-at]` — the last only when
-  derivable). **Every card is now PERMANENTLY collapsed** — canvas geometry
+  [data-initiative-collapsed="true"][data-completed-at][data-initiative-flow-id]`
+  — the last two only when derivable). `data-initiative-flow-id` (M7 findings
+  row 59) carries the initiative manifest's own `flow_id` BESIDE
+  `data-initiative-status` — never a substitute for it, never renamed into
+  it: forge-architect and forge-develop both terminate at the SAME status
+  word (`ready-for-review`), which `tests/stories/S10.story.mjs` asserts as
+  a load-bearing `data-initiative-status` value, so the flow id is the only
+  way a card (or `report.md`'s header, which renders it the same way beside
+  `Status:`) can be told apart from its sibling flow's identical terminal
+  status. Absent (never fabricated) for a manifest that carries no
+  `flow_id`. **Every card is now PERMANENTLY collapsed** — canvas geometry
   never reflows on selection (operator ruling, mock decision point P5), so
   `data-initiative-collapsed` never flips to `"false"` and there is no more
   per-node inline-expand toggle (`[data-action="toggle-node-detail"]` is
