@@ -39,7 +39,7 @@
 import { readFileSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { productionFiles } from './check-owner.mjs';
+import { productionFiles, countLines } from './check-owner.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const FORMULA = "productionFiles() from scripts/check-owner.mjs (CODE extensions + skills/*/SKILL.md, minus *.test.* and test-fixtures/, over git ls-files --cached --others --exclude-standard)";
@@ -107,8 +107,10 @@ export function measurePackages(root = FORGE_ROOT, lister = productionFiles) {
         new Error(`${rel} was listed by the corpus and could not be read (${err instanceof Error ? err.message : String(err)})`),
       );
     }
-    const n = text.split('\n').length - 1;
-    lines.set(m[1], (lines.get(m[1]) ?? 0) + n);
+    // ONE definition (forge-8vfn.5.18): countLines lives in check-owner.mjs,
+    // which check-owner's own loc-drift check uses too — a second inline copy
+    // of this arithmetic is exactly the defect that bead is about.
+    lines.set(m[1], (lines.get(m[1]) ?? 0) + countLines(text));
   }
   return lines;
 }
