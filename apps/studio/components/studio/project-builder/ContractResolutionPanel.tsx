@@ -81,6 +81,9 @@ export function ContractResolutionPanel({
   // forge-8vfn.5.5: the demo session a DEMO-tier clause mints, rendered here
   // instead of being consumed by a `router.push` inside the same click.
   const [demoSessionId, setDemoSessionId] = useState<string | null>(null);
+  // forge-8vfn.5.10: same fix for the 'instructions' agent-tier route, which
+  // M1-G's sweep left `router.push`ing from inside the click that minted it.
+  const [instructionsSessionId, setInstructionsSessionId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [runStatus, setRunStatus] = useState<Record<string, PolledPreflightFixStatus>>({});
   const [msg, setMsg] = useState<string | null>(null);
@@ -138,8 +141,11 @@ export function ContractResolutionPanel({
     }
     // Agent-tier clauses route to an existing builder — navigate there.
     if (r.route === 'instructions') {
+      // forge-8vfn.5.10: PUBLISH AND STAY, matching the demo-builder branch
+      // just below — `router.push` inside the minting click left the id
+      // observable to nothing and no beat could bind /sessions/instructions/<id>.
       const s = await startInstructions({ project: projectId, mode: 'init' });
-      if (s.ok && s.sessionId) router.push(`/sessions/instructions/${encodeURIComponent(s.sessionId)}`);
+      if (s.ok && s.sessionId) setInstructionsSessionId(s.sessionId);
     } else if (r.route === 'demo-builder') {
       // PUBLISH AND STAY, and note this branch does NOT navigate while the
       // 'instructions' branch above still does — the asymmetry is the point.
@@ -203,6 +209,11 @@ export function ContractResolutionPanel({
       // was the READER, not the judgement. Those two sites and their doors are
       // stale by ~100 rulings; migrating them is not this PR's business.
       data-demo-session-id={demoSessionId ?? ''}
+      // forge-8vfn.5.10, mirroring the demo key just above (ruling 307):
+      // distinctly named because this panel can render INSIDE a session page
+      // (the onboarding session hosts the same Contract Buildout), whose own
+      // root also carries a generic `data-session-id`.
+      data-instructions-session-id={instructionsSessionId ?? ''}
       data-resolution-failing-count={failing.length}
       data-resolution-auto-count={auto.length}
       data-resolution-agent-count={agent.length}
@@ -332,6 +343,10 @@ export function ContractResolutionPanel({
         </div>
       )}
       <SessionMinted kind="demo" sessionId={demoSessionId} project={projectId} />
+      {/* No `?project=` — unchanged from the pre-fix `router.push` target,
+          and an exact-href-matched anchor must never carry a query string
+          (see `authoring-launcher-mint.test.ts`). */}
+      <SessionMinted kind="instructions" sessionId={instructionsSessionId} />
     </div>
   );
 }

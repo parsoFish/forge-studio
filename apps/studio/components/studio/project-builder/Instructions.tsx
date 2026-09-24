@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { startInstructions } from '@/lib/bridge-client';
 import { fetchStudioSessions, type SessionIndexRow } from '@/lib/studio-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
+import { SessionMinted } from '@/components/studio/session/SessionMinted';
 
 /**
  * Standing-instructions panel, bound to the project's **AGENTS.md** as the single
@@ -35,6 +36,11 @@ export function Instructions({
   // briefing session on every click, forever. Advisory (a failed read keeps
   // the plain launch; the server-side picture still shows on /sessions).
   const [openSession, setOpenSession] = useState<SessionIndexRow | null>(null);
+  // forge-8vfn.5.10: the id THIS click mints, rendered before the navigation
+  // that consumes it — the `SessionMinted` convention M1-G (`forge-8vfn.5.5`)
+  // adopted for architect and demo. `router.push`ing from inside the click
+  // left the id observable to nothing (docs/reference/studio-dom-contract.md).
+  const [mintedSessionId, setMintedSessionId] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     fetchStudioSessions()
@@ -63,7 +69,9 @@ export function Instructions({
         setError(res.error ?? 'failed to start the instructions agent');
         return;
       }
-      router.push(`/sessions/instructions/${encodeURIComponent(res.sessionId)}`);
+      // Publish, never navigate (rulings 396/406/409/422/436): mint and stay,
+      // and let `SessionMinted`'s real anchor carry the operator over.
+      setMintedSessionId(res.sessionId);
     } finally {
       setLaunching(false);
     }
@@ -107,7 +115,13 @@ export function Instructions({
   );
 
   return (
-    <section>
+    <section
+      // Distinctly named, not the generic `data-session-id` (ruling 307):
+      // this panel sits on `/projects/[id]` alongside `KbBind` and
+      // `ContractResolutionPanel`'s own instructions mint, each of which
+      // must be bindable without shadowing the others.
+      data-instructions-session-id={mintedSessionId ?? ''}
+    >
       <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
         Standing Instructions <span style={{ flex: 1, height: 1, background: 'var(--line)' }} />
       </div>
@@ -130,6 +144,7 @@ export function Instructions({
         <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {launchBtn}
           {error && <div style={{ fontSize: 11.5, color: 'var(--red, #f85149)' }}>{error}</div>}
+          <SessionMinted kind="instructions" sessionId={mintedSessionId} />
 
           {fileBound ? (
             <pre
