@@ -222,3 +222,40 @@ test('the port is optional and additive: a run given no prior spend behaves exac
 
   assert.ok(!(logger.events as Array<Record<string, unknown>>).some((e) => e['message'] === 'flow.cost-warn'));
 });
+
+test('(RED) [forge-8vfn.5.20] a flow that terminates early must NOT fire its on:flow-complete triggers — a red merge-boundary gate parks the branch, it is not a terminal SUCCESS (kills: an unconditional fireFlowTriggers(\'flow-complete\') call reached after the terminateEarly break)', async () => {
+  const enqueued: Array<{ flowId: string; targetKind: string | undefined }> = [];
+  const stub: PhaseExecutor<NodeExecContext> = {
+    async run(_nodeId, ctx) {
+      // Mirrors execDemo on a red merge-boundary gate / execOnboardPreflight on
+      // a red contract: the node asks the walk to stop, routing to
+      // ready-for-review instead of completing normally.
+      ctx.state.terminateEarly = true;
+      return ctx.state.cycleOutcome;
+    },
+  };
+
+  const flow: FlowDefinition = {
+    ...makeFlow([{ id: 'demo', agent: 'demo-agent' }]),
+    triggers: [{ on: 'flow-complete', target: { kind: 'flow', ref: 'downstream-flow' } }],
+  };
+
+  await runFlow({
+    flow,
+    input: makeInput(),
+    logger: makeLogger(),
+    executor: stub,
+    projectGate: { runPreflight: () => { throw new Error('unreachable — the stub node terminates before any gate runs'); } },
+    runClosure: async (_i, _l, reviewerOutcome) => {
+      assert.equal(reviewerOutcome, 'ready-for-review', 'the early-termination closure must park at ready-for-review');
+      return { outcome: 'ready-for-review', merged: false };
+    },
+    enqueueFlowRun: (flowId, opts) => { enqueued.push({ flowId, targetKind: opts.targetKind }); },
+  });
+
+  assert.deepEqual(
+    enqueued,
+    [],
+    'an early-terminated flow must stage ZERO flow-complete-triggered runs — the branch it just parked is not a shippable terminal success',
+  );
+});
