@@ -500,9 +500,8 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       try {
         const w = fsWatch(d, { persistent: false }, () => {
           queueChangeCoalescer.trigger();
-          // A new cycle may have appeared; pick up its log if so — kept
-          // uncoalesced so a live tail arms promptly regardless of the WS
-          // broadcast cadence above.
+          // A new cycle may have appeared; pick up its log if so — uncoalesced,
+          // so a live tail arms promptly regardless of the broadcast cadence.
           startTailsForLive();
         });
         queueWatchers.push(w);
