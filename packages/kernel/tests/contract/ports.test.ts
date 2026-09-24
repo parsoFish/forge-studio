@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 
 import { createBandRegistry, type PhaseExecutor } from '../../ports.ts';
 
-const ALLOWED = ['demo-band', 'review-band'] as const;
+const ALLOWED = ['integrate-band', 'review-band'] as const;
 
 test('registerBand rejects an id outside the allowed set, naming the offender AND the allowed set (kills: a table keyed by a bare string, where a typo registers a band nothing ever dispatches and no gate notices)', () => {
   const reg = createBandRegistry<{ n: number }>(ALLOWED);
@@ -18,7 +18,7 @@ test('registerBand rejects an id outside the allowed set, naming the offender AN
     () => reg.registerBand('demo_band', async () => {}),
     (err: Error) =>
       err.message.includes('demo_band') &&
-      err.message.includes('demo-band') &&
+      err.message.includes('integrate-band') &&
       err.message.includes('review-band'),
   );
   assert.equal(reg.get('demo_band'), undefined);
@@ -27,9 +27,9 @@ test('registerBand rejects an id outside the allowed set, naming the offender AN
 test('registerBand rejects a duplicate registration (kills: last-write-wins, which makes band dispatch depend on import order)', () => {
   const reg = createBandRegistry<{ n: number }>(ALLOWED);
   const first = async () => {};
-  reg.registerBand('demo-band', first);
-  assert.throws(() => reg.registerBand('demo-band', async () => {}), /demo-band/);
-  assert.equal(reg.get('demo-band'), first, 'the first registration survives the rejected second');
+  reg.registerBand('integrate-band', first);
+  assert.throws(() => reg.registerBand('integrate-band', async () => {}), /integrate-band/);
+  assert.equal(reg.get('integrate-band'), first, 'the first registration survives the rejected second');
 });
 
 test('a registered band is retrievable, receives the caller context, and ids() lists exactly what was registered', async () => {

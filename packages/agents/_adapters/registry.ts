@@ -52,14 +52,6 @@ export function getAdapter(id: string): RuntimeAdapter {
 }
 
 /**
- * Returns all registered adapters (in registration order).
- * Use for introspection / health checks — the catalog GET, not the hot path.
- */
-export function listAdapters(): RuntimeAdapter[] {
-  return Object.values(ADAPTERS);
-}
-
-/**
  * Returns the ids of every registered adapter.
  * Drives the UI SDK picker: only ids returned here are candidates.
  */

@@ -104,15 +104,7 @@ export async function dispatchTerminalStatus(
       // in-flight/. Move it here as an idempotent safety net so the architect→develop
       // hand-off (enqueueDevelopRun) claims it instead of refusing on a phantom
       // in-flight cycle. A no-op when closure already moved it (not in in-flight/).
-      let moved: 'ready-for-review' | null = null;
-      if (existsSync(join(paths.inFlight, filename))) {
-        try {
-          moveTo(filename, 'ready-for-review', paths);
-          moved = 'ready-for-review';
-        } catch {
-          /* concurrent move; non-fatal */
-        }
-      }
+      const moved = moveIfInFlight(filename, 'ready-for-review', paths);
       await notifyFn({
         type: 'review-ready',
         title: `Ready for review: ${manifest.initiativeId}`,
@@ -147,15 +139,7 @@ export async function dispatchTerminalStatus(
         }
       }
 
-      let moved: 'failed' | null = null;
-      if (existsSync(join(paths.inFlight, filename))) {
-        try {
-          moveTo(filename, 'failed', paths);
-          moved = 'failed';
-        } catch {
-          /* concurrent move; non-fatal */
-        }
-      }
+      const moved = moveIfInFlight(filename, 'failed', paths);
       await notifyFn({
         type: 'failed',
         title: `Failed: ${manifest.initiativeId}`,
@@ -163,6 +147,17 @@ export async function dispatchTerminalStatus(
       });
       return { moved, notified: 'failed', retry_decision: decision };
     }
+  }
+}
+
+/** Moves a manifest still in in-flight/ to `to`; a concurrent move is non-fatal and reads as null. */
+function moveIfInFlight<T extends 'ready-for-review' | 'failed'>(filename: string, to: T, paths: QueuePaths): T | null {
+  if (!existsSync(join(paths.inFlight, filename))) return null;
+  try {
+    moveTo(filename, to, paths);
+    return to;
+  } catch {
+    return null;
   }
 }
 
@@ -179,16 +174,21 @@ export function decideAutoRetry(
   paths: QueuePaths,
   logPath: string,
 ): AutoRetryDecision {
-  // Read manifest's current retry_count.
+  // Read and parse are caught apart so the reason names which failed (forge-8vfn.6.10.16).
   let retryCount = 0;
-  try {
-    const inFlightPath = join(paths.inFlight, filename);
-    if (existsSync(inFlightPath)) {
-      const m = parseFullManifest(readFileSync(inFlightPath, 'utf8'));
-      retryCount = m.retry_count ?? 0;
+  const inFlightPath = join(paths.inFlight, filename);
+  if (existsSync(inFlightPath)) {
+    let raw: string;
+    try {
+      raw = readFileSync(inFlightPath, 'utf8');
+    } catch (err) {
+      return { retry: false, reason: `manifest read failed: ${(err as Error).message}` };
     }
-  } catch {
-    return { retry: false, reason: 'manifest read failed' };
+    try {
+      retryCount = parseFullManifest(raw).retry_count ?? 0;
+    } catch (err) {
+      return { retry: false, reason: `manifest parse failed: ${(err as Error).message}` };
+    }
   }
   if (retryCount >= MAX_AUTO_RETRIES) {
     return { retry: false, reason: `retry cap reached (${retryCount}/${MAX_AUTO_RETRIES})` };

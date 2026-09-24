@@ -4,7 +4,7 @@
  * `composition.guards` rename (at that migration's landing the 9 ids were
  * unchanged: the 5 toggles
  * `event-log`/`cost-guard`/`stall-watchdog`/`merge-gate`/`scratch-strip` and
- * the 4 bands `wi-contract`/`reflection-close`/`demo-band`/`review-band`.
+ * the 4 bands `wi-contract`/`reflection-close`/`integrate-band`/`review-band`.
  * R4-18 later added a 10th id, the 5th band `onboard-preflight` — see
  * `EXPECTED_GUARDS_BY_SLUG` and `agent-bands.ts`'s `BAND_GUARD_IDS` for the
  * current set).
@@ -108,7 +108,7 @@ const EXPECTED_GUARDS_BY_SLUG: Readonly<Record<string, readonly string[]>> = {
   // composition-bearing SKILL.md, not just the 16 that existed when this
   // table was generated.
   'creation-agent': ['event-log'],
-  'demo-agent': ['demo-band', 'event-log'],
+  'demo-agent': ['integrate-band', 'event-log'],
   'demo-builder': ['event-log'],
   'developer-ralph': ['cost-guard', 'event-log', 'scratch-strip', 'stall-watchdog'],
   'instructions-creator': ['event-log'],

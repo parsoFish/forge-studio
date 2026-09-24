@@ -85,7 +85,7 @@ function developFlow(): Flow {
     goal: 'Build the initiative.',
     nodes: [
       { id: 'dev', agent: 'developer-ralph' },
-      { id: 'demo', agent: 'demo-agent', resumable: true },
+      { id: 'integrate', agent: 'demo-agent', resumable: true },
     ],
     edges: [],
     triggers: [],
@@ -114,7 +114,7 @@ function archivedRun(over: Partial<Run> = {}): Run {
 function rows(): FlowRunTimelineRow[] {
   return [
     { nodeId: 'dev', agent: 'developer-ralph', status: 'complete', costUsd: 3.5, note: '4 files · +120 · 2 commits', artifacts: [] },
-    { nodeId: 'demo', agent: 'demo-agent', status: 'pending', costUsd: 0, note: null, artifacts: [] },
+    { nodeId: 'integrate', agent: 'demo-agent', status: 'pending', costUsd: 0, note: null, artifacts: [] },
   ];
 }
 
@@ -222,24 +222,24 @@ test('only the expanded node shows a detail panel — a sibling row stays collap
   // `expandedNodeId`) — the classic "shows everyone's log at once" defect.
   const html = render({
     expandedNodeId: 'dev',
-    nodeLogLines: { dev: DEV_LINES, demo: [{ kind: 'out', text: 'DEMO-ONLY-LINE', eventType: 'log' }] },
+    nodeLogLines: { dev: DEV_LINES, integrate: [{ kind: 'out', text: 'DEMO-ONLY-LINE', eventType: 'log' }] },
   });
 
   expect(detailMarkup(html, 'dev')).not.toBeNull();
-  expect(detailMarkup(html, 'demo')).toBeNull();
+  expect(detailMarkup(html, 'integrate')).toBeNull();
   expect(html).not.toContain('DEMO-ONLY-LINE');
 });
 
 test('the row reports its own expanded state honestly via data-node-expanded', () => {
   const html = render({ expandedNodeId: 'dev', nodeLogLines: { dev: DEV_LINES } });
   const at = (needle: string) => html.indexOf(needle);
-  // dev's own row (not its detail panel) carries expanded="true"; demo's
+  // dev's own row (not its detail panel) carries expanded="true"; integrate's
   // row — found by searching from where dev's block ends — stays "false".
   const devRowStart = at('data-node-id="dev"');
   const devRowEnd = html.indexOf('>', devRowStart);
   expect(html.slice(html.lastIndexOf('<', devRowStart), devRowEnd)).toContain('data-node-expanded="true"');
 
-  const demoRowStart = at('data-node-id="demo"');
+  const demoRowStart = at('data-node-id="integrate"');
   const demoRowEnd = html.indexOf('>', demoRowStart);
   expect(html.slice(html.lastIndexOf('<', demoRowStart), demoRowEnd)).toContain('data-node-expanded="false"');
 });

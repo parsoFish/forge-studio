@@ -65,7 +65,7 @@
  * (f) NODE ORDER comes from the flow definition's `nodes` array.
  *   `@forge/flows/studio/flow-registry.ts` builds it with an order-preserving
  *   `rawNodes.map(...)` over flow.yaml, and `studio/flows/forge-develop/
- *   flow.yaml` declares `dev → demo → adversarial-review → review`. That is
+ *   flow.yaml` declares `dev → integrate → adversarial-review → review`. That is
  *   the authoritative order; a timeline in any other order is a defect.
  */
 
@@ -86,13 +86,13 @@ function developFlow(): Flow {
     goal: 'Build the initiative.',
     nodes: [
       { id: 'dev', agent: 'developer-ralph' },
-      { id: 'demo', agent: 'demo-agent', resumable: true },
+      { id: 'integrate', agent: 'demo-agent', resumable: true },
       { id: 'adversarial-review', agent: 'adversarial-review' },
       { id: 'review', gate: 'verdict' }, // gate-only: NO agent
     ],
     edges: [
-      { from: 'dev', to: 'demo', artifact: 'diff' },
-      { from: 'demo', to: 'adversarial-review', artifact: 'demo' },
+      { from: 'dev', to: 'integrate', artifact: 'diff' },
+      { from: 'integrate', to: 'adversarial-review', artifact: 'demo' },
       { from: 'adversarial-review', to: 'review', artifact: 'review-findings' },
     ],
     triggers: [],
@@ -165,7 +165,7 @@ test('a node with NO phaseMeta entry costs 0 — the run total is never borrowed
   const rows = deriveFlowRunTimeline(developFlow(), run);
 
   expect(run.costUsd).toBe(4.1); // precondition: the run DOES have a nonzero total
-  for (const id of ['demo', 'adversarial-review', 'review']) {
+  for (const id of ['integrate', 'adversarial-review', 'review']) {
     expect(rowFor(rows, id).costUsd).toBe(0);
   }
 });
@@ -176,16 +176,16 @@ test("every row's cost is sourced from its OWN phaseMeta entry, not a neighbour'
   // positionally rather than keying by node id. Two nodes carry DISTINCT,
   // non-zero, non-equal costs so a shift lands on the wrong number.
   const run = archivedRun({
-    phases: { dev: 'complete', demo: 'complete' },
+    phases: { dev: 'complete', integrate: 'complete' },
     phaseMeta: {
       dev: meta({ costUsd: 3.5 }),
-      demo: meta({ costUsd: 0.25 }),
+      integrate: meta({ costUsd: 0.25 }),
     },
   });
   const rows = deriveFlowRunTimeline(developFlow(), run);
 
   expect(rowFor(rows, 'dev').costUsd).toBe(3.5);
-  expect(rowFor(rows, 'demo').costUsd).toBe(0.25);
+  expect(rowFor(rows, 'integrate').costUsd).toBe(0.25);
 });
 
 // ---------------------------------------------------------------------------
@@ -201,7 +201,7 @@ test("a node's status comes from run.phases[node], never from the run's own stat
 
   expect(run.status).toBe('complete'); // precondition
   expect(rowFor(rows, 'dev').status).toBe('complete');
-  expect(rowFor(rows, 'demo').status).toBe('pending');
+  expect(rowFor(rows, 'integrate').status).toBe('pending');
   expect(rowFor(rows, 'adversarial-review').status).toBe('pending');
   expect(rowFor(rows, 'review').status).toBe('pending');
 });
@@ -212,13 +212,13 @@ test('a node the run knows as failed keeps its OWN failed status on a run that i
   // 'failed' and another 'retrying' — three different values at once.
   const run = archivedRun({
     status: 'active',
-    phases: { dev: 'failed', demo: 'retrying' },
-    phaseMeta: { dev: meta({ costUsd: 3.5 }), demo: meta({ costUsd: 0.25 }) },
+    phases: { dev: 'failed', integrate: 'retrying' },
+    phaseMeta: { dev: meta({ costUsd: 3.5 }), integrate: meta({ costUsd: 0.25 }) },
   });
   const rows = deriveFlowRunTimeline(developFlow(), run);
 
   expect(rowFor(rows, 'dev').status).toBe('failed');
-  expect(rowFor(rows, 'demo').status).toBe('retrying');
+  expect(rowFor(rows, 'integrate').status).toBe('retrying');
   expect(rowFor(rows, 'adversarial-review').status).toBe('pending');
 });
 
@@ -233,12 +233,12 @@ test('rows follow the FLOW DEFINITION order, and a node with no events still app
   // Order measured from studio/flows/forge-develop/flow.yaml.
   const rows = deriveFlowRunTimeline(developFlow(), archivedRun());
 
-  expect(rows.map((r) => r.nodeId)).toEqual(['dev', 'demo', 'adversarial-review', 'review']);
+  expect(rows.map((r) => r.nodeId)).toEqual(['dev', 'integrate', 'adversarial-review', 'review']);
 });
 
 test('a flow whose node order is NOT alphabetical is preserved verbatim', () => {
   // KILLS: an implementation that sorts node ids (alphabetical order here
-  // would be ['adversarial-review','demo','dev','review'] — a different
+  // would be ['adversarial-review','integrate','dev','review'] — a different
   // sequence from the flow's declared one, so a sort is caught).
   const rows = deriveFlowRunTimeline(developFlow(), archivedRun());
   const ids = rows.map((r) => r.nodeId);
@@ -270,7 +270,7 @@ test('a run that does not exist yields NO rows — never a fabricated all-pendin
 
 test("a node with nothing to report gets an HONEST EMPTY note, not invented prose", () => {
   // KILLS: a free-typed or agent-authored narrative string ("Waiting to
-  // start…", "This node has not run yet"). `demo` has no phaseMeta entry at
+  // start…", "This node has not run yet"). `integrate` has no phaseMeta entry at
   // all; `adversarial-review` has an entry carrying only the two mandatory
   // fields at their zero values. Neither has anything true to say.
   const run = archivedRun({
@@ -281,7 +281,7 @@ test("a node with nothing to report gets an HONEST EMPTY note, not invented pros
   });
   const rows = deriveFlowRunTimeline(developFlow(), run);
 
-  expect(rowFor(rows, 'demo').note).toBeNull();
+  expect(rowFor(rows, 'integrate').note).toBeNull();
   expect(rowFor(rows, 'adversarial-review').note).toBeNull();
 });
 
@@ -316,7 +316,7 @@ test('note segments compose deterministically from the node\'s own fields, in a 
   // only when `nodeId === 'unifier'` (run-model-derive.ts:181), but no seed
   // flow declares a `unifier` node — `studio/flows/forge-develop/flow.yaml`'s
   // own header records the monolithic unifier node's retirement (R4-10-F1,
-  // ADR-039/040): the live flow is `dev → demo → adversarial-review →
+  // ADR-039/040): the live flow is `dev → integrate → adversarial-review →
   // review`. Since `deriveFlowRunTimeline` sources its rows from
   // `flow.nodes`, no row with `nodeId === 'unifier'` can ever exist, for any
   // run including archived ones — so a gate-checks segment could never be
@@ -359,13 +359,13 @@ test("a node's note never reports a NEIGHBOUR's delivered numbers", () => {
   const run = archivedRun({
     phaseMeta: {
       dev: meta({ costUsd: 3.5, delivered: { files: 4, insertions: 120, commits: 2 } }),
-      demo: meta({ costUsd: 0.25, delivered: { files: 1, insertions: 7, commits: 1 } }),
+      integrate: meta({ costUsd: 0.25, delivered: { files: 1, insertions: 7, commits: 1 } }),
     },
   });
   const rows = deriveFlowRunTimeline(developFlow(), run);
 
   expect(rowFor(rows, 'dev').note).toBe('4 files · +120 · 2 commits');
-  expect(rowFor(rows, 'demo').note).toBe('1 files · +7 · 1 commits');
+  expect(rowFor(rows, 'integrate').note).toBe('1 files · +7 · 1 commits');
 });
 
 // ---------------------------------------------------------------------------
@@ -419,5 +419,5 @@ test('flow definition missing AND run missing → no rows (never a fabricated ti
 test('a REGISTERED flow still drives the rows (definition order, nodes with no events included) — the fallback is only for a missing definition', () => {
   const run = archivedRun({ phases: { review: 'complete', dev: 'complete' } });
   const rows = deriveFlowRunTimeline(developFlow(), run);
-  expect(rows.map((r) => r.nodeId)).toEqual(['dev', 'demo', 'adversarial-review', 'review']);
+  expect(rows.map((r) => r.nodeId)).toEqual(['dev', 'integrate', 'adversarial-review', 'review']);
 });
