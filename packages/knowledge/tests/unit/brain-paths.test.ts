@@ -16,6 +16,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  deriveKbIdFromBrainPath,
   projectBrainDir,
   projectThemesDir,
   readArtifactRoot,
@@ -226,4 +227,33 @@ test('readArtifactRoot: returns "." when artifactRoot is "." explicitly', () => 
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// deriveKbIdFromBrainPath — forge-8vfn.8.3.5. The ONE kbId-from-path regex,
+// shared by the PM's brain.read (forge-8vfn.5.16 / M7-C U2, repo-relative
+// input) and the architect's own (M7-C ABR, absolute tool-call `file_path`
+// input, since the architect's SDK session cwd is the PROJECT repo).
+// ---------------------------------------------------------------------------
+
+test('deriveKbIdFromBrainPath: repo-relative Brain 1/2 path (e.g. "brain/cycles/themes/x.md") → "cycles"', () => {
+  assert.equal(deriveKbIdFromBrainPath('brain/cycles/themes/x.md'), 'cycles');
+});
+
+test('deriveKbIdFromBrainPath: repo-relative Brain 3 path ("brain/projects/<id>/...") → the project id', () => {
+  assert.equal(deriveKbIdFromBrainPath('brain/projects/gitpulse/themes/a.md'), 'gitpulse');
+});
+
+test('deriveKbIdFromBrainPath: ABSOLUTE path with a brain/ segment mid-string → still resolves', () => {
+  assert.equal(deriveKbIdFromBrainPath('/home/parso/forge/brain/forge-dev/themes/x.md'), 'forge-dev');
+  assert.equal(deriveKbIdFromBrainPath('/home/parso/forge/brain/projects/kbB/themes/z.md'), 'kbB');
+});
+
+test('deriveKbIdFromBrainPath: an ordinary project-repo path names no KB → null', () => {
+  assert.equal(deriveKbIdFromBrainPath('README.md'), null);
+  assert.equal(deriveKbIdFromBrainPath('/home/parso/projects/p1/src/index.ts'), null);
+});
+
+test('deriveKbIdFromBrainPath: "brain/" with no further segment (no trailing slash after the id) → null, never a truncated id', () => {
+  assert.equal(deriveKbIdFromBrainPath('brain/kb.yaml'), null);
 });
