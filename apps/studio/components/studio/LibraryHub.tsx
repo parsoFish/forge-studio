@@ -11,6 +11,7 @@ import { groupTemplateLibrary, templateBadges } from '@/lib/template-library-vie
 import type { CommunityHubWithCount, CommunityItem } from '@/lib/community-client';
 import { hubLabel, installStateLabel } from '@/lib/community-view';
 import { StudioPage } from '@/components/StudioPage';
+import { KICKOFF_ENTRIES } from '@/lib/session-kind-meta';
 
 // ---------------------------------------------------------------------------
 // LibraryHub — the rebuilt `/library` page (W6-IA-4). Replaces the old
@@ -19,8 +20,10 @@ import { StudioPage } from '@/components/StudioPage';
 // /projects (IA-1), /agents (IA-3), /flows (IA-2), /knowledge). Library is
 // now SHELVES ONLY: the five reusable-building-block island types every
 // agent and flow composes from, in the operator-locked order Skills / Hooks
-// / Connections / Templates / Community, plus a small cross-link card
-// pointing at Knowledge (which now owns KB creation).
+// / Connections / Templates / Community, plus a Sessions launcher row
+// (forge-8vfn.7.6.12, below) linking straight to each session kind's
+// kickoff. No cross-link card for Knowledge — the pillar nav already carries
+// it, and a card here would just duplicate that (library-02).
 //
 // Pure, props-driven presentational component (no fetch, no `useEffect`) —
 // mirrors `ProjectsIndexBody` / `AgentsIndexView`'s own precedent exactly,
@@ -167,7 +170,57 @@ export function LibraryHub({ skills, hooks, connections, templates, community, r
 
       {/* KB cross-link card REMOVED (W7-B4, library-02 — operator note 9):
           the pillar nav already carries Knowledge; the card duplicated it. */}
+
+      <SessionsShelf />
     </StudioPage>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SessionsShelf (forge-8vfn.7.6.12) — a direct link to every session kind's
+// launcher, reusing the ONE source (`KICKOFF_ENTRIES`, `lib/session-kind-meta.ts`)
+// the Sessions index's own kickoff row (`SessionsIndex.tsx`'s `KickoffRow`)
+// already reads — no duplicated route strings. Sessions is deliberately NOT
+// its own StudioNav pillar (W6-B11) and this row is not a fetched "part"
+// shelf (no loading/error state, no create/browse CTA): before this, the
+// shortest path from the Library to a session launcher was three hops
+// (Agents index -> `[data-nav="sessions-secondary"]` -> Sessions index ->
+// its kickoff row -> the launcher); this collapses that to one hop straight
+// from the parts bin (docs/how-to/S7.md's "fourth kind of part"). The
+// `data-action="kickoff-<kind>"` handle is the SAME one the Sessions index
+// kickoff row already uses (docs/reference/studio-dom-contract.md) — one
+// vocabulary for "start this kind of session" regardless of entry point.
+// ---------------------------------------------------------------------------
+
+function SessionsShelf() {
+  return (
+    <section data-section="sessions" aria-label="Start a session" style={{ marginBottom: 40 }}>
+      <div className="lib-section-head" style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 14 }}>
+        <span className="badge badge-agent">Sessions</span>
+        <span
+          className="lib-count"
+          style={{
+            fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--faint)',
+            background: 'var(--panel-2)', border: '1px solid var(--line)', borderRadius: 4, padding: '1px 7px',
+          }}
+        >
+          {KICKOFF_ENTRIES.length}
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {KICKOFF_ENTRIES.map((entry) => (
+          <Link
+            key={entry.kind}
+            className="btn btn-sm"
+            href={entry.href}
+            data-action={`kickoff-${entry.kind}`}
+            style={{ textDecoration: 'none' }}
+          >
+            {entry.label}
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 
