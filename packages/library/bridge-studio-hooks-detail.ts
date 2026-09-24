@@ -17,11 +17,14 @@
 
 import type { AgentFacts } from './studio/agent-facts.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { writeFileSync, statSync, openSync, readSync, closeSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { resolveGuardedPath } from '@forge/kernel';
 import yaml from 'js-yaml';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, listCycles, type StudioContext, type RouteContext } from '@forge/kernel';
+import {
+  sendJson, allowedOrigin, sanitizeError, pathOnly, listCycles,
+  guardedMtime, guardedReadFileTail, type StudioContext, type RouteContext,
+} from '@forge/kernel';
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import { scanHookFireSummary, HOOK_FIRE_SCAN_MAX_CYCLES } from './studio/hook-fire-summary.ts';
 import {
@@ -216,39 +219,17 @@ export async function handleHookDetail(req: IncomingMessage, res: ServerResponse
       // forge-8vfn.5.16 (M7-C U2, T2 review of 95cb287f) — last-fire facts,
       // BOUNDED (mtime-ordered, not lexical — full rationale: docs/
       // reference/request-path-sinks.md's "M7-C U2" section). Wire field is
-      // `recentFireCount`, not `fireCount`: honestly a window count.
-      const guardedCycleMtime = (cycleId: string): number => {
-        const guarded = resolveGuardedPath(ctx.logsRoot, [cycleId]);
-        if (!guarded.ok || !guarded.exists) return -Infinity; // rejected/absent sorts last
-        try { return statSync(guarded.realPath).mtimeMs; } catch { return -Infinity; }
-      };
-      const guardedEventsTail = (cycleId: string): string | null => {
-        const guarded = resolveGuardedPath(ctx.logsRoot, [cycleId, 'events.jsonl']);
-        if (!guarded.ok || !guarded.exists) return null;
-        let fd: number | null = null;
-        try {
-          const size = statSync(guarded.realPath).size; // guard-terminal: realPath IS the guard's own output
-          const start = Math.max(0, size - HOOK_FIRE_SCAN_TAIL_BYTES);
-          const length = size - start;
-          if (length === 0) return '';
-          fd = openSync(guarded.realPath, 'r');
-          const buf = Buffer.alloc(length);
-          readSync(fd, buf, 0, length, start);
-          const text = buf.toString('utf8');
-          // A truncated tail's first line may be a partial JSON fragment;
-          // a whole-file read (start===0) keeps everything.
-          if (start === 0) return text;
-          const nl = text.indexOf('\n');
-          return nl === -1 ? '' : text.slice(nl + 1);
-        } catch {
-          return null;
-        } finally {
-          if (fd !== null) { try { closeSync(fd); } catch { /* ignore */ } }
-        }
-      };
+      // `recentFireCount`, not `fireCount`: honestly a window count. The
+      // guarded mtime read and the guarded tail read are @forge/kernel's
+      // (T2's follow-up review moved them down so agents/sessions can share
+      // them too) — this route only supplies WHICH root/segments.
       const fireSummary = scanHookFireSummary(
         id,
-        { listCycleIds: () => listCycles(ctx.logsRoot), mtimeOf: guardedCycleMtime, readTail: guardedEventsTail },
+        {
+          listCycleIds: () => listCycles(ctx.logsRoot),
+          mtimeOf: (cycleId) => guardedMtime(ctx.logsRoot, [cycleId]),
+          readTail: (cycleId) => guardedReadFileTail(ctx.logsRoot, [cycleId, 'events.jsonl'], HOOK_FIRE_SCAN_TAIL_BYTES),
+        },
         HOOK_FIRE_SCAN_MAX_CYCLES,
       );
 

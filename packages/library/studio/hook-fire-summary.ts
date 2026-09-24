@@ -10,7 +10,7 @@
  * function the parsed events. Kept separate from that route so the folding
  * logic is unit-testable without a real forge root.
  */
-import type { EventLogEntry } from '@forge/kernel';
+import { selectRecentEntries, type EventLogEntry } from '@forge/kernel';
 
 export type HookFireOutcome = 'ran' | 'refused' | 'timeout' | 'error';
 
@@ -50,43 +50,38 @@ export function deriveHookFireSummary(events: readonly EventLogEntry[], hookId: 
 }
 
 // Bounded scan — T2 review of 95cb287f (forge-8vfn.5.16), same class #834
-// (forge-hqkm/omk0) fixed elsewhere. Full rationale: docs/reference/
-// request-path-sinks.md's "M7-C U2" section.
+// (forge-hqkm/omk0) fixed elsewhere. The generic sort+bound+tail-read
+// mechanics live in @forge/kernel's guarded-scan.ts (moved there, T2's
+// follow-up review) — this file keeps only the hook-specific page size and
+// fold. Full rationale: docs/reference/request-path-sinks.md's "M7-C U2"
+// section.
 
 /** Page size — never open more cycle dirs than this per request. */
 export const HOOK_FIRE_SCAN_MAX_CYCLES = 50;
 
-/** Newest-`max` by the injected `mtimeOf` (mirrors `sortEntriesByMtimeDesc`) —
- *  injectable so a test can prove the bound with a counting fake. */
-export function selectRecentCycles(
-  cycleIds: readonly string[],
-  mtimeOf: (cycleId: string) => number,
-  max: number,
-): string[] {
-  return cycleIds.slice().sort((a, b) => mtimeOf(b) - mtimeOf(a)).slice(0, max);
-}
-
-/** The IO a route wires with guarded fs primitives, and a test wires with
- *  counting fakes to prove `scanHookFireSummary` is bounded. */
+/** The IO a route wires with guarded fs primitives (`@forge/kernel`'s
+ *  `guardedMtime`/`guardedReadFileTail`), and a test wires with counting
+ *  fakes to prove `scanHookFireSummary` is bounded. */
 export type HookFireScanDeps = {
   /** Cheap directory-name enumeration (e.g. `listCycles`); never reads. */
   listCycleIds: () => readonly string[];
-  /** Directory mtime, guarded (e.g. `resolveGuardedPath` + `statSync`). */
-  mtimeOf: (cycleId: string) => number;
-  /** A BOUNDED read of one cycle's `events.jsonl` (e.g.
-   *  `guardedReadFileTail`); `null` when absent/rejected. */
+  /** Directory mtime, guarded; `null` when unknown (sorts last). */
+  mtimeOf: (cycleId: string) => number | null;
+  /** A BOUNDED read of one cycle's `events.jsonl`; `null` when
+   *  absent/rejected. */
   readTail: (cycleId: string) => string | null;
 };
 
-/** Selects the newest `maxCycles`, reads at most that many via `readTail`,
- *  and folds through `deriveHookFireSummary`. A fire only in an
+/** Selects the newest `maxCycles` (via `@forge/kernel`'s
+ *  `selectRecentEntries`), reads at most that many via `readTail`, and
+ *  folds through `deriveHookFireSummary`. A fire only in an
  *  older-than-window cycle is invisible by design. */
 export function scanHookFireSummary(
   hookId: string,
   deps: HookFireScanDeps,
   maxCycles: number = HOOK_FIRE_SCAN_MAX_CYCLES,
 ): HookFireSummary | null {
-  const recent = selectRecentCycles(deps.listCycleIds(), deps.mtimeOf, maxCycles);
+  const recent = selectRecentEntries(deps.listCycleIds(), deps.mtimeOf, maxCycles);
   const events: EventLogEntry[] = [];
   for (const cycleId of recent) {
     const raw = deps.readTail(cycleId);

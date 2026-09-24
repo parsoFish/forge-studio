@@ -86,15 +86,13 @@ describe('deriveHookFireSummary', () => {
 // T2 review of 95cb287f (forge-8vfn.5.16) — the unbounded request-path scan
 // class #834 (forge-hqkm/omk0) fixed for ingest-activity/standalone-history
 // applies here too: GET /api/studio/hooks/:id must never open every cycle's
-// events.jsonl. `selectRecentCycles` is the injectable sort+bound seam
-// (mirrors packages/agents/bridge-agents-history-rows.ts's
-// sortEntriesByMtimeDesc extraction) and `scanHookFireSummary` is the
-// bounded-read engine a route wires with real guarded IO and a test wires
-// with COUNTING fakes.
+// events.jsonl. `scanHookFireSummary` is the bounded-read engine a route
+// wires with real guarded IO and a test wires with COUNTING fakes; the
+// sort+bound mechanism it uses (`selectRecentEntries`) moved to
+// `@forge/kernel` (T2's follow-up review) and has its own tests there —
+// `packages/kernel/tests/unit/guarded-scan.test.ts`.
 //
 // WHAT EACH TEST KILLS:
-//  - "selectRecentCycles keeps only the newest `max`" kills an
-//    implementation that returns everything, or slices before sorting.
 //  - "scanHookFireSummary opens at most maxCycles readTail calls" kills an
 //    implementation that still loops the full cycle list for reads even
 //    after bounding the SELECTION — the bound must reach the actual I/O,
@@ -104,21 +102,7 @@ describe('deriveHookFireSummary', () => {
 //    (e.g. off-by-one) would still show the wrong fireCount here.
 // ---------------------------------------------------------------------------
 
-import { selectRecentCycles, scanHookFireSummary, HOOK_FIRE_SCAN_MAX_CYCLES } from '../../studio/hook-fire-summary.ts';
-
-describe('selectRecentCycles', () => {
-  it('keeps only the newest `max` entries, by the injected mtimeOf', () => {
-    const ids = ['a', 'b', 'c', 'd', 'e'];
-    const mtimeOf = (id: string): number => ({ a: 1, b: 5, c: 3, d: 4, e: 2 })[id]!;
-    assert.deepEqual(selectRecentCycles(ids, mtimeOf, 3), ['b', 'd', 'c']);
-  });
-
-  it('max >= entries.length returns everything, still sorted newest-first', () => {
-    const ids = ['old', 'new'];
-    const mtimeOf = (id: string): number => (id === 'new' ? 100 : 1);
-    assert.deepEqual(selectRecentCycles(ids, mtimeOf, 50), ['new', 'old']);
-  });
-});
+import { scanHookFireSummary, HOOK_FIRE_SCAN_MAX_CYCLES } from '../../studio/hook-fire-summary.ts';
 
 describe('scanHookFireSummary (bounded engine)', () => {
   it('opens readTail for at most maxCycles entries, even when far more cycles exist', () => {
