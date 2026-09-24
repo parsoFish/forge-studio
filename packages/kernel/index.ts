@@ -32,6 +32,11 @@ export * from './path-guard.ts';
  *  forge-gp4) — moved down from `agents`/`library` (M7-C) so both rank-3
  *  packages import ONE mechanism instead of each carrying a verbatim copy. */
 export * from './case-folding-probe.ts';
+/** Guarded mtime read + newest-first bound + guarded tail read — the shared
+ *  mechanism for a request-path scan that must not open every entry on disk
+ *  (forge-8vfn.5.16, M7-C U2) — moved down from `library` for the same
+ *  reason `case-folding-probe.ts` was. */
+export * from './guarded-scan.ts';
 
 /** The project-contract report shape the `ProjectGate` port carries (SPEC.md §6). */
 export * from './project-contract.ts';
