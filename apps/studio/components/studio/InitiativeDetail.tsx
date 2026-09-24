@@ -38,6 +38,7 @@ import Link from 'next/link';
 import type { RoadmapWorkItem, RecoveryInspect } from '@/lib/bridge-client';
 import type { TopoLevelResult } from '@/lib/dep-layout';
 import { isRecoverableStatus, type AttemptInfo } from '@/lib/recovery-attrs';
+import { COST_TERMINAL_CYCLE_STATUSES } from '@/lib/cycle-cost-cache';
 import { disabledAttrs } from '@/lib/disabled-reason';
 import type { DevelopCardState, PlanCardState } from './RoadmapCanvas';
 import { EnqueueOutcomeLine } from './EnqueueOutcomeLine';
@@ -54,7 +55,13 @@ export type InitiativeDetailProps = {
   blockedBy: string[];
   unplanned: boolean;
   wiLevels: TopoLevelResult<RoadmapWorkItem> | null;
-  /** Active cycle first (index 0), then every prior (completed) attempt. */
+  /**
+   * The MOST RECENT attempt first (index 0), then every older attempt.
+   * "Most recent" is not the same claim as "currently running" — index 0 is
+   * only labelled "active run" when `status` (below) is itself non-terminal
+   * (forge-6gv.13.1: an 18-day-old FAILED cycle still sat at index 0 and
+   * read "active run" unconditionally).
+   */
   runCycleIds: string[];
   onOpenDemo?: () => void;
   plan: PlanCardState;
@@ -201,24 +208,37 @@ export function InitiativeDetail({
         </div>
       )}
 
-      {/* R4-13 run dig-in: active + prior (completed) cycles, joined on cycleId. */}
-      {runCycleIds.length > 0 && (
-        <div data-section="initiative-runs" style={{ display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid var(--line)', paddingTop: 8 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>Runs</div>
-          {runCycleIds.map((cycleId, idx) => (
-            <Link
-              key={cycleId}
-              data-run-link
-              data-run-cycle-id={cycleId}
-              data-run-active={idx === 0 ? 'true' : 'false'}
-              href={`/flows/forge-develop/run/${cycleId}`}
-              style={{ fontSize: 11, color: 'var(--c-dev, #4ca3f5)', textDecoration: 'underline' }}
-            >
-              {idx === 0 ? 'active run' : 'prior run'} · {cycleId} →
-            </Link>
-          ))}
-        </div>
-      )}
+      {/* R4-13 run dig-in: active + prior (completed) cycles, joined on cycleId.
+          forge-6gv.13.1: index 0 is the MOST RECENT attempt, not necessarily
+          a CURRENTLY RUNNING one — `status` is the same cycle's own status
+          (RoadmapInitiative/Cycle share one vocabulary), so a terminal
+          status there (reusing this repo's existing merged/done/failed SSOT,
+          lib/cycle-cost-cache.ts — "no further spend" and "no longer active"
+          are the same fact) reads "last run" instead of a lie. */}
+      {runCycleIds.length > 0 && (() => {
+        const newestIsActive = !COST_TERMINAL_CYCLE_STATUSES.has(status);
+        return (
+          <div data-section="initiative-runs" style={{ display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid var(--line)', paddingTop: 8 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>Runs</div>
+            {runCycleIds.map((cycleId, idx) => {
+              const isActive = idx === 0 && newestIsActive;
+              const label = isActive ? 'active run' : idx === 0 ? 'last run' : 'prior run';
+              return (
+                <Link
+                  key={cycleId}
+                  data-run-link
+                  data-run-cycle-id={cycleId}
+                  data-run-active={isActive ? 'true' : 'false'}
+                  href={`/flows/forge-develop/run/${cycleId}`}
+                  style={{ fontSize: 11, color: 'var(--c-dev, #4ca3f5)', textDecoration: 'underline' }}
+                >
+                  {label} · {cycleId} →
+                </Link>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {onOpenDemo && (
         <button

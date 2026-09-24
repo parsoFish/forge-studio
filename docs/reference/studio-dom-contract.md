@@ -2977,10 +2977,15 @@ is what this contract reads — but it cannot be the only distinguisher.
   unreachable to a beat, and S10 beats 9–21 all failed on "no real-nav path to
   the run page". Pressing it opens the drawer for that initiative; the drawer's
   run links are `[data-run-link][data-run-cycle-id][data-run-active]` with
-  `href="/flows/forge-develop/run/<cycleId>"`. **`data-run-active="true"` means
-  NEWEST, not running** (`cycle-grouping.ts:48-62` sorts by cycle id and takes
-  the head; it is not a liveness check) — and the route is keyed by CYCLE id,
-  never by initiative id.
+  `href="/flows/forge-develop/run/<cycleId>"`. `cycle-grouping.ts:48-62` sorts
+  by cycle id and takes the head as the "active" cycle, which is NEWEST, not
+  a liveness check on its own — **forge-6gv.13.1:** `data-run-active="true"`
+  (and the "active run" label; index 0 otherwise reads "last run") therefore
+  also requires the initiative's own `status` to be NON-terminal (reusing
+  `lib/cycle-cost-cache.ts`'s `COST_TERMINAL_CYCLE_STATUSES` — merged/done/
+  failed), so a newest cycle that has already concluded (an old failed or
+  done attempt) is never mislabelled "active run" — and the route is keyed by
+  CYCLE id, never by initiative id.
 
   **REFRESH SEMANTICS — the roadmap is LIVE (`forge-8vfn.7.6.27`).** The page
   subscribes to the bridge socket and re-reads on `cycle-list-changed` (every

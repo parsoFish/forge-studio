@@ -274,12 +274,19 @@ test('[W6-RV-2] AT4: a [data-dep-jump] chip is keyboard-reachable (role=button, 
   expect(chip).toContain('tabindex="0"');
 });
 
-test('[W6-RV-2] AT4: the drawer carries the run dig-in (active + prior cycles) for a node with runs', () => {
+test('[W6-RV-2] AT4: the drawer carries the run dig-in (most-recent + prior cycles) for a node with runs', () => {
+  // forge-6gv.13.1: INIT-A's status is 'done' (a terminal status, see
+  // buildRoadmap() above) — its most recent cycle (`c-active`, despite the
+  // fixture's own id) is therefore a CONCLUDED run, not a currently-running
+  // one, and must read "last run" / data-run-active="false", never "active
+  // run" for a done initiative. `c-old` (an OLDER attempt) stays
+  // "prior run" regardless.
   const html = render({ initialSelectedId: 'INIT-A' });
   expect(html).toContain('data-run-cycle-id="c-active"');
-  expect(html).toContain('data-run-active="true"');
-  expect(html).toContain('data-run-cycle-id="c-old"');
   expect(html).toContain('data-run-active="false"');
+  expect(html).toContain('last run');
+  expect(html).toContain('data-run-cycle-id="c-old"');
+  expect(html).toContain('prior run');
 });
 
 // ---------------------------------------------------------------------------
