@@ -203,8 +203,9 @@ export function compareBoundary(baseline, current, options = {}) {
       const entry = { type: 'pr-state-changed', prNumber, before, after };
       // Scoped-judgment rule (ruling 1263): only the run's own branches are
       // judged; a sibling lane's PR moving in the same window is context.
-      const headRefName = after?.headRefName ?? before?.headRefName;
-      if (isJudgedHeadRef(headRefName)) {
+      // Judged when EITHER side is a product ref: a product PR re-pointed to
+      // a lane-shaped ref must not launder itself into context.
+      if (isJudgedHeadRef(before?.headRefName) || isJudgedHeadRef(after?.headRefName)) {
         violations.push(entry);
       } else {
         context.push(entry);
