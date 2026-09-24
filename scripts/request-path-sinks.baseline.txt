@@ -393,8 +393,6 @@ packages/knowledge/bridge-studio-kb-routes-maintenance.ts mkdirSync 2
 packages/knowledge/bridge-studio-kb-routes-maintenance.ts openSync 1
 packages/knowledge/bridge-studio-kb-routes-maintenance.ts readFileSync 1
 packages/knowledge/bridge-studio-kb-routes-maintenance.ts spawn 1
-packages/knowledge/bridge-studio-kb-routes-read.ts existsSync 1
-packages/knowledge/bridge-studio-kb-routes-read.ts readdirSync 1
 packages/knowledge/bridge-studio-kbs.ts existsSync 2
 packages/knowledge/bridge-studio-kbs.ts mkdirSync 2
 packages/knowledge/bridge-studio-kbs.ts readdirSync 2
