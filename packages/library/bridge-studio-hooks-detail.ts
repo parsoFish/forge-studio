@@ -21,8 +21,9 @@ import { writeFileSync } from 'node:fs';
 import { resolveGuardedPath } from '@forge/kernel';
 import yaml from 'js-yaml';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext, type RouteContext } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, listCycles, guardedReadFile, type StudioContext, type RouteContext, type EventLogEntry } from '@forge/kernel';
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
+import { deriveHookFireSummary } from './studio/hook-fire-summary.ts';
 import {
   hooksDir,
   listHookLibrary,
@@ -208,10 +209,32 @@ export async function handleHookDetail(req: IncomingMessage, res: ServerResponse
       const runState = hookRunState(ctx.forgeRoot, id);
       const ledgerEntry = readHookApprovalLedger(ctx.forgeRoot).get(id);
       const declinedEntry = readHookDeclinedLedger(ctx.forgeRoot).get(id);
+      // forge-8vfn.5.16 (M7-C U2) — last-fire facts. Mirrors the ingest-
+      // activity route's own scan (packages/knowledge/bridge-studio-kb-
+      // routes-maintenance.ts): every cycle's events.jsonl, read through the
+      // SAME guarded primitive, cycleId never folded into the path. The
+      // folding itself (latest-wins, full count, null when never fired) is
+      // `deriveHookFireSummary`'s job, not this route's.
+      const fireEvents: EventLogEntry[] = [];
+      for (const cycleId of listCycles(ctx.logsRoot)) {
+        const raw = guardedReadFile(ctx.logsRoot, [cycleId, 'events.jsonl']);
+        if (raw === null) continue;
+        for (const line of raw.split('\n')) {
+          if (!line.trim()) continue;
+          try { fireEvents.push(JSON.parse(line) as EventLogEntry); } catch { continue; }
+        }
+      }
+      const fireSummary = deriveHookFireSummary(fireEvents, id);
 
       sendJson(res, 200, {
         ok: true,
         ...hookWireFields(entry, runState, ledgerEntry, declinedEntry),
+        // fireCount is always present (0 = "scanned, found none", the same
+        // idiom data-hook-carried-by-count already uses); lastFireAt/
+        // lastFireOutcome stay ABSENT — never fabricated — for a hook that
+        // has never fired.
+        fireCount: fireSummary?.fireCount ?? 0,
+        ...(fireSummary ? { lastFireAt: fireSummary.lastFireAt, lastFireOutcome: fireSummary.lastFireOutcome } : {}),
         // W7-B4 (library-09): the approval RECORD the resolved-state panel
         // renders — approvedAt + the distinct overridden act + its reason.
         // Present iff a live ledger entry exists; never fabricated.

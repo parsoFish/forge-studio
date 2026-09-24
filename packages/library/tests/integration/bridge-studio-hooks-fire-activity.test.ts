@@ -39,10 +39,20 @@ import { fixtureFlowSource } from '../test-fixtures/flow-fixture.ts';
 import { inertAuthoringSession } from '../test-fixtures/authoring-session-fixture.ts';
 
 let forgeRoot: string;
+let routes: ReturnType<typeof libraryRoutes>;
 
 before(() => {
   forgeRoot = mkdtempSync(join(tmpdir(), 'bridge-hooks-fire-activity-'));
   mkdirSync(join(forgeRoot, '_logs'), { recursive: true });
+  // Built AFTER forgeRoot exists — fixtureAgentFacts closes over the value at
+  // call time, so building this before `before()` ran would bind it to an
+  // unassigned root forever.
+  routes = libraryRoutes({
+    agentFacts: fixtureAgentFacts(forgeRoot),
+    isSdkAvailable: () => false,
+    flowSource: fixtureFlowSource,
+    authoringSession: inertAuthoringSession,
+  });
 });
 
 after(() => {
@@ -75,13 +85,6 @@ function recordFire(cycleId: string, hookId: string, outcome: string, startedAt:
     metadata: { hookId, event: 'SessionEnd', outcome, exitCode: outcome === 'ran' ? 0 : null, durationMs: outcome === 'ran' ? 42 : null },
   });
 }
-
-const routes = libraryRoutes({
-  agentFacts: fixtureAgentFacts(forgeRoot),
-  isSdkAvailable: () => false,
-  flowSource: fixtureFlowSource,
-  authoringSession: inertAuthoringSession,
-});
 
 function mockRes(): { res: ServerResponse; body: () => Record<string, unknown> } {
   let payload = '{}';
