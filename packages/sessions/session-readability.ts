@@ -45,7 +45,7 @@
  * so no caller can use this module as an existence oracle outside `logsRoot`.
  */
 
-import { readFileSync } from 'node:fs';
+import { closeSync, openSync, readFileSync, readSync, statSync } from 'node:fs';
 
 import { deriveSessionCostUsd, resolveGuardedPath } from '@forge/kernel';
 
@@ -97,6 +97,44 @@ export function parseGuardedEventsJsonl(root: string, entryName: string): Record
     .trim().split('\n').filter(Boolean)
     .map((l) => { try { return JSON.parse(l) as Record<string, unknown>; } catch { return null; } })
     .filter((e): e is Record<string, unknown> => e !== null);
+}
+
+/** M7-C (forge-omk0/forge-aug) — the cheapest reliable identity signal a
+ *  standalone run's log carries: its FIRST event, which every dispatch route
+ *  writes (as a t0 marker) before anything else, carrying the true slug in
+ *  `metadata.agent_slug` and/or top-level `skill` — the same two fields
+ *  `standaloneRunMatchesSlug` checks across a run's WHOLE array. A bounded
+ *  HEAD read (never the whole file): same guard as `parseGuardedEventsJsonl`
+ *  above, then a bounded positional read off the guard's own realPath —
+ *  mirrors `guardedReadFileTail`'s (bridge-studio-lifecycle.ts) tail-read
+ *  shape, just from offset 0 instead of `size - maxBytes`.
+ *
+ *  `null` covers "no events yet", "guard rejected", AND "the first line does
+ *  not fit inside `maxBytes`" — every caller MUST treat `null` as
+ *  INDETERMINATE, never as a definite non-match, and fall through to a full
+ *  `parseGuardedEventsJsonl` read. Only an actually-parsed event is a strong
+ *  enough signal to skip that full read. */
+export function parseGuardedFirstEvent(root: string, entryName: string, maxBytes = 4096): Record<string, unknown> | null {
+  const guarded = resolveGuardedPath(root, [entryName, 'events.jsonl']);
+  if (!guarded.ok || !guarded.exists) return null;
+  let fd: number | null = null;
+  try {
+    // guard-terminal: `guarded.realPath` IS the guard's own output.
+    const size = statSync(guarded.realPath).size;
+    const length = Math.min(size, maxBytes);
+    if (length === 0) return null;
+    fd = openSync(guarded.realPath, 'r');
+    const buf = Buffer.alloc(length);
+    readSync(fd, buf, 0, length, 0);
+    const head = buf.toString('utf8');
+    const newlineAt = head.indexOf('\n');
+    const line = newlineAt === -1 ? (length < size ? null : head) : head.slice(0, newlineAt);
+    return line === null || line.trim() === '' ? null : (JSON.parse(line.trim()) as Record<string, unknown>);
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) { try { closeSync(fd); } catch { /* best-effort close */ } }
+  }
 }
 
 /** The one `metadata` accessor these two derivations share: the event's own
