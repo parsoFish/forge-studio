@@ -47,6 +47,33 @@ export function cycleArchiveRelPath(cycleId: string): string {
   return `brain/cycles/_raw/${cycleId}.md`;
 }
 
+/**
+ * The ONE kbId-from-path regex (forge-8vfn.8.3.5 / M7-C ABR). Matches a
+ * `brain/` path SEGMENT — at the start of the string or after a `/`, so both
+ * a repo-relative path (`brain/cycles/themes/x.md`, the PM's
+ * `readPmBrainContext` shape) and an absolute one (an architect tool call's
+ * `file_path`, since the architect's SDK session runs with `cwd` set to the
+ * PROJECT repo, not forgeRoot — brain/ paths it Reads are absolute) resolve
+ * to the same kbId. Optional `projects/` covers Brain 3 (`brain/projects/<id>/`).
+ *
+ * forge-8vfn.5.16 (M7-C U2) inlined an anchored ('^brain/...') copy of this
+ * regex in `packages/factory/phases/project-manager.ts` before this helper
+ * existed; that copy's input is always repo-relative so this superset regex
+ * matches it identically. U2 should repoint at this export on merge rather
+ * than carry a second definition (see this bead's report).
+ */
+const BRAIN_KB_ID_RE = /(?:^|\/)brain\/(?:projects\/)?([^/]+)\//;
+
+/**
+ * Derive the kbId a brain-rooted path belongs to, or `null` when `path` names
+ * no brain/ segment at all (an ordinary project-repo path, the common case for
+ * every OTHER file a turn reads). Never throws — a malformed/empty `path`
+ * simply fails to match.
+ */
+export function deriveKbIdFromBrainPath(path: string): string | null {
+  return BRAIN_KB_ID_RE.exec(path)?.[1] ?? null;
+}
+
 // Brain 3 (project) dirs — kernel owns these now (M4 ruling 18); this
 // re-export keeps this module the one brain-path door (ADR 035).
 export { projectBrainDir, projectThemesDir } from '@forge/kernel';

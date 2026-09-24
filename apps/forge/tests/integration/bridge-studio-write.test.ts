@@ -75,7 +75,9 @@ function makeAgentSkillMd(): string {
     'allowed-tools:',
     '  - Read',
     '  - Edit',
-    'disallowed-tools: []',
+    // forge-q4sz: PUT now 400s an unfenced save, so this shared fixture
+    // must start fenced (the one test proving body-over-inherit forces []).
+    'disallowed-tools: [Task, Agent]',
     'budgets:',
     '  iterationCap: 3',
     '---',
@@ -125,6 +127,8 @@ function makePutAgentBody(overrides: Record<string, unknown> = {}): Record<strin
       strategy: 'fixed',
       model: 'claude-sonnet-4-5',
     },
+    // forge-q4sz: a fenced default (overrides below win via the spread).
+    disallowedTools: ['Task', 'Agent'],
     ...overrides,
   };
 }
@@ -262,10 +266,10 @@ test('PUT /api/studio/agents/new-fenced-agent (create:true) with disallowedTools
 });
 
 test('PUT /api/studio/agents/write-agent explicit disallowedTools in body is READ (not just coincidentally matched to existing)', async () => {
-  // On-disk starts with an EMPTY fence; the body explicitly declares one.
-  // If the bridge were still ignoring the body (falling back to `existing`
-  // unconditionally, the pre-fix behaviour), this would stay [].
-  writeFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), makeAgentSkillMd());
+  // On-disk starts with an EMPTY fence, overriding the fixture's fenced
+  // default (forge-q4sz) — the body explicitly declares one instead.
+  const unfenced = makeAgentSkillMd().replace('disallowed-tools: [Task, Agent]', 'disallowed-tools: []');
+  writeFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), unfenced);
 
   const res = await putJson(
     `${bridgeUrl}/api/studio/agents/write-agent`,
@@ -279,12 +283,8 @@ test('PUT /api/studio/agents/write-agent explicit disallowedTools in body is REA
 });
 
 test('PUT /api/studio/agents/write-agent — the exact load → edit unrelated field → save round trip preserves a fence already on disk', async () => {
-  // Reset to a fixture that actually carries a fence, so this test can
-  // distinguish "preserved" from "coincidentally empty on both sides".
-  writeFileSync(
-    join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'),
-    makeAgentSkillMd().replace('disallowed-tools: []', 'disallowed-tools:\n  - Task\n  - Agent'),
-  );
+  // The shared fixture already carries a fence by default (makeAgentSkillMd).
+  writeFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), makeAgentSkillMd());
 
   // The exact builder flow: load (disallowedTools: [Task, Agent] arrives via
   // GET), edit something UNRELATED (purpose, via makePutAgentBody's default
@@ -702,7 +702,7 @@ function makeFanoutAgentSkillMd(): string {
     '  perItemGate: item-declared',
     'allowed-tools:',
     '  - Read',
-    'disallowed-tools: []',
+    'disallowed-tools: [Task, Agent]',
     'budgets: {}',
     '---',
     '',
@@ -1021,7 +1021,7 @@ function makeHookedAgentSkillMd(): string {
     'interactivity: none',
     'allowed-tools:',
     '  - Read',
-    'disallowed-tools: []',
+    'disallowed-tools: [Task, Agent]',
     'budgets: {}',
     '---',
     '',

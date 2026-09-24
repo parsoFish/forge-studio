@@ -66,13 +66,18 @@ function lanes(args: string[], env: Record<string, string> = {}, timeoutMs = 300
     env: {
       ...envWithoutLanesVars(),
       LANES_SESSION_PREFIX: PREFIX,
-      LANES_CONFIRM_TIMEOUT_S: '6',
+      // A TEST ARTEFACT, not a product bound — the product default is 60s (see lanes.sh's own
+      // header). Chosen only to keep the failure-path tests (the ones that let this expire on
+      // purpose) fast. Register row "lanes.test.ts:528": under load, a real tmux+bash+python3
+      // registration can outrun a too-tight artefact value, so this is wide enough to absorb
+      // realistic startup latency while staying far below the real 60s default.
+      LANES_CONFIRM_TIMEOUT_S: '15',
       // Pinned so the memory floor cannot turn every launch test into a reading of whatever the
       // host had free at the time — the same reason envWithoutLanesVars() exists.
       LANES_MEMINFO: meminfo(9 * 1024 * 1024),
       LANES_ROSTER_CMD: rosterCmd,
       LANES_CWD: repo,
-      LANES_WORKTREE_ROOT: join(dir, 'wt'),
+      LANES_WORKTREE_ROOT: join(dir, 'wt'), LANES_PROC_ROOT: join(dir, 'no-proc'), LANES_DNS_CMD: 'true', LANES_CLAUDE_JSON: join(dir, 'no-claude.json'), // nonexistent-but-guarded: no test scans real /proc, DNS, or ~/.claude.json
       ...env,
     },
   });
@@ -141,7 +146,7 @@ echo $! > '${join(dir, `${name}.detachedpid`)}'
   return writeExec(
     name,
     `#!/usr/bin/env bash
-printf '%s\\0' "$@" > '${argvFile}'
+if [ "$1" = --version ]; then echo '0.0.0 (test)'; exit 0; fi; printf '%s\\0' "$@" > '${argvFile}' # row 40
 printenv > '${join(dir, `${name}.env`)}'
 SESS=""; while [ $# -gt 0 ]; do [ "$1" = -n ] && SESS="$2"; shift; done
 export SESS ROSTER='${rosterFile}'
@@ -175,7 +180,14 @@ function plant(name: string, cwd: string) {
 function alive(pid: number) {
   return existsSync(`/proc/${pid}`);
 }
-function waitGone(pid: number, ms = 12000) {
+/**
+ * Register row F3 (`scripts/lanes.test.ts:311`). Retiring a pid is now confirmed SYNCHRONOUSLY
+ * inside `lanes.sh` itself — `retire_pid()` polls for the actual exit (see its own comment) —
+ * so by the time the `lanes()` call this wraps has returned, the pid is normally already gone
+ * and this loop exits on its first check. The 20s ceiling is a safety net, not the mechanism:
+ * generous on purpose, so it is never the thing a load-sensitive test is really measuring.
+ */
+function waitGone(pid: number, ms = 20000) {
   const deadline = performance.now() + ms; // monotonic — forge-8vfn.7.6.50
   while (performance.now() < deadline && alive(pid)) spawnSync('sleep', ['0.2']);
   return !alive(pid);
@@ -319,7 +331,13 @@ describe('lanes.sh launch — confirmed by the roster, never by the pane', () =>
     writeFileSync(prompt, kickoff('never consumed'));
     const before = readFileSync(join(camp, 'heartbeat', 'ACTIVE'), 'utf8');
 
-    const r = lanes(['launch', camp, lane, prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin });
+    // A generous explicit timeout: this path pays the full confirm window (register row F3
+    // widened it to 15s, see `lanes()`'s LANES_CONFIRM_TIMEOUT_S) PLUS retire_pid's own two
+    // bounded exit-polls (up to 10s TERM + 10s KILL, register row F3) PLUS die_launch's bounded
+    // re-census — comfortably over the 30s default under real load, and the outer spawnSync
+    // timeout killing the script mid-retirement would be a worse, less diagnosable failure than
+    // this test simply taking longer.
+    const r = lanes(['launch', camp, lane, prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin }, 90000);
     const stray = detachedPid('lane-deaf');
 
     assert.notEqual(r.status, 0, 'launch must exit non-zero when the lane cannot be confirmed');

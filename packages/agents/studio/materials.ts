@@ -29,11 +29,11 @@
  */
 
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { MATERIAL_KINDS, type MaterialKind } from '@forge/contracts';
 
-/** The closed, frozen materials vocabulary. Order is significant (surfaced
- *  verbatim in builder UI pickers and lint messages) — do not re-sort. */
-export const MATERIAL_KINDS = Object.freeze(['images', 'documents', 'audio', 'data-files'] as const);
-export type MaterialKind = (typeof MATERIAL_KINDS)[number];
+// The closed, frozen materials vocabulary now lives in @forge/contracts
+// (forge-ni3), re-exported so this package's importers need no change.
+export { MATERIAL_KINDS, type MaterialKind };
 
 /** Hard cap on the length of a `materials:` array. The vocabulary has only
  *  `MATERIAL_KINDS.length` members, so a list longer than that is ALWAYS a

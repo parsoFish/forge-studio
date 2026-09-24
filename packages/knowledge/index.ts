@@ -31,6 +31,7 @@ export {
   cycleArchiveRelPath,
   cyclesRawDir,
   cyclesThemesDir,
+  deriveKbIdFromBrainPath,
   projectBrainDir,
   projectThemesDir,
   readArtifactRoot,
@@ -57,6 +58,12 @@ export {
   computeAgentCleanupFindings,
   loadKbDescriptors,
 } from './bridge-studio-kbs.ts';
+// The seam itself (SPEC.md §4, ADR 018): every per-KB read and write goes
+// through `KbBackend`. M7-C KN1 — `@forge/sessions` is this seam's first
+// cross-package consumer, which is what makes it a public-door export rather
+// than an internal one; `getKbBackend`'s throwing twin is not added until a
+// caller actually needs it (index.ts's own "measured, not everything" rule).
+export { tryGetKbBackend, type KbBackend } from './kb-backend.ts';
 export { activeJobReason, deriveKbActiveJob } from './kb-job-state.ts';
 export { runPostReflectionKbHealth } from './kb-health.ts';
 export { guardAgentKbEdits, snapshotBrainTree } from './kb-drain-edit-soundness.ts';

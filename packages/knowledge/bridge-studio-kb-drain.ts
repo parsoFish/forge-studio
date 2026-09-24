@@ -80,10 +80,10 @@
  */
 
 import { basename, join } from 'node:path';
-import { resolveKbBrainDir } from './brain-paths.ts';
+import { tryGetKbBackend } from './kb-backend.ts';
 import { createLogger, sanitizeError } from '@forge/kernel';
 import { applyAutoFixesUntilStable, resolutionCounts, type Finding } from './brain-lint.ts';
-import { collectKbFindings, findingUnderDir, runBrainLintFullFresh } from './kb-lint-summary.ts';
+import { collectKbFindings, runBrainLintFullFresh } from './kb-lint-summary.ts';
 import { diffKbSnapshot, type KbEditChange } from './kb-drain-structural.ts';
 import type { KbDrainFixTurnInput, KbDrainFixTurnResult, KbDrainRunFixTurnFn, SessionStatusIoPort } from './kb-drain-model.ts';
 import {
@@ -98,9 +98,6 @@ import {
   DEFAULT_KB_DRAIN_MAX_COST_USD,
   KB_DRAIN_HEARTBEAT_MS,
   KB_DRAIN_MAX_ROUNDS,
-  autoAppliedEntry,
-  autoSkippedEntry,
-  autoUnattributedEntry,
   buildAutoProposedChanges,
   buildProposedChanges,
   finalizeRoundRows,
@@ -108,10 +105,10 @@ import {
   pendingRows,
   progressKeySet,
   setsEqual,
+  shapeAutoPassRoundRows,
   type KbDrainApplyAutoFixesFn,
   type KbDrainLintFn,
   type KbDrainPerFinding,
-  type KbDrainRoundRow,
   type KbDrainState,
   type KbDrainStatus,
 } from './kb-drain-model.ts';
@@ -401,18 +398,25 @@ export async function runKbDrain(
       heartbeat.unref?.();
     }
 
-    const brainDir = resolveKbBrainDir(forgeRoot, kbId);
-    if (!brainDir) {
+    // M7-C KN1 (bead forge-8vfn.5.25.3) — resolved through the KbBackend seam
+    // (`tryGetKbBackend`), not `resolveKbBrainDir` directly; `inKb` below is
+    // the backend's own `contains()`, the same per-KB scoping question every
+    // other caller of it asks. `brainDir` (the raw root) is still needed
+    // as-is further down for `mintKbCleanupDraftSession`'s descriptor lookup
+    // — `rootDir()` is the seam's one deliberate raw-path exception.
+    const backend = tryGetKbBackend(forgeRoot, kbId);
+    const brainDir = backend?.rootDir() ?? null;
+    if (!backend || !brainDir) {
       throw new Error(`runKbDrain: kb id "${kbId}" does not resolve to any real brain directory`);
     }
     // W8-F1 — TWO scopes, and the difference is the whole S1-b defect. The
     // agent runs with `cwd = forgeRoot`, so what it CAN write is the whole
-    // brain (`brainRoot`); what it MAY write is this KB (`brainDir`). The gate
-    // snapshots the former and permits only the latter. Snapshotting the KB
-    // alone — what this did before — meant an edit one directory over was
+    // brain (`brainRoot`); what it MAY write is this KB (`inKb`, below). The
+    // gate snapshots the former and permits only the latter. Snapshotting the
+    // KB alone — what this did before — meant an edit one directory over was
     // never even seen.
     const brainRoot = brainRootDir(forgeRoot);
-    const inKb = (f: Finding): boolean => findingUnderDir(forgeRoot, brainDir, f);
+    const inKb = (f: Finding): boolean => backend.contains(f.file);
     // W7-B2 (knowledge-10): ONE lint lens — the same one buildKbHealth counts
     // from, so the drain can never report green while the health readout on
     // the same screen still counts flags.
@@ -474,26 +478,22 @@ export async function runKbDrain(
       const autoSnapshot = snapshotBrainTree(forgeRoot);
       const autoResult = applyAutoFixes(forgeRoot, { filter: inKb });
       const autoProposals = buildAutoProposedChanges(forgeRoot, brainRoot, diffKbSnapshot(brainRoot, autoSnapshot));
-      const autoRows = autoResult.applied.map((x) => autoAppliedEntry(x, round, autoProposals));
       // W8-F1 review round 2 — a mutation NO row claims is a mutation the
-      // operator never sees. `autoAppliedEntry` attributes by path, which is
-      // as precise as the fixers' flat `applied` list allows, but it is not
-      // total: `category.mis-routed` reports `{file: <source>, detail: 'moved
-      // to …'}`, so neither the CREATED file's diff nor the index rewrite that
-      // follows it matches either clause. Those diffs used to be dropped on
-      // the floor. They are collected here instead, on their own row, rather
-      // than attributed to a finding that did not cause them.
-      const claimed = new Set(autoRows.flatMap((r) => (r.proposedChanges ?? []).map((p) => p.file)));
-      const unclaimed = autoProposals.filter((p) => !claimed.has(p.file));
-      const roundRows: KbDrainRoundRow[] = [
-        ...autoRows,
-        ...(unclaimed.length > 0 ? [autoUnattributedEntry(unclaimed, round)] : []),
-        ...autoResult.skipped.map((x) => autoSkippedEntry(x, round)),
-      ];
+      // operator never sees; `autoAppliedEntry` (inside `shapeAutoPassRoundRows`)
+      // attributes by path, which is as precise as the fixers' flat `applied`
+      // list allows, but it is not total: `category.mis-routed` reports
+      // `{file: <source>, detail: 'moved to …'}`, so neither the CREATED
+      // file's diff nor the index rewrite that follows it matches either
+      // clause — those go on their own unattributed row instead of being
+      // dropped. knowledge-48: `inProgressCounts` is the round's REAL
+      // post-auto-fix backlog (`kb-drain-model.ts`'s own doc comment has the
+      // full incident) — every persist until this round's own re-lint
+      // (`after`, below) uses it, never the stale `status.counts`.
+      const { roundRows, inProgressCounts } = shapeAutoPassRoundRows(autoResult, autoProposals, round);
       emitProgress(`kb-drain.auto (applied ${autoResult.applied.length}, skipped ${autoResult.skipped.length})`, {
         round, applied: autoResult.applied.length, skipped: autoResult.skipped.length,
       });
-      status = persist({ ...base, state: 'running', round, counts: status.counts, perFinding: [...completed, ...pendingRows(roundRows)], costUsd, updatedAt: now() });
+      status = persist({ ...base, state: 'running', round, counts: inProgressCounts, perFinding: [...completed, ...pendingRows(roundRows)], costUsd, updatedAt: now() });
 
       const agentResidual = autoResult.remaining.filter(
         (f): f is Finding & { check: string; kind: string } =>
@@ -653,7 +653,13 @@ export async function runKbDrain(
         emitProgress(`kb-drain.turn-end (${basename(f.file)} · $${costUsd.toFixed(2)})`, {
           round, file: f.file, check: f.check, costUsd,
         });
-        status = persist({ ...base, state: 'running', round, counts: status.counts, perFinding: [...completed, ...pendingRows(roundRows)], costUsd, updatedAt: now() });
+        // knowledge-48: same real, non-stale backlog as the auto-pass
+        // persist above — a turn's own self-report is untrusted (this
+        // file's own established rule, see the comment above `runFixTurn`'s
+        // call), so this does NOT decrement per turn; it just stops
+        // re-showing the round's PRE-auto-fix (or previous-round) number for
+        // every turn in between.
+        status = persist({ ...base, state: 'running', round, counts: inProgressCounts, perFinding: [...completed, ...pendingRows(roundRows)], costUsd, updatedAt: now() });
         if (costUsd >= maxCostUsd) {
           costCeilingHit = true;
           break;

@@ -235,6 +235,40 @@ function sweepStagingLeftovers(root: string, id: string): void {
   }
 }
 
+/** forge-9fp: `sweepStagingLeftovers` above is scoped to THIS create's own id,
+ *  so a `.staging-<id>-*` orphan left by a DIFFERENT id's crashed create is
+ *  only ever swept if that other id happens to be recreated — otherwise it
+ *  accumulates on disk invisibly forever (every project/brain listing filters
+ *  dot-prefixed dirs). No boot-time sweep exists, so run this opportunistically
+ *  on every create instead: sweep every OTHER id's `.staging-*` leftover too,
+ *  but ONLY past `STALE_STAGING_AGE_MS` — old enough that no real create is
+ *  still legitimately mid-staging (SEC-05 4on: staging + rename is seconds,
+ *  not minutes), so a concurrent create's own live staging dir is never
+ *  touched by construction, not by a lock. */
+const STALE_STAGING_AGE_MS = 60 * 60 * 1000; // 1 hour
+
+function sweepStaleCrossIdStagingLeftovers(root: string): void {
+  let entries;
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    return; // root absent — nothing to sweep
+  }
+  const cutoff = Date.now() - STALE_STAGING_AGE_MS;
+  for (const e of entries) {
+    if (!e.isDirectory() || !e.name.startsWith('.staging-')) continue;
+    const full = resolve(root, e.name);
+    let stat;
+    try {
+      stat = lstatSync(full);
+    } catch {
+      continue; // vanished between readdir and stat — another sweep/create won the race
+    }
+    if (stat.mtimeMs >= cutoff) continue; // recent enough to be a live concurrent create
+    rmSync(full, { recursive: true, force: true });
+  }
+}
+
 /**
  * Scaffold a greenfield project from its template + seed the central brain, then
  * preflight. `hardGreen` is the authoritative "ready for the first architect run"
@@ -368,6 +402,11 @@ export function scaffoldGreenfieldProject(input: {
   //     construction, never confusable with operator data.
   sweepStagingLeftovers(projectsRoot, id);
   sweepStagingLeftovers(brainProjectsRoot, id);
+  // forge-9fp: also opportunistically sweep OTHER ids' stale `.staging-*`
+  // leftovers (age-bounded — see sweepStaleCrossIdStagingLeftovers), since
+  // nothing else in forge sweeps them and they are otherwise invisible.
+  sweepStaleCrossIdStagingLeftovers(projectsRoot);
+  sweepStaleCrossIdStagingLeftovers(brainProjectsRoot);
   let projectEntry = null;
   try { projectEntry = lstatSync(projectDir); } catch { /* absent — the create path */ }
   if (projectEntry !== null) {

@@ -6,13 +6,18 @@
  * other kinds adopt it in two lines (`forge-8vfn.5.5`; the contract doc carries
  * the rule). No id, no element: the link cannot point at a session that was
  * never created.
+ *
+ * `instructions` and `project-brain` joined the union in `forge-8vfn.5.10`
+ * (project-builder's own instructions launcher, KB-brain launcher, and
+ * ContractResolutionPanel's agent-tier `instructions` route — the last of the
+ * still-scattered mint-then-`router.push` sites M1-G didn't sweep).
  */
 export function SessionMinted({
   kind,
   sessionId,
   project,
 }: {
-  kind: 'architect' | 'demo';
+  kind: 'architect' | 'demo' | 'instructions' | 'project-brain';
   sessionId: string | null;
   project?: string;
 }): JSX.Element | null {

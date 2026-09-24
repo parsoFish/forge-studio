@@ -28,7 +28,7 @@ keywords:
   - redraw
 created_at: 2026-05-10T15:30:00.000Z
 updated_at: 2026-05-20T00:00:00.000Z
-related_themes: []
+related_themes: [episodic-not-cumulative-learnings]
 ---
 
 # trafficGame — overlays on the shared paused canvas

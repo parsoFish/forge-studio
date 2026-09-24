@@ -22,6 +22,7 @@
  * tests assert firing without touching the queue or spawning an agent.
  */
 import type { FlowDefinition, FlowTrigger } from '@forge/contracts/studio/types.ts';
+import type { TriggerKindId } from '@forge/contracts';
 import { stageFlowRunRequest, decideTriggerProjectScope } from './flow-run-requests.ts';
 
 /**
@@ -59,6 +60,22 @@ export type { TriggerKindId } from '@forge/contracts';
  */
 export const FLOW_TRIGGER_EVENTS = ['flow-complete', 'merged'] as const;
 export type FlowTriggerEvent = (typeof FLOW_TRIGGER_EVENTS)[number];
+
+/**
+ * The `on:` kinds that resolve via a `webhook:` config block sharing the SAME
+ * `POST /api/hooks/:hookId` receiver (R2-08-F3: `pr-merged` / `issue-raised`
+ * are their OWN `on:` values — ADR-027's amendment — never a sub-event under
+ * `on: webhook`, but they reuse the existing receiver and config shape). ONE
+ * definition — `bridge-hooks.ts` (route resolution) and
+ * `studio/validate-triggers.ts` (webhook-config validation) both import this
+ * rather than hand-declaring their own copy, so the two can never drift
+ * (forge-g99).
+ */
+export const WEBHOOK_FAMILY_KIND_IDS: ReadonlySet<string> = new Set<TriggerKindId>([
+  'webhook',
+  'pr-merged',
+  'issue-raised',
+]);
 
 export type FireFlowTriggersDeps = {
   /**

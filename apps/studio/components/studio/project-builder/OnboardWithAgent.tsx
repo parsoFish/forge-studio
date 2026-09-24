@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { startOnboardingSession, fetchActiveOnboarding, getAgentRunStatus, type AgentRunStatus } from '@/lib/studio-client';
 import { postSessionAffordance } from '@/lib/session-client';
 import { ONBOARDING_BRIEF_QUESTION } from '@/lib/onboarding-brief';
-import { cancelStudioSession } from '@/lib/session-lifecycle-client';
+import { cancelStudioSession, type SessionLifecycle } from '@/lib/session-lifecycle-client';
 import { pollAgentRun, pollDisplayState, type PolledAgentRunStatus } from '@/lib/agent-dispatch';
 
 /**
@@ -53,6 +53,23 @@ export function onboardLaunchState(busy: boolean, runState: string): { disabled:
   return { disabled: false, label: 'Run onboarding agent', reason: null };
 }
 
+/**
+ * forge-6gv.13.1 (projects-42): whether a reattach's raw `phase: 'running'`
+ * means the run is ACTUALLY still live. `phase` alone lied for a LEAKED run
+ * (the dispatch process died with no terminal marker ever written) — this
+ * folds in the server's honestly-derived `lifecycle` companion (the same
+ * canonical staleness rule every session surface applies) before trusting
+ * it. `lifecycle === null` (an older/degraded response, or the route's own
+ * graceful "no lifecycle resolved" fallback) stays live — the honest
+ * unknown, never worse than the pre-fix blind trust. Exported for its
+ * direct render-independent pin, same reason as `onboardLaunchState` above.
+ */
+export function onboardReattachIsLive(phase: string | null, lifecycle: SessionLifecycle | null): boolean {
+  if (phase !== 'running') return false;
+  if (lifecycle === null) return true;
+  return lifecycle.state !== 'stalled' && lifecycle.state !== 'crashed';
+}
+
 export function OnboardWithAgent({ projectId }: { projectId: string }) {
   const [runId, setRunId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -80,15 +97,19 @@ export function OnboardWithAgent({ projectId }: { projectId: string }) {
     setLastRun(null);
     fetchActiveOnboarding(projectId).then(async (r) => {
       if (cancelled) return;
-      if (r.runId && r.phase === 'running') {
+      if (r.runId && onboardReattachIsLive(r.phase, r.lifecycle)) {
         setRunId(r.runId);
         setSessionId(r.sessionId);
         setAttaching(false);
         return;
       }
       if (r.runId) {
-        // Terminal (complete/failed/cancelled) — one status read for the
-        // last-run block (cost, outputRefs, real state).
+        // Terminal (complete/failed/cancelled), OR a LEAKED run — phase
+        // still reads 'running' but the derived lifecycle says otherwise
+        // (forge-6gv.13.1/projects-42) — one status read for the last-run
+        // block; getAgentRunStatus's own standalone staleness derivation
+        // (packages/agents/bridge-agents-run-state.ts) renders the honest
+        // state (e.g. 'stalled'), never a guessed "still running".
         const s = await getAgentRunStatus(r.runId);
         if (cancelled) return;
         setLastRun({ runId: r.runId, sessionId: r.sessionId, status: s });

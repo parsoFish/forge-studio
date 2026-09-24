@@ -33,7 +33,7 @@ merge — not one monolithic pipeline:
 
 ```
 architect ─plan─▶ pm ··(forge-architect flow)··
-pm ─work-items─▶ dev ─branch─▶ demo ─pr─▶ adversarial-review ─findings─▶ review(verdict) ··(forge-develop flow)··
+pm ─work-items─▶ dev ─branch─▶ integrate ─pr─▶ adversarial-review ─findings─▶ review(verdict) ··(forge-develop flow)··
 review ··on: merged··▶ reflector (standalone agent, not a flow node)
 ```
 
@@ -216,11 +216,13 @@ means one wedged work item doesn't block its unrelated siblings.
 
 ## Integrate — deriving the review bundle
 
-*Unattended; an orchestrator verb, not an LLM turn.* **Write `integrate`,
-not `demo`, for this station** (vocabulary ruling 383) — its code identifier
-is `demo`: the flow node id is `demo`, the skill directory is
-`skills/demo-agent/`, and the module is `packages/factory/phases/integrate.ts`.
-Name that mapping once, here, and use `integrate` everywhere else.
+*Unattended; an orchestrator verb, not an LLM turn.* **Write `integrate` for
+this station** (vocabulary ruling 383, executed forge-8vfn.6.10.18) — the flow
+node id, band guard, `resume_from` value, requeue API field and CLI flag are
+all `integrate` now. Two things intentionally kept the word `demo`: the skill
+directory (`skills/demo-agent/`, a name, not the station) and the executor
+(`execIntegrate` in `packages/factory/phases/executor-table.ts`, registered
+against the `demo-agent` skill's declared band). Name that mapping once, here.
 
 Takes the branch the build station finished and turns it into what a
 reviewer reads: a `demo.json` + `DEMO.md` bundle and the PR body. **Nothing

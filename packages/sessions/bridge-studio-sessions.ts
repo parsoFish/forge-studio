@@ -126,7 +126,7 @@ import { readSessionCostUsd } from './session-readability.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { skillPathRelative } from '@forge/library/skill-path.ts';
 import { deriveSessionTranscript, deriveSessionArtifact, safeReadFileInSession, type ParseManifestPort } from './studio/session-transcript.ts';
-import { resolveKbBrainDir } from '@forge/knowledge/brain-paths.ts';
+import { tryGetKbBackend } from '@forge/knowledge';
 import { deriveContractStages } from '@forge/projects/contract-stages.ts';
 import { deriveSessionLifecycleFor } from './bridge-studio-lifecycle.ts';
 import {
@@ -285,10 +285,11 @@ export type FinalizedPointer = { kind: string; id: string; exists: boolean };
 /** Where each finalized `kind` lands its object. The ONE table that answers
  *  "does the thing this session produced still exist" — every entry resolves
  *  through the same `resolveGuardedPath` choke point the rest of this module
- *  uses (or, for a KB, through `resolveKbBrainDir`, the SAME resolver the
- *  cleanup-plan artifact branch above already trusts). An unrecognised kind
- *  is NOT dropped from the wire — it rides through with `exists: false`, and
- *  the panel renders the honest label with no link (never a guessed href). */
+ *  uses (or, for a KB, through `tryGetKbBackend`, the SAME seam the
+ *  cleanup-plan artifact branch below already goes through — M7-C KN1, bead
+ *  forge-8vfn.23). An unrecognised kind is NOT dropped from the wire — it
+ *  rides through with `exists: false`, and the panel renders the honest
+ *  label with no link (never a guessed href). */
 function finalizedObjectExists(
   kind: string,
   id: string,
@@ -309,7 +310,7 @@ function finalizedObjectExists(
     // same way this module hand-copies AWAITING_ANSWERS_PHASE).
     case 'agents-md': return guarded(opts.projectsRoot, [id, 'AGENTS.md']);
     case 'demo': return guarded(opts.projectsRoot, [id, '.forge', 'demo', 'demo.lock.json']);
-    case 'kb': return resolveKbBrainDir(opts.forgeRoot, id) !== null;
+    case 'kb': return tryGetKbBackend(opts.forgeRoot, id) !== null;
     default: return false;
   }
 }
@@ -523,16 +524,21 @@ export async function handleStudioSessionsRoutes(
         }
         // R4-19-F2 fail-safe fix (ORCHESTRATOR RULING) — the scanned-domain
         // signal that makes 'cleared' derivable at all (see session-
-        // transcript.ts's CleanupScan doc). Resolved via the SAME
-        // `resolveKbBrainDir` choke point `computeAgentCleanupFindings`
-        // itself already used, immediately above, to scope the live lint
-        // pass — so `brainDir` names exactly the region that was actually
-        // scanned. A TOCTOU miss (the KB vanishes between the two calls,
+        // transcript.ts's CleanupScan doc). Resolved via the SAME KbBackend
+        // seam `computeAgentCleanupFindings` itself already goes through,
+        // immediately above, to scope the live lint pass — so `brainDir`
+        // names exactly the region that was actually scanned. `rootDir()` is
+        // KbBackend's one deliberate raw-path exception (kb-backend.ts) —
+        // CleanupScan's shape stays `{forgeRoot, brainDir}` (session-
+        // transcript-scan.test.ts pins its escape-shape hardening against
+        // exactly that shape) — only the resolution mechanism moved off
+        // `resolveKbBrainDir` and onto the seam (M7-C KN1, bead forge-
+        // 8vfn.23). A TOCTOU miss (the KB vanishes between the two calls,
         // vanishingly unlikely) degrades to `cleanupScan` omitted, i.e.
         // every unmatched action stays 'unknown' — fail SAFE, never a hard
         // 500 for a signal that is advisory, not load-bearing for the
         // read's own success.
-        const brainDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
+        const brainDir = tryGetKbBackend(ctx.forgeRoot, kbId)?.rootDir() ?? null;
         const cleanupScan = brainDir !== null ? { forgeRoot: ctx.forgeRoot, brainDir } : undefined;
         artifact = deriveSessionArtifact({ descriptor, sessionDir, cleanupFindings, cleanupScan, parseManifest: ctx.parseManifest });
       } else {
