@@ -81,3 +81,79 @@ describe('deriveHookFireSummary', () => {
     assert.equal(summary!.lastFireAt, '2026-09-25T09:00:00.000Z');
   });
 });
+
+// ---------------------------------------------------------------------------
+// T2 review of 95cb287f (forge-8vfn.5.16) — the unbounded request-path scan
+// class #834 (forge-hqkm/omk0) fixed for ingest-activity/standalone-history
+// applies here too: GET /api/studio/hooks/:id must never open every cycle's
+// events.jsonl. `selectRecentCycles` is the injectable sort+bound seam
+// (mirrors packages/agents/bridge-agents-history-rows.ts's
+// sortEntriesByMtimeDesc extraction) and `scanHookFireSummary` is the
+// bounded-read engine a route wires with real guarded IO and a test wires
+// with COUNTING fakes.
+//
+// WHAT EACH TEST KILLS:
+//  - "selectRecentCycles keeps only the newest `max`" kills an
+//    implementation that returns everything, or slices before sorting.
+//  - "scanHookFireSummary opens at most maxCycles readTail calls" kills an
+//    implementation that still loops the full cycle list for reads even
+//    after bounding the SELECTION — the bound must reach the actual I/O,
+//    not just an intermediate array.
+//  - "a fire recorded only in an OUT-OF-WINDOW cycle is invisible" is the
+//    behavioural proof, independent of call-counting: bounded-but-wrong
+//    (e.g. off-by-one) would still show the wrong fireCount here.
+// ---------------------------------------------------------------------------
+
+import { selectRecentCycles, scanHookFireSummary, HOOK_FIRE_SCAN_MAX_CYCLES } from '../../studio/hook-fire-summary.ts';
+
+describe('selectRecentCycles', () => {
+  it('keeps only the newest `max` entries, by the injected mtimeOf', () => {
+    const ids = ['a', 'b', 'c', 'd', 'e'];
+    const mtimeOf = (id: string): number => ({ a: 1, b: 5, c: 3, d: 4, e: 2 })[id]!;
+    assert.deepEqual(selectRecentCycles(ids, mtimeOf, 3), ['b', 'd', 'c']);
+  });
+
+  it('max >= entries.length returns everything, still sorted newest-first', () => {
+    const ids = ['old', 'new'];
+    const mtimeOf = (id: string): number => (id === 'new' ? 100 : 1);
+    assert.deepEqual(selectRecentCycles(ids, mtimeOf, 50), ['new', 'old']);
+  });
+});
+
+describe('scanHookFireSummary (bounded engine)', () => {
+  it('opens readTail for at most maxCycles entries, even when far more cycles exist', () => {
+    const totalCycles = HOOK_FIRE_SCAN_MAX_CYCLES + 25;
+    const ids = Array.from({ length: totalCycles }, (_, i) => `cycle-${i}`);
+    // newest = highest index, by construction
+    const mtimeOf = (id: string): number => Number(id.replace('cycle-', ''));
+    let readTailCalls = 0;
+    const scan = scanHookFireSummary('any-hook', {
+      listCycleIds: () => ids,
+      mtimeOf,
+      readTail: () => {
+        readTailCalls++;
+        return `{"message":"hook.fire","started_at":"2026-01-01T00:00:00.000Z","metadata":{"hookId":"any-hook","outcome":"ran"}}\n`;
+      },
+    });
+    assert.equal(readTailCalls, HOOK_FIRE_SCAN_MAX_CYCLES, `expected exactly ${HOOK_FIRE_SCAN_MAX_CYCLES} readTail calls, got ${readTailCalls} (${totalCycles} cycles existed)`);
+    assert.ok(scan, 'the in-window cycles do carry a real fire');
+    assert.equal(scan!.fireCount, HOOK_FIRE_SCAN_MAX_CYCLES);
+  });
+
+  it('a fire recorded ONLY in an out-of-window (older-than-bound) cycle is invisible — never a false claim of "never fired"', () => {
+    const totalCycles = HOOK_FIRE_SCAN_MAX_CYCLES + 5;
+    const ids = Array.from({ length: totalCycles }, (_, i) => `cycle-${i}`); // cycle-0 is OLDEST
+    const mtimeOf = (id: string): number => Number(id.replace('cycle-', ''));
+    const scan = scanHookFireSummary('target-hook', {
+      listCycleIds: () => ids,
+      // Only the OLDEST cycle (outside the newest-`max` window) carries a
+      // real fire for target-hook; every in-window cycle is empty.
+      mtimeOf,
+      readTail: (id) =>
+        id === 'cycle-0'
+          ? `{"message":"hook.fire","started_at":"2026-01-01T00:00:00.000Z","metadata":{"hookId":"target-hook","outcome":"ran"}}\n`
+          : '',
+    });
+    assert.equal(scan, null, 'a fire outside the scanned window must not be visible — this is the honest cost of bounding, not a bug, but it must be true');
+  });
+});
