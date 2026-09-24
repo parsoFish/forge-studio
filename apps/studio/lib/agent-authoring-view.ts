@@ -23,7 +23,7 @@
  * objects, never mutates its input.
  */
 
-import type { Agent, AgentCapabilityDescriptor, AgentRuntime, AgentFanout } from './studio-client';
+import type { Agent, AgentCapabilityDescriptor, AgentRuntime, AgentFanout, AgentBudgets } from './studio-client';
 // Explicit `.ts` extension (moduleResolution: "bundler" tolerates it, and
 // Next/vitest already resolve `./authoring-package-shape`-style extension-
 // less siblings fine either way) — this is a VALUE import (unlike the
@@ -71,16 +71,23 @@ export type AgentBuilderState = {
    * definition as it will actually be saved (the server preserves it
    * unchanged from `existing` when the PUT body omits it — see
    * `buildAgentPutBody`, which does not send it for exactly that reason).
-   * `description`/`library`/`surface`/`executor`/`budgets` are the SAME
-   * class of field but are NOT carried here: `Agent` (studio-client.ts)
-   * never parsed them off the wire in the first place, and that file is at
-   * its 800-line ratchet ceiling (`scripts/baselines/file-size.json`,
-   * 2540/2540 — `check-file-size.mjs` fails on ANY growth, exempted or not)
-   * — wiring them needs that file split first, which is its own initiative,
-   * not a line this cluster fix can add. Reported as a gap, not silently
-   * dropped.
    */
   fanout?: AgentFanout;
+  /**
+   * agents-15 (forge-6gv.5.1) — the SAME read-only pass-through class as
+   * `fanout` above, reachable now that `Agent` (lib/agent-wire.ts, split out
+   * of studio-client.ts) actually parses them off the wire.
+   * `description`/`surface`/`executor` de-optionalize to `''` the same way
+   * `phase` already does above (a real, absent wire value both collapse to
+   * the same "nothing declared" builder state); `library`/`budgets` stay
+   * optional like `capability`/`fanout` — an object/boolean's ABSENCE is
+   * itself meaningful and must not be coerced into a fabricated default.
+   */
+  description: string;
+  library?: boolean;
+  surface: string;
+  executor: string;
+  budgets?: AgentBudgets;
 };
 
 export const DEFAULT_AGENT_RUNTIME: AgentRuntime = {
@@ -121,6 +128,12 @@ export function parseAgentToState(raw: Agent): AgentBuilderState {
     costCeilingEnforceable: raw.costCeilingEnforceable === true,
     declaredMaxBudgetUsd: raw.declaredMaxBudgetUsd,
     fanout: raw.fanout,
+    // agents-15 (forge-6gv.5.1)
+    description: raw.description ?? '',
+    library: raw.library,
+    surface: raw.surface ?? '',
+    executor: raw.executor ?? '',
+    budgets: raw.budgets,
   };
 }
 
@@ -188,6 +201,14 @@ export function buildAgentPreviewModel(state: AgentBuilderState): Record<string,
     ...buildAgentPutBody(state, { create: false }),
     phase: state.phase,
     fanout: state.fanout,
+    // agents-15 (forge-6gv.5.1): same read-only pass-through treatment as
+    // phase/fanout above — never sent by buildAgentPutBody, but real and
+    // shown here since the server round-trips them unchanged either way.
+    description: state.description,
+    library: state.library,
+    surface: state.surface,
+    executor: state.executor,
+    budgets: state.budgets,
   };
 }
 
@@ -224,6 +245,10 @@ export const EMPTY_STATE: AgentBuilderState = {
   disallowedTools: [],
   phase: '',
   costCeilingEnforceable: false,
+  // agents-15 (forge-6gv.5.1)
+  description: '',
+  surface: '',
+  executor: '',
 };
 
 /**

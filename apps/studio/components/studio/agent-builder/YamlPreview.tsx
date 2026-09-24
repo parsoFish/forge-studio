@@ -1,6 +1,6 @@
 'use client';
 
-import type { Catalog, AgentRuntime, AgentFanout } from '@/lib/studio-client';
+import type { Catalog, AgentRuntime, AgentFanout, AgentBudgets } from '@/lib/studio-client';
 
 // ---------------------------------------------------------------------------
 // YamlPreview — live-rendered preview of the definition as it will be SAVED.
@@ -16,13 +16,14 @@ import type { Catalog, AgentRuntime, AgentFanout } from '@/lib/studio-client';
 // only go missing from the preview by going missing from that ONE model,
 // never by a second hand-copied prop list falling out of sync with it.
 //
-// NOT YET FIXED (reported, not silently dropped): `description`, `library`,
-// `surface`, `executor` and `budgets` are still missing from the preview.
-// `Agent` (lib/studio-client.ts) never parses them off the wire at all, and
-// that file sits at its 800-line file-size ratchet ceiling (2540/2540,
-// `scripts/baselines/file-size.json` — `check-file-size.mjs` fails on ANY
-// growth of a baselined file, exempted or not); wiring those five fields
-// through needs that file split first, which is a separate initiative.
+// agents-15 (forge-6gv.5.1): `description`, `library`, `surface`, `executor`
+// and `budgets` were missing from the preview for the same reason — `Agent`
+// never parsed them off the wire at all. Now that the wire type + parser
+// moved to lib/agent-wire.ts (out of studio-client.ts, which was pinned at
+// its 800-line file-size ratchet ceiling), `buildAgentPreviewModel` carries
+// all five and this component renders them the SAME way as `phase`/`fanout`
+// just above: declared-or-absent, straight off the one model, never a
+// second hand-maintained field list.
 // ---------------------------------------------------------------------------
 
 /** The shape `buildAgentPreviewModel` returns — loosely typed (it is built
@@ -43,6 +44,12 @@ type Definition = {
   brainAccess?: string;
   allowedTools?: string[];
   disallowedTools?: string[];
+  // agents-15 (forge-6gv.5.1)
+  description?: string;
+  library?: boolean;
+  surface?: string;
+  executor?: string;
+  budgets?: AgentBudgets;
 };
 
 type Props = {
@@ -86,6 +93,7 @@ function buildYaml(definition: Definition, catalog: Catalog): string {
   const {
     slug, name, phase, purpose, composition, materials, process, interactivity,
     runtime, fanout, brainAccess, allowedTools, disallowedTools,
+    description, library, surface, executor, budgets,
   } = definition;
   const comp = composition ?? {};
 
@@ -121,6 +129,14 @@ function buildYaml(definition: Definition, catalog: Catalog): string {
   // when actually declared, same "absent is meaningful" discipline the rest
   // of this preview already uses.
   if (phase) lines.push(kv('phase', phase));
+  // agents-15 (forge-6gv.5.1): SKILL.md-authored metadata, same
+  // "declared vs absent" discipline as `phase` just above. `library` is a
+  // real declared boolean (`false` is meaningful, not "absent") so its row
+  // is gated on `!== undefined`, not truthiness.
+  if (description) lines.push(kv('description', description));
+  if (library !== undefined) lines.push(kv('library', String(library)));
+  if (surface) lines.push(kv('surface', surface));
+  if (executor) lines.push(kv('executor', executor));
   lines.push(kv('purpose', purpose || '—'));
   lines.push('');
   lines.push(sect('composition'));
@@ -172,6 +188,20 @@ function buildYaml(definition: Definition, catalog: Catalog): string {
     lines.push(`  ${kv('isolation', fanout.isolation)}`);
     if (fanout.concurrencyCap !== undefined) lines.push(`  ${kv('concurrencyCap', String(fanout.concurrencyCap))}`);
     if (fanout.perItemGate) lines.push(`  ${kv('perItemGate', fanout.perItemGate)}`);
+  }
+  // budgets — agents-15 (forge-6gv.5.1): same "declared vs absent"
+  // discipline as fanout just above; a declared-but-empty block (no
+  // overrides) renders no section at all rather than an empty header.
+  if (budgets && Object.keys(budgets).length > 0) {
+    lines.push('');
+    lines.push(sect('budgets'));
+    if (budgets.iterationFloor !== undefined) lines.push(`  ${kv('iterationFloor', String(budgets.iterationFloor))}`);
+    if (budgets.iterationCap !== undefined) lines.push(`  ${kv('iterationCap', String(budgets.iterationCap))}`);
+    if (budgets.maxTurnsPerIteration !== undefined) lines.push(`  ${kv('maxTurnsPerIteration', String(budgets.maxTurnsPerIteration))}`);
+    if (budgets.wedgeKillMs !== undefined) lines.push(`  ${kv('wedgeKillMs', String(budgets.wedgeKillMs))}`);
+    if (budgets.maxTurns !== undefined) lines.push(`  ${kv('maxTurns', String(budgets.maxTurns))}`);
+    if (budgets.maxBudgetUsd !== undefined) lines.push(`  ${kv('maxBudgetUsd', String(budgets.maxBudgetUsd))}`);
+    if (budgets.maxBudgetUsdShare !== undefined) lines.push(`  ${kv('maxBudgetUsdShare', String(budgets.maxBudgetUsdShare))}`);
   }
   lines.push('');
   lines.push(kv('brain_access', brainAccess || 'none'));
