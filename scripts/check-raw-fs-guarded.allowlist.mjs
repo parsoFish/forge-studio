@@ -100,8 +100,21 @@ export const ALLOWLIST = [
   // own: recorded as residuals with owners named, never edited from here.
   { file: 'packages/factory/reflector-rerun.ts', line: 95, sink: 'readFileSync',
     reason: 'SERVER-ENUMERATED PATH (M4-flows 5.36, owner factory/M5-A): `manifestPath` is not caller-supplied — it is `candidates.find((p) => existsSync(p))` over a server-built list of queue-state paths, and the function THROWS when none exists, so the read can only ever open a path this module itself composed from queueRoot + the resolved initiativeId. The taint token is the local binding, not request bytes.' },
-  { file: 'packages/library/studio/hook-runtime.ts', line: 270, sink: 'readFileSync',
-    reason: 'SLUG-VALIDATED AT THE BOUNDARY (M4-flows 5.36, owner library): `scriptPath` is `join(hookDir(id, forgeRoot), def.script)`, and `hookDir` (hook-library.ts:247) calls `assertSkillSlug(id, "hook")`, which THROWS on any value carrying a separator, a dot or a traversal segment. `def.script` is the parsed hook definition\'s own field, not a caller string. The call also sits behind the runnable/approval gate above it, so an unapproved hook never reaches the read.' },
+  // packages/library/studio/hook-runtime.ts's `readFileSync(scriptPath)` row
+  // RETIRED here, not line-drift-remapped (forge-9a3): the approval gate,
+  // this read and the env fence were extracted verbatim into a new,
+  // module-PRIVATE `prepareHookRun` step shared by the pre-existing sync tail
+  // and a new async tail. `node scripts/check-raw-fs-guarded.mjs --json`
+  // reports ZERO findings for this file post-extraction (not merely this row
+  // suppressed) — this script's own header names exactly this shape as its
+  // documented blind spot: "the INTERPROCEDURAL case a taint trigger cannot
+  // see in-function" (line ~54), i.e. its in-function def-use trace does not
+  // follow a call into a separate helper function. `prepareHookRun` is NOT a
+  // DESIGNATED_UNGUARDED_FUNCTIONS candidate either (that list is for helpers
+  // that resolve a dir with NO containment of their own; this one still runs
+  // `assertSkillSlug` via `hookDir` and the runnable/approval gate, unchanged
+  // — the guard moved with the sink, it was not dropped). Verified live at
+  // packages/library/studio/hook-runtime.ts:335.
   { file: 'packages/library/studio/template-library.ts', line: 505, sink: 'readFileSync',
     reason: 'ID IS A LOOKUP KEY, NOT A PATH SEGMENT (M4-flows 5.36, owner library): `absPath` is `join(root, entry.definitionRef)`, where `entry` comes from `listTemplateLibrary(root).find((e) => e.id === id)` and the function returns null when nothing matches. The id selects a server-enumerated registry entry; the path is that entry\'s own `definitionRef`. The id never reaches the join. (M4-library B1 line-drift remap from 525: 48 lines of D1-D7 design rationale moved out of this module preamble into packages/library/design.md, and the FlowSource port plus listTemplateIds moved in below it -- net -23 above this row. Re-paired by SINK IDENTITY, never arithmetic: the readFileSync(absPath) line is the ONLY occurrence of that exact line in the file at BOTH revisions (parsoFish/main 58588d9f returns exactly 525, the working tree exactly 502) and the sha256 of that line is identical across both trees (d6e1ddeefe161d10). Same enclosing function, same expression, byte-for-byte unchanged; the underlying gap is untouched by this refactor and stays open.) (SEAM F1 line-drift remap from 502 to 505: the FlowSource port\'s `flowPathForId` field + its trimmed doc comment landed above this row (net +3). Re-verified by exact-text match: line 505 is byte-for-byte `const body = readFileSync(absPath, \'utf8\');`, same enclosing function (`loadArtifactTemplate`), sink unchanged.)' },
 
