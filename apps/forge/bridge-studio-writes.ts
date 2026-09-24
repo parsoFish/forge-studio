@@ -38,13 +38,15 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, openSync, closeSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 import { listAgentDefinitions, listStarterAgents, loadAgentDefinition, serializeAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { loadFlowDefinition, serializeFlowDefinition, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
+import { flowPathForId } from '@forge/flows/flow-runner.ts';
 import { deriveFlowKickoff } from '@forge/flows/studio/flow-kickoff.ts';
 import { discoverProjects } from '@forge/kernel';
 import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
+import { flowRoots, resolveIdAcrossRoots, skillRoots } from '@forge/kernel/discovery-roots.ts';
 import { resolveGuardedPath, guardedFile, guardedWriteFile } from '@forge/kernel';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
 import { SLUG_RE, isReservedId } from '@forge/kernel/ids.ts';
@@ -337,6 +339,22 @@ export async function handleStudioWriteRoutes(
         return true;
       }
 
+      // SEAM F1 (operator ruling item 81): writes stay in `studio/flows/`
+      // ONLY. A flow whose id already resolves under a PACKAGE root ships
+      // WITH that package and is read-only — refuse both PUT (create/edit)
+      // and DELETE before any write-route fs path construction, never
+      // silently shadow it with a second, studio-owned flow.yaml of the
+      // same id (which would itself become a loud cross-root duplicate the
+      // next time any resolver lists this id).
+      const packageOwner = resolveIdAcrossRoots(flowRoots(ctx.forgeRoot).slice(1), id, ['flow.yaml']);
+      if (packageOwner !== null) {
+        const pkg = basename(dirname(packageOwner.root));
+        sendJson(res, 409, {
+          error: `package-owned flow "${id}" is read-only — it ships with packages/${pkg}`,
+        }, origin);
+        return true;
+      }
+
       // 2. Resolve + guard the flow.yaml path through the shared containment
       // guard (cli/studio-path-guard.ts). The former lexical
       // `startsWith(flowsBase + sep)` check had NO dirent-type gate anywhere
@@ -398,10 +416,10 @@ export async function handleStudioWriteRoutes(
         const triggeringFlows: string[] = [];
         for (const otherId of listFlowIds(ctx.forgeRoot)) {
           if (otherId === id) continue;
-          const g = resolveGuardedPath(flowsBase, [otherId, 'flow.yaml']);
-          if (!g.ok || !g.exists) continue;
+          const otherPath = flowPathForId(otherId, ctx.forgeRoot);
+          if (!existsSync(otherPath)) continue;
           try {
-            const otherDef = loadFlowDefinition(g.realPath);
+            const otherDef = loadFlowDefinition(otherPath);
             if (otherDef.triggers.some((t) => t.target?.kind === 'flow' && t.target.ref === id)) {
               triggeringFlows.push(otherId);
             }
@@ -476,10 +494,9 @@ export async function handleStudioWriteRoutes(
       // 5. Build the agents map. validateFlow reads it (step 8) and so does the
       // kickoff derivation, which needs the HEAD station's definition — so it
       // is built before the merge rather than after it.
-      const skillsDir = toSkillsDir(ctx.forgeRoot);
       let agentsList: AgentDefinition[] = [];
       try {
-        agentsList = listAgentDefinitions(skillsDir);
+        agentsList = listAgentDefinitions(skillRoots(ctx.forgeRoot));
       } catch {
         // skills dir absent in tests — proceed with empty map (agent-ref check will flag)
       }
@@ -557,16 +574,17 @@ export async function handleStudioWriteRoutes(
         //
         // Two layers, matching the four already-fixed write routes:
         //   1. SLUG_RE as the independent first layer (defense in depth).
-        //   2. The shared realpath identity guard, with `studio/flows` as a
-        //      fixed forgeRoot-derived root and `id` as its OWN segment.
+        //   2. The shared realpath identity guard, `id` as its OWN segment —
+        //      searched across every flow root (SEAM F1): `studio/flows` AND
+        //      every `packages/<pkg>/flows`.
         // Every rejection returns `undefined` — byte-identical to "no such
         // flow" — because an oracle closes only when the rejected and the
         // not-found cases are indistinguishable to the caller.
         if (!SLUG_RE.test(id)) return undefined;
-        const guarded = resolveGuardedPath(resolve(ctx.forgeRoot, 'studio', 'flows'), [id, 'flow.yaml']);
-        if (!guarded.ok || !guarded.exists) return undefined;
+        const guarded = resolveIdAcrossRoots(flowRoots(ctx.forgeRoot), id, ['flow.yaml']);
+        if (guarded === null) return undefined;
         try {
-          return loadFlowDefinition(guarded.realPath).project;
+          return loadFlowDefinition(guarded.path).project;
         } catch {
           return undefined;
         }

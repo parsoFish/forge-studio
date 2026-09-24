@@ -24,9 +24,9 @@
 # `npm run`, `flock`, `--approve-spend`; there are none. It is safe to pipe, safe
 # to truncate, safe to run at any time. It makes exactly ONE write, named below.
 #
-# EXIT: 0 only when every GATING item is zero or absent. Otherwise 1, naming the
-# FIRST non-zero item — a verdict that says "not clean" without saying which is
-# the summary-without-items this file exists to replace.
+# EXIT: 0 only when every GATING item is zero or absent. Otherwise 1, naming
+# EVERY non-zero item — a verdict that names only the first non-zero item cost
+# three separate $0 runs to discover a tree with three leavings (M7 row 60).
 set -u
 
 R="${1:?usage: residue.sh <worktree>}"
@@ -36,17 +36,17 @@ R="${1:?usage: residue.sh <worktree>}"
 TS=$(date -u +%FT%TZ)          # ONE date, used by every line below.
 say() { echo "$TS RESIDUE $*"; }
 
-FIRST=""                        # the first gating item found non-zero
+NONZERO=()                      # every gating item found non-zero, in order found
 gate() {                        # gate <label> <count>
   say "$1=$2"
   [ "$2" = "0" ] && return 0
-  [ -n "$FIRST" ] || FIRST="$1=$2"
+  NONZERO+=("$1=$2")
 }
 
-# --- porcelain, SPLIT. 861: `.gitignore:42` hides `_queue/ready-for-review/*`,
-# so "porcelain 0" stood as the clean-tree line for thirteen hours with a real
-# initiative sitting in the queue. Tracked and untracked are different claims and
-# are never collapsed here.
+# --- porcelain, SPLIT. 861: the `_queue/ready-for-review/*` rule in
+# `.gitignore` hides that path, so "porcelain 0" stood as the clean-tree line
+# for thirteen hours with a real initiative sitting in the queue. Tracked and
+# untracked are different claims and are never collapsed here.
 P_TRACKED=$(cd "$R" && git status --porcelain 2>/dev/null | grep -cv '^??' || true)
 P_UNTRACKED=$(cd "$R" && git status --porcelain 2>/dev/null | grep -c '^??' || true)
 gate "porcelain.tracked" "$P_TRACKED"
@@ -86,7 +86,7 @@ else
   dp=$(cat "$PID_FILE" 2>/dev/null)
   if [ -n "$dp" ] && [ -d "/proc/$dp" ]; then
     say "_logs/daemon/forge.pid=LIVE:$dp"
-    [ -n "$FIRST" ] || FIRST="_logs/daemon/forge.pid=LIVE:$dp"
+    NONZERO+=("_logs/daemon/forge.pid=LIVE:$dp")
   else
     say "_logs/daemon/forge.pid=dead-and-removed:${dp:-empty} (mtime $(stat -c %y "$PID_FILE" 2>/dev/null))"
     rm -f "$PID_FILE"
@@ -96,14 +96,17 @@ fi
 # --- 746: a campaign dir inside the worktree. Present is residue, not config.
 if [ -e "$R/_1.0" ]; then
   say "_1.0/=present"
-  [ -n "$FIRST" ] || FIRST="_1.0/=present"
+  NONZERO+=("_1.0/=present")
 else
   say "_1.0/=absent"
 fi
 
-if [ -z "$FIRST" ]; then
+if [ "${#NONZERO[@]}" -eq 0 ]; then
   say "VERDICT clean — every gating item above is zero or absent"
   exit 0
 fi
-say "VERDICT NOT CLEAN — first non-zero gating item: $FIRST"
+for item in "${NONZERO[@]}"; do
+  say "VERDICT NOT CLEAN — non-zero gating item: $item"
+done
+say "VERDICT NOT CLEAN — ${#NONZERO[@]} non-zero gating item(s), all named above"
 exit 1

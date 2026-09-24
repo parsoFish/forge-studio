@@ -36,12 +36,13 @@ import type { AgentFacts, ComposingAgent } from '@forge/library/studio/agent-fac
 // scanner's view of what a request can reach true (§15.85's shape).
 import { agentUsageIndex } from '@forge/agents/studio/agent-usage.ts';
 import { isStudioAgent, loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { listSkillMdDirs, skillsDir } from '@forge/agents/skill-path.ts';
+import { listSkillMdDirs } from '@forge/agents/skill-path.ts';
+import { skillRoots } from '@forge/kernel/discovery-roots.ts';
 
-/** Studio agents under `<forgeRoot>/skills`, tolerating a malformed one. */
+/** Studio agents across every skill root (SEAM F1), tolerating a malformed one. */
 function resilientRoster(forgeRoot: string): AgentDefinition[] {
   const defs: AgentDefinition[] = [];
-  for (const dir of listSkillMdDirs(skillsDir(forgeRoot))) {
+  for (const dir of skillRoots(forgeRoot).flatMap(listSkillMdDirs)) {
     const mdPath = join(dir, 'SKILL.md');
     if (!isStudioAgent(mdPath)) continue;
     try {

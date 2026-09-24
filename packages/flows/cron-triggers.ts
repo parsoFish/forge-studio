@@ -36,11 +36,12 @@
  * check belongs to the drain sweep (flow-run-requests.ts), which has visibility
  * into what's actually claimed/in-flight.
  */
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { Cron } from 'croner';
 
 import { normalizeProjectId } from '@forge/kernel';
 import { listFlowIds, loadFlowDefinition } from './studio/flow-registry.ts';
+import { flowPathForId } from './flow-runner.ts';
 import { stageFlowRunRequest } from './flow-run-requests.ts';
 import type { TriggerTarget } from '@forge/contracts/studio/types.ts';
 
@@ -104,7 +105,7 @@ function scanDeclaredCronTriggers(forgeRoot: string, notify: (msg: string) => vo
   for (const flowId of listFlowIds(root)) {
     let flowDef;
     try {
-      const flowYamlPath = join(root, 'studio', 'flows', flowId, 'flow.yaml');
+      const flowYamlPath = flowPathForId(flowId, root);
       flowDef = loadFlowDefinition(flowYamlPath);
     } catch (err) {
       notify(
@@ -184,8 +185,8 @@ function makeFireFn(
  * Diff the declared cron triggers (scanned fresh from disk) against the live
  * armed set, stopping jobs no longer declared and arming jobs newly declared.
  * An unchanged declaration (same key already armed) is left untouched — no
- * re-arm, no job churn. Never throws: a broken flow or an invalid schedule is
- * reported via `notify` and skipped.
+ * re-arm, no job churn. A broken flow or an invalid schedule is reported via
+ * `notify` and skipped; a flow id under two discovery roots THROWS (the tick catches).
  */
 export function syncCronTriggers(deps: SyncCronTriggersDeps): SyncCronTriggersResult {
   const notify = deps.notify ?? (() => {});

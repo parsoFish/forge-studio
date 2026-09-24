@@ -27,6 +27,11 @@ export * from './gh-identity.ts';
 export * from './init.ts';
 /** The realpath containment guard every request-derived path passes through. */
 export * from './path-guard.ts';
+/** The direct-filesystem case-folding probe shared by every staging module
+ *  that dedupes entries by resolved path before writing them (forge-qn8,
+ *  forge-gp4) — moved down from `agents`/`library` (M7-C) so both rank-3
+ *  packages import ONE mechanism instead of each carrying a verbatim copy. */
+export * from './case-folding-probe.ts';
 
 /** The project-contract report shape the `ProjectGate` port carries (SPEC.md §6). */
 export * from './project-contract.ts';
@@ -61,3 +66,6 @@ export * from './dry-bridge.ts';
 /** `_logs/` cycle discovery and the run-id charset gate — moved down from
  *  `flows` and `agents` so a rank-2 package can reach them (ruling 57). */
 export * from './log-cycles.ts';
+/** Package-owned discovery roots (SEAM F1) — `flowRoots`/`skillRoots`, plus
+ *  the generic multi-root id resolvers every per-kind resolver is built on. */
+export * from './discovery-roots.ts';

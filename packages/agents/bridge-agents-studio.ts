@@ -40,7 +40,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import yaml from 'js-yaml';
@@ -50,14 +50,16 @@ import {
   SLUG_RE, isReservedId, AGENT_PROVENANCE, resolveDefaultKickoffCeilingUsd,
   loadConfig, defaultConfigPath, type RouteContext,
 } from '@forge/kernel';
+import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import { checkHookComposition, listHookIds } from '@forge/library/studio/hook-library.ts';
 import { removeInstallLedgerEntry } from '@forge/library/studio/skill-install-ledger.ts';
-import { listSkillLibrary } from '@forge/library/studio/skill-trust.ts';
+import { lintSkillToolFence } from '@forge/library/studio-lint-tool-fence.ts';
 import type { AgentFacts } from '@forge/library/studio/agent-facts.ts';
 
 import { PLATFORM_GUARD_IDS } from './agent-bands.ts';
+import { agentsUsing } from './studio/agent-usage.ts';
 import { skillsDir as toSkillsDir } from './skill-path.ts';
 import { MAX_MATERIALS_LENGTH } from './studio/materials.ts';
 import { agentCapabilityDescriptor } from './studio/derive.ts';
@@ -81,6 +83,9 @@ import { validateAgent } from './studio/validate-agent.ts';
 export type AgentStudioRouteDeps = {
   listFlowIds(forgeRoot: string): string[];
   loadFlowDefinition(flowYamlPath: string): FlowDefinition;
+  /** SEAM F1: `@forge/flows`' `flowPathForId` — every flow root, bound at
+   *  `apps/forge` (agents rank 3, flows rank 5). */
+  flowPathForId(flowId: string, forgeRoot: string): string;
   /** Library's `AgentFacts` port, bound at `apps/forge`. This module calls
    *  into `@forge/library` (rank 3 → 2, legal) and library's readers now take
    *  the facts by injection, so the binding travels with the deps rather than
@@ -159,8 +164,7 @@ function sessionKindAgentRefs(forgeRoot: string): Map<string, string[]> {
 export const handleStudioAgentsList = (): Handler => async (req, res, ctx) => {
   const origin = allowedOrigin(req);
   try {
-    const skillsDir = toSkillsDir(resolve(ctx.forgeRoot));
-    const agents = listAgentDefinitions(skillsDir);
+    const agents = listAgentDefinitions(skillRoots(resolve(ctx.forgeRoot)));
     // R2-02-F1: thread the server-computed capability descriptor onto each
     // agent's wire payload — no capability fact may exist only in UI code.
     // R6-04 (WI-2): `defaultCostCeilingUsd` is RUN-LEVEL policy (read from
@@ -212,6 +216,15 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
       sendJson(res, 400, { error: `agent slug "${slug}" is reserved (the /agents/new builder lives at that path) — choose another slug` }, origin);
       return true;
     }
+    // SEAM F1: writes stay in `skills/` ONLY — a slug already resolving
+    // under a PACKAGE root ships with that package and is read-only, same
+    // rule flows' write route enforces.
+    const skillPackageOwner = resolveIdAcrossRoots(skillRoots(ctx.forgeRoot).slice(1), slug, ['SKILL.md']);
+    if (skillPackageOwner !== null) {
+      const pkg = basename(dirname(skillPackageOwner.root));
+      sendJson(res, 409, { error: `package-owned skill "${slug}" is read-only — it ships with packages/${pkg}` }, origin);
+      return true;
+    }
 
     // 2. Resolve + guard the SKILL.md path through the shared, generalized
     // containment guard (cli/studio-path-guard.ts — see its docstring for
@@ -251,10 +264,8 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
         }, origin);
         return true;
       }
-      // Defence in depth: even for a real agent, never delete one that
-      // something still composes. Same `usedBy` derivation the library
-      // listing renders — one source of truth, no second scan.
-      const composedBy = listSkillLibrary(ctx.forgeRoot, deps.agentFacts).find((e) => e.id === slug)?.usedBy ?? [];
+      // forge-8vfn.19: listSkillLibrary excludes studio agents (AT-5), so this always found undefined; ask agents' own reverse index (ruling 13) directly.
+      const composedBy = agentsUsing('skill', slug, ctx.forgeRoot);
       if (composedBy.length > 0) {
         sendJson(res, 409, {
           error: `agent "${slug}" is still composed by ${composedBy.length} agent(s): ${composedBy.join(', ')} — unbind it from their builders first`,
@@ -264,10 +275,10 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
       }
       const referencingFlows: string[] = [];
       for (const flowId of deps.listFlowIds(ctx.forgeRoot)) {
-        const guarded = resolveGuardedPath(resolve(ctx.forgeRoot, 'studio', 'flows'), [flowId, 'flow.yaml']);
-        if (!guarded.ok || !guarded.exists) continue;
+        const flowPath = deps.flowPathForId(flowId, ctx.forgeRoot);
+        if (!existsSync(flowPath)) continue;
         try {
-          const def = deps.loadFlowDefinition(guarded.realPath);
+          const def = deps.loadFlowDefinition(flowPath);
           if (def.nodes.some((n) => n.agent === slug)) referencingFlows.push(flowId);
         } catch {
           // a malformed sibling flow is studio-lint's finding, not a
@@ -606,6 +617,18 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
       mkdirSync(skillDirPath, { recursive: true });
     }
     writeFileSync(skillMdPath, serialized, 'utf8');
+
+    // forge-q4sz: reuse the SAME lint (never re-implement it) against the file just written; 400 + restore, like every other check above that never wrote at all.
+    const fenceFindings = lintSkillToolFence(ctx.forgeRoot).filter((f) => f.object === `skill:${slug}`);
+    if (fenceFindings.some((f) => f.level === 'error')) {
+      if (pathGuard.exists) {
+        writeFileSync(skillMdPath, originalRaw as string, 'utf8');
+      } else {
+        rmSync(skillDirPath, { recursive: true, force: true });
+      }
+      sendJson(res, 400, { error: 'validation failed', findings: [...findings, ...fenceFindings] }, origin);
+      return true;
+    }
 
     const flagFindings = findings.filter((f) => f.level === 'flag');
     sendJson(res, 200, { ok: true, slug, findings: flagFindings }, origin);

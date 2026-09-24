@@ -34,4 +34,11 @@ export const fixtureFlowSource: FlowSource = {
     if (!doc || typeof doc !== 'object') throw new Error(`fixture flow is not a mapping: ${flowYamlPath}`);
     return doc as unknown as FlowDefinition;
   },
+  // Deliberately single-root (studio/flows only) — same scope note as
+  // `listFlowIds` above: the SEAM F1 package-root search is `@forge/flows`'
+  // real `flowPathForId`, proven against the real binding at
+  // `apps/forge/tests/contract/library-flow-source.test.ts`.
+  flowPathForId(flowId: string, forgeRoot: string): string {
+    return join(forgeRoot, 'studio', 'flows', flowId, 'flow.yaml');
+  },
 };

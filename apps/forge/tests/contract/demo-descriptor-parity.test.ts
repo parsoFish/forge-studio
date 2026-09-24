@@ -6,7 +6,7 @@
  *   (b) the demo-builder's composition (`demoTaskLines`, Face B — HTML deliverable),
  *   (c) the integrate band's derivation (`deriveDemoModel`, Face A — executed demo).
  *
- * Consumer (c) was the demo-agent's briefing until the LLM demo node was deleted
+ * Consumer (c) was the demo-agent's briefing until the LLM integrate node was deleted
  * (spec §5 item 4). The claim it carries is unchanged — the descriptor and its
  * step ORDER may not drift between the faces — but the third face now DERIVES
  * the checkpoints instead of describing them to a model.
