@@ -27,7 +27,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 
 import { deriveSessionCostUsd, resolveGuardedPath } from '@forge/kernel';
 
@@ -60,6 +60,10 @@ export type AgentHistoryDeps = AgentRunStateDeps & {
    *  caller catches per flow so one bad file never sinks the mapping. Narrowed
    *  to the three fields read here; the host passes the real definition. */
   loadFlowDefinition(flowPath: string): { id: string; nodes: readonly { id: string; agent?: string }[] };
+  /** `listFlowIds`/`flowPathForId` — every flow root (SEAM F1): `studio/
+   *  flows` AND every `packages/<pkg>/flows`. */
+  listFlowIds(forgeRoot: string): readonly string[];
+  flowPathForId(flowId: string, forgeRoot: string): string;
   /** `loadSessionKinds` — allowed to THROW; a misconfigured studio must fail
    *  loudly rather than degrade to a stale mirror. Narrowed to the four fields
    *  read here (`legacyRoutes[0]` is the per-kind href template). */
@@ -232,10 +236,8 @@ function standaloneRunSlug(events: readonly Record<string, unknown>[]): string |
 function buildFlowNodeToSlug(deps: AgentHistoryDeps, forgeRoot: string): Map<string, Map<string, string>> {
   const byFlow = new Map<string, Map<string, string>>();
   try {
-    const flowsDir = join(resolve(forgeRoot), 'studio', 'flows');
-    if (!existsSync(flowsDir)) return byFlow;
-    for (const entry of readdirSync(flowsDir).sort()) {
-      const flowPath = join(flowsDir, entry, 'flow.yaml');
+    for (const entry of deps.listFlowIds(forgeRoot)) {
+      const flowPath = deps.flowPathForId(entry, forgeRoot);
       if (!existsSync(flowPath)) continue;
       let flow;
       try {

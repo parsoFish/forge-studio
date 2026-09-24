@@ -217,4 +217,29 @@ describe('residue.sh — the list is printed IN FULL or the tool is the defect',
       assert.equal(run('/nope/not/a/worktree').status, 2);
     } finally { rmSync(d, { recursive: true, force: true }); }
   });
+
+  // M7 findings row 60: the verdict named only the FIRST non-zero gating item
+  // ("VERDICT NOT CLEAN — first non-zero gating item: $FIRST"), so a tree with
+  // three leavings cost three separate $0 runs to discover them all. Two
+  // non-zero items are planted here — one reached through `gate()`, one
+  // reached through the hand-rolled `_1.0/` check — and BOTH must be named in
+  // the verdict output, not just whichever was found first.
+  test('reports EVERY non-zero gating item in the verdict, not just the first (row 60)', () => {
+    const d = cleanTree();
+    try {
+      writeFileSync(join(d, '_queue/in-flight/INIT-a.md'), 'a');
+      mkdirSync(join(d, '_1.0'), { recursive: true });
+      const r = run(d);
+      assert.equal(r.status, 1);
+      const verdictLines = r.stdout.split('\n').filter((l) => /NOT CLEAN/.test(l)).join('\n');
+      assert.match(
+        verdictLines, /_queue\/in-flight=1/,
+        'the verdict must name _queue/in-flight — it is the FIRST non-zero item found',
+      );
+      assert.match(
+        verdictLines, /_1\.0\/=present/,
+        'the verdict must ALSO name _1.0/ — a second non-zero item must not be dropped because a first one already fired',
+      );
+    } finally { rmSync(d, { recursive: true, force: true }); }
+  });
 });

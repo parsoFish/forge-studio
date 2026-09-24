@@ -99,6 +99,7 @@ import { isSafeRunId } from '@forge/agents/run-agent.ts';
 import { SAFE_AGENT_SLUG_RE } from '@forge/agents/bridge-agents-slug.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, isSafeSubPath } from '@forge/kernel';
+import { flowRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
 import {
   installedExample as example, peekInstalledFactory,
   resolveInstalledFactory, type InstalledFactory } from './factory-wiring.ts';
@@ -1563,9 +1564,20 @@ async function handleHttp(
       return;
     }
     // Existence through the guard family (never a raw fs probe on a
-    // request-derived segment): the flow id is a single slug segment under the
-    // trusted forgeRoot/studio/flows.
-    if (guardedFile(ctx.forgeRoot, ['studio', 'flows', flowId, 'flow.yaml'], 'read') === null) {
+    // request-derived segment): the flow id is a single slug segment,
+    // searched across every flow root (SEAM F1) — `studio/flows` AND every
+    // `packages/<pkg>/flows`. `resolveIdAcrossRoots` THROWS, naming both
+    // paths, if the id is a real flow under more than one root — never
+    // "first root wins" — so this is wrapped (every other branch below sends
+    // its own 500 on throw; `handleHttp` has no single top-level catch).
+    let flowMatch;
+    try {
+      flowMatch = resolveIdAcrossRoots(flowRoots(ctx.forgeRoot), flowId, ['flow.yaml']);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+      return;
+    }
+    if (flowMatch === null) {
       sendJson(res, 404, { error: 'flow not found', flowId }, origin);
       return;
     }

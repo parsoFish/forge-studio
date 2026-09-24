@@ -98,9 +98,6 @@ import {
   DEFAULT_KB_DRAIN_MAX_COST_USD,
   KB_DRAIN_HEARTBEAT_MS,
   KB_DRAIN_MAX_ROUNDS,
-  autoAppliedEntry,
-  autoSkippedEntry,
-  autoUnattributedEntry,
   buildAutoProposedChanges,
   buildProposedChanges,
   finalizeRoundRows,
@@ -108,10 +105,10 @@ import {
   pendingRows,
   progressKeySet,
   setsEqual,
+  shapeAutoPassRoundRows,
   type KbDrainApplyAutoFixesFn,
   type KbDrainLintFn,
   type KbDrainPerFinding,
-  type KbDrainRoundRow,
   type KbDrainState,
   type KbDrainStatus,
 } from './kb-drain-model.ts';
@@ -474,26 +471,22 @@ export async function runKbDrain(
       const autoSnapshot = snapshotBrainTree(forgeRoot);
       const autoResult = applyAutoFixes(forgeRoot, { filter: inKb });
       const autoProposals = buildAutoProposedChanges(forgeRoot, brainRoot, diffKbSnapshot(brainRoot, autoSnapshot));
-      const autoRows = autoResult.applied.map((x) => autoAppliedEntry(x, round, autoProposals));
       // W8-F1 review round 2 — a mutation NO row claims is a mutation the
-      // operator never sees. `autoAppliedEntry` attributes by path, which is
-      // as precise as the fixers' flat `applied` list allows, but it is not
-      // total: `category.mis-routed` reports `{file: <source>, detail: 'moved
-      // to …'}`, so neither the CREATED file's diff nor the index rewrite that
-      // follows it matches either clause. Those diffs used to be dropped on
-      // the floor. They are collected here instead, on their own row, rather
-      // than attributed to a finding that did not cause them.
-      const claimed = new Set(autoRows.flatMap((r) => (r.proposedChanges ?? []).map((p) => p.file)));
-      const unclaimed = autoProposals.filter((p) => !claimed.has(p.file));
-      const roundRows: KbDrainRoundRow[] = [
-        ...autoRows,
-        ...(unclaimed.length > 0 ? [autoUnattributedEntry(unclaimed, round)] : []),
-        ...autoResult.skipped.map((x) => autoSkippedEntry(x, round)),
-      ];
+      // operator never sees; `autoAppliedEntry` (inside `shapeAutoPassRoundRows`)
+      // attributes by path, which is as precise as the fixers' flat `applied`
+      // list allows, but it is not total: `category.mis-routed` reports
+      // `{file: <source>, detail: 'moved to …'}`, so neither the CREATED
+      // file's diff nor the index rewrite that follows it matches either
+      // clause — those go on their own unattributed row instead of being
+      // dropped. knowledge-48: `inProgressCounts` is the round's REAL
+      // post-auto-fix backlog (`kb-drain-model.ts`'s own doc comment has the
+      // full incident) — every persist until this round's own re-lint
+      // (`after`, below) uses it, never the stale `status.counts`.
+      const { roundRows, inProgressCounts } = shapeAutoPassRoundRows(autoResult, autoProposals, round);
       emitProgress(`kb-drain.auto (applied ${autoResult.applied.length}, skipped ${autoResult.skipped.length})`, {
         round, applied: autoResult.applied.length, skipped: autoResult.skipped.length,
       });
-      status = persist({ ...base, state: 'running', round, counts: status.counts, perFinding: [...completed, ...pendingRows(roundRows)], costUsd, updatedAt: now() });
+      status = persist({ ...base, state: 'running', round, counts: inProgressCounts, perFinding: [...completed, ...pendingRows(roundRows)], costUsd, updatedAt: now() });
 
       const agentResidual = autoResult.remaining.filter(
         (f): f is Finding & { check: string; kind: string } =>
@@ -653,7 +646,13 @@ export async function runKbDrain(
         emitProgress(`kb-drain.turn-end (${basename(f.file)} · $${costUsd.toFixed(2)})`, {
           round, file: f.file, check: f.check, costUsd,
         });
-        status = persist({ ...base, state: 'running', round, counts: status.counts, perFinding: [...completed, ...pendingRows(roundRows)], costUsd, updatedAt: now() });
+        // knowledge-48: same real, non-stale backlog as the auto-pass
+        // persist above — a turn's own self-report is untrusted (this
+        // file's own established rule, see the comment above `runFixTurn`'s
+        // call), so this does NOT decrement per turn; it just stops
+        // re-showing the round's PRE-auto-fix (or previous-round) number for
+        // every turn in between.
+        status = persist({ ...base, state: 'running', round, counts: inProgressCounts, perFinding: [...completed, ...pendingRows(roundRows)], costUsd, updatedAt: now() });
         if (costUsd >= maxCostUsd) {
           costCeilingHit = true;
           break;
