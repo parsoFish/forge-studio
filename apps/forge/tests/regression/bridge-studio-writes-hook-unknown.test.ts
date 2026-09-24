@@ -157,6 +157,10 @@ function makePutAgentBody(overrides: Record<string, unknown> = {}): Record<strin
     brainAccess: 'advisory',
     composition: { skills: [], tools: [], mcps: [], guards: [], hooks: [] },
     runtime: { sdk: 'claude-code', strategy: 'fixed', model: 'claude-sonnet-4-5' },
+    // forge-q4sz: every save now declares tool frontmatter (serializeAgentDefinition
+    // writes disallowed-tools unconditionally) and the route 400s it unless
+    // fenced — unrelated to what this file tests (composition.hooks).
+    disallowedTools: ['Task', 'Agent'],
     ...overrides,
   };
 }
