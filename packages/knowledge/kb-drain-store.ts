@@ -15,7 +15,7 @@ import type { GuardedWriteSessionStatusFn } from './kb-drain-model.ts';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { resolveKbBrainDir } from './brain-paths.ts';
+import { tryGetKbBackend } from './kb-backend.ts';
 import { loadConfig, defaultConfigPath, resolveProjectsDir, guardedWriteFile } from '@forge/kernel';
 import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
@@ -217,11 +217,13 @@ export function listKbRuns(forgeRoot: string, kbId: string): KbRunRow[] {
 
   // kb-cleanup sessions — anchored under the KB's own session project
   // (binding.ref for a project KB, the `.kb-<id>` anchor otherwise).
-  const brainDir = resolveKbBrainDir(forgeRoot, kbId);
+  // M7-C KN1 (bead forge-8vfn.5.25.3): `descriptorPath()` is the KbBackend
+  // seam's own kb.yaml resolution, resolved per call same as before.
+  const descriptorPath = tryGetKbBackend(forgeRoot, kbId)?.descriptorPath() ?? null;
   let anchor = `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`;
-  if (brainDir) {
+  if (descriptorPath) {
     try {
-      const kb = loadKbDescriptor(join(brainDir, 'kb.yaml'));
+      const kb = loadKbDescriptor(descriptorPath);
       if (kb.binding.kind === 'project') anchor = kb.binding.ref;
     } catch {
       // fall through to the dot anchor

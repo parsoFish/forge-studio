@@ -21,15 +21,15 @@ exports, in both directions, and is required to FAIL against an empty index.
 | brain index | `loadBrainIndex` · `regenerateBrainIndex` |
 | brain lint | `CHECK_NAMES` · `classify` · `classifyFinding` · `lintThemeFiles` · `runBrainLint` |
 | KB descriptors | `loadKbDescriptor` · `serializeKbDescriptor` · `projectKbBindings` · `unroutableKbReason` · `kbReadPolicyViolation` |
-| KB surface | `KB_SEEDING_ANCHOR_PREFIX` · `approveKbCleanup` · `computeAgentCleanupFindings` · `loadKbDescriptors` · `activeJobReason` · `deriveKbActiveJob` · `runPostReflectionKbHealth` · `guardAgentKbEdits` · `snapshotBrainTree` |
+| KB surface | `KB_SEEDING_ANCHOR_PREFIX` · `approveKbCleanup` · `computeAgentCleanupFindings` · `loadKbDescriptors` · `activeJobReason` · `deriveKbActiveJob` · `runPostReflectionKbHealth` · `guardAgentKbEdits` · `snapshotBrainTree` · `tryGetKbBackend` |
 | project brain seeding | `checkProjectBrainSeedContainment` · `seedProjectBrain` |
 | cycle retention | `assignRetention` · `collectCitedBy` · `patchArchiveFrontmatter` |
 | HTTP routes | `knowledgeRoutes` |
 
-### Types (7)
+### Types (8)
 
 `Finding` · `RunBrainLintResult` · `Scope` · `UnroutableKb` · `KbEditGateResult` ·
-`RetentionTag` · `ThemeMeta`
+`RetentionTag` · `ThemeMeta` · `KbBackend`
 
 ## What it owns
 
