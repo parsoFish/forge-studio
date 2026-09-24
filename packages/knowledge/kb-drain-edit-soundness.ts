@@ -120,10 +120,6 @@ export function buildKbEditSoundnessCtx(forgeRoot: string, brainDir: string): Kb
   return { forgeRoot, brainDir, themeTargets: collectThemeSlugTargets(join(forgeRoot, 'brain')) };
 }
 
-export function isUnsound(found: readonly KbEditUnsoundness[]): boolean {
-  return found.length > 0;
-}
-
 // ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------
@@ -353,14 +349,6 @@ function auditTargets(
   }
 
   return found;
-}
-
-/** Audit a whole turn's worth of changes. */
-export function auditKbEdits(
-  changes: readonly KbEditChange[],
-  ctx: KbEditSoundnessCtx,
-): KbEditUnsoundness[] {
-  return changes.flatMap((c) => auditKbEdit(c, ctx));
 }
 
 /**

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
 import { FetchErrorState } from '@/components/FetchErrorState';
+import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import { FilePackage } from '@/components/studio/FilePackage';
 import { LibraryItemActions } from '@/components/studio/LibraryItemActions';
 import { ApprovalRecordPanel } from '@/components/studio/ApprovalRecordPanel';
@@ -116,6 +117,10 @@ export default function HookDetailPage() {
   useEffect(() => {
     if (id) void load(id);
   }, [id, load]);
+
+  // forge-5rr: refill ONLY while in the failed state — never re-load over
+  // the operator's in-flight edit/approve/override state (crosscut-22).
+  useBridgeRecoveryWhenFailed(state === 'error', () => { if (id) void load(id); });
 
   async function handleApprove() {
     setApproving(true);

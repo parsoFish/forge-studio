@@ -70,6 +70,7 @@ import { agentsRoutes } from '@forge/agents/routes.ts';
 import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
 import { buildAgentSlugToNodeId } from '@forge/flows/run-model.ts';
 import { loadFlowDefinition, listFlowIds as listFlowIdsForAgents } from '@forge/flows/studio/flow-registry.ts';
+import { flowPathForId as flowPathForIdForAgents } from '@forge/flows/flow-runner.ts';
 import {
   DEFAULT_STALL_CEILING_MS, isTurnAlive, extractErrorMessage, killTrackedRun,
 } from '@forge/sessions/bridge-studio-lifecycle.ts';
@@ -148,7 +149,17 @@ const knowledgeSessionStatusIo: SessionStatusIoPort = {
 
 export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
   return [
-    ...knowledgeRoutes({ listFlowIds, listFlowBandIds, runFixTurn: realKbDrainFixTurn, sessionStatusIo: knowledgeSessionStatusIo }),
+    ...knowledgeRoutes({
+      listFlowIds,
+      listFlowBandIds,
+      runFixTurn: realKbDrainFixTurn,
+      sessionStatusIo: knowledgeSessionStatusIo,
+      // knowledge-01 (forge-6gv.6.1): the SAME tail registry the agent-run
+      // routes already arm/release — a live KB drain's activity drawer never
+      // streamed because this was never threaded through.
+      ensureAgentRunTail: deps.ensureAgentRunTail,
+      releaseAgentRunTail: deps.releaseAgentRunTail,
+    }),
     ...libraryRoutes({ agentFacts: libraryAgentFacts, isSdkAvailable, flowSource: libraryFlowSource, authoringSession: authoringSessionPort }),
     ...projectsRoutes({
       seedBrain: seedProjectBrain,
@@ -174,6 +185,7 @@ export function makeRouteTable(deps: RouteTableDeps): AssembledRouteTable {
       buildAgentSlugToNodeId,
       loadFlowDefinition,
       listFlowIds: listFlowIdsForAgents,
+      flowPathForId: flowPathForIdForAgents,
       // Bridge-instance state, from the host's own closures.
       projectsRoot: deps.projectsRoot,
       safeInputKeyRe: deps.safeInputKeyRe,
