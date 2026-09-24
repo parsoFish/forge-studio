@@ -3161,7 +3161,13 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-field="create-name"]` / `[data-field="create-north-star"]` /
   `[data-field="create-app-type"]` (a `<select>` of curated app types) and a
   `[data-action="create-project"]` button — scaffolds a contract-green project
-  from a framework template and navigates to its page.
+  from a framework template and navigates to its page. **A failed create
+  carries its own handle (`forge-8vfn.6.11.37`):** `[data-section="create-
+  error"]`, a paragraph rendered by the extracted `CreateError` component
+  (`components/studio/CreateFromTemplate.tsx`) that carries the failure
+  message and nothing else when there is none — before this, the message
+  rendered as bare text with no `data-*` at all, so a beat needed a CLI probe
+  to learn why a create failed (S2 run 6).
   **Amended 2026-09-06 (bead `forge-8vfn.6.11.4`, operator ruling 301):** the
   starters are named for a STYLE — `api`, `cli`, `webapp` — and
   `GET /api/studio/projects/starters` answers `{appTypes: [{id, label,
