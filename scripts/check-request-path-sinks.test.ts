@@ -373,6 +373,151 @@ test('--write regenerates the baseline file and a subsequent check passes', () =
 });
 
 // =============================================================================
+// forge-8vfn.5.19 — sink matching must resolve to a real node:fs /
+// node:child_process import, not just a bare name match; and --write must not
+// silently absorb rows it did not intend to touch.
+//
+// Measured repro from the bead: a local `const exec = executors[kind] ??
+// execUnknown` in orchestrator/phases/executor-table.ts was reported as a
+// NEW 'exec' sink, purely because its name matched. Had a lane run --write
+// there, a fake sink would have entered the baseline permanently.
+// =============================================================================
+
+test('8vfn.5.19: a local function sharing a sink name is NOT counted (never imported from node:fs)', () => {
+  const root = makeFixture();
+  try {
+    writeFileSync(
+      join(root, 'orchestrator/reached.ts'),
+      [
+        'function existsSync(p) { return p.length > 0; }', // shadows the sink name; not from node:fs
+        'export function readReached() {',
+        "  return existsSync('/tmp/out');",
+        '}',
+        '',
+      ].join('\n')
+    );
+    const { rows } = analyze(root);
+    assert.ok(
+      !rows.some((r) => r.file === 'orchestrator/reached.ts' && r.sink === 'existsSync'),
+      'a local existsSync never imported from node:fs must not be counted as the sink'
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('8vfn.5.19: a name destructured off a local object is NOT counted (not node:fs)', () => {
+  const root = makeFixture();
+  try {
+    writeFileSync(
+      join(root, 'orchestrator/reached.ts'),
+      [
+        "const obj = { readFileSync: () => 'stub' };",
+        'const { readFileSync } = obj;',
+        'export function readReached() {',
+        "  return readFileSync('/tmp/out');",
+        '}',
+        '',
+      ].join('\n')
+    );
+    const { rows } = analyze(root);
+    assert.ok(
+      !rows.some((r) => r.file === 'orchestrator/reached.ts' && r.sink === 'readFileSync'),
+      'readFileSync destructured off a local object, never imported from node:fs, must not count'
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('8vfn.5.19: a real node:fs import is still counted (no regression)', () => {
+  const root = makeFixture();
+  try {
+    // makeFixture's orchestrator/reached.ts already imports existsSync/writeFileSync from node:fs.
+    const { rows } = analyze(root);
+    assert.ok(rows.some((r) => r.file === 'orchestrator/reached.ts' && r.sink === 'existsSync'));
+    assert.ok(rows.some((r) => r.file === 'orchestrator/reached.ts' && r.sink === 'writeFileSync'));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('8vfn.5.19: an ALIASED node:fs import is still counted under its canonical sink name', () => {
+  const root = makeFixture();
+  try {
+    writeFileSync(
+      join(root, 'orchestrator/reached.ts'),
+      [
+        "import { readFileSync as rf } from 'node:fs';",
+        'export function readReached() {',
+        "  return rf('/tmp/out');",
+        '}',
+        '',
+      ].join('\n')
+    );
+    const { rows } = analyze(root);
+    const row = rows.find((r) => r.file === 'orchestrator/reached.ts' && r.sink === 'readFileSync');
+    assert.ok(row, 'an aliased import of a real node:fs sink must still be counted under its canonical name');
+    assert.equal(row.count, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('8vfn.5.19: --write PRINTS every row it changes (the "silent absorption" defect)', () => {
+  const root = makeFixture();
+  const baselinePath = baselinePathFor(root);
+  try {
+    // Baseline with TWO writeFileSync calls.
+    writeFileSync(
+      join(root, 'orchestrator/reached.ts'),
+      [
+        "import { existsSync, writeFileSync } from 'node:fs';",
+        'export function readReached() {',
+        "  writeFileSync('/tmp/out', 'x');",
+        "  writeFileSync('/tmp/out2', 'y');",
+        "  return existsSync('/tmp/out');",
+        '}',
+        '',
+      ].join('\n')
+    );
+    runCheck({ root, baselinePath, write: true });
+
+    // Shrink back to one call — nothing about existsSync changed, only
+    // writeFileSync's count did. Bead repro: "cli/brain-lint.ts existsSync
+    // 22->20 ... rewrote rows nothing had touched" — --write regenerating the
+    // WHOLE baseline silently, with no record of what moved.
+    writeFileSync(
+      join(root, 'orchestrator/reached.ts'),
+      [
+        "import { existsSync, writeFileSync } from 'node:fs';",
+        'export function readReached() {',
+        "  writeFileSync('/tmp/out', 'x');",
+        "  return existsSync('/tmp/out');",
+        '}',
+        '',
+      ].join('\n')
+    );
+
+    let out = '';
+    const origLog = console.log;
+    console.log = (...args: unknown[]) => { out += args.join(' ') + '\n'; };
+    try {
+      runCheck({ root, baselinePath, write: true });
+    } finally {
+      console.log = origLog;
+    }
+    assert.match(
+      out,
+      /orchestrator\/reached\.ts writeFileSync:\s*2\s*->\s*1/,
+      '--write must print the exact row it is changing, not just a summary count (bead forge-8vfn.5.19)'
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// =============================================================================
 // Group 2 — CI-enforced gate: the REAL check against the REAL repository
 // =============================================================================
 
