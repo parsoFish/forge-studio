@@ -251,6 +251,16 @@ export default function HookDetailPage() {
             // no `packageHash` field) — `detail` is non-null in this branch
             // by the same `state === 'ready'` guard `view` was built under.
             'data-package-hash': detail.packageHash,
+            // forge-8vfn.5.16 (M7-C U2) — the class fix: every OTHER
+            // data-hook-* attribute on this page names the hook's
+            // DEFINITION or TRUST; this is the first that names an
+            // EXECUTION. Always present once loaded (0 = "scanned every
+            // cycle, found no fire" — the same idiom data-hook-carried-by-
+            // count already uses); the last-fire pair stays ABSENT — never
+            // fabricated — for a hook that has never fired.
+            'data-hook-fire-count': view.fireCount,
+            ...(view.lastFireAt !== undefined ? { 'data-hook-last-fire-at': view.lastFireAt } : {}),
+            ...(view.lastFireOutcome !== undefined ? { 'data-hook-last-fire-outcome': view.lastFireOutcome } : {}),
           }
         : {})}
       style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
