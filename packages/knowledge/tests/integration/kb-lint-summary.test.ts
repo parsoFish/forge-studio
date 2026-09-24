@@ -79,7 +79,7 @@ function initQueueDirs(forgeRoot: string): void {
  * argument changed meaning, from a base URL to the forge root. An unmatched
  * path reports the host's 404, never a status of 0 (§15.50).
  */
-const routes = knowledgeRoutes({ sessionStatusIo: refusingSessionStatusIo, listFlowIds: () => ['forge-develop'], listFlowBandIds: () => ['review-band', 'integrate-band'], runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); } });
+const routes = knowledgeRoutes({ sessionStatusIo: refusingSessionStatusIo, listFlowIds: () => ['forge-develop'], listFlowBandIds: () => ['review-band', 'integrate-band'], runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); }, sessionIsReadable: () => { throw new Error('unexpected session-readability probe call in this test'); } }); // M7-C U8 (bead forge-u8y2): REQUIRED, same shape as runFixTurn — never runs/drain here.
 const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;
 
 async function get(root: string, path: string): Promise<{ status: number; json: Record<string, unknown> }> {
