@@ -161,7 +161,7 @@ import { ALLOWLIST, PROJECTS_ROOT_FOLD_ALLOWLIST, applyAllowlist } from './check
 // Bead forge-mlk (anchor computation) + forge-8vfn.5.63 (the one-level
 // interprocedural taint hop) share one function-boundary parse — see that
 // module's header for why it is not folded back into this (baselined) file.
-import { parseFunctions, anchorFor } from './check-raw-fs-guarded.interproc.mjs';
+import { buildInterprocContext, anchorFor, isParamTaintedViaCallers } from './check-raw-fs-guarded.interproc.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -734,8 +734,12 @@ function identIsGuardBound(full, head, line, cleanedLines, depth = 0) {
 /** Does the value produced by identifier/member `full` at `line` resolve to a
  *  request-derived SOURCE (a taint token, or a binding that draws on one)?
  *  Bounded recursion via `depth`. Guard-bound values are NOT tainted (the guard
- *  is a sanitizer); trusted roots short-circuit to not-tainted. */
-function identIsTainted(full, head, line, cleanedLines, depth = 0, bare = REQUEST_TAINT_BARE) {
+ *  is a sanitizer); trusted roots short-circuit to not-tainted. `interproc`/
+ *  `allowHop` (bead forge-8vfn.5.63): an UNRESOLVED, non-bare `head` tries the
+ *  ONE-LEVEL hop (interproc.mjs's isParamTaintedViaCallers) before giving up;
+ *  `allowHop` is forced `false` on that hop's OWN recursive check so a second
+ *  hop is never taken. */
+function identIsTainted(full, head, line, cleanedLines, depth = 0, bare = REQUEST_TAINT_BARE, interproc = null, allowHop = true) {
   if (REQUEST_TAINT_HEADS.has(head)) return true; // body./params./query./req. — always a request source
   if (TRUSTED_ROOTS.has(head)) return false;
   if (depth > 6) return false; // fail toward NOT-tainted at the bound (documented: curated list is the guarantee)
@@ -749,11 +753,15 @@ function identIsTainted(full, head, line, cleanedLines, depth = 0, bare = REQUES
   if (binding) {
     if (rhsIsGuardProducer(binding.rhs)) return false; // guarded → sanitized
     for (const id of governingIdents(binding.rhs)) {
-      if (identIsTainted(id.full, id.head, line, cleanedLines, depth + 1, bare)) return true;
+      if (identIsTainted(id.full, id.head, line, cleanedLines, depth + 1, bare, interproc, allowHop)) return true;
     }
     return false;
   }
-  return bare.has(full) || bare.has(head);
+  if (bare.has(full) || bare.has(head)) return true;
+  // UNRESOLVED and not on the bare list: try the one-level interprocedural
+  // hop (bead forge-8vfn.5.63) before falling back to not-tainted.
+  return allowHop && !!interproc
+    && !!isParamTaintedViaCallers(head, line, interproc, (f2, h2, l2) => identIsTainted(f2, h2, l2, cleanedLines, 0, bare, interproc, false));
 }
 
 /** Is the whole path expression guard-terminal? `<g>`, `<g>.realPath`,
@@ -815,8 +823,9 @@ export function analyzeModule(text, relFile, model = {}) {
   const origLines = text.split('\n');
   const starts = lineStarts(cleaned);
   // Bead forge-mlk: one function-boundary parse, reused for every finding's
-  // content-key anchor (and, when wired, the interprocedural hop).
-  const funcs = parseFunctions(cleaned, starts);
+  // content-key anchor. Bead forge-8vfn.5.63: the SAME parse (+ a per-module
+  // memoization cache) drives the one-level interprocedural taint hop below.
+  const interproc = buildInterprocContext(cleaned, starts);
   const findings = [];
   const sinkRe = new RegExp(`(?<![.\\w$])(${RAW_FS_SINKS.join('|')})\\s*\\(`, 'g');
   let m;
@@ -843,7 +852,7 @@ export function analyzeModule(text, relFile, model = {}) {
       let taintTok = null;
       for (const id of idents) {
         if (!guardBase && identIsGuardBound(id.full, id.head, lineIdx, cleanedLines)) guardBase = id.full;
-        if (!taintTok && identIsTainted(id.full, id.head, lineIdx, cleanedLines, 0, bare)) taintTok = id.full;
+        if (!taintTok && identIsTainted(id.full, id.head, lineIdx, cleanedLines, 0, bare, interproc, true)) taintTok = id.full;
     }
     // (3) DIR-PARAM LEAF-APPEND — the interprocedural shape: a leaf appended onto
     // an unresolved dir-shaped param (the caller laundered the request id into
@@ -851,10 +860,18 @@ export function analyzeModule(text, relFile, model = {}) {
     const dirParamBase = !guardBase && !taintTok ? dirParamLeafAppend(path, lineIdx, cleanedLines, 0, dirParams) : null;
     if (!guardBase && !taintTok && !dirParamBase) continue; // request-independent → safe
     const kind = guardBase ? 'leaf-append' : taintTok ? 'tainted' : 'dir-param-leaf-append';
+    // Bead forge-8vfn.5.63: when taint reached here via the one-level
+    // interprocedural hop, name the ORIGINAL request source in `why` (not
+    // just the local param) — re-derived here (not threaded out of
+    // identIsTainted's boolean return) so the lookup is only ever done for
+    // a finding that is actually being reported, and it is cache-backed.
+    const interprocHit = taintTok
+      ? isParamTaintedViaCallers(taintTok.split('.')[0], lineIdx, interproc, (f2, h2, l2) => identIsTainted(f2, h2, l2, cleanedLines, 0, bare, interproc, false))
+      : null;
     const why = guardBase
       ? `leaf-append below guarded value "${guardBase}" — the appended leaf is NOT guarded (route the FULL path incl. leaf through guardedFile)`
       : taintTok
-        ? `request/project-derived path via "${taintTok}" reaches raw ${sink} unguarded`
+        ? `request/project-derived path via "${taintTok}" reaches raw ${sink} unguarded${interprocHit ? ` (one-level interprocedural hop: caller passes "${interprocHit.argExpr}" to ${interprocHit.fnName}(${interprocHit.paramName}) at line ${interprocHit.callerLine + 1})` : ''}`
         : `leaf-append onto unresolved dir-shaped param "${dirParamBase}" — the caller's dir may be contained but the appended leaf rides raw (route the FULL path incl. leaf through guardedFile / the guarded sibling)`;
     // Original (unblanked) text for the anchor/display — see argAt's header:
     // two literal leaves (`'a.json'` vs `'b.json'`) must stay DISTINGUISHABLE
@@ -862,7 +879,7 @@ export function analyzeModule(text, relFile, model = {}) {
     // structural (governingIdents/isGuardTerminal) checks above.
     const origPath = argAt(cleaned, openIdx, argIndex, text);
     const normPath = origPath.replace(/\s+/g, ' ').slice(0, 120).trim();
-    findings.push({ file: relFile, line: lineIdx + 1, sink, path: normPath, kind, why, anchor: anchorFor(funcs, lineIdx, normPath) });
+    findings.push({ file: relFile, line: lineIdx + 1, sink, path: normPath, kind, why, anchor: anchorFor(interproc.funcs, lineIdx, normPath) });
     }
   }
   return findings;

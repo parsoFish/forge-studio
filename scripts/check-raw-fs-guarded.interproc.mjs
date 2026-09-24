@@ -161,3 +161,152 @@ export function anchorFor(funcs, line, normalizedPath) {
   const fn = enclosingFunction(funcs, line);
   return `${fn ? fn.name : '<module>'}::${normalizedPath}`;
 }
+
+// =============================================================================
+// THE ONE-LEVEL INTERPROCEDURAL HOP (bead forge-8vfn.5.63).
+//
+// THE GAP. check-raw-fs-guarded.mjs's def-use walk (findBinding/
+// identIsTainted) is bounded to ONE function: when a sink's governing
+// identifier is an UNRESOLVED name (a function PARAMETER, not a local
+// `const`/`let`), the walk falls back to the curated bare-taint list and
+// gives up. A sink moved verbatim into a same-module helper —
+// `route(body) { return helper(body.project); }` /
+// `function helper(arg) { readFileSync(join(root, arg)); }` — is exactly
+// that shape: `arg` is unresolved INSIDE `helper`, and nothing about
+// `helper`'s own definition names it as request-derived, so the sink goes
+// dark even though every call site hands it a tainted value (measured live:
+// hook-runtime.ts's readFileSync(scriptPath), retired from the allowlist as
+// a documented blind spot when the read moved into a private
+// prepareHookRun step).
+//
+// THE FIX. Given an unresolved parameter NAME and the line it is read at:
+// find the enclosing top-level function, find every OTHER call site of that
+// function in the SAME module, and ask (via `identIsTaintedAt`, supplied by
+// the CALLER at call time — see "NO BACK-IMPORT" below) whether the
+// argument at that parameter's position is tainted WHERE IT IS WRITTEN.
+// Recursion into a SECOND hop is explicitly disabled by the caller (a
+// second hop is the sibling ratchet's caller-count remit, not this lint's).
+//
+// SAME-MODULE, TOP-LEVEL, POSITIONAL PARAMETERS ONLY (disclosed limits, same
+// spirit as the file this serves): a destructured parameter can't be
+// resolved positionally and is skipped (`null` at its slot in
+// parseFunctions — never a guess); an ARROW-const helper is not a parsed
+// function boundary; a cross-file call is out of scope (bead 5.63's
+// "if cheap" qualifier — a real cross-package call graph is not cheap, so
+// it is not attempted).
+//
+// NO BACK-IMPORT. This module never imports from check-raw-fs-guarded.mjs.
+// `argAt`/`governingIdents` are small, pure text utilities DUPLICATED here
+// (not re-exported-and-reimported) so the two files keep an ACYCLIC
+// dependency edge: check-raw-fs-guarded.mjs imports FROM here, never the
+// reverse. `identIsTaintedAt` — the caller's OWN def-use taint check — is
+// passed in as a plain function value at call time, for the same reason.
+// =============================================================================
+
+/** Path-combinator names — kept in lockstep with check-raw-fs-guarded.mjs's
+ *  own PATH_HELPERS; a bare call to one of these is scaffolding, not a
+ *  taint-carrying helper name, when listing a call argument's governing
+ *  idents. */
+const PATH_HELPERS = new Set(['join', 'resolve', 'dirname', 'basename', 'normalize', 'relative']);
+
+/** Balanced-paren extraction of the argument at `index` (0-based) in a call
+ *  whose `(` is the character just before `open`, over the CLEANED module
+ *  text. Mirrors check-raw-fs-guarded.mjs's own `argAt` (duplicated, not
+ *  imported — see the section header). */
+function argAt(cleaned, open, index) {
+  let depth = 0;
+  let i = open;
+  const n = cleaned.length;
+  let argIdx = 0;
+  let start = i;
+  for (; i < n; i++) {
+    const c = cleaned[i];
+    if (c === '(' || c === '[' || c === '{') depth += 1;
+    else if (c === ')' || c === ']' || c === '}') {
+      if (depth === 0) break;
+      depth -= 1;
+    } else if (c === ',' && depth === 0) {
+      if (argIdx === index) return cleaned.slice(start, i).trim();
+      argIdx += 1;
+      start = i + 1;
+    }
+  }
+  if (argIdx !== index) return '';
+  return cleaned.slice(start, i).trim();
+}
+
+/** Governing identifiers of an expression — a request-derived MEMBER
+ *  (`body.project`) or bare name, never a bare helper call. Mirrors
+ *  check-raw-fs-guarded.mjs's own `governingIdents` (duplicated — see
+ *  section header). */
+function governingIdents(expr) {
+  const out = [];
+  const re = /([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*(\()?/g;
+  let m;
+  while ((m = re.exec(expr))) {
+    const full = m[1];
+    const isCall = m[2] === '(';
+    const head = full.split('.')[0];
+    if (isCall && !full.includes('.')) continue;
+    if (isCall && PATH_HELPERS.has(head)) continue;
+    out.push({ full, head });
+  }
+  return out;
+}
+
+/** Every OTHER call site of `fn.name(` in the module (excluding its own
+ *  declaration), each with the balanced-paren argument-list open offset and
+ *  the 0-based line the CALL sits on. */
+function findCallSites(cleaned, fn, starts) {
+  const re = new RegExp(`(?<![.\\w$])${fn.name}\\s*\\(`, 'g');
+  const sites = [];
+  let m;
+  while ((m = re.exec(cleaned))) {
+    const openIdx = m.index + m[0].length;
+    if (openIdx === fn.declOpenIdx) continue;
+    sites.push({ openIdx, line: offsetToLine(starts, m.index) });
+  }
+  return sites;
+}
+
+/**
+ * THE ONE-LEVEL HOP. Is `paramName`, read at `line` (0-based) inside the
+ * enclosing top-level function, tainted because SOME call site elsewhere in
+ * the module passes a request-derived argument at that parameter's
+ * position? Returns the hit `{ fnName, paramName, argExpr, callerLine }` (a
+ * truthy diagnostic, not just a boolean — callers use it to name the
+ * ORIGINAL request source in a finding's `why`) or `null`.
+ * `identIsTaintedAt(full, head, line)` is the CALLER's own def-use taint
+ * check, invoked here ONLY at the call site's own line — never recursed
+ * into a second hop, which is what makes this "one level" (the caller is
+ * responsible for passing a version of itself with further hops disabled).
+ * Memoized per (function, param index) on `ctx.cache` so a helper with
+ * several sinks over the same param pays for the caller scan once.
+ */
+export function isParamTaintedViaCallers(paramName, line, ctx, identIsTaintedAt) {
+  const { cleaned, starts, funcs, cache } = ctx;
+  const fn = enclosingFunction(funcs, line);
+  if (!fn) return null;
+  const idx = fn.params.indexOf(paramName);
+  if (idx === -1) return null;
+  const cacheKey = `${fn.name}\u0000${idx}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
+  let hit = null;
+  for (const site of findCallSites(cleaned, fn, starts)) {
+    const argExpr = argAt(cleaned, site.openIdx, idx);
+    if (!argExpr) continue;
+    for (const id of governingIdents(argExpr)) {
+      if (identIsTaintedAt(id.full, id.head, site.line)) { hit = { fnName: fn.name, paramName, argExpr, callerLine: site.line }; break; }
+    }
+    if (hit) break;
+  }
+  cache.set(cacheKey, hit);
+  return hit;
+}
+
+/** A fresh per-module interprocedural context — one `parseFunctions` pass, a
+ *  memoization cache shared by every sink the module's `analyzeModule` scans
+ *  (both for anchor computation and, when wired, the taint hop above). */
+export function buildInterprocContext(cleaned, starts) {
+  return { cleaned, starts, funcs: parseFunctions(cleaned, starts), cache: new Map() };
+}

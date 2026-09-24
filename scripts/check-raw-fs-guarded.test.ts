@@ -9,12 +9,12 @@
  * are suppressed by reasoned allowlist rows), never because the scanner is dead.
  *
  * Group A — the def-use mechanism, unit-tested on synthetic module TEXT so it is
- * independent of what forge's own code currently looks like.
- * Group B — runLint + the allowlist contract (suppress / reason-required /
- * mistargeted / stale).
+ * independent of what forge's own code currently looks like. Group B/H (the
+ * allowlist contract) moved to check-raw-fs-guarded.allowlist.test.ts.
  * Group D — a synthetic NEW unguarded request sink in a REAL handling module
  * name TRIPS the lint through the real pipeline (charter's deliberate RED).
  * Group C — the CI-enforced gate: the REAL repo passes clean, proven live.
+ * Group I — the one-level interprocedural taint hop (bead forge-8vfn.5.63).
  */
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -372,13 +372,6 @@ test('A8: a sink-shaped call on a comment line is not counted', () => {
   assert.deepEqual(analyzeModule(text, 'cli/ui-bridge.ts'), []);
 });
 
-// =============================================================================
-// Group B/H — runLint + the CONTENT-KEYED allowlist contract (suppress /
-// reason-required / mistargeted / stale / ambiguous / count) MOVED to
-// check-raw-fs-guarded.allowlist.test.ts (bead forge-mlk): `applyAllowlist`
-// itself now lives in check-raw-fs-guarded.allowlist.mjs, beside the ANCHOR
-// scheme its behavior is entirely about — tested code lives beside its test,
-// the same principle that already put the row-shape contract (C4) there.
 // =============================================================================
 // Group D — a synthetic NEW unguarded request sink in a REAL handling module
 // TRIPS the lint through the real pipeline + real allowlist (charter RED)
@@ -975,13 +968,10 @@ test('G10 (CALIBRATION): the sweep\'s bare-id list is the measured seven — the
 });
 
 // =============================================================================
-// Group I — the ONE-LEVEL INTERPROCEDURAL hop (bead forge-8vfn.5.63). The
-// def-use walk is bounded to ONE function; a sink moved verbatim into a
-// same-module helper — the helper's own param unresolved, nothing about its
-// NAME taints it — went dark (measured live: hook-runtime.ts's
-// readFileSync(scriptPath), retired from the allowlist as a documented blind
-// spot when the read moved into a private prepareHookRun step). This closes
-// that ONE hop: check-raw-fs-guarded.interproc.mjs's isParamTaintedViaCallers.
+// Group I — the ONE-LEVEL INTERPROCEDURAL hop (bead forge-8vfn.5.63): a sink
+// moved into a same-module helper (param unresolved, name-blind) went dark
+// (measured live: hook-runtime.ts's readFileSync(scriptPath)). Closed by
+// interproc.mjs's isParamTaintedViaCallers.
 // =============================================================================
 
 test('I1 (RED): route → helper(requestDerived) → sink(arg) — invisible today, a finding after the one-level hop', () => {
