@@ -251,6 +251,23 @@ describe('validateSessionKinds — semantic errors', () => {
     assert.ok(f!.message.includes('another-real-agent-fixture'), `message must enumerate the known-agent set (missing "another-real-agent-fixture"), got: ${f!.message}`);
   });
 
+  // forge-boqn — CHECK_UNKNOWN_AGENT only catches a retired kind re-added
+  // under its OWN (now-deleted) agent id; one re-animated under a DIFFERENT,
+  // still-live agent (the exact repro: `agent: creation-agent`) passed
+  // clean, with the class held only by session-kinds-repo.test.ts's exact-
+  // count pin — never by the operator-facing validator `forge studio lint`
+  // actually calls.
+  it('AT-boqn: a RETIRED session-kind id re-added under a still-live agent → error naming it retired (not caught by unknown-agent)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'still-live-agent'); // the agent resolves fine — proves this is NOT an unknown-agent catch
+    writeSessionKindsYaml(root, [baseDescriptor({ id: 'community-refresh', agent: 'still-live-agent' })]);
+    const findings = validateSessionKinds(root);
+    const f = findings.find((x) => x.check === 'session-kinds/retired-kind-id');
+    assert.ok(f, `expected a session-kinds/retired-kind-id finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f!.level, 'error');
+    assert.equal(findings.some((x) => x.check === 'session-kinds/unknown-agent'), false, 'the agent DOES resolve — no unknown-agent finding should fire alongside it');
+  });
+
   it('AT-13: a missing studio/session-kinds.yaml → loadSessionKinds throws; validateSessionKinds returns exactly one error finding, never a silent empty list', () => {
     const root = makeForgeRoot();
     // No studio/ dir at all — the file is entirely absent.

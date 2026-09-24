@@ -115,6 +115,11 @@ creates:
   - src/auth/middleware.ts
   - src/auth/middleware.test.ts
 estimated_iterations: 3
+quality_gate_cmd:
+  - npx
+  - vitest
+  - run
+  - src/auth/middleware.test.ts
 ---
 
 # WI-3: OAuth bearer-header validation
@@ -143,6 +148,11 @@ files_in_scope:
   - src/auth/middleware.ts
 verification_artifact: src/auth/middleware.ts
 estimated_iterations: 2
+quality_gate_cmd:
+  - npx
+  - vitest
+  - run
+  - src/auth/middleware.test.ts
 ---
 
 # WI-4: reject tokens with no scope claim
