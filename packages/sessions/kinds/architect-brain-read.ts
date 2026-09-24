@@ -8,14 +8,17 @@
  * `kind-turn.ts`'s hooks are already ruling 78's whole budget, and
  * `architect-steps.ts` is near the file cap, so neither is touched.
  * `withBrainReadTracking` wraps each phase's `KindStepHandler` from OUTSIDE,
- * at `architect.ts`'s `steps:` table, substituting a tallying `queryFn`
- * every sub-turn (interview/explore/draft/critic) threads through unchanged
- * — wrapping once observes the whole turn; messages re-yielded as-is.
+ * at `architect.ts`'s `steps:` table. It observes through `onToolUse` — the
+ * EXISTING live tool-telemetry callback every sub-turn (interview/explore/
+ * draft/critic) already threads through unchanged (`runStructuredTurn`'s own
+ * loop calls it for every tool_use block) — never `queryFn`: bead 5.50's lock
+ * (`run-query-marker.enforce.test.ts`) requires every production `queryFn` be
+ * a caller-supplied pass-through, on pain of a spawned child losing its
+ * sweep marker, so this module must never construct or inject one.
  */
 import type { EventLogger } from '@forge/kernel';
 import { deriveKbIdFromBrainPath } from '@forge/knowledge/brain-paths.ts';
-import { extractPath } from '@forge/agents/tool-event-emit.ts';
-import type { QueryFn } from '../interactive-session.ts';
+import type { ToolUseLiveDetail } from '@forge/agents/ralph/claude-agent.ts';
 import type { KindStepHandler, KindTurnInput, KindTurnPlumbing, KindTurnResult, KindTurnStatus } from './kind-turn.ts';
 
 /** Write tools never touch brain/, so these three are exhaustive. */
@@ -25,33 +28,39 @@ const KB_READ_TOOL_NAMES = new Set(['Read', 'Grep', 'Glob']);
  *  not tool calls, so a re-Read (a retried draft round) counts once. */
 export type BrainReadTally = Map<string, Set<string>>;
 
-/** Wrap a `queryFn` so every Read/Grep/Glob tool_use is tallied into the
- *  shared `tally`, message re-yielded unchanged. */
-export function withBrainReadTally(base: QueryFn, tally: BrainReadTally): QueryFn {
-  return (params) => {
-    const source = base(params);
-    return (async function* () {
-      for await (const msg of source) {
-        recordBrainReadsFromMessage(msg, tally);
-        yield msg;
-      }
-    })();
-  };
+/**
+ * `ToolUseLiveDetail.inputSummary` (`summarizeToolInput`, tool-event-emit.ts)
+ * IS the path for Read/Glob; for Grep it is `` `${pattern} @ ${path}` `` when
+ * a `path` arg was given, else just the pattern. Never the raw tool input —
+ * this reads the SAME summary the tool_use event log already carries, no new
+ * seam onto the SDK message.
+ */
+function pathFromToolUseDetail(detail: ToolUseLiveDetail): string | null {
+  if (!KB_READ_TOOL_NAMES.has(detail.name)) return null;
+  const summary = detail.inputSummary;
+  if (!summary) return null;
+  if (detail.name !== 'Grep') return summary;
+  const at = summary.lastIndexOf(' @ ');
+  return at === -1 ? null : summary.slice(at + 3);
 }
 
-function recordBrainReadsFromMessage(msg: unknown, tally: BrainReadTally): void {
-  const m = msg as { type?: string; message?: { content?: Array<{ type?: string; name?: string; input?: unknown }> } };
-  if (m?.type !== 'assistant') return;
-  for (const block of m.message?.content ?? []) {
-    if (block?.type !== 'tool_use' || !block.name || !KB_READ_TOOL_NAMES.has(block.name)) continue;
-    const path = extractPath(block.input);
-    if (!path) continue;
+/** Wrap an `onToolUse` callback: forwards every call unchanged (the shared
+ *  live-telemetry sink still sees everything), then tallies Read/Grep/Glob
+ *  brain/ paths into the shared `tally`. */
+export function withBrainReadTally(
+  base: (d: ToolUseLiveDetail) => void,
+  tally: BrainReadTally,
+): (d: ToolUseLiveDetail) => void {
+  return (detail) => {
+    base(detail);
+    const path = pathFromToolUseDetail(detail);
+    if (!path) return;
     const kbId = deriveKbIdFromBrainPath(path);
-    if (!kbId) continue;
+    if (!kbId) return;
     const seen = tally.get(kbId);
     if (seen) seen.add(path);
     else tally.set(kbId, new Set([path]));
-  }
+  };
 }
 
 /** One `brain.read` event per KB in `tally` — same shape as the PM's:
@@ -86,7 +95,7 @@ export function withBrainReadTracking<
 >(step: KindStepHandler<S, R, I>): KindStepHandler<S, R, I> {
   return async (args) => {
     const tally: BrainReadTally = new Map();
-    const plumbing: KindTurnPlumbing = { ...args.plumbing, queryFn: withBrainReadTally(args.plumbing.queryFn, tally) };
+    const plumbing: KindTurnPlumbing = { ...args.plumbing, onToolUse: withBrainReadTally(args.plumbing.onToolUse, tally) };
     try {
       return await step({ ...args, plumbing });
     } finally {

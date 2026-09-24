@@ -117,6 +117,46 @@ test('AT-8.3.5-0 an architect interview turn emits one brain.read event per KB i
   }
 });
 
+test('AT-8.3.5-1b Grep and Glob tool calls into brain/ are tallied through the same onToolUse path-summary seam as Read', async () => {
+  // forge-8vfn.8.3.5 gate fix: the tally observes `onToolUse` (already
+  // threaded through every architect sub-turn), never `queryFn` — bead 5.50's
+  // lock forbids a production `queryFn:` that is not a caller pass-through.
+  // `ToolUseLiveDetail.inputSummary` (summarizeToolInput) is the path itself
+  // for Glob, and `` `${pattern} @ ${path}` `` for Grep — this pins BOTH shapes.
+  const { projectRoot, logsRoot, root } = plantSession();
+  try {
+    const queryFn: QueryFn = () => ({
+      async *[Symbol.asyncIterator]() {
+        yield {
+          type: 'assistant',
+          message: {
+            content: [
+              { type: 'tool_use', name: 'Grep', input: { pattern: 'ADR', path: 'brain/kbA/themes/g.md' } },
+              { type: 'tool_use', name: 'Glob', input: { pattern: '*.md', path: 'brain/projects/kbB/themes' } },
+            ],
+          },
+        };
+        yield {
+          type: 'result',
+          subtype: 'success',
+          total_cost_usd: 0.01,
+          structured_output: { done: false, questions: [{ question: 'Q?', header: 'H' }] },
+        };
+      },
+    });
+
+    await runArchitectTurn({ sessionId: SESSION_ID, projectRoot, logsRoot, brainCwd: root, queryFn });
+
+    const reads = readEvents(logsRoot).filter((e) => e.message === 'brain.read');
+    assert.equal(reads.length, 2, `expected one brain.read event per KB (Grep -> kbA, Glob -> kbB), got ${JSON.stringify(reads)}`);
+    const byKb = new Map(reads.map((e) => [(e.metadata as Record<string, unknown>)['kbId'], e]));
+    assert.equal((byKb.get('kbA')?.metadata as Record<string, unknown>)['themeCount'], 1, 'Grep path parsed out of "pattern @ path"');
+    assert.equal((byKb.get('kbB')?.metadata as Record<string, unknown>)['themeCount'], 1, 'Glob path IS the inputSummary');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('AT-8.3.5-1 (positive control) a turn that reads no brain/ path emits no brain.read event at all', async () => {
   const { projectRoot, logsRoot, root } = plantSession();
   try {
