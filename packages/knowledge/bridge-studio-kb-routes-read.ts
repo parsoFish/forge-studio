@@ -14,11 +14,9 @@
  * the wrong claimant here returns 200 from the wrong code path.
  */
 import { type IncomingMessage, type ServerResponse } from 'node:http';
-import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { resolveKbBrainDir } from './brain-paths.ts';
+import { basename } from 'node:path';
 import { type UnroutableKb } from './kb-sites.ts';
-import { getKbBackend } from './kb-backend.ts';
+import { getKbBackend, type KbBackend } from './kb-backend.ts';
 import { attachKbLintSummaries } from './kb-lint-summary.ts';
 import { KB_ID_RE, sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
 import { buildKbHealth, loadKbDescriptors } from './bridge-studio-kbs.ts';
@@ -248,10 +246,14 @@ export async function handleKbGet(
         return true;
       }
 
-      // Build the per-kb graph from the brain filesystem
+      // Build the per-kb graph from the brain filesystem. `backend` is
+      // reused below for the guidance listing (M7-C KN1, bead
+      // forge-8vfn.5.25.3) — one resolution, not two.
       let graph;
+      let backend: KbBackend;
       try {
-        graph = getKbBackend(ctx.forgeRoot, kbId).buildGraph();
+        backend = getKbBackend(ctx.forgeRoot, kbId);
+        graph = backend.buildGraph();
       } catch (err) {
         const msg = String(err);
         if (msg.includes('Unknown kbId')) {
@@ -267,18 +269,16 @@ export async function handleKbGet(
       // W7-B2 (knowledge-29): pinned-guidance notes awaiting an ingest pass —
       // listed so the operator can SEE the queue the pin button feeds,
       // instead of the note vanishing behind a promise about a pass that may
-      // never have run. Server-enumerated names under the KB's own dir.
+      // never have run. Through the SAME backend's `listPendingGuidance()`
+      // (the seam's own guidance-note reader, kb-graph.ts) rather than a
+      // second, hand-rolled `_guidance/` directory scan.
       const guidance: Array<{ file: string; at: string }> = [];
       try {
-        const kbBrainDirForGuidance = resolveKbBrainDir(ctx.forgeRoot, kbId);
-        const gDir = kbBrainDirForGuidance ? join(kbBrainDirForGuidance, '_guidance') : null;
-        if (gDir && existsSync(gDir)) {
-          for (const name of readdirSync(gDir)) {
-            if (!name.endsWith('.md')) continue;
-            guidance.push({ file: name, at: name.replace(/\.md$/, '') });
-          }
-          guidance.sort((a, b) => (a.at < b.at ? 1 : -1));
+        for (const g of backend.listPendingGuidance()) {
+          const name = basename(g.file);
+          guidance.push({ file: name, at: name.replace(/\.md$/, '') });
         }
+        guidance.sort((a, b) => (a.at < b.at ? 1 : -1));
       } catch {
         // best-effort — an unreadable _guidance dir just lists nothing
       }

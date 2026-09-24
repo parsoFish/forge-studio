@@ -80,10 +80,10 @@
  */
 
 import { basename, join } from 'node:path';
-import { resolveKbBrainDir } from './brain-paths.ts';
+import { tryGetKbBackend } from './kb-backend.ts';
 import { createLogger, sanitizeError } from '@forge/kernel';
 import { applyAutoFixesUntilStable, resolutionCounts, type Finding } from './brain-lint.ts';
-import { collectKbFindings, findingUnderDir, runBrainLintFullFresh } from './kb-lint-summary.ts';
+import { collectKbFindings, runBrainLintFullFresh } from './kb-lint-summary.ts';
 import { diffKbSnapshot, type KbEditChange } from './kb-drain-structural.ts';
 import type { KbDrainFixTurnInput, KbDrainFixTurnResult, KbDrainRunFixTurnFn, SessionStatusIoPort } from './kb-drain-model.ts';
 import {
@@ -398,18 +398,25 @@ export async function runKbDrain(
       heartbeat.unref?.();
     }
 
-    const brainDir = resolveKbBrainDir(forgeRoot, kbId);
-    if (!brainDir) {
+    // M7-C KN1 (bead forge-8vfn.5.25.3) — resolved through the KbBackend seam
+    // (`tryGetKbBackend`), not `resolveKbBrainDir` directly; `inKb` below is
+    // the backend's own `contains()`, the same per-KB scoping question every
+    // other caller of it asks. `brainDir` (the raw root) is still needed
+    // as-is further down for `mintKbCleanupDraftSession`'s descriptor lookup
+    // — `rootDir()` is the seam's one deliberate raw-path exception.
+    const backend = tryGetKbBackend(forgeRoot, kbId);
+    const brainDir = backend?.rootDir() ?? null;
+    if (!backend || !brainDir) {
       throw new Error(`runKbDrain: kb id "${kbId}" does not resolve to any real brain directory`);
     }
     // W8-F1 — TWO scopes, and the difference is the whole S1-b defect. The
     // agent runs with `cwd = forgeRoot`, so what it CAN write is the whole
-    // brain (`brainRoot`); what it MAY write is this KB (`brainDir`). The gate
-    // snapshots the former and permits only the latter. Snapshotting the KB
-    // alone — what this did before — meant an edit one directory over was
+    // brain (`brainRoot`); what it MAY write is this KB (`inKb`, below). The
+    // gate snapshots the former and permits only the latter. Snapshotting the
+    // KB alone — what this did before — meant an edit one directory over was
     // never even seen.
     const brainRoot = brainRootDir(forgeRoot);
-    const inKb = (f: Finding): boolean => findingUnderDir(forgeRoot, brainDir, f);
+    const inKb = (f: Finding): boolean => backend.contains(f.file);
     // W7-B2 (knowledge-10): ONE lint lens — the same one buildKbHealth counts
     // from, so the drain can never report green while the health readout on
     // the same screen still counts flags.

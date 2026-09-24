@@ -18,7 +18,7 @@ import { spawn } from 'node:child_process';
 import { join, relative, resolve, sep } from 'node:path';
 import { resolveGuardedPath, guardedFile, guardedReadFile } from '@forge/kernel';
 import { loadKbDescriptor, resolveKbProcesses } from './studio/kb-descriptor.ts';
-import { resolveKbBrainDir } from './brain-paths.ts';
+import { tryGetKbBackend } from './kb-backend.ts';
 import { type KbDescriptor } from '@forge/contracts/studio/types.ts';
 import { resolutionCounts, applyAutoFixesUntilStable, type Finding } from './brain-lint.ts';
 import { listCycles } from '@forge/kernel';
@@ -26,7 +26,6 @@ import { regenerateBrainIndex } from './brain-index.ts';
 import { isDryBridge, refuseDryBridge } from '@forge/kernel';
 import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
 import {
-  findingUnderDir,
   collectKbFindings,
   runBrainLintFullMemoized,
   runBrainLintFullFresh,
@@ -373,8 +372,8 @@ export async function handleKbMaintenance(
         // repeat clicks. MAJOR 2: fix-auto also WRITES, so it must share the
         // exact-dir scope — the old substring `includes(kbId)` folded a sibling
         // (e.g. `alpha-two` into `alpha`) into this KB's auto-fix write set.
-        const kbBrainDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
-        const inKb = (f: Finding): boolean => kbBrainDir !== null && findingUnderDir(ctx.forgeRoot, kbBrainDir, f);
+        const kbBackend = tryGetKbBackend(ctx.forgeRoot, kbId);
+        const inKb = (f: Finding): boolean => kbBackend !== null && kbBackend.contains(f.file);
         const result = applyAutoFixesUntilStable(ctx.forgeRoot, { filter: inKb });
         sendJson(res, 200, { op: 'fix-auto', ok: true, applied: result.applied, skipped: result.skipped, rounds: result.rounds, remaining: result.remaining, counts: resolutionCounts(result.remaining) }, origin);
         return true;
@@ -461,13 +460,13 @@ export async function handleKbMaintenance(
         // ALSO refresh the global brain meta-index (cheap, and its counts
         // include this KB). The response reports both halves so the UI can
         // say what actually happened.
-        const idxBrainDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
-        if (!idxBrainDir) {
+        const idxBackend = tryGetKbBackend(ctx.forgeRoot, kbId);
+        if (!idxBackend) {
           sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin);
           return true;
         }
         const idxInKb = (f: Finding): boolean =>
-          findingUnderDir(ctx.forgeRoot, idxBrainDir, f) && typeof f.kind === 'string' && f.kind.startsWith('index.');
+          idxBackend.contains(f.file) && typeof f.kind === 'string' && f.kind.startsWith('index.');
         // Two per-KB repair lanes, both deterministic and spawn-free: the
         // auto-tier index fixers (forge sub-wiki indexes), plus the SAME
         // ensureLinkedAt repair consolidate uses for a project brain's
@@ -520,11 +519,14 @@ export async function handleKbMaintenance(
         // the kb.yaml explicitly overrides it. Only 'brain-fix' is
         // implemented today — an explicit, typed rejection beats silently
         // running the wrong obligation for a `{cmd}` or unrecognized builtin.
-        const kbDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
-        if (!kbDir) { sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin); return true; }
+        // M7-C KN1 (bead forge-8vfn.5.25.3): `descriptorPath()` is the
+        // backend's own kb.yaml resolution — re-resolved per call, so this
+        // stays TOCTOU-safe the same way `resolveKbBrainDir` was.
+        const descriptorPath = tryGetKbBackend(ctx.forgeRoot, kbId)?.descriptorPath() ?? null;
+        if (!descriptorPath) { sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin); return true; }
         let kb: KbDescriptor;
         try {
-          kb = loadKbDescriptor(join(kbDir, 'kb.yaml'));
+          kb = loadKbDescriptor(descriptorPath);
         } catch (err) {
           sendJson(res, 500, { error: `failed to load kb descriptor: ${sanitizeError(err)}` }, origin);
           return true;
