@@ -21,6 +21,17 @@
  * RED-B pins `collectRecentAgentRuns`'s standalone half the same way against
  * its own `limit`.
  *
+ * RED-D (security-review finding, bead forge-omk0): the cap+order bound above
+ * only proves the RIGHT dirs come back, not that finding them is cheap. The
+ * newest-first ORDER itself was built on `entries.sort((a,b) => mtimeOf(b) -
+ * mtimeOf(a))` — a comparator-embedded stat, called by V8's sort roughly
+ * `2*n*log2(n)` times, not `n` (measured ~21x at n=4000, ~29x at n=50000 in
+ * the finding). `resolveGuardedPath`/`statSync` are imported directly, not
+ * part of `AgentHistoryDeps`, so there is no pre-existing seam to count real
+ * guarded stats through `collectStandaloneRows`; `sortEntriesByMtimeDesc`
+ * (exported from the module under test) is that seam — a pure decorate/sort/
+ * undecorate helper taking an injectable `mtimeOf`, which this test counts.
+ *
  * RUN: node --experimental-strip-types --test packages/agents/tests/unit/standalone-history-bounded-scan.test.ts
  */
 import { test } from 'node:test';
@@ -29,7 +40,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { collectStandaloneRows, collectRecentAgentRuns, type AgentHistoryDeps } from '../../bridge-agents-history-rows.ts';
+import {
+  collectStandaloneRows,
+  collectRecentAgentRuns,
+  sortEntriesByMtimeDesc,
+  type AgentHistoryDeps,
+} from '../../bridge-agents-history-rows.ts';
 
 const PAGE = 50; // mirrors STANDALONE_HISTORY_MAX_ROWS
 
@@ -196,5 +212,38 @@ test("M7-C RED-B: collectRecentAgentRuns's standalone half never opens more than
     assert.ok(!calls.full.includes('_agent-recent-forbidden'), `the oldest dir must never be opened: ${JSON.stringify(calls.full)}`);
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('M7-C RED-D: sortEntriesByMtimeDesc stats each entry exactly once, never once per comparison', () => {
+  const N = 200;
+  const entries = Array.from({ length: N }, (_, i) => `_agent-e-${i}`);
+  // Fisher-Yates shuffle so a real sort has real reordering work to do — a
+  // pre-sorted or reverse-sorted input can let some comparator-based sorts
+  // dodge comparisons a truly-buggy implementation would otherwise make.
+  for (let i = entries.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = entries[i]!;
+    entries[i] = entries[j]!;
+    entries[j] = tmp;
+  }
+
+  let calls = 0;
+  // The synthetic "mtime" is just the index encoded in the entry's own name,
+  // so newest-first order is independently checkable without touching disk.
+  const countingMtimeOf = (entry: string): number => {
+    calls += 1;
+    return Number(entry.slice(entry.lastIndexOf('-') + 1));
+  };
+
+  const sorted = sortEntriesByMtimeDesc(entries, countingMtimeOf);
+
+  assert.equal(calls, N, `stat each entry exactly once: expected ${N} mtimeOf calls, got ${calls}`);
+  assert.equal(sorted.length, N);
+  assert.deepEqual(new Set(sorted), new Set(entries), 'must be a reordering, not a drop/duplicate');
+  for (let i = 1; i < sorted.length; i += 1) {
+    const prevIdx = Number(sorted[i - 1]!.slice(sorted[i - 1]!.lastIndexOf('-') + 1));
+    const curIdx = Number(sorted[i]!.slice(sorted[i]!.lastIndexOf('-') + 1));
+    assert.ok(prevIdx >= curIdx, `not newest-first at index ${i}: ${sorted[i - 1]} before ${sorted[i]}`);
   }
 });
