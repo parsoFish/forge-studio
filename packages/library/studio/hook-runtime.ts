@@ -76,7 +76,8 @@ import { HOOK_ENV_BASE_ALLOWLIST, HOOK_ENV_CREDENTIAL_EXCLUSIONS, buildChildEnv 
 import type { EventLogger } from '@forge/kernel';
 import { hookDir, loadHookDefinition, resolveHookScriptPath, type HookDefinition, type HookPermissionManifest } from './hook-library.ts';
 import { extractEnvVarNames, scanHookPackage, type HookScanReport } from './hook-scan.ts';
-import { hookRunState } from './hook-approval-ledger.ts';
+import { hookRunState, readHookApprovalLedger } from './hook-approval-ledger.ts';
+import { hashHookScript } from './hook-package.ts';
 
 // ---------------------------------------------------------------------------
 // buildHookChildEnv — composes spawn-env.ts's buildChildEnv over the
@@ -226,6 +227,10 @@ const HOOK_SPAWN_MAX_BUFFER_BYTES = 1024 * 1024;
 interface PreparedHookRun {
   def: HookDefinition;
   scriptPath: string;
+  /** The EXACT bytes hash-verified against the ledger's approved scriptHash
+   *  below — the one and only thing either spawn tail executes. Never a
+   *  fourth read of `scriptPath` off disk (forge-8vfn.8.3.2, content half). */
+  scriptBody: string;
   dir: string;
   childEnv: NodeJS.ProcessEnv;
   undeclaredEnvRefs: string[];
@@ -287,6 +292,30 @@ function prepareHookRun(input: { forgeRoot: string; id: string; logger: EventLog
   const scriptPath = resolveHookScriptPath(dir, def.script);
   const scriptBody = readFileSync(scriptPath, 'utf8');
 
+  // forge-8vfn.8.3.2 (content half): THIS is now the ONE read either tail
+  // executes — verify it BEFORE it is trusted with anything, then never open
+  // `scriptPath` again. Before this check, the approval fingerprint
+  // (`hookRunState` above, via `snapshotHookPackage -> readHookPackage`), this
+  // `readFileSync`, and each tail's own `spawn(Sync)('bash', [scriptPath])`
+  // were THREE separate opens of the same path — nothing stopped the bytes
+  // from changing in place between the gate's read and the exec read (or,
+  // before this fix, a FOURTH read: bash's own). Hashing THIS read's bytes
+  // with `hashHookScript` — the ledger's own hashing function, reused rather
+  // than reimplemented — and comparing against the ledger's stored
+  // `scriptHash` (the value the gate just accepted, not a fresh live rescan)
+  // closes that window: a change landing between the gate and here is
+  // refused, and passing this check means no later read of the path can
+  // diverge from it, because there is no later read — both tails execute
+  // THESE bytes directly.
+  const approvedScriptHash = readHookApprovalLedger(forgeRoot).get(id)?.scriptHash;
+  const liveScriptHash = hashHookScript(scriptBody);
+  if (liveScriptHash !== approvedScriptHash) {
+    throw new HookRunError(
+      'not-runnable',
+      `runHookScript: hook "${id}"'s script content changed between the approval gate's check and this read (fingerprint mismatch: expected ${approvedScriptHash ?? '(no approval on record)'}, read ${liveScriptHash}) — refusing to spawn bytes that were never approved`,
+    );
+  }
+
   // Emitted unconditionally (CLAUDE.md: "emit structured events on every
   // invocation") — the mismatch event below is CONDITIONAL, so a hook run
   // with nothing to report must still leave a real trace in the log.
@@ -328,7 +357,7 @@ function prepareHookRun(input: { forgeRoot: string; id: string; logger: EventLog
     });
   }
 
-  return { def, scriptPath, dir, childEnv, undeclaredEnvRefs };
+  return { def, scriptPath, scriptBody, dir, childEnv, undeclaredEnvRefs };
 }
 
 /** The shape both spawn tails reduce their real child-process result to,
@@ -375,13 +404,53 @@ function finalizeHookOutcome(id: string, timeoutMs: number, durationMs: number, 
   };
 }
 
-// Tail 1 — SYNCHRONOUS, unchanged in signature and behaviour.
+// ---------------------------------------------------------------------------
+// bashStdinScriptEnv / BASH_STDIN_SCRIPT_ARGS — BOTH tails execute
+// `prepared.scriptBody` (the ONE hash-verified read, above) fed to `bash` on
+// STDIN rather than a THIRD `spawn(Sync)('bash', [scriptPath])` that would
+// have bash re-open the path itself, which is exactly the open this fix
+// closes.
+//
+// `-s` (read commands from stdin), not `-c <scriptBody>`: a script's size is
+// bounded only by `MAX_PACKAGE_BYTES` (5 MiB, skill-package.ts) — comfortably
+// past this host's measured `ARG_MAX` (2 MiB, `getconf ARG_MAX`) — so passing
+// the bytes as a `-c` argv string would make an approved, in-cap hook fail to
+// spawn (E2BIG) purely from this fix's own choice of exec mechanism. Stdin has
+// no such limit.
+//
+// `$0`/argv semantics hooks rely on (checked against real fixtures, not
+// assumed): `hook-runtime.test.ts`'s PIN D entry script sources a sibling via
+// `. "$(dirname "$0")/lib.sh"`, so `$0` must still be the script's real path.
+// `-s` alone does NOT do this — bash's OWN behaviour, verified empirically,
+// sets `$0` to `bash` itself when reading from stdin, positional args after
+// `-s` become `$1`/`$2`/…, never `$0`. `BASH_ARGV0` is bash's own (5.0+,
+// documented) mechanism for exactly this case — "a caller invoking the shell
+// through a means with no argv[0] to borrow sets this to name it" — and it is
+// set directly on the spawn's OWN env object here, never threaded through
+// `buildHookChildEnv`'s manifest-derived overrides: it is forge's own spawn
+// directive, always the real `scriptPath`, never parent- or hook-supplied
+// data, so it does not belong in the credential-fenced grant path above.
+// ---------------------------------------------------------------------------
+
+const BASH_STDIN_SCRIPT_ARGS = ['-s'];
+
+function bashStdinScriptEnv(childEnv: NodeJS.ProcessEnv, scriptPath: string): NodeJS.ProcessEnv {
+  return { ...childEnv, BASH_ARGV0: scriptPath };
+}
+
+// Tail 1 — SYNCHRONOUS.
 export function runHookScript(input: RunHookScriptInput): HookRunResult {
   const { forgeRoot, id, logger, initiativeId, parentEnv = process.env, timeoutMs = HOOK_SPAWN_TIMEOUT_MS } = input;
   const prepared = prepareHookRun({ forgeRoot, id, logger, initiativeId, parentEnv });
 
   const start = performance.now(); // monotonic: Date.now() steps back here (forge-8vfn.7.6.50)
-  const result = spawnSync('bash', [prepared.scriptPath], { env: prepared.childEnv, cwd: prepared.dir, timeout: timeoutMs, encoding: 'utf8' });
+  const result = spawnSync('bash', BASH_STDIN_SCRIPT_ARGS, {
+    env: bashStdinScriptEnv(prepared.childEnv, prepared.scriptPath),
+    cwd: prepared.dir,
+    timeout: timeoutMs,
+    encoding: 'utf8',
+    input: prepared.scriptBody,
+  });
   const durationMs = Math.round(performance.now() - start);
   const outcome = { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '', error: result.error as NodeJS.ErrnoException | undefined };
   return finalizeHookOutcome(id, timeoutMs, durationMs, outcome, prepared.undeclaredEnvRefs, logger, initiativeId);
@@ -390,11 +459,22 @@ export function runHookScript(input: RunHookScriptInput): HookRunResult {
 // spawnBashAsync — async spawn wrapper: manual timeout + manual BOUNDED
 // capture, reduced to the same HookSpawnOutcome shape as spawnSync's result.
 
-function spawnBashAsync(scriptPath: string, cwd: string, env: NodeJS.ProcessEnv, timeoutMs: number): Promise<HookSpawnOutcome> {
+function spawnBashAsync(scriptBody: string, scriptPath: string, cwd: string, env: NodeJS.ProcessEnv, timeoutMs: number): Promise<HookSpawnOutcome> {
   return new Promise((resolve) => {
     // `detached: true` makes `bash` the leader of its own process group (pid
     // === pgid) so a group-targeted signal reaches every descendant too.
-    const child = spawn('bash', [scriptPath], { env, cwd, detached: true });
+    // Same `-s` + stdin + `BASH_ARGV0` scheme as the sync tail (see
+    // `bashStdinScriptEnv`/`BASH_STDIN_SCRIPT_ARGS`'s doc comment) — executes
+    // `scriptBody` directly, never a second read of `scriptPath`.
+    const child = spawn('bash', BASH_STDIN_SCRIPT_ARGS, { env: bashStdinScriptEnv(env, scriptPath), cwd, detached: true });
+    // Write the verified bytes and close stdin — `spawnSync`'s `input` option
+    // has no async equivalent, so this is the manual write+end the async API
+    // requires. `stdin` errors (e.g. EPIPE from a child that exits or is
+    // killed before it finishes reading) are swallowed HERE, deliberately:
+    // the real outcome is decided by `exit`/`close`/the timer below, and an
+    // unhandled `error` on a Writable throws and would crash the process.
+    child.stdin?.on('error', () => {});
+    child.stdin?.end(scriptBody);
     const buf = { stdout: '', stderr: '' };
     let overflowed = false;
     let timedOut = false;
@@ -462,7 +542,7 @@ export async function runHookScriptAsync(input: RunHookScriptInput): Promise<Hoo
   const prepared = prepareHookRun({ forgeRoot, id, logger, initiativeId, parentEnv });
 
   const start = performance.now(); // monotonic: Date.now() steps back here (forge-8vfn.7.6.50)
-  const outcome = await spawnBashAsync(prepared.scriptPath, prepared.dir, prepared.childEnv, timeoutMs);
+  const outcome = await spawnBashAsync(prepared.scriptBody, prepared.scriptPath, prepared.dir, prepared.childEnv, timeoutMs);
   const durationMs = Math.round(performance.now() - start);
 
   return finalizeHookOutcome(id, timeoutMs, durationMs, outcome, prepared.undeclaredEnvRefs, logger, initiativeId);
