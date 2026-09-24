@@ -28,6 +28,7 @@ import {
   formatBaseline,
   parseBaseline,
   compareBaseline,
+  countDocClassifications,
   runCheck,
 } from './check-request-path-sinks.mjs';
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -622,6 +623,59 @@ test('8vfn.5.19: --write PRINTS every row it changes (the "silent absorption" de
       /orchestrator\/reached\.ts writeFileSync:\s*2\s*->\s*1/,
       '--write must print the exact row it is changing, not just a summary count (bead forge-8vfn.5.19)'
     );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// =============================================================================
+// Doc-derived classification counts — replaces docs/reference/request-path-
+// sinks.md's hand-maintained Summary table (a top-of-file conflict every PR
+// touched, on top of the append-at-the-end every PR also did — lane C hit it
+// 6x in one day). The checker now derives the count from the doc's own
+// classified table rows and prints it; nothing in the doc asserts a number
+// that can drift from what is actually written there.
+// =============================================================================
+
+test('countDocClassifications: buckets rows by their own class cell, ignores the header', () => {
+  const md = [
+    '| file:line | op | field | class | evidence |',
+    '|---|---|---|---|---|',
+    '| a.ts:1 | x | y | guarded `[exec]` | z |',
+    '| b.ts:1 | x | y | unguarded | z |',
+    "| c.ts:1 | x | y | accidentally-safe `[read]` | z |",
+    "| d.ts:1 | x | y | `accidentally-safe` -> **not request-derived** `[read]` | z |",
+    '| e.ts:1 | x | y | not request-derived `[read]` | z |',
+  ].join('\n');
+  const counts = countDocClassifications(md);
+  assert.equal(counts.totalRows, 5, 'the header/separator rows must not be counted as classified rows');
+  assert.equal(counts.byClass.guarded, 1);
+  assert.equal(counts.byClass.unguarded, 1);
+  assert.equal(counts.byClass.accidentallySafe, 1);
+  assert.equal(counts.byClass.notRequestDerived, 2);
+  assert.equal(counts.byMarker.exec, 1);
+  assert.equal(counts.byMarker.read, 3);
+});
+
+test('doc census: runCheck prints a doc-derived classification count, never a hand-typed one', () => {
+  const root = makeFixture();
+  const baselinePath = baselinePathFor(root);
+  const docPath = join(root, 'docs/reference/request-path-sinks.md');
+  try {
+    mkdirSync(dirname(docPath), { recursive: true });
+    writeFileSync(
+      docPath,
+      ['| file:line | op | field | class | evidence |', '|---|---|---|---|---|', '| a.ts:1 | x | y | guarded `[exec]` | z |'].join('\n')
+    );
+    let out = '';
+    const origLog = console.log;
+    console.log = (...args: unknown[]) => { out += args.join(' ') + '\n'; };
+    try {
+      runCheck({ root, baselinePath, docPath, write: true });
+    } finally {
+      console.log = origLog;
+    }
+    assert.match(out, /doc census.*1 classified row/i, 'runCheck must print a doc-derived count, computed live from docPath');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
