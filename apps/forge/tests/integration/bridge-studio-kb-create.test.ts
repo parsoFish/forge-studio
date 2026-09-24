@@ -71,8 +71,8 @@ This agent does ${band} things.
 }
 
 /** Minimal forge-develop flow.yaml whose two agent-bearing nodes declare
- *  demo-band + review-band — so listFlowBandIds derives a REAL, non-empty band
- *  vocabulary { demo-band, review-band } (F2: the fail-CLOSED helper returns []
+ *  integrate-band + review-band — so listFlowBandIds derives a REAL, non-empty band
+ *  vocabulary { integrate-band, review-band } (F2: the fail-CLOSED helper returns []
  *  for a flow with no derivable vocabulary, so an EMPTY forge-develop dir would
  *  now reject every band scope). */
 const FORGE_DEVELOP_FLOW_YAML = `id: forge-develop
@@ -119,13 +119,13 @@ before(async () => {
 
   // A registered flow + a discovered project, so binding.ref existence checks
   // (R1-01) have something real to resolve against. forge-develop is now a REAL
-  // flow (flow.yaml + demo-band/review-band skills) so listFlowBandIds derives a
-  // non-empty { demo-band, review-band } vocabulary — required after F2 made the
+  // flow (flow.yaml + integrate-band/review-band skills) so listFlowBandIds derives a
+  // non-empty { integrate-band, review-band } vocabulary — required after F2 made the
   // helper fail CLOSED (an empty flow dir yields [] and rejects every band).
   const developFlowDir = join(forgeRoot, 'studio', 'flows', 'forge-develop');
   mkdirSync(developFlowDir, { recursive: true });
   writeFileSync(join(developFlowDir, 'flow.yaml'), FORGE_DEVELOP_FLOW_YAML);
-  for (const [slug, band] of [['demo-agent', 'demo-band'], ['adversarial-review', 'review-band']] as const) {
+  for (const [slug, band] of [['demo-agent', 'integrate-band'], ['adversarial-review', 'review-band']] as const) {
     const skillDir = join(forgeRoot, 'skills', slug);
     mkdirSync(skillDir, { recursive: true });
     writeFileSync(join(skillDir, 'SKILL.md'), bandSkillMd(slug, band));

@@ -61,7 +61,7 @@ export const SHIPPED_TRIGGER_KIND_IDS: readonly TriggerKindId[] = TRIGGER_KINDS.
  * mirrored in the UI today: a flow's band vocabulary reaches the browser as
  * DERIVED data over HTTP, so no parity test points at this constant.
  */
-export const BAND_GUARD_IDS = ['wi-contract', 'reflection-close', 'demo-band', 'review-band', 'onboard-preflight'] as const;
+export const BAND_GUARD_IDS = ['wi-contract', 'reflection-close', 'integrate-band', 'review-band', 'onboard-preflight'] as const;
 export type BandGuardId = (typeof BAND_GUARD_IDS)[number];
 
 /**

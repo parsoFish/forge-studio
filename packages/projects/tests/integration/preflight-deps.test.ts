@@ -21,7 +21,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { checkDeps } from '../../preflight-deps.ts';
-import { runPreflight } from '../../preflight.ts';
+import { runPreflight, SCRATCH_PATHS } from '../../preflight.ts';
 
 /** A contract-complete project whose declared gate needs an install it has not had. */
 function unprovisionedProject(): { dir: string; forgeRoot: string; cleanup: () => void } {
@@ -29,7 +29,7 @@ function unprovisionedProject(): { dir: string; forgeRoot: string; cleanup: () =
   const forgeRoot = mkdtempSync(join(tmpdir(), 'deps-wire-fr-'));
   const name = dir.split('/').pop()!;
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name, scripts: { test: 'vitest run' } }));
-  writeFileSync(join(dir, '.gitignore'), ['node_modules/', '.forge/'].join('\n'));
+  writeFileSync(join(dir, '.gitignore'), ['node_modules/', ...SCRATCH_PATHS].join('\n'));
   writeFileSync(join(dir, 'roadmap.md'), '# Roadmap\n');
   writeFileSync(join(dir, 'CLAUDE.md'), '# Constraints\nQuality gate: `vitest run`.\n');
   mkdirSync(join(forgeRoot, 'brain', 'projects', name), { recursive: true });
