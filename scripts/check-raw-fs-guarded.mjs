@@ -154,8 +154,16 @@ import { fileURLToPath } from 'node:url';
 import { findReachableModules, listEntryModules, DISPATCH_ENTRY_MODULES } from './check-request-path-sinks.mjs';
 // Ruling 106: the audited-residual LEDGER (ALLOWLIST + the fold rows, with
 // their charters and line-drift history) lives in its own data module. Both
-// are re-exported below so every consumer's import path is unchanged.
-import { ALLOWLIST, PROJECTS_ROOT_FOLD_ALLOWLIST } from './check-raw-fs-guarded.allowlist.mjs';
+// are re-exported below so every consumer's import path is unchanged. Bead
+// forge-mlk: `applyAllowlist` (the content-keyed matcher) moved there too —
+// it is tightly coupled to the row shape it matches against.
+import { ALLOWLIST, PROJECTS_ROOT_FOLD_ALLOWLIST, applyAllowlist } from './check-raw-fs-guarded.allowlist.mjs';
+// Bead forge-mlk (anchor computation) + forge-8vfn.5.63 (the one-level
+// interprocedural taint hop) share one function-boundary parse — see that
+// module's header for why it is not folded back into this (baselined) file.
+import { buildInterprocContext, anchorFor, isParamTaintedViaCallers } from './check-raw-fs-guarded.interproc.mjs';
+// Bead forge-8vfn.5.63: findBinding's destructured-declaration matcher (kept out for the same reason as the two imports above).
+import { findDestructureBinding } from './check-raw-fs-guarded.destructure.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -595,9 +603,18 @@ function offsetToLine(starts, off) {
 }
 
 /** Extract the balanced first argument text starting at `open` (index of the
- *  char right after the sink's `(`), from the CLEANED text. Returns the arg
- *  substring (trimmed) or null. */
-function argAt(cleaned, open, index) {
+ *  char right after the sink's `(`). Boundaries are found on the CLEANED text
+ *  (so a comma inside a string/template can't shift the split); the returned
+ *  substring is sliced from `origText` when given (bead forge-mlk: string
+ *  literals matter for the content-key anchor and for display — `cleaned`
+ *  has already blanked them to spaces, which collapsed `join(dir,'a.json')`
+ *  and `join(dir,'b.json')` onto the same anchor), else from `cleaned` (the
+ *  structural callers — governingIdents/isGuardTerminal — don't care either
+ *  way since literals never produce identifiers). `cleaned` and `origText`
+ *  are the same length (cleanStructure is character-for-character
+ *  length-preserving), so one set of offsets indexes both. */
+function argAt(cleaned, open, index, origText = null) {
+  const src = origText ?? cleaned;
   let depth = 0;
   let i = open;
   const n = cleaned.length;
@@ -610,7 +627,7 @@ function argAt(cleaned, open, index) {
       if (depth === 0) break; // closing ) of the sink call
       depth -= 1;
     } else if (c === ',' && depth === 0) {
-      if (argIdx === index) return cleaned.slice(start, i).trim();
+      if (argIdx === index) return src.slice(start, i).trim();
       argIdx += 1;
       start = i + 1;
     }
@@ -619,7 +636,7 @@ function argAt(cleaned, open, index) {
   // the sink's path positions describe (a 1-arg rmSync-style call, or a
   // malformed/multi-line shape the cleaner collapsed). Absent, not empty.
   if (argIdx !== index) return '';
-  return cleaned.slice(start, i).trim();
+  return src.slice(start, i).trim();
 }
 
 /** Governing identifiers / member-expressions of a path expression: every
@@ -658,16 +675,15 @@ function findBinding(cleanedLines, name, fromLine) {
   // checks classify it by the collection's origin (trusted ⇒ no finding), the
   // same no-false-positive discipline the simple-for-of case (A7) already has.
   const forDestrRe = new RegExp(`\\bfor\\s*\\(\\s*(?:const|let)\\s*[\\[{][^\\]}]*\\b${name}\\b[^\\]}]*[\\]}]\\s+of\\s+(.+?)\\s*\\)`);
-  // DESTRUCTURED DECLARATION (W8-F5) — `const { runId } = body;`,
-  // `const { target: { ref } } = req.body;`, `const [first] = parts;` bind `name`
-  // as a MEMBER of the RHS. Without this the name reads as UNRESOLVED (i.e. "a
-  // caller-supplied parameter") and only the curated BARE id list could catch
-  // it — which the sweep model deliberately empties, so
-  // `const { runId } = body` would evade the very member rule that
-  // `body.runId` trips. Binding-wins then classifies it by the RHS: a trusted
-  // RHS stays clean, a request member taints. Nested patterns are covered
-  // because the char class spans the inner braces (no `=`/`;` inside them).
-  const destrRe = new RegExp(`(?:const|let)\\s*[\\[{][^=;]*\\b${name}\\b[^=;]*[\\]}]\\s*=\\s*(.+?);?\\s*$`);
+  // DESTRUCTURED DECLARATION (W8-F5; bead forge-8vfn.5.63) — `const { runId } =
+  // body;`, `const { target: { ref } } = req.body;`, `const [first] = parts;`
+  // bind `name` as a MEMBER of the RHS: without this the name reads as
+  // UNRESOLVED and only the curated BARE id list could catch it (the sweep
+  // model deliberately empties that list). Binding-wins classifies it by the
+  // RHS: trusted stays clean, a request member taints. `findDestructureBinding`
+  // (see its doc comment) replaced a `[^=;]*`-fenced regex that excluded `=`
+  // ENTIRELY, so a LATER property's default (`{ id, env = process.env }`)
+  // broke matching for an EARLIER, defaultless name.
   const declHereRe = new RegExp(`(?:const|let)\\s+${name}\\b|\\bfor\\s*\\(\\s*(?:const|let)\\s*[\\[{]?[^\\]})]*\\b${name}\\b`);
   const limit = Math.max(0, fromLine - BACKSCAN_LIMIT);
   for (let i = fromLine; i >= limit; i--) {
@@ -678,8 +694,8 @@ function findBinding(cleanedLines, name, fromLine) {
     if (forDestrM) return { kind: 'for', rhs: forDestrM[1].trim() };
     const m = nameRe.exec(line);
     if (m) return { kind: 'const', rhs: m[1].trim() };
-    const destrM = destrRe.exec(line);
-    if (destrM) return { kind: 'const', rhs: destrM[1].trim() };
+    const destrB = findDestructureBinding(line, name);
+    if (destrB) return { kind: 'const', rhs: destrB.rhs };
     // Boundary: a column-0 structural line that ISN'T our own binding stops the
     // walk (we've left the enclosing function). Checked AFTER the binding tests
     // so the enclosing function's own leading `const`/`function` line, if it
@@ -719,8 +735,12 @@ function identIsGuardBound(full, head, line, cleanedLines, depth = 0) {
 /** Does the value produced by identifier/member `full` at `line` resolve to a
  *  request-derived SOURCE (a taint token, or a binding that draws on one)?
  *  Bounded recursion via `depth`. Guard-bound values are NOT tainted (the guard
- *  is a sanitizer); trusted roots short-circuit to not-tainted. */
-function identIsTainted(full, head, line, cleanedLines, depth = 0, bare = REQUEST_TAINT_BARE) {
+ *  is a sanitizer); trusted roots short-circuit to not-tainted. `interproc`/
+ *  `allowHop` (bead forge-8vfn.5.63): an UNRESOLVED, non-bare `head` tries the
+ *  ONE-LEVEL hop (interproc.mjs's isParamTaintedViaCallers) before giving up;
+ *  `allowHop` is forced `false` on that hop's OWN recursive check so a second
+ *  hop is never taken. */
+function identIsTainted(full, head, line, cleanedLines, depth = 0, bare = REQUEST_TAINT_BARE, interproc = null, allowHop = true) {
   if (REQUEST_TAINT_HEADS.has(head)) return true; // body./params./query./req. — always a request source
   if (TRUSTED_ROOTS.has(head)) return false;
   if (depth > 6) return false; // fail toward NOT-tainted at the bound (documented: curated list is the guarantee)
@@ -734,11 +754,15 @@ function identIsTainted(full, head, line, cleanedLines, depth = 0, bare = REQUES
   if (binding) {
     if (rhsIsGuardProducer(binding.rhs)) return false; // guarded → sanitized
     for (const id of governingIdents(binding.rhs)) {
-      if (identIsTainted(id.full, id.head, line, cleanedLines, depth + 1, bare)) return true;
+      if (identIsTainted(id.full, id.head, line, cleanedLines, depth + 1, bare, interproc, allowHop)) return true;
     }
     return false;
   }
-  return bare.has(full) || bare.has(head);
+  if (bare.has(full) || bare.has(head)) return true;
+  // UNRESOLVED and not on the bare list: try the one-level interprocedural
+  // hop (bead forge-8vfn.5.63) before falling back to not-tainted.
+  return allowHop && !!interproc
+    && !!isParamTaintedViaCallers(head, line, interproc, (f2, h2, l2) => identIsTainted(f2, h2, l2, cleanedLines, 0, bare, interproc, false));
 }
 
 /** Is the whole path expression guard-terminal? `<g>`, `<g>.realPath`,
@@ -799,6 +823,10 @@ export function analyzeModule(text, relFile, model = {}) {
   const cleanedLines = cleaned.split('\n');
   const origLines = text.split('\n');
   const starts = lineStarts(cleaned);
+  // Bead forge-mlk: one function-boundary parse, reused for every finding's
+  // content-key anchor. Bead forge-8vfn.5.63: the SAME parse (+ a per-module
+  // memoization cache) drives the one-level interprocedural taint hop below.
+  const interproc = buildInterprocContext(cleaned, starts);
   const findings = [];
   const sinkRe = new RegExp(`(?<![.\\w$])(${RAW_FS_SINKS.join('|')})\\s*\\(`, 'g');
   let m;
@@ -825,7 +853,7 @@ export function analyzeModule(text, relFile, model = {}) {
       let taintTok = null;
       for (const id of idents) {
         if (!guardBase && identIsGuardBound(id.full, id.head, lineIdx, cleanedLines)) guardBase = id.full;
-        if (!taintTok && identIsTainted(id.full, id.head, lineIdx, cleanedLines, 0, bare)) taintTok = id.full;
+        if (!taintTok && identIsTainted(id.full, id.head, lineIdx, cleanedLines, 0, bare, interproc, true)) taintTok = id.full;
     }
     // (3) DIR-PARAM LEAF-APPEND — the interprocedural shape: a leaf appended onto
     // an unresolved dir-shaped param (the caller laundered the request id into
@@ -833,63 +861,35 @@ export function analyzeModule(text, relFile, model = {}) {
     const dirParamBase = !guardBase && !taintTok ? dirParamLeafAppend(path, lineIdx, cleanedLines, 0, dirParams) : null;
     if (!guardBase && !taintTok && !dirParamBase) continue; // request-independent → safe
     const kind = guardBase ? 'leaf-append' : taintTok ? 'tainted' : 'dir-param-leaf-append';
+    // Bead forge-8vfn.5.63: when taint reached here via the one-level
+    // interprocedural hop, name the ORIGINAL request source in `why` (not
+    // just the local param) — re-derived here (not threaded out of
+    // identIsTainted's boolean return) so the lookup is only ever done for
+    // a finding that is actually being reported, and it is cache-backed.
+    const interprocHit = taintTok
+      ? isParamTaintedViaCallers(taintTok.split('.')[0], lineIdx, interproc, (f2, h2, l2) => identIsTainted(f2, h2, l2, cleanedLines, 0, bare, interproc, false))
+      : null;
     const why = guardBase
       ? `leaf-append below guarded value "${guardBase}" — the appended leaf is NOT guarded (route the FULL path incl. leaf through guardedFile)`
       : taintTok
-        ? `request/project-derived path via "${taintTok}" reaches raw ${sink} unguarded`
+        ? `request/project-derived path via "${taintTok}" reaches raw ${sink} unguarded${interprocHit ? ` (one-level interprocedural hop: caller passes "${interprocHit.argExpr}" to ${interprocHit.fnName}(${interprocHit.paramName}) at line ${interprocHit.callerLine + 1})` : ''}`
         : `leaf-append onto unresolved dir-shaped param "${dirParamBase}" — the caller's dir may be contained but the appended leaf rides raw (route the FULL path incl. leaf through guardedFile / the guarded sibling)`;
-    findings.push({ file: relFile, line: lineIdx + 1, sink, path: path.replace(/\s+/g, ' ').slice(0, 120), kind, why });
+    // Original (unblanked) text for the anchor/display — see argAt's header:
+    // two literal leaves (`'a.json'` vs `'b.json'`) must stay DISTINGUISHABLE
+    // here even though the CLEANED `path` blanks them to spaces for the
+    // structural (governingIdents/isGuardTerminal) checks above.
+    const origPath = argAt(cleaned, openIdx, argIndex, text);
+    const normPath = origPath.replace(/\s+/g, ' ').slice(0, 120).trim();
+    findings.push({ file: relFile, line: lineIdx + 1, sink, path: normPath, kind, why, anchor: anchorFor(interproc.funcs, lineIdx, normPath) });
     }
   }
   return findings;
 }
 
 
-export { ALLOWLIST, PROJECTS_ROOT_FOLD_ALLOWLIST };
-
-function keyOf(f) {
-  return `${f.file}:${f.line}`;
-}
-
-/**
- * Suppress findings that carry an EXPLICIT allowlist entry (file+line). Returns
- * { kept, suppressed, stale, mistargeted }:
- *  - kept        = findings that FAIL the build (no valid allowlist entry).
- *  - suppressed  = findings cleared by a valid, reasoned entry.
- *  - stale       = allowlist entries matching NO finding (line drift / a fixed
- *                  sink) — reported as a warning, never a failure (fail-safe: a
- *                  stale entry cannot hide a real finding, it only lingers).
- *  - mistargeted = an entry whose line HAS a finding but of a DIFFERENT sink
- *                  than recorded — the finding is KEPT (fails closed), because a
- *                  drifted entry must not silently bless a different sink.
- * An entry with an empty/whitespace reason is rejected (its finding is kept).
- */
-export function applyAllowlist(findings, allowlist = ALLOWLIST) {
-  const byKey = new Map(allowlist.map((a) => [`${a.file}:${a.line}`, a]));
-  const kept = [];
-  const suppressed = [];
-  const mistargeted = [];
-  const usedKeys = new Set();
-  for (const f of findings) {
-    const a = byKey.get(keyOf(f));
-    if (!a) { kept.push(f); continue; }
-    if (!a.reason || !a.reason.trim()) {
-      kept.push({ ...f, why: `${f.why} [ALLOWLIST ENTRY AT ${keyOf(f)} HAS NO REASON — rejected]` });
-      continue;
-    }
-    const auditedSinks = a.sinks ?? (a.sink ? [a.sink] : null);
-    if (auditedSinks && !auditedSinks.includes(f.sink)) {
-      // The line drifted onto a different sink than was audited — do NOT bless it.
-      mistargeted.push({ entry: a, found: f });
-      kept.push({ ...f, why: `${f.why} [allowlist entry at ${keyOf(f)} audited "${auditedSinks.join('|')}", found "${f.sink}" — mistargeted, not suppressed]` });
-      continue;
-    }
-    usedKeys.add(keyOf(f));
-    suppressed.push({ ...f, reason: a.reason });
-  }
-  const stale = allowlist.filter((a) => !usedKeys.has(`${a.file}:${a.line}`));
-  return { kept, suppressed, stale, mistargeted };
-}
+// Bead forge-mlk: `applyAllowlist` itself (the content-keyed matcher) now
+// lives with the data it matches — see check-raw-fs-guarded.allowlist.mjs.
+export { ALLOWLIST, PROJECTS_ROOT_FOLD_ALLOWLIST, applyAllowlist };
 
 // ===========================================================================
 // PROJECTS-ROOT-FOLD RULE (SEC-07, hardened) — the dimension the def-use scan
