@@ -8,7 +8,7 @@
 import { loadFixtureDescriptor, logger, setup } from './test-fixtures/interactive-runner-fixtures.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { mkdirSync, existsSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runInteractiveTurn } from '../../interactive-runner.ts';
 import { type QueryFn } from '../../interactive-session.ts';
@@ -75,4 +75,23 @@ test('turnSpec style:structured naming an unregistered schema id refuses loudly,
     () => runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) }),
     /totally-not-a-real-schema-id/,
   );
+});
+
+test('a structured turn never writes output.json through a symlink the agent planted in its own writes dir', async () => {
+  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const sessionId = '2026-09-19T00-00-01';
+  const sessionDir = join(projectRoot, '_interactivetest-structured', sessionId);
+  mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+  writeSessionStatus<StructuredStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
+  const outside = join(forgeRoot, 'outside-secret.txt');
+  writeFileSync(outside, 'untouched\n');
+  symlinkSync(outside, join(sessionDir, 'staging', 'output.json'));
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind-structured');
+  const queryFn: QueryFn = () => (async function* () { yield { type: 'result', total_cost_usd: 0.02, structured_output: { done: true, questions: [] } }; })();
+
+  await assert.rejects(
+    runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) }),
+    /output\.json/,
+  );
+  assert.equal(readFileSync(outside, 'utf8'), 'untouched\n');
 });
