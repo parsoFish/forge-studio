@@ -190,7 +190,7 @@ test('kills "a sub-chunk is reviewed under a weaker fence": every per-file spawn
 //
 // G2's resume paid for `WI-1`, `WI-2` exhausted, and the pipeline returned a
 // failure — so `WI-1`'s finished record died with it. The cycle already solves
-// exactly this one level up (`resume_from: demo` reuses the six finished work
+// exactly this one level up (`resume_from: integrate` reuses the six finished work
 // items); the review solved it for nothing one level down.
 // ---------------------------------------------------------------------------
 
