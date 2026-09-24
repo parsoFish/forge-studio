@@ -50,3 +50,29 @@ test('a failed phase read never fabricates "running" — the hook resets to null
   // `kbSeedBannerCopy` renders identically to "not yet read".
   expect(src).toMatch(/fetchProjectBrainSessions\(\)[\s\S]{0,400}\.catch\(\(\) => \{[\s\S]{0,80}setPhase\(null\)/);
 });
+
+// ---------------------------------------------------------------------------
+// forge-t4pp — `?seedSession=<id>` used to mint `[data-action="open-
+// seed-session"]`'s href straight off the raw URL param: a hand-typed or
+// stale id rendered a link whose target 404s. `useKbSeedSessionPhase`
+// ALREADY performs the one session-id validity predicate this page has
+// (`.find((s) => s.session_id === seedSessionId)`, pinned above) — its
+// return is `null` for every dishonest case alike (not yet checked, the
+// read failed, or no such session), and a REAL phase value only once a
+// matching session was actually found. The fix reuses that SAME predicate
+// to gate the link instead of adding a second one: no link renders until
+// `seedBanner.phase !== null`.
+// ---------------------------------------------------------------------------
+
+test('forge-t4pp: the seed-session link is gated on the session actually having been found (seedBanner.phase !== null) — never on the raw query param alone', () => {
+  const src = readPage();
+  const bannerIdx = src.indexOf('data-component="kb-seed-banner"');
+  expect(bannerIdx, 'the seed banner section was not found').toBeGreaterThan(-1);
+  const linkIdx = src.indexOf('data-action="open-seed-session"', bannerIdx);
+  expect(linkIdx, 'open-seed-session was not found inside the seed banner').toBeGreaterThan(-1);
+  // The nearest preceding conditional gating that render must name
+  // seedBanner.phase, not merely re-check seedSessionParam (already the
+  // banner's own outer gate — validating the SAME fact twice proves nothing).
+  const between = src.slice(bannerIdx, linkIdx);
+  expect(between).toMatch(/seedBanner\.phase !== null/);
+});

@@ -74,6 +74,12 @@ _worktrees/
 # Runtime, never source.
 _skill-staging/
 
+# forge-7zp: template-content validation staging root (<forgeRoot>/_template-staging).
+# invalidTemplateContentReason (packages/library/bridge-studio-templates.ts) stages
+# candidate template bytes here before loadArtifactTemplate/loadDemoElement
+# validates them, and rm's the dir in a `finally`. Runtime, never source.
+_template-staging/
+
 # R4-21 phase 2 / ADR-043: the generic interactive-runner's finalize landing
 # root (<forgeRoot>/_interactive-library). `copyStagingToLibrary`
 # (orchestrator/interactive-finalizers.ts) lands a session's drafted package

@@ -308,6 +308,15 @@ before(async () => {
   mkdirSync(attackerKbCleanupDir, { recursive: true });
   symlinkSync(victimDir, join(attackerKbCleanupDir, 'evil-session'));
 
+  // forge-7kzj — a real on-disk session dir for a kind NOT in
+  // session-kinds.yaml (the retired "community-refresh" shape). The
+  // collector only ever probes disk for a REGISTERED kind, so this session
+  // must surface as a NAMED, counted gap (`unknownKinds`), never a silent
+  // drop with 0 diagnostic.
+  const unknownKindDir = join(projectsRoot, 'projunknown', '_community-refresh', '2026-08-18T12-54-32');
+  mkdirSync(unknownKindDir, { recursive: true });
+  writeFileSync(join(unknownKindDir, 'status.json'), JSON.stringify({ phase: 'committed', project: 'projunknown' }), 'utf8');
+
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   const result = await startBridge({ forgeRoot, port: 0 });
   bridgeUrl = result.url;
@@ -401,4 +410,23 @@ test('a symlinked session dir escaping to another project (the generic fallback 
   // into the same outcome as "session not found" (no oracle).
   const attackerRow = body.sessions.find((s) => s.project === 'attackerproj');
   assert.equal(attackerRow, undefined, 'the attacker project must contribute no row for the symlinked session');
+});
+
+test('forge-7kzj: a session dir under an UNREGISTERED kind ("_community-refresh") is named in a top-level unknownKinds field, not silently dropped', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { sessions: IndexRow[]; cap: number; unknownKinds: string[] };
+  assert.ok(Array.isArray(body.unknownKinds), `expected a top-level "unknownKinds" array field, got: ${JSON.stringify(Object.keys(body))}`);
+  assert.ok(
+    body.unknownKinds.includes('community-refresh'),
+    `expected "community-refresh" named in unknownKinds, got: ${JSON.stringify(body.unknownKinds)}`,
+  );
+  // Unchanged behavior: the unregistered kind still contributes no ROW (this
+  // fix adds a diagnostic, it does not start rendering unregistered-kind
+  // sessions as if they were registered).
+  assert.equal(
+    body.sessions.some((s) => s.project === 'projunknown'),
+    false,
+    'an unregistered-kind session must still contribute no row in `sessions`',
+  );
 });
