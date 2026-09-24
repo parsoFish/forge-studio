@@ -114,3 +114,37 @@ test('W6-B14: data-agent-run-state is empty on a fresh render (no run dispatched
   const html = render([clause({ id: 'C1', resolution: 'user', route: undefined })]);
   expect(html).toContain('data-agent-run-state=""');
 });
+
+// ---------------------------------------------------------------------------
+// forge-8vfn.5.11 — M1-G's `select-stage-<stage>` shape, closed here for the
+// two clause-tier controls: `resolve-clause-agent` (agent tier) and
+// `apply-clause-decision` (user tier) used to repeat ONE action name across
+// every clause row, and `scripts/stories/beats.mjs` resolves
+// `[data-action=…]` and takes `.first()` — so with two failing clauses in the
+// same tier, nothing could press the SECOND one. The action now carries the
+// clause id; `data-resolve-clause-id`/`data-apply-clause-id` stay, they are
+// what the contract reads.
+// ---------------------------------------------------------------------------
+
+test('5.11: two agent-tier clauses render two DISTINCT resolve actions, each naming its own clause', () => {
+  const html = render([
+    clause({ id: 'C8', resolution: 'agent', route: 'instructions' }),
+    clause({ id: 'DEMO', resolution: 'agent', route: 'demo-builder' }),
+  ]);
+  expect(html).toContain('data-action="resolve-clause-agent-C8"');
+  expect(html).toContain('data-action="resolve-clause-agent-DEMO"');
+  // The qualifying attribute stays — it is what the DOM contract reads.
+  expect(html).toContain('data-resolve-clause-id="C8"');
+  expect(html).toContain('data-resolve-clause-id="DEMO"');
+});
+
+test('5.11: two user-tier clauses render two DISTINCT apply actions, each naming its own clause', () => {
+  const html = render([
+    clause({ id: 'C1', resolution: 'user', route: undefined }),
+    clause({ id: 'C1b', resolution: 'user', route: undefined }),
+  ]);
+  expect(html).toContain('data-action="apply-clause-decision-C1"');
+  expect(html).toContain('data-action="apply-clause-decision-C1b"');
+  expect(html).toContain('data-apply-clause-id="C1"');
+  expect(html).toContain('data-apply-clause-id="C1b"');
+});
