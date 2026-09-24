@@ -46,24 +46,23 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { SLUG_RE } from '@forge/kernel';
 import { isUnfilteredStudioAgent, loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
-import { resolveGuardedPath } from '@forge/kernel';
-import { skillsDir } from '@forge/agents/skill-path.ts';
+import { guardedSkillMdPath } from '@forge/library/skill-path.ts';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
 
 const AGENT_CAPABILITY_ROUTE_RE = /^\/api\/studio\/agents\/([^/]+)\/capability$/;
 
 /**
- * Resolve `<forgeRoot>/skills/<slug>/SKILL.md` via the shared
- * `resolveGuardedPath` choke point, then confirm it's a real (unfiltered)
- * studio agent. Returns `null` for a missing file, an escaping symlink, AND
- * a non-agent SKILL.md alike — all three are the SAME "unknown agent" 404 to
- * the caller (see module header).
+ * Resolve a slug's `SKILL.md` across every skill root (SEAM F1) via
+ * `guardedSkillMdPath` — `skills/` AND every `packages/<pkg>/skills/` — then
+ * confirm it's a real (unfiltered) studio agent. Returns `null` for a
+ * missing file, an escaping symlink, AND a non-agent SKILL.md alike — all
+ * three are the SAME "unknown agent" 404 to the caller (see module header).
  */
 function resolveUnfilteredAgentPath(forgeRoot: string, slug: string): string | null {
-  const guard = resolveGuardedPath(skillsDir(forgeRoot), [slug, 'SKILL.md']);
-  if (!guard.ok || !guard.exists) return null;
-  if (!isUnfilteredStudioAgent(guard.realPath)) return null;
-  return guard.realPath;
+  const mdPath = guardedSkillMdPath(slug, forgeRoot);
+  if (mdPath === null) return null;
+  if (!isUnfilteredStudioAgent(mdPath)) return null;
+  return mdPath;
 }
 
 export async function handleStudioAgentCapabilityRoute(

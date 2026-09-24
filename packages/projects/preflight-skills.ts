@@ -44,9 +44,54 @@
  * mandate that every project bind one.
  */
 
-import { guardedFile } from '@forge/kernel';
+import { guardedFile, guardedReadFile } from '@forge/kernel';
 import type { ClauseResult } from '@forge/kernel';
 import type { ProjectConfig } from './project-config.ts';
+import { loadProjectConfig } from './project-config.ts';
+
+/** Where a declared skill id may live, in lookup order: project-local, then forge-wide. */
+function skillCandidates(dir: string, forgeRoot: string, id: string): { root: string; segments: string[] }[] {
+  return [
+    { root: dir, segments: ['.forge', 'skills', id, 'SKILL.md'] },
+    { root: forgeRoot, segments: ['skills', id, 'SKILL.md'] },
+  ];
+}
+
+/** The first candidate that resolves through `guardedFile`, or `null`. */
+export function resolveDeclaredSkillPath(dir: string, forgeRoot: string, id: string): string | null {
+  for (const { root, segments } of skillCandidates(dir, forgeRoot, id)) {
+    const path = guardedFile(root, segments, 'read');
+    if (path !== null) return path;
+  }
+  return null;
+}
+
+/** Named, fail-fast: a declared skill id an agent was told to load that resolves nowhere. */
+export class MissingDeclaredSkillError extends Error {
+  constructor(id: string, dir: string, forgeRoot: string) {
+    super(
+      `declared skill "${id}" does not resolve — no SKILL.md at ${dir}/.forge/skills/${id}/ (project-local) ` +
+        `or ${forgeRoot}/skills/${id}/ (forge-wide)`,
+    );
+    this.name = 'MissingDeclaredSkillError';
+  }
+}
+
+export type DeclaredSkill = { id: string; path: string; text: string };
+
+/** Every skill the project declares, read for an agent's prompt (ADR 024, item 90).
+ *  A declared id that resolves nowhere throws: a running agent has no later. */
+export function loadDeclaredSkills(projectDir: string, forgeRoot: string): DeclaredSkill[] {
+  const declared = loadProjectConfig(projectDir)?.skills ?? [];
+  return declared.map((id) => {
+    for (const { root, segments } of skillCandidates(projectDir, forgeRoot, id)) {
+      const text = guardedReadFile(root, segments);
+      const path = guardedFile(root, segments, 'read');
+      if (text !== null && path !== null) return { id, path, text };
+    }
+    throw new MissingDeclaredSkillError(id, projectDir, forgeRoot);
+  });
+}
 
 export function checkSkills(dir: string, cfg: ProjectConfig | null, forgeRoot: string): ClauseResult {
   const base = { clause: 'SKILLS' as const, title: 'Declared skills resolve (project-local or forge-wide)', hard: true };
@@ -55,12 +100,7 @@ export function checkSkills(dir: string, cfg: ProjectConfig | null, forgeRoot: s
     return { ...base, pass: true, detail: 'no skills declared — nothing to resolve' };
   }
 
-  const missing = declared.filter((id) => {
-    const local = guardedFile(dir, ['.forge', 'skills', id, 'SKILL.md'], 'read');
-    if (local !== null) return false;
-    const forgeWide = guardedFile(forgeRoot, ['skills', id, 'SKILL.md'], 'read');
-    return forgeWide === null;
-  });
+  const missing = declared.filter((id) => resolveDeclaredSkillPath(dir, forgeRoot, id) === null);
 
   if (missing.length === 0) {
     return { ...base, pass: true, detail: `${declared.length} declared skill(s) all resolve` };
