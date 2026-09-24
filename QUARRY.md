@@ -243,6 +243,7 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/theme-frontmatter.ts | knowledge | verbatim | 116 |
 | apps/forge/ui-bridge.ts | apps/forge | rewritten | 2265 |
 | apps/forge/bridge-broadcast-log.ts | apps/forge | rewritten | 84 |
+| apps/forge/broadcast-coalescer.ts | apps/forge | rewritten | 77 |
 | packages/agents/_adapters/aider/index.ts | agents | verbatim | 485 |
 | packages/agents/_adapters/claude/index.ts | agents | verbatim | 29 |
 | packages/agents/_adapters/conformance.ts | agents | verbatim | 203 |
