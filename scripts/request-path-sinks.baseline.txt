@@ -524,6 +524,8 @@ packages/library/studio/skill-install.ts statSync 1
 packages/library/studio/skill-install.ts writeFileSync 4
 packages/library/studio/skill-package.ts readdirSync 1
 packages/library/studio/skill-package.ts readFileSync 1
+packages/library/studio/skill-package.ts realpathSync 1
+packages/library/studio/skill-package.ts statSync 1
 packages/library/studio/skill-registry.ts readFileSync 1
 packages/library/studio/skill-trust.ts readFileSync 3
 packages/library/studio/template-library.ts readdirSync 5
@@ -593,8 +595,8 @@ packages/sessions/bridge-studio-kickoff.ts writeFileSync 5
 packages/sessions/bridge-studio-lifecycle.ts openSync 1
 packages/sessions/bridge-studio-lifecycle.ts readFileSync 1
 packages/sessions/bridge-studio-lifecycle.ts statSync 2
-packages/sessions/bridge-studio-session-index.ts existsSync 8
-packages/sessions/bridge-studio-session-index.ts readdirSync 8
+packages/sessions/bridge-studio-session-index.ts existsSync 9
+packages/sessions/bridge-studio-session-index.ts readdirSync 10
 packages/sessions/bridge-studio-session-index.ts readFileSync 1
 packages/sessions/interactive-agent-step.ts lstatSync 1
 packages/sessions/interactive-agent-step.ts mkdirSync 2

@@ -114,6 +114,11 @@ export const DEFAULT_BRIDGE_PORT = 4123;
 /** Max drain rounds (fresh lint → auto → agent turns → fresh lint): the ONE definition knowledge and studio import (forge-8vfn.5.25.2). */
 export const KB_DRAIN_MAX_ROUNDS = 5;
 
+// ── Materials ──
+/** Closed, order-significant upload-materials vocabulary: the ONE definition agents and studio import (forge-ni3). */
+export const MATERIAL_KINDS = Object.freeze(['images', 'documents', 'audio', 'data-files'] as const);
+export type MaterialKind = (typeof MATERIAL_KINDS)[number];
+
 // ── Cycle outcome ──
 
 /**

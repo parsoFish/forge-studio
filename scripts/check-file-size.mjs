@@ -127,14 +127,20 @@ function codeFiles(root) {
  *
  * Returns `null` for a path that has VANISHED between the glob and this read.
  * The caller's `existsSync` above is a time-of-check/time-of-use gap, not a
- * guarantee: the checker walks the live tree, and a sibling guard test plants
- * and removes real files in that tree to prove its own checker sees them
+ * guarantee: the checker walks the live tree, and — until bead
+ * forge-8vfn.5.64 — a sibling guard test planted and removed real files in
+ * that tree to prove its own checker sees them
  * (`scripts/check-disabled-reason.test.ts` and its
- * `apps/studio/components/__ratchet_probe__.tsx`). Test FILES run in parallel
- * processes under `node:test`, so this checker can glob a probe and then read
- * it after the sibling has deleted it — which crashed the whole audit with an
+ * `apps/studio/components/__ratchet_probe__.tsx`, since moved into a
+ * `mkdtempSync` fixture of its own). Test FILES run in parallel processes
+ * under `node:test`, so this checker could glob a probe and then read it
+ * after the sibling had deleted it — which crashed the whole audit with an
  * ENOENT stack and reds a lane's CI for a reason no diff caused
- * (`_1.0/known-flakes.md` #6, root-caused from a CI failure on PR #341).
+ * (`_1.0/known-flakes.md` #6, root-caused from a CI failure on PR #341). The
+ * skip below stays as defence in depth — a checker that walks the live tree
+ * can still race a HUMAN edit, not only a fixed sibling test — while this
+ * file's own probe tests (`planted()`, below) no longer plant in that tree
+ * either.
  *
  * A file that no longer exists has no size to check, so skipping it is the
  * honest answer rather than a tolerance: it narrows nothing, widens nothing,
@@ -221,17 +227,26 @@ function main(argv) {
   const json = argv.includes('--json');
   const at = argv.indexOf('--baseline');
   const baselinePath = at === -1 ? join(ROOT, 'scripts/baselines/file-size.json') : resolve(argv[at + 1]);
+  // `--root` — lets a test drive the CLI (and its text output) against a
+  // `mkdtempSync` fixture instead of the live tree. `audit(root, …)` already
+  // took its root as a parameter; this only wires the flag through to it.
+  // Bead forge-8vfn.5.64: this file's own `lineCount` doc (below) names the
+  // race this closes — a probe test planting real files under `ROOT` (this
+  // file's own `__cap_probe__.mjs`/`__headroom_probe__.mjs` included) races
+  // every other scanner reading the live tree at the same moment.
+  const rootAt = argv.indexOf('--root');
+  const root = rootAt === -1 ? ROOT : resolve(argv[rootAt + 1]);
 
   let result;
   try {
-    result = audit(ROOT, readBaseline(baselinePath));
+    result = audit(root, readBaseline(baselinePath));
   } catch (err) {
     if (!(err instanceof CorpusUnreadable)) throw err;   // a real bug is not a refusal
     process.stderr.write(
       `check-file-size: REFUSED — ${err.message}\n` +
       `  This is NOT a cap violation. The corpus could not be enumerated, so there is no verdict\n` +
       `  to give; exiting ${EXIT_CANNOT_MEASURE} (REFUSED) rather than 1, which means "this tree\n` +
-      `  breaks the cap". Root read as ${ROOT}.\n`,
+      `  breaks the cap". Root read as ${root}.\n`,
     );
     return EXIT_CANNOT_MEASURE;
   }

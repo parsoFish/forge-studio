@@ -23,7 +23,7 @@
 import type { ArtifactTemplate, Catalog, CommunityRegistry, InstructionSeed } from '@forge/contracts/studio/types.ts';
 import { SLUG_RE } from '@forge/kernel/ids.ts';
 import { type Finding, err, flag } from '@forge/kernel';
-import { communitySourceKey } from './community-source-url.ts';
+import { communitySourceKey, HTTP_URL_RE } from './community-source-url.ts';
 
 // Duplicated from `orchestrator/studio/validate.ts` — see header.
 function findDuplicates(ids: string[]): string[] {
@@ -255,5 +255,6 @@ export function validateCommunityRegistry(registry: CommunityRegistry): Finding[
     }
   }
 
+  for (const item of registry.items) if (!HTTP_URL_RE.test(item.sourceUrl)) findings.push(err(obj, 'community-registry/source-url-scheme', `Community registry item "${item.id}" sourceUrl "${item.sourceUrl}" must be an http(s) URL`)); // forge-p2zf: mirrors the write-side scheme guard
   return findings;
 }

@@ -84,6 +84,10 @@ function toolFenceFinding(skillMdPath: string, id: string, objectId: string): Fi
   const declaresToolFrontmatter = 'allowed-tools' in data || 'disallowed-tools' in data;
   if (!declaresToolFrontmatter) return null; // the "declares neither" set is out of scope
 
+  // forge-6gv.20 — composer-reachable escape hatch (a hand comment can't
+  // survive re-serialization); additive, no-op unless declared true.
+  if (data['tool-fence-exempt'] === true) return null;
+
   const disallowedRaw = data['disallowed-tools'];
   const disallowed = Array.isArray(disallowedRaw) ? disallowedRaw.map((v) => String(v)) : [];
   const missing = TOOL_FENCE_REQUIRED_NAMES.filter((name) => !disallowed.includes(name));
@@ -96,7 +100,7 @@ function toolFenceFinding(skillMdPath: string, id: string, objectId: string): Fi
     check: 'skill-tool-fence/task-agent-not-disallowed',
     message: `Skill "${id}" declares tool frontmatter but its disallowed-tools list omits ${missing
       .map((n) => `"${n}"`)
-      .join(' and ')} — allowed-tools is advisory only (no production spawn site sets options.tools), so disallowed-tools is the only real fence against this skill reaching the subagent-spawn tool. Add ${TOOL_FENCE_REQUIRED_NAMES.join(', ')} to "disallowed-tools:" in ${id}/SKILL.md, or, if this skill genuinely needs to spawn a subagent, leave it out and add a frontmatter comment explaining why (see skills/brain-maintenance/SKILL.md for the model).`,
+      .join(' and ')} — allowed-tools is advisory only (no production spawn site sets options.tools), so disallowed-tools is the only real fence against this skill reaching the subagent-spawn tool. Add ${TOOL_FENCE_REQUIRED_NAMES.join(', ')} to "disallowed-tools:" in ${id}/SKILL.md, or, if this skill genuinely needs to spawn a subagent, leave it out and add a frontmatter comment explaining why (see skills/brain-maintenance/SKILL.md for the model), or set "tool-fence-exempt: true" when the SKILL.md is composer-managed and a comment would not survive re-serialization.`,
   };
 }
 
