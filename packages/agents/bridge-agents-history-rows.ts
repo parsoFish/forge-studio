@@ -93,13 +93,24 @@ export function collectFlowNodeRows(deps: AgentHistoryDeps, forgeRoot: string, s
 
 export const STANDALONE_HISTORY_MAX_ROWS = 50; // M7-C page size — no query param on either standalone route
 
-/** Sorts `entries` newest-first by `mtimeOf`, extracted as a pure, exported
- *  helper (not just an inline `.sort` closure) so a test can inject a
- *  COUNTING `mtimeOf` and assert the call count directly — `resolveGuardedPath`
- *  + `statSync` are not themselves injectable (they're imported straight from
- *  `@forge/kernel`/`node:fs`), so this is the seam. */
+/** Sorts `entries` newest-first by `mtimeOf`, calling `mtimeOf` on each
+ *  entry EXACTLY ONCE — decorate (map each entry to `{entry, mtime}`, one
+ *  `mtimeOf` call apiece) -> sort (numeric compare on the already-computed
+ *  `mtime`, no further calls) -> undecorate (map back to the bare entries). Security
+ *  review (bead forge-omk0) measured the prior `entries.sort((a, b) =>
+ *  mtimeOf(b) - mtimeOf(a))` — a comparator-embedded stat — calling
+ *  `mtimeOf` ~21x n at n=4000 and ~29x n at n=50,000 (V8's sort invokes the
+ *  comparator ~2*n*log2(n) times), turning one guarded `statSync` per
+ *  candidate into a super-linear per-request cost. Exported (not just an
+ *  inline `.sort` closure) so a test can inject a COUNTING `mtimeOf` and
+ *  assert the call count directly — `resolveGuardedPath` + `statSync` are
+ *  not themselves injectable (imported straight from `@forge/kernel`/
+ *  `node:fs`), so this is the seam. */
 export function sortEntriesByMtimeDesc(entries: readonly string[], mtimeOf: (entry: string) => number): string[] {
-  return entries.slice().sort((a, b) => mtimeOf(b) - mtimeOf(a));
+  return entries
+    .map((entry) => ({ entry, mtime: mtimeOf(entry) }))
+    .sort((a, b) => b.mtime - a.mtime)
+    .map((decorated) => decorated.entry);
 }
 
 /** `_agent-*` entries, NEWEST FIRST by directory mtime (M7-C) — metadata
