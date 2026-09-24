@@ -321,7 +321,13 @@
       # list, never a hardcoded "file-package needs an id" assumption on
       # either side.
       - { phase: awaiting-review, step: noop, awaits: verdict, verdicts: [approve, revise, reject], requires: [id] }
-      - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, next: committed }
+      # stagingDirName (forge-7m2) — the read-side twin of `analyzing`'s
+      # `writes: [staging]` above: names the SAME dir copyStagingToLibrary
+      # walks, so the finalizer never hardcodes the literal. Threaded via
+      # FinalizerContext.stagingDirName (interactive-agent-step.ts ->
+      # interactive-finalizers.ts) — this yaml row is the single source of
+      # truth for BOTH sides now.
+      - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, stagingDirName: staging, next: committed }
       - { phase: committed, step: terminal }
       # W7-C2 — reject's terminal landing row (reuses the token
       # `instructions` already ships; reached ONLY by the generic write

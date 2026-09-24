@@ -353,8 +353,13 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
     // W7-B6 (sessions-kinds-03): the two architect entries CONVERGE on the
     // one form (`NewIdeaBox` — roster select + tier + ceiling); this page no
     // longer bounces the operator through a link to /architect/new.
+    // crosscut-R12 (forge-6gv.2.1): `dataPage` matches /architect/new's OWN
+    // value — the same converged form must report the same page identity
+    // regardless of which of the two addresses served it, never the generic
+    // per-kind "session-kickoff" shape this branch otherwise shares nothing
+    // with (it returns early, before the shared kickoff body below).
     return (
-      <StudioArchitectShell dataPage="session-kickoff" ready={routeReady(architectRoster.state)} title="New idea → architect" mainData={{ 'data-kickoff-kind': 'architect' }}>
+      <StudioArchitectShell dataPage="architect-new" ready={routeReady(architectRoster.state)} title="New idea → architect" mainData={{ 'data-kickoff-kind': 'architect' }}>
         {/* W8-B3 (sessions-kinds-R07) — architect was the only one of the eight
             kickoffs with no way back: the other seven get `data-action=
             "kickoff-back"` from KickoffContextCard, but this branch returns
