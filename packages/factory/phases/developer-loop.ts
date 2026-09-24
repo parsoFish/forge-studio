@@ -199,7 +199,7 @@ function makeAgentWithTelemetry(
     skill: string;
     workItemId?: string;
   },
-  agentOpts: Omit<ClaudeAgentOptions, 'onToolUse' | 'onHeartbeat' | 'onUsageDelta' | 'onReasoning'>,
+  agentOpts: Omit<ClaudeAgentOptions, 'onToolUse' | 'onHeartbeat' | 'onUsageDelta' | 'onReasoning' | 'onProjectSkillsLoaded'>,
   // Runtime selection (ADR-029). Now threaded from the SKILL.md runtime.sdk via
   // the phase agent spec (devAgentSpec/unifierAgentSpec), resolved through
   // resolveSdkId at the caller so a free-text/unavailable id falls back to
@@ -225,6 +225,20 @@ function makeAgentWithTelemetry(
     onToolUse: toolSink.onToolUse,
     onHeartbeat: toolSink.onHeartbeat,
     ...(onReasoning !== undefined ? { onReasoning } : {}),
+    // Item 90: the project's declared skills reached this agent's prompt.
+    onProjectSkillsLoaded: (ids) => {
+      logger.emit({
+        initiative_id: sinkCtx.initiativeId,
+        parent_event_id: sinkCtx.parentEventId,
+        phase: sinkCtx.phase,
+        skill: sinkCtx.skill,
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'project_skills_loaded',
+        metadata: { ...(sinkCtx.workItemId ? { work_item_id: sinkCtx.workItemId } : {}), ids },
+      });
+    },
     onUsageDelta: (u) => {
       // Change B: emit per-turn token deltas as a lightweight log event so
       // the operator UI and future tooling can track mid-iteration usage.
