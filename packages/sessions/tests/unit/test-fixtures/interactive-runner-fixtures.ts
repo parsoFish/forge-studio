@@ -114,7 +114,7 @@ const FIXTURE_SESSION_KINDS_YAML = `
     phases:
       - { phase: analyzing, step: agent, writes: [staging], next: awaiting-review }
       - { phase: awaiting-review, step: noop }
-      - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, next: committed }
+      - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, stagingDirName: staging, next: committed }
       - { phase: committed, step: terminal }
 - id: test-kind-bad-finalizer
   agent: project-brain-builder
@@ -160,7 +160,7 @@ const FIXTURE_SESSION_KINDS_YAML = `
     kindDir: _interactivetest-ghostnext-finalize
     style: agent
     phases:
-      - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, next: ghost-next-phase }
+      - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, stagingDirName: staging, next: ghost-next-phase }
 - id: test-kind-no-writes-declared
   agent: project-brain-builder
   title: Interactive Runner Test Kind (P1 - no writes declared, true carve-out)

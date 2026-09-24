@@ -57,12 +57,17 @@ function deps(projectsRoot: string): AgentHistoryDeps {
     cachedListRuns: () => [],
     buildAgentSlugToNodeId: () => new Map(),
     loadFlowDefinition: () => ({ id: 'none', nodes: [] }),
+    listFlowIds: () => [],
+    flowPathForId: (flowId: string, forgeRoot: string) => join(forgeRoot, 'studio', 'flows', flowId, 'flow.yaml'),
     loadSessionKinds: () => [{ id: KIND, agent: SLUG, title: 'Authoring session', legacyRoutes: [] }],
     parseGuardedEventsJsonl: (logsRoot, entry) => {
       const p = join(logsRoot, entry, 'events.jsonl');
       if (!existsSync(p)) return null;
       return readFileSync(p, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>);
     },
+    // Not exercised by these fixtures (this route's standalone-cap check has
+    // no target slug to pre-filter against) — present only to satisfy the type.
+    parseGuardedFirstEvent: () => null,
     isTurnAlive: () => false,
     extractErrorMessage: () => '',
     stallCeilingMs: 180_000,

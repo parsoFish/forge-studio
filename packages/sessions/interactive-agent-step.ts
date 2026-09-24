@@ -457,6 +457,12 @@ export async function runFinalizeStep(args: {
   // writeToRepoRoot is the one place that re-validates it (isContainedProjectRepoPath) before using it as a write root.
   const projectRepoPath = typeof statusRecord.project_repo_path === 'string' ? statusRecord.project_repo_path : undefined;
   const project = typeof statusRecord.project === 'string' ? statusRecord.project : undefined;
+  // forge-7m2 — AUTHORED data (the SAME `writes:`-style field as an
+  // `agent`-step phase, just meaningful on a `finalize` row instead): the
+  // committing phase row names the dir its finalizer reads FROM, exactly as
+  // an earlier `agent`-step row names the dir it writes INTO. Omitted
+  // (never defaulted) when the row doesn't declare one — a finalizer that
+  // needs it (copyStagingToLibrary) refuses loudly at that point instead.
   const finalizerCtx: FinalizerContext = {
     sessionDir,
     forgeRoot,
@@ -469,6 +475,7 @@ export async function runFinalizeStep(args: {
     ...(packageId !== undefined ? { packageId } : {}),
     ...(projectRepoPath !== undefined ? { project_repo_path: projectRepoPath } : {}),
     ...(project !== undefined ? { project } : {}),
+    ...(phaseRow.stagingDirName !== undefined ? { stagingDirName: phaseRow.stagingDirName } : {}),
   };
 
   const wrote = await finalizerFn(finalizerCtx);

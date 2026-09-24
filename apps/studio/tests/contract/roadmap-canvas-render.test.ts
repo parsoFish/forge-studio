@@ -78,6 +78,7 @@ function buildRoadmap(): ProjectRoadmap {
         dependsOnInitiatives: [],
         workItems: [wi('WI-A1')],
         completedAt: '2026-06-05T09:00:00.000Z',
+        flowId: 'forge-architect',
       }),
       initiative({
         initiativeId: 'INIT-B',
@@ -274,12 +275,23 @@ test('[W6-RV-2] AT4: a [data-dep-jump] chip is keyboard-reachable (role=button, 
   expect(chip).toContain('tabindex="0"');
 });
 
-test('[W6-RV-2] AT4: the drawer carries the run dig-in (active + prior cycles) for a node with runs', () => {
+test('[W6-RV-2] AT4: the drawer carries the run dig-in (most-recent + prior cycles) for a node with runs', () => {
+  // forge-6gv.13.1: INIT-A's status is 'done' (a terminal status, see
+  // buildRoadmap() above) — its most recent cycle (`c-active`, despite the
+  // fixture's own id) is therefore a CONCLUDED run, not a currently-running
+  // one, and must read "last run", never "active run", for a done
+  // initiative. `data-run-active` still reads "true" on it regardless —
+  // that attribute means NEWEST (S10.story.mjs binds off it), not RUNNING;
+  // the terminal fact lives on the label and on the separate
+  // `data-run-live="false"` attribute instead. `c-old` (an OLDER attempt)
+  // stays "prior run" / data-run-active="false" regardless.
   const html = render({ initialSelectedId: 'INIT-A' });
   expect(html).toContain('data-run-cycle-id="c-active"');
   expect(html).toContain('data-run-active="true"');
+  expect(html).toContain('data-run-live="false"');
+  expect(html).toContain('last run');
   expect(html).toContain('data-run-cycle-id="c-old"');
-  expect(html).toContain('data-run-active="false"');
+  expect(html).toContain('prior run');
 });
 
 // ---------------------------------------------------------------------------
@@ -342,6 +354,14 @@ test('[W6-RV-2] AT6: a done card carries data-completed-at, honestly matching Ru
   expect(tagContaining(html, 'data-initiative-id="INIT-A"')).toContain('data-completed-at="2026-06-05T09:00:00.000Z"');
   // Never fabricated for a card with no completedAt.
   expect(tagContaining(html, 'data-initiative-id="INIT-B"')).not.toContain('data-completed-at');
+});
+
+test('[M7 findings row 59] AT6b: the card carries data-initiative-flow-id beside data-initiative-status — forge-architect and forge-develop both terminate at "ready-for-review", so the status word alone cannot tell them apart', () => {
+  const html = render();
+  const tagA = tagContaining(html, 'data-initiative-id="INIT-A"');
+  expect(tagA).toContain('data-initiative-flow-id="forge-architect"');
+  // Never fabricated for a card whose roadmap entry carries no flowId.
+  expect(tagContaining(html, 'data-initiative-id="INIT-B"')).not.toContain('data-initiative-flow-id');
 });
 
 // ---------------------------------------------------------------------------

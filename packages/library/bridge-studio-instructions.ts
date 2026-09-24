@@ -59,31 +59,27 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { SLUG_RE } from '@forge/kernel';
 import { composeInstructionsDraft } from './studio/instructions-draft.ts';
 import {
-  resolveGuardedPath,
   sendJson,
   allowedOrigin,
   sanitizeError,
   pathOnly,
   type RouteContext,
 } from '@forge/kernel';
-import { skillsDir } from './skill-path.ts';
+import { guardedSkillMdPath } from './skill-path.ts';
 
 export const INSTRUCTIONS_DRAFT_ROUTE_RE = /^\/api\/studio\/agents\/([^/]+)\/instructions-draft$/;
 
 /**
- * Resolve `<forgeRoot>/skills/<slug>/SKILL.md` via the shared
- * `resolveGuardedPath` choke point (cli/studio-path-guard.ts).
+ * Resolve a slug's `SKILL.md` across every skill root (SEAM F1) via
+ * `guardedSkillMdPath` — `skills/` AND every `packages/<pkg>/skills/`.
  * Returns `null` for a missing file AND for an escaping symlink alike (see
  * header) — never distinguishable from the response. This route only ever
  * needs the EXISTING-file case (D9: it confirms the agent exists, never
- * creates one), so a not-yet-created SKILL.md — which the shared guard
- * otherwise tolerates for the PUT route's create flow — is treated the same
- * as "unknown agent" here.
+ * creates one), which is exactly `guardedSkillMdPath`'s own contract (never
+ * tolerates create-mode, unlike the PUT route's own guard).
  */
 function resolveSafeSkillMdPath(forgeRoot: string, slug: string): string | null {
-  const guard = resolveGuardedPath(skillsDir(forgeRoot), [slug, 'SKILL.md']);
-  if (!guard.ok || !guard.exists) return null;
-  return guard.realPath;
+  return guardedSkillMdPath(slug, forgeRoot);
 }
 
 export async function handleStudioInstructionsRoutes(

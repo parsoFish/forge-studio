@@ -191,6 +191,17 @@ export type FinalizerContext = {
   manifestPorts?: QueuePorts;
   /** See ProjectRepoPathGuard. Absent ⇒ writeToRepoRoot refuses (no silent trust). */
   isContainedProjectRepoPath?: ProjectRepoPathGuard;
+  /** forge-7m2 — additive-optional (ADR-042 boundary #2: an additive-optional
+   *  field on an exported type is disclose-not-park). AUTHORED data, sourced
+   *  from the ADR-043 yaml turnSpec's `committing` phase row's `stagingDirName`
+   *  (`studio/session-kinds.yaml`, threaded by `runFinalizeStep` in
+   *  `interactive-agent-step.ts`) — never inferred, never hardcoded here.
+   *  Optional on the TYPE because only `copyStagingToLibrary` consumes it
+   *  (`writeToRepoRoot`/`recordLockedDemo` ignore it); `copyStagingToLibrary`
+   *  itself REQUIRES it present at call time and throws
+   *  `InteractiveFinalizerError` naming the omission rather than silently
+   *  falling back to a literal — see `discoverStagingEntries` below. */
+  stagingDirName?: string;
 };
 
 export type FinalizerFn = (ctx: FinalizerContext) => string[] | Promise<string[]>;
@@ -212,13 +223,17 @@ export type FinalizerRow = {
 type StagedEntry = { relParts: string[]; srcRealPath: string };
 
 /**
- * Recursively walk `<sessionDir>/staging/`, routing EVERY discovered entry —
- * directories included, before descending into them — through
- * `resolveGuardedPath(sessionDir, ['staging', ...relParts])`. Throws
- * `InteractiveFinalizerError` on the first entry that fails containment
- * (symlink, hardlink, or any other guard rejection); performs no writes.
+ * Recursively walk `<sessionDir>/<stagingDirName>/`, routing EVERY discovered
+ * entry — directories included, before descending into them — through
+ * `resolveGuardedPath(sessionDir, [stagingDirName, ...relParts])`. `forge-7m2`:
+ * `stagingDirName` is AUTHORED data (the caller's `FinalizerContext.stagingDirName`,
+ * itself sourced from the ADR-043 yaml turnSpec) — never a hardcoded literal
+ * here, so a session kind that authors a non-default staging dirname is
+ * honored rather than silently missed. Throws `InteractiveFinalizerError` on
+ * the first entry that fails containment (symlink, hardlink, or any other
+ * guard rejection); performs no writes.
  */
-function discoverStagingEntries(sessionDir: string): StagedEntry[] {
+function discoverStagingEntries(sessionDir: string, stagingDirName: string): StagedEntry[] {
   const out: StagedEntry[] = [];
 
   function walk(currentReal: string, relParts: string[]): void {
@@ -239,7 +254,7 @@ function discoverStagingEntries(sessionDir: string): StagedEntry[] {
       // destination, anchored at the trusted sessionDir. This is what stops
       // us from ever readdirSync-ing THROUGH a directory symlink: the guard
       // check on the entry itself runs before any recursion into it.
-      const guarded = resolveGuardedPath(sessionDir, ['staging', ...nextRelParts]);
+      const guarded = resolveGuardedPath(sessionDir, [stagingDirName, ...nextRelParts]);
       if (!guarded.ok) {
         throw new InteractiveFinalizerError(
           `copyStagingToLibrary: staged entry "${nextRelParts.join('/')}" failed source containment (${guarded.reason}).`,
@@ -279,11 +294,11 @@ function discoverStagingEntries(sessionDir: string): StagedEntry[] {
     }
   }
 
-  const stagingRoot = join(sessionDir, 'staging');
+  const stagingRoot = join(sessionDir, stagingDirName);
   let rootReal: string;
   try {
-    // `sessionDir` (and therefore its 'staging' child) is TRUSTED per this
-    // module's contract — no identity check here, matching how
+    // `sessionDir` (and therefore its `stagingDirName` child) is TRUSTED per
+    // this module's contract — no identity check here, matching how
     // resolveGuardedPath itself treats its own `root` parameter.
     rootReal = realpathSync(stagingRoot);
   } catch (err) {
@@ -390,12 +405,24 @@ function writeValidatedLibraryFile(destPath: string, buf: Buffer, relLabel: stri
  * paths on success.
  */
 export function copyStagingToLibrary(ctx: FinalizerContext): string[] {
-  const { sessionDir, libraryRoot, packageId } = ctx;
+  const { sessionDir, libraryRoot, packageId, stagingDirName } = ctx;
   // bead 8vfn.6.6 item 3 — packageId is now optional on the shared context
   // type (a finalizer that doesn't need one, e.g. writeToRepoRoot, gets
   // none); this one always did, so it asserts its own precondition.
   if (typeof packageId !== 'string') {
     throw new InteractiveFinalizerError('copyStagingToLibrary: FinalizerContext.packageId is required.');
+  }
+  // forge-7m2 — required AT USE TIME even though the type carries it
+  // optional (ADR-042 boundary #2's additive-optional discipline is about
+  // the TYPE, shared across finalizers that don't all need it; this
+  // finalizer specifically cannot do its job without it). Refuse loudly,
+  // naming the omission, rather than silently falling back to a literal —
+  // the exact "declared-data-fails-open" shape this campaign keeps closing.
+  if (stagingDirName === undefined) {
+    throw new InteractiveFinalizerError(
+      'copyStagingToLibrary: FinalizerContext.stagingDirName is required — the caller (runFinalizeStep) must thread ' +
+        "it from the session kind's turnSpec committing-phase row (studio/session-kinds.yaml).",
+    );
   }
 
   // ---- Phase 1: resolve and validate EVERY entry, zero side effects ----
@@ -407,7 +434,7 @@ export function copyStagingToLibrary(ctx: FinalizerContext): string[] {
     throw new InteractiveFinalizerError(`copyStagingToLibrary: packageId failed containment (${pkgGuard.reason}).`);
   }
 
-  const staged = discoverStagingEntries(sessionDir);
+  const staged = discoverStagingEntries(sessionDir, stagingDirName);
 
   const planned: { destPath: string; srcRealPath: string; relLabel: string }[] = [];
   for (const entry of staged) {
@@ -460,7 +487,11 @@ export function writeToRepoRoot(ctx: FinalizerContext): string[] {
   if (!ctx.isContainedProjectRepoPath(repoPath, { forgeRoot: ctx.forgeRoot })) {
     throw new InteractiveFinalizerError(`writeToRepoRoot: project_repo_path "${repoPath}" failed containment — refusing to use it as a write root.`);
   }
-  const staged = discoverStagingEntries(sessionDir);
+  // writeToRepoRoot doesn't take a session-kind-declared stagingDirName
+  // (FinalizerContext.stagingDirName is copyStagingToLibrary's alone, per
+  // that field's own doc) — it always reads the same default staging dir
+  // copyStagingToLibrary defaults to when a kind doesn't override it.
+  const staged = discoverStagingEntries(sessionDir, 'staging');
   return withStudioWrite(repoPath, `forge-studio: commit ${project ?? 'session'} output`, () => {
     const wrote: string[] = [];
     for (const entry of staged) {

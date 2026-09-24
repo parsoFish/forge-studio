@@ -35,7 +35,7 @@
  */
 
 import { expect, test } from 'vitest';
-import { deriveRunGating, type RunGatingInput } from '../../lib/run-panel-gating';
+import { deriveRunGating, standaloneBlockedReasonFor, type RunGatingInput } from '../../lib/run-panel-gating';
 
 const SAVE_HINT = 'Save the agent (no unsaved changes) to run it';
 const IN_FLIGHT = 'A run is already in flight';
@@ -206,4 +206,37 @@ test('deriveRunState: no run at all is idle', () => {
   expect(deriveRunGating.runStateOf({ status: null, runId: null, reattachedStatus: null })).toBe('idle');
   // A reattach that resolved to nothing must not conjure a state either.
   expect(deriveRunGating.runStateOf({ status: null, runId: null, reattachedStatus: 'done' })).toBe('idle');
+});
+
+// ---------------------------------------------------------------------------
+// standaloneBlockedReasonFor — agents-25: the standalone-refusal advisory
+// mirrored the server's `resolveDispatchableAgent` (packages/agents/
+// agent-dispatch.ts) for a ralph loop ONLY. A declaration-only /
+// executor-driven agent (a band-guard def — contract-check declares
+// `guards: [event-log, onboard-preflight]`) got a primary Run button with
+// no warning, even though the server's own `BandGuardDispatchRefusedError`
+// refuses EVERY band-guard def uniformly, not just ralph loops.
+// ---------------------------------------------------------------------------
+
+test('THE DEFECT: a band-guard agent (contract-check\'s own composition) is advised, not silently offered a Run that always fails', () => {
+  const reason = standaloneBlockedReasonFor({ loopStrategy: undefined, guards: ['event-log', 'onboard-preflight'] });
+  expect(reason).not.toBeNull();
+  expect(reason).toMatch(/band/i);
+});
+
+test('a ralph loop is still advised (unchanged behaviour)', () => {
+  const reason = standaloneBlockedReasonFor({ loopStrategy: 'ralph', guards: [] });
+  expect(reason).not.toBeNull();
+  expect(reason).toMatch(/ralph/i);
+});
+
+test('a generic agent (no ralph loop, no band guard) is not blocked', () => {
+  expect(standaloneBlockedReasonFor({ loopStrategy: 'one-shot', guards: ['event-log'] })).toBeNull();
+  expect(standaloneBlockedReasonFor({ loopStrategy: undefined, guards: [] })).toBeNull();
+});
+
+test('every declared band guard id refuses standalone dispatch, not just onboard-preflight', () => {
+  for (const guard of ['wi-contract', 'reflection-close', 'integrate-band', 'review-band', 'onboard-preflight']) {
+    expect(standaloneBlockedReasonFor({ loopStrategy: undefined, guards: [guard] }), guard).not.toBeNull();
+  }
 });

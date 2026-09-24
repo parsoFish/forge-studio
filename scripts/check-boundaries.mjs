@@ -238,8 +238,17 @@ async function main(argv) {
   const json = argv.includes('--json');
   const at = argv.indexOf('--baseline');
   const baselinePath = at === -1 ? join(ROOT, 'scripts/baselines/boundaries.json') : resolve(argv[at + 1]);
+  // `--root` — lets a test drive the CLI (and its text output) against a
+  // `mkdtempSync` fixture instead of the live tree. `audit(root, …)` already
+  // took its root as a parameter; this only wires the flag through to it.
+  // Bead forge-8vfn.5.64: the four probes below used to plant real files
+  // under `ROOT` for exactly this reason, which raced every other scanner
+  // reading the live tree at the same moment (`node --test` runs
+  // `scripts/*.test.ts` files concurrently).
+  const rootAt = argv.indexOf('--root');
+  const root = rootAt === -1 ? ROOT : resolve(argv[rootAt + 1]);
 
-  const result = await audit(ROOT, readBaseline(baselinePath));
+  const result = await audit(root, readBaseline(baselinePath));
   if (json) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 
   const failed = result.introduced.length + result.stale.length;

@@ -53,10 +53,13 @@ import { runReflector } from '../../phases/reflector.ts';
 import { createLogger } from '@forge/kernel';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import type { RunBrainLintResult } from '@forge/knowledge/brain-lint.ts';
+import { acquireIsolatedReflectorLease } from '../test-fixtures/reflector-lease-test-fixture.ts';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
 const FIXTURE_PATH = resolve(FORGE_ROOT, 'packages', 'kernel', 'tests', 'test-fixtures', 'spawn-capture', 'reflector.json');
+
+// forge-ler4 cross-file flake fix (mechanism: reflector-lease-test-fixture.ts).
 
 // Fixed (see file header) — distinct + greppable, never a real cycle id.
 const CYCLE_ID = 'SPAWN-CAPTURE-TEST-reflector-fixture';
@@ -119,6 +122,7 @@ test('runReflector: pins the exact {prompt, options} spawn call (characterizatio
     const result = await runReflector(input, logger, {
       sdkQuery: capturingSdkQuery,
       brainLint: cleanLint,
+      acquireBrainWriteLease: acquireIsolatedReflectorLease,
     });
     assert.equal(result.reflection_status, 'closed', 'sanity: the stubbed pass must close cleanly');
 

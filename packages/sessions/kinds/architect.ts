@@ -47,6 +47,7 @@ import { PathGuardContainmentError, type EventLogger } from '@forge/kernel';
 import { archiveSessionDir } from './architect-plan.ts';
 import { requirePorts } from './architect-ports.ts';
 import { runKindTurn } from './kind-turn.ts';
+import { withBrainReadTracking } from './architect-brain-read.ts';
 import type { SessionKindVariant } from './kind-turn.ts';
 import { guardedReadStatus, readArchitectSessionStats, readInterview } from './architect-session.ts';
 import type { ArchitectStatus, RunArchitectTurnInput, RunArchitectTurnResult } from './architect-session.ts';
@@ -163,7 +164,8 @@ export const architectKind: SessionKindVariant<
     // one turn may run the interview, then exploration, then the draft, and
     // which of those happen depends on the agent's own answer plus the round
     // ceiling. No phase table expresses that.
-    interviewing: withPaths(async ({ input, status, plumbing, writeStatus, paths }) => {
+    // forge-8vfn.8.3.5 — withBrainReadTracking (architect-brain-read.ts) emits brain.read per KB at turn end.
+    interviewing: withBrainReadTracking(withPaths(async ({ input, status, plumbing, writeStatus, paths }) => {
       const maxRounds = input.maxInterviewRounds ?? DEFAULT_MAX_INTERVIEW_ROUNDS;
       const interview = readInterview(input.projectRoot, input.sessionId);
       const decision = await runInterviewStep({ input, status, interview, plumbing, writeStatus, paths });
@@ -183,13 +185,13 @@ export const architectKind: SessionKindVariant<
       // Ready — the explicit exploration stage runs before drafting (R4-04-F4).
       writeStatus({ ...status, phase: 'exploring' });
       return await runExploreThenDraft({ input, status, plumbing, writeStatus, paths });
-    }),
+    })),
 
-    exploring: withPaths(runExploreThenDraft),
+    exploring: withBrainReadTracking(withPaths(runExploreThenDraft)),
 
-    drafting: withPaths(async (a) => await runDraftRounds({ ...a, resolvedDecisions: null })),
+    drafting: withBrainReadTracking(withPaths(async (a) => await runDraftRounds({ ...a, resolvedDecisions: null }))),
 
-    finalizing: withPaths(runFinalizeStep),
+    finalizing: withBrainReadTracking(withPaths(runFinalizeStep)),
 
     rejected: async ({ input, plumbing }) => {
       // ARCH-6: the bridge sets phase=rejected before spawning this turn; the

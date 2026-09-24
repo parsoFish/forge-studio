@@ -18,7 +18,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { writeFileSync, rmSync, mkdtempSync, readFileSync } from 'node:fs';
+import { writeFileSync, rmSync, mkdtempSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -244,19 +244,60 @@ test('it inspects a real dependency graph, not an empty one', () => {
  * directory under three concurrent scanners", the split is the honest trade —
  * and it is stated here rather than left for the next reader to discover that
  * `:104` has no end-to-end probe.
+ *
+ * CHAPTER FOUR — bead forge-8vfn.5.64. Chapter three moved the DIRECTORY off
+ * the live tree; the FILE stayed on it (`writeFileSync(join(ROOT, …))`), which
+ * turned out to be the same class of race one level down: `check-package-caps`
+ * listed this test's own probe mid-cruise and then read it after this test's
+ * `finally` had already removed it, and REFUSED rather than passing or failing
+ * (CI run 36024767395). `boundaryFixture()`, below, plants BOTH ends of the
+ * edge in a `mkdtempSync` root of their own and drives `check-boundaries.mjs`'s
+ * new `--root` flag — `audit(root, baseline)` already took its root as a
+ * parameter, so this fixes the CLI's wiring, not the checker's shape.
  */
 const NON_CONTRACTS_PACKAGE = 'packages/kernel/config.ts';
 
+/**
+ * Plants files under a `mkdtempSync` ROOT of their own and cruises THAT,
+ * never the live tree — bead forge-8vfn.5.64. The four probes below used to
+ * `writeFileSync`/`rmSync` real files under the repository `ROOT`, which is
+ * known-flake #6's shape: `node --test` runs `scripts/*.test.ts` files
+ * concurrently, so a probe appearing and vanishing there races every other
+ * scanner reading the live tree at that moment (`check-package-caps.mjs`
+ * listed `check-boundaries.test.ts`'s own probe on CI run 36024767395, then
+ * it was gone before the read, and REFUSED rc 75 rather than passing or
+ * failing). `check-boundaries.mjs`'s `audit(root, baseline)` already took
+ * its root as a parameter (only the CLI didn't forward one) — the fixture
+ * below drives that parameter through the CLI's new `--root` flag, so every
+ * assertion keeps reading the checker's own text output unchanged.
+ */
+function boundaryFixture(files: Record<string, string>): { root: string; cleanup: () => void } {
+  const root = mkdtempSync(join(tmpdir(), 'boundaries-fixture-'));
+  for (const [rel, body] of Object.entries(files)) {
+    const abs = join(root, rel);
+    mkdirSync(dirname(abs), { recursive: true });
+    writeFileSync(abs, body);
+  }
+  const baseline = join(root, 'empty-baseline.json');
+  writeFileSync(baseline, '[]\n');
+  return {
+    root,
+    cleanup: () => rmSync(root, { recursive: true, force: true }),
+  };
+}
+
 test('it FAILS on a NEW studio → beyond-contracts import (the defect it exists for)', () => {
-  const victim = join(ROOT, 'apps/studio/lib/__boundary_probe__.ts');
-  writeFileSync(victim, `import '../../../${NON_CONTRACTS_PACKAGE}';\nexport const probe = 1;\n`);
+  const { root, cleanup } = boundaryFixture({
+    [NON_CONTRACTS_PACKAGE]: 'export const x = 1;\n',
+    'apps/studio/lib/__boundary_probe__.ts': `import '../../../${NON_CONTRACTS_PACKAGE}';\nexport const probe = 1;\n`,
+  });
   try {
-    const { code, out } = run();
+    const { code, out } = run(['--root', root, '--baseline', join(root, 'empty-baseline.json')]);
     assert.equal(code, 1, `a new apps/studio -> non-contracts package import must fail — got exit 0:\n${out}`);
     assert.match(out, /studio-beyond-contracts/);
     assert.match(out, /__boundary_probe__\.ts/);
   } finally {
-    rmSync(victim, { force: true });
+    cleanup();
   }
 });
 
@@ -265,19 +306,21 @@ test('it FAILS on a NEW package -> assembly import (ruling 116, driven through t
   // that a real edge in a real cruise reaches it. A rule that classifies
   // correctly but is never consulted is the same blindness by another door.
   //
-  // The victim is planted and removed here, in the live tree, because
-  // dependency-cruiser must cruise the real graph to produce the edge at all.
-  // That is known-flake #6's shape and it is why this file's probes are named
-  // `__…_probe__` and deleted in a `finally`.
-  const victim = join(ROOT, 'packages/kernel/__assembly_probe__.ts');
-  writeFileSync(victim, "import '../../apps/forge/routes.ts';\nexport const probe = 1;\n");
+  // Both ends of the edge are planted in the fixture (`boundaryFixture`,
+  // above) because dependency-cruiser must cruise a real graph to produce
+  // the edge at all — a fixture tree serves exactly as well as the live one
+  // for that, and races no concurrent scanner.
+  const { root, cleanup } = boundaryFixture({
+    'apps/forge/routes.ts': 'export const routes = [];\n',
+    'packages/kernel/__assembly_probe__.ts': "import '../../apps/forge/routes.ts';\nexport const probe = 1;\n",
+  });
   try {
-    const { code, out } = run();
+    const { code, out } = run(['--root', root, '--baseline', join(root, 'empty-baseline.json')]);
     assert.equal(code, 1, `a new packages/kernel -> apps/forge import must fail — got exit 0:\n${out}`);
     assert.match(out, /package-to-assembly/);
     assert.match(out, /__assembly_probe__\.ts/);
   } finally {
-    rmSync(victim, { force: true });
+    cleanup();
   }
 });
 
@@ -326,27 +369,29 @@ test('a bare npm specifier is not a path and is left alone; an unresolvable PATH
 });
 
 test('it FAILS on an ALIASED studio -> legacy import — the shape a relative-path-only test cannot see', () => {
-  const victim = join(ROOT, 'apps/studio/lib/__alias_probe__.ts');
-  writeFileSync(victim, "import { MAX_KICKOFF_COST_CEILING_USD } from '@/../../orchestrator/config';\nexport const probe = MAX_KICKOFF_COST_CEILING_USD;\n");
+  const { root, cleanup } = boundaryFixture({
+    'apps/studio/lib/__alias_probe__.ts': "import { MAX_KICKOFF_COST_CEILING_USD } from '@/../../orchestrator/config';\nexport const probe = MAX_KICKOFF_COST_CEILING_USD;\n",
+  });
   try {
-    const { code, out } = run();
+    const { code, out } = run(['--root', root, '--baseline', join(root, 'empty-baseline.json')]);
     assert.equal(code, 1, `an aliased forge-ui -> orchestrator import must fail — got exit 0:\n${out}`);
     assert.match(out, /studio-beyond-contracts/);
     assert.match(out, /__alias_probe__\.ts -> orchestrator\/config/);
   } finally {
-    rmSync(victim, { force: true });
+    cleanup();
   }
 });
 
 test('it FAILS on a workspace-specifier import from the studio tree', () => {
-  const victim = join(ROOT, 'apps/studio/lib/__ws_probe__.ts');
-  writeFileSync(victim, "import { x } from '@forge/kernel';\nexport const probe = x;\n");
+  const { root, cleanup } = boundaryFixture({
+    'apps/studio/lib/__ws_probe__.ts': "import { x } from '@forge/kernel';\nexport const probe = x;\n",
+  });
   try {
-    const { code, out } = run();
+    const { code, out } = run(['--root', root, '--baseline', join(root, 'empty-baseline.json')]);
     assert.equal(code, 1, `apps/studio may import contracts only — got exit 0:\n${out}`);
     assert.match(out, /studio-beyond-contracts/);
     assert.match(out, /packages\/kernel/);
   } finally {
-    rmSync(victim, { force: true });
+    cleanup();
   }
 });

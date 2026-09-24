@@ -113,6 +113,7 @@ function buildAgentSlugToNodeIdFixture(forgeRoot: string): Map<string, string> {
 function makeDeps(runs: AgentFlowRun[]): AgentHistoryDeps {
   return {
     parseGuardedEventsJsonl: () => { throw new Error('unexpected parseGuardedEventsJsonl call'); },
+    parseGuardedFirstEvent: () => { throw new Error('unexpected parseGuardedFirstEvent call'); },
     isTurnAlive: () => { throw new Error('unexpected isTurnAlive call'); },
     extractErrorMessage: () => { throw new Error('unexpected extractErrorMessage call'); },
     stallCeilingMs: 0,
@@ -120,6 +121,11 @@ function makeDeps(runs: AgentFlowRun[]): AgentHistoryDeps {
     cachedListRuns: () => runs,
     buildAgentSlugToNodeId: buildAgentSlugToNodeIdFixture,
     loadFlowDefinition,
+    listFlowIds: (forgeRoot: string) => {
+      const flowsDir = join(forgeRoot, 'studio', 'flows');
+      return existsSync(flowsDir) ? readdirSync(flowsDir).sort() : [];
+    },
+    flowPathForId: (flowId: string, forgeRoot: string) => join(forgeRoot, 'studio', 'flows', flowId, 'flow.yaml'),
     loadSessionKinds: () => { throw new Error('unexpected loadSessionKinds call'); },
   };
 }

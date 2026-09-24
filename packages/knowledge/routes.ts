@@ -80,12 +80,14 @@ import {
 import {
   handleKbDrainCancel,
   handleKbActiveJob,
-  handleKbRuns,
-  handleKbDrainRun,
+  createKbRunsHandler,
+  createKbDrainRunHandler,
   createKbDrainStartHandler,
-  handleKbDrainStatus,
+  createKbDrainStatusHandler,
+  type KbDrainTailDeps,
 } from './kb-drain-routes.ts';
 import type { KbDrainRunFixTurnFn } from './bridge-studio-kb-drain.ts';
+import type { SessionReadabilityProbe } from './kb-drain-model.ts';
 
 /**
  * The context these handlers receive. `StudioContext` moved to `@forge/kernel`
@@ -141,7 +143,7 @@ const m = {
  * the same reason, as `projectsRoutes(deps)`. Declared structurally so this
  * package names no forbidden module even in a type position.
  */
-export type KnowledgeRouteDeps = KbCreateDeps & {
+export type KnowledgeRouteDeps = KbCreateDeps & KbDrainTailDeps & {
   /**
    * The real brain-fix turn (M4 ruling 86). This package is rank 2 and
    * `@forge/sessions` is rank 4, so the drain and the consolidate loop declare
@@ -151,6 +153,9 @@ export type KnowledgeRouteDeps = KbCreateDeps & {
    * the drift check between the two sides.
    */
   runFixTurn: KbDrainRunFixTurnFn;
+  /** M7-C U8 (bead forge-u8y2) — same rank problem as `runFixTurn`, same
+   *  REQUIRED shape — see `design.md` ("The session-readability port"). */
+  sessionIsReadable: SessionReadabilityProbe;
 };
 
 export function knowledgeRoutes(deps: KnowledgeRouteDeps): RouteTable<KnowledgeRouteContext> {
@@ -159,6 +164,14 @@ export function knowledgeRoutes(deps: KnowledgeRouteDeps): RouteTable<KnowledgeR
   // other row is bound directly, as before.
   const handleKbMaintenance = createKbMaintenanceHandler(deps);
   const handleKbDrainStart = createKbDrainStartHandler(deps);
+  // knowledge-01 (forge-6gv.6.1): `ensureAgentRunTail`/`releaseAgentRunTail`
+  // are OPTIONAL on `KnowledgeRouteDeps` — every existing caller (every route
+  // test in this package) supplies neither and stays unaffected; only the
+  // real assembly (`apps/forge/routes.ts`) supplies the real implementations.
+  // `sessionIsReadable` does NOT ride along with that optionality (see above).
+  const handleKbDrainRun = createKbDrainRunHandler(deps);
+  const handleKbRuns = createKbRunsHandler(deps);
+  const handleKbDrainStatus = createKbDrainStatusHandler(deps);
   return [
   {
     method: 'GET',
