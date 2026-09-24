@@ -245,9 +245,11 @@ test('compareBoundary: an ignore entry can name one exact file (e.g. brain/INDEX
 
 test('compareBoundary: pr-state-changed when an open PR disappears (merged/closed mid-run)', () => {
   withTmpRepo((dir) => {
+    // headRefName is a judged (product-owned) branch — INIT-… — so this
+    // stays a hard violation under the ruling-1263 scoped-judgment rule.
     const baseline = captureBoundaryBaseline({
       repoRoot: dir,
-      ghPrList: () => [{ number: 23, state: 'OPEN', headRefName: 'feat/x' }],
+      ghPrList: () => [{ number: 23, state: 'OPEN', headRefName: 'INIT-23' }],
     });
     const current = captureBoundaryBaseline({ repoRoot: dir, ghPrList: () => [] });
 
@@ -265,13 +267,15 @@ test('compareBoundary: pr-state-changed when an open PR disappears (merged/close
 
 test('compareBoundary: pr-state-changed when a PR state/branch changes without disappearing', () => {
   withTmpRepo((dir) => {
+    // headRefName is a judged (product-owned) branch — cycle/… — so this
+    // stays a hard violation under the ruling-1263 scoped-judgment rule.
     const baseline = captureBoundaryBaseline({
       repoRoot: dir,
-      ghPrList: () => [{ number: 23, state: 'OPEN', headRefName: 'feat/x' }],
+      ghPrList: () => [{ number: 23, state: 'OPEN', headRefName: 'cycle/x' }],
     });
     const current = captureBoundaryBaseline({
       repoRoot: dir,
-      ghPrList: () => [{ number: 23, state: 'MERGED', headRefName: 'feat/x' }],
+      ghPrList: () => [{ number: 23, state: 'MERGED', headRefName: 'cycle/x' }],
     });
 
     const result = compareBoundary(baseline, current);
@@ -283,6 +287,63 @@ test('compareBoundary: pr-state-changed when a PR state/branch changes without d
     assert.equal(violation.after?.state, 'MERGED');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Scoped judgment (ruling 1263 / bead forge-92r7, findings row 20) — the
+// account-wide open-PR diff used to judge EVERY head ref, so a sibling
+// lane merging or opening its own PR during the run window read as THIS
+// run's containment violation. compareBoundary now judges only PRs on the
+// run's own branches (JUDGED_PR_HEAD_REF_PREFIXES); every other head ref is
+// recorded in `context` — visible, never a violation. The guard stays hard
+// for the judged set (covered above and by the two tests just above).
+// ---------------------------------------------------------------------------
+
+test('compareBoundary: a PR change on a non-product head ref (m7/x) is recorded as context, not a violation', () => {
+  withTmpRepo((dir) => {
+    const baseline = captureBoundaryBaseline({
+      repoRoot: dir,
+      ghPrList: () => [{ number: 5, state: 'OPEN', headRefName: 'm7/x' }],
+    });
+    const current = captureBoundaryBaseline({
+      repoRoot: dir,
+      ghPrList: () => [{ number: 5, state: 'MERGED', headRefName: 'm7/x' }],
+    });
+
+    const result = compareBoundary(baseline, current);
+
+    assert.equal(result.clean, true);
+    assert.deepEqual(result.violations, []);
+    assert.equal(result.context?.length, 1);
+    const entry = result.context[0];
+    if (!entry || entry.type !== 'pr-state-changed') throw new Error('expected a pr-state-changed context entry');
+    assert.equal(entry.prNumber, 5);
+    assert.equal(entry.before?.headRefName, 'm7/x');
+    assert.equal(entry.after?.headRefName, 'm7/x');
+  });
+});
+
+for (const headRefName of ['forge/INIT-42', 'cycle/x', 'INIT-42']) {
+  test(`compareBoundary: a PR change on a product head ref (${headRefName}) stays a hard violation`, () => {
+    withTmpRepo((dir) => {
+      const baseline = captureBoundaryBaseline({
+        repoRoot: dir,
+        ghPrList: () => [{ number: 7, state: 'OPEN', headRefName }],
+      });
+      const current = captureBoundaryBaseline({
+        repoRoot: dir,
+        ghPrList: () => [{ number: 7, state: 'MERGED', headRefName }],
+      });
+
+      const result = compareBoundary(baseline, current);
+
+      assert.equal(result.clean, false);
+      assert.deepEqual(result.context, []);
+      const violation = result.violations.find((v) => v.type === 'pr-state-changed');
+      if (!violation || violation.type !== 'pr-state-changed') throw new Error('expected a pr-state-changed violation');
+      assert.equal(violation.prNumber, 7);
+    });
+  });
+}
 
 test('compareBoundary: gh-degrade — prs:null on either snapshot skips PR checks without throwing', () => {
   withTmpRepo((dir) => {
