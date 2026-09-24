@@ -219,12 +219,6 @@ export default function SessionShellPage({
     [kind, sessionId, projectHint],
   );
 
-  useEffect(() => {
-    refreshShell();
-    const poll = setInterval(refreshShell, SHELL_POLL_MS);
-    return () => clearInterval(poll);
-  }, [refreshShell]);
-
   // W7-B5 (sessions-kinds-34): the operator's stage choice — applied over
   // the freshly-derived shell state via the pure `selectStage` (which
   // refuses a stage outside the session's declared set; a refusal falls
@@ -241,20 +235,27 @@ export default function SessionShellPage({
     return base;
   }, [shellResult, stageOverride]);
 
-  // forge-d5ib (W8-F6 follow-up): a LEGACY session's per-kind summary
-  // endpoint reads the same project-side status.json the shell route no
-  // longer needs, so it can only ever resolve to nothing — polling it
-  // forever is wasted traffic the legacy kindPanel branch never reads
-  // anyway. Gated on `viewState` (not `summary`/`shellResult` directly) so
-  // it reads the SAME settled/legacy verdict the rest of the page renders
-  // from — see `shouldPollSessionSummary`'s own doc comment for why every
-  // OTHER state (loading/no-session/error) still polls.
+  // sessions-kinds-37 — ONE poller now drives both reads this page needs:
+  // the shell route (every kind — transcript/artifact/affordances) always,
+  // and the per-kind summary route only while `shouldPollSessionSummary`
+  // says to (forge-d5ib: a LEGACY session's summary endpoint reads the
+  // project-side status.json the shell route no longer needs, so it can
+  // only ever resolve to nothing — polling it forever past that point is
+  // wasted traffic the legacy kindPanel branch never reads anyway; every
+  // OTHER state still polls, see that predicate's own doc comment).
+  // Two INDEPENDENT `setInterval` timers used to run this page — the exact
+  // uncoordinated-poll shape this campaign already closed once for Home
+  // (`home-no-new-polling.test.ts`) — collapsed into the one below, pinned
+  // structurally by `scripts/session-shell-one-poller.test.ts`.
   useEffect(() => {
-    if (!shouldPollSessionSummary(viewState)) return;
-    refreshSummary();
-    const poll = setInterval(refreshSummary, SUMMARY_POLL_MS);
+    const tick = () => {
+      refreshShell();
+      if (shouldPollSessionSummary(viewState)) refreshSummary();
+    };
+    tick();
+    const poll = setInterval(tick, SESSION_POLL_MS);
     return () => clearInterval(poll);
-  }, [refreshSummary, viewState]);
+  }, [refreshShell, refreshSummary, viewState]);
 
   // W7-B1 (sessions-kinds-07) — the artifact pane is wired for real on this
   // page now: `project`/`sessionId` thread through (generation "view →"
@@ -585,7 +586,7 @@ export default function SessionShellPage({
         // reached (network-error / no-bridge = unreachable; bad-request /
         // stage-conflict / server-error / non-json / malformed = it answered),
         // with the server's own message verbatim and a Retry that re-runs the
-        // shell read (the SHELL_POLL_MS poll keeps retrying on its own too).
+        // shell read (the SESSION_POLL_MS poll keeps retrying on its own too).
         <div data-section="session-error">
           <FetchErrorState
             what="this session"
@@ -605,8 +606,10 @@ export default function SessionShellPage({
 // Constants + small local helpers
 // ---------------------------------------------------------------------------
 
-const SHELL_POLL_MS = 3000;
-const SUMMARY_POLL_MS = 3000;
+// sessions-kinds-37 — ONE cadence for the ONE poller (see the merged
+// useEffect above); was two same-valued but independently-timered
+// constants (SHELL_POLL_MS, SUMMARY_POLL_MS).
+const SESSION_POLL_MS = 3000;
 
 /** Which live bridge-socket message signals "refetch the per-kind list" for
  *  a given kind — mirrors the retired architect/instructions pages'

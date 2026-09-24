@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useCallback, useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
+import { PageLoadError } from '@/components/PageLoadError';
+import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import {
   addRegistryItem,
   updateRegistryItem,
@@ -108,42 +110,63 @@ function RegistryItemFormInner(): JSX.Element {
   const [loaded, setLoaded] = useState(!editing);
   // W8-B5 (community-30): the load's OUTCOME, not just an error string. A
   // real 404 renders the shared NotFound; an unreachable/erroring bridge
-  // keeps the banner, because "the bridge is down" is never evidence that
-  // the row does not exist.
+  // gets the shared PageLoadError kit, because "the bridge is down" is
+  // never evidence that the row does not exist.
   const [loadOutcome, setLoadOutcome] = useState<RegistryEditLoadOutcome | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // forge-4sj — `{error, status}`, the same shape `fetchErrorPropsFrom`
+  // returns for a throwing read and every other PageLoadError caller uses,
+  // so this page's non-throwing `fetchRegistryItem` failure carries the
+  // same two facts (message + whether the bridge answered at all).
+  const [loadError, setLoadError] = useState<{ error: string; status?: number } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!editing) return;
-    let cancelled = false;
+  // forge-4sj — extracted so Retry and the bridge-recovery resubscribe below
+  // can both re-run it, mirroring /community/[kind]/[id]/page.tsx's own
+  // `load`/`reload` split for the identical non-throwing read shape.
+  const load = useCallback(() => {
+    // Callers (the mount effect, `reload`) only ever invoke this while
+    // `editing` — restated here too so `editId`'s narrowing to `string`
+    // survives the function boundary (aliased-condition narrowing does not
+    // cross into a callback whose OWN body never re-checks it).
+    if (!editing || editId === null) return;
+    setLoadError(null);
     fetchRegistryItem(editId).then((r) => {
-      if (cancelled) return;
       const outcome = registryEditLoadOutcome(r);
       setLoadOutcome(outcome);
-      if (outcome !== 'ok' || !r.item) {
-        setLoadError(r.error ?? `no registry item "${editId}"`);
+      if (outcome === 'ok' && r.item) {
+        setForm({
+          id: r.item.id,
+          kind: r.item.kind,
+          name: r.item.name,
+          desc: r.item.desc ?? '',
+          category: r.item.category,
+          sourceUrl: r.item.sourceUrl,
+          provenance: r.item.provenance,
+          tier: r.item.tier ?? '',
+          attributedTo: r.item.signals?.attributedTo ?? '',
+        });
         setLoaded(true);
         return;
       }
-      setForm({
-        id: r.item.id,
-        kind: r.item.kind,
-        name: r.item.name,
-        desc: r.item.desc ?? '',
-        category: r.item.category,
-        sourceUrl: r.item.sourceUrl,
-        provenance: r.item.provenance,
-        tier: r.item.tier ?? '',
-        attributedTo: r.item.signals?.attributedTo ?? '',
-      });
+      if (outcome !== 'not-found') {
+        setLoadError({ error: r.error ?? `no registry item "${editId}"`, status: r.status });
+      }
       setLoaded(true);
     });
-    return () => {
-      cancelled = true;
-    };
   }, [editing, editId]);
+
+  const reload = useCallback(() => {
+    if (editing) load();
+  }, [editing, load]);
+
+  useEffect(() => {
+    if (editing) load();
+  }, [editing, load]);
+
+  // Refill ONLY while failed — never re-load over the operator's in-flight
+  // edits (mirrors every other detail page's own rule).
+  useBridgeRecoveryWhenFailed(loadError !== null, reload);
 
   // ONE predicate, shared with the disabled reason and with each Field's `*`
   // marker (lib/community-form.ts). Never a second hand-written conjunction.
@@ -173,12 +196,32 @@ function RegistryItemFormInner(): JSX.Element {
   // W7-C3 review (A-H4): per-route tab title.
   useDocumentTitle(editing ? `Edit ${editId}` : 'Add a registry item', 'Community');
 
+  // forge-4sj — a non-404 edit-load failure (bridge down, or reachable but
+  // erroring) is neither "not found" nor a half-populated form behind an
+  // ad-hoc banner: the shared kit, with Retry and a bridge-recovery
+  // resubscribe, checked BEFORE the not-found branch below so a transport
+  // blip can never fall through toward a false absence claim.
+  if (editing && loadOutcome === 'error' && loadError) {
+    return (
+      <PageLoadError
+        page="community-registry-form"
+        rootAttrs={{ 'data-form-mode': 'edit' }}
+        what={`registry item "${editId}"`}
+        error={loadError.error}
+        status={loadError.status}
+        onRetry={reload}
+        backHref="/community"
+        backLabel="Community"
+      />
+    );
+  }
+
   // W8-B5 (community-30): the bridge ANSWERED, and what it said is "no
   // registry item with that id" — the shared not-found treatment, not an
   // edit form for a row that does not exist. Deliberately gated on the
-  // OUTCOME and not on `loadError`: an unreachable bridge also sets
-  // `loadError`, and rendering "No registry item …" for it would fabricate an
-  // absence claim out of a transport failure.
+  // OUTCOME and not on `loadError`: an unreachable bridge takes the branch
+  // above instead, so it can never fabricate an absence claim out of a
+  // transport failure.
   if (editing && loadOutcome === 'not-found') {
     return (
       <NotFound
@@ -214,12 +257,6 @@ function RegistryItemFormInner(): JSX.Element {
           why there is deliberately no star-count field here: a number nobody fetched is a fabricated
           signal.
         </p>
-
-        {loadError && (
-          <div data-component="fetch-error" style={{ color: '#f87171', fontSize: 13, marginBottom: 14 }}>
-            {loadError}
-          </div>
-        )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Field label="id (slug)" field="id">
