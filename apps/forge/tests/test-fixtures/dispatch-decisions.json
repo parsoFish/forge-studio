@@ -30,10 +30,10 @@
     },
     {
       "slug": "demo-agent",
-      "band": "demo-band",
+      "band": "integrate-band",
       "canonicalSlug": "demo-agent",
       "loopStrategy": "one-shot",
-      "dispatchPath": "band:demo-band"
+      "dispatchPath": "band:integrate-band"
     },
     {
       "slug": "developer-ralph",
@@ -145,10 +145,10 @@
     },
     {
       "slug": "demo-agent",
-      "band": "demo-band",
+      "band": "integrate-band",
       "canonicalSlug": "demo-agent",
       "loopStrategy": "one-shot",
-      "dispatchPath": "band:demo-band",
+      "dispatchPath": "band:integrate-band",
       "inComposableRoster": true
     },
     {
@@ -235,14 +235,14 @@
   "bandHookIds": [
     "wi-contract",
     "reflection-close",
-    "demo-band",
+    "integrate-band",
     "review-band",
     "onboard-preflight"
   ],
   "bandCanonicalSlug": {
     "wi-contract": "project-manager",
     "reflection-close": "reflector",
-    "demo-band": "demo-agent",
+    "integrate-band": "demo-agent",
     "review-band": "adversarial-review",
     "onboard-preflight": "contract-check"
   },
@@ -271,7 +271,7 @@
           "resolvedKind": "agent"
         },
         {
-          "id": "demo",
+          "id": "integrate",
           "agent": "demo-agent",
           "resolvedKind": "agent"
         },

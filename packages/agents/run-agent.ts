@@ -417,7 +417,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
     },
   });
 
-  const startedAt = Date.now();
+  const startedAt = performance.now(); // monotonic: Date.now() steps back on this host (forge-8vfn.7.6.50)
 
   // Step 2: harness safety — suppress the real spawn under dry-bridge / the
   // architect no-spawn seam, BEFORE any SDK call is made.
@@ -495,7 +495,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   }
 
   // Report + log the end event.
-  const durationMs = spawned.durationMs ?? Date.now() - startedAt;
+  const durationMs = spawned.durationMs ?? Math.round(performance.now() - startedAt);
 
   logger.emit({
     initiative_id: initiativeId,

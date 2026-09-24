@@ -230,6 +230,26 @@ export function enqueueConsolidate(kbId: string, run: () => Promise<void>): Prom
 }
 
 /**
+ * W6-B14 fix (forge-6esp): the runId this PROCESS last minted for a
+ * consolidate dispatch against `kbId`, recorded synchronously at mint time
+ * (before `enqueueConsolidate` defers). `.../consolidate/active` prefers this
+ * over sorting `_brainfix-<kbId>-consolidate-*` names by their embedded
+ * `Date.now().toString(36)`, which assumes a monotonic clock — false on this
+ * host (steps backward ~2.9s/30s, `_1.0/reports/m7-c-clockprobe-1.log`), so a
+ * fresh mint can sort below a stale one. `undefined` = never dispatched here
+ * (fresh process / untouched kb); caller falls back to the directory scan.
+ */
+const lastConsolidateRunId = new Map<string, string>();
+
+export function recordConsolidateDispatch(kbId: string, runId: string): void {
+  lastConsolidateRunId.set(kbId, runId);
+}
+
+export function lastConsolidateDispatchFor(kbId: string): string | undefined {
+  return lastConsolidateRunId.get(kbId);
+}
+
+/**
  * True for the ONE `checkProjectBrainIndexes` message shape with a fully
  * deterministic repair — "not listed in project category index" — where
  * `consolidateTargetFile` resolves the finding's own message to the EXACT

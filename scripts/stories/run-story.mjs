@@ -31,7 +31,7 @@ import { readdirSync, mkdirSync, writeFileSync, renameSync, rmSync } from 'node:
 import { join, dirname, relative } from 'node:path';
 import { chromium } from 'playwright-core';
 import { spendGateVerdict, summariseRunSpend, effectiveCeiling } from './spend.mjs';
-import { readRunEvents, hostState, collectSpendDirs, spendSoFar } from './run-observe.mjs';
+import { readRunEvents, hostState, collectSpendDirs, spendSoFar, finalSpendHalt } from './run-observe.mjs';
 import {
   applyFence,
   describeFence,
@@ -301,6 +301,17 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   });
   console.log(`[stories] spend: ${spend.label}`);
   for (const n of spend.notes ?? []) console.log(`[stories] spend: ${n}`);
+  // Bead `forge-8vfn.7.6.92` — a turn that ended after the LAST beat boundary
+  // is judged here, by the same verdict the boundaries use; a halt makes the
+  // run RED in its own words rather than letting it read as complete.
+  if (costs) {
+    const late = finalSpendHalt({ root: ROOT, startedMs, realSpawn: story.ground?.realSpawn === true, ceilingUsd: ceiling?.usd, alreadyHalted: spendHalt !== null });
+    for (const l of late.lines) console.log(l);
+    if (late.stop) {
+      console.error(`[stories] ${late.stop.headline} after the last beat boundary — ${late.stop.reason} (${ceiling.reason}).`);
+      spendHalt = late.stop;
+    }
+  }
 
   // §3.1's trailing duty: the fixtures this story CREATED in the product. Not
   // its own output — `demos/stories/<id>` IS the artifact. The comment that

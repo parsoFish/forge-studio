@@ -207,11 +207,14 @@ function snapshotBefore(): { dirs: Set<string>; skips: number } {
 }
 
 function waitFor(predicate: () => boolean, timeoutMs = 2000, intervalMs = 20): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
+  // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is not
+  // monotonic on this host, so a deadline computed from its difference can
+  // move mid-wait.
+  const deadline = performance.now() + timeoutMs;
   return new Promise((resolve, reject) => {
     const tick = () => {
       if (predicate()) return resolve();
-      if (Date.now() > deadline) return reject(new Error('waitFor: timed out'));
+      if (performance.now() > deadline) return reject(new Error('waitFor: timed out'));
       setTimeout(tick, intervalMs);
     };
     tick();

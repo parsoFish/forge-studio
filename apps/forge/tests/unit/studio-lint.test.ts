@@ -553,12 +553,12 @@ test('RED (R1-06): kb.yaml binding.band not present in the bound flow\'s real ba
 
   const kbDir = join(root, 'brain', 'mismatched-band-kb');
   mkdirSync(kbDir, { recursive: true });
-  // demo-band IS a real BAND_GUARD_IDS member, but it is NOT one of
+  // integrate-band IS a real BAND_GUARD_IDS member, but it is NOT one of
   // test-flow's own bands (only review-band is) — so this must be flagged,
   // the same way a dangling binding.ref is flagged above.
   writeFileSync(
     join(kbDir, 'kb.yaml'),
-    validKbYaml('mismatched-band-kb', 'binding: { kind: flow, ref: test-flow, band: demo-band }'),
+    validKbYaml('mismatched-band-kb', 'binding: { kind: flow, ref: test-flow, band: integrate-band }'),
   );
 
   const result = runStudioLint(root);
@@ -569,7 +569,7 @@ test('RED (R1-06): kb.yaml binding.band not present in the bound flow\'s real ba
   assert.ok(
     bandFinding !== undefined,
     'Expected an error finding naming the band mismatch for kb:mismatched-band-kb (binding.band '
-      + '"demo-band" is not among test-flow\'s real bands { review-band }) — studio-lint has no band '
+      + '"integrate-band" is not among test-flow\'s real bands { review-band }) — studio-lint has no band '
       + `check at all today. Got: ${JSON.stringify(result.findings.map((f) => ({ object: f.object, check: f.check, message: f.message })))}`,
   );
 

@@ -380,11 +380,11 @@ export function checkFlowVersionSeam(
  * The caller (runCycle) must have already resolved resolveQualityGateCmd and
  * threaded inputWithGate — runFlow receives the already-resolved input (item 1).
  *
- * resumeFrom: when `input.resumeFrom === 'demo'`, the pm node rebases + skips
+ * resumeFrom: when `input.resumeFrom === 'integrate'`, the pm node rebases + skips
  * (item 3), the dev node runs but self-no-ops the per-WI work (toRun=[], still
  * emitting its start/end{resumed:true} events so the dev hex resolves complete),
- * and the `demo` node (declared `resumable`) is the resume target — the DAG walk
- * re-enters the post-develop band (demo → adversarial-review → verdict) against
+ * and the `integrate` node (declared `resumable`) is the resume target — the DAG walk
+ * re-enters the post-develop band (integrate → adversarial-review → verdict) against
  * the preserved branch without rebuilding any WI.
  *
  * Returns enough for runCycle to build the full CycleResult.
@@ -450,6 +450,8 @@ export async function runFlow({
   const input: CycleInput = {
     ...rawInput,
     shouldStopBeforeWorkItem: (workItemId: string) => costTracker.stopReasonBeforeNextWorkItem(workItemId),
+    // M7-A: the SAME tracker's live remaining-budget reading (field doc above).
+    remainingCostBudgetUsd: () => costTracker.remainingUsd,
   };
 
   const order = topoSort(flow);
@@ -573,14 +575,14 @@ export async function runFlow({
       throw err;
     }
 
-    // R4-10-F2: a node (execDemo, on a red merge-boundary full-suite gate)
+    // R4-10-F2: a node (execIntegrate, on a red merge-boundary full-suite gate)
     // requested early termination — the branch is not shippable, so STOP the
-    // DAG walk (no demo/adversarial/verdict, no PR) and route the manifest to
+    // DAG walk (no integrate/adversarial/verdict, no PR) and route the manifest to
     // ready-for-review via closure. The gate-fix WIs it compiled make the drain
     // re-enter resume_from:'develop'; only a green baseline ever reaches openPr.
-    // R4-10-F2: a node (execDemo on a red merge-boundary gate, execOnboardPreflight
+    // R4-10-F2: a node (execIntegrate on a red merge-boundary gate, execOnboardPreflight
     // on a red contract) asked to terminate. The branch is not shippable, so STOP
-    // the walk (no demo, no adversarial review, no verdict, NO PR) and route the
+    // the walk (no integrate, no adversarial review, no verdict, NO PR) and route the
     // manifest to ready-for-review via closure. One branch, run once, outside the
     // node's try: the walk ends here, so nothing can call it twice.
     if (state.terminateEarly) {

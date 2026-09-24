@@ -97,12 +97,12 @@ export type CycleInput = {
    * Resume a previously-stalled/redirected cycle from a sub-phase, reusing
    * the preserved worktree + branch rather than a full re-run. Set by the
    * scheduler from the manifest's `resume_from` field. Two values:
-   *   - `'demo'` — ADR 019 (successor develop flow, R4-10-F6): crash / env-failure
+   *   - `'integrate'` — ADR 019 (successor develop flow, R4-10-F6): crash / env-failure
    *     recovery when every WI is already `complete`. Skips the architect, PM, and
    *     per-WI dev-loop (the WI commits already exist on the branch) and resumes at
-   *     the `demo` node — the post-develop band's `resumable` re-entry point — then
-   *     adversarial-review/verdict. Set by `forge requeue --resume-from=demo`.
-   *     (Was `'unifier'` before the topology cutover retired that node.)
+   *     the `integrate` node — the post-develop band's `resumable` re-entry point — then
+   *     adversarial-review/verdict. Set by `forge requeue --resume-from=integrate`.
+   *     (Was `'demo'` pre-rename, forge-8vfn.6.10.18; `'unifier'` pre-cutover.)
    *   - `'develop'` — ADR 040: review send-back re-entry. PM rebases onto
    *     main and skips (no re-decomposition); the dev loop RUNS (prior WIs
    *     re-verify cheaply via the iter-0 already-complete shortcut, new
@@ -110,7 +110,7 @@ export type CycleInput = {
    *     by the review→develop fix-loop drain.
    * Absent ⇒ normal full cycle.
    */
-  resumeFrom?: 'demo' | 'develop';
+  resumeFrom?: 'integrate' | 'develop';
   /** Project quality-gate command run by the orchestrator between review iterations. Defaults to `npm test` if package.json is present, otherwise `true`. */
   qualityGateCmd?: string[];
   /**
@@ -141,6 +141,9 @@ export type CycleInput = {
    * stop check).
    */
   shouldStopBeforeWorkItem?: (workItemId: string) => string | null;
+  /** M7-A: the SAME tracker's live remaining budget (`Infinity` while
+   *  unenforced), read every Ralph iteration by `dev-cost-bound.ts`. */
+  remainingCostBudgetUsd?: () => number;
 };
 
 export type ReflectionStatus = 'closed' | 'failed' | 'skipped';

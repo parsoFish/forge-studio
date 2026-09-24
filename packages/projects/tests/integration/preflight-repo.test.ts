@@ -29,7 +29,7 @@ import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
-import { runPreflight, SCRATCH_PATHS, type ClauseId } from '../../preflight.ts';
+import { runPreflight, SCRATCH_PATHS, TRACKED_CONFIG_PATHS, type ClauseId } from '../../preflight.ts';
 
 function tmp(): string {
   return mkdtempSync(join(tmpdir(), 'forge-preflight-'));
@@ -47,7 +47,7 @@ function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void }
   );
   writeFileSync(
     join(dir, '.gitignore'),
-    ['node_modules/', 'dist/', '.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n'),
+    ['node_modules/', 'dist/', ...SCRATCH_PATHS].join('\n'),
   );
   writeFileSync(join(dir, 'roadmap.md'), '# Roadmap\n');
   // C8 coverage (R1-04-F1): the instruction file mentions the declared gate command.
@@ -96,7 +96,7 @@ test('C2 (HARD): scratch path not ignored by git ⇒ fail + ok=false, names the 
   const p = happyProject();
   try {
     // Remove PROMPT.md and fix_plan.md from .gitignore so they are NOT ignored.
-    writeFileSync(join(p.dir, '.gitignore'), ['node_modules/', 'dist/', '.forge/', 'AGENT.md'].join('\n'));
+    writeFileSync(join(p.dir, '.gitignore'), ['node_modules/', 'dist/', '.forge/work-items/', 'AGENT.md'].join('\n'));
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     const c = clause(r, 'C2');
     assert.equal(c.pass, false);
@@ -159,7 +159,7 @@ test('C2 (HARD): a dir-only ignore pattern (".forge/work-items/") covers the NOT
     // with a trailing slash, `.forge/` itself NOT wholesale-ignored.
     writeFileSync(
       join(p.dir, '.gitignore'),
-      ['node_modules/', 'dist/', '.forge/work-items/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n'),
+      ['node_modules/', 'dist/', ...SCRATCH_PATHS].join('\n'),
     );
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     const c = clause(r, 'C2');
@@ -264,13 +264,68 @@ test('C2 (HARD, green-lock) a dir scratch path existing as a REAL directory stil
   }
 });
 
+test('C2 (HARD): a .gitignore that blanket-ignores .forge/ fails C2, naming .forge/skills/ (operator ruling 92)', () => {
+  // The pre-ruling-92 shape (`docs/reference/project-contract.md` used to
+  // call `.forge/project.json` "force-tracked inside the ignored `.forge/`
+  // dir"): a project whose `.gitignore` ignores `.forge/` wholesale silently
+  // drops `.forge/skills/` — every project-local skill — from git too. C2
+  // must fail this, and the detail must name `.forge/skills/` specifically
+  // so the operator knows what to fix (not just "something's wrong").
+  const p = happyProject();
+  try {
+    writeFileSync(join(p.dir, '.gitignore'), ['node_modules/', 'dist/', '.forge/'].join('\n'));
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c = clause(r, 'C2');
+    assert.equal(c.pass, false, `a blanket .forge/ ignore must fail C2: ${c.detail}`);
+    assert.equal(r.ok, false);
+    assert.match(c.detail, /\.forge\/skills\//);
+    for (const configPath of TRACKED_CONFIG_PATHS) assert.ok(c.detail.includes(configPath), `detail must name ${configPath}: ${c.detail}`);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C2 (HARD): a .gitignore that ignores ONLY .forge/quality_gate_cmd fails C2, naming it (TRACKED_CONFIG_PATHS single source)', () => {
+  // Isolation pin: the sidecar gate command is tracked config just like
+  // project.json/skills — ignoring it in isolation (not via a blanket
+  // `.forge/`) must still fail, proving TRACKED_CONFIG_PATHS is checked
+  // entry-by-entry, not just as a side effect of the blanket-ignore case.
+  const p = happyProject();
+  try {
+    writeFileSync(join(p.dir, '.gitignore'), ['node_modules/', 'dist/', ...SCRATCH_PATHS, '.forge/quality_gate_cmd'].join('\n'));
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c = clause(r, 'C2');
+    assert.equal(c.pass, false, `ignoring .forge/quality_gate_cmd must fail C2: ${c.detail}`);
+    assert.match(c.detail, /\.forge\/quality_gate_cmd/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C2 (HARD): the canonical stanza (SCRATCH_PATHS ignored, .forge/project.json + .forge/skills/ untouched) passes', () => {
+  // The other half of the red-first pair: the stanza `fixScratchHygiene` /
+  // `scaffoldContractArtifacts` / the three starters all write — ignore only
+  // SCRATCH_PATHS, never `.forge/` itself — leaves TRACKED_CONFIG_PATHS
+  // trackable and C2 stays green.
+  const p = happyProject();
+  try {
+    writeFileSync(join(p.dir, '.gitignore'), ['node_modules/', 'dist/', ...SCRATCH_PATHS].join('\n'));
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c = clause(r, 'C2');
+    assert.equal(c.pass, true, `the canonical stanza must pass C2: ${c.detail}`);
+    assert.equal(r.ok, true);
+  } finally {
+    p.cleanup();
+  }
+});
+
 test('C6 (ADVISORY): no GitHub remote warns but does NOT flip ok; states forge-side-satisfied', () => {
   const dir = tmp();
   const forgeRoot = tmp();
   const name = dir.split('/').pop()!;
   try {
     writeFileSync(join(dir, 'package.json'), JSON.stringify({ name, scripts: { test: 'vitest run' } }));
-    writeFileSync(join(dir, '.gitignore'), ['.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n'));
+    writeFileSync(join(dir, '.gitignore'), [...SCRATCH_PATHS].join('\n'));
     writeFileSync(join(dir, 'roadmap.md'), '# r\n');
     writeFileSync(join(dir, 'CLAUDE.md'), '# c\n');
     // Brain 3 is forge-owned + central (ADR 035).
