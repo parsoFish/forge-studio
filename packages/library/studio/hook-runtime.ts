@@ -49,6 +49,16 @@
  * *** checked) would be worse than this — it would read as a promise this
  * *** module cannot keep — so it is left out entirely rather than added as a
  * *** field nothing verifies.
+ * ***
+ * *** PROCESS-GROUP CLEANUP IS ASYMMETRIC BETWEEN THE TWO SPAWN TAILS
+ * *** (forge-9a3 follow-up). The ASYNC tail (`runHookScriptAsync`) spawns
+ * *** `bash` detached and, on timeout/overflow, SIGKILLs the whole process
+ * *** group, so a script's grandchild (e.g. `sleep 30 &`) dies with it. The
+ * *** SYNC tail (`runHookScript`, `spawnSync`) does NOT: `spawnSync`'s own
+ * *** `timeout` option signals only the child's own pid, and `spawnSync`
+ * *** blocks the caller until the child exits, leaving no hook to intervene
+ * *** with a group-targeted kill from outside — so a timed-out sync hook can
+ * *** still leak an orphaned grandchild; left unchanged on purpose.
  *
  * `runHookScript` (sync) and `runHookScriptAsync` (async, forge-9a3 — see
  * `prepareHookRun`'s comment for why there are two) refuse to spawn anything
@@ -396,15 +406,37 @@ export function runHookScript(input: RunHookScriptInput): HookRunResult {
 
 function spawnBashAsync(scriptPath: string, cwd: string, env: NodeJS.ProcessEnv, timeoutMs: number): Promise<HookSpawnOutcome> {
   return new Promise((resolve) => {
-    const child = spawn('bash', [scriptPath], { env, cwd });
+    // `detached: true` makes `bash` the leader of its OWN new process group
+    // (pid === pgid), so a group-targeted signal (below) reaches it AND every
+    // descendant it spawns — never `unref()`ed, since this tail still awaits
+    // the child via the `exit`/`close`/`error` listeners below.
+    const child = spawn('bash', [scriptPath], { env, cwd, detached: true });
     const buf = { stdout: '', stderr: '' };
     let overflowed = false;
     let timedOut = false;
     let settled = false;
 
+    // killGroup — timeout/overflow must kill the whole process GROUP, not
+    // just `bash`'s own pid: a script's grandchild (e.g. `sleep 30 &`) is
+    // NOT a child of the signalled pid alone, and a single-pid kill leaves
+    // it reparented and orphaned, still running, still holding bash's
+    // inherited stdio pipes open indefinitely (forge-9a3 follow-up, proven:
+    // a killed run's grandchild was still alive 15s later). `-child.pid`
+    // signals the group; ESRCH means the group is already gone (a fast
+    // natural exit racing the timer, or overflow and timeout both firing)
+    // and is expected, not an error.
+    const killGroup = (): void => {
+      if (child.pid === undefined) return;
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ESRCH') throw err;
+      }
+    };
+
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGTERM');
+      killGroup();
     }, timeoutMs);
 
     const settle = (status: number | null, error?: NodeJS.ErrnoException): void => {
@@ -414,14 +446,14 @@ function spawnBashAsync(scriptPath: string, cwd: string, env: NodeJS.ProcessEnv,
       resolve({ status, stdout: buf.stdout, stderr: buf.stderr, error });
     };
 
-    // Appends up to HOOK_SPAWN_MAX_BUFFER_BYTES total, then kills the child.
+    // Appends up to HOOK_SPAWN_MAX_BUFFER_BYTES total, then kills the group.
     const onData = (key: 'stdout' | 'stderr') => (chunk: Buffer) => {
       if (overflowed) return;
       const next = buf[key] + chunk.toString('utf8');
       buf[key] = next.length > HOOK_SPAWN_MAX_BUFFER_BYTES ? next.slice(0, HOOK_SPAWN_MAX_BUFFER_BYTES) : next;
       if (next.length > HOOK_SPAWN_MAX_BUFFER_BYTES) {
         overflowed = true;
-        child.kill('SIGTERM');
+        killGroup();
       }
     };
     child.stdout?.on('data', onData('stdout'));
@@ -429,11 +461,18 @@ function spawnBashAsync(scriptPath: string, cwd: string, env: NodeJS.ProcessEnv,
 
     child.on('error', (err) => settle(null, err as NodeJS.ErrnoException));
 
-    // A forcible kill signals `bash` only, not its process group — a script's
-    // grandchild (e.g. `sleep 30`) survives it, still holding bash's inherited
-    // pipes open, so `close` (below) never fires on a killed run (proven
-    // empirically: still pending 15s after a 200ms-budget kill). spawnSync's
-    // own `timeout` doesn't wait for that either — same parity, via `exit`.
+    // Timeout/overflow still settle on `exit`, not `close` — DELIBERATELY,
+    // even though the group kill above now usually makes `close` fire
+    // promptly too (every pipe holder in the group dies together, so nothing
+    // is left to hold it open). `exit` fires the instant bash's OWN pid
+    // terminates, independent of whether every descendant's stdio pipe has
+    // finished closing; `close` additionally waits on that. Gating the
+    // wall-clock BOUND's promptness on "did cleanup finish" rather than on
+    // "did bash itself die" would re-couple two things this fix is precisely
+    // about decoupling — a caller awaiting the timeout is owed a prompt
+    // answer regardless of how long an orphan takes to unwind, and `killGroup`
+    // has already been issued (not merely scheduled) by the time `exit`
+    // fires, so cleanup does not wait on this choice either way.
     child.on('exit', (code) => {
       if (timedOut) settle(code, Object.assign(new Error('spawn bash ETIMEDOUT'), { code: 'ETIMEDOUT' }) as NodeJS.ErrnoException);
       else if (overflowed) settle(code, Object.assign(new Error('spawn bash ENOBUFS'), { code: 'ENOBUFS' }) as NodeJS.ErrnoException);
