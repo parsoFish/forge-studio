@@ -9,18 +9,23 @@
  * on the day this lands, and nothing anywhere said so.
  *
  * HOW THE RATCHET WORKS. `scripts/baselines/file-size.json` records every
- * file that is over the cap today, with its line count. Three things fail:
+ * file that is over the cap today, with its line count. Four things fail:
  *
  *   new     a file over the cap with no baseline entry — the cap bites for
  *           every file written from M2 onwards, which is the point.
  *   grew    a baselined file whose count went UP — an exemption is a debt
  *           ceiling, not a licence.
+ *   slack   a baselined file whose count went DOWN but is still over the
+ *           cap — the ceiling above it never followed it down, so growth
+ *           back into the old slack passes green with no gate having
+ *           moved (forge-8vfn.5.61). `--write` tightens every slack row to
+ *           the live size; it NEVER raises one.
  *   stale   a baseline entry for a file now under the cap or gone — the
  *           ratchet must be tightened when the debt is paid, or the next
- *           file to grow into that slot inherits a free pass.
- *
- * There is no `--write-baseline`. Shrinking the ratchet is a deliberate edit
- * to the JSON, and the `stale` failure tells you the exact line to remove.
+ *           file to grow into that slot inherits a free pass. `--write`
+ *           does not touch these: a stale entry names a debt that is fully
+ *           PAID, and removing the row (rather than the checker rewriting
+ *           it to nothing useful) is still a deliberate edit.
  *
  * SCOPE. Code files only (`.ts .tsx .mjs .js .cjs`), tracked or untracked-
  * but-not-ignored (`git ls-files --cached --others --exclude-standard`), so a
@@ -28,9 +33,9 @@
  * and generated lockfiles are not code. Markdown is NOT in scope: the docs
  * cull is a separate duty with its own budget (spec §4 "Docs").
  *
- * RUN: node scripts/check-file-size.mjs [--json] [--baseline <path>]
+ * RUN: node scripts/check-file-size.mjs [--json] [--baseline <path>] [--write]
  */
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -186,11 +191,20 @@ export function audit(root, baseline) {
 
   const newOversize = [];
   const grown = [];
+  // SLACK — forge-8vfn.5.61: a ceiling that sits ABOVE the live file. Before
+  // this, a row here fell through both branches below silently: not `grown`
+  // (`lines` is not `> allowed`) and not `stale` (the file is still over the
+  // 800-line cap, so `lines <= HARD_CAP_LINES` is false too). An exemption is
+  // a debt ceiling; a debt ceiling nobody tightens as the debt shrinks is not
+  // a ratchet, and a file that grows back INSIDE the old slack passes green
+  // with no gate ever having moved (declared-data-fails-open).
+  const slack = [];
   for (const [rel, lines] of sizes) {
     if (lines <= HARD_CAP_LINES) continue;
     const allowed = baseline[rel];
     if (allowed === undefined) newOversize.push({ path: rel, lines });
     else if (lines > allowed) grown.push({ path: rel, lines, allowed });
+    else if (lines < allowed) slack.push({ path: rel, lines, allowed });
   }
 
   const stale = [];
@@ -218,13 +232,31 @@ export function audit(root, baseline) {
     baselined: Object.keys(baseline).length,
     newOversize,
     grown,
+    slack,
     stale,
     nearCap,
   };
 }
 
+/**
+ * Tightens every SLACK row (ceiling above the live file) to the live size —
+ * `--write`, forge-8vfn.5.61. Never raises: a `grown` row (ceiling below the
+ * live file, a real violation) and a `stale` row (file gone or under the
+ * cap) are left exactly as they are, because rewriting either would be this
+ * checker laundering a violation instead of reporting one. Returns the
+ * tightened baseline object plus the count of rows it touched.
+ */
+export function tightenBaseline(root, baseline) {
+  const { slack } = audit(root, baseline);
+  if (slack.length === 0) return { baseline, tightened: 0 };
+  const next = { ...baseline };
+  for (const row of slack) next[row.path] = row.lines;
+  return { baseline: next, tightened: slack.length };
+}
+
 function main(argv) {
   const json = argv.includes('--json');
+  const write = argv.includes('--write');
   const at = argv.indexOf('--baseline');
   const baselinePath = at === -1 ? join(ROOT, 'scripts/baselines/file-size.json') : resolve(argv[at + 1]);
   // `--root` — lets a test drive the CLI (and its text output) against a
@@ -236,6 +268,13 @@ function main(argv) {
   // every other scanner reading the live tree at the same moment.
   const rootAt = argv.indexOf('--root');
   const root = rootAt === -1 ? ROOT : resolve(argv[rootAt + 1]);
+
+  if (write) {
+    const { baseline: next, tightened } = tightenBaseline(root, readBaseline(baselinePath));
+    writeFileSync(baselinePath, `${JSON.stringify(next, null, 2)}\n`);
+    process.stdout.write(`check-file-size: WROTE ${baselinePath} — ${tightened} slack ceiling(s) tightened to the live size\n`);
+    return 0;
+  }
 
   let result;
   try {
@@ -268,7 +307,7 @@ function main(argv) {
     }
   }
 
-  const failed = result.newOversize.length + result.grown.length + result.stale.length;
+  const failed = result.newOversize.length + result.grown.length + result.slack.length + result.stale.length;
   if (failed === 0) {
     if (!json) {
       process.stdout.write(
@@ -284,6 +323,11 @@ function main(argv) {
     }
     for (const f of result.grown) {
       process.stdout.write(`  ${f.path}: grew from ${f.allowed} to ${f.lines} lines — an exemption is a ceiling, not a licence.\n`);
+    }
+    for (const f of result.slack) {
+      process.stdout.write(
+        `  ${f.path}: slack — ceiling ${f.allowed}, file is ${f.lines} lines — tighten: ${f.lines} (run --write to apply)\n`,
+      );
     }
     for (const f of result.stale) {
       process.stdout.write(`  ${f.path}: stale baseline entry (${f.reason}) — remove it from the baseline to tighten the ratchet.\n`);

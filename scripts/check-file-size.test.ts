@@ -176,7 +176,9 @@ test('it does NOT double-count slack as "grown" — one row, one finding', () =>
   const real = JSON.parse(readFileSync(BASELINE, 'utf8')) as Record<string, number>;
   const { path, actual } = aBaselinedRow();
   withBaseline({ ...real, [path]: actual + 50 }, (b) => {
-    const json = JSON.parse(execFileSync('node', [CHECKER, '--json', '--baseline', b], { cwd: ROOT, encoding: 'utf8' }).toString()) as {
+    const { code, out } = run(['--json', '--baseline', b]);
+    assert.equal(code, 1, out);
+    const json = JSON.parse(out) as {
       slack: { path: string }[];
       grown: { path: string }[];
     };
