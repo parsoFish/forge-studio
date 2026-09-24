@@ -935,6 +935,23 @@ is what this contract reads — but it cannot be the only distinguisher.
   duplicated it); `KbCard` (`LibraryCard.tsx`) itself stays unused in the
   live product (its own render-test coverage,
   `lib/library-card-render.test.ts`, is unaffected).
+  **Sessions shelf (forge-8vfn.7.6.12, below the five shelves):**
+  `section[data-section="sessions"]` renders one `a[data-action=
+  "kickoff-<kind>"]` per entry of `lib/session-kind-meta.ts`'s
+  `KICKOFF_ENTRIES` — the SAME handle and the SAME single source the
+  Sessions index's own kickoff row already reads (`SessionsIndex.tsx`'s
+  `section[data-section="sessions-kickoff"]`, above); labels and hrefs are
+  never re-derived here. Unlike the five shelves above, this is not a
+  fetched "part" (no loading/error state, no count fetch, no create/browse
+  CTA) — it is a direct cross-link, the one role Sessions can have on
+  Library since it is deliberately NOT its own `StudioNav` pillar (W6-B11).
+  Before this it landed, the shortest path from the Library to a session
+  launcher was three hops — Agents index's `[data-nav="sessions-secondary"]`
+  → the Sessions index → its `sessions-kickoff` row → the launcher itself
+  (`docs/how-to/S7.md`'s "fourth kind of part") — this shelf collapses that
+  to one hop straight from the parts bin. `LibraryHub.tsx`'s own render test
+  (`tests/integration/library-hub-render.test.ts`) pins one link per
+  `KICKOFF_ENTRIES` row and that the shelf renders after Community.
   `StudioNav` (`[data-component="studio-nav"]`) is UNCHANGED by this rebuild
   — see the Global nav entry above (W6-IA-5; Monitor added W8-B1) for the
   current seven-pillar set/order/hrefs and active-state rules.
