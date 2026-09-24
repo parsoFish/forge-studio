@@ -6,14 +6,29 @@
  * runs). These tests run the real checker against the real tree, then
  * against a tree with a fabricated offender, and assert it flips.
  *
+ * THE FABRICATED OFFENDER IS PLANTED IN A `mkdtempSync` FIXTURE, NOT THE LIVE
+ * TREE — bead forge-8vfn.5.64. It used to `writeFileSync(join(ROOT, …))` a
+ * real `apps/studio/components/__ratchet_probe__.tsx` and `rmSync` it again
+ * in a `finally`; `node --test` runs `scripts/*.test.ts` files concurrently,
+ * so a probe planted and removed there raced every other scanner reading the
+ * tree at the same moment — named as the trigger in `check-file-size.mjs`'s
+ * own `lineCount` doc, and `font-selfhost.test.ts` did the same thing a third
+ * time (`_1.0/known-flakes.md` #6). `check-disabled-reason.mjs` now exports
+ * `audit(root)`, so the two probe tests below call it directly instead of
+ * going through the CLI's `run()`, which the other (read-only, live-tree)
+ * tests in this file keep using unchanged.
+ *
  * RUN: node --test --experimental-strip-types scripts/check-disabled-reason.test.ts
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, rmSync, mkdtempSync, mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { audit } from './check-disabled-reason.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CHECKER = join(ROOT, 'scripts/check-disabled-reason.mjs');
@@ -25,6 +40,17 @@ function run(): { code: number; out: string } {
     const e = err as { status?: number; stdout?: string; stderr?: string };
     return { code: e.status ?? 1, out: `${e.stdout ?? ''}${e.stderr ?? ''}` };
   }
+}
+
+/** A `mkdtempSync` root with just enough of `apps/studio` for `audit()` to
+ *  scan, plus the one probe `.tsx` file. */
+function disabledReasonFixture(tsx: string): { root: string; cleanup: () => void } {
+  const root = mkdtempSync(join(tmpdir(), 'disabled-reason-'));
+  mkdirSync(join(root, 'apps/studio/app'), { recursive: true });
+  const componentsDir = join(root, 'apps/studio/components');
+  mkdirSync(componentsDir, { recursive: true });
+  writeFileSync(join(componentsDir, '__ratchet_probe__.tsx'), tsx);
+  return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
 test('the tree is clean — every disabled primary CTA carries its reason', () => {
@@ -40,8 +66,7 @@ test('the checker actually inspects a real population, not an empty set', () => 
 });
 
 test('it FAILS on a disabled primary CTA with no reason (the defect it exists for)', () => {
-  const victim = join(ROOT, 'apps/studio/components/__ratchet_probe__.tsx');
-  writeFileSync(victim, [
+  const { root, cleanup } = disabledReasonFixture([
     "'use client';",
     'export function Probe({ busy }: { busy: boolean }) {',
     '  return (',
@@ -51,19 +76,17 @@ test('it FAILS on a disabled primary CTA with no reason (the defect it exists fo
     '',
   ].join('\n'));
   try {
-    const { code, out } = run();
-    assert.equal(code, 1, `the ratchet must fail on an unreasoned disabled primary CTA — got exit 0:\n${out}`);
-    assert.match(out, /__ratchet_probe__\.tsx/);
-    assert.match(out, /probe-cta/);
+    const result = audit(root);
+    assert.equal(result.offenders.length, 1, `the ratchet must fail on an unreasoned disabled primary CTA — got: ${JSON.stringify(result)}`);
+    assert.match(result.offenders[0]!.file, /__ratchet_probe__\.tsx/);
+    assert.equal(result.offenders[0]!.action, 'probe-cta');
   } finally {
-    rmSync(victim, { force: true });
+    cleanup();
   }
-  assert.equal(run().code, 0, 'the tree must be clean again once the probe is removed');
 });
 
 test('it PASSES the same CTA once the reason is spread from the ONE derivation', () => {
-  const victim = join(ROOT, 'apps/studio/components/__ratchet_probe__.tsx');
-  writeFileSync(victim, [
+  const { root, cleanup } = disabledReasonFixture([
     "'use client';",
     "import { disabledAttrs } from '@/lib/disabled-reason';",
     'export function Probe({ busy }: { busy: boolean }) {',
@@ -74,9 +97,10 @@ test('it PASSES the same CTA once the reason is spread from the ONE derivation',
     '',
   ].join('\n'));
   try {
-    assert.equal(run().code, 0, 'a CTA whose reason comes from disabledAttrs must satisfy the ratchet');
+    const result = audit(root);
+    assert.deepEqual(result.offenders, [], 'a CTA whose reason comes from disabledAttrs must satisfy the ratchet');
   } finally {
-    rmSync(victim, { force: true });
+    cleanup();
   }
 });
 
