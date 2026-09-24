@@ -38,7 +38,7 @@ import { randomBytes } from 'node:crypto';
 import { dirname, relative, resolve, sep } from 'node:path';
 import { resolveGuardedPath, guardedReadFile, provenanceOfOrigin, type Provenance } from '@forge/kernel';
 import { loadKbDescriptor } from './studio/kb-descriptor.ts';
-import { resolveKbBrainDir } from './brain-paths.ts';
+import { tryGetKbBackend } from './kb-backend.ts';
 import { kbSites, unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
 import { type KbBinding } from '@forge/contracts/studio/types.ts';
 import type { KbDrainRunFixTurnFn, SessionStatusIoPort, GuardedWriteSessionStatusFn } from './bridge-studio-kb-drain.ts';
@@ -228,7 +228,11 @@ export async function approveKbCleanup(
   const draftApplyRaw = (status as Record<string, unknown>)['draft_apply'];
   let draftWrites: Array<{ target: string; content: string }> | null = null;
   if (Array.isArray(draftApplyRaw) && draftApplyRaw.length > 0) {
-    const brainDir = resolveKbBrainDir(forgeRoot, kbId);
+    // M7-C KN1 (bead forge-8vfn.5.25.3): resolved through the KbBackend seam
+    // — `rootDir()` is its one deliberate raw-path exception, needed below
+    // for an EISDIR-safe boundary check (`contains()` accepts the root
+    // itself; this must reject it).
+    const brainDir = tryGetKbBackend(forgeRoot, kbId)?.rootDir() ?? null;
     if (!brainDir) {
       return { ok: false, status: 500, error: `kb-cleanup apply: kb id "${kbId}" does not resolve to any brain directory` };
     }
@@ -550,8 +554,12 @@ export function buildKbHealth(
  * against).
  */
 export function computeAgentCleanupFindings(forgeRoot: string, kbId: string): (Finding & { kind: string })[] {
-  const brainDir = resolveKbBrainDir(forgeRoot, kbId);
-  if (!brainDir) {
+  // M7-C KN1 (bead forge-8vfn.5.25.3): resolved through the KbBackend seam.
+  // `collectKbFindings` below already defaults its own `backend` param to
+  // `tryGetKbBackend` and would silently return `[]` for an unknown kbId —
+  // this existence check is what turns that into the loud throw this
+  // function's own contract promises.
+  if (tryGetKbBackend(forgeRoot, kbId) === null) {
     throw new Error(`computeAgentCleanupFindings: kb id "${kbId}" does not resolve to any real brain directory`);
   }
   const { findings } = runBrainLintFullMemoized(forgeRoot);
