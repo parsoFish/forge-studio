@@ -15,6 +15,7 @@
  * confident how-to telling an operator to do something that does not work.
  */
 import { join } from 'node:path';
+import { PLACEHOLDER } from './beats-page-read.mjs';
 
 const DIR_FOR_KIND = { tutorial: 'tutorials', 'how-to': 'how-to' };
 
@@ -76,7 +77,20 @@ function renderBeat(beat, index) {
   if (entries.length > 0) {
     lines.push('<details><summary>What you should see</summary>');
     lines.push('');
-    for (const [attr, value] of entries) lines.push(`- \`data-${attr}\` is \`${value}\``);
+    for (const [attr, value] of entries) {
+      // forge-8vfn.2.27 (labelling half). `beat.expect` (see `beats.mjs`) is
+      // the RAW declared value; a `<name>` there means the product MINTED
+      // `value` at run time, so it is expected to differ on every run. Stated
+      // as a bare fact it reads as drift on the next regeneration; labelled,
+      // a reader (or an agent diffing two generated docs) knows to ignore it.
+      const declared = beat.expect?.[attr];
+      const isPlaceholder = typeof declared === 'string' && PLACEHOLDER.test(declared);
+      lines.push(
+        isPlaceholder
+          ? `- \`data-${attr}\`: \`${declared}\` (bound at run time: \`${value}\`)`
+          : `- \`data-${attr}\` is \`${value}\``,
+      );
+    }
     lines.push('');
     lines.push('</details>');
     lines.push('');
