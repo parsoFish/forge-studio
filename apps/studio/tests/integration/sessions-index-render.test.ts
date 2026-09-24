@@ -55,6 +55,17 @@ test('data-page="sessions-index" is present once ready, alongside data-page-read
   expect(html).toContain('data-session-count="1"');
 });
 
+// ---- sessions-kinds-16 — the lede says terminal sessions "live on their ---
+// ---- artifacts" but the page offered no path to any of them; a pointer to
+// ---- Monitor's history ledger (which joins every spine session, terminal
+// ---- or not — apps/studio/lib/session-ledger.ts) closes that dead end. ---
+
+test('sessions-kinds-16: a pointer to Monitor (where terminal sessions are actually listed) renders, reusing the existing open-monitor action', () => {
+  const html = renderToStaticMarkup(React.createElement(SessionsIndexBody, { sessions: [], ready: false }));
+  expect(html).toContain('data-action="open-monitor"');
+  expect(html).toContain('href="/monitor"');
+});
+
 // ---- table rows — every session gets its own row, carrying the DOM ------
 // ---- contract data-session-kind / data-session-phase / data-needs-you. ---
 

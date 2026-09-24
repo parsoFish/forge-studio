@@ -38,7 +38,7 @@ import { join } from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 
 import { fenceBreaches, describeFence, siblingWorktreeEscapes, snapshotSiblingWorktrees, unownedEscapes } from './sweep.mjs';
-import { sessionScratchRoots } from './fence-attribution.mjs';
+import { sessionScratchRoots, liveSessionOwners } from './fence-attribution.mjs';
 
 // --- 308: the ground's Brain 3 is an expected artifact, held for the verdict --
 
@@ -619,5 +619,123 @@ test('7.5.6: when two live lanes\' roots OVERLAP, the MOST SPECIFIC root wins �
     assert.equal(mine[0].live.ownerRoot, realpathSync(inner), 'and the report names WHICH root won, so the choice is checkable');
   } finally {
     for (const s of [outerSleeper, innerSleeper]) { try { process.kill(s.pid); } catch { /* gone */ } }
+  }
+});
+
+// --- po2h: an UNKNOWN /proc read must not be read as an absent owner --------
+//
+// Bead `forge-po2h`. ONE occurrence, under the full suite, never reproduced by
+// timing (the bug report's own record: alone 3/3, two full 8240-test runs
+// clean, a 60/60 loaded probe clean — not repeated here, since it already
+// found nothing). The report's own "WHERE TO LOOK NEXT #1": `liveProcessCwds`
+// swallowed every `readlinkSync` failure as "gone, or another user's", so a
+// TRANSIENT failure on the owning session's OWN pid — indistinguishable, at
+// that line, from the process having exited — reads exactly like
+// `mine[0].live === null`.
+//
+// This does not claim to have reproduced the historical failure BY TIMING;
+// nothing here waits on a race, and the true cause of the one occurrence stays
+// unconfirmed. It reproduces the MECHANISM the report named, by injecting the
+// one failure shape the real code could not tell apart from genuine absence,
+// and applies the fix this repo already uses for the identical shape
+// (`readEmitFailures`, `run-observe.mjs` — ENOENT is absence, anything else is
+// UNKNOWN, §15.504): distinguish them, and never let one UNKNOWN read cost a
+// live session its attribution.
+
+/**
+ * Wrap the real `/proc` reader so ONE pid's `readlinkSync` can be scripted —
+ * every other pid, including every other real live process on the host, goes
+ * through the real syscall untouched. This is what makes the repro SCHEDULED
+ * rather than theorised: the target is a real, live process with a real cwd,
+ * and the only thing under the test's control is whether THAT pid's read
+ * throws, and with what error, on a given call.
+ *
+ * @param {number} pid the one pid to intercept
+ * @param {(call: number) => (Error|null)} scriptFor given the 0-based call
+ *   number seen for THIS pid, the error to throw, or null to let the real read through
+ */
+function interceptReadCwd(pid, scriptFor) {
+  const calls = { count: 0 };
+  const real = (p) => readlinkSync(join('/proc', p, 'cwd'));
+  const readCwd = (p) => {
+    if (Number(p) !== pid) return real(p);
+    const err = scriptFor(calls.count);
+    calls.count += 1;
+    if (err !== null) throw err;
+    return real(p);
+  };
+  return { readCwd, calls };
+}
+
+const genericReadError = () => new Error('EIO: some unreadable /proc state');
+const goneReadError = (code) => Object.assign(new Error(code), { code });
+
+test('po2h: an unrelated pid\'s /proc read failing during the same scan never costs the real owner its attribution', () => {
+  const laneDir = mkdtempSync(join(tmpdir(), 'fence-laneb-'));
+  const sleeper = sleeperIn(laneDir);
+  try {
+    const scratchTree = join(sessionScratchRoots(realpathSync(laneDir))[0], 'd7ba5f92-po2h', 'scratchpad', 'base');
+    // A pid that will never be real, scanned alongside the real one, and which
+    // always throws ENOENT — the "one unrelated pid" the debugging brief asks for.
+    const owners = liveSessionOwners([scratchTree], {
+      listPids: () => ['999999999', String(sleeper.pid)],
+      readCwd: (p) => (p === '999999999' ? (() => { throw goneReadError('ENOENT'); })() : readlinkSync(join('/proc', p, 'cwd'))),
+    });
+    assert.equal(owners.get(scratchTree)?.pid, sleeper.pid, 'the real owner is unaffected by an unrelated pid\'s failure');
+  } finally {
+    try { process.kill(sleeper.pid); } catch { /* already gone */ }
+  }
+});
+
+test('po2h: ENOENT/ESRCH on the OWNER\'s own pid is genuine absence — never retried, never attributed', () => {
+  const laneDir = mkdtempSync(join(tmpdir(), 'fence-laneb-'));
+  const sleeper = sleeperIn(laneDir);
+  try {
+    const scratchTree = join(sessionScratchRoots(realpathSync(laneDir))[0], 'd7ba5f92-po2h', 'scratchpad', 'base');
+    const { readCwd, calls } = interceptReadCwd(sleeper.pid, () => goneReadError('ENOENT'));
+    const owners = liveSessionOwners([scratchTree], { readCwd });
+    assert.equal(owners.get(scratchTree), undefined, 'ENOENT reads as the process being gone, exactly as it should');
+    assert.equal(calls.count, 1, 'a confirmed-gone read is answered once, never retried — retrying it would only cost time');
+  } finally {
+    try { process.kill(sleeper.pid); } catch { /* already gone */ }
+  }
+});
+
+test(
+  'po2h (RED): a live owner is lost when ITS OWN /proc read fails once with an UNKNOWN (non-ENOENT/ESRCH) error '
+  + '— the bead\'s mechanism, reproduced',
+  () => {
+    const laneDir = mkdtempSync(join(tmpdir(), 'fence-laneb-'));
+    const sleeper = sleeperIn(laneDir);
+    try {
+      const scratchTree = join(sessionScratchRoots(realpathSync(laneDir))[0], 'd7ba5f92-po2h', 'scratchpad', 'base');
+      // ONE unknown-class failure on the owner's own pid, then the real read
+      // succeeds — the read never says the process is gone; it just could not
+      // be read that one time.
+      const { readCwd, calls } = interceptReadCwd(sleeper.pid, (call) => (call === 0 ? genericReadError() : null));
+      const owners = liveSessionOwners([scratchTree], { readCwd });
+      assert.equal(
+        owners.get(scratchTree)?.pid, sleeper.pid,
+        'a read that fails once with an UNKNOWN error must not read as the session having exited',
+      );
+      assert.ok(calls.count >= 2, `the retry must have happened for the owner to be found at all (calls: ${calls.count})`);
+    } finally {
+      try { process.kill(sleeper.pid); } catch { /* already gone */ }
+    }
+  },
+);
+
+test('po2h: POSITIVE CONTROL — the retry budget is bounded; a read that never recovers still yields no owner', () => {
+  const laneDir = mkdtempSync(join(tmpdir(), 'fence-laneb-'));
+  const sleeper = sleeperIn(laneDir);
+  try {
+    const scratchTree = join(sessionScratchRoots(realpathSync(laneDir))[0], 'd7ba5f92-po2h', 'scratchpad', 'base');
+    const { readCwd, calls } = interceptReadCwd(sleeper.pid, () => genericReadError());
+    const owners = liveSessionOwners([scratchTree], { readCwd });
+    assert.equal(owners.get(scratchTree), undefined, 'a persistently-unknown read gives up — the guard is not weakened into infinite patience');
+    assert.ok(calls.count >= 2, `the bound must actually have been exercised, not given up on the first try (calls: ${calls.count})`);
+    assert.ok(calls.count <= 6, `and the bound must actually be a bound, not unbounded retrying (calls: ${calls.count})`);
+  } finally {
+    try { process.kill(sleeper.pid); } catch { /* already gone */ }
   }
 });

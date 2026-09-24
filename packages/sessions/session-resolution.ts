@@ -77,10 +77,13 @@ export function invalidSessionIdReason(id: string): string | null {
 // below, because there was exactly one community registry forge-wide). It never
 // surfaced as a phantom project — `discoverProjects` filters dot-prefixed dirs.
 // Its kickoff route and verdict dispatch are gone (W8-B5b) but the constant
-// STAYS EXPORTED for two live reasons: `invalidProjectReason`'s carve-out below
-// keeps pre-retirement sessions reachable, and forge-ui's session-shell
-// back-link maps it to `/community` via a parity test against this SSOT
-// (apps/studio/lib/session-shell-view.test.ts).
+// STAYS EXPORTED for one live reason: forge-ui's session-shell back-link maps
+// it to `/community` via a parity test against this SSOT
+// (apps/studio/lib/session-shell-view.test.ts). `invalidProjectReason`'s
+// carve-out below does NOT make pre-retirement sessions reachable — kind
+// resolution against `loadSessionKinds` (bridge-studio-sessions.ts) 404s on
+// "community-refresh" before the project carve-out is ever consulted, so
+// those sessions are unreachable, deliberately (see forge-6gv.21).
 export const COMMUNITY_REFRESH_PROJECT_ANCHOR = '.community-registry';
 
 // W6-B9 reviewer fix — the general invariant this file's own KB-seeding
