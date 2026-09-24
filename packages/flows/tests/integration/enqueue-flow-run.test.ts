@@ -187,7 +187,7 @@ test('enqueueFlowRun: a path-traversal flow id never escapes the studio flows di
 
 test('enqueueFlowRun: a stale resume_from is cleared when re-enqueueing for a fresh build', () => {
   withTmp((queueRoot) => {
-    seed(queueRoot, 'pending', manifest({ resume_from: 'demo' }));
+    seed(queueRoot, 'pending', manifest({ resume_from: 'integrate' }));
     enqueueFlowRun('INIT-2026-06-21-toc', 'retro-flow', { queueRoot });
     const paths = getPaths(queueRoot);
     const onDisk = parseManifest(readFileSync(join(paths.pending, 'INIT-2026-06-21-toc.md'), 'utf8'));
