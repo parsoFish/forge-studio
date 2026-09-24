@@ -3311,11 +3311,18 @@ is what this contract reads — but it cannot be the only distinguisher.
   run gets `[data-action="cancel-onboarding"][data-cancel-armed]` (two-step
   → the A2 session-cancel route, which really kills the tracked dispatch
   pid); the run id links to its run page via
-  `[data-action="open-onboarding-run"]`; and a TERMINAL reattach renders
+  `[data-action="open-onboarding-run"]`; and a TERMINAL reattach — **⚑
+  forge-6gv.13.1 (projects-42): OR a LEAKED one, the dispatch process dead
+  with no terminal marker ever written** (the reattach no longer trusts the
+  session's raw `phase: 'running'` alone; it folds in the bridge's
+  additively-derived `lifecycle` via `onboardReattachIsLive`, the SAME
+  canonical staleness rule every session surface applies) — renders
   `[data-section="onboard-last-run"][data-last-run-id][data-last-run-status]`
-  — when it ran, how it ended, its cost/ceiling, its `outputRefs` (what the
-  agent wrote, `[data-component="onboard-last-run-outputs"]`) and links to
-  the run page + session — instead of silently resetting to idle.
+  — when it ran, how it ended (a leaked run honestly reads
+  `data-last-run-status="stalled"`, never an indefinite `"running"`), its
+  cost/ceiling, its `outputRefs` (what the agent wrote, `[data-component=
+  "onboard-last-run-outputs"]`) and links to the run page + session —
+  instead of silently resetting to idle or claiming a dead run is live.
   A recoverable initiative (`in-flight | ready-for-review | failed` —
   deliberately excluding `merged`, a transient pass-through, and terminal
   `pending`/`done`) gets recovery affordances inside its **drawer**
