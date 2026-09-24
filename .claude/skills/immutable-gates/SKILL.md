@@ -20,6 +20,7 @@ From the forge wave-5 campaign: ~1,000 acceptance tests pinned across 18 merged 
 | script | answers |
 |---|---|
 | `scripts/pin-glob-check.sh` | does this manifest still list everything its own declared scope matches? Exit 1 = drift (each file named) · 3 = the manifest declares no scope · 0 = complete, with the count |
+| `scripts/pin-extension-gap.sh` | across the WHOLE manifest set, is every file extension in every directory-scoped glob's directory covered by some manifest? Exit 1 = gap (each directory + extension named) · 2 = usage · 0 = no gap |
 
 ## Why a green test lies — the catalogue
 

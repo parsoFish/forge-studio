@@ -149,15 +149,16 @@ export type ProjectConfig = {
   /** KB id bound to this project, or null to explicitly leave unbound. */
   kb?: string | null;
   /**
-   * Project-root-relative subdirectory under which a project's in-repo forge
-   * MACHINERY lives (e.g. `"forge"` → `forge/skills/`). Since ADR 035, Brain 3,
-   * development history, and the contract are **forge-owned and central** (in the
-   * forge repo, not here) — `artifactRoot` no longer governs them. It now only
-   * scopes the in-repo demo the unifier authors into the PR (`projectDemoRelDir`
-   * → `<artifactRoot>/history/<id>/demo`) and where the project keeps committed
-   * demo machinery. Default `"."` keeps the legacy in-root demo layout. Runtime
-   * scratch (`_architect/`, worktree `demo/<id>/`, `.forge/`) is unchanged.
-   * Validated as a clean relative path (no leading `/`, no `..`).
+   * Project-root-relative subdirectory under which a project keeps its
+   * committed in-repo forge DEMO machinery (e.g. `"forge"` →
+   * `forge/history/<id>/demo/`). Since ADR 035, Brain 3, development history,
+   * and the contract are **forge-owned and central** (in the forge repo, not
+   * here) — `artifactRoot` no longer governs them (nor ever scoped skills:
+   * those live at the fixed `.forge/skills/<id>/` path). It now only scopes
+   * the in-repo demo the unifier authors into the PR (`projectDemoRelDir` →
+   * `<artifactRoot>/history/<id>/demo`). Default `"."` keeps the legacy
+   * in-root layout. Validated as a clean relative path (no leading `/`, no
+   * `..`).
    */
   artifactRoot?: string;
   /**

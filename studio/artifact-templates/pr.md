@@ -25,11 +25,11 @@ the evidence a human reviewer approves against.
 `review-findings.json` (`acEvaluations[]`: criterion → met/partial/missed + evidence), because the agent
 that assembles the evidence must not also be the one that scores it (spec §5 item 5).
 
-R4-10-F1 relocated the whole bundle onto the demo node: the demo agent authors `demo.json` AND
+R4-10-F1 relocated the whole bundle onto the integrate node: the demo agent authors `demo.json` AND
 `.forge/pr-description.md` (the unifier's former job), and the pipeline renders `DEMO.md`. Requiring
-all three on the `demo → adversarial-review` edge is the runtime guard that the PR-body relocation
+all three on the `integrate → adversarial-review` edge is the runtime guard that the PR-body relocation
 actually happened — `openPrInline` hard-requires `.forge/pr-description.md` via `--body-file`, so a
-missing one at demo close is caught here, before the review even runs. The `review` verdict gate
+missing one at integrate close is caught here, before the review even runs. The `review` verdict gate
 opens the PR from this bundle after the adversarial critique.
 
 - **Producer:** demo-agent (authors the PR body + demo.json; R4-10-F1 — was developer-unifier).

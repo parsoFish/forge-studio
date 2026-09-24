@@ -367,7 +367,7 @@ export async function applyReviewVerdict(
     return;
   }
   try {
-    // R4-10-F1: honour the shared REVIEW-CAP-EXHAUSTED marker. The demo node is
+    // R4-10-F1: honour the shared REVIEW-CAP-EXHAUSTED marker. The integrate node is
     // now a SECOND writer of it (demo-fix-loop.ts) — and the drain skips ANY
     // marker-bearing manifest before it reads pending WIs. If this handler
     // enqueued a WI while the marker is present (its own per-WI cap still has

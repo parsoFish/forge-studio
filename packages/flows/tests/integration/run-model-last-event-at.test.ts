@@ -119,7 +119,7 @@ function ev(phase: string, event_type: string, started_at: string, msg?: string,
 
 /** Same minimal shape as apps/forge/tests/integration/bridge-studio.test.ts's makeGenericFlowYaml —
  *  already proven (in that file's own passing test) to parse and populate
- *  buildAgentSlugToNodeId with `demo-agent -> demo`. */
+ *  buildAgentSlugToNodeId with `demo-agent -> integrate`. */
 function writeGenericFlow(root: string): void {
   const dir = join(root, 'studio', 'flows', 'generic-flow');
   mkdirSync(dir, { recursive: true });
@@ -135,7 +135,7 @@ function writeGenericFlow(root: string): void {
       'costCeilingUsd: 5',
       'origin: architect',
       'nodes:',
-      '  - id: demo',
+      '  - id: integrate',
       '    agent: demo-agent',
       'edges: []',
       'triggers: []',
@@ -202,13 +202,13 @@ test('lastEventAt: advances to the LATEST event for the node, not the first — 
 });
 
 // ---------------------------------------------------------------------------
-// Case 3 — THE attribution case: developer-loop -> dev, orchestrator+agent_slug -> demo
+// Case 3 — THE attribution case: developer-loop -> dev, orchestrator+agent_slug -> integrate
 // ---------------------------------------------------------------------------
 
-test('lastEventAt: attributed via the REAL eventToNodeId resolver, not phase===nodeId — a developer-loop event lands on node "dev" (phase !== nodeId) and an orchestrator+agent_slug:demo-agent event lands on node "demo" — kills naive phase===nodeId attribution, the exact defect the amendment exists to fix', () => {
+test('lastEventAt: attributed via the REAL eventToNodeId resolver, not phase===nodeId — a developer-loop event lands on node "dev" (phase !== nodeId) and an orchestrator+agent_slug:demo-agent event lands on node "integrate" — kills naive phase===nodeId attribution, the exact defect the amendment exists to fix', () => {
   const root = makeTmp();
   try {
-    writeGenericFlow(root); // seeds studio/flows so buildAgentSlugToNodeId resolves demo-agent -> demo
+    writeGenericFlow(root); // seeds studio/flows so buildAgentSlugToNodeId resolves demo-agent -> integrate
     const initId = 'INIT-2026-01-01-attribution';
     const cycleId = '2026-01-01T03-00-00_INIT-2026-01-01-attribution';
     const manifestPath = writeManifest(root, 'in-flight', initId, { cycle_id: cycleId, flow_id: 'generic-flow' });
@@ -218,7 +218,7 @@ test('lastEventAt: attributed via the REAL eventToNodeId resolver, not phase===n
       // NOT to a node literally named 'developer-loop' (which doesn't exist).
       ev('developer-loop', 'log', '2026-01-01T03:00:01.000Z', 'dev-loop narration'),
       // phase:'orchestrator' + metadata.agent_slug:'demo-agent' — resolved via
-      // buildAgentSlugToNodeId (generic-flow declares node "demo" -> agent
+      // buildAgentSlugToNodeId (generic-flow declares node "integrate" -> agent
       // "demo-agent"), NOT literally to a node named 'orchestrator'.
       ev('orchestrator', 'log', '2026-01-01T03:00:02.000Z', 'demo narration', { agent_slug: 'demo-agent' }),
     ]);
@@ -227,8 +227,8 @@ test('lastEventAt: attributed via the REAL eventToNodeId resolver, not phase===n
 
     assert.notEqual(run.phaseMeta['dev']?.lastEventAt, undefined,
       'a developer-loop event must attribute to node "dev" (FALLBACK_PHASE_TO_NODE), not a node literally named "developer-loop"');
-    assert.notEqual(run.phaseMeta['demo']?.lastEventAt, undefined,
-      'an orchestrator+agent_slug:demo-agent event must attribute to node "demo" (buildAgentSlugToNodeId), not a node literally named "orchestrator"');
+    assert.notEqual(run.phaseMeta['integrate']?.lastEventAt, undefined,
+      'an orchestrator+agent_slug:demo-agent event must attribute to node "integrate" (buildAgentSlugToNodeId), not a node literally named "orchestrator"');
     // A naive `phase === nodeId` implementation would instead produce
     // phaseMeta['developer-loop'] and phaseMeta['orchestrator'] entries —
     // node ids that do not exist on this flow at all.

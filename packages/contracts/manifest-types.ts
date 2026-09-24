@@ -131,12 +131,12 @@ export type InitiativeManifest = {
    * Resume a stalled/redirected cycle from a sub-phase, reusing the preserved
    * worktree + branch rather than re-running the full cycle from scratch.
    * Two distinct callers set this field, for two distinct reasons:
-   *   - `'demo'` — ADR 019 (successor develop flow, R4-10-F6): crash / env-failure
+   *   - `'integrate'` — ADR 019 (successor develop flow, R4-10-F6): crash / env-failure
    *     recovery when every WI is already `complete`. Skips architect/PM/per-WI
-   *     dev-loop and resumes at the `demo` node — the post-develop band that is
-   *     the flow's declared `resumable` re-entry point (dev→demo→review) — reusing
-   *     the completed per-WI commits. Set by `forge requeue --resume-from=demo`.
-   *     (Was `'unifier'` before the topology cutover retired that node.)
+   *     dev-loop and resumes at the `integrate` node — the post-develop band that is
+   *     the flow's declared `resumable` re-entry point (dev→integrate→review) — reusing
+   *     the completed per-WI commits. Set by `forge requeue --resume-from=integrate`.
+   *     (Was `'demo'` pre-rename, forge-8vfn.6.10.18; `'unifier'` pre-cutover.)
    *   - `'develop'` — ADR 040: review send-back re-entry. The PM phase
    *     rebases onto main and skips (no re-decomposition); the dev loop
    *     RUNS (prior WIs re-verify cheaply via the iter-0 already-complete
@@ -145,7 +145,7 @@ export type InitiativeManifest = {
    *     handler's manifest lock.
    * Absent ⇒ normal full cycle.
    */
-  resume_from?: 'demo' | 'develop';
+  resume_from?: 'integrate' | 'develop';
   /**
    * ADR 040: send-back round counter. Incremented by the review verdict
    * handler (`persistManifestSendBack`) each time review feedback compiles

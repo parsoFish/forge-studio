@@ -77,6 +77,12 @@ model, landed in `docs/reference/project-contract.md`) is a **different** clause
 [R1-D1](../../../docs/roadmaps/archive/R1-contract-componentry.md) resolves the numbering
 on pick-up — that clause takes the next free id (e.g. C11), never C7.
 
+**C2 correction (2026-09-19, ruling 92, bead forge-8vfn.8.1.2):** the
+2026-05-31 "force-track config in ignored dirs" bullet is now WRONG —
+`.forge/skills/` + `.forge/project.json` (`TRACKED_CONFIG_PATHS`) must stay
+OUTSIDE any ignore pattern; `.forge/` is never ignored wholesale, so no
+`git add --force`. C2 checks this inverse direction too.
+
 ## Sources
 
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../cycles/_raw/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: the structural-prerequisite evidence.
