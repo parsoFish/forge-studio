@@ -679,24 +679,11 @@ function ensureForgeSkillsDir(projectDir: string): void {
  * working-tree changes for the operator to inspect via `git status`, not a
  * silent half-reset.
  *
- * COMMIT ORDER (data-loss fix, measured on a real project): the `.gitignore`
- * fix commits FIRST, before the contract/skills commit(s) below — reversed
- * from this function's first ship. A project whose `.gitignore` blanket-
- * ignores `.forge/` (exactly the drift `computeGitignoreDrift` exists to
- * catch) still has its just-relocated `.forge/skills/<id>/SKILL.md` and its
- * `.forge/project.json` git-ignored the instant the moves land on disk;
- * `git add -- <path>` on an ignored path is a silent no-op
- * (`commitStudioChange`'s `allowFail`), so committing the contract/skills
- * change BEFORE the `.gitignore` fix produced a commit that deleted the old
- * tracked `forge/skills/<id>/SKILL.md` sources and added NOTHING — the
- * relocated files and `.forge/project.json` were left untracked on a HEAD
- * that named them nowhere. Writing + committing `.gitignore` first means the
- * working tree's ignore rules are already correct by the time the
- * contract/skills `git add` below runs, so those paths stage normally.
- * `commitStudioChange` ALSO refuses (throws) to silently drop an explicitly
- * named path that is still ignored after its own `git add` — a second,
- * independent backstop for this class of defect, not a substitute for this
- * ordering.
+ * COMMIT ORDER: the `.gitignore` fix commits FIRST. Until it lands, a blanket
+ * `.forge/` ignore makes the relocated `.forge/skills/*` and
+ * `.forge/project.json` unstageable, and the contract commit would carry the
+ * old skills' deletions and nothing else. `commitStudioChange` also throws on
+ * a listed path it could not stage.
  */
 export function applyContractReset(projectDir: string, drift: DriftReport): ResetResult {
   const dir = resolve(projectDir);
@@ -712,12 +699,7 @@ export function applyContractReset(projectDir: string, drift: DriftReport): Rese
     skillMovesApplied.push(move);
   }
 
-  // .gitignore fix FIRST — its own scoped commit, and load-bearing for the
-  // commit(s) below (see the header's COMMIT ORDER note): a blanket
-  // `.forge/` ignore must be lifted from the WORKING TREE before the
-  // contract/skills `git add` runs, or the just-relocated
-  // `.forge/skills/<id>/SKILL.md` + `.forge/project.json` paths would still
-  // be ignored at that moment and silently dropped from that commit.
+  // .gitignore fix FIRST (see COMMIT ORDER above).
   const gitignoreFixed = drift.gitignoreDrift.action === 'regenerate';
   if (gitignoreFixed) {
     const giGuard = resolveGuardedPath(dir, ['.gitignore']);
