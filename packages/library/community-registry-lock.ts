@@ -8,7 +8,7 @@
  *   2. `mutateCommunityRegistry`  (bridge-studio-community-crud.ts — the CRUD routes)
  *
  * (HISTORY, W8-B5b: a third caller, `commitRegistryDraft`
- * (orchestrator/interactive-finalizers.ts), existed until the community-
+ * (packages/sessions/interactive-finalizers.ts), existed until the community-
  * refresh interactive session kind it finalized — mechanism A — retired,
  * superseded by `runCommunityRefresh`'s deterministic refresh, W8-B5.)
  *
@@ -21,8 +21,8 @@
  *
  * `proper-lockfile` is already a direct dependency and already this repo's
  * established primitive for exactly this shape (packages/flows/bridge-studio-runs.ts's
- * verdict mutex, orchestrator/drain-fix-loop.ts, orchestrator/manifest.ts,
- * orchestrator/review-comments.ts). Nothing new is introduced here.
+ * verdict mutex, packages/flows/drain-fix-loop.ts, packages/flows/manifest.ts,
+ * packages/flows/review-comments.ts). Nothing new is introduced here.
  *
  * TWO DELIBERATE CHOICES:
  *

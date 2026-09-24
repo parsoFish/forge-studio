@@ -1,5 +1,5 @@
 /**
- * Tests for forge-ui/lib/dep-layout.ts's `topoLevels` (adversarial-review
+ * Tests for apps/studio/lib/dep-layout.ts's `topoLevels` (adversarial-review
  * amendment on R4-15, 2026-08-06) — this function has FOUR real consumers
  * (`monitor-layout.ts`, `app/projects/[id]/page.tsx` twice, and the new
  * `dependency-dag.ts`) and, until this file, ZERO tests anywhere in the

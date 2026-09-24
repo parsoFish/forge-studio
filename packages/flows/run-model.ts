@@ -237,7 +237,7 @@ function buildRun(args: {
 }): Run {
   const { manifest, cycleId, events, logDir, root, runStatus, nowMs, nodeMapping, flowNodeSets, agentSlugToNodeId } = args;
 
-  // --- Phase status derivation (see orchestrator/run-model-derive.ts) ---
+  // --- Phase status derivation (see packages/flows/run-model-derive.ts) ---
   const phases = deriveNodeStatuses(events, runStatus, nodeMapping, agentSlugToNodeId);
 
   // --- Per-node metadata ---
@@ -252,7 +252,7 @@ function buildRun(args: {
   // --- Artifacts ---
   const artifactsReady = deriveArtifacts(logDir, root, runStatus, manifest.initiative_id, hasReflectionEvents);
 
-  // --- Cost rollup (authoritative rule — orchestrator/event-cost.ts, item 1.8;
+  // --- Cost rollup (authoritative rule — packages/kernel/event-cost.ts, item 1.8;
   // the naive all-events sum double/triple-counted iteration-loop phases) ---
   const costUsd = sumAuthoritativeCostUsd(events);
 

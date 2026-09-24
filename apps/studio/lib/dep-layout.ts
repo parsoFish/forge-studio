@@ -6,9 +6,9 @@
  * by reading both, not assumed) — this corrects a stale header claim that
  * had drifted from the as-built code.
  *
- * Real, current consumers: `forge-ui/lib/monitor-layout.ts` (the run-monitor
+ * Real, current consumers: `apps/studio/lib/monitor-layout.ts` (the run-monitor
  * hex layout), `forge-ui/app/projects/[id]/page.tsx` (the project roadmap
- * spine, two call sites), and `forge-ui/lib/dependency-dag.ts` (R4-15's
+ * spine, two call sites), and `apps/studio/lib/dependency-dag.ts` (R4-15's
  * shared dependency-DAG view model). All three reuse this module rather than
  * reimplementing the leveling algorithm — keep it that way.
  *

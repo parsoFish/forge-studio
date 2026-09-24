@@ -14,7 +14,7 @@
  *
  * MEASURED GROUNDS (read directly off this repo before writing anything
  * below — see the task report for the full trail):
- *   - `orchestrator/run-model.ts`'s `listRuns(root, nowMs)` walks all six
+ *   - `packages/flows/run-model.ts`'s `listRuns(root, nowMs)` walks all six
  *     `_queue/<state>/*.md` manifests; `run.phases[nodeId]` /
  *     `run.phaseMeta[nodeId]` are the node's OWN status/cost (RunPhaseStatus,
  *     RunPhaseMeta), distinct from `run.status`/`run.costUsd` (the RUN-level
@@ -28,7 +28,7 @@
  *     `studio/flows/forge-architect/flow.yaml` (copied verbatim from the
  *     live one) so the flow-node join resolves for real, not by the
  *     coincidence that node id === agent slug === phase name for 'architect'.
- *   - `orchestrator/run-agent.ts`'s `runAgent` emits a `start` event with
+ *   - `packages/agents/run-agent.ts`'s `runAgent` emits a `start` event with
  *     `metadata: { agent_phase, agent_slug }` (line ~320) and an `end` event
  *     with the SAME `metadata.agent_slug` plus a top-level `cost_usd` (line
  *     ~360-382) — a standalone run's OWN identity proof, independent of its
@@ -53,7 +53,7 @@
  *     `scripts/journeys/agents.mjs`'s `agents-kickoff-dispatch` beat (a real
  *     browser click through a real bridge, not a fixture) — see that file's
  *     "LOUD FINDING" comment. See the amended D4 below.
- *   - `EventLogEntry.cost_usd` (orchestrator/logging.ts:78) is a TOP-LEVEL
+ *   - `EventLogEntry.cost_usd` (packages/kernel/logging.ts:78) is a TOP-LEVEL
  *     field, never nested under `metadata` — every fixture below places it
  *     there.
  *   - Session state: `<projectsRoot>/<project>/_<kind>/<sessionId>/status.json`
@@ -145,7 +145,7 @@ function seedForgeArchitectFlow(): void {
  * ⚑ ROUND 4 (Amendment 1) — verbatim copy of the `architect` descriptor from
  * the REAL `studio/session-kinds.yaml` (read from this repo before writing
  * this file) — the ONLY session-kind descriptor the SESSION tests below
- * exercise. `loadSessionKinds` (orchestrator/studio/session-kinds.ts) THROWS
+ * exercise. `loadSessionKinds` (packages/sessions/studio/session-kinds.ts) THROWS
  * when this file is absent — this fixture never seeded it, so
  * `collectSessionRows` (apps/forge/ui-bridge.ts) could only resolve the 'architect'
  * agent -> session kind via a hand-maintained `FALLBACK_SESSION_KINDS` table
@@ -235,7 +235,7 @@ function seedEventsJsonl(cycleId: string, initId: string, events: Partial<Ev>[])
 }
 
 /** A standalone dispatch dir, `_logs/_agent-<slug>-<stamp>/events.jsonl` —
- *  mirrors `runAgent`'s REAL emitted shape (orchestrator/run-agent.ts:320-382):
+ *  mirrors `runAgent`'s REAL emitted shape (packages/agents/run-agent.ts:320-382):
  *  a `start` event carrying `metadata.agent_slug`, an `end` event carrying
  *  the SAME `metadata.agent_slug` plus a top-level `cost_usd`. This is the
  *  shape a genuinely UNSUPPRESSED production spawn produces (both `skill`
@@ -915,7 +915,7 @@ test('D5: after every traversal probe above, the route is still healthy for a no
 // ("a row shaped like the defect must still fail validation"), not a mirror
 // of today's wire shape, so they never needed to change when this file's
 // captures below did. Per this round's task instructions,
-// `apps/studio/lib/agent-ledger.test.ts` is untouched (verified unmodified —
+// `apps/studio/tests/integration/agent-ledger.test.ts` is untouched (verified unmodified —
 // see `git status` at the end of this round). This file still cannot import
 // the client resolver directly: `apps/studio/lib/*.ts` uses extensionless
 // relative imports (`from '../../bridge-client'`, no `.ts`), which Node's ESM

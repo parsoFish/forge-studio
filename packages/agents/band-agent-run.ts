@@ -1,6 +1,6 @@
 /**
  * band-agent-run.ts — standalone isolation surface for the band-guard node
- * agents (R4-10-F3, ADR-039). Carved out of `orchestrator/band-agent-run.ts`.
+ * agents (R4-10-F3, ADR-039). Carved out of `packages/agents/band-agent-run.ts`.
  *
  * The develop flow's two successor agents — `demo-agent` and
  * `adversarial-review` — are "banded": in the flow they run through their

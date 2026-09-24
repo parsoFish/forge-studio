@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/phases/release-finalize.ts (WS-A · final-loop).
+ * Tests for packages/factory/phases/release-finalize.ts (WS-A · final-loop).
  *
  * Covers:
  *   - opt-in skip: no `releaseProcess` in the project config → release_status:

@@ -30,7 +30,7 @@
  * this handler BEFORE `handleStudioAffordanceRoutes` — that route's regex
  * (`/^\/api\/studio\/sessions\/([^/]+)\/([^/]+)\/([^/]+)$/`) would otherwise
  * swallow the literal `cancel` segment as an affordance id and 409 it as
- * "not available". Pinned by packages/sessions/bridge-studio-lifecycle.test.ts.
+ * "not available". Pinned by packages/sessions/tests/integration/bridge-studio-lifecycle.test.ts.
  *
  * Security mirrors cli/bridge-studio-affordances.ts's own chain: kind →
  * registry (never a switch); sessionId → `invalidSessionIdReason` before any

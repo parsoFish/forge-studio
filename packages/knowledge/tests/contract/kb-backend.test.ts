@@ -63,7 +63,7 @@ test('getNodeArticle returns an article for a real node and null for a missing o
 });
 
 // Contract §4 (listPendingGuidance) is asserted in
-// `tests/contract/kb-backend-conformance.test.ts`. The `Array.isArray` check
+// `packages/knowledge/tests/contract/kb-backend-conformance.test.ts`. The `Array.isArray` check
 // that stood here was passed by a backend returning `[]` for everything — the
 // exact implementation a conformance gate exists to reject (H8).
 

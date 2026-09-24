@@ -1,5 +1,5 @@
 /**
- * Acceptance tests for forge-ui/lib/skill-library-view.ts (R3-01-F3/F4, WI-0).
+ * Acceptance tests for apps/studio/lib/skill-library-view.ts (R3-01-F3/F4, WI-0).
  *
  * The module under test does not exist yet — vitest cannot even collect this
  * file until it lands (module-not-found is the expected red).
@@ -9,7 +9,7 @@
  * React, no network.
  *
  * AT numbers map 1:1 onto _wave5/specs/R3-01-F3F4.md's
- * "AT set — forge-ui/lib/skill-library-view.test.ts".
+ * "AT set — apps/studio/tests/unit/skill-library-view.test.ts".
  */
 import { test, expect } from 'vitest';
 import {

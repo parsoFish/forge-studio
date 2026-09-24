@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/release-process.ts — the pure release helpers.
+ * Tests for packages/factory/release-process.ts — the pure release helpers.
  *
  * The opt-in invariant (a project without `releaseProcess` is byte-for-byte
  * unchanged) reduces to: every helper returns an empty result on `undefined`.

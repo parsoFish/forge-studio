@@ -18,7 +18,7 @@
  *     `skillPath()` call. The POST-create sibling (`POST /api/studio/skills`)
  *     IS guarded via resolveGuardedPath.
  *   - POST /api/studio/hooks                     — packages/library/bridge-studio-hooks.ts
- *     ~L239 (`hookDir(slug, forgeRoot)` — orchestrator/studio/hook-library.ts's
+ *     ~L239 (`hookDir(slug, forgeRoot)` — packages/library/studio/hook-library.ts's
  *     `assertSkillSlug` + bare `join()`).
  *   - POST /api/studio/hooks/:id/approve         — ~L278 (`hookYamlPath`).
  *   - GET  /api/studio/hooks/:id                 — ~L341-343 (`hookDir` +
@@ -98,7 +98,7 @@ function makePlainSkillMd(name: string, secretMarker: string): string {
   ].join('\n');
 }
 
-/** Minimal valid hook.yaml (matches orchestrator/studio/hook-library.ts's HookDefinition shape). */
+/** Minimal valid hook.yaml (matches packages/library/studio/hook-library.ts's HookDefinition shape). */
 function makeHookYaml(secretMarker: string): string {
   return [
     'name: Test Hook',
@@ -341,7 +341,7 @@ test('accidental-pass (regression lock, NOT a containment pin): GET /api/studio/
   if (skipIfNoSymlinks(t)) return;
   // ACCIDENT NAMED: the route's FIRST step is `listHookLibrary(ctx.forgeRoot)
   // .find(e => e.id === id)` — listHookLibrary's underlying scan
-  // (listHookIds, orchestrator/studio/hook-library.ts) does
+  // (listHookIds, packages/library/studio/hook-library.ts) does
   // `readdirSync(dir,{withFileTypes:true}).filter(e => e.isDirectory())`,
   // the SAME dirent-type filter that hides a symlinked directory ENTRY
   // (confirmed empirically) as the loadKbDescriptors/listSkillLibrary
@@ -418,7 +418,7 @@ test('non-regression: an ordinary real flow still GETs fine (no symlink involved
 //   resolveGuardedPath(hooksDir(forgeRoot), [id, ...entry.script.split('/')])
 // A hook.yaml declaring `script: "scripts//run.sh"` loads FINE everywhere
 // else: `loadHookDefinition`'s own `resolveHookScriptPath`
-// (orchestrator/studio/hook-library.ts) resolves it via `path.resolve()`,
+// (packages/library/studio/hook-library.ts) resolves it via `path.resolve()`,
 // which silently collapses the double slash, so `entry.ok === true`, the
 // LIST route (which never calls resolveGuardedPath at all) reports it
 // correctly, and `scanHookPackage`/`hookRunState` (which read the script via
@@ -556,7 +556,7 @@ test('security companion [Finding 3]: a hook script path that re-enters a DIFFER
 // ROUND 4 (2026-08-06, test-writer T3): two findings from the adversarial
 // review that need red ATs before the fix. NEITHER is a content-disclosure
 // escape — `loadHookDefinition` already validates `def.script` through
-// `resolveHookScriptPath` (orchestrator/studio/hook-library.ts — lexical +
+// `resolveHookScriptPath` (packages/library/studio/hook-library.ts — lexical +
 // percent-decoded + conditional-realpath), so a script that genuinely
 // escapes the hook dir is rejected AT LOAD, before any read. What is NOT
 // closed is what happens on the THROW path once a script path resolves
@@ -571,7 +571,7 @@ test('security companion [Finding 3]: a hook script path that re-enters a DIFFER
 //   listHookLibrary(forgeRoot).map(entry => toClientListEntry(forgeRoot, entry))
 // `toClientListEntry` (same file, ~L119) calls `hookRunState(forgeRoot,
 // entry.id)` with NO per-entry try/catch. `hookRunState` -> `scanHookPackage`
-// -> `readHookScriptBody` (orchestrator/studio/hook-scan.ts:364-367) ->
+// -> `readHookScriptBody` (packages/library/studio/hook-scan.ts:364-367) ->
 // `readFileSync(join(hookDir(id, forgeRoot), def.script))`.
 //
 // `listHookLibrary` itself ALREADY isolates a per-id LOAD failure (a hook

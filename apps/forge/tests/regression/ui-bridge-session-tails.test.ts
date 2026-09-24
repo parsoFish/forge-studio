@@ -74,7 +74,7 @@ function writeSkillAgent(root: string, slug: string): void {
 /** A minimal, valid `studio/session-kinds.yaml` carrying just the two kinds
  *  this file needs — kb-cleanup (turnSpec included, mirroring the real
  *  shipped row exactly) and authoring (turnSpec omitted: additive-optional
- *  per orchestrator/studio/session-kinds.ts, and irrelevant to the
+ *  per packages/sessions/studio/session-kinds.ts, and irrelevant to the
  *  read-only transcript/artifact derivation this test exercises). */
 function writeSessionKindsYaml(root: string): void {
   const dir = join(root, 'studio');

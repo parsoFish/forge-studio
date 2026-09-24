@@ -278,7 +278,7 @@ export function findFailure(
 
   // Fallback: no `failure_classification` event was ever written — the
   // process died before `emitFailureClassification` ran, or its own
-  // best-effort try/catch swallowed a throw (orchestrator/cycle.ts:436-478).
+  // best-effort try/catch swallowed a throw (packages/flows/cycle.ts:436-478).
   // ON-7 defect 1: the raw error text is still on disk, one event away, as
   // the last `error` event's `message` (emitted at cycle.ts:257) — derive
   // failNote from THAT instead of leaving a failed run with no reason at

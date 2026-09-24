@@ -1,6 +1,6 @@
 /**
  * Acceptance tests for the SHARED run-history ledger engine (R6-05 Task 3)
- * — `forge-ui/lib/history-ledger.ts`, a pure module that does not exist yet.
+ * — `apps/studio/lib/history-ledger.ts`, a pure module that does not exist yet.
  * Every assertion below is a legitimate RED against a not-yet-created file.
  *
  * WHY A SHARED MODULE: R6-05's flow monitor ledger and R6-06's (next
@@ -71,10 +71,10 @@
  *         `_queue/done/` + `_queue/merged/` to their ONE production writer
  *         chain — `terminalMove(..., 'merged')` (orchestrator/phases/
  *         closure.ts:334) fires ONLY after `confirm(...)` (defaults to
- *         `confirmPrMerged`, orchestrator/pr.ts:778) returns true, and
+ *         `confirmPrMerged`, packages/flows/pr.ts:778) returns true, and
  *         `confirmPrMerged` fails CLOSED (`gh pr view --json state` ==
  *         'MERGED', false on every other outcome including `gh` itself being
- *         absent). `promoteMergedToDone` (orchestrator/queue.ts:143) then
+ *         absent). `promoteMergedToDone` (packages/flows/queue.ts:143) then
  *         moves merged/ -> done/, with exactly two callers
  *         (finalize-merged.ts:252, flow-runner.ts's execReflect via
  *         phases/closure.ts:145), both themselves gated on that same
@@ -89,7 +89,7 @@
  *         count of `status === 'complete'` vs `.length`, not a dollar
  *         re-summation, so this is a different act than the D8 rule it
  *         sits beside). Measured non-fabricated per this campaign's
- *         standing refusal precedent: `orchestrator/run-model.test.ts`'s
+ *         standing refusal precedent: `packages/flows/tests/integration/run-model.test.ts`'s
  *         `complete-release-definition real fixture` test (a REAL 501-line
  *         archived cycle event log, `orchestrator/run-model.fixtures/
  *         complete-release-definition.events.jsonl`) asserts

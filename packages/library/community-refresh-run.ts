@@ -10,7 +10,7 @@
  *
  * THE SPLIT OF RESPONSIBILITIES, deliberately:
  *
- *   orchestrator/studio/community-refresh-api.ts   fetch + parse. NO filesystem.
+ *   packages/library/studio/community-refresh-api.ts   fetch + parse. NO filesystem.
  *   THIS FILE                                      load + decide + write. NO printing, NO HTTP.
  *   community-refresh-cmd.ts                       argv + console + exit code.
  *   bridge-studio-community.ts                     HTTP status + JSON body.

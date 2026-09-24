@@ -160,12 +160,12 @@ export type BridgeOptions = {
   scanCycles?: () => { live: Cycle[]; recent: Cycle[] };
   /**
    * Injectable for tests — defaults to the real `mergePullRequest` from
-   * orchestrator/pr.ts. Called by the POST /api/verdict 'approve' handler.
+   * packages/flows/pr.ts. Called by the POST /api/verdict 'approve' handler.
    */
   mergePr?: (worktreePath: string) => boolean;
   /**
    * Injectable for tests — defaults to the real `finalizeMergedReadyForReview`
-   * from orchestrator/finalize-merged.ts. Fired (void, non-blocking) on approve.
+   * from packages/flows/finalize-merged.ts. Fired (void, non-blocking) on approve.
    */
   finalizeAfterMerge?: (deps: { queueRoot: string; logsRoot: string }) => Promise<unknown>;
   /**
@@ -177,7 +177,7 @@ export type BridgeOptions = {
   runReleaseFinalize?: (input: ReleaseFinalizeHookInput) => Promise<{ release_status: string }>;
   /**
    * D — injectable for tests; defaults to the real `rerunReflector` from
-   * orchestrator/reflector-rerun.ts. Fired (non-blocking) when operator
+   * packages/factory/reflector-rerun.ts. Fired (non-blocking) when operator
    * reflection feedback is submitted, and at startup for any cycle whose
    * feedback out-dates its last reflector.end.
    */
@@ -964,7 +964,7 @@ async function handleHttp(
   // carry the x-forge-csrf header (that header exists to defeat CROSS-ORIGIN
   // forgery from a browser; a server-to-server webhook is neither same-origin
   // nor a browser fetch). Its trust boundary is signature/token verification
-  // (orchestrator/webhook-verify.ts), not the CSRF header, so this route is
+  // (packages/flows/webhook-verify.ts), not the CSRF header, so this route is
   // dispatched — and therefore EXEMPT — BEFORE the anti-CSRF guard below runs.
   if (await handleHookRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot }, url, method)) return;
 
@@ -1195,7 +1195,7 @@ async function handleHttp(
     // filename segments, all under the trusted logsRoot) through the
     // per-segment identity + nlink guard, which the lexical check cannot do.
     let body = guardedReadFile(ctx.logsRoot, [cycleId, 'artifacts', ...filenameSegments]);
-    // W7-D1 — PARITY with `deriveArtifacts` (orchestrator/run-model-derive.ts),
+    // W7-D1 — PARITY with `deriveArtifacts` (packages/flows/run-model-derive.ts),
     // which marks `pr` ready when `pr-description.md` exists in EITHER
     // `artifacts/` OR the cycle-log ROOT ("accept the legacy cycle-log-root
     // location too so older frozen logs still resolve"). This route only ever
@@ -1375,7 +1375,7 @@ async function handleHttp(
         return;
       }
       // W7-FIX-A3 (round-2 finding 3): Stop is IDEMPOTENT while THIS pid
-      // drains. `orchestrator/scheduler.ts`'s signal handler treats a SECOND
+      // drains. `packages/flows/scheduler.ts`'s signal handler treats a SECOND
       // SIGTERM as force-quit (`signalCount === 2` → exit), so re-signalling a
       // pid that is already draining hard-kills the in-flight cycles the first
       // Stop was politely waiting on — from nothing more than a second tab, or
@@ -1816,7 +1816,7 @@ export const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly 
  *  below — defense-in-depth on a pre-existing, F3b-renamed function (route
  *  handlers already 404 an unknown sessionId before spawning, plus the
  *  bridge's same-origin + `x-forge-csrf` guard, so this isn't closing an
- *  exploitable hole today). Reuses `isSafeRunId` — `orchestrator/run-agent.ts`'s
+ *  exploitable hole today). Reuses `isSafeRunId` — `packages/agents/run-agent.ts`'s
  *  `SAFE_RUN_ID_RE` + `..` check — as the SSOT rather than re-deriving it. */
 // Exported (W6-B4) so packages/sessions/bridge-studio-sessions-affordances.ts's
 // generic session-affordance write endpoint can DELEGATE to this SAME spawn

@@ -99,7 +99,7 @@ import type { ContractStageRow } from '../../lib/session-client';
 // (same "read the real thing, not a hand-copied mirror" mechanism
 // flow-header-render.test.ts's pin 2 already established for
 // SHIPPED_TRIGGER_KIND_IDS): proves a pr-merged/issue-raised trigger built
-// via the real client path is one `orchestrator/studio/validate-triggers.ts`
+// via the real client path is one `packages/flows/studio/validate-triggers.ts`
 // actually accepts, not just a shape this test file asserts by eye.
 import { checkFlowTriggers } from '../../../../packages/flows/studio/validate-triggers.ts';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
@@ -384,9 +384,9 @@ test('buildTriggerDeclaration: webhook sources is a trimmed, comma-split list', 
 // ---------------------------------------------------------------------------
 // forge-zyc pin 3 — agent-complete completability (RED today).
 //
-// orchestrator/studio/validate-triggers.ts:279-287's `trigger-agent-complete`
+// packages/flows/studio/validate-triggers.ts:279-287's `trigger-agent-complete`
 // check requires a non-empty `agent:` on every `on: 'agent-complete'` row —
-// a row without one can never fire (orchestrator/flow-trigger.ts:132-165's
+// a row without one can never fire (packages/flows/flow-trigger.ts:132-165's
 // `fireAgentCompleteTriggers` strict-matches `trigger.agent ===
 // completedAgentSlug`, so an absent `agent` never matches any real slug).
 // `buildTriggerDeclaration` is the ONLY place FlowHeader builds a trigger row
@@ -542,7 +542,7 @@ test('WEBHOOK_FAMILY_TRIGGER_KINDS: webhook, pr-merged and issue-raised are memb
 // (~:396) each independently compared only `(on, target)` — excluding a
 // valid 2nd agent-complete row for the same target with a different agent,
 // even though the server fires each row independently
-// (orchestrator/flow-trigger.ts's `fireAgentCompleteTriggers` matches
+// (packages/flows/flow-trigger.ts's `fireAgentCompleteTriggers` matches
 // per-row by `trigger.agent === completedAgentSlug`).
 // ---------------------------------------------------------------------------
 
@@ -820,7 +820,7 @@ test('parseRun carries reflectionLost independently of reflectionLostNote — a 
 // type admits every VALUE the server can produce — `origin` is typed
 // `'architect' | 'human-directed'` here, and the fixture below literally
 // cannot assign `'triggered'` (which the server CAN produce, per
-// `orchestrator/run-model.ts`'s `VALID_ORIGINS`) without a compile error.
+// `packages/flows/run-model.ts`'s `VALID_ORIGINS`) without a compile error.
 // That is bead forge-cv9's separate defect (the type admitting every
 // server-produced VALUE, not whether a field survives parsing) —
 // deliberately not stretched into this pin.
@@ -847,9 +847,9 @@ test('parseRun: FIELD-PARITY PIN — every field declared on the client Run type
     costUsd: 9.99,               // NOT parseRun's default (0)
     startedAt: '2026-01-01T00:00:00Z',
     // W8-A3 (flows-23): the architect session that produced the initiative,
-    // served by orchestrator/run-model.ts and carried through parseRun.
+    // served by packages/flows/run-model.ts and carried through parseRun.
     architectSessionId: '2026-08-14T15-26-59-072e0775',
-    // W7-A3 (flows-29): served by orchestrator/run-model.ts since W6-RV-2, but
+    // W7-A3 (flows-29): served by packages/flows/run-model.ts since W6-RV-2, but
     // was silently dropped here — the exact declared-data-fails-open class
     // this pin exists for. MonitorSummary's ELAPSED depends on it.
     completedAt: '2026-01-01T01:04:00Z',
@@ -897,7 +897,7 @@ test('parseRun: FIELD-PARITY PIN — every field declared on the client Run type
 });
 
 test("W7-C3 (forge-cv9): the client Run type admits every server-producible origin — 'triggered' included", () => {
-  // orchestrator/run-model.ts types origin 'architect'|'human-directed'|'triggered'
+  // packages/flows/run-model.ts types origin 'architect'|'human-directed'|'triggered'
   // (R2-08-F4 made 'triggered' a real, producible value); the client type was
   // narrower, so any consumer switching on origin either failed to compile
   // against real data or was written to handle only two cases. The annotation

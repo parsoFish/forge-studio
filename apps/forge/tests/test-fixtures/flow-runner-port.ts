@@ -13,7 +13,7 @@
  * phases only.
  *
  * The port itself — a stub executor that touches no phase — is exercised
- * directly by `orchestrator/flow-runner.port-conformance.test.ts`.
+ * directly by `apps/forge/tests/contract/flow-runner.port-conformance.test.ts`.
  */
 import { runFlow, type FlowRunArgs } from '@forge/flows/flow-runner.ts';
 import { createPhaseExecutor, type NodeExecutor } from '@forge/factory/phases/executor-table.ts';

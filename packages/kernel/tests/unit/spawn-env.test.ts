@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/spawn-env.ts — the R5-02 F1 allowlist that replaces
+ * Tests for packages/kernel/spawn-env.ts — the R5-02 F1 allowlist that replaces
  * the old denylist scrub (`pinnedAgentEnv`, removed). See spawn-env.ts's own
  * header for the design rationale and pinned-sdk-query.ts for the seam that
  * consumes `buildChildEnv`.
@@ -34,7 +34,7 @@ test('AGENT_ENV_ALLOWLIST: includes ANTHROPIC_API_KEY (the one auth var forge do
 
 test('AGENT_ENV_ALLOWLIST: does NOT include GH_TOKEN — the GitHub PAT never reaches a spawned agent child (W8-B5)', () => {
   // W8-B5 built forge's first outbound third-party API call (the deterministic
-  // community-registry refresh, orchestrator/studio/community-refresh-api.ts).
+  // community-registry refresh, packages/library/studio/community-refresh-api.ts).
   // The naive move when a feature needs a credential is to add it here; that
   // would be a SECURITY REGRESSION, not a fix. This allowlist governs SDK-
   // spawned agent CHILDREN, and forge's design is that only the ORCHESTRATOR
@@ -175,7 +175,7 @@ test('buildChildEnv: rejects an oversized overrides blob (allowlist stays closed
 });
 
 // ---------------------------------------------------------------------------
-// M4-library PR 2 — the module MOVED from `packages/agents/spawn-env.ts` to
+// M4-library PR 2 — the module MOVED from `packages/kernel/spawn-env.ts` to
 // `packages/kernel/spawn-env.ts` (T1 ruling, park #1 Q3): library's
 // `hook-runtime.ts` and `connection-probe.ts` need `HOOK_ENV_BASE_ALLOWLIST`
 // and `buildChildEnv`, and library (rank 2) may not import agents (rank 3).

@@ -122,7 +122,7 @@ export const brainFixKind: FixTurnVariant<RunBrainFixInput, RunBrainFixResult, B
     // The call is UNCONDITIONAL because an unresolvable kbId must deny every
     // write, not permit them: an empty root list makes `canUseTool` refuse a
     // write matching no root. Fail closed. Arm 3 of
-    // `tests/regression/fix-turn-capture.test.ts` pins that branch.
+    // `packages/sessions/tests/regression/fix-turn-capture.test.ts` pins that branch.
     // Resolved through `tryGetKbBackend`/`KbBackend.rootDir()` — the
     // package's public door — rather than `resolveKbBrainDir` directly
     // (M7-C KN1, bead forge-8vfn.23); `rootDir()` is the seam's one
@@ -222,7 +222,7 @@ export const brainFixKind: FixTurnVariant<RunBrainFixInput, RunBrainFixResult, B
  * fix` all reach a turn only through here), so it is where the brain-write
  * lease is taken: one turn writes brain/ at a time, whether the caller is a
  * Studio KB job or — via the SAME lease target — the daemon's reflector
- * (`orchestrator/phases/reflector.ts`). A turn that cannot take the lease is
+ * (`packages/factory/phases/reflector.ts`). A turn that cannot take the lease is
  * refused with a NAMED, visible outcome — never silently run ungated, which
  * is exactly how a reflector write mid-turn used to become indistinguishable
  * from the turn's own to `guardAgentKbEdits`.

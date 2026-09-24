@@ -1,12 +1,12 @@
 /**
  * Client-side fetch helpers for the Studio templates-library bridge routes
  * (R3-06, WI-3). Mirrors the server-side shapes from
- * orchestrator/studio/template-library.ts verbatim — see that module's header
+ * packages/library/studio/template-library.ts verbatim — see that module's header
  * for the category/usedBy-derivation rules; nothing here re-derives a
  * category/usage fact, every field is carried through as-is from the bridge
  * response.
  *
- * Follows forge-ui/lib/skill-client.ts's precedent exactly: local structural
+ * Follows apps/studio/lib/skill-client.ts's precedent exactly: local structural
  * parsers, no cross-boundary import of orchestrator types, and a strict
  * refusal to coerce an unrecognised enum token (`category`/`previewKind`) to
  * a permissive default — an unrecognised token is a malformed response, not a
@@ -15,7 +15,7 @@
  *
  * The same refusal applies to every REQUIRED structural field — `id`, `name`,
  * `category`, `provenance`, `definitionRef`, `usedBy`, `usedByDerivation`.
- * The server (orchestrator/studio/template-library.ts) always populates all
+ * The server (packages/library/studio/template-library.ts) always populates all
  * seven, even on a per-entry parse failure (surfaced via the sibling `error`
  * field) — so a missing or wrong-typed one here can only mean the bridge
  * response itself is malformed. `usedByDerivation` exists so an empty
@@ -33,7 +33,7 @@
 import { bridgeFetch } from './bridge-client';
 
 // ---------------------------------------------------------------------------
-// Types mirroring server shapes (orchestrator/studio/template-library.ts)
+// Types mirroring server shapes (packages/library/studio/template-library.ts)
 // ---------------------------------------------------------------------------
 
 export type TemplateCategory = 'demo-output' | 'planning' | 'project-scaffold';

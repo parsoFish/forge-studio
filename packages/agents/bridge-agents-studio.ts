@@ -22,7 +22,7 @@
  * `resolveDefaultKickoffCeilingUsd` are `@forge/kernel`'s; and
  * `@forge/library`'s catalog, hook and skill-trust readers are a legal rank-3 →
  * rank-2 import. Only THREE things genuinely live above this package:
- * `validateAgent` (this package's `studio/validate-agent.ts` since ruling 159 — the Agent kind's
+ * `validateAgent` (this package's `packages/agents/studio/validate-agent.ts` since ruling 159 — the Agent kind's
  * validator is the half of the registry split that has not moved yet) and the
  * Flow-kind pair `listFlowIds` / `loadFlowDefinition`, which wave 4 carries.
  * The roster GET needs no injection at all.
@@ -76,7 +76,7 @@ import { validateAgent } from './studio/validate-agent.ts';
  *
  * `validateAgent` USED to be a fourth field here, injected only because the
  * Agent kind's validator was still `orchestrator/studio/validate.ts`. Ruling
- * 159 brought it into this package (`studio/validate-agent.ts`), so the port
+ * 159 brought it into this package (`packages/agents/studio/validate-agent.ts`), so the port
  * is retired and the call below imports it — exactly what the old comment
  * said would happen "when it does".
  */
@@ -355,9 +355,9 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
     // 4. Load existing def or scaffold minimal one. Also capture the RAW
     // on-disk bytes (D5 wiring): five phase bindings + the release
     // finalizer readFileSync the WHOLE SKILL.md verbatim into the agent's
-    // system prompt (orchestrator/phases/dev-binding.ts:63, pm-binding.ts:53,
+    // system prompt (packages/factory/phases/dev-binding.ts:63, pm-binding.ts:53,
     // reflector-binding.ts:52, adversarial-review-binding.ts:40,
-    // demo-agent-binding.ts:53, orchestrator/release-finalize-invocation.ts:51)
+    // demo-agent-binding.ts:53, packages/factory/release-finalize-invocation.ts:51)
     // — so a lossy re-serialize on save is a PROMPT change, not mere file
     // churn. Handing `originalRaw` to serializeAgentDefinition below lets it
     // take the byte-preserving fast path (comments, fanout, key order kept
@@ -581,7 +581,7 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
     // this initiative: a rule implemented and unit-tested but inert because
     // production never invokes it). `checkHookComposition` is the SAME pure
     // predicate `lintHookComposition` runs over on-disk agents
-    // (orchestrator/studio/hook-library.ts) — applied HERE to the
+    // (packages/library/studio/hook-library.ts) — applied HERE to the
     // IN-MEMORY `merged.composition` candidate, since it is not yet
     // written; re-scanning disk would miss the very save this gates.
     // PLATFORM_GUARD_IDS is a fixed platform-vocabulary constant (not

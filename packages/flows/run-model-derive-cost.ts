@@ -54,7 +54,7 @@ export function buildNodeMeta(
   iterationBudget: number,
   nowMs: number,
 ): RunPhaseMeta {
-  // Cost — authoritative rule (item 1.8, orchestrator/event-cost.ts): an
+  // Cost — authoritative rule (item 1.8, packages/kernel/event-cost.ts): an
   // iteration-loop phase restates its iteration spend on per-WI + phase-level
   // 'end' events; the old naive sum inflated the Studio phase-hex cost badge
   // (data-phase-cost-usd) 2-3x for developer-loop/unifier nodes.

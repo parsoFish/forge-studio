@@ -54,12 +54,12 @@
  * place ("the transitional rule").
  *
  * WHICH RULE CARRIES THE GUARANTEE NOW: `lintHookComposition`'s
- * `hook-library/guard-in-hooks` check (`orchestrator/studio/hook-library.ts`)
+ * `hook-library/guard-in-hooks` check (`packages/library/studio/hook-library.ts`)
  * — strictly MORE precise than A3 ever was. A3 could only say "this key is
  * stale, don't read it as guards" (true for every value). The new rule
  * resolves the id: a legacy value under `composition.hooks` is READ as a
  * library-hook reference, and because all nine legacy platform-guard ids
- * (`PLATFORM_GUARD_IDS`, `orchestrator/agent-bands.ts`) collide with a real
+ * (`PLATFORM_GUARD_IDS`, `packages/agents/agent-bands.ts`) collide with a real
  * guard id, every one of them resolves to "this is a guard id sitting in the
  * wrong field" — `hook-library/guard-in-hooks`, not a generic "stale key"
  * error. A hand-authored id that is NOT a guard id (a real library hook)
@@ -75,7 +75,7 @@
  * fire through forge studio lint, not only when validateAgent is hand-called
  * with a manually-passed validGuardIds set ===
  *
- * `orchestrator/studio/guards-migration-validate-rules.test.ts` pins the
+ * `packages/agents/studio/guards-migration-validate-rules.test.ts` pins the
  * `validateAgent(def, validModelIds, validGuardIds)` direct-call contract
  * (C4a/C4b). That alone does not prove the REAL lint entry point ever
  * SUPPLIES `validGuardIds` — an optional parameter the production caller
@@ -231,7 +231,7 @@ test('A3 (lint surface) SUPERSEDED: forge studio lint reports a legacy compositi
 
 // R4-18 mechanical amendment (2026-08-10): a 5th band, 'onboard-preflight',
 // joins PLATFORM_GUARD_IDS — the count pin below is now ten, not nine. RED
-// until R4-18's production change lands (orchestrator/agent-bands.ts).
+// until R4-18's production change lands (packages/agents/agent-bands.ts).
 test('A3 SUPERSEDED (exhaustive): every one of the ten legacy PLATFORM_GUARD_IDS values fires hook-library/guard-in-hooks under composition.hooks', () => {
   assert.strictEqual(PLATFORM_GUARD_IDS.length, 10, 'sanity: the migration note claims ten legacy values — pin the count so this sweep cannot silently under-cover');
 

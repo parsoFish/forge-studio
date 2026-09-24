@@ -33,7 +33,7 @@
  * else in the fixture is not.
  *
  * Bootstrap / regenerate:
- *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test orchestrator/pm-spawn-capture.test.ts
+ *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test packages/factory/tests/contract/pm-spawn-capture.test.ts
  * (or delete the fixture) rewrites
  * packages/kernel/tests/test-fixtures/spawn-capture/pm.json from the current code.
  */

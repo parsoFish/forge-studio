@@ -156,9 +156,10 @@ describe('path-shaped citations in code comments', () => {
 
   test('a markdown-relative-link prefix ("./cli/foo.ts") still matches — not the same shape as nesting', () => {
     // A `/` right before the root is not ALWAYS a nested path — a markdown
-    // relative link (`(./cli/foo.ts)`) puts one there too, and the fix for
-    // the nesting false-positive above must not blind the checker to this,
-    // by far the more common shape of citation in this repo's own docs.
+    // relative link puts one there too, and the fix for the nesting
+    // false-positive above must not blind the checker to this, by far the
+    // more common shape of citation in this repo's own docs (see the fixture
+    // below for the exact shape).
     const { root, cleanup } = fixture({
       'docs/guide.md': `See [it](./packages/ghost/dead-module.ts) for details.\n`,
     });

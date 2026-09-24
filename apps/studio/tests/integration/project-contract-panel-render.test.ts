@@ -1,7 +1,7 @@
 /**
  * DOM acceptance tests for R4-12-F1's project-page "contract buildout" panel —
  * an ASYNC server component `ProjectContractPanel`
- * (`forge-ui/components/studio/project-builder/ProjectContractPanel.tsx`) that
+ * (`apps/studio/components/studio/project-builder/ProjectContractPanel.tsx`) that
  * does NOT exist yet. Every assertion below is a legitimate RED against a
  * not-yet-created module; the import resolves to nothing, so vitest fails the
  * whole file at collection until the implementer lands it. Named here so the

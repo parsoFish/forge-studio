@@ -195,7 +195,7 @@ test('it inspects a real dependency graph, not an empty one', () => {
 /**
  * The legacy module a probe points at is PLANTED, not found.
  *
- * §15.93, chapter one: this test hardcoded `orchestrator/flow-runner.ts` and
+ * §15.93, chapter one: this test hardcoded `packages/flows/flow-runner.ts` and
  * went red the moment that file was carved into its package. Failing loudly was
  * the right outcome; the wrong one is a probe that keeps passing while pointing
  * at nothing. So it took a live `orchestrator/*.ts` from git instead, on the
@@ -227,7 +227,7 @@ test('it inspects a real dependency graph, not an empty one', () => {
  *
  *   - The LEGACY branch (`check-boundaries.mjs:104`, `STUDIO → LEGACY`) is
  *     proven by the `classify()` unit tests above, which assert exactly
- *     `classify('apps/studio/lib/x.ts', 'orchestrator/config.ts') ===
+ *     `classify('apps/studio/lib/x.ts', 'packages/kernel/config.ts') ===
  *     'studio-beyond-contracts'`. They need no tree at all, which is the
  *     strongest possible form of "does not depend on a surviving inhabitant".
  *   - THIS test proves the rule is WIRED — that a real edge in a real cruise

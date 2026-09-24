@@ -1,7 +1,7 @@
 /**
  * Tests for `packages/agents/band-agent-run.ts` — the standalone isolation
  * surface for the band-guard node agents, after the carve out of
- * `orchestrator/band-agent-run.ts`.
+ * `packages/agents/band-agent-run.ts`.
  *
  * What this file proves is the module's OWN logic: the resolution boundary
  * errors, the isolation invariants (runId-scoped events, in-flight refusal,

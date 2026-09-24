@@ -7,7 +7,7 @@
  *   2. `mutateCommunityRegistry`  (bridge-studio-community-crud.ts, the CRUD routes)
  *
  * (HISTORY, W8-B5b: a third caller, `commitRegistryDraft`
- * (orchestrator/interactive-finalizers.ts), existed until the community-
+ * (packages/sessions/interactive-finalizers.ts), existed until the community-
  * refresh interactive session kind it finalized — mechanism A — retired,
  * superseded by `runCommunityRefresh`'s deterministic refresh, W8-B5.)
  *

@@ -1,6 +1,6 @@
 /**
  * DOM regression + acceptance tests for the WI-3 (R6-04) expansion of
- * `RunPanel.tsx` (forge-ui/components/studio/agent-builder/RunPanel.tsx) —
+ * `RunPanel.tsx` (apps/studio/components/studio/agent-builder/RunPanel.tsx) —
  * the `[data-section="agent-run"]` panel on `/agents/[id]`, expanded IN
  * PLACE, never a new route (see docs/forge-ui-dom-and-harness.md's
  * `/agents/[id]` section and scripts/journeys/agents.mjs lines ~478-501 /
@@ -20,7 +20,7 @@
  * here).
  *
  * TEST-WORLD NOTE: this file requires two additions to
- * `forge-ui/vitest.config.ts` (`resolve.alias['@']` and `oxc.jsx:
+ * `apps/studio/vitest.config.ts` (`resolve.alias['@']` and `oxc.jsx:
  * 'automatic'`) which this same test-writer pass added — see that file's
  * diff. Both are zero-new-dependency config additions (react/react-dom are
  * already installed); the full existing forge-ui vitest suite (28 files /

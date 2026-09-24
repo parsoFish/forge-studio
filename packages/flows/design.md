@@ -43,8 +43,8 @@ contributes route factories (`handleHookRoutes`, `handleRecoveryRoutes`,
 
 ## ADR 028 — the flow IS the ordered path of stations
 
-A flow is data: nodes, edges, kickoff, triggers. `studio/flow-registry.ts`
-loads and serializes it, `studio/validate-triggers.ts` checks its trigger
+A flow is data: nodes, edges, kickoff, triggers. `packages/flows/studio/flow-registry.ts`
+loads and serializes it, `packages/flows/studio/validate-triggers.ts` checks its trigger
 block, `flow-fanout.ts` answers a question about its shape. Adding a station
 is authoring YAML; the code path does not change.
 

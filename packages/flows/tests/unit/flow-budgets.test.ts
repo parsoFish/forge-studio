@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/flow-budgets.ts (ADR-028 decision 4, M3-3).
+ * Tests for packages/flows/flow-budgets.ts (ADR-028 decision 4, M3-3).
  *
  * All three budget classes are tested with injected clocks / fake streams.
  * No filesystem, no SDK calls.

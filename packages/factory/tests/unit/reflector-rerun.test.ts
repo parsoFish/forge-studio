@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/reflector-rerun.ts — manifest-id resolution.
+ * Tests for packages/factory/reflector-rerun.ts — manifest-id resolution.
  * (Renamed in W7-C1: the reflect FLOW wrapper was retired; this module
  * reruns the reflector AGENT.)
  *

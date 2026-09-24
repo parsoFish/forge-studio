@@ -116,7 +116,7 @@ export async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> 
 // Fixture — one forgeRoot, one turnSpec-only descriptor (no AGENT_RUNNERS
 // entry) with a single step:noop phase, plus a turnSpec-LESS "architect" row
 // sharing an id with a real AGENT_RUNNERS key (AT-5's fixture). Loaded
-// through the REAL loadSessionKinds parse path (studio/session-kinds.ts),
+// through the REAL loadSessionKinds parse path (packages/sessions/studio/session-kinds.ts),
 // mirroring orchestrator/interactive-runner.test.ts's own fixture-design
 // precedent, rather than a hand-built descriptor object.
 // ---------------------------------------------------------------------------
@@ -221,7 +221,7 @@ export type LogBaseline = Map<string, { existed: boolean; size: number }>;
  *  spine. Re-pointing it at a fixture root would make it assert about the
  *  fixture's config instead of the shipped one — a strictly WEAKER test. And the
  *  observation surface cannot be moved either: `runInteractiveTurn` writes to
- *  `resolve(forgeRoot, '_logs')` (orchestrator/interactive-runner.ts:249), so
+ *  `resolve(forgeRoot, '_logs')` (packages/sessions/interactive-runner.ts:249), so
  *  `ROOT/_logs` is the only place a real violation could ever appear.
  *
  *  NOT a retry and NOT a widened tolerance: nothing is re-attempted, and ONLY

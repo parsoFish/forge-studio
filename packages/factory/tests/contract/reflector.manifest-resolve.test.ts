@@ -3,7 +3,7 @@
  * cycle loses its reflection.
  *
  * T1's confirmed ruling (round 2 of this defect): the fix site is
- * `orchestrator/phases/reflector.ts`'s `resolveCurrentManifestPath` (~line
+ * `packages/factory/phases/reflector.ts`'s `resolveCurrentManifestPath` (~line
  * 793), called at ~line 162. Its candidate list is a HAND-WRITTEN SUBSET of
  * the queue's states — `done`, `ready-for-review`, `failed` — and the one it
  * omits is `merged/`, which is exactly where closure has put the manifest
@@ -24,7 +24,7 @@
  * `finalize-merged.ts` passes to a handler (see the deleted
  * `finalize-merged.reflect-manifest.test.ts`, replaced by this file).
  *
- * PIN THE CLASS, NOT THE INSTANCE: `orchestrator/queue.ts`'s `QueuePaths` /
+ * PIN THE CLASS, NOT THE INSTANCE: `packages/flows/queue.ts`'s `QueuePaths` /
  * `QueueState` declare SIX states (`pending | in-flight | ready-for-review |
  * merged | done | failed`). Rather than hand-listing a few of them (which is
  * exactly the shape of the bug — a hand-written subset that quietly omitted
@@ -113,7 +113,7 @@ test('resolveCurrentManifestPath: genuinely absent from every queue state — re
 // ---------------------------------------------------------------------------
 // Caller loud-loss regression guard (bullet 4): when resolution genuinely
 // fails, the EXISTING manifest-unreadable → cycle.reflection-lost mechanism
-// in `runReflector` (orchestrator/phases/reflector.ts ~line 171-198) must
+// in `runReflector` (packages/factory/phases/reflector.ts ~line 171-198) must
 // still fire. This calls the REAL `runReflector` (not a stub) — safe because
 // an unreadable manifest is caught before any SDK/agent call is ever made
 // (the read+parse happens first; the catch returns early). `runReflector`

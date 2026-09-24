@@ -96,7 +96,7 @@ test('harness mode: a drained cron origination mints queue state ONLY — no run
 // to the new agent-complete origination: the COMPLETE effect set of firing an
 // on: agent-complete trigger under the no-spawn/dry-bridge perimeter is
 // enumerated exhaustively, the same way the cron test above does. Depends on
-// `fireAgentCompleteTriggers` (pinned in orchestrator/agent-complete-trigger.test.ts)
+// `fireAgentCompleteTriggers` (pinned in packages/flows/tests/integration/agent-complete-trigger.test.ts)
 // — loaded dynamically so a missing export fails only THIS test, not the
 // whole file's collection (the two pre-existing tests above must stay green
 // regardless of F2's implementation state).

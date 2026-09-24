@@ -9,7 +9,7 @@ was **false at twenty measured sites**, a guarantee enforced nowhere. A contract
 implementation can violate is not a contract, and the campaign's recurring defect is
 exactly that shape: declared data whose declaration nothing checks. The replacement is
 smaller in words and larger in force — it says only what is true, and
-`tests/contract/kb-backend-conformance.test.ts` holds it with content assertions against
+`packages/knowledge/tests/contract/kb-backend-conformance.test.ts` holds it with content assertions against
 a seeded brain, including the prefix-sibling case (`alpha-two` must never fold into
 `alpha`) that was a live cross-KB **write** defect.
 
@@ -145,7 +145,7 @@ tree after it, and a turn takes minutes. Any OTHER process's brain/ write
 inside that window is indistinguishable from the turn's own; for a path
 INSIDE the turn's own KB the gate disposes of it on snapshot evidence alone
 (`revertChange` — an rmSync for a file the write CREATED). Meanwhile
-`orchestrator/phases/reflector.ts` writes brain themes from the daemon on
+`packages/factory/phases/reflector.ts` writes brain themes from the daemon on
 exactly the same tree, and `deriveKbActiveJob` (kb-job-state.ts) gates KB jobs
 PER-KB — it takes no account of the reflector at all. An operator clicking
 "Drain to green" while a cycle reflects is entirely reachable, and nothing

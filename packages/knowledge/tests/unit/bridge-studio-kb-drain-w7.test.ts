@@ -285,7 +285,7 @@ test('runKbDrain — a cancel request lands as a "cancelled" terminal between tu
 /**
  * Part B drives the CARVED HANDLERS directly — no bridge (COMMON §5: a package
  * test never boots one). The table, the req/res mocks and the `{status, json}`
- * shape are the seam `tests/integration/routes-dispatch.test.ts` established,
+ * shape are the seam `packages/knowledge/tests/integration/routes-dispatch.test.ts` established,
  * so every assertion below is byte-for-byte what it was over HTTP.
  *
  * What is deliberately NOT tested here any more: origin/CSRF/404-fallthrough.

@@ -10,9 +10,9 @@
  *
  * Exercises the PRODUCTION `writeGateFeedback` (exported for this test) +
  * `makeQualityGateFromCmd` + `createWiWorktree` + `runRalph`, wired exactly
- * as `orchestrator/phases/developer-loop.ts`'s per-WI dispatch body wires
+ * as `packages/factory/phases/developer-loop.ts`'s per-WI dispatch body wires
  * them — the only substitution is a fake `AgentInvocation` standing in for
- * the Claude Agent SDK call (the same seam `loops/ralph/runner.test.ts` and
+ * the Claude Agent SDK call (the same seam `packages/agents/tests/integration/runner.test.ts` and
  * `developer-loop.wi-worktree-fanin.test.ts` use), so the test never spawns
  * a real agent while still proving the orchestrator's own wiring is correct.
  */
@@ -116,7 +116,7 @@ test('dev-loop gate-failure re-injection: iter-1 agent sees iter-0 live failure,
 
       // Captures what the iteration-1 agent invocation actually found on disk
       // in ITS worktree — the same worktree the SDK adapter sets as `cwd`
-      // (loops/ralph/claude-agent.ts: `options.cwd = worktreePath`).
+      // (packages/agents/ralph/claude-agent.ts: `options.cwd = worktreePath`).
       let seenAtIteration1: string | null = null;
       const agent: AgentInvocation = async ({ worktreePath, iteration }) => {
         assert.equal(

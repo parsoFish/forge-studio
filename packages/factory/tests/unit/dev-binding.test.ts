@@ -1,5 +1,5 @@
 /**
- * Unit tests for orchestrator/phases/dev-binding.ts.
+ * Unit tests for packages/factory/phases/dev-binding.ts.
  *
  * Verifies the ADR 024 PhaseAgentSpec shape, the model derivation, and the
  * system + user prompt contracts. No SDK invocation, no shells.

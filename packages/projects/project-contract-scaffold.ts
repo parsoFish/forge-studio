@@ -533,7 +533,7 @@ export function scaffoldContractArtifacts(
   // 'main' fallback and every project-repo-tx operation is evaluated against a
   // branch that does not exist (the first "Save project" 500'd; saveProjectRepo
   // still cannot merge forge-studio into a nonexistent default branch). The
-  // greenfield path (orchestrator/project-create.ts) already commits its
+  // greenfield path (packages/projects/project-create.ts) already commits its
   // scaffold at birth — the onboard path got no equivalent when W7-B6 WI-1 made
   // `git init` fire for real here. Identity flags are passed per-invocation so
   // an unattended host with no global git identity still commits. Best-effort:

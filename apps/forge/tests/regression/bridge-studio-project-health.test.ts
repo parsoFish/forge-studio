@@ -15,7 +15,7 @@
  *
  * The verdict is DERIVED, per request, by running the config through the SAME
  * validator the orchestrator itself runs the project through —
- * `validateProjectConfig` (orchestrator/project-config.ts:364). Nothing is
+ * `validateProjectConfig` (packages/projects/project-config.ts:364). Nothing is
  * stored: there is no field on disk, in project.json, or anywhere else that a
  * writer could forget to update. If the validator's opinion changes, the
  * health signal changes with it in the same call.

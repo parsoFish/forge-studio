@@ -25,7 +25,7 @@
  *     `DraftInitiative.title` on the floor so every architect-originated
  *     initiative renders as its raw INIT id (W7A4-01).
  *
- * RUN: node --test --experimental-strip-types orchestrator/initiative-title.test.ts
+ * RUN: node --test --experimental-strip-types packages/flows/tests/integration/initiative-title.test.ts
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

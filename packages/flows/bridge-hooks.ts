@@ -4,7 +4,7 @@
  * `POST /api/hooks/:hookId` is the ONE ingress for github/gitea/gitlab
  * webhook deliveries. It is deliberately thin: verify the signature over the
  * RAW body, extract a typed payload, check the source allowlist, then STAGE a
- * claimable flow-run request (`orchestrator/flow-run-requests.ts`). There is
+ * claimable flow-run request (`packages/flows/flow-run-requests.ts`). There is
  * no dispatch and no agent spawn on this path — dispatch happens only in the
  * daemon's sweep, so `FORGE_ARCHITECT_NO_SPAWN` / dry-bridge hold structurally
  * for this trigger kind (see `cli/dry-bridge.ts`'s `exempt-local` row for this
@@ -12,7 +12,7 @@
  *
  * Trust model: the bridge binds 0.0.0.0, so this route is LAN/internet
  * reachable the moment an operator exposes it — signature verification
- * (`orchestrator/webhook-verify.ts`) is the ONLY trust boundary; there is no
+ * (`packages/flows/webhook-verify.ts`) is the ONLY trust boundary; there is no
  * source-IP allowlist (documented as defense-in-depth-only in ADR-041). A
  * missing/empty secret env value fails closed (503) rather than accepting an
  * unverified payload.
@@ -89,7 +89,7 @@ type ResolvedHook = { flow: FlowDefinition; trigger: FlowTrigger; webhook: Webho
  * Scan every registered flow for the `on: webhook` / `on: pr-merged` /
  * `on: issue-raised` trigger whose `webhook.id === hookId`. One malformed
  * flow.yaml is skipped (try/catch per flow) rather than 500ing every hook
- * receipt — mirrors `orchestrator/cron-triggers.ts`'s
+ * receipt — mirrors `packages/flows/cron-triggers.ts`'s
  * `scanDeclaredCronTriggers`.
  */
 function findWebhookTrigger(forgeRoot: string, hookId: string): ResolvedHook | null {

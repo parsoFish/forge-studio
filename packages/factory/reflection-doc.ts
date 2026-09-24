@@ -23,7 +23,7 @@
  * This is a best-effort heuristic — the reflector names themes after the
  * pattern they codify, so slug keywords reliably appear in the pattern prose.
  *
- * Pure function — no filesystem access. Caller is orchestrator/phases/reflector.ts
+ * Pure function — no filesystem access. Caller is packages/factory/phases/reflector.ts
  * which calls writeReflectionDoc() after the agent exits.
  */
 

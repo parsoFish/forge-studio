@@ -31,7 +31,7 @@
  * not at the queue move; subscribing to `cycle-list-changed` alone leaves run
  * 11's beat 8 exactly as broken as it was. Both, or neither is a fix.
  *
- * RUN: cd apps/studio && npx vitest run tests/unit/use-roadmap-live-refresh.test.ts
+ * RUN: cd apps/studio && npx vitest run apps/studio/tests/unit/use-roadmap-live-refresh.test.ts
  */
 import { test, expect } from 'vitest';
 

@@ -139,7 +139,7 @@ test('classifyReflectorProgress: a start then cycle.reflection-lost → lost, wi
 // cost_usd:0.544421 — project-manager never emits `iteration` events, so it
 // counts in FULL) are verbatim/unmodified. Line 108 (developer-loop `ralph.end`
 // for WI-1, cost_usd:0.46645539999999985 — a RESTATEMENT of the iteration cost
-// below, per orchestrator/event-cost.ts's doc comment) is also verbatim. Line
+// below, per packages/kernel/event-cost.ts's doc comment) is also verbatim. Line
 // 105 (the developer-loop WI-1 `iteration` event carrying the SAME
 // cost_usd:0.46645539999999985 as its own authoritative source) is
 // field-accurate but trims ~4.5KB of `tools_used`/`bash_commands`/

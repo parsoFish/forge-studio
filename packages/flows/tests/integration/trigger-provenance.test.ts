@@ -3,25 +3,25 @@
  *
  * Pins the contract (docs/decisions/027-studio-object-model.md "Run-model
  * trigger provenance (R2-08-F4) is derived, not stored" +
- * docs/roadmaps/R2-runnable-componentry.md R2-08-F4):
+ * docs/roadmaps/archive/R2-runnable-componentry.md R2-08-F4):
  *
  *   Run.trigger?: { kind: TriggerKindId; source: string; scope: string | null }
  *
- * derived from the staged FlowRunRequest (orchestrator/flow-run-requests.ts)
+ * derived from the staged FlowRunRequest (packages/flows/flow-run-requests.ts)
  * — never free text, never a new stored object. Must be RED against
  * dcbfee0f (HEAD at pin time): `Run` carries no `trigger` field anywhere in
- * orchestrator/run-model.ts, and `VALID_ORIGINS` silently coerces a
+ * packages/flows/run-model.ts, and `VALID_ORIGINS` silently coerces a
  * `manifest.origin === 'triggered'` down to `'architect'`.
  *
  * Fixture strategy per shipped kind (SHIPPED_TRIGGER_KIND_IDS,
- * orchestrator/flow-trigger.ts:56 = ['flow-complete','agent-complete',
+ * packages/flows/flow-trigger.ts:56 = ['flow-complete','agent-complete',
  * 'merged','cron','webhook']):
  *
  *  - cron / webhook / agent-complete: these are the three kinds that MINT a
  *    FRESH initiative (no `sourceInitiativeId` on the FlowRunRequest ⇒
  *    `mintTriggeredInitiative`, per flow-run-requests.ts's own
  *    `defaultStartFlowRun`). Driven through the REAL, already-shipped
- *    `mintTriggeredInitiative` (orchestrator/mint-triggered-initiative.ts)
+ *    `mintTriggeredInitiative` (packages/flows/mint-triggered-initiative.ts)
  *    with a hand-built `FlowRunRequest` mirroring each real call site's
  *    shape exactly (cron-triggers.ts `makeFireFn`, packages/flows/bridge-hooks.ts's
  *    webhook route, flow-trigger.ts `fireAgentCompleteTriggers`) — then the
@@ -45,12 +45,12 @@
  *    finalize-merged.ts:176-190 onFire callbacks) — verified by reading the
  *    actual source. These two fixtures plant that REAL, verified event
  *    shape directly into a synthetic events.jsonl (mirroring the exact
- *    pattern orchestrator/run-model.test.ts already uses for every other
+ *    pattern packages/flows/tests/integration/run-model.test.ts already uses for every other
  *    edge case in this file), since no live call path produces it as a
  *    file on disk without running a real cycle.
  *
  *    AMBIGUITY (escalated in the T3 report, resolved by round-2 review): the
- *    landed implementation (orchestrator/run-model.ts's `deriveTrigger` +
+ *    landed implementation (packages/flows/run-model.ts's `deriveTrigger` +
  *    `findTriggerFiringEvent`) confirms the event-log-derived path assumed
  *    here — cron/webhook/agent-complete persist `trigger_kind`/
  *    `trigger_source`/`trigger_scope` onto the minted manifest at mint time;
@@ -63,7 +63,7 @@
  * fixtures below omitted `sourceFlowId` — a field every real
  * `packages/flows/bridge-hooks.ts` call site now sets (the declaring flow, resolved by
  * `findWebhookTrigger`). Omitting it pressured the implementation into
- * adding a fallback in `orchestrator/mint-triggered-initiative.ts`'s
+ * adding a fallback in `packages/flows/mint-triggered-initiative.ts`'s
  * `deriveTriggerFields`: strip the `webhook:` prefix off `triggeredBy` and
  * report the HOOK id as `source` — a value the contract forbids (`source`
  * is a DEFINITION id, never an endpoint slug). Fixed: every webhook fixture
@@ -536,7 +536,7 @@ test('trigger.scope is exactly null (not undefined, not "") when the firing even
 // round-1 fixtures opened: those fixtures omitted `sourceFlowId` (a field
 // every real packages/flows/bridge-hooks.ts call site sets) while still asserting
 // `trigger` was present, which pressured the implementation into adding a
-// fallback (`deriveTriggerFields` in orchestrator/mint-triggered-initiative.ts:
+// fallback (`deriveTriggerFields` in packages/flows/mint-triggered-initiative.ts:
 // strip the `webhook:` prefix off `triggeredBy` and report the HOOK id as
 // `source`) — a value the contract explicitly forbids (`source` is a
 // DEFINITION id: a flow id or agent slug, never a webhook endpoint slug).
@@ -677,7 +677,7 @@ test('a manifest with origin: "triggered" is reported as origin "triggered", not
 // ---------------------------------------------------------------------------
 // Test 6 — derivation is pure: asking for trigger provenance writes NO file
 // ---------------------------------------------------------------------------
-// Mirrors orchestrator/trigger-harness-guard.test.ts's "COMPLETE effect set"
+// Mirrors packages/flows/tests/integration/trigger-harness-guard.test.ts's "COMPLETE effect set"
 // pattern. Kills any implementation that persists a NEW cached/materialized
 // trigger record to disk (violating "no new stored run object" — ADR-027).
 

@@ -44,7 +44,7 @@
  *       -> [data-component="node-outputs-empty"] when count is 0
  *
  * MEASURED GROUNDS (task report has the full trace):
- *   - `forge-ui/lib/flow-run-timeline.ts`'s own header (already shipped,
+ *   - `apps/studio/lib/flow-run-timeline.ts`'s own header (already shipped,
  *     WI-2): "`artifacts` is always `[]` — there is no per-node artifact
  *     data anywhere in the run model (`artifactsReady` is run-level, keyed
  *     by artifact TYPE)". `FlowRunTimelineRow.artifacts: string[]` is the

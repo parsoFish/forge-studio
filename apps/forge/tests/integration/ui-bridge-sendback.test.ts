@@ -4,7 +4,7 @@
  * The send-back branch no longer appends a terminal-re-prep UWI pair; it
  * compiles the operator's feedback into ONE ordinary work item (`origin:
  * 'review-fix'`) on the initiative's own `.forge/work-items/` queue via
- * `compileFixWorkItems` (orchestrator/fix-work-items.ts), stamps
+ * `compileFixWorkItems` (packages/flows/fix-work-items.ts), stamps
  * `resume_from: 'develop'` + increments `review_rounds` on the manifest
  * (`persistManifestSendBack`), and records the round in BOTH:
  *   1. the fix WI file itself — the operator's rationale lands VERBATIM in

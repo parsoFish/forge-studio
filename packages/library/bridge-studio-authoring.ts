@@ -32,7 +32,7 @@
  *      would make containment tautological — see
  *      `cli/studio-path-guard.ts`'s own CONTRACT section).
  *   3. Read `status.json` through the guarded read (leaf included, via
- *      `orchestrator/interactive-session.ts`'s `guardedReadSessionStatus` —
+ *      `packages/sessions/interactive-session.ts`'s `guardedReadSessionStatus` —
  *      the SAME primitive `runInteractiveTurn` itself uses). Require
  *      `phase === 'awaiting-review'` → 409 naming the current AND required
  *      phase otherwise. Never a silent 200.
@@ -77,7 +77,7 @@
  *          from body fields. Its `category` field is a DRAFT-ONLY routing
  *          hint — real installed templates never carry one (category is
  *          STRUCTURAL, derived from which directory a definition lives in,
- *          `orchestrator/studio/template-library.ts`'s own D1) — validated by
+ *          `packages/library/studio/template-library.ts`'s own D1) — validated by
  *          `writableCategoryOrReason` (`packages/library/bridge-studio-templates.ts`, the
  *          SAME function `POST /api/studio/templates` uses) and stripped
  *          before the persisted bytes are written. `project-scaffold` is
@@ -196,7 +196,7 @@ const REQUIRED_PHASE = 'awaiting-review';
 // S3 fix — which InteractiveFinalizerError shapes are an honest, NAMED
 // refusal (map to 400 in runFinalize's catch) vs a structural precondition
 // failure (stays 500 — see the call site's own comment for why P5-2 pins
-// this). `copyStagingToLibrary` (`orchestrator/interactive-finalizers.ts`)
+// this). `copyStagingToLibrary` (`packages/sessions/interactive-finalizers.ts`)
 // throws this SAME class for BOTH: every entry-scoped message it emits
 // begins with either `staged entry "<path>"` (source-side: containment,
 // vanished mid-walk, wrong type, TOCTOU-swap-at-read) or `destination for

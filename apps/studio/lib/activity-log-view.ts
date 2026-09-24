@@ -6,8 +6,8 @@
  * tool-coalesced summary row, and the per-sink cap-marker row are each
  * unit-testable without a DOM.
  *
- * Wire shapes this derives from (W6-B1, `orchestrator/interactive-session.ts`
- * + `orchestrator/tool-event-emit.ts` — NOT re-imported here: `forge-ui/` has
+ * Wire shapes this derives from (W6-B1, `packages/sessions/interactive-session.ts`
+ * + `packages/agents/tool-event-emit.ts` — NOT re-imported here: `forge-ui/` has
  * no dependency on `orchestrator/`, so the two marker literals below are
  * intentionally duplicated, not shared, across that boundary):
  *   - `event_type: 'tool_use'`, `metadata: { tool, input_summary, seq }` —
@@ -33,7 +33,7 @@
 
 import type { EventLogEntry } from './bridge-client';
 
-/** Mirrors `orchestrator/interactive-session.ts`'s `REDACTED_THINKING_MARKER`
+/** Mirrors `packages/sessions/interactive-session.ts`'s `REDACTED_THINKING_MARKER`
  *  — duplicated (not imported) across the forge-ui/orchestrator boundary. */
 export const REDACTED_THINKING_MARKER = '[thinking redacted]';
 

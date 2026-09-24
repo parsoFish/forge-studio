@@ -96,10 +96,10 @@ const CITED_EXTENSIONS = ['ts', 'tsx', 'mjs', 'js', 'cjs', 'md', 'json'];
  * corrupted a real citation. `(?<!\w\/)` rejects only the specific 2-char
  * "word-char then slash" 2-gram right before the root, so a genuinely
  * NESTED path (`word/root/…`) is rejected while a markdown-style relative
- * prefix (`./orchestrator/…`, `(./cli/…`) still matches — the char before
+ * prefix (`./orchestrator/…`, `(./skills/…`) still matches — the char before
  * the `/` there is `.` or `(`, never a word char. Plain `\b` alone is kept
- * too: it is what rejects a root glued onto a longer identifier
- * (`xcli/foo.ts` must not read as `cli/foo.ts`).
+ * too: it is what rejects a root glued onto a longer identifier, so a
+ * fictional `xcli` module must not read as the real `cli` root.
  */
 const PATH_TOKEN_RE = new RegExp(
   `\\b(?<!\\w/)(?:${KNOWN_ROOTS.join('|')})(?:/[A-Za-z0-9_.-]+)+\\.(?:${CITED_EXTENSIONS.join('|')})\\b`,

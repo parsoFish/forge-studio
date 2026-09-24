@@ -10,7 +10,7 @@
  * alone — a LEAKED run (dispatch process died, no terminal marker ever
  * written) read 'running' forever with nothing to contradict it.
  *
- * RUN: npx vitest run tests/unit/onboard-reattach-is-live.test.ts   (from apps/studio/)
+ * RUN: npx vitest run apps/studio/tests/unit/onboard-reattach-is-live.test.ts   (from apps/studio/)
  */
 import { test, expect } from 'vitest';
 

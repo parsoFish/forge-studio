@@ -3,7 +3,7 @@
  * builder + tool config.
  *
  * Single source of truth for what the release-finalizer agent sees. Called by
- * the live orchestrator (orchestrator/phases/release-finalize.ts).
+ * the live orchestrator (packages/factory/phases/release-finalize.ts).
  *
  * The release-finalizer is a **one-shot SDK invocation** (not a Ralph loop)
  * that runs AFTER the operator approves a merged-ready cycle and BEFORE forge

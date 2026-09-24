@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/run-model.ts
+ * Tests for packages/flows/run-model.ts
  *
  * Uses two real-cycle fixture logs (copied into run-model.fixtures/) plus
  * small synthetic fixtures for every edge-case branch.
@@ -466,7 +466,7 @@ triggers: []
 
     const manifestPath = writeManifest(root, 'done', initId, { cycle_id: cycleId, flow_id: 'agent-proof-flow' });
 
-    // runAgent (orchestrator/run-agent.ts)-shaped events: phase:'orchestrator'
+    // runAgent (packages/agents/run-agent.ts)-shaped events: phase:'orchestrator'
     // hardcoded (frozen F1 contract, run-agent.test.ts:121), skill:def.slug,
     // metadata.agent_slug/agent_phase, cost_usd riding on the end event.
     writeCycleLog(root, cycleId, [

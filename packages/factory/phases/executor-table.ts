@@ -364,7 +364,7 @@ const execReflect: NodeExecutor = async (ctx) => {
  * stronger claim — that the ABSENCE of an injection seam is what makes this
  * gate unfakeable — is retired there rather than left to rot. What guards it
  * now: exactly one production caller wires the real preflight
- * (`orchestrator/cycle.ts` via `createProjectGate()`), and a conformance test
+ * (`packages/flows/cycle.ts` via `createProjectGate()`), and a conformance test
  * fails if `flow-runner.ts` ever imports `packages/projects/preflight.ts` again. The
  * canonical agent def (`skills/contract-check/SKILL.md`) exists only as the
  * declaration carrier + display identity the band-guard machinery needs

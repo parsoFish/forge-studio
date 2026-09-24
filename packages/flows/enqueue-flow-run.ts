@@ -319,7 +319,7 @@ function firstExisting(candidates: string[]): string | null {
 
 /**
  * True if the dir holds at least one `WI-*.md` spec (skips `_graph.md` etc).
- * `WORK_ITEM_FILE_PATTERN` is the exported SSOT (orchestrator/work-item.ts) —
+ * `WORK_ITEM_FILE_PATTERN` is the exported SSOT (packages/flows/work-item.ts) —
  * this used to carry its own narrower `/^WI-\d+\.md$/`, which read a
  * split-only decomposition (`WI-4a.md`, `WI-4b.md`) as an EMPTY directory.
  */

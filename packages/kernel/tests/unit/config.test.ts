@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/config.ts. Covers F-10 / F-18 — `forge.config.json`
+ * Tests for packages/kernel/config.ts. Covers F-10 / F-18 — `forge.config.json`
  * loader and the env-assertion helper.
  */
 
@@ -374,8 +374,8 @@ test('resolveReviewLoopCaps: fields resolve independently — one from env, one 
 
 // ---------------------------------------------------------------------------
 // G8 wave 2 (2026-07-12): distinct git identity for forge-authored commits.
-// The env-pin allowlist itself (R5-02) now lives in orchestrator/spawn-env.ts
-// (buildChildEnv/AGENT_ENV_ALLOWLIST) — see orchestrator/spawn-env.test.ts.
+// The env-pin allowlist itself (R5-02) now lives in packages/kernel/spawn-env.ts
+// (buildChildEnv/AGENT_ENV_ALLOWLIST) — see packages/kernel/tests/unit/spawn-env.test.ts.
 // ---------------------------------------------------------------------------
 
 test('ralphGitIdentity: name is forge-ralph, email is tagged with the work item id', () => {

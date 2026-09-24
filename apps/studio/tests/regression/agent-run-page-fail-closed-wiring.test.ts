@@ -7,7 +7,7 @@
  * both files' own headers): a transport THROW is caught into
  * `resolution: 'unresolved'` with NO `status` (never the authoritative
  * "not found"), a non-404 non-2xx status maps the same way (pinned at the
- * pure-logic level in `tests/unit/run-view-client.test.ts`), and the page's
+ * pure-logic level in `apps/studio/tests/unit/run-view-client.test.ts`), and the page's
  * `NotFound` render is gated on `resolution === 'not-found'` alone — never
  * `'unresolved'`. This file formalises that as the EXEMPT-ing evidence:
  * verified, not assumed, with a mutation check proving each assertion

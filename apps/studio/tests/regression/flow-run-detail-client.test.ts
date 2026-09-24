@@ -1,7 +1,7 @@
 /**
  * Acceptance tests for a STATUS-AWARE `found` resolver for the flow
  * run-detail client fetch (R6-01 WI-2 / F4, round 2) —
- * `forge-ui/lib/flow-run-detail-client.ts`, a pure module that does not
+ * `apps/studio/lib/flow-run-detail-client.ts`, a pure module that does not
  * exist yet. Every assertion below is a legitimate RED against a
  * not-yet-created file.
  *

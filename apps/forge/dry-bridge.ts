@@ -42,7 +42,7 @@
  * - the one non-HTTP spawn path (the boot-time reflect-reconcile) has no
  *   response to type, so its JSONL event (`emitDryBridgeRefusal`) IS the
  *   typed refusal.
- * All event emission reuses the existing `orchestrator/logging.ts`
+ * All event emission reuses the existing `packages/kernel/logging.ts`
  * `createLogger` pattern rather than inventing a new logging path.
  */
 

@@ -9,7 +9,7 @@
  * skill-library-view.ts's testability convention.
  *
  * REUSE, not fork (T2 ruling, binding on this module): `brainStructureView`'s
- * file tabs go through the SHARED `forge-ui/lib/file-package.ts`
+ * file tabs go through the SHARED `apps/studio/lib/file-package.ts`
  * (`filePackageTabs`/`selectFile`) — the same machinery `brain-structure`'s
  * file tabs use elsewhere in Studio. No bespoke tab-strip state machine is
  * written here.

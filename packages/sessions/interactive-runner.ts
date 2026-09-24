@@ -40,7 +40,7 @@
  *      original `skillsDir(forgeRoot)` wrote into `<forgeRoot>/skills`, the
  *      LIVE tree production agent discovery actually scans
  *      (`listAgentDefinitions`/`discoverRuntimeAgentIds` —
- *      `orchestrator/flow-runner.ts:1285`, `apps/forge/ui-bridge.ts:1678` — promote
+ *      `packages/flows/flow-runner.ts:1285`, `apps/forge/ui-bridge.ts:1678` — promote
  *      ANY dir whose `SKILL.md` carries a `runtime:` key to a dispatchable
  *      agent, no slug gate). Ruling: the destination is now a dedicated,
  *      NON-scanned root, `<forgeRoot>/_interactive-library/<packageId>/...`
@@ -181,7 +181,7 @@ export async function runInteractiveTurn(
   // have one) — tracked separately, deliberately not fixed here.
   // Pinned by AT-a/AT-b
   // (`packages/agents/agent-run.test.ts`) and by the co-location ratchet
-  // (`packages/agents/agent-run-log-dir-colocation.test.ts`), which fails if this template
+  // (`packages/agents/tests/regression/agent-run-log-dir-colocation.test.ts`), which fails if this template
   // and the bridge's `logDir` template ever resolve differently again.
   //
   // Consequence, deliberate: for a kind id that also names a legacy runner, this
@@ -254,7 +254,7 @@ export async function runInteractiveTurn(
         // `RUNNER_SKILL`, `cycleId`); the step must not re-derive any of them.
         // Authoritative under `kernel/event-cost.ts`: this phase emits no
         // `iteration` events, so one plain row per turn counts exactly once —
-        // pinned by `tests/unit/interactive-runner-turn-cost.test.ts`, which
+        // pinned by `packages/sessions/tests/unit/interactive-runner-turn-cost.test.ts`, which
         // reads the figure back through the session route's own reader.
         // Best-effort, like the architect's: a logging failure must not fail a
         // turn that already ran and already cost money.

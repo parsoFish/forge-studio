@@ -1,5 +1,5 @@
 /**
- * Tests for forge-ui/lib/session-client.ts (R2-10, PR2) — DOES NOT EXIST YET.
+ * Tests for apps/studio/lib/session-client.ts (R2-10, PR2) — DOES NOT EXIST YET.
  * Vitest cannot even collect this file until it lands (module-not-found is
  * the expected red, mirroring hook-client.test.ts / community-client.test.ts's
  * own header note).
@@ -55,10 +55,10 @@
  * `git diff --stat HEAD -- packages/sessions/bridge-studio-sessions.ts` is empty — nothing
  * has changed there since PR1 merged) does NOT put `label` on the `artifact`
  * it sends. Its 200 response is built from `deriveSessionArtifact(...)`
- * (orchestrator/studio/session-transcript.ts) alone — that function's three
+ * (packages/sessions/studio/session-transcript.ts) alone — that function's three
  * return types (`RoadmapDraftArtifact`/`MarkdownDraftArtifact`/
  * `BrainStructureArtifact`) carry no `label` field, and `descriptor.artifact.
- * label` (which DOES exist, parsed by `orchestrator/studio/session-kinds.ts`
+ * label` (which DOES exist, parsed by `packages/sessions/studio/session-kinds.ts`
  * from the YAML) is never spread into the JSON `sendJson(...)` call — only
  * `descriptor.stages`/`descriptor.defaultStage` are threaded through today.
  * This test file pins the CORRECTED contract per T2's instruction (label
@@ -794,7 +794,7 @@ test('AT-101: parseSessionArtifact: roadmap-draft row "dependsOn" containing a n
 
 // ===========================================================================
 // R4-16 (2026-08-06) — a NEW live artifact kind, "generation-gallery"
-// (orchestrator/studio/session-transcript.ts's `deriveGenerationGallery`).
+// (packages/sessions/studio/session-transcript.ts's `deriveGenerationGallery`).
 // TEST-FIRST PIN: `parseSessionArtifact` does not have a case for this kind
 // yet — every well-formed fixture below currently falls into the generic
 // "unrecognised/reserved" default branch, which is the correct RED (this is
@@ -990,7 +990,7 @@ test('R4-17 AT-115: parseSessionArtifact: contract-buildout "sourcesScanned" or 
 
 // ===========================================================================
 // R4-19-F2 — "cleanup-plan" (the kb-cleanup session's brain-maintenance
-// artifact, orchestrator/studio/session-transcript.ts's CleanupPlanArtifact/
+// artifact, packages/sessions/studio/session-transcript.ts's CleanupPlanArtifact/
 // CleanupPlanAction) — AT-116..124.
 //
 // THE DEFECT this block exists to kill: `parseSessionArtifact`'s switch has

@@ -7,14 +7,14 @@
  * `mint-triggered-initiative.ts`'s `deriveTriggerFields`) with an
  * unrealistic shape, hiding gaps or forcing production code to grow a
  * fallback that no real caller needs (see the round-2 finding documented in
- * `orchestrator/trigger-provenance.test.ts`). These builders close that gap
+ * `packages/flows/tests/integration/trigger-provenance.test.ts`). These builders close that gap
  * by mirroring each real staging site's shape exactly, so fixtures drift
  * with production instead of away from it.
  *
  * Real staging sites mirrored (T1 ruling, forge-76y):
- *  - cron:           orchestrator/cron-triggers.ts:154-172 (`makeFireFn`)
+ *  - cron:           packages/flows/cron-triggers.ts:154-172 (`makeFireFn`)
  *  - webhook:         packages/flows/bridge-hooks.ts:373-394 (the `/api/hooks/:hookId` route)
- *  - agent-complete:  orchestrator/flow-trigger.ts:149-166 (`fireAgentCompleteTriggers`)
+ *  - agent-complete:  packages/flows/flow-trigger.ts:149-166 (`fireAgentCompleteTriggers`)
  *
  * Test-only: NOT a production export (T1 ruling Q8) — lives beside the
  * existing `test-fixtures/` fixture data, imported only from `*.test.ts`
@@ -81,7 +81,7 @@ export function buildWebhookFlowRunRequest(overrides: Partial<FlowRunRequest> = 
 }
 
 /**
- * Mirrors `orchestrator/flow-trigger.ts`'s `fireAgentCompleteTriggers`: every
+ * Mirrors `packages/flows/flow-trigger.ts`'s `fireAgentCompleteTriggers`: every
  * field a real agent-complete fire ALWAYS sets (`target`, `origin`,
  * `triggeredBy`, `sourceAgent`, `createdAt`) gets a realistic default;
  * `projects` / `eventProject` are conditional at the real call site too, so

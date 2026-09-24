@@ -101,7 +101,7 @@ async function withStudioRepo<T>(
     return await run();
   } finally {
     try {
-      const own = [DEMO_REL_DIR, DEMO_SKILL_REL_PATH, '.forge/skills/demo'].filter((p) => existsSync(join(status.project_repo_path, p))); // 7.3.6 — why: tests/unit/demo-commit-scope.test.ts
+      const own = [DEMO_REL_DIR, DEMO_SKILL_REL_PATH, '.forge/skills/demo'].filter((p) => existsSync(join(status.project_repo_path, p))); // 7.3.6 — why: packages/sessions/tests/unit/demo-commit-scope.test.ts
       if (own.length > 0) commitStudioChange(status.project_repo_path, `forge-studio: demo machinery (${status.phase})`, own);
     } catch { /* best-effort */ }
   }

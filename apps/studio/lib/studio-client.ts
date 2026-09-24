@@ -1,7 +1,7 @@
 /**
  * Client-side fetch helpers for the Studio bridge routes (M1-2).
  *
- * Mirrors the server-side types from orchestrator/run-model.ts and
+ * Mirrors the server-side types from packages/flows/run-model.ts and
  * orchestrator/studio/types.ts — re-declared client-side so they can be
  * imported into 'use client' components without pulling in Node.js modules.
  * Same pattern as EventLogEntry declared in bridge-client.ts.
@@ -172,7 +172,7 @@ export type RunPhaseMeta = {
   retries: number;
   model?: string;
   lastProgressAt?: string;
-  /** R6-01 WI-1 F1: mirrors orchestrator/run-model.ts's RunPhaseMeta.lastEventAt
+  /** R6-01 WI-1 F1: mirrors packages/flows/run-model.ts's RunPhaseMeta.lastEventAt
    *  — latest event of ANY type attributed to this node (unlike lastProgressAt,
    *  not filtered to progress types). Drives lib/phase-log-refresh.ts. */
   lastEventAt?: string;
@@ -183,7 +183,7 @@ export type RunPhaseMeta = {
   delivered?: { files: number; insertions: number; commits: number };
   gateChecks?: { id: string; pass: boolean; detail?: string }[];
   /**
-   * R6-05 WI-1: mirrors orchestrator/run-model.ts's RunPhaseMeta.findings —
+   * R6-05 WI-1: mirrors packages/flows/run-model.ts's RunPhaseMeta.findings —
    * the adversarial-review node's finding counts, carried verbatim over the
    * wire. Honest-absent: present only when a real review.findings.authored
    * event fired (a genuine all-zero clean pass still populates it).
@@ -199,26 +199,26 @@ export type Run = {
   /**
    * W6-SW-3 (sweep C8#1): the manifest's project slug, carried through so
    * GateBar can thread it into `postGate` for plan gates — mirrors
-   * orchestrator/run-model.ts's `Run.project`. Optional: absent for a
+   * packages/flows/run-model.ts's `Run.project`. Optional: absent for a
    * degraded (corrupt-manifest) run.
    */
   project?: string;
   /**
    * W8-A3 (`flows-23`): the architect session that produced this initiative —
-   * mirrors `orchestrator/run-model.ts`'s `Run.architectSessionId`, straight
+   * mirrors `packages/flows/run-model.ts`'s `Run.architectSessionId`, straight
    * off the manifest. Absent when the manifest names none; never fabricated.
    */
   architectSessionId?: string;
   status: RunStatus;
-  /** W7-C3 (forge-cv9): mirrors orchestrator/run-model.ts VALID_ORIGINS —
+  /** W7-C3 (forge-cv9): mirrors packages/flows/run-model.ts VALID_ORIGINS —
    *  'triggered' is a real, producible origin since R2-08-F4; the narrower
    *  client type forced consumers to handle only two of three cases. */
   origin: 'architect' | 'human-directed' | 'triggered';
-  costUsd: number | null; // null = no cost recorded, never a fabricated 0 — forge-ygys, why: tests/integration/run-cost-null.test.ts
+  costUsd: number | null; // null = no cost recorded, never a fabricated 0 — forge-ygys, why: apps/studio/tests/integration/run-cost-null.test.ts
   startedAt?: string;
   /**
    * W7-A3 (flows-29): the real cycle-end instant, mirrored from
-   * orchestrator/run-model.ts's `Run.completedAt` (W6-RV-2). Absent for a
+   * packages/flows/run-model.ts's `Run.completedAt` (W6-RV-2). Absent for a
    * still-open run — never fabricated. MonitorSummary's ELAPSED stops here.
    */
   completedAt?: string;
@@ -233,7 +233,7 @@ export type Run = {
   failedAt?: string;
   failNote?: string;
   /**
-   * W8-A2 (ON-7 defect 2) — mirrors orchestrator/run-model.ts's
+   * W8-A2 (ON-7 defect 2) — mirrors packages/flows/run-model.ts's
    * `Run.stopOnBudget` verbatim. The server has served this on the wire
    * (`sendJson(res, 200, { run }, ...)` — the WHOLE aggregated `Run`, no
    * field allowlist) since `stopOnBudget` first landed; this client TYPE
@@ -243,13 +243,13 @@ export type Run = {
    * clean, resumable budget stop apart from an ordinary crash.
    */
   stopOnBudget?: { spentUsd: number; ceilingUsd: number; resumable: true; completedWorkItems: number; totalWorkItems: number; stoppedBeforeNode?: string };
-  /** 2.10: the merged cycle's reflection was lost (cause) — mirrors orchestrator/run-model.ts. */
+  /** 2.10: the merged cycle's reflection was lost (cause) — mirrors packages/flows/run-model.ts. */
   reflectionLost?: string;
   reflectionLostNote?: string;
   /**
    * W7-B7 (artifact-plan-17): the run's pull-request URL, derived server-side
    * from its own `reviewer.pr-opened` event — mirrors
-   * orchestrator/run-model.ts's `Run.prUrl`. Absent when the cycle never
+   * packages/flows/run-model.ts's `Run.prUrl`. Absent when the cycle never
    * opened a PR; never fabricated.
    */
   prUrl?: string;
@@ -263,7 +263,7 @@ export type Run = {
   flowLineage: string[];
   /**
    * R2-08-F4 (ADR-027 amendment) / R6-01 WI-2: what started this run —
-   * mirrors `orchestrator/run-model.ts`'s `Run.trigger` verbatim. Absent
+   * mirrors `packages/flows/run-model.ts`'s `Run.trigger` verbatim. Absent
    * when the run carries no derivable provenance (a plain
    * architect-originated run) — NEVER a fabricated default. `kind` is left
    * as `string` rather than importing `TriggerKindId` (an orchestrator-side
@@ -346,7 +346,7 @@ export type FlowTrigger = {
   /** webhook only. */
   webhook?: WebhookTriggerConfig;
   /** agent-complete only: the source agent slug whose completion fires this row
-   *  (orchestrator/studio/validate-triggers.ts's trigger-agent-complete check
+   *  (packages/flows/studio/validate-triggers.ts's trigger-agent-complete check
    *  requires this be non-empty — an absent agent never means "fires for all"). */
   agent?: string;
   note?: string;
@@ -354,7 +354,7 @@ export type FlowTrigger = {
 
 /**
  * R2-04 (ADR-041): the shipped trigger kinds authorable in the UI today.
- * Mirrors orchestrator/flow-trigger.ts's `SHIPPED_TRIGGER_KIND_IDS` — the
+ * Mirrors packages/flows/flow-trigger.ts's `SHIPPED_TRIGGER_KIND_IDS` — the
  * server-side SSOT (registry rows-as-data). forge-ui cannot import
  * orchestrator TS directly, so this is a hand-kept mirror; keep it in
  * lockstep with the registry when a new kind ships (or one is retired).
@@ -382,7 +382,7 @@ export type ShippedTriggerKind = (typeof SHIPPED_TRIGGER_KINDS)[number];
  * `findWebhookTrigger` (which scans every flow for a trigger whose
  * `webhook.id === hookId`, regardless of which of the three kinds declared
  * it) can resolve a delivery for them. Mirrors
- * orchestrator/studio/validate-triggers.ts's `WEBHOOK_FAMILY_KIND_IDS`
+ * packages/flows/studio/validate-triggers.ts's `WEBHOOK_FAMILY_KIND_IDS`
  * verbatim (forge-ui cannot import orchestrator TS directly — see this
  * file's header convention).
  */
@@ -517,7 +517,7 @@ export function buildTriggerDeclaration(
  * (on,target)-only comparisons — silently excluding a valid SECOND
  * `agent-complete` row aimed at the same target flow with a DIFFERENT
  * source agent (the server has always supported this:
- * `orchestrator/flow-trigger.ts`'s `fireAgentCompleteTriggers` matches each
+ * `packages/flows/flow-trigger.ts`'s `fireAgentCompleteTriggers` matches each
  * row independently by `trigger.agent === completedAgentSlug`, so two rows
  * differing only in `agent` are two genuinely distinct, both-real triggers).
  * A single shared definition here means both call sites can never drift
@@ -2188,7 +2188,7 @@ export { MATERIAL_KINDS, type MaterialKind };
 
 /**
  * Parse a raw `materials` field (server AgentDefinition.materials shape,
- * orchestrator/studio/materials.ts) client-side. Mirrors the server parser's
+ * packages/agents/studio/materials.ts) client-side. Mirrors the server parser's
  * D1/D2 semantics exactly: an array of strings — including `[]` — parses
  * as-is (D2: declared-empty is a real, meaningful value, distinct from
  * absence); `undefined`/`null` (the field genuinely absent) parses to
@@ -2211,7 +2211,7 @@ export function parseMaterials(raw: unknown): string[] | undefined {
 }
 
 /** Self-describing manifest of what an instructions draft was composed from
- *  (orchestrator/studio/instructions-draft.ts `InstructionsDraftDerivation`,
+ *  (packages/library/studio/instructions-draft.ts `InstructionsDraftDerivation`,
  *  re-declared client-side per this file's header convention). Carried
  *  through verbatim — never re-derived here. */
 export type InstructionsDraftDerivation = {

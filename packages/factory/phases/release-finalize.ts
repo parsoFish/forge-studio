@@ -14,7 +14,7 @@
  * (the in-cycle DRAFT changelog is the fallback). The status is surfaced as
  * telemetry + a `notify`, never a merge gate.
  *
- * Mirrors orchestrator/phases/reflector.ts: shared invocation contract
+ * Mirrors packages/factory/phases/reflector.ts: shared invocation contract
  * (release-finalize-invocation.ts), SDK injected via `ReleaseFinalizeDeps`, the
  * SDK loop reads `total_cost_usd`/`duration_ms` off the result message.
  */

@@ -14,7 +14,7 @@
  * source; a dropped row would be indistinguishable from "we never looked".
  *
  * The row TYPE (`ContractStageRow`) is declared in
- * `orchestrator/studio/session-transcript.ts`, not here, and re-exported —
+ * `packages/sessions/studio/session-transcript.ts`, not here, and re-exported —
  * see that module's header for why (one canonical owner; the direction this
  * file already needs for `safeReadFileInSession`/`SESSION_STAGES`).
  *
@@ -22,7 +22,7 @@
  * opens `secrets.env` and NEVER reads an env VALUE — the `secrets` stage's
  * status/detail are derived exclusively from `.forge/project.json`'s
  * `testProcess.acceptance.requiresEnv` (declared NAMES), read through the
- * canonical `orchestrator/project-config.ts` validator like every other
+ * canonical `packages/projects/project-config.ts` validator like every other
  * config-backed stage.
  *
  * Fail-closed contract: `.forge/project.json` ABSENT is a normal, expected

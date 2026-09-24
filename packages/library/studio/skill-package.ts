@@ -28,7 +28,7 @@ import { guardedFile } from '@forge/kernel';
 import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
 
 // ---------------------------------------------------------------------------
-// Types (WI-1 pinned shapes — orchestrator/studio/skill-library.test.ts)
+// Types (WI-1 pinned shapes — packages/library/tests/integration/skill-library.test.ts)
 // ---------------------------------------------------------------------------
 
 export interface SkillProvenance {

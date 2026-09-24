@@ -42,7 +42,7 @@ export type AgentRuntime = {
 
 /**
  * Server-computed per-agent capability descriptor (R2-02-F1,
- * orchestrator/studio/derive.ts `agentCapabilityDescriptor`). Re-declared
+ * packages/agents/studio/derive.ts `agentCapabilityDescriptor`). Re-declared
  * client-side per studio-client.ts's header convention — threaded onto the
  * wire by the bridge (GET /api/studio/agents, GET /api/studio/starters) and
  * carried through as-is by `parseAgentDefinition`; NEVER re-derived here (a
@@ -56,7 +56,7 @@ export type AgentCapabilityDescriptor = {
   fanoutCapable: boolean;
 };
 
-/** W6-B6 — client mirror of `orchestrator/phase-agent.ts`'s `ModelTier`
+/** W6-B6 — client mirror of `packages/agents/phase-agent.ts`'s `ModelTier`
  *  (re-declared per studio-client.ts's own convention). */
 export type ModelTier = 'haiku' | 'sonnet' | 'opus';
 
@@ -92,7 +92,7 @@ export type Agent = {
   /** R2-03-F2 — the agent's declared fanout block (drives the node fanOut binding). */
   fanout?: AgentFanout;
   /**
-   * R6-04 WI-3 — server-computed FACT (orchestrator/studio/derive.ts
+   * R6-04 WI-3 — server-computed FACT (packages/agents/studio/derive.ts
    * `agentCapabilityDescriptor().costCeilingEnforceable`), read directly off
    * the wire's `capability` object rather than through `parseCapability`
    * (whose 3-key return shape is pinned byte-for-byte by
@@ -110,7 +110,7 @@ export type Agent = {
   declaredMaxBudgetUsd?: number;
   /**
    * W6-B6 (ADR-043 2026-08-15 amendment §3) — server-computed FACT
-   * (`orchestrator/studio/derive.ts`'s `agentCapabilityDescriptor().
+   * (`packages/agents/studio/derive.ts`'s `agentCapabilityDescriptor().
    * allowedTiers`), read directly off the wire's `capability` object —
    * SAME "own top-level field, parsed independently of `capability`"
    * precedent `costCeilingEnforceable` establishes immediately above (its
@@ -293,7 +293,7 @@ export function parseAgentDefinition(raw: unknown): Agent {
 
 /**
  * W6-B6 fix (wave-6 final gate, journey demo-builder DB-4) — the FULL server
- * `AgentCapabilityDescriptor` (orchestrator/studio/derive.ts), fetched
+ * `AgentCapabilityDescriptor` (packages/agents/studio/derive.ts), fetched
  * directly for ONE named slug via `fetchAgentCapability` (studio-client.ts).
  * NOT the roster's 3-key `capability` field `parseCapability` above parses
  * (whose shape is pinned separately — see that function's own header for
@@ -346,7 +346,7 @@ export function parseAgentCapability(raw: unknown): AgentCapability | null {
     costCeilingEnforceable: c['costCeilingEnforceable'] === true,
     // Omit the key entirely when absent (never `allowedTiers: undefined`) —
     // same discipline as the server's own AgentCapabilityDescriptor
-    // (orchestrator/studio/derive.ts) and PhaseAgentSpec.allowedTiers.
+    // (packages/agents/studio/derive.ts) and PhaseAgentSpec.allowedTiers.
     ...(allowedTiers ? { allowedTiers } : {}),
     // W8-B3 — same discipline; a malformed/absent value stays absent rather
     // than becoming a fabricated tier.

@@ -321,7 +321,7 @@ function findRun(forgeRoot: string, id: string): Run | null {
  * never mutated.
  *
  * `kind: 'architect'` is a literal because `architect_session_id`
- * (orchestrator/manifest.ts) carries no kind tag and has exactly ONE writer —
+ * (packages/flows/manifest.ts) carries no kind tag and has exactly ONE writer —
  * `orchestrator/architect-runner.ts:1251`, which writes the id of an ARCHITECT
  * session. That invariant is not enforced anywhere, so a second writer of a
  * differently-kinded session id would silently make this probe ask about the
@@ -825,7 +825,7 @@ export type RoadmapWorkItem = {
   title: string;
   dependsOn: string[];
   /**
-   * W6-RV-1: the WI's own status (`WorkItem['status']`, orchestrator/work-item.ts),
+   * W6-RV-1: the WI's own status (`WorkItem['status']`, packages/flows/work-item.ts),
    * threaded through from `parseWorkItem` rather than discarded — feeds the
    * roadmap card's "done/total" micro-badge. Optional so a read that predates
    * this field (or a snapshot with no status) never fabricates one.
@@ -857,7 +857,7 @@ export type RoadmapInitiative = {
   /**
    * W6-RV-2: the real cycle-completion instant (ISO), for the roadmap
    * canvas's completion-time X axis — `Run.completedAt`
-   * (orchestrator/run-model.ts) threaded straight through via the SAME
+   * (packages/flows/run-model.ts) threaded straight through via the SAME
    * memoized derivation `GET /api/runs` already uses (`cachedListRuns`,
    * packages/flows/run-list-cache.ts) rather than a second events.jsonl parser. Absent
    * (never fabricated) whenever the run carries no derivable completion —
@@ -946,7 +946,7 @@ function scanProjectManifests(projectId: string, forgeRoot: string): { entries: 
       let rawManifest = '';
       try {
         // W6-RV-1 perf fix: parseManifest already runs matter() internally and
-        // now exposes `title` (orchestrator/manifest.ts, additive-optional) —
+        // now exposes `title` (packages/flows/manifest.ts, additive-optional) —
         // a second matter() call here would parse the same buffer twice on a
         // route the operator UI polls repeatedly.
         rawManifest = readFileSync(fp, 'utf8');
@@ -1196,7 +1196,7 @@ function tryReadWorkItemDir(dir: string): RoadmapWorkItem[] | null {
   if (!existsSync(dir)) return null;
   let files: string[];
   try {
-    files = readdirSync(dir).filter((f) => WORK_ITEM_FILE_PATTERN.test(f)); // SSOT: orchestrator/work-item.ts
+    files = readdirSync(dir).filter((f) => WORK_ITEM_FILE_PATTERN.test(f)); // SSOT: packages/flows/work-item.ts
   } catch {
     return null;
   }

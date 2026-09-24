@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/enqueue-plan-run.ts (R4-05 / F4).
+ * Tests for packages/flows/enqueue-plan-run.ts (R4-05 / F4).
  *
  * The standalone "Plan" trigger: repoint a WI-less initiative's manifest at
  * the forge-architect flow and make it claimable (pending) — the scheduler

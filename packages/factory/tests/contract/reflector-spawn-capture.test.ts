@@ -39,7 +39,7 @@
  * else in the fixture is not.
  *
  * Bootstrap / regenerate:
- *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test orchestrator/phases/reflector-spawn-capture.test.ts
+ *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test packages/factory/tests/contract/reflector-spawn-capture.test.ts
  * (or delete the fixture) rewrites
  * packages/kernel/tests/test-fixtures/spawn-capture/reflector.json from current code.
  */

@@ -2,7 +2,7 @@
  * AT-12 (bead forge-3oq review, T3 companion to apps/forge/tests/regression/studio-provenance.test.ts's
  * AT-8/AT-9/AT-10/AT-11) — the CLIENT side of the KB/flow detail-route gap.
  *
- * `forge-ui/lib/studio-client.ts` declares `Kb.provenance` REQUIRED with a
+ * `apps/studio/lib/studio-client.ts` declares `Kb.provenance` REQUIRED with a
  * comment saying "every KB that reaches the client came through
  * `fetchStudioKbs`'s parser, which always attaches a real value... there is
  * no legitimate 'KB with no provenance opinion' state" (studio-client.ts
@@ -23,7 +23,7 @@
  * `fetchFlow` (studio-client.ts:1430) has the identical shape (lower stakes —
  * `Flow.provenance` is optional on the client type).
  *
- * Fetch harness: matches forge-ui/lib/studio-client.test.ts's own
+ * Fetch harness: matches apps/studio/tests/contract/studio-client.test.ts's own
  * `fetchContractStages` AT-F1-1 precedent EXACTLY (same `vi.mock` of
  * `./bridge-client.ts` to a fixed base, same `vi.stubGlobal('fetch', ...)` +
  * `afterEach(() => vi.unstubAllGlobals())` teardown) — no new mocking

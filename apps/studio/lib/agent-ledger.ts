@@ -23,7 +23,7 @@
  * `flow-ledger.ts`'s own `deriveFlowLedgerRows(runs: Run[])` takes full
  * `Run[]`, not a pre-flattened wire summary), derive narrative/href/
  * linkKind/sort — the presentation-layer work the server/CLI side never
- * imports (mirrors the EXISTING split: `orchestrator/run-model.ts` knows
+ * imports (mirrors the EXISTING split: `packages/flows/run-model.ts` knows
  * nothing of `LedgerSegment`).
  *
  * ⚑ D9 (restated per-node) — `gate-fails` is sourced from a node's own

@@ -50,7 +50,7 @@ export type RunPhaseMeta = {
   /**
    * R6-05 WI-1: the adversarial-review node's finding counts, derived
    * verbatim from the LATEST `review.findings.authored` event on this node
-   * (orchestrator/phases/adversarial-review.ts:332). Only the five COUNT
+   * (packages/factory/phases/adversarial-review.ts:332). Only the five COUNT
    * fields — the event's `path`/`head_sha`/`agent_slug` metadata keys never
    * leak in. Honest-absent: no event -> no key, never a fabricated
    * `{total:0,...}`; a genuine all-zero clean pass DOES populate it (the
@@ -92,7 +92,7 @@ export type Run = {
    * way `startedAt` is (a forward scan of THIS cycle's already-parsed
    * `events`, no second events.jsonl read) — the `started_at` of the
    * `{phase:'orchestrator', skill:'cycle', event_type:'end'}` event, which
-   * `orchestrator/cycle.ts::runCycle` emits exactly once per cycle, strictly
+   * `packages/flows/cycle.ts::runCycle` emits exactly once per cycle, strictly
    * BEFORE any out-of-band reflector rerun ever appends to the same log
    * (`reflector-rerun.ts` only ever emits `phase:'reflection'` events).
    * Falls back to the last non-`'reflection'` event when no such event exists

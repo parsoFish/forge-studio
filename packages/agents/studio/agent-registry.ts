@@ -148,7 +148,7 @@ function validateAgentDocument(doc: FrontmatterDoc): AgentDefinition {
       : {};
   // ADR-027 R3-03 amendment ("R3-03, 2026-08-04"): composition.hooks is
   // REINTRODUCED with a narrowed meaning — library lifecycle-hook ids only,
-  // resolved against the hooks registry (orchestrator/studio/hook-library.ts),
+  // resolved against the hooks registry (packages/library/studio/hook-library.ts),
   // never a platform guard id. Symmetric enforcement of the split
   // (guard-in-hooks / hook-in-guards / unknown-hook-ref) is a lint concern
   // (lintHookComposition), not a load-time throw — a load-time throw here

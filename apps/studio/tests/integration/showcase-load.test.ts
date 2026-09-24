@@ -56,9 +56,9 @@
  * ═══════════════════════════════════════════════════════════════════════
  * REAL RED PROOF (applies to every test below, house precedent —
  * `./agent-ledger.test.ts` / `./project-showcase.test.ts`'s own headers):
- * neither `forge-ui/lib/project-showcase.ts` (deriveShowcaseStats — the
+ * neither `apps/studio/lib/project-showcase.ts` (deriveShowcaseStats — the
  * sibling file currently only has its own test, no production module) nor
- * `forge-ui/lib/showcase-load.ts` exists at all. The static
+ * `apps/studio/lib/showcase-load.ts` exists at all. The static
  * `import { deriveShowcaseStats } from '@/lib/project-showcase'` and
  * `import { loadShowcase } from '@/lib/showcase-load'` below fail vitest's
  * own module-resolution step BEFORE any `test()` body runs — that

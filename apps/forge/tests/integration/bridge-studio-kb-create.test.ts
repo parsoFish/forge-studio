@@ -462,7 +462,7 @@ test('DELETE without CSRF header → 403', async () => {
 // ONLY review-band -> reviewer). Today `KbBinding` has no `band` field at
 // all — the create route only reads `binding.kind`/`binding.ref` (see
 // packages/knowledge/bridge-studio-kbs.ts ~516-551) and `serializeKbDescriptor` only ever
-// writes `{ kind, ref }` (orchestrator/studio/kb-descriptor.ts ~116-127) — so
+// writes `{ kind, ref }` (packages/knowledge/studio/kb-descriptor.ts ~116-127) — so
 // any `binding.band` sent in the POST body is silently dropped before the
 // kb.yaml is ever written.
 // ---------------------------------------------------------------------------

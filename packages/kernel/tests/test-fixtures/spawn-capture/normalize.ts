@@ -1,6 +1,6 @@
 /**
  * Characterization-test support for the PM / reflector spawn-capture tests
- * (orchestrator/pm-spawn-capture.test.ts, orchestrator/phases/reflector-spawn-
+ * (packages/factory/tests/contract/pm-spawn-capture.test.ts, orchestrator/phases/reflector-spawn-
  * capture.test.ts). These pin the EXACT `{prompt, options}` object each phase
  * passes into its injected SDK-query function today, so the R4-01 generic-
  * runnable-primitive refactor can prove byte-level no-behavioural-delta.

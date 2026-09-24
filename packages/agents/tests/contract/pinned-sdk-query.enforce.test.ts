@@ -2,7 +2,7 @@
  * G8 (2026-07 refinement) enforcement lock for the env-pin seam.
  *
  * Every SDK child spawn must route through `pinnedSdkQuery`
- * (orchestrator/pinned-sdk-query.ts) so `buildChildEnv` (orchestrator/spawn-env.ts)
+ * (packages/agents/pinned-sdk-query.ts) so `buildChildEnv` (packages/kernel/spawn-env.ts)
  * always allowlist-filters the ambient env (stripping ANTHROPIC_BASE_URL,
  * ANTHROPIC_CUSTOM_HEADERS, CLAUDE_EFFORT, HEADROOM_*, and anything else not
  * explicitly allowlisted) before a spawned child ever sees it.
@@ -50,7 +50,7 @@
  * by string concatenation escapes any static detector.
  *
  * Mirrors the frontmatter-regression-lock style of
- * orchestrator/studio/derive.test.ts (walk the tree, assert an explicit
+ * packages/agents/tests/unit/derive.test.ts (walk the tree, assert an explicit
  * invariant, guard against a vacuous pass with a "checked > 0" count).
  */
 

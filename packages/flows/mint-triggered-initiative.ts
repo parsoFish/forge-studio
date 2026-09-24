@@ -230,7 +230,7 @@ export function mintTriggeredInitiative(
       ].join('\n'),
     };
     // SEC-03 (Defect 3): route through the single write choke point
-    // (`writeManifest`, orchestrator/manifest.ts) rather than
+    // (`writeManifest`, packages/flows/manifest.ts) rather than
     // `serializeManifest` + `writeFileSync` directly. `writeManifest` runs
     // full `validateManifest` AND `assertManifestPathFields` (the SEC-02
     // containment guard on `project` / `project_repo_path` / `worktree_path` /

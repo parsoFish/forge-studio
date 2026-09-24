@@ -1,7 +1,7 @@
 /**
  * W8-A3 WI-1 — `flows-37` / `forge-chm` at the ROUTE boundary.
  *
- * `orchestrator/enqueue-flow-run-repoint.test.ts` pins the rule on the
+ * `packages/flows/tests/integration/enqueue-flow-run-repoint.test.ts` pins the rule on the
  * primitive. This file pins the two things only an over-the-wire test can
  * establish:
  *

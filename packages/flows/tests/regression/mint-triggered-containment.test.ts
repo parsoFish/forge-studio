@@ -1,9 +1,9 @@
 /**
  * ACCEPTANCE TESTS (SEC-03, T3) — Defect 3: `mintTriggeredInitiative`
- * (orchestrator/mint-triggered-initiative.ts:97) bypasses the manifest
+ * (packages/flows/mint-triggered-initiative.ts:97) bypasses the manifest
  * choke point. It writes a manifest with `serializeManifest` +
  * `writeFileSync` directly, never calling `writeManifest`
- * (orchestrator/manifest.ts:381) — the documented SINGLE place where
+ * (packages/flows/manifest.ts:381) — the documented SINGLE place where
  * `assertManifestPathFields` (SEC-02, packages/flows/manifest-path-guard.ts) validates
  * `worktree_path` / `project_repo_path` / `cycle_id` / `project`.
  *
@@ -12,7 +12,7 @@
  *      string (apps/forge/bridge-studio-writes.ts ~958-961) with NO shape/format
  *      validation anywhere — `validateFlow` never checks `flow.project`'s
  *      shape at all; `checkFlowTriggers`/`checkTargetProject`
- *      (orchestrator/studio/validate-triggers.ts) only requires it
+ *      (packages/flows/studio/validate-triggers.ts) only requires it
  *      NON-NULL/NON-EMPTY when the flow is an external-trigger TARGET, never
  *      checks its characters. A real `PUT` with
  *      `project: "../../<outside-dir>"` returns 200 with ZERO findings and
@@ -36,12 +36,12 @@
  *      That manifest lands in `_queue/pending/`, from which the SAME
  *      downstream sinks SEC-02 closed (`runRequeue`'s `rmSync(recursive)`,
  *      `finalize-merged.ts`, `drain-fix-loop.ts`'s `git -C <path>` +
- *      `spawnSync`, `orchestrator/scheduler.ts`) would read
+ *      `spawnSync`, `packages/flows/scheduler.ts`) would read
  *      `project_repo_path` as ground truth.
  *
  * CONCLUSION: the end-to-end chain (poisoned `flow.project` persisted via
  * the real PUT route → real trigger-dispatch entry point
- * (`orchestrator/flow-run-requests.ts`'s `drainFlowRunRequests`) → a written
+ * (`packages/flows/flow-run-requests.ts`'s `drainFlowRunRequests`) → a written
  * manifest carrying an out-of-`projects/` `project_repo_path`) IS reachable
  * TODAY, gated only by the attacker/operator being able to make SOME
  * directory exist at the traversed location (the same "local checkout
@@ -207,7 +207,7 @@ test('positive control (passes before AND after any fix): mintTriggeredInitiativ
 // TIER 2 — end-to-end: real PUT /api/studio/flows/:id (startBridge) → real
 // stageFlowRunRequest/drainFlowRunRequests dispatch (unmocked startFlowRun,
 // so the REAL mintTriggeredInitiative runs, exactly as the daemon's sweep
-// would invoke it — orchestrator/flow-run-requests.ts's defaultStartFlowRun).
+// would invoke it — packages/flows/flow-run-requests.ts's defaultStartFlowRun).
 // ---------------------------------------------------------------------------
 
 let e2eForgeRoot: string;
@@ -264,7 +264,7 @@ test('(RED) [Defect 3, end-to-end] a poisoned flow.project saved through the REA
 
   const sentinelBefore = readFileSync(join(e2eOutsideDir, 'SENTINEL.txt'), 'utf8');
 
-  // The REAL trigger-dispatch entry point (orchestrator/flow-run-requests.ts):
+  // The REAL trigger-dispatch entry point (packages/flows/flow-run-requests.ts):
   // stage a claimable flow-run request exactly as POST /api/hooks/:hookId
   // would after signature verification, then drain it with the DEFAULT
   // (unmocked) startFlowRun — which calls the REAL mintTriggeredInitiative,

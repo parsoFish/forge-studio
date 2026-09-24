@@ -1,6 +1,6 @@
 /**
  * AT3 (R4-13) — acceptance for the NOT-YET-EXISTING pure layout functions
- * `byDepth` / `columnFor` in forge-ui/lib/roadmap-dag-layout.ts.
+ * `byDepth` / `columnFor` in apps/studio/lib/roadmap-dag-layout.ts.
  *
  * R4-13 replaces `SerpentineTimeline` (roadmap laid out over TIME, ordered by
  * the INIT-YYYY-MM-DD date in the id) with a dependency DAG laid out over
@@ -12,7 +12,7 @@
  * CONTRACT this file pins:
  *   byDepth(initiatives: RoadmapInitiative[]): Map<initiativeId, column>
  *   columnFor(initiativeId: string, initiatives: RoadmapInitiative[]): column
- * `RoadmapInitiative` (forge-ui/lib/bridge-client.ts:199-215) carries
+ * `RoadmapInitiative` (apps/studio/lib/bridge-client.ts:199-215) carries
  * `initiativeId` and `dependsOnInitiatives: string[]`.
  *
  * KILLS:
@@ -26,7 +26,7 @@
  *    count on a pathological deep chain (the cap-guard: cap at 12, mirroring
  *    the mockup cap — see docs/reference/studio-copy.md).
  *
- * RED AT BASE: forge-ui/lib/roadmap-dag-layout.ts does NOT exist on this branch
+ * RED AT BASE: apps/studio/lib/roadmap-dag-layout.ts does NOT exist on this branch
  * yet — the `byDepth`/`columnFor` import below fails to resolve, so the whole
  * file fails to load and every test is RED until the implementer creates the
  * module. Marker to grep in the runner output: `R4-13-AT3`.

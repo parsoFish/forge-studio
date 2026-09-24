@@ -29,7 +29,7 @@ import { INTERACTIVE_LIBRARY_DIRNAME, type InstallOutcome } from './bridge-studi
 //
 // A template is ONE markdown file with gray-matter frontmatter
 // (apps/studio/app/templates/new/page.tsx's own seedContent — the manual
-// builder's precedent; orchestrator/studio/template-library.ts D1) — never a
+// builder's precedent; packages/library/studio/template-library.ts D1) — never a
 // multi-file package, unlike skill/hook. The creation-agent session drafts it
 // at the ONE canonical staging filename `staging/template.md`
 // (TEMPLATE_STAGING_FILENAME below), mirroring `SKILL.md`/`hook.yaml`'s own

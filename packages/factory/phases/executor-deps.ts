@@ -3,7 +3,7 @@
  * implementations it defaults to.
  *
  * Every import of a phase module lives in this file and its sibling
- * `executor-table.ts`; `orchestrator/flow-runner.ts` has none — that IS the
+ * `executor-table.ts`; `packages/flows/flow-runner.ts` has none — that IS the
  * port (`docs/roadmaps/1.0.md` §4 M2 Lane B, SPEC.md §2 Station). At M3 both
  * files move to `@forge/factory` with the phases they wire.
  */
@@ -104,7 +104,7 @@ export type FlowRunnerDeps = {
 
   /**
    * R4-11-F1 — the second terminal move of a confirmed merge: promotes the
-   * manifest `merged/ → done/`. `orchestrator/finalize-merged.ts` is the
+   * manifest `merged/ → done/`. `packages/flows/finalize-merged.ts` is the
    * production caller for the normal (deferred) merge-confirmation path; a
    * flow that combines a review node with a downstream reflect node in ONE
    * DAG pass (the retired forge-cycle monolith shape, kept as a generic

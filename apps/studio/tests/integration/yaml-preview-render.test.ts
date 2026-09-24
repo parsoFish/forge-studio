@@ -24,10 +24,10 @@
  * four fields above: read straight off `buildAgentPreviewModel`'s output,
  * no second hand-maintained field list.
  *
- * Render harness matches tests/integration/run-panel-render.test.ts's
+ * Render harness matches apps/studio/tests/integration/run-panel-render.test.ts's
  * precedent: `renderToStaticMarkup` over `createElement`, no jsdom.
  *
- * RUN: cd apps/studio && npx vitest run tests/integration/yaml-preview-render.test.ts
+ * RUN: cd apps/studio && npx vitest run apps/studio/tests/integration/yaml-preview-render.test.ts
  */
 import { test, expect } from 'vitest';
 import * as React from 'react';

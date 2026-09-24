@@ -87,7 +87,7 @@ test('LibraryItemActions — a blocked delete is disabled WITH the reason shown'
 
 // W8-B4 (library-46): `LibraryItemActions`' Delete used a hand-written
 // `disabled` + `title` pair instead of the ONE derivation
-// (`disabledAttrs()`, forge-ui/lib/disabled-reason.ts) — invisible to
+// (`disabledAttrs()`, apps/studio/lib/disabled-reason.ts) — invisible to
 // `scripts/check-disabled-reason.mjs`'s ratchet (it never carried
 // `data-disabled-reason`, and its non-primary className skipped it from the
 // scan entirely). Pin 5: the attribute is now driven by the ONE derivation,

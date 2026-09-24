@@ -16,14 +16,14 @@
  * re-enabled).
  *
  * Mounted via `createRoot`+`act`, following
- * `tests/regression/agent-builder-handles.test.ts`'s established pattern
+ * `apps/studio/tests/regression/agent-builder-handles.test.ts`'s established pattern
  * (no jsdom elsewhere in this repo's studio suite) — the transition under
  * test is a state update inside an async click handler, which
  * `renderToStaticMarkup` cannot observe. The page/component under test is
  * imported ONCE at module scope (never inside a test body — that shape was
  * the F5/F6 flake, fixed in #807).
  *
- * RUN: npx vitest run --root apps/studio tests/regression/contract-resolution-user-tier-run-lock.test.ts
+ * RUN: npx vitest run --root apps/studio apps/studio/tests/regression/contract-resolution-user-tier-run-lock.test.ts
  */
 import { test, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as React from 'react';

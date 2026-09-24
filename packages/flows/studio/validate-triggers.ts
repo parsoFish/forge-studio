@@ -307,14 +307,14 @@ export function checkFlowTriggers(
     // docs/decisions/027-studio-object-model.md — withdrawn 2026-08-23, W8-A1):
     // this used to special-case `on: merged` OUT of `projects:` scoping
     // entirely, because that kind dispatches INLINE from
-    // `orchestrator/finalize-merged.ts` (`resolveMergeAgentHandler`) and never
+    // `packages/flows/finalize-merged.ts` (`resolveMergeAgentHandler`) and never
     // staged a claimable `FlowRunRequest`, so `drainFlowRunRequests`'s scope
     // enforcement never ran for it — a declared scope would have been
     // silently unenforced. That gap is now closed at the SOURCE rather than
     // by making the declaration unauthorable: `decideTriggerProjectScope`
-    // (`orchestrator/flow-run-requests.ts`) is a single exported, pure
+    // (`packages/flows/flow-run-requests.ts`) is a single exported, pure
     // predicate that BOTH `drainFlowRunRequests` (the staged-request path)
-    // and `fireFlowTriggers` (`orchestrator/flow-trigger.ts`, the inline
+    // and `fireFlowTriggers` (`packages/flows/flow-trigger.ts`, the inline
     // `on: merged` path finalize-merged.ts drives) consult before dispatch —
     // one structural choke point every dispatch mechanism passes through,
     // inline dispatch included. `on: merged` therefore falls through to the

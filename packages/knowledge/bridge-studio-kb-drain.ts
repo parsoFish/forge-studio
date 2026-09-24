@@ -73,7 +73,7 @@
  * concurrent reader (the GET routes, polled by a caller) can only ever see a
  * fully-written prior or fully-written new version, never a truncated one.
  * Events land in the SAME dir's `events.jsonl` through the standard
- * `createLogger` (orchestrator/logging.ts) so a future ActivityLog (B7) can
+ * `createLogger` (packages/kernel/logging.ts) so a future ActivityLog (B7) can
  * tail it. `runBrainFixTurn`'s own thinking/reasoning sinks stream into ITS
  * OWN per-turn sub-dir (`_logs/_brainfix-<runId>__r<round>__<i>/`) — free,
  * unchanged from how consolidate's per-group turns already work.

@@ -399,7 +399,7 @@ test('POST /api/studio/projects/create (R4-03): greenfield scaffold from a templ
 // ---------------------------------------------------------------------------
 // SEC-03 round 3 (BLOCKER) — POST /api/studio/projects/create leaves a
 // HALF-CREATED project behind when seedProjectBrain rejects. See
-// orchestrator/project-create.test.ts's matching function-level test for the
+// packages/projects/tests/integration/project-create.test.ts's matching function-level test for the
 // full mechanism writeup; this is the SAME defect driven through the REAL
 // HTTP route, with the operator-visible consequence (GET /api/studio/projects
 // still lists it) asserted via the real listing route.
@@ -468,7 +468,7 @@ test('(RED) [SEC-03 round 3] POST /api/studio/projects/create: after a seedProje
 // (EACCES on copyTemplate's mkdirSync, the reference case) leaves a
 // phantom brain/projects/<id>/kb.yaml behind — visible to GET
 // /api/studio/kbs, invisible to GET /api/studio/projects. Same
-// chmod-0o500-on-projects/ mechanism as orchestrator/project-create.test.ts's
+// chmod-0o500-on-projects/ mechanism as packages/projects/tests/integration/project-create.test.ts's
 // matching test (verified deterministic there); driven here through the
 // REAL HTTP route + the REAL GET /api/studio/kbs listing route. The
 // greenfield route maps EACCES to a 400 (a pre-existing status-code

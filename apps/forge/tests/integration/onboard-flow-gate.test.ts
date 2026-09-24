@@ -44,7 +44,7 @@ const CATALOG_PATH = resolve(REPO_ROOT, 'studio', 'catalog.yaml');
 const CONTRACT_CHECK_SKILL_PATH = join(skillsDir(REPO_ROOT), 'contract-check', 'SKILL.md');
 
 // ---------------------------------------------------------------------------
-// Test helpers (mirrors orchestrator/flow-runner.test.ts's house style)
+// Test helpers (mirrors apps/forge/tests/unit/flow-runner.test.ts's house style)
 // ---------------------------------------------------------------------------
 
 function makeLogger(): EventLogger & { events: Array<Record<string, unknown>> } {

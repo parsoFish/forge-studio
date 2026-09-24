@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/mint-triggered-initiative.ts (R2-04 / ADR-041).
+ * Tests for packages/flows/mint-triggered-initiative.ts (R2-04 / ADR-041).
  *
  * Minting a fresh initiative for a cron/webhook-originated flow-run request:
  * the target flow's `project` binding supplies the project, the initiative id

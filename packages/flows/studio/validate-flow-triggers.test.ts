@@ -250,7 +250,7 @@ describe('validateFlow — trigger-agent-complete (R2-08-F2, T1 ruling #1)', () 
 /**
  * ACCEPTANCE TESTS (T3, R2-08-F1) — the `trigger-projects` lint check.
  *
- * PINNED CONTRACT: `TriggerCheckOpts` (orchestrator/studio/validate-triggers.ts)
+ * PINNED CONTRACT: `TriggerCheckOpts` (packages/flows/studio/validate-triggers.ts)
  * gains an optional `projectIds?: ReadonlySet<string>` field — mirroring the
  * existing `flowIds` opt exactly (same shape, same "omitted ⇒ skip the check"
  * precedent already established for `flowIds`/`flowProjectOf`). `checkFlowTriggers`
@@ -328,9 +328,9 @@ describe('validateFlow — trigger-projects (R2-08-F1)', () => {
  * (2026-08-07) that made `projects:` unauthorable on `on: merged` is
  * WITHDRAWN (docs/decisions/027-studio-object-model.md, addendum dated
  * 2026-08-23). Scope is now enforced at a single structural choke point —
- * `decideTriggerProjectScope` (`orchestrator/flow-run-requests.ts`) —
+ * `decideTriggerProjectScope` (`packages/flows/flow-run-requests.ts`) —
  * consulted both by `drainFlowRunRequests` (the staged-request path) and by
- * `fireFlowTriggers` (`orchestrator/flow-trigger.ts`, the inline `on: merged`
+ * `fireFlowTriggers` (`packages/flows/flow-trigger.ts`, the inline `on: merged`
  * path finalize-merged.ts drives). `on: merged` therefore now falls through
  * to the SAME shape + membership checks every other kind gets — it is no
  * longer special-cased at all.

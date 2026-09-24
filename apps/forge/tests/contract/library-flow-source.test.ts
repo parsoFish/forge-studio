@@ -1,7 +1,7 @@
 /**
  * The assembly's `FlowSource` binding — proven against the real Flow loader.
  *
- * Library's own tests supply this port from `tests/test-fixtures/flow-fixture.ts`,
+ * Library's own tests supply this port from `packages/library/tests/test-fixtures/flow-fixture.ts`,
  * because library (rank 2) may not import `@forge/flows` (rank 5) even in a
  * test. That leaves one thing unproven on that side: whether the REAL loader
  * answers what those fixtures assume. This file is that proof, and it is the

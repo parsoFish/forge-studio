@@ -61,7 +61,7 @@ const UI_BRIDGE_PATH = join(REPO_ROOT, 'apps', 'forge', 'ui-bridge.ts');
 
 const AUTHORING_ID = 'authoring';
 
-/** Extracts `orchestrator/interactive-runner.ts`'s `cycleId` template
+/** Extracts `packages/sessions/interactive-runner.ts`'s `cycleId` template
  *  literal, RAW (unevaluated source text) — e.g. today:
  *  `"_interactive-${descriptor.id}-${ctx.sessionId}"`. Anchored on the exact
  *  `const cycleId = \`...\`;` declaration shape; robust to incidental

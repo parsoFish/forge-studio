@@ -1,6 +1,6 @@
 /**
  * DOM regression tests for `OnboardWithAgent.tsx`
- * (forge-ui/components/studio/project-builder/OnboardWithAgent.tsx) — W6-B14's
+ * (apps/studio/components/studio/project-builder/OnboardWithAgent.tsx) — W6-B14's
  * extraction out of `app/projects/[id]/page.tsx` (a page-route file can only
  * export the reserved Next.js route symbols; a named export would fail
  * `next build` — same reasoning `run-panel-render.test.ts`'s header documents

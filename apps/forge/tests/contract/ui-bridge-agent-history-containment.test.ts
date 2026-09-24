@@ -501,7 +501,7 @@ test('ESCAPE 5 (session status.json file symlink): a poisoned status.json symlin
   assert.equal(status, 200);
   const rows = (body as { rows: Row[] }).rows;
 
-  // KILLS: `readSessionStatus` (orchestrator/interactive-session.ts) — a
+  // KILLS: `readSessionStatus` (packages/sessions/interactive-session.ts) — a
   // plain existsSync/readFileSync with no realpath containment, the exact
   // function `bridge-studio-sessions.ts`'s own docstring calls out this
   // route for using ("never readSessionStatus") — this collector currently

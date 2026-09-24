@@ -2,7 +2,7 @@
  * ACCEPTANCE TESTS (T3, R2-08-F4) — the trigger-provenance READ API, driven
  * at the REAL bridge routes (not by calling handler functions directly).
  *
- * Pins two surfaces (docs/roadmaps/R2-runnable-componentry.md R2-08-F4 +
+ * Pins two surfaces (docs/roadmaps/archive/R2-runnable-componentry.md R2-08-F4 +
  * docs/decisions/027-studio-object-model.md "Run-model trigger provenance"):
  *
  *  1. The EXISTING `GET /api/runs` / `GET /api/runs/<id>` routes
@@ -21,8 +21,8 @@
  * — grep of cli/*.ts confirms no route matches that path — so every
  * `/api/triggers` assertion here is RED by construction (404/fallthrough)
  * until F4 adds the route. The `/api/runs` assertions are RED because
- * `Run` carries no `trigger` field (orchestrator/run-model.test.ts's sibling
- * file, orchestrator/trigger-provenance.test.ts, pins the same gap at the
+ * `Run` carries no `trigger` field (packages/flows/tests/integration/run-model.test.ts's sibling
+ * file, packages/flows/tests/integration/trigger-provenance.test.ts, pins the same gap at the
  * derivation layer; this file pins it at the wire/HTTP layer).
  */
 
