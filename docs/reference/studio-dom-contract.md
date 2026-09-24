@@ -3125,8 +3125,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-roadmap-node][data-initiative-id][data-action="open-initiative-<id>"]
   [data-initiative-status]` (+
   `[data-develop-state][data-plan-state][data-initiative-ready][data-blocked-by]
-  [data-initiative-collapsed="true"][data-completed-at]` — the last only when
-  derivable). **Every card is now PERMANENTLY collapsed** — canvas geometry
+  [data-initiative-collapsed="true"][data-completed-at][data-initiative-flow-id]`
+  — the last two only when derivable). `data-initiative-flow-id` (M7 findings
+  row 59) carries the initiative manifest's own `flow_id` BESIDE
+  `data-initiative-status` — never a substitute for it, never renamed into
+  it: forge-architect and forge-develop both terminate at the SAME status
+  word (`ready-for-review`), which `tests/stories/S10.story.mjs` asserts as
+  a load-bearing `data-initiative-status` value, so the flow id is the only
+  way a card (or `report.md`'s header, which renders it the same way beside
+  `Status:`) can be told apart from its sibling flow's identical terminal
+  status. Absent (never fabricated) for a manifest that carries no
+  `flow_id`. **Every card is now PERMANENTLY collapsed** — canvas geometry
   never reflows on selection (operator ruling, mock decision point P5), so
   `data-initiative-collapsed` never flips to `"false"` and there is no more
   per-node inline-expand toggle (`[data-action="toggle-node-detail"]` is
@@ -3355,11 +3364,18 @@ is what this contract reads — but it cannot be the only distinguisher.
   run gets `[data-action="cancel-onboarding"][data-cancel-armed]` (two-step
   → the A2 session-cancel route, which really kills the tracked dispatch
   pid); the run id links to its run page via
-  `[data-action="open-onboarding-run"]`; and a TERMINAL reattach renders
+  `[data-action="open-onboarding-run"]`; and a TERMINAL reattach — **⚑
+  forge-6gv.13.1 (projects-42): OR a LEAKED one, the dispatch process dead
+  with no terminal marker ever written** (the reattach no longer trusts the
+  session's raw `phase: 'running'` alone; it folds in the bridge's
+  additively-derived `lifecycle` via `onboardReattachIsLive`, the SAME
+  canonical staleness rule every session surface applies) — renders
   `[data-section="onboard-last-run"][data-last-run-id][data-last-run-status]`
-  — when it ran, how it ended, its cost/ceiling, its `outputRefs` (what the
-  agent wrote, `[data-component="onboard-last-run-outputs"]`) and links to
-  the run page + session — instead of silently resetting to idle.
+  — when it ran, how it ended (a leaked run honestly reads
+  `data-last-run-status="stalled"`, never an indefinite `"running"`), its
+  cost/ceiling, its `outputRefs` (what the agent wrote, `[data-component=
+  "onboard-last-run-outputs"]`) and links to the run page + session —
+  instead of silently resetting to idle or claiming a dead run is live.
   A recoverable initiative (`in-flight | ready-for-review | failed` —
   deliberately excluding `merged`, a transient pass-through, and terminal
   `pending`/`done`) gets recovery affordances inside its **drawer**

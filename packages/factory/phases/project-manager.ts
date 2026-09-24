@@ -41,6 +41,7 @@ import { rejectWorkItemSet } from './pm-rejected-set.ts';
 import { writeDecompositionDoc } from './pm-decomposition-doc.ts';
 import { readPmBrainContext, readProjectContext } from './pm-prompt-context.ts';
 import { underDecomposedFlag } from './pm-class-set-rules.ts';
+import { deriveKbIdFromBrainPath } from '@forge/knowledge';
 
 /**
  * Injection seam for tests. The live cycle uses the pinned stream query;
@@ -129,15 +130,6 @@ type PmPassOutcome =
   | { kind: 'success' }
   | { kind: 'failure'; summary: string };
 
-/**
- * The KB id a `brain/...` path belongs to (ADR 018 layout: `brain/<kb>/...`
- * or `brain/projects/<kb>/...`). Local copy — replace with
- * `@forge/knowledge`'s `deriveKbIdFromBrainPath` once the architect
- * brain-read PR (branch `m7/c-architect-brain-read`) lands.
- */
-function deriveKbIdFromBrainPath(path: string): string | undefined {
-  return path.match(/^brain\/(?:projects\/)?([^/]+)\//)?.[1];
-}
 
 /**
  * Run the PM pass against the SDK, validate the emitted work-items, and
