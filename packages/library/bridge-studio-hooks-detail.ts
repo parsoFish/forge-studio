@@ -17,13 +17,13 @@
 
 import type { AgentFacts } from './studio/agent-facts.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, statSync, openSync, readSync, closeSync } from 'node:fs';
 import { resolveGuardedPath } from '@forge/kernel';
 import yaml from 'js-yaml';
 
-import { sendJson, allowedOrigin, sanitizeError, pathOnly, listCycles, guardedReadFile, type StudioContext, type RouteContext, type EventLogEntry } from '@forge/kernel';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, listCycles, type StudioContext, type RouteContext } from '@forge/kernel';
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
-import { deriveHookFireSummary } from './studio/hook-fire-summary.ts';
+import { scanHookFireSummary, HOOK_FIRE_SCAN_MAX_CYCLES } from './studio/hook-fire-summary.ts';
 import {
   hooksDir,
   listHookLibrary,
@@ -43,6 +43,12 @@ import { hookRunState, readHookApprovalLedger, readHookDeclinedLedger } from './
 // maintained views that can drift.
 import { readHookPackage, hashHookPackage, hashHookScript } from './studio/hook-package.ts';
 import { decodeIdSegment, locateHook, parseCreatePermissions, hookWireFields, HOOK_ID_RE } from './bridge-studio-hooks.ts';
+
+/** M7-C U2 review — how much of one cycle's `events.jsonl` the last-fire
+ *  scan reads when the file is too big to read whole (mirrors
+ *  `STDERR_TAIL_BYTES`, `packages/sessions/bridge-studio-lifecycle.ts`, a
+ *  larger magnitude since JSONL rows are denser than a stderr stream). */
+const HOOK_FIRE_SCAN_TAIL_BYTES = 64 * 1024;
 
 /**
  * PUT /api/studio/hooks/:id — edit (W7-B4, library-08).
@@ -209,31 +215,63 @@ export async function handleHookDetail(req: IncomingMessage, res: ServerResponse
       const runState = hookRunState(ctx.forgeRoot, id);
       const ledgerEntry = readHookApprovalLedger(ctx.forgeRoot).get(id);
       const declinedEntry = readHookDeclinedLedger(ctx.forgeRoot).get(id);
-      // forge-8vfn.5.16 (M7-C U2) — last-fire facts. Mirrors the ingest-
-      // activity route's own scan (packages/knowledge/bridge-studio-kb-
-      // routes-maintenance.ts): every cycle's events.jsonl, read through the
-      // SAME guarded primitive, cycleId never folded into the path. The
-      // folding itself (latest-wins, full count, null when never fired) is
-      // `deriveHookFireSummary`'s job, not this route's.
-      const fireEvents: EventLogEntry[] = [];
-      for (const cycleId of listCycles(ctx.logsRoot)) {
-        const raw = guardedReadFile(ctx.logsRoot, [cycleId, 'events.jsonl']);
-        if (raw === null) continue;
-        for (const line of raw.split('\n')) {
-          if (!line.trim()) continue;
-          try { fireEvents.push(JSON.parse(line) as EventLogEntry); } catch { continue; }
+      // forge-8vfn.5.16 (M7-C U2, T2 review of 95cb287f) — last-fire facts,
+      // BOUNDED. A hook can fire from ANY agent spawn (flow cycles,
+      // one-shot `_agent-*` runs, interactive session kinds, bridge
+      // writes), so — unlike the ingest-activity route's `reflect.kb-
+      // ingest` scan, which only ever comes from a flow cycle's ISO-
+      // prefixed, lexically-sortable id — recency here cannot be read off
+      // the cycle id string and comes from directory mtime instead
+      // (mirrors `sortEntriesByMtimeDesc`, M7-C #834). Opens at most
+      // `HOOK_FIRE_SCAN_MAX_CYCLES` cycle dirs, newest-first, and reads at
+      // most `HOOK_FIRE_SCAN_TAIL_BYTES` of each one's `events.jsonl` (the
+      // whole file when smaller — same shape as `guardedReadFileTail`,
+      // `packages/sessions/bridge-studio-lifecycle.ts`). The wire field is
+      // named `recentFireCount`, not `fireCount`: a fire recorded only in a
+      // cycle older than the scanned window is honestly invisible.
+      const guardedCycleMtime = (cycleId: string): number => {
+        const guarded = resolveGuardedPath(ctx.logsRoot, [cycleId]);
+        if (!guarded.ok || !guarded.exists) return -Infinity; // rejected/absent sorts last
+        try { return statSync(guarded.realPath).mtimeMs; } catch { return -Infinity; }
+      };
+      const guardedEventsTail = (cycleId: string): string | null => {
+        const guarded = resolveGuardedPath(ctx.logsRoot, [cycleId, 'events.jsonl']);
+        if (!guarded.ok || !guarded.exists) return null;
+        let fd: number | null = null;
+        try {
+          const size = statSync(guarded.realPath).size; // guard-terminal: realPath IS the guard's own output
+          const start = Math.max(0, size - HOOK_FIRE_SCAN_TAIL_BYTES);
+          const length = size - start;
+          if (length === 0) return '';
+          fd = openSync(guarded.realPath, 'r');
+          const buf = Buffer.alloc(length);
+          readSync(fd, buf, 0, length, start);
+          const text = buf.toString('utf8');
+          // A truncated tail's first line may be a partial JSON fragment;
+          // a whole-file read (start===0) keeps everything.
+          if (start === 0) return text;
+          const nl = text.indexOf('\n');
+          return nl === -1 ? '' : text.slice(nl + 1);
+        } catch {
+          return null;
+        } finally {
+          if (fd !== null) { try { closeSync(fd); } catch { /* ignore */ } }
         }
-      }
-      const fireSummary = deriveHookFireSummary(fireEvents, id);
+      };
+      const fireSummary = scanHookFireSummary(
+        id,
+        { listCycleIds: () => listCycles(ctx.logsRoot), mtimeOf: guardedCycleMtime, readTail: guardedEventsTail },
+        HOOK_FIRE_SCAN_MAX_CYCLES,
+      );
 
       sendJson(res, 200, {
         ok: true,
         ...hookWireFields(entry, runState, ledgerEntry, declinedEntry),
-        // fireCount is always present (0 = "scanned, found none", the same
-        // idiom data-hook-carried-by-count already uses); lastFireAt/
-        // lastFireOutcome stay ABSENT — never fabricated — for a hook that
-        // has never fired.
-        fireCount: fireSummary?.fireCount ?? 0,
+        // recentFireCount is always present (0 = "scanned the window, found
+        // none", the same idiom data-hook-carried-by-count already uses);
+        // lastFireAt/lastFireOutcome stay ABSENT — never fabricated — for a
+        // hook with no fire in the scanned window.
+        recentFireCount: fireSummary?.fireCount ?? 0,
         ...(fireSummary ? { lastFireAt: fireSummary.lastFireAt, lastFireOutcome: fireSummary.lastFireOutcome } : {}),
         // W7-B4 (library-09): the approval RECORD the resolved-state panel
         // renders — approvedAt + the distinct overridden act + its reason.
