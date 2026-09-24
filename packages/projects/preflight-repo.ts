@@ -12,16 +12,38 @@ import { join } from 'node:path';
 
 import type { ClauseResult } from '@forge/kernel';
 
-// C2: forge scratch the project repo MUST NOT track these paths (else every
-// cycle commits orchestration state into the PR — the W4 reviewer-confusion
-// bug). Checked via git-truth: a path violates C2 if it is tracked by git
-// (`git ls-files --error-unmatch` succeeds) OR not ignored by git
-// (`git check-ignore -q` fails), in either case relative to the project dir.
-// NOTE: the scratch dir is `.forge/work-items/` (regenerated per cycle), NOT
-// `.forge/` wholesale — `.forge/project.json` + `.forge/quality_gate_cmd` are
-// tracked CONTRACT CONFIG every conformant project keeps, so flagging `.forge/`
-// here false-failed them.
-export const SCRATCH_PATHS = ['.forge/work-items/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
+// C2 policy (ruling 92, bead forge-8vfn.8.1.2): SCRATCH_PATHS MUST be
+// untracked+ignored — `.forge/work-items/`, `.forge/.create-complete`, NOT
+// `.forge/` wholesale. TRACKED_CONFIG_PATHS is the inverse, the ONE single
+// source (also read by `pr-branch-sync.ts` + `reset.ts`) of what under
+// `.forge/` is tracked: `.forge/project.json`, `.forge/quality_gate_cmd`,
+// `.forge/skills/` — a blanket `.forge/` ignore violates BOTH lists.
+export const SCRATCH_PATHS = ['.forge/work-items/', '.forge/.create-complete', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
+export const TRACKED_CONFIG_PATHS = ['.forge/project.json', '.forge/quality_gate_cmd', '.forge/skills/'];
+
+/** `git -C dir rev-parse --git-dir` — shared so `reset.ts`'s gitignore drift
+ *  branches on the SAME git-vs-text-scan decision C2 does. */
+export function isGitRepoDir(dir: string): boolean {
+  return spawnSync('git', ['-C', dir, 'rev-parse', '--git-dir'], { stdio: 'ignore' }).status === 0;
+}
+
+/** Sentinel-child probe for a `TRACKED_CONFIG_PATHS` dir entry (judges the
+ *  FUTURE ignore truth; a file entry is probed directly) — reused by
+ *  `reset.ts` so the two can never disagree on which probe to use. */
+export function trackedConfigProbe(p: string): string {
+  return p.endsWith('/') ? `${p.replace(/\/$/, '')}/.forge-c2-tracked-probe` : p;
+}
+
+/** True iff one of `lines` (pre-trimmed, comments/blanks dropped) covers
+ *  `target`, itself or an ancestor dir — the non-git text-scan fallback,
+ *  reused (not re-implemented) by `reset.ts`. */
+export function giTextCovers(lines: readonly string[], target: string): boolean {
+  const stripped = target.replace(/^\//, '').replace(/\/$/, '');
+  return lines.some((l) => {
+    const ln = l.replace(/^\//, '').replace(/\/$/, '');
+    return ln === stripped || stripped.startsWith(`${ln}/`);
+  });
+}
 
 // --- C2: scratch hygiene (HARD) ---
 
@@ -41,14 +63,9 @@ export const SCRATCH_PATHS = ['.forge/work-items/', 'AGENT.md', 'PROMPT.md', 'fi
  * repo, we fall back to the `.gitignore` text-scan (best-effort).
  */
 function checkC2(dir: string): ClauseResult {
-  const base = { clause: 'C2' as const, title: 'Scratch hygiene (forge scratch untracked + ignored)', hard: true };
+  const base = { clause: 'C2' as const, title: 'Scratch hygiene (forge scratch ignored; contract config trackable)', hard: true };
 
-  // Determine whether this is a git repo at all.
-  const isRepo = spawnSync('git', ['-C', dir, 'rev-parse', '--git-dir'], {
-    stdio: 'ignore',
-  }).status === 0;
-
-  if (!isRepo) {
+  if (!isGitRepoDir(dir)) {
     // No git repo — fall back to .gitignore text-scan (best-effort).
     const giPath = join(dir, '.gitignore');
     if (!existsSync(giPath)) {
@@ -56,7 +73,7 @@ function checkC2(dir: string): ClauseResult {
         ...base,
         pass: false,
         detail:
-          'not a git repo and no .gitignore — forge scratch (.forge/, AGENT.md, PROMPT.md, fix_plan.md) would be committed into the PR',
+          'not a git repo and no .gitignore — forge scratch (.forge/work-items/, .forge/.create-complete, AGENT.md, PROMPT.md, fix_plan.md) would be committed into the PR',
       };
     }
     const lines = readFileSync(giPath, 'utf8')
@@ -64,27 +81,17 @@ function checkC2(dir: string): ClauseResult {
       .map((l) => l.trim())
       .filter((l) => l && !l.startsWith('#'));
     // A scratch path is covered if .gitignore lists it OR an ancestor dir of it
-    // (e.g. `.forge/` covers `.forge/work-items/`).
-    const isCovered = (p: string): boolean => {
-      const stripped = p.replace(/^\//, '').replace(/\/$/, '');
-      return lines.some((l) => {
-        const ln = l.replace(/^\//, '').replace(/\/$/, '');
-        return ln === stripped || stripped.startsWith(`${ln}/`);
-      });
-    };
-    const missing = SCRATCH_PATHS.filter((p) => !isCovered(p));
-    if (missing.length > 0) {
-      return {
-        ...base,
-        pass: false,
-        detail: `not a git repo; .gitignore does not exclude: ${missing.join(', ')}`,
-      };
+    // (e.g. `.forge/work-items/` covers `.forge/work-items/wi-1.md`).
+    const missing = SCRATCH_PATHS.filter((p) => !giTextCovers(lines, p));
+    const wronglyIgnored = TRACKED_CONFIG_PATHS.filter((p) => giTextCovers(lines, p)); // inverse (ruling 92)
+    if (missing.length > 0 || wronglyIgnored.length > 0) {
+      const bad = [
+        missing.length > 0 ? `does not exclude ${missing.join(', ')}` : null,
+        wronglyIgnored.length > 0 ? `wrongly ignores tracked contract config ${wronglyIgnored.join(', ')}` : null,
+      ].filter((s): s is string => s !== null);
+      return { ...base, pass: false, detail: `not a git repo; .gitignore ${bad.join('; ')}` };
     }
-    return {
-      ...base,
-      pass: true,
-      detail: `not a git repo; .gitignore covers all forge scratch (${SCRATCH_PATHS.join(', ')})`,
-    };
+    return { ...base, pass: true, detail: `not a git repo; .gitignore covers scratch (${SCRATCH_PATHS.join(', ')}) and leaves config trackable` };
   }
 
   // Git-truth check: a scratch path violates C2 if tracked OR not ignored.
@@ -148,21 +155,22 @@ function checkC2(dir: string): ClauseResult {
     }
   }
 
-  if (violations.length > 0) {
-    return {
-      ...base,
-      pass: false,
-      detail:
-        `forge scratch violates git-truth hygiene: ${violations.join('; ')}. ` +
-        'Add these to .gitignore AND ensure they are not already tracked ' +
-        '(`git rm --cached <path>` if needed).',
-    };
+  // Inverse (ruling 92): same sentinel-child probe, but a VIOLATION if ignored.
+  const configViolations: string[] = [];
+  for (const p of TRACKED_CONFIG_PATHS) {
+    if (spawnSync('git', ['-C', dir, 'check-ignore', '-q', trackedConfigProbe(p)], { stdio: 'ignore' }).status === 0) {
+      configViolations.push(`${p} (ignored — tracked contract config must stay trackable)`);
+    }
   }
-  return {
-    ...base,
-    pass: true,
-    detail: `git-truth: all forge scratch paths (${SCRATCH_PATHS.join(', ')}) are untracked + ignored`,
-  };
+
+  if (violations.length > 0 || configViolations.length > 0) {
+    const bad = [
+      violations.length > 0 ? `forge scratch violates git-truth hygiene: ${violations.join('; ')}` : null,
+      configViolations.length > 0 ? `tracked contract config violates git-truth hygiene: ${configViolations.join('; ')}` : null,
+    ].filter((s): s is string => s !== null);
+    return { ...base, pass: false, detail: `${bad.join('. ')}. Fix with .gitignore edits + \`git rm --cached <path>\` if a scratch path is already tracked.` };
+  }
+  return { ...base, pass: true, detail: `git-truth: scratch (${SCRATCH_PATHS.join(', ')}) untracked+ignored; config (${TRACKED_CONFIG_PATHS.join(', ')}) trackable` };
 }
 
 // --- C6: a satisfiable merge model (ADVISORY — forge-side-satisfied) ---

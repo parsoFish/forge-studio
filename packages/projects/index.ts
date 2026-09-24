@@ -56,7 +56,7 @@ export {
   runPreflight,
   formatPreflightReport,
   buildVerdictEvent,
-  SCRATCH_PATHS,
+  SCRATCH_PATHS, TRACKED_CONFIG_PATHS,
   SCAFFOLD_BUILD_OUTPUT_IGNORES,
 } from './preflight.ts';
 export type { ClauseId } from './preflight.ts';

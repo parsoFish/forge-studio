@@ -51,6 +51,10 @@ function printDriftReport(drift: DriftReport): void {
       console.log(`  ${move.id}: ${move.from ?? '(no source found)'} -> ${move.to}`);
     }
   }
+  if (drift.gitignoreDrift.action === 'regenerate') {
+    console.log('');
+    console.log('.gitignore: [regenerate] a tracked-config line (e.g. a blanket .forge/) is being replaced with the canonical scratch stanza');
+  }
 }
 
 /**
@@ -139,7 +143,7 @@ export function cmdProjectReset(args: string[]): number {
   try {
     const result = applyContractReset(projectRoot, drift);
     console.log('');
-    console.log(`applied ${result.applied.length} section(s); moved ${result.skillMovesApplied.length} skill dir(s)`);
+    console.log(`applied ${result.applied.length} section(s); moved ${result.skillMovesApplied.length} skill dir(s); .gitignore ${result.gitignoreFixed ? 'rewritten' : 'unchanged'}`);
     console.log(`preflight: ${result.preflight.ok ? 'MET' : 'NOT MET'}`);
     return result.preflight.ok ? 0 : 1;
   } catch (err) {
