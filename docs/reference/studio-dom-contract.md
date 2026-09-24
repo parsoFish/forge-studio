@@ -4606,7 +4606,17 @@ is what this contract reads — but it cannot be the only distinguisher.
     `[data-action="view-architect-session"]`); the KB hand-off was one of the
     six sites that kept the old shape. Rendered only when `seedSession` is
     present in the query. Harness coverage: `tests/stories/S6.story.mjs`
-    beats 4-7.
+    beats 4-7. `knowledge-38` (forge-6gv.6.1): the banner's TEXT is no longer
+    a hardcoded "…is running for it" claim off the query param's mere
+    presence — `startProjectBrain` always mints a fresh session at phase
+    `'briefing'` (idle, waiting for the operator's brief), so that claim was
+    wrong on every single KB creation. The banner now fetches the session's
+    real phase (`fetchProjectBrainSessions`) and renders
+    `lib/kb-seed-banner.ts`'s `kbSeedBannerCopy` derivation, carrying two new
+    attributes: `data-seed-session-phase` (the real phase, or `''` before
+    the read lands / if it fails — never a guessed value) and
+    `data-seed-session-running="true"|"false"` (true only for `'analyzing'`/
+    `'committing'` — the phases where an agent is genuinely doing something).
   - **KB selector zero-state (W6-IA-4 sweep finding C4#2).**
     `KbSelector.tsx`'s `#kb-select` used to render a genuinely empty
     `<select>` (zero `<option>`s) whenever the roster was empty — nothing to
