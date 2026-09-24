@@ -88,7 +88,7 @@
 import { fixtureAgentFacts, writeFixtureAgent } from '../test-fixtures/agent-fixture.ts';
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
@@ -109,6 +109,7 @@ import {
   listHookLibrary,
   lintHookDefinitions,
   lintHookComposition,
+  resolveHookScriptPath,
   type HookDefinition,
   type HookPermissionManifest,
   type HookLibraryEntry,
@@ -357,6 +358,90 @@ describe('loadHookDefinition: script must resolve INSIDE the hook dir (security 
     writeHookPackage(root, 'nested-script-hook', { script: 'scripts/deep/run.sh' });
     const def = loadHookDefinition('nested-script-hook', root);
     assert.equal(def.script, 'scripts/deep/run.sh');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveHookScriptPath — symlinked hook-dir PARENT (forge-8vfn.8.3.2).
+// The old boundary was built from `resolve(hookDirPath)` (lexical, never
+// realpathed) while the symlink check compared a FULLY realpathed script
+// path against it — so a hook dir reached through a symlinked ANCESTOR (not
+// the script itself) mismatched even for a perfectly legitimate script.
+// Each fixture here builds the real package under `<base>/real-hooks-
+// storage/<id>/`, then makes `<root>/studio/hooks` a SYMLINK to that real
+// location — `hookDir(id, root)` is therefore only reachable via the
+// symlinked ancestor, never a symlink on the script leaf itself (that shape
+// is already covered by "rejects a symlink inside the hook dir..." above).
+// ---------------------------------------------------------------------------
+
+describe('resolveHookScriptPath: symlinked hook-dir PARENT (forge-8vfn.8.3.2)', () => {
+  it('(a) accepts a legitimate script reached through a symlinked hook-dir ancestor — today wrongly refused', () => {
+    const base = makeForgeRoot();
+    const real = join(base, 'real-hooks-storage');
+    const id = 'via-symlinked-parent';
+    mkdirSync(join(real, id), { recursive: true });
+    writeFileSync(join(real, id, 'run.sh'), '#!/usr/bin/env bash\necho ok\n', 'utf8');
+    writeFileSync(
+      join(real, id, 'hook.yaml'),
+      yaml.dump({ id, name: id, description: 'x', on: 'PreToolUse', script: 'run.sh', permissions: DEFAULT_PERMISSIONS }),
+      'utf8',
+    );
+    const root = makeForgeRoot();
+    mkdirSync(join(root, 'studio'), { recursive: true });
+    symlinkSync(real, join(root, 'studio', 'hooks'));
+
+    assert.doesNotThrow(() => loadHookDefinition(id, root));
+  });
+
+  it('(b) still rejects a script that symlinks outside its real hook dir, even when the hook dir itself is reached through a symlinked parent', () => {
+    const base = makeForgeRoot();
+    const real = join(base, 'real-hooks-storage');
+    const id = 'via-symlinked-parent-escape';
+    mkdirSync(join(real, id), { recursive: true });
+    const outsideTarget = join(real, 'outside-secret.sh'); // a SIBLING of <id>, not inside it
+    writeFileSync(outsideTarget, '#!/usr/bin/env bash\necho leaked\n', 'utf8');
+    symlinkSync(outsideTarget, join(real, id, 'run.sh'));
+    writeFileSync(
+      join(real, id, 'hook.yaml'),
+      yaml.dump({ id, name: id, description: 'x', on: 'PreToolUse', script: 'run.sh', permissions: DEFAULT_PERMISSIONS }),
+      'utf8',
+    );
+    const root = makeForgeRoot();
+    mkdirSync(join(root, 'studio'), { recursive: true });
+    symlinkSync(real, join(root, 'studio', 'hooks'));
+
+    assert.throws(() => loadHookDefinition(id, root));
+  });
+
+  it('(c) returns the fully REALPATHED script path (existing script) — never the symlinked-ancestor-relative literal', () => {
+    const base = makeForgeRoot();
+    const real = join(base, 'real-hooks-storage');
+    const id = 'returns-realpath';
+    mkdirSync(join(real, id), { recursive: true });
+    const realHookDir = realpathSync(join(real, id));
+    writeFileSync(join(real, id, 'run.sh'), '#!/usr/bin/env bash\necho ok\n', 'utf8');
+    const root = makeForgeRoot();
+    mkdirSync(join(root, 'studio'), { recursive: true });
+    symlinkSync(real, join(root, 'studio', 'hooks'));
+
+    const hookDirPath = join(root, 'studio', 'hooks', id); // lexical, only reachable via the symlink
+    const resolved = resolveHookScriptPath(hookDirPath, 'run.sh');
+    assert.equal(resolved, join(realHookDir, 'run.sh'));
+    assert.notEqual(resolved, join(hookDirPath, 'run.sh')); // proves it actually resolved THROUGH the symlink
+  });
+
+  it('(c2) for a script that does not exist yet, returns the lexical join beneath the REALPATHED hook dir', () => {
+    const base = makeForgeRoot();
+    const real = join(base, 'real-hooks-storage');
+    const id = 'nonexistent-script';
+    mkdirSync(join(real, id), { recursive: true });
+    const root = makeForgeRoot();
+    mkdirSync(join(root, 'studio'), { recursive: true });
+    symlinkSync(real, join(root, 'studio', 'hooks'));
+
+    const hookDirPath = join(root, 'studio', 'hooks', id);
+    const resolved = resolveHookScriptPath(hookDirPath, 'missing.sh');
+    assert.equal(resolved, join(realpathSync(join(real, id)), 'missing.sh'));
   });
 });
 
