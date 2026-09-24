@@ -130,6 +130,16 @@ type PmPassOutcome =
   | { kind: 'failure'; summary: string };
 
 /**
+ * The KB id a `brain/...` path belongs to (ADR 018 layout: `brain/<kb>/...`
+ * or `brain/projects/<kb>/...`). Local copy — replace with
+ * `@forge/knowledge`'s `deriveKbIdFromBrainPath` once the architect
+ * brain-read PR (branch `m7/c-architect-brain-read`) lands.
+ */
+function deriveKbIdFromBrainPath(path: string): string | undefined {
+  return path.match(/^brain\/(?:projects\/)?([^/]+)\//)?.[1];
+}
+
+/**
  * Run the PM pass against the SDK, validate the emitted work-items, and
  * emit telemetry. Returns a discriminated outcome rather than throwing so
  * the outer orchestrator can decide how to handle failure.
@@ -211,7 +221,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // to attribute to one KB reliably.
   const brainReadKbs = new Map<string, number>();
   for (const b of brainContext) {
-    const kbId = b.path.match(/^brain\/(?:projects\/)?([^/]+)\//)?.[1];
+    const kbId = deriveKbIdFromBrainPath(b.path);
     if (kbId) brainReadKbs.set(kbId, (brainReadKbs.get(kbId) ?? 0) + 1);
   }
   for (const [kbId, themeCount] of brainReadKbs) {
