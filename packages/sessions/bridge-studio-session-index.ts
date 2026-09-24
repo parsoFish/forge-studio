@@ -230,7 +230,12 @@ export function listDemoSessions(projectsRoot: string): DemoBuilderStatus[] {
   }
   return out;
 }
-function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: string; logsRoot: string }): SessionIndexRow[] {
+/** `rows` — every row the registered-kind loop below finds. `unknownKinds` —
+ *  forge-7kzj's diagnostic: bare kind ids with a real `_*` session dir on
+ *  disk that no registered kind claims (see {@link discoverUnknownSessionKindIds}). */
+type SessionIndexCollection = { rows: SessionIndexRow[]; unknownKinds: string[] };
+
+function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: string; logsRoot: string }): SessionIndexCollection {
   const descriptors = loadSessionKinds(ctx.forgeRoot);
   const rows: SessionIndexRow[] = [];
   // W8-B3 (sessions-kinds-R06/31) — resolved ONCE PER KIND for this request,
@@ -338,7 +343,42 @@ function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: s
       }
     }
   }
-  return rows;
+  return { rows, unknownKinds: discoverUnknownSessionKindIds(ctx.projectsRoot, descriptors) };
+}
+
+/**
+ * forge-7kzj — the loop above iterates the REGISTRY one way only
+ * (`loadSessionKinds` -> probe disk per known kind), so a project dir for a
+ * kind NOT in `studio/session-kinds.yaml` (a retired kind's leftover
+ * sessions, or a kind dropped without a migration) is never visited: 0
+ * rows, no diagnostic. This scans the OTHER direction — every project's own
+ * `_*` dirs, against the registered kind-dir-name set (`_${id}`, the same
+ * convention the generic branch above assumes) — so the gap is a counted,
+ * named finding the /sessions page can surface instead of a silent drop.
+ * Returns sorted, deduped bare kind ids (no leading `_`).
+ */
+function discoverUnknownSessionKindIds(projectsRoot: string, descriptors: readonly SessionKindDescriptor[]): string[] {
+  const knownDirNames = new Set(descriptors.map((d) => `_${d.id}`));
+  const unknown = new Set<string>();
+  let projects: string[];
+  try {
+    projects = existsSync(projectsRoot) ? readdirSync(projectsRoot, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name) : [];
+  } catch {
+    projects = [];
+  }
+  for (const project of projects) {
+    let entries: string[];
+    try {
+      entries = readdirSync(join(projectsRoot, project), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+    } catch {
+      continue;
+    }
+    for (const name of entries) {
+      if (!name.startsWith('_') || knownDirNames.has(name)) continue;
+      unknown.add(name.slice(1));
+    }
+  }
+  return [...unknown].sort();
 }
 
 /** Deterministic ordering + bound for the aggregate sessions index —
@@ -389,10 +429,10 @@ export async function handleStudioSessionsIndex(
   const origin = allowedOrigin(req);
   try {
     const activeOnly = parseQuery(url).get('active') === '1';
-    const allRows = collectStudioSessionIndexRows({ forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, logsRoot: ctx.logsRoot });
+    const { rows: allRows, unknownKinds } = collectStudioSessionIndexRows({ forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, logsRoot: ctx.logsRoot });
     const filtered = activeOnly ? allRows.filter((r) => !r.terminal) : allRows;
     const sessions = sortAndCapSessionIndexRows(filtered);
-    sendJson(res, 200, { sessions, cap: SESSION_INDEX_MAX_ROWS }, origin);
+    sendJson(res, 200, { sessions, cap: SESSION_INDEX_MAX_ROWS, unknownKinds }, origin);
   } catch (err) {
     sendJson(res, 500, { error: sanitizeError(err) }, origin);
   }

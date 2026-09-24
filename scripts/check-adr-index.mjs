@@ -20,7 +20,7 @@
  * Usage: node scripts/check-adr-index.mjs
  */
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -118,7 +118,7 @@ function main() {
     if (fileMatch[1] !== number) {
       violations.push(`Active row ${number} links to "${file}" whose filename number (${fileMatch[1]}) doesn't match the row's own number (${number})`);
     }
-    if (!onDiskNumbers.has(fileMatch[1])) {
+    if (!existsSync(join(DECISIONS_DIR, file))) {
       violations.push(`Active row ${number} links to "docs/decisions/${file}", which does not exist on disk`);
     }
   }
