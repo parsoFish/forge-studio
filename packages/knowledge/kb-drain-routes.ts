@@ -18,7 +18,7 @@ import { KB_ID_RE } from '@forge/kernel';
 import { enqueueConsolidate } from './bridge-studio-kb-consolidate.ts';
 import { deriveKbActiveJob, activeJobReason, KB_DRAIN_STALE_MS } from './kb-job-state.ts';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
-import { withReadableDraftSessions, type SessionReadabilityProbe } from './kb-drain-model.ts';
+import { withReadableDraftSessions, requireSessionIsReadable, type SessionReadabilityProbe } from './kb-drain-model.ts';
 import {
   writeKbDrainStatus,
   readKbDrainStatus,
@@ -200,7 +200,8 @@ export async function handleKbRuns(
         sendJson(res, 400, { error: 'invalid kb id' }, origin);
         return true;
       }
-      sendJson(res, 200, { ok: true, runs: listKbRuns(ctx.forgeRoot, kbId, sessionIsReadable) }, origin);
+      const runs = listKbRuns(ctx.forgeRoot, kbId, requireSessionIsReadable(sessionIsReadable, 'handleKbRuns'));
+      sendJson(res, 200, { ok: true, runs }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -210,8 +211,10 @@ export async function handleKbRuns(
   return false;
 }
 
-/** M7-C U8 — same factory shape as `createKbDrainRunHandler` below. */
-export function createKbRunsHandler(deps: { sessionIsReadable?: SessionReadabilityProbe }) {
+/** M7-C U8 — same factory shape as `createKbDrainRunHandler` below. REQUIRED
+ *  (like `createKbDrainStartHandler`'s `runFixTurn`): the predicate is a
+ *  compile-time obligation on every route-table assembly, never a fallback. */
+export function createKbRunsHandler(deps: { sessionIsReadable: SessionReadabilityProbe }) {
   return (req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string) =>
     handleKbRuns(req, res, ctx, rawUrl, method, deps.sessionIsReadable);
 }
@@ -286,18 +289,25 @@ export async function handleKbDrainRun(
     // stops being tailed for the rest of the Studio session.
     if (status.state === 'running') tail?.ensureAgentRunTail?.(kbDrainCycleId(runId));
     else tail?.releaseAgentRunTail?.(kbDrainCycleId(runId));
-    // M7-C U8 — never mint a link for a `draftSession` pointer that resolves nowhere.
-    const { projectsRoot, logsRoot } = readabilityRoots(ctx.forgeRoot);
-    const perFinding = withReadableDraftSessions(status.perFinding, sessionIsReadable, projectsRoot, logsRoot);
-    sendJson(res, 200, { ok: true, runId, ...status, perFinding }, origin);
+    // M7-C U8 — never mint a link for a `draftSession` pointer that resolves
+    // nowhere. This module promises never to throw (see its own header), so
+    // the REQUIRED-probe refusal is caught here, same as every other arm.
+    try {
+      const { projectsRoot, logsRoot } = readabilityRoots(ctx.forgeRoot);
+      const perFinding = withReadableDraftSessions(status.perFinding, requireSessionIsReadable(sessionIsReadable, 'handleKbDrainRun'), projectsRoot, logsRoot);
+      sendJson(res, 200, { ok: true, runId, ...status, perFinding }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
     return true;
   }
 
   return false;
 }
 
-/** knowledge-01 / M7-C U8: same factory shape as `createKbDrainStartHandler` below. */
-export function createKbDrainRunHandler(deps: KbDrainTailDeps & { sessionIsReadable?: SessionReadabilityProbe }) {
+/** knowledge-01 / M7-C U8: same factory shape as `createKbDrainStartHandler` below.
+ *  REQUIRED, like that factory's `runFixTurn` — never a fallback. */
+export function createKbDrainRunHandler(deps: KbDrainTailDeps & { sessionIsReadable: SessionReadabilityProbe }) {
   return (req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string) =>
     handleKbDrainRun(req, res, ctx, rawUrl, method, deps, deps.sessionIsReadable);
 }
@@ -440,7 +450,7 @@ export async function handleKbDrainStatus(
       }
       // M7-C U8 — same drop as `handleKbDrainRun`, for the reattach path.
       const { projectsRoot, logsRoot } = readabilityRoots(ctx.forgeRoot);
-      const perFinding = withReadableDraftSessions(chosen.status.perFinding, sessionIsReadable, projectsRoot, logsRoot);
+      const perFinding = withReadableDraftSessions(chosen.status.perFinding, requireSessionIsReadable(sessionIsReadable, 'handleKbDrainStatus'), projectsRoot, logsRoot);
       sendJson(res, 200, { ok: true, runId: chosen.runId, ...chosen.status, perFinding }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -451,8 +461,8 @@ export async function handleKbDrainStatus(
   return false;
 }
 
-/** M7-C U8: same factory shape as `createKbRunsHandler` above. */
-export function createKbDrainStatusHandler(deps: { sessionIsReadable?: SessionReadabilityProbe }) {
+/** M7-C U8: same factory shape as `createKbRunsHandler` above. REQUIRED. */
+export function createKbDrainStatusHandler(deps: { sessionIsReadable: SessionReadabilityProbe }) {
   return (req: IncomingMessage, res: ServerResponse, ctx: StudioContext, rawUrl: string, method: string) =>
     handleKbDrainStatus(req, res, ctx, rawUrl, method, deps.sessionIsReadable);
 }

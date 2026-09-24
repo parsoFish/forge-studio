@@ -183,11 +183,13 @@ export function whenFromSessionId(sessionId: string): string {
   return `${m[1]}T${m[2]}:${m[3]}:${m[4]}.000Z`;
 }
 
-/** `sessionIsReadable` OPTIONAL (M7-C U8, bead forge-u8y2) — existing direct
- *  callers keep today's unfiltered behaviour; `handleKbRuns` always supplies
- *  the real predicate. A 'cleanup' row IS its session pointer (no other fact
- *  worth keeping), so an unreadable one is dropped WHOLE, never emptied. */
-export function listKbRuns(forgeRoot: string, kbId: string, sessionIsReadable?: SessionReadabilityProbe): KbRunRow[] {
+/** `sessionIsReadable` REQUIRED (M7-C U8, bead forge-u8y2) — an absent probe
+ *  defaulting to "keep every row" is the fail-open shape this campaign
+ *  forbids; every caller declares one explicitly (a real predicate, or a
+ *  stub that says which case it is). A 'cleanup' row IS its session pointer
+ *  (no other fact worth keeping), so an unreadable one is dropped WHOLE,
+ *  never emptied. */
+export function listKbRuns(forgeRoot: string, kbId: string, sessionIsReadable: SessionReadabilityProbe): KbRunRow[] {
   const rows: KbRunRow[] = [];
 
   // Drain runs — status.json is the record.
@@ -259,7 +261,7 @@ export function listKbRuns(forgeRoot: string, kbId: string, sessionIsReadable?: 
     if (sessionKbId !== null && sessionKbId !== kbId) continue;
     // M7-C U8 (bead forge-u8y2) — never mint a row for a session pointer that
     // resolves nowhere. Same predicate, same reason, as `withReadableDraftSessions`.
-    if (sessionIsReadable && !sessionIsReadable({ projectsRoot, logsRoot, kind: KB_CLEANUP_SESSION_KIND, sessionId: sid, project: anchor })) continue;
+    if (!sessionIsReadable({ projectsRoot, logsRoot, kind: KB_CLEANUP_SESSION_KIND, sessionId: sid, project: anchor })) continue;
     rows.push({ kind: 'cleanup', id: sid, when: whenFromSessionId(sid), status: phase, costUsd: null, detail: null, project: anchor });
   }
 

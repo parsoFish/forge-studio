@@ -47,6 +47,12 @@ const routes = knowledgeRoutes({
   runFixTurn: async () => {
     throw new Error('unexpected brain-fix dispatch in this test');
   },
+  // M7-C U8 (bead forge-u8y2): REQUIRED, same shape as `runFixTurn` above.
+  // Every KB this base table's tests dispatch against is clean (0 findings,
+  // perFinding always []) — the probe is never reached through it.
+  sessionIsReadable: () => {
+    throw new Error('unexpected session-readability probe call in this test');
+  },
 });
 
 const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;
@@ -331,6 +337,11 @@ test('knowledge-01: POST /drain arms the live tail for the cycle the instant the
     listFlowIds: () => ['forge-develop'],
     listFlowBandIds: () => ['review-band', 'integrate-band'],
     runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); },
+    // M7-C U8 (bead forge-u8y2): REQUIRED. This test drives the LIVE polling
+    // path a real bridge would — `() => true` (never actually invoked: the
+    // clean kb's perFinding is always []) rather than a throw, since this is
+    // exactly the production path the predicate legitimately gates.
+    sessionIsReadable: () => true,
     ensureAgentRunTail: (cycleId) => armed.push(cycleId),
     releaseAgentRunTail: () => {},
   });
@@ -358,6 +369,9 @@ test('knowledge-01: GET /drain/:runId re-arms the tail on every poll while runni
     listFlowIds: () => ['forge-develop'],
     listFlowBandIds: () => ['review-band', 'integrate-band'],
     runFixTurn: async () => { throw new Error('unexpected brain-fix dispatch in this test'); },
+    // M7-C U8 (bead forge-u8y2): REQUIRED — same reasoning as the sibling
+    // tailRoutes above (live polling path, clean kb, never actually invoked).
+    sessionIsReadable: () => true,
     ensureAgentRunTail: (cycleId) => armed.push(cycleId),
     releaseAgentRunTail: (cycleId) => released.push(cycleId),
   });

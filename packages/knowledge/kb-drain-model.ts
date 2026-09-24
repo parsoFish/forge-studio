@@ -531,16 +531,16 @@ export const KB_CLEANUP_SESSION_KIND = 'kb-cleanup';
 
 /** Drops `draftSession` from any per-finding row the probe says resolves
  *  nowhere — mirrors `withReadableSessionPointers` (apps/forge/bridge-studio.ts).
- *  `probe` OPTIONAL: never a silent drop for existing direct-handler tests
- *  that do not wire it (today's unfiltered behaviour, unchanged); the real
- *  bridge (`KnowledgeRouteDeps`, routes.ts) always supplies one. */
+ *  `probe` REQUIRED, never optional: an absent probe defaulting to "every
+ *  pointer passes" is the fail-open shape this campaign forbids (CLAUDE.md —
+ *  no fallback/compat path). `requireSessionIsReadable` below turns a caller
+ *  without a real probe into a loud refusal, never a silent pass-through. */
 export function withReadableDraftSessions(
   perFinding: readonly KbDrainPerFinding[],
-  probe: SessionReadabilityProbe | undefined,
+  probe: SessionReadabilityProbe,
   projectsRoot: string,
   logsRoot: string,
 ): KbDrainPerFinding[] {
-  if (!probe) return [...perFinding];
   return perFinding.map((f) => {
     const d = f.draftSession;
     if (d === undefined) return f;
@@ -548,4 +548,18 @@ export function withReadableDraftSessions(
     const { draftSession: _unreadable, ...rest } = f;
     return rest;
   });
+}
+
+/** Refuse BY NAME when a caller reached a pointer-minting path without a real
+ *  predicate wired — same idiom as `requireSessionStatusIo` above, never a
+ *  silent "every pointer passes" default. */
+export function requireSessionIsReadable(fn: SessionReadabilityProbe | undefined, caller: string): SessionReadabilityProbe {
+  if (!fn) {
+    throw new Error(
+      `${caller}: the session-readability predicate is required — it is declared by @forge/knowledge and ` +
+      'supplied by the assembly (apps/forge threads it through knowledgeRoutes). Refusing rather than ' +
+      'minting a session pointer through an unguarded path.',
+    );
+  }
+  return fn;
 }

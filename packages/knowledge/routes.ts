@@ -153,12 +153,18 @@ export type KnowledgeRouteDeps = KbCreateDeps & KbDrainTailDeps & {
    * the drift check between the two sides.
    */
   runFixTurn: KbDrainRunFixTurnFn;
-  /** M7-C U8 (bead forge-u8y2) — same rank problem as `runFixTurn`
-   *  (`@forge/sessions`' `sessionIsReadable` bound here). OPTIONAL, matching
-   *  `KbDrainTailDeps`: absent is a safe default (today's pre-fix, unfiltered
-   *  behaviour) for the many existing route tests; only the real assembly
-   *  (`apps/forge/routes.ts`) supplies the real predicate. */
-  sessionIsReadable?: SessionReadabilityProbe;
+  /**
+   * M7-C U8 (bead forge-u8y2, W8-F6 follow-up) — same rank problem as
+   * `runFixTurn`: `@forge/sessions`' `sessionIsReadable` is bound here. REQUIRED,
+   * same shape as `runFixTurn` immediately above — an OPTIONAL port whose
+   * absence means "let every stored session pointer reach the wire
+   * unchecked" is exactly the fail-open fallback CLAUDE.md forbids, and it is
+   * the shape that let these pointers go unchecked in the first place (W8-F6).
+   * Every route test that constructs `knowledgeRoutes({...})` declares one
+   * explicitly — a stub that throws where the test does not exercise this
+   * concern, `() => true` where it legitimately renders pointers.
+   */
+  sessionIsReadable: SessionReadabilityProbe;
 };
 
 export function knowledgeRoutes(deps: KnowledgeRouteDeps): RouteTable<KnowledgeRouteContext> {
@@ -171,7 +177,7 @@ export function knowledgeRoutes(deps: KnowledgeRouteDeps): RouteTable<KnowledgeR
   // are OPTIONAL on `KnowledgeRouteDeps` — every existing caller (every route
   // test in this package) supplies neither and stays unaffected; only the
   // real assembly (`apps/forge/routes.ts`) supplies the real implementations.
-  // M7-C U8: `sessionIsReadable` rides the same `deps` object, same reason.
+  // `sessionIsReadable` does NOT ride along with that optionality (see above).
   const handleKbDrainRun = createKbDrainRunHandler(deps);
   const handleKbRuns = createKbRunsHandler(deps);
   const handleKbDrainStatus = createKbDrainStatusHandler(deps);
