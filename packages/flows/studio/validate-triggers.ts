@@ -9,7 +9,7 @@
  */
 import { Cron } from 'croner';
 
-import { TRIGGER_KINDS, TRIGGER_KIND_IDS } from '../flow-trigger.ts';
+import { TRIGGER_KINDS, TRIGGER_KIND_IDS, WEBHOOK_FAMILY_KIND_IDS } from '../flow-trigger.ts';
 import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
 import { TRIGGER_MODES } from '@forge/contracts/studio/types.ts';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
@@ -48,8 +48,6 @@ const WEBHOOK_EVENTS_BY_KIND: Readonly<Record<string, ReadonlySet<string>>> = {
   'pr-merged': new Set(['pull_request']),
   'issue-raised': new Set(['issues']),
 };
-/** The `on:` kinds that carry the `webhook:` config block (R2-08-F3). */
-const WEBHOOK_FAMILY_KIND_IDS = new Set(['webhook', 'pr-merged', 'issue-raised']);
 
 /**
  * adversarial-review fix: `pr-merged`/`issue-raised` are GitHub-only by
