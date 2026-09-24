@@ -211,3 +211,67 @@ describe('readDispatchSnapshot: one read, every seam injected', () => {
     assert.equal(s.exitCode, null);
   });
 });
+
+/**
+ * `spendSoFar` PRINTS the classifier's arm — bead `forge-8vfn.7.6.76`, closing
+ * the gap a classifier only reachable by import left open. The previous read
+ * lives in a `Map` the CALLER owns (the run loop's own state, never a module
+ * global — two concurrent runs must never share one), passed in as
+ * `unmeasuredSnapshots` and updated in place so the next beat boundary's call
+ * compares against this one.
+ */
+describe('spendSoFar prints the UNMEASURED classifier’s arm, threaded across calls', () => {
+  test('7.6.76 (RED): a dispatch that grew between two calls prints IN FLIGHT, naming N', () => {
+    const r = root();
+    const dir = dispatch(r, '_architect-2026-09-12T08-00-00-aaaaaaaa', { pid: true });
+    writeFileSync(join(dir, 'events.jsonl'), '{"a":1}\n{"a":2}\n'); // 2 unpriced lines
+    const seams = { isAlive: () => true, readStderrTail: () => '' };
+    const snapshots = new Map();
+
+    const first = spendSoFar({ root: r, startedMs: 0, realSpawn: true, ceilingUsd: 35, label: 'after beat 1', unmeasuredSnapshots: snapshots, snapshotSeams: seams });
+    assert.equal(first.spend.measured, false);
+    assert.match(first.lines.join('\n'), new RegExp(`UNMEASURED ${basename(dir)} .*IN FLIGHT`), `call 1: ${first.lines.join('\n')}`);
+
+    writeFileSync(join(dir, 'events.jsonl'), '{"a":1}\n{"a":2}\n{"a":3}\n{"a":4}\n{"a":5}\n'); // grew to 5
+    const second = spendSoFar({ root: r, startedMs: 0, realSpawn: true, ceilingUsd: 35, label: 'after beat 2', unmeasuredSnapshots: snapshots, snapshotSeams: seams });
+    assert.match(
+      second.lines.join('\n'),
+      new RegExp(`UNMEASURED ${basename(dir)} .*IN FLIGHT.*grew by 3 line`),
+      `N must be measured against call 1's OWN snapshot (2), not zero: ${second.lines.join('\n')}`,
+    );
+  });
+
+  test('7.6.76 (RED): a dispatch whose log went STATIC between two calls prints REAPED\\/DIED, carrying stderr', () => {
+    const r = root();
+    const dir = dispatch(r, '_architect-2026-09-12T08-00-00-bbbbbbbb', { pid: true });
+    writeFileSync(join(dir, 'events.jsonl'), '{"a":1}\n{"a":2}\n{"a":3}\n');
+    const seams = { isAlive: () => true, readStderrTail: () => 'FATAL: worker exited' };
+    const snapshots = new Map();
+
+    const first = spendSoFar({ root: r, startedMs: 0, realSpawn: true, ceilingUsd: 35, label: 'after beat 1', unmeasuredSnapshots: snapshots, snapshotSeams: seams });
+    assert.match(first.lines.join('\n'), /IN FLIGHT/, 'first read has nothing to compare against yet, so it reads as growth from zero');
+
+    // events.jsonl UNCHANGED — nothing moved between the two reads.
+    const second = spendSoFar({ root: r, startedMs: 0, realSpawn: true, ceilingUsd: 35, label: 'after beat 2', unmeasuredSnapshots: snapshots, snapshotSeams: seams });
+    assert.match(
+      second.lines.join('\n'),
+      new RegExp(`UNMEASURED ${basename(dir)} .*REAPED/DIED`),
+      `call 2: ${second.lines.join('\n')}`,
+    );
+    assert.match(second.lines.join('\n'), /FATAL: worker exited/, 'the stderr tail must ride along into the printed line');
+  });
+
+  test('7.6.76: the Map is genuinely per-call-site state — a FRESH Map on the next call forgets growth', () => {
+    // The negative control for the wiring itself: without a shared Map, every
+    // call reads as a first call (previous defaults to zero), so a caller that
+    // forgot to thread the SAME Map would never see REAPED for a static log.
+    const r = root();
+    const dir = dispatch(r, '_architect-2026-09-12T08-00-00-cccccccc', { pid: true });
+    writeFileSync(join(dir, 'events.jsonl'), '{"a":1}\n{"a":2}\n{"a":3}\n');
+    const seams = { isAlive: () => true, readStderrTail: () => '' };
+
+    spendSoFar({ root: r, startedMs: 0, realSpawn: true, ceilingUsd: 35, label: 'after beat 1', unmeasuredSnapshots: new Map(), snapshotSeams: seams });
+    const second = spendSoFar({ root: r, startedMs: 0, realSpawn: true, ceilingUsd: 35, label: 'after beat 2', unmeasuredSnapshots: new Map(), snapshotSeams: seams });
+    assert.match(second.lines.join('\n'), /IN FLIGHT/, 'a fresh Map has no memory of call 1, so call 2 reads as growth from zero again');
+  });
+});
