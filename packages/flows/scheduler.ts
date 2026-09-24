@@ -224,7 +224,7 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
   // second signal force-exits — recovers the operator's intent if the drain
   // hangs (e.g., a wedged SDK call). Heartbeat + queue state is recoverable
   // either way thanks to the recovery sweep, but a clean drain is cheaper.
-  const startedAt = Date.now();
+  const startedAt = performance.now(); // monotonic — forge-8vfn.7.6.50
   let signalCount = 0;
   const onSignal = (sig: NodeJS.Signals): void => {
     signalCount += 1;
@@ -252,7 +252,7 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
         if (stop) return;
         if (inFlight.size > 0) return; // not idle if work is in flight
         const c = counts(getPaths(cfg.queueRoot));
-        const upMins = Math.floor((Date.now() - startedAt) / 60_000);
+        const upMins = Math.floor((performance.now() - startedAt) / 60_000);
         console.log(
           `[idle] ${inFlight.size} in-flight · ${c.pending} pending · uptime ${upMins}m`,
         );
@@ -710,7 +710,7 @@ async function runOne(
     // self-heals by rm-rf'ing the path — wiping the gitignored `.forge/work-items/`
     // + `.forge/unifier-items/` + per-WI commits that live untracked there. Two
     // cases need the preserved tree:
-    //   - a resume marker: 'demo' crash recovery (ADR-019) or 'develop'
+    //   - a resume marker: 'integrate' crash recovery (ADR-019) or 'develop'
     //     fix-loop re-entry (ADR-040) — both run against the per-WI commits.
     //   - architect→develop hand-off (S9/DEC-3): the forge-architect cycle parked
     //     at ready-for-review with pm's `.forge/work-items/`; the develop run's
@@ -881,11 +881,11 @@ type ParsedManifest = {
   flowId?: string;
   /**
    * ADR 019 (successor develop flow, R4-10-F6) / ADR 040: resume the cycle
-   * against the preserved worktree — 'demo' skips PM + the per-WI dev-loop and
-   * re-enters at the post-develop `demo` node (WI commits already present);
+   * against the preserved worktree — 'integrate' skips PM + the per-WI dev-loop and
+   * re-enters at the post-develop `integrate` node (WI commits already present);
    * 'develop' (ADR 040 send-back re-entry) rebase-skips PM and RUNS the dev loop.
    */
-  resumeFrom?: 'demo' | 'develop';
+  resumeFrom?: 'integrate' | 'develop';
 };
 
 function parseManifest(path: string): ParsedManifest {

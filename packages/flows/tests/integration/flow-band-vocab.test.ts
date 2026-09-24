@@ -9,17 +9,17 @@
  * Real production ground truth for the 'forge-develop' flow
  * (studio/flows/forge-develop/flow.yaml), verified by reading the actual
  * SKILL.md guard declarations rather than assuming them:
- *   - nodes: dev (developer-ralph), demo (demo-agent, resumable),
+ *   - nodes: dev (developer-ralph), integrate (demo-agent, resumable),
  *     adversarial-review (adversarial-review), review (a `gate`, no agent).
  *   - skills/developer-ralph/SKILL.md composition.guards:
  *       [event-log, cost-guard, stall-watchdog, scratch-strip] — no band.
  *   - skills/demo-agent/SKILL.md composition.guards:
- *       [event-log, demo-band] -> demo-band.
+ *       [event-log, integrate-band] -> integrate-band.
  *   - skills/adversarial-review/SKILL.md composition.guards:
  *       [event-log, review-band] -> review-band.
  *   - `review` is a bare `gate` node (no `agent` key) -> contributes nothing.
  * So the real expected vocabulary for forge-develop is exactly
- * {demo-band, review-band}.
+ * {integrate-band, review-band}.
  *
  * RED today: packages/flows/flow-band-vocab.ts does not exist — the import below fails
  * (module not found), which IS the RED proof for this pin. Once the helper
@@ -45,9 +45,9 @@ test('listFlowBandIds(forgeRoot, "forge-develop") returns the real band vocabula
   const bandIds = listFlowBandIds(forgeRoot, 'forge-develop');
   assert.deepEqual(
     [...bandIds].sort(),
-    ['demo-band', 'review-band'],
+    ['integrate-band', 'review-band'],
     `expected exactly the bands declared by forge-develop's node SKILL.md guards ` +
-      `(demo-agent -> demo-band, adversarial-review -> review-band) — got ${JSON.stringify(bandIds)}`,
+      `(demo-agent -> integrate-band, adversarial-review -> review-band) — got ${JSON.stringify(bandIds)}`,
   );
 });
 
