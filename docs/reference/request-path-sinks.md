@@ -2545,3 +2545,61 @@ tests (SECURITY/FAIL-OPEN/ONE-NOTION-WITH-C2) and
 tests. `scripts/request-path-sinks.baseline.txt` accepts the new counts via
 `--write` in the same commit that adds this section, per this document's own
 rule.
+
+### Relocated in M7-C (bead forge-8vfn.15) — run-model-derive.ts split under the 800-line cap (three sink pairs, no new surface)
+
+`run-model-derive.ts` was over the 800-line cap on a baseline exemption; the
+bead calls for real seams, not a cap-driven move — see the file's own doc
+comment for the seam map. It split into `run-model-derive-{status,cost,
+lineage,node-id}.ts`; only `lineage.ts` (artifact detection + the
+PR-description gate note) carries any raw-fs sink, moved whole:
+
+```
+run-model-derive.ts   existsSync   8 -> 0    run-model-derive-lineage.ts   existsSync   0 -> 8
+run-model-derive.ts   readdirSync  1 -> 0    run-model-derive-lineage.ts   readdirSync  0 -> 1
+run-model-derive.ts   readFileSync 1 -> 0    run-model-derive-lineage.ts   readFileSync 0 -> 1
+```
+
+No sink was added, removed or re-shaped. `status.ts`, `cost.ts` and
+`node-id.ts` carry no raw-fs sink at all.
+
+### Relocated in M7-C (bead forge-8vfn.15) — scheduler.ts split under the 800-line cap (twenty sink pairs, no new surface)
+
+`scheduler.ts` was over the 800-line cap on the same exemption; see its own
+doc comment for the seam map. It split into `scheduler-run-one.ts`
+(per-initiative dispatch — worktree setup, `linkProjectDeps`, claim-refusal
+event emission) and `scheduler-sweeps.ts` (background sweeps);
+`scheduler.ts` itself keeps `serve`'s admission loop and layout bootstrap. No
+sink was added, removed or re-shaped — every count below reconciles exactly
+against what the original carried:
+
+```
+scheduler.ts   appendFileSync 1 -> 0         scheduler-run-one.ts   appendFileSync 0 -> 1
+scheduler.ts   execFileSync   1 -> 0         scheduler-run-one.ts   execFileSync   0 -> 1
+scheduler.ts   lstatSync      1 -> 0         scheduler-run-one.ts   lstatSync      0 -> 1
+scheduler.ts   readdirSync    1 -> 0         scheduler-run-one.ts   readdirSync    0 -> 1
+scheduler.ts   symlinkSync    1 -> 0         scheduler-run-one.ts   symlinkSync    0 -> 1
+scheduler.ts   writeFileSync  2 -> 0         scheduler-run-one.ts   writeFileSync  0 -> 2
+scheduler.ts   existsSync    11 -> 5         scheduler-run-one.ts   existsSync     0 -> 5   (+ scheduler-sweeps.ts existsSync 0 -> 1)
+scheduler.ts   mkdirSync      3 -> 2         scheduler-run-one.ts   mkdirSync      0 -> 1
+scheduler.ts   readFileSync   5 -> 1         scheduler-run-one.ts   readFileSync   0 -> 3   (+ scheduler-sweeps.ts readFileSync 0 -> 1)
+```
+
+`existsSync` and `readFileSync` each split three ways because
+`cleanupRecoveredWorktrees` (shared by `serve()`'s inline startup sweep and
+`scheduler-sweeps.ts`'s `runRecoverySweep`) moved whole into
+`scheduler-sweeps.ts` while `runOne`'s own worktree/claim-refusal reads moved
+into `scheduler-run-one.ts`, and `scheduler.ts` itself keeps
+`checkInitiativeDeps`'s one `readFileSync` plus `ensureLayout`'s directory
+probes. The `resolve('projects', m.project)` projects-root fold (see
+`PROJECTS_ROOT_FOLD_ALLOWLIST` in `scripts/check-raw-fs-guarded.allowlist.mjs`)
+moved with `parseManifest` into `scheduler-run-one.ts`; same audited site,
+new home.
+
+Measured with `node scripts/check-request-path-sinks.mjs` across both splits
+together: 362 reachable modules, 661 `(file, sink)` rows, **1,372 total sink
+calls — identical to merged main** before either split. Accepted by
+hand-editing the affected lines, NOT by `--write`: the checker also reports
+one pre-existing, unrelated tightenable line in
+`packages/flows/scheduler-dispatch.ts` (`existsSync 4 -> 3`) that neither
+split touched; sweeping it in would mix another lane's slack into this one.
