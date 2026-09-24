@@ -43,10 +43,10 @@ gate() {                        # gate <label> <count>
   NONZERO+=("$1=$2")
 }
 
-# --- porcelain, SPLIT. 861: `.gitignore:42` hides `_queue/ready-for-review/*`,
-# so "porcelain 0" stood as the clean-tree line for thirteen hours with a real
-# initiative sitting in the queue. Tracked and untracked are different claims and
-# are never collapsed here.
+# --- porcelain, SPLIT. 861: the `_queue/ready-for-review/*` rule in
+# `.gitignore` hides that path, so "porcelain 0" stood as the clean-tree line
+# for thirteen hours with a real initiative sitting in the queue. Tracked and
+# untracked are different claims and are never collapsed here.
 P_TRACKED=$(cd "$R" && git status --porcelain 2>/dev/null | grep -cv '^??' || true)
 P_UNTRACKED=$(cd "$R" && git status --porcelain 2>/dev/null | grep -c '^??' || true)
 gate "porcelain.tracked" "$P_TRACKED"
