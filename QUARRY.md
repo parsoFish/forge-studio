@@ -450,6 +450,7 @@ operator-ratified new cap — never a silent raise.
 | packages/library/studio/yaml-comments.ts | library | verbatim | 132 |
 | packages/kernel/studio/yaml-fields.ts | kernel | verbatim | 105 |
 | packages/agents/tool-event-emit.ts | agents | verbatim | 244 |
+| packages/agents/project-skills.ts | agents | verbatim | 64 |
 | packages/flows/trigger-payload.ts | flows | verbatim | 294 |
 | packages/flows/webhook-verify.ts | flows | verbatim | 114 |
 | packages/flows/wi-dispatch-scheduler.ts | flows | verbatim | 151 |

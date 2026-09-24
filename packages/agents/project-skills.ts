@@ -12,18 +12,53 @@
  * unaffected.
  */
 
-import type { DeclaredSkill } from '@forge/projects/preflight-skills.ts';
+import { join } from 'node:path';
+import { createLogger, type EventLogger, type Phase } from '@forge/kernel';
+import { loadDeclaredSkills, type DeclaredSkill } from '@forge/projects/preflight-skills.ts';
 
 export type { DeclaredSkill };
 
 const SECTION_HEADING = '## Project skills (declared in .forge/project.json)';
 
-export function composeProjectSkills(
-  systemPrompt: string | undefined,
-  skills: readonly DeclaredSkill[],
-): string | undefined {
+export function composeProjectSkills(systemPrompt: string | undefined, skills: readonly DeclaredSkill[]): string | undefined {
   if (skills.length === 0) return systemPrompt;
   const body = skills.map((s) => `### ${s.id}\n\n${s.text.trim()}`).join('\n\n');
   const section = `${SECTION_HEADING}\n\n${body}`;
   return systemPrompt !== undefined ? `${systemPrompt}\n\n${section}` : section;
+}
+
+/** `runOneShotSpawn`'s item-90 wiring, collapsed to one call: load + compose,
+ *  and — for a non-empty load only — emit `project_skills_loaded`. Absent
+ *  `ctx.bindings.project` ⇒ no lookup, so a non-project run's systemPrompt
+ *  (and the golden spawn-capture fixtures) stay byte-identical. */
+export function loadAndComposeProjectSkills(
+  ctx: { bindings?: { project?: { repoPath: string }; initiative?: { id: string } }; systemPrompt?: string; logger?: EventLogger; runId: string; logsRoot?: string },
+  forgeRoot: string,
+  agentSlug: string,
+): string | undefined {
+  const skills = ctx.bindings?.project ? loadDeclaredSkills(ctx.bindings.project.repoPath, forgeRoot) : [];
+  if (skills.length > 0) {
+    const logger = ctx.logger ?? createLogger(ctx.runId, ctx.logsRoot ?? join(forgeRoot, '_logs'));
+    logger.emit({
+      initiative_id: ctx.bindings?.initiative?.id ?? ctx.runId, phase: 'orchestrator', skill: agentSlug,
+      event_type: 'log', input_refs: [], output_refs: [],
+      message: 'project_skills_loaded', metadata: { ids: skills.map((s) => s.id) },
+    });
+  }
+  return composeProjectSkills(ctx.systemPrompt, skills);
+}
+
+/** `makeAgentWithTelemetry`'s item-90 wiring, collapsed to one call: the
+ *  `onProjectSkillsLoaded` callback, emitting the same `project_skills_loaded`
+ *  shape every other `sinkCtx`-scoped event here already uses. */
+export function makeProjectSkillsLoadedSink(
+  logger: EventLogger,
+  sinkCtx: { initiativeId: string; parentEventId: string; phase: Phase; skill: string; workItemId?: string },
+): (ids: string[]) => void {
+  return (ids) =>
+    void logger.emit({
+      initiative_id: sinkCtx.initiativeId, parent_event_id: sinkCtx.parentEventId, phase: sinkCtx.phase, skill: sinkCtx.skill,
+      event_type: 'log', input_refs: [], output_refs: [],
+      message: 'project_skills_loaded', metadata: { ...(sinkCtx.workItemId ? { work_item_id: sinkCtx.workItemId } : {}), ids },
+    });
 }
