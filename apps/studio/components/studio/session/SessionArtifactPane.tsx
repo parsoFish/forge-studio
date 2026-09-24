@@ -6,9 +6,15 @@ import { FilePackage } from '@/components/studio/FilePackage';
 import { DependencyDag } from '@/components/studio/DependencyDag';
 import { GenerationGallery } from '@/components/studio/GenerationGallery';
 import { ContractBuildout } from '@/components/studio/ContractBuildout';
-import { roadmapDraftView, markdownDraftView, cleanupPlanView, type SessionArtifactView, type CleanupPlanView, sessionArtifactView } from '@/lib/session-artifact-view';
+import { roadmapDraftView, markdownDraftView, cleanupPlanView, type SessionArtifactView, type CleanupPlanView, type GenerationSelection, sessionArtifactView } from '@/lib/session-artifact-view';
 import { lineDiff, type DiffRow } from '@/lib/text-diff';
 import type { SessionArtifactPayload, RoadmapDraftRow, CleanupPlanAction, CleanupActionState } from '@/lib/session-client';
+
+/** bead forge-8vfn.8.3.4 — the inert default `GenerationGallery` gets when
+ *  this pane's own `onSelectGeneration` is absent (a caller that predates
+ *  the state lift, or a DOM-pin test): a stable module-level no-op, never a
+ *  fresh arrow function every render. */
+function noopSelectGeneration(): void {}
 
 /** W7-C2 (sessions-kinds-30) — the verdict context for a markdown-draft
  *  artifact: where approving will WRITE (`targetPath`, absolute), and the
@@ -60,16 +66,27 @@ export type MarkdownDraftContext = {
 // `FilePackage` is handed the raw `files` and manages its own tab-selection
 // state via the same `filePackageTabs`/`selectFile` primitives
 // `lib/session-artifact-view.ts`'s (unused-by-this-component)
-// `brainStructureView`/`selectBrainStructureFile` also wrap. generation-gallery
-// follows the SAME "hand the raw data to a self-contained component" pattern:
-// `GenerationGallery` owns its own selection state internally (mirrors
-// `FilePackage`, not a state lift here) — as a poll-stable generation NUMBER
-// fed through `generationGalleryView`'s optional `preferredNumber` (R4-16 pin
-// 2, Finding D), not an index derived from whichever `artifact` object
-// reference happened to arrive on the latest 3s poll tick. contract-buildout
+// `brainStructureView`/`selectBrainStructureFile` also wrap. contract-buildout
 // (R4-17) hands `ContractBuildout` the ALREADY-COMPUTED `sessionArtifactView`
 // output directly — that view IS its render input (mode:'checklist'|'detail'),
 // so there is no second call to make.
+//
+// **generation-gallery's selection is LIFTED, not internal (bead
+// forge-8vfn.8.3.4).** `GenerationGallery` used to own its selection state
+// internally; it is now a CONTROLLED component (`selection`/`onSelect`),
+// because `SessionInteractivePanel`'s verdict-approve generation picker
+// used to keep an INDEPENDENT selection of its own — the two controls could
+// disagree about which generation an approve would lock. `selectedGeneration`/
+// `onSelectGeneration` below are this pane's own optional passthrough of
+// the SAME session-page-owned state `SessionInteractivePanel` receives;
+// absent (a caller that predates this fix, or a DOM-pin test), the pane
+// falls back to an inert `null`/no-op pair — `GenerationGallery` then
+// simply shows no explicit pick, its own pre-existing "newest" default,
+// exactly like before this fix landed. The stored value is still looked up
+// BY VALUE — a poll-stable generation NUMBER fed through
+// `generationGalleryView`'s optional `preferredNumber` (R4-16 pin 2,
+// Finding D), never an index derived from whichever `artifact` object
+// reference happened to arrive on the latest 3s poll tick.
 //
 // `project`/`sessionId` are OPTIONAL passthrough, needed only by
 // generation-gallery's per-item "view" links + "finalize" action (D7: gallery
@@ -77,8 +94,9 @@ export type MarkdownDraftContext = {
 // bridge URL keyed on project+session+generation+filename). The other kinds
 // ignore them entirely. `onFinalizeGeneration` is likewise optional —
 // owned and wired by whichever caller has a live demo-builder session to act
-// on (DemoBuilderPanel); the generic `/sessions/[kind]/[sessionId]` deep-link
-// route renders the gallery read-only without it (D3: "zero extra code").
+// on; the generic `/sessions/[kind]/[sessionId]` deep-link route (this
+// pane's sole real caller) always wires it for a live, non-terminal demo
+// session (see that page's own `onFinalizeGeneration` derivation).
 // `activeStage` (R4-17) is the currently-selected session stage
 // (session-shell-view.ts's `state.selectedStage`) — threaded straight to the
 // dispatcher; every stage-UNAWARE kind (everything except contract-buildout)
@@ -100,6 +118,8 @@ export function SessionArtifactPane({
   onFinalizeGeneration,
   draftContext,
   terminalPhase = null,
+  selectedGeneration = null,
+  onSelectGeneration = noopSelectGeneration,
 }: {
   artifact: SessionArtifactPayload;
   project?: string;
@@ -109,6 +129,11 @@ export function SessionArtifactPane({
   /** W7-C2 — markdown-draft only; every other kind ignores it (same
    *  optional-passthrough convention as `project`/`sessionId` above). */
   draftContext?: MarkdownDraftContext;
+  /** bead forge-8vfn.8.3.4 — generation-gallery only; threaded straight to
+   *  `GenerationGallery`'s own `selection`/`onSelect`. Optional so a DOM-pin
+   *  test (or any caller that predates the state lift) needs no update. */
+  selectedGeneration?: GenerationSelection;
+  onSelectGeneration?: (next: GenerationSelection) => void;
   /** W8-B3 (sessions-kinds-R08) — the session's phase when it has SETTLED
    *  (`committed` / `rejected` / `locked` / `abandoned` / …), else `null`.
    *  The pane used to render its destination line from the draft payload
@@ -168,6 +193,8 @@ export function SessionArtifactPane({
             artifact={artifact as Extract<SessionArtifactPayload, { kind: 'generation-gallery' }>}
             project={project}
             sessionId={sessionId}
+            selection={selectedGeneration}
+            onSelect={onSelectGeneration}
             // W8-B3 (sessions-kinds-07) — the REAL reason, from the caller
             // that knows it: a settled session names the phase that settled
             // it, instead of the hardcoded "Not available from this view".
