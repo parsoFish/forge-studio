@@ -6,8 +6,8 @@
  * worktree + branch still carry committed work must NOT be wiped back to a
  * fresh-from-main re-run. The requeue resumes from the preserved state
  * instead, mirroring the ADR-019 resume machinery:
- *   - all WIs complete  → `resume_from: demo` (R4-10-F6 marker; the post-develop
- *                          band re-runs at the demo node, no WI rebuilt)
+ *   - all WIs complete  → `resume_from: integrate` (R4-10-F6 marker; the post-develop
+ *                          band re-runs at the integrate node, no WI rebuilt)
  *   - some WIs pending  → preserve the worktree with NO marker; the
  *                          scheduler's preserved-work-items reuse path picks
  *                          it up and the dev-loop re-runs in place (complete
@@ -114,7 +114,7 @@ test('decideRequeueResume: environment failure + preserved work + all WIs comple
     workItems: { total: 3, complete: 3 },
   });
   assert.equal(d.resume, true);
-  if (d.resume) assert.equal(d.resume_from, 'demo');
+  if (d.resume) assert.equal(d.resume_from, 'integrate');
 });
 
 test('decideRequeueResume: environment failure + preserved work + WIs incomplete → resume with NO marker (dev-loop re-runs in place)', () => {
@@ -264,7 +264,7 @@ test('inferRequeueResume: environment death after all WIs complete → resume fr
     projectRepoPath: repo,
   });
   assert.equal(d.resume, true);
-  if (d.resume) assert.equal(d.resume_from, 'demo');
+  if (d.resume) assert.equal(d.resume_from, 'integrate');
 });
 
 test('inferRequeueResume: terminal failure → no resume even with preserved state', () => {

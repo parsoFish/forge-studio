@@ -1,22 +1,22 @@
 ---
 name: demo-agent
-description: "The declaration carrier and display identity for the develop flow's `demo` node — the INTEGRATE band (spec §5 item 4). The band is an orchestrator verb: it derives the demo bundle and the PR body from the acceptance criteria, the merge gate's own evidence and the diff, then renders and captures. No model is spawned on any path — see 'What this is, honestly' below."
+description: "The declaration carrier and display identity for the develop flow's `integrate` node — the INTEGRATE band (spec §5 item 4). The band is an orchestrator verb: it derives the demo bundle and the PR body from the acceptance criteria, the merge gate's own evidence and the diff, then renders and captures. No model is spawned on any path — see 'What this is, honestly' below."
 library: true
-phase: demo
+phase: integrate
 surface: unattended
-purpose: Declare the `demo-band` guard and its display identity for the develop flow's demo node. The orchestrator derives the bundle; this def carries no runtime process.
+purpose: Declare the `integrate-band` guard and its display identity for the develop flow's integrate node. The orchestrator derives the bundle; this def carries no runtime process.
 composition:
   skills: [demo]
   tools: []
   mcps: []
-  guards: [event-log, demo-band]
+  guards: [event-log, integrate-band]
 runtime:
   sdk: claude
   strategy: fixed
   model: claude-sonnet-4-6
   loopStrategy: one-shot
 brainAccess: advisory
-interactivity: Never runs. The orchestrator-band executor (execDemo) performs the whole band directly and spawns nothing, on every path — there is no standalone dispatch either (`demo-agent` was removed from STANDALONE_BAND_SLUGS when the LLM node was deleted).
+interactivity: Never runs. The orchestrator-band executor (execIntegrate) performs the whole band directly and spawns nothing, on every path — there is no standalone dispatch either (`demo-agent` was removed from STANDALONE_BAND_SLUGS when the LLM node was deleted).
 allowed-tools: []
 disallowed-tools: [Bash, NotebookEdit, WebFetch, WebSearch, Task, Agent]
 budgets: {maxTurns: 1, maxBudgetUsd: 0}
@@ -27,16 +27,16 @@ budgets: {maxTurns: 1, maxBudgetUsd: 0}
 ## What this is, honestly
 
 This SKILL.md is **not a running agent**. It is the declaration carrier and
-display identity the `demo-band` guard needs to exist as a first-class citizen
+display identity the `integrate-band` guard needs to exist as a first-class citizen
 of the platform (a `composition.guards` entry, a `studio/catalog.yaml` display
 row, a real roster member `forge studio lint` can validate) — nothing more. It
 is the same shape [`skills/contract-check/SKILL.md`](../contract-check/SKILL.md)
 already has for the `onboard-preflight` band.
 
-The develop flow's `demo` node carries `agent: "demo-agent"` (ADR-039 declared
+The develop flow's `integrate` node carries `agent: "demo-agent"` (ADR-039 declared
 dispatch); at runtime `execAgent`
 ([`packages/factory/phases/executor-table.ts`](../../packages/factory/phases/executor-table.ts))
-resolves the declared `demo-band` guard and routes the node to `execDemo`, which
+resolves the declared `integrate-band` guard and routes the node to `execIntegrate`, which
 runs the band **directly, orchestrator-side**. No agent is spawned, no prompt is
 assembled, and no budget is drawn.
 
@@ -73,7 +73,10 @@ grading its own work. That verdict belongs to the read-only review agent.
 
 ## The name
 
-The band's spec word is `integrate`. Its node id, band guard, slug and
-`resume_from` value are still `demo` because renaming them costs a pinned
-golden, a pinned story, a contracts union member, an API field and a CLI flag,
-and buys no gate (T1 ruling 245). The rename is priced separately.
+The band's spec word is `integrate`, and as of forge-8vfn.6.10.18 (operator
+item 85) the STATION identity matches it: the flow node id, the band guard,
+`resume_from`, the requeue API field and the `--resume-from` CLI flag are all
+`integrate` now. Two things deliberately did NOT move: this skill's own slug
+(`demo-agent` — a name, not the station) and the demo ARTIFACT concept
+(`demo.json`, `DEMO.md`, demo capture) the band still produces — those are
+about the demo, not the station that runs it.

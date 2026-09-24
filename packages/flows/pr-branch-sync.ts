@@ -19,6 +19,7 @@ import { ghForWorktree } from './gh-pinned.ts';
 import { existsSync } from 'node:fs';
 
 import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
+import { TRACKED_CONFIG_PATHS } from '@forge/projects/preflight.ts';
 
 /**
  * Resolve the current branch name of a worktree. Returns null for a
@@ -76,14 +77,13 @@ export type PushResult =
  * strips any tracked `.forge/` from the index and commits the removal so
  * scratch can never be pushed. Best-effort — never blocks a push.
  */
-/**
- * betterado #4: a project may force-track its forge config INSIDE the ignored
- * `.forge/` dir (`.forge/project.json` + `.forge/quality_gate_cmd` — load-bearing,
- * read every cycle). A blanket `git rm -r --cached .forge` deleted those from the
- * branch (the betterado PR lost its project config). Strip the scratch but EXEMPT
- * the tracked config.
- */
-const PROTECTED_FORGE_CONFIG: readonly string[] = ['.forge/project.json', '.forge/quality_gate_cmd'];
+/** betterado #4: a blanket `git rm -r --cached .forge` deleted tracked config
+ *  from the branch. EXEMPT `TRACKED_CONFIG_PATHS` (ruling 92) — its
+ *  `.forge/skills/` is a DIRECTORY, matched by PREFIX: a WI's skill is a FILE
+ *  under it, and exact-match alone silently dropped every one (8.1.2). */
+function isTrackedConfig(f: string): boolean {
+  return TRACKED_CONFIG_PATHS.some((p) => (p.endsWith('/') ? f.startsWith(p) : f === p));
+}
 
 /**
  * C2 leak: the Ralph runner stamps its loop scratch — PROMPT.md / AGENT.md /
@@ -128,7 +128,7 @@ function isTrackedAtRef(worktreePath: string, ref: string, file: string): boolea
 }
 
 /**
- * Strips gitignored forge scratch (`.forge/*` minus `PROTECTED_FORGE_CONFIG`,
+ * Strips gitignored forge scratch (`.forge/*` minus `TRACKED_CONFIG_PATHS`,
  * plus cycle-introduced `ROOT_RALPH_SCRATCH`) that leaked onto the CURRENTLY
  * CHECKED-OUT branch at `worktreePath`, as a new commit on that branch.
  * Returns the list of paths actually stripped (empty when the tree was
@@ -152,7 +152,7 @@ export function stripForgeScratchFromBranch(worktreePath: string): string[] {
         ...trackedForge
           .split('\n')
           .map((s) => s.trim())
-          .filter((f) => f && !PROTECTED_FORGE_CONFIG.includes(f)),
+          .filter((f) => f && !isTrackedConfig(f)),
       );
     }
 
@@ -183,7 +183,7 @@ export function stripForgeScratchFromBranch(worktreePath: string): string[] {
         ...gitIdentityConfigArgs(ORCHESTRATOR_GIT_IDENTITY),
         'commit',
         '-m',
-        'chore: drop forge scratch from branch (.forge/ + root Ralph PROMPT/AGENT/fix_plan; keeps tracked .forge/project.json + quality_gate_cmd)',
+        'chore: drop forge scratch from branch (.forge/ + root Ralph PROMPT/AGENT/fix_plan; keeps TRACKED_CONFIG_PATHS)',
       ],
       { cwd: worktreePath, stdio: 'pipe' },
     );
