@@ -18,8 +18,8 @@
  */
 
 import { Cron } from 'croner';
-
 import { bridgeFetch } from './bridge-client';
+import { finiteNumberOr, normalizePhaseMeta } from './run-cost-guards';
 import {
   readBridgeJson,
   unwrapBridgeRead,
@@ -1057,13 +1057,13 @@ export function parseRun(raw: unknown): Run {
     initiative:    r.initiative    ?? '',
     status:        r.status        ?? 'planned',
     origin:        r.origin        ?? 'human-directed',
-    costUsd:       r.costUsd       ?? null,
+    costUsd:       finiteNumberOr(r.costUsd, null),
     startedAt:     r.startedAt,
     // W7-A3 (flows-29): served since W6-RV-2, dropped here until now — the
     // declared-data-fails-open class the field-parity pin exists for.
     ...(r.completedAt !== undefined ? { completedAt: r.completedAt } : {}),
     phases:        r.phases        ?? {},
-    phaseMeta:     r.phaseMeta     ?? {},
+    phaseMeta:     normalizePhaseMeta(r.phaseMeta),
     artifactsReady: r.artifactsReady ?? {},
     gate:          r.gate,
     gateNote:      r.gateNote,
