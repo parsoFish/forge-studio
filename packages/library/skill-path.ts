@@ -27,10 +27,11 @@
  * definition, composed here — never re-implemented.
  */
 import { readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { FORGE_ROOT, assertSkillSlug } from '@forge/kernel/ids.ts';
 import { guardedFile } from '@forge/kernel';
+import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
 
 /** The `skills/` directory under a given root (default: the real repo root).
  *  The one place the literal `skills` directory name is constructed. */
@@ -44,10 +45,14 @@ export function skillDir(name: string, root: string = FORGE_ROOT): string {
   return join(skillsDir(root), name);
 }
 
-/** Absolute path to a named skill's `SKILL.md`: `<root>/skills/<name>/SKILL.md`. */
+/** Absolute path to a named skill's `SKILL.md` — searched across every skill
+ *  root (SEAM F1): `skills/` first, then every `packages/<pkg>/skills/`.
+ *  THROWS, naming both, if real under two roots. Absent everywhere falls
+ *  back to the `skills/` layout path (same non-fallback contract as
+ *  `flowPathForId` — a downstream read throws a clear ENOENT there). */
 export function skillPath(name: string, root: string = FORGE_ROOT): string {
   assertSkillSlug(name);
-  return join(skillsDir(root), name, 'SKILL.md');
+  return resolveIdAcrossRoots(skillRoots(root), name, ['SKILL.md'])?.path ?? join(skillsDir(root), name, 'SKILL.md');
 }
 
 /**
@@ -82,10 +87,14 @@ export function skillPathRelative(name: string): string {
  *
  * The two live side by side ON PURPOSE: a reader reaching for `skillPath` to
  * open a file meets this one immediately below it.
+ *
+ * SEAM F1: searches every skill root the same way `skillPath` does above
+ * (`resolveIdAcrossRoots`, itself built on `guardedFile`). THROWS, naming
+ * both, on a cross-root duplicate.
  */
 export function guardedSkillMdPath(name: string, root: string = FORGE_ROOT): string | null {
   assertSkillSlug(name);
-  return guardedFile(skillsDir(root), [name, 'SKILL.md'], 'read');
+  return resolveIdAcrossRoots(skillRoots(root), name, ['SKILL.md'])?.path ?? null;
 }
 
 /**
@@ -117,8 +126,21 @@ export function listSkillMdDirs(dir: string): string[] {
     .sort();
 }
 
-/** The skills-tree discovery walk: every skill directory under `<root>/skills/`
- *  that carries a `SKILL.md`. Parameterized by root (default: the real repo). */
+/** The skills-tree discovery walk: every skill directory carrying a
+ *  `SKILL.md`, across every skill root (SEAM F1) — `<root>/skills/` first,
+ *  then every `<root>/packages/<pkg>/skills/`. THROWS, naming both
+ *  directories, when the same slug is real under two roots. */
 export function listSkillDirs(root: string = FORGE_ROOT): string[] {
-  return listSkillMdDirs(skillsDir(root));
+  const dirByName = new Map<string, string>();
+  for (const skillsRoot of skillRoots(root)) {
+    for (const dir of listSkillMdDirs(skillsRoot)) {
+      const name = basename(dir);
+      const prior = dirByName.get(name);
+      if (prior !== undefined) {
+        throw new Error(`skill "${name}" is defined in more than one discovery root: ${prior} AND ${dir}`);
+      }
+      dirByName.set(name, dir);
+    }
+  }
+  return [...dirByName.values()].sort();
 }

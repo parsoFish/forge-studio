@@ -115,7 +115,12 @@ steps leaves the reviewer approving blind.
 ### skills (required: ≥ 1 bound skill slug)
 
 Skill slugs bound to this project. Forge uses bound skills as the palette when
-generating agent prompts and when the flow engine selects tools. A project with
+generating agent prompts and when the flow engine selects tools. Since ADR 024
+item 90, a declared skill is not just a preflight-checked fact: `loadDeclaredSkills`
+reads every one's `SKILL.md` (project-local or forge-wide) and both spawn builders
+(`runAgent`'s one-shot path, the dev-loop's per-WI Ralph) fold the text into the
+system prompt of **every** agent that runs on the project — a declared id that
+doesn't resolve throws rather than silently dropping the binding. A project with
 no bound skills relies on forge's defaults; the UI requires ≥ 1 explicit binding
 to confirm the operator has thought about the project's tooling surface.
 

@@ -20,6 +20,9 @@ import { withIdleDeadline } from '../stream-deadline.ts';
 import { gitIdentityEnvOverlay, type GitIdentity } from '@forge/kernel';
 import type { AgentInvocation, ToolUseDetail } from './runner.ts';
 import { extractPath, truncate } from '../tool-event-emit.ts';
+import { FORGE_ROOT } from '../studio/derive.ts';
+import { loadDeclaredSkills } from '@forge/projects/preflight-skills.ts';
+import { composeProjectSkills } from '../project-skills.ts';
 
 export type { GitIdentity };
 
@@ -178,6 +181,16 @@ export type ClaudeAgentOptions = {
    * — backward compatible.
    */
   onReasoning?: (text: string) => void;
+  /**
+   * ADR 024 item 90 — fired once per iteration with the ids of this
+   * worktree's declared `.forge/project.json` `skills[]` (`loadDeclaredSkills`),
+   * whenever the list is non-empty. The caller (which owns the run's logger)
+   * turns this into a structured JSONL event, mirroring `onHeartbeat`/
+   * `onToolUse`/`onReasoning`'s own callback-to-log-event shape. If unset, no
+   * event fires — backward compatible; the skill text still folds into
+   * `options.systemPrompt` either way.
+   */
+  onProjectSkillsLoaded?: (ids: string[]) => void;
 };
 
 /**
@@ -227,6 +240,22 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
   return async ({ promptPath, worktreePath }) => {
     const prompt = readFileSync(promptPath, 'utf8');
 
+    // ADR 024 item 90 — `worktreePath` IS the project directory for a per-WI
+    // Ralph iteration (an explicit AgentInvocation parameter, never guessed
+    // from `process.cwd()`), so this resolves the SAME `.forge/project.json`
+    // `skills[]` `checkSkills` validates at preflight. A declared id that
+    // does not resolve THROWS (`loadDeclaredSkills`, fail-fast) — this
+    // rejects the iteration rather than silently dropping the binding.
+    const projectSkills = loadDeclaredSkills(worktreePath, FORGE_ROOT);
+    if (projectSkills.length > 0) {
+      try {
+        opts.onProjectSkillsLoaded?.(projectSkills.map((s) => s.id));
+      } catch {
+        /* never let a misbehaving consumer break the agent */
+      }
+    }
+    const composedSystemPrompt = composeProjectSkills(opts.systemPrompt, projectSkills);
+
     const options: Record<string, unknown> = {
       cwd: worktreePath,
       allowedTools: opts.allowedTools ?? DEFAULT_ALLOWED_TOOLS,
@@ -241,7 +270,7 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
     if (opts.model !== undefined) options.model = opts.model;
     if (opts.maxTurnsPerIteration !== undefined) options.maxTurns = opts.maxTurnsPerIteration;
     if (opts.maxBudgetUsdPerIteration !== undefined) options.maxBudgetUsd = opts.maxBudgetUsdPerIteration;
-    if (opts.systemPrompt !== undefined) options.systemPrompt = opts.systemPrompt;
+    if (composedSystemPrompt !== undefined) options.systemPrompt = composedSystemPrompt;
     if (opts.hooks !== undefined) options.hooks = opts.hooks;
     // G8 wave 2 (R5-02: now a small override delta, not a pre-merged env —
     // see gitIdentityEnvOverlay + pinned-sdk-query.ts's override semantics).

@@ -35,8 +35,9 @@ import { join } from 'node:path';
 
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
-import { listSkillMdDirs, skillsDir } from '../skill-path.ts';
+import { listSkillMdDirs } from '../skill-path.ts';
 import { isStudioAgent, loadAgentDefinition } from './agent-registry.ts';
+import { skillRoots } from '@forge/kernel/discovery-roots.ts';
 
 /** The composable kinds an agent can name. A connection spans two fields. */
 export type AgentUsageKind = 'skill' | 'hook' | 'connection';
@@ -74,7 +75,7 @@ function idsFor(kind: AgentUsageKind, agent: AgentDefinition): string[] {
  */
 function listAgentsResilient(forgeRoot: string): AgentDefinition[] {
   const defs: AgentDefinition[] = [];
-  for (const dir of listSkillMdDirs(skillsDir(forgeRoot))) {
+  for (const dir of skillRoots(forgeRoot).flatMap(listSkillMdDirs)) {
     const mdPath = join(dir, 'SKILL.md');
     if (!isStudioAgent(mdPath)) continue;
     try {

@@ -168,6 +168,20 @@ export function SessionsIndexBody({
       title="Sessions"
       lede="Every in-flight interactive session, across kinds and projects. Sorted needs-you first, then last-updated. Terminal sessions are not listed here — they live on their artifacts."
     >
+      {/* sessions-kinds-16 — the lede above says terminal sessions "live on
+          their artifacts" but named no path to any of them. Monitor's
+          history ledger (lib/session-ledger.ts's deriveSessionLedgerRows)
+          joins every spine session regardless of phase, so it is where a
+          finished session is actually still findable; static (no fetch
+          dependency), so it renders in every state including loading,
+          reusing the SAME `open-monitor` action MonitorSummaryStrip.tsx
+          already uses for this exact link. */}
+      <div data-section="terminal-sessions-pointer" style={{ marginBottom: 14, fontSize: 12.5, color: 'var(--faint)' }}>
+        Looking for a finished session?{' '}
+        <Link href="/monitor" data-action="open-monitor" style={{ color: 'var(--ember, #FF9E4A)' }}>
+          See its history in Monitor →
+        </Link>
+      </div>
       {error ? (
         <div style={{ marginBottom: sessions.length > 0 ? 18 : 0 }}>
           <FetchErrorState what="sessions" error={error.message} status={error.status} onRetry={onRetry} />

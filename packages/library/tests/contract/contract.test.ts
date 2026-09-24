@@ -18,16 +18,22 @@
  *
  * WHAT IT CANNOT CHECK, STATED. A module namespace only enumerates VALUES at
  * runtime, so the seven exported TYPES cannot appear in `Object.keys`. They are
- * marked `type` in the README table and excluded from the comparison; `tsc`
- * is what enforces those, and claiming otherwise here would be a green
- * assertion over nothing. The type rows are still checked for one thing this
- * test CAN prove: that each names a real export in `index.ts`'s source.
+ * marked `type` in the README table and excluded from the comparison. The type
+ * rows are checked structurally instead (forge-8vfn.20): parsed as an AST via
+ * the real TypeScript compiler (`ts.createSourceFile`, the same tool `tsc`
+ * itself uses, mirroring `path-guard-caller-built-root-ratchet.test.ts`'s own
+ * precedent for this), reading each top-level `export { ... }` declaration's
+ * type-only specifiers — never a regex over the raw source text, which would
+ * match a name that merely appears in a comment or string. A type documented
+ * in the README but only mentioned in prose, never actually exported, is
+ * exactly what this catches.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 import * as library from '../../index.ts';
 
@@ -44,6 +50,25 @@ function readmeApi(): { values: string[]; types: string[] } {
     (m[2] === 'value' ? values : types).push(m[1]!);
   }
   return { values: values.sort(), types: types.sort() };
+}
+
+/** The names REALLY exported as type-only from `index.ts` — parsed as an AST
+ *  (forge-8vfn.20), never a regex over the raw text, so a name that merely
+ *  appears in a comment or string cannot pass for an export. Covers both
+ *  `export type { X } from '...'` (declaration-level `isTypeOnly`) and
+ *  `export { type X } from '...'` (specifier-level `isTypeOnly`) — the two
+ *  real TS syntaxes; `index.ts` today uses the latter. */
+function indexExportedTypeNames(): Set<string> {
+  const indexPath = join(PKG_DIR, 'index.ts');
+  const sf = ts.createSourceFile(indexPath, readFileSync(indexPath, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const names = new Set<string>();
+  for (const stmt of sf.statements) {
+    if (!ts.isExportDeclaration(stmt) || !stmt.exportClause || !ts.isNamedExports(stmt.exportClause)) continue;
+    for (const el of stmt.exportClause.elements) {
+      if (stmt.isTypeOnly || el.isTypeOnly) names.add(el.name.text);
+    }
+  }
+  return names;
 }
 
 test('the README documents a real API — the table is not empty and its rows are unique', () => {
@@ -70,13 +95,21 @@ test('index.ts exports exactly the values the README names — no more, no less'
 });
 
 test('every type the README names is really exported from index.ts', () => {
-  // Types vanish at runtime, so this is a source check, not a namespace check —
-  // and it is honest about being one. It catches the drift that matters: a type
-  // documented as public that the index never actually re-exports.
+  // Types vanish at runtime, so this cannot be the namespace check the value
+  // test above is — it is an AST check instead (forge-8vfn.20), reading the
+  // parsed export declarations rather than the raw text, which catches the
+  // drift that matters: a type documented as public that the index never
+  // actually re-exports (including one merely MENTIONED in a comment, which
+  // a source-text regex would have wrongly accepted).
   const { types } = readmeApi();
-  const indexSrc = readFileSync(join(PKG_DIR, 'index.ts'), 'utf8');
-  const absent = types.filter((t) => !new RegExp(`\\btype\\s+${t}\\b`).test(indexSrc));
+  const reallyExported = indexExportedTypeNames();
+  const absent = types.filter((t) => !reallyExported.has(t));
   assert.deepEqual(absent, [], `documented as public but not exported as a type from index.ts:\n  ${absent.join('\n  ')}`);
+});
+
+test('non-vacuity: indexExportedTypeNames() finds a real, non-empty set of type-only exports — proves the AST walk itself is not silently matching nothing', () => {
+  const reallyExported = indexExportedTypeNames();
+  assert.ok(reallyExported.size > 0, 'indexExportedTypeNames() found zero type exports — the AST walk or index.ts is broken');
 });
 
 test('design.md names the ADRs that govern this package', () => {

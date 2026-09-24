@@ -10,7 +10,8 @@
  * The agent SDK is stubbed via the `deps.sdkQuery` injectable. The brain-lint
  * runner is stubbed via `deps.brainLint`. The cycle log dir + manifest are
  * pre-seeded in a tempdir so the reflector reads a manifest that resolves
- * cleanly.
+ * cleanly. `runReflector` below (forge-ler4) wraps every call with this
+ * file's own lease lock — see `../test-fixtures/reflector-lease-test-fixture.ts`.
  *
  * IMPORTANT: the reflector uses `import.meta.dirname` to resolve the forge root
  * for writes (brain/, _logs/). Tests use unique cycle ids and clean up after
@@ -20,24 +21,23 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { runReflector } from '../../phases/reflector.ts';
+import { runReflector as runReflectorReal, type ReflectorDeps } from '../../phases/reflector.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import type { RunBrainLintResult, Finding } from '@forge/knowledge/brain-lint.ts';
+import { acquireIsolatedReflectorLease } from '../test-fixtures/reflector-lease-test-fixture.ts';
 
 // The forge root the reflector code resolves to (orchestrator/phases/ ⇒ ..)
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
+
+const runReflector = (
+  input: CycleInput, logger: Parameters<typeof runReflectorReal>[1], deps: ReflectorDeps = {},
+): ReturnType<typeof runReflectorReal> =>
+  runReflectorReal(input, logger, { acquireBrainWriteLease: acquireIsolatedReflectorLease, ...deps });
 
 type Harness = {
   cycleId: string;

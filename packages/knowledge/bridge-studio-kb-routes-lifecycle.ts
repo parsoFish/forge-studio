@@ -20,7 +20,7 @@ import {
   discoverProjects,
 } from '@forge/kernel';
 import { loadKbDescriptor, serializeKbDescriptor } from './studio/kb-descriptor.ts';
-import { resolveKbBrainDir } from './brain-paths.ts';
+import { tryGetKbBackend } from './kb-backend.ts';
 import { KB_BINDING_KINDS, type KbBinding } from '@forge/contracts/studio/types.ts';
 import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
 import { KB_ID_RE, isReservedId, sendJson, allowedOrigin, sanitizeError, pathOnly, type RouteContext } from '@forge/kernel';
@@ -243,10 +243,10 @@ export function createKbCreateHandler(deps: KbCreateDeps) {
       // containment roots — brain/<id> (checked above) AND the central
       // per-project root brain/projects/<id> (ADR 035). Without this, a new
       // KB named after an already-onboarded project scaffolded a second,
-      // empty kb.yaml at brain/<id> that resolveKbBrainDir (roots tried in
-      // order [brain/, brain/projects/]) then resolved FIRST — silently
-      // shadowing the project's real central brain everywhere.
-      if (resolveKbBrainDir(ctx.forgeRoot, id)) {
+      // empty kb.yaml at brain/<id> that the resolver (roots tried in order
+      // [brain/, brain/projects/]) then resolved FIRST — silently shadowing
+      // the project's real central brain everywhere.
+      if (tryGetKbBackend(ctx.forgeRoot, id) !== null) {
         sendJson(res, 409, { error: `kb already exists: ${id} (its brain lives at brain/projects/${id})` }, origin);
         return true;
       }
@@ -347,7 +347,10 @@ export async function handleKbDelete(
         sendJson(res, 403, { error: `the forge-owned brain "${id}" cannot be deleted` }, origin);
         return true;
       }
-      const dir = resolveKbBrainDir(ctx.forgeRoot, id);
+      // M7-C KN1 (bead forge-8vfn.5.25.3): resolved via the KbBackend seam —
+      // `rootDir()` is its one deliberate raw-path exception, needed here for
+      // the `rmSync` target below.
+      const dir = tryGetKbBackend(ctx.forgeRoot, id)?.rootDir() ?? null;
       if (!dir || !existsSync(dir)) {
         sendJson(res, 404, { error: `unknown kb: ${id}` }, origin);
         return true;
@@ -358,7 +361,7 @@ export async function handleKbDelete(
         sendJson(res, 409, { error: activeJobReason(deleteActiveJob), runId: deleteActiveJob.runId }, origin);
         return true;
       }
-      // Containment is enforced at the choke point: `resolveKbBrainDir` now
+      // Containment is enforced at the choke point: the seam's resolver now
       // runs the per-segment realpath identity walk, so `dir` is either a
       // verified real directory under `brain/` (or `brain/projects/`) or
       // null. The lexical `resolve(dir).startsWith(brainBase + sep)` check
@@ -440,12 +443,14 @@ export async function handleKbGuidance(
         return true;
       }
 
-      // 2. Containment: resolve the kb dir through the guarded choke point.
-      // This replaces a vacuous `resolve(brainBase, kbId).startsWith(...)`
-      // check AND fixes a second, latent bug it was hiding — that check built
-      // `brain/<id>` unconditionally, so guidance for a per-project brain
+      // 2. Containment: resolve the kb dir through the guarded choke point —
+      // the KbBackend seam's `rootDir()` (M7-C KN1, bead forge-8vfn.5.25.3),
+      // needed here as a real path for `guardKbTail` below. This replaces a
+      // vacuous `resolve(brainBase, kbId).startsWith(...)` check AND fixes a
+      // second, latent bug it was hiding — that check built `brain/<id>`
+      // unconditionally, so guidance for a per-project brain
       // (`brain/projects/<id>`, ADR 035) was written to the wrong directory.
-      const kbDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
+      const kbDir = tryGetKbBackend(ctx.forgeRoot, kbId)?.rootDir() ?? null;
       if (!kbDir) {
         sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin);
         return true;

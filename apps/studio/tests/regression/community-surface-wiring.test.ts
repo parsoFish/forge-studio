@@ -105,7 +105,48 @@ test('E9: NotFound is gated on the not-found OUTCOME, never on the presence of a
 });
 
 test('E9: the transport-failure banner SURVIVES — a bridge that is down still renders the error surface', () => {
-  expect(read(FORM_PAGE)).toMatch(/data-component="fetch-error"/);
+  // forge-4sj: the ad-hoc inline `data-component="fetch-error"` div is
+  // retired in favour of the shared PageLoadError kit (it renders
+  // FetchErrorState — and that data-component attribute — internally); the
+  // source-level fact this page must still carry is that it uses the kit.
+  expect(read(FORM_PAGE)).toMatch(/<PageLoadError/);
+});
+
+// ---------------------------------------------------------------------------
+// forge-4sj — `/community/new`(?edit=) was EXEMPT in
+// detail-pages-fail-closed-wiring.test.ts because fetchRegistryItem never
+// throws (the same status-shaped read as the detail page's
+// fetchCommunityItemDetail), but the exemption's own note disclosed a real
+// gap: no shared PageLoadError kit, no bridge-recovery resubscribe, no
+// Retry — a non-404 edit-load failure left an ad-hoc dead-end banner ABOVE a
+// half-empty form instead of the same retryable, self-healing error state
+// every other detail page gets. Mirrors the detail page's own three PageLoadError
+// tests above almost verbatim (same non-throwing read shape, same kit).
+// ---------------------------------------------------------------------------
+
+test('forge-4sj: the registry form imports the shared PageLoadError kit + bridge-recovery hook', () => {
+  const src = read(FORM_PAGE);
+  expect(src).toMatch(/import \{ PageLoadError \} from '@\/components\/PageLoadError'/);
+  expect(src).toMatch(/import \{ useBridgeRecoveryWhenFailed \} from '@\/lib\/use-bridge-status'/);
+});
+
+test('forge-4sj: a non-404 edit-load failure renders the shared PageLoadError with Retry — never the form half-populated behind an ad-hoc banner', () => {
+  const src = stripComments(read(FORM_PAGE));
+  expect(src).toMatch(/useState<\{ error: string; status\?: number \} \| null>\(null\)/);
+  expect(src).toMatch(/setLoadError\(\{ error: r\.error \?\? [^,]+, status: r\.status \}\)/);
+  expect(src).toMatch(/<PageLoadError[\s\S]{0,200}page="community-registry-form"/);
+  expect(src).toMatch(/<PageLoadError[\s\S]{0,400}onRetry=\{reload\}/);
+  // The error branch must be a real early RETURN — never the form rendered
+  // underneath an inline banner (the exact gap this bead closes).
+  const errIdx = src.indexOf('<PageLoadError');
+  const formIdx = src.indexOf('data-page="community-registry-form"\n');
+  expect(errIdx).toBeGreaterThan(0);
+  expect(formIdx).toBeGreaterThan(errIdx);
+});
+
+test('forge-4sj: a failed edit load re-fills on bridge recovery ONLY while it is the failed state', () => {
+  const src = stripComments(read(FORM_PAGE));
+  expect(src).toMatch(/useBridgeRecoveryWhenFailed\(\s*loadError !== null,\s*reload,?\s*\)/);
 });
 
 test('E9: fetchRegistryItem carries the HTTP status through, so 404 is distinguishable from "never reached"', () => {
@@ -335,4 +376,40 @@ test('E5 (client half): the add form posts NO retired repo-fact key — not even
       `the add form names the retired repo fact "${retired}" as a \`key:\` — either in the request body it builds, or in the copy it shows the operator. Under schema v2 an item has no such field: it belongs in the registry's top-level "sources" map, keyed by sourceUrl, written only from a real upstream response. (The rendered-copy half is not incidental — this assertion is how the form's own description was caught still telling operators their row would be stamped "fetchedBy: operator".)`,
     ).not.toMatch(new RegExp(`\\b${retired}\\s*:`));
   }
+});
+
+// ---------------------------------------------------------------------------
+// forge-5rr (projects-45): the detail page's own `fetchCommunityItemDetail`
+// NEVER throws — it is the status-shaped `{ok, item?, status?, error?}` read,
+// unlike the throwing `studioRead*` reads `detail-pages-fail-closed-wiring.
+// test.ts`'s `expectFailClosedPrimitives` is written for. That is why this
+// page cannot satisfy that shared assertion textually (there is no
+// `catch (err)`) and is EXEMPT there rather than COMPLIANT — but it is the
+// SAME crosscut-08 defect class underneath: a `not-found` claim must be
+// reachable ONLY off a real, bridge-answered 404, never off a transport
+// failure, AND (the gap this pass actually closes) a down bridge must be a
+// retryable, self-healing error state, not a dead-end banner (crosscut-22).
+// ---------------------------------------------------------------------------
+
+test('community detail: the not-found claim is reachable ONLY off a genuine HTTP 404 — never a transport failure', () => {
+  const src = stripComments(read(DETAIL_PAGE));
+  expect(src).toMatch(/if \(r\.status === 404\) \{\s*setState\('not-found'\);/);
+  // The failure mode this guards against: collapsing `!r.ok` alone (true
+  // for BOTH an unreachable bridge and a real 404) into 'not-found'.
+  expect(src).not.toMatch(/if \(!r\.ok\) \{\s*setState\('not-found'\)/);
+});
+
+test('community detail: a non-404 failure (bridge down or answered-but-refused) renders the shared PageLoadError, not an ad-hoc dead-end banner', () => {
+  const src = stripComments(read(DETAIL_PAGE));
+  expect(src).toMatch(/import \{ PageLoadError \} from '@\/components\/PageLoadError'/);
+  expect(src).toMatch(/import \{ useBridgeRecoveryWhenFailed \} from '@\/lib\/use-bridge-status'/);
+  expect(src).toMatch(/useState<\{ error: string; status\?: number \} \| null>\(null\)/);
+  expect(src).toMatch(/setLoadError\(\{ error: r\.error \?\? [^,]+, status: r\.status \}\)/);
+  expect(src).toMatch(/<PageLoadError[\s\S]{0,200}page="community-detail"/);
+  expect(src).toMatch(/<PageLoadError[\s\S]{0,400}onRetry=\{reload\}/);
+});
+
+test('community detail: a failed load re-fills on bridge recovery ONLY while it is the failed state (never re-loads over a healthy page)', () => {
+  const src = stripComments(read(DETAIL_PAGE));
+  expect(src).toMatch(/useBridgeRecoveryWhenFailed\(\s*loadError !== null,\s*reload,?\s*\)/);
 });

@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
+import { PageLoadError } from '@/components/PageLoadError';
+import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import { FilePackage } from '@/components/studio/FilePackage';
 import { LibraryItemActions } from '@/components/studio/LibraryItemActions';
 import { TemplateEditor } from '@/components/studio/TemplateEditor';
@@ -48,7 +50,14 @@ export default function TemplateDetailPage() {
 
   const [state, setState] = useState<PageState>('loading');
   const [detail, setDetail] = useState<TemplateDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // forge-5rr (projects-45): `fetchTemplate` never throws — it is the
+  // status-shaped `{ok, status?, detail?, error?}` read, same shape as
+  // `/community/[kind]/[id]`'s — so there is no `catch` here, but a non-404
+  // failure still needs the SAME shared page-level error state + Retry +
+  // bridge-recovery resubscribe every throwing detail read gets, instead of
+  // the old static banner with no way to retry short of a manual reload
+  // (crosscut-22).
+  const [loadError, setLoadError] = useState<{ error: string; status?: number } | null>(null);
   // W7-B4 (library-17): edit / duplicate / delete state. Only the two
   // single-file categories are writable; scaffolds render the reason.
   const [editing, setEditing] = useState(false);
@@ -60,6 +69,7 @@ export default function TemplateDetailPage() {
 
   const load = useCallback(async (templateId: string) => {
     setState('loading');
+    setLoadError(null);
     const r = await fetchTemplate(templateId);
 
     if (r.ok && r.detail) {
@@ -69,17 +79,27 @@ export default function TemplateDetailPage() {
     }
 
     setDetail(null);
+    // A real, bridge-ANSWERED 404 only — never a transport failure (no
+    // status at all) or a reachable-but-erroring 5xx.
     if (r.status === 404) {
       setState('not-found');
       return;
     }
-    setError(r.error ?? 'could not load this template');
+    setLoadError({ error: r.error ?? 'could not load this template', status: r.status });
     setState('error');
   }, []);
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     if (id) void load(id);
   }, [id, load]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  // Refill ONLY while failed — never re-load over the operator's in-flight
+  // edit/duplicate/delete state (mirrors every other detail page's rule).
+  useBridgeRecoveryWhenFailed(loadError !== null, reload);
 
   // ---- W7-B4 (library-17): authoring actions -----------------------------
 
@@ -143,6 +163,24 @@ export default function TemplateDetailPage() {
   // W7-C3 review (A-H4): per-route tab title, before the early returns.
   useDocumentTitle(detail?.name ?? id, 'Templates');
 
+  // forge-5rr: a non-404 failure is an honest error state with Retry,
+  // checked before the not-found branch so a transport blip can never fall
+  // through to a false absence claim.
+  if (state === 'error' && loadError) {
+    return (
+      <PageLoadError
+        page="template-detail"
+        rootAttrs={{ 'data-template-id': id }}
+        what={`template "${id}"`}
+        error={loadError.error}
+        status={loadError.status}
+        onRetry={reload}
+        backHref="/templates"
+        backLabel="Templates"
+      />
+    );
+  }
+
   // W7-A4 (crosscut-27): unknown id → the ONE shared not-found treatment.
   if (state === 'not-found') {
     return <NotFound kind="template" id={id} backHref="/templates" backLabel="Templates" />;
@@ -164,15 +202,6 @@ export default function TemplateDetailPage() {
 
         {state === 'loading' && (
           <div style={{ color: 'var(--dim)', fontSize: 13.5, padding: '24px 0' }}>Loading…</div>
-        )}
-
-        {state === 'error' && (
-          <div
-            data-component="fetch-error"
-            style={{ marginTop: 16, color: '#f87171', fontSize: 13, padding: '14px 16px', border: '1px solid rgba(248,113,113,.35)', borderRadius: 'var(--radius-sm, 6px)', background: 'rgba(248,113,113,.06)' }}
-          >
-            Could not reach the forge bridge ({error}).
-          </div>
         )}
 
         {state === 'ready' && detail && (

@@ -57,6 +57,7 @@ import { execFileSync, execFile } from 'node:child_process';
 
 import type { RuntimeAdapter, AdapterAgentOptions, QueryFn } from '../types.ts';
 import type { AgentInvocation, AgentIterationInfo } from '../../ralph/runner.ts';
+import { truncate } from '../../tool-event-emit.ts';
 
 // ---------------------------------------------------------------------------
 // Constants — flags, env var names, package id (no hardcoded magic inline)
@@ -433,15 +434,6 @@ function makeAiderQuery(runAider: AiderRunner, model?: string): QueryFn {
  * zero-cost error terminal — still contract-valid.
  */
 const aiderQuery: QueryFn = makeAiderQuery(defaultAiderRunner);
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return s.slice(0, max - 1) + '…';
-}
 
 // ---------------------------------------------------------------------------
 // Adapter export

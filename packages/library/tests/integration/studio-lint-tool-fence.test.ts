@@ -66,9 +66,13 @@ function buildBaseRoot(): string {
 /** A minimal valid studio-agent SKILL.md, with `allowed-tools`/
  *  `disallowed-tools` overridable so tests can construct both the missing-
  *  names and the fully-fenced case without duplicating the whole template. */
-function agentSkillMd(slug: string, opts: { allowedTools?: string[]; disallowedTools?: string[] } = {}): string {
+function agentSkillMd(
+  slug: string,
+  opts: { allowedTools?: string[]; disallowedTools?: string[]; toolFenceExempt?: boolean } = {},
+): string {
   const allowed = opts.allowedTools ?? ['Read'];
   const disallowed = opts.disallowedTools ?? ['Bash'];
+  const exemptLine = opts.toolFenceExempt !== undefined ? `\ntool-fence-exempt: ${opts.toolFenceExempt}` : '';
   return `---
 name: ${slug}
 description: A test agent for the tool-fence sweep.
@@ -87,7 +91,7 @@ runtime:
   model: claude-sonnet-4-6
 budgets: {}
 allowed-tools: [${allowed.join(', ')}]
-disallowed-tools: [${disallowed.join(', ')}]
+disallowed-tools: [${disallowed.join(', ')}]${exemptLine}
 ---
 ## Process
 
@@ -200,6 +204,52 @@ test('forge studio lint: a roster SKILL.md whose disallowed-tools already lists 
 
     const hits = result.findings.filter((f) => f.object === `skill:${slug}` && f.check === CHECK);
     assert.strictEqual(hits.length, 0, `expected 0 ${CHECK} findings for a fully-fenced skill — got: ${JSON.stringify(result.findings)}`);
+  } finally {
+    if (root) rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// forge-6gv.20 — the composer (skill-md-fidelity.ts) always writes BOTH tool
+// keys for a composed agent, so the documented "declare neither key + a
+// comment" escape hatch is unreachable to it. `tool-fence-exempt: true` is
+// the machine-readable escape a composed agent CAN reach and survive a
+// re-serialize with (packages/agents/tests/contract/skill-md-fidelity.test.ts
+// proves the round-trip half).
+test('forge studio lint: a roster SKILL.md missing Task/Agent but declaring tool-fence-exempt: true passes clean', () => {
+  let root: string | undefined;
+  try {
+    root = buildBaseRoot();
+    const slug = 'agent-exempt';
+    writeAgentMd(root, slug, agentSkillMd(slug, { disallowedTools: ['Bash'], toolFenceExempt: true }));
+
+    const result = runStudioLint(root);
+
+    const hits = result.findings.filter((f) => f.object === `skill:${slug}` && f.check === CHECK);
+    assert.strictEqual(
+      hits.length,
+      0,
+      `expected 0 ${CHECK} findings for a skill declaring tool-fence-exempt: true — got: ${JSON.stringify(result.findings)}`,
+    );
+  } finally {
+    if (root) rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('forge studio lint: tool-fence-exempt: false does NOT suppress the finding (only true opts out)', () => {
+  let root: string | undefined;
+  try {
+    root = buildBaseRoot();
+    const slug = 'agent-exempt-false';
+    writeAgentMd(root, slug, agentSkillMd(slug, { disallowedTools: ['Bash'], toolFenceExempt: false }));
+
+    const result = runStudioLint(root);
+
+    const hits = result.findings.filter((f) => f.object === `skill:${slug}` && f.check === CHECK);
+    assert.strictEqual(
+      hits.length,
+      1,
+      `expected the finding to still fire when tool-fence-exempt is false — got: ${JSON.stringify(result.findings)}`,
+    );
   } finally {
     if (root) rmSync(root, { recursive: true, force: true });
   }

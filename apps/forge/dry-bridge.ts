@@ -14,6 +14,23 @@
  * table (data, not prose) enumerating every bridge route with its
  * classification. Route-coverage drift-guard tests consume this table.
  *
+ * bead forge-8vfn.5.30: `RouteEntry.dryClassification` (packages/kernel/
+ * route-entry.ts) already classifies every carved route — every
+ * `packages/<pkg>/routes.ts` table entry states it, non-optionally, right
+ * beside its `method`/`path`. A hand-written row HERE for the same route was
+ * a second, unenforced copy of that same fact, free to drift from it with
+ * nothing to notice. `HAND_ROUTE_CLASSIFICATION` below now carries ONLY the
+ * routes `deriveCarvedRouteClassification` structurally cannot produce: a
+ * route with no `RouteEntry` at all (still dispatched from an if-chain in
+ * `apps/forge/*.ts`), or one where the hand row states something a
+ * `RouteEntry` cannot — the 409 body's `action` (refuse rows) or WHERE the
+ * suppression lives (`guard`), or a body-field-multiplexed sub-classification
+ * (the KB-maintenance `op=` rows: one `RouteEntry`, several real behaviours,
+ * T1 ruling 29). `BRIDGE_ROUTE_CLASSIFICATION` — the table every consumer
+ * still imports — is the union of that hand table and the derived rows;
+ * `apps/forge/tests/contract/dry-bridge-coverage.test.ts` proves the union
+ * carries no redundant hand row and drops nothing a `RouteEntry` declares.
+ *
  * Never silent success/skip:
  * - every `refuse` route writes both a typed 409 HTTP response (via
  *   `refuseDryBridge`) AND a JSONL event;
@@ -28,7 +45,6 @@
  * All event emission reuses the existing `orchestrator/logging.ts`
  * `createLogger` pattern rather than inventing a new logging path.
  */
-
 
 // The env gate and the typed refusal moved to `@forge/kernel` (M4-knowledge
 // s5): five packages consumed them and could only reach them by importing
@@ -46,6 +62,15 @@ export {
   type DryBridgeRefusalInput,
 } from '@forge/kernel';
 import type { DryBridgeAction } from '@forge/kernel';
+
+// bead forge-8vfn.5.30: the SAME route-table factories `apps/forge/routes.ts`
+// calls to assemble the real bridge — called here with stub deps purely to
+// read each row's `dryClassification` (see `classificationStubDeps` below).
+import { knowledgeRoutes, type KnowledgeRouteDeps } from '@forge/knowledge/routes.ts';
+import { libraryRoutes, type LibraryRouteDeps } from '@forge/library/routes.ts';
+import { projectsRoutes, type ProjectsRouteDeps } from '@forge/projects/routes.ts';
+import { agentsRoutes, type AgentsRouteDeps } from '@forge/agents/routes.ts';
+import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions/routes.ts';
 
 
 export type DryBridgeClassification = 'refuse' | 'stub-actions' | 'exempt-local' | 'read-only';
@@ -78,32 +103,30 @@ export type RouteClassification = {
 };
 
 // ---------------------------------------------------------------------------
-// The coverage table — every bridge route, classified. Data, not prose.
+// The hand table — ONLY routes `deriveCarvedRouteClassification` (below)
+// cannot produce: no `RouteEntry` exists (still dispatched from an if-chain),
+// or the row states an `action`/`guard` a `RouteEntry` has no field for, or a
+// body-multiplexed `op=` sub-classification finer than the route's one
+// `RouteEntry.dryClassification`. Every other carved route's row is derived.
 // ---------------------------------------------------------------------------
 
-export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
-  // ---- refuse: full route-level 409 -------------------------------------
+export const HAND_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
+  // ---- refuse: full route-level 409, no RouteEntry (still an if-chain arm) -
   { method: 'POST', route: '/api/scheduler/start', classification: 'refuse', action: 'daemon', guard: 'route',
     reason: 'spawns the detached forge serve daemon (spawnServeDetached)' },
   { method: 'POST', route: '/api/scheduler/stop', classification: 'refuse', action: 'daemon', guard: 'route',
     reason: 'SIGTERMs the live daemon process' },
-  // W8-B5 (exit row E7) — the deterministic community-registry refresh. The
-  // ONLY route in the bridge that calls a third-party API, and it calls it
-  // with the operator's real GH_TOKEN. Refused outright rather than
-  // stub-actioned: there is no local-bookkeeping half to keep (the network
-  // call IS the route), and a harness run that silently spent the operator's
-  // GitHub rate limit — or wrote live upstream numbers into the repo-tracked
-  // registry — is the 2026-07-16 incident shape.
-  { method: 'POST', route: '/api/studio/community/refresh', classification: 'refuse', action: 'network', guard: 'route',
-    reason: 'calls api.github.com / registry.npmjs.org / registry.modelcontextprotocol.io with the operator\'s GH_TOKEN and rewrites studio/community/registry.yaml from the answers' },
-  { method: 'POST', route: '/api/studio/kbs/:id/maintenance (op=fix-agent)', classification: 'refuse', action: 'spawn-agent', guard: 'route',
-    reason: 'spawnBrainFix dispatches a real agent-fix turn' },
   { method: 'POST', route: '/api/recovery/:id/abandon', classification: 'refuse', action: 'git-remote', guard: 'route',
     reason: 'removes the worktree/branch and pushes a remote branch delete' },
   { method: 'POST', route: '/api/recovery/:id/requeue', classification: 'refuse', action: 'git-remote', guard: 'route',
     reason: 'runRequeue performs real git ops on the project repo' },
   { method: 'POST', route: '/api/runs/:id/resume', classification: 'refuse', action: 'git-remote', guard: 'route',
     reason: 'delegates to the same runRequeue git ops as recovery/requeue' },
+
+  // ---- refuse: has a RouteEntry, but the row states an `action`/`guard` no
+  // RouteEntry field carries — kept hand, not a duplicate. -------------------
+  { method: 'POST', route: '/api/studio/community/refresh', classification: 'refuse', action: 'network', guard: 'route',
+    reason: 'calls api.github.com / registry.npmjs.org / registry.modelcontextprotocol.io with the operator\'s GH_TOKEN and rewrites studio/community/registry.yaml from the answers' },
   { method: 'POST', route: '/api/studio/projects/:id/save-repo', classification: 'refuse', action: 'git-remote', guard: 'route',
     reason: 'saveProjectRepo merges + pushes the project default branch' },
   { method: 'PUT', route: '/api/studio/projects/:id', classification: 'refuse', action: 'git-remote', guard: 'route',
@@ -111,20 +134,17 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   // The SAME handler has always answered POST on this URL — its legacy entry
   // gate was `method !== 'DELETE'`, not `method === 'PUT'` — but only the PUT
   // row was ever classified here, so the POST path reached the same
-  // push-to-remote code with no dry-bridge row governing it. The M4 route
-  // carve surfaced it: a table's `method` is singular, so the two methods
-  // became two rows, and this guard immediately reported the missing one.
+  // push-to-remote code with no dry-bridge row governing it.
   { method: 'POST', route: '/api/studio/projects/:id', classification: 'refuse', action: 'git-remote', guard: 'route',
     reason: 'identical code path to the PUT row above — same handler, same saveProjectRepo merge + push' },
 
-  // ---- stub-actions: the spawn-route families ----------------------------
-  // Session bookkeeping (status/prompt/answers files) proceeds exactly as
-  // under FORGE_ARCHITECT_NO_SPAWN today, but never silently: the suppressed
-  // agent turn is explicit — `dryBridge: { skipped: ['agent-turn'] }` on the
-  // 200 body + one `dry-bridge.skip` event (dryBridgeAgentTurnMarker). The
-  // suppression itself is ORed into each helper's EXISTING internal NO_SPAWN
-  // early-return (guard: 'spawn-helper'); NO_SPAWN-only keeps its legacy
-  // silent-skip semantics byte-identical (no marker, no event).
+  // ---- stub-actions: the spawn-route families — every row states `guard:
+  // 'spawn-helper'`, a fact no `RouteEntry` field carries, so all are kept
+  // hand rather than derived. Session bookkeeping (status/prompt/answers
+  // files) proceeds exactly as under FORGE_ARCHITECT_NO_SPAWN today, but
+  // never silently: the suppressed agent turn is explicit — `dryBridge: {
+  // skipped: ['agent-turn'] }` on the 200 body + one `dry-bridge.skip` event
+  // (dryBridgeAgentTurnMarker). ----------------------------------------------
   { method: 'POST', route: '/api/architect/start', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'spawnArchitectTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
   { method: 'POST', route: '/api/architect/answer', classification: 'stub-actions', guard: 'spawn-helper',
@@ -132,9 +152,9 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/architect/rerun', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'spawnArchitectTurn — StuckWarning re-run; re-spawns the existing session as-is (no round/answers mutation), the agent turn is skipped with marker + event' },
   { method: 'POST', route: '/api/plan-verdict', classification: 'stub-actions', guard: 'spawn-helper',
-    reason: 'applyPlanVerdict → spawnArchitectTurn — marker on approve/revise (reject never spawns)' },
+    reason: 'applyPlanVerdict → spawnArchitectTurn — marker on approve/revise (reject never spawns); no RouteEntry — still an if-chain arm' },
   { method: 'POST', route: '/api/runs/:id/gates/plan', classification: 'stub-actions', guard: 'spawn-helper',
-    reason: 'same handler as /api/plan-verdict (applyPlanVerdict)' },
+    reason: 'same handler as /api/plan-verdict (applyPlanVerdict); no RouteEntry — still an if-chain arm' },
   { method: 'POST', route: '/api/instructions/brief', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'spawnInstructionsTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
   { method: 'POST', route: '/api/instructions/answer', classification: 'stub-actions', guard: 'spawn-helper',
@@ -164,152 +184,135 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/studio/kbs/:id/cleanup/start', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'spawnAgentTurn (R4-19-F2 — the kb-cleanup session, riding the generic runInteractiveTurn spine) — the session dir, status.json (kb_id/kb_binding/findings) are REAL bookkeeping and still land; only the agent turn is skipped with marker + event, exactly as the authoring/onboarding-start rows above' },
 
-
-  // ---- stub-actions: connections install (R3-04, D6/D7; forge-6gv.8.2) ---
-  // installArgvFor derives the real `npm install` argv from the catalog pin
-  // ONLY — the request body is read for the `confirm` flag alone and never
-  // for package/version/registry (D6). The suppression check is inline in
-  // the route (mirrors verdict-approve/reflect-answer below, not a named
-  // spawn-helper), so this row carries no `guard`. An UNCONFIRMED request
-  // (forge-6gv.8.2) never reaches the suppression check at all — it returns
-  // a preview and executes nothing, confirmed or not.
-  { method: 'POST', route: '/api/studio/connections/:id/install', classification: 'stub-actions',
-    reason: 'a CONFIRMED request runs a real `npm install` (network + child process); FORGE_DRY_BRIDGE=1 or FORGE_ARCHITECT_NO_SPAWN=1 suppress it and return {suppressed:true, wouldInstall} instead (D7, mirrors run-agent.ts\'s own double env check). An unconfirmed request never reaches this at all — it returns {ok:true, preview} (forge-6gv.8.2)' },
-
-  // ---- stub-actions: community install (R3-07, D2/D9) --------------------
-  // For a mcp/tool item this route delegates to the SAME connection-install
-  // path as /api/studio/connections/:id/install above (byte-identical
-  // suppression check, argv derivation, and executor).
-  //
-  // M6-D / ruling 477 CHANGED WHAT THIS ROUTE CAN REACH, and this table is the
-  // SSOT a reviewer reads, so it is corrected here rather than left to the
-  // handler. A skill item whose package is NOT yet vendored now fetches it
-  // from a third-party repository with the operator's PAT and writes the bytes
-  // into the repo-tracked tree. That arm REFUSES outright under either env var
-  // (`bridge-studio-community.ts`, the fetch arm — `refuseDryBridge` with
-  // action 'network', the refresh route's own answer), which is why the row
-  // stays 'stub-actions' rather than becoming 'refuse': the OTHER arms of this
-  // one route — an already-vendored skill, a hook, a connection — still have
-  // real, useful suppressed behaviour and must keep it. The classification is
-  // per-route and this route is no longer uniform; the reason says so.
-  { method: 'POST', route: '/api/studio/community/:kind/:id/install', classification: 'stub-actions',
-    reason: 'mcp/tool items route to the same real `npm install` path as /api/studio/connections/:id/install (same suppression, D7); an already-vendored skill/hook only copies local bytes, never real-acting; a NOT-yet-vendored skill fetches its package from GitHub with the operator credential and is REFUSED outright by that arm (action: network, ruling 477)' },
-
-  // ---- stub-actions: verdict-approve special case -----------------------
+  // ---- stub-actions: verdict-approve / reflect-answer special cases — no
+  // RouteEntry (still if-chain arms in apps/forge/ui-bridge.ts) --------------
   { method: 'POST', route: '/api/verdict', classification: 'stub-actions',
     reason: 'approve path proceeds (state transition + artifact writes) but skips runReleaseFinalize/mergePr/finalizeAfterMerge — the exact incident actions' },
   { method: 'POST', route: '/api/runs/:id/gates/verdict', classification: 'stub-actions',
     reason: 'same handler as /api/verdict (applyReviewVerdict)' },
-
-  // ---- stub-actions: reflect-answer special case -------------------------
-  // Task A-finalfix FIX 1: the handler does two things — writing
-  // user-feedback.md (bookkeeping) and detached-firing rerunReflector (the
-  // agent turn). Only the latter is suppressed, inline via
-  // dryBridgeAgentTurnMarker (no spawn-helper mkdir/spawn pair exists here),
-  // so — like verdict-approve — this row carries no `guard`.
   { method: 'POST', route: '/api/reflect/:cycleId/answer', classification: 'stub-actions', action: 'spawn-agent',
     reason: 'feedback bookkeeping proceeds; reflector rerun is the skipped agent turn' },
 
-  // ---- exempt-local: mutates only local state ----------------------------
+  // ---- KB maintenance: ONE RouteEntry (`POST /api/studio/kbs/:id/maintenance`,
+  // dryClassification 'stub-actions' — see packages/knowledge/routes.ts), body
+  // field `op` multiplexes FIVE real behaviours the route pattern cannot see
+  // (`matches: (url) => boolean` never reads the body — T1 ruling 29). These
+  // two rows are the finer-grained classification the RouteEntry structurally
+  // cannot express; `deriveCarvedRouteClassification` also emits the plain
+  // (un-suffixed) 'stub-actions' row for the RouteEntry itself, so all three
+  // coexist without duplicating one another (op-suffixed route strings never
+  // exact-match the bare RouteEntry path). ------------------------------------
+  { method: 'POST', route: '/api/studio/kbs/:id/maintenance (op=fix-agent)', classification: 'refuse', action: 'spawn-agent', guard: 'route',
+    reason: 'spawnBrainFix dispatches a real agent-fix turn' },
+  { method: 'POST', route: '/api/studio/kbs/:id/maintenance (op=lint|fix-auto|index)', classification: 'exempt-local', reason: 'local brain lint/fix/index only' },
+
+  // ---- exempt-local: no RouteEntry (still if-chain arms) -------------------
   { method: 'POST', route: '/api/scheduler/pause', classification: 'exempt-local', reason: 'flag file only, no process action' },
   { method: 'POST', route: '/api/scheduler/resume', classification: 'exempt-local', reason: 'flag file only, no process action' },
-  { method: 'POST', route: '/api/studio/projects/:id/preflight/fix-auto', classification: 'exempt-local', reason: 'local git commit to forge-studio branch, no push' },
-  // S3 (1.0.md §3) — "Rebuild contract" (M4-projects, packages/projects/
-  // bridge-studio-project-reset.ts). Dry-run computes computeContractDrift
-  // from the request body's optional appType and writes NOTHING — a POST
-  // only because the app-type override arrives as a body, same shape as
-  // /api/studio/agents/:slug/instructions-draft below.
-  { method: 'POST', route: '/api/studio/projects/:id/contract-reset', classification: 'exempt-local', reason: 'computes the drift report (computeContractDrift) from the request body\'s optional appType override — writes nothing at all, no spawn, no remote (a POST only because the app-type override arrives as a body)' },
-  // applyContractReset writes ONLY via withStudioWrite/commitStudioChange —
-  // a local commit to the project's own forge-studio branch, never a push
-  // (saveProjectRepo, refused above, is the only route that pushes) — same
-  // shape as preflight/fix-auto directly above.
-  { method: 'POST', route: '/api/studio/projects/:id/contract-reset/apply', classification: 'exempt-local', reason: 'applyContractReset commits locally to the project\'s forge-studio branch (withStudioWrite/commitStudioChange) — no push, no spawn, no remote' },
-  { method: 'POST', route: '/api/studio/projects', classification: 'exempt-local', reason: 'onboard: local git init + file scaffolds only' },
-  { method: 'POST', route: '/api/studio/projects/create', classification: 'exempt-local', reason: 'greenfield create (R4-03): local template scaffold + brain seed, no spawn/remote' },
   { method: 'POST', route: '/api/develop/start', classification: 'exempt-local', reason: 'manifest move only' },
   { method: 'POST', route: '/api/initiatives/:id/plan', classification: 'exempt-local', reason: 'plan enqueue: manifest move only (scheduler decomposes, no in-request spawn)' },
   { method: 'POST', route: '/api/flows/:id/run', classification: 'exempt-local', reason: 'W7-A3 per-flow enqueue: manifest move only (enqueueFlowRun); the scheduler claims it later, no in-request spawn' },
   { method: 'POST', route: '/api/runs', classification: 'exempt-local', reason: 'manifest move only' },
-  { method: 'POST', route: '/api/studio/kbs/:id/maintenance (op=lint|fix-auto|index)', classification: 'exempt-local', reason: 'local brain lint/fix/index only' },
-  // ---- exempt-local: kb drain-to-green (W6-B12) --------------------------
-  // Same reasoning as /api/studio/kbs/:id/cleanup/apply above: this route
-  // dispatches runKbDrain (packages/knowledge/bridge-studio-kb-drain.ts), which carries its
-  // OWN noSpawn guard (`FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()`,
-  // mirroring runBrainConsolidateNow's identical guard) — under dry-bridge
-  // the drain loop still runs its local auto-tier fixes and lint scans to a
-  // real (honest) terminal state, just with agent-tier turns skipped rather
-  // than the whole route refusing outright.
-  { method: 'POST', route: '/api/studio/kbs/:id/drain', classification: 'exempt-local',
-    reason: 'runs the KB drain-to-green loop (runKbDrain) — that loop already self-suppresses its own agent-tier spawn under dry-bridge, so this route is never suppressed further (mirrors op=consolidate|lint|fix-auto|index and /cleanup/apply above)' },
-  { method: 'POST', route: '/api/studio/kbs/:id/drain/cancel', classification: 'exempt-local',
-    reason: 'W7-B2 (knowledge-14): writes the local cancel flag (_logs/_kb-drain-<runId>/cancel.json) a live drain loop honors between turns, or force-terminates a DEAD run by rewriting its local status.json — local files only, no agent spawn, no network; the loop it stops is the same self-suppressing runKbDrain above' },
   { method: 'POST', route: '/api/review-comments/:cycleId', classification: 'exempt-local', reason: 'appends to the local review-comments sidecar' },
   { method: 'POST', route: '/api/review-comments/:cycleId/resolve', classification: 'exempt-local', reason: 'marks a local review-comments sidecar entry resolved' },
   { method: 'POST', route: '/api/review-comments/:cycleId/edit', classification: 'exempt-local', reason: 'rewrites one local review-comments sidecar entry (W7-B7 artifact-plan-15)' },
   { method: 'POST', route: '/api/review-comments/:cycleId/delete', classification: 'exempt-local', reason: 'removes one local review-comments sidecar entry (W7-B7 artifact-plan-15)' },
-  { method: 'PUT', route: '/api/studio/agents/:slug', classification: 'exempt-local', reason: 'writes a local SKILL.md' },
   { method: 'PUT', route: '/api/studio/flows/:id', classification: 'exempt-local', reason: 'writes a local flow.yaml' },
-  { method: 'POST', route: '/api/studio/starters/seed', classification: 'exempt-local', reason: 'copies starter agent packages already committed in this repo (studio/starters/agents/) into skills/ — local filesystem only, no network, no spawn; the closed slug set is server-controlled and an existing skills/<slug> is never overwritten (ruling 384)' },
-  // W7-B4 — library authoring write surface: every route below edits or
-  // removes an already-materialised LOCAL file package (skills/<id>/,
-  // studio/hooks/<id>/, studio/artifact-templates|demo-elements, flow dirs)
-  // through the same guarded-path helpers its POST siblings above use.
-  // No spawn, no remote, no daemon — exempt-local like those siblings.
-  { method: 'DELETE', route: '/api/studio/agents/:slug', classification: 'exempt-local', reason: 'removes a local skills/<slug>/ package (409 while referenced by a flow node or session kind)' },
   { method: 'DELETE', route: '/api/studio/flows/:id', classification: 'exempt-local', reason: 'removes a local flow directory (seed flows 403, active run 423)' },
-  { method: 'PUT', route: '/api/studio/skills/:id', classification: 'exempt-local', reason: 'rewrites a local SKILL.md (name/description/body) — no spawn/remote' },
-  { method: 'DELETE', route: '/api/studio/skills/:id', classification: 'exempt-local', reason: 'removes a local skill package (409 while used by agents)' },
-  { method: 'PUT', route: '/api/studio/hooks/:id', classification: 'exempt-local', reason: 'rewrites a local hook.yaml + scripts/run.sh; hash change honestly re-enters needs-review' },
-  { method: 'DELETE', route: '/api/studio/hooks/:id', classification: 'exempt-local', reason: 'removes a local hook package (409 while carried by agents)' },
-  { method: 'POST', route: '/api/studio/hooks/:id/revoke-approval', classification: 'exempt-local', reason: 'moves the local hook-approvals.yaml ledger entry approved→revoked — no spawn/remote' },
-  { method: 'POST', route: '/api/studio/templates', classification: 'exempt-local', reason: 'writes a local template file under studio/artifact-templates|demo-elements (validated by the category loader)' },
-  { method: 'PUT', route: '/api/studio/templates/:id', classification: 'exempt-local', reason: 'rewrites a local planning|demo-output template file (scaffold category 400)' },
-  { method: 'DELETE', route: '/api/studio/templates/:id', classification: 'exempt-local', reason: 'removes a local template file (409 while used by flows; scaffold 400)' },
-  { method: 'POST', route: '/api/studio/skills', classification: 'exempt-local', reason: 'writes a local skill definition' },
-  { method: 'POST', route: '/api/studio/skills/install', classification: 'exempt-local', reason: 'installs an already-materialised local skill package (D2: no network call in this initiative)' },
-  { method: 'POST', route: '/api/studio/skills/:id/approve', classification: 'exempt-local', reason: 'flips a draft skill\'s frontmatter status locally — no spawn/remote' },
-  { method: 'POST', route: '/api/studio/hooks', classification: 'exempt-local', reason: 'writes a local hook.yaml + scripts/run.sh package — no spawn/remote' },
-  { method: 'POST', route: '/api/studio/hooks/:id/approve', classification: 'exempt-local', reason: 'writes a local hook-approvals.yaml ledger entry — no spawn/remote' },
-  { method: 'POST', route: '/api/studio/hooks/:id/override', classification: 'exempt-local', reason: 'writes a local hook-approvals.yaml ledger entry (overridden:true) — no spawn/remote' },
-  { method: 'POST', route: '/api/studio/hooks/:id/decline', classification: 'exempt-local', reason: 'writes a local hook-approvals.yaml ledger entry (declined) — no spawn/remote (forge-8vfn.5.2)' },
-  { method: 'POST', route: '/api/studio/connections/:id/probe', classification: 'exempt-local', reason: 'R3-04 D3/D11 — spawns a declared, credential-stripped local presence/version check only; deliberately NEVER suppressed by dry-bridge (readiness must stay real, D3) — no git-remote/daemon/agent-turn' },
-  // M4 §4 step 2 — TWO ROUTES THIS TABLE HAD NEVER SEEN. Both already existed
-  // and both are non-GET; neither was ever classified, because
-  // `dry-bridge-coverage.test.ts` derives its candidates by reading
-  // `url === '<literal>'` / `url.match(/…/)` arms and BOTH of these arms
-  // compared against a module CONST instead (`FINALIZE_URL`,
-  // `INSTRUCTIONS_DRAFT_ROUTE_RE`). Carving them into
-  // `packages/library/routes.ts` states their method and path as DATA, which
-  // is what makes them visible — the carve un-blinded the scanner rather than
-  // adding routes. Same failure shape as COMMON §15.16's directory-list-scoped
-  // guard: the check passed while its scope silently excluded real routes.
-  { method: 'POST', route: '/api/studio/authoring/finalize', classification: 'exempt-local', reason: 'lands an authoring session\'s staged package into the local library — the `committing` turn performs NO SDK spawn at all — it runs copyStagingToLibrary, per bridge-studio-authoring.ts step 5, and the install writes local skills/<id>/ or studio/hooks/<id>/ bytes through the guarded-path helpers; no spawn, no remote, no daemon' },
-  { method: 'POST', route: '/api/studio/agents/:slug/instructions-draft', classification: 'exempt-local', reason: 'composes an instructions draft from the request body and confirms the agent exists via a guarded SKILL.md existence check — writes nothing at all, no spawn, no remote (a POST only because the draft input arrives as a body)' },
-  { method: 'POST', route: '/api/studio/kbs', classification: 'exempt-local', reason: 'creates a local KB directory' },
-  { method: 'DELETE', route: '/api/studio/kbs/:id', classification: 'exempt-local', reason: 'removes a local KB directory' },
-  // W7-B3 (community-23) — registry CRUD: all three write ONLY the local
-  // repo-tracked studio/community/registry.yaml (fixed path, temp+rename,
-  // re-parsed through loadCommunityRegistry before the rename); no spawn,
-  // no network, no git action — the operator commits via their own flow.
-  { method: 'POST', route: '/api/studio/community/registry/items', classification: 'exempt-local', reason: 'adds a row to the local community registry file' },
-  { method: 'PUT', route: '/api/studio/community/registry/items/:id', classification: 'exempt-local', reason: 'edits a local community registry row in place' },
-  { method: 'DELETE', route: '/api/studio/community/registry/items/:id', classification: 'exempt-local', reason: 'removes a local community registry row' },
-  { method: 'POST', route: '/api/studio/kbs/:id/guidance', classification: 'exempt-local', reason: 'writes a local guidance markdown file' },
+  { method: 'POST', route: '/api/studio/starters/seed', classification: 'exempt-local', reason: 'copies starter agent packages already committed in this repo (studio/starters/agents/) into skills/ — local filesystem only, no network, no spawn; the closed slug set is server-controlled and an existing skills/<slug> is never overwritten (ruling 384)' },
   { method: 'POST', route: '/api/initiatives', classification: 'exempt-local', reason: 'writeManifest — local queue write only' },
-  { method: 'POST', route: '/api/instructions/start', classification: 'exempt-local', reason: 'creates local session state; the spawn is on brief/answer/verdict' },
-  { method: 'POST', route: '/api/project-brain/start', classification: 'exempt-local', reason: 'creates local session state; the spawn is on brief/approve' },
-  { method: 'POST', route: '/api/project-brain/abandon', classification: 'exempt-local', reason: 'writes local session status only — confirmed it does NOT call spawnProjectBrainTurn (only /approve does)' },
-  { method: 'POST', route: '/api/demo-builder/start', classification: 'exempt-local', reason: 'creates local session state; the spawn is on brief/feedback/lock/abandon' },
   { method: 'POST', route: '/api/hooks/:hookId', classification: 'exempt-local', reason: 'signature-verified webhook receipt: stages a claimable flow-run request file only — dispatch happens in the daemon sweep behind NO_SPAWN/dry-bridge' },
-  // W7-A2 — the generic session cancel: writes the universal `cancelled`
-  // terminal phase onto the session's own status.json and SIGTERMs the
-  // session's tracked turn pid IF one is alive and provably ours (a
-  // journey/dry seed never has one). No spawn, no remote, no daemon.
-  { method: 'POST', route: '/api/studio/sessions/:kind/:sessionId/cancel', classification: 'exempt-local', reason: 'writes local session status (phase=cancelled) + SIGTERMs an owned live turn pid when one is tracked — no spawn/remote/daemon' },
-  { method: 'POST', route: '/api/studio/sessions/:kind/:sessionId/:affordance', classification: 'stub-actions', reason: 'the generic session-affordance WRITE endpoint: its verdict/answer arms spawn the next agent turn, so the dry bridge skips the spawn and the 200 carries the dryBridge disclosure. First classified when M4 row 37 carved the dispatch into packages/sessions/routes.ts — while it was a host arm its matcher was a named const, which this table\'s cli scan cannot derive, so the route ran unclassified' },
-  { method: 'POST', route: '/api/agents/runs/:runId/cancel', classification: 'exempt-local', reason: 'W7-B5 (agents-30): appends a local agent-dispatch.cancelled marker event + SIGTERMs an owned live dispatch pid when one is tracked (ownership proven via the runId in its argv) — no spawn/remote/daemon' },
 
   // ---- read-only ----------------------------------------------------------
   { method: 'GET', route: '*', classification: 'read-only', reason: 'all GET routes across the bridge are read-only by construction' },
 ] as const;
+
+// ---------------------------------------------------------------------------
+// Derivation — every OTHER carved route's row comes straight from its own
+// `RouteEntry.dryClassification`, by calling each package's route-table
+// FACTORY (the same function `apps/forge/routes.ts` calls to assemble the
+// real bridge) and reading the field off the real, typed result — never a
+// text oracle over source. Each factory needs a `deps` object, but
+// `dryClassification` is a literal on every row, independent of `deps`
+// content; only the `matches`/`handler` closures a factory also produces
+// ever read `deps`, and neither is invoked here. `classificationStubDeps`
+// supplies a harmless stand-in, exactly as every package's own
+// `tests/contract/routes-table.test.ts` already does to inspect its table's
+// shape. GET routes are skipped (blanket-covered by the wildcard read-only
+// row), and a route whose exact (method, route) already has a
+// `HAND_ROUTE_CLASSIFICATION` row (the op-suffixed KB-maintenance rows) is
+// skipped so the union never carries two rows claiming the same table entry.
+// ---------------------------------------------------------------------------
+
+/**
+ * A stand-in for a route-table factory's `deps` parameter whose every
+ * property access returns a harmless no-op function. Only `method`/`path`/
+ * `dryClassification` — literals on each produced row — are ever read off
+ * the result; `matches`/`handler` (the only fields a factory ever reads
+ * `deps` to build) are never called.
+ */
+function classificationStubDeps<T>(): T {
+  return new Proxy({}, { get: () => () => undefined }) as T;
+}
+
+type CarvedRouteMeta = { readonly method: string; readonly path: string; readonly dryClassification: string };
+
+/** Project a factory's real `RouteEntry[]` down to the three fields this
+ *  module needs, immediately discarding `matches`/`handler` so no caller
+ *  here ever holds a value built from stub `deps`. */
+function projectRouteMeta(entries: readonly { method: string; path: string; dryClassification: string }[]): CarvedRouteMeta[] {
+  return entries.map((e) => ({ method: e.method, path: e.path, dryClassification: e.dryClassification }));
+}
+
+/** Every carved route across every package, via the SAME factories the real
+ *  bridge assembly (`apps/forge/routes.ts`) calls. */
+function allCarvedRouteMeta(): CarvedRouteMeta[] {
+  return [
+    ...projectRouteMeta(knowledgeRoutes(classificationStubDeps<KnowledgeRouteDeps>())),
+    ...projectRouteMeta(libraryRoutes(classificationStubDeps<LibraryRouteDeps>())),
+    ...projectRouteMeta(projectsRoutes(classificationStubDeps<ProjectsRouteDeps>())),
+    ...projectRouteMeta(agentsRoutes(classificationStubDeps<AgentsRouteDeps>())),
+    ...projectRouteMeta(sessionsRoutes(classificationStubDeps<SessionsRouteDeps>())),
+  ];
+}
+
+const VALID_CLASSIFICATIONS = new Set<string>(['refuse', 'stub-actions', 'exempt-local']);
+const VALID_METHODS = new Set<string>(['POST', 'PUT', 'DELETE']); // GET is blanket-covered; PATCH: no carved route uses it today
+
+/**
+ * Every carved route's classification, read straight from its `RouteEntry`.
+ * Exported (not just used to build `BRIDGE_ROUTE_CLASSIFICATION`) so the
+ * coverage test can assert on it directly without re-deriving.
+ */
+export function deriveCarvedRouteClassification(
+  handRows: readonly RouteClassification[] = HAND_ROUTE_CLASSIFICATION,
+): RouteClassification[] {
+  const handKeys = new Set(handRows.map((r) => `${r.method} ${r.route}`));
+  const seen = new Set<string>();
+  const out: RouteClassification[] = [];
+  for (const entry of allCarvedRouteMeta()) {
+    if (!VALID_METHODS.has(entry.method) || !VALID_CLASSIFICATIONS.has(entry.dryClassification)) continue;
+    const route = entry.path.replace(/:[A-Za-z_][A-Za-z0-9_]*/g, ':id');
+    const key = `${entry.method} ${route}`;
+    if (handKeys.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      method: entry.method as RouteClassification['method'],
+      route,
+      classification: entry.dryClassification as DryBridgeClassification,
+      reason: `derived from its RouteEntry.dryClassification (path '${entry.path}')`,
+    });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// The coverage table — every bridge route, classified. Data, not prose.
+// The union other modules/tests import: hand rows the derivation cannot
+// produce, plus every carved route's derived row.
+// ---------------------------------------------------------------------------
+
+export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
+  ...HAND_ROUTE_CLASSIFICATION,
+  ...deriveCarvedRouteClassification(),
+];

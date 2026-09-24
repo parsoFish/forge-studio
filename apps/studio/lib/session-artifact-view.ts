@@ -187,15 +187,23 @@ export function generationGalleryView(
 
 /**
  * R4-16 round 2 (pin 3, Finding C, MAJOR) — the pure decision behind the
- * cross-session selection-leak fix. `GenerationGallery` used to store a bare
- * `useState<number | null>`, so a generation picked while viewing session A
- * silently kept rendering after the panel swapped to session B (the caller
- * swaps `sessionId` without unmounting). This function is what lets the
- * component derive its view fresh every render, with NO artifact-identity
+ * cross-session selection-leak fix, and (bead forge-8vfn.8.3.4) the ONE
+ * selection shape shared by every control that can pick a generation:
+ * `GenerationGallery`'s per-item selector AND `SessionInteractivePanel`'s
+ * verdict-approve picker are both LIFTED to this same shape, owned by one
+ * `useState` on the session page (`app/sessions/[kind]/[sessionId]/page.tsx`)
+ * — so the two controls can no longer disagree about which generation an
+ * approve locks. The `sessionId` tag is what let `GenerationGallery` stop
+ * storing a bare `useState<number | null>`, whose pick silently kept
+ * rendering after the panel swapped to a different session (the caller
+ * swaps `sessionId` without unmounting) — NOT an artifact-identity
  * `useEffect` (that shape was the ROUND-1 defect this replaces — an effect
  * keyed on the artifact's object reference resets on every 3s poll tick even
  * when nothing the operator picked actually changed, AT-112).
- *
+ */
+export type GenerationSelection = { sessionId: string; number: number } | null;
+
+/**
  * Returns `selection.number` iff `selection.sessionId === sessionId` — the
  * session currently on screen — else `undefined`, so `generationGalleryView`
  * falls back to its existing, already-pinned newest-generation default
@@ -203,7 +211,7 @@ export function generationGalleryView(
  * `undefined`.
  */
 export function preferredGenerationFor(
-  selection: { sessionId: string; number: number } | null,
+  selection: GenerationSelection,
   sessionId: string,
 ): number | undefined {
   if (selection === null) return undefined;
