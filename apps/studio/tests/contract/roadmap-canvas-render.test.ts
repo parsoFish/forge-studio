@@ -274,12 +274,23 @@ test('[W6-RV-2] AT4: a [data-dep-jump] chip is keyboard-reachable (role=button, 
   expect(chip).toContain('tabindex="0"');
 });
 
-test('[W6-RV-2] AT4: the drawer carries the run dig-in (active + prior cycles) for a node with runs', () => {
+test('[W6-RV-2] AT4: the drawer carries the run dig-in (most-recent + prior cycles) for a node with runs', () => {
+  // forge-6gv.13.1: INIT-A's status is 'done' (a terminal status, see
+  // buildRoadmap() above) — its most recent cycle (`c-active`, despite the
+  // fixture's own id) is therefore a CONCLUDED run, not a currently-running
+  // one, and must read "last run", never "active run", for a done
+  // initiative. `data-run-active` still reads "true" on it regardless —
+  // that attribute means NEWEST (S10.story.mjs binds off it), not RUNNING;
+  // the terminal fact lives on the label and on the separate
+  // `data-run-live="false"` attribute instead. `c-old` (an OLDER attempt)
+  // stays "prior run" / data-run-active="false" regardless.
   const html = render({ initialSelectedId: 'INIT-A' });
   expect(html).toContain('data-run-cycle-id="c-active"');
   expect(html).toContain('data-run-active="true"');
+  expect(html).toContain('data-run-live="false"');
+  expect(html).toContain('last run');
   expect(html).toContain('data-run-cycle-id="c-old"');
-  expect(html).toContain('data-run-active="false"');
+  expect(html).toContain('prior run');
 });
 
 // ---------------------------------------------------------------------------
@@ -494,4 +505,42 @@ test('[7.6.39] the handle is unique per node — one press, one initiative', () 
   const handles = [...html.matchAll(/data-action="(open-initiative-[^"]+)"/g)].map((m) => m[1]);
   expect(handles.length, 'one handle per rendered node').toBeGreaterThanOrEqual(4);
   expect(new Set(handles).size, 'handles must be unique').toBe(handles.length);
+});
+
+// ---------------------------------------------------------------------------
+// `forge-8vfn.7.6.26` (T1 720(ii)) — the `ready-for-review` x `data-plan-state`
+// cell. Previously only a $2.50 story run (S10 amend-8) asserted this; these
+// two cases pin it as a unit door for free. Derivation:
+// `apps/forge/bridge-studio.ts:893/995/984/1128-1156` threads `workItems` from
+// the work-items snapshot into `status: 'ready-for-review'` untouched, and
+// `RoadmapCanvas.tsx:103/563` read `workItems !== undefined` FIRST — ahead of
+// any `status` check — so `planned` here means "work items exist", never
+// "no longer awaiting planning".
+// ---------------------------------------------------------------------------
+
+test('[7.6.26] a READY-FOR-REVIEW initiative WITH a work-item snapshot reads `planned`', () => {
+  const id = 'INIT-READY-FOR-REVIEW-PLANNED';
+  const html = render({
+    roadmap: oneInitiative({ initiativeId: id, status: 'ready-for-review', workItems: [wi('WI-1')] }),
+    cycleGroups: [],
+  });
+
+  const tag = tagContaining(html, `data-initiative-id="${id}"`);
+  expect(tag).toContain('data-initiative-status="ready-for-review"');
+  expect(planStateOf(html, id)).toBe('planned');
+});
+
+test('[7.6.26] a READY-FOR-REVIEW initiative WITHOUT a work-item snapshot reads `unplanned`, never `planning`', () => {
+  // `planPhase` can only reach `claimed` when `status === 'in-flight'` (:563);
+  // anything past in-flight with no work items falls through to `pending` ->
+  // `unplanned` -- this is the value nobody guesses.
+  const id = 'INIT-READY-FOR-REVIEW-UNPLANNED';
+  const html = render({
+    roadmap: oneInitiative({ initiativeId: id, status: 'ready-for-review' }),
+    cycleGroups: [],
+  });
+
+  const tag = tagContaining(html, `data-initiative-id="${id}"`);
+  expect(tag).toContain('data-initiative-status="ready-for-review"');
+  expect(planStateOf(html, id)).toBe('unplanned');
 });

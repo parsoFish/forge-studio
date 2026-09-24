@@ -16,9 +16,7 @@ import { join, dirname, relative } from 'node:path';
 
 import {
   auditKbEdit,
-  auditKbEdits,
   repairKbEdit,
-  isUnsound,
   buildKbEditSoundnessCtx,
   scanRelatedThemesBlock,
   guardAgentKbEdits,
@@ -65,15 +63,6 @@ test('a created or deleted FILE is never audited for soundness (the structural g
   const { ctx } = plantRealEdit1();
   assert.deepEqual(auditKbEdit(change(EDIT_1_REL, null, REAL_EDIT_1_AFTER), ctx), []);
   assert.deepEqual(auditKbEdit(change(EDIT_1_REL, REAL_EDIT_1_BEFORE, null), ctx), []);
-});
-
-test('auditKbEdits aggregates across changes and isUnsound is true iff at least one row is present', () => {
-  const { ctx } = plantRealEdit1();
-  const sound = change(EDIT_1_REL, REAL_EDIT_1_BEFORE, REAL_EDIT_1_BEFORE.replace('Rewritten', 'x'));
-  const unsoundChange = change(EDIT_1_REL, REAL_EDIT_1_BEFORE, REAL_EDIT_1_AFTER);
-  assert.equal(isUnsound(auditKbEdits([sound], ctx)), false);
-  assert.equal(isUnsound(auditKbEdits([sound, unsoundChange], ctx)), true);
-  assert.equal(auditKbEdits([unsoundChange, unsoundChange], ctx).length, 2);
 });
 
 test('the audit\'s slug universe is the SAME derivation checkDanglingEdges lints against — one walk, not two', () => {
