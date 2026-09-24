@@ -71,7 +71,7 @@ export { scaffoldGreenfieldProject, listProjectStarters, projectStartersDir } fr
 export type { ScaffoldResult } from './project-create.ts';
 
 // --- repo transactions: the `forge-studio` branch write path --------------
-export { ensureStudioBranch, commitStudioChange, withStudioWrite } from './project-repo-tx.ts';
+export { ensureStudioBranch, commitStudioChange, withStudioWrite, StudioWritePathIgnoredError } from './project-repo-tx.ts';
 
 // --- the reset: `forge project reset` / studio "Rebuild contract" ---------
 export { computeContractDrift, applyContractReset, AppTypeUnresolvedError } from './reset.ts';

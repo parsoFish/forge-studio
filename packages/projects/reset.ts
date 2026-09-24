@@ -673,11 +673,30 @@ function ensureForgeSkillsDir(projectDir: string): void {
  * that one, has no all-new staging tree to unwind: these are an EXISTING
  * project's live files, and every move this function makes was already
  * named in the drift report the operator reviewed before confirming apply.
- * A thrown error never reaches `withStudioWrite`, so the `.forge/project.json`
- * write below never runs and nothing is committed to `forge-studio` — the
+ * A thrown error never reaches `withStudioWrite`, so none of the commits
+ * below ever run and nothing is committed to `forge-studio` — the
  * partially-moved directories are left as real, visible, uncommitted
  * working-tree changes for the operator to inspect via `git status`, not a
  * silent half-reset.
+ *
+ * COMMIT ORDER (data-loss fix, measured on a real project): the `.gitignore`
+ * fix commits FIRST, before the contract/skills commit(s) below — reversed
+ * from this function's first ship. A project whose `.gitignore` blanket-
+ * ignores `.forge/` (exactly the drift `computeGitignoreDrift` exists to
+ * catch) still has its just-relocated `.forge/skills/<id>/SKILL.md` and its
+ * `.forge/project.json` git-ignored the instant the moves land on disk;
+ * `git add -- <path>` on an ignored path is a silent no-op
+ * (`commitStudioChange`'s `allowFail`), so committing the contract/skills
+ * change BEFORE the `.gitignore` fix produced a commit that deleted the old
+ * tracked `forge/skills/<id>/SKILL.md` sources and added NOTHING — the
+ * relocated files and `.forge/project.json` were left untracked on a HEAD
+ * that named them nowhere. Writing + committing `.gitignore` first means the
+ * working tree's ignore rules are already correct by the time the
+ * contract/skills `git add` below runs, so those paths stage normally.
+ * `commitStudioChange` ALSO refuses (throws) to silently drop an explicitly
+ * named path that is still ignored after its own `git add` — a second,
+ * independent backstop for this class of defect, not a substitute for this
+ * ordering.
  */
 export function applyContractReset(projectDir: string, drift: DriftReport): ResetResult {
   const dir = resolve(projectDir);
@@ -691,6 +710,24 @@ export function applyContractReset(projectDir: string, drift: DriftReport): Rese
   for (const move of realMoves) {
     guardedRename(dir, (move.from as string).split('/'), move.to.split('/'));
     skillMovesApplied.push(move);
+  }
+
+  // .gitignore fix FIRST — its own scoped commit, and load-bearing for the
+  // commit(s) below (see the header's COMMIT ORDER note): a blanket
+  // `.forge/` ignore must be lifted from the WORKING TREE before the
+  // contract/skills `git add` runs, or the just-relocated
+  // `.forge/skills/<id>/SKILL.md` + `.forge/project.json` paths would still
+  // be ignored at that moment and silently dropped from that commit.
+  const gitignoreFixed = drift.gitignoreDrift.action === 'regenerate';
+  if (gitignoreFixed) {
+    const giGuard = resolveGuardedPath(dir, ['.gitignore']);
+    if (!giGuard.ok) throw new PathGuardContainmentError(`reset: .gitignore containment check failed: ${giGuard.reason}`);
+    withStudioWrite(
+      dir,
+      'forge-studio: reset .gitignore (untrap tracked contract config)',
+      () => writeFileSync(giGuard.realPath, drift.gitignoreDrift.after as string, 'utf8'),
+      ['.gitignore'],
+    );
   }
 
   // COMMIT SCOPE: every path this call wrote, and nothing else. `paths` is
@@ -745,19 +782,6 @@ export function applyContractReset(projectDir: string, drift: DriftReport): Rese
     // relocation, scoped the same way. Before this branch existed the moves
     // reached a commit only as collateral of the unscoped `add -A`.
     withStudioWrite(dir, 'forge-studio: reset project skill layout', () => undefined, movePaths);
-  }
-
-  // .gitignore fix — its own scoped commit, independent of the two above.
-  const gitignoreFixed = drift.gitignoreDrift.action === 'regenerate';
-  if (gitignoreFixed) {
-    const giGuard = resolveGuardedPath(dir, ['.gitignore']);
-    if (!giGuard.ok) throw new PathGuardContainmentError(`reset: .gitignore containment check failed: ${giGuard.reason}`);
-    withStudioWrite(
-      dir,
-      'forge-studio: reset .gitignore (untrap tracked contract config)',
-      () => writeFileSync(giGuard.realPath, drift.gitignoreDrift.after as string, 'utf8'),
-      ['.gitignore'],
-    );
   }
 
   const preflight = runPreflight(dir, { forgeRoot: drift.forgeRoot });

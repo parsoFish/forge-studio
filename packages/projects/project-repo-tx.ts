@@ -15,10 +15,35 @@
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
 
 export const STUDIO_BRANCH = 'forge-studio';
+
+/**
+ * Thrown by `commitStudioChange` when an EXPLICITLY-listed `paths` entry
+ * still exists on disk but git refused to stage it (still ignored at the
+ * moment `git add` ran) — the measured data-loss defect this class exists to
+ * make impossible to repeat: a project whose `.gitignore` blanket-ignored
+ * `.forge/` had its relocated `.forge/skills/<id>/SKILL.md` +
+ * `.forge/project.json` silently dropped from a "reset project contract"
+ * commit (`git add -- <paths>`'s `allowFail` swallowed git's "paths are
+ * ignored" failure). A path this caller explicitly named as something it
+ * just wrote must never vanish from the commit without anyone finding out.
+ * `paths` carries exactly the offending subset, structured (not just
+ * interpolated into `.message`), so a caller can react to WHICH path(s).
+ */
+export class StudioWritePathIgnoredError extends Error {
+  readonly paths: string[];
+  constructor(paths: string[]) {
+    super(
+      `commitStudioChange: git refused to stage the following explicitly-listed path(s) — still ignored by .gitignore: ${paths.join(', ')}`,
+    );
+    this.name = 'StudioWritePathIgnoredError';
+    this.paths = paths;
+  }
+}
 
 /** Forge session/scratch dirs that must NEVER be committed into the project. */
 const SCRATCH_EXCLUDES = ['_instructions', '_demo', '_preflight-fix', '_architect', '_project-brain', '.forge/work-items'];
@@ -139,6 +164,18 @@ export function commitStudioChange(projectDir: string, message: string, paths?: 
   ensureStudioBranch(projectDir);
   if (paths !== undefined) {
     git(projectDir, ['add', '--', ...paths], { allowFail: true });
+    // Fail loud (data-loss fix, see `StudioWritePathIgnoredError`'s doc): a
+    // listed path that legitimately doesn't exist on disk (e.g. a move's
+    // `from` source, already gone — `git add` stages that as a deletion just
+    // fine) is NOT an error. A listed path that DOES still exist on disk but
+    // git still reports as untracked-and-ignored means the `add` above was a
+    // silent no-op for it.
+    const stillIgnored = paths.filter((p) => {
+      if (!existsSync(join(projectDir, p))) return false;
+      const listing = git(projectDir, ['ls-files', '--others', '--ignored', '--exclude-standard', '--', p], { allowFail: true });
+      return listing.length > 0;
+    });
+    if (stillIgnored.length > 0) throw new StudioWritePathIgnoredError(stillIgnored);
   } else {
     git(projectDir, ['add', '-A', '--', '.', ...SCRATCH_EXCLUDES.map((s) => `:(exclude)${s}`)], { allowFail: true });
   }
