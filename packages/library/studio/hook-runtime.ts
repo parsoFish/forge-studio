@@ -71,11 +71,10 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 
 import { HOOK_ENV_BASE_ALLOWLIST, HOOK_ENV_CREDENTIAL_EXCLUSIONS, buildChildEnv } from '@forge/kernel/spawn-env.ts';
 import type { EventLogger } from '@forge/kernel';
-import { hookDir, loadHookDefinition, type HookDefinition, type HookPermissionManifest } from './hook-library.ts';
+import { hookDir, loadHookDefinition, resolveHookScriptPath, type HookDefinition, type HookPermissionManifest } from './hook-library.ts';
 import { extractEnvVarNames, scanHookPackage, type HookScanReport } from './hook-scan.ts';
 import { hookRunState } from './hook-approval-ledger.ts';
 
@@ -275,7 +274,17 @@ function prepareHookRun(input: { forgeRoot: string; id: string; logger: EventLog
 
   const def = loadHookDefinition(id, forgeRoot);
   const dir = hookDir(id, forgeRoot);
-  const scriptPath = join(dir, def.script);
+  // Re-resolve HERE, at prepare time, and use THIS call's returned real path
+  // for both the read below and the spawn in the caller — never a second,
+  // unvalidated `join(dir, def.script)` re-derivation (forge-8vfn.8.3.2,
+  // second half). `loadHookDefinition` above already calls
+  // `resolveHookScriptPath` once, but only for its throw side effect; the
+  // validated real path it computes is discarded, which is exactly the gap
+  // this closes — a symlink swapped between that discarded check and a raw
+  // re-join would have re-resolved outside the hook dir, unnoticed. This
+  // call is the last validation before either tail ever reads or spawns the
+  // script, minimising (never fully eliminating) the residual TOCTOU window.
+  const scriptPath = resolveHookScriptPath(dir, def.script);
   const scriptBody = readFileSync(scriptPath, 'utf8');
 
   // Emitted unconditionally (CLAUDE.md: "emit structured events on every
