@@ -46,8 +46,8 @@ packages/agents/bridge-agents-slug.ts mkdirSync 1
 packages/agents/bridge-agents-studio.ts existsSync 3
 packages/agents/bridge-agents-studio.ts mkdirSync 1
 packages/agents/bridge-agents-studio.ts readFileSync 2
-packages/agents/bridge-agents-studio.ts rmSync 1
-packages/agents/bridge-agents-studio.ts writeFileSync 1
+packages/agents/bridge-agents-studio.ts rmSync 2
+packages/agents/bridge-agents-studio.ts writeFileSync 2
 packages/agents/find-session-project.ts existsSync 3
 packages/agents/find-session-project.ts readdirSync 1
 packages/agents/find-session-project.ts statSync 1
@@ -476,6 +476,7 @@ packages/library/instruction-seed-match.ts readFileSync 2
 packages/library/skill-path.ts readdirSync 1
 packages/library/skill-staging.ts mkdirSync 1
 packages/library/skill-staging.ts writeFileSync 1
+packages/library/studio-lint-tool-fence.ts readFileSync 1
 packages/library/studio/artifact-registry.ts readdirSync 3
 packages/library/studio/artifact-registry.ts readFileSync 3
 packages/library/studio/community-fetch-package.ts existsSync 1
