@@ -44,6 +44,7 @@ import {
   removePaths,
   sweepProductFixtures,
   sweepStoryRemotesFromManifest,
+  describeRemoteSweep,
 } from './sweep.mjs';
 import {
   snapshotSiblingGrounds,
@@ -353,9 +354,9 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // GitHub remotes this run minted. Unreached until now, so every run that
   // minted one leaked it.
   const remotes = sweepStoryRemotesFromManifest({ storyId: story.id, root: ROOT });
-  for (const r of remotes.deleted) console.log(`[stories] trailing sweep DELETED remote ${r}`);
-  for (const r of remotes.refusals) console.warn(`[stories] ${r}`);
-  for (const f of remotes.failed) console.warn(`[stories] could not delete remote ${f.nameWithOwner ?? f}: ${f.error ?? ''}`);
+  const remoteReport = describeRemoteSweep(remotes);
+  for (const line of remoteReport.lines) console.log(line);
+  for (const line of remoteReport.warnLines) console.warn(line);
   for (const f of sweep.failed) console.warn(`[stories] trailing sweep could not remove ${f.path}: ${f.error}`);
 
   // And the fence, over everything the product wrote that carries no story id.
