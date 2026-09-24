@@ -183,12 +183,9 @@ export function whenFromSessionId(sessionId: string): string {
   return `${m[1]}T${m[2]}:${m[3]}:${m[4]}.000Z`;
 }
 
-/** `sessionIsReadable` REQUIRED (M7-C U8, bead forge-u8y2) — an absent probe
- *  defaulting to "keep every row" is the fail-open shape this campaign
- *  forbids; every caller declares one explicitly (a real predicate, or a
- *  stub that says which case it is). A 'cleanup' row IS its session pointer
- *  (no other fact worth keeping), so an unreadable one is dropped WHOLE,
- *  never emptied. */
+/** `sessionIsReadable` REQUIRED (M7-C U8, bead forge-u8y2 — see design.md). A
+ *  'cleanup' row IS its session pointer (no other fact worth keeping), so an
+ *  unreadable one is dropped WHOLE, never emptied. */
 export function listKbRuns(forgeRoot: string, kbId: string, sessionIsReadable: SessionReadabilityProbe): KbRunRow[] {
   const rows: KbRunRow[] = [];
 

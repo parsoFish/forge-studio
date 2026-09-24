@@ -508,14 +508,11 @@ export function requireSessionStatusIo<T>(fn: T | undefined, caller: string): T 
   return fn;
 }
 
-/** M7-C U8 (bead forge-u8y2, W8-F6 follow-up) — the ONE readability predicate
- *  a `/sessions/<kind>/<sessionId>` link may be minted from. Declared
- *  STRUCTURALLY (rank-2 `@forge/knowledge` may not import rank-4
- *  `@forge/sessions`, even for a type) but shaped to match the REAL
- *  `sessionIsReadable` (packages/sessions/session-resolution.ts) argument-for-
- *  argument, so the assembly (apps/forge/routes.ts) binds that function
- *  directly, no wrapper to drift out of step. `project` is a HINT, not a
- *  claim — same as that function's own `?project=` handling. */
+/** M7-C U8 (bead forge-u8y2) — the readability predicate a `/sessions/<kind>/
+ *  <sessionId>` link may be minted from, declared structurally (rank-2 may
+ *  not import rank-4 `@forge/sessions`) to match the real `sessionIsReadable`
+ *  argument-for-argument. REQUIRED everywhere in this file, never optional
+ *  — see `design.md` ("The session-readability port"). */
 export type SessionReadabilityProbe = (args: {
   projectsRoot: string;
   logsRoot: string;
@@ -524,17 +521,11 @@ export type SessionReadabilityProbe = (args: {
   project?: string | null;
 }) => boolean;
 
-/** `_kb-cleanup` (session-resolution.ts's `kindDirName`) — the ONE session
- *  kind this package mints pointers for (`draftSession` below, and
- *  `listKbRuns`'s cleanup rows). */
+/** `_kb-cleanup` — the ONE session kind this package mints pointers for. */
 export const KB_CLEANUP_SESSION_KIND = 'kb-cleanup';
 
-/** Drops `draftSession` from any per-finding row the probe says resolves
- *  nowhere — mirrors `withReadableSessionPointers` (apps/forge/bridge-studio.ts).
- *  `probe` REQUIRED, never optional: an absent probe defaulting to "every
- *  pointer passes" is the fail-open shape this campaign forbids (CLAUDE.md —
- *  no fallback/compat path). `requireSessionIsReadable` below turns a caller
- *  without a real probe into a loud refusal, never a silent pass-through. */
+/** Drops `draftSession` from any per-finding row the probe says is
+ *  unreadable — mirrors `withReadableSessionPointers` (apps/forge/bridge-studio.ts). */
 export function withReadableDraftSessions(
   perFinding: readonly KbDrainPerFinding[],
   probe: SessionReadabilityProbe,
@@ -548,18 +539,4 @@ export function withReadableDraftSessions(
     const { draftSession: _unreadable, ...rest } = f;
     return rest;
   });
-}
-
-/** Refuse BY NAME when a caller reached a pointer-minting path without a real
- *  predicate wired — same idiom as `requireSessionStatusIo` above, never a
- *  silent "every pointer passes" default. */
-export function requireSessionIsReadable(fn: SessionReadabilityProbe | undefined, caller: string): SessionReadabilityProbe {
-  if (!fn) {
-    throw new Error(
-      `${caller}: the session-readability predicate is required — it is declared by @forge/knowledge and ` +
-      'supplied by the assembly (apps/forge threads it through knowledgeRoutes). Refusing rather than ' +
-      'minting a session pointer through an unguarded path.',
-    );
-  }
-  return fn;
 }

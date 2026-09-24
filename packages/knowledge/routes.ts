@@ -153,17 +153,8 @@ export type KnowledgeRouteDeps = KbCreateDeps & KbDrainTailDeps & {
    * the drift check between the two sides.
    */
   runFixTurn: KbDrainRunFixTurnFn;
-  /**
-   * M7-C U8 (bead forge-u8y2, W8-F6 follow-up) — same rank problem as
-   * `runFixTurn`: `@forge/sessions`' `sessionIsReadable` is bound here. REQUIRED,
-   * same shape as `runFixTurn` immediately above — an OPTIONAL port whose
-   * absence means "let every stored session pointer reach the wire
-   * unchecked" is exactly the fail-open fallback CLAUDE.md forbids, and it is
-   * the shape that let these pointers go unchecked in the first place (W8-F6).
-   * Every route test that constructs `knowledgeRoutes({...})` declares one
-   * explicitly — a stub that throws where the test does not exercise this
-   * concern, `() => true` where it legitimately renders pointers.
-   */
+  /** M7-C U8 (bead forge-u8y2) — same rank problem as `runFixTurn`, same
+   *  REQUIRED shape — see `design.md` ("The session-readability port"). */
   sessionIsReadable: SessionReadabilityProbe;
 };
 
