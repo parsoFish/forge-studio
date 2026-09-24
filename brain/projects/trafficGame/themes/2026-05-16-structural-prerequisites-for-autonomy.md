@@ -5,7 +5,7 @@ category: reference
 keywords: [trafficgame, prerequisites, simplification, test-stack, gitignore, decomposition, locked-core, git-ownership, roadmap, autonomy]
 created_at: 2026-05-16T00:00:00Z
 updated_at: 2026-05-16T00:00:00Z
-related_themes: []
+related_themes: [merge-boundary-stacked-initiative-failure, objective-gate-autonomous-closure]
 ---
 
 # trafficGame — structural prerequisites for autonomy
@@ -41,7 +41,7 @@ feature initiative is stranded unmerged in `_queue/done/`.
 ## Sources
 
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../../cycles/_raw/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: structural-prerequisite synthesis.
-- [`2026-05-16_trafficgame-arc-reflection.md`](../../../cycles/_raw/2026-05-16_trafficgame-arc-reflection.md) — §3 contract clauses C1–C6 derived from trafficGame.
+- `retro.md` — §3 contract clauses C1–C6 derived from trafficGame (`_logs/2026-05-16_trafficgame-arc-reflection/retro.md`; `_logs/` is gitignored and not tracked centrally, so this provenance is recorded as a name, not a link).
 
 ## Related
 

@@ -39,6 +39,7 @@ import { type QueryFn, type ClaudeAgentOptions } from '@forge/agents/ralph/claud
 import { getAdapter, resolveSdkId } from '@forge/agents/_adapters/registry.ts';
 import type { AgentInvocation } from '@forge/agents/_adapters/types.ts';
 import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
+import { makeProjectSkillsLoadedSink } from '@forge/agents/project-skills.ts';
 import { run as runRalph, type LoopResult } from '@forge/agents/ralph/runner.ts';
 import { matchesRateLimitSignature } from '@forge/agents/failure-classifier.ts';
 import { createWiWorktree, removeWiWorktree } from '@forge/flows/wi-worktree.ts';
@@ -184,13 +185,10 @@ export function resolveGitIdentity(sinkCtx: { phase: 'developer-loop' | 'unifier
  * Behavior-preserving: the sink and agent options are forwarded unchanged;
  * net effect is fewer lines at each call site.
  *
- * Change B — `onUsageDelta` is wired inside so every agent emits per-turn
- * token-usage log events. The callback emits a `log` event with
- * `usage_delta` message carrying raw token counts (no pricing table —
- * the authoritative `cost_usd` continues to come from the iteration `result`
- * event; this is additive mid-turn granularity only).
+ * Change B — `onUsageDelta` is also wired inside, emitting a per-turn
+ * `usage_delta` log event (detail on the callback itself, below).
  */
-function makeAgentWithTelemetry(
+export function makeAgentWithTelemetry(
   logger: EventLogger,
   sinkCtx: {
     initiativeId: string;
@@ -199,7 +197,7 @@ function makeAgentWithTelemetry(
     skill: string;
     workItemId?: string;
   },
-  agentOpts: Omit<ClaudeAgentOptions, 'onToolUse' | 'onHeartbeat' | 'onUsageDelta' | 'onReasoning'>,
+  agentOpts: Omit<ClaudeAgentOptions, 'onToolUse' | 'onHeartbeat' | 'onUsageDelta' | 'onReasoning' | 'onProjectSkillsLoaded'>,
   // Runtime selection (ADR-029). Now threaded from the SKILL.md runtime.sdk via
   // the phase agent spec (devAgentSpec/unifierAgentSpec), resolved through
   // resolveSdkId at the caller so a free-text/unavailable id falls back to
@@ -225,6 +223,8 @@ function makeAgentWithTelemetry(
     onToolUse: toolSink.onToolUse,
     onHeartbeat: toolSink.onHeartbeat,
     ...(onReasoning !== undefined ? { onReasoning } : {}),
+    // Item 90: the project's declared skills reached this agent's prompt.
+    onProjectSkillsLoaded: makeProjectSkillsLoadedSink(logger, sinkCtx),
     onUsageDelta: (u) => {
       // Change B: emit per-turn token deltas as a lightweight log event so
       // the operator UI and future tooling can track mid-iteration usage.
@@ -299,15 +299,15 @@ export async function runDeveloperLoop(
   }
 
   const ordered = topologicalOrder(items);
-  // ADR 019: resume-from-demo skips the per-WI dev-loop entirely — the WI
+  // ADR 019: resume-from-integrate skips the per-WI dev-loop entirely — the WI
   // commits already exist on the preserved branch from the prior cycle. We
   // still read + validate the WI set above (the post-develop band uses it for
   // context), but run the per-WI loop over an empty list so the walk re-enters
-  // at the `demo` node without rebuilding any WI.
+  // at the `integrate` node without rebuilding any WI.
   // ADR 040: resume-from-develop (the fix loop) RUNS the full list — prior WIs
   // fast-exit via the iter-0 already-complete shortcut, fix WIs build.
-  const resumeFromDemo = input.resumeFrom === 'demo';
-  const toRun = resumeFromDemo ? [] : ordered;
+  const resumeFromIntegrate = input.resumeFrom === 'integrate';
+  const toRun = resumeFromIntegrate ? [] : ordered;
 
   // cascade-v4 #2: establish a known-green baseline ONCE before any WI work.
   // On a fresh (non-resume) dev-loop the worktree sits at the initiative
@@ -1227,7 +1227,7 @@ export async function runDeveloperLoop(
       // ADR 019: flag resume runs so the report/UI can distinguish a
       // unifier-only resume (0 WIs run, commits already on branch) from a
       // genuine 0/N total failure.
-      resumed: resumeFromDemo,
+      resumed: resumeFromIntegrate,
       // ADR 040: which resume kind, when any — 'develop' is the fix-loop
       // re-entry (full list run, prior WIs fast-exit).
       ...(input.resumeFrom ? { resumed_from: input.resumeFrom } : {}),
@@ -1240,18 +1240,18 @@ export async function runDeveloperLoop(
   // identify what's missing, and feedback rounds can complete the work.
   // Only throw when ZERO WIs succeeded (total dev-loop failure); otherwise
   // emit the partial outcome and hand off to the post-develop band.
-  // ADR 019: on resume-from-demo zero WIs run by design (their commits are
+  // ADR 019: on resume-from-integrate zero WIs run by design (their commits are
   // already on the branch), so the total-failure guard must not fire.
-  if (!resumeFromDemo && completeCount === 0 && items.length > 0) {
+  if (!resumeFromIntegrate && completeCount === 0 && items.length > 0) {
     throw new Error(
       `developer-loop: 0/${items.length} work items completed — total failure`,
     );
   }
 
   // The dev-loop phase ends here, with only the per-WI work on the branch. The
-  // post-develop band (demo → adversarial-review → verdict, R4-10-F1) runs as
+  // post-develop band (integrate → adversarial-review → verdict, R4-10-F1) runs as
   // its own flow nodes after this; on a resume the flow-runner skips this dev
-  // node entirely and re-enters at the demo node (resume_from:'demo', R4-10-F6).
+  // node entirely and re-enters at the integrate node (resume_from:'integrate', R4-10-F6).
 }
 
 
@@ -1267,7 +1267,7 @@ export async function runDeveloperLoop(
  *
  * Exported for unit testing (real tmp git repos — see
  * `developer-loop-close-sync.test.ts`). Production callers reach this via the
- * post-develop band's close contract (execDemo, R4-10-F1).
+ * post-develop band's close contract (execIntegrate, R4-10-F1).
  */
 /**
  * cascade-v4 #1: emit `dev-loop.delivered` — the git-derived net contribution
@@ -1339,7 +1339,7 @@ export function wiDeliveryEvent(
 export function emitDeliverySummary(
   input: CycleInput,
   logger: EventLogger,
-  // Optional so the R4-10-F1 demo node can emit the delivery ground-truth
+  // Optional so the R4-10-F1 integrate node can emit the delivery ground-truth
   // (the reflector's grounding event) without threading a per-node parent id.
   parentEventId?: string,
 ): { filesChanged: number; insertions: number; deletions: number; commits: number } {

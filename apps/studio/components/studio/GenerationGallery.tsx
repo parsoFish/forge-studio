@@ -1,8 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-
-import { generationGalleryView, preferredGenerationFor, type GenerationGalleryView } from '@/lib/session-artifact-view';
+import { generationGalleryView, preferredGenerationFor, type GenerationGalleryView, type GenerationSelection } from '@/lib/session-artifact-view';
 import type { GenerationGalleryArtifact, GenerationGalleryEntry, GenerationGalleryItem } from '@/lib/session-client';
 import { architectFileUrl, demoGenerationFileUrl } from '@/lib/bridge-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
@@ -25,26 +23,36 @@ import { disabledAttrs } from '@/lib/disabled-reason';
 //
 // R4-16 round 2 (pin 3, Finding C, MAJOR) — the cross-session selection
 // leak: a bare `useState<number | null>` survived a session SWITCH too, not
-// just a poll tick — `projects/[id]/page.tsx`'s `handleDemoSessionStarted`
-// swaps `sessionId` without unmounting this component, so a generation
-// picked in session A silently kept rendering (and would be what
-// "finalize" sends) once the panel moved on to session B. The stored
-// selection now carries the session id it was made in; `preferredGenerationFor`
-// (lib/session-artifact-view.ts) only honours it when that id still matches
-// the CURRENTLY-DISPLAYED `sessionId` — never via an artifact-identity
-// `useEffect` (that was the earlier, now-replaced fix shape). `null` means
-// "no explicit pick yet in this render"; the view's own default (newest)
-// takes over, exactly matching the pre-fix behaviour until the operator
-// clicks one.
+// just a poll tick — the caller swaps `sessionId` without unmounting this
+// component, so a generation picked in session A silently kept rendering
+// (and would be what "finalize" sends) once the panel moved on to session
+// B. The stored selection carries the session id it was made in;
+// `preferredGenerationFor` (lib/session-artifact-view.ts) only honours it
+// when that id still matches the CURRENTLY-DISPLAYED `sessionId` — never
+// via an artifact-identity `useEffect` (that was the earlier, now-replaced
+// fix shape).
+//
+// **The selection is now LIFTED, not owned here (bead forge-8vfn.8.3.4).**
+// This component used to hold its own `useState<GenerationSelection>`,
+// independently of `SessionInteractivePanel`'s verdict-approve picker
+// (its OWN local `useState<string>`) — so the two controls could disagree
+// about which generation was "selected", and approving from the panel could
+// lock a DIFFERENT generation than the one this gallery showed highlighted.
+// `selection`/`onSelect` are now REQUIRED, CONTROLLED props: the session
+// page (`app/sessions/[kind]/[sessionId]/page.tsx`) owns the ONE
+// `GenerationSelection` `useState` and threads the identical pair into both
+// `GenerationGallery` (via `SessionArtifactPane`) and
+// `SessionInteractivePanel` — the two controls can no longer drift apart,
+// because there is only one value left to read. `null` means "no explicit
+// pick yet"; the view's own default (newest) takes over, exactly matching
+// the pre-fix behaviour until the operator clicks one.
 //
 // `project`/`sessionId` are OPTIONAL: this component is reachable both from
-// DemoBuilderPanel (project page, R1-03-F2 entry — always has both) and from
-// the generic `/sessions/[kind]/[sessionId]` deep-link route via
-// SessionArtifactPane (D3: "falls out of the registry, zero extra code" —
-// that route does not thread project/sessionId through today). Without
-// them, per-item "view" links and the "finalize" action are honestly
-// disabled rather than fabricating a broken link; the selection tracker
-// falls back to `''` as a stable per-mount identity (a route with no
+// its historical project-page caller (retired, W6-B10) and from the generic
+// `/sessions/[kind]/[sessionId]` deep-link route via `SessionArtifactPane`.
+// Without them, per-item "view" links and the "finalize" action are
+// honestly disabled rather than fabricating a broken link; the selection
+// tag falls back to `''` as a stable per-mount identity (a route with no
 // sessionId never swaps sessions, so this never leaks anything).
 // ---------------------------------------------------------------------------
 
@@ -52,16 +60,26 @@ export function GenerationGallery({
   artifact,
   project,
   sessionId,
+  selection,
+  onSelect,
   onFinalize,
   finalizeUnavailableReason = null,
 }: {
   artifact: GenerationGalleryArtifact;
   project?: string;
   sessionId?: string;
+  /** The ONE lifted selection (bead forge-8vfn.8.3.4) — the SAME value
+   *  `SessionInteractivePanel`'s verdict-approve generation picker reads and
+   *  writes. Required: this component owns no internal fallback state any
+   *  more, so a caller that forgets to wire it gets an honest `null`
+   *  ("nothing picked", the pre-existing default), never a silent second
+   *  source of truth. */
+  selection: GenerationSelection;
+  onSelect: (next: GenerationSelection) => void;
   /** Enacts "finalize this generation" (POST /api/demo-builder/lock with the
-   *  chosen generation number) — owned by the caller (DemoBuilderPanel),
-   *  never by this presentational component. Absent ⇒ the control renders,
-   *  disabled — never a silently-swallowed click. */
+   *  chosen generation number) — owned by the caller, never by this
+   *  presentational component. Absent ⇒ the control renders, disabled —
+   *  never a silently-swallowed click. */
   onFinalize?: (generationNumber: number) => void;
   /** W8-B3 (sessions-kinds-07) — WHY finalize is unavailable, supplied by the
    *  caller that actually knows (this session is already locked; it was
@@ -75,7 +93,6 @@ export function GenerationGallery({
   // Stable per-mount identity for a caller that doesn't thread `sessionId`
   // (the deep-link session-shell route) — see the module header above.
   const effectiveSessionId = sessionId ?? '';
-  const [selection, setSelection] = useState<{ sessionId: string; number: number } | null>(null);
   const view: GenerationGalleryView = generationGalleryView(artifact, preferredGenerationFor(selection, effectiveSessionId));
 
   const selected = view.selectedIndex >= 0 ? view.generations[view.selectedIndex] : null;
@@ -103,7 +120,7 @@ export function GenerationGallery({
                   data-action="select-generation"
                   data-generation-number={g.number}
                   data-generation-selected={isSelected ? 'true' : 'false'}
-                  onClick={() => setSelection({ sessionId: effectiveSessionId, number: g.number })}
+                  onClick={() => onSelect({ sessionId: effectiveSessionId, number: g.number })}
                   style={{
                     fontSize: 12,
                     fontWeight: 600,

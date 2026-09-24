@@ -28,6 +28,7 @@ import { KbSelector } from '@/components/studio/knowledge/KbSelector';
 import { KnowledgeEmptyState } from '@/components/studio/knowledge/KnowledgeEmptyState';
 import { FetchErrorState, fetchErrorPropsFrom } from '@/components/FetchErrorState';
 import { useBridgeRecovery } from '@/lib/use-bridge-status';
+import { kbSeedBannerCopy, useKbSeedSessionPhase } from '@/lib/kb-seed-banner';
 import Link from 'next/link';
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 
@@ -78,11 +79,10 @@ function KnowledgePageInner() {
   // RULING 1 — ?theme= is a THIN ALIAS onto the existing ?node= selection
   // machinery below, restricted to theme-layer nodes (see pendingIsThemeRef).
   const themeParam   = searchParams.get('theme') ?? '';
-  // W7-B2 (knowledge-23): the create form lands here with the seeding
-  // session it spawned — a banner tells the operator instead of the session
-  // silently existing.
+  // W7-B2 (knowledge-23): the create form lands here with the seeding session it spawned.
   const seedSessionParam = searchParams.get('seedSession') ?? '';
   const seedProjectParam = searchParams.get('seedProject') ?? '';
+  const seedBanner = kbSeedBannerCopy(useKbSeedSessionPhase(seedSessionParam)); // knowledge-38
 
   // RULING 5 — tab state is URL-synced via ?tab=, deep-linkable like ?node=/?id=.
   const tabParam: TabId =
@@ -522,17 +522,16 @@ function KnowledgePageInner() {
       <StudioNav />
 
       {/* W7-B2 (knowledge-23): the just-created KB's seeding session, named
-          instead of silently spawned. */}
+          instead of silently spawned; real-phase copy, not a guess (knowledge-38). */}
       {seedSessionParam && (
-        <div data-component="kb-seed-banner" data-seed-session-id={seedSessionParam} style={{ padding: '8px 20px', background: 'rgba(74,222,128,.07)', borderBottom: '1px solid rgba(74,222,128,.25)', fontSize: 12.5, color: 'var(--c-kb)' }}>
-          This knowledge base was created and a seeding session is running for it —{' '}
-          <Link
-            data-action="open-seed-session"
-            href={`/sessions/project-brain/${encodeURIComponent(seedSessionParam)}${seedProjectParam ? `?project=${encodeURIComponent(seedProjectParam)}` : ''}`}
-            style={{ color: 'var(--c-kb)', fontWeight: 600 }}
-          >
-            watch the seeding session →
-          </Link>
+        <div data-component="kb-seed-banner" data-seed-session-id={seedSessionParam} data-seed-session-phase={seedBanner.phase ?? ''} data-seed-session-running={seedBanner.running ? 'true' : 'false'} style={{ padding: '8px 20px', background: 'rgba(74,222,128,.07)', borderBottom: '1px solid rgba(74,222,128,.25)', fontSize: 12.5, color: 'var(--c-kb)' }}>
+          {seedBanner.text}{' '}
+          {/* forge-t4pp — no link for an id useKbSeedSessionPhase never found (its OWN predicate, reused, not a second check). */}
+          {seedBanner.phase !== null && (
+            <Link data-action="open-seed-session" href={`/sessions/project-brain/${encodeURIComponent(seedSessionParam)}${seedProjectParam ? `?project=${encodeURIComponent(seedProjectParam)}` : ''}`} style={{ color: 'var(--c-kb)', fontWeight: 600 }}>
+              watch the seeding session →
+            </Link>
+          )}
         </div>
       )}
 

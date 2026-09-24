@@ -43,7 +43,7 @@
 import type { AgentFacts } from './studio/agent-facts.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
 import {
@@ -55,7 +55,8 @@ import {
   type RouteContext,
 } from '@forge/kernel';
 import { resolveGuardedPath } from '@forge/kernel';
-import { skillPath, skillsDir } from './skill-path.ts';
+import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
+import { skillPath, skillsDir, guardedSkillMdPath } from './skill-path.ts';
 import { stageSkillPackage } from './skill-staging.ts';
 import { SLUG_RE, isReservedId } from '@forge/kernel';
 import { listSkillLibrary, skillTrustDetail, type SkillLibraryEntry } from './studio/skill-trust.ts';
@@ -77,6 +78,17 @@ const MAX_STAGED_PACKAGE_BYTES = 1 * 1024 * 1024; // 1 MiB
 function newSourceId(): string {
   const ts = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
   return `${ts}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/** SEAM F1: a WRITE (create/approve/update/delete) to a skill whose slug
+ *  already resolves under a PACKAGE root is refused, naming the package —
+ *  same rule as PUT/DELETE /api/studio/flows/:id. Sends the 409 itself. */
+function refusePackageOwnedSkill(res: ServerResponse, origin: string, forgeRoot: string, id: string): boolean {
+  const owner = resolveIdAcrossRoots(skillRoots(forgeRoot).slice(1), id, ['SKILL.md']);
+  if (owner === null) return false;
+  const pkg = basename(dirname(owner.root));
+  sendJson(res, 409, { error: `package-owned skill "${id}" is read-only — it ships with packages/${pkg}` }, origin);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,6 +173,7 @@ export async function handleSkillCreate(req: IncomingMessage, res: ServerRespons
       if (!SLUG_RE.test(slug)) { sendJson(res, 400, { error: 'could not derive a valid slug from the name' }, origin); return true; }
       // W7-A4 (crosscut-20): `new` is the /skills/new builder segment, never a skill.
       if (isReservedId(slug)) { sendJson(res, 400, { error: `skill id "${slug}" is reserved (the /skills/new builder lives at that path) — choose another name` }, origin); return true; }
+      if (refusePackageOwnedSkill(res, origin, ctx.forgeRoot, slug)) return true;
 
       // Guard through the shared containment guard (cli/studio-path-guard.ts
       // — 2026-08-06, this route's own BLOCKER: the prior lexical
@@ -342,6 +355,7 @@ export async function handleSkillApprove(req: IncomingMessage, res: ServerRespon
         sendJson(res, 400, { error: sanitizeError(err) }, origin);
         return true;
       }
+      if (refusePackageOwnedSkill(res, origin, ctx.forgeRoot, id)) return true;
       // Layer 2 — CONTAINMENT. A guard rejection collapses into the SAME 404
       // as a genuinely unknown skill: distinguishable responses would hand an
       // attacker a probe for which ids are planted.
@@ -428,6 +442,7 @@ export async function handleSkillUpdate(req: IncomingMessage, res: ServerRespons
         sendJson(res, 400, { error: sanitizeError(err) }, origin);
         return true;
       }
+      if (refusePackageOwnedSkill(res, origin, ctx.forgeRoot, id)) return true;
       const pathGuard = resolveGuardedPath(skillsDir(ctx.forgeRoot), [id, 'SKILL.md']);
       if (!pathGuard.ok || !pathGuard.exists) {
         sendJson(res, 404, { error: `unknown skill "${id}"` }, origin);
@@ -496,6 +511,7 @@ export async function handleSkillDelete(req: IncomingMessage, res: ServerRespons
         sendJson(res, 400, { error: sanitizeError(err) }, origin);
         return true;
       }
+      if (refusePackageOwnedSkill(res, origin, ctx.forgeRoot, id)) return true;
       const pathGuard = resolveGuardedPath(skillsDir(ctx.forgeRoot), [id, 'SKILL.md']);
       if (!pathGuard.ok || !pathGuard.exists) {
         sendJson(res, 404, { error: `unknown skill "${id}"` }, origin);
@@ -572,13 +588,14 @@ export async function handleSkillDetail(req: IncomingMessage, res: ServerRespons
       }
       // Layer 2 — CONTAINMENT. A guard rejection collapses into the SAME 404
       // as a genuinely unknown skill: distinguishable responses would hand an
-      // attacker a probe for which ids are planted.
-      const pathGuard = resolveGuardedPath(skillsDir(ctx.forgeRoot), [id, 'SKILL.md']);
-      if (!pathGuard.ok || !pathGuard.exists) {
+      // attacker a probe for which ids are planted. SEAM F1: searched across
+      // every skill root (`guardedSkillMdPath`, multi-root) — this is the
+      // route a package-owned skill's detail page reads through.
+      const mdPath = guardedSkillMdPath(id, ctx.forgeRoot);
+      if (mdPath === null) {
         sendJson(res, 404, { error: `unknown skill "${id}"` }, origin);
         return true;
       }
-      const mdPath = pathGuard.realPath;
 
       // MAJOR 1 fix: listSkillLibrary deliberately EXCLUDES studio agents
       // (SKILL.md with a `runtime:` block, AT-5) — mirror that exclusion here

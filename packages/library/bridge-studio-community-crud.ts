@@ -11,7 +11,7 @@
  * writer all three share) and its W7-B3 comment block MOVED VERBATIM from
  * `apps/forge/bridge-studio-writes.ts` (`:583` `:615` `:654`, helper `~:483` +
  * comment `~:340`) — see the comment on the function for the mutex it shares
- * with `runCommunityRefresh`/`commitRegistryDraft`. The old hoisted
+ * with `runCommunityRefresh` (`commitRegistryDraft` was retired in W8-B5b). The old hoisted
  * `registryItemMatch` is now `REGISTRY_ROW_RE` (`bridge-studio-community.ts`,
  * already exported for the GET arm): each handler matches it for itself, per
  * the one-handler-per-route contract (own `pathOnly`, own `origin`, `false`
@@ -33,12 +33,13 @@ import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import type { CommunityRegistryItem, CommunityRegistrySource } from '@forge/contracts/studio/types.ts';
 import { communityRegistryPath, loadCommunityRegistry, serializeCommunityRegistry, COMMUNITY_REGISTRY_SCHEMA_VERSION } from './studio/community-registry.ts';
 import { CommunityRegistryLockError, lockCommunityRegistry } from './community-registry-lock.ts';
+import { HTTP_URL_RE } from './studio/community-source-url.ts';
 import { decodeIdOrRespond, REGISTRY_ROW_RE } from './bridge-studio-community.ts';
 
 // W7-B3 (community-23) — community-registry CRUD helpers. The registry
 // (studio/community/registry.yaml) had exactly one writer, an agent commit
 // path — Studio itself had no add/edit/remove. These helpers give the
-// routes below the SAME structural discipline commitRegistryDraft holds:
+// routes below the SAME structural discipline that agent-commit path held:
 // parse the body against the loader's own field rules, serialize through
 // the ONE shared serializer, write temp-then-rename, and RE-PARSE the temp
 // file through loadCommunityRegistry before it replaces the real one (a
@@ -92,7 +93,7 @@ function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistr
   if (typeof category !== 'string') return { ok: false, error: category.error };
   const sourceUrl = requireString('sourceUrl');
   if (typeof sourceUrl !== 'string') return { ok: false, error: sourceUrl.error };
-  if (!/^https?:\/\//.test(sourceUrl)) return { ok: false, error: 'item.sourceUrl must be an http(s) URL' };
+  if (!HTTP_URL_RE.test(sourceUrl)) return { ok: false, error: 'item.sourceUrl must be an http(s) URL' };
   const provenance = requireString('provenance');
   if (typeof provenance !== 'string') return { ok: false, error: provenance.error };
 
@@ -170,9 +171,9 @@ function parseRegistryItemBody(raw: unknown): { ok: true; item: CommunityRegistr
  *  W8-B5 security review, FINDING 1: the WHOLE read-modify-write runs under
  *  the shared registry mutex (packages/library/community-registry-lock.ts), and the load
  *  below happens INSIDE it — the same lock, on the same path, that
- *  `runCommunityRefresh` and `commitRegistryDraft` take. A lock only one of
- *  three writers honours is not a lock, which is why there is exactly one
- *  helper and all three call it. Contention throws
+ *  `runCommunityRefresh` takes (its only other writer; `commitRegistryDraft`
+ *  was retired in W8-B5b). A lock only one of two writers honours is not a
+ *  lock, which is why there is exactly one helper and both call it. Contention throws
  *  `CommunityRegistryLockError`, which every arm below renders as a 503;
  *  nothing is written on that path. The critical section is fs-only and
  *  sub-millisecond — no caller of this function does network I/O while

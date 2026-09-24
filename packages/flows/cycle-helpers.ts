@@ -578,7 +578,7 @@ function runLocalSuiteGate(cmd: string[], worktreePath: string, declaredTimeoutM
  *      after its `ci_fix_cmd` formatters), when declared.
  *
  * Unlike `enforceFinalCiGate` (which THROWS, failing the cycle), this RETURNS
- * the verdict so the caller (execDemo) can drive the bounded gate-fix loop.
+ * the verdict so the caller (execIntegrate) can drive the bounded gate-fix loop.
  * Writes `.forge/last-gate-failure.md` on a red gate (the results-flow seam the
  * fix agent reads) and clears it on a green one. Never throws; a dry run passes.
  *
@@ -730,7 +730,7 @@ export function runMergeBoundaryGate(
     });
     if (decision) {
       // Commit + push any formatter changes WHENEVER the fixer ran — even on a
-      // red gate. A red gate now RETURNS (not throws): execDemo terminates to
+      // red gate. A red gate now RETURNS (not throws): execIntegrate terminates to
       // ready-for-review and the drain re-enters resume_from:'develop', whose
       // first step rebases the preserved branch onto main. Leaving the
       // formatter's tracked-file edits uncommitted would make that rebase abort

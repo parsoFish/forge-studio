@@ -401,7 +401,7 @@ export async function handleStudioPostRoutes(
       return true;
     }
     try {
-      runRequeue(runId, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, resumeFromDemo: true });
+      runRequeue(runId, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, resumeFromIntegrate: true });
       sendJson(res, 200, { ok: true, runId }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);

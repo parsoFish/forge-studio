@@ -112,15 +112,25 @@ export function cleanup(...roots: string[]): void {
  *  / async-resolve into one shape, so tests never have to guess which of the
  *  two the implementation picked. `await` on a non-promise value just resolves
  *  to it immediately, and a synchronous throw inside the awaited expression is
- *  still caught by the surrounding try/catch — both cases collapse cleanly. */
+ *  still caught by the surrounding try/catch — both cases collapse cleanly.
+ *
+ *  `stagingDirName` defaults to `'staging'` (forge-7m2) — a TEST-FIXTURE
+ *  convenience only, matching `mkScratch`'s own hardcoded `staging/` child,
+ *  never a production fallback: `copyStagingToLibrary` itself has no default
+ *  and throws when the field is omitted. Every caller in this suite that
+ *  builds its scratch tree via `mkScratch` relies on this default; a test
+ *  exercising a NON-default dirname passes `stagingDirName` explicitly and
+ *  overrides it (see `interactive-finalizers-staging-dirname.test.ts`, which
+ *  deliberately does NOT use this helper for that reason). */
 export async function callAndCapture(ctx: {
   sessionDir: string;
   forgeRoot: string;
   libraryRoot: string;
   packageId: string;
+  stagingDirName?: string;
 }): Promise<{ error: (Error & { name: string }) | null; wrote: string[] | null }> {
   try {
-    const wrote = await copyStagingToLibrary(ctx as never);
+    const wrote = await copyStagingToLibrary({ stagingDirName: 'staging', ...ctx } as never);
     return { error: null, wrote };
   } catch (err) {
     return { error: err as Error & { name: string }, wrote: null };

@@ -11,7 +11,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 
-import { auditKbEdit, repairKbEdit, isUnsound, buildKbEditSoundnessCtx } from '../../kb-drain-edit-soundness.ts';
+import { auditKbEdit, repairKbEdit, buildKbEditSoundnessCtx } from '../../kb-drain-edit-soundness.ts';
 import {
   newRoot,
   writeTheme,
@@ -45,7 +45,6 @@ test('REAL EDIT 1: the soundness audit REFUSES it — a related_themes entry who
   assert.equal(found[0].target, '2026-06-21-gitignored-scratch-files-double-commit');
   assert.equal(found[0].repairTargets.length, 1);
   assert.match(found[0].repairTargets[0], /2026-06-21-gitignored-scratch-files-double-commit\.md$/);
-  assert.equal(isUnsound(found), true);
 });
 
 test('REAL EDIT 1: refusal PRESERVES the edge — there is nothing to synthesize, `before` already carries it', () => {

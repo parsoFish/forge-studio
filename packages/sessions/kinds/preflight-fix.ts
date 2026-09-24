@@ -17,9 +17,12 @@
  */
 import { runPreflight, type ClauseId } from '@forge/projects/preflight.ts';
 import { ensureStudioBranch, commitStudioChange, dirtyPaths } from '@forge/projects/project-repo-tx.ts';
+import { clauseTarget } from '@forge/projects/preflight-resolve.ts';
+import { PROJECT_CONFIG_REL_PATH } from '@forge/projects/project-config.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { skillPathRelative } from '@forge/agents/skill-path.ts';
+import { guardedReadFile } from '@forge/kernel';
 
 import { runFixTurn, type FixTurnInput, type FixTurnResult, type FixTurnVariant } from './fix-turn.ts';
 
@@ -43,6 +46,42 @@ export type RunPreflightFixResult = FixTurnResult & {
   /** True when the post-turn re-run found the clause now passing. */
   cleared: boolean;
 };
+
+/**
+ * forge-8vfn.6.11.31: the agent used to be given the clause id + the
+ * operator's decision and left to GUESS the file (measured: 8 Read calls, 0
+ * writes, maxTurns exhausted on C1b). `clauseTarget` names where the fix
+ * actually lands; this renders that as prompt lines carrying the target file
+ * (project-relative) and its CURRENT content, so the agent's first tool call
+ * is the edit, not a Read probe. `[]` when the clause has no known target
+ * (unclassified id) — the prompt then reads exactly as it did before.
+ */
+function targetLines(projectDir: string, clauseId: ClauseId): string[] {
+  const target = clauseTarget(clauseId);
+  if (!target) return [];
+  if (target.kind === 'operator') {
+    return ['', `**Target:** not a file edit — ${target.reason} Make no change and stop.`];
+  }
+  const [path, content] =
+    target.kind === 'config'
+      ? [PROJECT_CONFIG_REL_PATH, guardedReadFile(projectDir, PROJECT_CONFIG_REL_PATH.split('/'))]
+      : resolveFileTarget(projectDir, target.candidates);
+  const key = target.kind === 'config' ? ` — declare \`${target.keyPath}\` with the value shape \`${target.shape}\`; preserve every other key, write valid JSON` : '';
+  return [
+    '',
+    `**Target:** ${path}${key}.`,
+    `**Current content:** ${content === null ? 'does not exist yet — create it.' : `\n\`\`\`\n${content}\n\`\`\``}`,
+  ];
+}
+
+/** The first candidate that already exists (with its content), else the first candidate to create. */
+function resolveFileTarget(projectDir: string, candidates: readonly string[]): [string, string | null] {
+  for (const c of candidates) {
+    const content = guardedReadFile(projectDir, [c]);
+    if (content !== null) return [c, content];
+  }
+  return [candidates[0]!, null];
+}
 
 export const preflightFixKind: FixTurnVariant<RunPreflightFixInput, RunPreflightFixResult, string[]> = {
   cycleIdPrefix: '_preflight-fix',
@@ -71,6 +110,7 @@ export const preflightFixKind: FixTurnVariant<RunPreflightFixInput, RunPreflight
       `**Preflight clause:** ${input.clause}`,
       ...(input.detail ? [`**Current failure:** ${input.detail}`] : []),
       `**Operator decision:** ${input.instruction || '(none provided)'}`,
+      ...targetLines(input.projectDir, input.clause),
       '',
       'Apply ONLY the minimal edit that clears this clause, per the operator decision. Touch nothing else, then stop.',
     ].join('\n');

@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
+import { PageLoadError } from '@/components/PageLoadError';
+import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import { FilePackage } from '@/components/studio/FilePackage';
 import {
   fetchCommunityItemDetail,
@@ -90,7 +92,16 @@ export default function CommunityDetailPage() {
 
   const [state, setState] = useState<PageState>('loading');
   const [item, setItem] = useState<CommunityItemDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // forge-5rr (projects-45): `fetchCommunityItemDetail` never throws — it is
+  // the status-shaped `{ok, item?, status?, error?}` read — so there is no
+  // `catch` here, but a non-404 failure (bridge down, or reachable-and-
+  // refused) still needs the SAME shared page-level error state + Retry +
+  // bridge-recovery resubscribe every throwing detail read gets
+  // (`PageLoadError`/`useBridgeRecoveryWhenFailed`) instead of the old
+  // dead-end banner with no way to retry short of a manual reload
+  // (crosscut-22). `status` distinguishes the two failure shapes exactly the
+  // way `fetchErrorPropsFrom` does for a thrown read.
+  const [loadError, setLoadError] = useState<{ error: string; status?: number } | null>(null);
   const [installing, setInstalling] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [installOutcome, setInstallOutcome] = useState<CommunityInstallOutcome | null>(null);
@@ -98,6 +109,7 @@ export default function CommunityDetailPage() {
   const load = useCallback(async (k: string, itemId: string) => {
     setState('loading');
     setActionError(null);
+    setLoadError(null);
     if (!isCommunityKind(k)) {
       setItem(null);
       setState('unknown-kind');
@@ -110,13 +122,19 @@ export default function CommunityDetailPage() {
       return;
     }
     setItem(null);
+    // A real, bridge-ANSWERED 404 only — never a transport failure (which
+    // carries no status at all) or a reachable-but-erroring 5xx.
     if (r.status === 404) {
       setState('not-found');
       return;
     }
-    setError(r.error ?? 'could not load this community item');
+    setLoadError({ error: r.error ?? 'could not load this community item', status: r.status });
     setState('error');
   }, []);
+
+  const reload = useCallback(() => {
+    if (kindParam && id) void load(kindParam, id);
+  }, [kindParam, id, load]);
 
   useEffect(() => {
     // Same reset as /connections/[id] — see its comment. A preview belongs to
@@ -124,8 +142,12 @@ export default function CommunityDetailPage() {
     // would show A's command above a confirm that installs B.
     setInstallOutcome(null);
     setActionError(null);
-    if (kindParam && id) void load(kindParam, id);
-  }, [kindParam, id, load]);
+    reload();
+  }, [reload]);
+
+  // Refill ONLY while failed — never re-load over the operator's in-flight
+  // install/confirm state (mirrors every other detail page's own rule).
+  useBridgeRecoveryWhenFailed(loadError !== null, reload);
 
   // forge-6gv.8.2 — the two-step confirm gate for the mcp/tool (npm) arm:
   // `confirm:false` (the default) fetches the real server PREVIEW and stops
@@ -155,6 +177,25 @@ export default function CommunityDetailPage() {
   // W7-C3 review (A-H4): per-route tab title, before the early returns.
   useDocumentTitle(item?.name ?? id, 'Community');
 
+  // forge-5rr: a non-404 failure is neither "unknown kind" nor "not found" —
+  // it is an honest error state with Retry, checked before either NotFound
+  // branch so a transport blip can never fall through to a false absence
+  // claim.
+  if (state === 'error' && loadError) {
+    return (
+      <PageLoadError
+        page="community-detail"
+        rootAttrs={{ 'data-item-id': id }}
+        what={`community item "${id}"`}
+        error={loadError.error}
+        status={loadError.status}
+        onRetry={reload}
+        backHref="/community"
+        backLabel="Community"
+      />
+    );
+  }
+
   // W7-A4 (community-11 / crosscut-27): unknown kind and unknown id are two
   // different honest answers, both through the ONE shared not-found treatment
   // with a way back to the community index.
@@ -179,15 +220,6 @@ export default function CommunityDetailPage() {
         <Breadcrumbs items={[{ label: 'Library', href: '/library' }, { label: 'Community', href: '/community' }, { label: item?.name ?? id }]} />
 
         {state === 'loading' && <div style={{ color: 'var(--dim)', fontSize: 13.5, padding: '24px 0' }}>Loading…</div>}
-
-        {state === 'error' && (
-          <div
-            data-component="fetch-error"
-            style={{ marginTop: 16, color: '#f87171', fontSize: 13, padding: '14px 16px', border: '1px solid rgba(248,113,113,.35)', borderRadius: 'var(--radius-sm, 6px)', background: 'rgba(248,113,113,.06)' }}
-          >
-            Could not reach the forge bridge ({error}).
-          </div>
-        )}
 
         {state === 'ready' && item && (
           <CommunityDetailBody

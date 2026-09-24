@@ -116,6 +116,42 @@ the bound expires — `beats.mjs:41-44`'s "absent from the page" against 438's
 bound-naming branch — and in one key having had two shapes across three sibling
 surfaces, which is the thing a contract exists to prevent.
 
+**`SessionMinted`'s kind union grew to `architect | demo | instructions |
+project-brain` (`forge-8vfn.5.10`).** M1-G swept architect and demo; three more
+project-builder sites (all on `/projects/[id]`) still `router.push`ed a session
+id from inside the click that minted it — `Instructions.tsx` (the standing-
+instructions launcher, `data-instructions-session-id` /
+`[data-action="launch-instructions"]`), `KbBind.tsx` (the project-brain
+builder, `data-project-brain-session-id` /
+`[data-action="create-project-brain"]`), and `ContractResolutionPanel.tsx`'s
+own `instructions`-route agent-tier resolve button (same
+`data-instructions-session-id` key as `Instructions.tsx` — the two surfaces
+mint independently and can legitimately disagree, since only one names the
+session actually reachable from wherever the operator is standing). Each now
+publishes its own distinctly-named key (ruling 307: this panel can render
+inside the onboarding SESSION page, whose root also carries a generic
+`data-session-id`) and renders `SessionMinted`'s real anchor
+(`[data-action="view-instructions-session"|"view-project-brain-session"]`)
+rather than navigating from the click. `ContractResolutionPanel`'s
+`brain-fix` route is NOT one of these — it navigates to an EXISTING, already-
+bound KB's health tab (`brainFixHref`, `/knowledge?id=<boundKbId>&tab=health`),
+never a `/sessions/` route, and mints nothing from the click; `SessionMinted`
+cannot express that href and the acceptance criterion this closes is scoped to
+`/sessions/` navigations only.
+
+**Neither new anchor carries `?project=`** — the pre-fix `Instructions.tsx`
+and `ContractResolutionPanel` targets never did, and `KbBind.tsx`'s did but
+lost it here on purpose: the session shell resolves `project` itself off each
+kind's own per-kind summary route (`listInstructionsSessions` /
+`fetchProjectBrainSessions`,
+`app/sessions/[kind]/[sessionId]/page.tsx`), and the story runner matches a
+minted anchor's `href` EXACTLY (`scripts/stories/beats.mjs`) — a query string
+renders a link a human can click and no beat can ever find
+(`authoring-launcher-mint.test.ts` pins the same rule for the authoring
+launcher). The `demo` kind's three existing `SessionMinted` call sites still
+carry `?project=` and are unchanged by this fix — a pre-existing instance of
+the same class, left for a future PR.
+
 **An action repeated per instance carries the instance in its own name (M1-G,
 `forge-8vfn.5.6`).** `[data-action="select-stage-<stage>"]`, like
 `browse-<name>` and `new-skill` before it. A reader resolves `[data-action=…]`
@@ -372,7 +408,13 @@ is what this contract reads — but it cannot be the only distinguisher.
   failure) and the body is this component. `/sessions/<kind>/<sid>` renders
   it inside `[data-section="session-error"]` (framed by the shell route's
   `errorKind`: `network-error`/`no-bridge` = unreachable, every other kind =
-  the bridge answered) with Retry (crosscut-09); the project page's contract
+  the bridge answered) with Retry (crosscut-09). `forge-5rr`: the SAME
+  page's per-kind SUMMARY read (a SEPARATE fetch from the shell read above —
+  architect/instructions/project-brain/demo's own list endpoint) renders it
+  inside `[data-section="session-summary-error"]`, with Retry
+  (`onRetry={refreshSummary}`) — reachable only for the two kinds
+  (architect, project-brain) with no generic-panel fallback, and only while
+  the summary itself never resolved; the project page's contract
   panel renders it inside `[data-section="contract-checklist-error"]` in the
   checklist's place — never a `data-checklist-row-count="0"` list on a
   404/409/500 (projects-03/crosscut-12); the `/hooks|/connections|/skills/[id]`
@@ -743,7 +785,17 @@ is what this contract reads — but it cannot be the only distinguisher.
     always rendered including at zero (a tile that appears and vanishes
     makes "nothing is running" indistinguishable from "the strip broke"):
     `[data-summary-tile="live"|"needs-you"|"failed"|"queued"][data-count]`.
-    Pinned by `lib/monitor-summary-strip-render.test.ts`.
+    Pinned by `lib/monitor-summary-strip-render.test.ts`. **forge-6gv.28:**
+    `data-monitor-ready` is `deriveSummaryReady({homeDataReady, agentRowsReady})`
+    (`lib/monitor-view.ts`), NOT the page's own `data-page-ready` — the
+    merged everything-ledger's standalone-agent half resolves in a SECOND,
+    independent effect after `homeDataReady` settles, and the counts above
+    are computed over that same merged list. Before this fix both callers
+    fed `data-monitor-ready` from `homeDataReady` alone, so a reader could
+    see `data-page-ready="true"` and `data-monitor-ready="true"` while the
+    live/total counts were still missing the agent half — a declared
+    readiness flag that did not cover one of the two reads its own headline
+    is derived from.
   - `section[data-section="scheduler"]` — the shared `SchedulerCard` (full
     contract under the Home entry above); its own component owns its read,
     so Monitor adds no extra fetch or interval here.
@@ -810,7 +862,16 @@ is what this contract reads — but it cannot be the only distinguisher.
   unfiltered set). **W7-B1 (home-sessions-12): the page stays LIVE** — the
   same `cycle-list-changed` bridge-WS signal Home refetches on, through the
   SAME `createDebouncedRefreshRuns` debounce (one subscribe, mount-only, no
-  page-level poll — `app/sessions/page.tsx`). **W7-B1 (crosscut-13 /
+  page-level poll — `app/sessions/page.tsx`). **sessions-kinds-16: a
+  terminal-sessions pointer** — the page's own lede says terminal sessions
+  "live on their artifacts" but named no path to any; a static (no fetch
+  dependency, renders in every state including loading)
+  `div[data-section="terminal-sessions-pointer"]` links to `/monitor` via
+  `a[data-action="open-monitor"]` — the SAME action `MonitorSummaryStrip.tsx`
+  already uses for this link — because Monitor's history ledger
+  (`lib/session-ledger.ts`'s `deriveSessionLedgerRows`) joins every spine
+  session regardless of phase, terminal included, unlike this page's own
+  active-only set. **W7-B1 (crosscut-13 /
   home-sessions-19): `section[data-section="sessions-kickoff"]` renders in
   BOTH the populated and the empty state** (only a FAILED read omits it) —
   one `a[data-action="kickoff-<kind>"]` per entry of
@@ -1084,7 +1145,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   routes match `INIT_ID_RE`, so a harness driving the API keys on this one) —
   each beside
   `[data-component="run-control-detail"][data-control=<id>]` saying what it does
-  (Resume re-enters at the demo node against the preserved branch; Requeue
+  (Resume re-enters at the integrate node against the preserved branch; Requeue
   re-runs from the start on a fresh worktree; Abandon deletes worktree and
   branch). Before this the monitor carried Resume alone, with no disclosure and
   no else branch — a refused POST was invisible. Abandon confirms in the DOM
@@ -1121,7 +1182,13 @@ is what this contract reads — but it cannot be the only distinguisher.
   [data-pinned-selection="true"]`, so collapse hides the pile, never the
   selection; the HistoryLedger row carries the same `data-run-id` on a LINK,
   so journeys select via the rail-scoped selector) and the phase drawer skips the log
-  fetch for a `pending` node (no 404 per hex click on a queued run). MONITOR renders the run's hex
+  fetch for a `pending` node (no 404 per hex click on a queued run). forge-7wc: a
+  rejected log fetch (idle/terminal node) renders
+  `[data-component="phase-log-error"]` with the failure's own message — a
+  state distinct from, and checked before, the drawer's existing "no log
+  lines for this phase" genuinely-empty copy, so a failed fetch can never
+  read as an empty log (`lib/phase-log-panel-view.ts`'s
+  `derivePhaseLogPanelState`). MONITOR renders the run's hex
   topology (`FlowTopology.tsx`): each node is
   `[data-mon-node][data-node-id][data-status][data-hex-kind]`
   (`data-hex-kind` is `phase | wi`); phase hexes carry `data-phase-cost-usd`,
@@ -1130,7 +1197,23 @@ is what this contract reads — but it cannot be the only distinguisher.
   `data-hex-kind="phase"`. The phase DRAWER opened from a WI hex reports that
   same per-WI cost (W7-B7 flows-14, `lib/phase-drawer-meta.ts`) — the pooled
   dev-phase cost/model/retries are never attributed to a single work item
-  (model + retries rows are omitted in WI mode). A single **flowLineage** run threads across
+  (model + retries rows are omitted in WI mode). **`forge-8vfn.5.16` (M7-C
+  U2) — the `pm` node's drawer (`studio/flows/forge-architect/flow.yaml`)
+  additionally renders a "Brain reads" section, per KB touched:
+  `[data-brain-read-kb][data-brain-read-count]`. Distinct from the
+  pre-existing plain-text "brain reads: N" line inside the Progress section
+  (a raw tool-use COUNT with no KB attribution, rendered only for the `dev`
+  node) and from `/knowledge`'s Ingest Activity tab (the reflector's WRITE
+  side, `reflect.kb-ingest`) — this is the planner's own READ, on the record.
+  Source: `packages/factory/phases/project-manager.ts` emits one
+  `message:"brain.read"` event per KB `readPmBrainContext`'s deterministic
+  pre-fetch touched (`metadata: {kbId, themeCount, reader, runId}`);
+  `PhaseDrawer.tsx` reads the run's live event stream via `useCycleEvents`
+  and folds it through `lib/brain-read-view.ts`'s `deriveBrainReadSummary`
+  (never fabricates a row from the architect's own unconditional per-turn
+  `brain-query` marker, which shares the `event_type` but carries no
+  `kbId`). The section renders only when at least one row exists — absent,
+  not an empty state, when the KB list is empty.** A single **flowLineage** run threads across
   chained flow definitions (`forge-architect` → `forge-develop`; W7-C1
   retired the reflect flow wrapper — reflection is a standalone post-merge
   agent run) — each renders only its own slice of nodes, so
@@ -1577,7 +1660,35 @@ is what this contract reads — but it cannot be the only distinguisher.
   `/hooks/[id]` is
   `main[data-page="hook-detail"][data-hook-id][data-page-ready][data-hook-event][data-hook-verdict][data-hook-trust][data-hook-runnable][data-package-hash]`
   — the last five are ABSENT while loading, on a fetch error and for an unknown
-  id; no verdict is ever fabricated. It reuses the shared
+  id; no verdict is ever fabricated. **`forge-8vfn.5.16` (M7-C U2) —
+  `data-hook-recent-fire-count`, present alongside the five once loaded (`0` =
+  "the scanned window was checked, no fire found" — the same idiom
+  `data-hook-carried-by-count` already uses), plus
+  `data-hook-last-fire-at`/`data-hook-last-fire-outcome` (`"ran"|"refused"|
+  "timeout"|"error"`), present ONLY once the hook has fired within that window
+  — never fabricated for a hook that has never run. This is the FIRST
+  `data-hook-*` attribute on this page naming an EXECUTION rather than the
+  hook's definition or trust: every fire (`packages/agents/studio/hook-
+  dispatch.ts`'s `emitHookFire`) appends one `message:"hook.fire"` event to the
+  firing cycle's own log; the route (`packages/library/bridge-studio-hooks-
+  detail.ts`) folds it through `packages/library/studio/hook-fire-summary.ts`'s
+  `deriveHookFireSummary` (latest-by-`started_at` wins the outcome; the count
+  is every matching fire within scope, not just the latest). **T2 review of
+  `95cb287f` — BOUNDED, not every cycle.** A hook can fire from any agent
+  spawn (flow cycles, one-shot `_agent-*` runs, interactive session kinds,
+  bridge writes), so recency can't be read off the cycle id the way the
+  ingest-activity route's `reflect.kb-ingest` scan does (that event only ever
+  comes from a flow cycle's ISO-prefixed id); the scan instead orders cycles
+  by directory mtime (`scanHookFireSummary`'s injectable
+  `selectRecentCycles`, mirroring `sortEntriesByMtimeDesc`,
+  `packages/agents/bridge-agents-history-rows.ts`, M7-C #834) and opens at
+  most `HOOK_FIRE_SCAN_MAX_CYCLES` (50) cycle dirs, reading at most
+  `HOOK_FIRE_SCAN_TAIL_BYTES` (64KB) of each one's `events.jsonl` (the whole
+  file when smaller). The wire field and this attribute are named
+  `recentFireCount`/`data-hook-recent-fire-count`, not `fireCount`/
+  `data-hook-fire-count`, precisely because of the bound: a fire recorded
+  only in a cycle older than the scanned window is honestly invisible here,
+  never claimed as "never fired".** It reuses the shared
   `[data-component="file-package"]` renderer R3-01 built, and adds the
   **SECURITY SCAN** panel
   `[data-section="scan-report"][data-scan-verdict][data-finding-count][data-critical-count]`
@@ -1863,10 +1974,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   the shared `NotFound`** (`data-not-found-kind="registry item"`), not the
   full edit form under a red banner. Gated on the load OUTCOME
   (`registryEditLoadOutcome`), never on "some load error happened": only a
-  real HTTP 404 may claim the row does not exist. A transport failure — the
-  bridge was never reached, so there is no status at all — keeps
-  `[data-component="fetch-error"]`, because a down bridge is not evidence of
-  absence (the same rule `bridge-result.ts` holds for every other read).
+  real HTTP 404 may claim the row does not exist. **forge-4sj: a non-404
+  edit-load failure** — the bridge was never reached, so there is no status
+  at all, or it answered but refused — renders the shared `PageLoadError`
+  kit (`main[data-page="community-registry-form"][data-form-mode="edit"]`,
+  `[data-component="page-load-error"]`, `[data-component="fetch-error"]`
+  inside it, `[data-action="retry-fetch"]`) instead of the form, with
+  `useBridgeRecoveryWhenFailed` resubscribing while failed — the SAME kit
+  `/community/[kind]/[id]` already uses, because a down bridge is not
+  evidence of absence (the same rule `bridge-result.ts` holds for every
+  other read). The prior ad-hoc inline banner above a half-populated form is
+  gone.
 
   **Refresh entry (W6-CR-3, 2026-08-15; replaced by W8-B5, retired-session-kind
   cutover W8-B5b WI-3).** The interactive community-refresh session kind
@@ -1968,7 +2086,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   [data-item-id][data-page-ready]` plus, **present ONLY once the item
   resolves** (`[data-item-kind][data-install-state]` are ABSENT while
   loading, on a fetch error, and for an unknown kind/id — an unvalidated
-  route param is never asserted as fact before the server confirms it):
+  route param is never asserted as fact before the server confirms it).
+  `forge-5rr` (projects-45): a non-404 read failure (bridge down, or
+  reachable-and-refused) renders the SHARED `PageLoadError` kit instead of
+  the page's own chrome — `main[data-page="community-detail"]
+  [data-page-ready="true"][data-fetch-status="error"][data-load-error="true"]
+  [data-item-id]`, with `[data-action="retry-fetch"]` (Retry re-runs the
+  read) and a bridge-recovery resubscribe that refills automatically once
+  the bridge is back — replacing the old dead-end banner with no retry path
+  short of a manual reload. The not-found claim itself stays reachable ONLY
+  off a real, bridge-answered HTTP 404 (`fetchCommunityItemDetail`'s own
+  `status`) — never off this transport-failure branch.
   `[data-section="hub-signals"]` (`[data-hub-id]` present only for a matched
   hub, a signal-attribution attribute present only when the source record
   actually carries signals — D4/D5, no invented hub name or signal figure
@@ -2977,11 +3105,25 @@ is what this contract reads — but it cannot be the only distinguisher.
   else, so before this the drawer — and the `[data-run-link]` inside it — was
   unreachable to a beat, and S10 beats 9–21 all failed on "no real-nav path to
   the run page". Pressing it opens the drawer for that initiative; the drawer's
-  run links are `[data-run-link][data-run-cycle-id][data-run-active]` with
-  `href="/flows/forge-develop/run/<cycleId>"`. **`data-run-active="true"` means
-  NEWEST, not running** (`cycle-grouping.ts:48-62` sorts by cycle id and takes
-  the head; it is not a liveness check) — and the route is keyed by CYCLE id,
-  never by initiative id.
+  run links are `[data-run-link][data-run-cycle-id][data-run-active]
+  [data-run-live]` with `href="/flows/forge-develop/run/<cycleId>"`.
+  `cycle-grouping.ts:48-62` sorts by cycle id and takes the head as the
+  "active" cycle, which is NEWEST, not a liveness check on its own —
+  `data-run-active="true"` means NEWEST (index 0) and nothing else; it
+  is unconditional on that cycle's own status, because `S10.story.mjs`
+  binds its `<cycleId>` off `[data-run-active="true"][data-run-cycle-id]`
+  and a beat must still find that link after the newest run concludes.
+  **forge-6gv.13.1:** the LABEL is what carries the liveness fact instead —
+  index 0 reads "active run" only when the initiative's own `status` is
+  NON-terminal (reusing `lib/cycle-cost-cache.ts`'s
+  `COST_TERMINAL_CYCLE_STATUSES` — merged/done/failed), else "last run"
+  (an older attempt, index > 0, always reads "prior run" and carries
+  `data-run-active="false"`), so a newest cycle that has already concluded
+  (an old failed or done attempt) is never mislabelled "active run" even
+  though it still carries `data-run-active="true"`. `data-run-live="true"`
+  duplicates that same liveness fact (NEWEST **and** non-terminal) as a
+  boolean for a caller that wants it without parsing the label text — and
+  the route is keyed by CYCLE id, never by initiative id.
 
   **REFRESH SEMANTICS — the roadmap is LIVE (`forge-8vfn.7.6.27`).** The page
   subscribes to the bridge socket and re-reads on `cycle-list-changed` (every
@@ -3000,8 +3142,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-roadmap-node][data-initiative-id][data-action="open-initiative-<id>"]
   [data-initiative-status]` (+
   `[data-develop-state][data-plan-state][data-initiative-ready][data-blocked-by]
-  [data-initiative-collapsed="true"][data-completed-at]` — the last only when
-  derivable). **Every card is now PERMANENTLY collapsed** — canvas geometry
+  [data-initiative-collapsed="true"][data-completed-at][data-initiative-flow-id]`
+  — the last two only when derivable). `data-initiative-flow-id` (M7 findings
+  row 59) carries the initiative manifest's own `flow_id` BESIDE
+  `data-initiative-status` — never a substitute for it, never renamed into
+  it: forge-architect and forge-develop both terminate at the SAME status
+  word (`ready-for-review`), which `tests/stories/S10.story.mjs` asserts as
+  a load-bearing `data-initiative-status` value, so the flow id is the only
+  way a card (or `report.md`'s header, which renders it the same way beside
+  `Status:`) can be told apart from its sibling flow's identical terminal
+  status. Absent (never fabricated) for a manifest that carries no
+  `flow_id`. **Every card is now PERMANENTLY collapsed** — canvas geometry
   never reflows on selection (operator ruling, mock decision point P5), so
   `data-initiative-collapsed` never flips to `"false"` and there is no more
   per-node inline-expand toggle (`[data-action="toggle-node-detail"]` is
@@ -3044,7 +3195,8 @@ is what this contract reads — but it cannot be the only distinguisher.
   now-line's chip, horizontally synced to pan/zoom, vertically fixed. Inside
   the open drawer, the card's real work items (`[data-work-item-id]`) and a
   per-node run dig-in `[data-section="initiative-runs"]` with one
-  `[data-run-link][data-run-cycle-id][data-run-active="true"|"false"]`
+  `[data-run-link][data-run-cycle-id][data-run-active="true"|"false"]
+  [data-run-live="true"|"false"]`
   (href `/flows/forge-develop/run/<cycleId>`) for the active cycle plus every
   Every roadmap node carries `[data-blocked-clauses]` — the failing hard-clause
   NAMES from a claim the SCHEDULER made and then REFUSED (`SKILLS`, comma-joined;
@@ -3178,7 +3330,13 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-field="create-name"]` / `[data-field="create-north-star"]` /
   `[data-field="create-app-type"]` (a `<select>` of curated app types) and a
   `[data-action="create-project"]` button — scaffolds a contract-green project
-  from a framework template and navigates to its page.
+  from a framework template and navigates to its page. **A failed create
+  carries its own handle (`forge-8vfn.6.11.37`):** `[data-section="create-
+  error"]`, a paragraph rendered by the extracted `CreateError` component
+  (`components/studio/CreateFromTemplate.tsx`) that carries the failure
+  message and nothing else when there is none — before this, the message
+  rendered as bare text with no `data-*` at all, so a beat needed a CLI probe
+  to learn why a create failed (S2 run 6).
   **Amended 2026-09-06 (bead `forge-8vfn.6.11.4`, operator ruling 301):** the
   starters are named for a STYLE — `api`, `cli`, `webapp` — and
   `GET /api/studio/projects/starters` answers `{appTypes: [{id, label,
@@ -3223,11 +3381,18 @@ is what this contract reads — but it cannot be the only distinguisher.
   run gets `[data-action="cancel-onboarding"][data-cancel-armed]` (two-step
   → the A2 session-cancel route, which really kills the tracked dispatch
   pid); the run id links to its run page via
-  `[data-action="open-onboarding-run"]`; and a TERMINAL reattach renders
+  `[data-action="open-onboarding-run"]`; and a TERMINAL reattach — **⚑
+  forge-6gv.13.1 (projects-42): OR a LEAKED one, the dispatch process dead
+  with no terminal marker ever written** (the reattach no longer trusts the
+  session's raw `phase: 'running'` alone; it folds in the bridge's
+  additively-derived `lifecycle` via `onboardReattachIsLive`, the SAME
+  canonical staleness rule every session surface applies) — renders
   `[data-section="onboard-last-run"][data-last-run-id][data-last-run-status]`
-  — when it ran, how it ended, its cost/ceiling, its `outputRefs` (what the
-  agent wrote, `[data-component="onboard-last-run-outputs"]`) and links to
-  the run page + session — instead of silently resetting to idle.
+  — when it ran, how it ended (a leaked run honestly reads
+  `data-last-run-status="stalled"`, never an indefinite `"running"`), its
+  cost/ceiling, its `outputRefs` (what the agent wrote, `[data-component=
+  "onboard-last-run-outputs"]`) and links to the run page + session —
+  instead of silently resetting to idle or claiming a dead run is live.
   A recoverable initiative (`in-flight | ready-for-review | failed` —
   deliberately excluding `merged`, a transient pass-through, and terminal
   `pending`/`done`) gets recovery affordances inside its **drawer**
@@ -3282,7 +3447,18 @@ is what this contract reads — but it cannot be the only distinguisher.
   id — a wrong destination with no indication anything went wrong). The
   USER-tier `[data-action="apply-clause-decision"]` button genuinely
   dispatches + polls a preflight-fix agent (~90s bounded) and is labelled
-  "Apply with agent" accordingly.
+  "Apply with agent" accordingly. `forge-8vfn.8.3.1` (projects-45): its
+  `disabled` consults the SAME per-clause poll state the row's own
+  `data-agent-run-state`/`data-poll-state` already render, not just the
+  click-scoped `busy` flag — `busy` clears the instant the dispatch POST
+  resolves, while the polled agent run can still be `'watching'` or
+  `'timed-out'` (a poll ceiling is a fact about the watcher, not the run —
+  `pollDisplayState`'s header). Either non-terminal state keeps the button
+  disabled with `[data-disabled-reason]` (`disabledAttrs`,
+  `lib/disabled-reason.ts`) naming the still-running clause; only a real
+  terminal status re-enables it. Before this fix the button re-enabled the
+  moment the POST returned, so a second click could dispatch a second agent
+  onto the same clause.
   **`[data-section="contract-panel"]` (R4-12-F1)** —
   `ProjectContractPanel.tsx`, an async server component mounted client-side by
   the page's `ContractPanelMount`; it issues its OWN
@@ -3736,6 +3912,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   -04, crosscut-21/-25, 2026-08-21):** `NewIdeaBox` is the ONE self-contained
   architect kickoff form, rendered by BOTH `/architect/new` and
   `/sessions/architect/new` (the two entries converge — no more bounce link).
+  **crosscut-R12 (forge-6gv.2.1):** the ROOT identity converges too —
+  `/sessions/architect/new` declares `data-page="architect-new"`, matching
+  `/architect/new` exactly, never the generic per-kind `"session-kickoff"`
+  every OTHER `/sessions/<kind>/new` still declares (that page's shared
+  branch this early return never reaches).
   Contract: `[data-section="new-idea"][data-new-idea-ready]
   [data-roster-state="loading"|"ok"|"error"][data-architect-session-id]`;
   `data-architect-session-id` is PRESENT FROM FIRST PAINT as `""` and carries the
@@ -4020,7 +4201,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   `runFinalize`) — this route validates the body shape and hands off, it
   never reimplements a finalizer.
 - **`SessionInteractivePanel` — the generic interaction panel (W6-B6,
-  2026-08-15; W6-B8 and W6-B9 extend it).** `components/studio/session/SessionInteractivePanel.tsx`.
+  2026-08-15; W6-B8 and W6-B9 extend it).** `components/studio/session/SessionInteractivePanel.tsx`
+  — the orchestrator; the `question-form` and `verdict` affordance kinds'
+  own markup live in sibling `SessionQuestionFormAffordance.tsx` /
+  `SessionVerdictAffordance.tsx` (bead forge-8vfn.8.3.4's file-size split —
+  same DOM contract, no behaviour change).
   Renders EXCLUSIVELY from the read route's own `affordances[]` — never
   re-derives an affordance from `phase`. Wired into the session shell for
   **`demo`, `onboarding`, `kb-cleanup`, `authoring`, and `instructions`
@@ -4146,7 +4331,12 @@ is what this contract reads — but it cannot be the only distinguisher.
   additions, both
   keyed off `artifact.kind` (never `kind`): for `demo` (a real
   `generation-gallery` with at least one generation), a generation picker
-  (`[data-field="session-generation-pick"]`); for `authoring` (a real
+  (`[data-field="session-generation-pick"][data-selected-generation]` —
+  bead forge-8vfn.8.3.4: `data-selected-generation` names the generation an
+  approve would ACTUALLY lock right now, the same fact
+  `GenerationGallery`'s own root attribute of the same name carries, because
+  both now read the ONE selection lifted onto the session page — see
+  "Generation gallery" below); for `authoring` (a real
   `file-package`, W6-B8), a package-id field
   (`[data-field="session-package-id"]`, labelled "Skill id (directory name)"
   or "Hook id (directory name)" per the draft's shape — detected purely by
@@ -4477,13 +4667,29 @@ is what this contract reads — but it cannot be the only distinguisher.
   itself reversed): `/sessions/demo/<sid>` renders the REAL
   `SessionArtifactPane`, fed by
   `GET /api/studio/sessions/demo/<sid>?project=<p>` — the same read route,
-  one mount now instead of two. `finalize-generation` (the gallery's own
-  per-item button) renders honestly DISABLED here (`onFinalizeGeneration` is
-  not wired on this page — `title="Not available from this view"`); the
-  session-shell's own way to finalize a chosen generation is the generic
-  verdict-approve's `[data-field="session-generation-pick"]` picker (posts
+  one mount now instead of two. **W7-B1** wires `finalize-generation` (the
+  gallery's own per-item button) for a live, non-terminal demo session on
+  THIS page too (session page's `onFinalizeGeneration`, the SAME
+  `demoBuilderLock` POST) — a terminal (locked/abandoned) session keeps it
+  honestly disabled instead. The generic verdict-approve's
+  `[data-field="session-generation-pick"]` picker (posts
   `{verdict:'approve', generation:<n>}` through the SAME affordance route
-  `handleDemoVerdict` already answers), not a second, redundant call path.
+  `handleDemoVerdict` already answers) is the OTHER way to lock a chosen
+  generation — not a second, redundant call path, but, until **bead
+  forge-8vfn.8.3.4**, a second, independent SELECTION: the gallery's own
+  per-item picker and the picker's `<select>` each carried their own local
+  `useState`, so the two could disagree about which generation an approve
+  would lock (select generation B in the gallery, approve from the panel,
+  and it could lock generation A). **Both are now driven by ONE selection**
+  (`lib/session-artifact-view.ts`'s `GenerationSelection`), owned by the
+  session page and threaded verbatim into `GenerationGallery` (via
+  `SessionArtifactPane`'s own `selectedGeneration`/`onSelectGeneration`) and
+  into `SessionInteractivePanel`'s verdict-approve picker (same two prop
+  names) — picking a generation in EITHER control moves both, and either
+  lock action (the gallery's `finalize-generation` or the picker's
+  `verdict-approve`) acts on exactly that generation. The picker's `<select>`
+  now also carries `[data-selected-generation]`, mirroring the gallery's own
+  root attribute exactly, so the two can be read and compared directly:
   Contract:
   `[data-section="generation-gallery"][data-generation-count][data-selected-generation]`,
   per selector button
@@ -4494,21 +4700,24 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-section="generation-feedback"][data-has-feedback="true"|"false"]`,
   the per-item viewer `[data-action="view-generation-item"]` (serving from
   `GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename>`), the
-  (on this page, honestly disabled) chooser
-  `[data-action="finalize-generation"][data-generation-number]`, and an
-  honest `[data-generation-empty="true"]` naming what was scanned rather than a
-  bare pane. `data-generation-number` is the snapshot's OWN recorded iteration,
-  never an array position, so a corrupt snapshot leaves a visible gap instead
-  of silently renumbering its successors. **The selection is poll-stable**: the
-  panel refetches on ONE 3s interval (never a second cycle — two independent
-  polls is the race this campaign already diagnosed once), and the view is
-  re-derived with the operator's chosen generation NUMBER preserved across the
-  new payload, because a selection that dies every 3 seconds cannot be acted
-  on. The real way to lock a CHOSEN generation on this page is
-  `verdict-approve`'s generation picker — server-side (`handleDemoVerdict`)
-  it restores that snapshot's sample AND its generator skill into the project
-  repo before the same lock runs, so `demo.lock.json`'s
-  `demo_html`/`demo_skill` pair always comes from one generation.
+  finalize chooser `[data-action="finalize-generation"][data-generation-number]`
+  (disabled, with its reason, on a terminal session — never a silent
+  no-handler swallow), and an honest `[data-generation-empty="true"]` naming
+  what was scanned rather than a bare pane. `data-generation-number` is the
+  snapshot's OWN recorded iteration, never an array position, so a corrupt
+  snapshot leaves a visible gap instead of silently renumbering its
+  successors. **The selection is poll-stable**: the page refetches the shell
+  on ONE 3s interval (never a second cycle — two independent polls is the
+  race this campaign already diagnosed once), and the view is re-derived
+  with the operator's chosen generation NUMBER preserved across the new
+  payload (looked up BY VALUE via `preferredGenerationFor`, never an array
+  position), because a selection that dies every 3 seconds cannot be acted
+  on. Locking a CHOSEN generation via `verdict-approve` — server-side
+  (`handleDemoVerdict`) it restores that snapshot's sample AND its generator
+  skill into the project repo before the same lock runs, so
+  `demo.lock.json`'s `demo_html`/`demo_skill` pair always comes from one
+  generation — now locks the SAME generation the gallery shows selected,
+  because there is only one selection left to disagree with.
 - **Contract build-out — the onboarding/creation session's artifact (R4-17,
   2026-08-06).** The `onboarding` session-kind descriptor (`studio/
   session-kinds.yaml`, D1: ONE descriptor reused for both the `/projects/[id]`
@@ -4615,8 +4824,20 @@ is what this contract reads — but it cannot be the only distinguisher.
     renders the id in TWO places: on the page root
     (`main[data-page="knowledge"][data-seed-session-id="<sid>"]`) and on
     `[data-component="kb-seed-banner"][data-seed-session-id="<sid>"]`, which
-    wraps `a[data-action="open-seed-session"]`. Both are present deliberately.
-    The banner carries it because that is the control it belongs to; the ROOT
+    wraps `a[data-action="open-seed-session"]` **once `seedBanner.phase !==
+    null`** (forge-t4pp: `seedSession` is an unvalidated URL param — a
+    hand-typed or stale id must never mint a link whose target 404s; reuses
+    `useKbSeedSessionPhase`'s own `.find((s) => s.session_id ===
+    seedSessionId)` lookup, already run to derive the banner's copy, as the
+    session-id validity predicate — `phase` is `null` for "not yet checked",
+    "the read failed" and "no such session" alike, and a real value only
+    once a genuine match was found). The banner `[data-component]` and its
+    `[data-seed-session-id]`/`[data-seed-session-phase]`/
+    `[data-seed-session-running]` attributes are unconditional on
+    `seedSession` being present; only the LINK inside is gated. The root's
+    `[data-seed-session-id]` is likewise unconditional (it announces which id
+    is being checked, not that a link exists for it). The banner carries it
+    because that is the control it belongs to; the ROOT
     carries it because `scripts/stories/beats.mjs`'s `resolveExpectations`
     reads the page root FIRST and only searches descendants for the keys the
     root does not answer — and S6 run 2 (2026-09-02) reported this key "absent
@@ -4633,7 +4854,17 @@ is what this contract reads — but it cannot be the only distinguisher.
     `[data-action="view-architect-session"]`); the KB hand-off was one of the
     six sites that kept the old shape. Rendered only when `seedSession` is
     present in the query. Harness coverage: `tests/stories/S6.story.mjs`
-    beats 4-7.
+    beats 4-7. `knowledge-38` (forge-6gv.6.1): the banner's TEXT is no longer
+    a hardcoded "…is running for it" claim off the query param's mere
+    presence — `startProjectBrain` always mints a fresh session at phase
+    `'briefing'` (idle, waiting for the operator's brief), so that claim was
+    wrong on every single KB creation. The banner now fetches the session's
+    real phase (`fetchProjectBrainSessions`) and renders
+    `lib/kb-seed-banner.ts`'s `kbSeedBannerCopy` derivation, carrying two new
+    attributes: `data-seed-session-phase` (the real phase, or `''` before
+    the read lands / if it fails — never a guessed value) and
+    `data-seed-session-running="true"|"false"` (true only for `'analyzing'`/
+    `'committing'` — the phases where an agent is genuinely doing something).
   - **KB selector zero-state (W6-IA-4 sweep finding C4#2).**
     `KbSelector.tsx`'s `#kb-select` used to render a genuinely empty
     `<select>` (zero `<option>`s) whenever the roster was empty — nothing to
@@ -4692,8 +4923,13 @@ is what this contract reads — but it cannot be the only distinguisher.
     the shared `[data-component="fetch-error"]` + Retry (which drops the cached
     rejected fetch) in the graph's place — never "No KB data available." under
     a root that advertises `ok`; force-graph
-    root `#kb-svg[data-kb-id][data-node-count][data-edge-count][data-selected-node]`,
-    per-node `[data-node-id][data-layer="theme"|"index"|"guidance"]` with a
+    root `#kb-svg[data-kb-id][data-node-count][data-edge-count][data-selected-node]`.
+    A zero-node graph (`data-node-count="0"`) overlays
+    `[data-component="kb-graph-empty"]` — "No data yet for this knowledge
+    base." — over the still-live canvas and controls (forge-0b0: before this
+    a genuinely empty KB rendered the identical inert canvas a broken graph
+    would, with nothing telling the operator which one they were looking
+    at). Per-node `[data-node-id][data-layer="theme"|"index"|"guidance"]` with a
     `[data-hit]` inner hit-circle (click target — the outer `<g>`'s bbox
     centre is pushed off-centre by the label). Node click opens the article
     pane (`[data-node-article-body]`); the KB selector is `#kb-select`, one
@@ -5297,10 +5533,16 @@ is what this contract reads — but it cannot be the only distinguisher.
   plus `[data-template-category]` and `[data-endpoints-verified="true"|"false"]`
   once the fetch resolves — the latter present ONLY when the template
   declares a producer and/or consumer (planning-only; absent, not `false`,
-  when nothing is declared). Non-ready states: `[data-component="fetch-error"]`
-  (bridge unreachable) and the shared not-found page (`main[data-page=
-  "not-found"][data-not-found-kind="template"]`, W7-A4 — unknown id, the
-  bridge 404s for it by design). The ready state renders
+  when nothing is declared). Non-ready states: the shared not-found page
+  (`main[data-page="not-found"][data-not-found-kind="template"]`, W7-A4 —
+  unknown id, reachable ONLY off a real bridge-answered 404, the bridge
+  404s for it by design); `forge-5rr` (projects-45): a non-404 failure (the
+  bridge unreachable, or reachable-and-refused) renders the shared
+  `PageLoadError` kit instead — `main[data-page="template-detail"]
+  [data-page-ready="true"][data-fetch-status="error"][data-load-error="true"]
+  [data-template-id]`, with `[data-action="retry-fetch"]` and a bridge-
+  recovery resubscribe, replacing the old dead-end `[data-component=
+  "fetch-error"]` banner with no retry path. The ready state renders
   `[data-section="definition"]` (format/provenance/definition-ref); for a
   malformed definition, `[data-section="parse-error"]` instead; planning-only,
   when a producer/consumer is declared, `[data-section="endpoints"]`

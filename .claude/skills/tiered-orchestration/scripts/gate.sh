@@ -21,13 +21,19 @@
 # each checkout (§15.148).
 set -u
 
+# forge-8vfn.7.6.79 — whether THIS gate is the one holding the suite-lock right
+# now, so the trap below removes only a sidecar it wrote itself and never a
+# sibling's (an ANCESTOR that declines to re-take the lock must not clean up
+# the outer holder's sidecar out from under it).
+SUITE_LOCK_HELD=0
+
 # T1 ruling 1104 (D's finding). `merge-slot.sh` reads `GATE_SH_EXIT=<rc>` out of
 # the handed gate log to tell a REFUSAL (exit 3 with zero FAIL rows — a step
 # never ran, §15.92, unwaivable) from a green gate. Nothing here wrote that
 # line; one lane's private wrapper did, so for every other lane the check
 # could not fire. The verdict is written by the thing that reached it, on EVERY
 # exit path, as the LAST stdout line — never appended by a wrapper afterwards.
-trap 'echo "GATE_SH_EXIT=$?"' EXIT
+trap 'ec=$?; [ "$SUITE_LOCK_HELD" = 1 ] && rm -f "${FORGE_SUITE_LOCK:-}.holder" 2>/dev/null; echo "GATE_SH_EXIT=$ec"' EXIT
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 die() { echo "gate.sh: $*" >&2; exit 2; }
@@ -251,7 +257,8 @@ echo "kernel link: ${link:-<none>}"
 # and #667 WAS on main; the run executed a worktree forked before it. A
 # dependency satisfied on `main` is not a dependency satisfied in the tree that
 # RUNS. So the tree that runs names itself, in the header, before any step.
-echo "GATE_CHECKOUT=$(git -C "$R" rev-parse --short=8 HEAD 2>/dev/null || echo '?')"
+GATE_CHECKOUT_SHA="$(git -C "$R" rev-parse --short=8 HEAD 2>/dev/null || echo '?')"
+echo "GATE_CHECKOUT=$GATE_CHECKOUT_SHA"
 
 # THE TREE IS PINNED HERE AND RE-READ BEFORE THE VERDICT (forge-8vfn.7.6.129,
 # T1 1118; D's `tree-pin.sh` is the reference). Two lanes voided their own gates
@@ -304,10 +311,37 @@ if git -C "$R" rev-parse --verify --quiet parsoFish/main >/dev/null 2>&1; then
 else
   echo "GATE_CHECKOUT_UNKNOWN: no parsoFish/main ref in $R — staleness not checked, so this log does not say whether its tooling is current"
 fi
-# A wall-clock delta is a proxy, and a proxy that can report an impossible number is a broken
-# measurement, not a fast step (§15.48: `real 0m0.000s` for 2 s of work). If the clock stepped
-# under us the duration is reported as `?s`, never as a plausible-looking lie.
-secs() { local d=$(( $(date +%s) - $1 )); if [ "$d" -lt 0 ]; then echo "?s (clock stepped)"; else echo "${d}s"; fi; }
+# A wall-clock delta is a proxy, and `date +%s` is not a safe one on this host:
+# `_1.0/reports/m7-c-clockprobe-1.log` measured CLOCK_REALTIME stepping
+# BACKWARDS ~2.85s every ~29.6s regardless of load (WSL2's clocksource). A step
+# landing between a step's `t0=$(date +%s)` and this function's own `date +%s`
+# read a negative delta and printed `?s (clock stepped)` — the mechanism behind
+# the flake register's `gate-refusal.test.ts:132` (699's REFUSED-line door
+# expects `\(\d+s\)` and intermittently got `?s`; reproduced on demand in
+# `gate-elapsed-clock.test.ts`). `build-guard.mjs` hit the SAME clock on the
+# SAME host and fixed it by reading `performance.now()` instead of
+# `Date.now()` (forge-8vfn.7.6.50); the bash equivalent of a monotonic clock
+# is `/proc/uptime`'s FIRST field — seconds since boot, kernel jiffies, never
+# adjusted by NTP or a manual step — never `$EPOCHREALTIME`, which is still
+# wall-clock and would carry the exact same bug forward.
+#
+# `FORGE_UPTIME_FILE` is the test seam, same idiom as `FORGE_PROC_LOCKS` above:
+# `/proc/uptime` cannot be made to hold a chosen value, so a door proving the
+# step no longer reaches `secs()` points at the wall clock (`date +%s` on
+# PATH) instead, in `gate-elapsed-clock.test.ts`.
+#
+# A monotonic source cannot go backward by construction, so the
+# `?s (clock stepped)` fallback is dropped rather than kept as dark code — a
+# check that can no longer fire is the "state that looks like nothing to
+# report" trap this file already names at §15.92.
+now_ticks() { awk '{print $1}' "${FORGE_UPTIME_FILE:-/proc/uptime}" 2>/dev/null; }
+secs() {
+  local now d
+  now="$(now_ticks)"
+  [ -n "$now" ] || { echo "?s (uptime unreadable)"; return; }
+  d="$(awk -v a="$1" -v b="$now" 'BEGIN{printf "%d", b - a}')"
+  echo "${d}s"
+}
 
 # T1 ruling 639 / bead `forge-8vfn.7.6.13`. `npm test` refuses while a story run
 # holds the run-lock, and it learns WHICH lock from the environment — the guard
@@ -325,9 +359,51 @@ if [ -n "$CAMP" ]; then
   export FORGE_RUN_LOCK="$CAMP/.run-lock"
 fi
 
+# forge-8vfn.7.6.79 — the sidecar `gate-vs-gate` reads when a collision cannot
+# be named from `/proc/locks` at all (the inherited-fd take below writes no row
+# there). One line, read back BY NAME never by position, same discipline as
+# every other marker in this file: pid, the checkout this gate is running
+# ($R, already resolved), the commit it measured, and when it took the lock.
+# Called only from the two branches that actually hold fd 9 themselves — never
+# from the ANCESTOR branch, which explicitly does not re-take it.
+write_suite_lock_holder() {
+  printf 'pid=%s cwd=%s head=%s since=%s\n' "$$" "$R" "$GATE_CHECKOUT_SHA" "$(date -u +%FT%TZ)" \
+    > "$FORGE_SUITE_LOCK.holder" 2>/dev/null || true
+  SUITE_LOCK_HELD=1
+}
+
+# The UNNAMEABLE branch's COURTESY, never its guarantee (§15.488: the wait
+# below is the guarantee regardless of what this prints). Returns 1 with
+# nothing printed when there is no sidecar to read, so the caller falls back to
+# the original generic line rather than inventing one. PID REUSE is an accepted
+# risk here, the same shape as `is_ancestor`'s pid walk above: a bare `kill -0`
+# cannot tell a live holder from a dead pid some unrelated process has since
+# reclaimed.
+read_suite_lock_holder() {
+  local f="$FORGE_SUITE_LOCK.holder" line pid cwd head since
+  [ -f "$f" ] || return 1
+  line="$(cat "$f" 2>/dev/null)" || return 1
+  pid="$(printf '%s\n' "$line" | sed -n 's/.*pid=\([0-9]*\).*/\1/p')"
+  [ -n "$pid" ] || return 1
+  cwd="$(printf '%s\n' "$line" | sed -n 's/.*cwd=\([^ ]*\).*/\1/p')"
+  head="$(printf '%s\n' "$line" | sed -n 's/.*head=\([^ ]*\).*/\1/p')"
+  since="$(printf '%s\n' "$line" | sed -n 's/.*since=\([^ ]*\).*/\1/p')"
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "suite-lock: HELD BY gate pid=$pid cwd=$cwd head=$head since $since"
+  else
+    # THE FLOCK ITSELF IS THE TRUTH; THE SIDECAR NEVER GATES. A dead pid does
+    # not mean the lock is free — falls through to the same wait as any other
+    # unclassified hold, unchanged.
+    echo "suite-lock: STALE-SIDECAR (pid $pid gone) — removed"
+    rm -f "$f"
+  fi
+  return 0
+}
+
 wait_for_suite_lock() {
   if flock -w "$SUITE_LOCK_WAIT" 9; then
     echo "suite-lock: TAKEN by this gate (pid $$) — the steps below are serialised against every other suite on this box"
+    write_suite_lock_holder
   else
     echo "suite-lock: NOT TAKEN after ${SUITE_LOCK_WAIT}s — refusing rather than running a suite beside another one (the 3.2x case, ruling 778)"
     exit 75
@@ -359,6 +435,7 @@ else
   exec 9>"$FORGE_SUITE_LOCK"
   if flock -n 9; then
     echo "suite-lock: TAKEN by this gate (pid $$) — the steps below are serialised against every other suite on this box"
+    write_suite_lock_holder
   else
     SUITE_LOCK_STATE="$(suite_lock_state "$FORGE_SUITE_LOCK")"
     case "$SUITE_LOCK_STATE" in
@@ -367,24 +444,93 @@ else
         ;;
       STRANGER:*)
         echo "suite-lock: WAITING on stranger pid(s) ${SUITE_LOCK_STATE#STRANGER:} — another lane's suite holds it"
+        # A kernel that lists the inherited-fd hold (CI's does; WSL2's does not)
+        # lands here, not below — so the sidecar is read on both paths.
+        read_suite_lock_holder || true
         wait_for_suite_lock
         ;;
       *)
         # HELD, BY SOMEONE THE LISTING CANNOT NAME — the inherited-fd shape
-        # above. Named rather than guessed: if this is an ancestor we will sit
-        # out the bound and refuse, which is a bounded, explained failure
-        # instead of a hang.
-        echo "suite-lock: HELD BY AN UNNAMEABLE HOLDER — the lock is taken but /proc/locks has no row for it, which is the inherited-fd shape; waiting, and refusing at the bound rather than guessing whether it is our own caller"
+        # above. forge-8vfn.7.6.79: read the sidecar first — the common case on
+        # this box is that the holder is another gate.sh — and fall back to the
+        # original generic line only when there is nothing to read. Either way
+        # the wait below is unchanged: a bounded, explained failure instead of
+        # a hang, never a guess about whether it is our own caller.
+        read_suite_lock_holder || echo "suite-lock: HELD BY AN UNNAMEABLE HOLDER — the lock is taken but /proc/locks has no row for it, which is the inherited-fd shape; waiting, and refusing at the bound rather than guessing whether it is our own caller"
         wait_for_suite_lock
         ;;
     esac
   fi
 fi
 
+# ---- host contention, bracketed (M7 findings row 15) --------------------------------------
+# §2.6's finding: the suite-lock serialises gates against EACH OTHER but not
+# against CPU — a costed story run (bridge + chromium + agents) held under
+# `.run-lock` shares the box with a gate's steps, and a run measured load
+# 8–12 during which three unrelated tests timed out; one of those surfaced as
+# TEN misleading FAILs from a single mount timeout. This does not fix the
+# contention — it NAMES it, so a reader of a red gate can tell "this measured
+# something real" from "the host was starved" without re-deriving it from
+# `_1.0/reports/`.
+#
+# `load_avg()` reports `load1 load5 load15`, the same shape `run-observe.mjs`
+# already uses for a story's per-beat host record (`hostState()`), matched
+# rather than invented a second time. `FORGE_LOADAVG_FILE` is the test seam,
+# same idiom as `FORGE_PROC_LOCKS`: `/proc/loadavg` cannot be made to hold a
+# chosen number, so a door proving the threshold and the stamp fire correctly
+# points here instead.
+load_avg() {
+  awk '{print $1, $2, $3}' "${FORGE_LOADAVG_FILE:-/proc/loadavg}" 2>/dev/null
+}
+
+# THE THRESHOLD IS NAMED, not buried in a comparison a reader has to re-derive
+# (§15.92's lesson one layer up): 2x nproc is generous headroom — this box
+# idles under 3 on 12 cores — so crossing it means "something else is plainly
+# running", not routine background noise. Overridable, same idiom as
+# `FORGE_SUITE_LOCK_WAIT` below, for a host whose own idle load differs.
+GATE_LOAD_THRESHOLD_MULT="${FORGE_GATE_LOAD_THRESHOLD_MULT:-2}"
+GATE_NPROC="$(nproc 2>/dev/null || echo 1)"
+GATE_LOAD_THRESHOLD="$(awk -v m="$GATE_LOAD_THRESHOLD_MULT" -v n="$GATE_NPROC" 'BEGIN{printf "%.2f", m*n}')"
+
+# True (exit 0) iff the 1-minute figure in a `load_avg()` string exceeds the
+# threshold. An unreadable/empty reading short-circuits to false: an UNKNOWN
+# load must never manufacture a PROVISIONAL stamp.
+load_over_threshold() {
+  local one="${1%% *}"
+  [ -n "$one" ] || return 1
+  awk -v v="$one" -v t="$GATE_LOAD_THRESHOLD" 'BEGIN{exit !(v > t)}'
+}
+
+# THE RUN-LOCK'S HOLDER, reusing the ONE classifier this file already has
+# rather than a second `/proc/locks` reader (this file's own §15.480-era
+# lesson). `gate.sh` never takes `.run-lock` itself — `with-locks.sh`'s header
+# states the opposite: `gate.sh` REFUSES UNDER it — so ANCESTOR is reachable
+# only if a caller mis-wraps a gate inside its own run-lock hold, exactly the
+# shape `with-locks.sh` refuses at launch.
+runlock_holder() {
+  if [ -z "${FORGE_RUN_LOCK:-}" ]; then
+    echo "NOT CONFIGURED"
+  else
+    suite_lock_state "$FORGE_RUN_LOCK"
+  fi
+}
+
+GATE_LOAD_START="$(load_avg)"
+GATE_RUNLOCK_HOLDER_START="$(runlock_holder)"
+echo "GATE_LOAD_START=${GATE_LOAD_START:-UNKNOWN}"
+echo "GATE_RUNLOCK_HOLDER_START=$GATE_RUNLOCK_HOLDER_START"
+GATE_LOAD_PROVISIONAL=0
+load_over_threshold "$GATE_LOAD_START" && GATE_LOAD_PROVISIONAL=1
+
 LOGS="${CAMP:+$CAMP/reports}"; [ -n "$LOGS" ] && mkdir -p "$LOGS" || LOGS="$(mktemp -d)"
 echo "logs: $LOGS"
 fail=0
 refused=0
+# forge-8vfn.7.6.89 — a COUNT and the one command, never re-derived from `fail`
+# (a bare flag) — the ALONE-RERUN proof below needs to know it was EXACTLY one
+# FAIL (never a REFUSAL) and which command that was.
+FAIL_COUNT=0
+FAIL_CMD=""
 while IFS= read -r cmd; do
   [ -n "$cmd" ] || continue
   name="$(printf '%s' "$cmd" | tr -cs 'A-Za-z0-9' '-' | sed 's/^-//; s/-$//' | cut -c1-60)"
@@ -400,7 +546,7 @@ while IFS= read -r cmd; do
   # The wrapper's own PASS/FAIL line was always per-lane and always correct;
   # it is the STEP log that lied, which is the harder kind to notice.
   log="$LOGS/gate-$(basename "$R")-$name.log"
-  t0=$(date +%s)
+  t0=$(now_ticks)
   # Written to a temp file and renamed: `rename(2)` is atomic within a
   # filesystem, so a reader either sees the previous complete log or this one,
   # never a half-written file — and a gate already executing this script keeps
@@ -442,9 +588,18 @@ while IFS= read -r cmd; do
     else
       echo "FAIL  $cmd  ($(secs "$t0"))  → $log"
       fail=1
+      FAIL_COUNT=$((FAIL_COUNT + 1))
+      FAIL_CMD="$cmd"
     fi
   fi
 done < <("$0" --list "$R" | sed -n 's/^RUN //p')
+
+# forge-8vfn.7.6.89 — THE REPLAY IS THIS TOOL'S TO PERFORM, NOT THE LANE'S (a
+# hand-typed ALONE-RERUN proves nothing). Called only here, after the loop's
+# own final count, so the two can never disagree about what ran.
+if [ -n "${GATE_RERUN_ALONE:-}" ]; then
+  ( cd "$R" && "$HERE/gate-rerun-alone.sh" "$GATE_RERUN_ALONE" "$FAIL_COUNT" "$FAIL_CMD" )
+fi
 
 echo "== steps this gate did NOT run (named, never silent) =="
 "$0" --list "$R" | grep -vE '^RUN ' || true
@@ -460,260 +615,13 @@ echo "SKILL.md:      $(git -C "$R" ls-tree -r --name-only HEAD | grep -c 'skills
 echo "CI run: steps: $(grep -c 'run:' "$CI")"
 echo "tests/stories: $(git -C "$R" status --porcelain -- tests/stories | wc -l) uncommitted path(s)"
 
-# NAMED, never silent — this script's own line 13 (§15.92). A pins section that
-# simply does not appear is indistinguishable from one that found nothing wrong,
-# which is exactly how `forge-e8dn` survived two full gates.
-echo "== pins =="
-if [ -z "$CAMP" ]; then
-  echo "SKIP no campaign dir was named — there are no manifests to check, and this gate wrote its logs to a temp dir"
-elif [ ! -d "$CAMP/gate-manifests" ]; then
-  echo "SKIP $CAMP has no gate-manifests/ — no manifests to check"
-else
-  # WHICH MANIFESTS THIS VERDICT IS ABOUT (`forge-8vfn.7.6.32`, T1 738).
-  # Measured 2026-09-11: M6-C amended `M6-C.sha256` fourteen seconds after a
-  # lane's `pin-precheck` read this block, and the precheck reported two
-  # undeclared failures that re-derived `OK` on a direct check seconds later.
-  # Neither instrument was wrong; each was correct about a different instant.
-  # `pin-precheck` already guards the TREE moving between here and the merge —
-  # nothing carried the identity of the MANIFESTS forward, so its `:145`
-  # diagnosis blamed a tree that had not moved.
-  #
-  # The asymmetry is the reason this matters: that instance printed a loud false
-  # REFUSAL. An amendment that ADDED rows instead of rehashing them would have
-  # produced `PIN_PRECHECK_OK` against a manifest already disagreeing with the
-  # tree, and the merge would have gone through on it.
-  #
-  # SCOPE: `*.sha256` AND `*.counts`, and the second half is not obvious. The
-  # verdict is computed from `.sha256`, so a first draft covered only that —
-  # but `pin-precheck.sh:107` reads `${m%.sha256}.counts` for `head=`, and
-  # `:129` uses `head=` to choose rc 4 (unreadable across skew, proceeds loudly)
-  # over rc 3 (undeclared drift, blocks). Opposite outcomes at the merge slot.
-  # `.globs` and `amend-*.md` stay out, measured: nothing in this block or in
-  # `pin-precheck` reads them (grep, both files, zero hits). If this block ever
-  # grows a `pin-glob-check` call, `.globs` reaches the log and this line must
-  # widen with it.
-  echo "PIN_MANIFESTS=$(sha256sum "$CAMP"/gate-manifests/*.sha256 "$CAMP"/gate-manifests/*.counts 2>/dev/null | sha256sum | cut -c1-16)"
-  # 7.6.80 (T1 879) — AND ONE PER MANIFEST, over the same two files each.
-  #
-  # The aggregate answers "did anything move", which is the right question for
-  # a log and the wrong one for a merge: any lane's reconcile moves it, so
-  # `pin-precheck` refuses every merge whose gate finished first. Measured on
-  # three consecutive merges in one evening, and in all of them the refusing
-  # lane's OWN manifest was untouched. A merge's pin precondition is about the
-  # manifests it declares and touches; the precheck cannot compare that subset
-  # against a single number, so the subset has to be printed.
-  #
-  # The aggregate STAYS. It is still the one-line answer, and a log carrying
-  # only it must stay readable until every lane's gate emits these.
-  for pin_m in "$CAMP"/gate-manifests/*.sha256; do
-    [ -e "$pin_m" ] || continue
-    pin_name="$(basename "$pin_m" .sha256)"
-    echo "PIN_MANIFEST $pin_name=$(sha256sum "$pin_m" "${pin_m%.sha256}.counts" 2>/dev/null | sha256sum | cut -c1-16)"
-  done
-  # SKEW MAKES A **FAILED** COUNT AMBIGUOUS -- IT DOES NOT INVALIDATE A CLEAN ONE
-  # (T1 ruling 684, correcting this block's first draft; §15.381 credited to M6-C).
-  # `sha256sum -c` verifies HASHES, so `0 FAILED` from a tree AHEAD of the pin is a
-  # true statement -- the pinned bytes still hold here. Only a NON-ZERO count is
-  # unreadable across skew, because a MISSING or DIFF line can be a file the pin
-  # predates rather than drift. The first draft SKIPPED on any skew and threw the
-  # real verification away with the ambiguous one.
-  #
-  # MEASURED, and reported wrongly before it was understood: this block printed
-  # `M6-C.sha256: 13 FAILED of 198` from a tree one merge behind, and it went
-  # upward as a sibling lane's drift. C's tree was 0 FAILED / 0 MISSING; seven of
-  # the nine were files that did not exist in this checkout yet.
-  #
-  # THE NO-`head=` BRANCH IS NOT DECORATION. Only three of the campaign's fourteen
-  # `.counts` carry `head=`; a check keyed on it that stayed QUIET for the other
-  # eleven would rebuild `forge-e8dn` eleven manifests over.
-  head_now="$(git -C "$R" rev-parse HEAD 2>/dev/null || echo '')"
-  short="${head_now:0:8}"
-  # A FAILED count the lane did not declare fails the gate (693(ii), §15.388):
-  # D's gate was rc=0, 20/20, with `M6-T1.sha256: 2 FAILED of 14` in the same
-  # log. Declarations are matched by MANIFEST or by `MANIFEST:path`, so a lane
-  # can account for one amended file without blanketing the whole manifest.
-  # 7.6.97 — A SIBLING'S STALE PIN IS NOT THIS GATE'S RED.
-  #
-  # `gate.sh` verifies EVERY manifest against the checkout, and §15.105 makes a
-  # pin stale the moment a SIBLING merges. With three lanes merging every few
-  # minutes the window in which all manifests agree with newest main is shorter
-  # than one gate run, so a lane's gate goes red on another lane's pin while
-  # every one of its own steps passes — D twice in six minutes (953: C's
-  # `reap.test.ts`; 954: A's #726 six files, four minutes after C reconciled).
-  # The merge slot already separates this case (7.6.80's `PIN_SIBLING_MOVED` —
-  # reported, not refused); the gate did not.
-  #
-  # THREE CONDITIONS, ALL REQUIRED, and each is there to keep a different thing
-  # red:
-  #   owner != this lane   — my own stale pin is mine to reconcile, not to excuse
-  #   path not in the diff — a path this PR touches must be DECLARED (7.6.43)
-  #   bytes == main's      — the change is a merge on main, NOT tampering here
-  # A row failing any one of them stays a red UNDECLARED. The third is the one
-  # that makes this safe: "a sibling owns it" alone would excuse an edit made in
-  # this tree to a file this lane does not own.
-  #
-  # THIS IS THE BACKSTOP, NEVER THE CHANNEL (T1 956). 954's rule is that a
-  # merging lane forwards `pin-reconcile`'s own `REFUSED — owner=X …` line to
-  # each owner at merge time; this classification covers the window between that
-  # merge and that message, and a reported row is not a reason to stop sending.
-  #
-  # UNSET `FORGE_LANE` TURNS THE CLASSIFICATION OFF AND SAYS SO. Without a lane
-  # identity there is no `owner != mine` to test, and a feature that quietly
-  # stopped classifying would print exactly the same clean pin block as one that
-  # found no stale siblings (§15.504). `pin-reconcile.sh` refuses outright for
-  # the same reason; a gate cannot refuse, so it announces.
-  sibling_stale_n=0
-  pr_diff_paths="|"
-  pr_diff_ok=0
-  if [ -n "${gate_main:-}" ] && git -C "$R" rev-parse --verify --quiet parsoFish/main >/dev/null 2>&1; then
-    if pr_diff_list="$(git -C "$R" diff --name-only parsoFish/main..HEAD 2>/dev/null)"; then
-      pr_diff_ok=1
-      while IFS= read -r pr_f; do
-        [ -n "$pr_f" ] && pr_diff_paths="$pr_diff_paths$pr_f|"
-      done <<< "$pr_diff_list"
-    fi
-  fi
-  if [ -z "${FORGE_LANE:-}" ]; then
-    echo "  PIN_SIBLING_STALE classification OFF: FORGE_LANE is unset, so this gate cannot tell a sibling's stale pin from drift in this tree — every FAILED row below stays UNDECLARED"
-  elif [ "$pr_diff_ok" -eq 0 ]; then
-    echo "  PIN_SIBLING_STALE classification OFF: this PR's diff against parsoFish/main could not be computed, and a row cannot be excused without knowing whether this PR touched it"
-  fi
-
-  manifest_owner() {
-    local c="$CAMP/gate-manifests/$1.counts"
-    [ -f "$c" ] || return 1
-    grep -o 'owner=[^ ]*' "$c" | head -1 | cut -d= -f2
-  }
-
-  # True only when all three hold. Every `return 1` here is a row that stays red.
-  sibling_stale() {
-    local man="$1" p="$2" owner main_blob here_blob
-    [ -n "${FORGE_LANE:-}" ] || return 1
-    [ "$pr_diff_ok" -eq 1 ] || return 1
-    owner="$(manifest_owner "$man")" || return 1
-    [ -n "$owner" ] || return 1
-    [ "$owner" != "$FORGE_LANE" ] || return 1
-    case "$pr_diff_paths" in *"|$p|"*) return 1 ;; esac
-    main_blob="$(git -C "$R" rev-parse --verify --quiet "parsoFish/main:$p" 2>/dev/null)" || return 1
-    here_blob="$(cd "$R" && git hash-object -- "$p" 2>/dev/null)" || return 1
-    [ -n "$main_blob" ] && [ "$main_blob" = "$here_blob" ]
-  }
-
-  # 7.6.144 (D, T1 1146): the OWN-lane twin of sibling_stale — same two byte
-  # conditions, owner == this lane. Such a row is this lane's manifest running
-  # BEHIND main (a merge landed on a path it pins), not a change this PR made.
-  # gate.sh had no word for it and called it UNDECLARED, printing the
-  # --expect-pin-fail remedy — a claim about the PR's diff that the diff
-  # contradicts; obeying it wrote false 925 declarations. It stays RED (the
-  # manifest is behind; the slot's precheck would refuse anyway) but the remedy
-  # is reconcile, never declare.
-  own_stale() {
-    local man="$1" p="$2" owner main_blob here_blob
-    [ -n "${FORGE_LANE:-}" ] || return 1
-    [ "$pr_diff_ok" -eq 1 ] || return 1
-    owner="$(manifest_owner "$man")" || return 1
-    [ "$owner" = "$FORGE_LANE" ] || return 1
-    case "$pr_diff_paths" in *"|$p|"*) return 1 ;; esac
-    main_blob="$(git -C "$R" rev-parse --verify --quiet "parsoFish/main:$p" 2>/dev/null)" || return 1
-    here_blob="$(cd "$R" && git hash-object -- "$p" 2>/dev/null)" || return 1
-    [ -n "$main_blob" ] && [ "$main_blob" = "$here_blob" ]
-  }
-
-  pin_fail() {
-    local man="$1" manifest="$2" undeclared=0 p
-    case " $EXPECTED_PIN_FAILS " in *" $man "*) echo "  declared: every failure in $man is accounted for by this PR"; return 0 ;; esac
-    while IFS= read -r p; do
-      [ -n "$p" ] || continue
-      case " $EXPECTED_PIN_FAILS " in
-        *" $man:$p "*) echo "  declared: $man:$p"; continue ;;
-      esac
-      if sibling_stale "$man" "$p"; then
-        echo "  PIN_SIBLING_STALE $man:$p — matches main ${gate_main:-unknown}; owner $(manifest_owner "$man") owes a reconcile"
-        sibling_stale_n=$((sibling_stale_n + 1))
-      elif own_stale "$man" "$p"; then
-        echo "  PIN_OWN_STALE $man:$p — matches main ${gate_main:-unknown} and this PR does not touch it: your manifest is BEHIND main — reconcile $man to main (pin-reconcile FROM=head), do not declare (7.6.144)"; undeclared=1
-      else
-        # 7.6.110 (A, T1 1036): the line carries its REMEDY, as PIN_SIBLING_STALE carries its
-        # owner — A spent a full twenty-step gate learning that a declaration is owner-independent.
-        echo "  UNDECLARED: $man:$p — this PR changed a pinned path and did not say so; declare it with --expect-pin-fail $man:$p (a declaration is the PR's claim about its own diff — your own lane's rows included)"; undeclared=1
-      fi
-    done < <(cd "$R" && sha256sum -c "$manifest" 2>/dev/null | sed -n 's/^\(.*\): FAILED$/\1/p')
-    [ "$undeclared" -eq 0 ] || fail=1
-  }
-  # 7.6.43 — A DECLARATION THAT NAMES NOTHING REFUSES.
-  #
-  # C's case (773): `--expect-pin-fail M6-C:tests/stories/S7.story.mjs` was
-  # accepted in silence although only `M1-C-S7` pins that path, and it surfaced
-  # only because a REAL undeclared failure happened to sit beside it. A
-  # declaration is the PR's claim about ITSELF, and `--expect-pin-fail` is the
-  # flag that turns a red gate green — so a claim matching nothing must not be
-  # indistinguishable from one that matched.
-  #
-  # THE MESSAGE NAMES WHICH OF THREE, because a refusal that catches only the
-  # third leaves two more ways to write a declaration that looks like cover:
-  #   1. the manifest does not exist at all
-  #   2. the path is pinned by no manifest anywhere (a typo)
-  #   3. manifest and path are both real but WRONG PAIR  <- C's, and the worst,
-  #      since a reader checking either half in isolation finds it
-  for decl in $EXPECTED_PIN_FAILS; do
-    [ -n "$decl" ] || continue
-    dman="${decl%%:*}"
-    if [ ! -f "$CAMP/gate-manifests/$dman.sha256" ]; then
-      echo "  declaration names nothing: $decl — no manifest named '$dman' in $CAMP/gate-manifests"
-      refused=1; continue
-    fi
-    [ "$decl" = "$dman" ] && continue          # manifest-level, and it exists
-    dpath="${decl#*:}"
-    if awk '{ q=$2; sub(/^\*/,"",q); print q }' "$CAMP/gate-manifests/$dman.sha256" \
-         | grep -Fxq "$dpath"; then continue; fi
-    holder=""
-    for other in "$CAMP"/gate-manifests/*.sha256; do
-      [ -f "$other" ] || continue
-      if awk '{ q=$2; sub(/^\*/,"",q); print q }' "$other" | grep -Fxq "$dpath"; then
-        holder="$holder $(basename "$other" .sha256)"
-      fi
-    done
-    if [ -n "$holder" ]; then
-      echo "  declaration names nothing: $decl — '$dman' does not pin that path;$holder does. Wrong pair."
-    else
-      echo "  declaration names nothing: $decl — no manifest pins '$dpath' at all (typo?)"
-    fi
-    refused=1
-  done
-
-  for m in "$CAMP"/gate-manifests/*.sha256; do
-    [ -f "$m" ] || continue
-    counts="${m%.sha256}.counts"
-    pinned=""
-    [ -f "$counts" ] && pinned="$(grep -o 'head=[0-9a-f]\{7,40\}' "$counts" | head -1 | cut -d= -f2)"
-    # Count FAILED lines only: `grep -vc ': OK$'` also counts sha256sum's WARNING line (§15.105).
-    n="$(cd "$R" && sha256sum -c "$m" 2>&1 | grep -cE ': FAILED|No such file')"
-    total="$(wc -l < "$m")"
-    man="$(basename "$m" .sha256)"
-    # SKEW IS AN ANCESTRY QUESTION, NOT A STRING ONE (M6-C, verified on a real
-    # tree: HEAD `82bb8bf4` is a DESCENDANT of pin `df473067`, so it contains
-    # every pinned commit and can answer perfectly — and a prefix match called
-    # it skew). With the rc riding on this, a prefix match would refuse a lane
-    # one commit ahead and hand it advice it has already followed.
-    readable=1
-    if [ -n "$pinned" ] && ! git -C "$R" merge-base --is-ancestor "$pinned" HEAD 2>/dev/null; then readable=0; fi
-    if [ -z "$pinned" ]; then
-      echo "$man.sha256: $n FAILED of $total — tree at ${short:-unknown} (no head= in $(basename "$counts") — skew unknown)"
-      [ "$n" -gt 0 ] && pin_fail "$man" "$m" || true
-    elif [ "$n" -gt 0 ] && [ "$readable" -eq 0 ]; then
-      echo "$man.sha256: $n FAILED of $total — tree at $short; last verified at $pinned — skew: reconcile from a tree at $pinned or later before reading these as drift (§15.381)"
-    else
-      echo "$man.sha256: $n FAILED of $total — tree at ${short:-unknown}; last verified at $pinned"
-      [ "$n" -gt 0 ] && pin_fail "$man" "$m" || true
-    fi
-  done
-fi
-# 7.6.97: COUNTED SEPARATELY so a reader sees how many siblings are stale rather
-# than inferring it from the absence of reds. Zero prints too — a count that
-# appears only when non-zero cannot be told from one nobody took.
-if [ -n "${sibling_stale_n:-}" ]; then
-  echo "PIN_SIBLING_STALE_COUNT=$sibling_stale_n"
-fi
+# T1 1260 — the `== pins ==` block moved to `gate-pins.sh` at this file's
+# 800-line cap: manifest loop, sibling_stale/own_stale/pin_fail and their
+# counters, PIN_SIBLING_STALE_COUNT. SOURCED, not exec'd, because it reads and
+# mutates THIS shell's own $R/$CAMP/$fail/$refused/$EXPECTED_PIN_FAILS/
+# $gate_main directly — a subshell would get copies it could not mutate back.
+# Located the same way `gate-rerun-alone.sh` is, four steps above.
+source "$HERE/gate-pins.sh"
 # THE TREE THAT REACHED THE VERDICT MUST BE THE TREE THAT STARTED (7.6.129). A
 # moved tree makes every line above a claim about something nobody has; it
 # outranks a red, because a red about the wrong tree is not even a red.
@@ -726,6 +634,21 @@ if [ "$PIN1" != "$PIN0" ]; then
   echo "GATE_TREE_MOVED: head ${PIN0%% *} -> ${PIN1%% *}, porcelain ${PIN0##* } -> ${PIN1##* } — the tree changed while this gate ran (§15.540), so every verdict above is about a tree that no longer exists. UNKNOWN, not red: commit or revert, then re-gate."
   exit 3
 fi
+# ---- host contention, the END bracket (M7 findings row 15) ---------------------------------
+GATE_LOAD_END="$(load_avg)"
+GATE_RUNLOCK_HOLDER_END="$(runlock_holder)"
+echo "GATE_LOAD_END=${GATE_LOAD_END:-UNKNOWN}"
+echo "GATE_RUNLOCK_HOLDER_END=$GATE_RUNLOCK_HOLDER_END"
+load_over_threshold "$GATE_LOAD_END" && GATE_LOAD_PROVISIONAL=1
+# A STAMP FOR THE READER, NEVER A LAUNDERING (M7 findings row 15): the exit
+# code below is computed exactly as it always was, from `fail`/`refused`
+# alone, and this line changes neither — it only tells a reader that host
+# contention was observed at one end of this gate or the other, so a red (or
+# a green) here may be about the host as much as the tree.
+if [ "$GATE_LOAD_PROVISIONAL" -eq 1 ]; then
+  echo "GATE_VERDICT=PROVISIONAL reason=load>${GATE_LOAD_THRESHOLD} (threshold ${GATE_LOAD_THRESHOLD_MULT}x nproc=${GATE_NPROC}, observed start=${GATE_LOAD_START:-UNKNOWN} end=${GATE_LOAD_END:-UNKNOWN})"
+fi
+
 # A real failure outranks a refusal: a gate that both lost a step AND was
 # refused another is red, not "try again later".
 if [ "$fail" -ne 0 ]; then exit "$fail"; fi

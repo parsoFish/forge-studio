@@ -114,7 +114,7 @@ before(async () => {
   const developFlowDir = join(forgeRoot, 'studio', 'flows', 'forge-develop');
   mkdirSync(developFlowDir, { recursive: true });
   writeFileSync(join(developFlowDir, 'flow.yaml'), FORGE_DEVELOP_FLOW_YAML);
-  for (const [slug, band] of [['demo-agent', 'demo-band'], ['adversarial-review', 'review-band']] as const) {
+  for (const [slug, band] of [['demo-agent', 'integrate-band'], ['adversarial-review', 'review-band']] as const) {
     const skillDir = join(forgeRoot, 'skills', slug);
     mkdirSync(skillDir, { recursive: true });
     writeFileSync(join(skillDir, 'SKILL.md'), bandSkillMd(slug, band));

@@ -40,8 +40,8 @@
  *      it, so no path guard applies and none is faked.
  *
  * CONCURRENCY (W8-B5 security review, FINDING 1). This file, the CRUD routes
- * and `commitRegistryDraft` are three independent read-modify-write callers
- * of the same document; before the fix none of them locked, so the last
+ * and `commitRegistryDraft` were three independent read-modify-write callers
+ * of the same document (now two — `commitRegistryDraft` retired in W8-B5b); before the fix none of them locked, so the last
  * `rename` won and the loser's update vanished with no error surfaced to
  * either caller. This lane made that materially worse: the window here is
  * NETWORK-bound (timeoutMs x N distinct sources — minutes for a large

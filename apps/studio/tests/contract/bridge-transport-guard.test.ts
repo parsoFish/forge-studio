@@ -1,22 +1,25 @@
 /**
  * W7-FIX-A1 (A1-05) — ONE transport for every bridge call in Studio.
  *
- * `bridgeFetch` (lib/bridge-client.ts) is the ONLY place that (a) runs the
- * one-shot port correction against `/api/forge-config` and (b) reports a
- * transport failure to the bridge-status store (`notifyTransportFailure` →
- * the app-shell banner + immediate health probe). Before this fix, 14 client
- * modules still did `const base = await resolveBridgeUrl(); fetch(`${base}…`)`
- * — under `--bridge-port` their first wrong guess was never corrected until
- * some OTHER module happened to self-correct the shared cache, and their
+ * `bridgeFetch` (lib/bridge-client-core.ts, re-exported via lib/bridge-client.ts
+ * — `forge-8vfn.7.6.135` split the client surfaces out of the latter into
+ * sibling modules; the transport primitive itself lives in the `-core` one)
+ * is the ONLY place that (a) runs the one-shot port correction against
+ * `/api/forge-config` and (b) reports a transport failure to the
+ * bridge-status store (`notifyTransportFailure` → the app-shell banner +
+ * immediate health probe). Before this fix, 14 client modules still did
+ * `const base = await resolveBridgeUrl(); fetch(`${base}…`)` — under
+ * `--bridge-port` their first wrong guess was never corrected until some
+ * OTHER module happened to self-correct the shared cache, and their
  * failures never reached the banner (docs/forge-ui-dom-and-harness.md claimed
  * otherwise — crosscut-26 as generalised by W7-A1's PR body).
  *
  * This is a static scan over the REAL source tree (lib/, components/, app/;
  * non-test files) — the guard the sweep found missing ("nothing stops a
  * 17th copy"). Two rules:
- *   1. NO source file other than `lib/bridge-client.ts` calls global `fetch(`
- *      (bridgeFetch is the only sanctioned way to reach the bridge; Studio
- *      talks to nothing else over HTTP).
+ *   1. NO source file other than `lib/bridge-client-core.ts` calls global
+ *      `fetch(` (bridgeFetch is the only sanctioned way to reach the bridge;
+ *      Studio talks to nothing else over HTTP).
  *   2. `resolveBridgeUrl` may be imported ONLY by the explicit allowlist
  *      below — modules that need the base URL for a NON-fetch purpose (media
  *      `<video src>` / an `<iframe src>` served by the bridge). A new
@@ -34,7 +37,7 @@ import { join, relative, resolve } from 'node:path';
 
 const ROOT = resolve(__dirname, '..', '..');
 const SCAN_DIRS = ['lib', 'components', 'app'];
-const TRANSPORT = 'lib/bridge-client.ts';
+const TRANSPORT = 'lib/bridge-client-core.ts';
 
 /** Files that may import `resolveBridgeUrl` for a documented non-fetch use. */
 const RESOLVE_URL_ALLOWLIST: Record<string, string> = {
@@ -71,7 +74,7 @@ export function scanBridgeTransport(root: string = ROOT): { rawFetch: string[]; 
   return { rawFetch: rawFetch.sort(), resolveUrlImporters: resolveUrlImporters.sort() };
 }
 
-test('rule 1: no source file outside lib/bridge-client.ts calls global fetch( — every bridge call rides bridgeFetch', () => {
+test('rule 1: no source file outside lib/bridge-client-core.ts calls global fetch( — every bridge call rides bridgeFetch', () => {
   const { rawFetch } = scanBridgeTransport();
   expect(rawFetch).toEqual([]);
 });
@@ -84,7 +87,7 @@ test('rule 2: resolveBridgeUrl is imported only by the documented non-fetch allo
   expect({ unexpected, stale }).toEqual({ unexpected: [], stale: [] });
 });
 
-test('positive control: the scanner sees a raw fetch and a resolveBridgeUrl import when they exist (bridge-client.ts itself has both)', () => {
+test('positive control: the scanner sees a raw fetch and a resolveBridgeUrl import when they exist (bridge-client-core.ts itself has both)', () => {
   const code = stripComments(readFileSync(join(ROOT, TRANSPORT), 'utf8'));
   expect(/(?<![\w.$])fetch\s*\(/.test(code)).toBe(true);
   // the transport module DEFINES resolveBridgeUrl; the import regex is exercised on a synthetic line

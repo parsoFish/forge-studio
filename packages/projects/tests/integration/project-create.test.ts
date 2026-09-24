@@ -31,7 +31,7 @@ import { discoverProjects } from '@forge/kernel';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 /** A temp forge root with the real project starters copied in + a brain/projects dir. */
-import { runPreflight } from '../../preflight.ts';
+import { runPreflight, SCRATCH_PATHS } from '../../preflight.ts';
 
 function isolatedForgeRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'pcreate-'));
@@ -69,6 +69,26 @@ test('F2: the curated starter library lists ≥2 app types', () => {
   assert.ok(types.includes('cli') && types.includes('api'), `got ${types.join(', ')}`);
   assert.ok(types.length >= 2);
 });
+
+// Operator ruling 92 (forge-8vfn.8.1.2): the scaffold writer
+// (`project-contract-scaffold.ts`'s `scaffoldContractArtifacts`, which
+// templates `.gitignore` from this SAME `SCRATCH_PATHS` constant) and the
+// three curated starters must agree on ONE canonical forge-scratch stanza —
+// checked-in text can silently drift from the constant even when behaviour
+// still happens to pass, so this pins the literal content, not just the
+// preflight verdict the tests above already cover.
+for (const appType of listProjectStarters(FORGE_ROOT)) {
+  test(`C2 stanza: starter "${appType}"'s .gitignore lists every SCRATCH_PATHS entry verbatim`, () => {
+    const gi = readFileSync(join(projectStartersDir(FORGE_ROOT), appType, '.gitignore'), 'utf8');
+    const lines = gi.split('\n').map((l) => l.trim());
+    for (const p of SCRATCH_PATHS) {
+      assert.ok(lines.includes(p), `${appType}/.gitignore must list "${p}" verbatim — got:\n${gi}`);
+    }
+    // The inverse: it must never blanket-ignore `.forge/` itself — the exact
+    // pre-ruling-92 shape that silently dropped .forge/skills/ + project.json.
+    assert.ok(!lines.includes('.forge/') && !lines.includes('.forge'), `${appType}/.gitignore must not blanket-ignore .forge/`);
+  });
+}
 
 for (const appType of ['cli', 'api']) {
   test(`F2/F3: scaffolding "${appType}" reaches preflight HARD-green with no manual surgery`, () => {

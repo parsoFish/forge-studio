@@ -301,15 +301,126 @@ const EXEMPT_PAGES: Record<string, string> = {
   //   not-found OUTCOME…", "the transport-failure banner SURVIVES",
   //   "fetchRegistryItem carries the HTTP status through") and enumerated over
   //   every status shape in tests/regression/community-form.test.ts.
-  //   NOT covered — this page does NOT use the shared PageLoadError kit, and
-  //   has no bridge-recovery resubscribe and no Retry control. That is a real
-  //   (smaller) gap, disclosed here rather than papered over; it was out of
-  //   W8-B5/WI-6's brief, which was the false-absence claim.
+  //   forge-4sj CLOSED the second half: the page now uses the shared
+  //   PageLoadError kit (Retry + bridge-recovery resubscribe) for a non-404
+  //   edit-load failure, exactly like its `[kind]/[id]` sibling below —
+  //   pinned by the "forge-4sj: …" tests in community-surface-wiring.test.ts.
   'app/community/new/page.tsx':
     'tests/regression/community-surface-wiring.test.ts + tests/regression/community-form.test.ts — the 404-vs-' +
-    'transport-failure split (this file\'s defect class) is pinned there over every ' +
-    'status shape. NOT the shared PageLoadError kit: no bridge-recovery resubscribe ' +
-    'and no Retry control — disclosed gap, out of W8-B5/WI-6\'s scope.',
+    'transport-failure split AND the PageLoadError/useBridgeRecoveryWhenFailed retry wiring are both ' +
+    'pinned there, adapted for this page\'s non-throwing read shape (fetchRegistryItem never throws).',
+  // forge-5rr (projects-45): the pending scan flagged this as the strongest
+  // GENUINE gap of the eight — a closer look found the not-found branch
+  // ALREADY correctly gated on a real bridge-answered 404 (never a transport
+  // failure), but the failure branch had no Retry and no bridge-recovery
+  // resubscribe (a dead-end banner, crosscut-22). Fixed to use the shared
+  // PageLoadError + useBridgeRecoveryWhenFailed kit — EXEMPT here rather than
+  // COMPLIANT only because `fetchCommunityItemDetail` is a status-shaped
+  // `{ok,status?,error?}` read that never throws, so `expectFailClosedPrimitives`'s
+  // `catch (err)` regex cannot match it textually; the same contract is
+  // pinned, adapted for that shape, in the tests below.
+  'app/community/[kind]/[id]/page.tsx':
+    'tests/regression/community-surface-wiring.test.ts — the not-404-vs-transport ' +
+    'split AND the PageLoadError/useBridgeRecoveryWhenFailed retry wiring are both ' +
+    'pinned there, adapted for this page\'s non-throwing read shape.',
+  // forge-5rr (projects-45): the pending scan's OTHER strongest candidate.
+  // The page's own NotFound (`viewState.status === 'no-session'`) was
+  // ALREADY correctly gated — it is driven entirely by `fetchSessionShell`/
+  // `deriveSessionShellViewState`, pinned at the pure-logic level
+  // (tests/contract/session-shell-view.test.ts AT-63/AT-65) to be reachable
+  // ONLY off a genuine `errorKind === 'not-found'`, never a transport
+  // failure. The REAL defect was one level down: the per-kind SUMMARY
+  // read's four `.catch(() => {})` sites silently discarded a fail-closed
+  // (bridgeReadOrThrow) failure — for architect/project-brain (no generic-
+  // panel fallback) that blanked the whole left column while the page still
+  // reported "ready". Fixed to capture it into `summaryError` and render a
+  // retryable FetchErrorState instead. EXEMPT here rather than COMPLIANT
+  // because the page renders via `StudioArchitectShell` + an inline
+  // `FetchErrorState`, never the standalone `PageLoadError` component, so
+  // `expectFailClosedPrimitives`'s regexes cannot match it textually.
+  // DISCLOSED, not fixed: `fetchStagedThemes`'s own `.catch(() => {})` has
+  // the same shape but self-heals within one ~3s poll and is materially
+  // less severe (see the wiring test's own header for the full reasoning).
+  'app/sessions/[kind]/[sessionId]/page.tsx':
+    'tests/regression/session-shell-summary-fail-closed-wiring.test.ts — the summary-' +
+    'read swallow fix is pinned there; the not-found-vs-transport-failure split is ' +
+    'pinned at the pure-logic level in tests/contract/session-shell-view.test.ts.',
+  // forge-5rr (projects-45): the pending scan's three "unverified" siblings
+  // (connections/hooks/skills). On inspection all three already had the
+  // crosscut-08 defect class closed: a status-shaped, never-throwing read
+  // (same shape as `/community/[kind]/[id]`'s) with `not-found` reachable
+  // ONLY off a real HTTP 404, and a Retry ALREADY wired to the inline
+  // FetchErrorState. The one gap, uniform across all three: no bridge-
+  // recovery resubscribe (crosscut-22) — fixed identically on each.
+  'app/connections/[id]/page.tsx':
+    'tests/regression/library-detail-fail-closed-wiring.test.ts — the 404-only-not-found ' +
+    'guard, the pre-existing Retry, and the new bridge-recovery resubscribe are all ' +
+    'pinned there for this page\'s non-throwing read shape.',
+  'app/hooks/[id]/page.tsx':
+    'tests/regression/library-detail-fail-closed-wiring.test.ts — same contract as ' +
+    '/connections/[id], pinned for this page\'s non-throwing read shape.',
+  'app/skills/[id]/page.tsx':
+    'tests/regression/library-detail-fail-closed-wiring.test.ts — same contract as ' +
+    '/connections/[id], pinned for this page\'s non-throwing read shape.',
+  // forge-5rr (projects-45): ALREADY fully closed under an earlier bead
+  // (forge-irn, W7-B5 — see both files' own headers) before this scan even
+  // ran. `fetchRunDetail` catches a transport throw into
+  // `resolution:'unresolved'` (no status, never the authoritative
+  // "not found"); a non-404 non-2xx status maps the same way (pinned at the
+  // pure-logic level, tests/unit/run-view-client.test.ts); the page's
+  // NotFound render is gated on `resolution === 'not-found'` alone; Retry is
+  // already wired; the live poll keeps watching an "unresolved" transient
+  // failure rather than giving up on the first blip. No production change
+  // this pass — verified with a mutation check, not assumed.
+  'app/agents/[id]/run/[runId]/page.tsx':
+    'tests/regression/agent-run-page-fail-closed-wiring.test.ts — the not-found-vs-' +
+    'unresolved split, the Retry wiring and the poll\'s transient-failure tolerance ' +
+    'are all pinned there; the underlying status-mapping is pinned at the pure-logic ' +
+    'level in tests/unit/run-view-client.test.ts.',
+  // forge-5rr (projects-45): the D9/forge-irn SIBLING of the row above —
+  // ALREADY fully closed before this scan ran. `fetchFlowRunDetail`'s
+  // transport-throw path resolves 'unresolved' via the sentinel-0
+  // convention (never 'not-found'); `resolveRunPageState` additionally
+  // downgrades a FOUND run to 'unresolved' when the flows-list read failed.
+  // All of that was already exhaustively pinned at the pure-logic level
+  // (tests/regression/flow-run-detail-client.test.ts's own "KILL 1a/1b/2a/
+  // 2b/3" tests). What was missing was the PAGE-level wiring pin — the scan's
+  // "unverified" note fired because the page uses a bespoke inline retry
+  // body, not the shared FetchErrorState/PageLoadError a grep would catch,
+  // but the CONTRACT (never NotFound off a transport failure, checked
+  // BEFORE not-found, with a working Retry) was already honoured. No
+  // production change — verified with a mutation check.
+  'app/flows/[id]/run/[runId]/page.tsx':
+    'tests/regression/flow-run-page-fail-closed-wiring.test.ts — the unresolved-before-' +
+    'not-found ordering, the bespoke Retry, and the single NotFound render site are ' +
+    'all pinned there; the underlying status-mapping is pinned at the pure-logic level ' +
+    'in tests/regression/flow-run-detail-client.test.ts.',
+  // forge-5rr (projects-45): the scan's own note already verified this at
+  // source ("a real, distinguishable failure state, not a swallow") and
+  // left it PENDING only because no test pinned that banner to a thrown
+  // read yet. `kickoffSpecFor(kind)` — a pure, static registry lookup with
+  // NO bridge read in its path — decides the NotFound branch BEFORE the
+  // mount-load effect can even fire, so the not-found claim here is
+  // STRUCTURALLY incapable of the crosscut-08 shape; a real mount-load
+  // failure (for a REGISTERED kind) surfaces via the existing
+  // `data-kickoff-error` banner with the thrown message. No production
+  // change — both proven by mounting the real page, with a mutation check.
+  'app/sessions/[kind]/new/page.tsx':
+    'tests/regression/session-kickoff-fail-closed-wiring.test.ts — both the zero-' +
+    'network-calls not-found claim and the real mount-load failure banner are ' +
+    'proven by mounting the real page.',
+  // forge-5rr (projects-45): the not-found claim was ALREADY correctly
+  // gated on a real bridge-answered 404 (`fetchTemplate`'s status-shaped,
+  // never-throwing read — same shape as `/community/[kind]/[id]`'s) — but,
+  // unlike its /connections|/hooks|/skills/[id] siblings, the error state
+  // had NO Retry at all (a static banner) and no bridge-recovery
+  // resubscribe. Fixed to use the shared PageLoadError +
+  // useBridgeRecoveryWhenFailed kit — EXEMPT here rather than COMPLIANT for
+  // the same non-throwing-read reason as its community sibling.
+  'app/templates/[id]/page.tsx':
+    'tests/regression/template-detail-fail-closed-wiring.test.ts — the 404-only-not-' +
+    'found guard, the PageLoadError render and the bridge-recovery resubscribe are ' +
+    'all pinned there for this page\'s non-throwing read shape.',
 };
 
 /**
@@ -321,43 +432,12 @@ const EXEMPT_PAGES: Record<string, string> = {
  * out to be an equally valid pattern on closer look — that look is exactly
  * what was NOT done here, per the brief's "report, don't fix" instruction.
  */
-const PENDING_PAGES: Record<string, string> = {
-  'app/agents/[id]/run/[runId]/page.tsx':
-    'Renders NotFound for "no such run" AND an inline FetchErrorState for "unresolved" ' +
-    '— NOT the shared PageLoadError kit. Unverified whether the FetchErrorState branch ' +
-    'is reachable for a THROWN read or only a resolved-but-refused one.',
-  'app/community/[kind]/[id]/page.tsx':
-    'Renders NotFound for an unknown kind/id; no FetchErrorState/PageLoadError/catch ' +
-    'visible near the read — the most likely GENUINE gap of the eight.',
-  'app/connections/[id]/page.tsx':
-    'Renders NotFound AND an inline FetchErrorState with its own error/errorStatus ' +
-    'state — not the shared kit; unverified whether a transport failure reaches it.',
-  'app/flows/[id]/run/[runId]/page.tsx':
-    'Renders NotFound for an unknown run; no FetchErrorState/PageLoadError visible ' +
-    'near the read in a quick scan — unverified.',
-  'app/hooks/[id]/page.tsx':
-    'Renders NotFound AND an inline FetchErrorState with its own error/errorStatus ' +
-    'state — not the shared kit; unverified whether a transport failure reaches it.',
-  'app/sessions/[kind]/[sessionId]/page.tsx':
-    'Renders NotFound AND FetchErrorState; several `.catch(() => {})` sites nearby ' +
-    'that look like the SAME swallow-to-nothing shape crosscut-08 is about — the ' +
-    'strongest OTHER candidate for a real defect, unverified.',
-  'app/sessions/[kind]/new/page.tsx':
-    'NEW CANDIDATE as of W8-B3 (crosscut-R08): this page began rendering the shared ' +
-    'NotFound for an unknown session KIND, which is a routing outcome rather than a ' +
-    'read failure, so the derivation now picks it up. Verified at source, not scanned: ' +
-    'its mount load is a single Promise.all with ONE top-level .catch that sets `error` ' +
-    'and renders it at :512 as `data-kickoff-error` — a real, distinguishable failure ' +
-    'state, not a swallow. It is PENDING rather than EXEMPT only because no test pins ' +
-    'that banner to a thrown bridge read yet, and EXEMPT here requires naming a test ' +
-    'file that actually covers the page.',
-  'app/skills/[id]/page.tsx':
-    'Renders NotFound AND an inline FetchErrorState with its own error/errorStatus ' +
-    'state — not the shared kit; unverified whether a transport failure reaches it.',
-  'app/templates/[id]/page.tsx':
-    'Renders NotFound; no FetchErrorState/PageLoadError/catch visible near the read ' +
-    'in a quick scan — unverified, possibly a genuine gap.',
-};
+// forge-5rr (projects-45): CLOSED — every candidate the W8-A2/WI-5 scan
+// derived is now COMPLIANT or EXEMPT. Kept as an explicit empty map (not
+// deleted) so the completeness test below still enforces the invariant: any
+// NEW page the derivation finds must be consciously categorized here before
+// it can pass.
+const PENDING_PAGES: Record<string, string> = {};
 
 test('the derived candidate list is EXACTLY the union of compliant + exempt + pending — a new page must be consciously categorized, never silently uncovered', () => {
   const accountedFor = [...COMPLIANT_PAGES, ...Object.keys(EXEMPT_PAGES), ...Object.keys(PENDING_PAGES)].sort();

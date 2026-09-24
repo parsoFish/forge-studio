@@ -117,7 +117,7 @@ function findingsEvent(counts: { total: number; blocker: number; major: number; 
   });
 }
 
-const AGENT_SLUG_MAP = new Map<string, string>([['adversarial-review', 'adversarial-review'], ['demo-agent', 'demo']]);
+const AGENT_SLUG_MAP = new Map<string, string>([['adversarial-review', 'adversarial-review'], ['demo-agent', 'integrate']]);
 const CANONICAL_MAPPING = new Map<string, string | null>([
   ['developer-loop', 'dev'],
   ['orchestrator', null], // orchestrator events fall to null UNLESS agent_slug resolves first (b)
