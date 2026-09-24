@@ -102,7 +102,7 @@ function standaloneEntriesNewestFirst(logsRoot: string, entries: readonly string
   const mtimeOf = (entry: string): number => {
     const guarded = resolveGuardedPath(logsRoot, [entry]);
     if (!guarded.ok || !guarded.exists) return -Infinity; // rejected/absent sorts last
-    try { return statSync(guarded.realPath).mtimeMs; } catch { return -Infinity; }
+    try { return statSync(guarded.realPath).mtimeMs; } catch { return -Infinity; } // stat race after the guard sorts last, not an error
   };
   return entries.filter((e) => e.startsWith(STANDALONE_RUN_DIR_PREFIX)).sort((a, b) => mtimeOf(b) - mtimeOf(a));
 }
@@ -139,8 +139,16 @@ export function collectStandaloneRows(deps: AgentHistoryDeps, logsRoot: string, 
   const rows: AgentHistoryRow[] = [];
   for (const entry of standaloneEntriesNewestFirst(logsRoot, entries)) {
     if (rows.length >= STANDALONE_HISTORY_MAX_ROWS) break; // page filled — never read another dir's full log
+    // A DEFINITE non-match requires the first event to CARRY an identity
+    // field (`metadata.agent_slug` or top-level `skill`) that names some
+    // OTHER slug — `standaloneRunSlug` is null both when the guard/read
+    // failed AND when the first event genuinely carries neither field (a
+    // shape not verified against a real installation's logs), and both of
+    // those are INDETERMINATE, never a non-match, so they fall through to
+    // the full parse below.
     const first = deps.parseGuardedFirstEvent(logsRoot, entry);
-    if (first !== null && !standaloneRunMatchesSlug([first], slug)) continue; // definite non-match — no full parse
+    const firstIdentity = first !== null ? standaloneRunSlug([first]) : null;
+    if (firstIdentity !== null && firstIdentity !== slug) continue; // definite non-match — no full parse
     const parsed = deps.parseGuardedEventsJsonl(logsRoot, entry); // `entry` came from readdir, never from `slug`
     // No events at all (or a poisoned/rejected entry — indistinguishable by
     // design) -> nothing to prove identity against; honestly unattributable
