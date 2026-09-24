@@ -152,18 +152,54 @@ test('it FAILS when QUARRY.md is absent — ownership has no other source', () =
 // ---------------------------------------------------------------------------
 
 test('it FAILS on a row LOC that disagrees with the real file — the defect this bead is about', () => {
+  // `--json` rather than the prose list: the prose list is capped (readable,
+  // not a flood — see the near-real-tree drift this bead itself found), and
+  // this asserts the underlying finding, not where it lands in a printed
+  // top-15. A dedicated fixture below covers the cap itself.
   const subject = aQuarriedProductionFile();
   withQuarry(
     (rows) => rows.map((l) => (l.trim().startsWith(`| ${subject} |`) ? l.replace(/\|\s*\d+\s*\|$/, '| 999999 |') : l)),
     (q, b) => {
-      const { code, out } = run(['--quarry', q, '--baseline', b]);
+      const { code, out } = run(['--quarry', q, '--baseline', b, '--json']);
       assert.equal(code, 1, `a wrong row loc must fail — got exit 0:\n${out}`);
-      assert.ok(
-        out.includes(`loc drift: ${subject} — QUARRY says 999999`),
-        `the row and the QUARRY number must be named — got:\n${out}`,
-      );
+      const json = JSON.parse(out) as { locDrift: { path: string; quarried: number; measured: number }[] };
+      const found = json.locDrift.find((d) => d.path === subject);
+      assert.ok(found, `${subject} must be in locDrift — got:\n${JSON.stringify(json.locDrift)}`);
+      assert.equal(found!.quarried, 999999, 'the row names the QUARRY number');
+      assert.ok(Number.isInteger(found!.measured) && found!.measured >= 0, 'and the real, measured number');
     },
   );
+});
+
+test('the loc drift list in prose output is capped, not a flood — a fixture with many offenders', () => {
+  // Doctors EVERY packages/ row's loc to a shared wrong value in an isolated
+  // fixture QUARRY, rather than relying on the live tree's own drift count
+  // (which the data-fix commit in this bead reduces to zero).
+  const rows = readFileSync(QUARRY, 'utf8').split('\n');
+  let mutated = 0;
+  const doctored = rows.map((l) => {
+    const t = l.trim();
+    if (/^\| packages\/[^|]+\.ts \|/.test(t) && mutated < 20) {
+      mutated += 1;
+      return l.replace(/\|\s*\d+\s*\|$/, '| 1 |');
+    }
+    return l;
+  });
+  assert.ok(mutated >= 16, `fixture needs enough packages/ rows to exceed the 15-row cap, got ${mutated}`);
+  const dir = mkdtempSync(join(tmpdir(), 'quarry-cap-'));
+  const quarryPath = join(dir, 'QUARRY.md');
+  const baselinePath = join(dir, 'owner.json');
+  writeFileSync(quarryPath, `${doctored.join('\n')}\n`);
+  writeFileSync(baselinePath, `${JSON.stringify({ unowned: 0 })}\n`);
+  try {
+    const { code, out } = run(['--quarry', quarryPath, '--baseline', baselinePath]);
+    assert.equal(code, 1, out);
+    const printed = (out.match(/^  loc drift: /gm) ?? []).length;
+    assert.equal(printed, 15, `the printed list must be capped at 15 — got ${printed}`);
+    assert.match(out, /more loc drift row\(s\)/, 'and say how many more, not just stop silently');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('it FAILS on a disposition summary count that disagrees with the per-file table', () => {
