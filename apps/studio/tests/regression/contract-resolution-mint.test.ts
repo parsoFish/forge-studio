@@ -116,7 +116,7 @@ test('832: the key is published from first paint, empty — never absent', async
 test('832: once a demo clause mints a session, the id is on the panel root, not only the anchor', async () => {
   await render();
 
-  const resolve = container.querySelector<HTMLButtonElement>('[data-action="resolve-clause-agent"]');
+  const resolve = container.querySelector<HTMLButtonElement>('[data-action="resolve-clause-agent-demo-evidence"]');
   expect(resolve, 'the agent-tier resolve control must render').not.toBeNull();
 
   await act(async () => {

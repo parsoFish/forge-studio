@@ -59,7 +59,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, join, resolve, sep } from 'node:path';
 
-import { createLogger, type EventLogger } from '@forge/kernel';
+import { createLogger, guardedFile, type EventLogger } from '@forge/kernel';
 import { loadAgentDefinition } from './studio/agent-registry.ts';
 import { skillPath } from './skill-path.ts';
 import { resolveBandGuard } from './agent-bands.ts';
@@ -211,7 +211,7 @@ function resolveInitiativeContext(
     { dir: paths.pending, state: 'pending' },
   ];
   for (const { dir, state } of owned) {
-    if (existsSync(join(dir, `${initiativeId}.md`))) {
+    if (guardedFile(dir, [`${initiativeId}.md`], 'read')) { // guard-held containment, not just SAFE_INITIATIVE_RE (bead 8vfn.6.7)
       throw new Error(
         `runBandAgentStandalone: initiative "${initiativeId}" is ${state} — a live scheduler cycle owns its worktree; ` +
           `refusing to run standalone against it (would race the cycle). Re-run once it settles (ready-for-review / failed / done).`,
@@ -220,8 +220,8 @@ function resolveInitiativeContext(
   }
   let manifestPath: string | null = null;
   for (const { dir } of runnable) {
-    const candidate = join(dir, `${initiativeId}.md`);
-    if (existsSync(candidate)) { manifestPath = candidate; break; }
+    const candidate = guardedFile(dir, [`${initiativeId}.md`], 'read');
+    if (candidate) { manifestPath = candidate; break; }
   }
   if (!manifestPath) {
     throw new Error(

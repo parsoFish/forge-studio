@@ -99,7 +99,7 @@ test('the key is published from first paint, empty — never absent', async () =
 test('once an instructions clause mints a session, the id is on the panel root and the click does not navigate', async () => {
   await render();
 
-  const resolve = container.querySelector<HTMLButtonElement>('[data-action="resolve-clause-agent"]');
+  const resolve = container.querySelector<HTMLButtonElement>('[data-action="resolve-clause-agent-c8-gate-command"]');
   expect(resolve, 'the agent-tier resolve control must render').not.toBeNull();
 
   await act(async () => {

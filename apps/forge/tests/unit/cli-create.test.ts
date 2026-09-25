@@ -117,6 +117,28 @@ test('runCreate: unknown app-type -> caught scaffold error, exit 1, process stay
   assert.equal(typeof process.pid, 'number');
 });
 
+test('6.11.33: a REAL starter that declares no language refuses, naming the starter (exit 1)', () => {
+  const root = freshRoot();
+  try {
+    const tplDir = join(root, 'studio', 'starters', 'projects', 'bare-lang');
+    mkdirSync(tplDir, { recursive: true });
+    writeFileSync(join(tplDir, 'README.md'), '# {{TITLE}}\n\n{{NORTH_STAR}}\n', 'utf8');
+    // No sibling `starters.json` at all: `describeProjectStarters` reports
+    // this REAL starter with `language: null` — the shape 6.11.33 refuses.
+    const result = runCreate(
+      ['--name', 'x', '--app-type', 'bare-lang', '--north-star', 'n'],
+      { forgeRoot: root },
+    );
+    assert.equal(result.ok, false);
+    assert.equal(result.kind, 'error');
+    assert.equal(result.exitCode, 1);
+    assert.match(result.message, /"bare-lang"/);
+    assert.match(result.message, /declares no language/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('runCreate: hard-green scaffold against a temp root -> scaffolded result, exit 0', () => {
   const root = freshRoot();
   try {
@@ -125,8 +147,12 @@ test('runCreate: hard-green scaffold against a temp root -> scaffolded result, e
       join(root, 'studio', 'starters', 'projects', 'cli'),
       { recursive: true },
     );
+    // `--language` supplied explicitly (6.11.33): this fixture's `cli` starter
+    // carries no sibling `starters.json`, so its declared language is null —
+    // irrelevant to what THIS test proves (hardGreen/failingClauses), so the
+    // explicit-caller-wins path is used rather than depending on the manifest.
     const result = runCreate(
-      ['--name', 'probe project', '--app-type', 'cli', '--north-star', 'a probe project for testing'],
+      ['--name', 'probe project', '--app-type', 'cli', '--north-star', 'a probe project for testing', '--language', 'TypeScript'],
       { forgeRoot: root },
     );
     assert.equal(result.ok, true);
@@ -149,8 +175,10 @@ test('runCreate: not-hard-green scaffold against a temp root -> scaffolded resul
     mkdirSync(tplDir, { recursive: true });
     writeFileSync(join(tplDir, 'README.md'), '# {{TITLE}}\n\n{{NORTH_STAR}}\n', 'utf8');
 
+    // `--language` supplied explicitly (6.11.33) — same reason as the
+    // hard-green fixture above.
     const result = runCreate(
-      ['--name', 'probe two', '--app-type', 'bare-minimum', '--north-star', 'a bare probe'],
+      ['--name', 'probe two', '--app-type', 'bare-minimum', '--north-star', 'a bare probe', '--language', 'TypeScript'],
       { forgeRoot: root },
     );
     assert.equal(result.ok, true);

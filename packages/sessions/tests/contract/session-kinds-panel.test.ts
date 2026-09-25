@@ -417,17 +417,17 @@ describe('validateSessionKinds — panel (W6-B3): reuses the SAME frozen phase-r
     assert.deepEqual(findings, [], `expected zero panel-* findings for a well-formed panel, got: ${JSON.stringify(findings)}`);
   });
 
-  it('W6-B3-11 (the finalizer-vocab-split reviewer finding, direct pairing): a turnSpec row naming "writeToRepoRoot" FAILS lint (it is real and descriptive but not in the DISPATCHABLE set — resolveFinalizer would throw at spawn time), while the IDENTICAL finalizer id on a panel row (never dispatched) PASSES', () => {
+  it('W6-B3-11 (the finalizer-vocab-split reviewer finding, direct pairing — bead 8vfn.6.6 item 2 moved writeToRepoRoot to the DISPATCHABLE set, so this now uses recordLockedDemo, the one id still descriptive-only): a turnSpec row naming "recordLockedDemo" FAILS lint (it is real and descriptive but not in the DISPATCHABLE set — resolveFinalizer would throw at spawn time), while the IDENTICAL finalizer id on a panel row (never dispatched) PASSES', () => {
     const root = makeForgeRoot();
     writeAgentSkill(root, 'fixture-agent');
     const turnSpec = wellFormedTurnSpec();
     const turnSpecPhases = turnSpec.phases as Record<string, unknown>[];
     const committingIdx = turnSpecPhases.findIndex((p) => p.phase === 'committing');
-    turnSpecPhases[committingIdx] = { ...turnSpecPhases[committingIdx], finalizer: 'writeToRepoRoot' };
+    turnSpecPhases[committingIdx] = { ...turnSpecPhases[committingIdx], finalizer: 'recordLockedDemo' };
 
     const panel = wellFormedPanel();
     const panelPhases = panel.phases as Record<string, unknown>[];
-    panelPhases[panelPhases.length - 1] = { phase: 'finalizing', step: 'finalize', finalizer: 'writeToRepoRoot' }; // replaces the terminal row — see W6-B3-2's own note on this shape
+    panelPhases[panelPhases.length - 1] = { phase: 'finalizing', step: 'finalize', finalizer: 'recordLockedDemo' }; // replaces the terminal row — see W6-B3-2's own note on this shape
 
     writeSessionKindsYaml(root, [
       { ...turnSpecDescriptor(turnSpec), id: 'turnspec-writetorepo-kind' },
@@ -438,15 +438,15 @@ describe('validateSessionKinds — panel (W6-B3): reuses the SAME frozen phase-r
     const turnSpecFinding = findings.find((f) => f.object === 'session-kind:turnspec-writetorepo-kind' && f.check === 'session-kinds/turnspec-unknown-finalizer');
     assert.ok(
       turnSpecFinding,
-      `expected a session-kinds/turnspec-unknown-finalizer finding for the turnSpec row naming "writeToRepoRoot" (it would throw at spawn — resolveFinalizer/FINALIZERS has no such id), got: ${JSON.stringify(findings)}`,
+      `expected a session-kinds/turnspec-unknown-finalizer finding for the turnSpec row naming "recordLockedDemo" (it would throw at spawn — resolveFinalizer/FINALIZERS has no such id), got: ${JSON.stringify(findings)}`,
     );
-    assert.ok(turnSpecFinding!.message.includes('writeToRepoRoot'), 'message must name the offending value');
+    assert.ok(turnSpecFinding!.message.includes('recordLockedDemo'), 'message must name the offending value');
 
     const panelUnknownFinalizerFindings = findings.filter((f) => f.object === 'session-kind:panel-writetorepo-kind' && f.check === 'session-kinds/panel-unknown-finalizer');
     assert.deepEqual(
       panelUnknownFinalizerFindings,
       [],
-      `the IDENTICAL finalizer id on a panel row must pass — panel is never dispatched (invisible to cmdAgentRun's turnSpec fork), so it validates against the full DESCRIPTIVE FINALIZER_IDS, which does carry "writeToRepoRoot". Got: ${JSON.stringify(panelUnknownFinalizerFindings)}`,
+      `the IDENTICAL finalizer id on a panel row must pass — panel is never dispatched (invisible to cmdAgentRun's turnSpec fork), so it validates against the full DESCRIPTIVE FINALIZER_IDS, which does carry "recordLockedDemo". Got: ${JSON.stringify(panelUnknownFinalizerFindings)}`,
     );
   });
 });
