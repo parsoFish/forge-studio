@@ -358,6 +358,27 @@ still_matches_main() {
   [ -n "$main_blob" ] && [ "$main_blob" = "$here_blob" ]
 }
 
+# T1 1293 (4b) — A ROW RECONCILED TO MAIN AFTER THE GATE, ON A PATH THIS MERGE
+# NEVER TOUCHED. Main moves between a lane's gate and its slot; the owner then
+# reconciles the manifest to main's new bytes, and this older tree fails that row
+# though the merge had nothing to do with it (#892: A's #894 moved four factory
+# files mid-slot). `gh pr update-branch` brings main in and CI judges the result
+# (550). So: the row's hash equals MAIN's CURRENT bytes (freshly fetched — a stale
+# local ref is how 7.6.126 happened) and the PR does not change the path ->
+# accounted. A fetch that fails leaves the row unclassified and refused as before.
+MAIN_FRESH=""
+row_is_mains_current() {           # row_is_mains_current <sha256-file> <path> -> 0 when the row pins main's current bytes
+  local m="$1" p="$2" pinned main_sha
+  if [ -z "$MAIN_FRESH" ]; then
+    git -C "$R" fetch -q parsoFish main 2>/dev/null && MAIN_FRESH=yes || MAIN_FRESH=no
+  fi
+  [ "$MAIN_FRESH" = yes ] || return 1
+  pinned="$(awk -v p="$p" '{ q=$2; sub(/^\*/,"",q); if (q == p) { print $1; exit } }' "$m")"
+  main_sha="$(git -C "$R" show "parsoFish/main:$p" 2>/dev/null | sha256sum | cut -c1-64)" || return 1
+  git -C "$R" cat-file -e "parsoFish/main:$p" 2>/dev/null || return 1
+  [ -n "$pinned" ] && [ "$pinned" = "$main_sha" ]
+}
+
 rc=0
 declared_seen=""
 for m in "$CAMP"/gate-manifests/*.sha256; do
@@ -447,6 +468,11 @@ $CHANGED
 $p
 "*) own_diff=1 ;; esac
         owner="$(manifest_owner "$man" || echo unknown)"
+        if [ "$own_diff" -eq 0 ] && row_is_mains_current "$m" "$p"; then
+          echo "PIN_ACCOUNTED $man:$p — reconciled to parsoFish/main's current bytes after the gate; this tree predates them and this PR does not touch the path — update-branch brings them in, CI judges (T1 1293)"
+          declared_seen="$declared_seen $man:$p"
+          continue
+        fi
         if [ -n "$BEHIND" ]; then
           echo "PIN_PRECHECK_REFUSED: $man:$p FAILED, and this tree is BEHIND parsoFish/main ($BEHIND) — rebase first; neither reconciling nor declaring is the fix while the tree is behind"
         elif [ "$own_diff" -eq 1 ]; then

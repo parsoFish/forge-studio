@@ -376,5 +376,24 @@ out="$(bash "$PP" "$T/gate.log" "$T/repo" "$T/camp" --changed-paths-file "$T/c.t
   || bad "count moved on unowned row" "rc=$r out=$(printf '%s' "$out" | grep -E 'REFUSED|NOTE' | head -2)"
 rm -rf "$T"
 
+# 5. #892: after the gate, main moved an UNOWNED file and its owner reconciled the row
+#    to main's new bytes; this older tree fails the row -> accounted (fresh fetch).
+T="$(gitfixture)"; regen_log "$T" 0; echo README.md > "$T/c.txt"
+( cd "$T" && git clone -q --bare repo origin.git && git -C repo remote add parsoFish "$T/origin.git" ) >/dev/null 2>&1
+( cd "$T" && git clone -q origin.git upd && cd upd && git config user.email f@x.invalid && git config user.name f \
+  && echo "main moved it" > src/a.ts && git commit -qam "sibling merge" && git push -q origin HEAD:main ) >/dev/null 2>&1
+( cd "$T/upd" && sha256sum src/a.ts ) > "$T/camp/gate-manifests/OTHER.sha256"
+out="$(bash "$PP" "$T/gate.log" "$T/repo" "$T/camp" --changed-paths-file "$T/c.txt" 2>&1)"; r=$?
+{ [ "$r" = 0 ] || [ "$r" = 4 ]; } && printf '%s' "$out" | grep -q '^PIN_ACCOUNTED OTHER:src/a.ts — reconciled to parsoFish/main' && ! printf '%s' "$out" | grep -q 'PIN_PRECHECK_REFUSED' \
+  && ok "an unowned row reconciled to main's current bytes after the gate -> accounted (update-branch brings them in)" \
+  || bad "reconciled-to-main unowned row" "rc=$r out=$(printf '%s' "$out" | grep -E 'REFUSED|ACCOUNTED|SKEW' | head -2)"
+# 6. CONTROL: the same row pinned to bytes that are NOT main's -> still refused.
+( cd "$T" && echo "neither" > nb.ts && printf '%s  src/a.ts\n' "$(sha256sum < nb.ts | cut -c1-64)" ) > "$T/camp/gate-manifests/OTHER.sha256"
+out="$(bash "$PP" "$T/gate.log" "$T/repo" "$T/camp" --changed-paths-file "$T/c.txt" 2>&1)"; r=$?
+[ "$r" != 0 ] && [ "$r" != 4 ] && printf '%s' "$out" | grep -q 'PIN_PRECHECK_REFUSED: OTHER:src/a.ts' \
+  && ok "CONTROL: an unowned failing row pinned to bytes that are NOT main's -> still refused" \
+  || bad "not-main control" "rc=$r out=$(printf '%s' "$out" | grep -E 'REFUSED|ACCOUNTED' | head -2)"
+rm -rf "$T"
+
 printf '\nprecheck-doors: %d ok, %d FAILED\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
