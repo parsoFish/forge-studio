@@ -36,6 +36,9 @@ packages/agents/agent-dispatch-cmd.ts realpathSync 5
 packages/agents/agent-dispatch-cmd.ts statSync 2
 packages/agents/agent-dispatch.ts readdirSync 1
 packages/agents/agent-run.ts existsSync 2
+packages/agents/agents-md-compose.ts existsSync 2
+packages/agents/agents-md-compose.ts readFileSync 1
+packages/agents/agents-md-compose.ts writeFileSync 1
 packages/agents/band-agent-run.ts existsSync 1
 packages/agents/band-agent-run.ts readFileSync 1
 packages/agents/bridge-agents-history-rows.ts existsSync 5

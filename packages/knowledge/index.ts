@@ -42,7 +42,7 @@ export {
 export { loadBrainIndex, regenerateBrainIndex } from './brain-index.ts';
 
 // --- brain lint -------------------------------------------------------------
-export { CHECK_NAMES, classify, classifyFinding, lintThemeFiles, runBrainLint } from './brain-lint.ts';
+export { CHECK_NAMES, classify, classifyFinding, lintThemeFiles, runBrainLint, brainTruthRates, formatTruthfulnessLines } from './brain-lint.ts';
 export type { Finding, RunBrainLintResult, Scope } from './brain-lint.ts';
 
 // --- KB descriptors, sites and read policy ----------------------------------
