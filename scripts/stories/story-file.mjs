@@ -76,11 +76,22 @@ function validateAmong(among, data, at) {
 }
 
 /**
- * `beats[].fork` — forge-8vfn.2.22. `{ over: <fill field>, cases: [<value>,
- * …] }` runs the beat once per case, substituting each case for that field's
- * `with` value (`beats-fork.mjs`). `steps` is this beat's ALREADY-VALIDATED
- * `do` array, so `over` is checked against what the beat can actually consume
- * rather than against the raw input.
+ * `beats[].fork` — forge-8vfn.2.22, T1 ruling 1350. `{ over: <string>, cases:
+ * [<value>, …] }`. `over` naming a `fill` step in this beat's OWN `do` — S2
+ * beat 3's `create-app-type` — makes this a FILL fork: `beats-fork.mjs` runs
+ * the beat once per case, each on its own ground, substituting each case for
+ * that field's `with` value. `over` naming anything else — S7 beat 3's
+ * `authoring-door`, which no `fill` step fills — makes it a DOOR fork:
+ * declared and carried through, but performed ONCE, unexpanded.
+ *
+ * THE CLASSIFICATION IS NOT CHECKED HERE, on purpose. `over`'s relationship to
+ * `do` used to be a LOAD-TIME refusal ("a fork over a field nothing fills
+ * would run every case identically and silently"), which is why S7's real
+ * door fork could not load on this branch. That hazard no longer applies: a
+ * door fork is never expanded per case, so it cannot run N cases identically.
+ * `steps` (this beat's already-validated `do`) is accepted for the same
+ * signature every other per-beat validator here uses, not because this
+ * function still consults it.
  */
 function validateFork(raw, steps, at) {
   if (raw === undefined) return undefined;
@@ -97,14 +108,6 @@ function validateFork(raw, steps, at) {
       `${at}.fork.cases`,
       `expected distinct cases, got ${JSON.stringify(raw.cases)} — a duplicate would run the same case ` +
       'twice under two different labels, silently doubling the cost of a real-spawn beat',
-    );
-  }
-  if (!steps.some((s) => Object.hasOwn(s, 'fill') && s.fill === raw.over)) {
-    fail(
-      `${at}.fork.over`,
-      `names ${JSON.stringify(raw.over)}, which no \`fill\` step in this beat's own \`do\` fills — a fork ` +
-      'over a field nothing fills would run every case identically and silently. Name the `fill` step\'s ' +
-      'field this fork varies.',
     );
   }
   return Object.freeze({ over: raw.over, cases: Object.freeze([...raw.cases]) });
