@@ -13,7 +13,7 @@
  * proposal was rejected). It mirrors the existing ADR-027/R2-04 precedent
  * already in this codebase — `parseFlowTrigger` fails loud on a stale `flow:`
  * key, no back-compat parsing. The contract: `loadAgentDefinition`
- * (`@forge/agents/studio/agent-registry.ts`) itself THROWS when a SKILL.md's
+ * (`@forge/agents`) itself THROWS when a SKILL.md's
  * `composition:` block still carries a `hooks:` key. The thrown message must
  * name the offending file, name `composition.hooks`, and point at
  * `composition.guards`.
@@ -94,9 +94,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { lintHookComposition } from '@forge/library/studio/hook-library.ts';
-import { PLATFORM_GUARD_IDS } from '@forge/agents/agent-bands.ts';
+import { loadAgentDefinition } from '@forge/agents';
+import { lintHookComposition } from '@forge/library';
+import { PLATFORM_GUARD_IDS } from '@forge/agents';
 import { runStudioLint } from '../../studio-lint.ts';
 
 const LEGACY_SLUG = 'legacy-hooks-fixture';

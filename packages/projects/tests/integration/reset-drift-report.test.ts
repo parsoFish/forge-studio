@@ -36,7 +36,7 @@ import { join, relative } from 'node:path';
 import { computeContractDrift, applyContractReset } from '../../reset.ts';
 import { runPreflight, SCRATCH_PATHS } from '../../preflight.ts';
 import { projectStartersDir, PathGuardContainmentError } from '@forge/kernel';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 function isolatedForgeRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'reset-drift-forge-'));

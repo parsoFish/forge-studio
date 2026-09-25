@@ -28,23 +28,22 @@ import { join } from 'node:path';
 
 import { requireClassProfiles, type ChangeClass, type ClassProfilePort } from '../class-profile-port.ts';
 import { reviewCeilingUsd, changedLinesFromNumstat } from './review-budget.ts';
-import { writeRootFenceOptions } from '@forge/sessions/session-write-fence.ts';
-import { projectBrainDir } from '@forge/knowledge/brain-paths.ts';
+import { writeRootFenceOptions } from '@forge/sessions';
+import { projectBrainDir } from '@forge/knowledge';
 import {
   validateReviewFindings,
   writeReviewFindingsJson,
   type ReviewFinding,
   type ReviewFindingsExpectation,
   type ReviewFindingsRecord,
-} from '@forge/flows/flow-artifacts.ts';
+} from '@forge/flows';
 import type { EventLogger } from '@forge/kernel';
-import { guardedReadFile, guardedWriteFile } from '@forge/kernel';
+import { guardedReadFile, guardedWriteFile, FORGE_ROOT } from '@forge/kernel';
 import { createHash } from 'node:crypto';
-import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
-import { runAgent } from '@forge/agents/run-agent.ts';
-import { FORGE_ROOT } from '@forge/agents/studio/derive.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
-import { readWorkItemsFromDir, type WorkItem } from '@forge/flows/work-item.ts';
+import type { StreamQueryFn } from '@forge/agents';
+import { runAgent } from '@forge/agents';
+import type { AgentDefinition } from '@forge/contracts';
+import { readWorkItemsFromDir, type WorkItem } from '@forge/flows';
 import { chunkLabel, mergeChunkRecords, partitionChangedFiles, type ReviewChunk,
   splitChunkPerFile,
   mergeSplitRecords,
@@ -55,7 +54,7 @@ import {
   REVIEW_FINDINGS_FILENAME,
   REVIEW_INPUT_REL_DIR,
 } from './adversarial-review-binding.ts';
-import { takeScopeSnapshot, scopeViolations } from '@forge/agents/phases/agent-scope-guard.ts';
+import { takeScopeSnapshot, scopeViolations } from '@forge/agents';
 
 const BASE_REF = 'main';
 const MAX_AUTHOR_ATTEMPTS = 2;

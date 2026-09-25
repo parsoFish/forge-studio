@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { createPinnedSdkQuery } from '../../pinned-sdk-query.ts';
-import { CLAUDE_CLI_ENV } from '@forge/kernel/claude-cli-path.ts';
+import { CLAUDE_CLI_ENV } from '@forge/kernel';
 
 function withCliEnv<T>(bin: string | undefined, fn: () => T): T {
   const had = Object.hasOwn(process.env, CLAUDE_CLI_ENV);

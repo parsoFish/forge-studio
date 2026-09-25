@@ -32,7 +32,7 @@ import { } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 
-import { getPaths } from '@forge/flows/queue.ts';
+import { getPaths } from '@forge/flows';
 import {
   handleStudioRoutes,
   handleStudioWriteRoutes,
@@ -45,17 +45,17 @@ import { makeRouteTable, dispatchRoute, type AssembledRouteTable } from './route
 // here (skills, hooks, authoring, templates) are GONE: every arm is now a
 // per-route handler in `packages/library/routes.ts`, which the `routeTable`
 // imported on the line above already carries and `dispatchRoute` claims first.
-import { sessionIsReadable } from '@forge/sessions/session-resolution.ts';
+import { sessionIsReadable } from '@forge/sessions';
 // M4 §4 step 2 — instructions, connections and community carved the same way.
 // This file's line COUNT is held constant across the carve on purpose: 18 audited
 // rows in `scripts/check-raw-fs-guarded.mjs` are keyed to `ui-bridge.ts:<line>`.
-import { handleRecoveryRoutes } from '@forge/flows/bridge-recovery.ts';
-import { handleHookRoutes } from '@forge/flows/bridge-hooks.ts';
+import { handleRecoveryRoutes } from '@forge/flows';
+import { handleHookRoutes } from '@forge/flows';
 import {
   handleStudioPostRoutes,
   type StudioPostContext,
   type ReleaseFinalizeHookInput,
-} from '@forge/flows/bridge-studio-runs.ts';
+} from '@forge/flows';
 import { isDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnMarker } from '@forge/kernel';
 import { bindReleaseFinalize } from './example-hooks.ts';
 import { handleCycleDataRoutes, servedFileHeaders } from './bridge-cycle-data.ts';
@@ -80,9 +80,9 @@ import {
   watchDirsFlat,
   watchProjectSubdirs,
 } from './bridge-cycle-scan.ts';
-import { mergePullRequest } from '@forge/flows/pr.ts';
+import { mergePullRequest } from '@forge/flows';
 import type { BridgeIdentity } from './forge-watch.ts';
-import { finalizeMergedReadyForReview } from '@forge/flows/finalize-merged.ts';
+import { finalizeMergedReadyForReview } from '@forge/flows';
 import type { EventLogEntry } from '@forge/kernel';
 import { makeRecordingBroadcast } from './bridge-broadcast-log.ts';
 import { makeTrailingCoalescer } from './broadcast-coalescer.ts';

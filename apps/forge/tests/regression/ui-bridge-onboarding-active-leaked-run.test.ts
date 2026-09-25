@@ -35,7 +35,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn, type ChildProcess } from 'node:child_process';
 
 import { startBridge } from '../../ui-bridge.ts';
-import { sessionLogDirName, DEFAULT_STALL_CEILING_MS } from '@forge/sessions/bridge-studio-lifecycle.ts';
+import { sessionLogDirName, DEFAULT_STALL_CEILING_MS } from '@forge/sessions';
 
 const REPO_ROOT_FOR_YAML = fileURLToPath(new URL('../../../..', import.meta.url));
 

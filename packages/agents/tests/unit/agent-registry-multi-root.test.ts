@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { listAgentDefinitions } from '../../studio/agent-registry.ts';
-import { skillRoots } from '@forge/kernel/discovery-roots.ts';
+import { skillRoots } from '@forge/kernel';
 
 function tmpRoot(): string {
   return mkdtempSync(join(tmpdir(), 'agent-registry-multi-root-'));

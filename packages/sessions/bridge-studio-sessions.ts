@@ -118,16 +118,18 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, parseQuery, resolveGuardedPath, type StudioContext } from '@forge/kernel';
-import { computeAgentCleanupFindings } from '@forge/knowledge/bridge-studio-kbs.ts';
+import { computeAgentCleanupFindings } from '@forge/knowledge';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
 import { deriveSessionAffordances } from './studio/session-kinds-affordances.ts';
 import { readSessionCostUsd } from './session-readability.ts';
+// Deep path, not the door (bead forge-8vfn.5.31, same cycle as
+// packages/sessions/kinds/architect-session.ts's own module doc).
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { skillPathRelative } from '@forge/library/skill-path.ts';
+import { skillPathRelative } from '@forge/library';
 import { deriveSessionTranscript, deriveSessionArtifact, safeReadFileInSession, type ParseManifestPort } from './studio/session-transcript.ts';
 import { tryGetKbBackend } from '@forge/knowledge';
-import { deriveContractStages } from '@forge/projects/contract-stages.ts';
+import { deriveContractStages } from '@forge/projects';
 import { deriveSessionLifecycleFor } from './bridge-studio-lifecycle.ts';
 import {
   decodeSegment,

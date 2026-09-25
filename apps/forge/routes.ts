@@ -21,15 +21,15 @@
  */
 import type { RouteContext, RouteTable } from '@forge/kernel';
 import { parseManifestPort } from './session-kind-deps.ts';
-import { knowledgeRoutes } from '@forge/knowledge/routes.ts';
+import { knowledgeRoutes } from '@forge/knowledge';
 // M4 ruling 86 — the real brain-fix turn, bound at the assembly because this
 // is the one place that may import both knowledge's port and sessions' turn.
 import { realKbDrainFixTurn } from './brain-fix-turn.ts';
-import { libraryRoutes } from '@forge/library/routes.ts';
+import { libraryRoutes } from '@forge/library';
 import { libraryAgentFacts } from './library-agent-facts.ts';
 import { libraryFlowSource } from './library-flow-source.ts';
 import { authoringSessionPort } from './library-authoring-session.ts';
-import { isSdkAvailable } from '@forge/agents/_adapters/registry.ts';
+import { isSdkAvailable } from '@forge/agents';
 // M4 §4 step 2 (projects routes carve, assembly pass). `projectsRoutes`'s
 // `ProjectsRouteDeps` (packages/projects/routes.ts) declares every one of
 // these nine dependencies STRUCTURALLY rather than importing their real
@@ -45,17 +45,17 @@ import { isSdkAvailable } from '@forge/agents/_adapters/registry.ts';
 import {
   seedProjectBrain,
   checkProjectBrainSeedContainment,
-} from '@forge/knowledge/project-brain-seed.ts';
-import { readArtifactRoot } from '@forge/knowledge/brain-paths.ts';
-import { projectKbBindings } from '@forge/knowledge/kb-sites.ts';
-import { isContainedProjectRepoPath } from '@forge/flows/manifest-path-guard.ts';
-import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
-import { listStarterAgents } from '@forge/agents/studio/agent-registry.ts';
-import { loadStarterFlow, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
-import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
+} from '@forge/knowledge';
+import { readArtifactRoot } from '@forge/knowledge';
+import { projectKbBindings } from '@forge/knowledge';
+import { isContainedProjectRepoPath } from '@forge/flows';
+import { agentCapabilityDescriptor } from '@forge/agents';
+import { listStarterAgents } from '@forge/agents';
+import { loadStarterFlow, listFlowIds } from '@forge/flows';
+import { listFlowBandIds } from '@forge/flows';
 import { spawnPreflightFix } from './bridge-studio-writes.ts';
-import { projectsRoutes } from '@forge/projects/routes.ts';
-import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions/routes.ts';
+import { projectsRoutes } from '@forge/projects';
+import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions';
 // M4 §4 step 2 (agents routes carve, assembly pass). `agentsRoutes`'s
 // `AgentsRouteDeps` declares its collaborators STRUCTURALLY for the same reason
 // `projectsRoutes` does: `packages/agents` is rank 3, so it may not import
@@ -66,23 +66,23 @@ import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions/routes.t
 // `@forge/agents` or `@forge/kernel` exports reached through a legacy
 // re-export, so the package imports its own owners directly (COMMON §15.43) and
 // six would-be dependencies never became injections at all.
-import { agentsRoutes } from '@forge/agents/routes.ts';
-import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
-import { buildAgentSlugToNodeId } from '@forge/flows/run-model.ts';
-import { loadFlowDefinition, listFlowIds as listFlowIdsForAgents } from '@forge/flows/studio/flow-registry.ts';
-import { flowPathForId as flowPathForIdForAgents } from '@forge/flows/flow-runner.ts';
+import { agentsRoutes } from '@forge/agents';
+import { cachedListRuns } from '@forge/flows';
+import { buildAgentSlugToNodeId } from '@forge/flows';
+import { loadFlowDefinition, listFlowIds as listFlowIdsForAgents } from '@forge/flows';
+import { flowPathForId as flowPathForIdForAgents } from '@forge/flows';
 import {
   DEFAULT_STALL_CEILING_MS, isTurnAlive, extractErrorMessage, killTrackedRun,
-} from '@forge/sessions/bridge-studio-lifecycle.ts';
-import { parseGuardedEventsJsonl, parseGuardedFirstEvent } from '@forge/sessions/session-readability.ts';
-import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/session-status-io.ts';
-import type { SessionStatusIoPort } from '@forge/knowledge/kb-drain-model.ts';
+} from '@forge/sessions';
+import { parseGuardedEventsJsonl, parseGuardedFirstEvent } from '@forge/sessions';
+import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions';
+import type { SessionStatusIoPort } from '@forge/knowledge';
 // M7-C U8 (bead forge-u8y2, W8-F6 follow-up) — the real readability predicate
 // for `@forge/knowledge`'s own `sessionIsReadable` port (`kb-drain-model.ts`).
 // Bound DIRECTLY, no wrapper: that port's argument shape is declared to match
 // this function's exactly, for precisely this reason.
-import { sessionIsReadable } from '@forge/sessions/session-resolution.ts';
-import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
+import { sessionIsReadable } from '@forge/sessions';
+import { loadSessionKinds } from '@forge/sessions';
 
 /**
  * Re-exported so the host imports its whole routing surface from one module:

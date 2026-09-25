@@ -22,8 +22,8 @@
  * (table) via `bridge-studio-project-onboard.ts` and `bridge-studio-project-preflight-write.ts` (T2
  * assembles the table; not done in this file). `scaffoldContractArtifacts`
  * and `demoProcessChanged` below are now thin re-exports of the moved
- * implementations in `@forge/projects/project-contract-scaffold.ts` and
- * `@forge/projects/bridge-studio-project-onboard.ts` — kept ONLY because two existing test
+ * implementations in `@forge/projects` and
+ * `@forge/projects` — kept ONLY because two existing test
  * files (`apps/forge/tests/regression/onboard-git-init.test.ts`, `cli/bridge-studio-writes-demo-
  * design.test.ts`) import them directly from this module; every other
  * projects-only helper (`checkContractArtifactContainment`,
@@ -40,21 +40,21 @@ import { spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 
-import { listAgentDefinitions, listStarterAgents, loadAgentDefinition, serializeAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { loadFlowDefinition, serializeFlowDefinition, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
-import { flowPathForId } from '@forge/flows/flow-runner.ts';
-import { deriveFlowKickoff } from '@forge/flows/studio/flow-kickoff.ts';
+import { listAgentDefinitions, listStarterAgents, loadAgentDefinition, serializeAgentDefinition } from '@forge/agents';
+import { loadFlowDefinition, serializeFlowDefinition, listFlowIds } from '@forge/flows';
+import { flowPathForId } from '@forge/flows';
+import { deriveFlowKickoff } from '@forge/flows';
 import { discoverProjects } from '@forge/kernel';
-import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
-import { flowRoots, resolveIdAcrossRoots, skillRoots } from '@forge/kernel/discovery-roots.ts';
+import { skillsDir as toSkillsDir } from '@forge/agents';
+import { flowRoots, resolveIdAcrossRoots, skillRoots } from '@forge/kernel';
 import { resolveGuardedPath, guardedFile, guardedWriteFile } from '@forge/kernel';
-import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
-import { SLUG_RE, isReservedId } from '@forge/kernel/ids.ts';
-import { validateFlow } from '@forge/flows/studio/validate-flow.ts';
-import { readArtifactRoot } from '@forge/knowledge/brain-paths.ts';
+import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
+import { SLUG_RE, isReservedId } from '@forge/kernel';
+import { validateFlow } from '@forge/flows';
+import { readArtifactRoot } from '@forge/knowledge';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { isDryBridge } from './dry-bridge.ts';
-import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
+import { cachedListRuns } from '@forge/flows';
 import {
   sendJson,
   allowedOrigin,
@@ -65,7 +65,7 @@ import {
 } from './bridge-studio.ts';
 // ---------------------------------------------------------------------------
 // C4 contract-artifact scaffolding (B3) — MOVED to
-// @forge/projects/project-contract-scaffold.ts (M4-projects carve, worker B).
+// @forge/projects (M4-projects carve, worker B).
 // `scaffoldContractArtifacts` is re-exported here, with `readArtifactRoot`
 // wired to the real @forge/knowledge implementation (already an accepted,
 // baselined `legacy-to-package-not-via-shim` edge for this legacy file —
@@ -77,7 +77,7 @@ import {
 // checkContractArtifactContainment) moved with NO shim: nothing else in this
 // repo imported them directly.
 // ---------------------------------------------------------------------------
-import { scaffoldContractArtifacts as scaffoldContractArtifactsImpl } from '@forge/projects/project-contract-scaffold.ts';
+import { scaffoldContractArtifacts as scaffoldContractArtifactsImpl } from '@forge/projects';
 
 export function scaffoldContractArtifacts(
   projectRoot: string,
@@ -93,11 +93,11 @@ export function scaffoldContractArtifacts(
 // Write routes (M2-2) — PUT /api/studio/agents/:slug, PUT /api/studio/projects/:id
 // ---------------------------------------------------------------------------
 
-// `demoProcessChanged` MOVED to @forge/projects/bridge-studio-project-onboard.ts (M4-projects
+// `demoProcessChanged` MOVED to @forge/projects (M4-projects
 // carve, worker B). Re-exported here ONLY because
 // apps/forge/tests/regression/bridge-studio-writes-demo-design.test.ts imports it directly from this
 // module.
-export { demoProcessChanged } from '@forge/projects/bridge-studio-project-onboard.ts';
+export { demoProcessChanged } from '@forge/projects';
 
 /**
  * Handle Forge Studio write (PUT) routes.

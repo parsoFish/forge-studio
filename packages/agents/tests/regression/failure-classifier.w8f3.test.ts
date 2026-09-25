@@ -28,8 +28,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { classifyCycleFailure } from '../../failure-classifier.ts';
-import { decideAutoRetry } from '@forge/flows/scheduler-dispatch.ts';
-import { getPaths } from '@forge/flows/queue.ts';
+import { decideAutoRetry } from '@forge/flows';
+import { getPaths } from '@forge/flows';
 import type { EventLogEntry } from '@forge/kernel';
 
 /** The sibling suite's fixture builder, duplicated rather than exported: a

@@ -8,7 +8,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './agent-registry.ts';
 import { MATERIAL_KINDS } from './materials.ts';
 import { validateAgent } from './validate-agent.ts';

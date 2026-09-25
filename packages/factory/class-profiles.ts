@@ -39,7 +39,7 @@
 import { readFileSync } from 'node:fs';
 
 import type { ChangeClass, GateProfile } from '@forge/stations';
-import { CHANGE_CLASSES, parseManifest } from '@forge/flows/manifest.ts';
+import { CHANGE_CLASSES, parseManifest } from '@forge/flows';
 
 export type { ChangeClass, GateProfile };
 export { CHANGE_CLASSES };

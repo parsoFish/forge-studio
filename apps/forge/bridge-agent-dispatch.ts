@@ -35,15 +35,15 @@ import { join, basename, dirname } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError } from '@forge/kernel';
 import { isDryBridge, guardedWriteFile } from '@forge/kernel';
-import { isSafeRunId } from '@forge/agents/run-agent.ts';
+import { isSafeRunId } from '@forge/agents';
 // M4 agents carve: the slug refusal `spawnAgentDispatch` applies is the SAME
 // one the carved `POST /api/agents/:slug/run` route applies, so the package
 // owns the single definition and the host imports it. Two copies of a
 // defense-in-depth guard drift; one does not.
-import { SAFE_AGENT_SLUG_RE } from '@forge/agents/bridge-agents-slug.ts';
-import { sessionLogDirName } from '@forge/sessions/bridge-studio-lifecycle.ts';
-import type { SpawnTurnOutcome } from '@forge/sessions/bridge-studio-session-helpers.ts';
-import { applyPlanVerdict, type StudioPostContext } from '@forge/flows/bridge-studio-runs.ts';
+import { SAFE_AGENT_SLUG_RE } from '@forge/agents';
+import { sessionLogDirName } from '@forge/sessions';
+import type { SpawnTurnOutcome } from '@forge/sessions';
+import { applyPlanVerdict, type StudioPostContext } from '@forge/flows';
 import { peekInstalledFactory } from './factory-wiring.ts';
 import { readJson } from './bridge-http.ts';
 

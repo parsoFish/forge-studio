@@ -11,13 +11,15 @@
  */
 import { relative } from 'node:path';
 
+// Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
+// packages/sessions/kinds/architect-session.ts's own module doc).
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { skillPathRelative } from '@forge/agents/skill-path.ts';
-import { runBrainLint, lintThemeFiles, classify } from '@forge/knowledge/brain-lint.ts';
-import { guardAgentKbEdits, snapshotBrainTree, noKbEdits, type KbEditGateResult } from '@forge/knowledge/kb-drain-edit-soundness.ts';
+import { runBrainLint, lintThemeFiles, classify } from '@forge/knowledge';
+import { guardAgentKbEdits, snapshotBrainTree, noKbEdits, type KbEditGateResult } from '@forge/knowledge';
 import { tryGetKbBackend } from '@forge/knowledge';
-import { acquireBrainWriteLease, BrainWriteLeaseContentionError } from '@forge/knowledge/brain-write-lease.ts';
+import { acquireBrainWriteLease, BrainWriteLeaseContentionError } from '@forge/knowledge';
 
 import { writeRootFenceOptions } from '../session-write-fence.ts';
 import { runFixTurn, type FixTurnInput, type FixTurnResult, type FixTurnVariant } from './fix-turn.ts';

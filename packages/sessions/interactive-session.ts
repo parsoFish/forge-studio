@@ -69,12 +69,16 @@ export function writeSessionStatus<S extends Record<string, unknown>>(
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+// Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
+// packages/sessions/kinds/architect-session.ts's own module doc — this file
+// is reached from `architect-steps.ts`, part of `kinds/registry.ts`'s
+// dependency closure).
 import { withIdleDeadline, StreamDeadlineError } from '@forge/agents/stream-deadline.ts';
-import type { SdkHooksOption } from '@forge/agents/studio/hook-dispatch.ts';
+import type { SdkHooksOption } from '@forge/agents';
 import { extractLiveToolDetails } from '@forge/agents/tool-event-emit.ts';
 import { toolFenceOptions } from '@forge/kernel';
 import type { EventLogger, Phase } from '@forge/kernel';
-import type { ToolUseLiveDetail } from '@forge/agents/ralph/claude-agent.ts';
+import type { ToolUseLiveDetail } from '@forge/agents';
 
 // The write-root fence lives in its own module; importers reach it directly.
 import { writeRootFenceOptions, type BashFenceMode } from './session-write-fence.ts';

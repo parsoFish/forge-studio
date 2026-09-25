@@ -29,7 +29,7 @@ import { join } from 'node:path';
 import { computeContractDrift, applyContractReset } from '../../reset.ts';
 import { commitStudioChange, ensureStudioBranch, StudioWritePathIgnoredError } from '../../project-repo-tx.ts';
 import { projectStartersDir } from '@forge/kernel';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 function isolatedForgeRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'reset-tracked-commit-forge-'));

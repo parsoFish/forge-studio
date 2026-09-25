@@ -98,7 +98,7 @@ export type HubOutcome = {
   message?: string;
 };
 import { communitySourceKey, parseCommunityUpstream } from './studio/community-source-url.ts';
-import type { CommunityRegistry, CommunityRegistryItem, CommunityRegistrySource } from '@forge/contracts/studio/types.ts';
+import type { CommunityRegistry, CommunityRegistryItem, CommunityRegistrySource } from '@forge/contracts';
 import { CommunityRegistryLockError, lockCommunityRegistry } from './community-registry-lock.ts';
 
 /** Per-status tallies, computed once here so the CLI's printed tally and the

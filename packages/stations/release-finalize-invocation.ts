@@ -19,10 +19,10 @@
 
 import { readFileSync } from 'node:fs';
 
-import type { ReleaseStep } from '@forge/contracts/studio/types.ts';
-import { modelForSpec } from '@forge/agents/phase-agent.ts';
-import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { skillPath, skillPathRelative } from '@forge/agents/skill-path.ts';
+import type { ReleaseStep } from '@forge/contracts';
+import { modelForSpec } from '@forge/agents';
+import { deriveAgentSpec } from '@forge/agents';
+import { skillPath, skillPathRelative } from '@forge/agents';
 
 const SKILL_PATH = skillPath('release-finalizer');
 

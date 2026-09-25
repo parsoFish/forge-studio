@@ -20,9 +20,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 
-import { runPreflight } from '@forge/projects/preflight.ts';
-import { classifyClause } from '@forge/projects/preflight-resolve.ts';
-import { hasPendingStudioChanges, STUDIO_BRANCH } from '@forge/projects/project-repo-tx.ts';
+import { runPreflight } from './preflight.ts';
+import { classifyClause } from './preflight-resolve.ts';
+import { hasPendingStudioChanges, STUDIO_BRANCH } from './project-repo-tx.ts';
 import {
   discoverProjects,
   defaultConfigPath,

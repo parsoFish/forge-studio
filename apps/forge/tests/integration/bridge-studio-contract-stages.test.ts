@@ -26,7 +26,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from '../../ui-bridge.ts';
-import { deriveContractStages, type ContractStageRow, type DeriveContractStagesResult } from '@forge/projects/contract-stages.ts';
+import { deriveContractStages, type ContractStageRow, type DeriveContractStagesResult } from '@forge/projects';
 
 let forgeRoot: string;
 let url: string;

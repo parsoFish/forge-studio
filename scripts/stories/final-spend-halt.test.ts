@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { createLogger } from '@forge/kernel';
-import { emitTurnCostRow, emitTurnEndedUnpricedRow } from '@forge/sessions/turn-cost-rows.ts';
+import { emitTurnCostRow, emitTurnEndedUnpricedRow } from '@forge/sessions';
 
 import { finalSpendHalt } from './run-observe.mjs';
 

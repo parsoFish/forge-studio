@@ -74,7 +74,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import { HOOK_ENV_BASE_ALLOWLIST, HOOK_ENV_CREDENTIAL_EXCLUSIONS, buildChildEnv } from '@forge/kernel/spawn-env.ts';
+import { HOOK_ENV_BASE_ALLOWLIST, HOOK_ENV_CREDENTIAL_EXCLUSIONS, buildChildEnv } from '@forge/kernel';
 import type { EventLogger } from '@forge/kernel';
 import { hookDir, loadHookDefinition, type HookDefinition, type HookPermissionManifest } from './hook-library.ts';
 import { extractEnvVarNames, scanHookPackage, type HookScanReport } from './hook-scan.ts';

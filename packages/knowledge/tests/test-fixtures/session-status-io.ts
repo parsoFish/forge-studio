@@ -3,7 +3,7 @@
  * and the approve path end to end (M4 ruling 99).
  *
  * WHY THIS EXISTS RATHER THAN AN IMPORT. The production implementation lives in
- * `@forge/sessions/session-status-io.ts`, which this package (rank 2) may not
+ * `@forge/sessions`, which this package (rank 2) may not
  * import — and a test importing it would mint exactly the boundary row the port
  * was created to close. So the port is implemented here, over `@forge/kernel`'s
  * `guardedFile`, which is the SAME containment primitive the real functions use.

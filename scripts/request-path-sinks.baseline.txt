@@ -40,6 +40,9 @@ packages/agents/agent-dispatch-cmd.ts realpathSync 5
 packages/agents/agent-dispatch-cmd.ts statSync 2
 packages/agents/agent-dispatch.ts readdirSync 1
 packages/agents/agent-run.ts existsSync 2
+packages/agents/agents-md-compose.ts existsSync 2
+packages/agents/agents-md-compose.ts readFileSync 1
+packages/agents/agents-md-compose.ts writeFileSync 1
 packages/agents/band-agent-run.ts existsSync 1
 packages/agents/band-agent-run.ts readFileSync 1
 packages/agents/bridge-agents-history-rows.ts existsSync 5
@@ -416,6 +419,7 @@ packages/library/instruction-seed-match.ts readFileSync 2
 packages/library/skill-path.ts readdirSync 1
 packages/library/skill-staging.ts mkdirSync 1
 packages/library/skill-staging.ts writeFileSync 1
+packages/library/studio-lint-library-passes.ts existsSync 3
 packages/library/studio-lint-tool-fence.ts readFileSync 1
 packages/library/studio/artifact-registry.ts readdirSync 3
 packages/library/studio/artifact-registry.ts readFileSync 3
@@ -473,6 +477,9 @@ packages/projects/bridge-studio-project-onboard.ts existsSync 5
 packages/projects/bridge-studio-project-onboard.ts mkdirSync 3
 packages/projects/bridge-studio-project-onboard.ts readFileSync 1
 packages/projects/bridge-studio-project-onboard.ts writeFileSync 2
+packages/projects/constraint-author.ts existsSync 3
+packages/projects/constraint-author.ts readFileSync 3
+packages/projects/constraint-author.ts writeFileSync 1
 packages/projects/constraint-blocks.ts existsSync 2
 packages/projects/constraint-blocks.ts readdirSync 1
 packages/projects/constraint-blocks.ts readFileSync 2
@@ -514,6 +521,9 @@ packages/projects/project-create.ts readFileSync 2
 packages/projects/project-create.ts renameSync 2
 packages/projects/project-create.ts rmSync 4
 packages/projects/project-create.ts writeFileSync 3
+packages/projects/project-migrate.ts existsSync 2
+packages/projects/project-migrate.ts readFileSync 1
+packages/projects/project-migrate.ts writeFileSync 1
 packages/projects/project-preflight-read.ts readFileSync 1
 packages/projects/project-repo-tx.ts execFileSync 1
 packages/projects/project-repo-tx.ts existsSync 1
@@ -600,6 +610,8 @@ packages/sessions/session-write-fence.ts realpathSync 3
 packages/sessions/studio/session-artifact-derivers.ts readdirSync 2
 packages/sessions/studio/session-artifact-derivers.ts readFileSync 1
 packages/sessions/studio/session-artifact-derivers.ts realpathSync 6
+packages/sessions/studio/session-kinds-validate.ts existsSync 1
+packages/sessions/studio/session-kinds-validate.ts readFileSync 1
 packages/sessions/studio/session-kinds.ts readFileSync 1
 packages/sessions/turn-cost-rows.ts appendFileSync 1
 packages/stations/cycle-recap.ts existsSync 9

@@ -30,7 +30,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 import { createLogger } from '@forge/kernel';
 import { runDemoBuilderTurn, demoSessionDir } from '../../kinds/demo-builder.ts';
 import {

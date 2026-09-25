@@ -14,7 +14,7 @@
  * both is what the assembly is for.
  *
  * AT-89 travels with them for the same reason from the other side: its
- * subjects are `@forge/kernel`'s `SLUG_RE` and `@forge/agents/skill-path.ts`,
+ * subjects are `@forge/kernel`'s `SLUG_RE` and `@forge/agents`,
  * neither of which is library's. Its import of the legacy validator is
  * disclosed as an `assembly-to-legacy` row (ruling 116) that dies with that
  * file's carve; what it replaces was a `package-to-legacy` violation with no
@@ -33,9 +33,9 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 
-import { skillPath, skillsDir } from '@forge/library/skill-path.ts';
-import { installSkillPackage, approveSkillDraft } from '@forge/library/studio/skill-install.ts';
-import { isStudioAgent, listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
+import { skillPath, skillsDir } from '@forge/library';
+import { installSkillPackage, approveSkillDraft } from '@forge/library/testing';
+import { isStudioAgent, listAgentDefinitions } from '@forge/agents';
 
 const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
 
@@ -244,16 +244,16 @@ describe('SLUG_RE relocation regression guard', () => {
     // Third relocation of this guard. Its first two subjects were
     // `orchestrator/skill-path.ts` and `orchestrator/studio/validate.ts`; the
     // latter is deleted by ruling 159's split, and the surviving re-export of
-    // the id vocabulary is `@forge/agents/skill-path.ts`'s
-    // `export * from '@forge/kernel/ids.ts'`. Same assertion, same reason: a
+    // the id vocabulary is `@forge/agents`'s
+    // `export * from '@forge/kernel'`. Same assertion, same reason: a
     // second regex with a matching source would pass a `.source` comparison
     // and diverge on the next edit.
-    const idsModule = (await import('@forge/kernel/ids.ts')) as Record<string, unknown>;
-    const skillPathModule = (await import('@forge/agents/skill-path.ts')) as Record<string, unknown>;
+    const idsModule = (await import('@forge/kernel')) as Record<string, unknown>;
+    const skillPathModule = (await import('@forge/agents')) as Record<string, unknown>;
 
     const fromKernel = idsModule['SLUG_RE'] as RegExp | undefined;
     const fromSkillPath = skillPathModule['SLUG_RE'] as RegExp;
 
-    assert.equal(fromKernel, fromSkillPath, '@forge/kernel/ids.ts must define SLUG_RE and @forge/agents/skill-path.ts must RE-EXPORT that object — not a second regex with a matching source');
+    assert.equal(fromKernel, fromSkillPath, '@forge/kernel must define SLUG_RE and @forge/agents must RE-EXPORT that object — not a second regex with a matching source');
   });
 });

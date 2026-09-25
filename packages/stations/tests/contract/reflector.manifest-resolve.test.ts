@@ -46,11 +46,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { getPaths, type QueuePaths } from '@forge/flows/queue.ts';
+import { getPaths, type QueuePaths } from '@forge/flows';
 import { runReflector } from '../../phases/reflector.ts';
 import { createLogger } from '@forge/kernel';
 import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
-import { REFLECTION_LOST_EVENT, type CycleInput } from '@forge/flows/cycle-context.ts';
+import { REFLECTION_LOST_EVENT, type CycleInput } from '@forge/flows';
 
 // Dynamic import: `resolveCurrentManifestPath` is not exported today. If the
 // export has not landed yet, every case below fails on its own

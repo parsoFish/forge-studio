@@ -37,7 +37,7 @@ import {
   type KindTurnPlumbing,
   type SessionKindVariant,
 } from './kind-turn.ts';
-import { emitGroundFileChanges, guardedFile, guardedWriteFile, sendJson } from '@forge/kernel';
+import { emitGroundFileChanges, guardedFile, guardedWriteFile, sendJson, SLUG_RE } from '@forge/kernel';
 import { guardedWriteSessionStatus } from '../session-status-io.ts';
 import {
   DEMO_HISTORY_REL_DIR,
@@ -64,10 +64,13 @@ import {
   readAnswersBody,
   type AffordanceRouteContext,
 } from '../bridge-studio-sessions-affordance-shell.ts';
-import { ensureStudioBranch, commitStudioChange } from '@forge/projects/project-repo-tx.ts';
+import { ensureStudioBranch, commitStudioChange } from '@forge/projects';
+// Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
+// architect-session.ts's own module doc — `kinds/registry.ts` needs
+// `demoKind` fully bound at its own top level).
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { skillPathRelative, SLUG_RE } from '@forge/agents/skill-path.ts';
+import { skillPathRelative } from '@forge/agents/skill-path.ts';
 
 // ---------------------------------------------------------------------------
 // ADR-024: spec derived from skills/demo-builder/SKILL.md (single source)

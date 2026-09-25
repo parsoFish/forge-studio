@@ -36,7 +36,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 /** Anchored on FORGE_ROOT, not a hand-counted `..` chain (COMMON §15.14). */
 const INSTRUCTIONS_KIND_TS = join(FORGE_ROOT, 'packages', 'sessions', 'kinds', 'instructions.ts');

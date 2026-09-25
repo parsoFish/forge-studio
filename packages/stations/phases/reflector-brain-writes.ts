@@ -16,9 +16,9 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { EventLogger, EventLogEntry } from '@forge/kernel';
-import { runAgent } from '@forge/agents/run-agent.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
-import { classifyCrash } from '@forge/agents/failure-classifier.ts';
+import { runAgent } from '@forge/agents';
+import type { AgentDefinition } from '@forge/contracts';
+import { classifyCrash } from '@forge/agents';
 import {
   tallyToolUse as tallyReflectorToolUse,
   type ReflectorToolUseSummary,
@@ -27,15 +27,15 @@ import {
   recordBrainGateResult,
   REFLECTION_LOST_EVENT,
   type CycleInput,
-} from '@forge/flows/cycle-context.ts';
+} from '@forge/flows';
 import {
   assignRetention,
   collectCitedBy,
   patchArchiveFrontmatter,
   type ThemeMeta,
   type RetentionTag,
-} from '@forge/knowledge/cycle-retention.ts';
-import { runPostReflectionKbHealth } from '@forge/knowledge/kb-health.ts';
+} from '@forge/knowledge';
+import { runPostReflectionKbHealth } from '@forge/knowledge';
 import type { ReflectorDeps } from './reflector.ts';
 
 /**

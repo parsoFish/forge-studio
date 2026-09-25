@@ -69,7 +69,7 @@ import { join } from 'node:path';
 
 import { cmdAgentRun } from '../../agent-run.ts';
 import type { AgentDispatchDeps } from '../../agent-dispatch-cmd.ts';
-import { writeSessionStatus } from '@forge/sessions/interactive-session.ts';
+import { writeSessionStatus } from '@forge/sessions';
 
 // ---------------------------------------------------------------------------
 // cmdAgentRun driver — mirrors packages/agents/tests/integration/agent-run-dispatch.test.ts's own `run()`

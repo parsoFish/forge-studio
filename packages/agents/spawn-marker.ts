@@ -30,7 +30,7 @@
  * pid/ppid/pgid evidence is gone.
  *
  * WHY IT IS AN OVERRIDE AND NEVER AN ALLOWLIST ENTRY. `buildChildEnv`
- * (`@forge/kernel/spawn-env.ts`) filters the ambient env to
+ * (`@forge/kernel`) filters the ambient env to
  * `AGENT_ENV_ALLOWLIST` and layers the caller's own overrides on top.
  * Allowlisting the marker would let an ambient value — one stale token
  * exported in a shell — be inherited by everything forge spawns, and the
@@ -85,7 +85,7 @@ import { randomUUID } from 'node:crypto';
 import { appendFileSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 
-import { isSafeRunId } from '@forge/kernel/log-cycles.ts';
+import { isSafeRunId } from '@forge/kernel';
 
 /**
  * The env var every agent child this runtime spawns carries. Read by

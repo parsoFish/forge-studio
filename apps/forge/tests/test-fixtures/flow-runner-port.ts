@@ -15,11 +15,12 @@
  * The port itself — a stub executor that touches no phase — is exercised
  * directly by `apps/forge/tests/contract/flow-runner.port-conformance.test.ts`.
  */
-import { runFlow, type FlowRunArgs } from '@forge/flows/flow-runner.ts';
-import { createPhaseExecutor, type NodeExecutor } from '@forge/stations/phases/executor-table.ts';
-import { createProjectGate, defaultRunClosure } from '@forge/stations/phases/executor-deps.ts';
-import type { FlowRunnerDeps } from '@forge/stations/phases/executor-deps.ts';
-import type { NodeKind } from '@forge/flows/flow-node-kind.ts';
+import { runFlow, type FlowRunArgs } from '@forge/flows';
+import { createPhaseExecutor } from '@forge/stations';
+import type { NodeExecutor } from '@forge/stations/testing';
+import { createProjectGate, defaultRunClosure } from '@forge/stations';
+import type { FlowRunnerDeps } from '@forge/stations';
+import type { NodeKind } from '@forge/flows';
 
 export type { NodeExecutor, FlowRunnerDeps };
 export type EnqueueFlowRun = FlowRunArgs['enqueueFlowRun'];

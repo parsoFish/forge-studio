@@ -15,8 +15,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { reviewFindingsJsonPath, validateReviewFindings } from '@forge/flows/flow-artifacts.ts';
-import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import { reviewFindingsJsonPath, validateReviewFindings } from '@forge/flows';
+import type { StreamQueryFn } from '@forge/agents';
 
 import {
   CRITERION, CYCLE_ID, EXPECTED, collectLogger, makeFixture, run, validFindingsJson,

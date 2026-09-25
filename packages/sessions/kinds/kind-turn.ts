@@ -47,6 +47,9 @@
 import { rmSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
+// Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
+// architect-session.ts's own module doc — this file is reached from
+// `kinds/registry.ts` via `architect.ts`/`demo-builder.ts`).
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';

@@ -14,7 +14,7 @@
  * about flow SEMANTICS (`SPEC.md` §2, Station), not about the studio object
  * model, and because the runner may not import `orchestrator/`.
  */
-import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
+import type { FlowDefinition } from '@forge/contracts';
 
 export type FanOutViolation = { nodeId: string; fanOut: string };
 

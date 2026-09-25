@@ -31,9 +31,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { runBandAgentStandalone } from '@forge/agents/band-agent-run.ts';
-import { serializeWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
-import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import { runBandAgentStandalone } from '@forge/agents';
+import { serializeWorkItem, type WorkItem } from '@forge/flows';
+import type { StreamQueryFn } from '@forge/agents';
 
 const INIT = 'INIT-2026-08-02-standalone-review';
 const RUN = 'RUN-2026-08-02-band-standalone';

@@ -47,11 +47,11 @@ import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
 import { createLogger, type EventLogEntry, type EventLogger } from '@forge/kernel';
-import { approveHook } from '@forge/library/studio/hook-approval-ledger.ts';
-import type { HookLifecycleEvent, HookPermissionManifest } from '@forge/library/studio/hook-library.ts';
+import { approveHook } from '@forge/library';
+import type { HookLifecycleEvent, HookPermissionManifest } from '@forge/library';
 
 import { describeHookRunFailure, sdkHooksForAgent, type SdkHooksOption } from '../../studio/hook-dispatch.ts';
-import { HookRunError } from '@forge/library/studio/hook-runtime.ts';
+import { HookRunError } from '@forge/library';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers — a real on-disk forge root: skills/<slug>/SKILL.md +

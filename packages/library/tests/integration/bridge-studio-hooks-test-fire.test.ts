@@ -30,7 +30,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import yaml from 'js-yaml';
 
 import { dispatchRoute, DRY_BRIDGE_ENV, readBoundedLog, boundedLogSegments } from '@forge/kernel';
-import { approveHook } from '@forge/library/studio/hook-approval-ledger.ts';
+import { approveHook } from '../../studio/hook-approval-ledger.ts';
 import { libraryRoutes, type LibraryRouteContext } from '../../routes.ts';
 import { HOOK_TEST_FIRE_LOG_DIR } from '../../bridge-studio-hooks-test-fire.ts';
 import { fixtureAgentFacts } from '../test-fixtures/agent-fixture.ts';

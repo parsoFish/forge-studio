@@ -6,7 +6,7 @@
  * `apps/forge/session-kind-deps.ts` and by the conformance test beside it, and
  * it should be findable without reading 1,600 lines of runner.
  */
-import type { InitiativeManifest } from '@forge/contracts/manifest-types.ts';
+import type { InitiativeManifest } from '@forge/contracts';
 
 /**
  * The manifest FUNCTIONS architect needs, bound at `apps/forge` and injected:

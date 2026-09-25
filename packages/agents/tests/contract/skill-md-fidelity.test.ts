@@ -34,7 +34,7 @@ import assert from 'node:assert/strict';
 import matter from 'gray-matter';
 
 import { serializeAgentDefinition } from '../../studio/skill-md-fidelity.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 
 function minimalDef(overrides: Partial<AgentDefinition> = {}): AgentDefinition {
   return {

@@ -30,8 +30,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { seedProjectBrain } from '@forge/knowledge/project-brain-seed.ts';
-import { loadProjectConstraintBlocks } from '@forge/projects/constraint-blocks.ts';
+import { seedProjectBrain } from '@forge/knowledge';
+import { loadProjectConstraintBlocks } from '@forge/projects';
 
 test('seedProjectBrain: the documented forge:constraint example is inert — parses to zero live blocks (knowledge writes it, projects parses it)', () => {
   const forgeRoot = mkdtempSync(join(tmpdir(), 'project-brain-seed-test-'));

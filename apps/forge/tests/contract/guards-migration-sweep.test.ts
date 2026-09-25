@@ -43,7 +43,7 @@
  * `studio/starters/agents/` (2026-08-04 coverage-gap close): the ORIGINAL
  * A2 only scanned `skills/`, but `studio/starters/agents/{plan,dev,review}`
  * also carry `composition:` blocks and ALSO flow through `loadAgentDefinition`
- * (via `listStarterAgents`, `@forge/agents/studio/agent-registry.ts` — the New-Agent
+ * (via `listStarterAgents`, `@forge/agents` — the New-Agent
  * picker's StarterPicker source) — a directory the sweep could silently miss
  * while `skills/` alone stayed clean, since nothing else pinned it. These
  * three are the ONLY other on-disk `composition:`-bearing definitions:
@@ -72,8 +72,8 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { skillsDir, listSkillMdDirs } from '@forge/agents/skill-path.ts';
+import { loadAgentDefinition } from '@forge/agents';
+import { skillsDir, listSkillMdDirs } from '@forge/agents';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
 

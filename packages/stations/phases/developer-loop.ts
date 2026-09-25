@@ -10,19 +10,19 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
-import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
+import { pinnedSdkQuery as sdkQuery } from '@forge/agents';
+import { sdkHooksForAgent } from '@forge/agents';
 
 import type { EventLogger } from '@forge/kernel';
-import { classifyCrash } from '@forge/agents/failure-classifier.ts';
+import { classifyCrash } from '@forge/agents';
 import {
   resolveDevSpawnModel, buildDevSystemPrompt,
   prepareDevWorkspace,
   tallyToolUse as tallyDevToolUse,
   type DevToolUseSummary,
 } from './dev-binding.ts';
-import { skillPathRelative } from '@forge/agents/skill-path.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { skillPathRelative } from '@forge/agents';
+import type { AgentDefinition } from '@forge/contracts';
 import {
   gateRequiredPaths,
   readWorkItemsFromDir,
@@ -30,28 +30,28 @@ import {
   validateWorkItemSet,
   writeWorkItemStatus,
   type WorkItem,
-} from '@forge/flows/work-item.ts';
+} from '@forge/flows';
 import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
-import { type QueryFn, type ClaudeAgentOptions } from '@forge/agents/ralph/claude-agent.ts';
-import { getAdapter, resolveSdkId } from '@forge/agents/_adapters/registry.ts';
-import type { AgentInvocation } from '@forge/agents/_adapters/types.ts';
-import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
-import { makeProjectSkillsLoadedSink } from '@forge/agents/project-skills.ts';
-import { run as runRalph, type LoopResult } from '@forge/agents/ralph/runner.ts';
-import { matchesRateLimitSignature } from '@forge/agents/failure-classifier.ts';
-import { createWiWorktree, removeWiWorktree } from '@forge/flows/wi-worktree.ts';
-import { createMergeQueue, mergeAndPublish, type MergeConflictDetail } from '@forge/flows/wi-merge-back.ts';
-import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '@forge/agents/ralph/stop-conditions.ts';
-import { assertLocalRemoteSynced, checkLocalRemoteSynced, type PushResult } from '@forge/flows/pr.ts';
+import { type QueryFn, type ClaudeAgentOptions } from '@forge/agents';
+import { getAdapter, resolveSdkId } from '@forge/agents';
+import type { AgentInvocation } from '@forge/agents';
+import { makeToolEventSink } from '@forge/agents';
+import { makeProjectSkillsLoadedSink } from '@forge/agents';
+import { runRalphLoop as runRalph, type LoopResult } from '@forge/agents';
+import { matchesRateLimitSignature } from '@forge/agents';
+import { createWiWorktree, removeWiWorktree } from '@forge/flows';
+import { createMergeQueue, mergeAndPublish, type MergeConflictDetail } from '@forge/flows';
+import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '@forge/agents';
+import { assertLocalRemoteSynced, checkLocalRemoteSynced, type PushResult } from '@forge/flows';
 import {
   resolveDevWiConcurrency,
   ralphGitIdentity,
   UNIFIER_GIT_IDENTITY,
   type GitIdentity,
 } from '@forge/kernel';
-import { runConcurrentDispatch, type DispatchOutcome } from '@forge/flows/wi-dispatch-scheduler.ts';
-import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '@forge/projects/project-config.ts';
-import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import { runConcurrentDispatch, type DispatchOutcome } from '@forge/flows';
+import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '@forge/projects';
+import type { CycleInput } from '@forge/flows';
 import { resolveWiCostBudgetUsd, makeCostCeilingCheck, isCostCeilingHalt } from './dev-cost-bound.ts';
 
 /**

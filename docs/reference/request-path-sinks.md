@@ -1068,7 +1068,7 @@ every one of these sites resolves a path from a **slug-validated** id —
 `assertSkillSlug` refuses `/`, `\`, `.`, `..`, the empty string and anything
 over 100 characters before a join happens — and the walk sites take a
 **directory** argument that is composed from a fixed root, never from request
-bytes. `assertSkillSlug` itself moved to `@forge/kernel/ids.ts` in the same PR;
+bytes. `assertSkillSlug` itself moved to `@forge/kernel` in the same PR;
 `packages/kernel/tests/unit/ids.test.ts` pins which shapes it rejects, so the move cannot
 quietly widen it.
 
@@ -2464,7 +2464,7 @@ sibling-trigger scan, and `packages/agents/bridge-agents-studio.ts`'s `DELETE
 `listFlowIds(forgeRoot)` — a full, server-side directory enumeration across
 every flow root, never filtered or built from the request's own `:id`/`:slug`
 — and for each enumerated id call `flowPathForId(id, forgeRoot)`
-(`@forge/flows/flow-runner.ts`), which resolves it through
+(`@forge/flows`), which resolves it through
 `resolveIdAcrossRoots` → `guardedFile` (the SAME containment guard
 `resolveGuardedPath` is built on) BEFORE this `existsSync` ever runs. The
 `existsSync` itself is a redundant, read-only existence probe on a path that
@@ -2765,6 +2765,83 @@ via counting fakes against the injected `HookFireScanDeps` seam), and
 over real files with real directory mtimes via `utimesSync` — 5 real fires
 recorded only in cycles older than the 50-cycle window are confirmed
 invisible on the wire).
+
+### M7-C OD — five sites made VISIBLE by merging `parsoFish/main` into the one-door-imports branch (bead `forge-8vfn.5.31`)
+
+None of these five files were touched by the one-door-imports bead itself
+(that bead only rewrites import SPECIFIERS, never call sites or path
+composition). They are pre-existing production code from concurrent M7-B/M7
+lanes that had never been run against this ratchet before this merge — the
+first `check-request-path-sinks.mjs` run on the combined tree.
+
+| file | sink | before | after |
+|---|---|---|---|
+| `packages/agents/agents-md-compose.ts` | `existsSync` | 0 | 2 |
+| `packages/agents/agents-md-compose.ts` | `readFileSync` | 0 | 1 |
+| `packages/agents/agents-md-compose.ts` | `writeFileSync` | 0 | 1 |
+| `packages/library/studio-lint-library-passes.ts` | `existsSync` | 0 | 3 |
+| `packages/projects/constraint-author.ts` | `existsSync` | 0 | 3 |
+| `packages/projects/constraint-author.ts` | `readFileSync` | 0 | 3 |
+| `packages/projects/constraint-author.ts` | `writeFileSync` | 0 | 1 |
+| `packages/projects/project-migrate.ts` | `existsSync` | 0 | 2 |
+| `packages/projects/project-migrate.ts` | `readFileSync` | 0 | 1 |
+| `packages/projects/project-migrate.ts` | `writeFileSync` | 0 | 1 |
+| `packages/sessions/studio/session-kinds-validate.ts` | `existsSync` | 0 | 1 |
+| `packages/sessions/studio/session-kinds-validate.ts` | `readFileSync` | 0 | 1 |
+
+**`agents-md-compose.ts`'s three sinks** (`composeAgentsMd`, reads/writes
+`AGENTS.md`/`CLAUDE.md`) are **CLI-ARG, operator trust boundary**: its one
+caller is `apps/forge/cli.ts:615`'s `cmdInstructionsCompose`
+(`forge instructions compose --project <name>`), where `projectDir` comes
+from `resolvePreflightProjectDir(project)` — `project` is a `process.argv`
+token the operator typed, resolved against the server's own
+`resolveProjectsDir(FORGE_ROOT, …)` roster, never a value read off an HTTP
+request. No bridge route calls `composeAgentsMd`.
+
+**`studio-lint-library-passes.ts`'s three `existsSync` calls** (catalog path,
+registry path, a stray-staging probe) run inside `runStudioLint(root)`,
+called from exactly one site, `apps/forge/cli.ts:421`
+(`forge studio lint`), always with the server's own `FORGE_ROOT` constant —
+never a request-derived `root`. **CLI-ARG-free: a fixed server constant, not
+even an operator argument.**
+
+**`constraint-author.ts`'s four sinks** (`extractConstraintsSource`,
+`authorConstraintBlocks`) share `agents-md-compose.ts`'s exact shape: the
+only caller is `apps/forge/cli.ts:642`'s `cmdConstraintsAuthor`
+(`forge constraints author --project <name>`), `projectDir` is the same
+`resolvePreflightProjectDir(project)` CLI-arg resolution, and no bridge
+route reaches either function. **CLI-ARG, operator trust boundary.**
+
+**`project-migrate.ts`'s four sinks** (`migrateProjectConfig`, reading and
+rewriting `.forge/project.json` in place) are reached only through
+`cmdProjectMigrate` (`apps/forge/cli.ts:135`, `forge project migrate`),
+whose `projectRoot` argument is likewise a `process.argv` project name/path
+the operator supplied at the CLI, never parsed from an HTTP request body or
+URL. **CLI-ARG, operator trust boundary** — the same shape `check-raw-fs-
+guarded.allowlist.mjs`'s existing CLI-ARG rows already document for sibling
+`cmd*` verbs in this same file (`reset-cli.ts`, `project-contract-scaffold.ts`).
+
+**`session-kinds-validate.ts`'s two sinks** (`discoverRuntimeAgentIds`,
+reading each `SKILL.md` under a discovered skill dir) are **SERVER-
+ENUMERATED PATH**: `skillMdPath` is `join(dir, 'SKILL.md')` over `dir`
+values produced by `skillRoots(forgeRoot).flatMap(listSkillMdDirs)` — a
+server-side `readdirSync` enumeration of the server's own skill roots, with
+no request-derived component anywhere in the join. The sibling `existsSync`
+(`candidate`, line 489) is the file's own documented guard helper —
+its docstring states the `..`-segment rejection happens BEFORE this call
+runs, matching the SERVER-ENUMERATED PATH pattern used throughout
+`check-raw-fs-guarded.allowlist.mjs` for directory-enumeration reads.
+
+**Confirmed, not just classified.** All five sites were read in full above,
+not inferred from the sink name alone; each caller chain was traced to its
+one entry point (`apps/forge/cli.ts`, never a bridge route file) before
+classification. `check-raw-fs-guarded.mjs` (the companion def-use lint, whose
+scope is `packages/`-wide rather than reachable-from-request-path-entry
+only) reports 0 unguarded request-derived raw fs sinks with all five files
+in scope. Re-run with `--write` in the same commit that adds this section,
+per this document's own rule; the one tightened row
+(`packages/agents/band-agent-run.ts` `existsSync` 3 → 1, a real shrink from
+concurrent work, never a regression) is accepted in the same `--write`.
 
 ### Extended in M7-C PKG — the private copy widens to the WHOLE package (bead `forge-8vfn.8.3.6`)
 

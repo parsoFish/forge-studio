@@ -26,7 +26,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
-import type { QueryFn } from '@forge/agents/ralph/claude-agent.ts';
+import type { QueryFn } from '@forge/agents';
 import { makeAgentWithTelemetry } from '../../phases/developer-loop.ts';
 
 /** Records every emitted entry; mirrors `developer-loop.cost-ceiling.test.ts`'s `makeRawLogger`. */

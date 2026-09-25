@@ -39,8 +39,8 @@ import { join } from 'node:path';
 import { dispatchAgentRun } from '../../agent-dispatch.ts';
 import { runAgent } from '../../run-agent.ts';
 import { cmdAgentDispatch } from '../../agent-dispatch-cmd.ts';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { FORGE_ROOT } from '@forge/kernel';
+import type { AgentDefinition } from '@forge/contracts';
 import type { StreamQueryFn } from '../../pinned-sdk-query.ts';
 import { AGENT_RUN_MARKER_FILE, readRunMarkers } from '../../spawn-marker.ts';
 

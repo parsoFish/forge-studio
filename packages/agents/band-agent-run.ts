@@ -64,7 +64,7 @@ import { loadAgentDefinition } from './studio/agent-registry.ts';
 import { skillPath } from './skill-path.ts';
 import { resolveBandGuard } from './agent-bands.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 
 /** Band-guard slugs runnable standalone → pipeline kind. `demo-agent` came off when its band stopped
  *  spawning a model (§5 item 4): its SKILL.md is a declaration carrier, and a carrier has no turn to re-run. */
@@ -79,7 +79,7 @@ export type BandPipelineKind = 'review';
 
 /**
  * The six queue state directories this surface reads. Declared with every field
- * REQUIRED and by name, so the real `getPaths` from `@forge/flows/queue.ts`
+ * REQUIRED and by name, so the real `getPaths` from `@forge/flows`
  * satisfies it structurally at the assembly site and a rename there breaks the
  * repo-wide typecheck rather than passing a fake in this package's own tests
  * (COMMON §15.71).
@@ -135,9 +135,9 @@ export type BandPipelineOutcome = { status: 'complete' | 'complete-with-misses' 
 export type BandAgentDeps = {
   /** `@forge/stations/phases/{demo-agent,adversarial-review}.ts`, behind one call. */
   runPipeline(call: BandPipelineCall): Promise<BandPipelineOutcome>;
-  /** `getPaths` from `@forge/flows/queue.ts`. */
+  /** `getPaths` from `@forge/flows`. */
   queuePaths(queueRoot: string): BandQueuePaths;
-  /** `parseManifest` from `@forge/flows/manifest.ts`. */
+  /** `parseManifest` from `@forge/flows`. */
   parseInitiativeManifest(content: string): BandInitiativeFields;
 };
 

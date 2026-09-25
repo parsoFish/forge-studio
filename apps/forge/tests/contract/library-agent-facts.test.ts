@@ -24,10 +24,10 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
-import { agentUsageIndex } from '@forge/agents/studio/agent-usage.ts';
-import { isStudioAgent } from '@forge/agents/studio/agent-registry.ts';
-import type { ComposableKind } from '@forge/library/studio/agent-facts.ts';
+import { FORGE_ROOT } from '@forge/kernel';
+import { agentUsageIndex } from '@forge/agents';
+import { isStudioAgent } from '@forge/agents';
+import type { ComposableKind } from '@forge/library/testing';
 
 import { libraryAgentFacts } from '../../library-agent-facts.ts';
 

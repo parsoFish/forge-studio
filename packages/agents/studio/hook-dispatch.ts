@@ -150,8 +150,8 @@ import { resolve } from 'node:path';
 import type { EventLogger } from '@forge/kernel';
 import { FORGE_ROOT } from './derive.ts';
 import { loadAgentDefinition } from './agent-registry.ts';
-import { loadHookDefinition, parseHookMatcher, type HookLifecycleEvent, type HookMatcherParse } from '@forge/library/studio/hook-library.ts';
-import { HookRunError, runHookScriptAsync, type HookRunFailureReason, type HookRunResult } from '@forge/library/studio/hook-runtime.ts';
+import { loadHookDefinition, parseHookMatcher, type HookLifecycleEvent, type HookMatcherParse } from '@forge/library';
+import { HookRunError, runHookScriptAsync, type HookRunFailureReason, type HookRunResult } from '@forge/library';
 
 // ---------------------------------------------------------------------------
 // Structural mirrors of the SDK's hook option types. Deliberately declared

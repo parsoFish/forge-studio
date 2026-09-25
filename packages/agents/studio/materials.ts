@@ -28,7 +28,7 @@
  * this campaign's recurring defect shape, so nothing here fails open.
  */
 
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 import { MATERIAL_KINDS, type MaterialKind } from '@forge/contracts';
 
 // The closed, frozen materials vocabulary now lives in @forge/contracts

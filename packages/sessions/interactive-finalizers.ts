@@ -126,10 +126,10 @@ import {
 import { join, dirname } from 'node:path';
 
 import { resolveGuardedPath } from '@forge/kernel';
-import { withStudioWrite } from '@forge/projects/project-repo-tx.ts';
+import { withStudioWrite } from '@forge/projects';
 // knowledge is rank 2, below this package — a legal direct import (unlike
 // promoteToQueue's rank-5 flows dependency, injected via QueuePorts below).
-import { commitProjectBrain, type ProjectBrainCommitInput } from '@forge/knowledge/project-brain-build.ts';
+import { commitProjectBrain, type ProjectBrainCommitInput } from '@forge/knowledge';
 
 // ---------------------------------------------------------------------------
 // Error contract (ADR-042's third boundary — a pure function with an

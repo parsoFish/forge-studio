@@ -39,7 +39,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { acquireBrainWriteLease } from '@forge/knowledge/brain-write-lease.ts';
+import { acquireBrainWriteLease } from '@forge/knowledge';
 
 const LEASE_LOCK_PATH = join(
   mkdtempSync(join(tmpdir(), 'reflector-test-lease-lock-')),

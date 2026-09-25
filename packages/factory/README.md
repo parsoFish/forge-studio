@@ -56,6 +56,29 @@ measured and rejected: it put **17 new (file, sink) pairs reachable from a bridg
 route** for surfaces no bridge route calls. One file would have meant widening a
 security ratchet to make a count look tidier.
 
+### `package.json` enumerates these two specifiers by name — nothing else
+
+Bead `forge-8vfn.5.31` narrowed `exports` from a `"./*"` wildcard — which
+legalised every file in the package, not just the two the seams actually
+reach for — to exactly `"./class-profiles.ts"` and `"./demo.ts"`. ADR 048's
+barrel prohibition governs `index.ts`, not the exports map — an explicit
+per-file allowlist is the same discipline this README's table already keeps,
+just enforced by Node's module resolution instead of only by
+`contract.test.ts`.
+
+This table was fourteen entries wide, plus three test-only ones, until item
+83's split: the same bead's first pass legalised the phase executors,
+`reflector.ts`, `adversarial-review.ts`, `release-finalize.ts`,
+`reflect-reconcile.ts`, `reflector-rerun.ts`, `gates/docs-gate.ts`,
+`demo-model.ts` and three test-only phase files — all of which moved to
+`@forge/stations` in the same wave (F3, operator ruling items 81/83). Merging
+the two lanes' work found the stale entries — `package.json` exports naming
+files that no longer exist under `packages/factory/` at all — and this table
+is the corrected, re-measured result: only `class-profiles.ts` and `demo.ts`
+are still the example's to legalise. `@forge/stations`'s own `package.json`
+now carries the corresponding entries for the files that moved; see that
+package's README.
+
 ## What is inside
 
 `design.md` is the internal shape — the bands, the phases, which files are over

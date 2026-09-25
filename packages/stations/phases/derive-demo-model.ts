@@ -22,8 +22,8 @@
  * produce deep-equal models.
  */
 
-import type { DemoStep } from '@forge/contracts/studio-types.ts';
-import type { MergeGateEvidence } from '@forge/flows/cycle-helpers.ts';
+import type { DemoStep } from '@forge/contracts';
+import type { MergeGateEvidence } from '@forge/flows';
 
 import type { DemoModel, DemoModelCheckpoint, TestResultRow } from '../demo-model.ts';
 import type { GateProfile } from '../class-profile-port.ts';

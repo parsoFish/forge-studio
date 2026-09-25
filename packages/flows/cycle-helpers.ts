@@ -22,9 +22,9 @@ import type { EventLogger } from '@forge/kernel';
 import type { CycleInput } from './cycle-context.ts';
 import { DEMO_MD_BASENAME, worktreeDemoMdPath, worktreeDemoRelDir } from './demo-paths.ts';
 import { assertLocalRemoteSynced, checkLocalRemoteSynced, openPullRequest, pushInitiativeBranch } from './pr.ts';
-import { loadProjectConfig } from '@forge/projects/project-config.ts';
+import { loadProjectConfig } from '@forge/projects';
 import { decideFinalCiGate, execCommandVector } from './ci-gate.ts';
-import { resolveGateTimeoutMs } from '@forge/agents/ralph/stop-conditions.ts';
+import { resolveGateTimeoutMs } from '@forge/agents';
 
 // ---------------------------------------------------------------------------
 // openPrInline

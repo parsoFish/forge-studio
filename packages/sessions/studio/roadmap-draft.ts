@@ -10,7 +10,7 @@
  * module takes its readers as a port instead of importing them.
  */import { join } from 'node:path';
 
-import type { InitiativeManifest } from '@forge/contracts/manifest-types.ts';
+import type { InitiativeManifest } from '@forge/contracts';
 
 /** The session dir under which the architect writes its promoted manifests. */
 const MANIFESTS_DIRNAME = 'manifests';

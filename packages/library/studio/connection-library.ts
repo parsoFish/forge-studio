@@ -46,7 +46,7 @@
 
 import { join } from 'node:path';
 
-import { assertSkillSlug } from '@forge/kernel/ids.ts';
+import { assertSkillSlug } from '@forge/kernel';
 import type { AgentFacts } from './agent-facts.ts';
 import { loadCatalog } from './catalog-registry.ts';
 import type {
@@ -55,7 +55,7 @@ import type {
   CatalogConnectionEntry,
   CatalogInstallMethod,
   CatalogProbeSpec,
-} from '@forge/contracts/studio/types.ts';
+} from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // D2 — CONNECTION_KINDS is closed at exactly two values, structural (which

@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 function create(args: string[]): { code: number | null; out: string } {
   const r = spawnSync(process.execPath, ['--experimental-strip-types', 'apps/forge/cli.ts', 'create', ...args], {

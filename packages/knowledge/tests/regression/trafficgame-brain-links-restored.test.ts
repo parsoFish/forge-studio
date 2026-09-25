@@ -25,7 +25,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 import { parseThemeFile } from '../../theme-frontmatter.ts';
 import { checkDanglingEdges } from '../../brain-lint.ts';

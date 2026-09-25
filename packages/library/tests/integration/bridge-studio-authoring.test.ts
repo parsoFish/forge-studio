@@ -38,7 +38,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 import { startBridge } from '../../../../apps/forge/ui-bridge.ts';
 
 // ---------------------------------------------------------------------------

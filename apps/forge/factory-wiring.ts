@@ -27,7 +27,7 @@
  * dynamic and try/caught. `createPhaseExecutor` takes that table by injection
  * (`ClassProfilePort`) — this file is where a factory binds one in.
  */
-import type { PhaseWiring } from '@forge/flows/phase-wiring.ts';
+import type { PhaseWiring } from '@forge/flows';
 import {
   createPhaseExecutor,
   createProjectGate,

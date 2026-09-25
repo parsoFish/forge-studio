@@ -17,14 +17,14 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
 
-import { reqString, optString, reqNumber, reqObject, oneOf, loadYamlWithRaw } from '@forge/kernel/studio/yaml-fields.ts';
+import { reqString, optString, reqNumber, reqObject, oneOf, loadYamlWithRaw } from '@forge/kernel';
 import type {
   CommunitySkill,
   CommunityRegistry,
   CommunityRegistryItem,
   CommunityRegistrySource,
   CommunityRegistrySignals,
-} from '@forge/contracts/studio/types.ts';
+} from '@forge/contracts';
 import { communitySourceKey } from './community-source-url.ts';
 import { extractLeadingCommentBlock, findCommentLinesInBlock } from './yaml-comments.ts';
 

@@ -35,7 +35,7 @@ import { join } from 'node:path';
 
 import { stubArchitectManifestPorts } from '../../tests/architect-ports-stub.ts';
 import { runArchitectTurn, type ArchitectStatus } from '../../kinds/architect.ts';
-import { DEFAULT_IDLE_DEADLINE_MS } from '@forge/agents/stream-deadline.ts';
+import { DEFAULT_IDLE_DEADLINE_MS } from '@forge/agents/testing';
 
 /** The bound these pins advance past, written as a LITERAL on purpose.
  *  Deriving it from `DEFAULT_IDLE_DEADLINE_MS` made the first draft of this

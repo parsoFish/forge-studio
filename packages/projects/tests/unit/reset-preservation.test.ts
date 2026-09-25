@@ -53,7 +53,7 @@ import { fileURLToPath } from 'node:url';
 
 import { computeContractDrift, applyContractReset } from '../../reset.ts';
 import { projectStartersDir } from '@forge/kernel';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 const RESET_SRC_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'reset.ts');
 

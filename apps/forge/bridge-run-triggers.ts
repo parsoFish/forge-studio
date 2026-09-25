@@ -21,12 +21,12 @@ import { join } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError } from '@forge/kernel';
 import { MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
-import { flowRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
-import { getPaths } from '@forge/flows/queue.ts';
-import { persistManifestCostCeiling } from '@forge/flows/manifest.ts';
-import { enqueueDevelopRun } from '@forge/flows/enqueue-develop-run.ts';
-import { enqueuePlanRun } from '@forge/flows/enqueue-plan-run.ts';
-import { enqueueFlowRun } from '@forge/flows/enqueue-flow-run.ts';
+import { flowRoots, resolveIdAcrossRoots } from '@forge/kernel';
+import { getPaths } from '@forge/flows';
+import { persistManifestCostCeiling } from '@forge/flows';
+import { enqueueDevelopRun } from '@forge/flows';
+import { enqueuePlanRun } from '@forge/flows';
+import { enqueueFlowRun } from '@forge/flows';
 import { readJson } from './bridge-http.ts';
 
 /** The context these run-trigger routes need from the host. */

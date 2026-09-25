@@ -15,8 +15,8 @@
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
-import type { MergeGateResult } from '@forge/flows/cycle-helpers.ts';
-import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import type { MergeGateResult } from '@forge/flows';
+import type { CycleInput } from '@forge/flows';
 import type { EventLogger } from '@forge/kernel';
 import type { GateProfile } from '../class-profile-port.ts';
 import { guardedFile } from '@forge/kernel';

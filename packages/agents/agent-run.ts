@@ -35,9 +35,9 @@ import {
 } from './agent-dispatch-cmd.ts';
 import { findSessionProject } from './find-session-project.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
-import { runInteractiveTurn } from '@forge/sessions/interactive-runner.ts';
-import { loadSessionKinds, type SessionKindDescriptor } from '@forge/sessions/studio/session-kinds.ts';
-import { SESSION_KIND_RUNNERS } from '@forge/sessions/kinds/registry.ts';
+import { runInteractiveTurn } from '@forge/sessions';
+import { loadSessionKinds, type SessionKindDescriptor } from '@forge/sessions';
+import { SESSION_KIND_RUNNERS } from '@forge/sessions';
 
 type AgentTurnInput = { sessionId: string; projectRoot: string; forgeRoot?: string };
 type AgentTurnFn = (input: AgentTurnInput) => Promise<unknown>;

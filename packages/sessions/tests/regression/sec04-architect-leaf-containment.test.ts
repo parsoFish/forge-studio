@@ -50,7 +50,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { runArchitectTurn, type QueryFn } from '../../kinds/architect.ts';
-import { loadProjectConfig } from '@forge/projects/project-config.ts';
+import { loadProjectConfig } from '@forge/projects';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

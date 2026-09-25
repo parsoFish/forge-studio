@@ -23,19 +23,19 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { FORGE_ROOT } from '@forge/kernel';
 
-import { resolveNodeKind } from '@forge/flows/flow-runner.ts';
+import { resolveNodeKind } from '@forge/flows';
 import { runFlowT, type TestDeps } from '../test-fixtures/flow-runner-port.ts';
-import { loadAgentDefinition, listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
-import { loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
-import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
-import { validateFlow } from '@forge/flows/studio/validate-flow.ts';
-import { validateAgent } from '@forge/agents/studio/validate-agent.ts';
-import { skillsDir } from '@forge/agents/skill-path.ts';
-import { BAND_GUARD_IDS, BAND_CANONICAL_SLUG, PLATFORM_GUARD_IDS, resolveBandGuard } from '@forge/agents/agent-bands.ts';
-import { runPreflight, SCRATCH_PATHS } from '@forge/projects/preflight.ts';
-import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import { loadAgentDefinition, listAgentDefinitions } from '@forge/agents';
+import { loadFlowDefinition } from '@forge/flows';
+import { loadCatalog } from '@forge/library';
+import { validateFlow } from '@forge/flows';
+import { validateAgent } from '@forge/agents';
+import { skillsDir } from '@forge/agents';
+import { BAND_GUARD_IDS, BAND_CANONICAL_SLUG, PLATFORM_GUARD_IDS, resolveBandGuard } from '@forge/agents';
+import { runPreflight, SCRATCH_PATHS } from '@forge/projects';
+import type { CycleInput } from '@forge/flows';
 import type { EventLogger } from '@forge/kernel';
-import type { FlowNode } from '@forge/contracts/studio/types.ts';
+import type { FlowNode } from '@forge/contracts';
 
 // §15.14: this file moved from orchestrator/ to apps/forge/, so a hand-counted
 // '..' chain now lands in apps/. Anchored on kernel's FORGE_ROOT instead.

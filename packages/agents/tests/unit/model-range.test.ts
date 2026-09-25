@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { rangeTiers } from '../../model-range.ts';
-import type { Catalog } from '@forge/contracts/studio/types.ts';
+import type { Catalog } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // Minimal catalog fixture (haiku < sonnet < opus by cost)

@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 // Handoff P11a, closed by MOVING rather than converting. This test validates
 // the starter FIXTURES against three packages at once — the Agent kind
 // (agents), the Flow kind (flows) and the Catalog kind (library) — so no single
@@ -21,12 +21,12 @@ import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 // row for a strictly worse `package-layer-order` one. Ruling 89 puts a test
 // that needs real cross-package objects FLAT at the assembly, where importing
 // every package is what the assembly is FOR — so the row closes outright.
-import { loadAgentDefinition, listStarterAgents } from '@forge/agents/studio/agent-registry.ts';
-import { loadFlowDefinition, loadStarterFlow } from '@forge/flows/studio/flow-registry.ts';
-import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
-import { validateAgent } from '@forge/agents/studio/validate-agent.ts';
-import { validateFlow } from '@forge/flows/studio/validate-flow.ts';
-import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
+import { loadAgentDefinition, listStarterAgents } from '@forge/agents';
+import { loadFlowDefinition, loadStarterFlow } from '@forge/flows';
+import { loadCatalog } from '@forge/library';
+import { validateAgent } from '@forge/agents';
+import { validateFlow } from '@forge/flows';
+import { agentCapabilityDescriptor } from '@forge/agents';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const STARTERS = join(ROOT, 'studio', 'starters');

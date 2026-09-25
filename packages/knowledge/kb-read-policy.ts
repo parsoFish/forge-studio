@@ -38,7 +38,7 @@
  */
 
 import { resolveKbProcesses } from './studio/kb-descriptor.ts';
-import type { KbDescriptor } from '@forge/contracts/studio/types.ts';
+import type { KbDescriptor } from '@forge/contracts';
 
 /** The one ratified band → reader-role exception (ADR-010 amendment). */
 const RATIFIED_BAND_READER = { band: 'review-band', role: 'reviewer' } as const;

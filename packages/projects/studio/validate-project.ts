@@ -33,8 +33,8 @@
  * reached into from here.
  */
 
-import { type Finding, err, flag } from '@forge/kernel/findings.ts';
-import { PROJECT_ID_RE } from '@forge/kernel/ids.ts';
+import { type Finding, err, flag } from '@forge/kernel';
+import { PROJECT_ID_RE } from '@forge/kernel';
 
 /**
  * Duplicate-id helper — the local copy this package's one caller needs. See

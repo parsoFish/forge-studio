@@ -23,9 +23,9 @@ import { readFileSync } from 'node:fs';
 
 
 import { allowedOrigin, sendJson } from '@forge/kernel';
-import { guardedFile, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel/path-guard.ts';
+import { guardedFile, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel';
 
-import { readAgentInstructionsFile } from '@forge/projects/project-config.ts';
+import { readAgentInstructionsFile } from '@forge/projects';
 
 import { DRAFT_FILENAME, type InstructionsStatus } from './kinds/instructions.ts';
 import { listInstructionsSessions } from './bridge-studio-session-index.ts';

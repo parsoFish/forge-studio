@@ -40,9 +40,9 @@ import {
   runInstructionsTurn,
   instructionsSessionDir,
   type InstructionsStatus,
-} from '@forge/sessions/kinds/instructions.ts';
-import { type QueryFn } from '@forge/sessions/interactive-session.ts';
-import { writeSessionStatus } from '@forge/sessions/interactive-session.ts';
+} from '@forge/sessions';
+import { type QueryFn } from '@forge/sessions';
+import { writeSessionStatus } from '@forge/sessions';
 import { createLogger } from '@forge/kernel';
 
 /** Write `content` to a fresh tmpdir under `<name>` and return the file path.

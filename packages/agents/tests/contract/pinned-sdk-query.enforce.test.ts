@@ -58,7 +58,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 // §15.14 / bead `forge-8vfn.5.47`: anchored on kernel's FORGE_ROOT, never on
 // `'..'` arithmetic from this file's own location. The previous form was

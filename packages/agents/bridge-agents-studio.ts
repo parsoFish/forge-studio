@@ -50,13 +50,13 @@ import {
   SLUG_RE, isReservedId, AGENT_PROVENANCE, resolveDefaultKickoffCeilingUsd,
   loadConfig, defaultConfigPath, type RouteContext,
 } from '@forge/kernel';
-import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
-import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
-import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
-import { checkHookComposition, listHookIds } from '@forge/library/studio/hook-library.ts';
-import { removeInstallLedgerEntry } from '@forge/library/studio/skill-install-ledger.ts';
-import { lintSkillToolFence } from '@forge/library/studio-lint-tool-fence.ts';
-import type { AgentFacts } from '@forge/library/studio/agent-facts.ts';
+import { skillRoots, resolveIdAcrossRoots } from '@forge/kernel';
+import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
+import { loadCatalog } from '@forge/library';
+import { checkHookComposition, listHookIds } from '@forge/library';
+import { removeInstallLedgerEntry } from '@forge/library';
+import { lintSkillToolFence } from '@forge/library';
+import type { AgentFacts } from '@forge/library';
 
 import { PLATFORM_GUARD_IDS } from './agent-bands.ts';
 import { agentsUsing } from './studio/agent-usage.ts';

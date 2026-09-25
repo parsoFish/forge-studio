@@ -46,12 +46,12 @@ import { runAdversarialReview as realRunAdversarialReview } from '../../phases/a
 import { runProjectManager as realRunProjectManager, type PmQueryFn } from '../../phases/project-manager.ts';
 import { buildDevSystemPrompt, resolveDevSpawnModel, DEV_MODEL, DEV_ALLOWED_TOOLS } from '../../phases/dev-binding.ts';
 import { loadAgentSkillText } from '../../phases/agent-skill-text.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { loadAgentDefinition } from '@forge/agents';
+import type { AgentDefinition } from '@forge/contracts';
 import { createLogger } from '@forge/kernel';
-import type { NodeExecContext, NodeRunState } from '@forge/flows/flow-node-context.ts';
-import { WedgeDetector } from '@forge/flows/flow-budgets.ts';
-import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import type { NodeExecContext, NodeRunState } from '@forge/flows';
+import { WedgeDetector } from '@forge/flows';
+import type { StreamQueryFn } from '@forge/agents';
 import { testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
 import {
   makeFixture,

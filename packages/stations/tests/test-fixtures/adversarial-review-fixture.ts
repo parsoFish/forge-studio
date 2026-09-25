@@ -28,8 +28,8 @@ import { runAdversarialReview, type AdversarialReviewResult } from '../../phases
 import { testClassProfilePort } from './class-profile-port-fixture.ts';
 import { canonicalDef } from './canonical-def-fixture.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
-import { serializeWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
-import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import { serializeWorkItem, type WorkItem } from '@forge/flows';
+import type { StreamQueryFn } from '@forge/agents';
 
 export const INIT_ID = 'INIT-2026-07-24-rev';
 export const CYCLE_ID = 'CY-rev-1';

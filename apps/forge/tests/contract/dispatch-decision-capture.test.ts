@@ -108,12 +108,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
-import { isStudioAgent, listAgentDefinitions, loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { listFlowIds, loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
-import { resolveBandGuard, BAND_GUARD_IDS, BAND_CANONICAL_SLUG, type BandGuardId } from '@forge/agents/agent-bands.ts';
-import { resolveNodeKind, flowPathForId } from '@forge/flows/flow-runner.ts';
-import { skillsDir, listSkillMdDirs } from '@forge/agents/skill-path.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { isStudioAgent, listAgentDefinitions, loadAgentDefinition } from '@forge/agents';
+import { listFlowIds, loadFlowDefinition } from '@forge/flows';
+import { resolveBandGuard, BAND_GUARD_IDS, BAND_CANONICAL_SLUG, type BandGuardId } from '@forge/agents';
+import { resolveNodeKind, flowPathForId } from '@forge/flows';
+import { skillsDir, listSkillMdDirs } from '@forge/agents';
+import type { AgentDefinition } from '@forge/contracts';
 import { assertMatchesJsonSnapshot } from '../../../../packages/kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 
 // §15.14: moved from orchestrator/ to apps/forge/, so the '..' chain was one

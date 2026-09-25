@@ -18,7 +18,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { AgentComposition } from '@forge/contracts/studio/types.ts';
+import type { AgentComposition } from '@forge/contracts';
 import type { AgentFacts, ComposableKind, ComposingAgent } from '../../studio/agent-facts.ts';
 
 const EMPTY: AgentComposition = { skills: [], tools: [], mcps: [], guards: [], hooks: [] };
