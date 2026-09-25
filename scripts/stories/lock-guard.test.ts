@@ -99,11 +99,11 @@ test('a path that is NOT a lock yields null — absence is a state, and not the 
   );
 });
 
-test('a CANNOT-CHECK verdict names the path and what it is therefore not enforcing', () => {
+test('m7-d-guard-unknown-audit.md row 12: a CANNOT-CHECK verdict REFUSES and names the path it could not resolve', () => {
   const lock = heldLock();
   lock.release();
   const v = suiteLockVerdict({ [SUITE_LOCK_ENV]: lock.path });
-  assert.equal(v.ok, true, 'an unresolvable path must not block work — a checkout with a bad path still runs');
+  assert.equal(v.ok, false, 'a CONFIGURED-but-missing path must refuse — CANNOT CHECK is UNKNOWN, never folded into ok:true');
   assert.match(v.reason, /CANNOT CHECK/, 'but it must say it could not check, not imply it checked');
   assert.match(v.reason, new RegExp(lock.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'and NAME the path it could not find');
   assert.equal(
