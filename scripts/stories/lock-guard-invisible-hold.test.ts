@@ -16,7 +16,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, realpathSync, statSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join, resolve, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -27,13 +27,17 @@ const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** A fake /proc: `locks` empty (the invisible hold), self 333 → 222 → 111 → 1,
  *  and `openerPid` holding fd 8 on the lock file. */
-function invisibleHoldFixture(openerPid: string) {
+function invisibleHoldFixture(openerPid: string, lockRowPid: string | null = null) {
   const dir = mkdtempSync(join(tmpdir(), 'lg-invisible-'));
   const lock = join(dir, '.suite-lock');
   writeFileSync(lock, '');
   const proc = join(dir, 'proc');
   mkdirSync(proc);
-  writeFileSync(join(proc, 'locks'), '');
+  // lockRowPid: a /proc/locks row whose owner is `lockRowPid` — a standard
+  // kernel keeps listing a flock taken through a shared descriptor under the
+  // EXITED locker's pid (GitHub runner, #911's first CI run: holder pid with
+  // cwd unreadable). null = no row at all (this WSL host).
+  writeFileSync(join(proc, 'locks'), lockRowPid === null ? '' : `1: FLOCK  ADVISORY  WRITE ${lockRowPid} 08:30:${statSync(lock).ino} 0 EOF\n`);
   const chain: Array<[string, string]> = [['333', '222'], ['222', '111'], ['111', '1'], ['444', '1']];
   for (const [pid, ppid] of chain) {
     mkdirSync(join(proc, pid, 'fd'), { recursive: true });
@@ -98,4 +102,20 @@ test('REAL processes, heavy-slot\'s exact shape: `exec 8>lock; flock -n 8` then 
     const v = JSON.parse(out);
     assert.equal(v.ok, true, v.reason);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a /proc/locks row owned by an EXITED pid (standard kernel) + an ancestor opener + a held probe = our hold', () => {
+  const f = invisibleHoldFixture('111', '99999'); // 99999 has no /proc entry: the flock binary that exited
+  try {
+    const v = suiteLockVerdict(env(f.lock), f.proc, '333', { probeHeld: () => true });
+    assert.equal(v.ok, true, v.reason);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+
+test('a LIVE non-ancestor holder in /proc/locks is refused, whatever the ancestor has open', () => {
+  const f = invisibleHoldFixture('111', '444'); // 444 exists in the fake /proc and is not an ancestor
+  try {
+    const v = suiteLockVerdict(env(f.lock), f.proc, '333', { probeHeld: () => true });
+    assert.equal(v.ok, false, v.reason);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
