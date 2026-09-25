@@ -15,7 +15,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync
 import { tmpdir } from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight, DAEMON_PID_FILE } from './sweep-teardown.mjs';
+import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight, stopSchedulerCensusAndRelease, DAEMON_PID_FILE } from './sweep-teardown.mjs';
 
 /**
  * The leading sweep's missing paired restore — T1 ruling 594, half 2.
@@ -273,4 +273,181 @@ test('689(iii) fallback: no in-flight dir, or nothing of ours in it, is silence'
   mkdirSync(join(root, '_queue', 'in-flight'), { recursive: true });
   writeFileSync(join(root, '_queue', 'in-flight', 'INIT-theirs.md'), '---\nproject_repo_path: /elsewhere/projects/x\n---\n');
   assert.deepEqual(releaseOwnInFlight(root), { released: [], failed: [] });
+});
+
+/**
+ * Finding row 75 (T1 rulings 1258, 1332) — `stopOwnScheduler` signals ONLY the
+ * recorded daemon pid, and `spawnAgentTurn` spawns its dispatches `detached:
+ * true` (reap.mjs's header), so a phase agent the daemon started is its OWN
+ * process group and outlives a daemon killed before it drained. Measured: a
+ * heartbeat written back 13s after a runner printed CLEARED, a loop still
+ * committing into the ground 2.7 minutes later. `stopSchedulerCensusAndRelease`
+ * closes this by snapshotting the daemon's descendants BEFORE any signal (the
+ * same reap.mjs 5.45 lesson: once the daemon exits, the kernel reparents its
+ * children as part of that exit, so a walk mounted afterwards can no longer
+ * find them under it), killing them directly, censusing, and only THEN
+ * releasing the queue claim — with a re-read after, because the census cannot
+ * see a writer outside the daemon's own tree.
+ *
+ * Every planted process is cleaned up in `t.after` in the SAME test (T3 rule 9).
+ */
+
+/** A daemon that ignores SIGTERM and, at spawn, forks a detached grandchild
+ *  running `grandchildScript` — writing the grandchild's pid to `ralphPidFile`
+ *  so the test can find and clean it up once its parent is dead. */
+function plantDaemonWithGrandchild(root: string, grandchildScript: string, ralphPidFile: string) {
+  mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
+  const daemon = spawn(process.execPath, ['-e', `
+    const { spawn } = require('node:child_process');
+    const fs = require('node:fs');
+    const child = spawn(process.execPath, ['-e', ${JSON.stringify(grandchildScript)}], {
+      cwd: ${JSON.stringify(root)}, detached: true, stdio: 'ignore',
+    });
+    fs.writeFileSync(${JSON.stringify(ralphPidFile)}, String(child.pid));
+    process.on('SIGTERM', () => {}); // ignored — the daemon itself must be force-killed
+    setInterval(() => {}, 1000);
+  `], { cwd: root, stdio: 'ignore' });
+  writeFileSync(join(root, DAEMON_PID_FILE), String(daemon.pid));
+  return daemon;
+}
+
+/** The `_queue/in-flight/` claim `releaseOwnInFlight` will find as this tree's own. */
+function plantInFlightClaim(root: string) {
+  const dir = join(root, '_queue', 'in-flight');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'INIT-mine.md'), `---\nproject_repo_path: ${join(root, 'projects', 'gitpulse')}\n---\n`);
+  writeFileSync(join(dir, 'INIT-mine.md.heartbeat'), '2026-09-11T07:53:27.192Z');
+  return { manifest: join(dir, 'INIT-mine.md'), heartbeat: join(dir, 'INIT-mine.md.heartbeat') };
+}
+
+function killIfAlive(pid: number) {
+  try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+}
+
+test('finding row 75 RED: the OLD sequence releases the claim while a detached grandchild is still rewriting the heartbeat', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-census-red-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const ralphPidFile = join(root, 'ralph.pid');
+  const { heartbeat } = plantInFlightClaim(root);
+
+  const daemon = plantDaemonWithGrandchild(root, `
+    process.on('SIGTERM', () => {}); // ignored — this is the writer that must be force-killed
+    setInterval(() => { try { require('node:fs').writeFileSync(${JSON.stringify(heartbeat)}, String(Date.now())); } catch {} }, 25);
+    setInterval(() => {}, 1000);
+  `, ralphPidFile);
+  t.after(() => {
+    killIfAlive(daemon.pid!);
+    try { killIfAlive(Number(readFileSync(ralphPidFile, 'utf8'))); } catch { /* never wrote */ }
+  });
+  await new Promise((r) => setTimeout(r, 150)); // let the grandchild's rewrite loop start
+
+  // The OLD sequence, exactly as `run.mjs` ran it before this fix: stop, then
+  // release, with nothing in between confirming the grandchild is gone.
+  const sched = stopOwnScheduler(root, 300);
+  assert.equal(sched.how, 'SIGKILL', 'the daemon ignores SIGTERM and must be force-killed');
+  assert.equal(sched.drained, false);
+  const rel = releaseOwnInFlight(root);
+  assert.ok(rel.released.includes('INIT-mine.md.heartbeat'), 'the old code reports it released');
+
+  await new Promise((r) => setTimeout(r, 100)); // the grandchild's next tick
+  assert.equal(
+    existsSync(heartbeat), true,
+    'RED: the grandchild the daemon spawned outlived it and rewrote the heartbeat the old sequence just released',
+  );
+});
+
+test('finding row 75 DOOR: stopSchedulerCensusAndRelease kills the grandchild, censuses empty, and the release HOLDS', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-census-green-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const ralphPidFile = join(root, 'ralph.pid');
+  const { heartbeat } = plantInFlightClaim(root);
+
+  const daemon = plantDaemonWithGrandchild(root, `
+    process.on('SIGTERM', () => {});
+    setInterval(() => { try { require('node:fs').writeFileSync(${JSON.stringify(heartbeat)}, String(Date.now())); } catch {} }, 25);
+    setInterval(() => {}, 1000);
+  `, ralphPidFile);
+  t.after(() => {
+    killIfAlive(daemon.pid!);
+    try { killIfAlive(Number(readFileSync(ralphPidFile, 'utf8'))); } catch { /* never wrote */ }
+  });
+  await new Promise((r) => setTimeout(r, 150));
+
+  const result = await stopSchedulerCensusAndRelease(root, { graceMs: 300, censusBoundMs: 3000, censusPollMs: 20, rereadDelayMs: 150 });
+
+  assert.equal(result.sched.how, 'SIGKILL');
+  assert.equal(result.sched.drained, false);
+  assert.equal(result.census?.empty, true, `census must settle: ${JSON.stringify(result.census)}`);
+  assert.ok(result.release?.released.includes('INIT-mine.md.heartbeat'));
+  assert.deepEqual(result.release?.reappeared, [], `nothing may reappear: ${JSON.stringify(result.lines)}`);
+  assert.equal(existsSync(heartbeat), false, 'GREEN: the heartbeat stayed cleared — the writer was dead before the release ran');
+
+  const ralphPid = Number(readFileSync(ralphPidFile, 'utf8'));
+  assert.throws(() => process.kill(ralphPid, 0), 'the grandchild must actually be dead, not merely unwritten-to');
+});
+
+test('finding row 75 DOOR (second): a writer OUTSIDE the daemon\'s tree is invisible to the census and caught only by the re-read', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-census-sibling-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const { heartbeat } = plantInFlightClaim(root);
+
+  // A daemon with NO grandchild — the census over its own tree settles empty
+  // immediately. The sibling below is spawned directly by the TEST, sharing no
+  // ancestry with the daemon at all: exactly "a process writing the same path"
+  // that never descended from the run root.
+  mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
+  const daemon = spawn(process.execPath, ['-e', `
+    process.on('SIGTERM', () => {});
+    setInterval(() => {}, 1000);
+  `], { cwd: root, stdio: 'ignore' });
+  writeFileSync(join(root, DAEMON_PID_FILE), String(daemon.pid));
+  t.after(() => killIfAlive(daemon.pid!));
+
+  const sibling = spawn(process.execPath, ['-e', `
+    setInterval(() => { try { require('node:fs').writeFileSync(${JSON.stringify(heartbeat)}, 'sibling'); } catch {} }, 20);
+    setInterval(() => {}, 1000);
+  `], { stdio: 'ignore' });
+  t.after(() => killIfAlive(sibling.pid!));
+  await new Promise((r) => setTimeout(r, 100));
+
+  const result = await stopSchedulerCensusAndRelease(root, { graceMs: 300, censusBoundMs: 2000, censusPollMs: 20, rereadDelayMs: 150 });
+
+  assert.equal(result.census?.empty, true, 'the census is legitimately empty — the sibling is not in the daemon\'s tree');
+  assert.ok(result.release?.released.includes('INIT-mine.md.heartbeat'), 'the release itself still ran');
+  assert.ok(
+    (result.release?.reappeared ?? []).includes('INIT-mine.md.heartbeat'),
+    `the re-read must catch what the census could not: ${JSON.stringify(result.lines)}`,
+  );
+  assert.ok(
+    result.lines.some((l: string) => /RELEASE DID NOT HOLD/.test(l)),
+    'never a silent CLEARED for a path that came back',
+  );
+});
+
+test('finding row 75 DOOR (third): a TERM-respecting grandchild exits within the bound — no escalation needed', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-census-term-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const ralphPidFile = join(root, 'ralph.pid');
+  const cleanExitMarker = join(root, 'clean-exit.marker');
+  const { heartbeat } = plantInFlightClaim(root);
+
+  const daemon = plantDaemonWithGrandchild(root, `
+    process.on('SIGTERM', () => {
+      require('node:fs').writeFileSync(${JSON.stringify(cleanExitMarker)}, 'clean');
+      process.exit(0);
+    });
+    setInterval(() => {}, 1000);
+  `, ralphPidFile);
+  t.after(() => {
+    killIfAlive(daemon.pid!);
+    try { killIfAlive(Number(readFileSync(ralphPidFile, 'utf8'))); } catch { /* already exited, which is the point */ }
+  });
+  await new Promise((r) => setTimeout(r, 150));
+
+  const result = await stopSchedulerCensusAndRelease(root, { graceMs: 300, censusBoundMs: 3000, censusPollMs: 20, rereadDelayMs: 100 });
+
+  assert.equal(result.census?.empty, true);
+  assert.ok(result.census!.waitedMs < 1500, `a TERM-respecting child must not consume the full bound: waited ${result.census!.waitedMs} ms`);
+  assert.equal(existsSync(cleanExitMarker), true, 'the grandchild exited on its own SIGTERM handler, never SIGKILLed');
+  assert.equal(existsSync(heartbeat), false);
 });
