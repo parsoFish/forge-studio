@@ -19,7 +19,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -193,6 +193,34 @@ describe('forge-8vfn.7.6.89 — the alone-rerun is gate.sh\'s own act, never a l
     const r = gate(d, c, {});
 
     assert.doesNotMatch(r.out, /ALONE-RERUN/, `unset GATE_RERUN_ALONE must run no rerun at all: ${r.out}`);
+
+    rmSync(d, { recursive: true, force: true });
+    rmSync(c, { recursive: true, force: true });
+  });
+
+  // M7 findings row 76a. `eval "$cmd"` runs every gate step inside THIS
+  // script's own shell, so a caller that exports GATE_RERUN_ALONE for
+  // gate.sh's own alone-rerun purposes was handing that control var to every
+  // step it runs too — including `npm test`, whose own process spawns the
+  // NESTED gate.sh fixtures above and inherited the ambient var as if each
+  // fixture invocation had asked for it itself. Measured: with
+  // GATE_RERUN_ALONE exported in the invoking shell, `npm test` goes red at
+  // this very file's "no GATE_RERUN_ALONE named" case, because the var was
+  // never gate.sh's to leak. The step's command here records its OWN
+  // environment with a plain `env`, never a fixture that could disagree with
+  // what gate.sh actually exec'd.
+  test('GATE_RERUN_ALONE is scrubbed from every step\'s own environment', () => {
+    const d = tree(['env > env-dump.txt'], {});
+    const c = camp();
+
+    const r = gate(d, c, { GATE_RERUN_ALONE: 'probe.mjs' });
+
+    const dumped = readFileSync(join(d, 'env-dump.txt'), 'utf8');
+    assert.doesNotMatch(
+      dumped,
+      /^GATE_RERUN_ALONE=/m,
+      `gate.sh's own control var leaked into the step's environment: ${r.out}\n---env---\n${dumped}`,
+    );
 
     rmSync(d, { recursive: true, force: true });
     rmSync(c, { recursive: true, force: true });
