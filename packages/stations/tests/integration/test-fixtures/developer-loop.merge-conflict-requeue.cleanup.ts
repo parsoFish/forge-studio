@@ -31,7 +31,7 @@
  * deleted anyway, so ending its writer is safe.
  *
  * M7-C last-flakes #3 (known-flakes.md
- * `packages/factory/tests/integration/developer-loop.merge-conflict-requeue.test.ts:686`,
+ * historical: `packages/factory/tests/integration/developer-loop.merge-conflict-requeue.test.ts:686`,
  * moved to `packages/stations/` — same file): the OTHER three tests in the
  * sibling file call plain `f.cleanup()` with NO known writer — a real,
  * unidentified git straggler from production `mergeAndPublish`/

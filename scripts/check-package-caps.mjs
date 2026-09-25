@@ -88,7 +88,7 @@ export class CorpusUnreadable extends Error {
  * half is `git ls-files --cached --others --exclude-standard`, which names
  * whatever is untracked at that instant — including a transient PROBE file a
  * sibling `node --test` file plants and removes inside one assertion
- * (`check-boundaries.test.ts` used to write `packages/kernel/__assembly_probe__.ts`
+ * (historical: `check-boundaries.test.ts` used to write `packages/kernel/__assembly_probe__.ts`
  * straight into the live tree; `forge-8vfn.5.64`'s `no-live-tree-plants.test.ts`
  * door is the root fix that now stops every POLICED test file from doing
  * that). This is the second, narrower layer the flake's register note also

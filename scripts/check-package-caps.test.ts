@@ -324,7 +324,7 @@ test('forge-8vfn.28: a healthy corpus still returns 0 through the same path', ()
  * `productionFiles()`'s listing — names whatever is untracked in the tree at
  * that instant, including a transient PROBE a sibling `node --test` file
  * plants and removes inside a single `mkdtempSync`-free assertion
- * (`check-boundaries.test.ts` used to write `packages/kernel/__assembly_probe__.ts`
+ * (historical: `check-boundaries.test.ts` used to write `packages/kernel/__assembly_probe__.ts`
  * straight into the live tree before it moved to a fixture root under
  * `forge-8vfn.5.64`'s `no-live-tree-plants.test.ts` door). The corpus listed
  * the probe, this gate's read lost the race, and `measurePackages` raised
