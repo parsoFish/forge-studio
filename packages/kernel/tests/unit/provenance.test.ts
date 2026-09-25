@@ -14,7 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { provenanceOfOrigin, AGENT_PROVENANCE, PROJECT_PROVENANCE } from '../../provenance.ts';
+import { provenanceOfOrigin, AGENT_PROVENANCE, PROJECT_PROVENANCE, originOfHookOrTemplate, SCAFFOLD_TEMPLATE_ORIGIN } from '../../provenance.ts';
 
 test('provenanceOfOrigin maps seed/ootb-library -> ootb, studio -> operator, and everything else -> unknown (kills: a mapping that guesses a badge from an origin it has never seen)', () => {
   const cases: Array<[string | undefined | null, string]> = [
@@ -38,4 +38,27 @@ test('provenanceOfOrigin maps seed/ootb-library -> ootb, studio -> operator, and
 test('the two un-attestable types report the literal unknown token (kills: a constant quietly flipped to ootb/operator, which would fabricate a badge for a type carrying no on-disk origin signal at all)', () => {
   assert.equal(AGENT_PROVENANCE, 'unknown', 'AGENT_PROVENANCE must be the unknown token');
   assert.equal(PROJECT_PROVENANCE, 'unknown', 'PROJECT_PROVENANCE must be the unknown token');
+});
+
+test('originOfHookOrTemplate: only the literal stamped "operator" reads as operator; absent/null/malformed all read as ootb, never a third "unknown" bucket (forge-8vfn.8.3.7 — kills: a mapping that invents unknown for a kind that has exactly two real sources)', () => {
+  const cases: Array<[string | undefined | null, string]> = [
+    ['operator', 'operator'],
+    ['ootb', 'ootb'],
+    [undefined, 'ootb'],
+    [null, 'ootb'],
+    ['', 'ootb'],
+    ['studio', 'ootb'],
+    ['seed', 'ootb'],
+  ];
+  for (const [input, expected] of cases) {
+    assert.equal(
+      originOfHookOrTemplate(input),
+      expected,
+      `originOfHookOrTemplate(${JSON.stringify(input)}) must be ${expected}`,
+    );
+  }
+});
+
+test('SCAFFOLD_TEMPLATE_ORIGIN is the literal ootb token (kills: a constant quietly flipped to operator, which would fabricate operator authorship for a category with no create route at all)', () => {
+  assert.equal(SCAFFOLD_TEMPLATE_ORIGIN, 'ootb', 'SCAFFOLD_TEMPLATE_ORIGIN must be the ootb token');
 });
