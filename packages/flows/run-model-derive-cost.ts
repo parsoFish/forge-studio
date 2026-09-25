@@ -4,7 +4,7 @@
  */
 import type { EventLogEntry } from '@forge/kernel';
 import { sumAuthoritativeCostUsd } from '@forge/kernel';
-import type { RunPhaseMeta } from './run-view-types.ts';
+import type { RunPhaseMeta } from '@forge/contracts';
 import { eventToNodeId } from './run-model-derive-node-id.ts';
 
 // ---------------------------------------------------------------------------

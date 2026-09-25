@@ -606,7 +606,7 @@ export default {
       do: [
         { press: 'back-to-project' },
         {
-          repeat: [{ fill: 'clause-decision-C1b', with: C1B_DECISION }, { press: 'apply-clause-decision' }],
+          repeat: [{ fill: 'clause-decision-C1b', with: C1B_DECISION }, { press: 'apply-clause-decision-C1b' }],
           until: { 'preflight-status': 'ok', 'flow-ready': 'true' },
         },
       ],

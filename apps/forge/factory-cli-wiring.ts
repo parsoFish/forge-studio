@@ -23,7 +23,7 @@ export { requireInstalledFactory };
 
 export type FactoryDemo = {
   readonly captureCheckpoints: typeof import('@forge/factory/demo.ts')['captureCheckpoints'];
-  readonly model: typeof import('@forge/factory/demo-model.ts');
+  readonly model: typeof import('@forge/stations/demo-model.ts');
 };
 
 /** The demo verbs, or `null` when no example is installed. */
@@ -31,7 +31,7 @@ export async function resolveFactoryDemo(): Promise<FactoryDemo | null> {
   try {
     const [demo, model] = await Promise.all([
       import('@forge/factory/demo.ts'),
-      import('@forge/factory/demo-model.ts'),
+      import('@forge/stations/demo-model.ts'),
     ]);
     return { captureCheckpoints: demo.captureCheckpoints, model };
   } catch (err) {
@@ -48,9 +48,9 @@ export async function requireFactoryDemo(verb: string): Promise<FactoryDemo> {
 }
 
 /** `forge gate docs`'s rules (spec §5 item 6), or `null` when no example is installed. */
-export async function resolveDocsGate(): Promise<typeof import('@forge/factory/gates/docs-gate.ts')['runDocsGate'] | null> {
+export async function resolveDocsGate(): Promise<typeof import('@forge/stations/gates/docs-gate.ts')['runDocsGate'] | null> {
   try {
-    return (await import('@forge/factory/gates/docs-gate.ts')).runDocsGate;
+    return (await import('@forge/stations/gates/docs-gate.ts')).runDocsGate;
   } catch (err) {
     if (!isFactoryNotInstalled(err)) throw err;
     return null;
@@ -58,7 +58,7 @@ export async function resolveDocsGate(): Promise<typeof import('@forge/factory/g
 }
 
 /** The same, or a loud usage-error exit — a gate that greens because its rules were missing is the failure this guards. */
-export async function requireDocsGate(verb: string): Promise<typeof import('@forge/factory/gates/docs-gate.ts')['runDocsGate']> {
+export async function requireDocsGate(verb: string): Promise<typeof import('@forge/stations/gates/docs-gate.ts')['runDocsGate']> {
   const gate = await resolveDocsGate();
   if (gate === null) { console.error(`${verb}: ${NO_EXAMPLE_INSTALLED}`); process.exit(2); }
   return gate;

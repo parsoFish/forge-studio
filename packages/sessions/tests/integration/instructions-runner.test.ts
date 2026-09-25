@@ -6,9 +6,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 
 import {
   runInstructionsTurn,
@@ -64,6 +64,17 @@ function setup(overrides?: Partial<InstructionsStatus>): {
 }
 
 const logger = (logsRoot: string, sid: string) => createLogger(`_instructions-${sid}`, logsRoot);
+
+/** The shipped `isContainedProjectRepoPath` guard's contract, stubbed — mirrors
+ *  bridge-studio-session-helpers.test.ts's own `contained` stub (naming the
+ *  real guard even in type position would mint a boundary row: it lives in
+ *  @forge/flows, rank 5 above this package). */
+function containedUnder(allowedRoot: string): (candidate: string, opts: { forgeRoot: string; projectsRoot?: string }) => boolean {
+  return (candidate: string) => {
+    const real = resolve(candidate);
+    return real === allowedRoot || real.startsWith(`${allowedRoot}${sep}`);
+  };
+}
 
 test('interviewing → needs answers: writes questions.json + status awaiting-answers', async () => {
   const { projectRoot, logsRoot, sessionId, sessionDir } = setup();
@@ -155,7 +166,10 @@ test('finalizing: writes the approved draft to <repo>/AGENTS.md + status committ
   const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup({ phase: 'finalizing' });
   writeFileSync(join(sessionDir, DRAFT_FILENAME), '# Demo CLI\n\nBuild: `npm run build`.\n');
 
-  const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn: makeQueryFn({}), logger: logger(logsRoot, sessionId) });
+  const result = await runInstructionsTurn({
+    sessionId, projectRoot, logsRoot, queryFn: makeQueryFn({}), logger: logger(logsRoot, sessionId),
+    isContainedProjectRepoPath: containedUnder(repoPath),
+  });
 
   assert.equal(result.phase, 'committed');
   const agentsPath = join(repoPath, 'AGENTS.md');
@@ -163,6 +177,51 @@ test('finalizing: writes the approved draft to <repo>/AGENTS.md + status committ
   assert.match(readFileSync(agentsPath, 'utf8'), /Demo CLI/);
   assert.equal(result.agentsPath, agentsPath);
   assert.equal(readSessionStatus<InstructionsStatus>(sessionDir)?.phase, 'committed');
+});
+
+test('finalizing refuses loudly when isContainedProjectRepoPath is absent (no silent trust of status.json\'s project_repo_path)', async () => {
+  const { projectRoot, logsRoot, sessionId, sessionDir } = setup({ phase: 'finalizing' });
+  writeFileSync(join(sessionDir, DRAFT_FILENAME), '# Demo CLI\n');
+
+  let error: Error | null = null;
+  try {
+    await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn: makeQueryFn({}), logger: logger(logsRoot, sessionId) });
+  } catch (err) {
+    error = err as Error;
+  }
+  assert.ok(error, 'must throw, not silently trust an unvalidated project_repo_path');
+  assert.ok(error!.message.includes('isContainedProjectRepoPath'), 'message must name the missing port');
+});
+
+test('SEC-03/path-guard CONTRACT: finalizing refuses a FORGED status.project_repo_path outside the allowed roots — nothing written, no git branch op', async () => {
+  const { projectRoot, logsRoot, sessionId, sessionDir } = setup({ phase: 'finalizing' });
+  writeFileSync(join(sessionDir, DRAFT_FILENAME), '# ATTACKER PAYLOAD\n');
+  const allowedRoot = mkdtempSync(join(tmpdir(), 'instr-runner-allowed-'));
+  const outsideRepo = mkdtempSync(join(tmpdir(), 'instr-runner-OUTSIDE-'));
+  // Arrange precondition: the forged status.json now points OUTSIDE the allowed root.
+  const forged = readSessionStatus<InstructionsStatus>(sessionDir);
+  assert.ok(forged, 'arrange: seeded status must be readable before forging it');
+  writeSessionStatus(sessionDir, { ...forged!, project_repo_path: outsideRepo });
+  assert.deepEqual(readdirSync(outsideRepo), [], 'arrange: the forged target must start empty');
+
+  let error: Error | null = null;
+  try {
+    await runInstructionsTurn({
+      sessionId, projectRoot, logsRoot, queryFn: makeQueryFn({}), logger: logger(logsRoot, sessionId),
+      isContainedProjectRepoPath: containedUnder(allowedRoot),
+    });
+  } catch (err) {
+    error = err as Error;
+  }
+
+  assert.ok(error, 'must refuse a project_repo_path outside the allowed roots');
+  assert.ok(error!.message.includes(outsideRepo), 'message must name the offending path');
+  assert.deepEqual(
+    readdirSync(outsideRepo),
+    [],
+    'the forged target must be byte-for-byte untouched — no AGENTS.md written, no .git created by withStudioWrite\'s ' +
+      'checkout -b (the containment check must run BEFORE any write is attempted)',
+  );
 });
 
 test('drafting bakes operator revision feedback into the draft prompt', async () => {

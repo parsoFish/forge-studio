@@ -83,7 +83,7 @@ function mount() {
 }
 
 const q = (sel: string) => container.querySelector(sel);
-const button = () => q('[data-action="apply-clause-decision"]') as HTMLButtonElement;
+const button = () => q('[data-action="apply-clause-decision-C1"]') as HTMLButtonElement;
 
 async function typeDecision(text: string) {
   const textarea = q('[data-field="clause-decision-C1"]') as HTMLTextAreaElement;

@@ -155,7 +155,7 @@ async function runTurnSpecAgent(
   agentId: string,
   descriptor: SessionKindDescriptor,
   args: string[],
-  forgeRoot: string,
+  forgeRoot: string, deps?: AgentDispatchDeps, // bead 8vfn.6.6 item 2 — forwarded to runInteractiveTurn below, same as the legacy branch.
 ): Promise<void> {
   const sessionId = args[0];
   const flagRest = args.slice(1);
@@ -239,7 +239,7 @@ async function runTurnSpecAgent(
   const sessionDir = join(projectRoot, turnSpec.kindDir, sessionId);
   let result: Awaited<ReturnType<typeof runInteractiveTurn>>;
   try {
-    result = await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot });
+    result = await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot, ...(deps?.sessionKind ?? {}) }); // same opaque spread as the legacy-runner branch below.
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // writeSessionTerminalPhase is best-effort (its own try/catch swallows
@@ -278,7 +278,7 @@ export async function cmdAgentRun(rest: string[], forgeRoot: string, deps?: Agen
   if (agentId) {
     const descriptor = findSessionKindDescriptor(agentId, forgeRoot);
     if (descriptor?.turnSpec) {
-      return await runTurnSpecAgent(agentId, descriptor, rest.slice(1), forgeRoot);
+      return await runTurnSpecAgent(agentId, descriptor, rest.slice(1), forgeRoot, deps);
     }
   }
 
