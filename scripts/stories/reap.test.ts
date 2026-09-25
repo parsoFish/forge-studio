@@ -33,13 +33,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import {
-  collectAgentRuns, decideReap, describeReap, descendantsOf, reapAgentRuns, readProcTable, PID_READ_UNKNOWN,
-} from './reap.mjs';
+import { collectAgentRuns, decideReap, describeReap, descendantsOf, reapAgentRuns } from './reap.mjs';
 import {
   readPlantRecord, readLastBeat, plantDiedMessage,
   everyPlantedPidVanished, plantVanishedInWindowMessage,
@@ -114,112 +112,11 @@ test('a session dir with no turn.pid is skipped without throwing', () => {
   assert.deepEqual(runs, []);
 });
 
-test('control: a genuinely absent _logs/ (real ENOENT) yields no runs, exactly as today', () => {
-  const runs = collectAgentRuns('/r', 0, {
-    listDirs: () => {
-      const e = new Error('ENOENT: no such file or directory');
-      e.code = 'ENOENT';
-      throw e;
-    },
-    readPid: () => 1,
-  });
-  assert.deepEqual(runs, []);
-});
-
-test('ROW 101 (RED) / M7-D finding 5: an unreadable (non-ENOENT) _logs/ must NOT empty the whole dispatch set', () => {
-  // The OLD behaviour folded ANY listDirs failure into `[]` — the same shape
-  // as "nothing was ever dispatched". `reapedPids` downstream then reads
-  // vacuously empty and the trailing census/sweep proceeds while a real
-  // dispatched agent may still be alive. A single sentinel row keeps the set
-  // non-empty and refuses to be signalled (PID_READ_UNKNOWN is never a valid
-  // pid), so the gap is reported by name instead of disappearing.
-  const runs = collectAgentRuns('/r', 0, {
-    listDirs: () => {
-      const e = new Error('EACCES: permission denied');
-      e.code = 'EACCES';
-      throw e;
-    },
-    readPid: () => 1,
-  });
-  assert.notDeepEqual(runs, [], 'an unreadable _logs/ must not read the same as an absent one');
-  assert.equal(runs.length, 1);
-  assert.equal(runs[0].pid, PID_READ_UNKNOWN);
-});
-
-test('control: a session dir whose turn.pid is genuinely absent (real ENOENT, no markers) is skipped as today', () => {
-  const runs = collectAgentRuns('/r', 0, {
-    listDirs: () => [{ name: '_agent-x', mtimeMs: 10 }],
-    readPid: () => null, // the real readPidFile default maps ENOENT to null
-  });
-  assert.deepEqual(runs, []);
-});
-
-test('ROW 101 (RED) / M7-D finding 4: a turn.pid unreadable for a reason OTHER than ENOENT is not silently dropped', () => {
-  // Simulates readPidFile's real default via a real EACCES on the file.
-  const root = mkdtempSync(join(tmpdir(), 'reap-pidfile-'));
-  const dir = join(root, '_logs', '_agent-x');
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'turn.pid'), '4242');
-  chmodSync(join(dir, 'turn.pid'), 0o000);
-  try {
-    const runs = collectAgentRuns(root, 0);
-    assert.equal(runs.length, 1, 'the row must not vanish just because markers.length === 0');
-    assert.equal(runs[0].pid, PID_READ_UNKNOWN);
-  } finally {
-    chmodSync(join(dir, 'turn.pid'), 0o644);
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('reapAgentRuns (RED) / M7-D findings 4+5: a PID_READ_UNKNOWN row is refused by name, never silently skipped nor reaped', async () => {
-  const sent = [];
-  const report = await reapAgentRuns([{ dir: '/r/_logs/_unreadable', pid: PID_READ_UNKNOWN, markers: [] }], {
-    ownRoot: '/r',
-    cwdOf: () => '/r',
-    procTable: () => new Map(),
-    kill: (pid, sig) => sent.push([pid, sig]),
-    isAlive: () => false,
-    graceMs: 20,
-    pollMs: 5,
-    sleep: async () => {},
-  });
-  assert.deepEqual(sent, [], 'an unreadable pid must never be signalled on a guess');
-  assert.deepEqual(report.reaped, []);
-  assert.equal(report.skipped.length, 1);
-  assert.match(report.skipped[0].reason, /UNKNOWN|could not be read/i);
-});
-
-test('readProcTable (RED) / ROW 101 M7-D finding 6: a listPids failure is UNKNOWN (null), never an empty table', () => {
-  const table = readProcTable({ listPids: () => { throw new Error('EMFILE'); } });
-  assert.equal(table, null, 'a table build failure must never render as "found nothing"');
-});
-
-test('readProcTable control: a real, empty process listing is a real empty Map, not null', () => {
-  const table = readProcTable({ listPids: () => [], readStat: () => { throw new Error('unused'); } });
-  assert.deepEqual(table, new Map());
-});
-
-test('reapAgentRuns (RED) / ROW 101 M7-D finding 6: a null process table refuses descendant/group claims, never crashes or silently reaps only the root', async () => {
-  const sent = [];
-  const report = await reapAgentRuns([{ dir: '/r/_logs/_agent-a', pid: 7 }], {
-    ownRoot: '/r',
-    cwdOf: () => '/r',
-    procTable: () => null, // simulates a real /proc listing failure
-    kill: (pid, sig) => sent.push([pid, sig]),
-    isAlive: () => false,
-    graceMs: 20,
-    pollMs: 5,
-    sleep: async () => {},
-  });
-  // The recorded root itself is still signalled (cwd-verified provenance does
-  // not depend on the table) — but the pass must NAME that descendants/groups
-  // could not be verified, never silently claim a clean, complete reap.
-  assert.deepEqual(sent, [[7, 'SIGTERM']]);
-  assert.ok(
-    report.skipped.some((s) => /process table|descendant|group/i.test(s.reason)),
-    `expected a named UNKNOWN line about the table: ${JSON.stringify(report.skipped)}`,
-  );
-});
+// ROW 101 / M7-D findings 4, 5 and 6 supersede the old, single "an unreadable
+// _logs/ yields no runs" door here: an unreadable (non-ENOENT) listing is now
+// a distinct, named PID_READ_UNKNOWN row, never folded in with a genuinely
+// absent `_logs/`. Both the ENOENT control and the non-ENOENT RED door live
+// in `reap-unknown.test.ts` — split out to stay under the 800-line cap.
 
 // -------------------------------------------------------------- reapAgentRuns
 

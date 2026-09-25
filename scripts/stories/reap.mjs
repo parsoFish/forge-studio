@@ -189,13 +189,26 @@ function listSessionDirs(logsDir) {
     .map((e) => ({ name: e.name, mtimeMs: statSync(join(logsDir, e.name)).mtimeMs }));
 }
 
-/** Real-filesystem default for {@link collectAgentRuns}. */
+/**
+ * A `turn.pid` (or `_logs/`) read that failed for a reason OTHER than the
+ * path being genuinely absent (ENOENT) — ROW 101 / M7-D findings 4 & 5. Never
+ * a valid pid, so `decideReap`'s own `Number.isInteger` gate would already
+ * refuse it; carried as a distinct value so the row is never silently
+ * dropped the way a genuine "no pid file" is.
+ */
+export const PID_READ_UNKNOWN = 'PID_READ_UNKNOWN';
+
+/** Real-filesystem default for {@link collectAgentRuns}. ENOENT means this
+ *  run never wrote one — an ordinary "no pid", left for the caller's own
+ *  marker check. Any OTHER failure (EACCES, EIO, a truncated read mid-write)
+ *  is NOT the same fact and must never read as "no pid" (ROW 101 / M7-D
+ *  finding 4). */
 function readPidFile(path) {
   try {
     const n = Number.parseInt(readFileSync(path, 'utf8').trim(), 10);
     return Number.isInteger(n) ? n : null;
-  } catch {
-    return null;
+  } catch (e) {
+    return e.code === 'ENOENT' ? null : PID_READ_UNKNOWN;
   }
 }
 
@@ -226,8 +239,13 @@ export function collectAgentRuns(root, sinceMs, deps = {}) {
   let entries;
   try {
     entries = listDirs(logsDir);
-  } catch {
-    return [];
+  } catch (e) {
+    if (e.code === 'ENOENT') return []; // genuinely no _logs yet — nothing was dispatched
+    // ROW 101 / M7-D finding 5 — any OTHER failure must not empty the WHOLE
+    // dispatch set: a single sentinel row keeps it non-empty and unsignalable
+    // (PID_READ_UNKNOWN fails `decideReap`'s own pid check), so the teardown
+    // reports it by name instead of the set silently reading empty.
+    return [{ dir: logsDir, pid: PID_READ_UNKNOWN, markers: [] }];
   }
 
   const runs = [];
@@ -242,6 +260,9 @@ export function collectAgentRuns(root, sinceMs, deps = {}) {
     // with no cwd corroboration to catch it, because this rung waives that
     // check on purpose. Adversarial containment review, 2026-09-03.
     const markers = readMarkers(dir).filter((token) => tokenBelongsToRunDir(token, dir));
+    // A read that failed for a reason OTHER than ENOENT (PID_READ_UNKNOWN)
+    // must not vanish just because this dir also carries no marker token —
+    // ROW 101 / M7-D finding 4.
     if (pid === null && markers.length === 0) continue;
     runs.push({ dir, pid, markers });
   }
@@ -260,7 +281,11 @@ export function collectAgentRuns(root, sinceMs, deps = {}) {
  * itself contain spaces or a `)`, so the fields are taken from after the LAST
  * `)` — never by splitting the whole line.
  *
- * Never throws: this runs inside the run's `finally`.
+ * Never throws: this runs inside the run's `finally`. Returns `null` — never
+ * an empty `Map` — when the listing itself could not be read (ROW 101 / M7-D
+ * finding 6, `reap-census.mjs`'s own `censusSurvivors` pattern): a table that
+ * could not be BUILT must never render the same as one that was built and
+ * found nothing, or a live descendant reads as "no descendants" downstream.
  */
 export function readProcTable(deps = {}) {
   const listPids =
@@ -272,7 +297,7 @@ export function readProcTable(deps = {}) {
   try {
     pids = listPids();
   } catch {
-    return table;
+    return null;
   }
   for (const pid of pids) {
     let raw;
@@ -476,8 +501,27 @@ export async function reapAgentRuns(runs, opts = {}) {
 
   // (1) one snapshot for the whole teardown.
   const table = procTable();
+  // ROW 101 / M7-D finding 6 — a table that could not be built must not
+  // silently stand in for "no descendants": every rung below that depends on
+  // it is skipped, NAMED, rather than reaping only the recorded roots and
+  // reporting that as a complete pass.
+  const tableUnknown = table === null;
+  if (tableUnknown) {
+    skipped.push({
+      pid: null, dir: null,
+      reason: 'the process table could not be read — descendant and process-group provenance are UNKNOWN for this pass; only recorded roots were considered',
+    });
+  }
 
   for (const { dir, pid } of runs) {
+    // ROW 101 / M7-D findings 4 & 5 — a pid file or `_logs/` listing this run
+    // could not read (for a reason other than "genuinely absent") arrives
+    // here as PID_READ_UNKNOWN rather than vanishing; refused by NAME, never
+    // treated as "no pid to reap".
+    if (pid === PID_READ_UNKNOWN) {
+      skipped.push({ pid: null, dir, reason: `${dir}: turn.pid or _logs/ could not be read — provenance UNKNOWN, not reaped` });
+      continue;
+    }
     // (2) the recorded pid gates its whole subtree. A run may have recorded a
     //     marker and no pid (5.50) — there is no root to gate, and its
     //     children are reached by the marker rung below.
@@ -489,9 +533,12 @@ export async function reapAgentRuns(runs, opts = {}) {
       continue;
     }
 
-    // (3) parentage, then the group.
-    const descendants = descendantsOf(pid, table).filter((p) => !claimed.has(p));
-    const groupMembers = groupMembersOf(pid, table);
+    // (3) parentage, then the group — skipped entirely when the table itself
+    // could not be read (tableUnknown, already reported above): guessing "no
+    // descendants" from a table build failure is the exact false EMPTY ROW
+    // 101 guards against.
+    const descendants = tableUnknown ? [] : descendantsOf(pid, table).filter((p) => !claimed.has(p));
+    const groupMembers = tableUnknown ? [] : groupMembersOf(pid, table);
 
     // A group is ours on evidence, never on the assumption that a dead pid was
     // once a leader. Either the recorded pid is present in the snapshot AND
@@ -500,7 +547,7 @@ export async function reapAgentRuns(runs, opts = {}) {
     // one surviving member corroborates by sitting inside the run worktree.
     // Without that corroboration a reused pid could hand us a stranger's group
     // (see groupMembersOf's note on the reuse window), so we decline it.
-    const leaderPresent = table.get(pid)?.pgrp === pid;
+    const leaderPresent = !tableUnknown && table.get(pid)?.pgrp === pid;
     const corroborated = leaderPresent ? groupMembers : groupMembers.filter((m) => isInside(cwdOf(m) ?? '', ownRoot));
     const ownsGroup = leaderPresent || corroborated.length > 0;
     if (ownsGroup) groupLeaders.push(pid);
@@ -600,7 +647,7 @@ export async function reapAgentRuns(runs, opts = {}) {
     const failure = signal(target, 'SIGTERM');
     if (failure === null) continue;
     const killedByOurGroupSignal =
-      aliveBeforeSignals.has(target) && signalledGroups.has(table.get(target)?.pgrp) && !isAlive(target);
+      aliveBeforeSignals.has(target) && !tableUnknown && signalledGroups.has(table.get(target)?.pgrp) && !isAlive(target);
     if (!killedByOurGroupSignal) failures.set(target, failure);
   }
 
