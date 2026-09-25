@@ -25,7 +25,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -50,6 +50,8 @@ import { makeQualityGateFromCmd } from '@forge/agents';
 import { runConcurrentDispatch, type DispatchOutcome } from '@forge/flows';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import { SCRATCH_PATHS } from '@forge/projects';
+
+import { cleanupFixtureRoot } from './test-fixtures/developer-loop.merge-conflict-requeue.cleanup.ts';
 
 const MAX_RETRIES = 1;
 
@@ -89,77 +91,10 @@ type Fixture = {
   cleanup: () => Promise<void>;
 };
 
-/**
- * `rmSync(root, {recursive:true,force:true})`'s `force` suppresses ENOENT
- * (already gone) — never ENOTEMPTY. A git subprocess this fixture's own
- * `push` may have left running against `origin.git` (a receive-pack-
- * triggered auto-gc deciding to detach — `gc.autoDetach`'s own default,
- * disabled below as the primary fix) can still be writing into it a beat
- * after our `git` calls already returned, racing this walk — reproduced
- * deterministically (15/15 in isolation, and red above without this retry)
- * with a controlled concurrent writer (bd forge-8vfn.5.55, known-flakes #9).
- *
- * The retry is scoped to this ONE error code, never a blind "retry until it
- * works": by the time a test reaches teardown its own assertions have
- * already run, so a straggler that finishes within a few hundred ms should
- * not flip an already-passing test to failed (COMMON §15.74's second
- * remedy shape) — but anything OTHER than ENOTEMPTY, or a straggler that
- * has not finished after the budget, still throws.
- *
- * A fixed `delayMs` sleep-and-hope is not honest under load: at proof-suite
- * load 8 the injected straggler (its own 400ms wall-clock write budget)
- * outlived the 5×100ms retry window and threw ENOTEMPTY at 1.8s (bd
- * forge-8vfn.5.55, known-flakes #9, load-8 recurrence). When the caller
- * knows exactly which child process is still writing (`knownWriters` — the
- * straggler test spawns its own), teardown stops guessing at timing
- * entirely: it kills that child and awaits its actual exit before retrying
- * the removal, so the wait is bounded by "is it dead yet", not by a
- * wall-clock budget that starves along with everything else. The disposable
- * fixture is about to be deleted anyway, so ending its writer outright is
- * safe. Callers with no known writer (a real, unidentified git straggler)
- * still fall back to the scoped delay retry as before.
- */
-async function cleanupFixtureRoot(
-  root: string,
-  opts: { knownWriters?: ChildProcess[]; attempts?: number; delayMs?: number } = {},
-): Promise<void> {
-  const { knownWriters = [], attempts = 5, delayMs = 100 } = opts;
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      rmSync(root, { recursive: true, force: true });
-      return;
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      // Scoped to this ONE named teardown error, after this test's own assertions already passed — never a blind retry.
-      if (code !== 'ENOTEMPTY' || attempt === attempts) throw err;
-      if (knownWriters.length > 0) {
-        await Promise.all(knownWriters.map(killAndAwaitExit));
-      } else {
-        await new Promise((resolveWait) => setTimeout(resolveWait, delayMs));
-      }
-    }
-  }
-}
-
-/** Stop a known writer outright and wait for it to actually be gone —
- *  bounded by the OS actually delivering the exit, not by a wall-clock
- *  guess. Already-exited children (checked via `exitCode`/`signalCode`)
- *  resolve immediately; a `kill()` racing a child that exits on its own
- *  between the check and the signal still resolves via the `exit` event. */
-function killAndAwaitExit(child: ChildProcess): Promise<void> {
-  return new Promise((resolveExit) => {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      resolveExit();
-      return;
-    }
-    child.once('exit', () => resolveExit());
-    try {
-      child.kill('SIGKILL');
-    } catch {
-      resolveExit();
-    }
-  });
-}
+// `cleanupFixtureRoot` (the ENOTEMPTY-vs-a-straggler retry, M7-C last-flakes
+// #3) lives in the sibling `.cleanup.ts` file purely to keep this file under
+// its 800-line cap — see that file's docstring for the full incident and
+// mechanism.
 
 function setup(initiativeId: string): Fixture {
   const root = mkdtempSync(join(tmpdir(), 'forge-devloop-requeue-'));
