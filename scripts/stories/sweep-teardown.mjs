@@ -533,6 +533,9 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
  */
 export async function reapCensusAndSweep({
   root, storyId, sinceMs, groundProject, evidenceDir, reapedPids,
+  // M7-D — grounds the sweep must NOT remove yet (a fixture ground is judged
+  // before its teardown); passed straight through to `sweepProductFixtures`.
+  keepProjects,
   quiesce = quiesceWriters, sweep = sweepProductFixtures,
   // Injected exactly like `reapAgentRuns`'s own `procTable`/`kill` seam
   // (reap.mjs) — not for symmetry, but because a fixed or fabricated root
@@ -582,7 +585,7 @@ export async function reapCensusAndSweep({
     return { quiesce: quiesceResult, census, sweep: null, reappearedArtefacts: [], lines, warnLines: [] };
   }
 
-  const sweepResult = sweep(storyId, root, { sinceMs, groundProject, evidenceDir });
+  const sweepResult = sweep(storyId, root, { sinceMs, groundProject, evidenceDir, ...(keepProjects ? { keepProjects } : {}) });
   lines.push(
     ...sweepResult.lines, // 7.6.74: the removals AND the cycle's own queue writes, which no story-id glob reaches
   );
