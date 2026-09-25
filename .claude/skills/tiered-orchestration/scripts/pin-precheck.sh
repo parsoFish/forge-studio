@@ -418,6 +418,13 @@ for m in "$CAMP"/gate-manifests/*.sha256; do
   if [ "$n_actual" -gt 0 ] && [ -n "$pinned_head" ] && ! git -C "$R" merge-base --is-ancestor "$pinned_head" HEAD 2>/dev/null; then
     echo "PIN_PRECHECK_SKEW: $man has $n_actual non-OK from a tree that does not contain $pinned_head, the sha it was last verified at — skew and drift are indistinguishable from here (§15.381). Advance this tree to $pinned_head or later and re-run; do NOT report these as another lane's drift."
     [ "$rc" -eq 0 ] && rc=4
+    # T1 1293 (4c): skew makes the UNDECLARED rows unreadable, not the DECLARED
+    # ones — a declared row that fails here still came true, so it is seen.
+    # Skipping it made the check below refuse "declared and did NOT fail" for
+    # every declared row of every PR gated before the latest reconcile (#892, #904).
+    for p in $actual; do
+      case " $EXPECT " in *" $man:$p "*) echo "PIN_ACCOUNTED $man:$p — declared by this PR (read across skew)"; declared_seen="$declared_seen $man:$p" ;; esac
+    done
     continue
   fi
 

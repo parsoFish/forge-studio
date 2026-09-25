@@ -395,5 +395,30 @@ out="$(bash "$PP" "$T/gate.log" "$T/repo" "$T/camp" --changed-paths-file "$T/c.t
   || bad "not-main control" "rc=$r out=$(printf '%s' "$out" | grep -E 'REFUSED|ACCOUNTED' | head -2)"
 rm -rf "$T"
 
+# 7. (4c) #892/#904: a DECLARED row that fails, in a tree that predates the
+#    manifest's head= (skew), came true — it must be seen, not refused as
+#    "declared and did NOT fail".
+T="$(gitfixture)"; regen_log "$T" 0
+( cd "$T/repo" && echo "this PR's own change" > src/b.ts && git commit -qam "pr change" ) >/dev/null 2>&1
+echo "paths=1 head=abcdef1234567 owner=MINE" > "$T/camp/gate-manifests/MINE.counts"
+echo src/b.ts > "$T/c.txt"
+out="$(bash "$PP" "$T/gate.log" "$T/repo" "$T/camp" --expect-pin-fail MINE:src/b.ts --changed-paths-file "$T/c.txt" 2>&1)"; r=$?
+! printf '%s' "$out" | grep -q 'did NOT fail' && printf '%s' "$out" | grep -q 'PIN_ACCOUNTED MINE:src/b.ts — declared by this PR (read across skew)' && [ "$r" != 3 ] \
+  && ok "a declared row failing across skew is SEEN — never 'declared and did NOT fail' (4c)" \
+  || bad "declared across skew" "rc=$r out=$(printf '%s' "$out" | grep -E 'REFUSED|ACCOUNTED|SKEW' | head -3)"
+rm -rf "$T"
+
+# 8. (row 78 control) the same skewed tree, but the DECLARED row does NOT fail
+#    here (the PR's bytes equal the pin) -> still refused "declared and did NOT
+#    fail": reading declared rows across skew never excuses a false declaration.
+T="$(gitfixture)"; regen_log "$T" 0
+echo "paths=1 head=abcdef1234567 owner=MINE" > "$T/camp/gate-manifests/MINE.counts"
+echo src/b.ts > "$T/c.txt"
+out="$(bash "$PP" "$T/gate.log" "$T/repo" "$T/camp" --expect-pin-fail MINE:src/b.ts --changed-paths-file "$T/c.txt" 2>&1)"; r=$?
+[ "$r" = 3 ] && printf '%s' "$out" | grep -q 'MINE:src/b.ts was declared as an expected pin failure and did NOT fail' \
+  && ok "CONTROL (row 78): skewed tree + a declared row that does NOT fail -> still refused" \
+  || bad "declared-not-failing across skew" "rc=$r out=$(printf '%s' "$out" | grep -E 'REFUSED|ACCOUNTED' | head -2)"
+rm -rf "$T"
+
 printf '\nprecheck-doors: %d ok, %d FAILED\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
