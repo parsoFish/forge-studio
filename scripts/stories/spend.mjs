@@ -290,6 +290,44 @@ export function effectiveCeiling(declaredUsd, fundedUsd) {
 }
 
 /**
+ * Was a beat's own `costless: true` declaration kept? — findings row 61.
+ *
+ * A beat declaring `costless: true` asserts it dispatches nothing at all, so
+ * the runner enforces the assertion the same way `spendCeilingVerdict`
+ * enforces the story's own ceiling: by comparing two MEASURED readings, never
+ * by trusting the declaration. `beforeUsd` is the run's total spend
+ * immediately before this beat ran and `afterUsd` immediately after; a beat
+ * that dispatched nothing leaves the two equal.
+ *
+ * `null` ON EITHER SIDE NEVER RESOLVES TOWARD RED (§15.504). `summariseRunSpend`
+ * returns `usd: null` for UNMEASURED — a dispatch that has not priced itself
+ * yet, or a turn reaped before it could — and there is no number to say moved.
+ * Reddening a beat on an absence would fail a healthy in-flight dispatch at the
+ * very beat boundary that is supposed to prove nothing was dispatched, which is
+ * backwards: an unmeasured reading is a reason to look harder at the run's own
+ * ceiling column, not a verdict this comparison can make for it.
+ *
+ * A DECREASE IS NOT A VIOLATION. The only question this asks is "did spend
+ * GROW inside this beat's own window"; a ledger correction or an accounting
+ * reconciliation moving the total down is not something the beat did.
+ *
+ * @param {number|null} beforeUsd measured spend immediately before this beat ran
+ * @param {number|null} afterUsd measured spend immediately after
+ * @returns {Readonly<{ok: boolean, reason: string|null}>}
+ */
+export function costlessBeatVerdict(beforeUsd, afterUsd) {
+  if (typeof beforeUsd !== 'number' || !Number.isFinite(beforeUsd)
+    || typeof afterUsd !== 'number' || !Number.isFinite(afterUsd)) {
+    return Object.freeze({ ok: true, reason: null });
+  }
+  const spent = afterUsd - beforeUsd;
+  if (spent > 0) {
+    return Object.freeze({ ok: false, reason: `declared costless, spent $${spent.toFixed(4)}` });
+  }
+  return Object.freeze({ ok: true, reason: null });
+}
+
+/**
  * Turns that ENDED with nobody pricing them — bead `forge-8vfn.7.6.71`,
  * T1 ruling 849 option (d).
  *
