@@ -15,7 +15,11 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { driveBeat } from './beats-drive.mjs';
+import { makeCycleTerminalWatch } from './beats-agent-proc.mjs';
 
 // ── M1-H: the post-press wait, and the state it is leaving (bead `forge-8vfn.2.28`)
 //
@@ -666,4 +670,85 @@ test('586 POSITIVE CONTROL: collapsing fragments does not swallow a QUERY differ
   assert.match(said, /id=a/, `it names both candidates: ${said}`);
   assert.match(said, /id=b/, said);
   assert.match(said, /QUERY/, `and now the message is true as written: ${said}`);
+});
+
+// ── forge-8vfn.8.1.4: a STALLED wait must never compose GREEN ──────────────
+//
+// `beatVerdict` at `driveBeat`'s final read is re-derived from a FRESH page
+// read, purely against the beat's `expect.data` — it knows nothing about why
+// the wait that preceded it ended. A beat's plain data attributes (set by the
+// PRESS, not by the thing a declared `terminal` wait is watching FOR) can
+// already answer true the moment the press lands, so a stall that ends the
+// wait early composed with a verdict that had nothing to do with the stall.
+// `named()` used to append the stall's reason only when the verdict was
+// ALREADY red — a beat whose plain expect already held passed straight
+// through, the stall discarded. Bead `forge-8vfn.8.1.4`.
+/** A page standing on ONE route whose `expect.data` answers true from t = 0 —
+ *  S10 beat 10's exact shape, `enqueue-kind: develop` set by the press itself. */
+function answeringPage(route: string) {
+  const locator = (): any => ({
+    first: () => locator(), count: async () => 1, nth: () => locator(),
+    evaluateAll: async (fn: any, a: any) => fn([], a), waitFor: async () => {},
+  });
+  return {
+    url: () => `http://localhost:4124${route}`,
+    locator,
+    goto: async () => {},
+    waitForSelector: async () => {},
+    evaluate: async () => ({
+      data: { page: 'projects', 'project-id': 'gitpulse', 'enqueue-kind': 'develop' },
+      nested: [], lifecycle: null, lifecycleError: null, sessionPhase: null,
+    }),
+  };
+}
+
+test('forge-8vfn.8.1.4: a stalled wait reds the beat even though its plain expect already held at the press', async () => {
+  const initiative = 'INIT-drive-8-1-4';
+  const root = mkdtempSync(join(tmpdir(), 'drive-stall-8-1-4-'));
+  const dispatch = join(root, '_logs', `2026-09-19T00-00-00_${initiative}`);
+  mkdirSync(dispatch, { recursive: true });
+  // A `cycle.start` dated well past any anchor this beat could resolve, so the
+  // door's identity check (`cycleStartedSince`) accepts it unconditionally.
+  writeFileSync(
+    join(dispatch, 'events.jsonl'),
+    `${JSON.stringify({ event_type: 'start', message: 'cycle.start', started_at: new Date(Date.now() + 3_600_000).toISOString() })}\n`,
+  );
+  // The product's own terminal verdict for this cycle: WRONG state.
+  mkdirSync(join(root, '_queue', 'failed'), { recursive: true });
+  writeFileSync(join(root, '_queue', 'failed', `${initiative}.md`), '# failed\n');
+
+  const cycleWatchFor = (wantState: string, cycleOf: string | null) =>
+    makeCycleTerminalWatch(root, wantState, cycleOf === null ? null : { cycleOf });
+
+  const beat = {
+    act: 'Hand the plan to the build flow',
+    expect: {
+      route: '/projects/gitpulse',
+      data: { page: 'projects', 'project-id': 'gitpulse', 'enqueue-kind': 'develop' },
+    },
+    wait: { for: 'agent', terminal: 'ready-for-review', cycleOf: initiative, upTo: 20_000 },
+    say: 'Hand the plan to the build flow and watch the cycle finish.',
+  };
+
+  const v = await driveBeat(
+    answeringPage('/projects/gitpulse') as never,
+    beat as never,
+    1,
+    'http://localhost:4124',
+    {},
+    15_000,
+    null,
+    null,
+    new Map(),
+    cycleWatchFor as never,
+  );
+
+  assert.equal(
+    v.status, 'red',
+    `forge-8vfn.8.1.4: the cycle ended in "failed", not the wanted "ready-for-review" — a stalled wait must ` +
+    `never compose green just because the beat's plain expect.data already answered at the press. Got: ${JSON.stringify(v)}`,
+  );
+  const said = v.failures.join(' | ');
+  assert.match(said, /cycle-ended/, said);
+  assert.match(said, /failed/, said);
 });
