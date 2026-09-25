@@ -115,6 +115,23 @@ test('identifyPid: an unreadable pid is recorded with startTime null, not thrown
   assert.deepEqual(identifyPid('999999', { procRoot: '/no-such-proc-root-reap-census' }), { pid: '999999', startTime: null });
 });
 
+test('identifyPid (RED) / ROW 101 M7-D finding 7: a non-ENOENT stat failure is UNKNOWN, not the same fact as gone', () => {
+  // Real EACCES via chmodSync — the one failure mode a fixture cannot fake,
+  // since Linux enforces it for the owning user too (same technique the
+  // MUST-3 `censusSurvivors` door below already uses on a `status` file).
+  const root = procRootWithStat([{ pid: '100', starttime: 555 }]);
+  chmodSync(join(root, '100', 'stat'), 0o000);
+  try {
+    const id = identifyPid('100', { procRoot: root });
+    assert.equal(id.pid, '100');
+    assert.equal(id.startTime, null);
+    assert.equal(id.unknown, true, `an EACCES read must be marked unknown, not folded into "gone": ${JSON.stringify(id)}`);
+  } finally {
+    chmodSync(join(root, '100', 'stat'), 0o644);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 // ----------------------------------------------------------------- samePid
 
 test('samePid: MUST 2 — a matching start time is the same process', () => {
@@ -368,6 +385,38 @@ test('censusSurvivors: MUST 3 — a read failure OTHER than ENOENT on some candi
     assert.equal(r, null, '102 might descend from 100 through the unreadable 101 — under-reporting it is the false EMPTY this closes');
   } finally {
     chmodSync(join(root, '101', 'status'), 0o644);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('censusSurvivors (RED) / ROW 101 M7-D finding 7: a root identified UNKNOWN at snapshot time refuses the WHOLE census, never silently drops it', () => {
+  // The exact chain the audit named: `identifyPid` recorded `startTime: null`
+  // for a root because ITS OWN stat read hit EACCES (not "gone"). The OLD
+  // `rootIsUsable` treated `startTime === null` as "never usable" regardless
+  // of why — this root would be dropped from `usableRoots` forever, and if it
+  // is the ONLY recorded root, `censusSurvivors` would report `[]` (clean)
+  // around a process that may still be alive and writing.
+  const root = procRootWithStat([{ pid: '100', starttime: 555 }]);
+  try {
+    const unknownRoot = { pid: '100', startTime: null, unknown: true };
+    const r = censusSurvivors([unknownRoot], { procRoot: root, listPids: () => ['100'] });
+    assert.equal(r, null, 'an UNKNOWN identity must refuse the census, never silently read as an empty/clean one');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('censusSurvivors control: a root that is genuinely GONE at snapshot time (startTime null, no unknown flag) is dropped as before, not refused', () => {
+  // The control the mutation test reverts against — ordinary ENOENT-at-record-
+  // time behaviour (a root that had already exited before it was ever
+  // identified) must still resolve exactly as today: a live descendant is
+  // still found via the OTHER usable root.
+  const root = combinedProcRoot([{ pid: '101', ppid: '100', starttime: 20 }]);
+  try {
+    const goneRoot = { pid: '100', startTime: null }; // no `unknown` — genuinely never identified
+    const r = censusSurvivors([goneRoot], { procRoot: root, listPids: () => ['101'] });
+    assert.deepEqual(r, [], 'a merely-absent root (not unknown) must not refuse the census by itself');
+  } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
