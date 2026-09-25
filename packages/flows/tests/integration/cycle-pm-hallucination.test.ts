@@ -22,7 +22,12 @@ import { join, resolve } from 'node:path';
 import { runProjectManager, type PmQueryFn } from '@forge/stations/testing';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import type { CycleInput } from '../../cycle-context.ts';
-import { classifyCycleFailure } from '@forge/agents';
+import { classifyCycleFailure, loadAgentDefinition, skillPath } from '@forge/agents';
+
+// Seam F4: this file lives in packages/flows and may not reach into
+// packages/stations' own test-fixtures (package-layer-order) — loads the
+// canonical project-manager def itself via @forge/agents (rank-safe).
+const canonicalDef = (slug: string) => loadAgentDefinition(skillPath(slug));
 
 const MANIFEST_BODY = `---
 initiative_id: INIT-2026-05-20-pm-decomp-test
@@ -196,7 +201,7 @@ test('runProjectManager: clean pass with 2 WIs succeeds — no retry', async () 
       },
     ]);
 
-    await runProjectManager(h.input, h.logger, { queryFn });
+    await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn });
 
     assert.equal(callCount(), 1, 'expected exactly one SDK pass on a clean run');
 
@@ -228,7 +233,7 @@ test('runProjectManager: zero WIs emitted → throws + emits pm.empty-decomposit
     ]);
 
     await assert.rejects(
-      () => runProjectManager(h.input, h.logger, { queryFn }),
+      () => runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn }),
       /no work items emitted/,
     );
     assert.equal(callCount(), 1, 'expected exactly one SDK pass');
@@ -266,7 +271,7 @@ test('runProjectManager: single WI with explicit depends_on = [] succeeds', asyn
       isChangeClass: (v: unknown) => v === 'code',
       hollowGateGuardFor: () => false,
     } as unknown as NonNullable<NonNullable<Parameters<typeof runProjectManager>[2]>['classProfiles']>;
-    await runProjectManager(h.input, h.logger, { queryFn, classProfiles });
+    await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles });
 
     const events = readEvents(h.logger);
     const end = events.find((e) => e.event_type === 'end' && e.phase === 'project-manager');

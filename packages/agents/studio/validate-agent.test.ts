@@ -454,9 +454,9 @@ describe('validateAgent runtime/loop-strategy', () => {
     assert.ok(findings.some((f) => f.check === 'runtime/loop-strategy' && f.level === 'error'));
   });
 
-  it('ralph on a non-canonical slug → runtime/loop-strategy error', () => {
+  it('ralph is no longer slug-restricted — any def may declare it (seam F4, bands generalised)', () => {
     const findings = validateAgent(inline('some-agent', 'ralph'));
-    assert.ok(findings.some((f) => f.check === 'runtime/loop-strategy' && f.level === 'error'));
+    assert.ok(!findings.some((f) => f.check === 'runtime/loop-strategy'));
   });
 
   it('ralph on developer-ralph is clean; one-shot valid anywhere', () => {
@@ -487,13 +487,13 @@ describe('validateAgent composition/band-guard + budgets/range', () => {
   const bandErrs = (f: Array<{ check: string; level: string }>) =>
     f.filter((x) => x.check === 'composition/band-guard' && x.level === 'error');
 
-  it('a foreign def declaring wi-contract → error (canonical-slug restriction)', () => {
+  it('a foreign def declaring wi-contract → clean (seam F4, band-guard slug restriction lifted)', () => {
     const findings = validateAgent(mk('some-agent', {
       composition: { skills: [], tools: [], mcps: [], hooks: [], guards: ['event-log', 'wi-contract'] },
       runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'one-shot' },
       budgets: { maxTurns: 10, maxBudgetUsd: 1 },
     }));
-    assert.ok(bandErrs(findings).length >= 1);
+    assert.equal(bandErrs(findings).length, 0);
   });
 
   it('two band guards on one def → error; band guard without one-shot/caps → errors', () => {

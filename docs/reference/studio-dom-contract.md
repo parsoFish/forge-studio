@@ -1761,6 +1761,30 @@ is what this contract reads — but it cannot be the only distinguisher.
   revocation is RECORDED in the ledger's `revoked` list — an audit trail,
   never a silent erase; `revokeHookApproval`,
   `packages/library/studio/hook-scan.ts`).
+  **forge-6gv.8.1 (library-10/33).** An unbound hook (`data-carried-by-
+  count="0"`) now states PLAINLY that it cannot fire — "this hook cannot
+  fire until it is bound to an agent" — replacing the earlier neutral "bind
+  it from an agent's builder" copy, now that dispatch (M7-C U2/B6) is real
+  and an unbound hook genuinely can never run; `hookBadges()`
+  (`lib/hook-library-view.ts`) also gains an `'unbound'` badge, rendered on
+  BOTH the `/hooks` index card and `/hooks/[id]`'s own badge row (same
+  generic badge renderer as `'approved'`/`'blocked'`/etc — no new `data-*`
+  attribute, since badges here are text content, not attributes). **Test-
+  fire**, an operator-initiated control that runs the hook for real through
+  the SAME `prepareHookRun` gate production dispatch uses (approval +
+  package pin + env fence, never a bypass) — binding is NOT required,
+  approval IS: `section[data-section="test-fire"][data-test-fire-run-
+  count]`, `[data-action="test-fire-hook"]` (disabled + reasoned via
+  `testFireDisabledReason`, `lib/hook-library-view.ts`, exactly the
+  `disabledAttrs` convention every other primary CTA on this page uses) →
+  `POST /api/studio/hooks/:id/test-fire` (`testFireHook`, `lib/hook-
+  client.ts`); a 409 (unapproved) surfaces inline, never silently. The
+  latest run: `[data-component="test-fire-result"][data-test-fire-outcome]
+  [data-test-fire-exit-code]`. The bounded run history
+  (`bridge-studio-hooks-test-fire.ts`'s per-hook log, newest first, read
+  back onto `GET /api/studio/hooks/:id` as `testFireRuns`): one row per run,
+  `[data-test-fire-run][data-test-fire-at][data-test-fire-outcome]
+  [data-test-fire-event]`.
 - **`/connections`, `/connections/[id]`** (R3-04-F2/F3) — the connections
   pillar: curated tools/MCP servers read from `studio/catalog.yaml`'s
   `tools:`/`mcps:` sections (D2: kind is structural — `tool`|`mcp` — never a

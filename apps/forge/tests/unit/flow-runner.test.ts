@@ -202,11 +202,11 @@ describe('flow-runner full run', () => {
     const origClosure = deps.runClosure;
     const origReflect = deps.runReflector;
 
-    deps.runProjectManager = async (inp, logger) => { seenInputs.push(inp); return origPm(inp, logger); };
-    deps.runDeveloperLoop = async (inp, logger) => { seenInputs.push(inp); return origDev(inp, logger); };
+    deps.runProjectManager = async (inp, logger, ...rest) => { seenInputs.push(inp); return origPm(inp, logger, ...rest); };
+    deps.runDeveloperLoop = async (inp, logger, ...rest) => { seenInputs.push(inp); return origDev(inp, logger, ...rest); };
     deps.openPrInline = async (inp, logger) => { seenInputs.push(inp); return origPr(inp, logger); };
     deps.runClosure = async (inp, logger, ro) => { seenInputs.push(inp); return origClosure(inp, logger, ro); };
-    deps.runReflector = async (inp, logger) => { seenInputs.push(inp); return origReflect(inp, logger); };
+    deps.runReflector = async (inp, logger, ...rest) => { seenInputs.push(inp); return origReflect(inp, logger, ...rest); };
 
     await runFlowT({ flow, input, logger, deps });
 
@@ -673,7 +673,7 @@ describe('flow-runner wedge-kill race', () => {
     let capturedSignal: AbortSignal | undefined;
 
     const deps: TestDepsPartial = {
-      runProjectManager: async (_inp, nodeLogger, sig) => {
+      runProjectManager: async (_inp, nodeLogger, _def, sig) => {
         capturedSignal = sig;
         // Emit a heartbeat to seed the WedgeDetector (starts the progress clock).
         nodeLogger.emit({
@@ -731,7 +731,7 @@ describe('flow-runner wedge-kill race', () => {
     const logger = makeLogger();
 
     const deps: TestDepsPartial = {
-      runProjectManager: async (_inp, nodeLogger, _sig) => {
+      runProjectManager: async (_inp, nodeLogger, _def, _sig) => {
         // Heartbeat → tool progress → resolve after short delay.
         nodeLogger.emit({
           initiative_id: input.initiativeId,
@@ -777,7 +777,7 @@ describe('flow-runner wedge-kill race', () => {
     let capturedSignal: AbortSignal | undefined | 'not-called' = 'not-called';
 
     const deps: TestDepsPartial = {
-      runProjectManager: async (_inp, _logger, sig) => {
+      runProjectManager: async (_inp, _logger, _def, sig) => {
         capturedSignal = sig;
       },
       commitDevLoopBoundary: () => { /* no-op */ },

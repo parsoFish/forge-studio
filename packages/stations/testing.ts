@@ -13,3 +13,11 @@ export { settleWiOutcome, assertOutcomesSettled, type WiOutcome } from './phases
 export { runProjectManager, type PmQueryFn } from './phases/project-manager.ts';
 export { type NodeExecutor, integrateDeliveryFailure } from './phases/executor-table.ts';
 export { deriveDemoModel } from './phases/derive-demo-model.ts';
+export { buildDevSystemPrompt } from './phases/dev-binding.ts';
+export { testClassProfilePort } from './tests/test-fixtures/class-profile-port-fixture.ts';
+export {
+  makeFixture,
+  stubQueryFn,
+  validFindingsJson,
+  type Fixture,
+} from './tests/test-fixtures/adversarial-review-fixture.ts';

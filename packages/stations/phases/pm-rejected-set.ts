@@ -32,6 +32,8 @@ export type RejectionEvent = {
   logger: EventLogger;
   initiativeId: string;
   parentEventId?: string;
+  /** Seam F4: the executing node's own agent slug (`def.slug`), not a literal. */
+  skill: string;
 };
 
 export type QuarantineResult = {
@@ -121,7 +123,7 @@ export function rejectWorkItemSet(
         initiative_id: ev.initiativeId,
         parent_event_id: ev.parentEventId,
         phase: 'project-manager',
-        skill: 'project-manager',
+        skill: ev.skill,
         event_type: 'error',
         input_refs: [workItemsDir],
         output_refs: [q.movedTo],

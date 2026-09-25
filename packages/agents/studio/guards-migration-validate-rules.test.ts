@@ -99,7 +99,7 @@ test('C1: readiness/guard flags empty composition.guards (RED — today the chec
 // C2 — composition/band-guard, sourced from composition.guards
 // ---------------------------------------------------------------------------
 
-test('C2a: a foreign def declaring wi-contract in composition.guards → composition/band-guard error (canonical-slug restriction)', () => {
+test('C2a: a foreign def declaring wi-contract in composition.guards → clean (seam F4, band-guard slug restriction lifted)', () => {
   const findings = validateAgent(
     mk('some-agent', {
       composition: { skills: [], tools: [], mcps: [], hooks: [], guards: ['event-log', 'wi-contract'] },
@@ -108,7 +108,7 @@ test('C2a: a foreign def declaring wi-contract in composition.guards → composi
     }),
   );
   const bandErrs = findings.filter((x) => x.check === 'composition/band-guard' && x.level === 'error');
-  assert.ok(bandErrs.length >= 1, `expected >=1 composition/band-guard error for a foreign guards declarer — got ${JSON.stringify(findings.map((f) => f.check))}`);
+  assert.equal(bandErrs.length, 0, `expected 0 composition/band-guard errors for a non-canonical guards declarer (seam F4) — got ${JSON.stringify(findings.map((f) => f.check))}`);
 });
 
 test('C2b: two band ids in composition.guards → "at most one" error', () => {

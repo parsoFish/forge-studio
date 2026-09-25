@@ -10,7 +10,7 @@ Rank 3 in the allow-graph. It may import `contracts`, `kernel`, `library`,
 import. That is why the route table and the band surface take a deps object
 rather than importing what they need.
 
-## API (63 values)
+## API (64 values)
 
 | seam | exports |
 |---|---|
@@ -26,7 +26,7 @@ rather than importing what they need.
 | declared-skill composition | `makeProjectSkillsLoadedSink` |
 | the agent-slug route helpers | `SAFE_AGENT_SLUG_RE` |
 | studio agent validation | `validateAgent` |
-| model resolution | `modelForSpec` · `resolveSessionModel` · `MODEL_BY_TIER` |
+| model resolution | `modelForSpec` · `resolveSessionModel` · `MODEL_BY_TIER` · `resolveModelTier` |
 | events and classification | `makeToolEventSink` · `extractLiveToolDetails` · `classifyCycleFailure` · `classifyCrash` · `matchesRateLimitSignature` |
 | scope and hooks | `takeScopeSnapshot` · `scopeViolations` · `sdkHooksForAgent` |
 | AGENTS.md and HTTP | `composeAgentsMd` · `agentsRoutes` |

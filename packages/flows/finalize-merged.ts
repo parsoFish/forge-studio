@@ -68,8 +68,15 @@ export type FinalizeDeps = {
    * The factory's reflection turn (ADR 048). REQUIRED and injected: this package
    * declares the port and never imports `@forge/factory`, so that deleting the
    * example package leaves the platform running. Tests inject their own.
+   *
+   * `def` (seam F4, operator item 81/ADR-039 generalisation): the resolved
+   * `on: merged` target's own agent def (`resolveMergeAgentHandler` below
+   * already loads it to read its band guard) — threaded through so the
+   * reflection-close band's system prompt/spawn options read THIS def, never
+   * a hardcoded canonical reflector path, mirroring the live flow dispatch's
+   * `execReflect` (`executor-table.ts`).
    */
-  runReflector: (input: CycleInput, logger: EventLogger) => Promise<unknown>;
+  runReflector: (input: CycleInput, logger: EventLogger, def: AgentDefinition) => Promise<unknown>;
   /**
    * Resolve an agent-target `ref` (slug) to its `AgentDefinition` so the
    * dispatch can read its declared band guard (R4-09-F1: registry-driven, not a
@@ -141,7 +148,7 @@ function defaultLoadAgentDef(ref: string): AgentDefinition {
  */
 function resolveMergeAgentHandler(
   target: TriggerTarget,
-  runReflectorFn: (input: CycleInput, logger: EventLogger) => Promise<unknown>,
+  runReflectorFn: (input: CycleInput, logger: EventLogger, def: AgentDefinition) => Promise<unknown>,
   loadAgentDef: (ref: string) => AgentDefinition,
 ): ((input: CycleInput, logger: EventLogger) => Promise<unknown>) | null {
   if (target.kind !== 'agent') return null;
@@ -151,7 +158,10 @@ function resolveMergeAgentHandler(
   } catch {
     return null;
   }
-  if (resolveBandGuard(def) === 'reflection-close') return runReflectorFn;
+  // Seam F4: thread THIS target's own resolved def into the reflector call —
+  // never a hardcoded canonical slug — so a second factory's own
+  // `reflection-close`-declaring agent runs under its own identity here too.
+  if (resolveBandGuard(def) === 'reflection-close') return (input, logger) => runReflectorFn(input, logger, def);
   return null;
 }
 

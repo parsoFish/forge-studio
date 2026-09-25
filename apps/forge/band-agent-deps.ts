@@ -48,7 +48,7 @@ function asChangeClass(factory: InstalledFactory, value: string): string {
 export const bandAgentDeps: BandAgentDeps = {
   queuePaths: getPaths,
   parseInitiativeManifest: parseManifest,
-  runPipeline: async ({ input, logger, queryFn }) => {
+  runPipeline: async ({ input, logger, queryFn, agentDef }) => {
     // ADR 048: the band pipeline IS the example. Resolved here rather than
     // imported, and its absence refuses loudly — a band dispatch with no
     // pipeline to dispatch to must never look like a completed review.
@@ -57,7 +57,7 @@ export const bandAgentDeps: BandAgentDeps = {
     return await factory.runAdversarialReview(
       { ...input, changeClass: asChangeClass(factory, input.changeClass) as never },
       logger,
-      { queryFn },
+      { queryFn, agentDef },
     );
   },
 };

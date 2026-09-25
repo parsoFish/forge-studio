@@ -41,6 +41,7 @@ import { promoteManifests } from '@forge/flows';
 import { enqueuePlanRun, PLAN_FLOW_ID } from '@forge/flows';
 import { getPaths } from '@forge/flows';
 import { testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
+import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 
 const INITIATIVE_ID = 'INIT-2026-07-18-shared-pipeline';
 
@@ -203,6 +204,7 @@ test('F5: the SAME runProjectManager pass over each entry path\'s manifest produ
       worktreePath: worktree,
     };
     await runProjectManager(inputA, createLogger('TEST-shared-pipeline-a', logsDir), {
+      agentDef: canonicalDef('project-manager'),
       queryFn: makeStubQueryFn(INITIATIVE_ID),
       constraintSourcesRoot: sourcesRoot,
       classProfiles: testClassProfilePort(),
@@ -228,6 +230,7 @@ test('F5: the SAME runProjectManager pass over each entry path\'s manifest produ
       worktreePath: worktree,
     };
     await runProjectManager(inputB, createLogger('TEST-shared-pipeline-b', logsDir), {
+      agentDef: canonicalDef('project-manager'),
       queryFn: makeStubQueryFn(INITIATIVE_ID),
       constraintSourcesRoot: sourcesRoot,
       classProfiles: testClassProfilePort(),

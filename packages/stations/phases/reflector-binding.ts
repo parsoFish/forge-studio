@@ -16,14 +16,12 @@
  * render the structured operator handoff. Stdin/CLI transport is deferred.
  */
 
-import { readFileSync } from 'node:fs';
-
 import { loadBrainIndex } from '@forge/knowledge';
 import { modelForSpec } from '@forge/agents';
 import { deriveAgentSpec } from '@forge/agents';
-import { skillPath, skillPathRelative } from '@forge/agents';
-
-const SKILL_PATH = skillPath('reflector');
+import { skillPathRelative } from '@forge/agents';
+import type { AgentDefinition } from '@forge/contracts';
+import { loadAgentSkillText } from './agent-skill-text.ts';
 
 export type ReflectorAllowedTool = 'Read' | 'Grep' | 'Glob' | 'Write' | 'Edit' | 'Bash';
 export type ReflectorDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
@@ -45,13 +43,6 @@ export const REFLECTOR_DISALLOWED_TOOLS = reflectorAgentSpec.disallowedTools as 
  * Behavior-preserving: resolves to `claude-sonnet-4-6` — same as before.
  */
 export const REFLECTOR_MODEL = modelForSpec(reflectorAgentSpec);
-
-let cachedSkillText: string | null = null;
-function loadSkillText(): string {
-  if (cachedSkillText !== null) return cachedSkillText;
-  cachedSkillText = readFileSync(SKILL_PATH, 'utf8');
-  return cachedSkillText;
-}
 
 let cachedBrainIndex: string | null = null;
 let cachedBrainIndexCwd: string | null = null;
@@ -89,10 +80,10 @@ function loadBrainNavigation(cwd: string): string {
  * intent lives in SKILL.md; per-cycle data (cycle id, manifest paths, worktree
  * paths) goes in the user prompt only.
  *
- * @param brainCwd - directory containing `brain/`. For the bench this is the
- *   tempdir (with symlinked brain/); for the live cycle this is the forge root.
+ * @param brainCwd - directory containing `brain/`. Bench: tempdir; live: forgeRoot.
+ * @param def - the executing node's own agent def (seam F4) — no default (no fallback).
  */
-export function buildReflectorSystemPrompt(brainCwd: string): string {
+export function buildReflectorSystemPrompt(brainCwd: string, def: AgentDefinition): string {
   return [
     '# Brain navigation index',
     '',
@@ -102,9 +93,9 @@ export function buildReflectorSystemPrompt(brainCwd: string): string {
     '',
     '---',
     '',
-    '# reflector skill contract',
+    `# ${def.slug} skill contract`,
     '',
-    loadSkillText(),
+    loadAgentSkillText(def),
   ].join('\n');
 }
 

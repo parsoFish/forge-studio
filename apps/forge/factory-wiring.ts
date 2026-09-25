@@ -113,7 +113,10 @@ export async function resolveInstalledFactory(): Promise<InstalledFactory | null
         executor: createPhaseExecutor({ classProfiles: classProfilePort }),
         projectGate: createProjectGate(),
         runClosure: defaultRunClosure,
-        runReflector,
+        // Seam F4: thread the caller's resolved def (finalize-merged.ts's
+        // resolveMergeAgentHandler) into reflector.ts's own ReflectorDeps —
+        // never a hardcoded canonical path.
+        runReflector: (input, logger, def) => runReflector(input, logger, { agentDef: def }),
       },
       singleWiAllowed(changeClass: string): boolean | null {
         const profile = (classProfiles.CLASS_PROFILES as Record<string, { singleWiAllowed: boolean } | undefined>)[changeClass];

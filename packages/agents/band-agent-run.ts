@@ -64,6 +64,7 @@ import { loadAgentDefinition } from './studio/agent-registry.ts';
 import { skillPath } from './skill-path.ts';
 import { resolveBandGuard } from './agent-bands.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
+import type { AgentDefinition } from '@forge/contracts';
 
 /** Band-guard slugs runnable standalone → pipeline kind. `demo-agent` came off when its band stopped
  *  spawning a model (§5 item 4): its SKILL.md is a declaration carrier, and a carrier has no turn to re-run. */
@@ -119,6 +120,8 @@ export type BandPipelineCall = {
   input: BandPipelineInput;
   logger: EventLogger;
   queryFn?: StreamQueryFn | undefined;
+  /** Seam F4: the requested slug's own def, resolved here (no flow node to read it from). */
+  agentDef: AgentDefinition;
 };
 
 /**
@@ -264,6 +267,9 @@ export async function runBandAgentStandalone(
     );
   }
   if (!opts.runId) throw new Error('runBandAgentStandalone: runId is required (the isolated run identity)');
+  // Seam F4: this surface names its own slug explicitly (the operator's `forge
+  // agent <slug>`) — load THAT def and thread it, never a hardcoded canonical one.
+  const agentDef = loadAgentDefinition(skillPath(opts.slug));
   const forgeRoot = opts.forgeRoot ? resolve(opts.forgeRoot) : resolve('.');
   const logsRoot = opts.logsRoot ? resolve(opts.logsRoot) : join(forgeRoot, '_logs');
   const queueRoot = opts.queueRoot ? resolve(opts.queueRoot) : join(forgeRoot, '_queue');
@@ -312,6 +318,7 @@ export async function runBandAgentStandalone(
     },
     logger,
     queryFn: opts.queryFn,
+    agentDef,
   });
 
   base.emit({

@@ -23,6 +23,7 @@ import { createLogger, type EventLogEntry } from '@forge/kernel';
 import type { CycleInput } from '@forge/flows';
 import { parseManifest } from '@forge/flows';
 import { testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
+import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 
 const MANIFEST_BODY = `---
 initiative_id: INIT-2026-06-06-pm-contract-test
@@ -154,7 +155,7 @@ test('A2a: acceptance_gate.required + no live-acc WI → PM pass fails', async (
   try {
     const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }, { wiId: 'WI-2' }]);
     await assert.rejects(
-      () => runProjectManager(h.input, h.logger, { queryFn, classProfiles: testClassProfilePort() }),
+      () => runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() }),
       /no acceptance work item/,
     );
     const events = readEvents(h.logger);
@@ -184,7 +185,7 @@ test('A2a: acceptance_gate.required + a matching live-acc WI → PM pass succeed
       { wiId: 'WI-1' },
       { wiId: 'WI-2', filename: 'azuredevops/internal/acceptancetests/resource_foo_test.go', gate: ACC_GATE },
     ]);
-    await runProjectManager(h.input, h.logger, { queryFn, classProfiles: testClassProfilePort() });
+    await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() });
     const events = readEvents(h.logger);
     const end = events.find((e) => e.phase === 'project-manager' && e.event_type === 'end');
     assert.ok(end, 'expected a successful pm.end event');
@@ -203,7 +204,7 @@ test('R4-05-F2: a successful PM pass persists specs (the produced work_item_ids)
       { wiId: 'WI-1' },
       { wiId: 'WI-2', filename: 'azuredevops/internal/acceptancetests/resource_foo_test.go', gate: ACC_GATE },
     ]);
-    await runProjectManager(h.input, h.logger, { queryFn, classProfiles: testClassProfilePort() });
+    await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() });
     const manifest = parseManifest(readFileSync(h.input.manifestPath, 'utf8'));
     assert.deepEqual(manifest.specs, ['WI-1', 'WI-2']);
   } finally {
@@ -220,7 +221,7 @@ test('R4-05-F2: a failed PM pass (accGateViolation) does NOT persist specs onto 
     // Neither WI's gate matches "acceptancetests" — same fixture as the
     // "no live-acc WI → PM pass fails" test above.
     const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }, { wiId: 'WI-2' }]);
-    await assert.rejects(() => runProjectManager(h.input, h.logger, { queryFn, classProfiles: testClassProfilePort() }));
+    await assert.rejects(() => runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() }));
     const manifest = parseManifest(readFileSync(h.input.manifestPath, 'utf8'));
     assert.equal(manifest.specs, undefined, 'a failed pass must leave the manifest specs list untouched');
   } finally {
@@ -238,7 +239,7 @@ test('R4-05-T4: a flagged (under-covered) decomposition still succeeds and emits
     // *looks* successful (valid WI set, no gate violations) but under-covers
     // the stated scope. This must NOT block the pass.
     const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }]);
-    await runProjectManager(h.input, h.logger, { queryFn, classProfiles: testClassProfilePort() }); // no throw — dispatch NOT blocked
+    await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() }); // no throw — dispatch NOT blocked
 
     const events = readEvents(h.logger);
     const completenessEvent = events.find((e) => e.message === 'plan.completeness');
@@ -267,7 +268,7 @@ test('A2a: no acceptance_gate config → no live-acc requirement (other projects
   const h = setupHarness({ ...BASE_CONFIG });
   try {
     const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }]);
-    await runProjectManager(h.input, h.logger, { queryFn, classProfiles: testClassProfilePort() }); // no throw
+    await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() }); // no throw
   } finally {
     rmSync(h.dir, { recursive: true, force: true });
   }
@@ -280,7 +281,7 @@ test('A2b: standing_work_item_acs are appended to every WI body, exactly once', 
   });
   try {
     const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }, { wiId: 'WI-2' }]);
-    await runProjectManager(h.input, h.logger, { queryFn, classProfiles: testClassProfilePort() });
+    await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() });
     for (const wi of ['WI-1', 'WI-2']) {
       const body = readFileSync(resolve(h.worktree, '.forge', 'work-items', `${wi}.md`), 'utf8');
       assert.match(body, /## Standing acceptance criteria \(project contract\)/);
@@ -308,7 +309,7 @@ test('WS-A: releaseProcess in-cycle changelog step → draft-changelog AC on eve
   });
   try {
     const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }, { wiId: 'WI-2' }]);
-    await runProjectManager(h.input, h.logger, { queryFn, classProfiles: testClassProfilePort() });
+    await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() });
     for (const wi of ['WI-1', 'WI-2']) {
       const body = readFileSync(resolve(h.worktree, '.forge', 'work-items', `${wi}.md`), 'utf8');
       assert.match(body, /## Standing acceptance criteria \(project contract\)/);
@@ -328,7 +329,7 @@ test('WS-A: no releaseProcess → no draft-changelog AC (non-release projects un
   const h = setupHarness({ ...BASE_CONFIG });
   try {
     const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }]);
-    await runProjectManager(h.input, h.logger, { queryFn, classProfiles: testClassProfilePort() });
+    await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() });
     const body = readFileSync(resolve(h.worktree, '.forge', 'work-items', 'WI-1.md'), 'utf8');
     assert.doesNotMatch(body, /DRAFT CHANGELOG/);
     // With no standing ACs and no release process, the section is absent entirely.
@@ -383,7 +384,7 @@ test('M2-3 as amended by plan 2.11: 0 agent brain reads no longer aborts — inj
     })();
   };
   try {
-    await runProjectManager(h.input, h.logger, { queryFn: noBrainQueryFn, classProfiles: testClassProfilePort() });
+    await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn: noBrainQueryFn, classProfiles: testClassProfilePort() });
     const events = readEvents(h.logger);
     assert.equal(
       events.filter((e) => e.message === 'project-manager.brain-skipped').length,
@@ -433,7 +434,7 @@ test('ADR-037: malformed constraint block in profile.md → controlled PM failur
 
     const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }]);
     await assert.rejects(
-      () => runProjectManager(h.input, h.logger, { queryFn, constraintSourcesRoot: sourcesRoot, classProfiles: testClassProfilePort() }),
+      () => runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, constraintSourcesRoot: sourcesRoot, classProfiles: testClassProfilePort() }),
       /project-manager phase failed:[\s\S]*missing mandatory id/,
     );
 
@@ -470,7 +471,7 @@ test('ADR-037: valid constraint block is injected through the full PM pass into 
 
     const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }, { wiId: 'WI-2' }]);
     // Must not throw: injection happens, then the injected set validates green.
-    await runProjectManager(h.input, h.logger, { queryFn, constraintSourcesRoot: sourcesRoot, classProfiles: testClassProfilePort() });
+    await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, constraintSourcesRoot: sourcesRoot, classProfiles: testClassProfilePort() });
 
     for (const wiId of ['WI-1', 'WI-2']) {
       const onDisk = readFileSync(resolve(h.worktree, '.forge', 'work-items', `${wiId}.md`), 'utf8');
@@ -496,7 +497,7 @@ test('ADR-037: WI with neither creates nor verification_artifact → compileErro
   try {
     const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1', omitCreates: true }]);
     await assert.rejects(
-      () => runProjectManager(h.input, h.logger, { queryFn, classProfiles: testClassProfilePort() }),
+      () => runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() }),
       /project-manager phase failed:[\s\S]*creates is required \(ADR 037\)/,
     );
 
@@ -528,7 +529,7 @@ test('a PM pass emits brain.read naming the KB it read (cycles) and a real theme
   const h = setupHarness(BASE_CONFIG);
   try {
     const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }]);
-    await runProjectManager(h.input, h.logger, { queryFn, classProfiles: testClassProfilePort() });
+    await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() });
     const events = readEvents(h.logger);
     const reads = events.filter((e) => e.message === 'brain.read');
     assert.equal(reads.length, 1, `expected exactly one brain.read event (one per KB touched), got ${JSON.stringify(reads)}`);

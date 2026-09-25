@@ -55,9 +55,14 @@ door.
 `WiOutcome` (`phases/developer-loop.ts`), `runProjectManager`/`PmQueryFn`
 (`phases/project-manager.ts`), `NodeExecutor`/`integrateDeliveryFailure`
 (`phases/executor-table.ts`, beyond what the main door already exports from
-that file) and `deriveDemoModel` (`phases/derive-demo-model.ts`) — each has
-no production consumer outside this package, only `apps/forge` and
-`packages/flows` tests reach for them.
+that file), `deriveDemoModel` (`phases/derive-demo-model.ts`),
+`buildDevSystemPrompt` (`phases/dev-binding.ts`), `testClassProfilePort`
+(`tests/test-fixtures/class-profile-port-fixture.ts`) and
+`makeFixture`/`stubQueryFn`/`validFindingsJson`/`Fixture`
+(`tests/test-fixtures/adversarial-review-fixture.ts`) — each has no
+production consumer outside this package, only `apps/forge`'s
+`second-factory.test.ts` (the G3 proof) and `packages/flows` tests reach for
+them.
 
 ## What is inside
 

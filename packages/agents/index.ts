@@ -35,7 +35,7 @@ export {
   loadAgentDefinition, listAgentDefinitions, isStudioAgent, isUnfilteredStudioAgent, listStarterAgents,
   PHASE_EXECUTOR_KINDS,
 } from './studio/agent-registry.ts';
-export { deriveAgentSpec, agentCapabilityDescriptor } from './studio/derive.ts';
+export { deriveAgentSpec, agentCapabilityDescriptor, resolveModelTier } from './studio/derive.ts';
 export { serializeAgentDefinition } from './studio/skill-md-fidelity.ts';
 
 /**

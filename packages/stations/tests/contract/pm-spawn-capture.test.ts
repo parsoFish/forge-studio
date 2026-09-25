@@ -48,6 +48,7 @@ import { createLogger } from '@forge/kernel';
 import type { CycleInput } from '@forge/flows';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 import { testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
+import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 
 const FIXTURE_PATH = resolve(import.meta.dirname, '..', '..', '..', '..', 'packages', 'kernel', 'tests', 'test-fixtures', 'spawn-capture', 'pm.json');
 
@@ -128,7 +129,7 @@ Body for WI-1.
       })();
     };
 
-    await runProjectManager(input, logger, { queryFn, classProfiles: testClassProfilePort() });
+    await runProjectManager(input, logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() });
 
     assert.ok(captured, 'queryFn must have been invoked exactly once with the spawn call');
     const normalized = normalizeForSnapshot(captured, [{ value: dir, placeholder: '<TMP>' }]);

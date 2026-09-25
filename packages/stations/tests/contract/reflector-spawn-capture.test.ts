@@ -54,6 +54,7 @@ import { createLogger } from '@forge/kernel';
 import type { CycleInput } from '@forge/flows';
 import type { RunBrainLintResult } from '@forge/knowledge';
 import { acquireIsolatedReflectorLease } from '../test-fixtures/reflector-lease-test-fixture.ts';
+import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
@@ -123,6 +124,7 @@ test('runReflector: pins the exact {prompt, options} spawn call (characterizatio
       sdkQuery: capturingSdkQuery,
       brainLint: cleanLint,
       acquireBrainWriteLease: acquireIsolatedReflectorLease,
+      agentDef: canonicalDef('reflector'),
     });
     assert.equal(result.reflection_status, 'closed', 'sanity: the stubbed pass must close cleanly');
 

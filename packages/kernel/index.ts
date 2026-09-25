@@ -82,3 +82,5 @@ export * from './studio-object.ts';
 /** The shared YAML-field readers (`reqString`, `optString`, `loadYaml`, …)
  *  every studio registry parses its catalog files with. */
 export * from './studio/yaml-fields.ts';
+/** A small, per-key JSON-array log with bounded retention (forge-6gv.8.1). */
+export * from './bounded-log.ts';

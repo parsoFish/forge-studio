@@ -45,6 +45,7 @@ import {
   DECOMPOSITION_STATE_FILENAME,
 } from '../../phases/pm-binding.ts';
 import { testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
+import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
 
@@ -292,7 +293,7 @@ test('runProjectManager: prompt carries inlined manifest + brain context + tree 
       brainRead: false, // agent reads NO brain files â€” injection must carry the gate
     });
 
-    await runProjectManager(h.input, h.logger, { queryFn, classProfiles: testClassProfilePort() });
+    await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() });
 
     const prompt = capturedPrompt();
     assert.ok(prompt.includes(MANIFEST_SECTION_HEADER), 'prompt should inline the manifest');
@@ -342,7 +343,7 @@ test('runProjectManager: capped mid-decomposition with a partial usable WI set â
       brainRead: true,
     });
 
-    await assert.rejects(() => runProjectManager(h.input, h.logger, { queryFn, classProfiles: testClassProfilePort() }), /project-manager phase failed/);
+    await assert.rejects(() => runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() }), /project-manager phase failed/);
 
     const events = readEvents(h.logger);
     const partial = events.find((e) => e.message === 'pm.partial-decomposition');
@@ -376,7 +377,7 @@ test('runProjectManager: capped but checkpoint-complete valid set still succeeds
       brainRead: true,
     });
 
-    await runProjectManager(h.input, h.logger, { queryFn, classProfiles: testClassProfilePort() });
+    await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() });
 
     const events = readEvents(h.logger);
     assert.equal(events.filter((e) => e.message === 'pm.partial-decomposition').length, 0);
@@ -392,7 +393,7 @@ test('runProjectManager: capped with zero WIs stays pm.empty-decomposition (term
   try {
     const { queryFn } = makeStubQueryFn({ wis: [], resultSubtype: 'error_max_turns', brainRead: true });
 
-    await assert.rejects(() => runProjectManager(h.input, h.logger, { queryFn, classProfiles: testClassProfilePort() }));
+    await assert.rejects(() => runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() }));
 
     const events = readEvents(h.logger);
     assert.ok(events.find((e) => e.message === 'pm.empty-decomposition'));
@@ -418,7 +419,7 @@ test('runProjectManager: emits pm.turn-budget-warning once when streamed turns c
       filerTurns: 65, // > 80% of the 70-turn live cap
     });
 
-    await runProjectManager(h.input, h.logger, { queryFn, classProfiles: testClassProfilePort() });
+    await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() });
 
     const events = readEvents(h.logger);
     const warnings = events.filter((e) => e.message === 'pm.turn-budget-warning');
@@ -441,7 +442,7 @@ test('runProjectManager: no turn-budget warning on a short run', async () => {
       filerTurns: 5,
     });
 
-    await runProjectManager(h.input, h.logger, { queryFn, classProfiles: testClassProfilePort() });
+    await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() });
 
     const events = readEvents(h.logger);
     assert.equal(events.filter((e) => e.message === 'pm.turn-budget-warning').length, 0);

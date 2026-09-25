@@ -17,6 +17,7 @@ import {
   renderDevUserPrompt,
 } from '../../phases/dev-binding.ts';
 import { modelForSpec } from '@forge/agents';
+import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 
 // ---------------------------------------------------------------------------
 // devAgentSpec shape
@@ -76,7 +77,7 @@ test('DEV_DISALLOWED_TOOLS bans web tools', () => {
 // System prompt — SKILL.md carries all intent (table-driven)
 // ---------------------------------------------------------------------------
 
-const SYS = buildDevSystemPrompt('/tmp/fake-brain-cwd');
+const SYS = buildDevSystemPrompt('/tmp/fake-brain-cwd', canonicalDef('developer-ralph'));
 
 test('buildDevSystemPrompt: contains all key invariants', () => {
   // Substantive

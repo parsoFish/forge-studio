@@ -33,7 +33,7 @@ rule is the target, not a description of today.
 
 ### Types
 
-`ClosureResult` · `CouplingPair` · `CronTriggerPayload` · `CycleInput` · `CycleOutcome` · `DispatchOutcome` · `FlowRunArgs` · `FlowRunRequest` · `LintStatus` · `MergeConflictDetail` · `MergeGateEvidence` · `MergeGateResult` · `MergeQueue` · `NodeExecContext` · `NodeKind` · `PushResult` · `QueuePaths` · `QueueState` · `ReflectMode` · `ReflectionStatus` · `ReflectorPhaseResult` · `ReleaseFinalizeHookInput` · `ReleaseFinalizePhaseResult` · `ReviewFinding` · `ReviewFindingsRecord` · `ReviewerOutcome` · `Run` · `StudioPostContext` · `TriggerCheckOpts` · `TriggerPayload` · `WebhookPushPayload` · `WorkItem` · `PhaseWiring` · `ReviewComment` · `AcceptanceCriterion` · `ReviewCommentsSidecar` · `NewReviewComment` · `DerivedVerdict` · `CycleMetrics` · `FlowHeadShape` · `ReviewFindingsExpectation`
+`ClosureResult` · `CouplingPair` · `CronTriggerPayload` · `CycleInput` · `CycleOutcome` · `DispatchOutcome` · `FlowRunArgs` · `FlowRunRequest` · `LintStatus` · `MergeConflictDetail` · `MergeGateEvidence` · `MergeGateResult` · `MergeQueue` · `NodeExecContext` · `NodeKind` · `NodeRunState` · `PushResult` · `QueuePaths` · `QueueState` · `ReflectMode` · `ReflectionStatus` · `ReflectorPhaseResult` · `ReleaseFinalizeHookInput` · `ReleaseFinalizePhaseResult` · `ReviewFinding` · `ReviewFindingsRecord` · `ReviewerOutcome` · `Run` · `StudioPostContext` · `TriggerCheckOpts` · `TriggerPayload` · `WebhookPushPayload` · `WorkItem` · `PhaseWiring` · `ReviewComment` · `AcceptanceCriterion` · `ReviewCommentsSidecar` · `NewReviewComment` · `DerivedVerdict` · `CycleMetrics` · `FlowHeadShape` · `ReviewFindingsExpectation`
 
 ## Three things this door is not
 

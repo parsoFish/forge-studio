@@ -289,6 +289,53 @@ case "$link" in
   *) echo "BORROWED node_modules — this tree is running another tree's install; verdict void (§15.13)"; exit 2 ;;
 esac
 
+# ---- WORKSPACE LINK PREFLIGHT (M7 findings row 79) -------------------------
+# The kernel-only check above voids a verdict when node_modules/@forge/kernel
+# is BORROWED, but a worktree whose install merely PREDATES a package added
+# on main has no borrowed link at all — it has NO link, for a package
+# `require()` has never heard of. `[ ! -e … ]` never reaches that check's
+# `readlink -f` comparison, so nothing above this caught it: the gate ran the
+# full suite against a stale install and the result was VOID, indistinguishable
+# in the log from a green one.
+#
+# Generalised here to every workspace package, not one hard-coded name: for
+# each `packages/*/package.json` in THIS tree, `node_modules/<its own "name"
+# field>` — e.g. `@forge/stations` — must EXIST and REALPATH to that
+# package's own `packages/<dir>`, never a missing link and never a link into
+# another checkout. Any miss REFUSES before a single step runs, naming every
+# missing/mis-pointed package and the fix. Same refusal CLASS as the kernel
+# check three lines up — "this install cannot be trusted, void before it
+# runs" — so it shares that check's exit code (2) rather than minting a new
+# one: this file's codes are not one-per-refusal (GATE_TREE_UNREADABLE,
+# GATE_CHECKOUT_STALE and GATE_TREE_MOVED all already share exit 3), and the
+# message text is what a reader greps, not the number.
+WORKSPACE_LINK_ISSUES=""
+for pkg_json in "$R"/packages/*/package.json; do
+  [ -f "$pkg_json" ] || continue
+  pkg_dir="$(dirname "$pkg_json")"
+  # BY NAME, NEVER BY POSITION (this file's own recurring lesson): the
+  # package's declared "name" field, not the directory it happens to live in
+  # — `packages/foo` need not produce `@forge/foo`.
+  pkg_name="$(sed -n 's/^[[:space:]]*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$pkg_json" | head -1)"
+  [ -n "$pkg_name" ] || continue
+  want="$(cd "$pkg_dir" && pwd)"
+  pkg_link="$R/node_modules/$pkg_name"
+  if [ ! -e "$pkg_link" ]; then
+    WORKSPACE_LINK_ISSUES="$WORKSPACE_LINK_ISSUES
+  missing: node_modules/$pkg_name — wants $pkg_dir. Fix: npm ci (or npm install) in $R"
+  else
+    got="$(readlink -f "$pkg_link" 2>/dev/null || true)"
+    if [ "$got" != "$want" ]; then
+      WORKSPACE_LINK_ISSUES="$WORKSPACE_LINK_ISSUES
+  mis-pointed: node_modules/$pkg_name -> ${got:-<unresolvable>} — wants $pkg_dir. Fix: npm ci (or npm install) in $R"
+    fi
+  fi
+done
+if [ -n "$WORKSPACE_LINK_ISSUES" ]; then
+  echo "GATE_WORKSPACE_LINKS_STALE: this tree's node_modules does not match its own packages/* — a gate run here would measure a stale or borrowed install and the result would be void (§15.13, M7 findings row 79).$WORKSPACE_LINK_ISSUES"
+  exit 2
+fi
+
 # IS IT BEHIND? A gate from a checkout that does not contain `parsoFish/main` is
 # a verdict produced by a tool nobody merged, and the reader cannot tell from the
 # log. Named `GATE_CHECKOUT_STALE`, rc 3, and it prints the sha to advance TO so

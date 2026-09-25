@@ -30,7 +30,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { measurePackages, CorpusUnreadable, EXIT_CANNOT_MEASURE, main } from './check-package-caps.mjs';
+import { measurePackages, CorpusUnreadable, EXIT_CANNOT_MEASURE, main, parseCaps } from './check-package-caps.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CHECKER = join(ROOT, 'scripts/check-package-caps.mjs');
@@ -108,8 +108,8 @@ test('every package with a QUARRY cap is measured, and every measured package ha
   const names = Object.keys(pkgs).sort();
   assert.deepEqual(
     names,
-    ['agents', 'contracts', 'factory', 'flows', 'kernel', 'knowledge', 'library', 'projects', 'sessions', 'stations'],
-    'all ten packages accounted for',
+    ['agents', 'contracts', 'factory', 'flows', 'forge-docs', 'kernel', 'knowledge', 'library', 'projects', 'sessions', 'stations'],
+    'all eleven packages accounted for (forge-docs: the G3 second factory, data only)',
   );
   for (const [name, row] of Object.entries(pkgs)) {
     assert.equal(typeof row.lines, 'number', `${name} has a measured line count`);
@@ -154,6 +154,25 @@ test('control 5: an untracked-but-not-ignored file IS counted (--others --exclud
   assert.ok(flowsLines(BASE) > 0, 'a file that is not yet committed still counts');
 });
 
+/**
+ * SEAM F1 (packages/kernel/discovery-roots.ts): a package's own `skills/`
+ * directory is now a real discovery root, so a package can ship
+ * `packages/<pkg>/skills/<slug>/SKILL.md` as an agent with no registration
+ * code. Before this fix `productionFiles()`'s SKILL.md filter only matched
+ * the top-level `skills/<slug>/SKILL.md` shape, so this file was invisible
+ * to `measurePackages` too — a package could carry an arbitrarily large
+ * SKILL.md and never move its own cap total, the same "watched per-file,
+ * unwatched per-package" gap ruling 94 already fixed once for code files.
+ */
+test('a package-owned SKILL.md counts toward its own package total', () => {
+  const root = repoWith({ 'packages/demo-pkg/skills/x/SKILL.md': TEN_LINES });
+  assert.equal(
+    measurePackages(root).get('demo-pkg'),
+    10,
+    'packages/<pkg>/skills/<slug>/SKILL.md must be measured like any other production file',
+  );
+});
+
 // =============================================================================
 // The failure branch — a gate whose red is untested is not a gate
 // =============================================================================
@@ -180,6 +199,28 @@ test('an override naming a package that does not exist is rejected', () => {
   const { code, out } = run(['--cap-override', 'nosuchpkg=1']);
   assert.equal(code, 1, `an override for an unknown package must fail — got exit 0:\n${out}`);
   assert.match(out, /nosuchpkg/);
+});
+
+/**
+ * A hyphenated package name (e.g. `forge-docs`) could not get a cap row at
+ * all: `parseCaps`' row pattern was `` /^`([a-z]+)`$/ ``, so a cap-table row
+ * for such a package parsed as "not a cap row" and the package would show up
+ * as `uncapped` forever — no cull, no split, no operator ratification could
+ * ever satisfy it, because the gate could not even SEE the row that would.
+ */
+test('the cap-table parser accepts a hyphenated package name', () => {
+  const caps = parseCaps('| `forge-docs` | 1 | 10 | **20** | note |\n');
+  assert.equal(caps.get('forge-docs'), 20, `expected a parsed cap for "forge-docs" — got: ${JSON.stringify([...caps])}`);
+});
+
+test('a hyphenated --cap-override package name is parsed, not rejected as malformed', () => {
+  // `no-such-pkg` names no package, so this must still fail, but on "no such
+  // package", never on "malformed spec". The malformed-spec message is what a
+  // still-`[a-z]+` override parser would produce for a name with a hyphen.
+  const { code, out } = run(['--cap-override', 'no-such-pkg=999']);
+  assert.equal(code, 1, out);
+  assert.match(out, /no-such-pkg/);
+  assert.doesNotMatch(out, /--cap-override expects/, 'a well-formed hyphenated override must not be reported as malformed');
 });
 
 /** The repo root, for the injected-lister tests below: with a lister supplied,

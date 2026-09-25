@@ -16,16 +16,13 @@ import { sdkHooksForAgent } from '@forge/agents';
 import type { EventLogger } from '@forge/kernel';
 import { classifyCrash } from '@forge/agents';
 import {
-  DEV_ALLOWED_TOOLS,
-  DEV_DISALLOWED_TOOLS,
-  DEV_FANOUT_CONCURRENCY_CAP,
-  DEV_MODEL,
-  devAgentSpec,
-  buildDevSystemPrompt,
+  resolveDevSpawnModel, buildDevSystemPrompt,
   prepareDevWorkspace,
   tallyToolUse as tallyDevToolUse,
   type DevToolUseSummary,
 } from './dev-binding.ts';
+import { skillPathRelative } from '@forge/agents';
+import type { AgentDefinition } from '@forge/contracts';
 import {
   gateRequiredPaths,
   readWorkItemsFromDir,
@@ -260,6 +257,8 @@ export function makeAgentWithTelemetry(
 export async function runDeveloperLoop(
   input: CycleInput,
   logger: EventLogger,
+  // Seam F4: the executing node's own agent def. REQUIRED — no fallback.
+  agentDef: AgentDefinition,
   // R2-03-F4: the flow node's wedge-kill signal, now CHAINED into each per-WI
   // Ralph iteration (claude-agent.ts `externalSignal`) so a wedge-kill cancels
   // the in-flight per-item CLI subprocesses, not just the outer phase promise.
@@ -274,18 +273,20 @@ export async function runDeveloperLoop(
   // Spec §5 item 9: the gate's diff-inclusion list is the CLASS's (ADR 051).
   const classProfile = cp.profileFor(cp.readChangeClass(input.manifestPath));
   const requiredPathsSource = classProfile.requiredPathsSource;
+  // Seam F4: model/tier resolved from THIS def, not the canonical constant.
+  const devSpawnModel = resolveDevSpawnModel(agentDef);
   const start = logger.emit({
     initiative_id: input.initiativeId,
     phase: 'developer-loop',
-    skill: 'developer-ralph',
+    skill: agentDef.slug,
     event_type: 'start',
     input_refs: [workItemsDir],
     output_refs: [],
     metadata: {
       // ADR 024 seam observability: the agent + tier the orchestrator spawned.
-      agent_skill: devAgentSpec.skill,
-      agent_tier: devAgentSpec.tier,
-      model: DEV_MODEL,
+      agent_skill: agentDef.slug,
+      agent_tier: devSpawnModel.tier,
+      model: devSpawnModel.model,
     },
   });
 
@@ -328,16 +329,16 @@ export async function runDeveloperLoop(
   }
 
   const forgeRoot = resolve(import.meta.dirname, '..', '..', '..');
-  const systemPrompt = buildDevSystemPrompt(forgeRoot);
+  const systemPrompt = buildDevSystemPrompt(forgeRoot, agentDef);
   const sdkQueryFn = sdkQuery as unknown as QueryFn;
 
-  // ADR 029: resolve the dev agent's runtime sdk ONCE (the SKILL.md
-  // `runtime.sdk`, threaded via devAgentSpec). resolveSdkId gates a free-text /
-  // unavailable id back to 'claude' and logs `sdk.unavailable-fallback` so the
-  // downgrade is observable rather than silent. Stock SKILL.md → 'claude'.
+  // ADR 029: resolve the dev agent's runtime sdk ONCE (seam F4: THIS def's
+  // own declared `runtime.sdk`). resolveSdkId gates a free-text / unavailable
+  // id back to 'claude' and logs `sdk.unavailable-fallback` so the downgrade
+  // is observable rather than silent. Stock SKILL.md → 'claude'.
   const DEV_SDK_ID = resolveSdkId(
-    devAgentSpec.sdk,
-    sdkFallbackEventSink(logger, input.initiativeId, 'developer-loop', 'developer-ralph'),
+    agentDef.runtime.sdk,
+    sdkFallbackEventSink(logger, input.initiativeId, 'developer-loop', agentDef.slug),
   );
 
   // Live-acc env guard (2026-06-06): when the project declares an
@@ -439,7 +440,7 @@ export async function runDeveloperLoop(
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
       phase: 'developer-loop',
-      skill: 'developer-ralph',
+      skill: agentDef.slug,
       event_type: 'log',
       input_refs: [resolve(workItemsDir, `${wi.work_item_id}.md`)],
       output_refs: [],
@@ -457,7 +458,7 @@ export async function runDeveloperLoop(
         initiative_id: input.initiativeId,
         parent_event_id: wiStart.event_id,
         phase: 'developer-loop',
-        skill: 'developer-ralph',
+        skill: agentDef.slug,
         event_type: 'log',
         input_refs: [resolve(workItemsDir, `${wi.work_item_id}.md`)],
         output_refs: [],
@@ -476,7 +477,7 @@ export async function runDeveloperLoop(
         initiative_id: input.initiativeId,
         parent_event_id: wiStart.event_id,
         phase: 'developer-loop',
-        skill: 'developer-ralph',
+        skill: agentDef.slug,
         event_type: 'log',
         input_refs: [resolve(workItemsDir, `${wi.work_item_id}.md`)],
         output_refs: [],
@@ -597,22 +598,23 @@ export async function runDeveloperLoop(
         initiativeId: input.initiativeId,
         parentEventId: wiStart.event_id,
         phase: 'developer-loop',
-        skill: 'developer-ralph',
+        skill: agentDef.slug,
         workItemId: wi.work_item_id,
       },
       {
-        model: DEV_MODEL,
-        allowedTools: [...DEV_ALLOWED_TOOLS],
-        disallowedTools: [...DEV_DISALLOWED_TOOLS],
+        // Seam F4: model/tools come from THIS def, never the canonical constants.
+        model: devSpawnModel.model,
+        allowedTools: [...agentDef.allowedTools],
+        disallowedTools: [...agentDef.disallowedTools],
         permissionMode: 'acceptEdits',
         systemPrompt,
-        // W8-B6 — developer-ralph's own bound library hooks, derived from its
+        // W8-B6 — this def's own bound library hooks, derived from its
         // SKILL.md path (never a copy carried on the spec). The dev loop
         // spawns one SDK session per Ralph iteration, so hooks fire per
         // iteration, which is the SDK's own session semantics.
         ...(() => {
           const hooks = sdkHooksForAgent({
-            skill: devAgentSpec.skill,
+            skill: skillPathRelative(agentDef.slug),
             logger,
             initiativeId: input.initiativeId,
           });
@@ -638,7 +640,7 @@ export async function runDeveloperLoop(
             initiative_id: input.initiativeId,
             parent_event_id: wiStart.event_id,
             phase: 'developer-loop',
-            skill: 'developer-ralph',
+            skill: agentDef.slug,
             event_type: 'log',
             input_refs: [],
             output_refs: [],
@@ -746,7 +748,7 @@ export async function runDeveloperLoop(
               workItemId: wi.work_item_id,
               worktreePath: wiWorktree.path,
               phase: 'developer-loop',
-              skill: 'developer-ralph',
+              skill: agentDef.slug,
             }, iteration),
           // F-14: emit per-iteration events so metrics (cycle.ts:metrics.ts)
           // can aggregate iteration counts. F-23 enriches the metadata so
@@ -760,7 +762,7 @@ export async function runDeveloperLoop(
               initiative_id: input.initiativeId,
               parent_event_id: wiStart.event_id,
               phase: 'developer-loop',
-              skill: 'developer-ralph',
+              skill: agentDef.slug,
               event_type: 'iteration',
               iteration,
               input_refs: [specPath],
@@ -813,7 +815,7 @@ export async function runDeveloperLoop(
           initiative_id: input.initiativeId,
           parent_event_id: wiStart.event_id,
           phase: 'developer-loop',
-          skill: 'developer-ralph',
+          skill: agentDef.slug,
           event_type: 'error',
           input_refs: [specPath],
           output_refs: [],
@@ -834,7 +836,7 @@ export async function runDeveloperLoop(
         initiative_id: input.initiativeId,
         parent_event_id: wiStart.event_id,
         phase: 'developer-loop',
-        skill: 'developer-ralph',
+        skill: agentDef.slug,
         event_type: 'log',
         input_refs: [specPath],
         output_refs: [],
@@ -900,7 +902,7 @@ export async function runDeveloperLoop(
           initiative_id: input.initiativeId,
           parent_event_id: wiStart.event_id,
           phase: 'developer-loop',
-          skill: 'developer-ralph',
+          skill: agentDef.slug,
           event_type: 'log',
           input_refs: [wiWorktree.path],
           output_refs: [],
@@ -913,7 +915,7 @@ export async function runDeveloperLoop(
           initiative_id: input.initiativeId,
           parent_event_id: wiStart.event_id,
           phase: 'developer-loop',
-          skill: 'developer-ralph',
+          skill: agentDef.slug,
           event_type: 'log',
           input_refs: [input.worktreePath],
           output_refs: [],
@@ -969,7 +971,7 @@ export async function runDeveloperLoop(
       initiative_id: input.initiativeId,
       parent_event_id: wiStart.event_id,
       phase: 'developer-loop',
-      skill: 'developer-ralph',
+      skill: agentDef.slug,
       event_type: 'end',
       input_refs: [specPath],
       output_refs: result ? result.filesChanged : [],
@@ -1006,7 +1008,7 @@ export async function runDeveloperLoop(
         initiative_id: input.initiativeId,
         parent_event_id: wiStart.event_id,
         phase: 'developer-loop',
-        skill: 'developer-ralph',
+        skill: agentDef.slug,
         event_type: 'log',
         input_refs: [specPath],
         output_refs: [],
@@ -1043,7 +1045,7 @@ export async function runDeveloperLoop(
         initiative_id: input.initiativeId,
         parent_event_id: wiStart.event_id,
         phase: 'developer-loop',
-        skill: 'developer-ralph',
+        skill: agentDef.slug,
         event_type: 'log',
         input_refs: [wiWorktree.path],
         output_refs: [],
@@ -1073,7 +1075,7 @@ export async function runDeveloperLoop(
         initiative_id: input.initiativeId,
         parent_event_id: wiStart.event_id,
         phase: 'developer-loop',
-        skill: 'developer-ralph',
+        skill: agentDef.slug,
         event_type: push.pushed ? 'log' : 'error',
         input_refs: [input.worktreePath],
         output_refs: [],
@@ -1153,7 +1155,7 @@ export async function runDeveloperLoop(
         initiative_id: input.initiativeId,
         parent_event_id: start.event_id,
         phase: 'developer-loop',
-        skill: 'developer-ralph',
+        skill: agentDef.slug,
         event_type: 'log',
         input_refs: [resolve(workItemsDir, `${wi.work_item_id}.md`)],
         output_refs: [],
@@ -1177,7 +1179,7 @@ export async function runDeveloperLoop(
         initiative_id: input.initiativeId,
         parent_event_id: start.event_id,
         phase: 'developer-loop',
-        skill: 'developer-ralph',
+        skill: agentDef.slug,
         event_type: 'log',
         input_refs: [resolve(workItemsDir, `${wi.work_item_id}.md`)],
         output_refs: [],
@@ -1202,10 +1204,8 @@ export async function runDeveloperLoop(
     items: toRun,
     idOf: (wi) => wi.work_item_id,
     dependsOn: (wi) => wi.depends_on,
-    // R2-03-F4: the fanout agent's declared concurrencyCap is the definition-
-    // level source (env still overrides). developer-ralph declares 1 ⇒
-    // byte-identical to the pre-F4 default.
-    cap: resolveDevWiConcurrency(undefined, DEV_FANOUT_CONCURRENCY_CAP),
+    // R2-03-F4 (seam F4): THIS def's own declared concurrencyCap (env still overrides).
+    cap: resolveDevWiConcurrency(undefined, agentDef.fanout?.concurrencyCap),
     dispatch: dispatchWi,
   });
 
@@ -1220,7 +1220,7 @@ export async function runDeveloperLoop(
     initiative_id: input.initiativeId,
     parent_event_id: start.event_id,
     phase: 'developer-loop',
-    skill: 'developer-ralph',
+    skill: agentDef.slug,
     event_type: 'end',
     input_refs: [workItemsDir],
     output_refs: [input.worktreePath],
@@ -1919,7 +1919,7 @@ function emitUncommittedWorkSwept(
     workItemId: string;
     worktreePath: string;
     phase: 'developer-loop' | 'unifier';
-    skill: 'developer-ralph' | 'developer-unifier';
+    skill: string; // seam F4: the executing def's own slug, not a fixed literal.
   },
   iteration: number,
 ): void {

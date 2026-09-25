@@ -66,6 +66,7 @@ import { serializeWorkItem, type WorkItem } from '@forge/flows';
 import type { StreamQueryFn } from '@forge/agents';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 import { testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
+import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
 const FIXTURE_PATH = resolve(FORGE_ROOT, 'packages', 'kernel', 'tests', 'test-fixtures', 'spawn-capture', 'adversarial-review.json');
@@ -193,7 +194,7 @@ test('runAdversarialReview: pins the exact {prompt, options} spawn call (charact
     const res = await runAdversarialReview(
       { initiativeId: INIT_ID, worktreePath: fx.worktree, cycleId: CYCLE_ID, logsRoot: fx.logsRoot, projectName: 'fix', changeClass: 'code' },
       logger,
-      { queryFn, classProfiles: testClassProfilePort() },
+      { queryFn, classProfiles: testClassProfilePort(), agentDef: canonicalDef('adversarial-review') },
     );
 
     assert.equal(res.status, 'complete', 'sanity: the fixture must drive the pipeline to a clean completion');
