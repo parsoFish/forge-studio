@@ -18,11 +18,11 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight, stopSchedulerCensusAndRelease, reapCensusAndSweep, teardownExitCode, DAEMON_PID_FILE } from './sweep-teardown.mjs';
+import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight, stopSchedulerCensusAndRelease, reapCensusAndSweep, teardownExitCode, isRunning, DAEMON_PID_FILE } from './sweep-teardown.mjs';
 import { sweepProductFixtures } from './sweep.mjs';
 import {
   killIfAlive, plantDaemonWithGrandchild, plantReapedRootWithGrandchild,
@@ -189,6 +189,52 @@ test('657(ii): a dead pid is reported as gone, never as a kill', () => {
   const r = stopOwnScheduler(root);
   assert.equal(r.stopped, null);
   assert.match(r.note ?? '', /already gone/, r.note ?? '');
+});
+
+/**
+ * T1 1372's third repro (RP's second load-repro pass, 1/20 red): a REAL
+ * PRODUCT DEFECT, not a test artifact — `isRunning`'s old shape treated ANY
+ * `/proc/<pid>/stat` read failure as "gone", the same conflation MUST 3
+ * closed in the census one call site over. Under load, `stopOwnScheduler`
+ * reported `how: 'SIGTERM'` at 192ms into a 300ms grace for a daemon whose
+ * own SIGTERM-ignoring handler had already been confirmed installed (via the
+ * kernel's own `SigCgt` record) before the signal was even sent — the only
+ * way to reach that conclusion is a transient, non-ENOENT read failure on a
+ * pid that was still genuinely alive, read as if it had exited.
+ */
+test('isRunning: ENOENT means gone', () => {
+  assert.equal(isRunning('999999', '/no-such-proc-root-for-this-test'), false);
+});
+
+test('isRunning: MUST-3-class fix — a read failure OTHER than ENOENT is never read as "exited"', () => {
+  // A real EACCES via chmodSync — the one failure mode a fixture cannot fake
+  // (Linux enforces it for the owning user too), the same technique
+  // reap-census.test.ts uses for the identical class of door.
+  const root = mkdtempSync(join(tmpdir(), 'forge-isrunning-proc-'));
+  mkdirSync(join(root, '12345'));
+  writeFileSync(join(root, '12345', 'stat'), '12345 (fixture) S 1 1 1 0 -1 4194304 0 0 0 0 0 0 0 0 20 0 1 0 42');
+  chmodSync(join(root, '12345', 'stat'), 0o000);
+  try {
+    assert.equal(
+      isRunning('12345', root), true,
+      'an unreadable-for-a-reason-other-than-ENOENT pid must be treated as still running, never concluded exited',
+    );
+  } finally {
+    chmodSync(join(root, '12345', 'stat'), 0o644);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('isRunning: a real, live process reads as running; a zombie reads as not', () => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-isrunning-real-'));
+  mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+  try {
+    assert.equal(isRunning(String(child.pid)), true);
+  } finally {
+    killIfAlive(child.pid!);
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('689(iii): a daemon that DRAINS is waited for, and never killed', async () => {

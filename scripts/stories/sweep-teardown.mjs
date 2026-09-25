@@ -226,13 +226,31 @@ function waitForExit(pid, ms) {
  * different facts, and reading one for the other is how three of today's other
  * defects happened. `/proc/<pid>/stat`'s state field is the one that answers it,
  * and it is the same `/proc` read `lockHolders` and the `cwd` check already use.
+ *
+ * ENOENT — AND ONLY ENOENT — MEANS GONE (T1 1372, RP's second load repro).
+ * The old shape treated ANY read failure as "gone", the exact conflation
+ * MUST 3 closed one call site over in `reap-census.mjs`'s census: a
+ * transient, unexplained read failure on a pid there is every reason to
+ * believe is still alive (measured — a daemon whose own SIGTERM-ignoring
+ * handler had already been confirmed installed, via the kernel's own record,
+ * BEFORE the signal was even sent) is NOT the same fact as that pid having
+ * exited, and reading it as exited is what let `stopOwnScheduler` report
+ * `'SIGTERM'` for a daemon that never stopped ignoring it: 192ms into a
+ * 300ms grace, one run in twenty under `taskset -c 0` plus three burners.
+ * Any OTHER failure now reports "still running" — the safe direction for
+ * `waitForExit`'s own question, since a stray extra `SIGKILL` at a pid that
+ * genuinely has exited by then is caught and ignored two lines up in
+ * `stopOwnScheduler`, while concluding "gone" on a guess is not reversible.
+ *
+ * `procRoot` is a seam for the fixture door this bug bought itself — real
+ * callers never pass it and get the real `/proc`.
  */
-function isRunning(pid) {
+export function isRunning(pid, procRoot = '/proc') {
   let stat;
   try {
-    stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
-  } catch {
-    return false; // gone entirely
+    stat = readFileSync(`${procRoot}/${pid}/stat`, 'utf8');
+  } catch (err) {
+    return err?.code !== 'ENOENT'; // ENOENT: gone. Anything else: unknown, so NOT concluded gone.
   }
   // `comm` can contain spaces and parentheses, so the state field is the first
   // character after the LAST ')' — never `split(' ')[2]`.
