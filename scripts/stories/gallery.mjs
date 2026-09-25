@@ -120,18 +120,22 @@ function mediaFor(row) {
 /**
  * Render the index page. Pure — sorted by id so regeneration is stable.
  *
- * `stale` — the list `artifact-staleness.mjs`'s `staleArtifacts` produces
- * (findings row 56 + row 14, T1 ruling 1283 option B) — marks a named row
- * with a visible badge instead of presenting it as current. Defaulting to
- * `[]` keeps every existing caller's rendered bytes unchanged.
+ * `row.stale` — a reason string or `null`/absent (findings row 56 + row 14,
+ * T1 ruling 1283 option B), set by BOTH `galleryRowsFrom` and
+ * `committedGalleryRows` — marks a named row with a visible badge instead of
+ * presenting it as current. Reading it FROM THE ROW rather than a second
+ * argument is deliberate: an earlier pass took a `stale` list here, and only
+ * the disk-generation caller ever computed one, so the pinned repo-door check
+ * (which renders `committedGalleryRows`' rows with no such list) disagreed
+ * with the very first real run's output. Two callers computing the same field
+ * on the same row is a question renderGalleryIndex cannot get wrong by taking
+ * no side in it.
  */
-export function renderGalleryIndex(rows, stale = []) {
-  const staleReasonById = new Map(stale.map((s) => [s.id, s.reason]));
+export function renderGalleryIndex(rows) {
   const sorted = [...rows].sort((a, b) => a.id.localeCompare(b.id));
   const cards = sorted
     .map((r) => {
-      const staleReason = staleReasonById.get(r.id);
-      const badge = staleReason ? `\n    <p class="stale-badge">${esc(staleReason)}</p>` : '';
+      const badge = r.stale ? `\n    <p class="stale-badge">${esc(r.stale)}</p>` : '';
       return `  <section class="story ${esc(r.status)}">
     <h2>${esc(r.id)} — ${esc(r.title)}</h2>
     <p class="verdict ${esc(r.status)}">${esc(r.status)} · ${r.greenBeats}/${r.beats} beats green</p>${badge}
@@ -410,16 +414,33 @@ export function untrackedGalleryTargets(root, entryIds) {
  * @returns {{rows: object[], ids: string[]}} rows in DISCOVERY order; the
  *   render sorts by id itself, so callers never depend on this order.
  */
+/** `{id -> reason}` from `staleArtifacts(root)` — ONE call per row-path
+ *  invocation, shared by both `galleryRowsFrom` and `committedGalleryRows` so
+ *  the two can never compute staleness two different ways. */
+function staleReasonMap(root) {
+  return new Map(staleArtifacts(root).map((s) => [s.id, s.reason]));
+}
+
+/** A row from `storyRowFrom`, with `stale` attached from an already-built
+ *  reason map (findings row 56 + row 14, T1 ruling 1283 option B). ONE
+ *  function so `galleryRowsFrom` and `committedGalleryRows` attach it
+ *  IDENTICALLY — they may read different story.json bytes (disk vs HEAD), but
+ *  never a different notion of "how does staleness land on a row". */
+function withStaleness(row, id, staleReasonById) {
+  return Object.freeze({ ...row, stale: staleReasonById.get(id) ?? null });
+}
+
 export function galleryRowsFrom(root) {
   const base = join(root, 'demos', 'stories');
   const rows = [];
   const ids = [];
+  const staleReasonById = staleReasonMap(root);
   if (existsSync(base)) {
     for (const entry of readdirSync(base, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       const file = join(base, entry.name, 'story.json');
       if (!existsSync(file)) continue;
-      rows.push(storyRowFrom(readStoryJson(file)));
+      rows.push(withStaleness(storyRowFrom(readStoryJson(file)), entry.name, staleReasonById));
       ids.push(entry.name);
     }
   }
@@ -483,6 +504,7 @@ export function committedGalleryRows(root) {
   }
   const rows = [];
   const ids = [];
+  const staleReasonById = staleReasonMap(root);
   for (const rel of ls.stdout.split(NUL)) {
     if (rel === '') continue;
     const show = spawnSync('git', ['-C', root, 'show', `HEAD:${rel}`], {
@@ -493,8 +515,9 @@ export function committedGalleryRows(root) {
     // not yet committed. It is not part of the committed state, so it is not
     // this check's subject — skipped, not refused.
     if (show.error === undefined && show.status === 0) {
-      rows.push(storyRowFrom(JSON.parse(show.stdout)));
-      ids.push(rel.split('/')[2]);
+      const id = rel.split('/')[2];
+      rows.push(withStaleness(storyRowFrom(JSON.parse(show.stdout)), id, staleReasonById));
+      ids.push(id);
     }
   }
   return { rows, ids };
@@ -536,10 +559,10 @@ export function regenerateGallery(root, wroteThisRun = []) {
   }
 
   mkdirSync(base, { recursive: true });
-  // Findings row 56 + row 14, T1 ruling 1283 (option B) — a row whose story
-  // file has moved on since its artifact was committed gets a visible badge,
-  // never a silent gate: `staleArtifacts` NAMES, it never throws.
-  const html = renderGalleryIndex(rows, staleArtifacts(root));
+  // `rows` already carries `.stale` — `galleryRowsFrom` attaches it (findings
+  // row 56 + row 14, T1 ruling 1283 option B), the SAME way `committedGalleryRows`
+  // does, so this and the repo-door check can never disagree about it.
+  const html = renderGalleryIndex(rows);
   writeFileSync(join(base, 'index.html'), html);
   return { rows, html };
 }
