@@ -179,14 +179,12 @@ export type FlowRunArgs = {
    */
   projectGate: ProjectGate;
   /**
-   * Cost-bearing events this cycle incurred BEFORE the runner existed, so the
-   * tracker can count them (spec §5 item 7, ruling 257). One supplier today:
-   * the architect, which runs out-of-cycle, and whose synthetic `architect.end`
-   * `cycle.ts` emits with the raw logger before `runFlow` is called — so until
-   * this port its dollars were in the log, on the report and in Studio, and
-   * absent from every ceiling the run was actually stopped by. Declared as
-   * EVENTS so `isAuthoritativeCostEvent` decides them like any other, and named
-   * for the shape not the phase, because the runner imports no phase.
+   * Cost-bearing events this cycle incurred BEFORE this call's own tracker
+   * existed (spec §5 item 7, ruling 257): the architect (out-of-cycle), and,
+   * on a cycle RE-ENTERED after the PLAN gate (bead forge-8vfn.8.1.5), every
+   * phase that finished in an earlier entry — `cycle.ts`'s
+   * `readPriorCycleCostEvents` supplies both. Declared as EVENTS so
+   * `isAuthoritativeCostEvent` decides them like any other.
    */
   priorSpendEvents?: readonly EventLogEntry[];
   /**

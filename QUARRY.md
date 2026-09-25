@@ -61,13 +61,13 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,156 | **12,578** | ratified 12,578 — M7-C door re-exports OD (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 12,965 | **12,965** | ratified 12,965 — M7-C door re-exports OD round G (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 59 | 20,520 | **20,482** | ratified 20,482 — M7-C door re-exports OD, round-G circular-import fix (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `flows` | 82 | 23,290 | **23,090** | ratified 23,090 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
+| `flows` | 82 | 23,281 | **23,090** | ratified 23,090 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 14 | 2,113 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 38 | 11,129 | **11,129** | ratified 11,129 — M7-C door re-exports OD round G (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,837 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **457** | **125,045** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **457** | **125,036** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -313,7 +313,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/cycle-context.ts | flows | verbatim | 361 |
 | packages/flows/cycle-helpers.ts | flows | verbatim | 772 |
 | packages/flows/cycle-report.ts | flows | verbatim | 30 |
-| packages/flows/cycle.ts | flows | verbatim | 549 |
+| packages/flows/cycle.ts | flows | verbatim | 542 |
 | packages/flows/daemon.ts | flows | verbatim | 248 |
 | packages/sessions/kinds/demo-builder.ts | sessions | verbatim | 515 |
 | packages/sessions/kinds/authoring.ts | sessions | rewritten | 141 |
@@ -333,7 +333,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/flow-run-requests.ts | flows | verbatim | 408 |
 | packages/flows/flow-node-context.ts | flows | verbatim | 54 |
 | packages/flows/flow-node-kind.ts | flows | verbatim | 66 |
-| packages/flows/flow-runner.ts | flows | rewritten | 683 |
+| packages/flows/flow-runner.ts | flows | rewritten | 681 |
 | packages/flows/flow-fanout.ts | flows | verbatim | 34 |
 | packages/flows/flow-accepts-class.ts | flows | rewritten | 34 |
 | packages/flows/flow-trigger.ts | flows | verbatim | 222 |
