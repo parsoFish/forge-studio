@@ -483,11 +483,11 @@ function gitTruthOffenders(dir: string): { rewritableLines: Set<number>; other: 
   return { rewritableLines, other };
 }
 
-/** Ruling 92 (SEC review): replaces ONLY the first offending line with
- *  missing `SCRATCH_PATHS` entries, byte-for-byte otherwise. Reads through
- *  `resolveGuardedPath` — a rejected (symlinked) `.gitignore` THROWS
- *  `PathGuardContainmentError`; absent is the only `ok` case reporting
- *  `unchanged` — any other read failure propagates. */
+/** Regenerates when a line wrongly ignores `TRACKED_CONFIG_PATHS` (replaced
+ *  by the missing `SCRATCH_PATHS` entries) or when entries are simply missing
+ *  (appended). Reads through `resolveGuardedPath`: a rejected (symlinked)
+ *  `.gitignore` throws `PathGuardContainmentError`; absent reports
+ *  `unchanged`; any other read failure propagates. */
 function computeGitignoreDrift(projectDir: string): GitignoreDrift {
   const guarded = resolveGuardedPath(projectDir, ['.gitignore']);
   if (!guarded.ok) throw new PathGuardContainmentError(`reset: .gitignore containment check failed: ${guarded.reason}`);
@@ -499,12 +499,23 @@ function computeGitignoreDrift(projectDir: string): GitignoreDrift {
   const { rewritableLines, other } = isGitRepoDir(projectDir)
     ? gitTruthOffenders(projectDir)
     : { rewritableLines: new Set(lines.map((l, i) => (TRACKED_CONFIG_PATHS.some((p) => giTextCovers([l.trim()], p)) ? i : -1)).filter((i) => i !== -1)), other: [] as string[] };
-  if (rewritableLines.size === 0) return { before: raw, after: raw, action: 'unchanged', otherSourceViolations: other };
 
   const present = new Set(lines.map((l) => l.trim()));
   const missing = SCRATCH_PATHS.filter((p) => !present.has(p));
-  const firstOffender = Math.min(...rewritableLines);
-  const rewritten = lines.flatMap((l, i) => (!rewritableLines.has(i) ? [l] : i === firstOffender ? missing : []));
+
+  if (rewritableLines.size === 0 && missing.length === 0) {
+    return { before: raw, after: raw, action: 'unchanged', otherSourceViolations: other };
+  }
+
+  let rewritten: string[];
+  if (rewritableLines.size > 0) {
+    const firstOffender = Math.min(...rewritableLines);
+    rewritten = lines.flatMap((l, i) => (!rewritableLines.has(i) ? [l] : i === firstOffender ? missing : []));
+  } else {
+    // Nothing to replace: append, keeping the file's trailing newline.
+    const trailingBlank = lines.length > 0 && lines[lines.length - 1] === '';
+    rewritten = trailingBlank ? [...lines.slice(0, -1), ...missing, ''] : [...lines, ...missing];
+  }
   const after = rewritten.join('\n');
   return { before: raw, after, action: after === raw ? 'unchanged' : 'regenerate', otherSourceViolations: other };
 }

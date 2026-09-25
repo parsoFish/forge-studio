@@ -22,101 +22,27 @@
  * initiative in a Go repo is handed a Go test recipe. A phase that re-derives a
  * profile by branching on a class name can drift from this table while claiming
  * to obey it; `class-profiles.contract.test.ts` fails on any such branch inside
- * `packages/factory`.
+ * `packages/factory` or `packages/stations`.
  *
  * This module decides nothing. Consumers read a profile with `profileFor(cls)`
  * and act on the columns.
+ *
+ * F3 (operator ruling, items 81/83): `ChangeClass` and `GateProfile` moved to
+ * `@forge/stations/class-profile-port.ts` VERBATIM — the bands that read this
+ * table now live in `@forge/stations` and take the table by injection (the
+ * `ClassProfilePort`), not by importing this file, so `packages/factory` stays
+ * deletable without deleting execution. This module imports both types back
+ * down and stays their one home: the table, the four functions and every
+ * value below are unchanged.
  */
 
 import { readFileSync } from 'node:fs';
 
-import type { InitiativeManifest } from '@forge/contracts/manifest-types.ts';
+import type { ChangeClass, GateProfile } from '@forge/stations';
 import { CHANGE_CLASSES, parseManifest } from '@forge/flows/manifest.ts';
-import type { RequiredPathsSource } from '@forge/flows/work-item.ts';
 
-/** The manifest field's own union — not a second declaration of it. */
-export type ChangeClass = InitiativeManifest['class'];
-
+export type { ChangeClass, GateProfile };
 export { CHANGE_CLASSES };
-
-export type GateProfile = {
-  /**
-   * Must the per-WI quality gate FAIL on the untouched base before iteration 1?
-   *
-   * Two values, not three. `'advisory'` — run the iteration-0 check, record it,
-   * do not fail the work item — has no mapping onto the ralph runner's
-   * `failOnHollowIter0Gate` boolean, and giving it one meant editing
-   * `packages/agents` at exactly its cap. The `infra` row it was written for now
-   * reads `'required'`, the safe direction: a gate that passes before any work
-   * exists still stops the work item. Narrowed under T1 ruling 292 and RATIFIED
-   * by the operator in window 8 (ruling 300).
-   */
-  iter0FailFirst: 'required' | 'off';
-  /**
-   * Where the ralph runner's diff-inclusion list comes from. The union is
-   * `@forge/flows`' own (`work-item.ts`, beside `gateRequiredPaths`), not a
-   * copy of it — see the module header on why this table declares no
-   * vocabulary of its own.
-   *
-   * `docs` is the one row off the `'wi.creates'` priority chain (ruling 300):
-   * the chain stops at `creates`, so a docs WI that declared two pages to
-   * revise and created one new page passed its gate touching neither.
-   */
-  requiredPathsSource: RequiredPathsSource;
-  /**
-   * Which `testProcess.*` the ORCHESTRATOR runs at the merge boundary, in
-   * order; `[]` = none, and then `mergeBoundaryVerb` must not be null — a class
-   * with neither has no merge boundary at all, which the contract test refuses.
-   *
-   * `'acceptance'` was dropped from the union with `'advisory'` and for the same
-   * reason: no gate implements it and no row selected it. Narrowed under T1
-   * ruling 292 and RATIFIED by the operator in window 8 (ruling 300).
-   */
-  mergeBoundaryTest: ReadonlyArray<'ci' | 'local'>;
-  /** An orchestrator verb run at the merge boundary in addition to the above; null = none. */
-  mergeBoundaryVerb: 'gate docs' | null;
-  /** What evidence the integrate band captures. */
-  capture: 'checkpoints' | 'plan-output' | 'none';
-  /** The review agent's lenses for this class (spec §5 item 5). */
-  reviewLenses: ReadonlyArray<string>;
-  /**
-   * May an initiative of this class be a SINGLE deliverable outcome?
-   *
-   * Enforced in two places, which ruling 229 settled after the column's first
-   * consumer showed the sentence could be read two ways:
-   *   - GATE, at the plan gate, on the manifest's declared `acceptance_criteria`
-   *     — exactly one criterion for a `false` class is REFUSED before any spend.
-   *   - FLAG, at the project manager, on the decomposed work-item count — a
-   *     one-item set for a `false` class is recorded for the report and NEVER
-   *     fails the pass, because a one-item decomposition of a genuinely
-   *     one-item initiative is the PM being correct, and the PM is the wrong
-   *     actor to punish for the architect's scoping.
-   */
-  singleWiAllowed: boolean;
-  /**
-   * The WALL on a review chunk's derived spend ceiling, in dollars (beads
-   * `forge-gefz` / `forge-jb7i`, operator ruling 475).
-   *
-   * `adversarial-review` no longer hands the SDK its flat declared
-   * `maxBudgetUsd`. The ceiling is DERIVED from the diff the chunk is actually
-   * given (`phases/review-budget.ts`) — because the work scales with the diff
-   * and the declared number does not — and this column is where that curve
-   * stops. Without it "derive from the diff" is "unbounded".
-   *
-   * THE VALUES ARE THE OPERATOR'S, and these are the starting ones (475).
-   * `code` and `infra` are 8: both carry four lenses over the largest diffs,
-   * and the measured failure this closes was a single `code` file whose review
-   * cost $2.7056 against a declared 2.0 — 4x the declared floor leaves room for
-   * a file several times that size before the wall is reached. `docs` and
-   * `config` are 4: read-and-check work whose reviews have never approached
-   * the declared base, so a lower wall costs nothing and keeps a runaway on the
-   * cheapest classes cheap.
-   *
-   * A class's review does NOT get this much by default — it gets the floor,
-   * and reaches the wall only if its own diff is large enough to earn it.
-   */
-  reviewCeilingUsd: number;
-};
 
 export const CLASS_PROFILES: Readonly<Record<ChangeClass, GateProfile>> = {
   code: {
