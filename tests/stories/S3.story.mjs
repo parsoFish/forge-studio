@@ -120,25 +120,38 @@ export default {
     // `.forge/project.json` unconditionally whenever ANY row is
     // `regenerate`/`add` — here the `skills` row always is, even though no
     // config VALUE changes (verified by running `applyContractReset` against
-    // this fixture: the only diff is JSON string-escaping normalisation,
-    // `—`→`—` etc. — zero semantic change). Run 3 (on the real ground)
+    // this fixture: the only diff is JSON string-escaping normalisation —
+    // Node's `JSON.stringify` renders a `—` escape as a literal `—`
+    // character — zero semantic change). Run 3 (on the real ground)
     // went 12/12 green and still exited 1, because the nine skill-move
     // removals were inside no minted session, written by no agent, and not
     // ignored — so the fence could only call them UNDECLARED.
     //
-    // RE-DERIVED FOR THE FIXTURE (M7-D, forge-1rk5.1, plan D5): the real
-    // ground's `.gitignore` (at authoring time) ignored `.forge/` wholesale,
-    // so the nine `.forge/skills/<id>/SKILL.md` ARRIVALS were absorbed by
-    // `groundIgnore` without a declaration — only the nine REMOVALS needed
-    // licensing. This fixture ground carries NO `.gitignore` at all, so
-    // nothing is ignored: simulating the fence's own `classifyOwnGroundDrift`
-    // against a provisioned-and-reset copy showed the nine ARRIVALS and the
-    // `.forge/project.json` re-serialisation ALL fall to UNDECLARED unless
-    // named here too. Declared as ADDITIONS (arrivals) and one MODIFICATION
-    // (the config rewrite) — every path `applyContractReset` demonstrably
-    // writes on this ground, and nothing wider (`tests/stories/grounds/go-provider-old-contract/PROVENANCE.md`
-    // records the simulation that proved this set exact: 19 declared, 0
-    // undeclared, 0 unmatched).
+    // RE-DERIVED FOR THE FIXTURE, TWICE (M7-D, forge-1rk5.1, plan D5). First
+    // pass: this fixture then carried NO `.gitignore` at all, so nothing was
+    // ignored — simulating `classifyOwnGroundDrift` against a
+    // provisioned-and-reset copy showed the nine `.forge/skills/<id>/SKILL.md`
+    // ARRIVALS and the `.forge/project.json` re-serialisation ALL fall to
+    // UNDECLARED unless named. Second pass, after the fixture was corrected to
+    // carry betterado's own tracked `.gitignore` (verbatim, `3b2e2ca4`) so C2
+    // could pass: re-ran the SAME simulation expecting the ignore to now
+    // absorb the arrivals the way it did on the real ground. It does NOT —
+    // `groundIgnoreFromGit` runs `git check-ignore` against the ground's git
+    // state as the RUN LEAVES it, and beat 5's own press REWRITES `.gitignore`
+    // (from the blanket `.forge/` this pin carries to the narrow scratch-only
+    // form — the exact fix PR #72's `15a74d8a` made on the real ground,
+    // `gitignoreFixed: true` when actually run). Checked against that FINAL,
+    // narrow `.gitignore`, none of `.forge/skills/*` is ignored, so all nine
+    // arrivals are STILL undeclared — and the rewrite adds an ELEVENTH new
+    // write, `.gitignore` itself (`modified`), that the real ground's story
+    // never had to declare (there, PR #72's fix predated S3 by three weeks and
+    // was never inside a run this fence judged). Declared as ADDITIONS (the
+    // nine arrivals), TWO MODIFICATIONS (`.forge/project.json`'s
+    // re-serialisation, `.gitignore`'s rewrite) — every path
+    // `applyContractReset` demonstrably writes on this ground, and nothing
+    // wider (`tests/stories/grounds/go-provider-old-contract/PROVENANCE.md`
+    // records both simulations: the first proved 19 exact, the second proved
+    // 19 insufficient and 20 exact — 20 declared, 0 undeclared, 0 unmatched).
     //
     // `beat: 5` (7.6.140, T1 1275): each change names the beat whose press
     // causes it — beat 5's "Rebuild contract" — for the harness's per-beat
@@ -147,6 +160,7 @@ export default {
       ...SKILL_IDS.map((id) => ({ path: `forge/skills/${id}/SKILL.md`, change: 'removed', beat: 5 })),
       ...SKILL_IDS.map((id) => ({ path: `.forge/skills/${id}/SKILL.md`, change: 'added', beat: 5 })),
       { path: '.forge/project.json', change: 'modified', beat: 5 },
+      { path: '.gitignore', change: 'modified', beat: 5 },
     ],
   },
   docs: { kind: 'how-to', title: 'Reset a project contract' },
@@ -336,24 +350,24 @@ export default {
       // are all the readiness panel's own <div>, so the three are answerable
       // together.
       //
-      // FLAGGED (M7-D, forge-1rk5.1, plan D5), not fabricated or weakened: a
-      // file-scoped run of `runPreflight` (`packages/projects/preflight.ts`)
-      // directly against a provisioned-and-reset copy of THIS fixture measured
-      // `ok: false` — two HARD failures neither present on the real ground.
-      // C2: the fixture carries no `.gitignore`, so forge's own scratch paths
-      // (e.g. `.forge/work-items/`) are not git-ignored. C4: missing
-      // `roadmap.md` (present in the real repo at this SHA, never part of the
-      // GATE-closure carry) AND missing `brain/projects/story-s3/profile.md` —
-      // forge's own central Brain 3, keyed by the project's DIRECTORY NAME,
-      // which a fixture that was never onboarded cannot have without
-      // fabricating one. The assertion below is left AS THE STORY DECLARES IT
-      // — a live-DOM run is the only way to observe it for real, and this file
-      // only re-points tokens — but this measurement says it will not clear
-      // today. `.gitignore` + `roadmap.md` could be carried from `3b2e2ca4`
-      // (real, tracked, not fabricated) to close C2 and half of C4; the
-      // Brain-3 half needs a product/plan-level call (copy the real Brain 3
-      // under `story-s3`, or key C4 off `config.kb`), not a unilateral fix
-      // here. Full measurement in
+      // CONFIRMED, not fabricated (M7-D, forge-1rk5.1, plan D5): a first pass
+      // measured `runPreflight` (`packages/projects/preflight.ts`) directly
+      // against a provisioned-and-reset copy of this fixture at `ok: false` —
+      // C2 (no `.gitignore` carried, so forge's own scratch paths were not
+      // git-ignored) and C4 (missing `roadmap.md` and
+      // `brain/projects/story-s3/profile.md`). Both are now fixed at the
+      // source, not papered over: `.gitignore` and `roadmap.md` carried
+      // verbatim from `3b2e2ca4` (both tracked there), and the fixture ground
+      // harness (`scripts/stories/fixture-ground.mjs`) grew the ability to
+      // provision a fixture's own `brain/` directory to
+      // `brain/projects/<project>/` — this fixture carries the REAL
+      // `brain/projects/terraform-provider-betterado/profile.md` (this forge
+      // repo, `parsoFish/main`) verbatim, named + hashed in PROVENANCE.md.
+      // Re-measured against the corrected fixture: `ok: true` — every HARD
+      // clause (C1, C1b, C2, C4, SKILLS) passes; the readiness panel's own
+      // five UI checks (north star, instructions, demo, skills, kb) all pass
+      // too, so `ready-count: 5` and `flow-ready: true` hold for real, not
+      // merely as declared. Full report in
       // `tests/stories/grounds/go-provider-old-contract/PROVENANCE.md`.
       act: 'Confirm preflight is MET and the project is still ready for a Flow',
       expect: {
