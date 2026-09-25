@@ -118,14 +118,44 @@
  *     value laundered through one of the FOUR EXCLUDED bare ids (`cycleId`,
  *     `initiativeId`, `repoPath`, `runId`) or through an unresolved dir-param
  *     leaf-append is NOT reported — those rules are calibrated for request
- *     handlers, and over the whole tree the full model reports 108 findings at
- *     `c0093918`, nearly all server-built ids, i.e. an allowlist that would
- *     train blind regeneration. CONCRETELY, the shape this does NOT catch: a
- *     brand-new DELEGATE HELPER outside the declared surface whose route caller
- *     hands it a request id under one of those four names, by plain parameter.
- *     Bring such a helper into `EXPLICIT_MODULES` (that is what those rows are
- *     for) or give it the HTTP-plumbing signal. A module outside the four walk
- *     roots (`loops/`, `scripts/`) is scanned by neither tier.
+ *     handlers. CONCRETELY, the shape this does NOT catch: a brand-new
+ *     DELEGATE HELPER outside the declared surface whose route caller hands
+ *     it a request id under one of those four names, by plain parameter, or
+ *     a brand-new dir-param-leaf-append site. Bring such a helper into
+ *     `EXPLICIT_MODULES` (that is what those rows are for) or give it the
+ *     HTTP-plumbing signal. A module outside the four walk roots (`loops/`,
+ *     `scripts/`) is scanned by neither tier.
+ *
+ *     forge-38dl (T3 lane RA) AUDITED THE RESIDUE, not widened the tier-2
+ *     model: at `c0093918` the full model reported 108 findings tree-wide,
+ *     all unaudited. Re-measured on THIS tree (paths moved: `cli/` ->
+ *     `apps/forge/`, `orchestrator/` -> `packages/*`; #878 re-keyed the
+ *     allowlist to `{file, anchor}`) it was 98, across 34 modules, over the
+ *     bead's own declared scope (`targetModules` UNION `findReachableModules`
+ *     — "the whole bridge-reachable set"); a further pass over the WHOLE
+ *     production tree (`targetModules` UNION `sweepModules`) found 16 more in
+ *     4 CLI-only lint/migration modules. Every one of the 114 findings was
+ *     read, traced to either a server-composed/charset-sanitized origin (a
+ *     mint site, a config-derived root, a `readdirSync` enumeration) or an
+ *     explicit gate before the sink in a DIFFERENT function than the sink
+ *     (`isSafeRunId` / `isSafeCycleId` / `isCanonicalInitiativeId` /
+ *     `resolveGuardedPath` / `isContainedProjectRepoPath` / a manual
+ *     realpath+startsWith containment) — zero were REAL holes — then either
+ *     allowlisted with that evidence (`check-raw-fs-guarded.allowlist.mjs`)
+ *     or, for the CLI-only ones, the operator-trust-boundary category the
+ *     allowlist's own charter already names. All 38 modules were promoted
+ *     into `EXPLICIT_MODULES` (tier 1) rather than left as a parked residue,
+ *     so `node scripts/check-raw-fs-guarded.mjs` now reports 0 findings for
+ *     BOTH `targetModules ∪ findReachableModules` and `targetModules ∪
+ *     sweepModules` at time of writing. What tier 2's restriction STILL
+ *     means, honestly: the four expensive bare ids and the dir-param-leaf-
+ *     append rule remain OFF in `SWEEP_MODEL` (widening those tree-wide was
+ *     rejected the same way it was before — see the "trains blind
+ *     regeneration" note above), so a genuinely NEW module outside
+ *     `EXPLICIT_MODULES`/the HTTP-plumbing signal, using one of those shapes,
+ *     is still invisible to the daily gate until it is brought into scope the
+ *     same way — this file's job is to keep that list of un-swept modules at
+ *     zero, not to make the sweep itself all-seeing.
  *   - TIER 1's ENTRY half was name-shaped until bead 5.34; `listEntryModules`
  *     now derives host, route tables and dispatch entries structurally.
  *   - TIER 1's reachability half inherits the sibling walker's limits: only
@@ -407,6 +437,55 @@ export const EXPLICIT_MODULES = [
   'packages/library/studio/skill-install.ts', 'packages/library/studio/skill-package.ts', 'packages/library/studio/skill-trust.ts', 'packages/library/bridge-studio-authoring-hook.ts', 'packages/library/bridge-studio-authoring-template.ts',
   'packages/library/studio/community-install.ts',
   'packages/library/studio/community-index.ts',
+  // forge-38dl (T3 lane RA): 34 modules promoted out of the tier-2 sweep after
+  // a module-by-module audit of the full model's findings over them (98
+  // findings, all SERVER-BUILT or BOUNDARY-VALIDATED — see
+  // check-raw-fs-guarded.allowlist.mjs's matching ALLOWLIST rows for the
+  // per-finding evidence). None carries the HTTP-plumbing signal or sits on
+  // the bridge's relative-import reachability walk, so tier 2 was the only
+  // coverage they had before this — exactly the "unaudited" residue this
+  // bead measured.
+  'packages/flows/cycle.ts',
+  'packages/flows/enqueue-flow-run.ts',
+  'packages/flows/enqueue-plan-run.ts',
+  'packages/library/studio/template-library.ts',
+  'packages/projects/preflight-build.ts',
+  'packages/projects/project-create.ts',
+  'packages/factory/reflector-rerun.ts',
+  'packages/flows/review-comments.ts',
+  'packages/kernel/case-folding-probe.ts',
+  'packages/library/instruction-seed-match.ts',
+  'packages/projects/preflight-gate.ts',
+  'packages/agents/spawn-marker.ts',
+  'packages/flows/scheduler-run-one.ts',
+  'packages/kernel/logging.ts',
+  'packages/projects/preflight-deps.ts',
+  'packages/projects/preflight-instructions.ts',
+  'packages/sessions/studio/session-artifact-derivers.ts',
+  'packages/factory/cycle-recap.ts',
+  'packages/flows/requeue-resume.ts',
+  'packages/knowledge/brain-paths.ts',
+  'packages/knowledge/kb-job-state.ts',
+  'packages/library/studio/connection-probe.ts',
+  'packages/projects/preflight-demo.ts',
+  'packages/projects/preflight-fix-auto.ts',
+  'packages/projects/preflight-repo.ts',
+  'packages/agents/agent-dispatch.ts',
+  'packages/flows/forge-metrics.ts',
+  'packages/flows/pr.ts',
+  'packages/flows/run-model-derive-lineage.ts',
+  'packages/flows/work-item.ts',
+  'packages/knowledge/kb-drain-structural.ts',
+  'packages/knowledge/kb-lint-summary.ts',
+  'packages/projects/preflight-release.ts',
+  'packages/projects/preflight.ts',
+  // forge-38dl: a second, beyond-bridge-reachable-scope pass over the full
+  // production tree found 16 more full-model findings in these 4 CLI-only
+  // lint/migration modules (see the matching ALLOWLIST rows).
+  'apps/forge/studio-lint.ts',
+  'packages/library/studio-lint-library-passes.ts',
+  'packages/projects/constraint-author.ts',
+  'packages/projects/project-migrate.ts',
 ];
 
 /** The HTTP-plumbing signal: a module that speaks the bridge's request/response
