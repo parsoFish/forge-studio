@@ -34,7 +34,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, mkdtempSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, mkdirSync, renameSync, writeFileSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -510,11 +510,14 @@ test('T1 1503: a queue terminal wins even when cycle.start predates the anchor',
 test('T1 1503: a queue terminal OLDER than the anchor is ignored — the wait continues', () => {
   const { root, logs } = realDoor();
   const initiative = 'INIT-run22-mtime-guard';
-  const anchor = Date.now();
   liveDispatch(logs, `2026-09-18T10-21-56_${initiative}`);
+  // Genuinely BEFORE the anchor — mtime AND ctime. `utimesSync` alone would
+  // not do: it back-dates mtime but stamps ctime with NOW, and ctime is what
+  // a rename into _queue/<state>/ moves (see the rename test below).
   queueFile(root, 'failed', initiative);
-  const before = (anchor - 60_000) / 1000;
-  utimesSync(join(root, '_queue', 'failed', `${initiative}.md`), before, before);
+  const settledAt = Date.now() + 50;
+  while (Date.now() < settledAt) { /* ctime resolution: the anchor must be strictly later */ }
+  const anchor = Date.now();
 
   const watch = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: initiative })!;
   assert.equal(watch(null, anchor), null, 'a terminal older than the anchor is the PREVIOUS run\'s, not this one\'s');
@@ -538,4 +541,27 @@ test('T1 1503: a queue terminal in the WANTED state, mid-wait, reaches — even 
 
   assert.equal(watch(null, anchor), null, 'a first sighting starts the page grace, by design — it does not end the wait yet');
   assert.equal(watch.reached, true, 'but it IS reached — the terminal was read despite cycle.start predating the anchor');
+});
+
+/** A RENAME DOES NOT TOUCH MTIME. `moveTo` (packages/flows/queue.ts) is a bare
+ *  `renameSync`, so a manifest last WRITTEN before the press keeps its old
+ *  mtime in _queue/failed/ — only its ctime records the move. Reading mtime
+ *  alone would ignore a genuine terminal as "the previous run's". */
+test('T1 1503: a manifest MOVED into a terminal state after the anchor counts even though its mtime is older (rename keeps mtime)', () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-1503-renamed';
+  liveDispatch(logs, `2026-09-25T20-36-45_${initiative}`);
+  queueFile(root, 'in-flight', initiative);
+  const old = (Date.now() - 600_000) / 1000;
+  utimesSync(join(root, '_queue', 'in-flight', `${initiative}.md`), old, old);
+  const settledAt = Date.now() + 50;
+  while (Date.now() < settledAt) { /* the anchor is strictly after the file's last write */ }
+  const anchor = Date.now();
+  const watch = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: initiative })!;
+  assert.equal(watch(null, anchor), null, 'still in flight');
+  mkdirSync(join(root, '_queue', 'failed'), { recursive: true });
+  renameSync(join(root, '_queue', 'in-flight', `${initiative}.md`), join(root, '_queue', 'failed', `${initiative}.md`));
+  const stop = watch(null, anchor);
+  assert.notEqual(stop, null, 'the move happened after the anchor — a stale mtime must not hide it');
+  assert.equal(stop!.reason, 'cycle-ended');
 });
