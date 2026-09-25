@@ -55,6 +55,8 @@ const WELL_FORMED_OK_ENTRY = {
   scanVerdict: 'clean',
   trust: 'approved',
   runnable: true,
+  // forge-8vfn.8.3.7: server-attested, mandatory on every real entry.
+  origin: 'operator',
 };
 
 test('parseHookLibraryEntry: a well-formed ok:true entry round-trips every field verbatim', () => {
@@ -139,6 +141,27 @@ test('parseHookLibraryEntry: permissions with a non-array env/read or non-boolea
   expect(() => parseHookLibraryEntry({ ...WELL_FORMED_OK_ENTRY, permissions: { env: 'GH_TOKEN', read: [], network: false } })).toThrow();
   expect(() => parseHookLibraryEntry({ ...WELL_FORMED_OK_ENTRY, permissions: { env: [], read: [], network: 'false' } })).toThrow();
   expect(() => parseHookLibraryEntry({ ...WELL_FORMED_OK_ENTRY, permissions: undefined })).toThrow();
+});
+
+// ---------------------------------------------------------------------------
+// forge-8vfn.8.3.7 — origin ('ootb'|'operator'), server-attested, never
+// client-inferred. Mandatory on every real entry (the route always sends
+// it, mirroring `runnable`'s discipline above); an unrecognised token
+// (including the wire's own 3-value 'unknown', which this two-source kind
+// never legitimately emits) THROWS, never coerced to a guessed value.
+// ---------------------------------------------------------------------------
+
+test('parseHookLibraryEntry: origin "ootb" round-trips too (not just "operator")', () => {
+  const parsed = parseHookLibraryEntry({ ...WELL_FORMED_OK_ENTRY, origin: 'ootb' });
+  expect((parsed as { origin?: string }).origin).toBe('ootb');
+});
+
+test('parseHookLibraryEntry: origin missing, or an unrecognised value, THROWS — never defaulted to "ootb" or "operator"', () => {
+  const { origin: _drop, ...missing } = WELL_FORMED_OK_ENTRY;
+  expect(() => parseHookLibraryEntry(missing)).toThrow();
+  expect(() => parseHookLibraryEntry({ ...WELL_FORMED_OK_ENTRY, origin: 'unknown' })).toThrow();
+  expect(() => parseHookLibraryEntry({ ...WELL_FORMED_OK_ENTRY, origin: 'seed' })).toThrow();
+  expect(() => parseHookLibraryEntry({ ...WELL_FORMED_OK_ENTRY, origin: undefined })).toThrow();
 });
 
 test('parseHookLibraryEntry: a missing/non-boolean `ok` THROWS — the discriminator itself is not optional', () => {
