@@ -9,9 +9,11 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import {
   mkdtempSync,
   mkdirSync,
+  readdirSync,
   rmSync,
   readFileSync,
   writeFileSync,
@@ -20,7 +22,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { runProjectManager, type PmQueryFn } from '@forge/stations/testing';
-import { createLogger, type EventLogEntry } from '@forge/kernel';
+import { createLogger, FORGE_ROOT, type EventLogEntry } from '@forge/kernel';
 import type { CycleInput } from '../../cycle-context.ts';
 import { classifyCycleFailure, loadAgentDefinition, skillPath } from '@forge/agents';
 
@@ -29,8 +31,11 @@ import { classifyCycleFailure, loadAgentDefinition, skillPath } from '@forge/age
 // canonical project-manager def itself via @forge/agents (rank-safe).
 const canonicalDef = (slug: string) => loadAgentDefinition(skillPath(slug));
 
-const MANIFEST_BODY = `---
-initiative_id: INIT-2026-05-20-pm-decomp-test
+const DEFAULT_INITIATIVE_ID = 'INIT-2026-05-20-pm-decomp-test';
+
+function manifestBody(initiativeId: string): string {
+  return `---
+initiative_id: ${initiativeId}
 project: testproj
 project_repo_path: ./projects/testproj
 created_at: 2026-05-20T00:00:00Z
@@ -49,6 +54,7 @@ Given a user is authenticated, when they request /api/health, then the response 
 
 Given no Authorization header, when /api/data is requested, then the response is 401.
 `;
+}
 
 /**
  * Frontmatter for a clean work-item that round-trips through readWorkItemsFromDir
@@ -160,7 +166,18 @@ type Harness = {
   input: CycleInput;
 };
 
-function setupHarness(): Harness {
+/**
+ * `initiativeId` is parametrized (default: the original hardcoded literal,
+ * unchanged for every pre-existing test) so a test that needs a NAME NO
+ * OTHER TEST IN THIS FILE HAS EVER USED — the `_logs` residue test below —
+ * can ask for one. All four tests otherwise share one process, and
+ * `runProjectManager` derives `runAgent`'s `runId` (and therefore any
+ * spawn-marker dir name) from `initiativeId`; reusing the same literal id
+ * across tests would let an EARLIER test's residue already be present in a
+ * LATER test's own before-snapshot, silently defeating the very check it
+ * exists to make.
+ */
+function setupHarness(initiativeId: string = DEFAULT_INITIATIVE_ID): Harness {
   const dir = mkdtempSync(join(tmpdir(), 'forge-pm-decomp-'));
   const worktree = join(dir, 'projects', 'testproj');
   mkdirSync(worktree, { recursive: true });
@@ -168,14 +185,14 @@ function setupHarness(): Harness {
     join(worktree, 'package.json'),
     JSON.stringify({ name: 'testproj', version: '0.0.1', scripts: { test: 'echo no tests' } }, null, 2),
   );
-  const manifestPath = join(dir, '_queue', 'in-flight', 'INIT-2026-05-20-pm-decomp-test.md');
+  const manifestPath = join(dir, '_queue', 'in-flight', `${initiativeId}.md`);
   mkdirSync(join(dir, '_queue', 'in-flight'), { recursive: true });
-  writeFileSync(manifestPath, MANIFEST_BODY);
+  writeFileSync(manifestPath, manifestBody(initiativeId));
   const logsDir = join(dir, '_logs');
   mkdirSync(logsDir, { recursive: true });
   const logger = createLogger('TEST-cycle-decomp', logsDir);
   const input: CycleInput = {
-    initiativeId: 'INIT-2026-05-20-pm-decomp-test',
+    initiativeId,
     manifestPath,
     projectRepoPath: worktree,
     worktreePath: worktree,
@@ -281,3 +298,55 @@ test('runProjectManager: single WI with explicit depends_on = [] succeeds', asyn
     rmSync(h.dir, { recursive: true, force: true });
   }
 });
+
+/**
+ * Every top-level entry name directly under THIS REPO's own `_logs/` (never
+ * the harness's tmpdir one) — before/after, never "must be empty": a real
+ * checkout legitimately carries real `_logs/INIT-*` dirs from real forge
+ * runs, so only entries that APPEAR during this test count as a violation.
+ */
+function repoLogsEntries(): Set<string> {
+  try {
+    return new Set(readdirSync(join(FORGE_ROOT, '_logs')));
+  } catch {
+    return new Set(); // no _logs/ at all yet — a fresh checkout, not a violation
+  }
+}
+
+test(
+  "runProjectManager: never writes into the repo's own _logs (forge-8vfn.8.1.10) — " +
+    "setupHarness's tmpdir logger must be the ONLY place the run's spawn marker lands",
+  async () => {
+    const before = repoLogsEntries();
+    // A name NEVER used by any other test in this file or any prior run of
+    // this one (see `setupHarness`'s doc) — otherwise an earlier test's own
+    // residue would already sit in `before`, and this check would silently
+    // pass over a real leak.
+    const h = setupHarness(`INIT-2026-05-20-pm-decomp-residue-${randomUUID()}`);
+    try {
+      const { queryFn } = makeStubQueryFn([
+        {
+          initiativeId: h.input.initiativeId,
+          // Two WIs (not one) — a single-WI decomposition also needs a bound
+          // `ClassProfilePort` (see the depends_on=[] test above); this test
+          // is about `_logs` residue, not that gate, so it reuses the
+          // no-classProfiles-needed shape the first test already proved.
+          wis: [{ wiId: 'WI-1' }, { wiId: 'WI-2', filename: 'src/wi2.ts' }],
+        },
+      ]);
+      await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn });
+
+      const after = repoLogsEntries();
+      const created = [...after].filter((name) => !before.has(name));
+      assert.deepEqual(
+        created,
+        [],
+        `runProjectManager must not create anything under this repo's own _logs/ — its ` +
+          `harness logger (setupHarness) is rooted in a tmpdir, and runAgent's spawn marker ` +
+          `must follow the injected logger, not <FORGE_ROOT>/_logs. Found: ${created.join(', ')}`,
+      );
+    } finally {
+      rmSync(h.dir, { recursive: true, force: true });
+    }
+  },
+);

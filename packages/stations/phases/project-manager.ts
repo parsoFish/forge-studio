@@ -301,6 +301,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     prompt,
     systemPrompt,
     lifecycle: 'caller',
+    logger, // forge-8vfn.8.1.10: lets runAgent root the spawn marker at this pipeline's own logger, not <FORGE_ROOT>/_logs.
     streamGuard: { label: 'project-manager', signal },
     bindings: {
       initiative: {

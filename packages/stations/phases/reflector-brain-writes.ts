@@ -128,6 +128,7 @@ export async function runReflectorBrainWrites(
       prompt,
       systemPrompt,
       lifecycle: 'caller',
+      logger, // forge-8vfn.8.1.10: lets runAgent root the spawn marker at this pipeline's own logger, not <FORGE_ROOT>/_logs.
       onMessage: (msg) => {
         if (typeof msg !== 'object' || msg === null) return;
         const m = msg as {
