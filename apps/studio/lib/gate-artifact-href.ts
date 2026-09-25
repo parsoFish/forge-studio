@@ -2,7 +2,8 @@
  * The artifact a GATED run is actually waiting on — `forge-8vfn.7.6.62`.
  *
  * THE BUG THIS REPLACES IS A NAMING COLLISION. `run.gate`
- * (`packages/flows/run-view-types.ts:110`) is a NODE ID, "derived from the
+ * (`packages/contracts/run-view-types.ts:62`, moved from `packages/flows` by
+ * `forge-8vfn.5.17`) is a NODE ID, "derived from the
  * run's own events (G9)" so a user-authored flow can name its gate node
  * anything. `node.gate` (`packages/contracts/studio-types.ts:161`) is the GATE
  * KIND — `plan` or `verdict`. Two fields, one name, different meanings.

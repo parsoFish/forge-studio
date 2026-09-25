@@ -5,7 +5,8 @@
  * exist for it.
  *
  * THE BUG IS A NAMING COLLISION, and these tests pin both halves of it.
- * `run.gate` (`packages/flows/run-view-types.ts:110`) is a NODE ID, "derived
+ * `run.gate` (`packages/contracts/run-view-types.ts:62`, moved from
+ * `packages/flows` by `forge-8vfn.5.17`) is a NODE ID, "derived
  * from the run's own events (G9)". `node.gate`
  * (`packages/contracts/studio-types.ts:161`) is the GATE KIND — `plan` or
  * `verdict`. Two fields, same name, different meanings. `RunRail.tsx:293` held

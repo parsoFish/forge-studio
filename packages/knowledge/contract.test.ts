@@ -29,9 +29,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import * as knowledge from '../../index.ts';
+import * as knowledge from './index.ts';
 
-const README = new URL('../../README.md', import.meta.url);
+const README = new URL('./README.md', import.meta.url);
 
 /** Pull the backtick-quoted identifiers out of the README's API tables. The
  *  Values table's rows are `| area | `a` · `b` |`; the Types paragraph is a
