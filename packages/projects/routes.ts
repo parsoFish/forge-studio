@@ -108,7 +108,7 @@
  * both assert every entry carries one.
  */
 import { pathOnly, type RouteContext, type RouteTable } from '@forge/kernel';
-import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 
 import { createProjectsListHandler, createStudioStartersHandler, handleProjectsStarters } from './project-roster.ts';
 import {
@@ -122,7 +122,7 @@ import { makePreflightWriteHandlers } from './bridge-studio-project-preflight-wr
 import { handleProjectContractResetDryRun, handleProjectContractResetApply } from './bridge-studio-project-reset.ts';
 
 /**
- * Structural mirror of `@forge/knowledge/project-brain-seed.ts`'s
+ * Structural mirror of `@forge/knowledge`'s
  * `ProjectBrainSeedResult` — `bridge-studio-project-onboard.ts` already duplicates this
  * exact shape (unexported) for the same reason: `projects` (rank 2) may not
  * import `@forge/knowledge` (same rank), not even for a type. Duplicated a
@@ -153,13 +153,13 @@ type ProjectBrainSeedResult = {
  * every package and the legacy tree freely — this file may not.
  */
 export type ProjectsRouteDeps = {
-  /** `@forge/knowledge/project-brain-seed.ts`'s `seedProjectBrain`. */
+  /** `@forge/knowledge`'s `seedProjectBrain`. */
   seedBrain: (forgeRoot: string, projectId: string, name: string) => ProjectBrainSeedResult;
-  /** `@forge/knowledge/project-brain-seed.ts`'s `checkProjectBrainSeedContainment`. */
+  /** `@forge/knowledge`'s `checkProjectBrainSeedContainment`. */
   checkBrainSeedContainment: (forgeRoot: string, projectId: string) => void;
-  /** `@forge/knowledge/brain-paths.ts`'s `readArtifactRoot`. */
+  /** `@forge/knowledge`'s `readArtifactRoot`. */
   readArtifactRoot: (projectRoot: string) => string;
-  /** `@forge/flows/manifest-path-guard.ts`'s `isContainedProjectRepoPath`. */
+  /** `@forge/flows`'s `isContainedProjectRepoPath`. */
   isContainedProjectRepoPath: (p: string, opts: { forgeRoot: string; projectsRoot?: string }) => boolean;
   /** `apps/forge/bridge-studio-writes.ts`'s `spawnPreflightFix` — sessions-owned
    *  (M4-projects routes budget row 12b), kept in its legacy home until the
@@ -168,14 +168,14 @@ export type ProjectsRouteDeps = {
     forgeRoot: string,
     p: { project: string; clause: string; instruction: string; detail: string; runId: string },
   ) => void;
-  /** `@forge/knowledge/kb-sites.ts`'s `projectKbBindings`. */
+  /** `@forge/knowledge`'s `projectKbBindings`. */
   projectKbBindings: (forgeRoot: string) => Map<string, string>;
-  /** `@forge/agents/studio/agent-registry.ts`'s `listStarterAgents` — injected, no
+  /** `@forge/agents`'s `listStarterAgents` — injected, no
    *  package-native home. */
   listStarterAgents: (forgeRoot: string) => AgentDefinition[];
-  /** `@forge/flows/studio/flow-registry.ts`'s `loadStarterFlow`. */
+  /** `@forge/flows`'s `loadStarterFlow`. */
   loadStarterFlow: (forgeRoot: string) => FlowDefinition | null;
-  /** `@forge/agents/studio/derive.ts`'s `agentCapabilityDescriptor`. Return
+  /** `@forge/agents`'s `agentCapabilityDescriptor`. Return
    *  type deliberately `unknown`, mirroring `project-roster.ts`'s own note:
    *  even a type-only import of `AgentCapabilityDescriptor` (rank 3) would be
    *  a `package-layer-order` violation the same as a value import. */

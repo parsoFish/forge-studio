@@ -7,10 +7,11 @@
 
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { pinnedStreamQuery, type StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import { pinnedStreamQuery, type StreamQueryFn } from '@forge/agents';
 
 import type { EventLogger } from '@forge/kernel';
-import { parseManifest, persistManifestSpecs, type InitiativeManifest } from '@forge/flows/manifest.ts';
+import { parseManifest, persistManifestSpecs } from '@forge/flows';
+import type { InitiativeManifest, AgentDefinition } from '@forge/contracts';
 import {
   PM_BRAIN_ACCESS,
   DECOMPOSITION_STATE_FILENAME,
@@ -26,14 +27,14 @@ import {
   validateWorkItemSet,
   type CouplingPair,
   type WorkItem,
-} from '@forge/flows/work-item.ts';
-import { loadProjectConfig, type ProjectConfig } from '@forge/projects/project-config.ts';
+} from '@forge/flows';
+import { loadProjectConfig, type ProjectConfig } from '@forge/projects';
 import { releaseDraftAcs } from '../release-process.ts';
-import { recordBrainGateResult, type CycleInput } from '@forge/flows/cycle-context.ts';
-import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents/tool-event-emit.ts';
-import { deriveGateRecipe, renderGateRecipeBlock } from '@forge/projects/gate-recipes.ts';
-import { runAgent } from '@forge/agents/run-agent.ts';
-import { compileWorkItemSpecs } from '@forge/flows/phases/wi-spec-compile.ts';
+import { recordBrainGateResult, type CycleInput } from '@forge/flows';
+import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents';
+import { deriveGateRecipe, renderGateRecipeBlock } from '@forge/projects';
+import { runAgent } from '@forge/agents';
+import { compileWorkItemSpecs } from '@forge/flows';
 import { checkDecomposeCompleteness } from './decompose-completeness.ts';
 import { rejectWorkItemSet } from './pm-rejected-set.ts';
 import { writeDecompositionDoc } from './pm-decomposition-doc.ts';
@@ -41,7 +42,6 @@ import { readPmBrainContext, readProjectContext } from './pm-prompt-context.ts';
 import { underDecomposedFlag } from './pm-class-set-rules.ts';
 import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
 import { deriveKbIdFromBrainPath } from '@forge/knowledge';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 /**
  * Injection seam for tests. The live cycle uses the pinned stream query;

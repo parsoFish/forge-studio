@@ -28,8 +28,8 @@
 import { existsSync, readFileSync, readdirSync, statSync, watch as fsWatch, type FSWatcher } from 'node:fs';
 import { join } from 'node:path';
 
-import { listInFlight, type QueuePaths } from '@forge/flows/queue.ts';
-import { parseManifest } from '@forge/flows/manifest.ts';
+import { listInFlight, type QueuePaths } from '@forge/flows';
+import { parseManifest } from '@forge/flows';
 
 /** Cap on how many terminal (non-live) cycles `scanCyclesFromDisk` surfaces —
  *  the UI's "recent" list, not a hard retention limit (frozen cycle logs are

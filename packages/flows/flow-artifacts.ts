@@ -32,7 +32,7 @@
 import { existsSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
+import type { FlowDefinition } from '@forge/contracts';
 import { worktreeDemoRelDir } from './demo-paths.ts';
 
 /** The subset of CycleInput the guard needs to resolve artifact locations. */

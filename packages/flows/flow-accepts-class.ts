@@ -10,8 +10,8 @@
  * `flow.accepts` directly (it is DERIVING the class, not checking a manifest
  * against it) and does not call this function.
  */
-import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
-import type { ManifestClass } from '@forge/contracts/manifest-types.ts';
+import type { FlowDefinition } from '@forge/contracts';
+import type { ManifestClass } from '@forge/contracts';
 
 /** True iff `flow` declares `manifestClass` in its `accepts` list. */
 export function flowAcceptsClass(

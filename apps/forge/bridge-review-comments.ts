@@ -25,9 +25,21 @@ import { existsSync } from 'node:fs';
 import lockfile from 'proper-lockfile';
 
 import { sendJson, allowedOrigin, sanitizeError } from '@forge/kernel';
-import * as rc from '@forge/flows/review-comments.ts';
-import { isSafeCycleId } from '@forge/flows/manifest-path-guard.ts';
-import { applyReviewVerdict, type StudioPostContext } from '@forge/flows/bridge-studio-runs.ts';
+import {
+  REVIEW_COMMENTS_MAX,
+  reviewCommentsPath,
+  readReviewComments,
+  writeReviewComments,
+  appendReviewComment,
+  resolveComment,
+  editComment,
+  deleteComment,
+  deriveVerdictFromComments,
+  type ReviewCommentsSidecar,
+  isSafeCycleId,
+  applyReviewVerdict,
+  type StudioPostContext,
+} from '@forge/flows';
 import { readJson } from './bridge-http.ts';
 
 /** True when `v` is a `{given, when, then}` shape (all string fields present). */
@@ -46,17 +58,17 @@ function isAcShape(v: unknown): boolean {
 async function withReviewCommentLock(
   logsRoot: string,
   cycleId: string,
-  mutate: (sidecar: rc.ReviewCommentsSidecar) => rc.ReviewCommentsSidecar,
-): Promise<rc.ReviewCommentsSidecar> {
-  // Ensure the sidecar exists so proper-lockfile has a target (rc.writeReviewComments
+  mutate: (sidecar: ReviewCommentsSidecar) => ReviewCommentsSidecar,
+): Promise<ReviewCommentsSidecar> {
+  // Ensure the sidecar exists so proper-lockfile has a target (writeReviewComments
   // throws on a traversal cycleId — that propagates as a 500, never a write).
-  if (!existsSync(rc.reviewCommentsPath(logsRoot, cycleId))) {
-    rc.writeReviewComments(logsRoot, cycleId, { cycleId, comments: [] });
+  if (!existsSync(reviewCommentsPath(logsRoot, cycleId))) {
+    writeReviewComments(logsRoot, cycleId, { cycleId, comments: [] });
   }
-  const release = await lockfile.lock(rc.reviewCommentsPath(logsRoot, cycleId), { retries: { retries: 5, minTimeout: 50 } });
+  const release = await lockfile.lock(reviewCommentsPath(logsRoot, cycleId), { retries: { retries: 5, minTimeout: 50 } });
   try {
-    const next = mutate(rc.readReviewComments(logsRoot, cycleId));
-    rc.writeReviewComments(logsRoot, cycleId, next);
+    const next = mutate(readReviewComments(logsRoot, cycleId));
+    writeReviewComments(logsRoot, cycleId, next);
     return next;
   } finally {
     try { await release(); } catch { /* ignore */ }
@@ -87,8 +99,8 @@ export async function handleReviewCommentRoutes(
   if (method === 'GET' && url.startsWith('/api/review-comments/')) {
     const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length));
     if (!cycleId || !isSafeCycleId(cycleId)) { sendJson(res, 400, { error: 'expected /api/review-comments/<cycleId>' }, origin); return true; }
-    const sidecar = rc.readReviewComments(ctx.logsRoot, cycleId);
-    sendJson(res, 200, { ...sidecar, derivedVerdict: rc.deriveVerdictFromComments(sidecar.comments) }, origin);
+    const sidecar = readReviewComments(ctx.logsRoot, cycleId);
+    sendJson(res, 200, { ...sidecar, derivedVerdict: deriveVerdictFromComments(sidecar.comments) }, origin);
     return true;
   }
   // W7-B7 (artifact-plan-15): edit + delete for authored comments. A
@@ -106,9 +118,9 @@ export async function handleReviewCommentRoutes(
       if (patchBody === '') { sendJson(res, 400, { error: 'body must be non-empty when provided' }, origin); return true; }
       if (patchBody === undefined && patchBlocking === undefined) { sendJson(res, 400, { error: 'nothing to edit — provide body and/or blocking' }, origin); return true; }
       const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
-        rc.editComment(sidecar, commentId, { body: patchBody, blocking: patchBlocking }),
+        editComment(sidecar, commentId, { body: patchBody, blocking: patchBlocking }),
       );
-      sendJson(res, 200, { ...result, derivedVerdict: rc.deriveVerdictFromComments(result.comments) }, origin);
+      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -120,8 +132,8 @@ export async function handleReviewCommentRoutes(
       const body = (await readJson(req)) as Record<string, unknown>;
       const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
       if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return true; }
-      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => rc.deleteComment(sidecar, commentId));
-      sendJson(res, 200, { ...result, derivedVerdict: rc.deriveVerdictFromComments(result.comments) }, origin);
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => deleteComment(sidecar, commentId));
+      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -133,8 +145,8 @@ export async function handleReviewCommentRoutes(
       const body = (await readJson(req)) as Record<string, unknown>;
       const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
       if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return true; }
-      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => rc.resolveComment(sidecar, commentId));
-      sendJson(res, 200, { ...result, derivedVerdict: rc.deriveVerdictFromComments(result.comments) }, origin);
+      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => resolveComment(sidecar, commentId));
+      sendJson(res, 200, { ...result, derivedVerdict: deriveVerdictFromComments(result.comments) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -147,18 +159,18 @@ export async function handleReviewCommentRoutes(
       const region = typeof body['region'] === 'string' ? body['region'].trim() : '';
       const text = typeof body['body'] === 'string' ? body['body'].trim() : '';
       if (!cycleId || !isSafeCycleId(cycleId) || !region || !text) { sendJson(res, 400, { error: 'cycleId, region, body required' }, origin); return true; }
-      if (rc.readReviewComments(ctx.logsRoot, cycleId).comments.length >= rc.REVIEW_COMMENTS_MAX) {
-        sendJson(res, 409, { error: `review-comment cap reached (${rc.REVIEW_COMMENTS_MAX}) for this cycle` }, origin);
+      if (readReviewComments(ctx.logsRoot, cycleId).comments.length >= REVIEW_COMMENTS_MAX) {
+        sendJson(res, 409, { error: `review-comment cap reached (${REVIEW_COMMENTS_MAX}) for this cycle` }, origin);
         return true;
       }
       const ac = isAcShape(body['ac']) ? (body['ac'] as { given: string; when: string; then: string }) : undefined;
       const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
-        rc.appendReviewComment(sidecar, { region, body: text, blocking: Boolean(body['blocking']), ac }),
+        appendReviewComment(sidecar, { region, body: text, blocking: Boolean(body['blocking']), ac }),
       );
       sendJson(res, 200, {
         ...result,
         comment: result.comments[result.comments.length - 1],
-        derivedVerdict: rc.deriveVerdictFromComments(result.comments),
+        derivedVerdict: deriveVerdictFromComments(result.comments),
       }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);

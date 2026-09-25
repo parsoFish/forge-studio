@@ -3,6 +3,7 @@
 - **Status:** accepted (operator, 2026-08-31, at gate H5 — `docs/roadmaps/1.0.md` §5)
 - **Amended:** 2026-08-31, same sitting — §1's tsconfig project-reference clause, in favour of the blueprint spec's [§3](../superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md) "no build step" decision. The amendment and its evidence are in §1 below.
 - **Amended:** 2026-08-31 (operator ruling, M3-A) — §1's `exports` clause, to permit an **additive** `"./*": "./*"` subpath alongside the single root entry. The amendment and its evidence are in §1 below.
+- **Amended:** 2026-09-25 (M7-C OD, bead `forge-8vfn.5.31`) — §1's `exports` clause again, RETIRING the M3-A `"./*"` subpath now that its stated purpose is discharged. The amendment and its evidence are in §1 below.
 - **Amended:** 2026-09-25 (operator ruling, M7 item 83) — §2 rule 4's chain gains `stations` between `flows` and `factory`. The amendment and its reason are in §2 below.
 - **Supersedes:** [ADR 042](./042-surface-cap-scope-and-testability.md) — the `orchestrator/` surface cap and its three boundary rulings are replaced by per-package caps. ADR 042's *context* (why a cap exists) stands; its *object* does not, because `orchestrator/` ceases to exist as a unit at M3.
 - **Relates to:** [ADR 027](./027-studio-object-model.md) (definitions as data), [ADR 028](./028-flow-engine.md) (the flow engine that becomes `@forge/flows`), [ADR 043](./043-generic-interactive-surface.md) (the spine that becomes `@forge/sessions`), [ADR 045](./045-operator-workspace-and-promotion.md) (`_local/` resolution, which lands in `@forge/kernel`).
@@ -66,6 +67,81 @@ its own `test` script, and its own `tsconfig.json` extending the root.
 > whole `exports` object; it now asserts that the root entry is exactly
 > `./index.ts` **and** that the subpath entry is present, which is the invariant
 > this amendment actually intends.
+
+> **Amendment, 2026-09-25 (M7-C OD, bead `forge-8vfn.5.31`).** The M3-A amendment named its own retirement condition without
+> spelling out the word: `"./*"` was **additive**, there so 756 deep-specifier
+> imports the M3 move emitted would keep resolving **while nothing had been
+> repointed yet**. Bead `forge-8vfn.5.31` (filed 2026-09-02, the same wave)
+> named exactly that follow-up: "populates each package index as the declared
+> public door... without repointing importers... Collapsing to one door is
+> bead forge-8vfn.5.31." That repoint is now done — every external importer of
+> `@forge/{contracts,kernel,knowledge,library,projects,agents,sessions,flows,stations}`
+> was measured, repointed to `@forge/<pkg>` (the door `"."` already names), and
+> `"./*"` is no longer additive for any of them: it is the LAST thing still
+> legalising a deep path the door itself does not. `stations` joined this list
+> after item 83's split carried it out of `factory`; its own door population
+> and repoint are this same bead, done on the merged tree rather than
+> re-litigated as a second amendment.
+>
+> **`exports` now reads, per package:**
+>
+> ```json
+> { "." : "./index.ts" }
+> ```
+>
+> plus, only where a real consumer needs one, a small number of **literal,
+> named** subpaths — never a wildcard — in one of two shapes:
+>
+> - **`"./testing"`** (`knowledge`, `library`, `projects`, `agents`, `sessions`,
+>   `flows`, `stations`), pointing at one `testing.ts` file in the package,
+>   for symbols with no production consumer outside the package (a test-only
+>   deep import gets a documented door of its own rather than re-legalising
+>   every internal file to reach it).
+> - **A specific deep path kept open on purpose**, documented at its use
+>   site, for the cases the repoint itself surfaced: a circular-import risk
+>   (`@forge/sessions`'s `"./studio/session-kinds.ts"` and
+>   `"./studio/session-transcript.ts"`, which `packages/projects/
+>   contract-stages.ts` reaches deep because going through the door crashed
+>   `packages/sessions/contract.test.ts` with a TDZ `ReferenceError` — the
+>   door eagerly loads the whole package graph, and something in it cycled
+>   back), and `@forge/stations`'s three demo/docs-gate paths (kept deep so
+>   `apps/forge/factory-cli-wiring.ts`'s CLI seam and `@forge/factory`'s own
+>   `demo.ts`/`demo-runtime.ts` do not pull the whole door's reachable-sink
+>   surface into a request-path scan for a verb the bridge never calls — the
+>   same reasoning `@forge/factory`'s own two-specifier allowlist rests on).
+>   `@forge/factory` is governed separately by [ADR 048](
+>   ./048-deletable-example-factory.md) — its door is `index.ts` staying
+>   **empty**, not a populated barrel, so this amendment's "one root entry"
+>   shape does not apply to it at all; item 83's split carried nine of its
+>   eleven production specifiers into `@forge/stations`, so the allowlist
+>   this amendment originally measured at fourteen is two
+>   (`class-profiles.ts`, `demo.ts`) after the merge. A fourth case surfaced
+>   in a later merge round: `@forge/flows`'s `"./work-item.ts"`, which
+>   `packages/agents/ralph/runner.ts` reaches deep because going through the
+>   door crashed `@forge/agents/_adapters/claude/index.ts`'s load with a TDZ
+>   `ReferenceError` (`claude-agent.ts` → this file → the flows door →
+>   `flow-runner.ts` → the agents door → `run-agent.ts` → `_adapters/
+>   registry.ts` → `claude/index.ts` again, still mid-evaluation) — the same
+>   shape as the sessions case, one file's door forced open by a cycle the
+>   repoint made reachable rather than one it created.
+>
+> **What changed and did not.** The allow-graph is unaffected exactly as the
+> M3-A amendment said the additive subpath left it unaffected: `"./*"` never
+> altered which package could import which, only whether a deep FILE inside an
+> already-permitted package resolved. Removing it does not change one edge in
+> `scripts/check-boundaries.mjs`'s graph. What it changes is enforcement
+> granularity: Node's own module resolver (`moduleResolution: bundler`, the
+> workspace symlinks under `node_modules/@forge/`) now refuses a deep import
+> outside the declared set at both `tsc` and runtime —
+> `ERR_PACKAGE_PATH_NOT_EXPORTED` — which is a stronger, load-bearing
+> guarantee than a side-channel lint script could give the same property
+> without also being wired into CI.
+>
+> `scripts/check-skeleton.test.ts`'s M3-A-era assertion — `exports['./*'] ===
+> './*'` present on every package — is retired in the same commit as this
+> amendment, and replaced by the inverse: every package's `exports` has
+> exactly one `"."` key plus zero or more literal (non-wildcard) subpaths,
+> each pointing at a file that exists.
 
 > **Amendment, 2026-08-31 (operator ruling at H5).** This clause originally read
 > "and is wired into the root `tsconfig` as a project reference". It cannot be

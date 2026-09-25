@@ -33,7 +33,7 @@ import { applyAutoFixes } from './brain-fix-auto.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
 import { tryGetKbBackend, type KbBackend } from './kb-backend.ts';
 import { loadKbDescriptor, resolveKbProcesses } from './studio/kb-descriptor.ts';
-import type { KbDescriptor, KbProcessImpl } from '@forge/contracts/studio/types.ts';
+import type { KbDescriptor, KbProcessImpl } from '@forge/contracts';
 import type { EventLogger } from '@forge/kernel';
 
 type StepStatus = 'done' | 'skipped' | 'failed';

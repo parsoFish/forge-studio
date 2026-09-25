@@ -42,7 +42,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readdirSync, existsSync 
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 /** The old anchor form, computed inside a module at whatever depth it sits. */
 const PROBE_MODULE = `

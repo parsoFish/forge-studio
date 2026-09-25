@@ -82,7 +82,7 @@ import { tmpdir } from 'node:os';
 
 import { startBridge } from '../../ui-bridge.ts';
 import { runStudioLint } from '../../studio-lint.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
+import { loadAgentDefinition } from '@forge/agents';
 
 const SLUG = 'write-agent-guards';
 const LEGACY_SLUG = 'write-agent-legacy-hooks';

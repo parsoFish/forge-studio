@@ -15,9 +15,8 @@
  * OWN def and must not use this helper — it always resolves the real,
  * canonical, on-disk `skills/<slug>/SKILL.md`.
  */
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { skillPath } from '@forge/agents/skill-path.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { loadAgentDefinition, skillPath } from '@forge/agents';
+import type { AgentDefinition } from '@forge/contracts';
 
 const cache = new Map<string, AgentDefinition>();
 

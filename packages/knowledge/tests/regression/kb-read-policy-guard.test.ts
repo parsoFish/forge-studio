@@ -13,9 +13,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { loadKbDescriptor, resolveKbProcesses } from '../../studio/kb-descriptor.ts';
-import type { KbDescriptor, KbReaderRole } from '@forge/contracts/studio/types.ts';
+import type { KbDescriptor, KbReaderRole } from '@forge/contracts';
 import { kbReadPolicyViolation } from '../../kb-read-policy.ts';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 // Anchored on kernel's FORGE_ROOT, never on a hand-counted `..` chain from
 // this file's own depth. The chain here WAS correct at `orchestrator/` (one

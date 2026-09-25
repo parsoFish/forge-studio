@@ -22,12 +22,12 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
-import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
+import { pinnedSdkQuery as sdkQuery } from '@forge/agents';
+import { sdkHooksForAgent } from '@forge/agents';
 import { releaseFinalizeAgentSpec } from '../release-finalize-invocation.ts';
 
 import type { EventLogger } from '@forge/kernel';
-import { loadProjectConfig } from '@forge/projects/project-config.ts';
+import { loadProjectConfig } from '@forge/projects';
 import { releaseFinalizeSteps, hasReleaseProcess } from '../release-process.ts';
 import {
   RELEASE_FINALIZE_ALLOWED_TOOLS,
@@ -38,8 +38,8 @@ import {
   tallyToolUse,
   type ReleaseFinalizeToolUseSummary,
 } from '../release-finalize-invocation.ts';
-import { writeReleaseJson } from '@forge/flows/flow-artifacts.ts';
-import type { ReleaseFinalizePhaseResult } from '@forge/flows/cycle-context.ts';
+import { writeReleaseJson } from '@forge/flows';
+import type { ReleaseFinalizePhaseResult } from '@forge/flows';
 
 /** Default changelog path when the project declares a release but omits the path. */
 const DEFAULT_CHANGELOG_PATH = 'CHANGELOG.md';

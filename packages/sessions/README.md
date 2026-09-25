@@ -19,19 +19,49 @@ The test that holds this file honest is `contract.test.ts` beside it: it reads t
 | `kinds/architect.ts` | `ARCHITECT_MODEL` · `architectAgentSpec` · `buildManifest` · `listArchitectSessions` · `readArchitectSessionStats` · `runArchitectTurn` |
 | `kinds/brain-fix.ts` | `runBrainFixTurn` |
 | `kinds/demo-builder.ts` | `DEMO_HTML_REL_PATH` · `demoSessionDir` · `demoTaskLines` |
+| `kinds/fix-registry.ts` | `FIX_KIND_RUNNERS` |
 | `kinds/instructions.ts` | `instructionsSessionDir` · `runInstructionsTurn` |
 | `kinds/registry.ts` | `SESSION_KIND_RUNNERS` |
 | `routes.ts` | `sessionsRoutes` |
-| `session-readability.ts` | `parseGuardedEventsJsonl`, `readSessionCostUsd` |
-| `session-resolution.ts` | `invalidProjectReason` · `sessionIsReadable` |
-| `session-status-io.ts` | `guardedReadSessionStatus` · `guardedWriteSessionStatus` |
+| `session-phases.ts` | `LEGACY_SESSION_TERMINAL_PHASES` · `LEGACY_SESSION_AWAITS_PHASES` · `LEGACY_SESSION_WORKING_PHASES` |
+| `session-readability.ts` | `parseGuardedEventsJsonl` · `readSessionCostUsd` · `parseGuardedFirstEvent` |
+| `session-resolution.ts` | `invalidProjectReason` · `sessionIsReadable` · `findSessionProject` |
+| `session-status-io.ts` | `guardedReadSessionStatus` · `guardedWriteSessionStatus` · `CANCELLED_PHASE` |
+| `session-write-fence.ts` | `writeRootFenceOptions` |
 | `packages/sessions/studio/session-kinds-validate.ts` | `validateSessionKinds` |
 | `packages/sessions/studio/session-kinds.ts` | `SESSION_STAGES` · `loadSessionKinds` |
 | `packages/sessions/studio/session-transcript.ts` | `deriveSessionArtifact` · `safeReadFileInSession` |
+| `turn-cost-rows.ts` | `EMIT_FAILED_SIDECAR` · `EMIT_FAILED_STDERR_MARKER` · `emitTurnCostRow` · `emitTurnEndedUnpricedRow` |
 
 ### Types
 
-`ArchitectManifestPorts` · `ArchitectStatus` · `ContractStage` · `ContractStageRow` · `ContractStageStatus` · `DemoBuilderStatus` · `DraftInitiative` · `InstructionsStatus` · `InteractiveTurnStatus` · `ParseManifestPort` · `QueryFn` · `RunInteractiveTurnResult` · `SessionKindDescriptor` · `SessionsRouteDeps` · `SpawnTurnOutcome`
+`ArchitectManifestPorts` · `ArchitectStatus` · `BashFenceMode` · `BashFenceOptions` · `ContractStage` · `ContractStageRow` · `ContractStageStatus` · `DemoBuilderStatus` · `DraftInitiative` · `FixKindId` · `FixKindRunner` · `InstructionsStatus` · `InteractiveTurnStatus` · `ParseManifestPort` · `QueryFn` · `RunInteractiveTurnResult` · `SessionKindDescriptor` · `SessionsRouteDeps` · `SpawnTurnOutcome` · `WriteRootCanUseTool`
+
+## One door, plus a documented cycle-avoidance exception and one test-only subpath
+
+`package.json` maps `"."`, `"./testing"`, and — kept deep on purpose — two
+literal subpaths pointing at `packages/sessions/studio/session-kinds.ts`
+and `packages/sessions/studio/session-transcript.ts`.
+`packages/projects/contract-stages.ts` imports `SESSION_STAGES` and three
+transcript symbols through those two deep paths rather than the door: going
+through `@forge/sessions` there crashed `packages/sessions/contract.test.ts`
+with `ReferenceError: Cannot access 'SESSION_STAGES' before initialization` —
+the door eagerly pulls in this package's whole module graph, and something
+reachable from it cycles back into `contract-stages.ts` before that
+same file's module finishes initializing. Bead `forge-8vfn.5.31` kept
+this one deep import rather than "fixing" the door at the cost of a live TDZ
+crash; every other consumer of this package goes through the door.
+
+`@forge/sessions/testing` exports `stubArchitectManifestPorts` and three
+`kinds/architect-critic.ts` symbols (`COMPLETENESS_CRITIC_MODEL`,
+`completenessCriticAgentSpec`, `CRITIC_MAX_TOTAL_PROMPT_CHARS`) — each has no
+production consumer outside this package, only test files reach for them.
+`turn-cost-rows.ts`'s `emitTurnCostRow`/`emitTurnEndedUnpricedRow`/
+`EMIT_FAILED_STDERR_MARKER` moved OFF this subpath onto the main door instead
+(the "module | exports" table above): `scripts/stories/
+structured-unpriced-halts.test.ts` and its siblings import them from the bare
+`@forge/sessions` specifier, so the door is read as the spec here rather than
+the original "test-only" classification.
 
 ## Three status pairs, and why only two are exported
 

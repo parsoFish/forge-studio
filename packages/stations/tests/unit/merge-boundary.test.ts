@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 
 import { runClassMergeBoundary, type MergeBoundaryDeps } from '../../phases/merge-boundary.ts';
 import { TEST_CLASS_PROFILES } from '../test-fixtures/class-profile-port-fixture.ts';
-import type { MergeGateResult } from '@forge/flows/cycle-helpers.ts';
+import type { MergeGateResult } from '@forge/flows';
 
 const INPUT = { initiativeId: 'INIT-x', worktreePath: '/wt', projectRepoPath: '/repo' } as never;
 

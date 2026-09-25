@@ -31,8 +31,8 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { validateCompiledWorkItemSet } from '@forge/flows/phases/wi-spec-compile.ts';
-import type { WorkItem } from '@forge/flows/work-item.ts';
+import type { WorkItem } from '@forge/flows';
+import { validateCompiledWorkItemSet } from '@forge/flows/testing';
 
 const REPO = join(import.meta.dirname, '..', '..', '..', '..');
 const SKILL = join(REPO, 'skills', 'project-manager', 'SKILL.md');

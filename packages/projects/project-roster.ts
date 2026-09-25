@@ -21,7 +21,7 @@
  * route-entry.ts`'s ranking; carve-rules.md's boundary section names
  * `@forge/knowledge` and `@forge/agents` explicitly):
  *
- *   1. `projectKbBindings` (`@forge/knowledge/kb-sites.ts`) — `loadProjectsWithMeta`
+ *   1. `projectKbBindings` (`@forge/knowledge`) — `loadProjectsWithMeta`
  *      derives a project's bound KB from it. `projects` (rank 2) may not
  *      import `@forge/knowledge` (same rank). Same shape as the ALREADY
  *      PRECEDENTED `seedProjectBrain` injection for the projects-onboard
@@ -31,7 +31,7 @@
  *      may import both packages.
  *   2. `listStarterAgents`/`loadStarterFlow` (`orchestrator/studio/registry.ts`,
  *      LEGACY — no package-native home) and `agentCapabilityDescriptor`
- *      (`@forge/agents/studio/derive.ts`, rank 3, strictly higher than
+ *      (`@forge/agents`, rank 3, strictly higher than
  *      `projects`) — both needed by `GET /api/studio/starters`. Same
  *      injected-dependency shape as (1), closed over by the SAME factory.
  *
@@ -64,8 +64,8 @@ import {
   validateProjectConfig,
   readQualityGateSidecar,
   injectSidecarIntoTestProcess,
-} from '@forge/projects/project-config.ts';
-import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
+} from './project-config.ts';
+import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 
 /** forge-3oq: the ONE provenance vocabulary this roster stamps every project
  *  with — Studio has no OOTB-project concept and `discoverProjects` is a
@@ -354,7 +354,7 @@ export function loadProjectsWithMeta(forgeRoot: string, projectKbBindings: Proje
 
 /** The injected dependencies `GET /api/studio/starters` needs — see the file
  *  header's dependency-injection note (2). `agentCapabilityDescriptor`'s
- *  return type (`AgentCapabilityDescriptor`, `@forge/agents/studio/derive.ts`,
+ *  return type (`AgentCapabilityDescriptor`, `@forge/agents`,
  *  rank 3) is deliberately NOT named here — even a type-only import of it
  *  would be a `package-layer-order` violation the same as a value import
  *  (`scripts/check-boundaries.mjs`'s `tsPreCompilationDeps: true` tracks

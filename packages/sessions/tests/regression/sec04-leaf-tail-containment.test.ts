@@ -47,7 +47,7 @@ import { runInstructionsTurn, instructionsSessionDir, type InstructionsStatus } 
 import { type QueryFn } from '../../interactive-session.ts';
 import { writeSessionStatus } from '../../interactive-session.ts';
 import { createLogger } from '@forge/kernel';
-import { deriveContractStages } from '@forge/projects/contract-stages.ts';
+import { deriveContractStages } from '@forge/projects';
 
 // Belt-and-braces: no interactive turn in this pin should ever reach a live SDK.
 process.env.FORGE_ARCHITECT_NO_SPAWN = '1';

@@ -9,22 +9,21 @@
 
 import { resolve, basename } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
-import { parseManifest } from '@forge/flows/manifest.ts';
-import { REFLECTION_LOST_EVENT, type CycleInput, type CycleOutcome } from '@forge/flows/cycle-context.ts';
-import { classifyCrash } from '@forge/agents/failure-classifier.ts';
-import { REPO_RE, type TriggerPayload } from '@forge/flows/trigger-payload.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
-import { enqueueGateFixWorkItems } from '@forge/flows/gate-fix-loop.ts';
-import { writeMergeGateConfigErrorMarker } from '@forge/flows/fix-work-items.ts';
-import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
-import { runAgent } from '@forge/agents/run-agent.ts';
+import { parseManifest } from '@forge/flows';
+import { REFLECTION_LOST_EVENT, type CycleInput, type CycleOutcome } from '@forge/flows';
+import { classifyCrash } from '@forge/agents';
+import { REPO_RE, type TriggerPayload } from '@forge/flows';
+import type { AgentDefinition } from '@forge/contracts';
+import { enqueueGateFixWorkItems } from '@forge/flows';
+import { writeMergeGateConfigErrorMarker } from '@forge/flows';
+import { resolveBandGuard } from '@forge/agents';
+import { runAgent } from '@forge/agents';
 import type { PhaseExecutor } from '@forge/kernel';
-import { createBandRegistry } from '@forge/kernel';
+import { createBandRegistry, FORGE_ROOT } from '@forge/kernel';
 import { BAND_GUARD_IDS, type BandGuardId } from '@forge/contracts';
-import type { NodeExecContext } from '@forge/flows/flow-node-context.ts';
-import type { NodeKind } from '@forge/flows/flow-node-kind.ts';
+import type { NodeExecContext } from '@forge/flows';
+import type { NodeKind } from '@forge/flows';
 import { type FlowRunnerDeps, buildDefaultDeps, raceWithWedge } from './executor-deps.ts';
-import { FORGE_ROOT } from '@forge/agents/skill-path.ts';
 import type { ClassProfilePort } from '../class-profile-port.ts';
 
 /**

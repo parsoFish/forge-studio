@@ -29,7 +29,7 @@ import type { EventLogEntry } from '@forge/kernel';
 import { summariseCycle, type CycleMetrics, phasesInRenderOrder, phaseCostRemainder } from './metrics.ts';
 import { parseManifest, type InitiativeManifest } from './manifest.ts';
 import { parseWorkItem, type WorkItem } from './work-item.ts';
-import { cycleArchivePath, cycleArchiveRelPath } from '@forge/knowledge/brain-paths.ts';
+import { cycleArchivePath, cycleArchiveRelPath } from '@forge/knowledge';
 
 export type CycleReportInput = {
   cycleId: string;

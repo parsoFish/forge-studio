@@ -51,7 +51,7 @@ import {
 import { buildBrainFixture, cleanup } from './test-fixtures/brain-lint.ts';
 import { BT, writeTruthTheme, writeCheckoutFile, gitCheckout } from './test-fixtures/brain-lint-truth.ts';
 
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 // ---------- 1. extraction: IS / IS-NOT examples ----------
 

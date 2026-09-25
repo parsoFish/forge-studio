@@ -301,7 +301,7 @@ export function parseAgentDefinition(raw: unknown): Agent {
  * included.
  *
  * Exists because `/api/studio/agents`' roster (`fetchStudioAgents`) filters
- * out every `library: false` agent (`@forge/agents/studio/agent-registry.ts`'s
+ * out every `library: false` agent (`@forge/agents`'s
  * `isStudioAgent`) — every kickoff-only system agent (demo-builder,
  * instructions-creator, brain-maintenance, creation-agent,
  * project-brain-builder) sets that flag, so NONE of them were ever

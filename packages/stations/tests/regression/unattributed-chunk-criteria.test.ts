@@ -28,7 +28,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { renderAdversarialReviewUserPrompt } from '../../phases/adversarial-review-binding.ts';
-import { validateReviewFindings } from '@forge/flows/flow-artifacts.ts';
+import { validateReviewFindings } from '@forge/flows';
 
 /** The exact string G2's reviewer submitted and was refused for — WI-1.md's own
  *  first criterion, in the pipeline's own rendering. Not a paraphrase of it. */

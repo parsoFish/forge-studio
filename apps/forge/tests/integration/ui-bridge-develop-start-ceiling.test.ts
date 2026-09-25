@@ -48,9 +48,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from '../../ui-bridge.ts';
-import { resolveCostCeilingOverride } from '@forge/flows/cycle.ts';
+import { resolveCostCeilingOverride } from '@forge/flows';
 import { MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
-import { DERIVED_CEILING_MARGIN_SHARE, persistManifestCostCeiling } from '@forge/flows/manifest.ts';
+import { DERIVED_CEILING_MARGIN_SHARE, persistManifestCostCeiling } from '@forge/flows';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 

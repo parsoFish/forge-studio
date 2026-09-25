@@ -19,7 +19,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
+import { loadAgentDefinition } from '@forge/agents';
 
 const createdDirs: string[] = [];
 after(() => { for (const d of createdDirs) rmSync(d, { recursive: true, force: true }); });

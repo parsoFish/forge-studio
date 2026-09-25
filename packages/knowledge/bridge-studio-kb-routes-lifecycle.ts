@@ -21,7 +21,7 @@ import {
 } from '@forge/kernel';
 import { loadKbDescriptor, serializeKbDescriptor } from './studio/kb-descriptor.ts';
 import { tryGetKbBackend } from './kb-backend.ts';
-import { KB_BINDING_KINDS, type KbBinding } from '@forge/contracts/studio/types.ts';
+import { KB_BINDING_KINDS, type KbBinding } from '@forge/contracts';
 import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
 import { KB_ID_RE, isReservedId, sendJson, allowedOrigin, sanitizeError, pathOnly, type RouteContext } from '@forge/kernel';
 import { KB_SEEDING_ANCHOR_PREFIX, loadKbDescriptors, mintProjectBrainSeedingSession, requireValidKbId } from './bridge-studio-kbs.ts';
@@ -80,7 +80,7 @@ function guardKbTail(kbDir: string, ...tail: readonly string[]): PathGuardResult
 export type KbCreateDeps = {
   /** `orchestrator/studio/registry.ts`'s `listFlowIds`. */
   listFlowIds: (forgeRoot: string) => string[];
-  /** `@forge/flows/flow-band-vocab.ts`'s `listFlowBandIds`. */
+  /** `@forge/flows`'s `listFlowBandIds`. */
   listFlowBandIds: (forgeRoot: string, flowId: string) => string[];
   /** The guarded session-status writer, as a port (ruling 99) — the create
    *  route mints a project-brain seeding session and this package may not

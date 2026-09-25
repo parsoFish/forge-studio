@@ -24,6 +24,9 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
+// Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
+// architect-session.ts's own module doc — `kinds/registry.ts` needs
+// `projectBrainKind` fully bound at its own top level).
 import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { skillPathRelative, loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
@@ -32,8 +35,8 @@ import {
   buildAnalyzePlan,
   commitProjectBrain,
   listStagedThemes,
-} from '@forge/knowledge/project-brain-build.ts';
-import type { KbBinding } from '@forge/contracts/studio/types.ts';
+} from '@forge/knowledge';
+import type { KbBinding } from '@forge/contracts';
 
 import { runAgentTurn } from '../interactive-session.ts';
 import { runKindTurn, type KindTurnInput, type SessionKindVariant } from './kind-turn.ts';

@@ -42,7 +42,7 @@
  */
 import { cpSync, mkdirSync, rmSync, existsSync, readdirSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
-import { resolveGuardedPath } from '@forge/kernel/path-guard.ts';
+import { resolveGuardedPath } from '@forge/kernel';
 
 /**
  * One row of `classifyOwnGroundDrift`'s structured output. `writers` is the

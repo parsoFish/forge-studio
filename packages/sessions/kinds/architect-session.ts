@@ -29,6 +29,15 @@ import type { EventLogger } from '@forge/kernel';
 import type { ArchitectManifestPorts } from './architect-ports.ts';
 import { parseGuardedEventsJsonl, sessionLogDirName } from '../session-readability.ts';
 import { deriveSessionCostUsd } from '@forge/kernel';
+// Deep paths, not the door (bead forge-8vfn.5.31): this file is reached from
+// `kinds/registry.ts` (via `architect.ts`), whose top-level object literal
+// needs `architectKind` fully bound. Going through `@forge/agents`'s door
+// here can cycle back into `@forge/sessions` (agents' `agent-run.ts` imports
+// it) while THIS module is still mid-load — a live TDZ
+// (`ReferenceError: Cannot access 'architectKind' before initialization`),
+// not a bundler quirk. `phase-agent.ts`/`packages/agents/studio/derive.ts`/
+// `skill-path.ts` only reach `@forge/contracts`/`@forge/kernel`/`@forge/library`, so these
+// deep imports break the cycle.
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import type { ModelTier } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';

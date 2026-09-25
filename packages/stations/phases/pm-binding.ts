@@ -11,12 +11,12 @@
  * The user prompt = a per-cycle, per-initiative briefing (dynamic data only).
  */
 
-import { loadBrainIndex } from '@forge/knowledge/brain-index.ts';
-import { modelForSpec } from '@forge/agents/phase-agent.ts';
-import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { skillPath, skillPathRelative } from '@forge/agents/skill-path.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { loadBrainIndex } from '@forge/knowledge';
+import { modelForSpec } from '@forge/agents';
+import { deriveAgentSpec } from '@forge/agents';
+import { loadAgentDefinition } from '@forge/agents';
+import { skillPath, skillPathRelative } from '@forge/agents';
+import type { AgentDefinition } from '@forge/contracts';
 import { loadAgentSkillText } from './agent-skill-text.ts';
 
 const SKILL_PATH = skillPath('project-manager');

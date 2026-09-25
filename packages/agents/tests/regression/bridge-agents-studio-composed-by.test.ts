@@ -5,7 +5,7 @@
  * Root cause (per the bead, confirmed by reading
  * `packages/agents/bridge-agents-studio.ts`): the guard derived `composedBy`
  * from `listSkillLibrary(ctx.forgeRoot, deps.agentFacts).find((e) => e.id ===
- * slug)?.usedBy ?? []`. `listSkillLibrary` (`@forge/library/studio/skill-trust.ts`)
+ * slug)?.usedBy ?? []`. `listSkillLibrary` (`@forge/library`)
  * deliberately EXCLUDES studio agents from its roster (AT-5 — an agent is not
  * a library skill), so for any real agent slug that `.find(...)` is always
  * `undefined` and `composedBy` is always `[]`. The 409 branch is dead code for

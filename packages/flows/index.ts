@@ -27,11 +27,11 @@
 
 // ---- Run one flow — the Station engine (SPEC.md §2, ADR 028) ---------------
 export { type FlowRunArgs, flowPathForId, resolveNodeKind, runFlow } from './flow-runner.ts';
-export { type NodeExecContext } from './flow-node-context.ts';
+export { type NodeExecContext, type NodeRunState } from './flow-node-context.ts';
 export { type NodeKind } from './flow-node-kind.ts';
 export { findFanOutViolations } from './flow-fanout.ts';
 export { listFlowBandIds } from './flow-band-vocab.ts';
-export { loadFlowDefinition, loadStarterFlow } from './studio/flow-registry.ts';
+export { loadFlowDefinition, loadStarterFlow, listFlowIds, serializeFlowDefinition } from './studio/flow-registry.ts';
 export { type TriggerCheckOpts, checkFlowTriggers } from './studio/validate-triggers.ts';
 
 // ---- The cycle the develop flow runs ---------------------------------------
@@ -44,14 +44,14 @@ export { compileWorkItemSpecs } from './phases/wi-spec-compile.ts';
 
 // ---- Queue state machine, manifests and initiatives ------------------------
 export { type QueuePaths, type QueueState, getPaths, listInFlight } from './queue.ts';
-export { DERIVED_CEILING_MARGIN_SHARE, initiativeTitle, mintAndPersistManifestCycleId, parseManifest, persistManifestCostCeiling, persistManifestSpecs, serializeManifest } from './manifest.ts';
-export { isContainedProjectRepoPath, isSafeProjectName } from './manifest-path-guard.ts';
+export { DERIVED_CEILING_MARGIN_SHARE, initiativeTitle, mintAndPersistManifestCycleId, parseManifest, persistManifestCostCeiling, persistManifestSpecs, serializeManifest, CHANGE_CLASSES } from './manifest.ts';
+export { isContainedProjectRepoPath, isSafeProjectName, isSafeCycleId } from './manifest-path-guard.ts';
 export { promoteManifests } from './promote-manifests.ts';
-export { listPlannedInitiatives } from './planned-initiatives.ts';
+export { listPlannedInitiatives, manifestBlockedClauses } from './planned-initiatives.ts';
 export { mintTriggeredInitiative } from './mint-triggered-initiative.ts';
 
 // ---- Work items and their worktrees ----------------------------------------
-export { type CouplingPair, DEV_WORK_ITEM_ID_PATTERN, WORK_ITEM_FILE_PATTERN, type WorkItem, type RequiredPathsSource, gateRequiredPaths, parseWorkItem, readWorkItemsFromDir, serializeWorkItem, topologicalOrder, validateWorkItemSet, writeWorkItem, writeWorkItemStatus } from './work-item.ts';
+export { type CouplingPair, DEV_WORK_ITEM_ID_PATTERN, WORK_ITEM_FILE_PATTERN, type WorkItem, type RequiredPathsSource, gateRequiredPaths, parseWorkItem, readWorkItemsFromDir, serializeWorkItem, topologicalOrder, validateWorkItem, validateWorkItemSet, writeWorkItem, writeWorkItemStatus } from './work-item.ts';
 export { createWiWorktree, removeWiWorktree, wiWorktreePath } from './wi-worktree.ts';
 export { type MergeConflictDetail, type MergeQueue, createMergeQueue, mergeAndPublish, mergeWiIntoCycle } from './wi-merge-back.ts';
 export { type DispatchOutcome, runConcurrentDispatch } from './wi-dispatch-scheduler.ts';
@@ -82,7 +82,7 @@ export { add } from './worktree.ts';
 export { finalizeMergedReadyForReview } from './finalize-merged.ts';
 
 // ---- Artifacts, demo paths and budgets -------------------------------------
-export { type ReviewFinding, type ReviewFindingsRecord, reviewFindingsJsonPath, validateReviewFindings, writeReleaseJson, writeReviewFindingsJson } from './flow-artifacts.ts';
+export { type ReviewFinding, type ReviewFindingsRecord, type ReviewFindingsExpectation, reviewFindingsJsonPath, validateReviewFindings, writeReleaseJson, writeReviewFindingsJson } from './flow-artifacts.ts';
 export { DEMO_JSON_BASENAME, DEMO_MD_BASENAME, worktreeDemoDir, worktreeDemoJsonPath, worktreeDemoRelDir } from './demo-paths.ts';
 export { CostCeilingError, WedgeDetector, WedgeKillError } from './flow-budgets.ts';
 
@@ -90,3 +90,26 @@ export { CostCeilingError, WedgeDetector, WedgeKillError } from './flow-budgets.
 export { handleHookRoutes } from './bridge-hooks.ts';
 export { handleRecoveryRoutes } from './bridge-recovery.ts';
 export { type ReleaseFinalizeHookInput, type StudioPostContext, applyPlanVerdict, applyReviewVerdict, handleStudioPostRoutes } from './bridge-studio-runs.ts';
+
+// ---- Initiative ids, phase wiring, review comments, cycle metrics ---------
+export { isCanonicalInitiativeId } from './initiative-id.ts';
+export type { PhaseWiring } from './phase-wiring.ts';
+export {
+  REVIEW_COMMENTS_MAX,
+  reviewCommentsPath,
+  readReviewComments,
+  writeReviewComments,
+  appendReviewComment,
+  resolveComment,
+  editComment,
+  deleteComment,
+  deriveVerdictFromComments,
+} from './review-comments.ts';
+export type { ReviewComment, AcceptanceCriterion, ReviewCommentsSidecar, NewReviewComment, DerivedVerdict } from './review-comments.ts';
+export { summariseCycle } from './metrics.ts';
+export type { CycleMetrics } from './metrics.ts';
+
+// ---- Studio flow surface: kickoff derivation, validation -------------------
+export { deriveFlowKickoff } from './studio/flow-kickoff.ts';
+export type { FlowHeadShape } from './studio/flow-kickoff.ts';
+export { validateFlow, validateArtifactRef } from './studio/validate-flow.ts';

@@ -2,8 +2,8 @@
  * The Flow kind's registry — load, parse and serialize `flow.yaml` (ADR 027,
  * ADR 028 §1). Carved out of `orchestrator/studio/registry.ts` (Task 13, M4-flows):
  * the package that owns the flow engine owns loading its definitions, the same
- * split the Agent kind took to `@forge/agents/studio/agent-registry.ts` and the
- * KB kind to `@forge/knowledge/studio/kb-descriptor.ts`.
+ * split the Agent kind took to `@forge/agents` and the
+ * KB kind to `@forge/knowledge`.
  *
  * Every function below is BYTE-IDENTICAL to the block it came from; only the
  * imports are re-stated at the new depth. Validation still lives in a separate
@@ -13,7 +13,7 @@
 import { join, resolve } from 'node:path';
 import yaml from 'js-yaml';
 
-import { flowRoots, listIdsAcrossRoots } from '@forge/kernel/discovery-roots.ts';
+import { flowRoots, listIdsAcrossRoots } from '@forge/kernel';
 
 import type {
   FlowDefinition,
@@ -22,8 +22,8 @@ import type {
   FlowKickoffKind,
   FlowNode,
   FlowTrigger,
-} from '@forge/contracts/studio/types.ts';
-import type { ManifestClass } from '@forge/contracts/manifest-types.ts';
+} from '@forge/contracts';
+import type { ManifestClass } from '@forge/contracts';
 
 import {
   reqString,
@@ -32,7 +32,7 @@ import {
   optNumber,
   optBool,
   loadYaml,
-} from '@forge/kernel/studio/yaml-fields.ts';
+} from '@forge/kernel';
 
 // ADR 051's four change classes as a runtime list, imported rather than
 // hand-copied — same SSOT `@forge/factory/class-profiles.ts` reads
@@ -335,7 +335,7 @@ export function serializeFlowDefinition(def: FlowDefinition): string {
  * already-computed flow-directory listing inline) so both share one
  * definition of "a registered flow id". THROWS, naming both roots, if the
  * same id is a real directory under more than one root — never "first root
- * wins" (`listIdsAcrossRoots`, `@forge/kernel/discovery-roots.ts`).
+ * wins" (`listIdsAcrossRoots`, `@forge/kernel`).
  */
 export function listFlowIds(forgeRoot: string): string[] {
   return listIdsAcrossRoots(flowRoots(forgeRoot));

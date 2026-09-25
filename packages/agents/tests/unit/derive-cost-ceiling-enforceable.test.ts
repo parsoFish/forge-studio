@@ -38,7 +38,7 @@ import { join } from 'node:path';
 
 import { agentCapabilityDescriptor, executionPathForSurface, FORGE_ROOT } from '../../studio/derive.ts';
 import { listAgentDefinitions } from '../../studio/agent-registry.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 
 /** Minimal AgentDefinition fixture; override only what a given test cares
  *  about. Mirrors derive.test.ts's own `baseAgentDefFixture` (independently

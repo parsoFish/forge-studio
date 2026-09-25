@@ -45,7 +45,7 @@ import { join, resolve } from 'node:path';
 
 import { runProjectManager, type PmQueryFn } from '../../phases/project-manager.ts';
 import { createLogger } from '@forge/kernel';
-import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import type { CycleInput } from '@forge/flows';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 import { testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
 import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';

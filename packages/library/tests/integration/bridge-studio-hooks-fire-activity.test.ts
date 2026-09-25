@@ -37,7 +37,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import yaml from 'js-yaml';
 
 import { createLogger, dispatchRoute } from '@forge/kernel';
-import { approveHook } from '@forge/library/studio/hook-approval-ledger.ts';
+import { approveHook } from '../../studio/hook-approval-ledger.ts';
 import { libraryRoutes, type LibraryRouteContext } from '../../routes.ts';
 import { HOOK_FIRE_SCAN_MAX_CYCLES } from '../../studio/hook-fire-summary.ts';
 import { fixtureAgentFacts } from '../test-fixtures/agent-fixture.ts';

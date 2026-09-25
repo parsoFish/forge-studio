@@ -18,7 +18,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { runConcurrentDispatch } from '../../wi-dispatch-scheduler.ts';
-import { settleWiOutcome, assertOutcomesSettled, type WiOutcome } from '@forge/stations/phases/developer-loop.ts';
+import { settleWiOutcome, assertOutcomesSettled, type WiOutcome } from '@forge/stations/testing';
 import type { WorkItem } from '../../work-item.ts';
 
 function wi(id: string, dependsOn: string[] = []): WorkItem {

@@ -15,9 +15,9 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import matter from 'gray-matter';
 
-import { ARTIFACT_KINDS, DEMO_STEP_KINDS, INSTRUCTION_SEED_KINDS, INSTRUCTION_SEED_SCOPES } from '@forge/contracts/studio/types.ts';
-import { reqString, optString, stringArray, oneOf } from '@forge/kernel/studio/yaml-fields.ts';
-import type { ArtifactTemplate, DemoElementDefinition, InstructionSeed } from '@forge/contracts/studio/types.ts';
+import { ARTIFACT_KINDS, DEMO_STEP_KINDS, INSTRUCTION_SEED_KINDS, INSTRUCTION_SEED_SCOPES } from '@forge/contracts';
+import { reqString, optString, stringArray, oneOf } from '@forge/kernel';
+import type { ArtifactTemplate, DemoElementDefinition, InstructionSeed } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // Artifact templates — studio/artifact-templates/<id>.md (gray-matter, ADR-027 amendment).

@@ -12,7 +12,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import { guardedFile, guardedReadFile, guardedReadDir } from '@forge/kernel';
-import type { ModelTier } from '@forge/agents/phase-agent.ts';
+import type { ModelTier } from '@forge/agents';
 
 /** R4-16 — session-dir-relative home for per-generation snapshots
  *  (`<sessionDir>/generations/<n>/`), NEVER the project repo (D4: the

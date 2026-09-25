@@ -51,17 +51,17 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 import {
   runProjectBrainTurn,
   projectBrainSessionDir,
   type ProjectBrainStatus,
 } from '../../kinds/project-brain.ts';
-import { type QueryFn } from '@forge/sessions/interactive-session.ts';
-import { writeSessionStatus } from '@forge/sessions/interactive-session.ts';
-import { cyclesRawDir } from '@forge/knowledge/brain-paths.ts';
-import { splitSkillTurnSections } from '@forge/agents/skill-path.ts';
+import { type QueryFn } from '../../interactive-session.ts';
+import { writeSessionStatus } from '../../interactive-session.ts';
+import { cyclesRawDir } from '@forge/knowledge';
+import { splitSkillTurnSections } from '@forge/agents';
 
 // M4 sessions s3: re-anchored on `FORGE_ROOT` when this file moved into the
 // package's `tests/unit/` bucket (COMMON §15.14 — a move breaks the files that

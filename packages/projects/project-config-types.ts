@@ -6,7 +6,7 @@
  * cycle.
  */
 
-import type { DemoStep, ReleaseConfig, BuildProcess } from '@forge/contracts/studio/types.ts';
+import type { DemoStep, ReleaseConfig, BuildProcess } from '@forge/contracts';
 
 /**
  * S7 / C13 — optional logging block. Currently surfaces

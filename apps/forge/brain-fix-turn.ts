@@ -26,7 +26,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { runBrainFixTurn } from '@forge/sessions/kinds/brain-fix.ts';
+import { runBrainFixTurn } from '@forge/sessions';
 import type { KbDrainRunFixTurnFn } from '@forge/knowledge';
 
 /**

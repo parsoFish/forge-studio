@@ -79,7 +79,7 @@ test('the remainder keeps the DIFF\'s order, not a Set\'s iteration order', () =
 // ---------------------------------------------------------------------------
 
 import { mergeChunkRecords } from '../../phases/review-chunks.ts';
-import type { ReviewFindingsRecord } from '@forge/flows/flow-artifacts.ts';
+import type { ReviewFindingsRecord } from '@forge/flows';
 
 const IDENT = { initiative_id: 'INIT-x', cycleId: 'CY-1', baseRef: 'origin/main', headSha: 'abc123' };
 

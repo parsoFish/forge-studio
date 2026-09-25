@@ -27,7 +27,7 @@ import { join } from 'node:path';
 import lockfile from 'proper-lockfile';
 
 import { allowedOrigin, sendJson, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
-import { guardedFile, guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel/path-guard.ts';
+import { guardedFile, guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel';
 
 import {
   guardedReadStatus,

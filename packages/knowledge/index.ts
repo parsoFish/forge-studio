@@ -42,7 +42,7 @@ export {
 export { loadBrainIndex, regenerateBrainIndex } from './brain-index.ts';
 
 // --- brain lint -------------------------------------------------------------
-export { CHECK_NAMES, classify, classifyFinding, lintThemeFiles, runBrainLint } from './brain-lint.ts';
+export { CHECK_NAMES, classify, classifyFinding, lintThemeFiles, runBrainLint, brainTruthRates, formatTruthfulnessLines } from './brain-lint.ts';
 export type { Finding, RunBrainLintResult, Scope } from './brain-lint.ts';
 
 // --- KB descriptors, sites and read policy ----------------------------------
@@ -66,11 +66,24 @@ export {
 export { tryGetKbBackend, type KbBackend } from './kb-backend.ts';
 export { activeJobReason, deriveKbActiveJob } from './kb-job-state.ts';
 export { runPostReflectionKbHealth } from './kb-health.ts';
-export { guardAgentKbEdits, snapshotBrainTree } from './kb-drain-edit-soundness.ts';
+export { guardAgentKbEdits, snapshotBrainTree, noKbEdits } from './kb-drain-edit-soundness.ts';
 export type { KbEditGateResult } from './kb-drain-edit-soundness.ts';
 
 // --- project brain seeding --------------------------------------------------
 export { checkProjectBrainSeedContainment, seedProjectBrain } from './project-brain-seed.ts';
+export {
+  PROJECT_BRAIN_KIND_DIR,
+  buildAnalyzePlan,
+  commitProjectBrain,
+  listStagedThemes,
+} from './project-brain-build.ts';
+export type { ProjectBrainCommitInput } from './project-brain-build.ts';
+
+// --- the brain write lease (contended writers back off, never corrupt) ------
+export { acquireBrainWriteLease, BrainWriteLeaseContentionError } from './brain-write-lease.ts';
+
+// --- KB validation (the studio-lint entry point) -----------------------------
+export { validateKb } from './studio/validate-kb.ts';
 
 // --- cycle retention --------------------------------------------------------
 export { assignRetention, collectCitedBy, patchArchiveFrontmatter } from './cycle-retention.ts';
@@ -91,4 +104,5 @@ export type {
   KbDrainFixTurnInput,
   KbDrainFixTurnResult,
   KbDrainRunFixTurnFn,
+  SessionStatusIoPort,
 } from './kb-drain-model.ts';

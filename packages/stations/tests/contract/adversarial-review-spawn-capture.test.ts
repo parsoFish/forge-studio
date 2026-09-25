@@ -62,8 +62,8 @@ import { test } from 'node:test';
 
 import { runAdversarialReview, REVIEW_ALLOWED_TOOLS, REVIEW_EXECUTION_TOOLS } from '../../phases/adversarial-review.ts';
 import { createLogger } from '@forge/kernel';
-import { serializeWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
-import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import { serializeWorkItem, type WorkItem } from '@forge/flows';
+import type { StreamQueryFn } from '@forge/agents';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 import { testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
 import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';

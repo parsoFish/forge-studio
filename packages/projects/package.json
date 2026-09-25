@@ -6,7 +6,7 @@
   "description": "The project contract: config, preflight clauses, contract stages, create, repo transactions.",
   "exports": {
     ".": "./index.ts",
-    "./*": "./*"
+    "./testing": "./testing.ts"
   },
   "scripts": {
     "test": "node --test --experimental-strip-types \"**/*.test.ts\""

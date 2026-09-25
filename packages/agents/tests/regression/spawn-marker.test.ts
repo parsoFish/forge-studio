@@ -31,7 +31,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { MAX_ENV_OVERRIDE_KEYS, buildChildEnv } from '@forge/kernel/spawn-env.ts';
+import { MAX_ENV_OVERRIDE_KEYS, buildChildEnv } from '@forge/kernel';
 
 import { resolveRunQuery, withRunMarker, type StreamQueryFn } from '../../pinned-sdk-query.ts';
 import { createClaudeAgent } from '../../ralph/claude-agent.ts';

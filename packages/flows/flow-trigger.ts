@@ -21,7 +21,7 @@
  * "enqueue a fresh run" and the "run inline with cycle context" cases, and unit
  * tests assert firing without touching the queue or spawning an agent.
  */
-import type { FlowDefinition, FlowTrigger } from '@forge/contracts/studio/types.ts';
+import type { FlowDefinition, FlowTrigger } from '@forge/contracts';
 import type { TriggerKindId } from '@forge/contracts';
 import { stageFlowRunRequest, decideTriggerProjectScope } from './flow-run-requests.ts';
 

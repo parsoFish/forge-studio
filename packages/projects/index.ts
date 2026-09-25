@@ -48,7 +48,7 @@
  */
 
 // --- config: `.forge/project.json`, the agent-instruction file ------------
-export { loadProjectConfig, readAgentInstructionsFile, resolveProjectIdForRepo } from './project-config.ts';
+export { loadProjectConfig, readAgentInstructionsFile, resolveProjectIdForRepo, PROJECT_CONFIG_REL_PATH } from './project-config.ts';
 export type { ProjectConfig, AcceptanceGateConfig } from './project-config.ts';
 
 // --- preflight: the C-clause verdict + the bounded auto-fix loop ----------
@@ -61,6 +61,9 @@ export {
 } from './preflight.ts';
 export type { ClauseId } from './preflight.ts';
 export { runContractComplianceLoop, formatComplianceReport } from './contract-compliance-loop.ts';
+export { clauseTarget } from './preflight-resolve.ts';
+export { loadDeclaredSkills, type DeclaredSkill } from './preflight-skills.ts';
+export { validateDiscoveredProjects } from './studio/validate-project.ts';
 
 // --- contract stages: the studio-facing per-project checklist -------------
 export { deriveContractStages, resolveContainedProjectDir } from './contract-stages.ts';
@@ -71,7 +74,7 @@ export { scaffoldGreenfieldProject, listProjectStarters, projectStartersDir } fr
 export type { ScaffoldResult } from './project-create.ts';
 
 // --- repo transactions: the `forge-studio` branch write path --------------
-export { ensureStudioBranch, commitStudioChange, withStudioWrite } from './project-repo-tx.ts';
+export { ensureStudioBranch, commitStudioChange, withStudioWrite, dirtyPaths } from './project-repo-tx.ts';
 
 // --- the reset: `forge project reset` / studio "Rebuild contract" ---------
 export { computeContractDrift, applyContractReset, AppTypeUnresolvedError } from './reset.ts';
@@ -95,4 +98,4 @@ export { loadProjectsWithMeta } from './project-roster.ts';
 export { cmdProjectMigrate } from './project-migrate.ts';
 
 // --- the HTTP route table ---------------------------------------------------
-export { projectsRoutes } from './routes.ts';
+export { projectsRoutes, type ProjectsRouteDeps } from './routes.ts';

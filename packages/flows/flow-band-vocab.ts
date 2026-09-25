@@ -17,9 +17,9 @@ import { resolve } from 'node:path';
 
 import { loadFlowDefinition } from './studio/flow-registry.ts';
 import { flowPathForId } from './flow-runner.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
-import { skillPath } from '@forge/agents/skill-path.ts';
+import { loadAgentDefinition } from '@forge/agents';
+import { resolveBandGuard } from '@forge/agents';
+import { skillPath } from '@forge/agents';
 
 /**
  * Returns the distinct band ids the flow's own nodes actually declare.

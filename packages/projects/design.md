@@ -79,8 +79,11 @@ function type, never as `import type` of the real implementation's own type.
 `projectsRoutes(deps)` takes them as parameters; `apps/forge/routes.ts` — which
 sits above every package and may import all of them freely — is the one
 assembly point that supplies the real implementations, as an inline object
-literal (not by naming `ProjectsRouteDeps`, which is why that type stays off the
-public door: its only consumer today is this package's own contract test).
+literal (not by naming `ProjectsRouteDeps`). The type moved onto the public door
+in bead `forge-8vfn.5.31`: `apps/forge/dry-bridge.ts` — a route-classification
+probe distinct from `apps/forge/routes.ts`'s inline-literal assembly — names
+`ProjectsRouteDeps` directly, and its deep import repointing to `@forge/projects`
+is the reason the type is exported rather than kept deep.
 
 ## What this package deliberately does not own
 
@@ -124,7 +127,7 @@ compilation).
 ## Contract stages import a sessions type, and it is already baselined
 
 `contract-stages.ts` re-exports `ContractStageRow`/`ContractStageStatus` from
-`@forge/sessions/studio/session-transcript.ts` — a rank-4 import from a rank-2
+`@forge/sessions` — a rank-4 import from a rank-2
 package, forbidden by the same rule §2 above states. This is a pre-existing,
 baselined `package-layer-order` violation (`scripts/baselines/boundaries.json`),
 not introduced by this PR and not fixed by it: fixing it means moving the type

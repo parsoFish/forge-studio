@@ -25,7 +25,7 @@ import { tmpdir } from 'node:os';
 
 import { deriveAgentSpec, executionPathForSurface, agentCapabilityDescriptor, FORGE_ROOT } from '../../studio/derive.ts';
 import { listAgentDefinitions, loadAgentDefinition } from '../../studio/agent-registry.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // Explicit expected-literal assertions (frontmatter-regression lock, M2-3)

@@ -27,7 +27,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 import { logger, setup } from './test-fixtures/demo-builder-runner-fixtures.ts';
 import { runDemoBuilderTurn } from '../../kinds/demo-builder.ts';

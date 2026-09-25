@@ -28,7 +28,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 
 import { resolveBandGuard } from '../../agent-bands.ts';
 

@@ -187,7 +187,7 @@ test('checkCategoryScope: real brain has 0 scope-guard errors', async () => {
   // If it fails, that is a genuine brain data inconsistency (not a test bug).
   // Depth-INDEPENDENT: a hand-counted chain would resolve short after a move,
   // find no `brain/`, return [], and pass VACUOUSLY (see this commit's message).
-  const { FORGE_ROOT: dir } = await import('@forge/kernel/ids.ts');
+  const { FORGE_ROOT: dir } = await import('@forge/kernel');
   const findings = checkCategoryScope(dir);
   const errors = findings.filter((f) => f.category === 'error');
   assert.equal(

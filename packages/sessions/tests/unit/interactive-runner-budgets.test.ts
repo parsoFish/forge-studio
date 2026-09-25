@@ -43,8 +43,8 @@ import { loadSessionKinds, type SessionKindDescriptor } from '../../studio/sessi
 import { type QueryFn } from '../../interactive-session.ts';
 import { writeSessionStatus } from '../../interactive-session.ts';
 import { createLogger } from '@forge/kernel';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { skillPath } from '@forge/agents/skill-path.ts';
+import { loadAgentDefinition } from '@forge/agents';
+import { skillPath } from '@forge/agents';
 
 /** Two rows, both real-parsed through `loadSessionKinds`. The agents are real;
  *  only the kind ids and directories are fixture-local, so this file pins the

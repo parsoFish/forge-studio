@@ -27,13 +27,15 @@ import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import type { OutgoingHttpHeaders } from 'node:http';
 
-import type { ModelTier } from '@forge/agents/phase-agent.ts';
+import type { ModelTier } from '@forge/agents';
 import { MAX_EXACT_ID_LENGTH, PROJECT_ID_RE } from '@forge/kernel';
-import { discoverProjects } from '@forge/kernel/project-layout.ts';
-import { isSafeSegment, resolveGuardedPath } from '@forge/kernel/path-guard.ts';
+import { discoverProjects } from '@forge/kernel';
+import { isSafeSegment, resolveGuardedPath } from '@forge/kernel';
+// Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
+// packages/sessions/kinds/architect-session.ts's own module doc).
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { resolveSessionModel } from '@forge/agents/phase-agent.ts';
-import { skillPathRelative } from '@forge/library/skill-path.ts';
+import { skillPathRelative } from '@forge/library';
 
 import { deriveSessionLifecycleFor, sessionHeartbeatMtimeMs } from './bridge-studio-lifecycle.ts';
 import { isTerminalPhase } from './session-resolution.ts';

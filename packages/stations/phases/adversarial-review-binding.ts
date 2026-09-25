@@ -17,7 +17,7 @@
  * dynamic lives in the user prompt.
  */
 
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 import { loadAgentSkillText } from './agent-skill-text.ts';
 
 /** Orchestrator-assembled inputs the agent Reads (worktree-relative). */

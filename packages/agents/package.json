@@ -6,7 +6,15 @@
   "description": "Running ONE agent: dispatch, band guards, the Ralph loop and its stop conditions, the adapter registry, the per-spawn runtime.",
   "exports": {
     ".": "./index.ts",
-    "./*": "./*"
+    "./testing": "./testing.ts",
+    "./phase-agent.ts": "./phase-agent.ts",
+    "./studio/derive.ts": "./studio/derive.ts",
+    "./skill-path.ts": "./skill-path.ts",
+    "./pinned-sdk-query.ts": "./pinned-sdk-query.ts",
+    "./studio/hook-dispatch.ts": "./studio/hook-dispatch.ts",
+    "./tool-event-emit.ts": "./tool-event-emit.ts",
+    "./stream-deadline.ts": "./stream-deadline.ts",
+    "./studio/agent-registry.ts": "./studio/agent-registry.ts"
   },
   "scripts": {
     "test": "node --test --experimental-strip-types \"**/*.test.ts\""

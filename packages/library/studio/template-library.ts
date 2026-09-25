@@ -24,7 +24,7 @@ import { discoverProjects, type DiscoveredProject } from '@forge/kernel';
 import { originOfHookOrTemplate, SCAFFOLD_TEMPLATE_ORIGIN, type HookTemplateOrigin } from '@forge/kernel';
 import { loadArtifactTemplate, loadDemoElement } from './artifact-registry.ts';
 import type { PackageFile } from './skill-package.ts';
-import type { ArtifactKind, DemoStepKind, FlowDefinition, FlowNode } from '@forge/contracts/studio/types.ts';
+import type { ArtifactKind, DemoStepKind, FlowDefinition, FlowNode } from '@forge/contracts';
 import type { Finding } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------

@@ -40,37 +40,37 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import matter from 'gray-matter';
 
-import { isStudioAgent, isUnfilteredStudioAgent, loadAgentDefinition, listStarterAgents } from '@forge/agents/studio/agent-registry.ts';
-import { loadFlowDefinition, loadStarterFlow, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
-import { flowPathForId } from '@forge/flows/flow-runner.ts';
+import { isStudioAgent, isUnfilteredStudioAgent, loadAgentDefinition, listStarterAgents } from '@forge/agents';
+import { loadFlowDefinition, loadStarterFlow, listFlowIds } from '@forge/flows';
+import { flowPathForId } from '@forge/flows';
 import { discoverProjects } from '@forge/kernel';
-import { loadKbDescriptor } from '@forge/knowledge/studio/kb-descriptor.ts';
-import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
+import { loadKbDescriptor } from '@forge/knowledge';
+import { loadCatalog } from '@forge/library';
 import {
   lintArtifactTemplates,
   lintDemoElements,
   lintInstructionSeeds,
   lintCatalogSection,
   lintCommunitySection,
-} from '@forge/library/studio-lint-library-passes.ts';
-import { lintTemplateLibrary } from '@forge/library/studio/template-library.ts';
-import { lintHookComposition, lintHookDefinitions } from '@forge/library/studio/hook-library.ts';
-import { lintCommunityIndex } from '@forge/library/studio/community-index.ts';
-import { validateSessionKinds } from '@forge/sessions/studio/session-kinds-validate.ts';
-import { validateAgent } from '@forge/agents/studio/validate-agent.ts';
-import { validateArtifactRef, validateFlow } from '@forge/flows/studio/validate-flow.ts';
-import { validateKb } from '@forge/knowledge/studio/validate-kb.ts';
-import { validateDiscoveredProjects } from '@forge/projects/studio/validate-project.ts';
-import { validateLibraryFlag } from '@forge/library/studio/library-validate.ts';
-import type { Finding } from '@forge/kernel/findings.ts';
+} from '@forge/library';
+import { lintTemplateLibrary } from '@forge/library';
+import { lintHookComposition, lintHookDefinitions } from '@forge/library';
+import { lintCommunityIndex } from '@forge/library';
+import { validateSessionKinds } from '@forge/sessions';
+import { validateAgent } from '@forge/agents';
+import { validateArtifactRef, validateFlow } from '@forge/flows';
+import { validateKb } from '@forge/knowledge';
+import { validateDiscoveredProjects } from '@forge/projects';
+import { validateLibraryFlag } from '@forge/library';
+import type { Finding } from '@forge/kernel';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
-import { listSkillMdDirs, listSkillDirs, skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
-import { lintSkillTrust, lintSkillRefs } from '@forge/library/studio/skill-trust.ts';
-import type { AgentDefinition, KbDescriptor } from '@forge/contracts/studio/types.ts';
-import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
-import { kbReadPolicyViolation } from '@forge/knowledge/kb-read-policy.ts';
-import { unroutableKbReason } from '@forge/knowledge/kb-sites.ts';
-import { lintSkillToolFence, lintStarterAgentToolFence } from '@forge/library/studio-lint-tool-fence.ts';
+import { listSkillMdDirs, listSkillDirs, skillsDir as toSkillsDir } from '@forge/agents';
+import { lintSkillTrust, lintSkillRefs } from '@forge/library';
+import type { AgentDefinition, KbDescriptor } from '@forge/contracts';
+import { listFlowBandIds } from '@forge/flows';
+import { kbReadPolicyViolation } from '@forge/knowledge';
+import { unroutableKbReason } from '@forge/knowledge';
+import { lintSkillToolFence, lintStarterAgentToolFence } from '@forge/library';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -99,7 +99,7 @@ function kbDirNameFindings(kbId: string, kbPath: string): Finding[] {
 }
 
 /** SEAM F1: several library skill-lint passes are built on `listSkillDirs`
- *  (`@forge/library/skill-path.ts`), which THROWS, naming both paths, on a
+ *  (`@forge/library`), which THROWS, naming both paths, on a
  *  cross-root duplicate slug — never "first root wins". `runStudioLint`
  *  promises no unhandled throws (module header), so every such pass runs
  *  through here: a thrown duplicate becomes its own error Finding instead of

@@ -12,12 +12,12 @@
 import { readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
-import { findSessionProject } from '@forge/sessions/session-resolution.ts';
+import { findSessionProject } from '@forge/sessions';
 import {
   CANCELLED_PHASE,
   guardedReadSessionStatus,
   guardedWriteSessionStatus,
-} from '@forge/sessions/session-status-io.ts';
+} from '@forge/sessions';
 
 // ---------------------------------------------------------------------------
 // The terminal fact a KILL cannot write for itself (bead `forge-8vfn.6.11.12`,

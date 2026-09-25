@@ -44,7 +44,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { startBridge } from '../../ui-bridge.ts';
-import { projectStartersDir } from '@forge/projects/project-create.ts';
+import { projectStartersDir } from '@forge/projects';
 
 const REAL_ROOT = process.cwd();
 

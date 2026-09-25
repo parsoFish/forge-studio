@@ -17,10 +17,10 @@
  */
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
+import { listAgentDefinitions } from '@forge/agents';
 import { loadFlowDefinition, listFlowIds } from './studio/flow-registry.ts';
 import { flowPathForId } from './flow-runner.ts';
-import { skillRoots } from '@forge/kernel/discovery-roots.ts';
+import { skillRoots } from '@forge/kernel';
 
 // A run's flow id comes from its manifest's `flow_id` (architect → forge-architect,
 // develop → forge-develop). This constant

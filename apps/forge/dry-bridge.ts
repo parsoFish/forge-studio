@@ -67,11 +67,11 @@ import type { DryBridgeAction } from '@forge/kernel';
 // bead forge-8vfn.5.30: the SAME route-table factories `apps/forge/routes.ts`
 // calls to assemble the real bridge — called here with stub deps purely to
 // read each row's `dryClassification` (see `classificationStubDeps` below).
-import { knowledgeRoutes, type KnowledgeRouteDeps } from '@forge/knowledge/routes.ts';
-import { libraryRoutes, type LibraryRouteDeps } from '@forge/library/routes.ts';
-import { projectsRoutes, type ProjectsRouteDeps } from '@forge/projects/routes.ts';
-import { agentsRoutes, type AgentsRouteDeps } from '@forge/agents/routes.ts';
-import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions/routes.ts';
+import { knowledgeRoutes, type KnowledgeRouteDeps } from '@forge/knowledge';
+import { libraryRoutes, type LibraryRouteDeps } from '@forge/library';
+import { projectsRoutes, type ProjectsRouteDeps } from '@forge/projects';
+import { agentsRoutes, type AgentsRouteDeps } from '@forge/agents';
+import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions';
 
 
 export type DryBridgeClassification = 'refuse' | 'stub-actions' | 'exempt-local' | 'read-only';

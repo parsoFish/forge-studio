@@ -25,8 +25,8 @@ import {
   sendJson, allowedOrigin, sanitizeError, pathOnly, listCycles, readBoundedLog, boundedLogSegments,
   guardedMtime, guardedReadFileTail, type StudioContext, type RouteContext,
 } from '@forge/kernel';
+import { assertSkillSlug } from '@forge/kernel';
 import { HOOK_TEST_FIRE_LOG_DIR, type HookTestFireLogEntry } from './bridge-studio-hooks-test-fire.ts';
-import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import { scanHookFireSummary, HOOK_FIRE_SCAN_MAX_CYCLES } from './studio/hook-fire-summary.ts';
 import {
   hooksDir,

@@ -12,7 +12,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import type { AgentDefinition, FlowDefinition, FlowTrigger } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition, FlowDefinition, FlowTrigger } from '@forge/contracts';
 import { TRIGGER_KIND_IDS } from '../flow-trigger.ts';
 import { validateFlow } from './validate-flow.ts';
 

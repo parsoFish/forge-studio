@@ -26,14 +26,14 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { runPreflight } from '@forge/projects/preflight.ts';
+import { runPreflight } from '@forge/projects';
 import { loadFlowDefinition } from './studio/flow-registry.ts';
-import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
+import { listAgentDefinitions } from '@forge/agents';
 import { validateFlow } from './studio/validate-flow.ts';
 import { flowAcceptsClass, flowClassRefusalMessage } from './flow-accepts-class.ts';
-import type { ManifestClass } from '@forge/contracts/manifest-types.ts';
-import { skillRoots } from '@forge/kernel/discovery-roots.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { ManifestClass } from '@forge/contracts';
+import { skillRoots } from '@forge/kernel';
+import type { AgentDefinition } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // Public types

@@ -26,10 +26,10 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
 import type { EventLogger } from '@forge/kernel';
-import { parseManifest } from '@forge/flows/manifest.ts';
-import type { MergeGateEvidence } from '@forge/flows/cycle-helpers.ts';
-import { worktreeDemoDir, worktreeDemoRelDir, DEMO_JSON_BASENAME } from '@forge/flows/demo-paths.ts';
-import { readWorkItemsFromDir } from '@forge/flows/work-item.ts';
+import { parseManifest } from '@forge/flows';
+import type { MergeGateEvidence } from '@forge/flows';
+import { worktreeDemoDir, worktreeDemoRelDir, DEMO_JSON_BASENAME } from '@forge/flows';
+import { readWorkItemsFromDir } from '@forge/flows';
 import {
   buildDemoCaptureArgv,
   CAPTURE_NONCE_ENV,
@@ -39,8 +39,8 @@ import {
   preflightDemoCaptureCommands,
   resolveDemoCaptureTimeoutMs,
   runOrchestratorCommand,
-} from '@forge/flows/phases/orchestrated-capture.ts';
-import { loadProjectConfig } from '@forge/projects/project-config.ts';
+} from '@forge/flows';
+import { loadProjectConfig } from '@forge/projects';
 
 import { renderDemoBundle, stripScratchFromDiffStat } from '../demo-model.ts';
 import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';

@@ -96,7 +96,7 @@ test('POST /api/agents/<slug>/run: an interactive agent is refused → 400', asy
 // because the tree contains no other candidate — measured, not assumed:
 //
 //   listAgentDefinitions = isStudioAgent = has a `runtime:` block AND
-//   `library !== false` (`@forge/agents/studio/agent-registry.ts`).
+//   `library !== false` (`@forge/agents`).
 //
 //   - The four real `surface: interactive` agents WITH a runtime block
 //     (brain-maintenance, creation-agent, demo-builder, instructions-creator)

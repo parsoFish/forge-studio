@@ -6,7 +6,7 @@
   "description": "Skills, hooks, connections, templates, seeds, community: author, scan, approve, list.",
   "exports": {
     ".": "./index.ts",
-    "./*": "./*"
+    "./testing": "./testing.ts"
   },
   "scripts": {
     "test": "node --test --experimental-strip-types \"**/*.test.ts\""

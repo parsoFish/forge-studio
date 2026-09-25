@@ -57,7 +57,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { delimiter, join, relative, resolve } from 'node:path';
 
-import { HOOK_ENV_BASE_ALLOWLIST, buildChildEnv } from '@forge/kernel/spawn-env.ts';
+import { HOOK_ENV_BASE_ALLOWLIST, buildChildEnv } from '@forge/kernel';
 import type { CatalogConnection, ConnectionConfigVar, ConnectionProbeSpec } from './connection-library.ts';
 
 // ---------------------------------------------------------------------------

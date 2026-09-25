@@ -18,26 +18,26 @@
 
 import { existsSync, readdirSync, statSync, mkdirSync, appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { serve } from '@forge/flows/scheduler.ts';
+import { serve } from '@forge/flows';
 import { requireFactoryDemo, requireInstalledFactory } from './factory-cli-wiring.ts';
-import { loadBrainIndex, regenerateBrainIndex } from '@forge/knowledge/brain-index.ts';
+import { loadBrainIndex, regenerateBrainIndex } from '@forge/knowledge';
 import { cmdBrainLint } from './cli-brain-lint.ts';
 import { cmdGate } from './cli-gate.ts';
 import { runStudioLint } from './studio-lint.ts';
-import { runPreflight, formatPreflightReport, buildVerdictEvent } from '@forge/projects/preflight.ts';
-import { runContractComplianceLoop, formatComplianceReport } from '@forge/projects/contract-compliance-loop.ts';
-import { composeAgentsMd } from '@forge/agents/agents-md-compose.ts';
-import { authorConstraintBlocks } from '@forge/projects/constraint-author.ts';
-import { scaffoldGreenfieldProject, listProjectStarters, type ScaffoldResult } from '@forge/projects/project-create.ts';
+import { runPreflight, formatPreflightReport, buildVerdictEvent } from '@forge/projects';
+import { runContractComplianceLoop, formatComplianceReport } from '@forge/projects';
+import { composeAgentsMd } from '@forge/agents';
+import { authorConstraintBlocks } from '@forge/projects';
+import { scaffoldGreenfieldProject, listProjectStarters, type ScaffoldResult } from '@forge/projects';
 import { assertEnv, defaultConfigPath, forgeBinOnPath, loadConfig, resolveProjectsDir, runInit,
   ensureLayoutDirs, ensureDefaultConfig, resolveGuardedPath, writeProjectGroundFile, describeProjectStarters, type InitReport } from '@forge/kernel';
-import { worktreeDemoDir } from '@forge/flows/demo-paths.ts';
-import { cmdAgent, cmdAgentRun } from '@forge/agents/agent-run.ts';
+import { worktreeDemoDir } from '@forge/flows';
+import { cmdAgent, cmdAgentRun } from '@forge/agents';
 import { AGENT_DISPATCH_DEPS } from './session-kind-deps.ts';
 
-import { cmdProjectMigrate } from '@forge/projects/project-migrate.ts';
-import { cmdProjectReset } from '@forge/projects/reset-cli.ts';
-import { cmdCommunity } from '@forge/library/community-refresh-cmd.ts';
+import { cmdProjectMigrate } from '@forge/projects';
+import { cmdProjectReset } from '@forge/projects';
+import { cmdCommunity } from '@forge/library';
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -294,7 +294,7 @@ async function cmdBrainFix(rest: string[]): Promise<void> {
   // M4 port 5 (ruling 60): resolve the KIND through the spine's session-less
   // fix dispatch rather than naming a `run<X>Turn` import. The row owns the
   // console summary too, so the kind that produces the edit audit reports it.
-  const { FIX_KIND_RUNNERS } = await import('@forge/sessions/kinds/fix-registry.ts');
+  const { FIX_KIND_RUNNERS } = await import('@forge/sessions');
   const row = FIX_KIND_RUNNERS['brain-fix'];
   const runTurn = await row.loadRunTurn();
   const r = await runTurn({
@@ -778,7 +778,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
     try {
       const { captureCheckpoints, model: demoModel } = await requireFactoryDemo('forge demo capture');
       const { collectCapturedMedia, mergeCapturedMedia, renderDemoBundle, stampCaptureNonce } = demoModel;
-      const { CAPTURE_NONCE_ENV } = await import('@forge/flows/phases/orchestrated-capture.ts');
+      const { CAPTURE_NONCE_ENV } = await import('@forge/flows');
       const bundleDir = join(demoDir, '.capture');
       const demoJson = JSON.parse(readFileSync(jsonPath, 'utf8'));
       const cps = (demoJson?.checkpoints ?? []) as Array<{ label?: string; command?: string }>;
@@ -856,7 +856,7 @@ async function cmdPreflightFix(rest: string[]): Promise<void> {
   const projectDir = resolvePreflightProjectDir(project);
   const runId = flag('run-id') ?? `manual-${clause}`;
   // M4 port 6 (ruling 60) — see `brain fix` above.
-  const { FIX_KIND_RUNNERS } = await import('@forge/sessions/kinds/fix-registry.ts');
+  const { FIX_KIND_RUNNERS } = await import('@forge/sessions');
   const runTurn = await FIX_KIND_RUNNERS['preflight-fix'].loadRunTurn();
   const r = await runTurn({
     runId,

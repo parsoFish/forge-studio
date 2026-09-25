@@ -21,7 +21,7 @@ import { loadKbDescriptor, resolveKbProcesses } from '../../studio/kb-descriptor
 // Depth-INDEPENDENT. A hand-counted `resolve(__dirname, '..', '..')` is
 // calibrated to this file's current directory, so moving the file two levels
 // deeper into tests/<bucket>/ would silently resolve two directories short.
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Contract §1: getKbBackend resolves a backend bound to the kbId

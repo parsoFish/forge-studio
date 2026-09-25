@@ -54,7 +54,7 @@ import type { KbDrainFixTurnInput, KbDrainFixTurnResult } from '../../bridge-stu
 // stand-in here would assert that a stand-in behaves, which is what the
 // 2026-08-22 defects already did. The row is recorded with this reason rather
 // than closed by weakening the test.
-import { runBrainFixTurn } from '@forge/sessions/kinds/brain-fix.ts';
+import { runBrainFixTurn } from '@forge/sessions';
 import type { Finding } from '../../brain-lint.ts';
 
 // ---------------------------------------------------------------------------
