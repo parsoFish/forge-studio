@@ -607,7 +607,13 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     // LAST: the fixture ground itself. `sweepProductFixtures` above kept it
     // (`keepProjects`) so the own-ground drift and this fence could both read
     // it; nothing after this point needs `projects/<project>` on disk.
-    const teardown = teardownFixtureGround(ROOT, { storyId: story.id, project: story.ground.project });
+    // Row 75 × D1: `reapCensusAndSweep` refused the trailing sweep while a writer
+    // from this run was still alive, so the ground stays too — an `rmSync` under
+    // a live writer is the race the census closes. The CONTAINMENT FAILURE below
+    // reds the run; the next run's leading sweep removes the ground.
+    const teardown = trailing.census.empty
+      ? teardownFixtureGround(ROOT, { storyId: story.id, project: story.ground.project })
+      : { removed: false, error: `not torn down — ${trailing.census.reason}` };
     if (teardown.removed) {
       console.log(`[stories] fixture ground: torn down projects/${story.ground.project}`);
     } else if (teardown.error !== undefined) {
