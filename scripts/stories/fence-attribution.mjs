@@ -370,10 +370,16 @@ function tallyErrno(errnos, err) {
  * sample as errored, never as "no descendants"; (3) every failed attempt's
  * errno is tallied, whether or not the sample it belongs to recovers, so a
  * report never has to guess how many attempts failed or of what kind; (4)
- * `longestGapMs` tracks the longest span with NO successful sample —
- * including run start -> first success, and last success -> `stop()` — so
+ * `longestGapMs` tracks the longest FAILURE WINDOW — from the last
+ * successful sample before an errored one (or run start, if the first sample
+ * errored) to the next success (or `stop()`, if it never recovered) — so
  * `attributeEscapes` can fail-close on an actual COVERAGE GAP instead of a
- * raw error count.
+ * raw error count. Only a window that CONTAINS a failed sample counts: a gap
+ * between two successes with no failure in it is the event loop running late
+ * (synchronous work, host load — measured: this file's own real-/proc test
+ * at loadavg 13 saw >3× a 10 ms interval between clean samples), and the
+ * sampler's pre-row-96 contract always accepted that; counting it would have
+ * traded one false red for another.
  *
  * @param {{rootPid: number|string, intervalMs?: number, procRoot?: string,
  *   listPids?: () => (number|string)[], readCwd?: (pid: number|string) => string,
@@ -397,6 +403,7 @@ export function startDescendantSampler(opts) {
   let samples = 0;
   const startedAt = Date.now();
   let lastSuccessAt = null; // null: no sample has ever succeeded yet
+  let failingSince = null; // start of the current failure window, or null while sighted
   let longestGapMs = 0;
 
   const note = (dir, pid, via) => {
@@ -405,8 +412,15 @@ export function startDescendantSampler(opts) {
   };
 
   const markSuccess = (now) => {
-    longestGapMs = Math.max(longestGapMs, now - (lastSuccessAt ?? startedAt));
+    if (failingSince !== null) {
+      longestGapMs = Math.max(longestGapMs, now - failingSince);
+      failingSince = null;
+    }
     lastSuccessAt = now;
+  };
+  const markErrored = () => {
+    erroredSamples += 1;
+    if (failingSince === null) failingSince = lastSuccessAt ?? startedAt;
   };
 
   const sampleOnce = () => {
@@ -430,7 +444,7 @@ export function startDescendantSampler(opts) {
       }
     }
     if (listErr !== undefined) {
-      erroredSamples += 1; // unreadable /proc listing, even after retrying: NEVER read as "no descendants"
+      markErrored(); // unreadable /proc listing, even after retrying: NEVER read as "no descendants"
       return;
     }
 
@@ -449,7 +463,7 @@ export function startDescendantSampler(opts) {
         for (const dir of openFileDirs(pid, procRoot, { listFds, readFd })) note(dir, pid, 'open file');
       }
     } catch (err) {
-      erroredSamples += 1;
+      markErrored();
       tallyErrno(errnos, err);
       return;
     }
@@ -464,7 +478,7 @@ export function startDescendantSampler(opts) {
   return {
     stop: () => {
       clearInterval(timer);
-      longestGapMs = Math.max(longestGapMs, Date.now() - (lastSuccessAt ?? startedAt)); // last success (or start) -> stop
+      if (failingSince !== null) longestGapMs = Math.max(longestGapMs, Date.now() - failingSince); // never recovered: window runs to stop
       return { touchedRoots, samples, erroredSamples, errnos: Object.fromEntries(errnos), longestGapMs, intervalMs };
     },
   };
@@ -538,8 +552,8 @@ export function mainCheckoutRoot(root) {
  * counted every RETRIED-AWAY `/proc` hiccup as blind and fail-closed on it,
  * which reddened S4 funded run 2 (13/13 beats green) on a sibling lane's own
  * test leak. Blindness is a GAP, never a count: blind iff `longestGapMs`
- * (the longest span with no successful sample — `startDescendantSampler`'s
- * own result) exceeds `BLIND_GAP_FACTOR × intervalMs`. A sampler that merely
+ * (the longest FAILURE window — `startDescendantSampler`'s own result) exceeds
+ * `BLIND_GAP_FACTOR × intervalMs`, or no coverage figure was passed at all. A sampler that merely
  * retried a few hiccups away, with real coverage throughout, is sighted; one
  * that went dark for a sustained stretch cannot prove a tree clean, so growth
  * it did not otherwise attribute stays THIS-RUN — and the reason names
@@ -558,8 +572,12 @@ export function attributeEscapes(escapes, opts = {}) {
   const mainRoot = opts.mainRoot ?? null;
   const mainResolved = mainRoot === null ? null : realpathOrResolve(mainRoot);
   const intervalMs = opts.intervalMs ?? DESCENDANT_SAMPLE_INTERVAL_MS;
-  const longestGapMs = opts.longestGapMs ?? 0;
-  const blind = longestGapMs > BLIND_GAP_FACTOR * intervalMs;
+  // An ABSENT coverage figure is blind, never the best possible one: a caller
+  // that did not pass the sampler's result, or a sampler that never ran, has
+  // proved nothing about any sibling tree (row 96 review; `?? 0` failed open).
+  const coverageKnown = Number.isFinite(opts.longestGapMs);
+  const longestGapMs = coverageKnown ? opts.longestGapMs : null;
+  const blind = !coverageKnown || longestGapMs > BLIND_GAP_FACTOR * intervalMs;
   return (escapes ?? []).map((e) => {
     const resolved = realpathOrResolve(e.root);
     const seen = touchedRoots.get(resolved) ?? touchedRoots.get(e.root);
@@ -590,8 +608,11 @@ export function attributeEscapes(escapes, opts = {}) {
       return {
         ...e,
         owner: 'this-run',
-        reason: `the descendant sampler went longestGapMs=${longestGapMs} without a successful /proc read — over ` +
-          `the ${BLIND_GAP_FACTOR}× ${intervalMs}ms bound (samples=${samples}, erroredSamples=${erroredSamples}, ` +
+        reason: (coverageKnown
+          ? `the descendant sampler went longestGapMs=${longestGapMs} without a successful /proc read — over ` +
+            `the ${BLIND_GAP_FACTOR}× ${intervalMs}ms bound`
+          : 'no sampler coverage figure was recorded for this run (longestGapMs absent)') +
+          ` (samples=${samples}, erroredSamples=${erroredSamples}, ` +
           `errnos=${errnos}) — a blind sampler cannot prove ${e.root} clean, so its growth stays THIS-RUN`,
       };
     }
