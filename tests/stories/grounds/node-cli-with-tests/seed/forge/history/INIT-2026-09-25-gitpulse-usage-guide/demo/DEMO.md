@@ -1,0 +1,47 @@
+# Add docs/usage.md: comprehensive CLI flag reference with worked examples
+
+> _Derived from `demo.json` (ADR 021). Essence:_ Add docs/usage.md: comprehensive CLI flag reference with worked examples — 2 work items delivered against 11 acceptance criteria, 1 merge-boundary gate run.
+
+## Summary
+
+- WI-1 [complete] # WI-1: Create docs/usage.md — comprehensive CLI flag reference
+- WI-2 [complete] # WI-2: Add README.md link to docs/usage.md
+- Commit: `f4b5e1c4c192b4adce636b43f95c959660e8237c`
+
+## Visual Changes
+
+### 4 files changed on this branch: CHANGELOG.md, README.md, docs/usage.md, scripts/gates/check-usage-guide.sh
+
+
+## Test Evidence
+
+| test | result | delta |
+|---|---|---|
+| docs: forge gate docs /home/parso/forge-m7-a-run/_worktrees/INIT-2026-09-25-gitpulse-usage-guide/CHANGELOG.md /home/parso/forge-m7-a-run/_worktrees/INIT-2026-09-25-gitpulse-usage-guide/README.md /home/parso/forge-m7-a-run/_worktrees/INIT-2026-09-25-gitpulse-usage-guide/docs/usage.md | pass | — |
+
+> result: **pass**/**fail** · **skip** = not run in this gate (e.g. a live test with no credentials present) — not a failure · delta **new** = test added by this change.
+
+## Acceptance criteria
+
+- (WI-1) GIVEN docs/usage.md does not yet exist WHEN the agent writes it THEN docs/usage.md is created with a dedicated section for every flag listed in `gitpulse --help`, each stating what the flag does, its accepted values, its default, and a worked example
+- (WI-1) GIVEN docs/usage.md contains a section for each flag WHEN each claim is traced against src/cli.ts before the section is finalised THEN no invented fields, no capabilities the code does not implement; output sections match what gitpulse actually prints for that flag
+- (WI-1) GIVEN the guide documents --author WHEN a reader checks the --compare interaction note THEN the guide explicitly states that --author is not applied on the --compare path and the combination silently ignores --author (known limitation)
+- (WI-1) GIVEN the guide documents --markdown with --since-tag or --until-tag WHEN a reader checks the output description THEN the guide explicitly states the range annotation is absent from markdown output because renderSummaryMarkdown receives but does not use the tagRange option
+- (WI-1) GIVEN the guide documents the tags subcommand WHEN a reader checks flag compatibility THEN (a) --top and --compare exit with code 2 (unsupported); (b) --since-tag and --until-tag exit with code 2 despite their names; (c) --no-merges is accepted but has no effect on the tags subcommand
+- (WI-1) GIVEN the guide documents --sort WHEN a reader uses it in any command context THEN the guide enumerates valid columns per context: authors (author, commits, insertions, deletions); compare (author, baseCommits, headCommits, deltaCommits, baseChurn, headChurn, deltaChurn); tags (name, date, commitsSince, uniqueAuthors, daysSince) — with the direction rule (numeric → desc default, text → asc default) and an explicit :asc/:desc example
+- (WI-1) GIVEN the guide documents --include and --exclude used together WHEN a reader applies both flags THEN the guide states inclusions are applied before exclusions, the order is code-enforced, and not configurable
+- (WI-1) GIVEN the guide documents --since-tag and --until-tag WHEN a reader checks boundary behaviour THEN the guide states --since-tag is exclusive (tagged commit excluded) and --until-tag is inclusive, with a worked example that makes the asymmetric boundary visible
+- (WI-1) GIVEN the guide documents --author WHEN a reader checks glob syntax rules THEN the guide states: wildcard is * only (** not supported unlike --include/--exclude); matching is case-insensitive; pattern matches against name OR email address
+- (WI-1) GIVEN the guide documents --help WHEN a reader pipes gitpulse output THEN the guide states --help / -h output is written to stderr, not stdout
+- (WI-2) GIVEN README.md exists and docs/usage.md exists (from WI-1) WHEN a reader opens the ## Usage section of README.md THEN it contains exactly one new sentence linking to docs/usage.md; no other README content is changed
+
+## Files Changed
+
+- `CHANGELOG.md`
+- `README.md`
+- `docs/usage.md`
+- `scripts/gates/check-usage-guide.sh`
+
+```
+4 files changed, 481 insertions(+), 1 deletion(-)
+```
