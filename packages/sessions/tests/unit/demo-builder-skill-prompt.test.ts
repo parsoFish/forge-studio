@@ -12,7 +12,7 @@ import type { DemoBuilderStatus } from '../../kinds/demo-session-store.ts';
 import { type QueryFn } from '../../interactive-session.ts';
 import { listDemoElements } from '@forge/library';
 import type { DemoStep } from '@forge/contracts';
-import { splitSkillTurnSections } from '@forge/agents/skill-path.ts';
+import { splitSkillTurnSections } from '@forge/agents';
 
 // ---------------------------------------------------------------------------
 // AT-1 — prose-left-the-TS (grep-assert, both files read from disk at test time)

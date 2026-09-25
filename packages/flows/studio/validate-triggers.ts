@@ -10,7 +10,7 @@
 import { Cron } from 'croner';
 
 import { TRIGGER_KINDS, TRIGGER_KIND_IDS, WEBHOOK_FAMILY_KIND_IDS } from '../flow-trigger.ts';
-import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
+import { resolveBandGuard } from '@forge/agents';
 import { TRIGGER_MODES } from '@forge/contracts';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 

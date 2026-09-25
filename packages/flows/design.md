@@ -51,7 +51,7 @@ is authoring YAML; the code path does not change.
 Task 13 (M4-flows) moved that loader here from
 `orchestrator/studio/registry.ts`, the last home of a Studio object kind its
 own package did not own — the same split the Agent kind took to
-`@forge/agents/studio/agent-registry.ts`. The rule underneath: **the package
+`@forge/agents`. The rule underneath: **the package
 that owns the engine owns loading its definitions.**
 
 The Flow *vocabulary*, though, is shared. `FlowDefinition`, `FlowNode`,

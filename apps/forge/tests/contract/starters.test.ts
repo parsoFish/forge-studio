@@ -21,12 +21,12 @@ import type { AgentDefinition } from '@forge/contracts';
 // row for a strictly worse `package-layer-order` one. Ruling 89 puts a test
 // that needs real cross-package objects FLAT at the assembly, where importing
 // every package is what the assembly is FOR — so the row closes outright.
-import { loadAgentDefinition, listStarterAgents } from '@forge/agents/studio/agent-registry.ts';
+import { loadAgentDefinition, listStarterAgents } from '@forge/agents';
 import { loadFlowDefinition, loadStarterFlow } from '@forge/flows/studio/flow-registry.ts';
 import { loadCatalog } from '@forge/library';
-import { validateAgent } from '@forge/agents/studio/validate-agent.ts';
+import { validateAgent } from '@forge/agents';
 import { validateFlow } from '@forge/flows/studio/validate-flow.ts';
-import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
+import { agentCapabilityDescriptor } from '@forge/agents';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const STARTERS = join(ROOT, 'studio', 'starters');

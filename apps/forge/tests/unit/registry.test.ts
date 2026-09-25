@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
-import { isStudioAgent, isUnfilteredStudioAgent, loadAgentDefinition, serializeAgentDefinition, listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
+import { isStudioAgent, isUnfilteredStudioAgent, loadAgentDefinition, serializeAgentDefinition, listAgentDefinitions } from '@forge/agents';
 import { loadFlowDefinition, serializeFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
 import { discoverProjects } from '@forge/kernel';
 import { loadKbDescriptor, serializeKbDescriptor } from '@forge/knowledge';

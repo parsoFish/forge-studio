@@ -35,7 +35,7 @@
  */
 
 // --- the skills tree --------------------------------------------------------
-// Full-module `export *`, not a curated symbol list: `@forge/agents/skill-path.ts`
+// Full-module `export *`, not a curated symbol list: `@forge/agents`
 // re-exports this ENTIRE module (`export * from '@forge/library'`) as part of its
 // own public door (agents/README.md's "skill packages" row), so a curated subset
 // here would silently narrow what agents can re-export — M7-C OD found this the

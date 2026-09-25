@@ -23,9 +23,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { basename, join, sep } from 'node:path';
 import matter from 'gray-matter';
 
-import { isSafeSegment, type Finding } from '@forge/kernel';
+import { isSafeSegment, type Finding, SLUG_RE } from '@forge/kernel';
 import { skillRoots } from '@forge/kernel';
-import { listSkillMdDirs, SLUG_RE } from '@forge/agents/skill-path.ts';
+import { listSkillMdDirs } from '@forge/agents';
 import { FINALIZERS } from '../interactive-finalizers.ts';
 
 import {

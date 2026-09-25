@@ -41,7 +41,7 @@ import { join, resolve } from 'node:path';
 import { loadCatalog } from '@forge/library';
 import { validateCatalog } from '@forge/library/testing';
 import { loadYaml } from '@forge/kernel';
-import { BAND_GUARD_IDS } from '@forge/agents/agent-bands.ts';
+import { BAND_GUARD_IDS } from '@forge/agents';
 import type { Catalog } from '@forge/contracts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');

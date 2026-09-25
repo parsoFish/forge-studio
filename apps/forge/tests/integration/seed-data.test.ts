@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { existsSync, readdirSync } from 'node:fs';
 
-import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
+import { listAgentDefinitions } from '@forge/agents';
 import { loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
 import { discoverProjects } from '@forge/kernel';
 import { loadKbDescriptor } from '@forge/knowledge';
@@ -19,10 +19,10 @@ import { loadCatalog } from '@forge/library';
 import { validateCatalog } from '@forge/library/testing';
 import { validateDiscoveredProjects } from '@forge/projects';
 import { validateKb } from '@forge/knowledge';
-import { validateAgent } from '@forge/agents/studio/validate-agent.ts';
+import { validateAgent } from '@forge/agents';
 import { resolveProjectsDir } from '@forge/kernel';
-import { MODEL_BY_TIER } from '@forge/agents/phase-agent.ts';
-import { MATERIAL_KINDS } from '@forge/agents/studio/materials.ts';
+import { MODEL_BY_TIER } from '@forge/agents';
+import { MATERIAL_KINDS } from '@forge/agents/testing';
 
 const ROOT = process.cwd();
 

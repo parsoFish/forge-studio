@@ -27,12 +27,12 @@ import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import type { OutgoingHttpHeaders } from 'node:http';
 
-import type { ModelTier } from '@forge/agents/phase-agent.ts';
+import type { ModelTier } from '@forge/agents';
 import { MAX_EXACT_ID_LENGTH, PROJECT_ID_RE } from '@forge/kernel';
 import { discoverProjects } from '@forge/kernel';
 import { isSafeSegment, resolveGuardedPath } from '@forge/kernel';
-import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { resolveSessionModel } from '@forge/agents/phase-agent.ts';
+import { deriveAgentSpec } from '@forge/agents';
+import { resolveSessionModel } from '@forge/agents';
 import { skillPathRelative } from '@forge/library';
 
 import { deriveSessionLifecycleFor, sessionHeartbeatMtimeMs } from './bridge-studio-lifecycle.ts';

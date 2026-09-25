@@ -31,7 +31,7 @@
  *      may import both packages.
  *   2. `listStarterAgents`/`loadStarterFlow` (`orchestrator/studio/registry.ts`,
  *      LEGACY — no package-native home) and `agentCapabilityDescriptor`
- *      (`@forge/agents/studio/derive.ts`, rank 3, strictly higher than
+ *      (`@forge/agents`, rank 3, strictly higher than
  *      `projects`) — both needed by `GET /api/studio/starters`. Same
  *      injected-dependency shape as (1), closed over by the SAME factory.
  *
@@ -354,7 +354,7 @@ export function loadProjectsWithMeta(forgeRoot: string, projectKbBindings: Proje
 
 /** The injected dependencies `GET /api/studio/starters` needs — see the file
  *  header's dependency-injection note (2). `agentCapabilityDescriptor`'s
- *  return type (`AgentCapabilityDescriptor`, `@forge/agents/studio/derive.ts`,
+ *  return type (`AgentCapabilityDescriptor`, `@forge/agents`,
  *  rank 3) is deliberately NOT named here — even a type-only import of it
  *  would be a `package-layer-order` violation the same as a value import
  *  (`scripts/check-boundaries.mjs`'s `tsPreCompilationDeps: true` tracks

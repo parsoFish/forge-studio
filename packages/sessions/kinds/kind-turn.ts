@@ -47,9 +47,9 @@
 import { rmSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
-import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
-import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
-import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
+import { pinnedSdkQuery as sdkQuery } from '@forge/agents';
+import { sdkHooksForAgent } from '@forge/agents';
+import { makeToolEventSink } from '@forge/agents';
 import { createLogger, guardedReadFile, resolveGuardedPath, type EventLogger, type Phase } from '@forge/kernel';
 
 import { makeHeartbeatWriter, makeReasoningSink, makeThinkingSink, runAgentTurn, type QueryFn } from '../interactive-session.ts';

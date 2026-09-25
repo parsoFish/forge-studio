@@ -7,9 +7,9 @@ import { join } from 'node:path';
 import { runInteractiveTurn } from '../../interactive-runner.ts';
 import { type QueryFn } from '../../interactive-session.ts';
 import { writeSessionStatus, readSessionStatus } from '../../interactive-session.ts';
-import { modelForSpec } from '@forge/agents/phase-agent.ts';
-import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { skillPathRelative } from '@forge/agents/skill-path.ts';
+import { modelForSpec } from '@forge/agents';
+import { deriveAgentSpec } from '@forge/agents';
+import { skillPathRelative } from '@forge/agents';
 
 // =============================================================================
 // R4-22 WI-3 adversarial-review round — four reviewer-confirmed findings

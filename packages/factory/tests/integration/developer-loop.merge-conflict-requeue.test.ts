@@ -45,8 +45,8 @@ import {
   type WiOutcome,
 } from '../../phases/developer-loop.ts';
 import { topologicalOrder, writeWorkItem, writeWorkItemStatus, type WorkItem } from '@forge/flows/work-item.ts';
-import { run as runRalph, type AgentInvocation } from '@forge/agents/ralph/runner.ts';
-import { makeQualityGateFromCmd } from '@forge/agents/ralph/stop-conditions.ts';
+import { runRalphLoop as runRalph, type AgentInvocation } from '@forge/agents';
+import { makeQualityGateFromCmd } from '@forge/agents';
 import { runConcurrentDispatch, type DispatchOutcome } from '@forge/flows/wi-dispatch-scheduler.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import { SCRATCH_PATHS } from '@forge/projects';

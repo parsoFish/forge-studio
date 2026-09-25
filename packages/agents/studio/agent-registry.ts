@@ -252,7 +252,7 @@ function validateAgentDocument(doc: FrontmatterDoc): AgentDefinition {
 // 800-line cap — 2026-08-05, finding C/11). Re-exported here so existing
 // importers keep resolving `serializeAgentDefinition` from './registry.ts';
 // it remains the ONE canonical serializer (ADR-027).
-export { serializeAgentDefinition } from '@forge/agents/studio/skill-md-fidelity.ts';
+export { serializeAgentDefinition } from './skill-md-fidelity.ts';
 
 /** Loads every studio agent under `skillsDirs` (one dir, or several — SEAM
  *  F1's `skillRoots`). THROWS, naming both, on a slug real under two dirs —

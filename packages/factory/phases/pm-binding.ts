@@ -14,10 +14,10 @@
 import { readFileSync } from 'node:fs';
 
 import { loadBrainIndex } from '@forge/knowledge';
-import { modelForSpec } from '@forge/agents/phase-agent.ts';
-import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { skillPath, skillPathRelative } from '@forge/agents/skill-path.ts';
+import { modelForSpec } from '@forge/agents';
+import { deriveAgentSpec } from '@forge/agents';
+import { loadAgentDefinition } from '@forge/agents';
+import { skillPath, skillPathRelative } from '@forge/agents';
 
 const SKILL_PATH = skillPath('project-manager');
 

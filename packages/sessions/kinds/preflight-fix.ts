@@ -19,9 +19,9 @@ import { runPreflight, type ClauseId } from '@forge/projects';
 import { ensureStudioBranch, commitStudioChange, dirtyPaths } from '@forge/projects';
 import { clauseTarget } from '@forge/projects';
 import { PROJECT_CONFIG_REL_PATH } from '@forge/projects';
-import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { modelForSpec } from '@forge/agents/phase-agent.ts';
-import { skillPathRelative } from '@forge/agents/skill-path.ts';
+import { deriveAgentSpec } from '@forge/agents';
+import { modelForSpec } from '@forge/agents';
+import { skillPathRelative } from '@forge/agents';
 import { guardedReadFile } from '@forge/kernel';
 
 import { runFixTurn, type FixTurnInput, type FixTurnResult, type FixTurnVariant } from './fix-turn.ts';

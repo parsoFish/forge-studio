@@ -29,11 +29,11 @@ import type { EventLogger } from '@forge/kernel';
 import type { ArchitectManifestPorts } from './architect-ports.ts';
 import { parseGuardedEventsJsonl, sessionLogDirName } from '../session-readability.ts';
 import { deriveSessionCostUsd } from '@forge/kernel';
-import { modelForSpec } from '@forge/agents/phase-agent.ts';
-import type { ModelTier } from '@forge/agents/phase-agent.ts';
-import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { modelForSpec } from '@forge/agents';
+import type { ModelTier } from '@forge/agents';
+import { deriveAgentSpec } from '@forge/agents';
 import type { CompletenessCriticFinding } from './architect-critic.ts';
-import { skillPathRelative } from '@forge/agents/skill-path.ts';
+import { skillPathRelative } from '@forge/agents';
 
 
 // ---------------------------------------------------------------------------

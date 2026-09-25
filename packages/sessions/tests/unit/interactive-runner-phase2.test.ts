@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { runInteractiveTurn } from '../../interactive-runner.ts';
 import { type QueryFn } from '../../interactive-session.ts';
 import { writeSessionStatus, readSessionStatus } from '../../interactive-session.ts';
-import { SLUG_RE } from '@forge/agents/skill-path.ts';
+import { SLUG_RE } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Finding 5 (orchestrator-ruled design change, NOT yet implemented): the

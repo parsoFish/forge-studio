@@ -34,9 +34,9 @@ import type { AgentFacts, ComposingAgent } from '@forge/library';
 // newly request-reachable and its three sinks newly un-baselined. Baselining
 // them would have recorded a phantom; naming the four modules keeps the
 // scanner's view of what a request can reach true (§15.85's shape).
-import { agentUsageIndex } from '@forge/agents/studio/agent-usage.ts';
-import { isStudioAgent, loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { listSkillMdDirs } from '@forge/agents/skill-path.ts';
+import { agentUsageIndex } from '@forge/agents';
+import { isStudioAgent, loadAgentDefinition } from '@forge/agents';
+import { listSkillMdDirs } from '@forge/agents';
 import { skillRoots } from '@forge/kernel';
 
 /** Studio agents across every skill root (SEAM F1), tolerating a malformed one. */

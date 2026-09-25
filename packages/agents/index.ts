@@ -28,11 +28,12 @@ export { runBandAgentStandalone, isStandaloneBandAgent, dispatchStandaloneBand }
 
 // ---- The Ralph loop and its stop conditions -------------------------------
 export { run as runRalphLoop } from './ralph/runner.ts';
-export { makeQualityGateFromCmd, resolveGateTimeoutMs } from './ralph/stop-conditions.ts';
+export { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from './ralph/stop-conditions.ts';
 
 // ---- The Agent kind of the studio object model ----------------------------
 export {
   loadAgentDefinition, listAgentDefinitions, isStudioAgent, isUnfilteredStudioAgent, listStarterAgents,
+  PHASE_EXECUTOR_KINDS,
 } from './studio/agent-registry.ts';
 export { deriveAgentSpec, agentCapabilityDescriptor } from './studio/derive.ts';
 export { serializeAgentDefinition } from './studio/skill-md-fidelity.ts';
@@ -46,15 +47,28 @@ export { agentUsageIndex, agentsUsing } from './studio/agent-usage.ts';
 
 // ---- The adapter registry ------------------------------------------------
 export { getAdapter, resolveSdkId, isSdkAvailable } from './_adapters/registry.ts';
+export type { AgentInvocation } from './_adapters/types.ts';
+
+// ---- The ralph dev-loop runtime: options, live tool detail -----------------
+export type { QueryFn, ClaudeAgentOptions, ToolUseLiveDetail } from './ralph/claude-agent.ts';
+
+// ---- Declared-skill composition into an agent's system prompt --------------
+export { makeProjectSkillsLoadedSink } from './project-skills.ts';
+
+// ---- The agent-slug route helpers ------------------------------------------
+export { SAFE_AGENT_SLUG_RE } from './bridge-agents-slug.ts';
+
+// ---- Studio agent validation -----------------------------------------------
+export { validateAgent } from './studio/validate-agent.ts';
 
 // ---- The pinned SDK seam, and spawn containment ---------------------------
 export { pinnedSdkQuery, pinnedStreamQuery, withRunMarker } from './pinned-sdk-query.ts';
 export { processesCarryingMarker } from './spawn-marker.ts';
-export { withIdleDeadline } from './stream-deadline.ts';
+export { withIdleDeadline, StreamDeadlineError } from './stream-deadline.ts';
 
 // ---- Skill packages ------------------------------------------------------
 export {
-  skillPath, skillsDir, skillPathRelative, assertSkillSlug, listSkillMdDirs,
+  skillPath, skillsDir, skillPathRelative, assertSkillSlug, listSkillMdDirs, listSkillDirs,
   loadSkillTurnPrompt, splitSkillTurnSections,
 } from './skill-path.ts';
 
@@ -75,7 +89,8 @@ export { agentsRoutes } from './routes.ts';
 export type { BandGuardId } from './agent-bands.ts';
 export type { BandAgentDeps } from './band-agent-run.ts';
 export type { StreamQueryFn } from './pinned-sdk-query.ts';
-export type { ModelTier } from './phase-agent.ts';
+export type { ModelTier, PhaseAgentSpec } from './phase-agent.ts';
 export type { AgentsRouteDeps } from './routes.ts';
+export type { SdkHooksOption } from './studio/hook-dispatch.ts';
 export type { AgentUsageIndex, AgentUsageKind } from './studio/agent-usage.ts';
 export type { LoopResult } from './ralph/runner.ts';

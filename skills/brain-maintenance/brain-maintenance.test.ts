@@ -40,9 +40,9 @@ import { readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import matter from 'gray-matter';
 
-import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { FORGE_ROOT, skillPath, skillPathRelative, skillsDir, listSkillMdDirs } from '@forge/agents/skill-path.ts';
-import { MODEL_BY_TIER } from '@forge/agents/phase-agent.ts';
+import { deriveAgentSpec } from '@forge/agents';
+import { FORGE_ROOT, skillPath, skillPathRelative, skillsDir, listSkillMdDirs } from '@forge/agents';
+import { MODEL_BY_TIER } from '@forge/agents';
 import { classifyFinding, CHECK_NAMES, type Finding } from '@forge/knowledge';
 
 const AGENT_SLUG = 'brain-maintenance';

@@ -62,8 +62,7 @@ import {
   type ContractStageStatus,
 } from '@forge/sessions/studio/session-transcript.ts';
 import { loadProjectConfig, AGENT_INSTRUCTION_FILES, type ProjectConfig } from './project-config.ts';
-import { PROJECT_ID_RE, MAX_EXACT_ID_LENGTH } from '@forge/agents/skill-path.ts';
-import { guardedFile } from '@forge/kernel';
+import { PROJECT_ID_RE, MAX_EXACT_ID_LENGTH, guardedFile } from '@forge/kernel';
 
 export type { ContractStageRow, ContractStageStatus } from '@forge/sessions/studio/session-transcript.ts';
 

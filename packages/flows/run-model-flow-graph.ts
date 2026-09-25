@@ -17,7 +17,7 @@
  */
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
+import { listAgentDefinitions } from '@forge/agents';
 import { loadFlowDefinition, listFlowIds } from './studio/flow-registry.ts';
 import { flowPathForId } from './flow-runner.ts';
 import { skillRoots } from '@forge/kernel';

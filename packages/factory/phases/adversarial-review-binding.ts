@@ -19,7 +19,7 @@
 
 import { readFileSync } from 'node:fs';
 
-import { skillPath } from '@forge/agents/skill-path.ts';
+import { skillPath } from '@forge/agents';
 
 const AGENT_SKILL_PATH = skillPath('adversarial-review');
 

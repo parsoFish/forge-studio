@@ -29,7 +29,7 @@ import { libraryRoutes } from '@forge/library';
 import { libraryAgentFacts } from './library-agent-facts.ts';
 import { libraryFlowSource } from './library-flow-source.ts';
 import { authoringSessionPort } from './library-authoring-session.ts';
-import { isSdkAvailable } from '@forge/agents/_adapters/registry.ts';
+import { isSdkAvailable } from '@forge/agents';
 // M4 §4 step 2 (projects routes carve, assembly pass). `projectsRoutes`'s
 // `ProjectsRouteDeps` (packages/projects/routes.ts) declares every one of
 // these nine dependencies STRUCTURALLY rather than importing their real
@@ -49,8 +49,8 @@ import {
 import { readArtifactRoot } from '@forge/knowledge';
 import { projectKbBindings } from '@forge/knowledge';
 import { isContainedProjectRepoPath } from '@forge/flows/manifest-path-guard.ts';
-import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
-import { listStarterAgents } from '@forge/agents/studio/agent-registry.ts';
+import { agentCapabilityDescriptor } from '@forge/agents';
+import { listStarterAgents } from '@forge/agents';
 import { loadStarterFlow, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { spawnPreflightFix } from './bridge-studio-writes.ts';
@@ -66,7 +66,7 @@ import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions/routes.t
 // `@forge/agents` or `@forge/kernel` exports reached through a legacy
 // re-export, so the package imports its own owners directly (COMMON §15.43) and
 // six would-be dependencies never became injections at all.
-import { agentsRoutes } from '@forge/agents/routes.ts';
+import { agentsRoutes } from '@forge/agents';
 import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
 import { buildAgentSlugToNodeId } from '@forge/flows/run-model.ts';
 import { loadFlowDefinition, listFlowIds as listFlowIdsForAgents } from '@forge/flows/studio/flow-registry.ts';

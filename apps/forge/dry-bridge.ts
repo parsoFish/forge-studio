@@ -69,7 +69,7 @@ import type { DryBridgeAction } from '@forge/kernel';
 import { knowledgeRoutes, type KnowledgeRouteDeps } from '@forge/knowledge';
 import { libraryRoutes, type LibraryRouteDeps } from '@forge/library';
 import { projectsRoutes, type ProjectsRouteDeps } from '@forge/projects';
-import { agentsRoutes, type AgentsRouteDeps } from '@forge/agents/routes.ts';
+import { agentsRoutes, type AgentsRouteDeps } from '@forge/agents';
 import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions/routes.ts';
 
 

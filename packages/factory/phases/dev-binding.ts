@@ -24,10 +24,10 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { parseWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
-import { modelForSpec } from '@forge/agents/phase-agent.ts';
-import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { skillPath, skillPathRelative } from '@forge/agents/skill-path.ts';
+import { modelForSpec } from '@forge/agents';
+import { deriveAgentSpec } from '@forge/agents';
+import { loadAgentDefinition } from '@forge/agents';
+import { skillPath, skillPathRelative } from '@forge/agents';
 
 const SKILL_PATH = skillPath('developer-ralph');
 

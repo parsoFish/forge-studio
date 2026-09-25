@@ -24,7 +24,7 @@ import { DEMO_MD_BASENAME, worktreeDemoMdPath, worktreeDemoRelDir } from './demo
 import { assertLocalRemoteSynced, checkLocalRemoteSynced, openPullRequest, pushInitiativeBranch } from './pr.ts';
 import { loadProjectConfig } from '@forge/projects';
 import { decideFinalCiGate, execCommandVector } from './ci-gate.ts';
-import { resolveGateTimeoutMs } from '@forge/agents/ralph/stop-conditions.ts';
+import { resolveGateTimeoutMs } from '@forge/agents';
 
 // ---------------------------------------------------------------------------
 // openPrInline

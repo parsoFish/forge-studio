@@ -18,9 +18,8 @@
  */
 import { readdirSync } from 'node:fs';
 
-import { SAFE_ID_RE, KB_ID_RE, PROJECT_ID_RE, MAX_EXACT_ID_LENGTH, resolveGuardedPath } from '@forge/kernel';
+import { SAFE_ID_RE, KB_ID_RE, PROJECT_ID_RE, MAX_EXACT_ID_LENGTH, MAX_SKILL_ID_LENGTH, resolveGuardedPath } from '@forge/kernel';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';
-import { MAX_SKILL_ID_LENGTH } from '@forge/agents/skill-path.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge';
 import { LEGACY_SESSION_TERMINAL_PHASES, CANCELLED_PHASE } from './session-phases.ts';
 import { safeReadFileInSession } from './studio/session-transcript.ts';

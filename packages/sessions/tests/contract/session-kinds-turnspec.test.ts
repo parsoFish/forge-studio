@@ -5,7 +5,7 @@ import { loadSessionKinds, type SessionKindDescriptor } from '../../studio/sessi
 import { validateSessionKinds } from '../../studio/session-kinds-validate.ts';
 import type { Finding } from '@forge/kernel';
 import { runStudioLint } from '../../../../apps/forge/studio-lint.ts';
-import { SLUG_RE } from '@forge/agents/skill-path.ts';
+import { SLUG_RE } from '@forge/kernel';
 
 import { REPO_ROOT, byId, makeForgeRoot, writeAgentSkill, writeSessionKindsYaml } from './test-fixtures/session-kinds-core.ts';
 

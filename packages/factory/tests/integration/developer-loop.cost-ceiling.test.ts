@@ -34,7 +34,7 @@ import { CostTracker } from '@forge/flows/flow-budgets.ts';
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import type { WorkItem } from '@forge/flows/work-item.ts';
-import { run as runRalph, type LoopResult } from '@forge/agents/ralph/runner.ts';
+import { runRalphLoop as runRalph, type LoopResult } from '@forge/agents';
 import {
   resolveWiCostBudgetUsd,
   makeCostCeilingCheck,

@@ -6,7 +6,7 @@
   "description": "Running ONE agent: dispatch, band guards, the Ralph loop and its stop conditions, the adapter registry, the per-spawn runtime.",
   "exports": {
     ".": "./index.ts",
-    "./*": "./*"
+    "./testing": "./testing.ts"
   },
   "scripts": {
     "test": "node --test --experimental-strip-types \"**/*.test.ts\""

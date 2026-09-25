@@ -170,12 +170,12 @@ export type ProjectsRouteDeps = {
   ) => void;
   /** `@forge/knowledge`'s `projectKbBindings`. */
   projectKbBindings: (forgeRoot: string) => Map<string, string>;
-  /** `@forge/agents/studio/agent-registry.ts`'s `listStarterAgents` — injected, no
+  /** `@forge/agents`'s `listStarterAgents` — injected, no
    *  package-native home. */
   listStarterAgents: (forgeRoot: string) => AgentDefinition[];
   /** `@forge/flows/studio/flow-registry.ts`'s `loadStarterFlow`. */
   loadStarterFlow: (forgeRoot: string) => FlowDefinition | null;
-  /** `@forge/agents/studio/derive.ts`'s `agentCapabilityDescriptor`. Return
+  /** `@forge/agents`'s `agentCapabilityDescriptor`. Return
    *  type deliberately `unknown`, mirroring `project-roster.ts`'s own note:
    *  even a type-only import of `AgentCapabilityDescriptor` (rank 3) would be
    *  a `package-layer-order` violation the same as a value import. */

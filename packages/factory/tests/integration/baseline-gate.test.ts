@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { assertGreenBaseline } from '../../phases/developer-loop.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
-import { classifyCycleFailure } from '@forge/agents/failure-classifier.ts';
+import { classifyCycleFailure } from '@forge/agents';
 
 function setup(qualityGateCmd?: string[]): {
   input: CycleInput;

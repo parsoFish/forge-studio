@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { pinnedStreamQuery, type StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import { pinnedStreamQuery, type StreamQueryFn } from '@forge/agents';
 
 import type { EventLogger } from '@forge/kernel';
 import { parseManifest, persistManifestSpecs, type InitiativeManifest } from '@forge/flows/manifest.ts';
@@ -30,11 +30,11 @@ import {
 import { loadProjectConfig, type ProjectConfig } from '@forge/projects';
 import { releaseDraftAcs } from '../release-process.ts';
 import { recordBrainGateResult, type CycleInput } from '@forge/flows/cycle-context.ts';
-import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents/tool-event-emit.ts';
+import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents';
 import { deriveGateRecipe, renderGateRecipeBlock } from '@forge/projects';
-import { runAgent } from '@forge/agents/run-agent.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { skillPath } from '@forge/agents/skill-path.ts';
+import { runAgent } from '@forge/agents';
+import { loadAgentDefinition } from '@forge/agents';
+import { skillPath } from '@forge/agents';
 import { compileWorkItemSpecs } from '@forge/flows/phases/wi-spec-compile.ts';
 import { checkDecomposeCompleteness } from './decompose-completeness.ts';
 import { rejectWorkItemSet } from './pm-rejected-set.ts';

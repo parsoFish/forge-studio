@@ -11,11 +11,11 @@ import { join } from 'node:path';
 import { resolveGuardedPath } from '@forge/kernel';
 import { runAgentTurn } from '../interactive-session.ts';
 import type { KindTurnInput, KindTurnPlumbing } from './kind-turn.ts';
-import { resolveSessionModel, type PhaseAgentSpec } from '@forge/agents/phase-agent.ts';
+import { resolveSessionModel, type PhaseAgentSpec } from '@forge/agents';
 import { loadProjectConfig } from '@forge/projects';
 import { listDemoElements } from '@forge/library';
 import type { DemoStep, DemoElementDefinition } from '@forge/contracts';
-import { loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
+import { loadSkillTurnPrompt } from '@forge/agents';
 import {
   DEMO_FRAGMENTS_REL_DIR,
   DEMO_KIND_DIR,

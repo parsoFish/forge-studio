@@ -4,7 +4,7 @@
  *
  * Root cause this route fixes: `/api/studio/agents` (`apps/forge/bridge-studio.ts`)
  * builds its roster from `listAgentDefinitions`, which filters through
- * `isStudioAgent` — `library !== false` (@forge/agents/studio/agent-registry.ts).
+ * `isStudioAgent` — `library !== false` (@forge/agents).
  * Every kickoff-only system agent (demo-builder, instructions-creator,
  * brain-maintenance, creation-agent, project-brain-builder) sets
  * `library: false` (they're dispatched by the bridge directly, never
@@ -44,8 +44,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { SLUG_RE } from '@forge/kernel';
-import { isUnfilteredStudioAgent, loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
+import { isUnfilteredStudioAgent, loadAgentDefinition } from '@forge/agents';
+import { agentCapabilityDescriptor } from '@forge/agents';
 import { guardedSkillMdPath } from '@forge/library';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
 

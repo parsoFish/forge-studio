@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { SESSION_ARTIFACT_KINDS, sessionArtifactKindState, loadSessionKinds, FINALIZER_IDS, type SessionKindDescriptor } from '../../studio/session-kinds.ts';
 import { validateSessionKinds } from '../../studio/session-kinds-validate.ts';
 import { deriveSessionAffordances } from '../../studio/session-kinds-affordances.ts';
-import { AGENT_RUNNERS } from '@forge/agents/agent-run.ts';
+import { AGENT_RUNNERS } from '@forge/agents';
 import type { Finding } from '@forge/kernel';
 
 import { type FixtureDescriptor, REPO_ROOT, baseDescriptor, byId, makeForgeRoot, writeAgentSkill, writeSessionKindsYaml } from './test-fixtures/session-kinds-core.ts';

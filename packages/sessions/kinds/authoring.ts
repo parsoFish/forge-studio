@@ -3,8 +3,7 @@
  */
 import type { ServerResponse } from 'node:http';
 
-import { sendJson, guardedReadFile } from '@forge/kernel';
-import { SLUG_RE } from '@forge/agents/skill-path.ts';
+import { sendJson, guardedReadFile, SLUG_RE } from '@forge/kernel';
 import { runFinalize } from '@forge/library';
 import { guardedWriteSessionStatus } from '../session-status-io.ts';
 import type { AffordanceRouteContext } from '../bridge-studio-sessions-affordance-shell.ts';

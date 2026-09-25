@@ -23,7 +23,7 @@ import { resolve } from 'node:path';
  * The slug shape shared across every studio object id (agents, flows,
  * artifacts, KBs, skills, ...). Defined HERE — this module is a true leaf
  * (only `node:fs`/`node:path`) — and re-exported from
- * `@forge/agents/skill-path.ts` for the call sites that reach it that way.
+ * `@forge/agents` for the call sites that reach it that way.
  *
  * This definition used to live in `validate.ts` and be imported back into
  * this file, closing a `skill-path → validate → registry → skill-path`

@@ -32,8 +32,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from '../../ui-bridge.ts';
-import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
+import { deriveAgentSpec } from '@forge/agents';
+import { loadAgentDefinition } from '@forge/agents';
 
 const REAL_ROOT = process.cwd();
 const STARTER_SLUGS = ['plan', 'dev', 'review'] as const;

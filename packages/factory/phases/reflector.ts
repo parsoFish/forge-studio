@@ -29,7 +29,7 @@ import { parseRetroMd } from '../reflection-doc.ts';
 
 import type { EventLogger } from '@forge/kernel';
 import { parseManifest } from '@forge/flows/manifest.ts';
-import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import type { StreamQueryFn } from '@forge/agents';
 import { buildReflectorSystemPrompt, renderReflectorUserPrompt } from './reflector-binding.ts';
 import {
   REFLECT_MODE_FILE,

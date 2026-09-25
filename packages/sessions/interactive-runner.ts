@@ -90,7 +90,7 @@ import { makeHeartbeatWriter, makeReasoningSink, makeThinkingSink } from './inte
 import { guardedReadSessionStatus } from './session-status-io.ts';
 import { emitTurnCostRow, emitTurnEndedUnpricedRow } from './turn-cost-rows.ts';
 import { createLogger, resolveGuardedPath } from '@forge/kernel';
-import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
+import { makeToolEventSink } from '@forge/agents';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';
 import {
   InteractiveRunnerError,

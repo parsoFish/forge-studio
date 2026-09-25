@@ -40,12 +40,12 @@ import { spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 
-import { listAgentDefinitions, listStarterAgents, loadAgentDefinition, serializeAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
+import { listAgentDefinitions, listStarterAgents, loadAgentDefinition, serializeAgentDefinition } from '@forge/agents';
 import { loadFlowDefinition, serializeFlowDefinition, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
 import { flowPathForId } from '@forge/flows/flow-runner.ts';
 import { deriveFlowKickoff } from '@forge/flows/studio/flow-kickoff.ts';
 import { discoverProjects } from '@forge/kernel';
-import { skillsDir as toSkillsDir } from '@forge/agents/skill-path.ts';
+import { skillsDir as toSkillsDir } from '@forge/agents';
 import { flowRoots, resolveIdAcrossRoots, skillRoots } from '@forge/kernel';
 import { resolveGuardedPath, guardedFile, guardedWriteFile } from '@forge/kernel';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts';

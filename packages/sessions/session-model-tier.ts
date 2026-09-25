@@ -27,8 +27,8 @@
  * never to a thrown read route.
  */
 
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
+import { loadAgentDefinition } from '@forge/agents';
+import { agentCapabilityDescriptor } from '@forge/agents';
 import { guardedSkillMdPath } from '@forge/library';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';
 

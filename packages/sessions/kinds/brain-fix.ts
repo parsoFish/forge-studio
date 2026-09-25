@@ -11,9 +11,9 @@
  */
 import { relative } from 'node:path';
 
-import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { modelForSpec } from '@forge/agents/phase-agent.ts';
-import { skillPathRelative } from '@forge/agents/skill-path.ts';
+import { deriveAgentSpec } from '@forge/agents';
+import { modelForSpec } from '@forge/agents';
+import { skillPathRelative } from '@forge/agents';
 import { runBrainLint, lintThemeFiles, classify } from '@forge/knowledge';
 import { guardAgentKbEdits, snapshotBrainTree, noKbEdits, type KbEditGateResult } from '@forge/knowledge';
 import { tryGetKbBackend } from '@forge/knowledge';

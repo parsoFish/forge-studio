@@ -24,7 +24,7 @@ import {
   buildReflectorSystemPrompt,
   renderReflectorUserPrompt,
 } from '../../phases/reflector-binding.ts';
-import { modelForSpec } from '@forge/agents/phase-agent.ts';
+import { modelForSpec } from '@forge/agents';
 
 // ---------------------------------------------------------------------------
 // reflectorAgentSpec shape

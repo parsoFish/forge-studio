@@ -32,7 +32,7 @@ import { createWiWorktree, removeWiWorktree, wiWorktreePath } from '@forge/flows
 import { createMergeQueue, mergeWiIntoCycle } from '@forge/flows/wi-merge-back.ts';
 import { gitNetDelta, prerequisiteBlockage, settleWiOutcome, type WiOutcome } from '../../phases/developer-loop.ts';
 import { topologicalOrder, writeWorkItem, writeWorkItemStatus, type WorkItem } from '@forge/flows/work-item.ts';
-import { run as runRalph, type AgentInvocation } from '@forge/agents/ralph/runner.ts';
+import { runRalphLoop as runRalph, type AgentInvocation } from '@forge/agents';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import { SCRATCH_PATHS } from '@forge/projects';
 

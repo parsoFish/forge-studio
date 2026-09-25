@@ -26,13 +26,13 @@ import { cmdGate } from './cli-gate.ts';
 import { runStudioLint } from './studio-lint.ts';
 import { runPreflight, formatPreflightReport, buildVerdictEvent } from '@forge/projects';
 import { runContractComplianceLoop, formatComplianceReport } from '@forge/projects';
-import { composeAgentsMd } from '@forge/agents/agents-md-compose.ts';
+import { composeAgentsMd } from '@forge/agents';
 import { authorConstraintBlocks } from '@forge/projects';
 import { scaffoldGreenfieldProject, listProjectStarters, type ScaffoldResult } from '@forge/projects';
 import { assertEnv, defaultConfigPath, forgeBinOnPath, loadConfig, resolveProjectsDir, runInit,
   ensureLayoutDirs, ensureDefaultConfig, resolveGuardedPath, writeProjectGroundFile, type InitReport } from '@forge/kernel';
 import { worktreeDemoDir } from '@forge/flows/demo-paths.ts';
-import { cmdAgent, cmdAgentRun } from '@forge/agents/agent-run.ts';
+import { cmdAgent, cmdAgentRun } from '@forge/agents';
 import { AGENT_DISPATCH_DEPS } from './session-kind-deps.ts';
 
 import { cmdProjectMigrate } from '@forge/projects';

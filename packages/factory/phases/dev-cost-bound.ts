@@ -25,7 +25,7 @@
  */
 
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
-import type { LoopResult } from '@forge/agents/ralph/runner.ts';
+import type { LoopResult } from '@forge/agents';
 
 /**
  * The real remaining cycle budget in USD, read live from

@@ -38,13 +38,12 @@ import {
   type ReviewFindingsRecord,
 } from '@forge/flows/flow-artifacts.ts';
 import type { EventLogger } from '@forge/kernel';
-import { guardedReadFile, guardedWriteFile } from '@forge/kernel';
+import { guardedReadFile, guardedWriteFile, FORGE_ROOT } from '@forge/kernel';
 import { createHash } from 'node:crypto';
-import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
-import { runAgent } from '@forge/agents/run-agent.ts';
-import { skillPath } from '@forge/agents/skill-path.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { FORGE_ROOT } from '@forge/agents/studio/derive.ts';
+import type { StreamQueryFn } from '@forge/agents';
+import { runAgent } from '@forge/agents';
+import { skillPath } from '@forge/agents';
+import { loadAgentDefinition } from '@forge/agents';
 import { readWorkItemsFromDir, type WorkItem } from '@forge/flows/work-item.ts';
 import { chunkLabel, mergeChunkRecords, partitionChangedFiles, type ReviewChunk,
   splitChunkPerFile,
@@ -56,7 +55,7 @@ import {
   REVIEW_FINDINGS_FILENAME,
   REVIEW_INPUT_REL_DIR,
 } from './adversarial-review-binding.ts';
-import { takeScopeSnapshot, scopeViolations } from '@forge/agents/phases/agent-scope-guard.ts';
+import { takeScopeSnapshot, scopeViolations } from '@forge/agents';
 
 const AGENT_SLUG = 'adversarial-review';
 const BASE_REF = 'main';

@@ -10,29 +10,43 @@ Rank 3 in the allow-graph. It may import `contracts`, `kernel`, `library`,
 import. That is why the route table and the band surface take a deps object
 rather than importing what they need.
 
-## API (57 values)
+## API (63 values)
 
 | seam | exports |
 |---|---|
 | run one agent | `runAgent` · `isSafeRunId` · `dispatchAgentRun` · `cmdAgent` · `cmdAgentRun` · `cmdAgentDispatch` · `parseAgentDispatchArgs` · `findSessionProject` |
 | bands | `resolveBandGuard` · `BAND_GUARD_IDS` · `PLATFORM_GUARD_IDS` · `BAND_CANONICAL_SLUG` · `runBandAgentStandalone` · `isStandaloneBandAgent` · `dispatchStandaloneBand` |
 | the Ralph loop | `runRalphLoop` · `makeQualityGateFromCmd` · `resolveGateTimeoutMs` |
-| the Agent kind | `loadAgentDefinition` · `listAgentDefinitions` · `listStarterAgents` · `isStudioAgent` · `isUnfilteredStudioAgent` · `deriveAgentSpec` · `agentCapabilityDescriptor` · `serializeAgentDefinition` |
+| the Agent kind | `loadAgentDefinition` · `listAgentDefinitions` · `listStarterAgents` · `isStudioAgent` · `isUnfilteredStudioAgent` · `deriveAgentSpec` · `agentCapabilityDescriptor` · `serializeAgentDefinition` · `PHASE_EXECUTOR_KINDS` |
 | the reverse index | `agentUsageIndex` · `agentsUsing` |
 | adapters | `getAdapter` · `resolveSdkId` · `isSdkAvailable` |
-| the pinned SDK seam | `pinnedSdkQuery` · `pinnedStreamQuery` · `withRunMarker` · `withIdleDeadline` |
+| the pinned SDK seam | `pinnedSdkQuery` · `pinnedStreamQuery` · `withRunMarker` · `withIdleDeadline` · `StreamDeadlineError` |
 | spawn containment | `processesCarryingMarker` |
-| skill packages | `skillPath` · `skillsDir` · `skillPathRelative` · `assertSkillSlug` · `listSkillMdDirs` · `loadSkillTurnPrompt` · `splitSkillTurnSections` |
+| skill packages | `skillPath` · `skillsDir` · `skillPathRelative` · `assertSkillSlug` · `listSkillMdDirs` · `listSkillDirs` · `loadSkillTurnPrompt` · `splitSkillTurnSections` |
+| declared-skill composition | `makeProjectSkillsLoadedSink` |
+| the agent-slug route helpers | `SAFE_AGENT_SLUG_RE` |
+| studio agent validation | `validateAgent` |
 | model resolution | `modelForSpec` · `resolveSessionModel` · `MODEL_BY_TIER` |
 | events and classification | `makeToolEventSink` · `extractLiveToolDetails` · `classifyCycleFailure` · `classifyCrash` · `matchesRateLimitSignature` |
 | scope and hooks | `takeScopeSnapshot` · `scopeViolations` · `sdkHooksForAgent` |
 | AGENTS.md and HTTP | `composeAgentsMd` · `agentsRoutes` |
 | the legacy dispatch table | `AGENT_RUNNERS` |
 
-### Types (7)
+### Types (14)
 
 `BandGuardId` · `BandAgentDeps` · `StreamQueryFn` · `ModelTier` ·
-`AgentsRouteDeps` · `AgentUsageIndex` · `AgentUsageKind`
+`AgentsRouteDeps` · `AgentUsageIndex` · `AgentUsageKind` · `AgentInvocation` ·
+`QueryFn` · `ClaudeAgentOptions` · `ToolUseLiveDetail` · `GateRunInfo` ·
+`PhaseAgentSpec` · `SdkHooksOption`
+
+### The one test-only subpath
+
+`@forge/agents/testing` exports `studio/materials.ts`'s vocabulary
+(`MATERIAL_KINDS`, `MAX_MATERIALS_COUNT`, `MAX_MATERIAL_BYTES`,
+`MAX_MATERIALS_TOTAL_BYTES`), `DEFAULT_IDLE_DEADLINE_MS`, `registeredSdkIds`,
+and `DispatchAgentRunOpts`/`DispatchAgentRunResult` — each has no production
+consumer outside this package, only test files reach for them, so they stay
+off the main door (bead `forge-8vfn.5.31`).
 
 ## Three things the door deliberately does not do
 

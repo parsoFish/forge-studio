@@ -46,10 +46,10 @@ import {
 } from './kind-turn.ts';
 import { guardedReadFile, guardedWriteFile, sendJson } from '@forge/kernel';
 import { withStudioWrite } from '@forge/projects';
-import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
-import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents';
+import { deriveAgentSpec } from '@forge/agents';
 import { readAgentInstructionsFile } from '@forge/projects';
-import { skillPathRelative, loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
+import { skillPathRelative, loadSkillTurnPrompt } from '@forge/agents';
 import { listInstructionSeeds } from '@forge/library';
 import type { InstructionSeed } from '@forge/contracts';
 import {

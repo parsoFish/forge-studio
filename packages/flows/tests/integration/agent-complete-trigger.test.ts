@@ -64,8 +64,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { listFlowRunRequests } from '../../flow-run-requests.ts';
-import { dispatchAgentRun } from '@forge/agents/agent-dispatch.ts';
-import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import { dispatchAgentRun } from '@forge/agents';
+import type { StreamQueryFn } from '@forge/agents';
 import type { FlowTrigger } from '@forge/contracts';
 
 // Bead forge-8vfn.5.53: anchored on kernel's FORGE_ROOT, not the process cwd.

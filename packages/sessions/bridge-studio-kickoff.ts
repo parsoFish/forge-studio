@@ -25,7 +25,7 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-import type { ModelTier } from '@forge/agents/phase-agent.ts';
+import type { ModelTier } from '@forge/agents';
 
 import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
@@ -37,7 +37,7 @@ import { readAnswersBody, type AffordanceRouteContext } from './bridge-studio-se
 import { activeJobReason, deriveKbActiveJob } from '@forge/knowledge';
 import { computeAgentCleanupFindings, loadKbDescriptors, KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge';
 import { resolveContainedProjectDir } from '@forge/projects';
-import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { deriveAgentSpec } from '@forge/agents';
 import { skillPathRelative } from '@forge/library';
 
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';

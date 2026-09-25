@@ -119,7 +119,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { readProcCwd } from './bridge.mjs';
-import { processesCarryingMarker, readRunMarkers, tokenBelongsToRunDir } from '@forge/agents/spawn-marker.ts';
+import { processesCarryingMarker, readRunMarkers, tokenBelongsToRunDir } from '@forge/agents';
 import { CANCELLED_PHASE } from '@forge/sessions/session-status-io.ts';
 
 /** How long a dispatched agent gets to exit on SIGTERM before SIGKILL. */

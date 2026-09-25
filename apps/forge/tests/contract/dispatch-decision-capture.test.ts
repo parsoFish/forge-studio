@@ -90,11 +90,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
-import { isStudioAgent, listAgentDefinitions, loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
+import { isStudioAgent, listAgentDefinitions, loadAgentDefinition } from '@forge/agents';
 import { listFlowIds, loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
-import { resolveBandGuard, BAND_GUARD_IDS, BAND_CANONICAL_SLUG, type BandGuardId } from '@forge/agents/agent-bands.ts';
+import { resolveBandGuard, BAND_GUARD_IDS, BAND_CANONICAL_SLUG, type BandGuardId } from '@forge/agents';
 import { resolveNodeKind, flowPathForId } from '@forge/flows/flow-runner.ts';
-import { skillsDir, listSkillMdDirs } from '@forge/agents/skill-path.ts';
+import { skillsDir, listSkillMdDirs } from '@forge/agents';
 import type { AgentDefinition } from '@forge/contracts';
 import { assertMatchesJsonSnapshot } from '../../../../packages/kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 

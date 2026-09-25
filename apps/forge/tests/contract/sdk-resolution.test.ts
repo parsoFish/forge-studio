@@ -21,15 +21,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 
-import { isStudioAgent, loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
+import { isStudioAgent, loadAgentDefinition } from '@forge/agents';
 import { loadCatalog } from '@forge/library';
 import { readdirSync } from 'node:fs';
 import {
   getAdapter,
   isSdkAvailable,
-  registeredSdkIds,
   resolveSdkId,
-} from '@forge/agents/_adapters/registry.ts';
+} from '@forge/agents';
+import { registeredSdkIds } from '@forge/agents/testing';
 
 const ROOT = process.cwd();
 

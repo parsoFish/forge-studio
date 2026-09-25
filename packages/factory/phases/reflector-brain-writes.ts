@@ -16,10 +16,10 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { EventLogger, EventLogEntry } from '@forge/kernel';
-import { runAgent } from '@forge/agents/run-agent.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { skillPath } from '@forge/agents/skill-path.ts';
-import { classifyCrash } from '@forge/agents/failure-classifier.ts';
+import { runAgent } from '@forge/agents';
+import { loadAgentDefinition } from '@forge/agents';
+import { skillPath } from '@forge/agents';
+import { classifyCrash } from '@forge/agents';
 import {
   tallyToolUse as tallyReflectorToolUse,
   type ReflectorToolUseSummary,

@@ -22,7 +22,7 @@ import {
   isCostCeilingHalt,
 } from '../../phases/dev-cost-bound.ts';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
-import type { LoopResult } from '@forge/agents/ralph/runner.ts';
+import type { LoopResult } from '@forge/agents';
 
 function baseInput(overrides: Partial<CycleInput> = {}): CycleInput {
   return {

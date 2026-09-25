@@ -22,8 +22,8 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
-import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
+import { pinnedSdkQuery as sdkQuery } from '@forge/agents';
+import { sdkHooksForAgent } from '@forge/agents';
 import { releaseFinalizeAgentSpec } from '../release-finalize-invocation.ts';
 
 import type { EventLogger } from '@forge/kernel';

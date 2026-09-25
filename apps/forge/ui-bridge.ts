@@ -91,12 +91,12 @@ import type { EventLogEntry } from '@forge/kernel';
 import { makeRecordingBroadcast } from './bridge-broadcast-log.ts';
 import { makeTrailingCoalescer } from './broadcast-coalescer.ts';
 type RerunReflectorFn = InstalledFactory['rerunReflector'];
-import { isSafeRunId } from '@forge/agents/run-agent.ts';
+import { isSafeRunId } from '@forge/agents';
 // M4 agents carve: the slug refusal `spawnAgentDispatch` applies is the SAME
 // one the carved `POST /api/agents/:slug/run` route applies, so the package
 // owns the single definition and the host imports it. Two copies of a
 // defense-in-depth guard drift; one does not.
-import { SAFE_AGENT_SLUG_RE } from '@forge/agents/bridge-agents-slug.ts';
+import { SAFE_AGENT_SLUG_RE } from '@forge/agents';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, isSafeSubPath } from '@forge/kernel';
 import { flowRoots, resolveIdAcrossRoots } from '@forge/kernel';

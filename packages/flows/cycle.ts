@@ -18,7 +18,7 @@ import { FORGE_ROOT, guardedReadFile } from '@forge/kernel';
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
 import type { CeilingSource } from './flow-budgets.ts';
 import { createLogger } from '@forge/kernel';
-import { classifyCycleFailure } from '@forge/agents/failure-classifier.ts';
+import { classifyCycleFailure } from '@forge/agents';
 import { writeCycleReport } from './cycle-report.ts';
 import { readManifestOrigin, readManifestCycleId, readManifestFlowId, readManifestCostCeiling, persistManifestCycleId, parseManifest } from './manifest.ts';
 import { worktreeDemoDir } from './demo-paths.ts';

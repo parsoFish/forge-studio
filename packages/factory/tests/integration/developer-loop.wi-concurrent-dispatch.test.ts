@@ -47,7 +47,7 @@ import {
   type WiOutcome,
 } from '../../phases/developer-loop.ts';
 import { topologicalOrder, writeWorkItem, writeWorkItemStatus, type WorkItem } from '@forge/flows/work-item.ts';
-import { run as runRalph, type AgentInvocation } from '@forge/agents/ralph/runner.ts';
+import { runRalphLoop as runRalph, type AgentInvocation } from '@forge/agents';
 import { runConcurrentDispatch } from '@forge/flows/wi-dispatch-scheduler.ts';
 import { resolveDevWiConcurrency } from '@forge/kernel';
 import { SCRATCH_PATHS } from '@forge/projects';
