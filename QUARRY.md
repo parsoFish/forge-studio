@@ -30,7 +30,7 @@ file reaches its package at M3:
 
 | disposition | meaning | count |
 |---|---|---|
-| `verbatim` | moves unchanged | 359 |
+| `verbatim` | moves unchanged | 360 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
 | `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 93 |
 | `deleted` | not carried forward | 0 |
@@ -57,7 +57,7 @@ operator-ratified new cap — never a silent raise.
 | `contracts` | 5 | 1,259 | **1,263** | ratified 1,263 — M7-A seam F6 (ADR 051 decisions 2 and 4, operator item 97), lane-ratified under ruling 666; see git history for prior raises. |
 | `kernel` | 29 | 5,429 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `projects` | 45 | 10,857 | **8,967** | ratified 8,967 — M7-A SKILLS-tracked (+34, growth), lane-ratified under ruling 666; see git history for prior raises. |
+| `projects` | 46 | 10,951 | **9,061** | ratified 9,061 — M7-A reset-resolvable (+94, growth): Rebuild adds a template npm command only when package.json has the script; lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,156 | **12,578** | ratified 12,578 — M7-C door re-exports OD (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 12,965 | **12,965** | ratified 12,965 — M7-C door re-exports OD round G (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 59 | 20,520 | **20,482** | ratified 20,482 — M7-C door re-exports OD, round-G circular-import fix (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
@@ -67,7 +67,7 @@ operator-ratified new cap — never a silent raise.
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,837 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **456** | **124,951** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **457** | **125,045** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -413,8 +413,9 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/project-config-validate.ts | projects | verbatim | 425 |
 | packages/projects/project-create.ts | projects | verbatim | 534 |
 | packages/projects/project-repo-tx.ts | projects | verbatim | 237 |
-| packages/projects/reset.ts | projects | verbatim | 783 |
-| packages/projects/reset-cli.ts | projects | verbatim | 153 |
+| packages/projects/reset.ts | projects | verbatim | 800 |
+| packages/projects/reset-cli.ts | projects | verbatim | 158 |
+| packages/projects/reset-command-resolve.ts | projects | verbatim | 71 |
 | packages/projects/testing.ts | projects | verbatim | 12 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `parseSkills` and `checkDemo` have no production consumer outside this package, only `scripts/skill-example-validators.test.ts` and `apps/forge/tests/contract/demo-descriptor-parity.test.ts` reach for them.** |
 | packages/flows/promote-manifests.ts | flows | verbatim | 76 |
 | packages/flows/queue.ts | flows | verbatim | 246 |
@@ -570,7 +571,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/bridge-studio-project-onboard.ts | projects | verbatim | 698 |
 | packages/projects/bridge-studio-project-preflight-write.ts | projects | verbatim | 298 |
 | packages/projects/project-contract-scaffold.ts | projects | verbatim | 557 |
-| packages/projects/bridge-studio-project-reset.ts | projects | verbatim | 226 |
+| packages/projects/bridge-studio-project-reset.ts | projects | verbatim | 227 |
 | packages/projects/routes.ts | projects | verbatim | 385 |
 | apps/forge/cli-gate.ts | apps/forge | rewritten | 70 |
 | apps/forge/cli-brain-lint.ts | apps/forge | rewritten | 93 |
