@@ -326,7 +326,6 @@ function killIfAlive(pid: number) {
 
 test('finding row 75 RED: the OLD sequence releases the claim while a detached grandchild is still rewriting the heartbeat', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'forge-census-red-'));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
   const ralphPidFile = join(root, 'ralph.pid');
   const { heartbeat } = plantInFlightClaim(root);
 
@@ -335,10 +334,17 @@ test('finding row 75 RED: the OLD sequence releases the claim while a detached g
     setInterval(() => { try { require('node:fs').writeFileSync(${JSON.stringify(heartbeat)}, String(Date.now())); } catch {} }, 25);
     setInterval(() => {}, 1000);
   `, ralphPidFile);
+  // KILL HOOKS REGISTERED BEFORE THE DIRECTORY REMOVAL, and that order is
+  // load-bearing, not cosmetic: node:test runs `t.after` hooks in the order
+  // they were REGISTERED (confirmed directly — a fixture with the rmSync
+  // registered first leaked the planted grandchild in exactly this file,
+  // because it read a now-deleted `ralphPidFile` and silently found nothing
+  // to kill). The process must be gone before its tmpdir is.
   t.after(() => {
     killIfAlive(daemon.pid!);
     try { killIfAlive(Number(readFileSync(ralphPidFile, 'utf8'))); } catch { /* never wrote */ }
   });
+  t.after(() => rmSync(root, { recursive: true, force: true }));
   await new Promise((r) => setTimeout(r, 150)); // let the grandchild's rewrite loop start
 
   // The OLD sequence, exactly as `run.mjs` ran it before this fix: stop, then
@@ -358,7 +364,6 @@ test('finding row 75 RED: the OLD sequence releases the claim while a detached g
 
 test('finding row 75 DOOR: stopSchedulerCensusAndRelease kills the grandchild, censuses empty, and the release HOLDS', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'forge-census-green-'));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
   const ralphPidFile = join(root, 'ralph.pid');
   const { heartbeat } = plantInFlightClaim(root);
 
@@ -367,10 +372,12 @@ test('finding row 75 DOOR: stopSchedulerCensusAndRelease kills the grandchild, c
     setInterval(() => { try { require('node:fs').writeFileSync(${JSON.stringify(heartbeat)}, String(Date.now())); } catch {} }, 25);
     setInterval(() => {}, 1000);
   `, ralphPidFile);
+  // Kill before rmSync — see the RED test above for why the order matters.
   t.after(() => {
     killIfAlive(daemon.pid!);
     try { killIfAlive(Number(readFileSync(ralphPidFile, 'utf8'))); } catch { /* never wrote */ }
   });
+  t.after(() => rmSync(root, { recursive: true, force: true }));
   await new Promise((r) => setTimeout(r, 150));
 
   const result = await stopSchedulerCensusAndRelease(root, { graceMs: 300, censusBoundMs: 3000, censusPollMs: 20, rereadDelayMs: 150 });
@@ -388,7 +395,6 @@ test('finding row 75 DOOR: stopSchedulerCensusAndRelease kills the grandchild, c
 
 test('finding row 75 DOOR (second): a writer OUTSIDE the daemon\'s tree is invisible to the census and caught only by the re-read', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'forge-census-sibling-'));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
   const { heartbeat } = plantInFlightClaim(root);
 
   // A daemon with NO grandchild — the census over its own tree settles empty
@@ -407,7 +413,9 @@ test('finding row 75 DOOR (second): a writer OUTSIDE the daemon\'s tree is invis
     setInterval(() => { try { require('node:fs').writeFileSync(${JSON.stringify(heartbeat)}, 'sibling'); } catch {} }, 20);
     setInterval(() => {}, 1000);
   `], { stdio: 'ignore' });
+  // Kill before rmSync — see the RED test above for why the order matters.
   t.after(() => killIfAlive(sibling.pid!));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
   await new Promise((r) => setTimeout(r, 100));
 
   const result = await stopSchedulerCensusAndRelease(root, { graceMs: 300, censusBoundMs: 2000, censusPollMs: 20, rereadDelayMs: 150 });
@@ -426,7 +434,6 @@ test('finding row 75 DOOR (second): a writer OUTSIDE the daemon\'s tree is invis
 
 test('finding row 75 DOOR (third): a TERM-respecting grandchild exits within the bound — no escalation needed', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'forge-census-term-'));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
   const ralphPidFile = join(root, 'ralph.pid');
   const cleanExitMarker = join(root, 'clean-exit.marker');
   const { heartbeat } = plantInFlightClaim(root);
@@ -438,10 +445,12 @@ test('finding row 75 DOOR (third): a TERM-respecting grandchild exits within the
     });
     setInterval(() => {}, 1000);
   `, ralphPidFile);
+  // Kill before rmSync — see the RED test above for why the order matters.
   t.after(() => {
     killIfAlive(daemon.pid!);
     try { killIfAlive(Number(readFileSync(ralphPidFile, 'utf8'))); } catch { /* already exited, which is the point */ }
   });
+  t.after(() => rmSync(root, { recursive: true, force: true }));
   await new Promise((r) => setTimeout(r, 150));
 
   const result = await stopSchedulerCensusAndRelease(root, { graceMs: 300, censusBoundMs: 3000, censusPollMs: 20, rereadDelayMs: 100 });
