@@ -2,7 +2,7 @@
  * forge-8vfn.8.1.7 — an agent run's `events.jsonl` never carried `hook.fire`
  * for a bound `SessionEnd` hook.
  *
- * `emitHookFire` (`../../studio/hook-dispatch.ts`) only ran inside the SDK's
+ * `emitHookFire` (`packages/agents/studio/hook-dispatch.ts`) only ran inside the SDK's
  * own `SessionEnd` hook callback, and the SDK's `SessionEnd` `ExitReason`s
  * (`clear | resume | logout | prompt_input_exit | other`) are all INTERACTIVE
  * teardown actions a headless `query()` completing never performs — so the
@@ -153,7 +153,7 @@ function successQueryFn(calls: Array<{ prompt: string; options: Record<string, u
  * `AbortController` both surface identically: a thrown error from the same
  * `for await` loop `runOneShotSpawn` drives). That equivalence is itself
  * this fix's documented decision for error/abort — see `fireSessionEndHooks`
- * in `../../studio/hook-dispatch.ts`. */
+ * in `packages/agents/studio/hook-dispatch.ts`. */
 function throwingMidStreamQueryFn(message: string): StreamQueryFn {
   return (() => {
     async function* gen() {
