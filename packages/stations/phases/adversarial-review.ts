@@ -11,7 +11,7 @@
  * (review-input dir + worktree findings copy deleted — nothing untracked is
  * ever left to block a later merge).
  *
- * Mechanical guards mirror the demo-agent pipeline (same review-lesson class):
+ * historical: mechanical guards mirror the demo-agent pipeline (same review-lesson class):
  * a pre/post `git status` diff hard-fails any write outside the findings file
  * (`review.scope-violation`); budget-killed spawns (`error_max_*`) fail loud,
  * never retried; declared budget caps + the no-Edit tool posture are asserted

@@ -26,7 +26,7 @@
  * source identifier populating it moved.
  *
  * `dispatchPath` mirrors `execAgent`'s branch order exactly
- * (`orchestrator/flow-runner.ts` ~L1065-1130: band guard wins first, then a
+ * (`packages/flows/flow-runner.ts` ~L1065-1130: band guard wins first, then a
  * declared `loopStrategy: 'ralph'`, else the generic one-shot/legacy spawn)
  * by calling the SAME `resolveBandGuard` the product uses and reading the
  * SAME `runtime.loopStrategy` field `execAgent` reads — no re-implementation
@@ -35,7 +35,7 @@
  *
  * ## Stated limit
  *
- * `AGENT_BAND_EXECUTORS` (`orchestrator/flow-runner.ts` ~L1155) — the
+ * `AGENT_BAND_EXECUTORS` (`packages/flows/flow-runner.ts` ~L1155) — the
  * band-guard-id → concrete `NodeExecutor` table `execAgent` looks up once it
  * has resolved a band guard — is NOT pinned by this fixture, and cannot be
  * with zero production change. It is a module-private `const`, never
@@ -97,9 +97,9 @@
  * DIFFERENT counts over deliberately DIFFERENT root sets, not a drifted pair.
  *
  * Bootstrap / regenerate:
- *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test orchestrator/dispatch-decision-capture.test.ts
+ *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test apps/forge/tests/contract/dispatch-decision-capture.test.ts
  * (or delete the fixture) rewrites
- * packages/kernel/tests/test-fixtures/spawn-capture/dispatch-decisions.json from current code.
+ * apps/forge/tests/test-fixtures/dispatch-decisions.json from current code.
  */
 
 import { test } from 'node:test';

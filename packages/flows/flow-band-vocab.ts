@@ -8,7 +8,7 @@
  *
  * Derives a flow's DECLARED band vocabulary from the actual SKILL.md
  * `composition.guards` of every agent-bearing node in the flow, resolved via
- * `resolveBandGuard`/`BAND_CANONICAL_SLUG` (orchestrator/agent-bands.ts) —
+ * `resolveBandGuard`/`BAND_CANONICAL_SLUG` (packages/agents/agent-bands.ts) —
  * never a hardcoded per-flow guess. Reuses the existing flow/agent loaders
  * (orchestrator/studio/registry.ts, orchestrator/skill-path.ts) rather than
  * re-parsing yaml/frontmatter here.

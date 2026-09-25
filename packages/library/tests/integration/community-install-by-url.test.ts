@@ -20,7 +20,7 @@
  * assert a pure decision, and the bridge-level test asserts that the fetch arm
  * is REFUSED under dry-bridge — which is also, at this level, the only proof
  * that the arm is reached at all. The fetch itself is driven by an injected
- * stub in `tests/unit/community-fetch-package.test.ts`; a green beat and a
+ * stub in `packages/library/tests/unit/community-fetch-package.test.ts`; a green beat and a
  * green route test prove the door is offered, and those unit tests prove it
  * works. The two claims are kept separate on purpose.
  */

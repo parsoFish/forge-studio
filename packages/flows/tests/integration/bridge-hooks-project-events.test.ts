@@ -1,7 +1,7 @@
 /**
  * ACCEPTANCE TESTS (T3, R2-08-F3 #9, #11) — the RECEIVER PATH for the two
  * new project-event trigger kinds (`pr-merged` / `issue-raised`), driven at
- * the REAL bridge route exactly as packages/flows/bridge-hooks.test.ts already does for
+ * the REAL bridge route exactly as packages/flows/tests/integration/bridge-hooks.test.ts already does for
  * push/release. New file (not appended to the existing 484-line
  * bridge-hooks.test.ts) per the small-focused-files rule; the two files
  * share no helper exports (bridge-hooks.test.ts's setup()/post()/githubSig()
@@ -12,7 +12,7 @@
  * roadmap text at the level of precision needed to construct a fixture;
  * escalated in this WI's report for T1's ruling):
  *   - A flow declares `on: pr-merged` / `on: issue-raised` directly — their
- *     OWN TRIGGER_KINDS id (orchestrator/flow-trigger.test.ts pins these as
+ *     OWN TRIGGER_KINDS id (packages/flows/tests/unit/flow-trigger.test.ts pins these as
  *     real registry rows) — carrying a `webhook: {...}` receive/trust config
  *     block of the SAME shape existing webhook triggers use (id/provider/
  *     secretEnv/sources), at the SAME `/api/hooks/:hookId` route ("over the
@@ -27,7 +27,7 @@
  * If the implementer lands a different wire shape (e.g. pr-merged reusing
  * `on: webhook` + a new `events:` value instead of its own `on:`), these
  * tests stay RED and must be renegotiated with T1 — same precedent as
- * orchestrator/flow-trigger-projects.test.ts (R2-08-F1).
+ * packages/flows/tests/integration/flow-trigger-projects.test.ts (R2-08-F1).
  *
  * CORPUS GROUNDING: the `pull_request` webhook payload shape below
  * (`action`, `number`, `pull_request.{number,title,body,merged,merged_at,
@@ -35,7 +35,7 @@
  * documented, stable webhook event schema for the `pull_request` event —
  * NOT drawn from this repo's local test corpus (no local pull_request/issues
  * fixtures exist yet; only push/release do, in
- * orchestrator/trigger-payload.test.ts / packages/flows/bridge-hooks.test.ts) and NOT
+ * packages/flows/tests/unit/trigger-payload.test.ts / packages/flows/tests/integration/bridge-hooks.test.ts) and NOT
  * invented ad hoc — it mirrors the well-known, stable GitHub API field names.
  * See this WI's report for the explicit per-fixture provenance statement.
  */
@@ -64,8 +64,8 @@ function githubSig(secret: string, payload: string): string {
  * only), FLOW_ID (declares the `on: pr-merged` trigger under test, SCOPED to
  * `projects: [PROJECT_DIR]`), and a REAL project directory declaring
  * `repo: ALLOWED_REPO` — the R2-08-F3 declaration this hook's resolution
- * must read (orchestrator/project-config-repo.test.ts pins the field itself;
- * orchestrator/project-event-resolve.test.ts pins the resolution function).
+ * must read (packages/projects/tests/integration/project-config-repo.test.ts pins the field itself;
+ * apps/forge/tests/contract/project-event-resolve.test.ts pins the resolution function).
  */
 function setup(): { forgeRoot: string } {
   const forgeRoot = mkdtempSync(join(tmpdir(), 'bridge-hooks-project-events-'));

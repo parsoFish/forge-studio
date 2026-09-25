@@ -405,7 +405,7 @@ test('--write regenerates the baseline file and a subsequent check passes', () =
 // silently absorb rows it did not intend to touch.
 //
 // Measured repro from the bead: a local `const exec = executors[kind] ??
-// execUnknown` in orchestrator/phases/executor-table.ts was reported as a
+// historical: execUnknown` in orchestrator/phases/executor-table.ts was reported as a
 // NEW 'exec' sink, purely because its name matched. Had a lane run --write
 // there, a fake sink would have entered the baseline permanently.
 // =============================================================================
@@ -460,7 +460,7 @@ test('8vfn.5.19: a name destructured off a local object is NOT counted (not node
 test('8vfn.5.19: a real node:fs import is still counted (no regression)', () => {
   const root = makeFixture();
   try {
-    // makeFixture's orchestrator/reached.ts already imports existsSync/writeFileSync from node:fs.
+    // historical: makeFixture's orchestrator/reached.ts already imports existsSync/writeFileSync from node:fs.
     const { rows } = analyze(root);
     assert.ok(rows.some((r) => r.file === 'orchestrator/reached.ts' && r.sink === 'existsSync'));
     assert.ok(rows.some((r) => r.file === 'orchestrator/reached.ts' && r.sink === 'writeFileSync'));
@@ -511,7 +511,7 @@ test('8vfn.5.19: --write PRINTS every row it changes (the "silent absorption" de
     runCheck({ root, baselinePath, write: true });
 
     // Shrink back to one call — nothing about existsSync changed, only
-    // writeFileSync's count did. Bead repro: "cli/brain-lint.ts existsSync
+    // writeFileSync's count did. historical: bead repro: "cli/brain-lint.ts existsSync
     // 22->20 ... rewrote rows nothing had touched" — --write regenerating the
     // WHOLE baseline silently, with no record of what moved.
     writeFileSync(

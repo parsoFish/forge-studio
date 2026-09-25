@@ -4,7 +4,7 @@
  * The module under test does not exist yet — this file is RED at branch base
  * (ERR_MODULE_NOT_FOUND on the `./skill-library.ts` import is the expected red).
  * See _wave5/specs/R3-01-F3F4.md for the full design; AT numbers below map
- * 1:1 onto that spec's "AT set — orchestrator/studio/skill-library.test.ts".
+ * 1:1 onto that spec's "AT set — packages/library/tests/integration/skill-library.test.ts".
  *
  * Style: node:test + node:assert/strict, real temp forge roots via
  * mkdtempSync (no mocking of node:fs), mirroring registry.test.ts.

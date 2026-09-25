@@ -52,7 +52,7 @@ const EXPECTED_GUARD_IDS = ['event-log', 'cost-guard', 'stall-watchdog', 'merge-
 // R4-18 mechanical amendment (2026-08-10): a 5th band, 'onboard-preflight',
 // joins the vocabulary — EXPECTED_GUARD_IDS now names 10 ids, not 9. RED
 // until R4-18's production change adds the matching studio/catalog.yaml row
-// (see orchestrator/onboard-flow-gate.test.ts AT-2).
+// (see apps/forge/tests/integration/onboard-flow-gate.test.ts AT-2).
 test('B1: studio/catalog.yaml has a guards: section with exactly the 10 known ids, and NO hooks: section (RED until migrated)', () => {
   const raw = loadYaml(REAL_CATALOG_PATH);
   const guards = raw['guards'];

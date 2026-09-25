@@ -9,7 +9,7 @@
  * had the new lines.
  *
  * The fix is server-side: `RunPhaseMeta.lastEventAt` (orchestrator/
- * run-model.ts, derived in orchestrator/run-model-derive.ts's
+ * run-model.ts, derived in packages/flows/run-model-derive.ts's
  * computeLastEventAt) is computed over EVERY event the authoritative
  * `eventToNodeId` resolver attributes to a node — the SAME resolver
  * `GET /api/runs/<id>/phases/<node>/log` filters with. This module's only job

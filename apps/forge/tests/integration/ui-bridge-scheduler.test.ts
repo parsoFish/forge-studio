@@ -224,7 +224,7 @@ test('POST /api/scheduler/stop → stopping:true, and GET /status keeps reportin
 // ---------------------------------------------------------------------------
 // W7-FIX-A3 (round-2 finding 3): Stop is IDEMPOTENT while a pid drains. The
 // scheduler's own signal handler treats a SECOND SIGTERM as force-quit
-// (`orchestrator/scheduler.ts` onSignal: signalCount === 2 → process.exit),
+// (`packages/flows/scheduler.ts` onSignal: signalCount === 2 → process.exit),
 // so a second Stop — from another tab, or from one whose 10s poll had not yet
 // flipped to `stopping` — hard-killed the in-flight cycles the first Stop was
 // politely draining. The marker the route already writes is the fact that

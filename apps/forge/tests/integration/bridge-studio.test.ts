@@ -868,7 +868,7 @@ test('classifyEvent: failure_classification + recoverable=true → retry (not st
 // ---------------------------------------------------------------------------
 // R2-01 final-review fix (c): generic-agent node log-tail resolution
 //
-// A generic-agent node (run via orchestrator/run-agent.ts's execAgent) always
+// A generic-agent node (run via packages/agents/run-agent.ts's execAgent) always
 // emits phase:'orchestrator' + metadata.agent_slug — nodeMapping.get('orchestrator')
 // is explicitly null, so a naive `nodeMapping.get(e.phase) === nodeId` filter
 // drops these events entirely. The drawer endpoint must resolve them via

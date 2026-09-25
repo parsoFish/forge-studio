@@ -11,8 +11,8 @@
  * a real-browser journey beat (a later work item) proves it end to end.
  * NOTE (M4): "no jsdom in this repo" was true when this was written and is
  * not any more — `jsdom` is a devDependency as of the 5.10 completion PR, and
- * `components/studio/session/kickoff-mint-before-navigate.test.ts` opts into
- * it per-file. Nothing here changed; the parenthetical did.
+ * historical: `components/studio/session/kickoff-mint-before-navigate.test.ts`
+ * opted into it per-file. Nothing here changed; the parenthetical did.
  *
  * Renders the shared `RunLog` (composed, never reimplemented), the run's
  * cost, materials and ceiling provenance READ-ONLY (no editable control —

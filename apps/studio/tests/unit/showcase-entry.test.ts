@@ -30,7 +30,7 @@
  *
  * ═══════════════════════════════════════════════════════════════════════
  * FIXTURE GROUNDING: every `Cycle` field below is a REAL field from the
- * shipped shape (`forge-ui/lib/bridge-client.ts:15` —
+ * shipped shape (`apps/studio/lib/bridge-client.ts:15` —
  * cycleId/initiativeId/project/status/startedAt/endedAt); no invented
  * fields. `project` ids are REAL managed/reference projects from this
  * repo's own operating ground (`gitpulse` — the verify-cycle routine ground,

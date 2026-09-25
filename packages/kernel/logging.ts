@@ -65,7 +65,7 @@ export type EventType =
   | 'phase_transition'
   /**
    * S7 / C13 — sidecar liveness pulse during a silent SDK call.
-   * Emit site: `loops/ralph/claude-agent.ts` (NOT the runner).
+   * Emit site: `packages/agents/ralph/claude-agent.ts` (NOT the runner).
    * Cadence: default 15s, configurable per-project via
    * `.forge/project.json` `logging.heartbeat_seconds`. Tail-emit
    * on idle > 30s. Metadata: `{ tool_use_count, last_tool,

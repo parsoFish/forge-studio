@@ -15,7 +15,7 @@
  * not a reason to skip it.
  *
  * KNOWN GAP (not fixed here, deliberately): "not recorded" is honest but
- * hides a KNOWABLE value — `orchestrator/phase-agent.ts` resolves an absent
+ * hides a KNOWABLE value — `packages/agents/phase-agent.ts` resolves an absent
  * tier to `modelForSpec(spec)`, a statically-known model. Showing it would
  * mean plumbing the spec's default into the session read model, which is new
  * behaviour rather than a review fix. Filed in the C3 fix return.

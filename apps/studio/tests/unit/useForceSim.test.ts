@@ -53,7 +53,7 @@ function captureForceSim(): ReturnType<typeof useForceSim> {
 }
 
 // A root-index → category-index → theme fixture graph, per the real edge
-// shape orchestrator/kb-graph.ts builds (kb-graph.ts:455 category-index→theme;
+// shape packages/knowledge/kb-graph.ts builds (kb-graph.ts:455 category-index→theme;
 // :458 kbIndex→theme fallback when no category index exists — this fixture
 // uses the category-index-present shape, the common case).
 function hubFixture(): { nodes: KbNode[]; edges: KbEdge[] } {

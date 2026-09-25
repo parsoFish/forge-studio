@@ -81,7 +81,7 @@ function manifest(): string {
 }
 
 // architect -> node 'architect'; developer-loop -> node 'dev'
-// (orchestrator/run-model.ts FALLBACK_PHASE_TO_NODE, lines 202/204) — both
+// (packages/flows/run-model.ts FALLBACK_PHASE_TO_NODE, lines 202/204) — both
 // measured [exec] against the real buildNodeMapping() in the task report.
 function eventsJsonl(): string {
   const base = { cycle_id: CYCLE_ID, initiative_id: INIT_ID, input_refs: [], output_refs: [] };

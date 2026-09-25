@@ -1,6 +1,6 @@
 /**
  * A1 (handoff, agents s4 re-confirmed on `05b327f0`): `DEFAULT_DEPS` resolved the
- * demo-agent and review pipelines' `logsRoot` with `resolve('_logs')` — relative to
+ * historical: demo-agent and review pipelines' `logsRoot` with `resolve('_logs')` — relative to
  * the PROCESS's cwd, not to the forge checkout. A cycle started from anywhere but
  * the repo root therefore wrote its evidence into a `_logs` tree beside whatever
  * directory the operator happened to be in, and the run that went looking for it

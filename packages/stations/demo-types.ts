@@ -6,9 +6,9 @@
  * PR-facing `DEMO.md` from it. These are the structured section types that
  * `demo.json` (`DemoModel`, in demo-model.ts) and the markdown renderer share.
  *
- * (Before F4 these lived in demo-html.ts alongside a parallel DEMO.html
- * renderer. F4 retired DEMO.html — demo OUTPUT is one markdown — so the schema
- * types moved here, leaving no HTML renderer behind.)
+ * historical: (before F4 these lived in demo-html.ts alongside a parallel
+ * DEMO.html renderer. F4 retired DEMO.html — demo OUTPUT is one markdown —
+ * so the schema types moved here, leaving no HTML renderer behind.)
  */
 
 /** Per-image inline cap (bytes). Shared by the capture path (demo.ts) and the

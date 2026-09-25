@@ -1,6 +1,6 @@
 /**
- * Tests for orchestrator/wi-worktree.ts — Phase 4 step 4: per-WI worktree
- * bootstrap. Pattern-matches orchestrator/worktree.test.ts: a real temp git
+ * Tests for packages/flows/wi-worktree.ts — Phase 4 step 4: per-WI worktree
+ * bootstrap. Pattern-matches packages/flows/tests/integration/worktree.test.ts: a real temp git
  * repo fixture, no mocks.
  */
 

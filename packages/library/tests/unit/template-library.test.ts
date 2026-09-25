@@ -1,5 +1,5 @@
 /**
- * Acceptance tests for orchestrator/studio/template-library.ts (R3-06).
+ * Acceptance tests for packages/library/studio/template-library.ts (R3-06).
  *
  * The module under test does not exist yet — this file is RED at branch base
  * (ERR_MODULE_NOT_FOUND on the `./template-library.ts` import is the expected

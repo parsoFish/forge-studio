@@ -2,7 +2,7 @@
  * ACCEPTANCE TESTS (must be RED until fixed) — bd `forge-wze` (P0): KB
  * containment defect, unit level on `resolveKbBrainDir`.
  *
- * Root cause (orchestrator/brain-paths.ts::resolveKbBrainDir): the function
+ * Root cause (packages/knowledge/brain-paths.ts::resolveKbBrainDir): the function
  * resolves `brain/<kbId>` (and its `brain/projects/<kbId>` fallback) with a
  * bare `resolve()` + `existsSync()` — no `realpathSync`, no per-segment
  * identity check, no `nlink` check. Contrast with the ratified guard at

@@ -15,14 +15,14 @@
  */
 
 const NOTE_BY_PHASE: Record<string, string> = {
-  // orchestrator/phases/release-finalize.ts — runs inside the approve→merge
+  // packages/stations/phases/release-finalize.ts — runs inside the approve→merge
   // finalization chain, opt-in per project.
   'release-finalize':
     'Dispatched automatically by the approve→merge finalization chain when the project declares a releaseProcess — not a flow node.',
   // skills/project-scoped-review — surface: operator-triggered, on demand.
   audit:
     'Operator-triggered utility — run it on demand from this page (pick the target project in the Run panel).',
-  // orchestrator/finalize-merged.ts — forge-develop's {on: merged} standing
+  // packages/flows/finalize-merged.ts — forge-develop's {on: merged} standing
   // trigger, resolved through the reflection-close band guard (R4-09-F1;
   // the flow wrapper was retired in W7-C1). NOTE the key is the SKILL
   // frontmatter phase `reflector` (skills/reflector/SKILL.md), NOT the

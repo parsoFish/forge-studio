@@ -36,7 +36,7 @@ import { noKbEdits } from '../../kb-drain-edit-soundness.ts';
 import type { Finding, AutoFixStableResult } from '../../brain-lint.ts';
 
 /**
- * Fixtures mirroring `tests/unit/bridge-studio-kb-drain.test.ts`'s Part A, and
+ * Fixtures mirroring `packages/knowledge/tests/unit/bridge-studio-kb-drain.test.ts`'s Part A, and
  * mirrored rather than imported on purpose: they are that file's private test
  * scaffolding, and a contract test that depends on another test file's
  * internals breaks when that file is re-bucketed. The shapes matter and were

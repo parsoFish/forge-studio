@@ -10,7 +10,7 @@
  * as belt-and-suspenders, mirroring the drain loop's own noSpawn guard).
  *
  * Drives the CARVED HANDLERS directly — no bridge (COMMON §5). Same seam as
- * `tests/integration/routes-dispatch.test.ts`; the `{status, json}` shape is
+ * `packages/knowledge/tests/integration/routes-dispatch.test.ts`; the `{status, json}` shape is
  * preserved so every assertion below is byte-for-byte what it was over HTTP.
  *
  * The two `Promise.all` concurrency tests keep their meaning: the per-kb

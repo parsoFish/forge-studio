@@ -294,7 +294,7 @@ export function applyDeterministicConsolidateFixes(
 /**
  * R1-06 WI-3: drain the FULL agent-tier finding set scoped to `kbId` — the
  * KB's RESOLVED `consolidate` obligation (`DEFAULT_KB_CONSOLIDATE`,
- * `orchestrator/studio/kb-descriptor.ts`) is the SAME 'brain-fix' agent
+ * `packages/knowledge/studio/kb-descriptor.ts`) is the SAME 'brain-fix' agent
  * op=fix-agent dispatches one finding at a time; this runs it over every
  * scoped agent-tier finding grouped by shared write-target (one real session
  * per target file, covering every finding that lands there — "ONE session

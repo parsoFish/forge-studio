@@ -24,7 +24,7 @@
  * pins that they cannot disagree — the "two notions of one thing" class this
  * campaign keeps paying for.
  *
- * RUN: npx vitest run tests/regression/drawer-reservation.test.ts (from apps/studio/)
+ * RUN: npx vitest run apps/studio/tests/regression/drawer-reservation.test.ts (from apps/studio/)
  */
 import { test, expect } from 'vitest';
 

@@ -1,5 +1,5 @@
 /**
- * Unit tests for orchestrator/phases/pm-binding.ts — ADR 024 seam.
+ * Unit tests for packages/stations/phases/pm-binding.ts — ADR 024 seam.
  *
  * Verifies:
  *   1. `pmAgentSpec` shape (phase / skill / tier / tools).

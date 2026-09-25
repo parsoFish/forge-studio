@@ -10,7 +10,7 @@ export function eventToNodeId(
   agentSlugToNodeId: Map<string, string>,
   metadata?: EventLogEntry['metadata'],
 ): string | null {
-  // R2-01-F4: execAgent/runAgent (orchestrator/run-agent.ts) always emits its
+  // R2-01-F4: execAgent/runAgent (packages/agents/run-agent.ts) always emits its
   // events with phase:'orchestrator' + metadata.agent_slug (the frozen F1
   // contract, run-agent.test.ts:121) — resolve THAT to the flow node
   // declaring the agent slug before the orchestrator→null canonical override

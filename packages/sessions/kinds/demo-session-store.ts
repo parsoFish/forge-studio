@@ -5,7 +5,7 @@
  * took the kind's two generic-affordance arms and would have crossed the
  * 800-line cap. This is the seam nothing else crosses — the kind directory, the
  * per-generation snapshot layout (R4-16) and the three guarded readers/writers
- * that walk it. `bridge-studio-demo.ts` and `studio/session-transcript.ts`
+ * that walk it. `bridge-studio-demo.ts` and `packages/sessions/studio/session-transcript.ts`
  * already imported the layout constants; they now name this module instead.
  */
 import { mkdirSync } from 'node:fs';

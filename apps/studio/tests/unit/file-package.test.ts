@@ -1,5 +1,5 @@
 /**
- * Acceptance tests for forge-ui/lib/file-package.ts (R3-01-F3/F4, WI-0).
+ * Acceptance tests for apps/studio/lib/file-package.ts (R3-01-F3/F4, WI-0).
  *
  * The module under test does not exist yet — vitest cannot even collect this
  * file until it lands (module-not-found is the expected red).
@@ -10,7 +10,7 @@
  * testability convention).
  *
  * AT numbers map 1:1 onto _wave5/specs/R3-01-F3F4.md's
- * "AT set — forge-ui/lib/file-package.test.ts".
+ * "AT set — apps/studio/tests/unit/file-package.test.ts".
  */
 import { test, expect } from 'vitest';
 import { filePackageTabs, selectFile, fileLanguage } from '../../lib/file-package.ts';

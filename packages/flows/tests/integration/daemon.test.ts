@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/daemon.ts (P4 — managed background daemon).
+ * Tests for packages/flows/daemon.ts (P4 — managed background daemon).
  *   - pid file read / write / clear / stale-reap
  *   - isAlive probe (self pid is alive; an unused high pid is not)
  *   - pause flag set/clear and isPaused

@@ -1,5 +1,5 @@
 /**
- * Tests for forge-ui/lib/connection-library-view.ts (R3-04-F2/F3) — DOES NOT
+ * Tests for apps/studio/lib/connection-library-view.ts (R3-04-F2/F3) — DOES NOT
  * EXIST YET. Vitest cannot even collect this file until it lands
  * (module-not-found is the expected red).
  *

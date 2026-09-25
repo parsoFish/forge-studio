@@ -11,7 +11,7 @@
  * poisoned by some other writer. `runRequeue` re-serializes via
  * `serializeManifest` without validating anything today, so this is a
  * genuinely independent choke point from the bridge-route fix in
- * `packages/flows/bridge-recovery-manifest-containment.test.ts`.
+ * `packages/flows/tests/regression/bridge-recovery-manifest-containment.test.ts`.
  */
 
 import { test, before, after } from 'node:test';

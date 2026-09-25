@@ -1,5 +1,5 @@
 /**
- * Tests for forge-ui/lib/debounce.ts — leading+trailing debounce used to
+ * Tests for apps/studio/lib/debounce.ts — leading+trailing debounce used to
  * collapse bursts of `cycle-list-changed` WS messages into at most two
  * `fetchRuns()` calls (see debounce.ts's header for the ADR-044 rationale).
  */

@@ -3,7 +3,7 @@
  * — spawner rulings on "silently skips a no-kind staged file" (round 5) and
  * "the bare `catch {}` conflates ENOENT with every other errno" (round 6).
  *
- * Split into its own file from `orchestrator/agent-dispatch.test.ts`
+ * Split into its own file from `apps/studio/tests/unit/agent-dispatch.test.ts`
  * deliberately: `discoverStagedMaterials` is module-private at HEAD (no
  * `export` keyword) and this file assumes it becomes exported — round 6
  * confirmed this assumption correct (ruling A) and the split itself was

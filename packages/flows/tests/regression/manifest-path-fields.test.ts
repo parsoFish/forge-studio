@@ -331,7 +331,7 @@ test('assertManifestPathFields: THROWS on a violating field, does NOT throw on a
 
 // ---------------------------------------------------------------------------
 // writeManifest refuses — the choke point. Its only two production callers
-// (orchestrator/promote-manifests.ts:71, packages/flows/bridge-recovery.ts:213) are both
+// (packages/flows/promote-manifests.ts:71, packages/flows/bridge-recovery.ts:213) are both
 // ingest paths.
 // ---------------------------------------------------------------------------
 
@@ -498,13 +498,13 @@ test('root-folding negative control: a candidate whose FIRST segment under the r
 // (packages/flows/manifest-path-guard.ts:170-173) hardcodes `join(opts.forgeRoot,
 // 'projects')` as the projects root, never consulting `FORGE_PROJECTS_DIR` or
 // `forge.config.json`'s `projectsDir` — unlike `resolveProjectsDir`
-// (orchestrator/config.ts), which every OTHER projects-root resolution in
+// (packages/kernel/config.ts), which every OTHER projects-root resolution in
 // this repo (`ctx.projectsRoot` in apps/forge/ui-bridge.ts, `writeSessionTerminalPhase`
 // in packages/agents/agent-run.ts, etc.) already goes through. Under a configured
 // projects root this function DISAGREES with the producers that correctly
 // used `resolveProjectsDir` — reachable from the approve/finalize path
-// (packages/flows/bridge-studio-runs.ts:222/390, orchestrator/finalize-merged.ts:301,
-// orchestrator/drain-fix-loop.ts:136, packages/flows/bridge-recovery.ts), so a
+// (packages/flows/bridge-studio-runs.ts:222/390, packages/flows/finalize-merged.ts:301,
+// packages/flows/drain-fix-loop.ts:136, packages/flows/bridge-recovery.ts), so a
 // configured `projectsDir` could break cycle approval entirely.
 //
 // T2's ruling: one concept, one resolution — `isContainedProjectRepoPath`

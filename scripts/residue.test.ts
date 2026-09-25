@@ -14,7 +14,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -49,8 +49,44 @@ function cleanTree(): string {
   mkdirSync(join(d, '_worktrees'), { recursive: true });
   return d;
 }
+// SAFE_DEFAULT_PORTS keeps every pre-existing test in this suite off the
+// host's REAL 4123/4124 — other lanes run a live `forge studio` there for the
+// whole duration of this session, and this suite must never probe it (a
+// read-only `ss`/`curl` probe is harmless, but a fixed, obviously-unused pair
+// keeps every assertion below deterministic regardless of host state).
+const SAFE_DEFAULT_PORTS = '18237,18238';
 const run = (d: string, ...extra: string[]) =>
-  spawnSync('bash', [SCRIPT, d, ...extra], { encoding: 'utf8' });
+  spawnSync('bash', [SCRIPT, d, ...extra], {
+    encoding: 'utf8',
+    env: { ...process.env, RESIDUE_STUDIO_PORTS: SAFE_DEFAULT_PORTS },
+  });
+const runWithPorts = (d: string, ports: string, ...extra: string[]) =>
+  spawnSync('bash', [SCRIPT, d, ...extra], {
+    encoding: 'utf8',
+    env: { ...process.env, RESIDUE_STUDIO_PORTS: ports },
+  });
+
+/** Spawn a REAL, separate OS process that binds an ephemeral TCP port with
+ *  `cwd` set to `cwd` — the "owning process's cwd" residue.sh's studio-port
+ *  check reads via `/proc/<pid>/cwd`. Resolves once the child reports the
+ *  port it actually bound; `kill()` tears it down. */
+function startListener(cwd: string): Promise<{ port: number; kill: () => void }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['-e', `
+      const net = require('net');
+      const srv = net.createServer();
+      srv.listen(0, '127.0.0.1', () => { process.stdout.write('PORT ' + srv.address().port + '\\n'); });
+    `], { cwd, stdio: ['ignore', 'pipe', 'ignore'] });
+    let buf = '';
+    const timer = setTimeout(() => reject(new Error('listener did not report a port in time')), 5000);
+    child.stdout.on('data', (d) => {
+      buf += d.toString();
+      const m = buf.match(/PORT (\d+)/);
+      if (m) { clearTimeout(timer); resolve({ port: Number(m[1]), kill: () => child.kill('SIGKILL') }); }
+    });
+    child.on('error', (err) => { clearTimeout(timer); reject(err); });
+  });
+}
 
 /** Every `<label>=<value>` the census printed, as a map. */
 function items(stdout: string): Map<string, string> {
@@ -84,6 +120,10 @@ describe('residue.sh — the list is printed IN FULL or the tool is the defect',
       assert.ok(got.has('_logs/_bridge-*'), 'the informational bridge count must still be printed');
       assert.equal(got.get('_logs/daemon/forge.pid'), 'absent');
       assert.equal(got.get('_1.0/'), 'absent');
+      // studio-port/* (M7-A row 82): nothing is listening on either injected
+      // port for a fresh tmpdir tree, so both gate 0.
+      assert.equal(got.get('studio-port/18237'), '0');
+      assert.equal(got.get('studio-port/18238'), '0');
       assert.match(r.stdout, /VERDICT clean/);
     } finally { rmSync(d, { recursive: true, force: true }); }
   });
@@ -241,5 +281,70 @@ describe('residue.sh — the list is printed IN FULL or the tool is the defect',
         'the verdict must ALSO name _1.0/ — a second non-zero item must not be dropped because a first one already fired',
       );
     } finally { rmSync(d, { recursive: true, force: true }); }
+  });
+
+  // ---------------------------------------------------------------------
+  // studio-port/<port> — M7-A finding row 82: the early-REFUSING teardown
+  // bug left a `forge studio` bridge + its Next UI child running,
+  // reparented to init, blocking every later run on the host.
+  // `_logs/daemon/forge.pid` tracks only the ONE daemon pid, never a
+  // studio (which holds two ports of its own and is never written there).
+  // Ports are injectable via RESIDUE_STUDIO_PORTS so this suite plants an
+  // EPHEMERAL listener instead of ever touching the host's real 4123/4124.
+  // ---------------------------------------------------------------------
+  describe('studio-port/<port> — a live studio listener left behind by this worktree', () => {
+    test('a listener on the audited port, owned by a process whose cwd is INSIDE this worktree, gates NOT CLEAN', async () => {
+      const d = cleanTree();
+      const listener = await startListener(d);
+      try {
+        const r = runWithPorts(d, String(listener.port));
+        const got = items(r.stdout);
+        assert.equal(got.get(`studio-port/${listener.port}`), '1');
+        assert.equal(r.status, 1);
+        assert.match(r.stdout, new RegExp(`VERDICT NOT CLEAN.*studio-port/${listener.port}=1`));
+      } finally {
+        listener.kill();
+        rmSync(d, { recursive: true, force: true });
+      }
+    });
+
+    test('a listener on the audited port whose cwd is OUTSIDE this worktree does NOT gate', async () => {
+      const d = cleanTree();
+      const other = mkdtempSync(join(tmpdir(), 'residue-other-'));
+      const listener = await startListener(other);
+      try {
+        const r = runWithPorts(d, String(listener.port));
+        assert.equal(items(r.stdout).get(`studio-port/${listener.port}`), '0');
+        assert.equal(r.status, 0);
+      } finally {
+        listener.kill();
+        rmSync(d, { recursive: true, force: true });
+        rmSync(other, { recursive: true, force: true });
+      }
+    });
+
+    test('no listener on the audited port → 0, and the informational health probe reports refused', () => {
+      const d = cleanTree();
+      try {
+        const r = runWithPorts(d, '18239');
+        assert.equal(items(r.stdout).get('studio-port/18239'), '0');
+        assert.match(r.stdout, /studio-port\/18239\/health=/);
+        assert.equal(r.status, 0);
+      } finally { rmSync(d, { recursive: true, force: true }); }
+    });
+
+    test('multiple injected ports are each checked and each labelled by their own number', async () => {
+      const d = cleanTree();
+      const listener = await startListener(d);
+      try {
+        const r = runWithPorts(d, `18240,${listener.port}`);
+        const got = items(r.stdout);
+        assert.equal(got.get('studio-port/18240'), '0');
+        assert.equal(got.get(`studio-port/${listener.port}`), '1');
+      } finally {
+        listener.kill();
+        rmSync(d, { recursive: true, force: true });
+      }
+    });
   });
 });

@@ -1,7 +1,7 @@
 /**
  * knowledge-38 (forge-6gv.6.1): `/knowledge?seedSession=<id>` — WIRING pin.
  * The pure copy derivation (`lib/kb-seed-banner.ts`'s `kbSeedBannerCopy`) is
- * unit-tested on its own (`tests/unit/kb-seed-banner.test.ts`); this file
+ * unit-tested on its own (`apps/studio/tests/unit/kb-seed-banner.test.ts`); this file
  * pins that the PAGE actually reads the session's real phase (via that same
  * module's `useKbSeedSessionPhase` hook — pulled out of the page itself,
  * which is already an over-cap size exemption) and renders that

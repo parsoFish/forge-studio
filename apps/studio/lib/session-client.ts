@@ -5,7 +5,7 @@
  * stages, defaultStage, turns, artifact}`. Mirrors template-client.ts's /
  * skill-client.ts's role and idiom exactly: local structural parsers, no
  * cross-boundary import of orchestrator types (the shapes here are a
- * hand-mirrored copy of orchestrator/studio/session-kinds.ts +
+ * hand-mirrored copy of packages/sessions/studio/session-kinds.ts +
  * session-transcript.ts, never an import from them).
  *
  * HEADLINE RULE (per the T3 task brief — this campaign's repeat "fail-open
@@ -24,7 +24,7 @@
  * never represent a future kind reusing an existing artifact kind with a
  * different label). See `parseSessionArtifact`'s per-kind parsers below.
  * The route side landed with it: `deriveSessionArtifact`
- * (orchestrator/studio/session-transcript.ts) threads
+ * (packages/sessions/studio/session-transcript.ts) threads
  * `descriptor.artifact.label` onto all three artifact shapes, and
  * `packages/sessions/bridge-studio-sessions.ts` forwards the artifact verbatim. The
  * envelope's `title` is threaded the same way, for the same reason.
@@ -124,7 +124,7 @@ function requireStringArray(raw: unknown, field: string): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// SessionTurn — mirrors orchestrator/studio/session-transcript.ts's SessionTurn
+// SessionTurn — mirrors packages/sessions/studio/session-transcript.ts's SessionTurn
 // ---------------------------------------------------------------------------
 
 const SESSION_TURN_ROLES = ['agent', 'operator'] as const;
@@ -178,7 +178,7 @@ export type RoadmapDraftRow = {
   project: string;
   phase: string;
   origin: string;
-  /** Cross-initiative dependency edges (orchestrator/manifest.ts's
+  /** Cross-initiative dependency edges (packages/flows/manifest.ts's
    *  `depends_on_initiatives`, threaded verbatim through
    *  `deriveSessionArtifact`). Absent on the wire is TOLERATED (parses to
    *  `[]`, matching the server's own absent-key default) — but a present,
@@ -219,7 +219,7 @@ export type BrainStructureArtifact = {
 };
 
 // R4-16: "generation-gallery" — the demo-builder's accumulating generation
-// selector. Mirrors orchestrator/studio/session-transcript.ts's
+// selector. Mirrors packages/sessions/studio/session-transcript.ts's
 // GenerationGalleryArtifact / GenerationGalleryEntry / GenerationGalleryItem
 // exactly (hand-mirrored, per this file's convention — never a cross-boundary
 // import of the orchestrator type).
@@ -249,7 +249,7 @@ export type GenerationGalleryArtifact = {
 };
 
 // R4-17: "contract-buildout" — the onboarding/creation session's five-stage
-// presence report. Mirrors orchestrator/studio/session-transcript.ts's
+// presence report. Mirrors packages/sessions/studio/session-transcript.ts's
 // ContractStageRow/ContractBuildoutArtifact exactly (hand-mirrored, per this
 // file's convention — never a cross-boundary import of the orchestrator
 // type). D11: a row reports PRESENCE only ("present"/"absent"), never a
@@ -296,7 +296,7 @@ export type FilePackageArtifact = {
 
 // R4-19-F2: "cleanup-plan" — the kb-cleanup session's brain-maintenance
 // artifact (studio/session-kinds.yaml's `id: kb-cleanup`, `agent:
-// brain-maintenance`). Mirrors orchestrator/studio/session-transcript.ts's
+// brain-maintenance`). Mirrors packages/sessions/studio/session-transcript.ts's
 // CleanupPlanAction/CleanupPlanArtifact exactly (hand-mirrored, per this
 // file's convention — never a cross-boundary import of the orchestrator
 // type). Live from birth (never reserved), unlike generation-gallery/
@@ -627,7 +627,7 @@ export function parseSessionArtifact(raw: unknown): SessionArtifactPayload {
 }
 
 // ---------------------------------------------------------------------------
-// SessionAffordancePayload — mirrors orchestrator/studio/session-kinds.ts's
+// SessionAffordancePayload — mirrors packages/sessions/studio/session-kinds.ts's
 // `SessionAffordance` (W6-B6, ADR-043 2026-08-15 amendment §1 "affordances
 // are derived, not authored"). Re-declared client-side per this file's own
 // convention (header) — never imported from the orchestrator.
@@ -790,7 +790,7 @@ export type SessionShellPayload = {
   artifact: SessionArtifactPayload;
   /**
    * W6-B6 (ADR-043 2026-08-15 amendment §1) — the derived, phase-scoped
-   * operator affordances (`orchestrator/studio/session-kinds.ts`'s
+   * operator affordances (`packages/sessions/studio/session-kinds.ts`'s
    * `deriveSessionAffordances`, server-computed). REQUIRED and hard-parsed
    * like every sibling field — a kind with no derivable affordances
    * (architect) still carries a genuine `[]`, never an omitted key.

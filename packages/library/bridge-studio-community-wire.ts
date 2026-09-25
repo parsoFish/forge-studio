@@ -95,7 +95,7 @@ export type WireCtx = {
 };
 
 /** T2 round 6, AT GROUP 5: mirrors listCommunityIndex's own deliberate
- *  missing-vs-malformed split (orchestrator/studio/community-index.ts, MAJOR
+ *  missing-vs-malformed split (packages/library/studio/community-index.ts, MAJOR
  *  2) at the ROUTE level, now over TWO independent files (W6-CR-1 decoupled
  *  community-skill sourcing from catalog.yaml):
  *   - connections: `listConnections` calls `loadCatalog` unguarded — correct

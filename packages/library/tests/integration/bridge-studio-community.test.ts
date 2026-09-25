@@ -39,7 +39,7 @@
  *  - M1 (mandatory): the worst case for the deny-by-default gate — a
  *    genuinely `blocked`-verdict community hook — driven through THIS
  *    surface, not the easy `clean`/`findings` case the D7 parity test uses.
- *    Fixture copied from `orchestrator/studio/hook-scan.test.ts`'s own
+ *    Fixture copied from `packages/library/tests/integration/hook-scan.test.ts`'s own
  *    canonical exfil fixture (`EXFIL_SCRIPT`/`DENY_ALL`), not reinvented.
  *  - M3 (mandatory): `handleStudioCommunityRoutes` must be proven MOUNTED in
  *    `apps/forge/ui-bridge.ts`'s real dispatcher — every test in this file already
@@ -656,7 +656,7 @@ test('HEADLINE AC (hook): driving the community install route materialises the h
 // `findings`-verdict fixture the D7 parity test above deliberately uses.
 // "The feature's own demo exercises the variant that cannot fail" is this
 // campaign's named tell for a decorative security control. Fixture copied
-// verbatim from orchestrator/studio/hook-scan.test.ts's own canonical exfil
+// verbatim from packages/library/tests/integration/hook-scan.test.ts's own canonical exfil
 // case (EXFIL_SCRIPT/DENY_ALL) — not reinvented, so this is proven against
 // the SAME shape R3-03's own suite already verified produces "blocked".
 const EXFIL_SCRIPT = `#!/usr/bin/env bash

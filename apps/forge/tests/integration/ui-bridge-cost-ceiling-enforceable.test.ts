@@ -1,13 +1,13 @@
 /**
  * Acceptance tests for WI-3 (R6-04): `GET /api/studio/agents` must serve the
- * new `costCeilingEnforceable` capability fact (orchestrator/studio/derive.ts
+ * new `costCeilingEnforceable` capability fact (packages/agents/studio/derive.ts
  * `agentCapabilityDescriptor`) on each agent's `capability` object — the SAME
  * wire shape the route already uses for `interactive`/`runtimeSdks`/
  * `fanoutCapable`/`materials` (apps/forge/bridge-studio.ts:
  * `agents.map((a) => ({ ...a, capability: agentCapabilityDescriptor(a) }))`).
  *
  * This is a BRIDGE-LAYER test (independent of
- * orchestrator/studio/derive-cost-ceiling-enforceable.test.ts's pure-function
+ * packages/agents/tests/unit/derive-cost-ceiling-enforceable.test.ts's pure-function
  * coverage of the same field): it proves the fact actually reaches the wire
  * through the real HTTP route, not merely that the pure function computes it
  * correctly in isolation. A descriptor-only test cannot catch a bridge route

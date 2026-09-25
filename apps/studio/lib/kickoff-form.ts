@@ -8,7 +8,7 @@
 
 /**
  * W7-B6 review F8 — parity-tested MIRROR of
- * `orchestrator/config.ts`'s `MAX_KICKOFF_COST_CEILING_USD` (forge-ui cannot
+ * `packages/kernel/config.ts`'s `MAX_KICKOFF_COST_CEILING_USD` (forge-ui cannot
  * import orchestrator code at runtime; `lib/kickoff-form.test.ts` imports the
  * SSOT and pins equality, same pattern as `lib/wi-status-parity.test.ts`).
  * The bridge 400s any ceiling above this — validating it client-side keeps

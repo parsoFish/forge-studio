@@ -73,7 +73,7 @@ refused; the runner's own comment calls that deliberate. Under `runAgentTurn` an
 convert a deny-all into an allow-all, and both success arms of the port's pin would still be green.
 
 So the loop lives in `fix-turn.ts` and the fence stays the **kind's** decision, expressed in the
-options bag it hands over. `tests/regression/fix-turn-capture.test.ts` arm 3 pins that branch, and
+options bag it hands over. `packages/sessions/tests/regression/fix-turn-capture.test.ts` arm 3 pins that branch, and
 mutation M8 in the pin's PR is this precise wrong port.
 
 ### Why the kind supplies the options bag
@@ -87,9 +87,9 @@ hide a reorder inside a deep-equal. The kind returns the assembled bag; the driv
 
 ## The roadmap-draft split, and why it has a reader port
 
-`studio/roadmap-draft.ts` holds `deriveRoadmapDraft` plus `ParseManifestPort`,
+`packages/sessions/studio/roadmap-draft.ts` holds `deriveRoadmapDraft` plus `ParseManifestPort`,
 `RoadmapDraftRow` and `RoadmapDraftArtifact`. It was extracted from
-`studio/session-transcript.ts` under **M4 ruling 83**, which accepted that file's
+`packages/sessions/studio/session-transcript.ts` under **M4 ruling 83**, which accepted that file's
 ceiling being re-keyed 1,359 → 1,368 for 3b's injected-port seam *on the
 condition that row 5's split brought it back down*. It did: **1,298**, below even
 the pre-3b ceiling, and the exemption was tightened to that rather than left as
@@ -226,7 +226,7 @@ absent. That is **ratified**, not an omission waiting to be filled.
 architect". Architect carries neither a `panel` nor a `turnSpec`, so no phase of
 it derives a writable affordance for the route to dispatch — the union and the
 missing table are two halves of one fact, and
-`tests/contract/architect-affordance-exclusion.test.ts` reds if either is
+`packages/sessions/tests/contract/architect-affordance-exclusion.test.ts` reds if either is
 undone (proven both ways: adding `'architect'` to the union reds one test,
 giving the architect a writable panel row reds the other two).
 
@@ -325,7 +325,7 @@ verbatim, truncated at 200 chars). For Grep it is `` `${pattern} @ ${path}` ``
 when a `path` arg was given, else just the pattern — `pathFromToolUseDetail`
 takes the tail after `summary.lastIndexOf(' @ ')`, a display-string heuristic
 (not a structured field) pinned by a mutation test
-(`tests/unit/architect-brain-read.test.ts`, AT-8.3.5-1b) rather than proven
+(`packages/sessions/tests/unit/architect-brain-read.test.ts`, AT-8.3.5-1b) rather than proven
 safe against every possible Grep pattern; a pattern containing the literal
 `" @ "` substring would defeat it, judged acceptable for this telemetry.
 

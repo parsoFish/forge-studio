@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/webhook-verify.ts (R2-04, ADR-041).
+ * Tests for packages/flows/webhook-verify.ts (R2-04, ADR-041).
  *
  * FAIL CLOSED is the security-sensitive property under test: a missing or
  * empty secret env value must ALWAYS be a 503, never a silent pass.

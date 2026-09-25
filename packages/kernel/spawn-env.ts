@@ -6,7 +6,7 @@ import { delimiter, resolve } from 'node:path';
  * the pure function that builds a child's full env from it.
  *
  * Replaces the prior denylist (`AGENT_ENV_DENYLIST` / `pinnedAgentEnv`,
- * removed from orchestrator/config.ts). A denylist only stops leaks the
+ * removed from packages/kernel/config.ts). A denylist only stops leaks the
  * author already thought of; the env-leak class recurred three times
  * (2026-06-16, 2026-07-02, 2026-07-11 — see
  * brain/forge-dev/themes/env-leak-must-be-fixed-at-spawn-seam-not-launcher.md)
@@ -93,7 +93,7 @@ export const MAX_ENV_OVERRIDE_KEYS = 8 as const;
  * NOT a trusted agent child: it is operator-authored (or worse, installed
  * from an untrusted source) shell run under a narrower contract
  * (`studio/hooks/<id>/hook.yaml`'s `permissions.env` allowlist,
- * `orchestrator/studio/hook-runtime.ts`'s `buildHookChildEnv`). A hook
+ * `packages/library/studio/hook-runtime.ts`'s `buildHookChildEnv`). A hook
  * manifest declaring `env: []` (asking for NOTHING) must see NOTHING beyond
  * bare process hygiene — composing `buildChildEnv` over the full
  * `AGENT_ENV_ALLOWLIST` would silently hand every hook the operator's real

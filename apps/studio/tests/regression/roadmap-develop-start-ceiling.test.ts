@@ -4,7 +4,7 @@
  * development" ceiling lever (forge-ui/app/projects/[id]/page.tsx).
  *
  * THE DEFECT: `defaultCeilingUsd` seeds from the run-level
- * `resolveDefaultKickoffCeilingUsd` (orchestrator/config.ts, effectively 10 —
+ * `resolveDefaultKickoffCeilingUsd` (packages/kernel/config.ts, effectively 10 —
  * never 0/undefined), fetched in a `useEffect` the instant the roadmap tab
  * mounts — before the operator has looked at, let alone touched, the ceiling
  * field. The pre-fix `startOne` computed `ceilingToSend` straight off the

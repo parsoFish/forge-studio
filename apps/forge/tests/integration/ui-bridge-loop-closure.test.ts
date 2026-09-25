@@ -417,7 +417,7 @@ test('GET /api/runs/<initiativeId>/phases/<node>/log resolves the CLAIMED run\'s
   const logDir = join(forgeRoot, '_logs', cycleId);
   mkdirSync(logDir, { recursive: true });
   // An architect-phase event resolves to the `architect` node
-  // (orchestrator/run-model.ts FALLBACK_PHASE_TO_NODE).
+  // (packages/flows/run-model.ts FALLBACK_PHASE_TO_NODE).
   writeFileSync(join(logDir, 'events.jsonl'), [
     JSON.stringify({ event_id: 'EV_a3_1', cycle_id: cycleId, initiative_id: INIT_B, phase: 'orchestrator', skill: 'scheduler', event_type: 'start', started_at: '2026-08-19T00:00:00.000Z', message: 'cycle.start', input_refs: [], output_refs: [] }),
     JSON.stringify({ event_id: 'EV_a3_2', cycle_id: cycleId, initiative_id: INIT_B, phase: 'architect', skill: 'architect', event_type: 'start', started_at: '2026-08-19T00:00:01.000Z', message: 'ARCHITECT-STABLE-HANDLE-MARKER', input_refs: [], output_refs: [] }),

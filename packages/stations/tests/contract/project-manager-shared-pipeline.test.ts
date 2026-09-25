@@ -123,7 +123,7 @@ test('F5: enqueuePlanRun and promoteManifests write state-equivalent decompose-t
   try {
     // SEC-02: the manifest path guard's containment root must exist before
     // any manifest referencing it is validated — a real forge root always
-    // has `projects/` (orchestrator/init.ts layoutDirs / ensureLayout).
+    // has `projects/` (packages/kernel/init.ts layoutDirs / ensureLayout).
     mkdirSync(join(rootA, 'projects'), { recursive: true });
     mkdirSync(join(rootB, 'projects'), { recursive: true });
 

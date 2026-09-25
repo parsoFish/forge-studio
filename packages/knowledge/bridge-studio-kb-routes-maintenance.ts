@@ -237,7 +237,7 @@ export async function handleKbIngestActivity(
   const origin = allowedOrigin(req);
 
   // ---- GET /api/studio/kbs/:id/ingest-activity (R6-08 WI-2) — READ-ONLY -----
-  // Lists real `reflect.kb-ingest` events (orchestrator/kb-health.ts) for this
+  // Lists real `reflect.kb-ingest` events (packages/knowledge/kb-health.ts) for this
   // KB, discovered via a listCycles-style walk of `_logs/<cycleId>/events.jsonl`
   // (mirroring packages/flows/metrics.ts's summariseCycle: guardedReadFile with cycleId as
   // its OWN segments[] element, never folded into the root). The kbId filter is

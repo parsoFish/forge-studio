@@ -3,7 +3,7 @@
  * `./bridge-client.ts` — the same client-side shape `EventTail.tsx` already
  * consumes) to the shared run-view display vocabulary: exactly THREE kinds —
  * `think | tool | out` — never a fourth. See `./run-log-line.test.ts`'s
- * header for the full rationale: `orchestrator/logging.ts`'s real `EventType`
+ * header for the full rationale: `packages/kernel/logging.ts`'s real `EventType`
  * union has 11 members; this maps ONTO the mockup's 3-bucket display
  * vocabulary, it never invents a new event-type vocabulary of its own.
  *

@@ -41,7 +41,7 @@ pattern ([ADR 002](../../../../docs/decisions/002-ralph-loop-pattern.md)) —
 forge-docs's own agent for the `build` station, the same loop mechanism
 [`developer-ralph`](../../../../skills/developer-ralph/SKILL.md) drives for
 `forge-develop`. Thin wrapper: prepare loop input artifacts (`PROMPT.md`,
-`AGENT.md`, `fix_plan.md`), invoke the platform's `loops/ralph/runner.ts`.
+`AGENT.md`, `fix_plan.md`), project: invoke the platform's `loops/ralph/runner.ts`.
 
 The gate profile this run is judged against comes from the initiative's
 `class: docs` field, read once by `packages/factory/class-profiles.ts` and
@@ -57,7 +57,7 @@ threaded into the dev-loop station — not from anything declared here:
 
 **Inputs:**
 - `<worktree>/.forge/work-items/WI-<n>.md` — the work-item spec.
-- `loops/ralph/PROMPT.md.tmpl` + `loops/ralph/AGENT.md.tmpl` — templates.
+- project: `loops/ralph/PROMPT.md.tmpl` + `loops/ralph/AGENT.md.tmpl` — templates.
 - The worktree itself.
 
 **Outputs:**
@@ -78,8 +78,8 @@ Same vocabulary as `developer-ralph`: `ralph.start`, per-iteration
 ## Process
 
 1. Read the work item spec — single source of intent (no forge-brain query).
-2. Stamp `loops/ralph/PROMPT.md.tmpl` with the work-item content + ACs.
-3. Stamp `loops/ralph/AGENT.md.tmpl` (empty; the loop fills it).
+2. project: stamp `loops/ralph/PROMPT.md.tmpl` with the work-item content + ACs.
+3. project: stamp `loops/ralph/AGENT.md.tmpl` (empty; the loop fills it).
 4. Initialise `<worktree>/fix_plan.md` with the ACs as a checklist.
 5. Invoke the ralph runner; the orchestrator writes `status` back to the WI.
 
