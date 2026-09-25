@@ -47,6 +47,10 @@ const BADGE_STYLE: Record<string, React.CSSProperties> = {
   // own positive-state color token (components/studio/LibraryHub.tsx —
   // `var(--sage, #7cb87c)`) rather than inventing a new one.
   approved: { color: 'var(--sage, #7cb87c)', borderColor: 'rgba(124,184,124,.4)', background: 'rgba(124,184,124,.08)' },
+  // forge-6gv.8.1 (library-10): "this hook cannot fire" — distinct from the
+  // muted `overridden` style so it reads as a fact worth noticing, not a
+  // resolved/inert state.
+  unbound: { color: '#fbbf24', borderColor: 'rgba(251,191,36,.3)', background: 'transparent' },
 };
 
 export type HookLibraryResultsProps = {
