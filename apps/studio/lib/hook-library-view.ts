@@ -134,6 +134,8 @@ export type HookDetailView = {
   scanVerdict: HookDetail['scanVerdict'];
   trust: HookDetail['trust'];
   runnable: boolean;
+  /** forge-8vfn.8.3.7 — server-attested, rendered by ProvenanceBadge. */
+  origin: HookDetail['origin'];
   files: HookDetail['files'];
   scan: HookScanPanel;
   /** W7-B4 (library-09): the recorded approval — present iff a live ledger
@@ -163,6 +165,7 @@ export function buildHookDetailView(detail: HookDetail): HookDetailView {
     scanVerdict: detail.scanVerdict,
     trust: detail.trust,
     runnable: detail.runnable,
+    origin: detail.origin,
     files: detail.files,
     scan: buildHookScanPanel(detail.scan),
     ...(detail.approval !== undefined ? { approval: detail.approval } : {}),

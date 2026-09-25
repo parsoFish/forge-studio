@@ -39,6 +39,13 @@ import { bridgeFetch } from './bridge-client';
 export type TemplateCategory = 'demo-output' | 'planning' | 'project-scaffold';
 export type TemplatePreviewKind = 'html' | 'video' | 'shots' | 'mock' | 'doc' | 'scaffold';
 
+/** forge-8vfn.8.3.7 — server-attested (never client-inferred): a template
+ *  has exactly two real sources, a create route (stamps 'operator') or
+ *  forge's shipped library / a project-scaffold with no create route at all
+ *  ('ootb'). A local type, not imported from @forge/kernel or
+ *  @forge/library — apps/studio may import @forge/contracts only. */
+export type TemplateOrigin = 'ootb' | 'operator';
+
 /** Names the real on-disk source a `usedBy` array was scanned from, and how
  *  many of that source were scanned — an empty `usedBy` always reads as
  *  "scanned N, found none", never "unknown". */
@@ -70,6 +77,11 @@ export type TemplateLibraryEntry = {
   description?: string;
   /** A malformed definition surfaces here — never dropped. */
   error?: string;
+  /** Server-attested — absent only when the definition failed to parse
+   *  (`error` set), same convention as `format`/`previewKind` above. NOT
+   *  `provenance` above (the category's on-disk source dir, an unrelated
+   *  fact). */
+  origin?: TemplateOrigin;
 };
 
 /**
@@ -95,6 +107,16 @@ function parseTemplatePreviewKind(raw: unknown): TemplatePreviewKind | undefined
     return raw;
   }
   throw new Error(`unrecognised template previewKind: ${JSON.stringify(raw)}`);
+}
+
+/** forge-8vfn.8.3.7 — legitimately absent (a malformed definition never gets
+ *  one, same as previewKind above); a PRESENT, unrecognised token (including
+ *  the wire's own 3-value Provenance vocabulary a template never
+ *  legitimately emits) still throws, never silently coerced. */
+function parseTemplateOrigin(raw: unknown): TemplateOrigin | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === 'ootb' || raw === 'operator') return raw;
+  throw new Error(`unrecognised template origin: ${JSON.stringify(raw)}`);
 }
 
 /** True for a non-null, non-array object — the shape every parser below
@@ -144,7 +166,12 @@ function parseUsedByDerivation(raw: unknown): TemplateUsedByDerivation {
   return { source, scanned };
 }
 
-function parseTemplateLibraryEntry(raw: unknown): TemplateLibraryEntry {
+/** forge-8vfn.8.3.7: EXPORTED so the parse boundary is directly testable in
+ *  isolation (no fetch/window) — mirrors hook-client.ts's `parseHookLibraryEntry`
+ *  precedent, which was made public for the identical reason (see that
+ *  file's own header: an unexported parser is exactly how a permissive-parse
+ *  bug shipped un-pinned before). */
+export function parseTemplateLibraryEntry(raw: unknown): TemplateLibraryEntry {
   if (!isPlainObject(raw)) {
     throw new Error(`malformed template entry: expected an object, got ${JSON.stringify(raw)}`);
   }
@@ -164,6 +191,7 @@ function parseTemplateLibraryEntry(raw: unknown): TemplateLibraryEntry {
     declaredConsumer: typeof r['declaredConsumer'] === 'string' ? r['declaredConsumer'] : undefined,
     description: typeof r['description'] === 'string' ? r['description'] : undefined,
     error: typeof r['error'] === 'string' ? r['error'] : undefined,
+    origin: parseTemplateOrigin(r['origin']),
   };
 }
 
