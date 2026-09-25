@@ -97,18 +97,18 @@ function wasEverTracked(checkoutRoot: string, ref: string): boolean {
 // Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
 export function themeTruth(cwd: string, project: string, hasHistoryOverride?: boolean): ThemeTruth[] {
   const themesDir = join(cwd, 'brain', 'projects', project, 'themes');
-  // SEC: `projectsRoot` is the one FIXED root (cwd is config-derived, never
-  // request/theme-derived) — `project` (readdir-derived, trusted) and every
+  // SEC (forge-8vfn.5.33 CONTRACT): `cwd` is the forge root, passed straight
+  // through as `root` — NEVER folded into a join()-built root a probe then
+  // trusts (the "caller-built root" escape path-guard.ts's own docs warn
+  // about, and packages/kernel/tests/regression/path-guard-caller-built-root-ratchet.test.ts
+  // ratchets). `'projects'`, `project` (readdir-derived, trusted) and every
   // `ref` (theme frontmatter `evidence:` / body span, UNTRUSTED — evidence:
   // is returned verbatim by extractThemeReferences, bypassing
-  // normalizeCandidate's own M1 traversal filter) go through it as GUARD
-  // SEGMENTS, never folded into a plain join()-built root a probe then
-  // trusts (the "caller-built root" escape path-guard.ts's own docs warn
-  // about). A ref the guard refuses is dropped before existsSync OR
-  // `git log -- <ref>` (wasEverTracked) ever sees it.
-  const projectsRoot = join(cwd, 'projects');
-  const checkoutGuard = resolveGuardedPath(projectsRoot, [project]);
-  const checkoutRoot = checkoutGuard.ok ? checkoutGuard.realPath : join(projectsRoot, project);
+  // normalizeCandidate's own M1 traversal filter) go through as GUARD
+  // SEGMENTS instead. A ref the guard refuses is dropped before existsSync
+  // OR `git log -- <ref>` (wasEverTracked) ever sees it.
+  const checkoutGuard = resolveGuardedPath(cwd, ['projects', project]);
+  const checkoutRoot = checkoutGuard.ok ? checkoutGuard.realPath : join(cwd, 'projects', project);
   const ownPrefix = `projects/${project}/`;
   const hasHistory = hasHistoryOverride ?? (checkoutGuard.ok && checkoutGuard.exists && isGitWorkTree(checkoutRoot));
   return readThemeDirFiles(themesDir).map((file) => {
@@ -127,7 +127,7 @@ export function themeTruth(cwd: string, project: string, hasHistoryOverride?: bo
       // it produces a leading empty segment, which isSafeSegment always
       // refuses, so an absolute ref is refused exactly like a `..` one.
       const refSegments = ref.replace(/\/+$/, '').split('/');
-      const refGuard = resolveGuardedPath(projectsRoot, [project, ...refSegments]);
+      const refGuard = resolveGuardedPath(cwd, ['projects', project, ...refSegments]);
       if (!refGuard.ok) continue; // e.g. a `..` segment or an absolute-looking leg — dropped, never probed
       if (refGuard.exists) {
         references.push(ref);
