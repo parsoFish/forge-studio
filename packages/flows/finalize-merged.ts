@@ -29,7 +29,7 @@ import { confirmPrMerged } from './pr.ts';
 import { pendingFixWorkItems } from './fix-work-items.ts';
 import { runClosure, promoteMergedToDone } from './phases/closure.ts';
 import { writeCycleReport } from './cycle-report.ts';
-import { createLogger, resolveGuardedPath, type EventLogger } from '@forge/kernel';
+import { createLogger, type EventLogger } from '@forge/kernel';
 import * as worktree from './worktree.ts';
 import type { WorktreeHandle } from './worktree.ts';
 import { pruneStaleWiWorktrees } from './wi-worktree.ts';
@@ -181,6 +181,16 @@ function resolveMergeAgentHandler(
  * so it is removed with a non-recursive rmdir. The merge has already happened:
  * every failure is logged as an error event and never thrown.
  */
+/** True iff `dir` exists and holds nothing; absent is not an error. */
+function isEmptyDir(dir: string): boolean {
+  try {
+    return readdirSync(dir).length === 0;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw err;
+  }
+}
+
 function pruneMergedWorktrees(
   input: CycleInput,
   logger: EventLogger,
@@ -216,9 +226,8 @@ function pruneMergedWorktrees(
   }
 
   // `worktreesRoot` derives from a worktree path already contained by
-  // isContainedWorktreePath; the initiative id still rides as its own segment.
-  const guarded = resolveGuardedPath(worktreesRoot, ['wi', input.initiativeId]);
-  const wiDir = guarded.ok ? guarded.realPath : null;
+  // isContainedWorktreePath; the initiative id must be one safe segment.
+  const wiDir = isSafeCycleId(input.initiativeId) ? join(worktreesRoot, 'wi', input.initiativeId) : null;
   try {
     const result = opts.pruneWiWorktrees({
       projectRepoPath: input.projectRepoPath,
@@ -226,7 +235,7 @@ function pruneMergedWorktrees(
       initiativeId: input.initiativeId,
       logsRoot: opts.logsRoot,
     });
-    if (guarded.ok && guarded.exists && readdirSync(guarded.realPath).length === 0) rmdirSync(guarded.realPath);
+    if (wiDir !== null && isEmptyDir(wiDir)) rmdirSync(wiDir);
     emit('finalize.wi-worktrees-pruned', false, {
       pruned_paths: result.prunedPaths,
       pruned_branches: result.prunedBranches,
