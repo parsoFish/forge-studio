@@ -32,7 +32,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readlinkSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readlinkSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
@@ -237,6 +237,30 @@ function sleeperIn(dir) {
     }
     execFileSync('sleep', ['0.02']);
   }
+}
+
+/**
+ * Diagnostic evidence for a sleeper that `liveSessionOwners` failed to
+ * attribute, milliseconds after `sleeperIn` confirmed its cwd — T1 1450/1451.
+ * Names whether the pid is STILL listed in `readdirSync('/proc')` and, if so,
+ * what `/proc/<pid>/stat` says its state is (or the read error either probe
+ * hit) — so a failure here points at "the sleeper was reaped by something
+ * else, mid-scan" instead of throwing `Cannot read properties of null`.
+ */
+function describeSleeperAbsence(pid) {
+  let listed;
+  try {
+    listed = readdirSync('/proc').includes(String(pid)) ? 'present' : 'ABSENT';
+  } catch (err) {
+    listed = `readdir(/proc) failed: ${err?.code ?? err?.message ?? err}`;
+  }
+  let stat;
+  try {
+    stat = readFileSync(join('/proc', String(pid), 'stat'), 'utf8').trim();
+  } catch (err) {
+    stat = `read failed: ${err?.code ?? err?.message ?? err}`;
+  }
+  return `pid ${pid} in /proc listing: ${listed}; /proc/${pid}/stat: ${stat}`;
 }
 
 /** The planted growth both cases share, so the only variable is who owns the tree. */
@@ -473,6 +497,10 @@ test('7.5.1: a worktree that appeared mid-run under a live session\'s OWN CWD is
     const under = addWorktreeAt(main, join(laneDir, 'scratch', 'base'), 'under-lane');
     const mine = siblingWorktreeEscapes(runRoot, baseline).filter((e) => e.root === under);
     assert.equal(mine.length, 1);
+    assert.notEqual(
+      mine[0].live, null,
+      `the sleeper vanished from attribution milliseconds after sleeperIn confirmed its cwd — ${describeSleeperAbsence(sleeper.pid)}`,
+    );
     assert.equal(mine[0].live.pid, sleeper.pid, 'the lane that owns the directory owns what it creates inside it');
     assert.equal(mine[0].live.via, 'appeared');
   } finally {
@@ -726,16 +754,24 @@ test(
 );
 
 test('po2h: POSITIVE CONTROL — the retry budget is bounded; a read that never recovers still yields no owner', () => {
-  const laneDir = mkdtempSync(join(tmpdir(), 'fence-laneb-'));
-  const sleeper = sleeperIn(laneDir);
-  try {
-    const scratchTree = join(sessionScratchRoots(realpathSync(laneDir))[0], 'd7ba5f92-po2h', 'scratchpad', 'base');
-    const { readCwd, calls } = interceptReadCwd(sleeper.pid, () => genericReadError());
-    const owners = liveSessionOwners([scratchTree], { readCwd });
-    assert.equal(owners.get(scratchTree), undefined, 'a persistently-unknown read gives up — the guard is not weakened into infinite patience');
-    assert.ok(calls.count >= 2, `the bound must actually have been exercised, not given up on the first try (calls: ${calls.count})`);
-    assert.ok(calls.count <= 6, `and the bound must actually be a bound, not unbounded retrying (calls: ${calls.count})`);
-  } finally {
-    try { process.kill(sleeper.pid); } catch { /* already gone */ }
-  }
+  // NO real process — T1 1450/1451: fence-containment.test.ts :463 and this
+  // test's own earlier form both leaned on a real `sleep 30` from
+  // `sleeperIn`, and under full-suite load the sleeper could vanish from
+  // `/proc` between being planted and being scanned, reading as an owner lost
+  // rather than as the pure retry-bound property this test actually asserts.
+  // The bound is a function of `listPids`/`readCwd` alone — `liveSessionOwners`
+  // passes `deps` straight through to `livePidCwds` — so it is provable
+  // without ever touching a real pid.
+  const scratchTree = join('/fence-po2h-fake-root', 'd7ba5f92-po2h', 'scratchpad', 'base');
+  const calls = { count: 0 };
+  const owners = liveSessionOwners([scratchTree], {
+    listPids: () => ['999999998'],
+    readCwd: () => {
+      calls.count += 1;
+      throw genericReadError();
+    },
+  });
+  assert.equal(owners.get(scratchTree), undefined, 'a persistently-unknown read gives up — the guard is not weakened into infinite patience');
+  assert.ok(calls.count >= 2, `the bound must actually have been exercised, not given up on the first try (calls: ${calls.count})`);
+  assert.ok(calls.count <= 6, `and the bound must actually be a bound, not unbounded retrying (calls: ${calls.count})`);
 });

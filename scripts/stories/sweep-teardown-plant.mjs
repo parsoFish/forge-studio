@@ -151,8 +151,17 @@ function registerCleanup(t, pid, ralphPidFile) {
  *  daemon's own no-op handler and the grandchild's own handler have ACTUALLY
  *  RUN (their own ready markers, `withReady` — see this module's header for
  *  why `SigCgt` could not answer this) — never a guess about how long that
- *  takes under load. */
-export async function plantDaemonWithGrandchild(t, root, grandchildScript, ralphPidFile) {
+ *  takes under load.
+ *
+ *  `opts.daemonArgv` — review finding 2: `ownSchedulerPid` now binds on the
+ *  daemon's own argv (`looksLikeForgeServe`, `sweep-teardown.mjs`), not cwd
+ *  alone. Defaults to the SAME two trailing tokens `spawnServeDetached`
+ *  (`packages/flows/daemon.ts`) puts in a real daemon's cmdline, so every
+ *  existing door that trusts `ownSchedulerPid` to find this fake daemon keeps
+ *  working unchanged. Pass a non-matching pair to plant an IMPOSTOR instead —
+ *  `sweep-teardown-scheduler.test.ts`'s own finding-2 door does exactly that. */
+export async function plantDaemonWithGrandchild(t, root, grandchildScript, ralphPidFile, opts = {}) {
+  const daemonArgv = opts.daemonArgv ?? [join(root, 'apps', 'forge', 'cli.ts'), 'serve'];
   mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
   const daemonReady = `${ralphPidFile}.daemon-ready`;
   const grandchildReady = `${ralphPidFile}.ready`;
@@ -166,7 +175,7 @@ export async function plantDaemonWithGrandchild(t, root, grandchildScript, ralph
     process.on('SIGTERM', () => {}); // ignored — the daemon itself must be force-killed
     ${withReady('', daemonReady)}
     setInterval(() => {}, 1000);
-  `], { cwd: root, stdio: 'ignore' });
+  `, ...daemonArgv], { cwd: root, stdio: 'ignore' });
   writeFileSync(join(root, DAEMON_PID_FILE), String(daemon.pid));
   registerCleanup(t, daemon.pid, ralphPidFile);
   if (!(await waitForFileToExist(daemonReady))) throw new Error(`sweep-teardown-plant: daemon pid ${daemon.pid} never reached its own ready marker`);

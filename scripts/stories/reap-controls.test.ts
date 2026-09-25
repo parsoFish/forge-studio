@@ -418,3 +418,106 @@ test('the reaper\'s OWN group signal is a reap: a member it killed is REAPED, ne
   // The turn exited on its own before any signal: THAT pid is honestly "already gone".
   assert.ok(report.skipped.some((s) => s.pid === turn.pid && /already gone/.test(s.reason)), `the turn that exited by itself stays skipped: ${JSON.stringify(report)}`);
 });
+
+// ----------------------------------------- T1 1450/1451: a foreign LIVE pid
+
+/**
+ * T1 1451's hypothesis, PROVEN OR DISPROVEN against a real process rather
+ * than argued from the source. `reap.test.ts`, `reap-marker.test.ts` and
+ * `reap-cancelled.test.ts` feed `reapAgentRuns`/`decideReap` hardcoded pid
+ * literals (4242, 100/101, 9001, 9101, 7, 1388950…) as a "recorded, gone"
+ * dispatch — under suite churn a fixed number CAN be a real, live, foreign
+ * process, and `record` provenance exists precisely to signal a pid whose cwd
+ * cannot be read. Every one of those call sites was read for this report: all
+ * pair the fake pid with an INJECTED `kill`, or never reach `kill` at all
+ * (`recordReapedCancellations`, `describeReap`, `plantDiedMessage` are pure
+ * report/decision functions with no signal in them). None reaches a real
+ * signal on a foreign pid — this test proves WHY, on the real kill path,
+ * rather than only by absence of a counter-example.
+ *
+ * A `sleep 30` this test spawns and owns stands in for "a hardcoded literal
+ * that happens to collide with a real host process". `reapAgentRuns` is
+ * called with NO `kill` and NO `isAlive`/`cwdOf`/`procTable` — every
+ * dependency is the real, default implementation — so this is genuinely the
+ * kill path production uses, not a stub of it.
+ */
+test('T1 1451: a live foreign pid fed to reapAgentRuns as "recorded" — real kill path, cwd containment fires first, it SURVIVES', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'story-reap-foreign-live-'));
+  const elsewhere = mkdtempSync(join(tmpdir(), 'story-reap-foreign-live-tree-'));
+  t.after(() => {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(elsewhere, { recursive: true, force: true });
+  });
+
+  const foreign = spawn('sleep', ['30'], { cwd: elsewhere, stdio: 'ignore', detached: true });
+  foreign.unref();
+  t.after(() => {
+    try { process.kill(foreign.pid, 'SIGKILL'); } catch { /* already gone */ }
+  });
+
+  // Fed in exactly as the hardcoded-pid tests do — a bare `{ dir, pid }`, no
+  // `collectAgentRuns`, no `turn.pid` ever written to disk — but with no opts
+  // beyond `ownRoot`/`graceMs`/`pollMs`/`pricedGraceMs`, so `cwdOf`,
+  // `procTable`, `isAlive` and `kill` are ALL the real, default
+  // implementations.
+  const report = await reapAgentRuns(
+    [{ dir: join(root, '_logs', '_agent-fed'), pid: foreign.pid }],
+    { ownRoot: root, graceMs: 200, pollMs: 25, pricedGraceMs: 50 },
+  );
+
+  let alive = true;
+  try {
+    process.kill(foreign.pid, 0);
+  } catch {
+    alive = false;
+  }
+  assert.equal(
+    alive, true,
+    `a live foreign pid fed in as "recorded" was signalled — cwd containment did not fire first: ${JSON.stringify(report)}`,
+  );
+  assert.equal(report.reaped.length, 0, 'nothing may be reported reaped');
+  assert.equal(report.skipped.length, 1);
+  assert.match(
+    report.skipped[0].reason, /outside the run worktree/,
+    'refused because its REAL cwd is readable and outside — not merely because it was never dispatched',
+  );
+});
+
+/**
+ * The narrower, more dangerous edge: what if the fed-in pid's cwd cannot be
+ * READ at all — the one real-world condition a same-uid spawn can never
+ * reproduce (a different owner, or a kernel thread with no userspace cwd),
+ * which is also the ONLY gate `record` provenance needs besides `!alive`.
+ * `cwdOf` is stubbed unreadable to reach it; `isAlive` is left the REAL
+ * default (`process.kill(pid, 0)`), because that is the one question this
+ * rung must answer honestly before it may ever fire without a cwd — and for
+ * a genuinely live pid, a REAL check never answers it "false".
+ */
+test('T1 1451: a live foreign pid whose cwd cannot be read is still refused — "record" needs a REAL isAlive() to say false, and it never lies', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'story-reap-foreign-unreadable-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  const foreign = spawn('sleep', ['30'], { cwd: root, stdio: 'ignore', detached: true });
+  foreign.unref();
+  t.after(() => {
+    try { process.kill(foreign.pid, 'SIGKILL'); } catch { /* already gone */ }
+  });
+
+  const report = await reapAgentRuns(
+    [{ dir: join(root, '_logs', '_agent-fed'), pid: foreign.pid }],
+    { ownRoot: root, cwdOf: () => null, graceMs: 200, pollMs: 25, pricedGraceMs: 50 },
+  );
+
+  let alive = true;
+  try {
+    process.kill(foreign.pid, 0);
+  } catch {
+    alive = false;
+  }
+  assert.equal(
+    alive, true,
+    `a live foreign pid with an unreadable cwd was signalled by "record" provenance: ${JSON.stringify(report)}`,
+  );
+  assert.equal(report.reaped.length, 0);
+  assert.match(report.skipped[0].reason, /alive but its cwd is unreadable/, 'the LIVE branch fired, never "record"');
+});

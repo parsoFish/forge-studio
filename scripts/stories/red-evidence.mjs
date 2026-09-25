@@ -202,6 +202,51 @@ export async function captureBeatDom(page, root, storyId, index, act, runStamp) 
   }
 }
 
+/**
+ * A beat's frame, as EVIDENCE — row 90, T1 1448.
+ *
+ * `run-story.mjs` used to await `page.screenshot(...)` bare, every beat. Under
+ * host load a single 5s screenshot timeout THREW, and a funded run aborted
+ * before beat 1 — for a picture, not for anything the beat's own assertions
+ * measured. A beat's verdict is decided by its own locators and expectations;
+ * losing the frame beside it is never a reason to lose the run.
+ *
+ * RETRIED, BOUNDED, NEVER THROWN. `attempts` (default 3) absorbs a transient
+ * host-load timeout without waiting on a genuinely broken page forever — the
+ * caller bounds "forever" itself via `timeoutMs`, passed straight to
+ * playwright's own per-call timeout. On final failure this logs exactly ONE
+ * named line — a missing picture is itself evidence, exactly like
+ * `describeRedEvidence`'s own rule that a capture nobody is told about is a
+ * capture nobody took — and returns `{ ok: false }` rather than raising, so
+ * nothing downstream has to guess whether a `frame` name it can `join()` on
+ * actually resolves to bytes on disk.
+ *
+ * @param {{screenshot: (opts: object) => Promise<unknown>}} page
+ * @param {string} path where the frame is written
+ * @param {{attempts?: number, timeoutMs?: number, log?: (line: string) => void}} [opts]
+ * @returns {Promise<{ok: boolean}>}
+ */
+export async function captureFrame(page, path, opts = {}) {
+  const attempts = opts.attempts ?? 3;
+  const log = opts.log ?? (() => {});
+  let lastError = null;
+  for (let n = 0; n < attempts; n += 1) {
+    try {
+      await page.screenshot({
+        path, fullPage: true, ...(opts.timeoutMs === undefined ? {} : { timeout: opts.timeoutMs }),
+      });
+      return { ok: true };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  log(
+    `frame capture failed for ${path} after ${attempts} attempts: ${lastError?.message ?? lastError} — ` +
+    'evidence only, the beat\'s verdict is unaffected',
+  );
+  return { ok: false };
+}
+
 /** The run's own words for what it read — printed whether or not it read anything (§15.92). */
 export function describeRedEvidence(dir, root) {
   if (dir === null) return [];
