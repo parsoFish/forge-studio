@@ -23,6 +23,12 @@
  */
 import { readFileSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { cycleProgressIdleMs } from './beats-cycle-progress.mjs';
+// T1 ruling 1471 — re-exported so `beats-page.mjs` names the wall ceiling
+// beside `STALL_CEILING_MS`/`TERMINAL_UI_GRACE_MS`, its two siblings that
+// already live in THIS file rather than in the schema that only validates what
+// a story may declare. This constant is never declared by a story at all.
+export { CYCLE_WAIT_WALL_CEILING_MS } from './story-wait-schema.mjs';
 
 /** `/sessions/<kind>/<sessionId>` → the runner's log dir for that turn. */
 export function sessionLogDir(forgeRoot, route) {
@@ -640,6 +646,10 @@ export function makeCycleTerminalWatch(forgeRoot, wantState, opts = null) {
   if (typeof wantState !== 'string' || wantState === '') return null;
   const door = makeCycleTerminalDoor(forgeRoot, opts);
   if (door === null) return null;
+  // Re-derived rather than read off `door`: `makeCycleTerminalDoor` keeps its
+  // own `logsDir` private, and re-joining `forgeRoot` here is one string concat
+  // against exposing an internal for one caller.
+  const logsDir = join(forgeRoot, '_logs');
   let terminalAt = null;
   let terminalState = null;
   const watch = (runId, sinceMs, now = Date.now()) => {
@@ -676,6 +686,26 @@ export function makeCycleTerminalWatch(forgeRoot, wantState, opts = null) {
   Object.defineProperty(watch, 'reached', { get: () => terminalAt !== null });
   Object.defineProperty(watch, 'wantState', { value: wantState });
   Object.defineProperty(watch, 'lastSeen', { get: () => door.lastSeen });
+  // T1 1471 — WHICH KIND OF WAIT THIS IS, exposed so `waitForConsequence` can
+  // tell "watching a cycle by IDENTITY" from "watching by the born-after-the-
+  // anchor form", without re-deriving the same opt this watch already
+  // normalised. A wait with no `cycleOf` keeps its plain, unreset deadline —
+  // that form has no stable identity to read progress FROM, only "born since
+  // the press", which is not a channel `cycleProgressIdleMs` can watch.
+  const cycleOf = typeof opts?.cycleOf === 'string' && opts.cycleOf !== '' ? opts.cycleOf : null;
+  Object.defineProperty(watch, 'cycleOf', { value: cycleOf });
+  // BY IDENTITY, the same dir the door above resolves — never
+  // `newestChannelSince`'s born-after-the-anchor form, which finds nothing for
+  // a continued cycle (7.6.143) and would read as "no progress" on one that is
+  // genuinely writing. Null-safe with no `cycleOf`, so a future caller need not
+  // guard the call; `waitForConsequence` only invokes it when `cycleOf` is set.
+  Object.defineProperty(watch, 'progressIdleMs', {
+    value: (now = Date.now()) => {
+      if (cycleOf === null) return null;
+      const dir = cycleDirForInitiative(logsDir, cycleOf);
+      return dir === null ? null : cycleProgressIdleMs(dir, now);
+    },
+  });
   return watch;
 }
 

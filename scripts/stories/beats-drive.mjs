@@ -102,7 +102,7 @@ function predicateFailure(target, err) {
   );
 }
 
-export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null, stallDoor = null, pressedAt = new Map(), cycleWatchFor = null) {
+export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null, stallDoor = null, pressedAt = new Map(), cycleWatchFor = null, spendGuard = null) {
   // `pressedAt` DEFAULTS BECAUSE MOST CALLERS DRIVE ONE BEAT. The door suite has
   // ~90 single-beat calls for which a fresh map is exactly right. A MULTI-BEAT
   // caller must thread ONE map across the loop, or every beat gets its own and
@@ -407,6 +407,10 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
           // from that sighting — and null for every beat that declared no
           // `terminal`, which is all of them but S10's beat 8.
           cycleWatch,
+          // T1 1471 — the run's own $ ceiling, checked on EVERY poll of this
+          // wait, not only at the beat boundary either side of it: a wait long
+          // enough to matter is long enough to cross a ceiling mid-flight.
+          spendGuard,
         );
         // 7.6.143 (b2). A `terminal:` declaration counts as consumed only when
         // the watch actually RESOLVED a cycle — not merely when it was called.

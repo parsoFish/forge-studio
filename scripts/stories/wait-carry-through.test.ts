@@ -199,21 +199,23 @@ describe('forge-8vfn.27: the runner threads ONE pressedAt across the beat loop',
     const call = /await driveBeat\(([^;]*?)\);/s.exec(source);
     assert.ok(call, `no driveBeat call found in ${path}`);
     const args = call[1]!.split(',').map((a) => a.trim());
-    // EXACT, not `>=`, and 7.6.118 moving it from 9 to 10 is the door working
-    // rather than the door being wrong: a new trailing argument with a default
-    // is exactly how the ninth could have been dropped silently, so each one
-    // costs a deliberate edit here. Both positions are named — an arity that
-    // matches with the arguments transposed would be the same defect wearing
-    // the right number.
+    // EXACT, not `>=`. 7.6.118 moved it from 9 to 10 and T1 1471 moved it from
+    // 10 to 11, and each move is the door working rather than the door being
+    // wrong: a new trailing argument with a default is exactly how an earlier
+    // one could be dropped silently, so each one costs a deliberate edit here.
+    // Every position is named — an arity that matches with the arguments
+    // transposed would be the same defect wearing the right number.
     assert.equal(
       args.length,
-      10,
-      `driveBeat takes ten parameters and the runner passed ${args.length} — the ninth defaults to a ` +
+      11,
+      `driveBeat takes eleven parameters and the runner passed ${args.length} — the ninth defaults to a ` +
         `fresh Map, so omitting it gives every beat its own and wait.anchor can never resolve (run 16); ` +
-        `the tenth builds the per-beat cycle watch (7.6.118). Got: ${call[1]}`,
+        `the tenth builds the per-beat cycle watch (7.6.118); the eleventh is the run's own $ guard for an ` +
+        `agent wait's poll loop (T1 1471). Got: ${call[1]}`,
     );
     assert.equal(args[8], 'pressedAt', `the ninth argument must be the shared map, got ${args[8]}`);
     assert.equal(args[9], 'cycleWatchFor', `the tenth must be the per-beat watch factory, got ${args[9]}`);
+    assert.equal(args[10], 'waitSpendGuard', `the eleventh must be the wait's own $ guard, got ${args[10]}`);
   });
 
   test('that map is declared OUTSIDE the loop — one per run, not one per beat', async () => {
