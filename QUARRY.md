@@ -138,7 +138,8 @@ operator-ratified new cap — never a silent raise.
 | packages/library/bridge-studio-connections.ts | library | verbatim | 225 |
 | packages/library/bridge-studio-hooks-approval.ts | library | verbatim | 145 |
 | packages/library/bridge-studio-hooks-decline.ts | library | verbatim | 61 |
-| packages/library/bridge-studio-hooks-detail.ts | library | verbatim | 265 |
+| packages/library/bridge-studio-hooks-detail.ts | library | rewritten | 268 |
+| packages/library/bridge-studio-hooks-test-fire.ts | library | rewritten | 95 |
 | packages/library/bridge-studio-hooks.ts | library | verbatim | 488 |
 | packages/library/bridge-studio-instructions.ts | library | verbatim | 149 |
 | packages/knowledge/bridge-studio-kb-consolidate.ts | knowledge | verbatim | 376 |
@@ -239,6 +240,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/provenance.ts | kernel | rewritten | 54 |
 | packages/kernel/dry-bridge.ts | kernel | rewritten | 86 |
 | packages/kernel/log-cycles.ts | kernel | rewritten | 44 |
+| packages/kernel/bounded-log.ts | kernel | rewritten | 32 |
 | packages/kernel/discovery-roots.ts | kernel | verbatim | 148 |
 | packages/knowledge/theme-frontmatter.ts | knowledge | verbatim | 116 |
 | apps/forge/ui-bridge.ts | apps/forge | rewritten | 2265 |
