@@ -107,13 +107,13 @@ function lanes(args: string[], env: Record<string, string> = {}) {
   });
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
-function launchUnconfirmed(lane: string, bin: string) {
+function launchUnconfirmed(lane: string, bin: string, env: Record<string, string> = {}) {
   const laneCwd = join(dir, `cwd-${lane}`);
   mkdirSync(laneCwd, { recursive: true });
   const prompt = join(dir, `prompt-${lane}.md`);
   writeFileSync(prompt, `never consumed\nSuites: flock ${camp}/.suite-lock npm test\n`);
   sessions.add(`${PREFIX}${lane}`);
-  return { laneCwd, r: lanes(['launch', camp, lane, prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin }) };
+  return { laneCwd, r: lanes(['launch', camp, lane, prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin, ...env }) };
 }
 
 before(() => {
@@ -198,15 +198,44 @@ describe('7.6.105 — the census reads a START time, not a first-lookup time', (
 });
 
 describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HUP', () => {
+  /*
+   * M7-C last-flakes #2 (known-flakes.md `scripts/lanes-census.test.ts:200`,
+   * "1.5 s late spawn + 3 s waitGone timing budget under load"). Traced by
+   * instrumenting a passing run: with `LANES_CONFIRM_TIMEOUT_S`'s default of
+   * 4 s, a 1.5 s scripted delay is comfortably UNDER that bound, so the
+   * spawn is already running by the time `die_launch`'s census-BEFORE-the-
+   * kill looks — `census: 1 claude pid(s) ... before the kill` — and it is
+   * retired right there, never touching the AFTER-kill re-census loop at
+   * all. `sleep` only guarantees a MINIMUM, though: under CPU contention the
+   * shell that runs it can be scheduled arbitrarily later before its NEXT
+   * line executes, so the "1.5 s" delay can itself stretch past the 4 s
+   * confirm bound under real load — which moves the spawn from that
+   * deterministic before-kill catch into the AFTER-kill re-census loop,
+   * whose own "quiet for 1 s" early-exit (die_launch's comment above: stop
+   * after "a full second in which nothing new started") is a MUCH tighter,
+   * load-sensitive window than `LANES_RECENSUS_S`'s nominal ceiling ever
+   * suggests — proven below by staging a 6 s spawn deterministically: with
+   * `LANES_RECENSUS_S` alone widened to 12 s the census STILL reports
+   * `census: 0 claude pid(s) ... retired in total` (the quiet-exit fires
+   * long before the ceiling), so `waitGone` timing out is a SYMPTOM, not the
+   * bug — nothing ever killed the stray. Widening `LANES_CONFIRM_TIMEOUT_S`
+   * instead keeps the spawn inside the deterministic before-kill catch with
+   * real headroom, which is what actually removes the flake.
+   */
   test('a lane program that spawns its grandchild 1.5 s after the kill is still retired, and stderr says what the census saw', () => {
     const bin = laneBin('lane-late', { lateSpawnS: 1.5 });
-    const { r } = launchUnconfirmed('late', bin);
+    // LANES_CONFIRM_TIMEOUT_S widened from the 4 s default so a 1.5 s spawn
+    // stays reliably inside the deterministic before-kill census catch (see
+    // the block comment above) even if load stretches the scripted delay;
+    // LANES_RECENSUS_S widened too, as defense-in-depth for the AFTER-kill
+    // path this test does not currently rely on.
+    const { r } = launchUnconfirmed('late', bin, { LANES_CONFIRM_TIMEOUT_S: '10', LANES_RECENSUS_S: '12' });
     const self = pidFrom('lane-late.selfpid', 8000);
     const stray = pidFrom('lane-late.detachedpid', 12000);
     try {
       assert.notEqual(r.status, 0, 'unconfirmed launch exits non-zero');
       assert.match(r.stderr, /NOT CONFIRMED for late/);
-      assert.ok(waitGone(stray, 3000), `the late-spawned claude is retired by PID (pid ${stray}); die_launch stderr:\n${r.stderr}`);
+      assert.ok(waitGone(stray), `the late-spawned claude is retired by PID (pid ${stray}); die_launch stderr:\n${r.stderr}`);
       assert.match(r.stderr, new RegExp(`retired pid ${stray}\\b`), 'the pid it retired is printed');
       assert.match(r.stderr, /census: .* started at\/after uptime \d+cs \(wall ~\d+\)/, 'and the census reports what it saw, in its own clock, so a red carries evidence');
     } finally {
@@ -214,36 +243,24 @@ describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HU
     }
   });
 
-  /*
-   * M7-C last-flakes #2 (known-flakes.md `scripts/lanes-census.test.ts:200`):
-   * a 1.5 s scripted late-spawn only guarantees a MINIMUM delay — `sleep`
-   * never returns early, but under CPU contention the process that runs
-   * NEXT after it wakes can be scheduled arbitrarily later, and the
-   * recensus loop's own per-iteration `pids_claude_in` shells out to a real
-   * subprocess each tick, which is far more CPU-bound (fork+exec) than a
-   * sleeping wait — so under load the loop's REAL margin over the spawn can
-   * close even though its NOMINAL 5 s budget (`LANES_RECENSUS_S`'s default)
-   * never changes. Staged deterministically, with no host load needed: a 6 s
-   * late spawn against the default 5 s window is missed EVERY time,
-   * regardless of speed — `census: 0 claude pid(s) ... retired in total`,
-   * so `waitGone` times out because nothing was ever killed, not because
-   * its own verification window was too short. Widening the recensus
-   * window to comfortably outlast the spawn (here 12 s, matching
-   * `waitGone`'s own generous default) is what actually removes the flake;
-   * a bigger `waitGone` number alone could never have helped here, since
-   * the census gave up before touching the pid at all.
-   */
-  test('M7-C last-flakes #2: a spawn 6 s late is still retired once the recensus window comfortably outlasts it', () => {
+  test('M7-C last-flakes #2: a spawn 6 s late is still retired when the confirm window gives it real headroom (deterministic margin proof)', () => {
+    // No host load needed: a 6 s spawn against the DEFAULT 4 s confirm
+    // window is missed every time, deterministically (proven while building
+    // this fix — LANES_RECENSUS_S alone, even widened to 12 s, does not
+    // help: the after-kill loop's "quiet for 1 s" early-exit fires long
+    // before a single late arrival at t=6s). Widening LANES_CONFIRM_TIMEOUT_S
+    // past the spawn keeps it inside the deterministic before-kill catch.
     const bin = laneBin('lane-margin', { lateSpawnS: 6 });
-    const { r } = launchUnconfirmed('margin', bin, { LANES_RECENSUS_S: '12' });
+    const { r } = launchUnconfirmed('margin', bin, { LANES_CONFIRM_TIMEOUT_S: '10', LANES_RECENSUS_S: '12' });
     const self = pidFrom('lane-margin.selfpid', 8000);
     const stray = pidFrom('lane-margin.detachedpid', 12000);
     try {
       assert.ok(
         waitGone(stray),
-        `a spawn 6 s late is still retired once the recensus window (12 s) comfortably covers it (pid ${stray}); die_launch stderr:\n${r.stderr}`,
+        `a spawn 6 s late is still retired once the confirm window (10 s) comfortably outlasts it (pid ${stray}); die_launch stderr:\n${r.stderr}`,
       );
       assert.match(r.stderr, new RegExp(`retired pid ${stray}\\b`), 'the pid it retired is printed');
+      assert.match(r.stderr, /census: 1 claude pid\(s\) .* before the kill/, 'caught by the deterministic before-kill census, never the load-sensitive after-kill loop');
     } finally {
       spawnSync('kill', ['-KILL', String(self)]);
     }
@@ -264,7 +281,10 @@ describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HU
     const stray = pidFrom('lane-late2.detachedpid', 12000);
     try {
       assert.match(r.stderr, /LANES_RECENSUS_S='soon' is not a whole number of seconds — using 5/, r.stderr);
-      assert.ok(waitGone(stray, 3000), `the re-census still ran (pid ${stray}):\n${r.stderr}`);
+      // waitGone's own generous default, not a tight override (M7-C last-flakes
+      // #2) — LANES_RECENSUS_S stays malformed here on purpose (that IS this
+      // test), so the verification window is the only knob left to widen.
+      assert.ok(waitGone(stray), `the re-census still ran (pid ${stray}):\n${r.stderr}`);
     } finally {
       spawnSync('kill', ['-KILL', String(self)]);
     }
@@ -283,7 +303,7 @@ describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HU
     const self = pidFrom('lane-deaf2.selfpid', 8000);
     const stray = pidFrom('lane-deaf2.detachedpid', 12000);
     try {
-      assert.ok(waitGone(stray, 3000), `the lane's own claude is retired (pid ${stray}):\n${r.stderr}`);
+      assert.ok(waitGone(stray), `the lane's own claude is retired (pid ${stray}):\n${r.stderr}`);
       assert.ok(alive(older), `the OLDER claude (pid ${older}, started before t0) survives:\n${r.stderr}`);
     } finally {
       spawnSync('kill', ['-KILL', String(self)]);
