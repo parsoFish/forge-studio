@@ -22,7 +22,7 @@
  * what proves the rule is generic rather than hardcoded to a name.
  *
  * SPLIT FROM a 1,226-line file. Its 268-line shared block became a real
- * fixture module, `tests/test-fixtures/interactive-runner-log-observer.ts`,
+ * fixture module, `packages/agents/tests/test-fixtures/interactive-runner-log-observer.ts`,
  * because all four of its clusters used it and one of them tests the log
  * walker as its subject — three duplicated copies of a 162-line walker is the
  * signal that a seam is wrong, not a smaller file (T1 ruling 94). The three
@@ -144,7 +144,7 @@ test('R4-21 phase 2, WI-1: cmdAgentRun(["authoring", sid, "--project", p]) reach
 // `<cwd>/projects`, ignoring `forge.config.json`'s `projectsDir` and the
 // `FORGE_PROJECTS_DIR` env var entirely. Every bridge route instead resolves
 // the projects root via `resolveProjectsDir(forgeRoot, loadConfig(
-// defaultConfigPath(forgeRoot)))` (orchestrator/config.ts:143) — the single
+// defaultConfigPath(forgeRoot)))` (packages/kernel/config.ts:143) — the single
 // source of truth for "where do managed projects live", honouring BOTH
 // overrides. Because R4-21's `POST /api/studio/authoring/start` route SPAWNS
 // `forge agent run authoring <sid> --project <p>` (WI-2, D5's sibling
@@ -304,7 +304,7 @@ test('R4-21 phase 2, correction B, AT-B3 (regression pin): --project still rides
 //     demo-builder,project-brain-builder}-runner.ts).
 //
 // THE DEFECT (already reproduced — see the T3 brief, not re-litigated here):
-// `orchestrator/interactive-runner.ts:213` today builds
+// `packages/sessions/interactive-runner.ts:213` today builds
 // `cycleId = \`_interactive-${descriptor.id}-${ctx.sessionId}\`` — an EXTRA
 // `_interactive-` prefix none of the three consumers above share. One real
 // authoring turn therefore splits its stderr (written to `_authoring-<sid>`)
@@ -320,7 +320,7 @@ test('R4-21 phase 2, correction B, AT-B3 (regression pin): --project still rides
 // and GREEN only once interactive-runner.ts:213 is fixed.
 // ===========================================================================
 
-// Kills: an implementation that leaves orchestrator/interactive-runner.ts:213
+// Kills: an implementation that leaves packages/sessions/interactive-runner.ts:213
 // unchanged (cycleId = `_interactive-${descriptor.id}-${ctx.sessionId}`) —
 // the correct-directory assertion fails outright; and an implementation that
 // "fixes" it by writing into BOTH the old and new directories (e.g. a

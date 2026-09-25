@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/trigger-payload.ts (R2-04-F3 / ADR-041).
+ * Tests for packages/flows/trigger-payload.ts (R2-04-F3 / ADR-041).
  *
  * External payloads enter forge as typed data ONLY: structured fields are
  * strict-charset validated at extraction; free-text fields are length-capped

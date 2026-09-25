@@ -1,6 +1,6 @@
 /**
  * DOM regression tests for `ContractResolutionPanel.tsx`
- * (forge-ui/components/studio/project-builder/ContractResolutionPanel.tsx) —
+ * (apps/studio/components/studio/project-builder/ContractResolutionPanel.tsx) —
  * pins that the initial-render markup for each resolution tier carries the
  * HONEST label this pass introduces, not the old "Resolve with agent" /
  * "Apply decision" strings, AND that the brain-fix button's enabled/disabled

@@ -33,7 +33,7 @@ first-class citizen of the platform (a `composition.guards` entry, a
 can validate) — nothing more. The `onboard-project` flow's `contract-check`
 node carries both `agent:"contract-check"` and `gate:"contract"`
 (ADR-039 declared dispatch); at runtime, `execAgent`
-(`orchestrator/phases/executor-table.ts`) resolves the declared
+(`packages/stations/phases/executor-table.ts`) resolves the declared
 `onboard-preflight` band guard and routes the node to
 `execOnboardPreflight`, which calls the REAL `runPreflight` function
 (`packages/projects/preflight.ts`) **directly, orchestrator-side**. On this path — the
@@ -75,7 +75,7 @@ away.
 
 ## What actually produces the gate's outcome
 
-`execOnboardPreflight` (`orchestrator/phases/executor-table.ts` since M2-B)
+`execOnboardPreflight` (`packages/stations/phases/executor-table.ts` since M2-B)
 runs `runPreflight` against the initiative's `projectRepoPath` — through the
 injected `ProjectGate` port (`ctx.projectGate`, SPEC.md §6), which is the
 security-relevant half: production wires the real preflight in `cycle.ts`, and

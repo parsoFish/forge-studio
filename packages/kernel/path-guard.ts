@@ -147,7 +147,7 @@ export type PathGuardResult = PathGuardOk | PathGuardReject;
  * (SEC-03 Finding A/round-2). One class, imported by any module that needs
  * to distinguish "the containment guard rejected this write" from an
  * unrelated internal error in a `catch` block that lives in a DIFFERENT
- * file than the `throw` (e.g. `orchestrator/project-brain-seed.ts` throwing,
+ * file than the `throw` (e.g. `packages/knowledge/project-brain-seed.ts` throwing,
  * `apps/forge/bridge-studio-writes.ts` catching) — mirroring the established
  * `orchestrator/ -> cli/` import direction this module already anchors
  * (SEC-01, `resolveKbBrainDir`). The message is for internal

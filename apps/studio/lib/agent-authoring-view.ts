@@ -14,7 +14,7 @@
  *                          states, moved here from app/agents/[id]/page.tsx —
  *                          a `'use client'` Next `page.tsx` may only export
  *                          Next's own whitelisted names
- *                          (forge-ui/lib/page-exports-whitelist.test.ts
+ *                          (apps/studio/tests/contract/page-exports-whitelist.test.ts
  *                          enforces it), so they were not importable by a
  *                          test in their old home. See BLANK_STATE's own
  *                          comment below for the security-fence rationale.
@@ -272,7 +272,7 @@ export const EMPTY_STATE: AgentBuilderState = {
  * the one that must actually carry the fence.
  *
  * The fix seeds `disallowedTools` from `TOOL_FENCE_REQUIRED_NAMES`
- * (forge-ui/lib/tool-fence-required-names.ts) — the SAME array
+ * (apps/studio/lib/tool-fence-required-names.ts) — the SAME array
  * `packages/library/studio-lint-tool-fence.ts` exports and checks against
  * (`packages/library/tests/contract/tool-fence-required-names-parity.test.ts` proves the two arrays
  * cannot drift apart), rather than a bare `['Task', 'Agent']` literal here.

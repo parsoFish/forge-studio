@@ -80,7 +80,7 @@ This avoids creating duplicate themes or re-ingesting overlapping raw.
 
 1. **Brain query first** to check for overlap.
 2. **Guidance consume step** (always run before the main ingest, once per kb-id in scope):
-   a. Call `listPendingGuidance(forgeRoot, kbId)` (exported from `orchestrator/kb-graph.ts`) to enumerate `brain/<kb-id>/_guidance/*.md`.
+   a. Call `listPendingGuidance(forgeRoot, kbId)` (exported from `packages/knowledge/kb-graph.ts`) to enumerate `brain/<kb-id>/_guidance/*.md`.
    b. For each pending guidance note:
       - If the note has a `target_node` slug: find the corresponding theme file; append the guidance text as a human annotation block (fenced, labelled `<!-- guidance -->`) and update `updated_at`.
       - If there is no `target_node` (floating note): decide whether the text fits an existing theme (brain-query to check) or warrants a new one. Treat it like a new raw source without provenance metadata.

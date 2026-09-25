@@ -18,7 +18,7 @@
  * now a real `<select>` driven by the `projects` prop), a materials-attach
  * section driven by the agent's declared kinds, an editable cost-ceiling
  * input (disabled + explained when the agent's loop strategy can't enforce
- * one — `costCeilingEnforceable`, orchestrator/studio/derive.ts), and ONE
+ * one — `costCeilingEnforceable`, packages/agents/studio/derive.ts), and ONE
  * Run affordance for every agent shape: dispatch for a non-interactive
  * agent, or a real session-entry link (or an explicit no-entry-point state,
  * never a fabricated href) for an interactive one.
@@ -164,7 +164,7 @@ type Props = {
    *  field (run-level policy, never a literal in this component). Seeds the
    *  editable ceiling input's initial value. */
   defaultCostCeilingUsd: number;
-  /** orchestrator/studio/derive.ts `agentCapabilityDescriptor().costCeilingEnforceable`
+  /** packages/agents/studio/derive.ts `agentCapabilityDescriptor().costCeilingEnforceable`
    *  — server-computed, threaded through as-is. `false` disables the
    *  ceiling input rather than letting an operator submit a value the
    *  server will 400. */

@@ -11,7 +11,7 @@
  * "why not reactflow" note below. The retired roadmap-uplift/b-prime mockup
  * (docs/reference/studio-copy.md) is the operator-locked visual/semantic
  * reference this ports; layout math lives in
- * `forge-ui/lib/roadmap-time-layout.ts` as pure, unit-tested functions —
+ * `apps/studio/lib/roadmap-time-layout.ts` as pure, unit-tested functions —
  * this component only turns that layout into DOM.
  *
  * WHY A HAND-ROLLED CSS TRANSFORM, NOT reactflow (already a dep for

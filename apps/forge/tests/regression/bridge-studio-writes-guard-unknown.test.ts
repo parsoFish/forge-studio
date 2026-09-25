@@ -36,7 +36,7 @@
  * DECISION 2 (asked for) — yes: the valid-guard-id direction needs pinning
  * too (A2), for the identical over-firing risk the direct-call C4b case
  * guards against at the lint level
- * (`orchestrator/studio/guards-migration-validate-rules.test.ts`) — an
+ * (`packages/agents/studio/guards-migration-validate-rules.test.ts`) — an
  * operator saving a legitimate agent using only real catalog guard ids must
  * still get 200, so the fix cannot lock operators out of legitimate saves.
  * Both directions live in this one file so a future reader sees the full

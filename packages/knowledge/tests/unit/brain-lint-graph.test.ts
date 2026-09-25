@@ -141,7 +141,7 @@ test('checkDanglingEdges: a bare-scalar (non-array) related_themes value is a DE
     // this shape can only be produced by hand-writing the file.
     //
     // WHY this is a deliberate pin, not an accidental gap:
-    //   (a) MIRRORS orchestrator/kb-graph.ts:327-329's own
+    //   (a) MIRRORS packages/knowledge/kb-graph.ts:327-329's own
     //       `Array.isArray(parsed?.data.related_themes) ? (...) : []` guard —
     //       the graph builder treats a non-array related_themes as "no edges
     //       declared" and never attempts to resolve it. If this lint check
@@ -160,7 +160,7 @@ test('checkDanglingEdges: a bare-scalar (non-array) related_themes value is a DE
     //       is parked rather than fixed now.
     //   (c) EXPIRY CONDITION (immutable-gates: a deliberately-green gap-pin
     //       must document when it should be revisited) — THIS TEST MUST
-    //       FLIP the moment orchestrator/kb-graph.ts starts coercing or
+    //       FLIP the moment packages/knowledge/kb-graph.ts starts coercing or
     //       otherwise honouring a scalar `related_themes` value into a real
     //       edge (i.e. the day the `Array.isArray(...)` guard at
     //       kb-graph.ts:327 is loosened/removed). Until then, staying a

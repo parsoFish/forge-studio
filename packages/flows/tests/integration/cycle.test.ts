@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/cycle.ts internal helpers. Heavy SDK-dependent paths
+ * Tests for packages/flows/cycle.ts internal helpers. Heavy SDK-dependent paths
  * (runProjectManager, runDeveloperLoop, runReviewer, runReflector) are
  * exercised by their respective benchmarks; this file covers the small
  * orchestration utilities the cycle uses for gates and routing — F-13

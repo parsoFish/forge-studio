@@ -1,7 +1,7 @@
 /**
  * Pure view-state derivation for the /templates library page (R3-06, WI-4).
  *
- * Mirrors forge-ui/lib/skill-library-view.ts's testability convention: no
+ * Mirrors apps/studio/lib/skill-library-view.ts's testability convention: no
  * DOM, no React, no network — the page component stays thin and calls these
  * directly off the fetched `TemplateLibraryEntry[]`. Immutability: every
  * function here returns NEW arrays/objects, never mutates its input.

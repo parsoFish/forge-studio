@@ -4,7 +4,7 @@
  *
  * THE OBSERVED DEFECT. SK-6 and HK-5 read a sid from a URL that publish-and-stay
  * had stopped filling, got `null`, and a route wrote
- * `projects/mdtoc/_authoring/null/status.json` — a directory literally named
+ * `tests/fixtures/live-capture/r4-19-f2-live-capture/status.json` — a directory literally named
  * `null`. Treated here as a PATH-SEGMENT boundary defect rather than a null-id
  * nit: request input is interpolated into a filesystem path with no shape check,
  * and `null` is the benign symptom of that, not the bug.

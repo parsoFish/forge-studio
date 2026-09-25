@@ -5,7 +5,7 @@
  *
  * WHY THIS EXISTS: the flow run-detail page (route `/flows/[id]/run/[runId]`)
  * derives its `found` prop from this 404 — see
- * `apps/studio/lib/flow-run-detail-render.test.ts`'s "a run that never existed
+ * `apps/studio/tests/integration/flow-run-detail-render.test.ts`'s "a run that never existed
  * renders an honest not-found" test, which feeds `found`/`run` in as PROPS.
  * That render test structurally CANNOT catch a server that starts fabricating
  * runs for unknown ids — it never talks to the bridge, so a regression at the
@@ -32,7 +32,7 @@
  * port, never 4123/4124 (this test never touches the operator's fixed-port
  * Studio session). Seeds a tmp forge root with a `_queue/done/` manifest plus
  * its `_logs/<cycleId>/events.jsonl`, mirroring
- * `orchestrator/flow-run-detail-serving.test.ts`'s archived-run fixture shape
+ * `packages/flows/tests/integration/flow-run-detail-serving.test.ts`'s archived-run fixture shape
  * (same `flow_id: forge-develop`, same minimal start/end event pair) so this
  * file pins the SAME contract at the wire that file already pins at the
  * derivation layer.

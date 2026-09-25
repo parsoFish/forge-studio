@@ -15,7 +15,7 @@
  * SHAPE (`@forge/agents/studio/validate-agent.ts`'s `['composition/hooks',
  * def.composition.hooks ?? []]` row), never whether the id actually
  * RESOLVES to a real library hook or collides with a platform guard id.
- * `lintHookComposition` (`orchestrator/studio/hook-library.ts`) is the ONLY
+ * `lintHookComposition` (`packages/library/studio/hook-library.ts`) is the ONLY
  * function that knows that, and it is called exclusively from
  * `apps/forge/studio-lint.ts`'s `runStudioLint` — a READ-ONLY entry point the write
  * route never invokes. Reproduced live by the implementer against a running

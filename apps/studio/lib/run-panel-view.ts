@@ -15,7 +15,7 @@
  * server check.
  *
  * The numeric caps and extension→kind table mirror
- * `orchestrator/studio/materials.ts` (`MATERIAL_KINDS`,
+ * `packages/agents/studio/materials.ts` (`MATERIAL_KINDS`,
  * `MAX_MATERIALS_COUNT`, `MAX_MATERIAL_BYTES`, `MAX_MATERIALS_TOTAL_BYTES`,
  * `materialKindForFilename`) as LITERALS — forge-ui cannot import
  * orchestrator/ TypeScript directly (the same constraint
@@ -26,18 +26,18 @@
  */
 
 // ---------------------------------------------------------------------------
-// Caps — mirrors orchestrator/studio/materials.ts
+// Caps — mirrors packages/agents/studio/materials.ts
 // ---------------------------------------------------------------------------
 
-/** Mirrors orchestrator/studio/materials.ts MAX_MATERIALS_COUNT. */
+/** Mirrors packages/agents/studio/materials.ts MAX_MATERIALS_COUNT. */
 const MAX_MATERIALS_COUNT = 8;
-/** Mirrors orchestrator/studio/materials.ts MAX_MATERIAL_BYTES (256 KiB). */
+/** Mirrors packages/agents/studio/materials.ts MAX_MATERIAL_BYTES (256 KiB). */
 const MAX_MATERIAL_BYTES = 262144;
-/** Mirrors orchestrator/studio/materials.ts MAX_MATERIALS_TOTAL_BYTES (512 KiB). */
+/** Mirrors packages/agents/studio/materials.ts MAX_MATERIALS_TOTAL_BYTES (512 KiB). */
 const MAX_MATERIALS_TOTAL_BYTES = 524288;
 
 /**
- * Mirrors orchestrator/studio/materials.ts's MATERIAL_EXTENSION_TO_KIND.
+ * Mirrors packages/agents/studio/materials.ts's MATERIAL_EXTENSION_TO_KIND.
  * DELIBERATE EXCLUSION: `.svg` is NOT mapped to `images` — SVG is an
  * active-content format (can embed `<script>`), so it must never be bucketed
  * with inert raster images. See that module's own comment for the full
@@ -54,7 +54,7 @@ const MATERIAL_EXTENSION_TO_KIND: Readonly<Record<string, string>> = Object.free
   json: 'data-files', csv: 'data-files', tsv: 'data-files', yaml: 'data-files', yml: 'data-files', ndjson: 'data-files',
 });
 
-/** Mirrors orchestrator/studio/materials.ts's materialKindForFilename. */
+/** Mirrors packages/agents/studio/materials.ts's materialKindForFilename. */
 function materialKindForFilename(filename: string): string | undefined {
   const lastDot = filename.lastIndexOf('.');
   if (lastDot === -1 || lastDot === filename.length - 1) return undefined;

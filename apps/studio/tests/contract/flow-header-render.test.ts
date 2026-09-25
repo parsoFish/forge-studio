@@ -1,7 +1,7 @@
 /**
  * DOM regression + acceptance tests for item forge-zyc pins 2 and 4, both
  * against the REAL `FlowHeader` component
- * (forge-ui/components/studio/flow-builder/FlowHeader.tsx). Renders via
+ * (apps/studio/components/studio/flow-builder/FlowHeader.tsx). Renders via
  * `react-dom/server`'s `renderToStaticMarkup`, following
  * `./run-panel-render.test.ts` / `./standing-triggers-render.test.ts`'s
  * established precedent (no jsdom / `@testing-library/react` in this repo —
@@ -36,12 +36,12 @@
  * Every kind that isn't cron/webhook/merged falls into the last line and is
  * mislabeled "on complete →" — including `pr-merged`, which is NOT a
  * completion event at all (it fires when a GitHub PR is merged, an EXTERNAL
- * webhook-family receipt — see orchestrator/flow-trigger.ts:40-44), and
+ * webhook-family receipt — see packages/flows/flow-trigger.ts:40-44), and
  * `issue-raised` (a GitHub issue being opened — not a completion of
  * anything), and `agent-complete` (which IS a completion, but of a specific
  * *agent* run, not "on complete" generically — indistinguishable on the UI
  * from an `on: merged`/`flow-complete` chip once mislabeled the same way).
- * `TRIGGER_KINDS`'s rows (orchestrator/flow-trigger.ts:52-62) carry no
+ * `TRIGGER_KINDS`'s rows (packages/flows/flow-trigger.ts:52-62) carry no
  * separate display-text field (only `id`/`origin`/`status`/`fires`), so the
  * honest fallback shape this test pins is `on <kind> →` — i.e. the row's own
  * `id`, not a fabricated friendlier phrase: "on pr-merged →", "on

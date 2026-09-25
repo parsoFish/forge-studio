@@ -498,7 +498,7 @@ test('(RED) POST /api/reflect/<..>/answer with a symlinked user-feedback.md leaf
 // W7-D1 — the artifact route and the run model disagreed about where a frozen
 // cycle's PR description lives, and the DECLARATION won.
 //
-// `deriveArtifacts` (orchestrator/run-model-derive.ts) marks `pr` ready when
+// `deriveArtifacts` (packages/flows/run-model-derive.ts) marks `pr` ready when
 // `pr-description.md` exists in EITHER `artifacts/` or — deliberately, "so
 // older frozen logs still resolve" — the cycle-log ROOT. The route only ever
 // read `artifacts/`. So a pre-mirror cycle advertised a PR tab in

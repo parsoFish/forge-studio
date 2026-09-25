@@ -303,7 +303,7 @@ test('cmdAgentDispatch: R4-17 AT-D7-5 (item 3, ACCEPT control): a --session-dir 
 // the session into complete/failed. `writeSessionTerminalPhase` used to spread
 // `{...existing, phase}` unconditionally through guardedWriteFile; it now
 // rides the ONE status-write seam (`guardedWriteSessionStatus`), which
-// refuses to overwrite `cancelled` (orchestrator/interactive-session.ts).
+// refuses to overwrite `cancelled` (packages/sessions/interactive-session.ts).
 // Asserted on the FILESYSTEM, on BOTH outcomes.
 // ---------------------------------------------------------------------------
 
@@ -350,7 +350,7 @@ test('cmdAgentDispatch: W7-FIX-A2 sticky-cancel — a FAILED dispatch (unknown s
 // `projectsRoot` via `resolveProjectsDir(resolve(forgeRoot), loadConfig())`
 // (packages/agents/agent-run.ts:201) — config-aware, honouring BOTH `FORGE_PROJECTS_DIR`
 // (env) and `forge.config.json`'s `projectsDir` (file), per
-// `orchestrator/config.ts:106-121`'s documented precedence. The BLOCKER is
+// `packages/kernel/config.ts:106-121`'s documented precedence. The BLOCKER is
 // that `apps/forge/ui-bridge.ts:222` — `POST /api/studio/onboarding/start`, the ONE
 // real producer of `--session-dir` — does NOT: it hardcodes `resolve(forgeRoot,
 // 'projects')`, never consulting either mechanism. When an operator
@@ -385,7 +385,7 @@ test('cmdAgentDispatch: W7-FIX-A2 sticky-cancel — a FAILED dispatch (unknown s
 // pre-round-3) would pick it up. That theory was already stale by the time
 // this test ran: round-3's own BLOCKER fix (pin 5, item 2) replaced the bare
 // `loadConfig()` call with `loadConfig(defaultConfigPath(forgeRoot))` —
-// FORGE-ROOT-ANCHORED, not cwd-relative (`orchestrator/config.ts:119`'s
+// FORGE-ROOT-ANCHORED, not cwd-relative (`packages/kernel/config.ts:119`'s
 // `defaultConfigPath`). But this file's `run()` helper (above) always called
 // `cmdAgentDispatch(args, ROOT)` — `ROOT = process.cwd()` captured ONCE at
 // module load — so `forgeRoot` was ALWAYS the real repo, never

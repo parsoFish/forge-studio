@@ -439,7 +439,7 @@ test('G1: the autocommit net sweeping uncommitted agent work invokes onAutoCommi
 // a private helper in this file with a single call site (the autocommit
 // safety net's `workItemId` arg) — pinned through the OBSERVABLE WIP commit
 // message rather than by exporting it. Must go RED if
-// `DEV_WORK_ITEM_ID_PATTERN` (orchestrator/work-item.ts) narrows back to
+// `DEV_WORK_ITEM_ID_PATTERN` (packages/flows/work-item.ts) narrows back to
 // digits-only, since that regresses split work items (`WI-4a`/`WI-4b`) to a
 // dropped id in the autocommit tag.
 // -------------------------------------------------------------------------

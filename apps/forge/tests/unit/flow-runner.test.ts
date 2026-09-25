@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/flow-runner.ts (ADR-028, M3-1/2).
+ * Tests for packages/flows/flow-runner.ts (ADR-028, M3-1/2).
  *
  * All tests use MOCK deps (spy functions) so no filesystem or SDK calls happen.
  * Test 4 loads the REAL forge-cycle.yaml via loadFlowDefinition and runs the

@@ -4,7 +4,7 @@
  *
  * The orchestrator's only job is to thread phase outputs into the next phase's
  * inputs. Each phase is invoked by calling its skill via the Claude Agent SDK
- * (or, for the developer loop, via loops/ralph/runner.ts).
+ * (or, for the developer loop, via packages/agents/ralph/runner.ts).
  *
  * STATUS: skeleton. Each phase invocation is a no-op stub that emits start/end
  * events to the log so the wiring is provable. Implementation lands per

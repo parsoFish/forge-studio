@@ -60,7 +60,7 @@ export function skillPath(name: string, root: string = FORGE_ROOT): string {
  * — always relative, regardless of root. This is the string form
  * `deriveAgentSpec` requires: its `skill` argument is echoed verbatim into
  * `PhaseAgentSpec.skill`, which is root-relative BY CONTRACT (see
- * `orchestrator/phase-agent.ts` — it flows into event-log `agent_skill`
+ * `packages/agents/phase-agent.ts` — it flows into event-log `agent_skill`
  * attribution, so it must stay a portable, greppable relative path, never an
  * absolute filesystem path). Use `skillPath()` (absolute) for direct file
  * reads instead.

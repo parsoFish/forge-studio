@@ -112,7 +112,7 @@ test('flows-37: the refusal holds for a FAILED source too — a re-run of someon
 });
 
 test('flows-37: a ready-for-review hand-off from ANOTHER flow is a repoint too — it needs the same confirmation', () => {
-  // This is the case orchestrator/enqueue-flow-run.test.ts pins as a
+  // This is the case packages/flows/tests/integration/enqueue-flow-run.test.ts pins as a
   // "hand-off fall-through". It stays runnable — but only on purpose.
   withTmp((queueRoot) => {
     const src = seed(queueRoot, 'ready-for-review', manifest({ flow_id: 'forge-architect' }));

@@ -7,7 +7,7 @@
  * execution (a session at exactly that cwd wrote nothing forge-wide), which
  * makes it a real open door rather than a live leak, and a door is closed by
  * naming the property, not by snapshotting it: the golden in
- * `tests/regression/interactive-runners-golden.test.ts` also records the `cwd`
+ * `packages/sessions/tests/regression/interactive-runners-golden.test.ts` also records the `cwd`
  * now, but a golden can be regenerated. This test states what the value must BE.
  */
 import { test } from 'node:test';

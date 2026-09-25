@@ -72,7 +72,7 @@ type LandedHookFile = { relParts: string[]; body: string };
  * `guardedFile(..., 'readdir')` (which itself requires the entry to be a REAL
  * directory — never a symlink masquerading as one, mirrors
  * `readVendoredPackage`'s own walk-and-guard-every-leaf pattern in
- * `orchestrator/studio/community-index.ts`); every leaf's bytes are read via
+ * `packages/library/studio/community-index.ts`); every leaf's bytes are read via
  * `guardedReadFile`. Throws a plain `Error` NAMING the first offending entry
  * — never a silent drop — when: an entry is neither a regular file nor a
  * directory (symlink/socket/fifo); a leaf fails the guarded read; the file
@@ -234,7 +234,7 @@ export function finalizeHookFromLanded(forgeRoot: string, id: string, sanitizeEr
   //
   // PHASE 1 — bless EVERY destination through the SAME `guardedFile(...,
   // 'write')` choke point `installCommunityHookPackage` uses
-  // (`orchestrator/studio/community-install.ts`), mirroring that function's
+  // (`packages/library/studio/community-install.ts`), mirroring that function's
   // own "bless everything, THEN write" two-phase discipline: a failure here
   // must never leave a partial hook package on disk.
   const otherFiles = landedFiles.filter((f) => f.relParts.join('/') !== 'hook.yaml');

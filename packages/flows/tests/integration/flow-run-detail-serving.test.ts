@@ -23,7 +23,7 @@
  * vitest — no bridge boot needed, since `listRuns`/`aggregateRun` ARE what
  * `GET /api/runs` and `GET /api/runs/<id>` call (apps/forge/bridge-studio.ts:33).
  *
- * The cost fixture below is not invented: `orchestrator/event-cost.ts`'s
+ * The cost fixture below is not invented: `packages/kernel/event-cost.ts`'s
  * header documents that a phase emitting ≥1 `iteration` event RESTATES the
  * same dollars on its per-WI `end` AND its phase-level rollup `end`, so a
  * naive re-sum inflates 2-3x. The dev node here emits
@@ -152,7 +152,7 @@ test('an archived run (_queue/done/) is served by the SAME listRuns path as a li
 
 test('an archived run reports RunStatus "complete" — the measured _queue/done mapping', () => {
   // KILLS: leaving an archived run in a live-looking status. Measured at
-  // orchestrator/run-model.ts:169 — QUEUE_STATE_TO_RUN_STATUS maps
+  // packages/flows/run-model.ts:169 — QUEUE_STATE_TO_RUN_STATUS maps
   // 'done' → 'complete' (as it does 'merged'); the detail page renders this
   // value directly, so a wrong mapping shows the operator a finished cycle
   // as still running.
@@ -193,7 +193,7 @@ test('an archived run carries per-node phaseMeta with AUTHORITATIVE per-node cos
   // KILLS: the twice-repeated re-summation defect, pinned at its source.
   // The dev node's events sum naively to 7.0 (0 + 2.0 + 1.5 + 3.5) because
   // the phase-level `end` restates the iteration spend; the authoritative
-  // rule (orchestrator/event-cost.ts) counts ONLY the iteration events, so
+  // rule (packages/kernel/event-cost.ts) counts ONLY the iteration events, so
   // phaseMeta.dev.costUsd is 3.5. The run's own total (4.1 = pm 0.6 + dev
   // 3.5) is a THIRD distinct number, asserted here so any node-vs-run
   // attribution mistake is caught too.

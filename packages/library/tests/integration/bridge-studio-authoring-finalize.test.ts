@@ -485,7 +485,7 @@ test('WI2-3c: a drafted hook.yaml whose "on" is outside HOOK_LIFECYCLE_EVENTS ->
 // W8-B6 — trigger coherence on the FOURTH write path into studio/hooks/.
 //
 // A matcher on a tool-less lifecycle event can never be honoured by hook
-// dispatch (`orchestrator/studio/hook-dispatch.ts`'s `hookMatcherMatches`
+// dispatch (`packages/agents/studio/hook-dispatch.ts`'s `hookMatcherMatches`
 // needs a `tool_name`), so the hook would be finalized, listed, bindable —
 // and silently never fire. `lintHookDefinitions`, POST /api/studio/hooks and
 // PUT /api/studio/hooks/:id all refuse it; this route is the fourth, and it
@@ -580,7 +580,7 @@ for (const { label, staging } of MALFORMED_HOOK_DRAFTS) {
 // METADATA (here, the draft-only `category` routing field) is read from the
 // LANDED, DRAFTED `template.md`, parsed server-side, never from body fields.
 // A template is ONE markdown file with gray-matter frontmatter (D1,
-// orchestrator/studio/template-library.ts; apps/studio/app/templates/new/page.tsx's
+// packages/library/studio/template-library.ts; apps/studio/app/templates/new/page.tsx's
 // own seedContent precedent) staged at the ONE canonical name `template.md`.
 // ===========================================================================
 
@@ -1065,7 +1065,7 @@ test('P6-2 (hook id collision — the EXISTING 409 must also leave the session r
 // directory name in TWO libraries (`_interactive-library/<id>/`,
 // `skills/<id>/` or `studio/hooks/<id>/`). It is live-safe today only
 // because guards TWO MODULES AWAY (`SLUG_RE` in
-// orchestrator/interactive-runner.ts, `assertSkillSlug` in
+// packages/sessions/interactive-runner.ts, `assertSkillSlug` in
 // installSkillPackage/hookDir) happen to catch it. Pinned HERE so a
 // regression in either upstream guard is caught by THIS module's own suite,
 // not only by that other module's.

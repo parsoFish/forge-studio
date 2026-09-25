@@ -1,6 +1,6 @@
 /**
  * Acceptance tests for the FLOW-SPECIFIC ledger derivation (R6-05 Task 3) —
- * `forge-ui/lib/flow-ledger.ts`, a pure module that does not exist yet.
+ * `apps/studio/lib/flow-ledger.ts`, a pure module that does not exist yet.
  * Every assertion below is a legitimate RED against a not-yet-created file.
  *
  * This is the FIRST caller of the shared engine in `./history-ledger.ts`
@@ -18,7 +18,7 @@
  * ═══════════════════════════════════════════════════════════════════════
  * MEASURED GROUNDS:
  *
- * (dev retries) `orchestrator/run-model-derive.ts:161-163`: `retries` is
+ * (dev retries) `packages/flows/run-model-derive.ts:161-163`: `retries` is
  *   `countGateFails` (message === 'gate.fail') ONLY for `nodeId === 'dev'`;
  *   every OTHER node's `retries` is a count of ANY `error`-typed event
  *   (spawn errors, budget exhaustion, scope violations — NOT gate failures
@@ -46,8 +46,8 @@
  * (ROUND 2, D10 — merged) `run.status === 'complete'` implies a
  *   CONFIRMED remote PR merge — traced this round to `_queue/merged/` and
  *   `_queue/done/`'s single production writer chain
- *   (`orchestrator/phases/closure.ts:334`'s `terminalMove(..., 'merged')`,
- *   gated on `confirmPrMerged` — `orchestrator/pr.ts:778`, fails closed —
+ *   (`packages/flows/phases/closure.ts:334`'s `terminalMove(..., 'merged')`,
+ *   gated on `confirmPrMerged` — `packages/flows/pr.ts:778`, fails closed —
  *   `promoteMergedToDone`'s two callers are equally gated); `run-model.ts`'s
  *   `QUEUE_STATE_TO_RUN_STATUS` maps both dirs to `'complete'`. See
  *   `history-ledger.test.ts`'s D10 header note for the full trail.
@@ -55,7 +55,7 @@
  * (ROUND 2, D10 — work-items) `run.workItems` (already on the client `Run`
  *   type, already carried verbatim by `parseRun`) feeds a `done`/`total`
  *   count — `done` is the count of `status === 'complete'` entries, `total`
- *   is `.length`. Measured non-fabricated: `orchestrator/run-model.test.ts`'s
+ *   is `.length`. Measured non-fabricated: `packages/flows/tests/integration/run-model.test.ts`'s
  *   real-fixture test (a genuine archived cycle's 501-line event log)
  *   asserts `run.workItems?.length === 5`, and passes.
  */

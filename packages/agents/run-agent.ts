@@ -42,7 +42,7 @@ import { DEFAULT_HEARTBEAT_INTERVAL_MS } from './ralph/claude-agent.ts';
 import { dirname, isAbsolute, join, relative } from 'node:path';
 
 // `FORGE_ROOT` (this install's root — `orchestrator/studio/` sits two levels
-// below it): single source is `studio/derive.ts`'s exported const. This
+// below it): single source is `packages/agents/studio/derive.ts`'s exported const. This
 // module previously defined its own identical local copy, which silently
 // duplicated derive.ts's `..`-depth by hand; import it instead so the two
 // can't drift out of sync.
@@ -89,7 +89,7 @@ function assertSafeRunId(runId: string): void {
  * R3-04 D9.1 — pre-spawn connection-readiness gate. Throws (naming every
  * unready bound component + its state) if `def` binds a tool/mcp connection
  * that is not `available`. Shares `unreadyConnectionsFor`/
- * `formatUnreadyConnections` (`./studio/connection-run-gate.ts`) with the
+ * `formatUnreadyConnections` (`./packages/agents/studio/connection-run-gate.ts`) with the
  * bridge's D9.2 refusal — one derivation, one vocabulary. `ctx.probeConnection`
  * is test-injection only; production falls through to the real default
  * prober scoped to `FORGE_ROOT`.
@@ -209,7 +209,7 @@ export type RunContext = {
    * Pre-spawn connection-readiness gate (R3-04 D9.1) — TEST-INJECTION ONLY,
    * mirrors `queryFn`'s seam exactly. Production omits this: the default is
    * the REAL per-connection prober (`defaultProbeConnection`,
-   * `./studio/connection-run-gate.ts`) against `FORGE_ROOT`'s curated
+   * `./packages/agents/studio/connection-run-gate.ts`) against `FORGE_ROOT`'s curated
    * catalog. `runAgent` calls this once per id `def` actually binds
    * (`composition.tools` + `composition.mcps`) — an agent binding nothing
    * never calls it at all, real or injected (cost discipline).

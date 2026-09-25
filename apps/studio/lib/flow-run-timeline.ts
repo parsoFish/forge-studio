@@ -11,7 +11,7 @@
  * file conforms to — in particular:
  *   - cost is EXACTLY `phaseMeta[node].costUsd`, never a re-sum over events
  *     and never the run's own `costUsd` total (the documented 2-3x
- *     re-summation defect `orchestrator/event-cost.ts` closes at its source).
+ *     re-summation defect `packages/kernel/event-cost.ts` closes at its source).
  *   - status is per-node (`run.phases[node]`), never the run's own status.
  *   - rows follow `flow.nodes`' declared order and include every node, even
  *     one the run never touched (status defaults to 'pending', cost to 0).

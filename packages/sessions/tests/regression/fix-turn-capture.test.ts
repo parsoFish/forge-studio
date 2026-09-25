@@ -57,7 +57,7 @@
  * against the REAL repo (its module-level `FORGE_ROOT`) and returns undefined
  * for both skills — the key is absent from the captured bag, and a port that
  * DROPPED the wiring entirely would capture identically. That hole is closed by
- * an existing guard, not by this one: `packages/agents/hook-dispatch-coverage.test.ts`
+ * an existing guard, not by this one: `packages/agents/tests/contract/hook-dispatch-coverage.test.ts`
  * enumerates every file that value-imports the pinned query and fails unless it
  * wires hook dispatch or carries a named exemption. A port must keep that
  * ratchet's census whole — the spawn-capable file MOVES, so the name shifts and

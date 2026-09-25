@@ -2,7 +2,7 @@
  * D14 fix round 2 (`.superpowers/d14-fix2-tests-brief.md`) — the brain-lint
  * truthfulness axis's HISTORY-BACKED staleness ruling, split out of
  * `brain-lint-truth.test.ts` at the 800-line cap (same split rationale as
- * `brain-lint.test.ts` -> `brain-lint-{graph,filing,integrity,
+ * historical: `brain-lint.test.ts` -> `brain-lint-{graph,filing,integrity,
  * orchestration}.test.ts`; shared fixtures — including the git-checkout
  * helpers this file needs — live in `./test-fixtures/brain-lint-truth.ts`).
  *

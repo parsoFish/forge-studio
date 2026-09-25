@@ -184,7 +184,7 @@ export const STALENESS_PREFIXES: readonly string[] = FORGE_INTERNAL_PREFIXES;
  *   the code never did.
  *
  * Citations are detected as backtick-wrapped paths that look like file paths:
- *   `src/foo.ts` `orchestrator/cycle.ts` `tests/x.test.ts`
+ *   `src/foo.ts` `packages/flows/cycle.ts` `tests/x.test.ts`
  */
 export function extractCitedPaths(content: string): string[] {
   const out: string[] = [];
@@ -344,7 +344,7 @@ export function checkLengthSoftCap(forgeRoot: string): Finding[] {
 /**
  * S6A — surface cleanup candidates by reading each cycle archive's
  * `retention` frontmatter (written by the reflector + post-processed by
- * `orchestrator/cycle-retention.ts`). Tiers:
+ * `packages/knowledge/cycle-retention.ts`). Tiers:
  *
  *   - `routine`     ⇒ Tier B (archive-and-summarise eligible if older
  *                     than CLEANUP_ROUTINE_MIN_AGE_DAYS).

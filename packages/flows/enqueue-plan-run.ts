@@ -1,7 +1,7 @@
 /**
  * R4-05 / F4 — the standalone per-initiative "Plan" trigger.
  *
- * Mirrors `orchestrator/enqueue-develop-run.ts` structure-for-structure: this
+ * Mirrors `packages/flows/enqueue-develop-run.ts` structure-for-structure: this
  * module is the real, claimable enqueue behind the roadmap's per-initiative
  * "Plan" button. It repoints the initiative's manifest at the `forge-architect`
  * flow (the decompose flow — architect node is a design-time no-op marker,

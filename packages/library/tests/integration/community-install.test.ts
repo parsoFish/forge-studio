@@ -1,5 +1,5 @@
 /**
- * Acceptance tests for orchestrator/studio/community-install.ts (R3-07-F3,
+ * Acceptance tests for packages/library/studio/community-install.ts (R3-07-F3,
  * `_wave5/specs/R3-07.md` D2/D9) — DOES NOT EXIST YET. This file is RED at
  * branch base: `Cannot find module './community-install.ts'` on import. Do
  * not stub the module into existence; red is the deliverable of this round.

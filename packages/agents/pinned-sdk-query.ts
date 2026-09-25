@@ -26,7 +26,7 @@
  * cycle. This file adds one more loops/ -> orchestrator/ edge; `./spawn-env.ts`
  * has no dependency path back into loops/, so no cycle is introduced.
  *
- * `packages/agents/pinned-sdk-query.enforce.test.ts` is the structural lock:
+ * `packages/agents/tests/contract/pinned-sdk-query.enforce.test.ts` is the structural lock:
  * every other file under orchestrator/, loops/, cli/ that imports `query` as
  * a value (not a type) from '@anthropic-ai/claude-agent-sdk' fails that test.
  */

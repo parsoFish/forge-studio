@@ -3,12 +3,12 @@
  * R6-07 batch-H honesty pass).
  *
  * Renders the REAL `FlowCard` / `AgentCard` / `ProjectCard` / `KbCard`
- * (forge-ui/components/studio/LibraryCard.tsx) via `react-dom/server`'s
+ * (apps/studio/components/studio/LibraryCard.tsx) via `react-dom/server`'s
  * `renderToStaticMarkup`, matching the precedent + rationale in
  * `./run-panel-render.test.ts`'s header (no jsdom/@testing-library, no new
  * dependency — react/react-dom are already forge-ui deps; the
  * `resolve.alias['@']` + `oxc.jsx: {runtime:'automatic'}` this needs are
- * ALREADY in `forge-ui/vitest.config.ts`, added by that same prior pass).
+ * ALREADY in `apps/studio/vitest.config.ts`, added by that same prior pass).
  * `.test.ts` (not `.test.tsx`, matching vitest.config.ts's `include` glob
  * and run-panel-render.test.ts's own convention) — components are built via
  * `React.createElement`, never angle-bracket JSX.

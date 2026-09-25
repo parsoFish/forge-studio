@@ -1,5 +1,5 @@
 /**
- * Tests for forge-ui/lib/session-shell-view.ts (R2-10, PR2) — DOES NOT EXIST
+ * Tests for apps/studio/lib/session-shell-view.ts (R2-10, PR2) — DOES NOT EXIST
  * YET. Vitest cannot even collect this file until it lands (module-not-found
  * is the expected red).
  *

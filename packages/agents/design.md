@@ -9,7 +9,7 @@ ended. Everything else in this package exists to serve that sentence.
 ## ADR 024 — an agent composes skills; it is not a hardcoded phase
 
 The runnable unit is a **SKILL.md with frontmatter**, not a function in a phase
-table. `studio/agent-registry.ts` loads it, `studio/derive.ts` derives what the
+table. `packages/agents/studio/agent-registry.ts` loads it, `packages/agents/studio/derive.ts` derives what the
 runtime needs from it, and `run-agent.ts` spawns whatever it describes. That is
 why the package has a *registry* and a *derivation* rather than a switch: adding
 an agent is authoring a file, and the code path does not change.

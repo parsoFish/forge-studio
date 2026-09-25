@@ -1,5 +1,5 @@
 /**
- * Acceptance tests for forge-ui/lib/hook-library-view.ts (R3-03-F4) — DOES
+ * Acceptance tests for apps/studio/lib/hook-library-view.ts (R3-03-F4) — DOES
  * NOT EXIST YET. Vitest cannot even collect this file until it lands
  * (module-not-found is the expected red — mirrors
  * skill-library-view.test.ts's own header note).
@@ -14,7 +14,7 @@
  * Types (`HookLibraryEntry`, `HookLibraryEntryOk`, `HookDetail`,
  * `HookScanReport`, `HookTrust`, `HookScanVerdict`, ...) come from
  * `./hook-client.ts` — see that module's own test file
- * (forge-ui/lib/hook-client.test.ts) for the transport-parse contract; this
+ * (apps/studio/tests/unit/hook-client.test.ts) for the transport-parse contract; this
  * file assumes a parsed, already-trustworthy `HookLibraryEntry`/`HookDetail`
  * as input and never re-derives `carriedBy`/`scanVerdict`/`trust` from raw
  * JSON itself.
@@ -61,7 +61,7 @@
  *   mirrors skills' "no fabricated trust value" rule exactly.)
  *   Package: [data-component="file-package"][data-file-count][data-active-file]
  *   with per-tab [data-file-tab][data-file-path] — REUSES
- *   forge-ui/components/studio/FilePackage.tsx verbatim (kind-agnostic, R3-01
+ *   apps/studio/components/studio/FilePackage.tsx verbatim (kind-agnostic, R3-01
  *   built it explicitly to be reused; a hook clone of it would be exactly the
  *   antipattern the task brief warns against).
  *   Carried-by: [data-section="carried-by"][data-carried-by-count] with
@@ -104,7 +104,7 @@
  *
  * Agent Builder drop zone — coexistence, not replacement:
  *   The existing zone carries [data-accepts="guard"] (platform dispatch-key
- *   vocabulary — forge-ui/components/studio/agent-builder/DropZone.tsx,
+ *   vocabulary — apps/studio/components/studio/agent-builder/DropZone.tsx,
  *   CatalogPalette.tsx's `Kind = 'skill'|'tool'|'mcp'|'guard'`). This
  *   initiative adds a DISTINCT [data-accepts="hook"] zone alongside it — the
  *   two must never merge into one vocabulary (the entire reason `composition

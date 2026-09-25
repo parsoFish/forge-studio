@@ -3,7 +3,7 @@
  * (registry.ts, kb-descriptor.ts). Extracted from registry.ts (R1-01) into this
  * leaf module so both the general definition loaders and the KB-descriptor
  * module draw the same strict field parsing from one place — with no import
- * cycle. Modelled on orchestrator/manifest.ts.
+ * cycle. Modelled on packages/flows/manifest.ts.
  */
 
 import { readFileSync } from 'node:fs';
@@ -79,7 +79,7 @@ export function loadYaml(file: string): Record<string, unknown> {
  *
  * W8-B5 (exit row E4): `js-yaml` cannot round-trip comments, so a loader whose
  * document will later be re-serialized needs the original bytes to recover the
- * comment layer from (see orchestrator/studio/yaml-comments.ts). Implemented
+ * comment layer from (see packages/library/studio/yaml-comments.ts). Implemented
  * as the ONE read that `loadYaml` now delegates to, deliberately: a second
  * `readFileSync` in a caller would both double the I/O and add a new
  * (file, sink) row to scripts/request-path-sinks.baseline.txt for a read the

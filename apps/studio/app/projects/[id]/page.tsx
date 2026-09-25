@@ -946,7 +946,7 @@ function ProjectOnboardForm() {
  * develop-start ceiling field's SEND decision. `fieldValue`
  * (`resolveCeilingFieldValue`) is what the input DISPLAYS — it seeds from
  * the run-level `defaultCeilingUsd` (`resolveDefaultKickoffCeilingUsd`,
- * orchestrator/config.ts) the instant the tab mounts, long before any
+ * packages/kernel/config.ts) the instant the tab mounts, long before any
  * operator interaction. Displaying a default is fine; SENDING it on every
  * "Start development" click is not — a manifest with its own
  * `cost_budget_usd`-derived ceiling (`readManifestCostCeiling`'s
@@ -960,7 +960,7 @@ function ProjectOnboardForm() {
  * `resolveCostCeilingForDispatch` (./run-panel-view.ts). When untouched,
  * returns `undefined` so `POST /api/develop/start` omits `costCeilingUsd`
  * entirely and the manifest's own derived fallback
- * (`resolveCostCeilingOverride`, orchestrator/cycle.ts) stands. Exported so
+ * (`resolveCostCeilingOverride`, packages/flows/cycle.ts) stands. Exported so
  * `lib/roadmap-develop-start-ceiling.test.ts` pins the real, shipped gate.
  */
 function RoadmapView({
@@ -1043,7 +1043,7 @@ function RoadmapView({
     // override ONLY when the operator has explicitly touched the field
     // (`ceilingTouched`) — an untouched field must send NOTHING, so the
     // manifest's own derived `cost_budget_usd`+margin fallback
-    // (resolveCostCeilingOverride, orchestrator/cycle.ts) stands. Never a
+    // (resolveCostCeilingOverride, packages/flows/cycle.ts) stands. Never a
     // fabricated fallback value; an empty/non-finite/non-positive TOUCHED
     // field also degrades to "no override" — the same "nothing sent rather
     // than a round-tripped 400" convention the agent-run kickoff field uses.
