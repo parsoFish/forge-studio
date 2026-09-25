@@ -162,10 +162,10 @@ function fakeClaude() {
  */
 function laneBin(name: string, opts: { lateSpawnS?: number } = {}) {
   const late = opts.lateSpawnS ? `trap '' HUP\nsleep ${opts.lateSpawnS}\n` : '';
+  const detachedpid = join(dir, `${name}.detachedpid`);
   return writeExec(name, `#!/usr/bin/env bash
 echo $$ > '${join(dir, `${name}.selfpid`)}'
-${late}setsid nohup '${fakeClaude()}' 300 </dev/null >/dev/null 2>&1 &
-echo $! > '${join(dir, `${name}.detachedpid`)}'
+${late}setsid nohup bash -c 'echo $$ > "$1"; exec "$2" "$3"' _ '${detachedpid}' '${fakeClaude()}' 300 </dev/null >/dev/null 2>&1 &
 sleep 120
 `);
 }
@@ -271,6 +271,7 @@ function killSurvivorsUnder(root: string): void {
 process.on('exit', () => {
   try {
     sweepPlanted();
+    if (dir) killSurvivorsUnder(dir);
   } catch {
     /* best-effort backstop — never let cleanup itself crash process teardown */
   }
@@ -278,6 +279,7 @@ process.on('exit', () => {
 after(() => {
   for (const s of sessions) spawnSync('tmux', ['kill-session', '-t', s]);
   sweepPlanted();
+  killSurvivorsUnder(dir);
   // M7-C last-flakes #2 sequel: the structural door itself — not "cleanup
   // ran" but "cleanup WORKED". Re-scans AFTER both passes above, so a red
   // here means even the exe-path sweep missed something.
