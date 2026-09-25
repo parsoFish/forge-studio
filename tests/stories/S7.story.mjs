@@ -125,9 +125,9 @@
  *     `[data-section="test-fire"]` row (`data-test-fire-run`, `-at`,
  *     `-outcome`, `-event`; `data-test-fire-run-count` on the section).
  *     Beat 13 fires it and asserts the run row. Dispatch firings surface as
- *     `data-hook-last-fire-at` / `-outcome` on the same page root; the final
- *     beat still asserts the agent RUN it can see — reshaping it to read the
- *     last-fire record is a separate amendment, not made here.
+ *     `data-hook-last-fire-at` / `-outcome` on the same page root, and the
+ *     story now ENDS on them (beats 23–26, T1 1316): run the agent, wait for
+ *     the session to end, walk back to the hook, read the firing.
  *
  * SWEEP. `sweep.mjs` removes `projects/story-<id>` and
  * `brain/projects/story-<id>` only. The skill, hook, template and agent this
@@ -760,24 +760,13 @@ export default {
       say: 'A hook is inert until an agent carries it. Binding is the act that makes a library part part of a worker, and it is the reason the hook’s own page counts how many agents carry it.',
     },
     {
-      // Was "NOT expressible", TRUE as of 2026-09-12 and FALSE as of
-      // 2026-09-25 (re-checked, §15.418: such a claim carries an expiry date
-      // nobody sets). Beat 21's identical phrase had been false since
-      // `4de6e5e4`.
-      //
-      // AMENDED 2026-09-25 (6gv.8.1): executions ARE named now — beat 13's
-      // test-fire rows, and `data-hook-last-fire-at`/`-outcome` on the hook
-      // page for dispatch firings. This beat was written when none existed
-      // (the whole vocabulary was `data-hook-count`, `-event`, `-id`,
-      // `-runnable`, `-trust`, `-url`, `-verdict`, `-carried-by-count`), and
-      // it still asserts only the agent run it can see here: reading the
-      // dispatch firing off the hook page's last-fire record needs a hop back
-      // to `/hooks/story-s7-hook`, an act change left to its own amendment.
-      // Asserting
-      // `carried-by-count` here instead would be reporting a BINDING as if it
-      // were an EXECUTION, which is the fail-open shape this story exists to
-      // catch.
-      act: 'Run the agent, and watch the hook fire on the session ending',
+      // AMENDED 2026-09-25 (T1 1316, forge-6gv.8.1 / 8vfn.5.16). This beat
+      // used to END the story on a claim the product could not make: "the hook
+      // fired". It now only starts the run; the three beats below read the
+      // firing where the product records it. Asserting `carried-by-count` here
+      // would report a BINDING as if it were an EXECUTION — the fail-open
+      // shape this story exists to catch.
+      act: 'Run the agent',
       do: [{ press: 'run-agent' }],
       expect: {
         route: '/agents/brain-ingest',
@@ -788,7 +777,69 @@ export default {
           'run-id': '<hookRunId>',
         },
       },
-      say: 'This is where S7 ends, and it ends on a claim the product does not yet make: that the hook the operator wrote, scanned, approved and bound actually RAN. A hook nobody can prove fired is a hook nobody should trust, and the whole gate in front of it — the scan, the package fingerprint, the approval — is spent guarding an event with no record.',
+      say: 'The hook is bound, so this run is the first time anything other than the operator can set it off. It fires on the session ending — so the story waits for the ending.',
+    },
+    {
+      // AMENDED 2026-09-25 (T1 1316) — ACT CHANGE, new beat. The hook fires on
+      // `SessionEnd` (HOOK_EVENT), so the firing cannot exist until this run
+      // ends, and the hook page reads its fire record once, at load. The S5
+      // pattern (S5's final beat): stay on the agent page under a declared
+      // agent bound until `run-status` reads `done`, on the SAME run the press
+      // minted (`<hookRunId>`, bound by the previous beat). 300 s is S5's bound
+      // for the same kind of standalone agent turn.
+      act: 'Wait for the run to end',
+      wait: { for: 'agent', upTo: 300_000 },
+      expect: {
+        route: '/agents/brain-ingest',
+        data: {
+          page: 'agents',
+          'agent-id': 'brain-ingest',
+          'run-status': 'done',
+          'run-id': '<hookRunId>',
+        },
+      },
+      say: 'A session that ends is the event this hook was written for. Until the run finishes there is nothing to fire on.',
+    },
+    {
+      // AMENDED 2026-09-25 (T1 1316) — ACT CHANGE, the hop back. Pure
+      // navigation: the agent page does not link to a hook, so the operator
+      // walks the Library pillar to the Hooks shelf, whose card links to the
+      // hook page (`LibraryHub.tsx` `data-card-type="hook"`). Same shape as
+      // this story's other Library returns.
+      act: 'Back to the Library',
+      expect: {
+        route: '/library',
+        data: { page: 'library', 'page-ready': 'true', section: 'hooks' },
+      },
+      say: 'The record of what a hook did lives with the hook, not with whichever agent happened to trigger it.',
+    },
+    {
+      // AMENDED 2026-09-25 (T1 1316) — the beat this story now ENDS on, and the
+      // claim it used to only narrate. Dispatch firings are the `hook.fire`
+      // events `packages/agents/studio/hook-dispatch.ts` emits into a run's
+      // events.jsonl; the hook page folds them (`hook-fire-summary.ts`) into
+      // `data-hook-last-fire-at` / `-outcome` on its root — ABSENT, never
+      // fabricated, for a hook that has never fired. Test-fires (beat 13) are
+      // a separate log and never feed these two attributes, so this reads the
+      // DISPATCH firing, not the operator's rehearsal.
+      //
+      // `-at` is a placeholder (a timestamp); `-outcome` is `ran` because
+      // HOOK_SCRIPT exits 0. HONEST LIMIT: the fire scan is a window over
+      // recent cycle dirs and `_logs/` is not the sweep's (`forge-8vfn.2.26`),
+      // so a re-run on an unswept host could read an EARLIER run's firing. On
+      // the fixture ground (M7-D) that residue does not exist.
+      act: 'Open the hook, and see the session ending fire it',
+      expect: {
+        route: '/hooks/story-s7-hook',
+        data: {
+          page: 'hook-detail',
+          'hook-id': 'story-s7-hook',
+          'carried-by-count': '1',
+          'hook-last-fire-at': '<hookLastFireAt>',
+          'hook-last-fire-outcome': 'ran',
+        },
+      },
+      say: 'This is where S7 ends: the hook the operator wrote, scanned, approved and bound actually ran, and its own page says when and how it ended. A hook nobody can prove fired is a hook nobody should trust — this one has a record.',
     },
   ],
 };
