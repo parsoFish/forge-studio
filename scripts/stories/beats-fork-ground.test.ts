@@ -227,10 +227,13 @@ test('S2: the pinned fill fork (beat 3) expands its WHOLE remainder once per sta
 });
 
 test('S7: the pinned door fork (beat 3) loads and drives exactly like an unforked story — one entry per beat', () => {
+  // The beat COUNT is read from the story, never hardcoded: S7 grows beats
+  // independently of this fork work, and the property pinned here is the
+  // RATIO — a door fork contributes exactly one entry, whatever the story's
+  // own length is — not a specific number a future amendment would stale again.
   const story = validateStory(S7);
   const out = expandForkedBeats(story.beats, story.ground.project);
-  assert.equal(story.beats.length, 22);
-  assert.equal(out.length, 22, 'a door fork contributes ONE entry — S7\'s beat count is unchanged by forking at all');
+  assert.equal(out.length, story.beats.length, 'a door fork contributes ONE entry — S7\'s beat count is unchanged by forking at all');
   assert.deepEqual(out.map((e) => e.label), story.beats.map((_, i) => String(i + 1)));
   const forkEntry = out[2];
   assert.deepEqual(forkEntry.doorFork, { over: 'authoring-door', cases: ['creation-agent', 'manual-form'] });
