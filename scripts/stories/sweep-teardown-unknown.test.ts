@@ -27,6 +27,16 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+
+/** A pid that is certainly GONE: a child this test spawned and already reaped.
+ *  A literal like 7 is a live process on some hosts (the GitHub runner: PR #949
+ *  CI run 36197789614), which makes the census non-empty and the control red. */
+function deadPid(): number {
+  const r = spawnSync('true');
+  if (typeof r.pid !== 'number') throw new Error('could not spawn a throwaway child');
+  return r.pid;
+}
 
 import {
   reapCensusAndSweep, stopSchedulerCensusAndRelease, ownSchedulerPid, ownSchedulerPidState, DAEMON_PID_FILE,
@@ -128,7 +138,7 @@ test('ROW 101 (RED) / M7-D finding 6: reapCensusAndSweep REFUSES when its OWN pr
   try {
     const result = await reapCensusAndSweep({
       root, storyId: 'S-unknown-table', sinceMs: Date.now() - 60_000, evidenceDir: join(root, 'queue-claim'),
-      reapedPids: [7], // non-empty so the table read is actually attempted
+      reapedPids: [deadPid()], // non-empty so the table read is actually attempted
       schedulerPid: null,
       procTable: () => null, // simulates a real /proc listing failure
     });
@@ -146,7 +156,7 @@ test('control: reapCensusAndSweep with a real (non-null) process table proceeds 
   try {
     const result = await reapCensusAndSweep({
       root, storyId: 'S-table-ctrl', sinceMs: Date.now() - 60_000, evidenceDir: join(root, 'queue-claim'),
-      reapedPids: [7], schedulerPid: null,
+      reapedPids: [deadPid()], schedulerPid: null,
       procTable: () => new Map(),
     });
     assert.ok(result.sweep, 'a real (empty) table must not be refused');
