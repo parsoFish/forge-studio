@@ -32,5 +32,9 @@ test('a row absent from the staleness list carries no badge', () => {
 
 test('calling renderGalleryIndex with no staleness list at all still renders, badge-free', () => {
   const html = renderGalleryIndex([row('SX')]);
-  assert.doesNotMatch(html, /stale-badge|stale since/i);
+  // NOT a bare `/stale-badge/` — the stylesheet declares that class's rule on
+  // every render, badge or none, so that substring alone is a false positive.
+  // The finding is a USED badge element, or the "stale since" text it carries.
+  assert.doesNotMatch(html, /<p class="stale-badge"/);
+  assert.doesNotMatch(html, /stale since/i);
 });

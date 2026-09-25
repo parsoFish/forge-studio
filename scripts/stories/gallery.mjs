@@ -26,7 +26,7 @@ import { spawnSync } from 'node:child_process';
  *  it is at the use site, which the escape never did. */
 const NUL = '\u0000';
 import { portableArtifact, portableFenceEscapes, portableReapEntries, portableSweepPaths } from './artifact-paths.mjs';
-import { shortDigest } from './artifact-staleness.mjs';
+import { shortDigest, staleArtifacts } from './artifact-staleness.mjs';
 
 /** `git rev-parse HEAD` in `root`, or `null` when it cannot be read (a
  *  refusal here would stop every run over a checkout mid-rebase or shallow
@@ -118,17 +118,27 @@ function mediaFor(row) {
   return `<p class="no-clip">no clip recorded on this checkout</p>`;
 }
 
-/** Render the index page. Pure — sorted by id so regeneration is stable. */
-export function renderGalleryIndex(rows) {
+/**
+ * Render the index page. Pure — sorted by id so regeneration is stable.
+ *
+ * `stale` — the list `artifact-staleness.mjs`'s `staleArtifacts` produces
+ * (findings row 56 + row 14, T1 ruling 1283 option B) — marks a named row
+ * with a visible badge instead of presenting it as current. Defaulting to
+ * `[]` keeps every existing caller's rendered bytes unchanged.
+ */
+export function renderGalleryIndex(rows, stale = []) {
+  const staleReasonById = new Map(stale.map((s) => [s.id, s.reason]));
   const sorted = [...rows].sort((a, b) => a.id.localeCompare(b.id));
   const cards = sorted
-    .map(
-      (r) => `  <section class="story ${esc(r.status)}">
+    .map((r) => {
+      const staleReason = staleReasonById.get(r.id);
+      const badge = staleReason ? `\n    <p class="stale-badge">${esc(staleReason)}</p>` : '';
+      return `  <section class="story ${esc(r.status)}">
     <h2>${esc(r.id)} — ${esc(r.title)}</h2>
-    <p class="verdict ${esc(r.status)}">${esc(r.status)} · ${r.greenBeats}/${r.beats} beats green</p>
+    <p class="verdict ${esc(r.status)}">${esc(r.status)} · ${r.greenBeats}/${r.beats} beats green</p>${badge}
     ${mediaFor(r)}
-  </section>`,
-    )
+  </section>`;
+    })
     .join('\n');
 
   return `<!doctype html>
@@ -145,6 +155,7 @@ export function renderGalleryIndex(rows) {
   .verdict.red { color: #cf222e; font-weight: 600; }
   video, img { max-width: 100%; border-radius: 4px; }
   .no-clip { color: #666; font-style: italic; }
+  .stale-badge { color: #9a6700; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -527,7 +538,10 @@ export function regenerateGallery(root, wroteThisRun = []) {
   }
 
   mkdirSync(base, { recursive: true });
-  const html = renderGalleryIndex(rows);
+  // Findings row 56 + row 14, T1 ruling 1283 (option B) — a row whose story
+  // file has moved on since its artifact was committed gets a visible badge,
+  // never a silent gate: `staleArtifacts` NAMES, it never throws.
+  const html = renderGalleryIndex(rows, staleArtifacts(root));
   writeFileSync(join(base, 'index.html'), html);
   return { rows, html };
 }
