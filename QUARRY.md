@@ -59,15 +59,15 @@ operator-ratified new cap — never a silent raise.
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `projects` | 46 | 10,951 | **9,061** | ratified 9,061 — M7-A reset-resolvable (+94, growth): Rebuild adds a template npm command only when package.json has the script; lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,156 | **12,578** | ratified 12,578 — M7-C door re-exports OD (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `agents` | 46 | 13,013 | **13,013** | ratified 13,013 — row 91 session-end hooks fire once for headless runs (forge-8vfn.8.1.7), lane-ratified under ruling 666; see git history for prior raises. |
-| `sessions` | 59 | 20,520 | **20,482** | ratified 20,482 — M7-C door re-exports OD, round-G circular-import fix (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `flows` | 83 | 23,499 | **23,301** | ratified 23,301 — row 93 stale remote branch fail-fast + cleanup (forge-8vfn.8.1.8), T1 ruling 1459 above lane authority (+128); see git history for prior raises. |
+| `agents` | 46 | 13,065 | **13,065** | ratified 13,065 — row 94 progress-only stream deadline (forge-8vfn.8.1.9), lane-ratified under ruling 666; see git history for prior raises. |
+| `sessions` | 59 | 20,542 | **20,504** | ratified 20,504 — row 94 heartbeat + deadline count only progress (forge-8vfn.8.1.9), lane-ratified under ruling 666; see git history for prior raises. |
+| `flows` | 83 | 23,505 | **23,305** | ratified 23,305 — row 93 ownership recorded on every attempt, hand-off cleanup (forge-8vfn.8.1.8), +4 lane-ratified under ruling 666 on top of T1 1459; see git history for prior raises. |
 | `factory` | 14 | 2,113 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 38 | 11,129 | **11,129** | ratified 11,129 — M7-C door re-exports OD round G (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,837 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **459** | **125,369** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **459** | **125,449** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -299,7 +299,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/architect-brain-read.ts | sessions | rewritten | 93 **New file, M7-C ABR (forge-8vfn.8.3.5, ruling 666):** the architect's own `brain.read` tally + emission, wrapping each phase's `KindStepHandler` from outside `architect-steps.ts` (near the file cap) and `kind-turn.ts` (ruling 78's hook budget). Priced into `sessions`'s cap-table raise 20,000 → 20,093. |
 | packages/sessions/bash-fence.ts | sessions | verbatim | 508 |
 | packages/sessions/kinds/brain-fix.ts | sessions | rewritten | 276 |
-| packages/sessions/kinds/fix-turn.ts | sessions | rewritten | 301 |
+| packages/sessions/kinds/fix-turn.ts | sessions | rewritten | 305 |
 | packages/sessions/kinds/fix-registry.ts | sessions | rewritten | 76 |
 | packages/knowledge/brain-paths.ts | knowledge | pruned | 198 |
 | packages/flows/claim-validator.ts | flows | verbatim | 264 |
@@ -345,7 +345,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/interactive-finalizers.ts | sessions | verbatim | 589 |
 | packages/sessions/interactive-runner.ts | sessions | verbatim | 294 |
 | packages/sessions/interactive-agent-step.ts | sessions | rewritten | 730 |
-| packages/sessions/interactive-session.ts | sessions | verbatim | 772 |
+| packages/sessions/interactive-session.ts | sessions | verbatim | 790 |
 | packages/sessions/turn-cost-rows.ts | sessions | verbatim | 160 |
 | packages/sessions/session-status-io.ts | sessions | rewritten | 224 |
 | packages/knowledge/kb-backend.ts | knowledge | verbatim | 280 |
@@ -437,10 +437,10 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/scheduler-dispatch.ts | flows | verbatim | 252 |
 | packages/flows/scheduler.ts | flows | verbatim | 398 |
 | packages/flows/scheduler-sweeps.ts | flows | verbatim | 177 |
-| packages/flows/scheduler-run-one.ts | flows | verbatim | 545 |
+| packages/flows/scheduler-run-one.ts | flows | verbatim | 551 |
 | packages/flows/stale-remote-branch-guard.ts | flows | verbatim | 73 |
 | packages/agents/skill-path.ts | agents | verbatim | 239 |
-| packages/agents/stream-deadline.ts | agents | verbatim | 74 |
+| packages/agents/stream-deadline.ts | agents | verbatim | 126 |
 | packages/agents/testing.ts | agents | verbatim | 13 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `studio/materials.ts`'s exports, `DEFAULT_IDLE_DEADLINE_MS`, `registeredSdkIds`, `DispatchAgentRunOpts`/`DispatchAgentRunResult` have no production consumer outside this package, only `apps/forge`/`packages/sessions` tests reach for them.** |
 | packages/library/studio/artifact-registry.ts | library | verbatim | 151 |
 | packages/library/studio/catalog-registry.ts | library | verbatim | 90 |
