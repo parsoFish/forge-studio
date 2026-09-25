@@ -195,6 +195,12 @@ export interface HookDefinition {
   /** Relative to the hook's own directory — validated to resolve inside it. */
   script: string;
   permissions: HookPermissionManifest;
+  /** RAW on-disk origin marker (forge-8vfn.8.3.7) — `'operator'` when
+   *  stamped by a create/edit route at write time; absent for a
+   *  shipped/hand-authored hook.yaml. Never read directly by a consumer —
+   *  always through `@forge/kernel`'s `originOfHookOrTemplate`, which maps
+   *  it to the wire's `HookTemplateOrigin` ('ootb' | 'operator'). */
+  origin?: string;
 }
 
 /** Names the real on-disk source a `carriedBy` array was scanned from, and how
@@ -363,8 +369,9 @@ export function loadHookDefinition(id: string, root: string = FORGE_ROOT): HookD
   const scriptRel = reqString(d, 'script', yamlPath);
   resolveHookScriptPath(dir, scriptRel); // throws before any read of the script
   const permissions = parseHookPermissions(d['permissions'], yamlPath);
+  const origin = optString(d, 'origin');
 
-  return { id, name, description, on, matcher, script: scriptRel, permissions };
+  return { id, name, description, on, matcher, script: scriptRel, permissions, origin };
 }
 
 // ---------------------------------------------------------------------------

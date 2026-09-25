@@ -26,6 +26,7 @@ K=3 # forge-8vfn.7.6.89: "k=3, default" — named once, here, nowhere else.
 target="${1:?usage: gate-rerun-alone.sh <target-test-file> <fail-count> <failing-cmd>}"
 n="${2:?}"
 cmd="${3:-}"
+step_log="${4:-}"
 
 refuse() { echo "ALONE-RERUN $target REFUSED — $*"; exit 0; }
 
@@ -66,6 +67,21 @@ case "$cmd" in
     ;;
 esac
 [ -n "$rerun" ] || refuse "the single failing step's command does not cover $target: '$cmd'"
+
+# forge-8vfn.8.2.2 — A STEP THAT COVERS THE FILE IS NOT A STEP WHOSE RED IS THE
+# FILE. `npm test` (or any multi-file step) covers every test; the proof is only
+# about the named file if every failing test the step's own log locates IS that
+# file. node's TAP prints `location: '<abs>:<line>:<col>'` for each failure,
+# vitest prints `FAIL  <path>`. No located red at all is UNKNOWN, and refuses.
+[ -r "$step_log" ] || refuse "the failing step's log is unreadable ('$step_log'), so its red cannot be named"
+if [ "$cmd" = 'npm run test:ui' ]; then   # vitest: ` FAIL  <path relative to apps/studio> > …`
+  reds="$(sed -n 's/^ *FAIL  *\([^ >]*\.[jt]sx\{0,1\}\) .*/apps\/studio\/\1/p' "$step_log" | sort -u)"
+else                                        # node TAP: `location: '<abs>:<line>:<col>'` (a nested gate's own FAIL rows are not locations)
+  reds="$(sed -n "s/^ *location: '\(.*\):[0-9]*:[0-9]*'\$/\1/p" "$step_log" | sed "s#^$PWD/##" | grep -v '^$' | sort -u)"
+fi
+[ -n "$reds" ] || refuse "the failing step's log locates no failing test, so its red cannot be named"
+other="$(printf '%s\n' "$reds" | grep -vxF -- "$target" | head -1)"
+[ -z "$other" ] || refuse "the step's red is in $other, not $target — a rerun of $target proves nothing about it"
 
 ok=0
 for _ in $(seq 1 "$K"); do

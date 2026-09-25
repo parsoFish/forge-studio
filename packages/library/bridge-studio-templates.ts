@@ -240,9 +240,16 @@ export async function handleTemplateCreate(req: IncomingMessage, res: ServerResp
         }
         const raw = source.files[0]?.body ?? '';
         const parsed = matter(raw, {});
-        content = matter.stringify(parsed.content, { ...(parsed.data as Record<string, unknown>), id });
+        // forge-8vfn.8.3.7: stamped unconditionally on the COPY, regardless
+        // of the source template's own origin — duplicating a shipped
+        // template still produces an operator-authored item.
+        content = matter.stringify(parsed.content, { ...(parsed.data as Record<string, unknown>), id, origin: 'operator' });
       } else if (typeof b['content'] === 'string' && b['content']) {
-        content = b['content'];
+        // forge-8vfn.8.3.7: stamped server-side, unconditionally — any
+        // "origin" the client sent in its frontmatter is overwritten here;
+        // the server, never the caller, attests it.
+        const parsed = matter(b['content'], {});
+        content = matter.stringify(parsed.content, { ...(parsed.data as Record<string, unknown>), origin: 'operator' });
       } else {
         sendJson(res, 400, { error: 'content is required (or duplicateOf naming an existing template)' }, origin);
         return true;
