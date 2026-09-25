@@ -708,3 +708,41 @@ test('teardown survives a straggler still writing into origin.git (bd forge-8vfn
     await cleanupFixtureRoot(f.root, { knownWriters: straggler ? [straggler] : [] });
   }
 });
+test('M7-C last-flakes #3: teardown survives an UNIDENTIFIED straggler too, through the exact call shape the other real tests use', async () => {
+  // The three real tests above (:412, :513, :593) all call `f.cleanup()`
+  // with NO known writer — a real, unidentified git straggler from
+  // production `mergeAndPublish`/`createWiWorktree` calls, not a test's own
+  // injected one. Staged the same deterministic way as the straggler test
+  // above, but through `f.cleanup()` (never `cleanupFixtureRoot(...,
+  // {knownWriters})`) and with a write budget (3000ms) that deliberately
+  // outlives the OLD delay-only fallback's real-world ceiling — this reds
+  // on the pre-`discoverWriters()` code every time, not just under load.
+  const f = setup('INIT-2026-09-19-unidentified-teardown-race');
+  let straggler: ChildProcess | undefined;
+  try {
+    const packDir = join(f.origin, 'objects', 'pack');
+    const readyFile = join(f.root, '.straggler-ready-2');
+    const writerSrc = [
+      "const fs = require('node:fs');",
+      `fs.writeFileSync(${JSON.stringify(readyFile)}, 'ready');`,
+      'const end = Date.now() + 3000;',
+      'let i = 0;',
+      `while (Date.now() < end) { try { fs.writeFileSync(${JSON.stringify(packDir)} + '/straggler-' + (i++), 'x'); } catch {} }`,
+    ].join('\n');
+    straggler = spawn(process.execPath, ['-e', writerSrc], { detached: true, stdio: 'ignore' });
+
+    const deadline = Date.now() + 2000;
+    while (!existsSync(readyFile) && Date.now() < deadline) { /* spin — wait for the straggler to actually be running */ }
+    assert.ok(existsSync(readyFile), 'fixture precondition: the straggler must be running before teardown races it');
+
+    assert.ok(existsSync(f.cycleWorktreePath));
+  } finally {
+    // THE call shape under test: no knownWriters, exactly like the three
+    // real tests above — teardown must survive the unidentified straggler
+    // on its own (`discoverWriters()`), not because a caller named it.
+    await f.cleanup();
+    if (straggler && straggler.exitCode === null && straggler.signalCode === null) {
+      straggler.kill('SIGKILL'); // best-effort, in case it somehow outlived cleanup's own kill
+    }
+  }
+});
