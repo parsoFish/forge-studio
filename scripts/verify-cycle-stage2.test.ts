@@ -68,3 +68,25 @@ test('a flow that declares reflect waits on reflector.end — a manifest in done
   writeFileSync(join(h.root, '_logs', 'C-a', 'events.jsonl'), `${JSON.stringify({ skill: 'reflector', event_type: 'end', message: 'reflector.end' })}\n`);
   assert.equal(await h.stageTwo.waitLanded({ initiativeId: 'INIT-a', cycleId: 'C-a' }, Date.now() + 1000), true);
 });
+
+// ---------------------------------------------------------------------------
+// T3 M7-A fix round — Defect 1: R4-11-F1's `_queue/merged/` is a legitimate
+// landed state on its own (a confirmed remote merge), NOT only `_queue/done/`
+// — `merged/ → done/` is a same-sweep promotion this harness's own reflect
+// wait can outrun (see the reflect-wait-bound tests in verify-outcomes.test.ts).
+// A flow declaring no `on: merged` reflect must land the instant finalize
+// moves the manifest to EITHER queue state.
+// ---------------------------------------------------------------------------
+
+test('a flow with no merged reflect is LANDED when its manifest reaches _queue/merged/ — done/ is not the only landed state', async () => {
+  const h = harness({ flowId: 'forge-docs', door: 'flow-run', flowReflects: false });
+  mkdirSync(join(h.root, '_queue', 'merged'), { recursive: true });
+  writeFileSync(join(h.root, '_queue', 'merged', 'INIT-a.md'), '---\n---\n');
+  assert.equal(await h.stageTwo.waitLanded({ initiativeId: 'INIT-a', cycleId: 'C-a' }, Date.now() + 1000), true);
+  assert.ok(h.logs.some((l) => /_queue\/merged\//.test(l)), 'the log must name the actual queue state it landed in');
+});
+
+test('a flow with no merged reflect whose manifest is in NEITHER merged/ nor done/ times out (not landed)', async () => {
+  const h = harness({ flowId: 'forge-docs', door: 'flow-run', flowReflects: false });
+  assert.equal(await h.stageTwo.waitLanded({ initiativeId: 'INIT-a', cycleId: 'C-a' }, Date.now() + 50), false);
+});
