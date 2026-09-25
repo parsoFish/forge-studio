@@ -10,7 +10,7 @@
  * downgrades a FOUND run to `'unresolved'` when the flows-list read failed
  * (never fabricates "unregistered" off a failed read). All of that is
  * already exhaustively pinned at the pure-logic level in
- * `tests/regression/flow-run-detail-client.test.ts` (its own "KILL 1a/1b/2a/
+ * `apps/studio/tests/regression/flow-run-detail-client.test.ts` (its own "KILL 1a/1b/2a/
  * 2b/3" tests + the thrown-fetch test using `fetchFlowRunDetail`'s
  * injectable `fetchImpl` param — no mocked global `fetch` needed).
  *

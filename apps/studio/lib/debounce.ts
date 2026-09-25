@@ -1,5 +1,5 @@
 /**
- * forge-ui/lib/debounce.ts — leading+trailing debounce.
+ * apps/studio/lib/debounce.ts — leading+trailing debounce.
  *
  * ADR-044 (`docs/decisions/044-read-path-memoization.md`) P1 consequence: the
  * `/api/runs` cache still costs one full pass per uncached call, so a client

@@ -41,7 +41,7 @@ export const CLIENT_SLUG_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 /** A drafted package's detected shape, by file presence, or `null` when the
  *  session has no file-package artifact at all. `AuthoringPackageKind`
  *  (W8-B4 FIX-1) is the ONE enumeration of "recognised shape" —
- *  `forge-ui/lib/authoring-package-shape.ts` — so a shape added there is a
+ *  `apps/studio/lib/authoring-package-shape.ts` — so a shape added there is a
  *  shape this gate accepts for free; only `'unknown'`/`null` (states that
  *  array does not itself describe) are added here. Before FIX-1 this was a
  *  hand-typed `'skill' | 'hook' | 'unknown' | null` that silently excluded

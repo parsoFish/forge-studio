@@ -72,7 +72,7 @@ export type AgentHistoryDeps = AgentRunStateDeps & {
   }[];
 };
 
-// forge-ewl: the node/phase key `slug`'s own runs are recorded under (SKILL.md `phase:`) — `undefined` for an unknown slug, never a throw. `reflector` is a one-entry hand mirror of packages/flows' CANONICAL_PHASE_OVERRIDES (rank 5, not importable here): its frontmatter phase 'reflector' differs from its canonical run.phases key 'reflect'; every OTHER phase agent's frontmatter already equals its node id verbatim. Pinned against real run history in tests/unit/bridge-agents-history-rows.test.ts.
+// forge-ewl: the node/phase key `slug`'s own runs are recorded under (SKILL.md `phase:`) — `undefined` for an unknown slug, never a throw. `reflector` is a one-entry hand mirror of packages/flows' CANONICAL_PHASE_OVERRIDES (rank 5, not importable here): its frontmatter phase 'reflector' differs from its canonical run.phases key 'reflect'; every OTHER phase agent's frontmatter already equals its node id verbatim. Pinned against real run history in packages/agents/tests/unit/bridge-agents-history-rows.test.ts.
 function agentOwnPhaseKey(forgeRoot: string, slug: string): string | undefined {
   if (slug === 'reflector') return 'reflect';
   try { return listAgentDefinitions(skillsDir(forgeRoot)).find((d) => d.slug === slug)?.phase; } catch { return undefined; }

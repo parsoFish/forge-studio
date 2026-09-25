@@ -7,7 +7,7 @@
  * point at.
  *
  * WHY THIS FILE OPTS INTO jsdom, like its neighbour
- * `studio/session/kickoff-publish-and-stay.test.ts`: only a real mint can prove
+ * `apps/studio/tests/regression/kickoff-publish-and-stay.test.ts`: only a real mint can prove
  * the second half — that the attribute FILLS and the anchor APPEARS once the
  * POST resolves. Both halves matter, because the wrong fixes fail in opposite
  * directions: deleting the attribute leaves the pinned S2 beat 10 / S4 beat 9

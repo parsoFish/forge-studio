@@ -79,7 +79,7 @@ export function invalidSessionIdReason(id: string): string | null {
 // Its kickoff route and verdict dispatch are gone (W8-B5b) but the constant
 // STAYS EXPORTED for one live reason: forge-ui's session-shell back-link maps
 // it to `/community` via a parity test against this SSOT
-// (apps/studio/lib/session-shell-view.test.ts). `invalidProjectReason`'s
+// (apps/studio/tests/contract/session-shell-view.test.ts). `invalidProjectReason`'s
 // carve-out below does NOT make pre-retirement sessions reachable — kind
 // resolution against `loadSessionKinds` (bridge-studio-sessions.ts) 404s on
 // "community-refresh" before the project carve-out is ever consulted, so
@@ -98,9 +98,9 @@ export const COMMUNITY_REFRESH_PROJECT_ANCHOR = '.community-registry';
 // validate-or-reject contract) has a single source rather than re-deriving
 // the same leading-"." fact. forge-ui never imports cli/ at runtime (see
 // this repo's SSOT-parity-test convention, e.g.
-// apps/studio/lib/trigger-kind-parity.test.ts) — its own `isPseudoProjectAnchor`
+// apps/studio/tests/contract/trigger-kind-parity.test.ts) — its own `isPseudoProjectAnchor`
 // (apps/studio/lib/session-shell-view.ts) is a small, independently-declared
-// mirror, kept honest by a parity test (apps/studio/lib/session-shell-view.test.ts).
+// mirror, kept honest by a parity test (apps/studio/tests/contract/session-shell-view.test.ts).
 export function isPseudoProjectAnchor(project: string): boolean {
   return project.startsWith('.');
 }

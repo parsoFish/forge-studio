@@ -1,7 +1,7 @@
 /**
  * The log observer's own contract — beads **forge-q1z** and **forge-1im**.
  *
- * The subject is `tests/test-fixtures/interactive-runner-log-observer.ts`, and
+ * The subject is `packages/agents/tests/test-fixtures/interactive-runner-log-observer.ts`, and
  * these are the tests that made it a module rather than a copied block.
  *
  * **forge-q1z** — `assertNoInteractiveRunnerSkillEvent` must be SCOPED to a
@@ -22,7 +22,7 @@
  * fix would be the defect, not the cure.
  *
  * SPLIT FROM a 1,226-line file. Its 268-line shared block became a real
- * fixture module, `tests/test-fixtures/interactive-runner-log-observer.ts`,
+ * fixture module, `packages/agents/tests/test-fixtures/interactive-runner-log-observer.ts`,
  * because all four of its clusters used it and one of them tests the log
  * walker as its subject — three duplicated copies of a 162-line walker is the
  * signal that a seam is wrong, not a smaller file (T1 ruling 94). The three

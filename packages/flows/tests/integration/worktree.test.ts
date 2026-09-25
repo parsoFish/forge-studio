@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/worktree.ts — focused on F1.I4 self-heal: a fresh
+ * Tests for packages/flows/worktree.ts — focused on F1.I4 self-heal: a fresh
  * `add()` succeeds even if the prior cycle left stale `.git/worktrees/`
  * registry entries or an orphan dir at the target path.
  */

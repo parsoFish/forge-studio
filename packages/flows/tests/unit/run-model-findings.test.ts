@@ -1,8 +1,8 @@
 /**
  * Acceptance tests for R6-05's additive `RunPhaseMeta.findings` field —
- * `orchestrator/run-model.ts`'s `RunPhaseMeta` type (mirrored client-side in
+ * `packages/flows/run-model.ts`'s `RunPhaseMeta` type (mirrored client-side in
  * `apps/studio/lib/studio-client.ts`) does NOT declare `findings` yet, and
- * `orchestrator/run-model-derive.ts`'s `buildNodeMeta`/`deriveNodeMeta` do
+ * `packages/flows/run-model-derive.ts`'s `buildNodeMeta`/`deriveNodeMeta` do
  * not populate one. Every assertion below is a legitimate RED against the
  * CURRENT, unmodified derivation.
  *
@@ -26,7 +26,7 @@
  * MEASURED GROUNDS (not invented — read from the real producer + the real
  * event-routing code, see the task report for the full trace):
  *
- * (a) THE REAL PRODUCER. `orchestrator/phases/adversarial-review.ts:330-332`:
+ * (a) THE REAL PRODUCER. `packages/stations/phases/adversarial-review.ts:330-332`:
  *       const counts: Record<string, number> =
  *         { total: harvest.record.findings.length, blocker: 0, major: 0, minor: 0, info: 0 };
  *       for (const f of harvest.record.findings) counts[f.severity] = (counts[f.severity] ?? 0) + 1;
@@ -79,7 +79,7 @@ import type { EventLogEntry, Phase } from '@forge/kernel';
 import type { RunPhaseMeta } from '../../run-model.ts';
 
 // ---------------------------------------------------------------------------
-// helpers — mirrors orchestrator/run-model-derive.test.ts's `ev()` house style
+// helpers — mirrors packages/flows/tests/unit/run-model-derive.test.ts's `ev()` house style
 // ---------------------------------------------------------------------------
 
 let seq = 0;

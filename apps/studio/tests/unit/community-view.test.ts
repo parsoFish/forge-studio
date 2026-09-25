@@ -1,5 +1,5 @@
 /**
- * Tests for forge-ui/lib/community-view.ts (R3-07-F1) — DOES NOT EXIST YET.
+ * Tests for apps/studio/lib/community-view.ts (R3-07-F1) — DOES NOT EXIST YET.
  * Vitest cannot even collect this file until it lands (module-not-found is
  * the expected red).
  *
@@ -199,7 +199,7 @@ test('hubLabel with a real hub renders its name', () => {
 // communityBadgeForSkill — T2 round 6, AT GROUP 3: the /skills join must be
 // gated on the skill's OWN source, never on id alone. `entry` deliberately
 // takes a minimal structural shape ({id, source}) rather than importing
-// forge-ui/lib/skill-client.ts's full SkillLibraryEntry type — this module
+// apps/studio/lib/skill-client.ts's full SkillLibraryEntry type — this module
 // stays decoupled from that client, matching its own stated "no
 // re-derivation of a fact the community index didn't send" convention.
 // ---------------------------------------------------------------------------

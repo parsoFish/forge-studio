@@ -7,7 +7,7 @@
 Skills are designed to be invoked from two surfaces:
 
 1. **Interactive Claude Code session** — the user types `/architect` or `/reflector` in a Claude Code session and the skill takes over for that phase.
-2. **Programmatic via the orchestrator** — `orchestrator/cycle.ts` and `loops/ralph/runner.ts` invoke skills via the Claude Agent SDK in unattended runs.
+2. **Programmatic via the orchestrator** — `packages/flows/cycle.ts` and `packages/agents/ralph/runner.ts` invoke skills via the Claude Agent SDK in unattended runs.
 
 Both surfaces use the same `SKILL.md` — that file is the contract.
 
@@ -115,5 +115,5 @@ Invoke `brain-query` with: ...
 
 1. Create `skills/<name>/SKILL.md` following the shape above.
 2. Add a row to the inventory table here.
-3. If it's used by the orchestrator, register it in `orchestrator/cycle.ts`.
+3. If it's used by the orchestrator, register it in `packages/flows/cycle.ts`.
 4. Validate behaviour against real merged cycles (the `benchmarks/` harnesses were removed 2026-05-25).

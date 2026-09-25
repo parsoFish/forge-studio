@@ -14,7 +14,7 @@
  * the guarantee the field exists to provide.
  *
  * Tested ONLY via the pure `parseConnection` function
- * (forge-ui/lib/connection-client.test.ts) — no fetch, no window, no jsdom
+ * (apps/studio/tests/unit/connection-client.test.ts) — no fetch, no window, no jsdom
  * (this repo's forge-ui vitest config is `environment: 'node'`, a standing
  * decision; the transport, `bridgeFetch`, requires `window`). The over-the-wire
  * behaviour (list/detail/probe/install round trips, the security core) is
@@ -24,8 +24,8 @@
 import { bridgeFetch } from './bridge-client.ts';
 
 // ---------------------------------------------------------------------------
-// Types mirroring server shapes (orchestrator/studio/connection-library.ts,
-// orchestrator/studio/connection-probe.ts, packages/library/bridge-studio-connections.ts)
+// Types mirroring server shapes (packages/library/studio/connection-library.ts,
+// packages/library/studio/connection-probe.ts, packages/library/bridge-studio-connections.ts)
 // ---------------------------------------------------------------------------
 
 export type ConnectionKind = 'tool' | 'mcp';
@@ -387,7 +387,7 @@ export type ConnectionInstallOutcome =
   | { ok: true; suppressed: false; installed: boolean; probe: ConnectionProbeResult };
 
 /** forge-6gv.8.2 — the CONFIRM-BEFORE-INSTALL preview
- *  (studio/connection-install.ts's `InstallPreview`, carried verbatim):
+ *  (packages/library/studio/connection-install.ts's `InstallPreview`, carried verbatim):
  *  package, version, registry, the exact argv, and whether npm lifecycle
  *  scripts will run. Every field is REQUIRED — a preview response missing
  *  one is malformed, never defaulted. */

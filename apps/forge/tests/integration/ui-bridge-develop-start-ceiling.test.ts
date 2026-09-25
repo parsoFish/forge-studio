@@ -6,7 +6,7 @@
  * (batch requests refuse it outright — the T1 batch-semantics ruling: a
  * single scalar override cannot map onto N manifests unambiguously). The
  * `FORGE_COST_CEILING_USD` env var's precedence over the manifest field is
- * pre-existing behaviour (`orchestrator/cycle.ts` `resolveCostCeilingOverride`)
+ * pre-existing behaviour (`packages/flows/cycle.ts` `resolveCostCeilingOverride`)
  * and is UNCHANGED by this WI — this file does not touch env precedence, it
  * only pins that the route's new body field reaches the manifest at all.
  *
@@ -23,7 +23,7 @@
  * Route contract pinned:
  *   (1) A single-id batch with a valid `costCeilingUsd` stamps
  *       `cost_ceiling_usd` onto the initiative's manifest, such that
- *       `resolveCostCeilingOverride(manifestPath)` (orchestrator/cycle.ts)
+ *       `resolveCostCeilingOverride(manifestPath)` (packages/flows/cycle.ts)
  *       returns EXACTLY that value — not the `cost_budget_usd x (1 +
  *       DERIVED_CEILING_MARGIN_SHARE)` fallback a manifest with no explicit
  *       ceiling would derive — and reports `source: 'manifest'`, so a stopped

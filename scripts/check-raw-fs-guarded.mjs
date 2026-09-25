@@ -275,7 +275,7 @@ export const GUARD_PRODUCERS = [
   'guardedReadFile',
   'guardedWriteFile',
   'guardedReadDir',
-  // W8-C2a (forge-5kh). `resolveKbBrainDir` (orchestrator/brain-paths.ts:97) is
+  // W8-C2a (forge-5kh). `resolveKbBrainDir` (packages/knowledge/brain-paths.ts:97) is
   // a guard producer in fact, not by courtesy: it passes `kbId` as its OWN
   // `segments[]` element to `resolveGuardedPath` against two fixed
   // forgeRoot-derived roots, and returns `dirname(guarded.realPath)` — the

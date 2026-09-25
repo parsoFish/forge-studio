@@ -2,7 +2,7 @@
  * Tests for packages/flows/run-list-cache.ts — ADR-044 P1: a keyed memo of the single
  * run derivation (docs/decisions/044-read-path-memoization.md).
  *
- * Structure mirrors orchestrator/run-model.test.ts's fixture helpers (small
+ * Structure mirrors packages/flows/tests/integration/run-model.test.ts's fixture helpers (small
  * synthetic manifests + events.jsonl trees on tmp dirs) since this module
  * is a thin caching layer over exactly that derivation.
  */
@@ -33,7 +33,7 @@ import {
 } from '../../run-list-cache.ts';
 
 // ---------------------------------------------------------------------------
-// Helpers (mirrors orchestrator/run-model.test.ts's fixture builders)
+// Helpers (mirrors packages/flows/tests/integration/run-model.test.ts's fixture builders)
 // ---------------------------------------------------------------------------
 
 function makeTmp(): string {

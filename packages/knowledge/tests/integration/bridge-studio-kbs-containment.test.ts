@@ -4,10 +4,10 @@
  * mirroring the fixture idiom of apps/forge/tests/integration/bridge-studio-write.test.ts and
  * apps/forge/tests/integration/bridge-studio-flows.test.ts.
  *
- * Root cause: `orchestrator/brain-paths.ts::resolveKbBrainDir` resolves
+ * Root cause: `packages/knowledge/brain-paths.ts::resolveKbBrainDir` resolves
  * `brain/<kbId>` (and its `brain/projects/<kbId>` fallback) with `resolve()`
  * + `existsSync()` — no `realpathSync`, no per-segment identity check, no
- * `nlink` check (see orchestrator/brain-paths-containment.test.ts for the
+ * `nlink` check (see packages/knowledge/tests/integration/brain-paths-containment.test.ts for the
  * unit-level pins on that function directly). Downstream `kb-graph.ts` then
  * bare-`join()`s nested segments (`themes/`, `_raw/`, `_guidance/`,
  * `INDEX.md`, `profile.md`) off that unresolved dir. The bridge's own

@@ -27,7 +27,7 @@
  *   - GET /api/studio/flows, /api/studio/agents, /api/studio/projects
  *     (apps/forge/bridge-studio.ts) and GET /api/studio/kbs
  *     (packages/knowledge/bridge-studio-kbs.ts) each add `provenance` to every descriptor.
- *   - orchestrator/studio/kb-descriptor.ts: KbDescriptor gains an OPTIONAL
+ *   - packages/knowledge/studio/kb-descriptor.ts: KbDescriptor gains an OPTIONAL
  *     `origin?: string`; loadKbDescriptor reads it, serializeKbDescriptor
  *     writes it when present.
  *   - POST /api/studio/kbs (packages/knowledge/bridge-studio-kbs.ts) stamps
@@ -527,7 +527,7 @@ function stripCommentsForCallSiteCheck(src: string): string {
  *
  * REWRITTEN IN M4 PR 4b, because the previous implementation was wrong and its
  * own doc comment said otherwise. It claimed to mirror
- * `packages/knowledge/kb-lint-summary.test.ts`'s `extractFunctionBody`; in fact
+ * `packages/knowledge/tests/integration/kb-lint-summary.test.ts`'s `extractFunctionBody`; in fact
  * it took the LAST top-level brace block between the signature and the next
  * `\nexport `, which is the target's body only while no NON-EXPORTED function
  * happens to follow it. When PR 4b moved `newProjectBrainSessionId` to sit

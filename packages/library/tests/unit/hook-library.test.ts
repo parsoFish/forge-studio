@@ -1,12 +1,12 @@
 /**
- * Acceptance tests for orchestrator/studio/hook-library.ts (R3-03-F1 + F1b) —
+ * Acceptance tests for packages/library/studio/hook-library.ts (R3-03-F1 + F1b) —
  * DOES NOT EXIST YET. This file is RED at branch base: every describe block
  * below fails at import time (`Cannot find module './hook-library.ts'`) —
  * that is the expected, deliberate red. Do not stub the module into
  * existence to turn this green; red is the deliverable of this round.
  *
  * Contract this file pins (docs/decisions/027-studio-object-model.md's
- * "Amendment (R3-03, 2026-08-04)" + docs/roadmaps/R3-library-componentry.md
+ * "Amendment (R3-03, 2026-08-04)" + docs/roadmaps/archive/R3-library-componentry.md
  * §R3-03):
  *
  *   A library HOOK is an agent-lifecycle customisation — {id, name,
@@ -75,7 +75,7 @@
  *       with a `composition.hooks` array using `as unknown as AgentDefinition`
  *       (never `any`, never `@ts-expect-error`) — the dispatch-hijack proof,
  *       which calls the REAL, ALREADY-SHIPPED `resolveBandGuard`
- *       (orchestrator/agent-bands.ts) directly and needs a real typed value.
+ *       (packages/agents/agent-bands.ts) directly and needs a real typed value.
  *       `AgentComposition` does not carry `hooks` yet (that lands with this
  *       feature); the cast is the documented, minimal way to pin the contract
  *       today without waiting on the type to exist. Every OTHER test reads
@@ -197,7 +197,7 @@ function writeAgentSkillMd(
  *  CURRENT `AgentComposition` shape — see D-E in the header for the ONE test
  *  that widens this with a `hooks` field via `as unknown as`. */
 // `makeAgentDef` moved with the dispatch-hijack proof to
-// `packages/agents/agent-bands-dispatch-hijack.test.ts` (M4-library PR 2) — it
+// `packages/agents/tests/regression/agent-bands-dispatch-hijack.test.ts` (M4-library PR 2) — it
 // was this file's only `AgentDefinition` fixture and had no other reader.
 
 // ---------------------------------------------------------------------------
@@ -633,7 +633,7 @@ describe('OOTB seed hooks (mockup data.jsx HOOKS_LOCAL, provenance: OOTB)', () =
 // PLATFORM_GUARD_IDS / studio/catalog.yaml guards: id-set PARITY
 // (2026-08-04 peer-review JOB 5a). `lintHookComposition` sources its "is this
 // id platform machinery" ground truth from `PLATFORM_GUARD_IDS`
-// (orchestrator/agent-bands.ts) — a fixed constant, deliberately NOT
+// (packages/agents/agent-bands.ts) — a fixed constant, deliberately NOT
 // re-derived from studio/catalog.yaml (catalog.yaml is a display surface, a
 // lint fixture root may not seed one at all). Ratified: that choice is
 // correct. But two representations that must agree, with nothing checking
@@ -672,7 +672,7 @@ describe('PLATFORM_GUARD_IDS / studio/catalog.yaml guards: id-set parity (bidire
 
   // R4-18 mechanical amendment (2026-08-10): a 5th band, 'onboard-preflight',
   // joins the vocabulary — both sides now count 10, not 9. RED until R4-18's
-  // production change lands (see orchestrator/onboard-flow-gate.test.ts AT-2).
+  // production change lands (see apps/forge/tests/integration/onboard-flow-gate.test.ts AT-2).
   it('sanity: both sides are exactly the known ten ids (catches a silent count-only false pass)', () => {
     assert.strictEqual(PLATFORM_GUARD_IDS.length, 10);
     const catalog = loadCatalog(join(REPO_ROOT, 'studio', 'catalog.yaml'));
@@ -731,7 +731,7 @@ describe('lintHookComposition: the correct placement in each field produces no f
 });
 
 // ---------------------------------------------------------------------------
-// The dispatch-hijack proof MOVED to `packages/agents/agent-bands-dispatch-hijack.test.ts`
+// The dispatch-hijack proof MOVED to `packages/agents/tests/regression/agent-bands-dispatch-hijack.test.ts`
 // in M4-library PR 2. It asserted about `resolveBandGuard`, which is agents'
 // function, from this library test file — a `library -> agents` import, which
 // PACKAGE_RANK forbids (library 2, agents 3). The assertions are verbatim

@@ -18,14 +18,14 @@
  * watch most, with a fully green suite — client-side re-implementation of
  * an attribution that already has one correct, server-side implementation
  * is the wrong fix (the SAME trap that inflated per-node cost 2-3x in this
- * codebase before it was fixed, per `orchestrator/run-model-derive.ts`'s
+ * codebase before it was fixed, per `packages/flows/run-model-derive.ts`'s
  * own `sumAuthoritativeCostUsd` comment).
  *
  * THE FIX moves attribution server-side: `RunPhaseMeta` gains an additive
  * `lastEventAt?: string`, computed over EVERY event `eventToNodeId`
  * attributes to a node (not filtered to `PROGRESS_EVENT_TYPES`, unlike its
  * sibling `lastProgressAt`) — pinned at the server/derivation layer by
- * `orchestrator/run-model-last-event-at.test.ts` (a NEW sibling file, this
+ * `packages/flows/tests/integration/run-model-last-event-at.test.ts` (a NEW sibling file, this
  * same amendment). This file's job shrinks to match: `tailEvents` is
  * DROPPED from the signature entirely — the function reads the
  * already-server-attributed `run.phaseMeta[nodeId]?.lastEventAt`, no

@@ -182,7 +182,7 @@ export type ProjectConfig = {
    * `issue-raised` project-event trigger kinds. Optional — absent means this
    * project can never match a project-event trigger (fail-closed; no
    * auto-discover / directory-name fallback anywhere). Validated by the SAME
-   * `REPO_RE` `orchestrator/trigger-payload.ts` uses to extract a payload's
+   * `REPO_RE` `packages/flows/trigger-payload.ts` uses to extract a payload's
    * repo — never a second, hand-copied regex.
    */
   repo?: string;

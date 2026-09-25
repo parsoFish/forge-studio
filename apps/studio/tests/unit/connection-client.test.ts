@@ -1,5 +1,5 @@
 /**
- * Tests for forge-ui/lib/connection-client.ts (R3-04-F2/F3) — DOES NOT EXIST
+ * Tests for apps/studio/lib/connection-client.ts (R3-04-F2/F3) — DOES NOT EXIST
  * YET. Vitest cannot even collect this file until it lands (module-not-found
  * is the expected red, mirroring hook-client.test.ts's own header note).
  *

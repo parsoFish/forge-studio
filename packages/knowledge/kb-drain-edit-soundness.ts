@@ -611,7 +611,7 @@ function outOfScopeNotDisposed(relPath: string): string {
  * **Why out-of-scope changes are detected but not disposed of.** The snapshot
  * spans the whole brain and the turn takes minutes, so "a file under brain/
  * changed during the window" does NOT mean "this turn changed it".
- * `orchestrator/phases/reflector.ts` writes brain themes from the daemon, and
+ * `packages/stations/phases/reflector.ts` writes brain themes from the daemon, and
  * `deriveKbActiveJob` is scoped per-KB, so there is no lock between the two: an
  * operator clicking Drain while a cycle reflects is entirely reachable.
  * Reverting on that evidence would delete the reflector's just-written theme —

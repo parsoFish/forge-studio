@@ -4,7 +4,7 @@
  * FIX FIRST, item 4): `validateConnections` is moving OUT of
  * `orchestrator/studio/validate.ts` (997 lines, over the house 800-line cap
  * — this initiative alone added 131 of them) into its own sibling module
- * `orchestrator/studio/connection-validate.ts`, the SAME discipline the
+ * `packages/library/studio/connection-validate.ts`, the SAME discipline the
  * initiative already applied when it extracted `connection-catalog.ts` out
  * of `registry.ts`. This file moved out of `validate.test.ts` to mirror
  * that 1:1 (the house convention throughout this campaign: one test file

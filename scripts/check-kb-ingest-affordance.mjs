@@ -2,7 +2,7 @@
 /**
  * check-kb-ingest-affordance.mjs — no-ingest-affordance RATCHET (operator
  * decision 3, 2026-08-03 — docs/decisions/010-brain-first.md line 22,
- * docs/roadmaps/R1-contract-componentry.md lines ~213-227: "Explicit
+ * docs/roadmaps/archive/R1-contract-componentry.md lines ~213-227: "Explicit
  * negative AC (decision 3): no ingest affordance anywhere in creation or
  * maintenance ... grep-level assert no UI route/action triggers ingest").
  *

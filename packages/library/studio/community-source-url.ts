@@ -7,7 +7,7 @@
  *
  *   - `orchestrator/studio/registry.ts` resolves an item's `sourceUrl` to the
  *     `sources:` row that holds that repo's facts (read time, no network);
- *   - `orchestrator/studio/community-refresh-api.ts` resolves the same
+ *   - `packages/library/studio/community-refresh-api.ts` resolves the same
  *     `sourceUrl` to the API call it is allowed to make (refresh time).
  *
  * A second, re-typed copy of the parser would be the campaign's most-repeated
@@ -29,7 +29,7 @@
  *      origin and both resolve to an attacker's host.
  *
  * This is the containment ratchet (cli/studio-path-guard.ts's
- * `resolveGuardedPath`, orchestrator/interactive-finalizers.ts's guarded
+ * `resolveGuardedPath`, packages/sessions/interactive-finalizers.ts's guarded
  * writes) applied to the NETWORK seam instead of the filesystem seam.
  */
 

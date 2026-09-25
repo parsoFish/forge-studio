@@ -1,6 +1,6 @@
 /**
  * kb-health-render.test.ts — R1-06 WI-3 group B (2)+(4): `KbHealth.tsx`
- * (forge-ui/components/studio/knowledge/KbHealth.tsx) gains structural
+ * (apps/studio/components/studio/knowledge/KbHealth.tsx) gains structural
  * `data-*` hooks so a journey can assert KB health WITHOUT scraping
  * rendered prose, and its "Suggested action" copy stops naming manual
  * ingest (operator decision 3, R1-06-F3 — ingest stays reflection-only;

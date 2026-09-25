@@ -11,7 +11,7 @@
  *
  *   - `kb.yaml`        — the KB descriptor `resolveKbBrainDir` /
  *                         `loadKbDescriptor` need to surface the project in
- *                         Studio's KB graph (`orchestrator/brain-paths.ts`).
+ *                         Studio's KB graph (`packages/knowledge/brain-paths.ts`).
  *                         Shape copied verbatim from the existing per-project
  *                         convention (see brain/projects/{gitpulse,mdtoc}/kb.yaml).
  *   - `profile.md`     — the machine-readable architecture profile planners

@@ -49,7 +49,7 @@ live gate.
 ## `run-view-types.ts` — three fields resolved toward the wire, not the server
 
 Bead `forge-8vfn.5.17`, M7-C. `RunStatus`/`RunPhaseStatus`/`RunPhaseMeta`/`Run` moved here
-from `packages/flows/run-view-types.ts` (parked there by M2-B to break the
+from `packages/contracts/run-view-types.ts` (parked there by M2-B to break the
 `run-model.ts` ↔ `run-model-derive.ts` cycle) — their correct home, since `apps/studio`'s
 `'use client'` components need them and `@forge/contracts` is the only package they may
 import (`check-boundaries`). `apps/studio/lib/studio-client.ts` had hand-mirrored the same

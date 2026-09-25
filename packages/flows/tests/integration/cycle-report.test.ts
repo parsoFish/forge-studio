@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/cycle-report.ts. The report builder consumes a
+ * Tests for packages/flows/cycle-report.ts. The report builder consumes a
  * variety of inputs (event log, manifest, work-item snapshots, brain themes,
  * git refs); these tests build synthetic fixtures and verify the markdown
  * output contains the load-bearing sections.

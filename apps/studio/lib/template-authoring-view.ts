@@ -6,7 +6,7 @@
 // A Next.js `page.tsx` may only export the framework's whitelisted names
 // (`default`, `metadata`, `dynamic`, …), so exporting them there fails
 // `next build` with "does not match the required types of a Next.js Page"
-// — a constraint `tsc -p forge-ui/tsconfig.tests.json` cannot see, because
+// — a constraint `tsc -p apps/studio/tsconfig.tests.json` cannot see, because
 // it does not read Next's generated route types. They live here instead,
 // with the page importing them. Same reason `HookLibraryResults.tsx` was
 // split out of `app/hooks/page.tsx`.

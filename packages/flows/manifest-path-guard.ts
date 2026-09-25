@@ -7,7 +7,7 @@
  * THE DEFECT (reproduced live by T2): `POST /api/initiatives`
  * (`packages/flows/bridge-recovery.ts`) accepted a manifest whose frontmatter carried
  * these four fields with ZERO validation (`validateManifest`,
- * `orchestrator/manifest.ts`, never checked them). `POST
+ * `packages/flows/manifest.ts`, never checked them). `POST
  * /api/recovery/:id/requeue` then calls `runRequeue`
  * (`packages/flows/forge-requeue.ts`), whose default `resume:false` ⇒
  * `preserveWorktree=false` ⇒ an unconditional
@@ -19,15 +19,15 @@
  * destroyed in the process.
  *
  * WHY GUARD AT THE WRITE POINT, NOT EVERY READ SITE: these four fields are
- * written ONCE, at ingest (`orchestrator/promote-manifests.ts`,
+ * written ONCE, at ingest (`packages/flows/promote-manifests.ts`,
  * `packages/flows/bridge-recovery.ts`'s `POST /api/initiatives`), and then read
  * UNCHECKED by roughly a dozen call sites downstream — `runRequeue`'s
  * `rmSync` + `git branch -D` / `push --delete`, the bridge's
- * approve/send-back verdict handlers, `orchestrator/requeue-resume.ts`'s
+ * approve/send-back verdict handlers, `packages/flows/requeue-resume.ts`'s
  * `events.jsonl` reads + `git -C <projectRepoPath>` calls,
- * `orchestrator/flow-artifacts.ts`'s `writeVerdictJson`,
- * `orchestrator/logging.ts`'s `createLogger` (both do
- * `resolve(logsRoot, cycleId)`), `orchestrator/scheduler.ts`'s
+ * `packages/flows/flow-artifacts.ts`'s `writeVerdictJson`,
+ * `packages/kernel/logging.ts`'s `createLogger` (both do
+ * `resolve(logsRoot, cycleId)`), `packages/flows/scheduler.ts`'s
  * `resolve('projects', m.project)` fallback. Guarding the WRITE choke point
  * (`writeManifest`) closes the defect for every one of those readers in one
  * place; guarding twelve read sites individually leaves the thirteenth
@@ -139,7 +139,7 @@ function resolveConfiguredProjectsRoot(forgeRoot: string): string {
  * behaviour changes: `writeManifest`'s short-lived callers
  * (`promote-manifests`, `mint-triggered-initiative`), the `runRequeue` CLI,
  * and `drain-fix-loop`/`finalize-merged`. The last two are NOT short-lived —
- * `orchestrator/scheduler.ts:526,549` calls them on every pass of the
+ * `packages/flows/scheduler.ts:526,549` calls them on every pass of the
  * `forge serve` forever loop — but they cache no root either: each call
  * re-resolves, so there are never two values in play to diverge. What makes
  * pin 7's defect possible is a SNAPSHOT, not uptime.
@@ -152,7 +152,7 @@ function resolveConfiguredProjectsRoot(forgeRoot: string): string {
  * declared-data-fails-open shape: a caller that declares a root and gets a
  * different one silently checked is worse than a rejection it can see. Every
  * production caller passes `resolveProjectsDir()`'s output, which is
- * unconditionally absolute (`orchestrator/config.ts:134-140`), so nothing
+ * unconditionally absolute (`packages/kernel/config.ts:134-140`), so nothing
  * legitimate reaches the refusal.
  *
  * THE PARAMETER IS NOT A WIDENING. It only chooses WHICH root the
@@ -262,8 +262,8 @@ export function isContainedProjectRepoPath(p: string, opts: ProjectsRootOpt): bo
 
 /**
  * `cycle_id` becomes a directory-entry name via `resolve(logsRoot, cycleId)`
- * at two independent WRITE sites (`orchestrator/flow-artifacts.ts`
- * `writeVerdictJson`, `orchestrator/logging.ts` `createLogger`) — a single
+ * at two independent WRITE sites (`packages/flows/flow-artifacts.ts`
+ * `writeVerdictJson`, `packages/kernel/logging.ts` `createLogger`) — a single
  * safe path segment, never a nested path.
  */
 export function isSafeCycleId(id: string): boolean {
@@ -272,7 +272,7 @@ export function isSafeCycleId(id: string): boolean {
 
 /**
  * `project` becomes a path segment via the scheduler's fallback
- * `resolve('projects', m.project)` (`orchestrator/scheduler.ts`) when a
+ * `resolve('projects', m.project)` (`packages/flows/scheduler.ts`) when a
  * manifest omits `project_repo_path` — a single safe path segment.
  */
 export function isSafeProjectName(name: string): boolean {

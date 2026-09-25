@@ -28,7 +28,7 @@
  * runs against the SET {old cwds ∪ X} — the cd may have failed — and every
  * possible cwd must keep the write in-root.
  *
- * Pinned by packages/sessions/bash-fence.test.ts.
+ * Pinned by packages/sessions/tests/unit/bash-fence.test.ts.
  */
 
 import { realpathSync } from 'node:fs';

@@ -157,7 +157,7 @@ export function commitProjectBrain(args: {
   // is silently orphaned. Create scaffolds brain/<id> UNCONDITIONALLY for EVERY
   // binding kind (packages/knowledge/bridge-studio-kbs.ts create route), so a create hand-off
   // commits into brain/<kbId> REGARDLESS of binding.kind — resolveKbBrainDir
-  // (orchestrator/brain-paths.ts) resolves it there. Only the ORDINARY
+  // (packages/knowledge/brain-paths.ts) resolves it there. Only the ORDINARY
   // project-brain flow (no hand-off, kbId === status.project, a real project)
   // targets the central per-project brain brain/projects/<project> (ADR 035).
   //

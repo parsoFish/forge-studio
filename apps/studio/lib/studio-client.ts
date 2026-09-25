@@ -1,7 +1,7 @@
 /**
  * Client-side fetch helpers for the Studio bridge routes (M1-2).
  *
- * Mirrors the server-side types from orchestrator/run-model.ts and
+ * Mirrors the server-side types from packages/flows/run-model.ts and
  * orchestrator/studio/types.ts — re-declared client-side so they can be
  * imported into 'use client' components without pulling in Node.js modules.
  * Same pattern as EventLogEntry declared in bridge-client.ts.
@@ -69,7 +69,7 @@ import {
 // ---------------------------------------------------------------------------
 
 // forge-8vfn.5.17: RunStatus/RunPhaseStatus/RunPhaseMeta/Run used to be
-// hand-declared here (a second copy of packages/flows/run-view-types.ts, with
+// hand-declared here (a second copy of packages/contracts/run-view-types.ts, with
 // no parity test — bead forge-cv9). They now live in @forge/contracts (the
 // one package this 'use client' module may import) — imported for this
 // file's own use below AND re-exported so every existing
@@ -244,7 +244,7 @@ export type FlowTrigger = {
   /** webhook only. */
   webhook?: WebhookTriggerConfig;
   /** agent-complete only: the source agent slug whose completion fires this row
-   *  (orchestrator/studio/validate-triggers.ts's trigger-agent-complete check
+   *  (packages/flows/studio/validate-triggers.ts's trigger-agent-complete check
    *  requires this be non-empty — an absent agent never means "fires for all"). */
   agent?: string;
   note?: string;
@@ -252,7 +252,7 @@ export type FlowTrigger = {
 
 /**
  * R2-04 (ADR-041): the shipped trigger kinds authorable in the UI today.
- * Mirrors orchestrator/flow-trigger.ts's `SHIPPED_TRIGGER_KIND_IDS` — the
+ * Mirrors packages/flows/flow-trigger.ts's `SHIPPED_TRIGGER_KIND_IDS` — the
  * server-side SSOT (registry rows-as-data). forge-ui cannot import
  * orchestrator TS directly, so this is a hand-kept mirror; keep it in
  * lockstep with the registry when a new kind ships (or one is retired).
@@ -280,7 +280,7 @@ export type ShippedTriggerKind = (typeof SHIPPED_TRIGGER_KINDS)[number];
  * `findWebhookTrigger` (which scans every flow for a trigger whose
  * `webhook.id === hookId`, regardless of which of the three kinds declared
  * it) can resolve a delivery for them. Mirrors
- * orchestrator/studio/validate-triggers.ts's `WEBHOOK_FAMILY_KIND_IDS`
+ * packages/flows/studio/validate-triggers.ts's `WEBHOOK_FAMILY_KIND_IDS`
  * verbatim (forge-ui cannot import orchestrator TS directly — see this
  * file's header convention).
  */
@@ -415,7 +415,7 @@ export function buildTriggerDeclaration(
  * (on,target)-only comparisons — silently excluding a valid SECOND
  * `agent-complete` row aimed at the same target flow with a DIFFERENT
  * source agent (the server has always supported this:
- * `orchestrator/flow-trigger.ts`'s `fireAgentCompleteTriggers` matches each
+ * `packages/flows/flow-trigger.ts`'s `fireAgentCompleteTriggers` matches each
  * row independently by `trigger.agent === completedAgentSlug`, so two rows
  * differing only in `agent` are two genuinely distinct, both-real triggers).
  * A single shared definition here means both call sites can never drift
@@ -2086,7 +2086,7 @@ export { MATERIAL_KINDS, type MaterialKind };
 
 /**
  * Parse a raw `materials` field (server AgentDefinition.materials shape,
- * orchestrator/studio/materials.ts) client-side. Mirrors the server parser's
+ * packages/agents/studio/materials.ts) client-side. Mirrors the server parser's
  * D1/D2 semantics exactly: an array of strings — including `[]` — parses
  * as-is (D2: declared-empty is a real, meaningful value, distinct from
  * absence); `undefined`/`null` (the field genuinely absent) parses to
@@ -2109,7 +2109,7 @@ export function parseMaterials(raw: unknown): string[] | undefined {
 }
 
 /** Self-describing manifest of what an instructions draft was composed from
- *  (orchestrator/studio/instructions-draft.ts `InstructionsDraftDerivation`,
+ *  (packages/library/studio/instructions-draft.ts `InstructionsDraftDerivation`,
  *  re-declared client-side per this file's header convention). Carried
  *  through verbatim — never re-derived here. */
 export type InstructionsDraftDerivation = {

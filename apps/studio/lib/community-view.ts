@@ -314,7 +314,7 @@ export function communityEmptyState(args: {
 // existence/trust; catalog wins on display metadata") — joining by id alone
 // would cross-attribute the catalog entry's hub/signals/provenance onto the
 // operator's own file. `entry` takes a minimal structural shape ({id,
-// source}) rather than importing forge-ui/lib/skill-client.ts's full
+// source}) rather than importing apps/studio/lib/skill-client.ts's full
 // SkillLibraryEntry type, keeping this module decoupled from that client.
 // ---------------------------------------------------------------------------
 

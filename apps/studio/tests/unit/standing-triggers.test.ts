@@ -8,7 +8,7 @@
  * 577`, exercised at the wire by `apps/forge/tests/integration/bridge-studio-triggers.test.ts`)
  * returns `{ triggers: {on, target:{kind,ref}, projects: string[]|null,
  * sourceFlowId}[] }`. `target.kind` is `'flow' | 'agent'`
- * (`forge-ui/lib/studio-client.ts`'s `TriggerTarget`). Confirmed against
+ * (`apps/studio/lib/studio-client.ts`'s `TriggerTarget`). Confirmed against
  * the LIVE seed roster (`studio/flows/forge-develop/flow.yaml:54`):
  *
  *   triggers:

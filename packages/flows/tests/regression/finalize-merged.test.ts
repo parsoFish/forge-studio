@@ -29,7 +29,7 @@ function setup(): { root: string; queueRoot: string } {
     mkdirSync(join(queueRoot, d), { recursive: true });
   }
   // SEC-02 round 3: the two containment roots the sweep checks against.
-  // `forge init` creates both on a real install (orchestrator/init.ts
+  // `forge init` creates both on a real install (packages/kernel/init.ts
   // `layoutDirs`), and a containment root that does not exist fails CLOSED —
   // so a fixture without them would report `error` for every manifest.
   mkdirSync(join(root, '_worktrees'), { recursive: true });

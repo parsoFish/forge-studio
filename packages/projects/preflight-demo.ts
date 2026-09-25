@@ -16,7 +16,7 @@ import type { ClauseResult } from '@forge/kernel';
 // --- DEMO: the project declares how its change is demonstrated (ADVISORY) ---
 
 /**
- * Delegates validation to `loadProjectConfig` from orchestrator/project-config.ts
+ * Delegates validation to `loadProjectConfig` from packages/projects/project-config.ts
  * (single source of truth; also single-sources the quality_gate_cmd sidecar). On
  * a structural violation the throw is caught and downgraded to an advisory WARN —
  * DEMO is never a hard blocker.

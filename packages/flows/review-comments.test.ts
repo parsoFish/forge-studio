@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/review-comments.ts (S7 / DEC-5).
+ * Tests for packages/flows/review-comments.ts (S7 / DEC-5).
  *
  * The interactive review page anchors W3C-annotation-style comments to
  * `data-demo-region` sections and persists them as a JSON sidecar; the verdict

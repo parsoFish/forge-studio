@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/gate-fix-loop.ts (R4-10-F2) — the merge-boundary
+ * Tests for packages/flows/gate-fix-loop.ts (R4-10-F2) — the merge-boundary
  * full-suite gate's unattended remediation: compile ONE gate-fix WI from the
  * red gate + stamp the manifest send-back, sharing the review/demo-fix caps,
  * reject-then-park on cap exhaustion.

@@ -1,6 +1,6 @@
 /**
  * W6-RV-2 — DOM acceptance tests for `RoadmapCanvas`
- * (forge-ui/components/studio/RoadmapCanvas.tsx), the completion-time
+ * (apps/studio/components/studio/RoadmapCanvas.tsx), the completion-time
  * canvas + push drawer that replaces `RoadmapDag` (the R4-13/W6-RV-1
  * dependency-depth column layout, retired this pass — see
  * `roadmap-serpentine-retired.test.ts` for the analogous "old impl truly

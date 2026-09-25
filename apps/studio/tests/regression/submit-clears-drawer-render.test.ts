@@ -14,7 +14,7 @@
  * publisher half, and both name the variable through the same exported
  * constant so a typo cannot make the binding silently fall back.
  *
- * RUN: npx vitest run tests/regression/submit-clears-drawer-render.test.ts (from apps/studio/)
+ * RUN: npx vitest run apps/studio/tests/regression/submit-clears-drawer-render.test.ts (from apps/studio/)
  */
 import { test, expect } from 'vitest';
 import * as React from 'react';

@@ -169,7 +169,7 @@ test('routes-table: every entry carries a dryClassification — a carved route t
  * Asserting the string alone would be worth nothing: it is a claim ABOUT the
  * handler, and a claim about a handler that the handler cannot falsify is the
  * declared-data-fails-open shape this campaign exists to kill. The claim's
- * POSITIVE CONTROL lives in `tests/integration/routes-dispatch.test.ts`
+ * POSITIVE CONTROL lives in `packages/knowledge/tests/integration/routes-dispatch.test.ts`
  * ('dry-bridge positive control'), which drives the real handler under
  * `FORGE_DRY_BRIDGE=1` and proves BOTH directions: `op=fix-agent` refused 409,
  * `op=lint` not refused. This assertion pins the string; that one pins the

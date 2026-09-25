@@ -20,7 +20,7 @@
 import type { ConnectionProbeResult } from './connection-client.ts';
 
 // ---------------------------------------------------------------------------
-// Types mirroring server shapes (orchestrator/studio/community-index.ts,
+// Types mirroring server shapes (packages/library/studio/community-index.ts,
 // packages/library/bridge-studio-community.ts)
 // ---------------------------------------------------------------------------
 

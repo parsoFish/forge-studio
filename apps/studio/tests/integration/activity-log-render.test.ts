@@ -1,6 +1,6 @@
 /**
  * DOM regression tests for `ActivityLog.tsx`
- * (forge-ui/components/studio/ActivityLog.tsx) — the shared full-width
+ * (apps/studio/components/studio/ActivityLog.tsx) — the shared full-width
  * bottom drawer (W6-B7), documented as the `[data-component=
  * "activity-drawer"]` contract in `docs/forge-ui-dom-and-harness.md`.
  *
@@ -13,7 +13,7 @@
  * `data-drawer-state`). This file renders the REAL component via
  * `react-dom/server`'s `renderToStaticMarkup` (same convention as
  * `run-panel-render.test.ts` — no jsdom/`@testing-library/react` added;
- * `forge-ui/vitest.config.ts`'s `resolve.alias`/`oxc.jsx` already support
+ * `apps/studio/vitest.config.ts`'s `resolve.alias`/`oxc.jsx` already support
  * this from that file's own addition) and asserts on the markup string.
  *
  * DISCLOSED RESIDUAL GAP (same class `run-panel-render.test.ts` already

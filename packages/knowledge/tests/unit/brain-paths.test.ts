@@ -1,5 +1,5 @@
 /**
- * Unit tests for orchestrator/brain-paths.ts.
+ * Unit tests for packages/knowledge/brain-paths.ts.
  *
  * ADR 035: per-project brain + history + contract are forge-owned and CENTRAL
  * (in the forge repo), not in the managed project's repo. Brain 3 lives at

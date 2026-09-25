@@ -432,7 +432,7 @@ export async function handleKickoffRoutes(
   //
   // No `resolveContainedProjectDir`/mkdir-then-realpath-verify-parent shape
   // here (unlike authoring/start): `guardedWriteSessionStatus`
-  // (orchestrator/interactive-session.ts) already realpath-guards the whole
+  // (packages/sessions/interactive-session.ts) already realpath-guards the whole
   // `[sessionProject, '_kb-cleanup', sessionId, 'status.json']` path AND
   // creates the session dir (`mkdirSync(dirname(p), {recursive:true})`) as
   // part of the SAME guarded write — a project (or a fresh `.kb-<id>`
@@ -478,10 +478,10 @@ export async function handleKickoffRoutes(
       // buildKbHealth uses (packages/knowledge/bridge-studio-kbs.ts's
       // computeAgentCleanupFindings), never a fabricated/hardcoded []. This
       // IS the turn input the agent reads as read-only context
-      // (orchestrator/interactive-runner.ts's `buildTurnPrompt` inlines the
+      // (packages/sessions/interactive-runner.ts's `buildTurnPrompt` inlines the
       // whole status object) — it is NOT the cleanup-plan artifact's source
       // of truth: the artifact re-derives live from a FRESH scan at read
-      // time (derive-don't-store, orchestrator/studio/session-transcript.ts's
+      // time (derive-don't-store, packages/sessions/studio/session-transcript.ts's
       // `deriveCleanupPlan`). Never "optimise" the renderer into reading
       // this stored copy back — a resolved finding after this snapshot
       // would then never show as cleared.
@@ -596,7 +596,7 @@ function renderOnboardingPrompt(inputs: Record<string, string>): string {
  * directory and write its two files (`status.json`, `prompt.md`). Exported so
  * the exclusive-create defences below can be driven against a KNOWN id, which
  * the route can no longer offer now that `newArchitectSessionId()` carries
- * real entropy; `tests/unit/onboarding-session-writer-seam.test.ts` is that
+ * real entropy; `packages/sessions/tests/unit/onboarding-session-writer-seam.test.ts` is that
  * caller.
  *
  * THREE independent closes (T2 ruling — a defence that only works because
@@ -681,7 +681,7 @@ export function writeOnboardingSession(
  *
  * R4-21 phase 2, WI-2: `prompt` is ALSO written INTO `status.json` (alongside
  * `phase`/`project`/`runId`/`startedAt`), not just into `prompt.md`. Verified
- * by reading `buildTurnPrompt` (`orchestrator/interactive-runner.ts`): the
+ * by reading `buildTurnPrompt` (`packages/sessions/interactive-runner.ts`): the
  * generic spine composes its turn prompt from the SKILL.md + the phase row +
  * a JSON dump of `status.json` — it never reads `prompt.md`. Without this,
  * the operator's description of what to build is silently dropped and the
