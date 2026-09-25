@@ -99,11 +99,15 @@ export default {
     // Declared as REMOVALS: the `.forge/skills/<id>/` arrivals are additions
     // the fence already accounts for, and licensing only what actually needs a
     // licence keeps the claim as small as the truth.
+    //
+    // `beat: 5` (7.6.140, T1 1275): each removal names the beat whose press
+    // causes it — beat 5's "Rebuild contract" — for the harness's per-beat
+    // attribution of declared changes (7.6.140) to read.
     expectedChanges: [
       'ado-api-explorer', 'ado-browser-inspector', 'ado-demo',
       'ado-release-explorer', 'breaking-change-detector', 'resource-scaffolder',
       'schema-refactor', 'tf-acceptance-test-author', 'tfplugindocs-gen',
-    ].map((id) => ({ path: `forge/skills/${id}/SKILL.md`, change: 'removed' })),
+    ].map((id) => ({ path: `forge/skills/${id}/SKILL.md`, change: 'removed', beat: 5 })),
   },
   docs: { kind: 'how-to', title: 'Reset a project contract' },
   beats: [

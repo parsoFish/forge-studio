@@ -174,6 +174,8 @@ function flowEditableProjection(def: FlowDefinition): string {
     project: def.project ?? null,
     kb: def.kb ?? null,
     costCeilingUsd: def.costCeilingUsd,
+    accepts: def.accepts,
+    review: def.review ?? null,
     nodes: def.nodes,
     edges: def.edges,
     triggers: def.triggers,
@@ -522,6 +524,17 @@ export async function handleStudioWriteRoutes(
       const nodes = Array.isArray(b['nodes']) ? b['nodes'] : (existing?.nodes ?? []);
       const edges = Array.isArray(b['edges']) ? b['edges'] : (existing?.edges ?? []);
       const triggers = Array.isArray(b['triggers']) ? b['triggers'] : (existing?.triggers ?? []);
+      // Seam F6 half 1 (ADR 051 decision 4): the builder has no UI for this
+      // field yet, so a save carries it exactly like `nodes`/`edges` above —
+      // forward a provided array verbatim (a bad entry surfaces on the next
+      // load/lint, same as a bad node), else preserve `existing`, else `code`
+      // for a brand-new flow (mirrors `costCeilingUsd`'s own new-flow default
+      // just above — the operator narrows it once the flow is real).
+      const accepts = Array.isArray(b['accepts'])
+        ? (b['accepts'] as FlowDefinition['accepts'])
+        : (existing?.accepts ?? ['code']);
+      // `review` (ADR 051 d2 as amended) rides the merge the same way, or a save strips it.
+      const review = b['review'] !== undefined ? (b['review'] as FlowDefinition['review']) : existing?.review;
 
       // Bump version: n+1 for existing, 1 for new
       const version = (existing?.version ?? 0) + 1;
@@ -535,6 +548,8 @@ export async function handleStudioWriteRoutes(
         kb,
         costCeilingUsd,
         origin: existing?.origin ?? 'studio',
+        accepts,
+        ...(review !== undefined ? { review } : {}),
         disposable: existing?.disposable,
         nodes: nodes as FlowDefinition['nodes'],
         edges: edges as FlowDefinition['edges'],
