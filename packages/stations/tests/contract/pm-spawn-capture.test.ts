@@ -47,6 +47,7 @@ import { runProjectManager, type PmQueryFn } from '../../phases/project-manager.
 import { createLogger } from '@forge/kernel';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
+import { testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
 
 const FIXTURE_PATH = resolve(import.meta.dirname, '..', '..', '..', '..', 'packages', 'kernel', 'tests', 'test-fixtures', 'spawn-capture', 'pm.json');
 
@@ -127,7 +128,7 @@ Body for WI-1.
       })();
     };
 
-    await runProjectManager(input, logger, { queryFn });
+    await runProjectManager(input, logger, { queryFn, classProfiles: testClassProfilePort() });
 
     assert.ok(captured, 'queryFn must have been invoked exactly once with the spawn call');
     const normalized = normalizeForSnapshot(captured, [{ value: dir, placeholder: '<TMP>' }]);

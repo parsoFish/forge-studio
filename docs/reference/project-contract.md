@@ -706,7 +706,7 @@ consistently locatable; the durable plan/verdict record is forge-owned and centr
 > (APPROVED 2026-07-24), and this spec is now live: `runMergeBoundaryGate`
 > (`packages/flows/cycle-helpers.ts`) runs the full-suite gate at the develop
 > flow's merge boundary — inside the integrate band (`execIntegrate`, in
-> `packages/factory/phases/executor-table.ts` since M2-B),
+> `packages/stations/phases/executor-table.ts` since M2-B),
 > BEFORE integrate runs, on the integrated branch tip. A red baseline compiles a
 > `gate-fix` work item (`packages/flows/gate-fix-loop.ts`) + stamps the send-back,
 > and the DAG walk terminates to `ready-for-review` with NO PR opened — the
@@ -744,7 +744,7 @@ The relocation re-homes *where* these two runs execute; `testProcess.local`/
 **Results flow TO agents, never from them.** The merge-boundary gate's verdict
 reaches the demo/review agents through the same seam dev-loop already
 uses: `.forge/last-gate-failure.md` (`lastGateFailurePath`, in
-`packages/factory/phases/developer-loop.ts`; write/clear behaviour in
+`packages/stations/phases/developer-loop.ts`; write/clear behaviour in
 `writeGateFeedback`, same file). The
 file is deleted on every passing gate run and at session start, so its
 **present ⇒ fresh** rule holds unchanged: if an agent reads it, the failure is
@@ -797,7 +797,7 @@ gates structurally cannot see.
 | DEMO-ALIGN | `forge preflight` — advisory | routes to demo agent |
 | ARTIFACTS | `forge preflight` — advisory | Language-specific build-output hints in `.gitignore` (build-**output** hygiene; grouped under the build process with BUILD, kept separate to preserve its `.gitignore`-append auto-fix) |
 | BRAIN | `forge preflight` — advisory | `brain/projects/<name>/themes/` (central forge repo) path-existence scan |
-| MB-GATE | **ENFORCED** — orchestrator-executed at the develop flow's merge boundary (R4-10-F2) | execution home: `runMergeBoundaryGate`, `packages/flows/cycle-helpers.ts`, wired at `packages/factory/phases/executor-table.ts` |
+| MB-GATE | **ENFORCED** — orchestrator-executed at the develop flow's merge boundary (R4-10-F2) | execution home: `runMergeBoundaryGate`, `packages/flows/cycle-helpers.ts`, wired at `packages/stations/phases/executor-table.ts` |
 
 **Readiness convergence:** `data-flow-ready="true"` on the project builder
 readiness panel requires all five UI checks AND `preflight.clauses.filter(hard &&

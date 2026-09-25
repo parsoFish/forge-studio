@@ -1,0 +1,14 @@
+{
+  "name": "@forge/stations",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The station executor and every band it dispatches: the platform's execution machinery, independent of any one factory's flows.",
+  "exports": {
+    ".": "./index.ts",
+    "./*": "./*"
+  },
+  "scripts": {
+    "test": "node --test --experimental-strip-types \"**/*.test.ts\""
+  }
+}

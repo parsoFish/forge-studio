@@ -41,6 +41,7 @@ import { rejectWorkItemSet } from './pm-rejected-set.ts';
 import { writeDecompositionDoc } from './pm-decomposition-doc.ts';
 import { readPmBrainContext, readProjectContext } from './pm-prompt-context.ts';
 import { underDecomposedFlag } from './pm-class-set-rules.ts';
+import type { ClassProfilePort } from '../class-profile-port.ts';
 import { deriveKbIdFromBrainPath } from '@forge/knowledge';
 
 /**
@@ -66,6 +67,12 @@ export type RunProjectManagerOptions = {
    * (`<root>/brain/projects/<project>/…`). Defaults to the forge repo root.
    */
   constraintSourcesRoot?: string;
+  /**
+   * The one port (operator ruling, items 81/83): threaded to
+   * `underDecomposedFlag`, which reads it only when the decomposed set is
+   * exactly one work item — see that function's own comment.
+   */
+  classProfiles?: ClassProfilePort;
 };
 
 // The live turn/budget caps are DECLARED DATA now (R4-01-F2, ADR-039):
@@ -107,6 +114,7 @@ export async function runProjectManager(
     queryFn,
     signal: options.signal,
     constraintSourcesRoot: options.constraintSourcesRoot,
+    classProfiles: options.classProfiles,
   });
 
   if (result.kind === 'success') return;
@@ -124,6 +132,8 @@ type PmPassInput = {
   signal?: AbortSignal;
   /** ADR 037 test seam — see RunProjectManagerOptions.constraintSourcesRoot. */
   constraintSourcesRoot?: string;
+  /** The one port (operator ruling, items 81/83) — see RunProjectManagerOptions.classProfiles. */
+  classProfiles?: ClassProfilePort;
 };
 
 type PmPassOutcome =
@@ -475,7 +485,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   const setErrors = [...validationSetErrors, ...compileErrors];
   // ADR 051 / ruling 229 half A — a FLAG, never a failure. The gate for this
   // column runs at the plan gate, on the declared criteria, before any spend.
-  const underDecomposed = underDecomposedFlag(manifest, items);
+  const underDecomposed = underDecomposedFlag(manifest, items, p.classProfiles);
   if (underDecomposed !== null) {
     logger.emit({
       initiative_id: manifest.initiative_id, parent_event_id: parentEventId,
