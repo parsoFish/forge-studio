@@ -11,7 +11,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
@@ -57,7 +57,7 @@ test('attributeEscapes: a non-descendant live in T (T never sampled) -> UNATTRIB
   // longer reads that field at all: only ancestry (`touchedRoots`) and the
   // main-checkout rule can turn an escape THIS-RUN.
   const escapes = [{ root: '/sib/tree', paths: ['a.txt'], live: { pid: 999, cwd: '/sib/tree', via: 'cwd' } }];
-  const [got] = attributeEscapes(escapes, { touchedRoots: new Map() });
+  const [got] = attributeEscapes(escapes, { touchedRoots: new Map(), longestGapMs: 0 });
   assert.equal(got.owner, 'unattributable');
   assert.match(got.reason, /no descendant of this run was seen in \/sib\/tree/);
 });
@@ -67,7 +67,7 @@ test('attributeEscapes: an APPEARED tree with NO live process at all -> UNATTRIB
   // fall straight into `unownedEscapes` and RED the run. It no longer does —
   // absence of a live owner was never evidence this run wrote the tree.
   const escapes = [{ root: '/home/parso/forge-m7-d-grp', paths: ['projects/x/README.md'], live: null }];
-  const [got] = attributeEscapes(escapes, { touchedRoots: new Map() });
+  const [got] = attributeEscapes(escapes, { touchedRoots: new Map(), longestGapMs: 0 });
   assert.equal(got.owner, 'unattributable', 'the defect this brief closes: no owner is not evidence of authorship');
 });
 
@@ -86,7 +86,7 @@ test('attributeEscapes: main-checkout non-ignored growth, no descendant seen -> 
 test('attributeEscapes: main-checkout GITIGNORED growth -> UNATTRIBUTABLE', () => {
   const escapes = [{ root: '/home/parso/forge', paths: ['projects/story-s2/README.md'] }];
   const [got] = attributeEscapes(escapes, {
-    touchedRoots: new Map(),
+    touchedRoots: new Map(), longestGapMs: 0,
     mainRoot: '/home/parso/forge',
     isIgnored: () => true,
   });
@@ -105,22 +105,52 @@ test('attributeEscapes: mixed main-checkout paths — only the non-ignored ones 
   assert.doesNotMatch(got.reason, /projects\/story-s2\/x/, 'the ignored path does not drive the reason');
 });
 
-test('attributeEscapes: unreadable /proc (sampleErrors > 0) -> BLIND, fail-closed to THIS-RUN', () => {
+// Row 96 / T1 1473 — blindness is a COVERAGE GAP (`longestGapMs` beyond
+// `BLIND_GAP_FACTOR × intervalMs`), never a raw error COUNT. The pre-fix rule
+// (`sampleErrors > 0`) turned every sibling-worktree growth into THIS-RUN the
+// moment even ONE `/proc` listing failed and was retried away clean — S4
+// funded run 2 (13/13 beats green) went red exactly this way on a sibling
+// lane's own test leak.
+
+test('attributeEscapes: longestGapMs beyond the bound -> BLIND, fail-closed to THIS-RUN, naming samples/erroredSamples/longestGapMs/errnos', () => {
   const escapes = [{ root: '/sib/tree', paths: ['a.txt'] }];
-  const [got] = attributeEscapes(escapes, { touchedRoots: new Map(), sampleErrors: 3 });
-  assert.equal(got.owner, 'this-run', 'a sampler that could not read /proc cannot prove this tree clean');
-  assert.match(got.reason, /blind|could not fully read \/proc/);
+  const [got] = attributeEscapes(escapes, {
+    touchedRoots: new Map(),
+    samples: 12,
+    erroredSamples: 5,
+    errnos: { EACCES: 3, UNKNOWN: 2 },
+    longestGapMs: 9000,
+    intervalMs: 2000, // bound = 3 × 2000 = 6000; 9000 is over it
+  });
+  assert.equal(got.owner, 'this-run', 'a sampler blind for that long cannot prove this tree clean');
+  assert.match(got.reason, /longestGapMs=9000/, 'the gap itself is named');
+  assert.match(got.reason, /samples=12/, 'how many samples were taken is named');
+  assert.match(got.reason, /erroredSamples=5/, 'how many of them errored is named');
+  assert.match(got.reason, /errnos=.*EACCES/, 'the distinct errno codes seen are named');
 });
 
-test('attributeEscapes: sampleErrors = 0 (the default) is NOT blind — an ordinary clean sample still excuses', () => {
+test('attributeEscapes: erroredSamples alone, however many, no longer drives blindness — only a coverage GAP does (the row-96 defect)', () => {
   const escapes = [{ root: '/sib/tree', paths: ['a.txt'] }];
-  const [got] = attributeEscapes(escapes, { touchedRoots: new Map() });
+  const [got] = attributeEscapes(escapes, {
+    touchedRoots: new Map(),
+    erroredSamples: 40, // every one of them retried away clean, per-sample
+    longestGapMs: 500, // well within the bound
+    intervalMs: 2000,
+  });
+  assert.equal(got.owner, 'unattributable', 'a high error COUNT with no real coverage gap must never fail-close a run');
+});
+
+test('attributeEscapes: longestGapMs = 0 (a sampler that never failed) is NOT blind — an ordinary clean sample still excuses', () => {
+  const escapes = [{ root: '/sib/tree', paths: ['a.txt'] }];
+  const [got] = attributeEscapes(escapes, { touchedRoots: new Map(), longestGapMs: 0 });
   assert.equal(got.owner, 'unattributable');
 });
 
 test('attributeEscapes: ancestry (a) wins over blindness — a tree the sampler DID see is never excused into a false THIS-RUN reason', () => {
   const touchedRoots = new Map([['/sib/tree', { pid: 7, at: '/sib/tree', via: 'cwd' }]]);
-  const [got] = attributeEscapes([{ root: '/sib/tree', paths: ['a.txt'] }], { touchedRoots, sampleErrors: 9 });
+  const [got] = attributeEscapes([{ root: '/sib/tree', paths: ['a.txt'] }], {
+    touchedRoots, longestGapMs: 999999, intervalMs: 1, // deep in blind territory
+  });
   assert.equal(got.owner, 'this-run');
   assert.match(got.reason, /pid 7/, 'the real evidence, not the blind fallback, explains the verdict');
 });
@@ -131,7 +161,7 @@ test('attributeEscapes: describeAttribution names THIS-RUN and UNATTRIBUTABLE li
       { root: '/sib/a', paths: ['x.txt', 'y.txt'] },
       { root: '/sib/b', paths: ['z.txt'] },
     ],
-    { touchedRoots: new Map([['/sib/a', { pid: 1, at: '/sib/a', via: 'cwd' }]]) },
+    { touchedRoots: new Map([['/sib/a', { pid: 1, at: '/sib/a', via: 'cwd' }]]), longestGapMs: 0 },
   );
   const lines = describeAttribution(attributed);
   assert.equal(lines.length, 3);
@@ -163,8 +193,8 @@ test('startDescendantSampler: a descendant\'s cwd inside a real git worktree is 
       },
       listFds: () => [],
     });
-    const { touchedRoots, sampleErrors } = sampler.stop();
-    assert.equal(sampleErrors, 0);
+    const { touchedRoots, erroredSamples } = sampler.stop();
+    assert.equal(erroredSamples, 0);
     assert.ok(touchedRoots.has(worktree), 'the descendant\'s tree is recorded');
     const evidence = touchedRoots.get(worktree)!;
     assert.equal(evidence.pid, '200', 'only the actual descendant is credited, never the unrelated pid 300');
@@ -200,16 +230,108 @@ test('startDescendantSampler: a read error on ONE pid\'s cwd is skipped, other d
   }
 });
 
-test('startDescendantSampler: an unreadable /proc LISTING is recorded as sampleErrors, never read as "no descendants"', () => {
+test('startDescendantSampler: an unreadable /proc LISTING is recorded as erroredSamples (after retrying), never read as "no descendants"', () => {
+  const err = Object.assign(new Error('EACCES: cannot list /proc'), { code: 'EACCES' });
   const sampler = startDescendantSampler({
     rootPid: 100,
     procRoot: '/no-such-proc-root-fence-attribution',
-    listPids: () => { throw new Error('EACCES: cannot list /proc'); },
+    listPids: () => { throw err; },
   });
-  const { touchedRoots, sampleErrors, samples } = sampler.stop();
+  const { touchedRoots, erroredSamples, samples, errnos, longestGapMs } = sampler.stop();
   assert.equal(touchedRoots.size, 0);
-  assert.ok(sampleErrors >= 1, 'the failure is counted, not silently absorbed into an empty (and therefore "clean") result');
+  assert.ok(erroredSamples >= 1, 'the failure is counted, not silently absorbed into an empty (and therefore "clean") result');
   assert.ok(samples >= 1);
+  // Every RETRY attempt within the one errored sample tallies its own errno
+  // (mirrors `livePidCwds`'s own retry count) — not just a single bare count.
+  assert.ok(errnos.EACCES >= 1, 'the errno is named, not just a bare count');
+  assert.ok(longestGapMs >= 0, 'a gap is tracked even for a single, immediately-stopped sample');
+});
+
+test('startDescendantSampler: a LISTING failure is retried under a bound (mirrors livePidCwds\' UNKNOWN_READ_RETRIES) — a listing that fails once then succeeds within the SAME sample leaves erroredSamples at 0, but still records the errno seen', () => {
+  let calls = 0;
+  const sampler = startDescendantSampler({
+    rootPid: 100,
+    procRoot: '/unused-for-this-test',
+    // Never actually fires on its own: the constructor's own immediate
+    // `sampleOnce()` call is the only sample this test observes.
+    intervalMs: 10_000_000,
+    listPids: () => {
+      calls += 1;
+      if (calls === 1) throw Object.assign(new Error('EIO: transient'), { code: 'EIO' });
+      return []; // the retry, within the same sample, succeeds
+    },
+  });
+  const { samples, erroredSamples, errnos } = sampler.stop();
+  assert.equal(samples, 1);
+  assert.ok(calls >= 2, 'the failed first attempt must have been retried');
+  assert.equal(erroredSamples, 0, 'every attempt did NOT fail, so this sample is not errored');
+  assert.equal(errnos.EIO, 1, 'the one failed attempt is still visible, even though the sample recovered');
+});
+
+test('startDescendantSampler: continuous /proc-listing failure for longer than the blind bound leaves longestGapMs over it', async () => {
+  const sampler = startDescendantSampler({
+    rootPid: 100,
+    procRoot: '/unused-for-this-test',
+    intervalMs: 10,
+    listPids: () => { throw Object.assign(new Error('EACCES'), { code: 'EACCES' }); },
+  });
+  await new Promise((r) => setTimeout(r, 80)); // several real ticks, ALL failing — well past 3 × 10ms
+  const { erroredSamples, longestGapMs, samples } = sampler.stop();
+  assert.ok(samples >= 4, `expected several samples over 80ms at a 10ms interval, got ${samples}`);
+  assert.ok(erroredSamples >= 1);
+  assert.ok(longestGapMs > 30, `longestGapMs (${longestGapMs}) must exceed the 3×10ms bound — nothing ever succeeded`);
+  const [got] = attributeEscapes([{ root: '/sib/tree', paths: ['a.txt'] }], { touchedRoots: new Map(), erroredSamples, longestGapMs, intervalMs: 10 });
+  assert.equal(got.owner, 'this-run', 'a sustained blackout must fail-close');
+  assert.match(got.reason, /longestGapMs/, 'the line names the gap');
+  assert.match(got.reason, /30|bound/, 'the line names the bound it exceeded');
+});
+
+test('startDescendantSampler: an exception from pidsDescendedFrom (or a per-pid read) inside one sample is contained — the interval keeps running and later samples still succeed', async () => {
+  let calls = 0;
+  // A pid whose OWN stringification throws — `pidsDescendedFrom` calls
+  // `String(startPid)` with no try/catch around that specific line, so this
+  // reaches all the way out of `pidsDescendedFrom` itself, never re-implemented
+  // here: this is the shape the brief calls out, not a fake substitute for it.
+  const poisonPid = { toString() { throw new Error('cannot stringify this pid'); } };
+  const sampler = startDescendantSampler({
+    rootPid: 100,
+    procRoot: '/unused-for-this-test',
+    intervalMs: 10,
+    listPids: () => {
+      calls += 1;
+      return calls === 1 ? [poisonPid] : []; // poison ONLY the very first sample
+    },
+  });
+  await new Promise((r) => setTimeout(r, 60)); // several real ticks beyond the poisoned one
+  const { samples, erroredSamples, touchedRoots } = sampler.stop();
+  assert.ok(samples >= 3, `the interval must have kept firing after the poisoned sample, got ${samples}`);
+  assert.ok(erroredSamples >= 1, 'the poisoned sample is counted as errored, never silently read as clean');
+  assert.equal(touchedRoots.size, 0);
+});
+
+test('startDescendantSampler (real /proc, real rootPid): a listing that throws once mid-run then reads real /proc stays SIGHTED — attributeEscapes never fail-closes a sibling growth it never saw', async () => {
+  let calls = 0;
+  const realListPids = () =>
+    readdirSync('/proc', { withFileTypes: true }).filter((e) => /^[0-9]+$/.test(e.name)).map((e) => e.name);
+  const sampler = startDescendantSampler({
+    rootPid: process.pid,
+    intervalMs: 10,
+    listPids: () => {
+      calls += 1;
+      if (calls === 2) throw Object.assign(new Error('EIO: injected, once'), { code: 'EIO' });
+      return realListPids();
+    },
+  });
+  await new Promise((r) => setTimeout(r, 80)); // several real ticks on the real kernel
+  const result = sampler.stop();
+  assert.ok(result.samples >= 4);
+  assert.ok(result.erroredSamples <= 1, 'a single transient failure, retried, costs at most one errored sample');
+  assert.ok(result.errnos.EIO >= 1, 'the transient failure\'s errno is still recorded, whether or not the retry saved the sample');
+  const [got] = attributeEscapes(
+    [{ root: '/definitely/not/a/real/descendants/tree', paths: ['a.txt'] }],
+    { ...result, mainRoot: null },
+  );
+  assert.equal(got.owner, 'unattributable', 'one retried hiccup on a real kernel must never fail-close a real run');
 });
 
 test('startDescendantSampler: an open file inside a tree is also evidence, not only cwd', () => {
@@ -376,4 +498,29 @@ test('real process: the sampler, rooted at a spawned "run", reports its grandchi
     try { process.kill(sibling.pid!, 'SIGKILL'); } catch { /* already gone */ }
     rm(main, worktreeA, worktreeB, runnerFile, gcPidFile);
   }
+});
+
+test('attributeEscapes: NO sampler coverage figure at all is blind, never sighted — an absent reading fails closed (row 96 review)', () => {
+  // A caller that forgot to spread the sampler's result (or a sampler that
+  // never ran) must not read as a sampler with perfect coverage: `?? 0` would
+  // have made the missing figure the BEST possible one.
+  const [got] = attributeEscapes([{ root: '/sib/tree', paths: ['a.txt'] }], { touchedRoots: new Map() });
+  assert.equal(got.owner, 'this-run', `a missing longestGapMs must not excuse sibling growth: ${got.reason}`);
+  assert.match(got.reason, /no sampler coverage figure/);
+});
+
+test('startDescendantSampler: a LATE tick with no failed sample is not a coverage gap — only a window containing a failure counts (row 96 review)', async () => {
+  // Synchronous work blocks the event loop well past 3× the interval with
+  // every listing succeeding: that is the runner being busy (host load, a
+  // hashing pass), which the pre-row-96 contract always accepted. Counting it
+  // as blindness would trade one false red for another.
+  const sampler = startDescendantSampler({ rootPid: process.pid, intervalMs: 10, listPids: () => [] });
+  const until = Date.now() + 120;
+  while (Date.now() < until) { /* block the loop: no tick can run */ }
+  await new Promise((r) => setTimeout(r, 30));
+  const result = sampler.stop();
+  assert.equal(result.erroredSamples, 0);
+  assert.equal(result.longestGapMs, 0, 'no failed sample, so no failure window');
+  const [got] = attributeEscapes([{ root: '/sib/tree', paths: ['a.txt'] }], { ...result, mainRoot: null });
+  assert.equal(got.owner, 'unattributable');
 });

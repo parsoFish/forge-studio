@@ -262,6 +262,13 @@ export function liveSessionOwners(dirs, deps = {}) {
  *  named constant is the only place an operator tuning it needs to look. */
 const DESCENDANT_SAMPLE_INTERVAL_MS = 2000;
 
+/** T1 ruling 1473 (row 96) — how many multiples of the sample interval a run
+ *  may go with NO successful sample before `attributeEscapes` can no longer
+ *  trust the sampler to prove a tree clean. A COVERAGE GAP, never a raw error
+ *  count: a handful of `/proc` hiccups, each retried away, cost real time but
+ *  leave no gap at all, and must never fail-close a run on their own. */
+const BLIND_GAP_FACTOR = 3;
+
 /** `d`, realpath'd where possible — a tree that no longer exists cannot own a
  *  process either way, so `resolve` is the honest fallback (mirrors the `real`
  *  closures above, kept separate rather than refactoring working code). */
@@ -324,6 +331,19 @@ function openFileDirs(pid, procRoot, deps = {}) {
   return dirs;
 }
 
+/** `err.code` when it is a string, else the bucket `livePidCwds` already
+ *  treats an uncoded failure as: UNKNOWN, never absence. */
+const errnoOf = (err) => (typeof err?.code === 'string' && err.code) || 'UNKNOWN';
+
+/** Tally one failed attempt's errno into `errnos` (code -> count), in place —
+ *  every attempt this module could not read, not only the ones that end up
+ *  costing a sample, because "how many, of what kind" is exactly what row 96
+ *  found nothing recording. */
+function tallyErrno(errnos, err) {
+  const code = errnoOf(err);
+  errnos.set(code, (errnos.get(code) ?? 0) + 1);
+}
+
 /**
  * Samples `/proc` on an interval for processes descended from `rootPid`,
  * recording every worktree root a descendant was seen in — by its cwd, or an
@@ -331,17 +351,42 @@ function openFileDirs(pid, procRoot, deps = {}) {
  * abnormal exit) can never hold the process open, the crash-safety discipline
  * `sweep.mjs`'s own leading sweep rests on.
  *
- * A read error on one pid skips that pid (its cwd, or its fd table, or both);
- * an UNREADABLE `/proc` LISTING is different in kind and is counted in
- * `sampleErrors` instead — it means this sample could not even enumerate
- * candidates, so it must never be read as "no descendants were found".
- * `attributeEscapes` below is where that count turns into a fail-closed
- * verdict, never here.
+ * A read error on one pid skips that pid (its cwd, or its fd table, or both)
+ * — never counted as a sample error, that is normal per-pid attrition.
+ *
+ * An UNREADABLE `/proc` LISTING is different in kind: it means this sample
+ * could not even enumerate candidates, so it must never be read as "no
+ * descendants were found". T1 ruling 1473 (row 96) — the FIRST version of
+ * this counted `sampleErrors` on the FIRST failed read of a single sample,
+ * with no retry, and `attributeEscapes` then fail-closed on ANY count above
+ * zero: one `/proc` hiccup, cleanly recoverable, reddened S4 funded run 2
+ * (13/13 beats green) on a SIBLING lane's own test leak. So: (1) a failed
+ * listing is retried, within the same sample, under the same bound
+ * `livePidCwds`'s `UNKNOWN_READ_RETRIES` already uses — a sample counts as
+ * errored only once EVERY attempt failed; (2) an exception from
+ * `pidsDescendedFrom` itself, or from crediting a pid's evidence, is
+ * contained here too (uncaught, it would have escaped this `setInterval`
+ * callback and killed the whole sampler silently) and likewise counts the
+ * sample as errored, never as "no descendants"; (3) every failed attempt's
+ * errno is tallied, whether or not the sample it belongs to recovers, so a
+ * report never has to guess how many attempts failed or of what kind; (4)
+ * `longestGapMs` tracks the longest FAILURE WINDOW — from the last
+ * successful sample before an errored one (or run start, if the first sample
+ * errored) to the next success (or `stop()`, if it never recovered) — so
+ * `attributeEscapes` can fail-close on an actual COVERAGE GAP instead of a
+ * raw error count. Only a window that CONTAINS a failed sample counts: a gap
+ * between two successes with no failure in it is the event loop running late
+ * (synchronous work, host load — measured: this file's own real-/proc test
+ * at loadavg 13 saw >3× a 10 ms interval between clean samples), and the
+ * sampler's pre-row-96 contract always accepted that; counting it would have
+ * traded one false red for another.
  *
  * @param {{rootPid: number|string, intervalMs?: number, procRoot?: string,
  *   listPids?: () => (number|string)[], readCwd?: (pid: number|string) => string,
  *   listFds?: (pid: number|string) => string[], readFd?: (pid: number|string, fd: string) => string}} opts
- * @returns {{stop(): {touchedRoots: Map<string,{pid:number|string,at:string,via:'cwd'|'open file'}>, sampleErrors: number, samples: number}}}
+ * @returns {{stop(): {touchedRoots: Map<string,{pid:number|string,at:string,via:'cwd'|'open file'}>,
+ *   samples: number, erroredSamples: number, errnos: Record<string,number>,
+ *   longestGapMs: number, intervalMs: number}}}
  */
 export function startDescendantSampler(opts) {
   const {
@@ -353,38 +398,90 @@ export function startDescendantSampler(opts) {
   const readCwdFn = readCwd ?? ((pid) => readlinkSync(join(procRoot, String(pid), 'cwd')));
 
   const touchedRoots = new Map();
-  let sampleErrors = 0;
+  const errnos = new Map();
+  let erroredSamples = 0;
   let samples = 0;
+  const startedAt = Date.now();
+  let lastSuccessAt = null; // null: no sample has ever succeeded yet
+  let failingSince = null; // start of the current failure window, or null while sighted
+  let longestGapMs = 0;
 
   const note = (dir, pid, via) => {
     const root = worktreeRootOf(dir);
     if (root !== null && !touchedRoots.has(root)) touchedRoots.set(root, { pid, at: dir, via });
   };
 
+  const markSuccess = (now) => {
+    if (failingSince !== null) {
+      longestGapMs = Math.max(longestGapMs, now - failingSince);
+      failingSince = null;
+    }
+    lastSuccessAt = now;
+  };
+  const markErrored = () => {
+    erroredSamples += 1;
+    if (failingSince === null) failingSince = lastSuccessAt ?? startedAt;
+  };
+
   const sampleOnce = () => {
     samples += 1;
+    const now = Date.now();
+
+    // (1) The listing itself: retried, within THIS sample, under the same
+    // bound `livePidCwds` already uses for an UNKNOWN pid read — errored only
+    // if every attempt failed, but every attempt's errno is tallied either way.
     let pids;
-    try {
-      pids = listPidsFn();
-    } catch {
-      sampleErrors += 1; // unreadable /proc listing: recorded, NEVER read as "no descendants"
+    let listErr;
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        pids = listPidsFn();
+        listErr = undefined;
+        break;
+      } catch (err) {
+        listErr = err;
+        tallyErrno(errnos, err);
+        if (attempt >= UNKNOWN_READ_RETRIES) break; // still failing after retrying: give up on this sample
+      }
+    }
+    if (listErr !== undefined) {
+      markErrored(); // unreadable /proc listing, even after retrying: NEVER read as "no descendants"
       return;
     }
-    for (const pid of pidsDescendedFrom(pids, rootPid, { procRoot })) {
-      try {
-        note(readCwdFn(pid), pid, 'cwd');
-      } catch {
-        // this pid's cwd could not be read — still try its open files below
+
+    // (2) Descending the tree and crediting each pid's evidence. Contained as
+    // a whole — never just the per-pid cwd read below — because an exception
+    // from `pidsDescendedFrom` itself (never re-implemented here) or from
+    // crediting evidence would otherwise escape this `setInterval` callback
+    // uncaught and silently end the sampler for the rest of the run.
+    try {
+      for (const pid of pidsDescendedFrom(pids, rootPid, { procRoot })) {
+        try {
+          note(readCwdFn(pid), pid, 'cwd');
+        } catch {
+          // this pid's cwd could not be read — still try its open files below
+        }
+        for (const dir of openFileDirs(pid, procRoot, { listFds, readFd })) note(dir, pid, 'open file');
       }
-      for (const dir of openFileDirs(pid, procRoot, { listFds, readFd })) note(dir, pid, 'open file');
+    } catch (err) {
+      markErrored();
+      tallyErrno(errnos, err);
+      return;
     }
+
+    markSuccess(now);
   };
 
   sampleOnce(); // a run that starts and finishes inside one interval is still sampled once
   const timer = setInterval(sampleOnce, intervalMs);
   timer.unref?.();
 
-  return { stop: () => { clearInterval(timer); return { touchedRoots, sampleErrors, samples }; } };
+  return {
+    stop: () => {
+      clearInterval(timer);
+      if (failingSince !== null) longestGapMs = Math.max(longestGapMs, Date.now() - failingSince); // never recovered: window runs to stop
+      return { touchedRoots, samples, erroredSamples, errnos: Object.fromEntries(errnos), longestGapMs, intervalMs };
+    },
+  };
 }
 
 /** `git check-ignore` for one path inside `root` — the real, default
@@ -450,21 +547,37 @@ export function mainCheckoutRoot(root) {
  * evidence this run WROTE the tree, and it no longer stands in for that
  * question.
  *
- * FAIL CLOSED when the sampler itself could not be trusted
- * (`sampleErrors > 0` — at least one `/proc` listing during the run could not
- * be read): a blind sampler cannot prove a tree clean, so growth it did not
- * otherwise attribute stays THIS-RUN rather than being excused.
+ * FAIL CLOSED when the sampler itself could not prove COVERAGE — T1 ruling
+ * 1473 (row 96), replacing the original rule (`sampleErrors > 0`): that
+ * counted every RETRIED-AWAY `/proc` hiccup as blind and fail-closed on it,
+ * which reddened S4 funded run 2 (13/13 beats green) on a sibling lane's own
+ * test leak. Blindness is a GAP, never a count: blind iff `longestGapMs`
+ * (the longest FAILURE window — `startDescendantSampler`'s own result) exceeds
+ * `BLIND_GAP_FACTOR × intervalMs`, or no coverage figure was passed at all. A sampler that merely
+ * retried a few hiccups away, with real coverage throughout, is sighted; one
+ * that went dark for a sustained stretch cannot prove a tree clean, so growth
+ * it did not otherwise attribute stays THIS-RUN — and the reason names
+ * `samples`, `erroredSamples`, `longestGapMs` and the errno codes seen, so a
+ * reader never has to take "blind" on faith.
  *
  * @param {Array<{root: string, paths: string[]}>} escapes from `siblingWorktreeEscapes`
  * @param {{touchedRoots?: Map<string,{pid:number|string,at:string,via:string}>,
- *   mainRoot?: string|null, isIgnored?: (path: string) => boolean, sampleErrors?: number}} [opts]
+ *   mainRoot?: string|null, isIgnored?: (path: string) => boolean, samples?: number,
+ *   erroredSamples?: number, errnos?: Record<string,number>, longestGapMs?: number,
+ *   intervalMs?: number}} [opts]
  * @returns {Array<{owner: 'this-run'|'unattributable', reason: string}>} (spread onto each escape)
  */
 export function attributeEscapes(escapes, opts = {}) {
   const touchedRoots = opts.touchedRoots ?? new Map();
   const mainRoot = opts.mainRoot ?? null;
   const mainResolved = mainRoot === null ? null : realpathOrResolve(mainRoot);
-  const blind = (opts.sampleErrors ?? 0) > 0;
+  const intervalMs = opts.intervalMs ?? DESCENDANT_SAMPLE_INTERVAL_MS;
+  // An ABSENT coverage figure is blind, never the best possible one: a caller
+  // that did not pass the sampler's result, or a sampler that never ran, has
+  // proved nothing about any sibling tree (row 96 review; `?? 0` failed open).
+  const coverageKnown = Number.isFinite(opts.longestGapMs);
+  const longestGapMs = coverageKnown ? opts.longestGapMs : null;
+  const blind = !coverageKnown || longestGapMs > BLIND_GAP_FACTOR * intervalMs;
   return (escapes ?? []).map((e) => {
     const resolved = realpathOrResolve(e.root);
     const seen = touchedRoots.get(resolved) ?? touchedRoots.get(e.root);
@@ -488,11 +601,19 @@ export function attributeEscapes(escapes, opts = {}) {
       }
     }
     if (blind) {
+      const samples = opts.samples ?? 0;
+      const erroredSamples = opts.erroredSamples ?? 0;
+      const errnoEntries = Object.entries(opts.errnos ?? {});
+      const errnos = errnoEntries.length > 0 ? errnoEntries.map(([code, n]) => `${code}×${n}`).join(', ') : 'none recorded';
       return {
         ...e,
         owner: 'this-run',
-        reason: `the descendant sampler could not fully read /proc during this run (sampleErrors) — a blind ` +
-          `sampler cannot prove ${e.root} clean, so its growth stays THIS-RUN`,
+        reason: (coverageKnown
+          ? `the descendant sampler went longestGapMs=${longestGapMs} without a successful /proc read — over ` +
+            `the ${BLIND_GAP_FACTOR}× ${intervalMs}ms bound`
+          : 'no sampler coverage figure was recorded for this run (longestGapMs absent)') +
+          ` (samples=${samples}, erroredSamples=${erroredSamples}, ` +
+          `errnos=${errnos}) — a blind sampler cannot prove ${e.root} clean, so its growth stays THIS-RUN`,
       };
     }
     return { ...e, owner: 'unattributable', reason: `no descendant of this run was seen in ${e.root}` };
