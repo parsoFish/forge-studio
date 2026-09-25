@@ -41,9 +41,9 @@ import {
   readGitPorcelain,
   snapshotSiblingWorktrees,
   siblingWorktreeEscapes,
-  unownedEscapes,
   removePaths,
 } from './sweep.mjs';
+import { startDescendantSampler, attributeEscapes, describeAttribution, mainCheckoutRoot } from './fence-attribution.mjs';
 import { sweepStoryRemotesFromManifest, describeRemoteSweep } from './sweep-remotes.mjs';
 import {
   snapshotSiblingGrounds,
@@ -106,6 +106,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // OTHER worktree of this repo is snapshotted too; what grows in one is an
   // escape into a tree this run does not own.
   const siblingsBefore = snapshotSiblingWorktrees(ROOT);
+  const descendantSampler = startDescendantSampler({ rootPid: process.pid }); // T1 1225 — sampled LIVE, not guessed at fence time (stopped below)
   // Bead `forge-8vfn.6.11.26` / §15.219 — the path fence above sees a whole
   // GROUND appearing in a sibling tree, but not an edit inside one that was
   // already there. S1 run 8 onboarded the operator's own `projects/gitweave`
@@ -115,8 +116,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // M7-D — the real-ground fence (a fixture run must never move a real ground);
   // scope and the `siblingDirs` choice: `realGroundDirs`'s header, fixture-ground.mjs.
   const realTreesBefore = story.ground?.fixture ? siblingDirs(ROOT) : null;
-  const realBefore = realTreesBefore === null
-    ? null
+  const realBefore = realTreesBefore === null ? null
     : snapshotRealGrounds(realGroundDirs(ROOT, { worktrees: realTreesBefore }));
   // T1 ruling 594 — the fence above proves the ground is unchanged in every
   // OTHER worktree; nobody checked the one this run is using. Three lanes each
@@ -425,12 +425,12 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     fenceBreaches(treeBefore, readGitPorcelain(ROOT), story.id, story.ground?.project ?? null, { root: ROOT }),
     ROOT,
   );
-  fence.escapes = siblingWorktreeEscapes(ROOT, siblingsBefore);
+  fence.escapes = attributeEscapes(siblingWorktreeEscapes(ROOT, siblingsBefore), { ...descendantSampler.stop(), mainRoot: mainCheckoutRoot(ROOT) }); // T1 1225/1226
   fence.groundEscapes = siblingGroundEscapes(story.ground?.project ?? null, groundsBefore, { root: ROOT });
   // Bead `forge-8vfn.6.12` (ruling 275) — a flow save legitimately materialises
   // starter agents into the roster, so the fence names those as EXPECTED while
   // still removing them; anything else is still an escape.
-  for (const line of describeFence(fence, starterAgentSlugs(ROOT))) console.log(line);
+  for (const line of [...describeFence(fence, starterAgentSlugs(ROOT)), ...describeAttribution(fence.escapes)]) console.log(line);
   for (const line of describeGroundEscapes(story.ground?.project ?? null, fence.groundEscapes)) console.log(line);
 
   // The run's own ground, judged against what the run demonstrably MINTED.
@@ -782,12 +782,12 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     );
     return 1;
   }
-  const unowned = unownedEscapes(fence.escapes);
-  const escaped = unowned.reduce((n, e) => n + e.paths.length, 0);
+  const thisRun = fence.escapes.filter((e) => e.owner === 'this-run'); // T1 ruling 1225 — no-owner is not evidence of authorship
+  const escaped = thisRun.reduce((n, e) => n + e.paths.length, 0);
   if (escaped > 0) {
     console.error(
       `[stories] ${story.id}: CONTAINMENT FAILURE — ${escaped} path(s) written into ` +
-      `${unowned.length} worktree(s) this run does not own (named above). The run is RED ` +
+      `${thisRun.length} worktree(s) this run's own ancestry (named above). The run is RED ` +
       'regardless of its beats.',
     );
     return 1;

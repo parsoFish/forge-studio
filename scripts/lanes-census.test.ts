@@ -24,7 +24,7 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, chmodSync, mkdirSync, copyFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, appendFileSync, readFileSync, readdirSync, readlinkSync, existsSync, chmodSync, mkdirSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -35,9 +35,73 @@ let dir: string;
 let camp: string;
 let rosterCmd: string;
 const sessions = new Set<string>();
-const planted = new Set<number>();
+// M7-C last-flakes #2 sequel (2026-09-26): pid -> its /proc start field AT THE
+// MOMENT it was planted, not just the bare pid. `Set<number>` used to be
+// enough for cleanup ("kill anything still alive"), but a plain pid number is
+// not proof of IDENTITY — a reused pid number would belong to a totally
+// different, unrelated process by the time cleanup runs. The start field
+// (the same `/proc/<pid>/stat` field 22 lanes.sh's own `proc_start_cs` reads,
+// forge-8vfn.7.6.105's fix for the identical class of bug) is checked again
+// at kill time so cleanup only ever ends the EXACT process it planted.
+const planted = new Map<number, string | null>();
 
 const alive = (pid: number) => existsSync(`/proc/${pid}`);
+/** `/proc/<pid>/stat` field 22 (ticks since boot the process started) — the
+ *  same field lanes.sh's `proc_start_cs()` reads, via the same "strip up to
+ *  the LAST `) `, then field 20 of the remainder" parse (comm can itself
+ *  contain spaces or parens). `null` for a pid that is not currently running
+ *  — never a stand-in for "matches", since `null !== null` is the ONE
+ *  comparison that must never look like a match by accident (see
+ *  `sweepPlanted`). */
+function procStartField(pid: number): string | null {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const afterComm = stat.slice(stat.lastIndexOf(') ') + 2);
+    const fields = afterComm.trim().split(/\s+/);
+    return fields[19] ?? null;
+  } catch {
+    return null;
+  }
+}
+const plantedLogPath = () => join(dir, '.planted-pids.jsonl');
+/** Records a planted pid two ways: in-memory (`planted`, the fast path for a
+ *  normal run) and appended to a file under the fixture's own `dir` (the
+ *  backstop for a run that is interrupted before reaching `after()` below —
+ *  `process.on('exit')` re-reads this same file, since an in-memory Set does
+ *  not survive whatever killed the process before that hook could run). */
+function recordPlant(pid: number): number {
+  const start = procStartField(pid);
+  planted.set(pid, start);
+  try {
+    appendFileSync(plantedLogPath(), `${JSON.stringify({ pid, start })}\n`);
+  } catch {
+    /* dir may not exist yet this early in a test that plants before before() finished — the in-memory Set still has it */
+  }
+  return pid;
+}
+/** Kills every planted pid still alive — but ONLY if the CURRENTLY running
+ *  process at that pid number is still the SAME one (its /proc start field
+ *  matches what was recorded at plant time). Never a bare `kill <pid>` on
+ *  identity alone: the pid could have been reused. Reads the on-disk log too
+ *  (not just the in-memory Set), so this sweep is complete even after an
+ *  interruption that skipped straight to `process.on('exit')`. */
+function sweepPlanted(): void {
+  const entries = new Map<number, string | null>(planted);
+  try {
+    for (const line of readFileSync(plantedLogPath(), 'utf8').split('\n')) {
+      if (!line) continue;
+      const { pid, start } = JSON.parse(line) as { pid: number; start: string | null };
+      if (!entries.has(pid)) entries.set(pid, start);
+    }
+  } catch {
+    /* no log yet, or dir already gone — the in-memory Set is everything there is */
+  }
+  for (const [pid, startAtPlant] of entries) {
+    if (!alive(pid)) continue;
+    if (procStartField(pid) !== startAtPlant) continue; // a DIFFERENT process now owns this pid number — not ours to touch
+    spawnSync('kill', ['-KILL', String(pid)]);
+  }
+}
 function waitGone(pid: number, ms = 12000) {
   // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is not
   // monotonic on this host, so a deadline built from its difference can move
@@ -68,13 +132,40 @@ function fakeClaude() {
  * `claude` grandchild through `setsid` — optionally AFTER ignoring HUP and
  * sleeping, which is the late-spawn race the one-shot census lost: the tmux
  * kill has landed, the program is still running its spawn line.
+ *
+ * M7-C last-flakes #2 sequel: `$!` right after `setsid nohup CMD &` is NOT
+ * reliably the real grandchild's pid under this fixture's actual invocation
+ * shape (tmux pane → this script as `LANES_CLAUDE_BIN`, with the env-var
+ * prefixed command line `cmd_launch` builds) — measured directly: the pid
+ * `$!` captured was confirmed dead (die_launch legitimately retired it,
+ * `retired pid <that pid>` printed and true), while a DIFFERENT, un-tracked
+ * `comm=claude` process in the SAME cwd kept running past the whole test
+ * file's own cleanup — reproduced this way every time, but never in
+ * isolation outside this exact harness despite extensive attempts, so the
+ * fix does not depend on isolating which fork step diverges.
+ *
+ * A first attempt RE-DISCOVERED the grandchild's identity the way `lanes.sh`
+ * die_launch's own `pids_claude_in` does — comm `claude`, exact cwd match,
+ * polled after backgrounding — and measured wrong too: still raced, still
+ * occasionally found a different pid than the one die_launch actually
+ * retired. Polling AFTER backgrounding cannot close this — whatever forks
+ * between `$!` and the final `claude`-comm process (never isolated) can
+ * still race a poll started after the fact.
+ *
+ * The fix that removes the ambiguity outright: the grandchild records its
+ * OWN pid, from INSIDE itself, the instant before it becomes the tracked
+ * process — `bash -c 'echo $$ > "$1"; exec "$2" "$3"'` writes `$$` and THEN
+ * `exec`s into the real `claude`-named binary. `exec` replaces the running
+ * image but never changes the pid, so the number written is, by
+ * construction, exactly the pid that becomes `comm=claude` — no fork, no
+ * poll, no window for anything to diverge from what gets written.
  */
 function laneBin(name: string, opts: { lateSpawnS?: number } = {}) {
   const late = opts.lateSpawnS ? `trap '' HUP\nsleep ${opts.lateSpawnS}\n` : '';
+  const detachedpid = join(dir, `${name}.detachedpid`);
   return writeExec(name, `#!/usr/bin/env bash
 echo $$ > '${join(dir, `${name}.selfpid`)}'
-${late}setsid nohup '${fakeClaude()}' 300 </dev/null >/dev/null 2>&1 &
-echo $! > '${join(dir, `${name}.detachedpid`)}'
+${late}setsid nohup bash -c 'echo $$ > "$1"; exec "$2" "$3"' _ '${detachedpid}' '${fakeClaude()}' 300 </dev/null >/dev/null 2>&1 &
 sleep 120
 `);
 }
@@ -87,8 +178,7 @@ function pidFrom(file: string, waitMs: number) {
   while (performance.now() < deadline && !existsSync(f)) spawnSync('sleep', ['0.1']);
   assert.ok(existsSync(f), `precondition: ${file} never appeared`);
   const pid = Number(readFileSync(f, 'utf8').trim());
-  planted.add(pid);
-  return pid;
+  return recordPlant(pid);
 }
 function lanes(args: string[], env: Record<string, string> = {}) {
   const r = spawnSync('bash', [LANES, ...args], {
@@ -107,13 +197,13 @@ function lanes(args: string[], env: Record<string, string> = {}) {
   });
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
-function launchUnconfirmed(lane: string, bin: string) {
+function launchUnconfirmed(lane: string, bin: string, env: Record<string, string> = {}) {
   const laneCwd = join(dir, `cwd-${lane}`);
   mkdirSync(laneCwd, { recursive: true });
   const prompt = join(dir, `prompt-${lane}.md`);
   writeFileSync(prompt, `never consumed\nSuites: flock ${camp}/.suite-lock npm test\n`);
   sessions.add(`${PREFIX}${lane}`);
-  return { laneCwd, r: lanes(['launch', camp, lane, prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin }) };
+  return { laneCwd, r: lanes(['launch', camp, lane, prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin, ...env }) };
 }
 
 before(() => {
@@ -132,9 +222,101 @@ before(() => {
   execFileSync('git', ['add', '.claude/skills/tiered-orchestration/SKILL.md'], { cwd: repo });
   execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'root'], { cwd: repo });
 });
+/** Every currently-running pid whose executable (`/proc/<pid>/exe`, a kernel
+ *  fact, never a guessed string) resolves under `root`. `root` is this run's
+ *  OWN `mkdtempSync` fixture directory — nothing else on the host can ever
+ *  have an exe path under it — so this identifies OUR processes exactly,
+ *  never by name or command-line pattern. */
+function survivorsUnder(root: string): string[] {
+  let entries: string[];
+  try {
+    entries = readdirSync('/proc');
+  } catch {
+    return [];
+  }
+  return entries.filter((entry) => {
+    if (!/^\d+$/.test(entry)) return false;
+    try {
+      return readlinkSync(`/proc/${entry}/exe`).startsWith(root);
+    } catch {
+      return false;
+    }
+  });
+}
+/**
+ * The authoritative cleanup pass. `sweepPlanted()` (pid + /proc start-field
+ * identity) is the primary mechanism and stays first — but MEASURED even
+ * with `laneBin`'s exec-preserves-pid fix (no more discovery race, every
+ * `waitGone(stray)` in every test in this file passing): a normal, otherwise
+ * fully green run STILL left 2–3 extra `comm=claude` processes running under
+ * this run's OWN `dir`, never referenced by any `.detachedpid` file at all —
+ * evidence of a SECOND, un-tracked process this harness's plumbing never
+ * names, from a fork this investigation could not isolate despite extensive
+ * reproduction attempts (see `laneBin`'s doc comment). `killSurvivorsUnder`
+ * does not need to know that pid to end it: `survivorsUnder(dir)` finds
+ * ANYTHING still running our own binary under our own fixture root — kernel
+ * fact, unique directory, so this is exact identity, not a name/pattern
+ * match — and ends it, whether or not this file ever assigned it a name.
+ */
+function killSurvivorsUnder(root: string): void {
+  for (const pid of survivorsUnder(root)) spawnSync('kill', ['-KILL', pid]);
+}
+/**
+ * `killSurvivorsUnder` alone is a SINGLE look — measured insufficient under
+ * load (taskset -c 0 + 3 burners): the second, untracked process (see
+ * `killSurvivorsUnder`'s doc comment) can itself be scheduling-delayed, so a
+ * one-shot scan right after the tests finish can land BEFORE it has even
+ * appeared, exactly the class of race M7-C last-flakes #2's product fix
+ * (die_launch's own fixed "quiet for 1s" window) was about — the same shape,
+ * one layer up, in this file's OWN cleanup. This is the same remedy: poll
+ * and kill repeatedly, event-driven on OBSERVED quiet rather than a single
+ * look, bounded by `ceilingMs` so a genuinely stuck process still surfaces
+ * as a failure rather than hanging teardown forever.
+ */
+function sweepUntilQuiet(root: string, opts: { quietChecks?: number; pollS?: string; ceilingMs?: number } = {}): string[] {
+  const { quietChecks = 3, pollS = '0.1', ceilingMs = 5000 } = opts;
+  const deadline = Date.now() + ceilingMs;
+  let quietStreak = 0;
+  while (Date.now() < deadline) {
+    const found = survivorsUnder(root);
+    if (found.length === 0) {
+      quietStreak += 1;
+      if (quietStreak >= quietChecks) return [];
+    } else {
+      quietStreak = 0;
+      for (const pid of found) spawnSync('kill', ['-KILL', pid]);
+    }
+    spawnSync('sleep', [pollS]);
+  }
+  return survivorsUnder(root); // the ceiling itself is the failure evidence
+}
+// M7-C last-flakes #2 sequel: a normal, uninterrupted run of this file was
+// measured leaking (bd forge-8vfn.7.6.105 sequel) — this `process.on('exit')`
+// closes the gap `after()` cannot close on its own: a run interrupted
+// (killed) before node:test ever reaches its `after()` hook. `exit` still
+// fires for a normal or SIGTERM shutdown (never for SIGKILL — no in-process
+// hook can close that gap), and it can only run synchronous code, which both
+// cleanup passes already are. Kept to a single pass here (not the quiet-poll
+// below) — Node's own guidance for 'exit' handlers is fast and minimal; this
+// is the last-resort backstop, not the primary path.
+process.on('exit', () => {
+  try {
+    sweepPlanted();
+    if (dir) killSurvivorsUnder(dir);
+  } catch {
+    /* best-effort backstop — never let cleanup itself crash process teardown */
+  }
+});
 after(() => {
   for (const s of sessions) spawnSync('tmux', ['kill-session', '-t', s]);
-  for (const pid of planted) if (alive(pid)) spawnSync('kill', ['-KILL', String(pid)]);
+  sweepPlanted();
+  // M7-C last-flakes #2 sequel: the structural door itself — not "cleanup
+  // ran" but "cleanup WORKED". Polls to quiet (see `sweepUntilQuiet`) rather
+  // than a single look, so a red here means the process genuinely never
+  // settled within a generous bounded window, not that this check looked
+  // once too early.
+  const survivors = sweepUntilQuiet(dir);
+  assert.deepEqual(survivors, [], `planted process(es) survived cleanup: pid(s) ${survivors.join(', ')} still running an executable under ${dir}`);
   if (dir) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -148,7 +330,7 @@ describe('7.6.105 — the census reads a START time, not a first-lookup time', (
     // land in — and the 2.5 s of not looking still proves it is not a first-lookup stamp.
     const r0 = spawnSync('bash', ['-c', 'sleep 300 </dev/null >/dev/null 2>&1 & echo $!'], { encoding: 'utf8' });
     const pid = Number(r0.stdout.trim());
-    planted.add(pid);
+    recordPlant(pid);
     spawnSync('sleep', ['2.5']);                      // nothing looks at /proc/<pid> meanwhile
     const both = spawnSync('bash', ['-c', `echo $(bash '${LANES}' proc-start ${pid}) $(bash '${LANES}' uptime-cs) $(date +%s%3N) $(awk 'NR==1{printf "%d",$1*1000}' /proc/uptime)`],
       { encoding: 'utf8', env: { ...process.env, LANES_SESSION_PREFIX: PREFIX } });
@@ -158,19 +340,81 @@ describe('7.6.105 — the census reads a START time, not a first-lookup time', (
     spawnSync('kill', ['-KILL', String(pid)]);
   });
 
+  /*
+   * M7-C last-flakes #2 sequel, round 3 (lane A's real gate, main,
+   * 9703/9704 on this exact door: "spawn 0: start 1790343972 < t0
+   * 1790343973"). Two SEPARATE processes each compute "now" and each floors
+   * independently to a whole second: this file's `t0` via Node's
+   * `Date.now()`, `lanes.sh proc-start`'s `got` via `proc_start_epoch` —
+   * `$EPOCHREALTIME` and `/proc/uptime` subtracted to ESTIMATE the boot
+   * instant, then that estimate plus the process's own uptime-relative
+   * ticks, floored to a second (`proc_start_epoch`'s own docstring already
+   * calls this verb "for humans; the census never uses it" — #887 closed the
+   * multi-second gap between reading uptime and wall SEPARATELY, but never
+   * closed the CROSS-PROCESS gap between Node's clock read and bash's).
+   * Comparing two independently-rounded clocks can disagree by one even
+   * when causality holds (the spawn genuinely happened after t0 was read) —
+   * a boundary condition, not a bug in either read alone, so ADDING slack
+   * to either side only narrows the window, never closes it.
+   *
+   * `1030mechanism` below proves the class deterministically — injected
+   * numbers, no host timing, no luck — by computing BOTH styles of
+   * comparison over the SAME true scenario: the OLD style (independently
+   * floored clocks, replicated from `proc_start_epoch`'s exact formula
+   * shape) DOES miss; the NEW style (one clock throughout, centiseconds
+   * since boot — `pids_claude_in`'s own proven-correct approach) cannot,
+   * structurally, by construction, since there is nothing left to subtract
+   * two independent reads of. The FIX below is exactly that: `t0` and `got`
+   * both read through `lanes.sh`'s own boot-clock verbs (`uptime-cs`,
+   * `proc-since-boot`) — the same clock, the same process, the same units
+   * `die_launch`'s real census already uses.
+   */
+  test('1030mechanism: two independently-floored clock reads can disagree by one even when causality holds (injected boundary)', () => {
+    const trueBootWallCs = 179_034_397_100; // an arbitrary fixed "boot instant", in centiseconds
+    const ticksCs = 3; // the process starts 3cs after boot — second 1_790_343_971
+    const trueStartCs = trueBootWallCs + ticksCs;
+    const trueSecond = Math.floor(trueStartCs / 100);
+    // t0, read a moment BEFORE the process spawned, lands in the SAME true
+    // second — the spawn is causally ordered after it, by construction.
+    const t0 = trueSecond;
+
+    // OLD style: proc_start_epoch's exact formula shape — floor((wallCs -
+    // upCs + ticksCs) / 100) — where wallCs/upCs are read AFTER the process
+    // exists and SEPARATELY from t0's own read. /proc/uptime's own kernel-
+    // side update granularity can leave it a tick behind EPOCHREALTIME's
+    // instant at read time, undershooting the derived boot estimate by
+    // exactly that tick — entirely plausible, not manufactured to order.
+    const staleUptimeTicksCs = 4;
+    const derivedBootWallCs = trueBootWallCs - staleUptimeTicksCs;
+    const oldGot = Math.floor((derivedBootWallCs + ticksCs) / 100);
+    assert.equal(oldGot, trueSecond - 1, 'the injected skew reproduces exactly the one-second undershoot the real door measured');
+    assert.ok(oldGot < t0, 'RED (old style): a causality-preserving spawn still reports as having started before t0 was read');
+
+    // NEW style: both sides in centiseconds since boot, one clock, one
+    // process, no wall-clock derivation on either side — t0cs read before
+    // the spawn, gotCs the process's own ticks (already boot-relative, no
+    // estimate to skew).
+    const t0Cs = ticksCs - 1; // t0 read 1cs before the spawn, same clock as gotCs
+    const gotCs = ticksCs;
+    assert.ok(gotCs >= t0Cs, 'GREEN (new style): comparing on one clock throughout leaves no independent estimate to disagree with');
+  });
+
   test('1030: a process spawned INSIDE the census second is never computed to the second before it', () => {
-    // CI red (run 34729635825) on the two doors whose claude spawns immediately, green on the
-    // two that spawn 1.5 s later: `btime + ticks/hz` uses a boot second FLOORED, so the sum runs
-    // up to a second early. Measured locally: boot fraction .749, 11 of 15 same-second spawns
-    // excluded. Fifteen spawns each taken right after `date +%s`; every start must be >= it.
+    // Fixed to compare on ONE clock throughout (see the mechanism door
+    // above): t0 and the process's start both come from lanes.sh's own
+    // boot-clock verbs (`uptime-cs`, `proc-since-boot` — die_launch's real
+    // census already uses exactly this pair, via `uptime_cs()` and
+    // `proc_start_cs()`), never Node's `Date.now()` against bash's
+    // wall-clock-estimating `proc-start`. Fifteen spawns each taken right
+    // after uptime-cs; every start must be >= it, in the same unit.
     const misses: string[] = [];
     for (let i = 0; i < 15; i++) {
-      const t0 = Math.floor(Date.now() / 1000);
+      const t0cs = Number(lanes(['uptime-cs']).stdout.trim());
       const r0 = spawnSync('bash', ['-c', 'sleep 300 </dev/null >/dev/null 2>&1 & echo $!'], { encoding: 'utf8' });
       const pid = Number(r0.stdout.trim());
-      planted.add(pid);
-      const got = Number(lanes(['proc-start', String(pid)]).stdout.trim());
-      if (!(got >= t0)) misses.push(`spawn ${i}: start ${got} < t0 ${t0}`);
+      recordPlant(pid);
+      const gotCs = Number(lanes(['proc-since-boot', String(pid)]).stdout.trim());
+      if (!(gotCs >= t0cs)) misses.push(`spawn ${i}: start ${gotCs}cs < t0 ${t0cs}cs`);
       spawnSync('kill', ['-KILL', String(pid)]);
       spawnSync('sleep', ['0.07']);
     }
@@ -198,6 +442,37 @@ describe('7.6.105 — the census reads a START time, not a first-lookup time', (
 });
 
 describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HUP', () => {
+  /*
+   * M7-C last-flakes #2 (known-flakes.md `scripts/lanes-census.test.ts:200`,
+   * "1.5 s late spawn + 3 s waitGone timing budget under load"). `sleep`
+   * only guarantees a MINIMUM: under CPU contention the shell running it can
+   * be scheduled arbitrarily later before its NEXT line executes, so a
+   * "1.5 s" scripted delay can stretch past die_launch's 4 s default confirm
+   * window under real load, moving the spawn from the deterministic
+   * BEFORE-kill census into the AFTER-kill re-census loop.
+   *
+   * FIRST ATTEMPT widened this test's own `LANES_CONFIRM_TIMEOUT_S` to keep
+   * the spawn inside the safe before-kill catch — ruled out (2026-09-26):
+   * that is exactly the "bigger number" the brief already forbids, and it
+   * papers over the REAL weakness, which was in `lanes.sh` itself: the
+   * after-kill loop used to stop on a fixed "quiet for 1 s" window (2 ticks
+   * with nothing new) — a load-sensitive GUESS about how long a late spawn
+   * line can take, unrelated to whether the launched process could still be
+   * running one. A launch that misses this window in production leaks a
+   * real, token-burning session, not just a test red.
+   *
+   * FIXED AT THE PRODUCT instead (`die_launch` in `lanes.sh`): a quiet tick
+   * only counts once `launch_pid` — the ONE process the pane's shell was
+   * directly running, captured via `/proc/<pane_pid>/task/<pane_pid>/
+   * children` before the kill — is CONFIRMED dead. Deterministic, not a
+   * guess; still bounded overall by `LANES_RECENSUS_S`, unchanged.
+   *
+   * `LANES_CONFIRM_TIMEOUT_S` stays at its production default (4 s, no
+   * override) in both tests below — the 1.5 s spawn is still caught by the
+   * deterministic before-kill census (comfortably under 4 s), and the 6 s
+   * door deliberately lands PAST it, exercising the fixed after-kill loop
+   * for real, with no host load needed to prove it.
+   */
   test('a lane program that spawns its grandchild 1.5 s after the kill is still retired, and stderr says what the census saw', () => {
     const bin = laneBin('lane-late', { lateSpawnS: 1.5 });
     const { r } = launchUnconfirmed('late', bin);
@@ -206,9 +481,33 @@ describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HU
     try {
       assert.notEqual(r.status, 0, 'unconfirmed launch exits non-zero');
       assert.match(r.stderr, /NOT CONFIRMED for late/);
-      assert.ok(waitGone(stray, 3000), `the late-spawned claude is retired by PID (pid ${stray}); die_launch stderr:\n${r.stderr}`);
+      assert.ok(waitGone(stray), `the late-spawned claude is retired by PID (pid ${stray}); die_launch stderr:\n${r.stderr}`);
       assert.match(r.stderr, new RegExp(`retired pid ${stray}\\b`), 'the pid it retired is printed');
       assert.match(r.stderr, /census: .* started at\/after uptime \d+cs \(wall ~\d+\)/, 'and the census reports what it saw, in its own clock, so a red carries evidence');
+    } finally {
+      spawnSync('kill', ['-KILL', String(self)]);
+    }
+  });
+
+  test('M7-C last-flakes #2: a spawn 6 s late — well past the 4 s confirm window — is still retired by the AFTER-kill census', () => {
+    // No host load needed: with LANES_CONFIRM_TIMEOUT_S at its production
+    // default, a 6 s spawn is guaranteed to land AFTER the before-kill
+    // census every run, so this exercises die_launch's launch_pid-gated
+    // after-kill loop directly, not the before-kill shortcut the test above
+    // relies on. LANES_RECENSUS_S is die_launch's own legitimate ceiling
+    // (never the thing under test), widened only far enough to outlast the
+    // deliberately late 6 s spawn.
+    const bin = laneBin('lane-margin', { lateSpawnS: 6 });
+    const { r } = launchUnconfirmed('margin', bin, { LANES_RECENSUS_S: '8' });
+    const self = pidFrom('lane-margin.selfpid', 8000);
+    const stray = pidFrom('lane-margin.detachedpid', 12000);
+    try {
+      assert.ok(
+        waitGone(stray),
+        `a spawn 6 s late is still retired by the after-kill census once it is gated on the pane's own launch_pid rather than a fixed quiet window (pid ${stray}); die_launch stderr:\n${r.stderr}`,
+      );
+      assert.match(r.stderr, new RegExp(`retired pid ${stray}\\b`), 'the pid it retired is printed');
+      assert.match(r.stderr, /census: 0 claude pid\(s\) .* before the kill/, 'the spawn is NOT yet running at the before-kill census — this exercises the after-kill loop, not the deterministic before-kill shortcut');
     } finally {
       spawnSync('kill', ['-KILL', String(self)]);
     }
@@ -229,7 +528,10 @@ describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HU
     const stray = pidFrom('lane-late2.detachedpid', 12000);
     try {
       assert.match(r.stderr, /LANES_RECENSUS_S='soon' is not a whole number of seconds — using 5/, r.stderr);
-      assert.ok(waitGone(stray, 3000), `the re-census still ran (pid ${stray}):\n${r.stderr}`);
+      // LANES_RECENSUS_S stays malformed here on purpose (that IS this test);
+      // die_launch's launch_pid gate still applies on top of the defaulted
+      // 5 s ceiling, so waitGone's own generous default is correct as-is.
+      assert.ok(waitGone(stray), `the re-census still ran (pid ${stray}):\n${r.stderr}`);
     } finally {
       spawnSync('kill', ['-KILL', String(self)]);
     }
@@ -242,13 +544,13 @@ describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HU
     // Planted BEFORE the launch, in the lane's cwd: T1's own session in a shared directory.
     const old = spawnSync('bash', ['-c', `setsid nohup '${fakeClaude()}' 300 </dev/null >/dev/null 2>&1 & echo $!`], { cwd: laneCwd, encoding: 'utf8' });
     const older = Number(old.stdout.trim());
-    planted.add(older);
+    recordPlant(older);
     spawnSync('sleep', ['1.5']);
     const { r } = launchUnconfirmed('deaf2', bin);
     const self = pidFrom('lane-deaf2.selfpid', 8000);
     const stray = pidFrom('lane-deaf2.detachedpid', 12000);
     try {
-      assert.ok(waitGone(stray, 3000), `the lane's own claude is retired (pid ${stray}):\n${r.stderr}`);
+      assert.ok(waitGone(stray), `the lane's own claude is retired (pid ${stray}):\n${r.stderr}`);
       assert.ok(alive(older), `the OLDER claude (pid ${older}, started before t0) survives:\n${r.stderr}`);
     } finally {
       spawnSync('kill', ['-KILL', String(self)]);

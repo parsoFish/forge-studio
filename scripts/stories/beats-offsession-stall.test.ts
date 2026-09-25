@@ -404,12 +404,19 @@ test('640 REGRESSION: a SESSION beat is never doored by the channel — lane A\'
   // Asserted at the GATE rather than through the wait, because the wait would
   // need a whole session fixture to reach the same line and would then be
   // testing the fixture. The condition IS the fix.
+  //
+  // Widened by `forge-8vfn.8.1.4`: the door is now ALSO skipped whenever a
+  // `cycleWatch` is watching (`!watching`), because its own channel search
+  // does not know `cycleOf` and wrongly doors a continued cycle. Additive —
+  // this test's own invariant ("only when there is no session to ask about")
+  // still holds; a beat can gain a new reason to skip the door without ever
+  // losing this one.
   const src = readFileSync(new URL('./beats-page.mjs', import.meta.url), 'utf8');
   const consequenceDoor = src.slice(src.indexOf('export async function waitForConsequence'));
   assert.match(
     consequenceDoor,
-    /if \(stallDoor !== null && sessionScope === null && doorWorthRunning\(timeoutMs, STALL_CEILING_MS\)\) \{/,
-    'the consequence wait must consult the channel door only when there is no session to ask about',
+    /if \(!watching && stallDoor !== null && sessionScope === null && doorWorthRunning\(timeoutMs, STALL_CEILING_MS\)\) \{/,
+    'the consequence wait must consult the channel door only when there is no session to ask about, and not while a cycleWatch is watching',
   );
   // And the pre-act wait reaches it only through `waitOffSession`, which is
   // already unreachable for a session beat.
