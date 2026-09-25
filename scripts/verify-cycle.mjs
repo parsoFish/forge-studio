@@ -27,7 +27,7 @@
  *      before teardown (the prior harness killed the bridge mid-reflect).
  *
  * The gate assertions (ADR 022 §1 + S9):
- *   1. the cycle reached merge (finalStatus `done` / manifest in _queue/done/);
+ *   1. the cycle reached merge (finalStatus `merged`/`done`, or manifest in `_queue/merged|done/`);
  *   2. the dev-loop completed N/N work items (no complete:0 / failed);
  *   3. the project's own tests are green post-merge (its .forge quality gate, else
  *      npm test);
@@ -82,10 +82,8 @@ import { classifyCriticFindings } from './verify-cycle-plan-gate.mjs';
 import { sumRunCost } from './verify-cycle-cost.mjs';
 import { flowDeclaresMergedReflect, flowDefinition, knownFlowIds, resolveFlowSelection } from './verify-cycle-flow.mjs';
 import { createStageTwo } from './verify-cycle-stage2.mjs';
-import {
-  DEFAULT_PROJECT,
-  buildOutcomeChecks,
-} from './lib/verify-outcomes.mjs';
+import { getPaths } from '@forge/flows';
+import { DEFAULT_PROJECT, buildOutcomeChecks, resolveReflectWaitDeadlineMs } from './lib/verify-outcomes.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -449,10 +447,11 @@ function reflectWroteBrainTheme(project, runStartMs) {
 function assessOutcomes({ finalStatus, cost, repoPath, cycleId, initiativeId, project, runStartMs }) {
   const wi = wiOutcomes(cycleId);
   const tests = runProjectTests(repoPath);
-  // The manifest landing in _queue/done/ is the AUTHORITATIVE merge signal — the bridge's
-  // /api/cycles status read is unreliable once the cycle has completed + moved terminal (it
-  // returned null even on cleanly-merged cycles). buildOutcomeChecks accepts either signal.
-  const manifestInDone = existsSync(join(FORGE_ROOT, '_queue', 'done', `${initiativeId}.md`));
+  // Manifest in merged/ OR done/ is the AUTHORITATIVE merge signal (both R4-11-F1
+  // confirmed-merge states, per @forge/flows' own getPaths — never a hand-typed string).
+  const queuePaths = getPaths(join(FORGE_ROOT, '_queue'));
+  const manifestFilename = `${initiativeId}.md`;
+  const manifestLanded = existsSync(join(queuePaths.merged, manifestFilename)) || existsSync(join(queuePaths.done, manifestFilename));
   const reflectTheme = FLOW_REFLECTS ? reflectWroteBrainTheme(project, runStartMs) : undefined;
   // Live-resource projects: assert the demo carries real REST evidence, so a
   // green-unit-gate-but-no-live-proof cycle fails the gate (demos-are-visual-evidence).
@@ -464,7 +463,7 @@ function assessOutcomes({ finalStatus, cost, repoPath, cycleId, initiativeId, pr
   const releaseProcess = releaseProcessFromConfig(repoPath);
   const releaseEv = releaseProcess ? releaseEvidence(repoPath, cycleId, releaseProcess) : undefined;
   const checks = buildOutcomeChecks({
-    finalStatus, manifestInDone, wi, tests, cost, costCeiling: COST_CEILING,
+    finalStatus, manifestLanded, wi, tests, cost, costCeiling: COST_CEILING,
     reflectTheme, liveEvidence, releaseEvidence: releaseEv,
   });
   return { checks, wi };
@@ -1083,7 +1082,8 @@ async function main() {
         }
         continue;
       }
-      await stageTwo.waitLanded(init, Date.now() + 12 * 60_000);
+      // Own bound from THIS approval instant, never runStartMs (REFLECT_LANDED_WAIT_MS).
+      await stageTwo.waitLanded(init, resolveReflectWaitDeadlineMs(Date.now()));
       await sleep(2000);
       await captureFrame(page, `final-state-${init.initiativeId}`);
       remaining.delete(init.initiativeId);
