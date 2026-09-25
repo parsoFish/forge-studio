@@ -33,7 +33,7 @@ import { logger, setup } from './test-fixtures/demo-builder-runner-fixtures.ts';
 import { runDemoBuilderTurn } from '../../kinds/demo-builder.ts';
 import { DEMO_HTML_REL_PATH, DEMO_REL_DIR, DEMO_SKILL_REL_PATH } from '../../kinds/demo-session-store.ts';
 import { type QueryFn } from '../../interactive-session.ts';
-import { StudioWritePathIgnoredError } from '@forge/projects/project-repo-tx.ts';
+import { StudioWritePathIgnoredError } from '@forge/projects/testing';
 
 const FOREIGN = 'roadmap.md';
 const git = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();

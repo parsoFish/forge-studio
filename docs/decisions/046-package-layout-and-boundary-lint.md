@@ -93,22 +93,29 @@ its own `test` script, and its own `tsconfig.json` extending the root.
 > named** subpaths — never a wildcard — in one of two shapes:
 >
 > - **`"./testing"`** (`knowledge`, `library`, `projects`, `agents`, `sessions`,
->   `flows`), pointing at one `testing.ts` file in the package, for symbols
->   with no production consumer outside the package (a test-only deep import
->   gets a documented door of its own rather than re-legalising every internal
->   file to reach it).
-> - **A specific deep path kept open on purpose**, documented at its use site,
->   for the two cases the repoint itself surfaced: a circular-import risk
+>   `flows`, `stations`), pointing at one `testing.ts` file in the package,
+>   for symbols with no production consumer outside the package (a test-only
+>   deep import gets a documented door of its own rather than re-legalising
+>   every internal file to reach it).
+> - **A specific deep path kept open on purpose**, documented at its use
+>   site, for the cases the repoint itself surfaced: a circular-import risk
 >   (`@forge/sessions`'s `"./studio/session-kinds.ts"` and
 >   `"./studio/session-transcript.ts"`, which `packages/projects/
 >   contract-stages.ts` reaches deep because going through the door crashed
 >   `packages/sessions/contract.test.ts` with a TDZ `ReferenceError` — the
 >   door eagerly loads the whole package graph, and something in it cycled
->   back), and `@forge/factory`'s fourteen-specifier allowlist, which predates
->   this amendment and is governed separately by [ADR 048](
->   ./048-deletable-example-factory.md) — `factory`'s door is `index.ts`
->   staying **empty**, not a populated barrel, so this amendment's "one root
->   entry" shape does not apply to it at all.
+>   back), and `@forge/stations`'s three demo/docs-gate paths (kept deep so
+>   `apps/forge/factory-cli-wiring.ts`'s CLI seam and `@forge/factory`'s own
+>   `demo.ts`/`demo-runtime.ts` do not pull the whole door's reachable-sink
+>   surface into a request-path scan for a verb the bridge never calls — the
+>   same reasoning `@forge/factory`'s own two-specifier allowlist rests on).
+>   `@forge/factory` is governed separately by [ADR 048](
+>   ./048-deletable-example-factory.md) — its door is `index.ts` staying
+>   **empty**, not a populated barrel, so this amendment's "one root entry"
+>   shape does not apply to it at all; item 83's split carried nine of its
+>   eleven production specifiers into `@forge/stations`, so the allowlist
+>   this amendment originally measured at fourteen is two
+>   (`class-profiles.ts`, `demo.ts`) after the merge.
 >
 > **What changed and did not.** The allow-graph is unaffected exactly as the
 > M3-A amendment said the additive subpath left it unaffected: `"./*"` never

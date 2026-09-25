@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 import { runFlow } from '@forge/flows';
-import { createPhaseExecutor, registeredBandIds } from '@forge/stations/phases/executor-table.ts';
+import { createPhaseExecutor, registeredBandIds } from '@forge/stations';
 import { BAND_GUARD_IDS } from '@forge/contracts';
 import type { PhaseExecutor } from '@forge/kernel';
 import type { NodeExecContext } from '@forge/flows';

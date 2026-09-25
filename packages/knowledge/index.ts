@@ -77,6 +77,7 @@ export {
   commitProjectBrain,
   listStagedThemes,
 } from './project-brain-build.ts';
+export type { ProjectBrainCommitInput } from './project-brain-build.ts';
 
 // --- the brain write lease (contended writers back off, never corrupt) ------
 export { acquireBrainWriteLease, BrainWriteLeaseContentionError } from './brain-write-lease.ts';

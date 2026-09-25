@@ -14,7 +14,7 @@
  * pinned.
  */
 import { readFileSync } from 'node:fs';
-import { parseManifest, CHANGE_CLASSES } from '@forge/flows/manifest.ts';
+import { parseManifest, CHANGE_CLASSES } from '@forge/flows';
 import type { ChangeClass, ClassProfilePort, GateProfile } from '../../class-profile-port.ts';
 
 export const TEST_CLASS_PROFILES: Readonly<Record<ChangeClass, GateProfile>> = {

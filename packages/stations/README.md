@@ -28,6 +28,37 @@ silently guessing a default profile.
 
 `ChangeClass` · `ClassProfilePort` · `FlowRunnerDeps` · `GateProfile`
 
+## One door, plus three literal production subpaths and one test-only subpath
+
+`package.json` maps `"."`, plus three specific deep paths kept legal on
+purpose — `"./demo-model.ts"`, `"./demo-types.ts"` and `"./gates/docs-gate.ts"`
+— and `"./testing"`. Bead `forge-8vfn.5.31` narrowed `exports` from the
+`"./*"` wildcard this package started with (the module doc above still says
+"those keep working unchanged; `git grep '@forge/stations/'` finds them",
+which was true before the narrowing and is why the three production paths
+below are named rather than silently broken).
+
+The three literal paths are production, not test-only, and are kept deep
+rather than repointed through the door for the same reason
+`apps/forge/factory-cli-wiring.ts`'s own module doc gives for keeping
+`@forge/factory/demo.ts` and `gates/docs-gate.ts` out of
+`factory-wiring.ts`'s static graph: naming them through a barrel pulls
+whatever ELSE the barrel exports into the same reachable-sink surface a
+request-path scan measures, for a CLI verb the bridge never calls.
+`demo-model.ts` and `demo-types.ts` are also imported by `packages/factory`'s
+own `demo.ts` and `demo-runtime.ts` (a real cross-package production
+consumer, not the CLI seam) — same two paths, same reason to keep them deep
+rather than route a demo-capture-heavy import through this package's main
+door.
+
+`@forge/stations/testing` exports `settleWiOutcome`/`assertOutcomesSettled`/
+`WiOutcome` (`phases/developer-loop.ts`), `runProjectManager`/`PmQueryFn`
+(`phases/project-manager.ts`), `NodeExecutor`/`integrateDeliveryFailure`
+(`phases/executor-table.ts`, beyond what the main door already exports from
+that file) and `deriveDemoModel` (`phases/derive-demo-model.ts`) — each has
+no production consumer outside this package, only `apps/forge` and
+`packages/flows` tests reach for them.
+
 ## What is inside
 
 `class-profile-port.ts` declares the port (`ClassProfilePort`, and the

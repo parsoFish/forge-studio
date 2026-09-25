@@ -25,7 +25,7 @@ import { test } from 'node:test';
 import { checkDemo } from '@forge/projects/testing';
 import { demoTaskLines } from '@forge/sessions';
 import type { DemoBuilderStatus } from '@forge/sessions';
-import { deriveDemoModel } from '@forge/stations/phases/derive-demo-model.ts';
+import { deriveDemoModel } from '@forge/stations/testing';
 // `listDemoElements` moved to `@forge/library` (M4
 // library-by-kind carve, PR 3 / Part 2) and is re-exported from `registry.ts`
 // for this importer specifically: `projects` (rank 2) may not import

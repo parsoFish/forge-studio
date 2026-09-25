@@ -16,9 +16,10 @@
  * directly by `orchestrator/flow-runner.port-conformance.test.ts`.
  */
 import { runFlow, type FlowRunArgs } from '@forge/flows';
-import { createPhaseExecutor, type NodeExecutor } from '@forge/stations/phases/executor-table.ts';
-import { createProjectGate, defaultRunClosure } from '@forge/stations/phases/executor-deps.ts';
-import type { FlowRunnerDeps } from '@forge/stations/phases/executor-deps.ts';
+import { createPhaseExecutor } from '@forge/stations';
+import type { NodeExecutor } from '@forge/stations/testing';
+import { createProjectGate, defaultRunClosure } from '@forge/stations';
+import type { FlowRunnerDeps } from '@forge/stations';
 import type { NodeKind } from '@forge/flows';
 
 export type { NodeExecutor, FlowRunnerDeps };

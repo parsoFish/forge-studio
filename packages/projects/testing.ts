@@ -9,3 +9,4 @@
  */
 export { parseSkills } from './project-config-validate.ts';
 export { checkDemo } from './preflight.ts';
+export { StudioWritePathIgnoredError } from './project-repo-tx.ts';

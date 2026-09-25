@@ -24,7 +24,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 /** `1.0.md` §0 and ADR 046, in allow-graph order. */
 const PACKAGES = [
   'contracts', 'kernel', 'library', 'knowledge', 'projects',
-  'agents', 'sessions', 'flows', 'factory',
+  'agents', 'sessions', 'flows', 'stations', 'factory',
 ];
 
 /**

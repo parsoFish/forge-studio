@@ -6,7 +6,10 @@
   "description": "The station executor and every band it dispatches: the platform's execution machinery, independent of any one factory's flows.",
   "exports": {
     ".": "./index.ts",
-    "./*": "./*"
+    "./testing": "./testing.ts",
+    "./demo-model.ts": "./demo-model.ts",
+    "./demo-types.ts": "./demo-types.ts",
+    "./gates/docs-gate.ts": "./gates/docs-gate.ts"
   },
   "scripts": {
     "test": "node --test --experimental-strip-types \"**/*.test.ts\""
