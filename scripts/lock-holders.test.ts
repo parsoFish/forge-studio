@@ -124,6 +124,15 @@ describe('lock-holders.sh — named AND confirmed, never /proc/locks alone', () 
   test('CO-OPENER: a process with the file open but never holding the flock is never named — even while someone else genuinely holds it', async () => {
     const { dir, lock } = lockFile();
     const holder = holdInvisibleAsStranger(lock);
+    // The holder must own the flock BEFORE the co-opener exists: spawned back to
+    // back, the co-opener's `flock -n` can win the race and the holder then
+    // exits 9 (row 89 — red on GitHub CI, run 36148719779).
+    try {
+      await waitReady(holder);
+    } catch (err) {
+      rmSync(dir, { recursive: true, force: true });
+      throw err;
+    }
     // Opens the SAME file, tries to flock it and FAILS (contended), keeps the
     // fd open anyway — the exact shape the CHECKING process itself is in
     // right before it asks this question (this is what let gate.sh misread a
@@ -135,7 +144,6 @@ describe('lock-holders.sh — named AND confirmed, never /proc/locks alone', () 
       { stdio: ['ignore', 'pipe', 'inherit'] },
     );
     try {
-      await waitReady(holder);
       await waitReady(coOpener);
       const r = state(lock);
       assert.match(r.stdout.trim(), /^STRANGER:\d+$/, r.stdout + r.stderr);
