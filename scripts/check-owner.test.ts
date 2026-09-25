@@ -67,7 +67,7 @@ test('it accounts for a real population, not an empty set', () => {
  * The subject these four fixtures manipulate, DERIVED rather than named.
  *
  * §15.93: a guard self-test that hardcodes a real repo path is coupled to every
- * carve — this file named `orchestrator/flow-runner.ts` and went red the moment
+ * carve — this file named `packages/flows/flow-runner.ts` and went red the moment
  * that file moved into its package. Failing loudly was the good outcome; the
  * bad one is a fixture that keeps passing while pointing at nothing. Taking the
  * first `packages/` row out of the live QUARRY table means the next move cannot

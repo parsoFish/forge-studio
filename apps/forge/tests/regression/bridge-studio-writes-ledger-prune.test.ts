@@ -13,7 +13,7 @@
  * delete means a LATER, unrelated skill created at the same id inherits a
  * mismatched `contentHash` and is wrongly flagged `needs-review` /
  * `provenance-tampered` (library-35's exact bug, reached through a fourth
- * path). See orchestrator/studio/destroy-prunes-ledger.test.ts for the
+ * path). See packages/agents/tests/contract/destroy-prunes-ledger.test.ts for the
  * static enumeration pin that now classifies this route.
  *
  * Pin 2 (below) asserts the ARTIFACTS — the ledger file's content and the

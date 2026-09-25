@@ -4,7 +4,7 @@
  * table (`turnSpec.phases`), not hand-written control flow in a kind module.
  *
  * Three new, additive-optional `TurnSpecPhase` fields
- * (`studio/session-kinds.ts`) carry this: `doneField` (a structured turn's
+ * (`packages/sessions/studio/session-kinds.ts`) carry this: `doneField` (a structured turn's
  * output key), `nextOnDone` (the phase to advance to — same call — when that
  * field is true, or when the phase's `ceiling` is reached against
  * `status.round`), reusing the existing `next` field for the "not done yet"

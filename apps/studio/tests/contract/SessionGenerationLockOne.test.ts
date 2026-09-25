@@ -23,7 +23,7 @@
  * internal fallback state), so the initial render already reveals whether a
  * passed-in selection is honoured.
  *
- * RUN: npx vitest run --root apps/studio tests/contract/SessionGenerationLockOne.test.ts
+ * RUN: npx vitest run --root apps/studio apps/studio/tests/contract/SessionGenerationLockOne.test.ts
  */
 import { test, expect } from 'vitest';
 import * as React from 'react';

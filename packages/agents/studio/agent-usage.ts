@@ -3,8 +3,8 @@
  *
  * WHY THE PACKAGE THAT OWNS AGENTS ANSWERS THIS. Three library modules build
  * this answer today, each with a private copy of the same agent-roster walk:
- * `studio/hook-library.ts` (`computeHookUsage`), `studio/connection-library.ts`
- * (`computeConnectionUsage`) and `studio/skill-trust.ts` (`deriveSkillUsage`
+ * `packages/library/studio/hook-library.ts` (`computeHookUsage`), `packages/library/studio/connection-library.ts`
+ * (`computeConnectionUsage`) and `packages/library/studio/skill-trust.ts` (`deriveSkillUsage`
  * over its own `listAgentDefinitionsResilient`). Library is rank 2 and agents
  * is rank 3, so library reading agent files at all is what ruling 13 forbids:
  * the answer must come from here and reach library by INJECTION at

@@ -19,7 +19,7 @@ import type { SessionTurn } from '@/lib/session-client';
 // composer is a real, wired form rather than the mockup's disabled input.
 //
 // W6-B9 reviewer fix — a pending `questions.json` turn (`deriveSessionTranscript`,
-// orchestrator/studio/session-transcript.ts) concatenates every real question's
+// packages/sessions/studio/session-transcript.ts) concatenates every real question's
 // text into ONE turn, joined on a blank line — the wire carries no per-question
 // boundary. Now that the generic `SessionInteractivePanel`'s single-box
 // `question-form` affordance has retired the bespoke per-question
@@ -86,7 +86,7 @@ export function SessionTranscript({
 }
 
 /** The SAME separator `deriveSessionTranscript` joins pending questions on
- *  (orchestrator/studio/session-transcript.ts) — a shared literal, not
+ *  (packages/sessions/studio/session-transcript.ts) — a shared literal, not
  *  independently guessed, so a change to one side is a visible diff on the
  *  other. */
 const QUESTIONS_TURN_SEPARATOR = '\n\n';

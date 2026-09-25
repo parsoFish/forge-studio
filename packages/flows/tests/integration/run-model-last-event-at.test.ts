@@ -1,18 +1,18 @@
 /**
  * Acceptance tests (R6-01 WI-1, amendment) for a NEW additive field,
- * `RunPhaseMeta.lastEventAt` (`orchestrator/run-model.ts`), derived in
- * `orchestrator/run-model-derive.ts`'s `buildNodeMeta`/`computeProgress`
+ * `RunPhaseMeta.lastEventAt` (`packages/flows/run-model.ts`), derived in
+ * `packages/flows/run-model-derive.ts`'s `buildNodeMeta`/`computeProgress`
  * neighbourhood — it does not exist yet. Every assertion reading
  * `phaseMeta[...].lastEventAt` below is a legitimate RED (the property is
  * simply absent from the real `RunPhaseMeta` object today) until the
  * implementer adds it.
  *
  * WHY THIS FIELD EXISTS (amendment to the original WI-1 pin,
- * apps/studio/lib/phase-log-refresh.test.ts): that file's first version
+ * apps/studio/tests/unit/phase-log-refresh.test.ts): that file's first version
  * attributed a `tailEvents` entry to a node via `event.phase === nodeId` —
  * a naive client-side re-derivation of attribution that the codebase's
  * OWN authoritative resolver, `eventToNodeId` (this file's own
- * `orchestrator/run-model-derive.ts`), does NOT do. Measured against the
+ * `packages/flows/run-model-derive.ts`), does NOT do. Measured against the
  * live flow set (`buildNodeMapping`/`buildAgentSlugToNodeId` over
  * `studio/flows/*`): only 4 of 12 real phase strings equal their node id
  * (`architect`, `demo`, `review`, `unifier`) — `developer-loop -> dev`,
@@ -25,7 +25,7 @@
  * `PROGRESS_EVENT_TYPES`, unlike its sibling `lastProgressAt`), reusing the
  * SAME resolver `GET /api/runs/<id>/phases/<node>/log` already uses.
  *
- * FIXTURE PATTERN: mirrors `orchestrator/run-model.test.ts`'s own
+ * FIXTURE PATTERN: mirrors `packages/flows/tests/integration/run-model.test.ts`'s own
  * `writeManifest`/`writeCycleLog`/`ev` helpers (real temp `_queue/` +
  * `_logs/<cycleId>/events.jsonl`, driven through the real `aggregateRun`)
  * — not hand-built `RunPhaseMeta` objects that bypass the read path. Case 3
@@ -36,7 +36,7 @@
  * events" test) so the generic-agent attribution path is exercised for
  * real, not asserted-in-principle.
  *
- * RUN: cd /home/parso/forge/.claude/worktrees/lane-r6-01 && FORGE_ARCHITECT_NO_SPAWN=1 node --test --experimental-strip-types orchestrator/run-model-last-event-at.test.ts
+ * RUN: cd /home/parso/forge/.claude/worktrees/lane-r6-01 && FORGE_ARCHITECT_NO_SPAWN=1 node --test --experimental-strip-types packages/flows/tests/integration/run-model-last-event-at.test.ts
  */
 
 import { test } from 'node:test';

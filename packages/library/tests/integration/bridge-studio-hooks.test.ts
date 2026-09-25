@@ -16,7 +16,7 @@
  *
  * Style: real bridge (startBridge) + fetch, mirroring
  * packages/library/tests/integration/bridge-studio-skills.test.ts, over the ALREADY-SHIPPED core
- * (orchestrator/studio/hook-library.ts F1, hook-scan.ts F2/F3 — read in full
+ * (packages/library/studio/hook-library.ts F1, hook-scan.ts F2/F3 — read in full
  * before writing this file; every fixture script below reuses the exact
  * bodies pinned in hook-scan.test.ts's own `EXFIL_SCRIPT`/`BENIGN_SCRIPT` so
  * the verdicts asserted here are not this file's own invention).
@@ -126,7 +126,7 @@ async function getJson(url: string): Promise<Record<string, unknown>> {
 type Permissions = { env: string[]; read: string[]; network: boolean };
 const DENY_ALL: Permissions = { env: [], read: [], network: false };
 
-/** Reused verbatim from orchestrator/studio/hook-scan.test.ts's own fixture
+/** Reused verbatim from packages/library/tests/integration/hook-scan.test.ts's own fixture
  *  constants — this file asserts the SAME verdicts on the SAME bodies via
  *  HTTP, it does not re-derive the scan behaviour. */
 const EXFIL_SCRIPT = `#!/usr/bin/env bash
@@ -671,7 +671,7 @@ test('the library route table declines a non-matching URL (passthrough contract)
 // W8-B6 — trigger coherence, gated on BOTH write routes
 //
 // A matcher on a tool-less event can never be honoured by hook dispatch
-// (`orchestrator/studio/hook-dispatch.ts`'s `hookMatcherMatches` needs a
+// (`packages/agents/studio/hook-dispatch.ts`'s `hookMatcherMatches` needs a
 // `tool_name`), so the hook would be authored, displayed as bound, and never
 // fire. Gating create alone would leave PUT as the open door — the one-of-N
 // shape this repo keeps paying for — so both are pinned here.

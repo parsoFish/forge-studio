@@ -17,7 +17,7 @@
  *     readSessionStatus(guarded.realPath)                 // status.json leaf — UNguarded
  *     writeSessionStatus(sessionDir, {...})               // status.json leaf — UNguarded
  *
- * `readSessionStatus`/`writeSessionStatus` (orchestrator/interactive-session.ts)
+ * `readSessionStatus`/`writeSessionStatus` (packages/sessions/interactive-session.ts)
  * do `join(sessionDir, 'status.json')` + `readFileSync`/`writeFileSync`, both of
  * which FOLLOW a symlinked leaf. So a REAL, genuinely-contained session dir whose
  * `status.json` is a SYMLINK pointing at an out-of-root victim:

@@ -64,7 +64,7 @@
  *               wouldInstall}` — no other key, so nothing could be
  *               misread as a completed install.
  *           (b) BOTH `FORGE_DRY_BRIDGE=1` and `FORGE_ARCHITECT_NO_SPAWN=1`
- *               independently suppress (mirrors `orchestrator/run-agent.ts`
+ *               independently suppress (mirrors `packages/agents/run-agent.ts`
  *               checking both).
  *           (c) a suppressed install changes NOTHING about real state — a
  *               subsequent real probe of the same connection still reports

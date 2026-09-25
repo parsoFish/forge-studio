@@ -1,7 +1,7 @@
 /**
  * The run view's shape (ADR 028 §3: "a run is derived, never stored").
  *
- * Moved here from `packages/flows/run-view-types.ts` (bead `forge-8vfn.5.17`,
+ * Moved here from `packages/contracts/run-view-types.ts` (bead `forge-8vfn.5.17`,
  * M2-B's cycle-break relocation): the ONE declaration for
  * `RunStatus`/`RunPhaseStatus`/`RunPhaseMeta`/`Run`, shared by the server
  * derivation (`@forge/flows`'s `run-model.ts`/`run-model-derive.ts`) and the

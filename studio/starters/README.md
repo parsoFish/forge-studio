@@ -36,7 +36,7 @@ form; saving **instantiates** it into a live object:
 - a starter agent → `skills/<slug>/SKILL.md` (via `PUT /api/studio/agents/:slug`)
 - the basic flow → `studio/flows/<slug>/flow.yaml`
 
-Validity is enforced by `orchestrator/studio/starters.test.ts` (every starter passes
+Validity is enforced by `apps/forge/tests/contract/starters.test.ts` (every starter passes
 `validateAgent` / `validateFlow`) and, once instantiated, by `forge studio lint`.
 
 See ADR-033 for the design.

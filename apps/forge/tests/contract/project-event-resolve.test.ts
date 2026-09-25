@@ -3,7 +3,7 @@
  * of "project-event trigger kinds". Per the ruling brief:
  *
  *   - Resolution is an IDENTITY match of the payload's repo against declared
- *     `repo` values (orchestrator/project-config-repo.test.ts pins the field
+ *     `repo` values (packages/projects/tests/integration/project-config-repo.test.ts pins the field
  *     itself); the result is the project's ENUMERATION id
  *     (`@forge/kernel` `discoverProjects` / `normalizeProjectId`),
  *     never the payload string, never the raw directory name.
@@ -16,7 +16,7 @@
  * annotations without checking them, so these tests run and fail on
  * ASSERTIONS/exports, not on TS compile errors):
  *
- *   orchestrator/project-config.ts exports
+ *   packages/projects/project-config.ts exports
  *     resolveProjectIdForRepo(forgeRoot: string, repo: string): string | null
  *
  * This mirrors `discoverProjects(projectsDir, forgeRoot)`'s own call-site
@@ -30,7 +30,7 @@
  *
  * Every call site below goes through a DYNAMIC `await import(...)` + a
  * `typeof fn === 'function'` guard (mirroring
- * orchestrator/trigger-harness-guard.test.ts's `fireAgentCompleteTriggers`
+ * packages/flows/tests/integration/trigger-harness-guard.test.ts's `fireAgentCompleteTriggers`
  * precedent) so a missing export fails ONLY the individual test that needs
  * it, never the whole file's collection — `project-config.ts` itself already
  * exists, so the dynamic import always succeeds; only the named export may

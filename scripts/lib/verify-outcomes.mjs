@@ -42,9 +42,9 @@
  * `classifyReflectorProgress` (M0-A round-2 defect B) and
  * `sumAuthoritativeCostFromLines` (M0-A round-2 defect C) are the one
  * declared exception to "no imports besides node builtins": the latter
- * delegates to `orchestrator/event-cost.ts`'s `sumAuthoritativeCostUsd` — the
+ * delegates to `packages/kernel/event-cost.ts`'s `sumAuthoritativeCostUsd` — the
  * single source of truth for cost summation also used by `packages/flows/metrics.ts`,
- * `orchestrator/run-model.ts` and `orchestrator/run-model-derive.ts` — rather
+ * `packages/flows/run-model.ts` and `packages/flows/run-model-derive.ts` — rather
  * than re-implementing the restatement rule a second time. That module's own
  * import of `EventLogEntry` is `import type`, erased at load, so pulling it
  * in from plain `.mjs` stays side-effect-free; Node v22's native TS type
@@ -189,7 +189,7 @@ export function buildOutcomeChecks({
  */
 
 /** The literal `cycle.reflection-lost` terminal-loss event message
- *  (`orchestrator/cycle-context.ts`'s `REFLECTION_LOST_EVENT`) — not
+ *  (`packages/flows/cycle-context.ts`'s `REFLECTION_LOST_EVENT`) — not
  *  imported, since that module is not the declared cost-rule exception and
  *  this file stays pure otherwise; the value is stable (it is itself a
  *  cross-module contract other callers match on). */
@@ -251,7 +251,7 @@ export function classifyReflectorProgress(logLines) {
 /**
  * Sum authoritative cost across raw event-log lines (M0-A round-2 defect C).
  *
- * Delegates to `orchestrator/event-cost.ts`'s `sumAuthoritativeCostUsd` — the
+ * Delegates to `packages/kernel/event-cost.ts`'s `sumAuthoritativeCostUsd` — the
  * ONE restatement rule, applied once per event (spec §5.7) — rather than
  * naively summing every `cost_usd` field, which double/triple-counts phases
  * that emit `iteration` events (developer-loop, unifier) because those

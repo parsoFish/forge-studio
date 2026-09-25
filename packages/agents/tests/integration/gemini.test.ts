@@ -4,7 +4,7 @@
  * Runs WITHOUT live creds and WITHOUT the @google/genai dependency installed:
  *
  *   A. Full RuntimeAdapter conformance under an injected mock `queryFn`
- *      (loops/_adapters/conformance.ts) — exactly how the Claude adapter is
+ *      (packages/agents/_adapters/conformance.ts) — exactly how the Claude adapter is
  *      tested. Proves the adapter's stream-folding glue handles a well-formed
  *      stream regardless of which SDK produced it.
  *   B. Dep+creds gating: `available` is false here (no dep, no key); the gate

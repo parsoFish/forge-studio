@@ -7,7 +7,7 @@
  * `runAdversarialReview` itself, which is `@forge/factory` (rank 7) and may
  * never be imported from `packages/agents` (rank 3). This is the layer that
  * legally holds both sides, so the parity case lives here — carried over
- * verbatim from `orchestrator/band-agent-run.test.ts` when that file was
+ * verbatim from `packages/agents/tests/integration/band-agent-run.test.ts` when that file was
  * carved (M4-agents, exit row 4).
  *
  * It was the DEMO arm until spec §5 item 4 deleted the LLM integrate node; the review

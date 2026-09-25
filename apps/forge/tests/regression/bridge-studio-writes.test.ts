@@ -2,7 +2,7 @@
  * ACCEPTANCE TESTS (SEC-05 / forge-4on, P1) — the greenfield create route is
  * NON-TRANSACTIONAL, end-to-end through the real bridge.
  *
- * The defect lives in `scaffoldGreenfieldProject` (orchestrator/project-create.ts),
+ * The defect lives in `scaffoldGreenfieldProject` (packages/projects/project-create.ts),
  * which is reached ONLY via `POST /api/studio/projects/create` (the greenfield
  * route — apps/forge/bridge-studio-writes.ts:732). `POST /api/studio/projects` is the
  * ONBOARD route and does NOT call `scaffoldGreenfieldProject`; the containment

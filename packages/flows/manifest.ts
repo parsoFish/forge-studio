@@ -490,7 +490,7 @@ export function persistManifestCycleId(manifestPath: string, cycleId: string): v
 /**
  * forge-shc WI-1: persist an operator-supplied per-run cost ceiling onto the
  * manifest's frontmatter (`cost_ceiling_usd`) at develop-start time, read
- * back by `resolveCostCeilingOverride` (orchestrator/cycle.ts) ahead of the
+ * back by `resolveCostCeilingOverride` (packages/flows/cycle.ts) ahead of the
  * `cost_budget_usd` x (1 + `DERIVED_CEILING_MARGIN_SHARE`) derived fallback. Unlike
  * `persistManifestCycleId` this is NOT one-shot: a later develop/start with a
  * different ceiling overwrites the prior one (the operator's latest explicit

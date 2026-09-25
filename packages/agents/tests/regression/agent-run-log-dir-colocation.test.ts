@@ -57,11 +57,14 @@ import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 // walks an EMPTY tree and reports zero findings, which reads as a pass.
 const REPO_ROOT = FORGE_ROOT;
 const INTERACTIVE_RUNNER_PATH = join(REPO_ROOT, 'packages', 'sessions', 'interactive-runner.ts');
-const UI_BRIDGE_PATH = join(REPO_ROOT, 'apps', 'forge', 'ui-bridge.ts');
+// forge-4zk: spawnAgentTurn + SPAWN_AGENT_SPECS carved out of ui-bridge.ts
+// into bridge-agent-dispatch.ts (feature move, no behaviour change) — this
+// ratchet follows the code it audits.
+const UI_BRIDGE_PATH = join(REPO_ROOT, 'apps', 'forge', 'bridge-agent-dispatch.ts');
 
 const AUTHORING_ID = 'authoring';
 
-/** Extracts `orchestrator/interactive-runner.ts`'s `cycleId` template
+/** Extracts `packages/sessions/interactive-runner.ts`'s `cycleId` template
  *  literal, RAW (unevaluated source text) — e.g. today:
  *  `"_interactive-${descriptor.id}-${ctx.sessionId}"`. Anchored on the exact
  *  `const cycleId = \`...\`;` declaration shape; robust to incidental

@@ -1,7 +1,7 @@
 /**
  * MIGRATION ACCEPTANCE TEST (must be RED on today's code) — F1 of the
  * ADR-027-amendment-#2 `composition.hooks` → `composition.guards` rename:
- * `forge-ui/lib/agent-readiness.ts`'s check key/label must be the guard one
+ * `apps/studio/lib/agent-readiness.ts`'s check key/label must be the guard one
  * (`key: 'guard'`), not the hook one (`key: 'hook'`).
  *
  * Mirrors `agent-readiness.test.ts`'s existing conventions (vitest

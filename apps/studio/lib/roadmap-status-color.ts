@@ -1,6 +1,6 @@
 /**
  * R4-13 — pure mapper from a roadmap initiative's queue status to a semantic
- * tone KEY of the SHARED 5-tone palette (`forge-ui/lib/status-colors.ts`
+ * tone KEY of the SHARED 5-tone palette (`apps/studio/lib/status-colors.ts`
  * `STATUS_COLOR`: idle / active / attention / complete / failed).
  *
  * The retired serpentine timeline carried its own 6-key status-colour map

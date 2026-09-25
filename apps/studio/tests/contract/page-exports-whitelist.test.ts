@@ -13,7 +13,7 @@
 // build` and turned it RED.
 //
 // The reason it kept happening is that NOTHING CHEAPER THAN A FULL NEXT BUILD
-// SAW IT: `npm run test:ui:typecheck` (`tsc -p forge-ui/tsconfig.tests.json`)
+// SAW IT: `npm run test:ui:typecheck` (`tsc -p apps/studio/tsconfig.tests.json`)
 // passes, because that project does not read Next's generated route types, and
 // every unit test passes too — the export is perfectly valid TypeScript. So a
 // worker gets a clean file-scoped signal and the failure only appears minutes

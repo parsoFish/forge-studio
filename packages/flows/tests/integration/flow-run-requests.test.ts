@@ -221,7 +221,7 @@ test('drain does NOT skip an origination request when the active triggered run t
 // ---------------------------------------------------------------------------
 // ACCEPTANCE TESTS (forge-f9g fix, W8-A1) — `decideTriggerProjectScope` is
 // the SINGLE extracted predicate `drainFlowRunRequests` above AND
-// `fireFlowTriggers` (orchestrator/flow-trigger.ts, the inline `on: merged`
+// `fireFlowTriggers` (packages/flows/flow-trigger.ts, the inline `on: merged`
 // path) both consult. Direct unit coverage of the pure function's full
 // matrix, plus a no-regression assertion that extracting it out of
 // `drainFlowRunRequests` left the drain's own observable behaviour

@@ -19,7 +19,7 @@
  *   · `apps/forge/cli.ts:530` sends `manifest`, `forgeRoot` — no `remote`.
  *
  * So `mintRemote` is unreachable in production. Its own unit test
- * (`tests/unit/project-create-remote.test.ts`) passes because it calls the
+ * (`packages/projects/tests/unit/project-create-remote.test.ts`) passes because it calls the
  * function DIRECTLY with an injected `runGh` — which is exactly why 6.11.2's
  * creation half was closed without a story ever proving it. A capability wired,
  * unit-tested against a fake, and never reached by the path the operator takes.

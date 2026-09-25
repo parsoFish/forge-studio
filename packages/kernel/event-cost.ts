@@ -9,8 +9,8 @@
  * docs/investigations/2026-07-holistic-review/cost-autopsy.md §0.
  *
  * The rule (single source of truth — used by `packages/flows/metrics.ts::aggregate()`,
- * `orchestrator/run-model.ts::buildRun()` and
- * `orchestrator/run-model-derive.ts::buildNodeMeta()` / `deriveWorkItems()`):
+ * `packages/flows/run-model.ts::buildRun()` and
+ * `packages/flows/run-model-derive.ts::buildNodeMeta()` / `deriveWorkItems()`):
  *   - a phase that emitted ≥1 `iteration` event → count ONLY its `iteration`
  *     events (every other row restates dollars already counted);
  *   - otherwise → count every event (single-call phases carry cost on `end`,

@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/pinned-sdk-query.ts (G8 env-pin seam, R5-02
+ * Tests for packages/agents/pinned-sdk-query.ts (G8 env-pin seam, R5-02
  * allowlist hardening).
  *
  * `createPinnedSdkQuery` is the DI seam: production code uses the default

@@ -1,5 +1,5 @@
 /**
- * Acceptance tests for orchestrator/studio/community-index.ts (R3-07-F1/F2,
+ * Acceptance tests for packages/library/studio/community-index.ts (R3-07-F1/F2,
  * `_wave5/specs/R3-07.md`) — DOES NOT EXIST YET. This file is RED at branch
  * base: `Cannot find module './community-index.ts'` on import. Do not stub
  * the module into existence; red is the deliverable of this round.

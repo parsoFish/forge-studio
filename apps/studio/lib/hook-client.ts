@@ -13,7 +13,7 @@
  * ONE DELIBERATE DEVIATION FROM skill-client.ts: `parseHookLibraryEntry` /
  * `parseHookDetail` are EXPORTED (skill-client.ts's equivalents are private)
  * so their refusal behaviour is directly pinnable
- * (forge-ui/lib/hook-client.test.ts). skill-client.ts's / template-client.ts's
+ * (apps/studio/tests/unit/hook-client.test.ts). skill-client.ts's / template-client.ts's
  * `Array.isArray(x) ? x : []` parses turned a malformed/missing array into a
  * confident empty answer — one of those shipped as a review BLOCKER. These
  * parsers REFUSE (throw) on a malformed payload instead of coercing one, so

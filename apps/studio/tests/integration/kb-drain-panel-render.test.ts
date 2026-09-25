@@ -1,6 +1,6 @@
 /**
  * kb-drain-panel-render.test.ts (W6-B13 review round) — DOM regression pins
- * for `KbDrainPanelView` (forge-ui/components/studio/knowledge/KbDrainPanel.tsx),
+ * for `KbDrainPanelView` (apps/studio/components/studio/knowledge/KbDrainPanel.tsx),
  * mirroring `run-panel-render.test.ts`'s technique exactly (see that file's
  * own header for the full rationale).
  *

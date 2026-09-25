@@ -1,5 +1,5 @@
 {
-  "apps/forge/bridge-studio.ts": 1235,
+  "apps/forge/bridge-studio.ts": 1215,
   "apps/forge/cli.ts": 948,
   "apps/forge/tests/contract/bridge-studio-sibling-containment.test.ts": 944,
   "apps/forge/tests/integration/architect-runner-integration.test.ts": 1410,
@@ -14,7 +14,6 @@
   "apps/forge/tests/unit/flow-runner.test.ts": 1530,
   "apps/forge/tests/unit/registry.test.ts": 2175,
   "apps/forge/tests/unit/studio-lint.test.ts": 1157,
-  "apps/forge/ui-bridge.ts": 2277,
   "apps/studio/app/agents/[id]/page.tsx": 925,
   "apps/studio/app/artifact/page.tsx": 1419,
   "apps/studio/app/flows/[id]/page.tsx": 992,
@@ -49,5 +48,5 @@
   "packages/library/tests/integration/skill-library.test.ts": 1779,
   "scripts/check-raw-fs-guarded.mjs": 1346,
   "scripts/check-raw-fs-guarded.test.ts": 1032,
-  "scripts/verify-cycle.mjs": 1206
+  "scripts/verify-cycle.mjs": 1205
 }

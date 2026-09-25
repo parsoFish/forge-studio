@@ -17,9 +17,9 @@ import { type AuthoringPackageKind, isAuthoringPackageKind } from '@/lib/authori
 // docs/decisions/043-generic-interactive-surface.md 2026-08-15 amendment §1).
 //
 // Renders EXCLUSIVELY from the GET session-shell route's own `affordances[]`
-// (`orchestrator/studio/session-kinds.ts`'s `deriveSessionAffordances`,
+// (`packages/sessions/studio/session-kinds.ts`'s `deriveSessionAffordances`,
 // threaded onto the wire by `packages/sessions/bridge-studio-sessions.ts`, parsed by
-// `forge-ui/lib/session-client.ts`) — it NEVER re-derives an affordance from
+// `apps/studio/lib/session-client.ts`) — it NEVER re-derives an affordance from
 // `phase` itself. Availability is recomputed server-side on every GET AND
 // re-checked server-side on every POST (`cli/bridge-studio-affordances.ts`,
 // W6-B4) — a stale client that fires a phase-inappropriate affordance id

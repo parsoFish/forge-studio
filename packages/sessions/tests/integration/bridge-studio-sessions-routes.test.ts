@@ -89,7 +89,7 @@ test('AT-39: GET /api/studio/sessions/instructions/<id>?project=<p> returns the 
   // W8-B3 AMENDMENT — see AT-38 above. This fixture's instructions-creator is
   // written as `strategy:fixed` on claude-sonnet-4-6 (writeSkillAgent), so the
   // fallback resolves. The scoping — that a strategy:RANGE agent resolves
-  // nothing — is pinned separately below and in packages/sessions/session-model-tier.test.ts
+  // nothing — is pinned separately below and in packages/sessions/tests/unit/session-model-tier.test.ts
   // against the REAL registry.
   assert.equal(body.modelTier, 'sonnet');
 });
@@ -203,7 +203,7 @@ test('AT-43: GET /api/studio/sessions/architect/<unknown-id>?project=<p> returns
 // required"): `?project=` is now OPTIONAL — a deep link that omits it
 // resolves the anchor project server-side (`findSessionProject`) and
 // returns the SAME 200 payload, `project` filled in. The unresolvable /
-// ambiguous cases are pinned in packages/sessions/bridge-studio-lifecycle.test.ts.
+// ambiguous cases are pinned in packages/sessions/tests/integration/bridge-studio-lifecycle.test.ts.
 test('AT-44 (W7-A2): GET /api/studio/sessions/architect/<id> with NO project query param resolves the project server-side and returns 200 with it filled in', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${REAL_ARCHITECT_SESSION}`);
   assert.equal(res.status, 200);

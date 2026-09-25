@@ -642,7 +642,7 @@ export function runStudioLint(root: string): StudioLintResult {
   // ------------------------------------------------------------------
   // 8. Hooks library (R3-03) — hook.yaml load errors (bad `on`, traversal,
   //    forbidden binding key, ...) and the SYMMETRIC composition.hooks vs
-  //    composition.guards enforcement. See orchestrator/studio/hook-library.ts.
+  //    composition.guards enforcement. See packages/library/studio/hook-library.ts.
   // ------------------------------------------------------------------
 
   findings.push(...lintHookDefinitions(root));
@@ -651,7 +651,7 @@ export function runStudioLint(root: string): StudioLintResult {
   // ------------------------------------------------------------------
   // 9. Community index (R3-07) — a vendored community skill package id must
   //    never collide with a studio/catalog.yaml community-skills id. See
-  //    orchestrator/studio/community-index.ts.
+  //    packages/library/studio/community-index.ts.
   // ------------------------------------------------------------------
 
   findings.push(...lintCommunityIndex(root));

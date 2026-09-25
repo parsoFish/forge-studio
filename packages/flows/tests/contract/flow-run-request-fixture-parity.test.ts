@@ -2,7 +2,7 @@
  * ACCEPTANCE TEST (T3, forge-76y) — fixture-parity pin.
  *
  * T1 RULING binds scope: ONLY arm 1 of `deriveTriggerFields`'s cron branch
- * (orchestrator/mint-triggered-initiative.ts:95 —
+ * (packages/flows/mint-triggered-initiative.ts:95 —
  * `sourceFlowId ?? parse(triggeredBy)`) is the target of this defect. Arm 2
  * (mint-triggered-initiative.ts:99 — `req.triggerKind ?? req.origin`) is
  * load-bearing and stays untouched; the second companion test below
@@ -12,7 +12,7 @@
  * THE DEFECT: the hand-built cron `FlowRunRequest` literal used as a test
  * fixture in apps/forge/tests/integration/bridge-studio-triggers.test.ts:155-165 ("current hand-built
  * shape") does NOT carry the same field set a REAL cron fire actually
- * stages via `stageFlowRunRequest` (orchestrator/cron-triggers.ts's
+ * stages via `stageFlowRunRequest` (packages/flows/cron-triggers.ts's
  * `makeFireFn`, lines 154-172). The hand-built literal is missing
  * `sourceFlowId`, `concurrency`, `projects`, and `eventProject` — fields the
  * real staging site always sets for a scoped, sourced cron trigger. Any
@@ -21,7 +21,7 @@
  * `sourceFlowId` arm (arm 1) at all.
  *
  * This test drives a REAL cron fire — `syncCronTriggers` + `job.trigger()`,
- * mirroring the real-path pattern in orchestrator/cron-triggers.test.ts's
+ * mirroring the real-path pattern in packages/flows/tests/integration/cron-triggers.test.ts's
  * "a fire stages a flow-run request" test (lines 169-210) — and diffs the
  * staged request's field-path set against the hand-built literal replicated
  * VERBATIM below. apps/forge/tests/integration/bridge-studio-triggers.test.ts itself is NOT modified;

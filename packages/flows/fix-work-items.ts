@@ -200,7 +200,7 @@ export class FixConcernInvalidError extends Error {}
  * Counts from the numeric STEM, so a split sibling is visible here: with
  * `WI-4a` / `WI-4b` on disk the next id is `WI-5`, not a `WI-4` sitting
  * confusingly beside them. `devWorkItemIdStem` is the exported SSOT
- * (orchestrator/work-item.ts) — this used to carry its own narrower `/^WI-(\d+)$/`.
+ * (packages/flows/work-item.ts) — this used to carry its own narrower `/^WI-(\d+)$/`.
  */
 export function nextDevWorkItemId(worktreePath: string): string {
   const { items } = readWorkItemsFromDir(devWorkItemsDir(worktreePath));

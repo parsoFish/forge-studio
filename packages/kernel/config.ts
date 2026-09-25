@@ -500,7 +500,7 @@ export const ORCHESTRATOR_GIT_IDENTITY: GitIdentity = {
  * The GIT_* identity delta for an SDK-spawned agent child (R5-02): NOT a
  * full env, just the four `GIT_AUTHOR_*`/`GIT_COMMITTER_*` keys for the
  * given identity. Pass this as `options.env` to a `pinnedSdkQuery` call
- * (orchestrator/pinned-sdk-query.ts) — the seam treats `options.env` as
+ * (packages/agents/pinned-sdk-query.ts) — the seam treats `options.env` as
  * deliberate overrides layered on top of the allowlist-filtered ambient
  * env, so this small delta reaches the child without ever needing to
  * pre-merge (or re-filter) the rest of the environment itself.

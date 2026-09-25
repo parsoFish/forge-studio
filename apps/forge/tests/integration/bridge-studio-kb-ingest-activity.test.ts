@@ -5,7 +5,7 @@
  *
  * Pins a NEW read-only route, `GET /api/studio/kbs/:id/ingest-activity`, that
  * lists REAL `reflect.kb-ingest` events (message string LITERALLY
- * 'reflect.kb-ingest', emitted by orchestrator/kb-health.ts:206/213/216;
+ * 'reflect.kb-ingest', emitted by packages/knowledge/kb-health.ts:206/213/216;
  * metadata `{kb, fresh_themes, impl:'builtin'|'cmd'}`) discovered via a
  * listCycles-style walk of `_logs/<cycleId>/events.jsonl` (mirroring
  * packages/flows/metrics.ts:46-76's `listCycles` + `guardedReadFile`), filtered to
@@ -94,7 +94,7 @@ async function get(path: string): Promise<{ status: number; json: Record<string,
 }
 
 /** Seed one `reflect.kb-ingest` event into `_logs/<cycleId>/events.jsonl`.
- *  Field shapes follow orchestrator/logging.ts's `EventLogEntry` (only the
+ *  Field shapes follow packages/kernel/logging.ts's `EventLogEntry` (only the
  *  fields this route cares about — `message`/`metadata` — carry real test
  *  values; the rest are minimal-valid placeholders). */
 function writeIngestEvent(cycleId: string, metadata: Record<string, unknown>): void {

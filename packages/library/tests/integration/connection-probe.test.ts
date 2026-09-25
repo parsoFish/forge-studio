@@ -1,5 +1,5 @@
 /**
- * Acceptance tests for orchestrator/studio/connection-probe.ts +
+ * Acceptance tests for packages/library/studio/connection-probe.ts +
  * connection-install.ts + connection-readiness.ts (R3-04-F2/F3/F4, D3/D4/D6/
  * D9/D11/D13-D16 of `_wave5/specs/R3-04.md`) — WI-2 has now landed
  * (`1205be16`). This file imports each name from its REAL home (round 5: WI-2

@@ -199,8 +199,8 @@ export const SINK_NAMES = [
  * IMPORT-BOUND SINK MATCHING (bead forge-8vfn.5.19, problem 1).
  *
  * Measured false positive: `const exec = executors[kind] ?? execUnknown;
- * await exec(ctx)` in packages/factory/phases/executor-table.ts was reported
- * as a new 'exec' sink purely because the CALL SITE NAME matched — 'exec' is
+ * historical: await exec(ctx)` in packages/factory/phases/executor-table.ts
+ * was reported as a new 'exec' sink purely because the CALL SITE NAME matched — 'exec' is
  * a local const, never node:child_process's. Had a lane run --write there, a
  * fake sink would have entered the baseline permanently.
  *
@@ -653,8 +653,8 @@ export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PA
     // bead forge-8vfn.5.19, problem 2: --write is not a re-key — it
     // regenerates the WHOLE baseline from the current tree, so accepting one
     // intended row silently rewrites every other row that has drifted since
-    // the baseline was last written (measured: cli/brain-lint.ts existsSync
-    // 22->20, orchestrator/fix-work-items.ts's three rows deleted outright).
+    // the baseline was last written (historical: measured cli/brain-lint.ts
+    // existsSync 22->20, historical: orchestrator/fix-work-items.ts's three rows deleted outright).
     // Fix: print every row that changes, so nothing is silently absorbed —
     // a human reads this before committing the regenerated file.
     const hadPriorBaseline = existsSync(baselinePath);

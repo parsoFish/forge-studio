@@ -260,7 +260,7 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
  * present-but-malformed throws (mirrors every other project.json field —
  * silently ignoring or coercing a bad value would let a project THINK it is
  * wired to a repo it never validly declared). Validated by the SAME `REPO_RE`
- * `orchestrator/trigger-payload.ts` exports and payload extraction already
+ * `packages/flows/trigger-payload.ts` exports and payload extraction already
  * uses — never a second, hand-copied regex (R2-08-F3 anti-duplication rule).
  */
 function parseRepo(v: unknown): string | undefined {

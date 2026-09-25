@@ -1,5 +1,5 @@
 /**
- * Tests for forge-ui/lib/hook-client.ts (R3-03-F4) — DOES NOT EXIST YET.
+ * Tests for apps/studio/lib/hook-client.ts (R3-03-F4) — DOES NOT EXIST YET.
  * Vitest cannot even collect this file until it lands (module-not-found is
  * the expected red, mirroring skill-library-view.test.ts's own header note).
  *

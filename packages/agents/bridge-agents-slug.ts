@@ -320,7 +320,7 @@ export const handleAgentRunStart = (deps: AgentSlugRouteDeps): Handler => async 
     // R3-04 D9.2 — pre-spawn connection-readiness refusal, BEFORE
     // spawnAgentDispatch is ever called: same shared derivation
     // (`unreadyConnectionsFor`/`formatUnreadyConnections`,
-    // `orchestrator/studio/connection-run-gate.ts`) as run-agent.ts's own
+    // `packages/agents/studio/connection-run-gate.ts`) as run-agent.ts's own
     // D9.1 gate — one vocabulary, not a second one open-coded here. A
     // blocked response carries neither `ok` nor `runId`: nothing was
     // dispatched.
@@ -370,7 +370,7 @@ export const handleAgentRunStart = (deps: AgentSlugRouteDeps): Handler => async 
     //      "enforceable" or "in bounds".
     //   2. enforceability — a property of the AGENT, invariant under the
     //      value (only `runtime.loopStrategy: 'one-shot'` agents can honor
-    //      a ceiling via options.maxBudgetUsd, orchestrator/run-agent.ts's
+    //      a ceiling via options.maxBudgetUsd, packages/agents/run-agent.ts's
     //      runOneShotSpawn; the legacy invocation path, 14 of 19 real
     //      dispatchable roster agents, has no budget concept at all). This
     //      wins over bounds: a bounds message ("must be <= N") implies "use
@@ -399,7 +399,7 @@ export const handleAgentRunStart = (deps: AgentSlugRouteDeps): Handler => async 
       }
       // W7-B5 (agents-21): the legacy invocation path (absent loopStrategy)
       // now ENFORCES a ceiling (adapter maxBudgetUsdPerIteration — see
-      // orchestrator/run-agent.ts runInvocationSpawn), so only an UNKNOWN
+      // packages/agents/run-agent.ts runInvocationSpawn), so only an UNKNOWN
       // declared strategy is refused here ('ralph' was already refused
       // above, before the ceiling was ever considered).
       if (def.runtime.loopStrategy !== undefined && def.runtime.loopStrategy !== 'one-shot') {
@@ -513,7 +513,7 @@ export const handleAgentRunStart = (deps: AgentSlugRouteDeps): Handler => async 
         initiative_id: runId,
         phase: 'orchestrator',
         skill: slug,
-        // NOT 'start' — `runAgent` (orchestrator/run-agent.ts:297) already
+        // NOT 'start' — `runAgent` (packages/agents/run-agent.ts:297) already
         // emits the run's real lifecycle `start` event when the spawned
         // process runs; a second `start` here would double up the
         // lifecycle terminal for the same runId (wrong "when did this run

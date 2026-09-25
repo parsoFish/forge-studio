@@ -11,7 +11,7 @@
 // both directions, so an unclassified OR a stale entry turns the suite red.
 //
 // Derivation mechanism (static, comment-stripped, line-based regex scan — no AST
-// dependency, matching the style of orchestrator/pinned-sdk-query.enforce.test.ts):
+// dependency, matching the style of packages/agents/tests/contract/pinned-sdk-query.enforce.test.ts):
 //
 //   1. Track function boundaries (`function name(`) to scope method gates per
 //      function.
@@ -91,7 +91,7 @@
 // beyond dispatch-shape (two-value method gates collapsing to the ambiguous
 // '*', the inline-regex-literal requirement for match-var routes, the
 // DELETE-as-POST-suffix encoding above) are likewise accepted, documented
-// residue — owner R7 (docs/roadmaps/R7-verification-infrastructure.md).
+// residue — owner R7 (docs/roadmaps/archive/R7-verification-infrastructure.md).
 //
 // Both directions are asserted: every derived real route must have a table
 // entry (direction 1 — the AC's "unclassified route" case), and every table
@@ -201,7 +201,7 @@ const KNOWN_DISPATCH_FILES = [
 
 type DerivedCandidate = { route: string; method: string; file: string; line: number };
 
-// Adapted from orchestrator/pinned-sdk-query.enforce.test.ts's stripComments —
+// Adapted from packages/agents/tests/contract/pinned-sdk-query.enforce.test.ts's stripComments —
 // duplicated locally to keep this guard self-contained, matching that file's
 // own precedent of not sharing a cross-cutting helper module for a single
 // small function.

@@ -74,7 +74,7 @@ field/type/default the code disagrees with, a described behaviour a reader
 would attribute to the current code but the diff (or a quick read of the
 cited module) shows is stale. A finding must name the exact claim and the
 exact place in the source that contradicts it — "this looks outdated" is not
-evidence, `docs/foo.md:42` claiming X against `packages/bar/baz.ts:17`
+evidence — example: `docs/foo.md:42` claiming X against `packages/bar/baz.ts:17`
 doing Y is.
 
 This is deliberately the ONLY lens forge-docs's flow declares. Link

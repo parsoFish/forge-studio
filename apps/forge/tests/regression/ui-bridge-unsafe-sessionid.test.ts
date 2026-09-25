@@ -1,6 +1,6 @@
 /**
  * R2-01 final-review fix (e) — `spawnAgentTurn`'s sessionId path-traversal
- * guard (`isSafeRunId`, `orchestrator/run-agent.ts`).
+ * guard (`isSafeRunId`, `packages/agents/run-agent.ts`).
  *
  * Both `FORGE_ARCHITECT_NO_SPAWN` and `FORGE_DRY_BRIDGE` are deliberately
  * UNSET here so this exercises the guard added in fix (e), not either of the

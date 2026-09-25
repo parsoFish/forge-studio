@@ -537,7 +537,7 @@ export function buildKbHealth(
  * findings need an operator decision neither the agent nor this session can
  * make. Every finding is stamped via `classify` (idempotent, total — safe to
  * call on an already-stamped Finding) so `.kind` is always populated, which
- * `deriveCleanupPlan`'s (orchestrator/studio/session-transcript.ts) plan-line
+ * `deriveCleanupPlan`'s (packages/sessions/studio/session-transcript.ts) plan-line
  * join requires (it matches a parsed action against a finding on (kind,
  * file)).
  *
@@ -562,7 +562,7 @@ export function computeAgentCleanupFindings(forgeRoot: string, kbId: string): (F
     // it optional — it stamps the SAME field it declares, so TS cannot see
     // that the stamp always lands) — the narrowing is what lets this
     // return type satisfy deriveCleanupPlan's CleanupFinding contract
-    // (orchestrator/studio/session-transcript.ts) without a cast.
+    // (packages/sessions/studio/session-transcript.ts) without a cast.
     .filter((f): f is Finding & { kind: string } => f.resolution === 'agent' && typeof f.kind === 'string');
 }
 

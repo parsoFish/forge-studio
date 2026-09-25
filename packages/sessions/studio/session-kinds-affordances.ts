@@ -6,7 +6,7 @@
  * server-side from the phase table, and the client renders what it is handed
  * and never re-derives.
  *
- * Split out of `studio/session-kinds.ts` (M4 exit row 5). It is the cleanest of
+ * Split out of `packages/sessions/studio/session-kinds.ts` (M4 exit row 5). It is the cleanest of
  * this package's seams: the whole module depends on exactly ONE name from the
  * parent — `SessionKindDescriptor`, a type — and nothing in the parent or in
  * the validator half references anything declared here.

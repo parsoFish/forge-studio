@@ -31,7 +31,7 @@
  * needed — but the page's other reads still need real mocks to avoid an
  * unhandled rejection.
  *
- * RUN: npx vitest run --root apps/studio tests/regression/architect-kickoff-data-page-parity.test.ts
+ * RUN: npx vitest run --root apps/studio apps/studio/tests/regression/architect-kickoff-data-page-parity.test.ts
  */
 import { test, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as React from 'react';

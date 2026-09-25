@@ -9,7 +9,7 @@
  * `descriptor.id === SPAWN_AGENT_SPECS[...].logPrefix` holds for every
  * spawnable kind, but that is a COINCIDENCE, not an enforced invariant — the
  * kb-cleanup/authoring collocation ratchet
- * (packages/agents/agent-run-log-dir-colocation.test.ts) only pins this for ONE kind
+ * (packages/agents/tests/regression/agent-run-log-dir-colocation.test.ts) only pins this for ONE kind
  * ('authoring'). A future rename of either side (a session-kind id in the
  * yaml, or a SPAWN_AGENT_SPECS key/logPrefix) would silently break
  * ensureSessionTail for that kind: `ensureTailFor`'s `existsSync` guard
@@ -24,7 +24,7 @@ import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 
 import { loadSessionKinds } from '../../studio/session-kinds.ts';
-import { SPAWN_AGENT_SPECS, type SpawnableAgentId } from '../../../../apps/forge/ui-bridge.ts';
+import { SPAWN_AGENT_SPECS, type SpawnableAgentId } from '../../../../apps/forge/bridge-agent-dispatch.ts';
 
 const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
 

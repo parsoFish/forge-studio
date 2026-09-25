@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/init.ts — `forge init` scaffolding (ADR-033, J1).
+ * Tests for packages/kernel/init.ts — `forge init` scaffolding (ADR-033, J1).
  * Pure-logic + idempotent-I/O against a temp dir.
  */
 

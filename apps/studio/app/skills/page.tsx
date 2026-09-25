@@ -24,7 +24,7 @@ import { InstallStateBadge } from '@/components/studio/LibraryHub';
 // page adds instead is honesty about provenance: a community-sourced card
 // (badge `community`) shows its derived hub and hub-attributed signals,
 // fetched independently from `/api/studio/community` and joined via
-// `communityBadgeForSkill` (forge-ui/lib/community-view.ts) — gated on the
+// `communityBadgeForSkill` (apps/studio/lib/community-view.ts) — gated on the
 // skill entry's OWN `source === 'community'` AND (kind === 'skill', id), not
 // id alone (a local skill sharing an id with a catalog community-skills
 // entry must never inherit that entry's hub/signals/provenance — the round-6

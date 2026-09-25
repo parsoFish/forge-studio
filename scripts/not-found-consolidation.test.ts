@@ -4,7 +4,7 @@
  * Studio-chrome `not-found.tsx` for unmatched paths (crosscut-27, crosscut-07).
  *
  * Source-level wiring pin, in the style of ./page-shell-consolidation.test.ts:
- * the render contract itself is pinned in apps/studio/lib/not-found-render.test.ts;
+ * the render contract itself is pinned in apps/studio/tests/contract/not-found-render.test.ts;
  * THIS test proves each route family actually uses it (a page can only reach
  * `data-page="not-found"` through the shared component) and that the legacy
  * hand-rolled treatments the walkthrough catalogued are gone — a page that

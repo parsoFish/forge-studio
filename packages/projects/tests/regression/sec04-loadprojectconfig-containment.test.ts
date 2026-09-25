@@ -2,7 +2,7 @@
  * ACCEPTANCE PINS (SEC-04 residual #1, WIRE-REACHABLE) — the loadProjectConfig
  * `.forge/project.json` LEAF escape.
  *
- * `loadProjectConfig(projectRoot)` (orchestrator/project-config.ts) reads
+ * `loadProjectConfig(projectRoot)` (packages/projects/project-config.ts) reads
  * `<projectRoot>/.forge/project.json`. The dir-level containment its callers do
  * — the POST /api/verdict send-back validates `manifest.project_repo_path` with
  * `isContainedProjectRepoPath` (packages/flows/bridge-studio-runs.ts:397) BEFORE calling

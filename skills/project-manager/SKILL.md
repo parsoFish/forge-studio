@@ -32,7 +32,7 @@ The coupling between planning and development is expressed **only** through the 
 
 Take the initiative manifest from `_queue/in-flight/<initiative-id>.md`, read the project state at the worktree's HEAD, and emit one work-item spec per atomic unit of work to `<worktree>/.forge/work-items/`. No human input.
 
-Format and validation rules are locked in [`docs/decisions/015-work-item-format.md`](../../docs/decisions/015-work-item-format.md). The orchestrator validates every work item via [`orchestrator/work-item.ts:validateWorkItem`](../../orchestrator/work-item.ts) before dispatching — invalid work items fail the cycle.
+Format and validation rules are locked in [`docs/decisions/015-work-item-format.md`](../../docs/decisions/015-work-item-format.md). The orchestrator validates every work item via [`packages/flows/work-item.ts:validateWorkItem`](../../packages/flows/work-item.ts) before dispatching — invalid work items fail the cycle.
 
 ## Operating mode
 

@@ -166,33 +166,13 @@ export { allowedOrigin, sendJson, sanitizeError };
 
 export { pathOnly, parseQuery };
 
-const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB
-
-/**
- * Read and parse the JSON request body. Used by write routes.
- * Caps at MAX_BODY_BYTES; destroys the socket and rejects on oversize.
- * Shared helper (mirrors readJson in ui-bridge.ts).
- */
-export function readJson(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolveJson, rejectJson) => {
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-    req.on('data', (chunk: Buffer) => {
-      totalBytes += chunk.byteLength;
-      if (totalBytes > MAX_BODY_BYTES) {
-        req.destroy();
-        rejectJson(new Error('request body too large'));
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8');
-      try { resolveJson(raw ? JSON.parse(raw) : {}); } catch (err) { rejectJson(err); }
-    });
-    req.on('error', rejectJson);
-  });
-}
+// forge-4zk follow-up: readJson moved to `./bridge-http.ts` — the ONE
+// implementation every bridge module shares. Re-exported here (not just
+// imported) because `apps/forge/bridge-studio-writes.ts` imports `readJson`
+// FROM this file; repointing that one import site would have been an
+// equally valid fix, but re-exporting keeps this module's existing public
+// surface stable for that one real consumer.
+export { readJson } from './bridge-http.ts';
 
 // ---------------------------------------------------------------------------
 // Phase log line derivation (design §7)
@@ -321,7 +301,7 @@ function findRun(forgeRoot: string, id: string): Run | null {
  * never mutated.
  *
  * `kind: 'architect'` is a literal because `architect_session_id`
- * (orchestrator/manifest.ts) carries no kind tag and has exactly ONE writer —
+ * (packages/flows/manifest.ts) carries no kind tag and has exactly ONE writer —
  * `orchestrator/architect-runner.ts:1251`, which writes the id of an ARCHITECT
  * session. That invariant is not enforced anywhere, so a second writer of a
  * differently-kinded session id would silently make this probe ask about the
@@ -825,7 +805,7 @@ export type RoadmapWorkItem = {
   title: string;
   dependsOn: string[];
   /**
-   * W6-RV-1: the WI's own status (`WorkItem['status']`, orchestrator/work-item.ts),
+   * W6-RV-1: the WI's own status (`WorkItem['status']`, packages/flows/work-item.ts),
    * threaded through from `parseWorkItem` rather than discarded — feeds the
    * roadmap card's "done/total" micro-badge. Optional so a read that predates
    * this field (or a snapshot with no status) never fabricates one.
@@ -857,7 +837,7 @@ export type RoadmapInitiative = {
   /**
    * W6-RV-2: the real cycle-completion instant (ISO), for the roadmap
    * canvas's completion-time X axis — `Run.completedAt`
-   * (orchestrator/run-model.ts) threaded straight through via the SAME
+   * (packages/flows/run-model.ts) threaded straight through via the SAME
    * memoized derivation `GET /api/runs` already uses (`cachedListRuns`,
    * packages/flows/run-list-cache.ts) rather than a second events.jsonl parser. Absent
    * (never fabricated) whenever the run carries no derivable completion —
@@ -946,7 +926,7 @@ function scanProjectManifests(projectId: string, forgeRoot: string): { entries: 
       let rawManifest = '';
       try {
         // W6-RV-1 perf fix: parseManifest already runs matter() internally and
-        // now exposes `title` (orchestrator/manifest.ts, additive-optional) —
+        // now exposes `title` (packages/flows/manifest.ts, additive-optional) —
         // a second matter() call here would parse the same buffer twice on a
         // route the operator UI polls repeatedly.
         rawManifest = readFileSync(fp, 'utf8');
@@ -1196,7 +1176,7 @@ function tryReadWorkItemDir(dir: string): RoadmapWorkItem[] | null {
   if (!existsSync(dir)) return null;
   let files: string[];
   try {
-    files = readdirSync(dir).filter((f) => WORK_ITEM_FILE_PATTERN.test(f)); // SSOT: orchestrator/work-item.ts
+    files = readdirSync(dir).filter((f) => WORK_ITEM_FILE_PATTERN.test(f)); // SSOT: packages/flows/work-item.ts
   } catch {
     return null;
   }

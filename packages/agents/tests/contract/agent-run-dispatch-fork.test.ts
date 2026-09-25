@@ -21,7 +21,7 @@
  * table and assert parity — what the bucket is for (tests/README.md).
  *
  * SPLIT FROM a 1,226-line file. Its 268-line shared block became a real
- * fixture module, `tests/test-fixtures/interactive-runner-log-observer.ts`,
+ * fixture module, `packages/agents/tests/test-fixtures/interactive-runner-log-observer.ts`,
  * because all four of its clusters used it and one of them tests the log
  * walker as its subject — three duplicated copies of a 162-line walker is the
  * signal that a seam is wrong, not a smaller file (T1 ruling 94). The three
@@ -266,7 +266,7 @@ test('R4-22 WI-5, AT-6 (argument-handling, PINNED): a turnSpec kind REQUIRES --p
 // ADR-043 says that switch is INTENTIONAL — it is precisely how each runner
 // migrates in batch E. The danger is that it can also happen BY ACCIDENT, and
 // the review established by inspection that nothing would catch it:
-// `orchestrator/interactive-runners-golden.test.ts` imports the four turn
+// `packages/sessions/tests/regression/interactive-runners-golden.test.ts` imports the four turn
 // functions DIRECTLY and never imports `cmdAgentRun`/`loadSessionKinds`, so it
 // stubs strictly BELOW the routing decision and would stay 4/4 green while the
 // live CLI silently took the new road.

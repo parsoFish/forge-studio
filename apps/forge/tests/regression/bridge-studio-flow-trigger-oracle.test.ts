@@ -16,7 +16,7 @@
  *     } catch { return undefined; }
  *   };
  *
- * — called from `checkTargetProject` (orchestrator/studio/validate-triggers.ts)
+ * — called from `checkTargetProject` (packages/flows/studio/validate-triggers.ts)
  * with `id = trigger.target.ref`, taken VERBATIM from the request BODY's
  * `triggers[].target.ref` field. That `ref` is NEVER SLUG_RE-gated or
  * containment-guarded anywhere on this path (checkFlowTriggers only checks

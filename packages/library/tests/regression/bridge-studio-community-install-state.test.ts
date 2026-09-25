@@ -11,7 +11,7 @@
  *
  * `communityInstallState`'s hook branch consulted `hookRunState(...).runnable`
  * alone and discarded `.needsReview` — already true for a freshly installed
- * hook with no ledger entry (`studio/hook-approval-ledger.ts`, the `!ledgerEntry`
+ * hook with no ledger entry (`packages/library/studio/hook-approval-ledger.ts`, the `!ledgerEntry`
  * arm). So a hook waiting on the operator's trust decision was reported in a
  * word only the community layer uses, while the install route that had just
  * created it answered `hook-needs-approval` and `/hooks/<id>` rendered
@@ -53,7 +53,7 @@
  * MUTATION PASS (§15.68 — a control that is green either way is not a
  * control). Restoring the old one-liner
  * (`hookRunState(...).runnable ? 'installed' : 'draft-pending-approval'`) reds
- * BOTH this file's test and the unit case in `studio/community-index.test.ts`:
+ * BOTH this file's test and the unit case in `packages/library/tests/integration/community-index.test.ts`:
  * measured `# pass 94 / # fail 2` with the two `not ok` lines named. Recorded
  * in the PR body.
  */

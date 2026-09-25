@@ -8,7 +8,7 @@
  * the "returns false when unhandled" passthrough contract.
  *
  * AT numbers continue the flat R3-06 sequence started in
- * orchestrator/studio/template-library.test.ts.
+ * packages/library/tests/unit/template-library.test.ts.
  */
 
 import { test, before, after } from 'node:test';

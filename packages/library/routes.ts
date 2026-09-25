@@ -28,7 +28,7 @@
  * order assertion would pin NOTHING here — it would pass under a swap. The
  * contract test pins the invariant that makes order irrelevant instead (no
  * two entries share a method and a URL), which fails the day an overlap is
- * added and names both rows; see `tests/contract/route-table.test.ts`.
+ * added and names both rows; see `packages/library/tests/contract/route-table.test.ts`.
  *
  * MATCHERS ARE IMPORTED, NOT RE-DECLARED — a deliberate divergence from
  * `packages/knowledge/routes.ts`, which re-declares its patterns "verbatim

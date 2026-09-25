@@ -1,6 +1,6 @@
 /**
  * Acceptance tests for the PROJECT-CYCLE ledger adapter (R4-12 F2) —
- * `forge-ui/lib/project-cycle-ledger.ts`, a pure module that does not exist
+ * `apps/studio/lib/project-cycle-ledger.ts`, a pure module that does not exist
  * yet. Every assertion below is a legitimate RED against a not-yet-created
  * file; the missing named export `deriveProjectCycleLedgerRows` (and the
  * missing module itself) is the RED signal.

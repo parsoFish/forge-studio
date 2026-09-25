@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/enqueue-develop-run.ts (S7 / DEC-3).
+ * Tests for packages/flows/enqueue-develop-run.ts (S7 / DEC-3).
  *
  * The "start development" trigger: repoint a decomposed initiative's manifest at
  * the forge-develop flow and make it claimable (pending), threading the SAME

@@ -31,7 +31,7 @@
  * through — `packages/agents/tests/contract/destroy-prunes-ledger.test.ts`'s
  * census keys off that co-occurrence by file, not by symbol.
  *
- * Over the ALREADY-SHIPPED core (orchestrator/studio/hook-library.ts F1,
+ * Over the ALREADY-SHIPPED core (packages/library/studio/hook-library.ts F1,
  * hook-scan.ts F2/F3). The bridge COMPOSES `listHookLibrary` (F1) with
  * `hookRunState` / `readHookApprovalLedger` (F2/F3) per entry — those stay
  * separate core modules; this composition is this bridge module's own job.
@@ -94,7 +94,7 @@
  *
  * Every id-bearing route resolves the id through `assertSkillSlug` /
  * `hookYamlPath` / `hookDir` (orchestrator/skill-path.ts +
- * orchestrator/studio/hook-library.ts), which slug-validate and throw on
+ * packages/library/studio/hook-library.ts), which slug-validate and throw on
  * anything that isn't a bare lowercase-kebab path segment — traversal,
  * absolute paths, encoded/double-encoded escapes, null bytes, and
  * over-length ids are all rejected there, before any filesystem read, and

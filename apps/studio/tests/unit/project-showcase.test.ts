@@ -1,6 +1,6 @@
 /**
  * Acceptance tests for the SHOWCASE cycle-selector (R4-14 WI-1) —
- * `forge-ui/lib/project-showcase.ts`, a pure module that does NOT exist
+ * `apps/studio/lib/project-showcase.ts`, a pure module that does NOT exist
  * yet. Every assertion below is a legitimate RED against a not-yet-created
  * file: the missing named export `deriveShowcaseCycleId` (and the missing
  * module itself) is the RED signal — a static `import` of a non-existent
@@ -43,7 +43,7 @@
  *
  * ═══════════════════════════════════════════════════════════════════════
  * REAL RED PROOF (applies to every test below, per house precedent —
- * `./project-cycle-ledger.test.ts`'s header): `forge-ui/lib/project-showcase.ts`
+ * `./project-cycle-ledger.test.ts`'s header): `apps/studio/lib/project-showcase.ts`
  * does not exist, so the static `import { deriveShowcaseCycleId } from
  * '@/lib/project-showcase'` below fails vitest's own module resolution
  * (`Cannot find module '@/lib/project-showcase' or its corresponding type

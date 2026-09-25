@@ -7,7 +7,7 @@
  * view.ts): a rejected fetch must read as its OWN state, never fall through
  * to "empty". See that module's header for the full defect writeup.
  *
- * RUN: npx vitest run --root apps/studio tests/regression/phase-log-panel-view.test.ts
+ * RUN: npx vitest run --root apps/studio apps/studio/tests/regression/phase-log-panel-view.test.ts
  */
 import { test, expect } from 'vitest';
 import { derivePhaseLogPanelState, phaseLogErrorMessage } from '@/lib/phase-log-panel-view';

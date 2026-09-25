@@ -13,7 +13,7 @@ import { ProvenanceBadge } from '@/components/ProvenanceBadge';
 //  1. Testability — a pure, props-driven component (no fetch, no
 //     useEffect) can be rendered directly via react-dom/server's
 //     renderToStaticMarkup with fixed props
-//     (forge-ui/lib/hooks-page-render.test.ts), mirroring this exact
+//     (apps/studio/tests/regression/hooks-page-render.test.ts), mirroring this exact
 //     precedent for the Library shelves (components/studio/LibraryHub.tsx,
 //     pinned by lib/library-hub-render.test.ts).
 //  2. Next.js App Router constraint — a `page.tsx` file may ONLY export the

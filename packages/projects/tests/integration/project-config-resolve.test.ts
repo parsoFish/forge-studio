@@ -7,7 +7,7 @@
  * on anything short of exactly one match.
  *
  * `resolveProjectIdForRepo` is exported by this package but was, until now,
- * exercised ONLY indirectly through `orchestrator/project-event-resolve.test.ts`
+ * exercised ONLY indirectly through `apps/forge/tests/contract/project-event-resolve.test.ts`
  * — every one of that file's 6 cases drives it through
  * `stageFlowRunRequest`/`drainFlowRunRequests` (`@forge/flows/flow-run-requests.ts`).
  * That file is leaving for `packages/flows` (a `packages/projects` (rank 2)

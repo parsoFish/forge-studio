@@ -5,7 +5,7 @@
  * not a hand-rolled/direct call to `lintHookComposition`/`lintHookDefinitions`.
  *
  * WHY THIS FILE EXISTS (peer-review redirect, 2026-08-04): the direct-call
- * tests in `orchestrator/studio/hook-library.test.ts` prove `lintHookComposition`
+ * tests in `packages/library/tests/unit/hook-library.test.ts` prove `lintHookComposition`
  * behaves correctly in isolation — they do NOT prove `runStudioLint` ever
  * calls it. An unwired lint function is exactly the "declared-data-fails-open"
  * defect class this campaign keeps finding (`composition/guard-unknown` was
