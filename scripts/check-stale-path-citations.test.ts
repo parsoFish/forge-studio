@@ -212,6 +212,39 @@ describe('path-shaped citations in code comments', () => {
       cleanup();
     }
   });
+
+  test('`example:` on the line suppresses a fictional illustrative path', () => {
+    // packages/forge-docs/skills/docs-review/SKILL.md:77 explains what a
+    // finding looks like by citing two invented paths as an
+    // example: (`docs/foo.md:42` claiming X against `packages/bar/baz.ts:17`) —
+    // never real repo paths at any point in time, so `historical:` would
+    // be inaccurate; `example:` is the marker for "this was never real".
+    const { root, cleanup } = fixture({
+      'skills/docs-review/SKILL.md': `// example: see docs/foo.md:42 claiming X against packages/bar/baz.ts:17\n`,
+    });
+    try {
+      const { code, out } = run(root, noBaseline(root));
+      assert.equal(code, 0, out);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('`project:` on the line suppresses a target-project-repo path', () => {
+    // packages/forge-docs/skills/docs-writer/SKILL.md tells an agent to
+    // project: invoke `loops/ralph/runner.ts` — a real path, but in the MANAGED
+    // PROJECT's repo the skill operates on, never this repo (forge has no
+    // loops/ tree at all). `project:` names that distinction.
+    const { root, cleanup } = fixture({
+      'skills/docs-writer/SKILL.md': `// project: invoke the platform's loops/ralph/runner.ts\n`,
+    });
+    try {
+      const { code, out } = run(root, noBaseline(root));
+      assert.equal(code, 0, out);
+    } finally {
+      cleanup();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -300,6 +333,28 @@ describe('retired-module basename stems in prose', () => {
     try {
       const { code, out } = run(root, noBaseline(root));
       assert.equal(code, 0, `basename still lives at packages/new/ — not retired:\n${out}`);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('a stem living on as a DIRECTORY name (not a file basename) is NOT curated as retired', () => {
+    // The real defect: `demo-agent.ts` (a file) was deleted, but
+    // `skills/demo-agent/` (a directory — the concept lives on as a skill)
+    // still exists. A basename-only presence check couldn't see the
+    // directory and kept flagging `demo-agent` as retired at every site
+    // that mentioned it, across three separate merges, until the presence
+    // check was widened to directory segments too.
+    const { root, cleanup } = fixture(
+      {
+        'skills/demo-agent/SKILL.md': '# demo-agent\n',
+        'docs/guide.md': `The demo-agent slug is intentional.\n`,
+      },
+      { 'packages/old/demo-agent.ts': 'export {};\n' },
+    );
+    try {
+      const { code, out } = run(root, noBaseline(root));
+      assert.equal(code, 0, `demo-agent lives on as a directory — not retired:\n${out}`);
     } finally {
       cleanup();
     }

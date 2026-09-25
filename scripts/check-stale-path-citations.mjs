@@ -35,10 +35,44 @@
  * mirrors check-identity.mjs's EXCLUDED_FILES for the same class of file: a
  * record whose job is to be accurate about the PAST, not the present).
  *
- * SUPPRESSION. A literal `historical:` anywhere on the physical line, or a
- * `(now at ...)` annotation anywhere on it, suppresses every finding on that
- * line. Line-grained, not proximity-grained — the same grain check-identity.mjs
- * and check-request-path-sinks.mjs already use for this class of lint.
+ * SUPPRESSION. A literal marker anywhere on the physical line, or a
+ * `(now at ...)` annotation anywhere on it, suppresses every finding on
+ * that line. Line-grained, not proximity-grained — the same grain
+ * check-identity.mjs and check-request-path-sinks.mjs already use for this
+ * class of lint. Three markers, one mechanism (SUPPRESSION_MARKERS below;
+ * add a fourth there, not a new code path, if another false-positive class
+ * turns up) — pick the one that names WHY the cited path isn't a live
+ * forge-repo citation:
+ *   historical:  the path/stem WAS real, describing what used to be true
+ *                (a past bug repro, a since-retired module, a split-out
+ *                file) — never rewrite the sentence's meaning, only mark it.
+ *   example:     the path is FICTIONAL — invented prose illustrating a
+ *                pattern or format (example: `docs/foo.md:42` in a sentence
+ *                explaining what a citation LOOKS like), never a real repo
+ *                path at any point in time.
+ *   project:     the path is real, but in the TARGET PROJECT's repo a
+ *                skill/flow operates on (project: e.g. a `loops/ralph/runner.ts`
+ *                a generated-project template ships) — never this repo,
+ *                forge's own. Common in packages/forge-docs and any other
+ *                skills/ tree that authors instructions FOR an agent
+ *                working a managed project, not for forge itself.
+ * Found via forge-docs skills reaching every one of the three shapes at
+ * once on landing (bead forge-8vfn.13 PR review): a lint that only knew
+ * `historical:` would either miss real dead forge citations forever (by
+ * exempting every skills/ path) or red every new skill package that cites
+ * its own examples or the project it instructs.
+ *
+ * WHY NOT A skills/ DEFAULT INSTEAD OF MARKERS. Considered defaulting any
+ * skills/**\/SKILL.md citation whose root isn't a CURRENT forge top-level
+ * dir to "assume project-relative, don't flag". Rejected: the retired
+ * roots that make a citation project-relative in a target repo (`loops/`,
+ * the ralph pattern) are the SAME retired roots (`cli/`, `orchestrator/`,
+ * `forge-ui/`) this guard exists to catch when a skill's prose still cites
+ * forge's OWN pre-carve structure — the property "root isn't current" is
+ * exactly what makes BOTH shapes findings, so it can't tell them apart.
+ * Defaulting would have silently un-caught the true positives this guard
+ * was built for, in the one file class (skills/) most likely to carry
+ * them. Markers stay explicit, one line at a time.
  *
  * THE RATCHET (content-keyed, forge-8vfn.13 PR review). `scripts/baselines/
  * stale-path-citations.json` — a JSON array of `{file, kind, cited, count}`
@@ -140,7 +174,14 @@ const PATH_TOKEN_RE = new RegExp(
 
 const URL_RE = /\bhttps?:\/\/\S+/g;
 const NOW_AT_RE = /\(now at [^)]*\)/i;
-const HISTORICAL_MARKER = 'historical:';
+
+/**
+ * Suppression markers — see SUPPRESSION in the header for what each one
+ * means and when to use it. A plain substring check, same as the original
+ * `historical:` always was: cheap, greppable, and exactly as line-grained
+ * as `isSuppressed`'s caller already commits to.
+ */
+const SUPPRESSION_MARKERS = ['historical:', 'example:', 'project:'];
 
 /** Only these extensions, at time of deletion, can seed a retired stem — a
  *  retired MODULE is code; a deleted `.md` or `.json` is not one. */
@@ -228,18 +269,31 @@ function basenameStem(relPath) {
 /**
  * The curated retired-stem set: a compound (`-`/`_`), 6+ char basename of a
  * file with a code extension that `git log` shows was deleted at some point,
- * AND that no file anywhere in the CURRENT tree still carries. Each clause
- * exists to keep false positives near zero (see the header):
+ * AND that no file OR DIRECTORY anywhere in the CURRENT tree still carries.
+ * Each clause exists to keep false positives near zero (see the header):
  *   - code extension at deletion: a retired MODULE, not an incidental doc.
  *   - compound + length: this repo's real module names are kebab-case and
  *     rarely under 6 chars; ordinary short/plain English words are excluded.
- *   - not present today: a name still in use anywhere is not "retired".
+ *   - not present today, as EITHER a file's own basename or a directory
+ *     name: a stem still naming a live concept isn't "retired" just because
+ *     no FILE happens to share its exact basename. Measured false positive:
+ *     `demo-agent.ts` (a file) was deleted, but `skills/demo-agent/` (a
+ *     directory — the concept lives on as a skill + a runtime slug) still
+ *     exists, and a file-basename-only presence check couldn't see it —
+ *     the same real stem got hand-annotated `historical:` at five separate
+ *     call sites across three merges before this fixed the root cause.
+ *     Checked against the other 182 curated stems on this tree: this ONLY
+ *     removes `demo-agent` from the set — no other stem shares a name with
+ *     a current directory, so nothing else is affected.
  * `--no-renames` so a renamed-away file (delete of the old path) still
  * counts — a rename is exactly a retirement of the old basename.
  */
 export function computeRetiredStems(root, fullSet) {
   const deleted = gitLogDeletions(root).split('\n');
   const present = new Set([...fullSet].map(basenameStem));
+  for (const p of fullSet) {
+    for (const seg of p.split('/').slice(0, -1)) present.add(seg);
+  }
   const stems = new Set();
   for (const raw of deleted) {
     const p = raw.trim();
@@ -328,7 +382,7 @@ export function commentSpans(line, inBlockAtStart) {
 // ---------------------------------------------------------------------------
 
 function isSuppressed(rawLine) {
-  return rawLine.includes(HISTORICAL_MARKER) || NOW_AT_RE.test(rawLine);
+  return SUPPRESSION_MARKERS.some((m) => rawLine.includes(m)) || NOW_AT_RE.test(rawLine);
 }
 
 function maskUrls(text) {
