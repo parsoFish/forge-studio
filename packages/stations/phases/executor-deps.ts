@@ -3,9 +3,11 @@
  * implementations it defaults to.
  *
  * Every import of a phase module lives in this file and its sibling
- * `executor-table.ts`; `orchestrator/flow-runner.ts` has none — that IS the
- * port (`docs/roadmaps/1.0.md` §4 M2 Lane B, SPEC.md §2 Station). At M3 both
- * files move to `@forge/factory` with the phases they wire.
+ * `executor-table.ts`; `@forge/flows/flow-runner.ts` has none — that IS the
+ * port (`docs/roadmaps/1.0.md` §4 M2 Lane B, SPEC.md §2 Station). F3 (operator
+ * ruling, items 81/83) moved both files, and every phase they wire, to
+ * `@forge/stations` — the platform's execution machinery, independent of
+ * `@forge/factory` (the develop/plan example).
  */
 
 import { basename, join } from 'node:path';
@@ -17,15 +19,15 @@ import { runPreflight } from '@forge/projects/preflight.ts';
 import type { ProjectGate } from '@forge/kernel';
 import { type ClosureResult, type CycleInput, type ReviewerOutcome } from '@forge/flows/cycle-context.ts';
 import { WedgeDetector, WedgeKillError } from '@forge/flows/flow-budgets.ts';
-import { runProjectManager as realRunProjectManager } from '@forge/factory/phases/project-manager.ts';
-import { runDeveloperLoop as realRunDeveloperLoop, emitDeliverySummary } from '@forge/factory/phases/developer-loop.ts';
-import { runIntegrateBand, type IntegrateResult } from '@forge/factory/phases/integrate.ts';
-import { runAdversarialReview, type AdversarialReviewResult } from '@forge/factory/phases/adversarial-review.ts';
-import { profileFor, readChangeClass } from '@forge/factory/class-profiles.ts';
-import { changedMarkdownFiles, runClassMergeBoundary } from '@forge/factory/phases/merge-boundary.ts';
-import { runDocsGate } from '@forge/factory/gates/docs-gate.ts';
+import { runProjectManager as realRunProjectManager } from '@forge/stations/phases/project-manager.ts';
+import { runDeveloperLoop as realRunDeveloperLoop, emitDeliverySummary } from '@forge/stations/phases/developer-loop.ts';
+import { runIntegrateBand, type IntegrateResult } from '@forge/stations/phases/integrate.ts';
+import { runAdversarialReview as realRunAdversarialReview, type AdversarialReviewResult } from '@forge/stations/phases/adversarial-review.ts';
+import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
+import { changedMarkdownFiles, runClassMergeBoundary } from '@forge/stations/phases/merge-boundary.ts';
+import { runDocsGate } from '@forge/stations/gates/docs-gate.ts';
 import { runClosure, promoteMergedToDone } from '@forge/flows/phases/closure.ts';
-import { runReflector } from '@forge/factory/phases/reflector.ts';
+import { runReflector } from '@forge/stations/phases/reflector.ts';
 import { rebasePreservedBranchOntoMain } from '@forge/flows/pr.ts';
 import { openPrInline, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, runMergeBoundaryGate, preservingForgeScratch, type MergeGateEvidence, type MergeGateResult } from '@forge/flows/cycle-helpers.ts';
 
@@ -197,62 +199,77 @@ function readCostBudgetUsd(input: CycleInput): number | undefined {
  */
 export const DEFAULT_LOGS_ROOT = join(FORGE_ROOT, '_logs');
 
-export const DEFAULT_DEPS: FlowRunnerDeps = {
-  // Thread the optional wedge-abort signal into real phase functions.
-  runProjectManager: (input, logger, signal?) =>
-    realRunProjectManager(input, logger, { signal }),
-  runDeveloperLoop: (input, logger, signal?) =>
-    realRunDeveloperLoop(input, logger, signal),
-  runIntegrate: (input, logger, gateEvidence) =>
-    runIntegrateBand(
-      {
-        initiativeId: input.initiativeId,
-        worktreePath: input.worktreePath,
-        manifestPath: input.manifestPath,
-        projectRepoPath: input.projectRepoPath,
-      },
-      logger,
-      gateEvidence,
-    ),
-  runAdversarialReview: (input, logger, signal?) =>
-    runAdversarialReview(
-      {
-        initiativeId: input.initiativeId,
-        worktreePath: input.worktreePath,
-        cycleId: input.cycleId ?? input.initiativeId,
-        logsRoot: DEFAULT_LOGS_ROOT,
-        costBudgetUsd: readCostBudgetUsd(input),
-        projectName: basename(input.projectRepoPath),
-        changeClass: readChangeClass(input.manifestPath),
-        forgeRoot: FORGE_ROOT,
-      },
-      logger,
-      { signal },
-    ),
-  computeDeliveryStats: (input, logger) => {
-    const s = emitDeliverySummary(input, logger);
-    return { commitsAhead: s.commits, filesChanged: s.filesChanged, insertions: s.insertions };
-  },
-  // Spec §5 item 1's merge-boundary columns: the CLASS decides which of the
-  // project's declared gates run and whether a verb runs with them. The value
-  // goes down into `@forge/flows`' gate; the verb's implementation lives here,
-  // because `@forge/flows` may not import this package.
-  runMergeBoundaryGate: (input, logger) =>
-    runClassMergeBoundary(profileFor(readChangeClass(input.manifestPath)), input, logger, {
-      runTestGate: runMergeBoundaryGate,
-      changedMarkdown: (worktreePath) => changedMarkdownFiles(worktreePath),
-      docsGate: (paths) => runDocsGate(paths, { links: true }),
-    }),
-  openPrInline,
-  runClosure,
-  runReflector,
-  promoteMergedToDone,
-  commitDevLoopBoundary,
-  enforceDevLoopCloseInvariant,
-  assertNonEmptyDelivery,
-  enforceFinalCiGate,
-  rebaseForResume: defaultRebaseForResume,
-};
+/**
+ * The real dep set, closed over the ONE port (operator ruling, items 81/83):
+ * `classProfiles` is threaded to every band that reads the class table, so a
+ * caller with no factory installed still gets a working executor — a band
+ * that actually needs a profile refuses BY NAME (`requireClassProfiles`)
+ * rather than this file silently picking a default. A function, not a module-
+ * level constant, because the port is per-`createPhaseExecutor()` call, not
+ * per-process: two callers in the same process (a live bridge and a test) may
+ * bind different tables, or none.
+ */
+export function buildDefaultDeps(classProfiles?: ClassProfilePort): FlowRunnerDeps {
+  return {
+    // Thread the optional wedge-abort signal into real phase functions.
+    runProjectManager: (input, logger, signal?) =>
+      realRunProjectManager(input, logger, { signal, classProfiles }),
+    runDeveloperLoop: (input, logger, signal?) =>
+      realRunDeveloperLoop(input, logger, signal, classProfiles),
+    runIntegrate: (input, logger, gateEvidence) =>
+      runIntegrateBand(
+        {
+          initiativeId: input.initiativeId,
+          worktreePath: input.worktreePath,
+          manifestPath: input.manifestPath,
+          projectRepoPath: input.projectRepoPath,
+        },
+        logger,
+        gateEvidence,
+        classProfiles,
+      ),
+    runAdversarialReview: (input, logger, signal?) =>
+      realRunAdversarialReview(
+        {
+          initiativeId: input.initiativeId,
+          worktreePath: input.worktreePath,
+          cycleId: input.cycleId ?? input.initiativeId,
+          logsRoot: DEFAULT_LOGS_ROOT,
+          costBudgetUsd: readCostBudgetUsd(input),
+          projectName: basename(input.projectRepoPath),
+          changeClass: requireClassProfiles(classProfiles, 'adversarial-review').readChangeClass(input.manifestPath),
+          forgeRoot: FORGE_ROOT,
+        },
+        logger,
+        { signal, classProfiles },
+      ),
+    computeDeliveryStats: (input, logger) => {
+      const s = emitDeliverySummary(input, logger);
+      return { commitsAhead: s.commits, filesChanged: s.filesChanged, insertions: s.insertions };
+    },
+    // Spec §5 item 1's merge-boundary columns: the CLASS decides which of the
+    // project's declared gates run and whether a verb runs with them. The value
+    // goes down into `@forge/flows`' gate; the verb's implementation lives here,
+    // because `@forge/flows` may not import this package.
+    runMergeBoundaryGate: (input, logger) => {
+      const cp = requireClassProfiles(classProfiles, 'merge-boundary');
+      return runClassMergeBoundary(cp.profileFor(cp.readChangeClass(input.manifestPath)), input, logger, {
+        runTestGate: runMergeBoundaryGate,
+        changedMarkdown: (worktreePath) => changedMarkdownFiles(worktreePath),
+        docsGate: (paths) => runDocsGate(paths, { links: true }),
+      });
+    },
+    openPrInline,
+    runClosure,
+    runReflector,
+    promoteMergedToDone,
+    commitDevLoopBoundary,
+    enforceDevLoopCloseInvariant,
+    assertNonEmptyDelivery,
+    enforceFinalCiGate,
+    rebaseForResume: defaultRebaseForResume,
+  };
+}
 
 /**
  * Race an executor promise against a concurrent wedge-kill timer.
@@ -307,6 +324,7 @@ export function createProjectGate(): ProjectGate {
 /**
  * The shipped early-terminate closure. `runFlow` takes it directly (not through
  * the phase port) because stopping the walk is the runner's own act; exporting
- * it here keeps the runner's caller free of a phase import.
+ * it here keeps the runner's caller free of a phase import. Not classProfiles-
+ * dependent (`runClosure` never reads the class table), so it needs no port.
  */
-export const defaultRunClosure = DEFAULT_DEPS.runClosure;
+export const defaultRunClosure = runClosure;

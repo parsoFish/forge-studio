@@ -108,8 +108,8 @@ test('every package with a QUARRY cap is measured, and every measured package ha
   const names = Object.keys(pkgs).sort();
   assert.deepEqual(
     names,
-    ['agents', 'contracts', 'factory', 'flows', 'kernel', 'knowledge', 'library', 'projects', 'sessions'],
-    'all nine packages accounted for',
+    ['agents', 'contracts', 'factory', 'flows', 'kernel', 'knowledge', 'library', 'projects', 'sessions', 'stations'],
+    'all ten packages accounted for',
   );
   for (const [name, row] of Object.entries(pkgs)) {
     assert.equal(typeof row.lines, 'number', `${name} has a measured line count`);

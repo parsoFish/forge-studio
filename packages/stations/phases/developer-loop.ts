@@ -34,7 +34,7 @@ import {
   writeWorkItemStatus,
   type WorkItem,
 } from '@forge/flows/work-item.ts';
-import { hollowGateGuardFor, profileFor, readChangeClass } from '../class-profiles.ts';
+import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
 import { type QueryFn, type ClaudeAgentOptions } from '@forge/agents/ralph/claude-agent.ts';
 import { getAdapter, resolveSdkId } from '@forge/agents/_adapters/registry.ts';
 import type { AgentInvocation } from '@forge/agents/_adapters/types.ts';
@@ -264,10 +264,15 @@ export async function runDeveloperLoop(
   // Ralph iteration (claude-agent.ts `externalSignal`) so a wedge-kill cancels
   // the in-flight per-item CLI subprocesses, not just the outer phase promise.
   signal?: AbortSignal,
+  // The one port (operator ruling, items 81/83): optional, because this
+  // station must build with no factory installed; refuses by name below the
+  // moment it actually needs a profile.
+  classProfiles?: ClassProfilePort,
 ): Promise<void> {
   const workItemsDir = resolve(input.worktreePath, '.forge/work-items');
+  const cp = requireClassProfiles(classProfiles, 'developer-loop');
   // Spec §5 item 9: the gate's diff-inclusion list is the CLASS's (ADR 051).
-  const classProfile = profileFor(readChangeClass(input.manifestPath));
+  const classProfile = cp.profileFor(cp.readChangeClass(input.manifestPath));
   const requiredPathsSource = classProfile.requiredPathsSource;
   const start = logger.emit({
     initiative_id: input.initiativeId,
@@ -724,7 +729,7 @@ export async function runDeveloperLoop(
           // when ALL of THIS WI's declared outputs are on the branch (a sibling
           // genuinely delivered them) — not on a bare "branch has a commit".
           requiredPaths: wi.creates ?? [],
-          failOnHollowIter0Gate: hollowGateGuardFor(classProfile.iter0FailFirst, wi.behavior_preserving),
+          failOnHollowIter0Gate: cp.hollowGateGuardFor(classProfile.iter0FailFirst, wi.behavior_preserving),
           // re-review #1: stop early if the gate command can't RUN (broken
           // gate) rather than iterating against it and burning the budget.
           gateErrored: () => lastGateErrored,

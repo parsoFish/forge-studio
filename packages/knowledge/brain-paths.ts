@@ -57,7 +57,7 @@ export function cycleArchiveRelPath(cycleId: string): string {
  * to the same kbId. Optional `projects/` covers Brain 3 (`brain/projects/<id>/`).
  *
  * forge-8vfn.5.16 (M7-C U2) inlined an anchored ('^brain/...') copy of this
- * regex in `packages/factory/phases/project-manager.ts` before this helper
+ * regex in `packages/stations/phases/project-manager.ts` before this helper
  * existed; that copy's input is always repo-relative so this superset regex
  * matches it identically. U2 should repoint at this export on merge rather
  * than carry a second definition (see this bead's report).

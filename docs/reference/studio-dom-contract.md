@@ -1205,7 +1205,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   (a raw tool-use COUNT with no KB attribution, rendered only for the `dev`
   node) and from `/knowledge`'s Ingest Activity tab (the reflector's WRITE
   side, `reflect.kb-ingest`) — this is the planner's own READ, on the record.
-  Source: `packages/factory/phases/project-manager.ts` emits one
+  Source: `packages/stations/phases/project-manager.ts` emits one
   `message:"brain.read"` event per KB `readPmBrainContext`'s deterministic
   pre-fetch touched (`metadata: {kbId, themeCount, reader, runId}`);
   `PhaseDrawer.tsx` reads the run's live event stream via `useCycleEvents`

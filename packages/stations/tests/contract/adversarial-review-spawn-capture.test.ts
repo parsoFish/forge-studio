@@ -65,6 +65,7 @@ import { createLogger } from '@forge/kernel';
 import { serializeWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
+import { testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
 const FIXTURE_PATH = resolve(FORGE_ROOT, 'packages', 'kernel', 'tests', 'test-fixtures', 'spawn-capture', 'adversarial-review.json');
@@ -192,7 +193,7 @@ test('runAdversarialReview: pins the exact {prompt, options} spawn call (charact
     const res = await runAdversarialReview(
       { initiativeId: INIT_ID, worktreePath: fx.worktree, cycleId: CYCLE_ID, logsRoot: fx.logsRoot, projectName: 'fix', changeClass: 'code' },
       logger,
-      { queryFn },
+      { queryFn, classProfiles: testClassProfilePort() },
     );
 
     assert.equal(res.status, 'complete', 'sanity: the fixture must drive the pipeline to a clean completion');
