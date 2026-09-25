@@ -45,7 +45,6 @@
  */
 
 import { readdirSync, readFileSync, readlinkSync, realpathSync, statSync, existsSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
 
 /** Env name → the campaign's full-suite lock, excluded by a story run. */
 export const SUITE_LOCK_ENV = 'FORGE_SUITE_LOCK';
@@ -66,27 +65,6 @@ export const RUN_LOCK_ENV = 'FORGE_RUN_LOCK';
  */
 export const EXIT_LOCK_REFUSED = 75;
 
-/**
- * Every process holding `lockPath` open, by file descriptor.
- *
- * ABSENCE IS A STATE, AND IT IS NOT THE SAME STATE AS "NOBODY IS RUNNING"
- * (bead `forge-e8dn`, T1 ruling 672). This used to return `[]` for a path that
- * does not exist, with a comment calling that "indistinguishable, as it should
- * be". It should not be: handed a real lock nobody holds and handed a path that
- * is not a lock at all, the old shape produced byte-identical output, so no
- * observation anywhere could tell them apart and the guard could not be
- * falsified. It stayed silent through two of lane A's collisions while
- * `gate.sh` fed it a relative campaign dir that resolved to a file nothing ever
- * creates — correct-looking, and blind.
- *
- * So a path that cannot be resolved returns `null`, and every caller must say
- * which answer it got. `[]` now means one thing only: this IS a lock file and
- * nobody holds it.
- *
- * @returns {{pid: string, cwd: string|null}[] | null} holders, or `null` when
- *          `lockPath` names nothing this process can resolve — never `[]` for
- *          a path that is not there.
- */
 /**
  * Who the KERNEL says holds `lockPath`, and who is blocked waiting for it.
  *
@@ -109,6 +87,18 @@ export const EXIT_LOCK_REFUSED = 75;
  * replaced rather than truncated. `/proc/locks` gives no `cwd`, which is why
  * the fd walk stays — each source supplies exactly what the other cannot, and
  * the sentence a lane needs ("held by pid N (cwd X); K waiting") requires both.
+ *
+ * NARROWED BY ROW 80B: this table is no longer the source of who HOLDS a
+ * lock. Measured on two kernels: a lock taken through a shared descriptor
+ * whose locker has exited (`exec 8>lock; flock -n 8`) has NO row at all on
+ * this WSL host, and the row survives under the EXITED pid on a standard
+ * kernel (the GitHub runner). Either reading, trusted as holder truth, is
+ * wrong. `lockHolders` / `lockOpeners` now classify by walking every live
+ * pid's own fd + fdinfo (`fdOccupants`, below) and treat this table as
+ * corroboration only. WAITERS are unaffected — a blocked `flock(2)` call's own
+ * fdinfo carries no `lock:` line on this host (measured), so this table stays
+ * the one place that can separate a waiter from a holder, exactly as it
+ * always has.
  *
  * @returns {{holders: {pid: string}[], waiters: {pid: string}[]}|null} null when
  *   the lock file is absent — the caller distinguishes "nothing holds it" from
@@ -153,45 +143,97 @@ function cwdOf(pid, procRoot) {
 }
 
 /**
- * Processes holding the DESCRIPTOR with no kernel lock — the third class
- * (T1 743, D's measurement).
+ * The `lock:` line inside `/proc/<pid>/fdinfo/<fd>` for one fd that has ALREADY
+ * been confirmed (by `readlink`) to resolve to the lock file — row 80b's
+ * instrument, and ground truth in a way `/proc/locks` is not. Measured on this
+ * host: a lock taken through a shared descriptor whose locking process has
+ * EXITED (`exec 8>lock; flock -n 8`) carries this line on the ancestor's own
+ * fd, exactly when the lock is truly held, with NO `/proc/locks` row at all.
  *
- * `exec 9>lock; flock 9` OPENS BEFORE IT LOCKS. D reproduced the window in four
- * lines: `( exec 9>"$T"; sleep 3 ) &` gives `/proc/locks` zero rows while
- * `fuser` names the pid. So a `/proc/locks`-only census would let a run start
- * inside that window with the guard excluding nothing at all — which is what
- * D's own first proposal ("`/proc/locks` for who holds, the fd walk only for
- * `cwd`") would have shipped.
- *
- * My first fix folded these into `lockHolders` as a fallback. That was the same
- * conflation this bead exists to remove, one level down: a process that has the
- * file open is not holding the lock, and calling it a holder is how the original
- * defect read. They are named as what they are, and the verdict still REFUSES on
- * them, because refusing inside the pre-flock window is the safe direction.
+ * THREE OUTCOMES, not two. A fd whose fdinfo vanishes between the fd census
+ * and this read (`ENOENT`) is GONE — the same ordinary race every other walk
+ * in this file treats as "correct to skip", never as a fact about the lock.
+ * Anything else unreadable (permissions, or anything this box can throw) is
+ * UNREADABLE, and the caller must NOT read that as "no lock": that is exactly
+ * how "cannot check" becomes "free" (the Refusal rule this row exists to
+ * enforce). A readable fdinfo with no `lock:` line is a real, positive answer:
+ * this descriptor is open and not locked.
  */
-export function lockOpeners(lockPath, procRoot = '/proc') {
+function fdLockLine(procRoot, pid, fd) {
+  let raw;
+  try {
+    raw = readFileSync(`${procRoot}/${pid}/fdinfo/${fd}`, 'utf8');
+  } catch (err) {
+    return { state: err && err.code === 'ENOENT' ? 'gone' : 'unreadable' };
+  }
+  const found = raw.split('\n').find((l) => l.startsWith('lock:'));
+  return found === undefined ? { state: 'open' } : { state: 'locked', line: found.slice('lock:'.length).trim() };
+}
+
+/**
+ * A `lock:` line's own shape mirrors a `/proc/locks` row minus the fd's own
+ * identity: `<n>: [->] TYPE ADVISORY MODE <pid> <maj>:<min>:<ino> <start> <end>`.
+ *
+ * THE PID FIELD IS NOT TRUSTED. Measured on this host: it reads `0` for a lock
+ * taken through a shared descriptor (heavy-slot's `exec 8>lock; flock -n 8`),
+ * because a BSD flock is a property of the open file description, not of
+ * whichever process's fd happens to be read. The fd's OWN pid — the
+ * `/proc/<pid>` directory this line was already read from — is the holder;
+ * only the inode (so a stale line naming a different file is never trusted)
+ * and the `->` marker (a blocked waiter, never a holder) are read here.
+ */
+export function classifyFdLock(line, ino) {
+  const m = /^\d+:\s*(->)?\s*\S+\s+\S+\s+\S+\s+\d+\s+[0-9a-f]+:[0-9a-f]+:(\d+)\s/.exec(line);
+  if (m === null || Number(m[2]) !== ino) return null; // unparseable, or names a different file
+  return m[1] === '->' ? 'waiter' : 'holder';
+}
+
+/**
+ * ONE walk of every LIVE pid's fd table, classifying each fd that resolves to
+ * `lockPath` by ITS OWN fdinfo — never by a `/proc/locks` row (row 80b, T1
+ * 1366). That table is corroboration at most: it can lose a real hold entirely
+ * (this WSL host, a shared descriptor whose locker exited) or keep it under
+ * the EXITED pid (a standard kernel, the GitHub runner). A live pid's own
+ * fd + fdinfo is the one signal measured to be right on both.
+ *
+ * `lockHolders` and `lockOpeners` are both thin wrappers over this — ONE
+ * walker, one classifier, so the two functions can never disagree about which
+ * pid is which class (948's error was two classifiers for one walk).
+ *
+ * @returns {{holders,waiters,openers}: {pid,cwd}[]} | null — null when the
+ *   lock path cannot be resolved, `/proc` cannot be listed, or a fd already
+ *   confirmed to be the lock's own descriptor has UNREADABLE fdinfo: that fd
+ *   might be the holder, so the whole census refuses rather than reporting
+ *   the rest as though it were complete.
+ */
+function fdOccupants(lockPath, procRoot = '/proc') {
+  let ino;
+  try {
+    ino = statSync(lockPath).ino;
+  } catch {
+    return null;
+  }
   let target;
   try {
     target = realpathSync(lockPath);
   } catch {
     return null;
   }
-  const rows = kernelLockRows(lockPath, procRoot);
-  const known = new Set([...(rows?.holders ?? []), ...(rows?.waiters ?? [])].map((r) => r.pid));
-  const out = [];
   let pids;
   try {
     pids = readdirSync(procRoot).filter((name) => /^\d+$/.test(name));
   } catch {
-    return [];
+    return null;
   }
+  const holders = [];
+  const waiters = [];
+  const openers = [];
   for (const pid of pids) {
-    if (known.has(pid)) continue; // already classified by the kernel
     let fds;
     try {
       fds = readdirSync(`${procRoot}/${pid}/fd`);
     } catch {
-      continue;
+      continue; // not ours to read, or it exited between readdir and here
     }
     for (const fd of fds) {
       let resolved;
@@ -201,14 +243,48 @@ export function lockOpeners(lockPath, procRoot = '/proc') {
         continue;
       }
       if (resolved !== target) continue;
-      out.push({ pid, cwd: cwdOf(pid, procRoot) });
-      break;
+      const info = fdLockLine(procRoot, pid, fd);
+      if (info.state === 'gone') continue; // raced away between the two reads — honestly gone
+      if (info.state === 'unreadable') return null; // this fd might be the holder; refuse rather than guess
+      const cwd = cwdOf(pid, procRoot);
+      if (info.state === 'open') {
+        openers.push({ pid, cwd });
+      } else {
+        const cls = classifyFdLock(info.line, ino);
+        if (cls === 'holder') holders.push({ pid, cwd });
+        else if (cls === 'waiter') waiters.push({ pid, cwd });
+        else openers.push({ pid, cwd }); // a lock: line that does not name THIS lock — cannot vouch for a hold
+      }
+      break; // one matching fd is enough to classify this pid
     }
   }
-  return out;
+  return { holders, waiters, openers };
 }
 
-/** Processes BLOCKED waiting for `lockPath` — never the ones holding it. */
+/**
+ * Processes holding the DESCRIPTOR with no fdinfo `lock:` line naming this
+ * file — the third class (T1 743, D's measurement), now read by `fdOccupants`
+ * above rather than a second walk.
+ *
+ * `exec 9>lock; flock 9` OPENS BEFORE IT LOCKS. D reproduced the window in four
+ * lines: `( exec 9>"$T"; sleep 3 ) &` gives `/proc/locks` zero rows while
+ * `fuser` names the pid. A process merely holding the file open is not holding
+ * the lock, and calling it a holder is how the original defect read. They are
+ * named as what they are, and the verdict still REFUSES on them, because
+ * refusing inside the pre-flock window is the safe direction.
+ *
+ * @returns {{pid,cwd}[]|null} null when `lockPath` cannot be resolved or the
+ *   census could not vouch for a fd that IS the lock's own descriptor.
+ */
+export function lockOpeners(lockPath, procRoot = '/proc') {
+  const occ = fdOccupants(lockPath, procRoot);
+  return occ === null ? null : occ.openers;
+}
+
+/** Processes BLOCKED waiting for `lockPath` — never the ones holding it.
+ *  UNCHANGED by row 80b: a blocked `flock(2)` call's own fdinfo carries no
+ *  `lock:` line on this host (measured), so `/proc/locks`'s `->` rows remain
+ *  the one instrument that can see a waiter at all. */
 export function lockWaiters(lockPath, procRoot = '/proc') {
   const rows = kernelLockRows(lockPath, procRoot);
   if (rows === null) return existsSync(lockPath) ? [] : null;
@@ -239,59 +315,27 @@ export function describeLockOccupants(holders, waiters, openers = []) {
   return waiters.length === 0 ? parts.join('; ') : `${parts.join('; ')}; ${waiters.length} waiting`;
 }
 
+/**
+ * Who HOLDS `lockPath` — row 80b's fix. A LIVE pid with a fd that `readlink`s
+ * to the lock file AND whose `/proc/<pid>/fdinfo/<fd>` carries a `lock:` line
+ * naming the lock's inode, not prefixed `->`, IS the holder. `/proc/locks`
+ * (`kernelLockRows`) is never consulted here any more: it is the table that
+ * went blind on this WSL host (a shared descriptor whose locker exited leaves
+ * NO row) and misleading on a standard kernel (the same shape keeps a row
+ * under the EXITED pid) — see `kernelLockRows`'s own doc for both measurements.
+ * A process that merely has the descriptor open with no `lock:` line is
+ * `lockOpeners`' class, not this one (T1 743).
+ *
+ * @returns {{pid,cwd}[]|null} null when `lockPath` does not exist or cannot be
+ *   resolved, or the census could not vouch for a fd that IS the lock's own
+ *   descriptor — never `[]` standing in for "cannot check".
+ */
 export function lockHolders(lockPath, procRoot = '/proc') {
   if (!existsSync(lockPath)) return null;
-  let target;
-  try {
-    target = realpathSync(lockPath);
-  } catch {
-    return null;
-  }
-  // 7.6.33: THE KERNEL IS THE AUTHORITY ON WHO HOLDS. `/proc/locks` is the only
-  // source that separates a holder from a process blocked waiting, and this
-  // function answers exactly the question its name asks. Processes that merely
-  // have the descriptor OPEN are a THIRD class and are reported by
-  // `lockOpeners` — see its comment for why collapsing them here was the same
-  // conflation one level down (T1 743).
-  const rows = kernelLockRows(lockPath, procRoot);
-  if (rows !== null) {
-    return rows.holders.map((h) => ({ pid: h.pid, cwd: cwdOf(h.pid, procRoot) }));
-  }
-
-  const holders = [];
-  let pids;
-  try {
-    pids = readdirSync(procRoot).filter((name) => /^\d+$/.test(name));
-  } catch {
-    return [];
-  }
-  for (const pid of pids) {
-    let fds;
-    try {
-      fds = readdirSync(`${procRoot}/${pid}/fd`);
-    } catch {
-      continue; // not ours to read, or it exited between readdir and here
-    }
-    for (const fd of fds) {
-      let resolved;
-      try {
-        resolved = readlinkSync(`${procRoot}/${pid}/fd/${fd}`);
-      } catch {
-        continue;
-      }
-      if (resolved !== target) continue;
-      let cwd = null;
-      try {
-        cwd = readlinkSync(`${procRoot}/${pid}/cwd`);
-      } catch {
-        /* a process we cannot introspect is still a holder worth naming */
-      }
-      holders.push({ pid, cwd });
-      break;
-    }
-  }
-  return holders;
+  const occ = fdOccupants(lockPath, procRoot);
+  return occ === null ? null : occ.holders;
 }
+
 
 /**
  * Should this kind of work refuse to start?
@@ -315,18 +359,26 @@ export function overlapVerdict({ lockPath, envName, thisKind, otherKind, procRoo
   }
   const holders = lockHolders(lockPath, procRoot);
   if (holders === null) {
-    // NAMED, never silent. The guard is configured and cannot do its job: the
-    // path it was told to watch does not exist, so it is watching nothing. A
-    // campaign lock is created by the first `flock` and persists, so a missing
-    // one means the PATH is wrong — a stale campaign dir, a typo, a resolve
-    // site that changed. Work proceeds (an unconfigured checkout must still be
-    // able to run) but the verdict says exactly what is NOT being enforced.
+    // NAMED, never silent. The guard is configured and cannot do its job.
+    // Two distinct causes now share this branch (row 80b widened it): the
+    // path it was told to watch does not exist — a stale campaign dir, a
+    // typo, a resolve site that changed — or the path DOES exist but a fd
+    // already confirmed to be its own descriptor has unreadable fdinfo, so
+    // the census cannot vouch for the rest either. Saying "does not exist"
+    // for the second cause would be a claim this branch is not entitled to
+    // make, which is exactly the shape the Refusal rule exists to close.
+    // Either way work proceeds (an unconfigured checkout must still be able
+    // to run) but the verdict says exactly what is NOT being enforced.
+    const missing = !existsSync(lockPath);
     return {
       ok: true,
-      reason:
-        `overlap guard CANNOT CHECK: ${envName} names ${lockPath}, which does not exist, so ` +
-        `${thisKind} is NOT excluded from ${otherKind}. A campaign lock is created by its first ` +
-        'holder and persists, so a missing one means the path is wrong rather than idle.',
+      reason: missing
+        ? `overlap guard CANNOT CHECK: ${envName} names ${lockPath}, which does not exist, so ` +
+          `${thisKind} is NOT excluded from ${otherKind}. A campaign lock is created by its first ` +
+          'holder and persists, so a missing one means the path is wrong rather than idle.'
+        : `overlap guard CANNOT CHECK: ${envName} names ${lockPath}, which exists but a descriptor ` +
+          `on it could not be classified (unreadable /proc), so ${thisKind} is NOT excluded from ` +
+          `${otherKind}.`,
     };
   }
   // All THREE classes refuse. A waiter means someone is queued for the same
@@ -353,16 +405,6 @@ export function overlapVerdict({ lockPath, envName, thisKind, otherKind, procRoo
   };
 }
 
-/** Is `lockPath` held right now, by anyone? A non-blocking `flock` on a FRESH
- *  descriptor: exit 1 = held, exit 0 = free (released at once), anything else
- *  (flock missing, a signal) = null — cannot answer, never read as either. */
-export function probeLockHeld(lockPath) {
-  const r = spawnSync('flock', ['-n', lockPath, 'true'], { stdio: 'ignore' });
-  if (r.status === 1) return true;
-  if (r.status === 0) return false;
-  return null;
-}
-
 /**
  * The story-run side: refuse while the full suite holds its lock.
  *
@@ -376,8 +418,21 @@ export function probeLockHeld(lockPath) {
  * unresolvable lock path still falls straight through to `overlapVerdict`
  * and keeps its existing reasons unchanged; it names the ancestor pid, never
  * a bare "ok", so the reason still says why waiters do not matter here.
+ *
+ * ROW 80B COLLAPSED THIS TO ONE RULE. `holders` now comes from `lockHolders`'
+ * fdinfo walk, which correctly names the ancestor for heavy-slot's exact shape
+ * (`exec 8>lock; flock -n 8`) on BOTH kernels measured — the WSL host that
+ * used to leave `/proc/locks` empty and the standard kernel that used to keep
+ * the row under the EXITED flock pid. Naming the ancestor is therefore always
+ * the FIRST branch's job now; the second branch that used to paper over
+ * `lockHolders`' blind spot with an opener check plus a fresh `flock -n`
+ * probe is deleted along with the blind spot it existed to patch. When
+ * `lockHolders` genuinely cannot classify (unreadable fdinfo on a fd that IS
+ * the lock's own descriptor) it returns `null`, this function falls straight
+ * through, and `overlapVerdict` reports CANNOT CHECK rather than inventing an
+ * exemption from a probe that could just as easily be racing the same fd.
  */
-export function suiteLockVerdict(env = process.env, procRoot = '/proc', selfPid = process.pid, { probeHeld = probeLockHeld } = {}) {
+export function suiteLockVerdict(env = process.env, procRoot = '/proc', selfPid = process.pid) {
   const lockPath = env[SUITE_LOCK_ENV];
   if (lockPath) {
     const holders = lockHolders(lockPath, procRoot);
@@ -393,28 +448,6 @@ export function suiteLockVerdict(env = process.env, procRoot = '/proc', selfPid 
             "is blocked by THIS run's hold, not the other way round; refusing here would refuse a run " +
             'for a queue only its own ancestor is causing.',
         });
-      }
-      // M7 row 80 (T1 1352/1353): a hold whose locker has EXITED. `heavy-slot.sh`
-      // locks via `exec 8>lock; flock -n 8` — the flock binary locks the shared
-      // descriptor and exits. This WSL kernel then lists no row at all; a
-      // standard kernel (the CI runner) lists it under the exited pid. Either
-      // way no LIVE process is the holder, and the ancestor that owns the
-      // descriptor reads as an opener. Required together: no live holder, an
-      // ANCESTOR opener, and a fresh probe proving the lock IS held. A live
-      // holder, a free probe (only open) or an unanswerable one (null) keeps
-      // the refusal below.
-      const liveHolders = holders.filter((h) => existsSync(`${procRoot}/${h.pid}`));
-      if (liveHolders.length === 0) {
-        const opener = (lockOpeners(lockPath, procRoot) ?? []).find((o) => ancestors.has(o.pid));
-        if (opener && probeHeld(lockPath) === true) {
-          return Object.freeze({
-            ok: true,
-            reason:
-              `${lockPath} is held through a descriptor pid ${opener.pid}, this story run's OWN ANCESTOR, has open ` +
-              "— /proc/locks shows no row for a lock whose locking process has exited (heavy-slot's " +
-              '`flock -n <fd>`), and a fresh probe confirms the lock is held, so this is the run\'s own hold.',
-          });
-        }
       }
     }
   }

@@ -147,7 +147,7 @@ test('REAL: heavy-slot\'s exact shape names the bash ancestor as holder directly
   }
 });
 
-test('REAL: a plain `flock lock cmd` names the flock pid as holder', async () => {
+test('REAL: a plain `flock lock cmd` names the flock pid as a holder', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'lg-fdinfo-real2-'));
   const lock = join(dir, '.lock');
   writeFileSync(lock, '');
@@ -155,7 +155,16 @@ test('REAL: a plain `flock lock cmd` names the flock pid as holder', async () =>
   try {
     await new Promise((resolve) => { setTimeout(resolve, 400); });
     const holders = lockHolders(lock);
-    assert.deepEqual(holders?.map((h) => h.pid), [String(holder.pid)]);
+    const pids = holders?.map((h) => h.pid) ?? [];
+    // Measured: `flock LOCK CMD ARGS` (no `-c`) forks — the flock binary itself
+    // calls flock(2), then forks a CHILD that execs "sleep", inheriting the
+    // locked fd. Both pids therefore reference the SAME open file description
+    // and both carry the `lock:` line in their own fdinfo — the identical
+    // shared-descriptor shape heavy-slot exercises, just with two live
+    // processes instead of one live + one exited. Asserting the singleton
+    // array here would penalise the new rule for seeing a second, equally
+    // real holder that a `/proc/locks`-row view (one row, one pid) could not.
+    assert.ok(pids.includes(String(holder.pid)), `the flock pid must be named among the holders: ${JSON.stringify(pids)}`);
   } finally {
     holder.kill('SIGKILL');
     rmSync(dir, { recursive: true, force: true });
