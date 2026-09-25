@@ -84,3 +84,7 @@ export * from './studio-object.ts';
 export * from './studio/yaml-fields.ts';
 /** A small, per-key JSON-array log with bounded retention (forge-6gv.8.1). */
 export * from './bounded-log.ts';
+/** The ONE `/proc`-based pid-liveness read (`isProcessRunning`), shared by
+ *  `packages/flows/daemon.ts`'s `isAlive` and the story runner's scheduler
+ *  preflight so the two can never disagree about a zombie pid (forge-8vfn.8.1.6). */
+export * from './process-liveness.ts';

@@ -8,8 +8,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, existsSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 
 import {
@@ -38,6 +39,43 @@ test('isAlive: own pid alive, unused high pid not', () => {
   assert.equal(isAlive(process.pid), true);
   // PIDs are capped well below this on Linux; nothing should own it.
   assert.equal(isAlive(2_147_483_640), false);
+});
+
+/**
+ * `forge-8vfn.8.1.6` follow-up (T1 review) — `isAlive` used to be
+ * `process.kill(pid, 0)`-based, which counts a ZOMBIE as alive (the kernel
+ * still holds its pid table entry until something reaps it). That let a
+ * zombie scheduler pid pass the story runner's own preflight
+ * (`scripts/stories/scheduler-preflight.mjs`, which used the STRICTER
+ * `/proc/<pid>/stat`-based reading) while `spawnServeDetached` below still
+ * treated the SAME pid as "already running" and started nothing new — the
+ * run's cost ceiling landed on a bridge whose scheduler-start was a silent
+ * no-op. `isAlive` now delegates to `@forge/kernel`'s `isProcessRunning`, the
+ * ONE reading both call sites share.
+ *
+ * A REAL, genuinely alive child proves the point `kill(pid, 0)` alone
+ * cannot: the fixture `procRoot` reports its pid as zombie-state `Z`, and
+ * `isAlive` must trust THAT reading over the real process table it would
+ * otherwise consult.
+ */
+test('isAlive: a ZOMBIE-state /proc fixture reads as NOT alive, even for a genuinely live pid', () => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-isalive-zombie-'));
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+  try {
+    mkdirSync(join(root, String(child.pid)));
+    writeFileSync(
+      join(root, String(child.pid), 'stat'),
+      `${child.pid} (fixture) Z 1 1 1 0 -1 4194304 0 0 0 0 0 0 0 0 20 0 1 0 42`,
+    );
+    assert.equal(
+      isAlive(child.pid!, root),
+      false,
+      'a zombie-state /proc reading must win over kill(pid,0), which cannot distinguish a zombie from a live process',
+    );
+  } finally {
+    child.kill('SIGKILL');
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('pid file: write → read → clear round-trips', () => {

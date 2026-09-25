@@ -288,6 +288,7 @@ packages/kernel/path-guard.ts readFileSync 1
 packages/kernel/path-guard.ts realpathSync 2
 packages/kernel/path-guard.ts renameSync 1
 packages/kernel/path-guard.ts writeFileSync 1
+packages/kernel/process-liveness.ts readFileSync 1
 packages/kernel/project-layout.ts existsSync 2
 packages/kernel/project-layout.ts mkdirSync 1
 packages/kernel/project-layout.ts readdirSync 1

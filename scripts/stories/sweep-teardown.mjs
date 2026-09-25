@@ -26,6 +26,10 @@ import { readProcTable, descendantsOf } from './reap.mjs';
 import { waitForCensusEmpty, describeCensus, identifyPid, verifiedKill } from './reap-census.mjs';
 import { quiesceWriters, describeQuiesce } from './quiesce.mjs';
 import { sweepProductFixtures } from './sweep.mjs';
+// The ONE `/proc`-based liveness rule (`forge-8vfn.8.1.6` follow-up) — a
+// relative .ts import, proven to work under the plain `node` this runner is
+// launched with (Node 22.21.1 strips erasable TS syntax with no flag).
+import { isProcessRunning } from '../../packages/kernel/process-liveness.ts';
 
 /**
  * Put back the COMMITTED artifacts the leading sweep removed and the run never
@@ -212,59 +216,28 @@ function waitForExit(pid, ms) {
 /**
  * Is `pid` a RUNNING process — not merely a pid that exists?
  *
- * `process.kill(pid, 0)` answers the second question and this file assumed it
- * answered the first. A process that has exited but not been reaped is a ZOMBIE:
- * its pid is still in the table, `kill(pid, 0)` still succeeds, and the wait
- * above would sit there until the grace ran out and then SIGKILL something that
- * had already finished draining — turning a clean shutdown into a reported
- * failure. The test for this caught it on its first run, because a synchronous
- * wait blocks the event loop, so a child of the waiting process can never be
- * reaped while the wait is in progress.
+ * `process.kill(pid, 0)` answers the second question, not the first: a
+ * process that has exited but not been reaped is a ZOMBIE — its pid is still
+ * in the table, `kill(pid, 0)` still succeeds, and the wait above would sit
+ * there until the grace ran out and then SIGKILL something that had already
+ * finished draining, turning a clean shutdown into a reported failure.
  *
- * The daemon is not the story runner's child in production, so the zombie case
- * is not the common one — but "the pid exists" and "the process is running" are
- * different facts, and reading one for the other is how three of today's other
- * defects happened. `/proc/<pid>/stat`'s state field is the one that answers it,
- * and it is the same `/proc` read `lockHolders` and the `cwd` check already use.
- *
- * ENOENT — AND ONLY ENOENT — MEANS GONE (T1 1372, RP's second load repro).
- * The old shape treated ANY read failure as "gone", the exact conflation
- * MUST 3 closed one call site over in `reap-census.mjs`'s census: a
- * transient, unexplained read failure on a pid there is every reason to
- * believe is still alive (measured — a daemon whose own SIGTERM-ignoring
- * handler had already been confirmed installed, via the kernel's own record,
- * BEFORE the signal was even sent) is NOT the same fact as that pid having
- * exited, and reading it as exited is what let `stopOwnScheduler` report
- * `'SIGTERM'` for a daemon that never stopped ignoring it: 192ms into a
- * 300ms grace, one run in twenty under `taskset -c 0` plus three burners.
- * Any OTHER failure now reports "still running" — the safe direction for
- * `waitForExit`'s own question, since a stray extra `SIGKILL` at a pid that
- * genuinely has exited by then is caught and ignored two lines up in
- * `stopOwnScheduler`, while concluding "gone" on a guess is not reversible.
+ * MOVED to `packages/kernel/process-liveness.ts`'s `isProcessRunning`
+ * (`forge-8vfn.8.1.6` follow-up, T1 review): this file's own `/proc`-based
+ * reading and `packages/flows/daemon.ts`'s `isAlive` used to be two
+ * INDEPENDENT implementations that had drifted — `isAlive`'s old
+ * `kill(pid, 0)` counted a zombie as alive, this file's never did — and a
+ * zombie scheduler pid could pass this file's own liveness read while the
+ * product's `spawnServeDetached` (which used `isAlive`) still treated it as
+ * "already running" and started nothing new. Delegating to ONE shared rule
+ * closes that by construction. See the kernel module's own header for the
+ * full ENOENT/Z/X reasoning — it applies unchanged; only its address moved.
  *
  * `procRoot` is a seam for the fixture door this bug bought itself — real
  * callers never pass it and get the real `/proc`.
  */
-// `Z` (zombie — exited, not yet reaped) and `X` (dead — a kernel state so
-// transient `man proc` calls it one that "should never be seen", but a
-// starved host can stretch that window into something a read actually lands
-// in) are the two `/proc/<pid>/stat` states that mean NOT running. RP's
-// review of the row-75 load repro asked this explicitly: both must count,
-// not only `Z`.
-const NOT_RUNNING_STATES = new Set(['Z', 'X']);
-
 export function isRunning(pid, procRoot = '/proc') {
-  let stat;
-  try {
-    stat = readFileSync(`${procRoot}/${pid}/stat`, 'utf8');
-  } catch (err) {
-    return err?.code !== 'ENOENT'; // ENOENT: gone. Anything else: unknown, so NOT concluded gone.
-  }
-  // `comm` can contain spaces and parentheses, so the state field is the first
-  // character after the LAST ')' — never `split(' ')[2]`.
-  const at = stat.lastIndexOf(')');
-  const state = at === -1 ? '' : stat.slice(at + 2, at + 3);
-  return !NOT_RUNNING_STATES.has(state);
+  return isProcessRunning(pid, procRoot);
 }
 
 /**

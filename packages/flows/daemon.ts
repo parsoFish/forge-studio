@@ -33,6 +33,7 @@ import {
 } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
+import { isProcessRunning } from '@forge/kernel';
 
 export type DaemonPaths = {
   dir: string;
@@ -61,15 +62,11 @@ export function readPid(pidFile: string): number | null {
   return Number.isInteger(pid) && pid > 0 ? pid : null;
 }
 
-/** True iff a process with this pid is alive (signal 0 probe). */
-export function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    // EPERM = exists but not ours to signal → still alive.
-    return (err as NodeJS.ErrnoException).code === 'EPERM';
-  }
+/** True iff `pid` is genuinely RUNNING — delegates to `@forge/kernel`'s
+ *  `isProcessRunning` (forge-8vfn.8.1.6: `kill(pid,0)` alone counts a ZOMBIE
+ *  as alive). `procRoot` is a test seam only. */
+export function isAlive(pid: number, procRoot?: string): boolean {
+  return isProcessRunning(pid, procRoot);
 }
 
 export type DaemonState = {
