@@ -11,15 +11,18 @@
  * The user prompt = a per-cycle, per-initiative briefing (dynamic data only).
  */
 
-import { readFileSync } from 'node:fs';
-
 import { loadBrainIndex } from '@forge/knowledge/brain-index.ts';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath, skillPathRelative } from '@forge/agents/skill-path.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { loadAgentSkillText } from './agent-skill-text.ts';
 
 const SKILL_PATH = skillPath('project-manager');
+
+/** Kept only for `PM_BRAIN_ACCESS` (ADR-010 platform policy) + PM_* test constants. */
+const CANONICAL_PM_DEFINITION = loadAgentDefinition(SKILL_PATH);
 
 export type PmAllowedTool = 'Read' | 'Grep' | 'Glob' | 'Write' | 'Edit';
 export type PmDisallowedTool = 'Bash' | 'NotebookEdit' | 'WebFetch' | 'WebSearch';
@@ -41,18 +44,13 @@ export const PM_DISALLOWED_TOOLS = pmAgentSpec.disallowedTools as PmDisallowedTo
 export const PM_MODEL = modelForSpec(pmAgentSpec);
 
 /**
- * M2-3: brainAccess from the PM SKILL.md frontmatter — used by the phase
- * runner to decide whether 0 brain reads should abort the cycle. When
- * 'mandatory' the gate fires; when 'advisory' it does not.
+ * M2-3: brainAccess from the CANONICAL project-manager SKILL.md frontmatter —
+ * used by the phase runner's brain-first gate (a wi-contract-band-specific
+ * policy, ADR-010, that stays keyed to the canonical declaration rather than
+ * the executing node's own def — see F4's own report on this coupling).
+ * 'mandatory' fires the gate; 'advisory' does not.
  */
-export const PM_BRAIN_ACCESS = loadAgentDefinition(SKILL_PATH).brainAccess;
-
-let cachedSkillText: string | null = null;
-function loadSkillText(): string {
-  if (cachedSkillText !== null) return cachedSkillText;
-  cachedSkillText = readFileSync(SKILL_PATH, 'utf8');
-  return cachedSkillText;
-}
+export const PM_BRAIN_ACCESS = CANONICAL_PM_DEFINITION.brainAccess;
 
 // Brain-index staleness window (documented, intentional — US-2.3 /
 // brain-read-policy): this cache is module-level, so a long-running
@@ -94,10 +92,10 @@ function loadBrainNavigation(cwd: string): string {
  *
  * Build the PM system prompt: brain navigation index + the SKILL.md contract.
  *
- * @param brainCwd - directory containing `brain/`. For the bench this is the
- *   tempdir (with symlinked brain/); for the live cycle this is the forge root.
+ * @param brainCwd - directory containing `brain/`. Bench: the tempdir; live: forgeRoot.
+ * @param def - the executing node's own agent def (seam F4) — no default (no fallback).
  */
-export function buildPmSystemPrompt(brainCwd: string): string {
+export function buildPmSystemPrompt(brainCwd: string, def: AgentDefinition): string {
   return [
     '# Brain navigation index',
     '',
@@ -107,9 +105,9 @@ export function buildPmSystemPrompt(brainCwd: string): string {
     '',
     '---',
     '',
-    '# project-manager skill contract',
+    `# ${def.slug} skill contract`,
     '',
-    loadSkillText(),
+    loadAgentSkillText(def),
   ].join('\n');
 }
 

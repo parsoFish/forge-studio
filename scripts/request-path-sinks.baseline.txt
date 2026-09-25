@@ -610,7 +610,6 @@ packages/stations/demo-model.ts readFileSync 4
 packages/stations/demo-model.ts writeFileSync 2
 packages/stations/gates/docs-gate.ts existsSync 2
 packages/stations/gates/docs-gate.ts readFileSync 1
-packages/stations/phases/adversarial-review-binding.ts readFileSync 1
 packages/stations/phases/adversarial-review.ts execFileSync 1
 packages/stations/phases/adversarial-review.ts existsSync 5
 packages/stations/phases/adversarial-review.ts mkdirSync 2
@@ -619,9 +618,10 @@ packages/stations/phases/adversarial-review.ts realpathSync 1
 packages/stations/phases/adversarial-review.ts rmSync 1
 packages/stations/phases/adversarial-review.ts unlinkSync 2
 packages/stations/phases/adversarial-review.ts writeFileSync 3
+packages/stations/phases/agent-skill-text.ts readFileSync 1
 packages/stations/phases/capture-nonce.ts readFileSync 1
 packages/stations/phases/dev-binding.ts existsSync 3
-packages/stations/phases/dev-binding.ts readFileSync 2
+packages/stations/phases/dev-binding.ts readFileSync 1
 packages/stations/phases/dev-binding.ts writeFileSync 3
 packages/stations/phases/developer-loop.ts execFileSync 3
 packages/stations/phases/developer-loop.ts existsSync 3
@@ -639,7 +639,6 @@ packages/stations/phases/integrate.ts readFileSync 1
 packages/stations/phases/integrate.ts unlinkSync 1
 packages/stations/phases/integrate.ts writeFileSync 2
 packages/stations/phases/merge-boundary.ts execFileSync 1
-packages/stations/phases/pm-binding.ts readFileSync 1
 packages/stations/phases/pm-decomposition-doc.ts writeFileSync 1
 packages/stations/phases/pm-prompt-context.ts existsSync 2
 packages/stations/phases/pm-prompt-context.ts readdirSync 1
@@ -653,7 +652,6 @@ packages/stations/phases/project-manager.ts existsSync 1
 packages/stations/phases/project-manager.ts readFileSync 2
 packages/stations/phases/project-manager.ts rmSync 1
 packages/stations/phases/project-manager.ts writeFileSync 1
-packages/stations/phases/reflector-binding.ts readFileSync 1
 packages/stations/phases/reflector-brain-writes.ts existsSync 2
 packages/stations/phases/reflector-brain-writes.ts readdirSync 1
 packages/stations/phases/reflector-brain-writes.ts readFileSync 2

@@ -21,6 +21,7 @@ import type { EventLogger, PhaseExecutor, ProjectGate } from '@forge/kernel';
 
 import type { ClosureResult, CycleInput, ReviewerOutcome } from './cycle-context.ts';
 import type { NodeExecContext } from './flow-node-context.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 export type PhaseWiring = {
   /** Runs one flow node. `@forge/factory`'s `createPhaseExecutor()` builds the shipped one. */
@@ -42,6 +43,12 @@ export type PhaseWiring = {
    * `on: merged` trigger whose band guard is `reflection-close`; it is a phase,
    * so it belongs to the factory and arrives here rather than by import.
    * `@forge/factory`'s `runReflector` is the shipped one.
+   *
+   * `def` (seam F4, operator item 81/ADR-039 generalisation): the `on: merged`
+   * target's own resolved agent def — `finalize-merged.ts`'s
+   * `resolveMergeAgentHandler` already loads it to read the band guard, and
+   * threads the SAME def through here rather than always running the
+   * canonical reflector.
    */
-  runReflector: (input: CycleInput, logger: EventLogger) => Promise<unknown>;
+  runReflector: (input: CycleInput, logger: EventLogger, def: AgentDefinition) => Promise<unknown>;
 };

@@ -42,9 +42,8 @@ import { guardedReadFile, guardedWriteFile } from '@forge/kernel';
 import { createHash } from 'node:crypto';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
 import { runAgent } from '@forge/agents/run-agent.ts';
-import { skillPath } from '@forge/agents/skill-path.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { FORGE_ROOT } from '@forge/agents/studio/derive.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { readWorkItemsFromDir, type WorkItem } from '@forge/flows/work-item.ts';
 import { chunkLabel, mergeChunkRecords, partitionChangedFiles, type ReviewChunk,
   splitChunkPerFile,
@@ -58,7 +57,6 @@ import {
 } from './adversarial-review-binding.ts';
 import { takeScopeSnapshot, scopeViolations } from '@forge/agents/phases/agent-scope-guard.ts';
 
-const AGENT_SLUG = 'adversarial-review';
 const BASE_REF = 'main';
 const MAX_AUTHOR_ATTEMPTS = 2;
 
@@ -177,11 +175,16 @@ function gitCapture(worktreePath: string, args: string[]): { ok: boolean; out: s
 export async function runAdversarialReview(
   input: AdversarialReviewInput,
   logger: EventLogger,
-  opts: { queryFn?: StreamQueryFn; signal?: AbortSignal; classProfiles?: ClassProfilePort } = {},
+  opts: {
+    queryFn?: StreamQueryFn;
+    signal?: AbortSignal;
+    classProfiles?: ClassProfilePort;
+    agentDef: AgentDefinition; // seam F4: the executing node's own def, no fallback
+  },
 ): Promise<AdversarialReviewResult> {
-  // The one port (operator ruling, items 81/83): the class → gate-profile
-  // table is the example's, not the platform's. Read once, here, so every
-  // profileFor() below reads the SAME bound table rather than re-resolving it.
+  const def = opts.agentDef;
+  // The one port (items 81/83): the class table is the example's. Read once, so
+  // every profileFor() below reads the SAME bound table.
   const classProfiles = requireClassProfiles(opts.classProfiles, 'adversarial-review');
   const emit = (
     message: string,
@@ -191,13 +194,13 @@ export async function runAdversarialReview(
     logger.emit({
       initiative_id: input.initiativeId,
       phase: 'orchestrator',
-      skill: AGENT_SLUG,
+      skill: def.slug,
       event_type: extra.event_type ?? 'log',
       input_refs: [],
       output_refs: [],
       ...(extra.cost_usd !== undefined ? { cost_usd: extra.cost_usd } : {}),
       message,
-      metadata: { agent_slug: AGENT_SLUG, ...metadata },
+      metadata: { agent_slug: def.slug, ...metadata },
     });
   };
 
@@ -210,7 +213,6 @@ export async function runAdversarialReview(
     return { status: 'failed', reason: 'spawn-suppressed', detail: 'spawn suppressed by harness env — no review authored (never faked)' };
   }
 
-  const def = loadAgentDefinition(skillPath(AGENT_SLUG));
   assertAdversarialReviewDeclaration(def);
 
   // Band 1 — assemble the review inputs (orchestrator-owned; full stdout).
@@ -344,7 +346,7 @@ export async function runAdversarialReview(
       }
     }
 
-    const systemPrompt = buildAdversarialReviewSystemPrompt();
+    const systemPrompt = buildAdversarialReviewSystemPrompt(def);
 
     // ── Bounded by construction: one review per WORK ITEM (bead 6.10.24) ─────
     //
@@ -471,7 +473,7 @@ export async function runAdversarialReview(
             prompt,
             systemPrompt,
             lifecycle: 'caller',
-            streamGuard: { label: AGENT_SLUG, signal: opts.signal },
+            streamGuard: { label: def.slug, signal: opts.signal },
             bindings: { initiative: { id: input.initiativeId, costBudgetUsd: input.costBudgetUsd } },
             ...(ceilingUsd !== undefined ? { kickoffCeilingUsd: ceilingUsd } : {}),
             queryFn: opts.queryFn,
