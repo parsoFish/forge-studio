@@ -48,8 +48,12 @@ export function isDryBridge(env: Record<string, string | undefined> = process.en
 
 /** The real-world reach a `refuse` route would have had. Kept as a closed
  *  union for the same reason the classification table is closed: a new kind of
- *  reach should force a decision, not be absorbed by an existing label. */
-export type DryBridgeAction = 'spawn-agent' | 'git-remote' | 'daemon' | 'network';
+ *  reach should force a decision, not be absorbed by an existing label.
+ *  `spawn-hook` (forge-6gv.8.1) is distinct from `spawn-agent`: it spawns a
+ *  real subprocess (a hook's own bash script via `runHookScriptAsync`), not
+ *  an SDK agent turn — absorbing it into `spawn-agent` would misdescribe the
+ *  409's own reach to an operator reading the refusal. */
+export type DryBridgeAction = 'spawn-agent' | 'spawn-hook' | 'git-remote' | 'daemon' | 'network';
 
 export type DryBridgeRefusalInput = {
   /** For HTTP routes the route path; for non-HTTP spawn paths a stable
