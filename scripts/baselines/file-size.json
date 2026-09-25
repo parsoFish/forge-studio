@@ -47,7 +47,7 @@
   "packages/library/tests/integration/hook-runtime.test.ts": 981,
   "packages/library/tests/integration/hook-scan.test.ts": 1330,
   "packages/library/tests/integration/skill-library.test.ts": 1965,
-  "scripts/check-raw-fs-guarded.mjs": 1450,
+  "scripts/check-raw-fs-guarded.mjs": 1346,
   "scripts/check-raw-fs-guarded.test.ts": 1032,
   "scripts/verify-cycle.mjs": 1206
 }
