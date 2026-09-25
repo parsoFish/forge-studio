@@ -200,36 +200,38 @@ describe('7.6.105 — the census reads a START time, not a first-lookup time', (
 describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HUP', () => {
   /*
    * M7-C last-flakes #2 (known-flakes.md `scripts/lanes-census.test.ts:200`,
-   * "1.5 s late spawn + 3 s waitGone timing budget under load"). Traced by
-   * instrumenting a passing run: with `LANES_CONFIRM_TIMEOUT_S`'s default of
-   * 4 s, a 1.5 s scripted delay is comfortably UNDER that bound, so the
-   * spawn is already running by the time `die_launch`'s census-BEFORE-the-
-   * kill looks — `census: 1 claude pid(s) ... before the kill` — and it is
-   * retired right there, never touching the AFTER-kill re-census loop at
-   * all. `sleep` only guarantees a MINIMUM, though: under CPU contention the
-   * shell that runs it can be scheduled arbitrarily later before its NEXT
-   * line executes, so the "1.5 s" delay can itself stretch past the 4 s
-   * confirm bound under real load — which moves the spawn from that
-   * deterministic before-kill catch into the AFTER-kill re-census loop,
-   * whose own "quiet for 1 s" early-exit (die_launch's comment above: stop
-   * after "a full second in which nothing new started") is a MUCH tighter,
-   * load-sensitive window than `LANES_RECENSUS_S`'s nominal ceiling ever
-   * suggests — proven below by staging a 6 s spawn deterministically: with
-   * `LANES_RECENSUS_S` alone widened to 12 s the census STILL reports
-   * `census: 0 claude pid(s) ... retired in total` (the quiet-exit fires
-   * long before the ceiling), so `waitGone` timing out is a SYMPTOM, not the
-   * bug — nothing ever killed the stray. Widening `LANES_CONFIRM_TIMEOUT_S`
-   * instead keeps the spawn inside the deterministic before-kill catch with
-   * real headroom, which is what actually removes the flake.
+   * "1.5 s late spawn + 3 s waitGone timing budget under load"). `sleep`
+   * only guarantees a MINIMUM: under CPU contention the shell running it can
+   * be scheduled arbitrarily later before its NEXT line executes, so a
+   * "1.5 s" scripted delay can stretch past die_launch's 4 s default confirm
+   * window under real load, moving the spawn from the deterministic
+   * BEFORE-kill census into the AFTER-kill re-census loop.
+   *
+   * FIRST ATTEMPT widened this test's own `LANES_CONFIRM_TIMEOUT_S` to keep
+   * the spawn inside the safe before-kill catch — ruled out (2026-09-26):
+   * that is exactly the "bigger number" the brief already forbids, and it
+   * papers over the REAL weakness, which was in `lanes.sh` itself: the
+   * after-kill loop used to stop on a fixed "quiet for 1 s" window (2 ticks
+   * with nothing new) — a load-sensitive GUESS about how long a late spawn
+   * line can take, unrelated to whether the launched process could still be
+   * running one. A launch that misses this window in production leaks a
+   * real, token-burning session, not just a test red.
+   *
+   * FIXED AT THE PRODUCT instead (`die_launch` in `lanes.sh`): a quiet tick
+   * only counts once `launch_pid` — the ONE process the pane's shell was
+   * directly running, captured via `/proc/<pane_pid>/task/<pane_pid>/
+   * children` before the kill — is CONFIRMED dead. Deterministic, not a
+   * guess; still bounded overall by `LANES_RECENSUS_S`, unchanged.
+   *
+   * `LANES_CONFIRM_TIMEOUT_S` stays at its production default (4 s, no
+   * override) in both tests below — the 1.5 s spawn is still caught by the
+   * deterministic before-kill census (comfortably under 4 s), and the 6 s
+   * door deliberately lands PAST it, exercising the fixed after-kill loop
+   * for real, with no host load needed to prove it.
    */
   test('a lane program that spawns its grandchild 1.5 s after the kill is still retired, and stderr says what the census saw', () => {
     const bin = laneBin('lane-late', { lateSpawnS: 1.5 });
-    // LANES_CONFIRM_TIMEOUT_S widened from the 4 s default so a 1.5 s spawn
-    // stays reliably inside the deterministic before-kill census catch (see
-    // the block comment above) even if load stretches the scripted delay;
-    // LANES_RECENSUS_S widened too, as defense-in-depth for the AFTER-kill
-    // path this test does not currently rely on.
-    const { r } = launchUnconfirmed('late', bin, { LANES_CONFIRM_TIMEOUT_S: '10', LANES_RECENSUS_S: '12' });
+    const { r } = launchUnconfirmed('late', bin);
     const self = pidFrom('lane-late.selfpid', 8000);
     const stray = pidFrom('lane-late.detachedpid', 12000);
     try {
@@ -243,24 +245,25 @@ describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HU
     }
   });
 
-  test('M7-C last-flakes #2: a spawn 6 s late is still retired when the confirm window gives it real headroom (deterministic margin proof)', () => {
-    // No host load needed: a 6 s spawn against the DEFAULT 4 s confirm
-    // window is missed every time, deterministically (proven while building
-    // this fix — LANES_RECENSUS_S alone, even widened to 12 s, does not
-    // help: the after-kill loop's "quiet for 1 s" early-exit fires long
-    // before a single late arrival at t=6s). Widening LANES_CONFIRM_TIMEOUT_S
-    // past the spawn keeps it inside the deterministic before-kill catch.
+  test('M7-C last-flakes #2: a spawn 6 s late — well past the 4 s confirm window — is still retired by the AFTER-kill census', () => {
+    // No host load needed: with LANES_CONFIRM_TIMEOUT_S at its production
+    // default, a 6 s spawn is guaranteed to land AFTER the before-kill
+    // census every run, so this exercises die_launch's launch_pid-gated
+    // after-kill loop directly, not the before-kill shortcut the test above
+    // relies on. LANES_RECENSUS_S is die_launch's own legitimate ceiling
+    // (never the thing under test), widened only far enough to outlast the
+    // deliberately late 6 s spawn.
     const bin = laneBin('lane-margin', { lateSpawnS: 6 });
-    const { r } = launchUnconfirmed('margin', bin, { LANES_CONFIRM_TIMEOUT_S: '10', LANES_RECENSUS_S: '12' });
+    const { r } = launchUnconfirmed('margin', bin, { LANES_RECENSUS_S: '8' });
     const self = pidFrom('lane-margin.selfpid', 8000);
     const stray = pidFrom('lane-margin.detachedpid', 12000);
     try {
       assert.ok(
         waitGone(stray),
-        `a spawn 6 s late is still retired once the confirm window (10 s) comfortably outlasts it (pid ${stray}); die_launch stderr:\n${r.stderr}`,
+        `a spawn 6 s late is still retired by the after-kill census once it is gated on the pane's own launch_pid rather than a fixed quiet window (pid ${stray}); die_launch stderr:\n${r.stderr}`,
       );
       assert.match(r.stderr, new RegExp(`retired pid ${stray}\\b`), 'the pid it retired is printed');
-      assert.match(r.stderr, /census: 1 claude pid\(s\) .* before the kill/, 'caught by the deterministic before-kill census, never the load-sensitive after-kill loop');
+      assert.match(r.stderr, /census: 0 claude pid\(s\) .* before the kill/, 'the spawn is NOT yet running at the before-kill census — this exercises the after-kill loop, not the deterministic before-kill shortcut');
     } finally {
       spawnSync('kill', ['-KILL', String(self)]);
     }
@@ -281,9 +284,9 @@ describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HU
     const stray = pidFrom('lane-late2.detachedpid', 12000);
     try {
       assert.match(r.stderr, /LANES_RECENSUS_S='soon' is not a whole number of seconds — using 5/, r.stderr);
-      // waitGone's own generous default, not a tight override (M7-C last-flakes
-      // #2) — LANES_RECENSUS_S stays malformed here on purpose (that IS this
-      // test), so the verification window is the only knob left to widen.
+      // LANES_RECENSUS_S stays malformed here on purpose (that IS this test);
+      // die_launch's launch_pid gate still applies on top of the defaulted
+      // 5 s ceiling, so waitGone's own generous default is correct as-is.
       assert.ok(waitGone(stray), `the re-census still ran (pid ${stray}):\n${r.stderr}`);
     } finally {
       spawnSync('kill', ['-KILL', String(self)]);
