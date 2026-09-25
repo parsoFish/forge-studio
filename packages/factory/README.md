@@ -7,9 +7,10 @@ package except two named seams, and **deleting the directory leaves
 `forge studio` bootable** — that property is the package's reason to exist, and
 `scripts/factory-deletable.mjs` proves it by execution on every CI run.
 
-Rank 6 in the allow-graph. It may import `contracts`, `kernel`, `library`,
-`knowledge`, `projects`, `sessions`, `agents` and `flows`. **Nothing may import
-it** but the two seams below.
+Rank 7 in the allow-graph (one above `stations` — F3, operator ruling, items
+81/83). It may import `contracts`, `kernel`, `library`, `knowledge`, `projects`,
+`sessions`, `agents`, `flows` and `stations`. **Nothing may import it** but the
+two seams below.
 
 ## The door is `export {}`, on purpose
 
@@ -21,26 +22,33 @@ package really has is the set of specifiers those two seams import**, and
 `contract.test.ts` measures it from the seam files rather than from a list, so
 this table cannot drift from what the product actually reaches for.
 
-### Reached by `apps/forge/factory-wiring.ts` — the BRIDGE seam (8)
+### Reached by `apps/forge/factory-wiring.ts` — the BRIDGE seam (1)
 
 | specifier | what the bridge resolves it for |
 |---|---|
-| `@forge/factory/phases/executor-table.ts` | the phase executors the flow runner walks |
-| `@forge/factory/phases/executor-deps.ts` | the injectable dep set those executors take |
-| `@forge/factory/phases/reflector.ts` | the reflector phase |
-| `@forge/factory/phases/adversarial-review.ts` | the one read-only review agent |
-| `@forge/factory/phases/release-finalize.ts` | the release-finalize phase |
 | `@forge/factory/class-profiles.ts` | the `class → gate-profile` table |
-| `@forge/factory/reflect-reconcile.ts` | reconciling operator feedback into the reflection |
-| `@forge/factory/reflector-rerun.ts` | re-running the reflector from the UI |
 
-### Reached by `apps/forge/factory-cli-wiring.ts` — the CLI seam (3)
+**F3 (operator ruling, items 81/83): the executor, every band, and the demo
+model moved to `@forge/stations`.** The bridge seam's other seven specifiers —
+the phase executors, the reflector, the review agent, release-finalize,
+feedback reconciliation and the reflector re-run — are `@forge/stations`
+imports now, not `@forge/factory` ones, so this table (which the contract test
+measures from the FACTORY-prefixed specifiers a seam actually imports) shrank
+to the one thing still the example's: the class table. `apps/forge` imports
+`@forge/stations` for the rest **statically** — it is not part of the example
+and is never absent, so there is nothing there for the seam's "no example
+installed" degrade path to guard.
+
+### Reached by `apps/forge/factory-cli-wiring.ts` — the CLI seam (1)
 
 | specifier | what the CLI verb resolves it for |
 |---|---|
 | `@forge/factory/demo.ts` | `forge demo capture` |
-| `@forge/factory/demo-model.ts` | the demo model the capture renders |
-| `@forge/factory/gates/docs-gate.ts` | `forge gate docs`, and the `docs` class's merge-boundary verb |
+
+**Same move.** The demo model and `docs-gate.ts` are `@forge/stations`
+specifiers now (`@forge/stations/demo-model.ts`, `@forge/stations/gates/docs-gate.ts`);
+`demo.ts` — the capture verb itself — is the one piece of the CLI seam that
+stayed the example's.
 
 **Why two seams and not one.** ADR 048 clause 2 says a fixed, enumerated set,
 currently two, checked by name. Folding the CLI's verbs into the bridge seam was
