@@ -14,6 +14,12 @@
  * Keeping them together makes that property visible: if a test in THIS file goes
  * red under load, the first question is whether its subject survived long enough to
  * be measured. No test in the other file can fail that way.
+ *
+ * `pricedGraceMs: 50` on every `reapAgentRuns` call below — findings row 62.
+ * These real spawns never write an `events.jsonl`, so left at the real 30 s
+ * default every one of them would sit out the whole window with a REAL
+ * `sleep`, since none injects one: four tests at ~30 s apiece is minutes added
+ * to this file alone for a wait none of them is testing.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -165,7 +171,7 @@ test('POSITIVE CONTROL: a re-parenting GRANDCHILD is dead after the reap — the
   // assertions and lowered only by reaching the end of them.
   keepArtifacts = true;
 
-  const report = await reapAgentRuns(collectAgentRuns(root, 0), { ownRoot: root, graceMs: 3000, pollMs: 25 });
+  const report = await reapAgentRuns(collectAgentRuns(root, 0), { ownRoot: root, graceMs: 3000, pollMs: 25, pricedGraceMs: 50 });
 
   await new Promise((r) => setTimeout(r, 150));
   let alive = true;
@@ -247,7 +253,7 @@ test('NEGATIVE CONTROL: a foreign process with the SAME NAME as a dispatched age
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'turn.pid'), String(ours.pid));
 
-  const report = await reapAgentRuns(collectAgentRuns(root, 0), { ownRoot: root, graceMs: 2000, pollMs: 25 });
+  const report = await reapAgentRuns(collectAgentRuns(root, 0), { ownRoot: root, graceMs: 2000, pollMs: 25, pricedGraceMs: 50 });
 
   await new Promise((r) => setTimeout(r, 150));
   let foreignAlive = true;
@@ -316,7 +322,7 @@ test('POSITIVE CONTROL: a grandchild that left the group via setsid is reaped by
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'turn.pid'), String(turn.pid));
 
-  const report = await reapAgentRuns(collectAgentRuns(root, 0), { ownRoot: root, graceMs: 3000, pollMs: 25 });
+  const report = await reapAgentRuns(collectAgentRuns(root, 0), { ownRoot: root, graceMs: 3000, pollMs: 25, pricedGraceMs: 50 });
 
   const entry = report.reaped.find((r) => r.pid === grandchild);
   assert.ok(entry, `the grandchild must be reaped: ${JSON.stringify(report)}`);
@@ -393,7 +399,7 @@ test('the reaper\'s OWN group signal is a reap: a member it killed is REAPED, ne
     process.kill(pid, sig);
     if (pid < 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, pauseAfterGroupSignalMs);
   };
-  const report = await reapAgentRuns(collectAgentRuns(root, 0), { ownRoot: root, graceMs: 3000, pollMs: 25, kill });
+  const report = await reapAgentRuns(collectAgentRuns(root, 0), { ownRoot: root, graceMs: 3000, pollMs: 25, pricedGraceMs: 50, kill });
 
   let alive = true;
   try {

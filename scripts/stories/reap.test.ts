@@ -225,7 +225,11 @@ test('POSITIVE CONTROL: a planted long-lived child registered as a dispatched ag
   assert.equal(runs.length, 1, 'the planted child must be collected from its turn.pid');
   assert.equal(runs[0].pid, child.pid);
 
-  const report = await reapAgentRuns(runs, { ownRoot: root, graceMs: 3000, pollMs: 25 });
+  // `pricedGraceMs` bounded small: this test is about the KILL, not about
+  // findings row 62's priced-event wait, and the planted child never writes
+  // an `events.jsonl` at all — left at its real 30 s default this single test
+  // would cost real wall-clock time waiting out a window it can never satisfy.
+  const report = await reapAgentRuns(runs, { ownRoot: root, graceMs: 3000, pollMs: 25, pricedGraceMs: 50 });
   assert.equal(report.skipped.length, 0, `nothing should have been skipped: ${JSON.stringify(report.skipped)}`);
   assert.equal(report.reaped.length, 1);
 
@@ -582,6 +586,10 @@ test('the grace period is ONE window for the whole teardown, not one per dispatc
       procTable: () => new Map(),
       kill: () => {},
       isAlive: () => true, // never dies, so the full window is spent
+      // Already priced: this test is about the SIGTERM/SIGKILL grace window
+      // (step 5), not findings row 62's priced-event wait (which runs BEFORE
+      // it, per root, and would otherwise add its own sleeps here).
+      readEvents: () => [{ cost_usd: 1 }],
       graceMs: 40,
       pollMs: 10,
       sleep: async () => {

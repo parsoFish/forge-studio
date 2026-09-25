@@ -121,11 +121,66 @@ import { join } from 'node:path';
 import { readProcCwd } from './bridge.mjs';
 import { processesCarryingMarker, readRunMarkers, tokenBelongsToRunDir } from '@forge/agents';
 import { CANCELLED_PHASE } from '@forge/sessions';
+import { readRunEvents } from './run-observe.mjs';
 
 /** How long a dispatched agent gets to exit on SIGTERM before SIGKILL. */
 const DEFAULT_GRACE_MS = 5_000;
 /** How often its liveness is re-read during that grace period. */
 const DEFAULT_POLL_MS = 100;
+
+/**
+ * M7 findings row 62 (ledger rulings 1136, 1156) — the bounded window a
+ * dispatched agent THIS RUN RECORDED gets to write its first priced event
+ * before the teardown below signals it. Measured shape: an onboarding turn
+ * ran ~2.3 s and the run's own SIGTERM (`exited with code 143`) landed before
+ * any priced event reached its log, so spend read UNMEASURED by construction
+ * — not because nothing was spent, but because nothing was given the chance
+ * to say so. NAMED and bounded at 30 s: a longer wait would make every
+ * teardown of a healthy, already-priced run pay a real delay for a case that
+ * (the fast path below) never triggers it.
+ */
+export const FIRST_PRICED_EVENT_GRACE_MS = 30_000;
+
+/** Has ANY row in this dispatch's own event log been priced? Same reading
+ *  `summariseRunSpend` (`spend.mjs`) uses — a genuine, non-negative number. */
+function hasPricedEvent(rows) {
+  return (rows ?? []).some((r) => typeof r?.cost_usd === 'number' && Number.isFinite(r.cost_usd) && r.cost_usd >= 0);
+}
+
+/**
+ * Give one dispatched run a bounded chance to price itself before it is
+ * signalled — findings row 62.
+ *
+ * THE FAST PATH IS THE WHOLE POINT: a dir that already carries a priced event
+ * resolves with `waitedMs: 0` and never calls `sleep` at all, so a healthy
+ * run's teardown pays nothing for this. A dispatch that prices itself MID-POLL
+ * ends the wait the moment it is seen, never sitting out the rest of the bound.
+ *
+ * A process that exits ON ITS OWN before pricing ends the wait EARLY rather
+ * than spinning out the whole window on a pid that is already gone — one more
+ * read (it may have flushed its log on exit) and then the verdict, at
+ * whatever elapsed time the exit was observed.
+ *
+ * @param {{pid: number, dir: string, isAlive: (pid: number) => boolean, readEvents?: (dir: string) => object[], graceMs?: number, pollMs?: number, sleep?: (ms: number) => Promise<void>}} args
+ * @returns {Promise<{priced: boolean, waitedMs: number}>}
+ */
+export async function waitForFirstPricedEvent({
+  pid, dir, isAlive, readEvents: readEventsIn = readRunEvents,
+  graceMs = FIRST_PRICED_EVENT_GRACE_MS, pollMs = DEFAULT_POLL_MS, sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
+}) {
+  if (hasPricedEvent(readEventsIn(dir))) return { priced: true, waitedMs: 0 };
+  const steps = Math.max(1, Math.ceil(graceMs / pollMs));
+  for (let i = 0; i < steps; i += 1) {
+    if (!isAlive(pid)) {
+      // Gone on its own between polls — one last read, since a process can
+      // flush its event log in the same instant it exits.
+      return { priced: hasPricedEvent(readEventsIn(dir)), waitedMs: i * pollMs };
+    }
+    await sleep(pollMs);
+    if (hasPricedEvent(readEventsIn(dir))) return { priced: true, waitedMs: (i + 1) * pollMs };
+  }
+  return { priced: false, waitedMs: graceMs };
+}
 
 /** Real-filesystem default for {@link collectAgentRuns}. */
 function listSessionDirs(logsDir) {
@@ -504,6 +559,25 @@ export async function reapAgentRuns(runs, opts = {}) {
     }
   }
 
+  // Findings row 62 (ledger rulings 1136, 1156) — BEFORE ANY SIGNAL, give every
+  // still-running RECORDED ROOT a bounded chance to write its first priced
+  // event. Only the roots: a descendant or a group member carries no event log
+  // of its own, so there is nothing on it to wait for. Run in PARALLEL — N
+  // dispatched runs pay the bound ONCE each, concurrently, not N times summed
+  // — and a pid already gone (`!isAlive`) is skipped outright: it cannot be
+  // protected from a signal it will never receive.
+  const pricedGraceMs = opts.pricedGraceMs ?? FIRST_PRICED_EVENT_GRACE_MS;
+  const readEventsForPricing = opts.readEvents ?? readRunEvents;
+  const pricedWaits = new Map();
+  await Promise.all(
+    rootOrder.filter((pid) => isAlive(pid)).map(async (pid) => {
+      pricedWaits.set(pid, await waitForFirstPricedEvent({
+        pid, dir: claimed.get(pid)?.dir, isAlive, readEvents: readEventsForPricing,
+        graceMs: pricedGraceMs, pollMs, sleep,
+      }));
+    }),
+  );
+
   // (4) the group first — it is the half that reaches a member re-parented out
   //     of our ancestry — then leaves, then the recorded roots. A group signal
   //     that FAILS is recorded against its leader: it is the only signal that
@@ -563,7 +637,15 @@ export async function reapAgentRuns(runs, opts = {}) {
       skipped.push({ pid: target, dir, reason: `pid ${target}: ${failure}` });
       continue;
     }
-    reaped.push({ pid: target, dir, signal: killed.has(target) ? 'SIGKILL' : 'SIGTERM', via });
+    // Findings row 62 — carried ONLY when the priced wait actually ran (a
+    // root, still alive at the time) AND found nothing: `pricedWaits` holds no
+    // entry for a descendant, a group member, or a root that was already gone,
+    // and this must not read as "terminated before pricing" for any of them.
+    const priced = pricedWaits.get(target);
+    reaped.push({
+      pid: target, dir, signal: killed.has(target) ? 'SIGKILL' : 'SIGTERM', via,
+      ...(priced !== undefined && priced.priced === false ? { terminatedBeforeFirstPricedEvent: priced.waitedMs } : {}),
+    });
   }
 
   return { reaped, skipped };

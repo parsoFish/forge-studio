@@ -123,22 +123,32 @@ test('reapAgentRuns waits for a priced event before SIGTERM, and records the out
   assert.ok(reaped.terminatedBeforeFirstPricedEvent > 0);
 });
 
-test('reapAgentRuns does NOT wait when the dispatch already priced itself before teardown', async () => {
-  let sleptAtAll = false;
+test('reapAgentRuns never waits on a pid that is already gone — nothing left to protect from a signal', async () => {
+  // `isAlive` false throughout: `rootOrder.filter(isAlive)` admits nothing to
+  // the priced wait. `pricedGraceMs: 5000` at `pollMs: 10` would need up to
+  // 500 `sleep` calls if the priced wait ran at all — the pre-existing
+  // SIGTERM/SIGKILL grace loop (step 5) still makes its OWN one or two calls
+  // regardless of this feature (it takes `alive = order.slice()` as its
+  // starting point before ever consulting `isAlive`), so the assertion is a
+  // bound, not zero.
+  let sleeps = 0;
   const report = await reapAgentRuns([{ dir: '/r/_logs/_agent-a', pid: 7 }], {
     ownRoot: ROOT,
     cwdOf: () => ROOT,
     procTable: () => new Map(),
-    isAlive: () => false, // already exited, priced, on disk
-    kill: () => { throw new Error('ESRCH'); },
+    isAlive: () => false,
+    kill: () => {},
     readEvents: () => [{ cost_usd: 0.30 }],
     pricedGraceMs: 5000,
     graceMs: 20,
     pollMs: 10,
-    sleep: async () => { sleptAtAll = true; },
+    sleep: async () => { sleeps += 1; },
   });
-  const reaped = report.reaped.find((r) => r.pid === 7);
-  assert.ok(reaped);
-  assert.equal(reaped.terminatedBeforeFirstPricedEvent, undefined, 'a priced turn must not carry the early-termination marker');
-  assert.equal(sleptAtAll, false, 'an already-dead, already-priced pid needs no wait at all');
+  assert.ok(sleeps <= 2, `the priced wait must not have run at all (500 possible sleeps at this bound): got ${sleeps}`);
+  const all = [...report.reaped, ...report.skipped];
+  assert.ok(all.some((e) => e.pid === 7), `pid 7 must appear somewhere in the report: ${JSON.stringify(report)}`);
+  assert.ok(
+    all.every((e) => e.terminatedBeforeFirstPricedEvent === undefined),
+    'a pid never protected by the wait must never carry its marker',
+  );
 });
