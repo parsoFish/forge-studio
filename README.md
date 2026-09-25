@@ -100,7 +100,7 @@ Every path belongs to one of **three scopes** — framework (1), cycles/agents/f
 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | — | Narrative architecture |
 | [`PRINCIPLES.md`](./PRINCIPLES.md) | — | The five principles that gate every decision |
 | [`docs/`](./docs/) | — | Docs — [repo map](./docs/explanation/architecture.md), ADRs, phase docs, guides |
-| [`packages/`](./packages/) | 1 | The ranked packages — `contracts ← kernel ← {library, knowledge, projects} ← agents ← sessions ← flows ← factory` |
+| [`packages/`](./packages/) | 1 | The ranked packages — `contracts ← kernel ← {library, knowledge, projects} ← agents ← sessions ← flows ← stations ← factory` |
 | [`apps/forge/`](./apps/forge/) | 1 | The assembly — `forge` CLI entry, the UI bridge and its routes, assembly-side bindings |
 | [`apps/studio/`](./apps/studio/) | 1 | Forge Studio — the Next.js operator UI (launched by `forge studio`) |
 | [`orchestrator/`](./orchestrator/) | 1 | Legacy residue still being quarried (`phases/`, `studio/validate.ts`, fixtures) |
