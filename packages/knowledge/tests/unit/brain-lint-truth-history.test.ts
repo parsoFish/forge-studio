@@ -30,8 +30,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
+import { rmSync } from 'node:fs';
 
 import { themeTruth, brainTruthRates, checkThemeTruth } from '../../brain-lint-checks-truth.ts';
+import { runBrainLint } from '../../brain-lint.ts';
 
 import { buildBrainFixture, cleanup } from './test-fixtures/brain-lint.ts';
 import {
@@ -164,6 +166,38 @@ test('themeTruth: an evidence: ref carrying git pathspec magic (`src/*.ts`) is j
       t.missing,
       [],
       `a literal "src/*.ts" must never read as "once tracked" via pathspec magic, got ${JSON.stringify(t.missing)}`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
+// ---------- D14 security review: the truth-row memo must not outlive one lint pass ----------
+
+test('runBrainLint: a SECOND full-scope pass in the same process must not serve the FIRST pass\'s cached truth rows — the bridge calls runBrainLintFullFresh repeatedly over one long-lived process', () => {
+  const root = buildBrainFixture({ themes: [] });
+  try {
+    writeTruthTheme(root, 'proj-cache', 'cache-theme', { evidence: ['src/a.ts'] });
+    const checkoutRoot = gitCheckout(root, 'proj-cache', { 'src/a.ts': 'package a\n' });
+
+    runBrainLint({ cwd: root, scope: 'full' });
+    const before = brainTruthRates(root).find((r) => r.project === 'proj-cache');
+    assert.ok(before, `expected a row for proj-cache on the first pass`);
+    assert.equal(before!.stale, 0, `src/a.ts is present on the first pass -> stale 0, got ${JSON.stringify(before)}`);
+
+    // Deleted from the WORKING TREE only (still in git history) — the same
+    // "once tracked, now gone" shape as the other tests here, but observed by
+    // a SECOND runBrainLint pass in this SAME process (never a fresh process,
+    // matching runBrainLintFullFresh's real call pattern).
+    rmSync(join(checkoutRoot, 'src/a.ts'));
+
+    runBrainLint({ cwd: root, scope: 'full' });
+    const after = brainTruthRates(root).find((r) => r.project === 'proj-cache');
+    assert.ok(after, `expected a row for proj-cache on the second pass`);
+    assert.equal(
+      after!.stale,
+      1,
+      `src/a.ts was deleted after the first pass — a second runBrainLint pass in the SAME process must see it as stale, never serve the first pass's memo, got ${JSON.stringify(after)}`,
     );
   } finally {
     cleanup(root);
