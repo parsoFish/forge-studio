@@ -2,7 +2,7 @@
  * packages/flows/run-list-cache.ts — ADR-044 P1: a keyed memo of the single run
  * derivation (docs/decisions/044-read-path-memoization.md).
  *
- * `orchestrator/run-model.ts::listRuns` walks every `_queue/<state>/*.md`
+ * `packages/flows/run-model.ts::listRuns` walks every `_queue/<state>/*.md`
  * manifest and re-derives its full `Run` (phase statuses/meta/work items/
  * artifacts/cost) from `_logs/<cycleId>/events.jsonl` on EVERY call — cheap
  * at seed scale, but `_queue/done/` grows without bound and a terminal run's
@@ -71,9 +71,9 @@ import type { Run } from './run-model.ts';
 // Queue-state enumeration
 // ---------------------------------------------------------------------------
 
-// Mirrors orchestrator/run-model.ts::listRuns's own hardcoded state list
+// Mirrors packages/flows/run-model.ts::listRuns's own hardcoded state list
 // (that function duplicates it too, rather than deriving from
-// orchestrator/queue.ts — there is no exported "all states" constant there).
+// packages/flows/queue.ts — there is no exported "all states" constant there).
 // ADR-042/044 forbid adding a new orchestrator export for this pass, so this
 // list is kept in sync by hand with listRuns's identical literal.
 const QUEUE_STATES: readonly QueueState[] = [
@@ -193,7 +193,7 @@ function statOrAbsentOrError(path: string): { fp: StatFingerprint | null; error:
   }
 }
 
-/** Mirrors orchestrator/run-model.ts's private findNewestCycleId exactly
+/** Mirrors packages/flows/run-model.ts's private findNewestCycleId exactly
  *  (not exported; ADR-042/044 forbid a new orchestrator export for this one
  *  call site) — needed to resolve the SAME events.jsonl path aggregateRun
  *  will read internally, for legacy manifests that carry no cycle_id. */
@@ -279,7 +279,7 @@ function deriveFresh(args: {
     });
   } catch {
     // Same degraded-Run constructor listRuns's own per-file catch calls
-    // (orchestrator/run-model.ts::makeDegradedRun, exported per ADR-042) —
+    // (packages/flows/run-model.ts::makeDegradedRun, exported per ADR-042) —
     // a corrupt or unreadable manifest yields the IDENTICAL degraded shape
     // instead of a hand-duplicated twin that can drift from it.
     const initiativeId = basename(manifestPath).replace(/\.md$/, '');
@@ -329,7 +329,7 @@ function deriveOneRun(args: {
 // ---------------------------------------------------------------------------
 
 /**
- * Same return contract as `orchestrator/run-model.ts::listRuns` — a
+ * Same return contract as `packages/flows/run-model.ts::listRuns` — a
  * byte-identical drop-in. Walks every `_queue/<state>/*.md` manifest exactly
  * like `listRuns`, but resolves each `Run` through the per-manifest memo
  * above instead of always calling the full derivation.

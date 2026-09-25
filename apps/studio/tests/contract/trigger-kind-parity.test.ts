@@ -1,27 +1,27 @@
 /**
  * Acceptance test for item forge-zyc pin 1 — trigger-kind mirror parity.
  *
- * SSOT: orchestrator/flow-trigger.ts:52-67's `TRIGGER_KINDS` registry
+ * SSOT: packages/flows/flow-trigger.ts:52-67's `TRIGGER_KINDS` registry
  * (rows-as-data). `SHIPPED_TRIGGER_KIND_IDS` (:65-67) is the filtered
  * `status: 'shipped'` subset — 7 ids today: flow-complete, agent-complete,
  * merged, pr-merged, issue-raised, cron, webhook (manual/feed stay
  * `status: 'reserved'`, correctly excluded).
  *
- * Drifted mirror: forge-ui/lib/studio-client.ts:245's hand-kept
+ * Drifted mirror: apps/studio/lib/studio-client.ts:245's hand-kept
  * `SHIPPED_TRIGGER_KINDS` constant. Its own doc comment (:236-244) says
  * "keep it in lockstep with the registry when a new kind ships (or one is
  * retired)" — it wasn't: agent-complete (R2-08-F2), pr-merged and
  * issue-raised (R2-08-F3) all shipped server-side but were never added here.
  *
- * Mechanism: follows forge-ui/lib/flow-artifact-catalog.test.ts's AT-52
+ * Mechanism: follows apps/studio/tests/contract/flow-artifact-catalog.test.ts's AT-52
  * precedent — read the REAL production source rather than a hand-copied
  * fixture, so this test stays true as the registry changes rather than
  * needing a manual update every time a kind ships/retires. AT-52 walks an
  * on-disk directory (its SSOT is a directory listing); here the real SSOT is
  * a TS module export, so this file imports it directly rather than parsing
  * text — confirmed under this repo's forge-ui vitest runner
- * (`environment: 'node'`, see forge-ui/vitest.config.ts) importing
- * `orchestrator/flow-trigger.ts`'s explicit-`.ts`-extension export resolves
+ * (`environment: 'node'`, see apps/studio/vitest.config.ts) importing
+ * `packages/flows/flow-trigger.ts`'s explicit-`.ts`-extension export resolves
  * with zero extra config and is inert at module-load time (its own import of
  * `stageFlowRunRequest` from `./flow-run-requests.ts` does no
  * filesystem/env work until a function is actually CALLED — this file never

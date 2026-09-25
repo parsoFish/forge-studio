@@ -381,7 +381,7 @@ test('drain: no worktree → no-worktree, skipped', async () => {
 
 // ---------------------------------------------------------------------------
 // SEC-02 round 4 — a near-exact mirror of round 3
-// (`orchestrator/finalize-merged.test.ts`), this module's own docstring calls
+// (`packages/flows/tests/regression/finalize-merged.test.ts`), this module's own docstring calls
 // it "a sibling of `finalize-merged`". Worse than round 3: this sweep
 // RE-ENTERS A WHOLE CYCLE (`runCycle({resumeFrom:'develop'})` — dev-loop, PM,
 // demo, adversarial-review) against the manifest-supplied `worktreePath` /
@@ -498,7 +498,7 @@ test('(RED) [SEC-02 round 4] traversing cycle_id: no file or directory may be cr
   const cycleId = `../../${uniqueSuffix}`;
   const logsRoot = join(root, '_logs');
   // The SAME construction the vulnerable sink uses (`resolve(logsRoot,
-  // cycleId)` inside createLogger, `orchestrator/logging.ts:124`) — used only
+  // cycleId)` inside createLogger, `packages/kernel/logging.ts:124`) — used only
   // to compute WHERE the escape artifact would land if the write succeeds.
   const escapeTarget = resolve(logsRoot, cycleId);
   assert.ok(!escapeTarget.startsWith(root), 'sanity: the escape target must be genuinely outside forgeRoot');

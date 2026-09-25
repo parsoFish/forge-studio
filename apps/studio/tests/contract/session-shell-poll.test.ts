@@ -15,7 +15,7 @@
  * full `sessionShellState`/`deriveSessionShellViewState` acceptance suite
  * this one deliberately does not duplicate.
  *
- * RUN: npx vitest run --root apps/studio tests/contract/session-shell-poll.test.ts
+ * RUN: npx vitest run --root apps/studio apps/studio/tests/contract/session-shell-poll.test.ts
  */
 import { test, expect } from 'vitest';
 import {

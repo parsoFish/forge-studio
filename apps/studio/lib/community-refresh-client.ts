@@ -18,7 +18,7 @@ import type { DiscoveredRow, HubOutcomeRow } from './community-types.ts';
 // W8-B5b — POST /api/studio/community/refresh, the DETERMINISTIC (LLM-free)
 // refresh. Types below mirror packages/library/community-refresh-run.ts's
 // `CommunityRefreshRunResult`/`CommunityRefreshCounts` and
-// orchestrator/studio/community-refresh-api.ts's `CommunityRefreshOutcome`/
+// packages/library/studio/community-refresh-api.ts's `CommunityRefreshOutcome`/
 // `CommunityRefreshFailure`/`CommunityRefreshErrorKind` — mirrored LOCALLY
 // (never imported from cli/orchestrator, same as every other type in this
 // file) so forge-ui keeps no build-time edge into those packages.

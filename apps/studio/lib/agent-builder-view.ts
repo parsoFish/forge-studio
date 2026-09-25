@@ -20,7 +20,7 @@ import { MATERIAL_KINDS } from './studio-client';
  * canonical order — never click order — so the YAML preview and the saved
  * file are stable regardless of which toggle the operator clicked first.
  *
- * Fail-closed (mirrors orchestrator/studio/materials.ts's gate): a `kind`
+ * Fail-closed (mirrors packages/agents/studio/materials.ts's gate): a `kind`
  * outside the closed vocabulary is a no-op, never an append — there is no
  * "unknown kind ⇒ append anyway" arm.
  */

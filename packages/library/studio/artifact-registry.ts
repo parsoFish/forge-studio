@@ -6,7 +6,7 @@
  * MOVED VERBATIM — `loadArtifactTemplate` / `listArtifactTemplates` /
  * `loadDemoElement` / `listDemoElements` / `loadInstructionSeed` /
  * `listInstructionSeeds` (registry.ts:593-717 on the pre-carve head).
- * `studio/template-library.ts` used to import the first two of these FROM
+ * `packages/library/studio/template-library.ts` used to import the first two of these FROM
  * `registry.ts` (an orchestrator→package back-edge); this move closes it —
  * both modules now sit in the same package.
  */

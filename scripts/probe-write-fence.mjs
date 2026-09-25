@@ -5,7 +5,7 @@
  *
  * Spends real tokens (one short haiku turn), so it is NOT part of `npm test`
  * — the T2 runs it once per fence change and records the output in the PR.
- * The unit contract lives in orchestrator/interactive-session-fence-mode.test.ts.
+ * The unit contract lives in packages/sessions/tests/unit/interactive-session-fence-mode.test.ts.
  *
  * What it does: builds a throwaway session dir with a `staging/` write root,
  * runs a REAL `runAgentTurn` through the pinned SDK with

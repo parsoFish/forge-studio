@@ -9,9 +9,9 @@
  * `merged` (R4-11-F1) is a transient pass-through, NOT a parking state: a
  * confirmed PR merge lands an initiative in `merged/`, then the existing
  * finalize→reflector chain transits it to `done/` in the SAME sweep (see
- * `orchestrator/finalize-merged.ts`). It is never left sitting in `merged/`
+ * `packages/flows/finalize-merged.ts`). It is never left sitting in `merged/`
  * across ticks. NOTE: the string `'merged'` is also an unrelated
- * `CycleOutcome`/`CycleResult.status` *value* (`orchestrator/cycle-context.ts`)
+ * `CycleOutcome`/`CycleResult.status` *value* (`packages/flows/cycle-context.ts`)
  * — that's an event outcome, not this queue directory. Don't conflate them.
  *
  * Atomicity: `rename` on a single filesystem is atomic. That is the entire
@@ -149,7 +149,7 @@ export function moveTo(
 /**
  * Promote a manifest already sitting in `_queue/merged/` on to `_queue/done/`.
  * R4-11-F1: `merged` is a transient pass-through, never a parking state —
- * `orchestrator/phases/closure.ts` (the single terminal-move authority) is the
+ * `packages/flows/phases/closure.ts` (the single terminal-move authority) is the
  * only caller, invoked in the SAME sweep as the `→merged` move (right after
  * firing reflection, success or lost). Distinct from `moveTo` (which always
  * sources from `in-flight/` and clears a heartbeat) because this move sources

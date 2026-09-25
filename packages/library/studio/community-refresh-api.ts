@@ -4,7 +4,7 @@
  *
  * WHAT IT REPLACES, AND WHAT IT INHERITS. The `community-refresh` OOTB agent
  * fetched upstream facts by reasoning and staged a draft; `commitRegistryDraft`
- * (orchestrator/interactive-finalizers.ts) then refused to commit any row whose
+ * (packages/sessions/interactive-finalizers.ts) then refused to commit any row whose
  * staged `evidence.json` did not say `verified`. That refusal is the part worth
  * keeping, and this module inherits it in a stronger, deterministic form:
  *
@@ -23,7 +23,7 @@
  *
  * THE CREDENTIAL. `process.env.GH_TOKEN`, read by the ORCHESTRATOR PROCESS,
  * never by a spawned agent. It is deliberately absent from
- * `AGENT_ENV_ALLOWLIST` (orchestrator/spawn-env.ts) — putting it there would
+ * `AGENT_ENV_ALLOWLIST` (packages/kernel/spawn-env.ts) — putting it there would
  * hand the operator's PAT to every SDK-spawned agent child, which is the exact
  * leak class that allowlist exists to close. This module takes the token as a
  * PARAMETER so the seam stays explicit and testable; the token value is never

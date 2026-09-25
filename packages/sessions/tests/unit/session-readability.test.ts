@@ -22,7 +22,7 @@
  *     first metadata.project string verbatim, unrejected; validating it
  *     against the ".kb-"/".community-registry" carve-out rules is
  *     `resolveReadableSession`'s job, covered in
- *     packages/sessions/session-readability-resolve.test.ts, not this pure function's)
+ *     packages/sessions/tests/unit/session-readability-resolve.test.ts, not this pure function's)
  *   - `resolveLegacySession({ logsRoot, kind, sessionId })` — the guarded
  *     read of `<logsRoot>/_<kind>-<sessionId>/events.jsonl`, returning
  *     `{ok:true, logDir, phase, projectFromLog}` or `{ok:false}`. ALL of this
@@ -32,7 +32,7 @@
  *
  * The higher-level composition (`resolveReadableSession` / `sessionIsReadable`,
  * which live on packages/sessions/bridge-studio-sessions.ts per the same course-correction)
- * is covered separately in packages/sessions/session-readability-resolve.test.ts.
+ * is covered separately in packages/sessions/tests/unit/session-readability-resolve.test.ts.
  *
  * Containment tests plant a SECRET MARKER outside the guarded root and assert
  * on the ARTIFACT (the marker never appears anywhere in the returned value,

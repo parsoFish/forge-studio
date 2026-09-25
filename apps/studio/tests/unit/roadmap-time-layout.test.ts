@@ -1,6 +1,6 @@
 /**
  * W6-RV-2 — pure-function tests for the B-prime completion-time canvas
- * layout (forge-ui/lib/roadmap-time-layout.ts). Covers day bucketing,
+ * layout (apps/studio/lib/roadmap-time-layout.ts). Covers day bucketing,
  * column-major wrap (≤6 rows, including the real betterado degenerate
  * shapes cited in the mock (docs/reference/studio-copy.md): a 19-merge day and an 11-item
  * no-dep-root band), capped-proportional gap compression, and

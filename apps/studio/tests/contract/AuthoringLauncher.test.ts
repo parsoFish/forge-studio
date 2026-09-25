@@ -3,7 +3,7 @@
  * — the entry point into the creation-agent authoring session, rendered from
  * `/skills/new` and `/hooks/new`).
  *
- * Mirrors `forge-ui/lib/run-panel-render.test.ts`'s own pattern: renders the
+ * Mirrors `apps/studio/tests/integration/run-panel-render.test.ts`'s own pattern: renders the
  * REAL component via `react-dom/server`'s `renderToStaticMarkup` and asserts
  * on the resulting markup string — no jsdom, no `@testing-library/react`
  * (neither is installed). `useState`/click-handler interaction does not run

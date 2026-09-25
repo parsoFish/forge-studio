@@ -1,10 +1,10 @@
 /**
- * Acceptance tests for orchestrator/studio/hook-scan.ts (R3-03-F2) — DOES NOT
+ * Acceptance tests for packages/library/studio/hook-scan.ts (R3-03-F2) — DOES NOT
  * EXIST YET. This file is RED at branch base:
  * `Cannot find module './hook-scan.ts'` on import. Do not stub the module
  * into existence; red is the deliverable of this round.
  *
- * Contract this file pins (docs/roadmaps/R3-library-componentry.md
+ * Contract this file pins (docs/roadmaps/archive/R3-library-componentry.md
  * §R3-03-F2, D4 in the T3 task brief):
  *
  *   Every hook entering the library passes a STATIC security scan before it

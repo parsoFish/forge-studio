@@ -8,7 +8,7 @@
  * assumes a parsed, already-trustworthy `HookLibraryEntry`/`HookDetail` and
  * never re-derives `carriedBy`/`scanVerdict`/`trust` from raw JSON itself.
  *
- * See forge-ui/lib/hook-library-view.test.ts's header for the full proposed
+ * See apps/studio/tests/unit/hook-library-view.test.ts's header for the full proposed
  * DOM-as-metrics contract this module's outputs feed.
  */
 

@@ -27,7 +27,7 @@ import { SLUG_RE } from '@forge/agents/skill-path.ts';
 // Kills: the current `libraryRoot = skillsDir(forgeRoot)` — a finalize that
 // installs a session-produced package into the SAME tree
 // `listAgentDefinitions`/`discoverRuntimeAgentIds` scan for dispatchable
-// agents (orchestrator/flow-runner.ts:1285, apps/forge/ui-bridge.ts:1678). Pins
+// agents (packages/flows/flow-runner.ts:1285, apps/forge/ui-bridge.ts:1678). Pins
 // (a) the correct destination root and (b) that a fresh forgeRoot's
 // (previously absent) skills/ is never auto-created as a side effect of a
 // finalize that should never have touched it. Uses ITS OWN valid-slug

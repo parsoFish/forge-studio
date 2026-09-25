@@ -60,7 +60,7 @@ const FENCE_STRIPPED_TOOLS = new Set([...FENCE_GATED_TOOLS, 'Bash']);
  *  in studio/session-kinds.yaml, validated against BASH_FENCE_MODES): every
  *  Bash command is statically inspected and every write-shaped operation
  *  must target a path inside the write roots. Kept as a string-literal
- *  union here (not imported from studio/session-kinds.ts) so this spine
+ *  union here (not imported from packages/sessions/studio/session-kinds.ts) so this spine
  *  file's dependency edges stay as they are; session-kinds' frozen
  *  BASH_FENCE_MODES is the vocabulary the yaml is validated against, and
  *  the runner threads the validated value through. */

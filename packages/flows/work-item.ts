@@ -126,9 +126,9 @@ const INITIATIVE_ID_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
  * Exported (W6-RV-1) so forge-ui's hand-kept `WorkItemStatus` mirror
  * (`apps/studio/lib/bridge-client.ts`'s `WI_STATUSES`, feeding the roadmap
  * card's WI done/total badge) can be pinned against this SSOT at runtime by
- * `apps/studio/lib/wi-status-parity.test.ts`, following the same precedent as
- * `orchestrator/flow-trigger.ts`'s `SHIPPED_TRIGGER_KIND_IDS` /
- * `apps/studio/lib/trigger-kind-parity.test.ts`.
+ * `apps/studio/tests/contract/wi-status-parity.test.ts`, following the same precedent as
+ * `packages/flows/flow-trigger.ts`'s `SHIPPED_TRIGGER_KIND_IDS` /
+ * `apps/studio/tests/contract/trigger-kind-parity.test.ts`.
  */
 export { WORK_ITEM_STATUSES } from '@forge/contracts';
 import { WORK_ITEM_STATUSES } from '@forge/contracts';

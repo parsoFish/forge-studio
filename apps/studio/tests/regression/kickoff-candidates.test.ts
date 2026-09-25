@@ -99,7 +99,7 @@ test('flows-37: the repoint fact is DERIVED per viewed flow — the same run ans
 
 test('flows-37: a run reporting no flow of its own has nothing to be taken from → not a repoint', () => {
   // The REAL shape (review round 1, S3-8): `Run.flowId` is already defaulted to
-  // `orchestrator/run-model.ts`'s FALLBACK_FLOW_ID for a manifest that carries no
+  // `packages/flows/run-model.ts`'s FALLBACK_FLOW_ID for a manifest that carries no
   // `flow_id`, so `'unknown'` — not `''` — is what a flowless manifest produces
   // over the wire. The first cut of this test pinned `flowId: ''`, an input the
   // product cannot emit, so the branch that mattered was never exercised: the UI
@@ -123,7 +123,7 @@ test('flows-37: a run reporting no flow of its own has nothing to be taken from 
 
 test('flows-37: NO_FLOW_SENTINEL still equals the server\'s FALLBACK_FLOW_ID', () => {
   // KILLS: silent drift. `lib/kickoff-candidates.ts` re-declares
-  // `orchestrator/run-model.ts`'s module-private `FALLBACK_FLOW_ID` client-side
+  // `packages/flows/run-model.ts`'s module-private `FALLBACK_FLOW_ID` client-side
   // (this repo's re-declare convention for orchestrator constants), and the only
   // thing linking them was a comment. Renaming the server constant's VALUE would
   // silently re-open the UI/server disagreement about a flowless manifest that

@@ -15,8 +15,8 @@
  *   Finding 2 (headline): `cycle_id` is completely unchecked in BOTH
  *   branches — no import of `isSafeCycleId` exists anywhere in
  *   `packages/flows/bridge-studio-runs.ts`. `writeVerdictJson`
- *   (`orchestrator/flow-artifacts.ts:170`) and `createLogger`
- *   (`orchestrator/logging.ts:124`) both do `resolve(logsRoot, cycleId)` +
+ *   (`packages/flows/flow-artifacts.ts:170`) and `createLogger`
+ *   (`packages/kernel/logging.ts:124`) both do `resolve(logsRoot, cycleId)` +
  *   `mkdirSync(recursive:true)` + a write. Confirmed live (manual repro
  *   before this file was written): `cycle_id: '../../sec02-r2-escape-<random>'`
  *   on BOTH a legitimate approve and a legitimate send-back actually created
@@ -26,7 +26,7 @@
  * Threat model: `applyReviewVerdict` reads the manifest from disk
  * (`_queue/in-flight/<id>.md` or `ready-for-review/`), NOT from an ingest
  * body — so every fixture here is planted DIRECTLY with `writeFileSync`,
- * the same defence-in-depth argument `packages/flows/forge-requeue-containment.test.ts`
+ * the same defence-in-depth argument `packages/flows/tests/regression/forge-requeue-containment.test.ts`
  * already makes for `runRequeue` (a different destructive call site, same
  * manifest-poisoning threat model).
  */
@@ -70,7 +70,7 @@ function setupForgeRoot(): string {
   // makes even a legitimate, identity-bound `<forgeRoot>/_worktrees/<id>`
   // report "outside allowed root" — which would mask the round-5 fix's real
   // invariant (a contained-but-cleaned-up worktree keeps its ordinary "gone"
-  // message). A real forge always has both: `orchestrator/init.ts` `layoutDirs`
+  // message). A real forge always has both: `packages/kernel/init.ts` `layoutDirs`
   // and the daemon's own `ensureLayout` each create them.
   mkdirSync(join(forgeRoot, '_worktrees'), { recursive: true });
   mkdirSync(join(forgeRoot, 'projects'), { recursive: true });

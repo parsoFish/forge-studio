@@ -1,11 +1,11 @@
 /**
  * Acceptance test for a W6-RV-1 review finding — WI-status mirror parity.
  *
- * SSOT: orchestrator/work-item.ts's `WORK_ITEM_STATUSES` (exported for this
+ * SSOT: packages/flows/work-item.ts's `WORK_ITEM_STATUSES` (exported for this
  * purpose) — the four `WorkItemStatus` values the scheduler/dev-loop actually
  * write to a work item's frontmatter: pending, in-progress, complete, failed.
  *
- * Mirror: forge-ui/lib/bridge-client.ts's `WI_STATUSES`, a hand-kept runtime
+ * Mirror: apps/studio/lib/bridge-client.ts's `WI_STATUSES`, a hand-kept runtime
  * array (feeding `RoadmapWorkItem['status']`'s type and, downstream, the
  * roadmap card's WI done/total micro-badge arithmetic in RoadmapCanvas.tsx —
  * 'complete' counts toward done, 'failed' counts in the total but not done).
@@ -16,7 +16,7 @@
  * explicit-.ts-extension export with zero extra config; the module is inert
  * at load time), so the pin stays true as the SSOT changes rather than
  * needing a synchronized manual update on both sides every time a status is
- * added or retired. Follows forge-ui/lib/trigger-kind-parity.test.ts's exact
+ * added or retired. Follows apps/studio/tests/contract/trigger-kind-parity.test.ts's exact
  * precedent (SHIPPED_TRIGGER_KIND_IDS vs SHIPPED_TRIGGER_KINDS).
  *
  * RUN: npx vitest run lib/wi-status-parity.test.ts   (from forge-ui/)

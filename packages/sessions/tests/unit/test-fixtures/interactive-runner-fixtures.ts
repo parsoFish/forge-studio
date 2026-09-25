@@ -33,7 +33,7 @@ import { createLogger } from '@forge/kernel';
  * No real `studio/session-kinds.yaml` row carries a `turnSpec` yet (that
  * lands with a later WI), so every test here builds its OWN tiny forgeRoot
  * with its own `studio/session-kinds.yaml` and loads descriptors through the
- * REAL `loadSessionKinds` parse path (studio/session-kinds.ts) rather than a
+ * REAL `loadSessionKinds` parse path (packages/sessions/studio/session-kinds.ts) rather than a
  * hand-built object literal — three rows, all shaped exactly like ADR-043
  * §1's own worked example:
  *

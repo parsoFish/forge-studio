@@ -25,7 +25,7 @@
  *
  * NOT CURRENTLY WIRED INTO `runPreflight` — DELIBERATELY, reported rather
  * than forced through. `checkDeps` here is complete and its OWN tests
- * (`tests/integration/preflight-deps.test.ts`) are green, but adding the
+ * (`packages/projects/tests/integration/preflight-deps.test.ts`) are green, but adding the
  * `checkDeps(dir, cfg)` call to `preflight.ts`'s composer flips `report.ok`
  * on ~15 EXISTING tests across ~8 sibling preflight test files: every one
  * shares a `happyProject()`-style fixture (duplicated per-file, house style)

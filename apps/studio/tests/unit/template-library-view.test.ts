@@ -1,14 +1,14 @@
 /**
- * Acceptance tests for forge-ui/lib/template-library-view.ts (R3-06).
+ * Acceptance tests for apps/studio/lib/template-library-view.ts (R3-06).
  *
  * The module under test does not exist yet — vitest cannot even collect this
  * file until it lands (module-not-found is the expected red). Pure view-state
  * derivation for the templates library page — mirrors
- * forge-ui/lib/skill-library-view.ts's testability convention: no DOM, no
+ * apps/studio/lib/skill-library-view.ts's testability convention: no DOM, no
  * React, no network.
  *
  * AT numbers continue the flat R3-06 sequence started in
- * orchestrator/studio/template-library.test.ts.
+ * packages/library/tests/unit/template-library.test.ts.
  */
 import { test, expect } from 'vitest';
 import {

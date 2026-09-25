@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/phases/closure.ts — the Phase-6 closure contract
+ * Tests for packages/flows/phases/closure.ts — the Phase-6 closure contract
  * (G1 / G10 / G9 / closure-aligns-local↔remote). These assert the NEW
  * (review-redesign) behaviour, replacing the old "reviewer auto-merges →
  * cycle moves to done/ → reflection fires" path:

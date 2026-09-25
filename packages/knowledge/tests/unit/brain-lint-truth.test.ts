@@ -18,7 +18,7 @@
  * extraction + round-1 + fix-round-1 (T2 review rulings) coverage; the
  * fix-round-2 (history-backed staleness) tests split into the sibling
  * `brain-lint-truth-history.test.ts` at the 800-line cap — same split
- * rationale as `brain-lint.test.ts` -> `brain-lint-{graph,filing,integrity,
+ * rationale as historical: `brain-lint.test.ts` -> `brain-lint-{graph,filing,integrity,
  * orchestration}.test.ts`. Shared fixtures (including the git-checkout
  * helpers both files need) live in `./test-fixtures/brain-lint-truth.ts`.
  *

@@ -11,7 +11,7 @@
  *
  * `filterConnections`/`readinessCounts`/`connectionBadges`/
  * `blockedRunMessage`/`describeInstallOutcome` are the AT-pinned exports
- * (see forge-ui/lib/connection-library-view.test.ts). `unreadyBoundConnections`
+ * (see apps/studio/tests/unit/connection-library-view.test.ts). `unreadyBoundConnections`
  * and `configVarStatus` are additional pure helpers this module adds so the
  * pages themselves stay thin (WI-5 scope note: "This is where all logic
  * lives; the pages stay thin") — not directly AT-covered here, but every call
@@ -88,7 +88,7 @@ export function connectionBadges(entry: ConnectionWire): ConnectionBadge[] {
 
 // ---------------------------------------------------------------------------
 // unreadyBoundConnections — the agent-builder's own readiness combinator,
-// mirroring orchestrator/studio/connection-readiness.ts's
+// mirroring packages/library/studio/connection-readiness.ts's
 // `connectionsReadinessFor` exactly (same declared-data-fails-open guard: a
 // bound id absent from the fetched connections list reads `not-installed`,
 // never assumed available). Re-implemented client-side rather than imported

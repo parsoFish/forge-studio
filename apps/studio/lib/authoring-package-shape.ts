@@ -17,8 +17,8 @@
  * This is the CLIENT-side copy of `cli/bridge-studio-affordances.ts`'s own
  * exported `AUTHORING_PACKAGE_SHAPES` — hand-mirrored, never a cross-
  * boundary import (forge-ui never imports cli/ at runtime; see
- * forge-ui/lib/session-lifecycle-client.ts's own header, and
- * forge-ui/lib/session-client.ts's "no-cross-boundary-import convention").
+ * apps/studio/lib/session-lifecycle-client.ts's own header, and
+ * apps/studio/lib/session-client.ts's "no-cross-boundary-import convention").
  * Kept honest by `packages/sessions/tests/contract/authoring-package-shape-parity.test.ts`, which is a
  * NODE-SIDE TEST (not part of either production bundle) that imports BOTH
  * arrays directly — a plain, framework-free TS module under forge-ui/lib/

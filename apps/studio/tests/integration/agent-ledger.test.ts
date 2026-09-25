@@ -1,6 +1,6 @@
 /**
  * Acceptance tests for the AGENT-SCOPED ledger derivation (R6-06 Task 2) —
- * `forge-ui/lib/agent-ledger.ts`, a pure module that does not exist yet.
+ * `apps/studio/lib/agent-ledger.ts`, a pure module that does not exist yet.
  * Every assertion below is a legitimate RED against a not-yet-created file.
  *
  * This is the SECOND caller of the shared engine in `./history-ledger.ts`
@@ -22,7 +22,7 @@
  * takes full `Run[]`, not a pre-flattened wire summary) and derives
  * narrative/href/linkKind/sort — the presentation-layer work `renderSegment`/
  * `renderNarrative` do, which the CLI/server side never imports (mirrors the
- * EXISTING split: `orchestrator/run-model.ts` knows nothing of
+ * EXISTING split: `packages/flows/run-model.ts` knows nothing of
  * `LedgerSegment`).
  *
  * ═══════════════════════════════════════════════════════════════════════
@@ -57,7 +57,7 @@
  * ═══════════════════════════════════════════════════════════════════════
  * MEASUREMENT (discipline item 10 — before pinning ANY segment kind derived
  * from a `RunPhaseMeta` field, measure whether it is actually populated for
- * a REAL node): read directly off `orchestrator/run-model-derive.ts:142-204`
+ * a REAL node): read directly off `packages/flows/run-model-derive.ts:142-204`
  * (`buildNodeMeta`) this round —
  *
  *   - `iter`/`iterBudget` (line 175, `computeIterations`): `if (nodeId !==
@@ -1021,7 +1021,7 @@ test('DEFECT 2 INTEGRATION: whatever rows resolveAgentHistoryFromResponse hands 
 // confirmed live by `apps/forge/tests/integration/ui-bridge-agent-history.test.ts`'s own "ROUND 8
 // CAPTURE + DRIFT GUARD (flow-node)" test, which asserts `run.startedAt`/
 // `run.initiative`/`run.flowId` directly off a REAL response body from a
-// REAL in-process bridge. `forge-ui/lib/flow-ledger.ts:126` already derives
+// REAL in-process bridge. `apps/studio/lib/flow-ledger.ts:126` already derives
 // `what: run.initiative` for the sibling flow-monitor ledger — the SAME
 // fact, same field, an established precedent this round confirms rather
 // than invents. Matches the mockup's own design intent too: every
@@ -1039,7 +1039,7 @@ test('DEFECT 2 INTEGRATION: whatever rows resolveAgentHistoryFromResponse hands 
 // `seedStandaloneRun`'s own hardcoded start-event timestamp
 // (apps/forge/tests/integration/ui-bridge-agent-history.test.ts:255).
 // what: NEGATIVE RESULT — measured this round, genuinely absent server-side.
-// A standalone run's own events (`orchestrator/run-agent.ts:320-382`) carry
+// A standalone run's own events (`packages/agents/run-agent.ts:320-382`) carry
 // only `phase: 'orchestrator'`, `skill: <agentSlug>`, `metadata:
 // {agent_phase, agent_slug}` — every one of these RE-STATES the agent's own
 // identity (already known: it is the very slug being queried), never a
@@ -1123,7 +1123,7 @@ test('ROUND 8 ⚑ THE PIN (item 1, round-trip; item 3, per-path — all three li
   // Both are now MEASURED and CONFIRMED, not merely reasoned: 'r8solo' (the
   // agent's own slug) is a proven NEGATIVE RESULT — no richer per-instance
   // "what" exists anywhere in a standalone run's own event log
-  // (`orchestrator/run-agent.ts:320-382`), so the slug remains the only
+  // (`packages/agents/run-agent.ts:320-382`), so the slug remains the only
   // non-fabricated string available, not a preferred pick among several.
   // 'Planning session' is verified byte-for-byte against the REAL, live
   // `studio/session-kinds.yaml:17` (`title: Planning session` on the

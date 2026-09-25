@@ -9,7 +9,7 @@
  * legitimate RED (module not found) until the implementer creates it with
  * the exact exports named here.
  *
- * WHY THREE KINDS, NOT ELEVEN: `orchestrator/logging.ts`'s `EventType`
+ * WHY THREE KINDS, NOT ELEVEN: `packages/kernel/logging.ts`'s `EventType`
  * union has 11 members (start / end / log / error / tool_use / iteration /
  * file_change / test_run / phase_transition / agent_heartbeat /
  * brain-query). The mockup's `NODE_LOGS` / `AGENT_RUN.log` fixtures

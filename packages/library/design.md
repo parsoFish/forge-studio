@@ -52,7 +52,7 @@ The hook approval ledger carries `approved`, a `revoked` history, and `declined`
 
 ### Agent facts arrive by injection
 
-Three modules here — `studio/skill-trust.ts`, `studio/hook-library.ts`, `studio/connection-library.ts` — each kept a private copy of the same resilient agent-roster walk, reaching `isStudioAgent` and `loadAgentDefinition` through `orchestrator/studio/registry.ts`. Library is rank 2 and agents is rank 3, so that read is what ruling 13 forbids. All three copies are gone. `studio/agent-facts.ts` declares what library needs in library's own vocabulary and `apps/forge/library-agent-facts.ts` binds it, beside the Agent-kind loaders.
+Three modules here — `packages/library/studio/skill-trust.ts`, `packages/library/studio/hook-library.ts`, `packages/library/studio/connection-library.ts` — each kept a private copy of the same resilient agent-roster walk, reaching `isStudioAgent` and `loadAgentDefinition` through `orchestrator/studio/registry.ts`. Library is rank 2 and agents is rank 3, so that read is what ruling 13 forbids. All three copies are gone. `packages/library/studio/agent-facts.ts` declares what library needs in library's own vocabulary and `apps/forge/library-agent-facts.ts` binds it, beside the Agent-kind loaders.
 
 The port has **two members answering two different questions, and no path in library uses both**:
 
@@ -63,7 +63,7 @@ The port has **two members answering two different questions, and no path in lib
 
 If a future path wants both members, that is the signal one of them is answering the wrong question — fix the path rather than widening the port.
 
-Two things follow from the boundary rather than from taste. Library's own tests supply the port from `tests/test-fixtures/agent-fixture.ts`, because a test edge is still an edge; what that leaves unproven — that the real binding answers what those fixtures assume — is proven at `apps/forge/tests/contract/library-agent-facts.test.ts`, which also carries the drift guard between `agentUsageIndex` and the assembly's `compositions` walk. And a handful of cases whose subject was the agent loader all along moved out to the assembly, where importing both packages is what the assembly is for.
+Two things follow from the boundary rather than from taste. Library's own tests supply the port from `packages/library/tests/test-fixtures/agent-fixture.ts`, because a test edge is still an edge; what that leaves unproven — that the real binding answers what those fixtures assume — is proven at `apps/forge/tests/contract/library-agent-facts.test.ts`, which also carries the drift guard between `agentUsageIndex` and the assembly's `compositions` walk. And a handful of cases whose subject was the agent loader all along moved out to the assembly, where importing both packages is what the assembly is for.
 
 ### The palette is scanned, not declared
 
@@ -73,7 +73,7 @@ What the palette unions, and why each half is real rather than declared: communi
 
 ### The template library's seven decisions
 
-Moved verbatim from `studio/template-library.ts`'s header, where they were 48 lines of a 60-line preamble. Nothing is lost by relocating them; a reader looking for why this package decides what it decides looks here.
+Moved verbatim from `packages/library/studio/template-library.ts`'s header, where they were 48 lines of a 60-line preamble. Nothing is lost by relocating them; a reader looking for why this package decides what it decides looks here.
 
 ```
 D1 — category is STRUCTURAL (which directory a definition lives in), never
@@ -128,7 +128,7 @@ one bad sibling never hides the rest.
 
 ### The authoring turn arrives by injection
 
-`bridge-studio-authoring.ts`'s finalize route drives a real session: it reads and writes `status.json` through the guarded pair, loads the `authoring` session kind, runs one interactive turn on it, and tells an honest named refusal from the staging copy layer apart from a structural failure. All four reads were `@forge/sessions` imports — rank 4 from a rank-2 package, handoffs L1–L4. `studio/authoring-session.ts` declares them as this package's own `AuthoringSessionPort`; `apps/forge/library-authoring-session.ts` binds it, and it reaches `packages/sessions/kinds/authoring.ts` — which calls `runFinalize` directly — through the deps that package already threads.
+`bridge-studio-authoring.ts`'s finalize route drives a real session: it reads and writes `status.json` through the guarded pair, loads the `authoring` session kind, runs one interactive turn on it, and tells an honest named refusal from the staging copy layer apart from a structural failure. All four reads were `@forge/sessions` imports — rank 4 from a rank-2 package, handoffs L1–L4. `packages/library/studio/authoring-session.ts` declares them as this package's own `AuthoringSessionPort`; `apps/forge/library-authoring-session.ts` binds it, and it reaches `packages/sessions/kinds/authoring.ts` — which calls `runFinalize` directly — through the deps that package already threads.
 
 Two collapses keep the port to four members and sessions' vocabulary out of library:
 
@@ -137,7 +137,7 @@ Two collapses keep the port to four members and sessions' vocabulary out of libr
 
 ### The Flow kind arrives by injection too
 
-`studio/template-library.ts` derives each planning template's `usedBy` from the flow graph, which meant reading the Flow kind's loaders — `@forge/flows` is rank 5, this package is rank 2, and they were reached through `orchestrator/studio/registry.ts`'s re-export hub. Library now declares its own `FlowSource` port (`listFlowIds` + `loadFlowDefinition`, in terms of the `FlowDefinition` that already lives in `@forge/contracts`, so nothing is lifted) and `apps/forge/library-flow-source.ts` binds it. Four exported functions take it: `listTemplateLibrary`, `templateDetail`, `lintTemplateLibrary` and `deriveArtifactTemplateUsage`.
+`packages/library/studio/template-library.ts` derives each planning template's `usedBy` from the flow graph, which meant reading the Flow kind's loaders — `@forge/flows` is rank 5, this package is rank 2, and they were reached through `orchestrator/studio/registry.ts`'s re-export hub. Library now declares its own `FlowSource` port (`listFlowIds` + `loadFlowDefinition`, in terms of the `FlowDefinition` that already lives in `@forge/contracts`, so nothing is lifted) and `apps/forge/library-flow-source.ts` binds it. Four exported functions take it: `listTemplateLibrary`, `templateDetail`, `lintTemplateLibrary` and `deriveArtifactTemplateUsage`.
 
 **Not five.** `deriveDemoElementUsage` was named as a consumer in the handoff, but it derives from discovered PROJECTS, not from flows, and never touches the index — measured from the code, which is why it takes no port.
 
@@ -160,7 +160,7 @@ hash, and lands the skill `status: draft` — `draft-pending-approval` to the br
 `skill-trust.ts` gates palette visibility on `ready`, which only the operator's approval
 produces. All of that ran before this change, but only for a package already on disk;
 `routeCommunityInstall` said so in as many words — *"a curated catalog reference with no
-vendored package on disk"*. `studio/community-fetch-package.ts` is that missing first step and
+vendored package on disk"*. `packages/library/studio/community-fetch-package.ts` is that missing first step and
 nothing else. Everything downstream of it is unchanged, which is why the route GAINED an arm
 rather than a second install path.
 
@@ -243,7 +243,7 @@ tree for the next install to mistake for forge's own.
 ## A hub is asked what it publishes, and only a hub forge can reach
 
 Operator ruling 478, scoped by T1 608 to **GitHub-shaped hubs only**.
-`studio/community-hub-index.ts`.
+`packages/library/studio/community-hub-index.ts`.
 
 **The gap.** A refresh re-verifies rows that already exist and never discovers one. Four of the
 nine declared hubs contribute nothing and stay that way through every refresh, so their chip

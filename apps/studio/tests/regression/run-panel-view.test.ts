@@ -85,11 +85,11 @@
  * wiring gap; this file closes everything reachable without one.
  *
  * The numeric caps mirrored here (8 materials / 262144 bytes per file /
- * 524288 bytes total) are orchestrator/studio/materials.ts's
+ * 524288 bytes total) are packages/agents/studio/materials.ts's
  * MAX_MATERIALS_COUNT / MAX_MATERIAL_BYTES / MAX_MATERIALS_TOTAL_BYTES,
  * duplicated as literals because forge-ui cannot import orchestrator/ TS
  * directly (the same constraint SHIPPED_TRIGGER_KINDS documents for itself
- * in forge-ui/lib/studio-client.ts) — a drift test at the bottom of this
+ * in apps/studio/lib/studio-client.ts) — a drift test at the bottom of this
  * file pins the literals against a comment-documented value so a future
  * server-side cap change is at least discoverable here, mirroring
  * materials.ts's OWN drift-test convention for MAX_MATERIALS_TOTAL_BYTES vs
@@ -259,7 +259,7 @@ test('validateMaterialsClientSide: acceptance is driven by the declaredKinds ARG
   expect(withoutImages.ok).toBe(false);
 });
 
-// The deliberate .svg exclusion (orchestrator/studio/materials.ts's
+// The deliberate .svg exclusion (packages/agents/studio/materials.ts's
 // documented security rationale — SVG is active content, never bucketed
 // with inert raster images) must survive the client mirror too, or the
 // client would show "accepted" for a file the server refuses.
@@ -273,7 +273,7 @@ test('validateMaterialsClientSide: .svg maps to NO kind (mirrors the server\'s d
 
 // ---------------------------------------------------------------------------
 // validateMaterialsClientSide — the three server caps, same message shape
-// (orchestrator/studio/materials.ts MAX_MATERIALS_COUNT=8,
+// (packages/agents/studio/materials.ts MAX_MATERIALS_COUNT=8,
 // MAX_MATERIAL_BYTES=262144, MAX_MATERIALS_TOTAL_BYTES=524288).
 // ---------------------------------------------------------------------------
 

@@ -28,7 +28,7 @@
  * copied into the fixture root so the real kinds/tables are exercised (the
  * bridge only loads it structurally — no agent-ref resolution at load time).
  *
- * RUN: node --test --experimental-strip-types packages/sessions/bridge-studio-lifecycle.test.ts
+ * RUN: node --test --experimental-strip-types packages/sessions/tests/integration/bridge-studio-lifecycle.test.ts
  */
 
 import { test, before, after } from 'node:test';

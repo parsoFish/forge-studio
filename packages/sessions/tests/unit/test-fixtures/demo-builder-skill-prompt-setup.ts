@@ -73,9 +73,9 @@ import type { DemoStep } from '@forge/contracts/studio/types.ts';
  *                              `demoTaskLines` or breaks its ordering
  *                              contract, silently breaking the R4-07
  *                              descriptor-parity test
- *                              (`packages/projects/tests/contract/demo-descriptor-parity.test.ts`).
+ *                              (`apps/forge/tests/contract/demo-descriptor-parity.test.ts`).
  *
- * Harness idiom mirrors `packages/sessions/demo-builder-runner.test.ts`: seed
+ * Harness idiom mirrors `packages/sessions/tests/unit/demo-builder-runner.test.ts`: seed
  * `projectRoot/_demo/<sid>/status.json` via `writeSessionStatus`, inject a
  * stub `queryFn` that simulates the agent's file writes, and (new to this
  * file) inject `skillPromptPath` fixtures to drive/observe turn selection.
@@ -108,7 +108,7 @@ export function norm(s: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Shared scaffolding — mirrors packages/sessions/demo-builder-runner.test.ts's setup().
+// Shared scaffolding — mirrors packages/sessions/tests/unit/demo-builder-runner.test.ts's setup().
 // ---------------------------------------------------------------------------
 
 export const OPERATOR_GUIDANCE_SENTINEL = 'OPERATOR-GUIDANCE-SENTINEL-4471: keep it dark and minimal.';

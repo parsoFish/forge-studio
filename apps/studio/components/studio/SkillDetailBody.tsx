@@ -95,7 +95,7 @@ export function SkillDetailBody({
       {/* W8-B4 (library-36): this used to be `detail.trust === 'draft' &&
           detail.scan` — the SECOND half of that guard is why widening only
           the trust check would not have been enough: the bridge only ever
-          populates `scan` for a draft (cli/bridge-studio-skills.ts, "the scan
+          populates `scan` for a draft (packages/library/bridge-studio-skills.ts, "the scan
           is drafts-only"), so `needs-review` NEVER carries one. The scan
           preview/report below stays scan-gated (draft-only, by design); the
           Approve control itself is gated on TRUST alone so a needs-review

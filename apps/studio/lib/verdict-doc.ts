@@ -1,6 +1,6 @@
 /**
  * verdict-doc.ts — map the on-disk VerdictRecord shape
- * (orchestrator/flow-artifacts.ts: `{kind, decidedBy, rationale, at}`) onto
+ * (packages/flows/flow-artifacts.ts: `{kind, decidedBy, rationale, at}`) onto
  * the renderer's VerdictDoc. The artifact page used to pass the raw record
  * straight through, so `doc.decision` was always undefined and view mode
  * rendered "Approved" for every verdict — including send-backs (R4-08-F3

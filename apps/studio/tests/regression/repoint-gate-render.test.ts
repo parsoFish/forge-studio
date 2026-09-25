@@ -14,7 +14,7 @@
  *
  * It also pins the display/payload identity: `onConfirm` receives the SAME flow
  * string the bar displays, so no surface can show one flow and confirm another
- * (the confirmation is a compare-and-swap — see `orchestrator/enqueue-flow-run.ts`).
+ * (the confirmation is a compare-and-swap — see `packages/flows/enqueue-flow-run.ts`).
  */
 import { test, expect } from 'vitest';
 import React from 'react';

@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/event-cost.ts — the shared cost-summation rule
+ * Tests for packages/kernel/event-cost.ts — the shared cost-summation rule
  * (plan item 1.8). Guards the iteration-vs-restatement distinction so no
  * consumer (metrics aggregate, run-model, node meta, per-WI attribution)
  * ever re-introduces the double/triple-count.

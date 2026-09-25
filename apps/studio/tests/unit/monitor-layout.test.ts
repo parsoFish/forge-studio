@@ -1,5 +1,5 @@
 /**
- * Tests for forge-ui/lib/monitor-layout.ts — the pure run-model → monitor
+ * Tests for apps/studio/lib/monitor-layout.ts — the pure run-model → monitor
  * topology mapping (M7-1, ADR-031).
  *
  * Pure synchronous function: no DOM, no React. Runs under the forge-ui

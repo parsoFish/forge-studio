@@ -19,7 +19,7 @@
  * the notes as rationale plus ONE synthesized GIVEN/WHEN/THEN — GateBar has
  * no per-region comment UI to derive richer ACs from (that is
  * DemoReviewSurface's job); the synthesized AC mirrors
- * orchestrator/review-comments.ts `acForComment`'s derived-GWT shape.
+ * packages/flows/review-comments.ts `acForComment`'s derived-GWT shape.
  *
  * Extracted as a pure function (this repo has no jsdom component-render
  * harness for forge-ui — logic lives in lib/*.ts and is unit-tested

@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/studio/instructions-draft.ts (R2-09 D8/D9).
+ * Tests for packages/library/studio/instructions-draft.ts (R2-09 D8/D9).
  *
  * NEW MODULE — does not exist yet. `composeInstructionsDraft(input)` is a
  * DETERMINISTIC composition of an instructions draft from the definition's

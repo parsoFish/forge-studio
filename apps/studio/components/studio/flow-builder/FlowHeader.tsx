@@ -196,7 +196,7 @@ export function FlowHeader({
     // zyc review finding 2: dedup by trigger IDENTITY, not raw (on,target) —
     // an agent-complete row's identity also carries `agent` (two rows may
     // legitimately share a target with a DIFFERENT source agent; the server
-    // fires each independently, orchestrator/flow-trigger.ts's
+    // fires each independently, packages/flows/flow-trigger.ts's
     // fireAgentCompleteTriggers). Every other kind stays (on,target)-only —
     // isSameTriggerIdentity is the ONE shared definition this callback and
     // the target-flow dropdown filter below both use, so they can't drift
@@ -545,7 +545,7 @@ export function FlowHeader({
           ))}
 
           {/* Kind selector — every SHIPPED kind, one <option> per entry
-              (mirrors orchestrator/flow-trigger.ts's SHIPPED_TRIGGER_KIND_IDS,
+              (mirrors packages/flows/flow-trigger.ts's SHIPPED_TRIGGER_KIND_IDS,
               the SSOT; forge-ui cannot import orchestrator TS directly). */}
           <select
             value={triggerKind}
@@ -599,7 +599,7 @@ export function FlowHeader({
           </select>
 
           {/* agent-complete — the source agent slug whose completion fires
-              this trigger (orchestrator/studio/validate-triggers.ts's
+              this trigger (packages/flows/studio/validate-triggers.ts's
               trigger-agent-complete check requires this be non-empty). */}
           {triggerKind === 'agent-complete' && (
             <input
@@ -642,7 +642,7 @@ export function FlowHeader({
               this SAME block (own `on:` value, ADR-027's amendment) — before
               this fix only `on: webhook` rendered it, so a pr-merged/
               issue-raised trigger had NO way to declare the webhook.id
-              cli/bridge-hooks.ts's findWebhookTrigger needs to route a
+              packages/flows/bridge-hooks.ts's findWebhookTrigger needs to route a
               delivery, making it authorable-but-permanently-dead. Provider
               options + event checkboxes are constrained PER KIND
               (WEBHOOK_PROVIDERS_BY_KIND / WEBHOOK_EVENTS_BY_KIND, mirrors

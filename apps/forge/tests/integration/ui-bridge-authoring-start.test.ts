@@ -126,7 +126,7 @@ test('AT-7: a valid start writes a real session dir (status.json + prompt.md) un
 
 // R4-21 phase 2, pin round 3 (T3, adversarial-review round 3) — P4
 // (_wave5/unit-specs/R4-21-phase2.md): `buildTurnPrompt`
-// (orchestrator/interactive-runner.ts) composes the turn prompt from
+// (packages/sessions/interactive-runner.ts) composes the turn prompt from
 // SKILL.md + the phase row + a JSON dump of status.json — it never reads
 // prompt.md. So the operator's free-text description of what to build,
 // written verbatim to prompt.md by this route, is silently dropped from

@@ -1,14 +1,14 @@
 /**
  * Developer-loop binding — system prompt + user prompt builders + tool
- * config. Called by orchestrator/phases/developer-loop.ts (runDeveloperLoop);
+ * config. Called by packages/stations/phases/developer-loop.ts (runDeveloperLoop);
  * the single source of truth for what the developer agent sees. (The bench
  * harnesses this header once named were removed 2026-05-25.)
  *
- * Contrast vs PM (orchestrator/phases/pm-binding.ts):
+ * Contrast vs PM (packages/stations/phases/pm-binding.ts):
  *   - PM is a one-shot decomposition. The agent reads, plans, writes WIs once.
  *   - Developer is a Ralph loop. Each iteration is one SDK query() call; the
  *     loop carries state across iterations via PROMPT.md / AGENT.md / fix_plan.md
- *     in the worktree (stamped by loops/ralph/runner.ts:prepareWorkspace).
+ *     in the worktree (stamped by packages/agents/ralph/runner.ts:prepareWorkspace).
  *   - PM forbids Bash. The developer agent NEEDS Bash (run tests, run build,
  *     git commit) — the quality-gate verification still happens orchestrator-side
  *     (the agent's claim of "tests pass" is not trusted; carried-over v1 lesson),
@@ -86,7 +86,7 @@ export type DevUserPromptInput = {
 
 /**
  * Render a per-iteration prompt body. This is the content Ralph stamps into
- * PROMPT.md and re-reads each iteration. The runner (loops/ralph/runner.ts)
+ * PROMPT.md and re-reads each iteration. The runner (packages/agents/ralph/runner.ts)
  * stamps from a template by default; this helper is provided so callers that
  * want to override the per-iteration body (e.g., tests injecting custom
  * scenarios) have a single source of truth.
@@ -163,7 +163,7 @@ export type PreparedDevWorkspace = {
  * Stamp a fully-rendered PROMPT.md, AGENT.md, and fix_plan.md into the
  * worktree from the WI spec. Idempotent — does not overwrite already-stamped
  * files (a re-entrant cycle inherits prior state). Both bench and live cycle
- * call this before `loops/ralph/runner.ts:run()`; the runner's own
+ * call this before `packages/agents/ralph/runner.ts:run()`; the runner's own
  * `prepareWorkspace` is a fallback that uses raw templates when no caller has
  * pre-stamped the worktree.
  */
