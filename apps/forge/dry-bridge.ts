@@ -137,6 +137,8 @@ export const HAND_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   // push-to-remote code with no dry-bridge row governing it.
   { method: 'POST', route: '/api/studio/projects/:id', classification: 'refuse', action: 'git-remote', guard: 'route',
     reason: 'identical code path to the PUT row above — same handler, same saveProjectRepo merge + push' },
+  { method: 'POST', route: '/api/studio/hooks/:id/test-fire', classification: 'refuse', action: 'spawn-hook', guard: 'route',
+    reason: 'forge-6gv.8.1: runs the hook\'s own script for real via runHookScriptAsync (bridge-studio-hooks-test-fire.ts)' },
 
   // ---- stub-actions: the spawn-route families — every row states `guard:
   // 'spawn-helper'`, a fact no `RouteEntry` field carries, so all are kept
