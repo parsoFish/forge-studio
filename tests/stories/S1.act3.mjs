@@ -25,7 +25,7 @@ export const ACT_3 = [
       // `startedSessionId` and publishes it on its own section
       // (`NewIdeaBox.tsx:111`), then renders `SessionMinted` beside it
       // (`:187`). `ProjectArchitectEntry.tsx:84` opens that box INLINE on the
-      // project page, so every step of this act happens on `/projects/gitweave`
+      // project page, so every step of this act happens on `/projects/story-s1`
       // and the id is bound where it is minted. The beat that stood here
       // asserted the architect session's own phase and could never reach it —
       // no earlier beat could supply the segment, so nothing was ever pressed
@@ -50,10 +50,10 @@ export const ACT_3 = [
         { press: 'start-architect' },
       ],
       expect: {
-        route: '/projects/gitweave',
+        route: '/projects/story-s1',
         data: {
           page: 'projects',
-          'project-id': 'gitweave',
+          'project-id': 'story-s1',
           section: 'new-idea',
           'architect-session-id': '<architectSessionId>',
         },
@@ -70,7 +70,7 @@ export const ACT_3 = [
       // AMENDED 2026-09-05 (H6, operator present) — one press added at the
       // front. The beat above now binds `<architectSessionId>` on the project
       // page rather than being swept into the session, so this beat starts on
-      // `/projects/gitweave` and `open-plan` is not there — it is on the
+      // `/projects/story-s1` and `open-plan` is not there — it is on the
       // architect session's panel. `SessionMinted.tsx:26` renders
       // `[data-action="view-architect-session"]` beside the id the beat above
       // bound, so the walk in is a declared step like the other two. Three
