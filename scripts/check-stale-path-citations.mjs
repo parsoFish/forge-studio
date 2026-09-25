@@ -18,11 +18,32 @@
  *         by `:<line>`, which is not part of the match and is ignored) —
  *         whose exact repo-relative path does not exist in the tree.
  *   stem  A bare basename (e.g. a retired `legacy-loader.ts`) of a file this
- *         repo once tracked and later deleted, where NO file anywhere in the
- *         current tree carries that basename today. Curated (see computeRetiredStems)
+ *         repo once tracked and later deleted, where NO file OR DIRECTORY
+ *         anywhere in the current tree carries that basename today. Curated
  *         to a kebab/snake-shaped, 6+ char stem whose deleted extension was
  *         a code extension — the repo's own retired module names all take
- *         this shape, and ordinary English prose almost never does.
+ *         this shape, and ordinary English prose almost never does. See
+ *         DETERMINISM below for where the candidate list comes from.
+ *
+ * DETERMINISM (forge-8vfn.13 CI incident, 2026-09-25). The CHECK never runs
+ * `git log` — only `git ls-files` (the current tree, always complete
+ * regardless of clone depth). Retired-stem CANDIDATES (the git-log-derived
+ * half of "stem", above) are COMMITTED DATA: `scripts/baselines/stale-path-
+ * retired-stems.json`, an array of stems, regenerated only by `--write`
+ * (which may run `git log` — a developer's local clone, always full depth)
+ * and read as-is by every plain check. CI's `actions/checkout` defaults to
+ * a depth-1 (shallow) clone: `git log --diff-filter=D` on a shallow clone
+ * sees no history, so EVERY stem the git-log path had ever curated read as
+ * gone, and every stem baseline row FAILED as stale — a lint whose verdict
+ * depends on clone depth is not deterministic, and this shape (343
+ * violations, all "stale … now 0") is what that failure mode looks like.
+ * The "is it still present" half of curation stays LIVE at check time (a
+ * cheap `git ls-files`-only Set lookup, not history) so a committed
+ * candidate whose name gets reused later is still correctly excluded —
+ * committing the CANDIDATES, not the final curated set, keeps that
+ * self-correcting property. Adding a newly-retired stem to the committed
+ * set = running `--write` locally and committing the diff, reviewed like
+ * any other baseline change.
  *
  * WHERE. Code comments only (not live code) in `.ts .tsx .mjs .js` files —
  * comment extraction is a crude, line-based, quote-aware scanner, the same
@@ -95,7 +116,7 @@
  * into the baseline.
  *
  * RUN: node scripts/check-stale-path-citations.mjs [--json] [--write]
- *        [--baseline <path>] [--root <path>]
+ *        [--baseline <path>] [--retired-stems-baseline <path>] [--root <path>]
  */
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -267,34 +288,19 @@ function basenameStem(relPath) {
 }
 
 /**
- * The curated retired-stem set: a compound (`-`/`_`), 6+ char basename of a
- * file with a code extension that `git log` shows was deleted at some point,
- * AND that no file OR DIRECTORY anywhere in the CURRENT tree still carries.
- * Each clause exists to keep false positives near zero (see the header):
- *   - code extension at deletion: a retired MODULE, not an incidental doc.
- *   - compound + length: this repo's real module names are kebab-case and
- *     rarely under 6 chars; ordinary short/plain English words are excluded.
- *   - not present today, as EITHER a file's own basename or a directory
- *     name: a stem still naming a live concept isn't "retired" just because
- *     no FILE happens to share its exact basename. Measured false positive:
- *     `demo-agent.ts` (a file) was deleted, but `skills/demo-agent/` (a
- *     directory — the concept lives on as a skill + a runtime slug) still
- *     exists, and a file-basename-only presence check couldn't see it —
- *     the same real stem got hand-annotated `historical:` at five separate
- *     call sites across three merges before this fixed the root cause.
- *     Checked against the other 182 curated stems on this tree: this ONLY
- *     removes `demo-agent` from the set — no other stem shares a name with
- *     a current directory, so nothing else is affected.
- * `--no-renames` so a renamed-away file (delete of the old path) still
- * counts — a rename is exactly a retirement of the old basename.
+ * `--write`-ONLY. Recomputes the retired-stem CANDIDATE set from `git log`
+ * — a compound (`-`/`_`), 6+ char basename of a file with a code extension
+ * that history shows was deleted at some point. `--no-renames` so a
+ * renamed-away file (delete of the old path) still counts — a rename is
+ * exactly a retirement of the old basename. NOT yet filtered by "still
+ * present" — see `curateRetiredStems`, which applies that filter LIVE at
+ * check time instead, from `git ls-files` alone. The CHECK path must never
+ * call this function directly (see DETERMINISM in the header) — only
+ * `main()`'s `--write` branch does.
  */
-export function computeRetiredStems(root, fullSet) {
+export function computeRetiredStemCandidatesFromHistory(root) {
   const deleted = gitLogDeletions(root).split('\n');
-  const present = new Set([...fullSet].map(basenameStem));
-  for (const p of fullSet) {
-    for (const seg of p.split('/').slice(0, -1)) present.add(seg);
-  }
-  const stems = new Set();
+  const candidates = new Set();
   for (const raw of deleted) {
     const p = raw.trim();
     if (!p) continue;
@@ -305,8 +311,34 @@ export function computeRetiredStems(root, fullSet) {
     const stem = basenameStem(p);
     if (!/[-_]/.test(stem)) continue;
     if (stem.length < MIN_STEM_LEN) continue;
-    if (present.has(stem)) continue;
-    stems.add(stem);
+    candidates.add(stem);
+  }
+  return candidates;
+}
+
+/**
+ * The curated retired-stem set the check actually matches against: the
+ * COMMITTED candidate set (see `readRetiredStemCandidates`) minus anything
+ * still present today, as EITHER a file's own basename or a DIRECTORY
+ * name — a stem still naming a live concept isn't "retired" just because no
+ * FILE happens to share its exact basename. Measured false positive:
+ * `demo-agent.ts` (a file) was deleted, but `skills/demo-agent/` (a
+ * directory — the concept lives on as a skill + a runtime slug) still
+ * exists, and a file-basename-only presence check couldn't see it — the
+ * same real stem got hand-annotated `historical:` at five separate call
+ * sites across three merges before a directory-aware presence check fixed
+ * the root cause. `git ls-files` only (`fullSet`, already read for every
+ * other part of the scan) — no `git log`, so this stays correct on a
+ * shallow clone even though the candidate set it started from is a cache.
+ */
+export function curateRetiredStems(candidates, fullSet) {
+  const present = new Set([...fullSet].map(basenameStem));
+  for (const p of fullSet) {
+    for (const seg of p.split('/').slice(0, -1)) present.add(seg);
+  }
+  const stems = new Set();
+  for (const stem of candidates) {
+    if (!present.has(stem)) stems.add(stem);
   }
   return stems;
 }
@@ -454,9 +486,10 @@ function scanProseFile(root, relPath, fullSet, stemRe) {
 // Whole-tree scan + baseline comparison
 // ---------------------------------------------------------------------------
 
-export function scanAll(root) {
+export function scanAll(root, stemsBaselinePath) {
   const { fullSet, code, prose } = collectFiles(root);
-  const stems = computeRetiredStems(root, fullSet);
+  const candidates = readRetiredStemCandidates(stemsBaselinePath);
+  const stems = curateRetiredStems(candidates, fullSet);
   const stemRe = buildStemRegex(stems);
   const findings = [];
   for (const relPath of code) findings.push(...scanCodeFile(root, relPath, fullSet, stemRe));
@@ -508,8 +541,8 @@ export function groupFindings(findings) {
  * ratchet has room to tighten, reported non-fatally so `--write` has
  * something to shrink.
  */
-export function audit(root, baselineRows) {
-  const scan = scanAll(root);
+export function audit(root, baselineRows, stemsBaselinePath) {
+  const scan = scanAll(root, stemsBaselinePath);
   const grouped = groupFindings(scan.findings);
   const budgets = new Map(baselineRows.map((row) => [contentKey(row), row.count]));
 
@@ -572,19 +605,53 @@ function readBaselineRows(path) {
   return parsed;
 }
 
+/**
+ * Reads the COMMITTED retired-stem candidate set — never via `git`, per
+ * DETERMINISM in the header. A missing file reads as an empty Set: the
+ * conservative direction (fewer stem findings, never a spurious one), and
+ * the correct reading the very first time this ships before anyone has run
+ * `--write` yet.
+ */
+function readRetiredStemCandidates(path) {
+  if (!existsSync(path)) return new Set();
+  const parsed = JSON.parse(readFileSync(path, 'utf8'));
+  if (!Array.isArray(parsed) || !parsed.every((s) => typeof s === 'string')) {
+    throw new Error(`${path}: expected an array of stem strings`);
+  }
+  return new Set(parsed);
+}
+
 function main(argv) {
   const json = argv.includes('--json');
   const write = argv.includes('--write');
   const atB = argv.indexOf('--baseline');
   const baselinePath = atB === -1 ? join(ROOT, 'scripts/baselines/stale-path-citations.json') : resolve(argv[atB + 1]);
+  const atS = argv.indexOf('--retired-stems-baseline');
+  const stemsBaselinePath = atS === -1
+    ? join(ROOT, 'scripts/baselines/stale-path-retired-stems.json')
+    : resolve(argv[atS + 1]);
   const atR = argv.indexOf('--root');
   const root = atR === -1 ? ROOT : resolve(argv[atR + 1]);
 
   let existing;
   let result;
+  let stemsBefore = 0;
+  let stemsAfter = 0;
   try {
+    if (write) {
+      // The ONLY place this script calls `git log` — see DETERMINISM in the
+      // header. Full overwrite, not shrink: this file caches a historical
+      // FACT (what was ever deleted), not a debt ratchet, so there is
+      // nothing to preserve across a regeneration — audit() below then
+      // reads back exactly what was just written, so the same run's FAIL/
+      // PASS verdict and this write are never out of sync with each other.
+      stemsBefore = readRetiredStemCandidates(stemsBaselinePath).size;
+      const candidates = computeRetiredStemCandidatesFromHistory(root);
+      stemsAfter = candidates.size;
+      writeFileSync(stemsBaselinePath, `${JSON.stringify([...candidates].sort(), null, 2)}\n`);
+    }
     existing = readBaselineRows(baselinePath);
-    result = audit(root, existing ?? []);
+    result = audit(root, existing ?? [], stemsBaselinePath);
   } catch (err) {
     if (!(err instanceof CorpusUnreadable)) throw err;
     process.stderr.write(
@@ -596,6 +663,9 @@ function main(argv) {
   }
 
   if (write) {
+    process.stdout.write(
+      `check-stale-path-citations: retired-stem candidates written — ${stemsBefore} -> ${stemsAfter}\n`,
+    );
     // SHRINK-ONLY, count-aware. No baseline on disk yet -> bootstrap from
     // every current row (first-time creation). A baseline that already
     // exists -> each row's budget can only fall to `min(old, current live

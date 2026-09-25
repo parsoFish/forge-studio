@@ -65,13 +65,27 @@ function fixture(
   return { root, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
-/** Always pins `--root` and `--baseline` — the checker's OWN default baseline
- *  path is this real repo's, computed from `import.meta.url`, so a fixture
- *  test that omitted `--baseline` would silently read/write the real file. */
+/** Every fixture's default retired-stem-candidates path — see `run` below. */
+function retiredStemsPath(root: string): string {
+  return join(root, 'retired-stems.json');
+}
+
+/**
+ * Always pins `--root`, `--baseline` and `--retired-stems-baseline` — the
+ * checker's OWN defaults for all three are this real repo's, computed from
+ * `import.meta.url`, so a fixture test that omitted any of them would
+ * silently read/write the real file. `--retired-stems-baseline` defaults
+ * to a per-fixture path that plain `fixture()` never populates (so a test
+ * that doesn't plant candidates gets an empty stem set, same as a repo
+ * that has never run `--write`), unless `extra` already names the flag.
+ */
 function run(root: string, baselinePath: string, extra: string[] = []): { code: number; out: string } {
+  const stemsFlag = extra.includes('--retired-stems-baseline')
+    ? []
+    : ['--retired-stems-baseline', retiredStemsPath(root)];
   try {
     const out = execFileSync(
-      'node', [CHECKER, '--root', root, '--baseline', baselinePath, ...extra],
+      'node', [CHECKER, '--root', root, '--baseline', baselinePath, ...stemsFlag, ...extra],
       { encoding: 'utf8' },
     );
     return { code: 0, out };
@@ -91,6 +105,15 @@ function writeBaseline(root: string, rows: BaselineRow[]): string {
   const path = join(root, 'baseline.json');
   writeFileSync(path, `${JSON.stringify(rows, null, 2)}\n`);
   return path;
+}
+
+/** Plants a COMMITTED retired-stem candidate set directly, at the exact
+ *  path `run()` defaults `--retired-stems-baseline` to — simulating a repo
+ *  where `--write` already ran and the result was committed, with NO git
+ *  history required at check time. This is the mechanism DETERMINISM in
+ *  the header describes: the check reads this file, never `git log`. */
+function writeRetiredStemCandidates(root: string, stems: string[]): void {
+  writeFileSync(retiredStemsPath(root), `${JSON.stringify(stems, null, 2)}\n`);
 }
 
 // ---------------------------------------------------------------------------
@@ -305,13 +328,13 @@ describe('path-shaped citations in markdown prose', () => {
 // Retired-module bare-basename stems
 // ---------------------------------------------------------------------------
 
-describe('retired-module basename stems in prose', () => {
-  test('a bare basename of a deleted, kebab-named module is a finding', () => {
-    const { root, cleanup } = fixture(
-      { 'docs/guide.md': `The instructions-runner used to own this step.\n` },
-      { 'packages/old/instructions-runner.ts': 'export {};\n' },
-    );
+describe('retired-module basename stems in prose (committed candidates — never git log at check time)', () => {
+  test('a candidate stem absent from the current tree is a finding', () => {
+    const { root, cleanup } = fixture({
+      'docs/guide.md': `The instructions-runner used to own this step.\n`,
+    });
     try {
+      writeRetiredStemCandidates(root, ['instructions-runner']);
       const { code, out } = run(root, noBaseline(root));
       assert.equal(code, 1, out);
       assert.match(out, /docs\/guide\.md: NEW/, out);
@@ -322,15 +345,13 @@ describe('retired-module basename stems in prose', () => {
     }
   });
 
-  test('a basename that still exists elsewhere in the tree is NOT curated as retired', () => {
-    const { root, cleanup } = fixture(
-      {
-        'packages/new/agent-runner.ts': 'export {};\n',
-        'docs/guide.md': `The agent-runner does this.\n`,
-      },
-      { 'packages/old/agent-runner.ts': 'export {};\n' },
-    );
+  test('a candidate stem still present as a FILE elsewhere is NOT curated as retired', () => {
+    const { root, cleanup } = fixture({
+      'packages/new/agent-runner.ts': 'export {};\n',
+      'docs/guide.md': `The agent-runner does this.\n`,
+    });
     try {
+      writeRetiredStemCandidates(root, ['agent-runner']);
       const { code, out } = run(root, noBaseline(root));
       assert.equal(code, 0, `basename still lives at packages/new/ — not retired:\n${out}`);
     } finally {
@@ -338,21 +359,19 @@ describe('retired-module basename stems in prose', () => {
     }
   });
 
-  test('a stem living on as a DIRECTORY name (not a file basename) is NOT curated as retired', () => {
+  test('a candidate stem living on as a DIRECTORY name is NOT curated as retired', () => {
     // The real defect: `demo-agent.ts` (a file) was deleted, but
     // `skills/demo-agent/` (a directory — the concept lives on as a skill)
     // still exists. A basename-only presence check couldn't see the
     // directory and kept flagging `demo-agent` as retired at every site
     // that mentioned it, across three separate merges, until the presence
     // check was widened to directory segments too.
-    const { root, cleanup } = fixture(
-      {
-        'skills/demo-agent/SKILL.md': '# demo-agent\n',
-        'docs/guide.md': `The demo-agent slug is intentional.\n`,
-      },
-      { 'packages/old/demo-agent.ts': 'export {};\n' },
-    );
+    const { root, cleanup } = fixture({
+      'skills/demo-agent/SKILL.md': '# demo-agent\n',
+      'docs/guide.md': `The demo-agent slug is intentional.\n`,
+    });
     try {
+      writeRetiredStemCandidates(root, ['demo-agent']);
       const { code, out } = run(root, noBaseline(root));
       assert.equal(code, 0, `demo-agent lives on as a directory — not retired:\n${out}`);
     } finally {
@@ -360,14 +379,97 @@ describe('retired-module basename stems in prose', () => {
     }
   });
 
-  test('a short or non-compound deleted basename is never curated (false-positive guard)', () => {
+  test('DETERMINISM: the check gets the IDENTICAL verdict with NO git history as with full history', () => {
+    // The CI incident this guards against (bead forge-8vfn.13, 2026-09-25):
+    // actions/checkout defaults to a depth-1 (shallow) clone, so
+    // `git log --diff-filter=D` sees nothing and every stem baseline row
+    // read as stale. `withHistory` recomputes the candidate file for real,
+    // from real deleted-file history, via --write. `noHistory` has ZERO
+    // commits (this file's own `fixture()` never commits unless given
+    // deletedHistory, so it is already the depth-1 shape) and gets the
+    // identical candidate planted directly, as committed data would arrive
+    // in a shallow checkout. Both then get the SAME check and must produce
+    // the SAME verdict.
+    const prose = { 'docs/guide.md': `The example-stem module handled this.\n` };
+    const withHistory = fixture(prose, { 'packages/old/example-stem.ts': 'export {};\n' });
+    const noHistory = fixture(prose);
+    try {
+      const writeResult = run(withHistory.root, join(withHistory.root, 'throwaway-baseline.json'), ['--write']);
+      assert.equal(writeResult.code, 0, writeResult.out);
+
+      writeRetiredStemCandidates(noHistory.root, ['example-stem']);
+
+      const a = run(withHistory.root, noBaseline(withHistory.root));
+      const b = run(noHistory.root, noBaseline(noHistory.root));
+      assert.equal(a.code, 1, `expected a finding with real history:\n${a.out}`);
+      assert.equal(a.code, b.code, `verdict must not depend on clone depth:\nwith-history: ${a.out}\nno-history: ${b.out}`);
+      assert.match(a.out, /example-stem/, a.out);
+      assert.match(b.out, /example-stem/, b.out);
+    } finally {
+      withHistory.cleanup();
+      noHistory.cleanup();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// --write's own candidate-regeneration (the ONLY place this script calls
+// `git log`)
+// ---------------------------------------------------------------------------
+
+describe('--write regenerates the retired-stem candidate set from git history', () => {
+  test('a compound, 6+ char, code-extension deletion becomes a candidate', () => {
+    const { root, cleanup } = fixture({}, { 'packages/old/instructions-runner.ts': 'export {};\n' });
+    try {
+      const result = run(root, noBaseline(root), ['--write']);
+      assert.equal(result.code, 0, result.out);
+      const candidates = JSON.parse(readFileSync(retiredStemsPath(root), 'utf8')) as string[];
+      assert.ok(candidates.includes('instructions-runner'), `expected it in ${JSON.stringify(candidates)}`);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('a short or non-compound deleted basename is never a candidate (false-positive guard)', () => {
     const { root, cleanup } = fixture(
-      { 'docs/guide.md': `See the utils file and the x helper.\n` },
+      {},
       { 'packages/old/utils.ts': 'export {};\n', 'packages/old/x.ts': 'export {};\n' },
     );
     try {
-      const { code, out } = run(root, noBaseline(root));
-      assert.equal(code, 0, `"utils" (no hyphen) and "x" (too short) must not be curated:\n${out}`);
+      const result = run(root, noBaseline(root), ['--write']);
+      assert.equal(result.code, 0, result.out);
+      const candidates = JSON.parse(readFileSync(retiredStemsPath(root), 'utf8')) as string[];
+      assert.ok(!candidates.includes('utils'), `"utils" has no hyphen: ${JSON.stringify(candidates)}`);
+      assert.ok(!candidates.includes('x'), `"x" is too short: ${JSON.stringify(candidates)}`);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('a non-code-extension deletion is never a candidate', () => {
+    const { root, cleanup } = fixture({}, { 'docs/old/legacy-notes.md': '# gone\n' });
+    try {
+      const result = run(root, noBaseline(root), ['--write']);
+      assert.equal(result.code, 0, result.out);
+      const candidates = JSON.parse(readFileSync(retiredStemsPath(root), 'utf8')) as string[];
+      assert.ok(!candidates.includes('legacy-notes'), `a deleted .md is not a retired MODULE: ${JSON.stringify(candidates)}`);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('--write regenerates the candidate file as a FULL overwrite, not shrink-only', () => {
+    // Unlike the citations baseline, this file caches a FACT (what git
+    // history shows was deleted), not a debt budget — a stale leftover
+    // candidate must not survive a regeneration by merging forward.
+    const { root, cleanup } = fixture({}, { 'packages/old/instructions-runner.ts': 'export {};\n' });
+    try {
+      writeRetiredStemCandidates(root, ['stale-leftover-candidate']);
+      const result = run(root, noBaseline(root), ['--write']);
+      assert.equal(result.code, 0, result.out);
+      const candidates = JSON.parse(readFileSync(retiredStemsPath(root), 'utf8')) as string[];
+      assert.ok(!candidates.includes('stale-leftover-candidate'), `must be overwritten, not merged: ${JSON.stringify(candidates)}`);
+      assert.ok(candidates.includes('instructions-runner'), JSON.stringify(candidates));
     } finally {
       cleanup();
     }
