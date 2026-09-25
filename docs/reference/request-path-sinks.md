@@ -2643,6 +2643,33 @@ one pre-existing, unrelated tightenable line in
 `packages/flows/scheduler-dispatch.ts` (`existsSync 4 -> 3`) that neither
 split touched; sweeping it in would mix another lane's slack into this one.
 
+### New — `stale-remote-branch-guard.ts`, consolidated onto `scheduler-run-one.ts` (bead `forge-8vfn.8.1.8`)
+
+`packages/flows/stale-remote-branch-guard.ts` is a brand-new module holding
+only the pure probe (`probeRemoteBranch`: `execFileSync` 0 → 1, `git
+ls-remote`) — no event logging, no delete. `packages/flows/scheduler-run-one.ts`
+owns both: its existing, already-baselined `emitClaimRefusedEvent` (renamed
+`emitOrchestratorEvent`, unchanged sink count — one `appendFileSync`/
+`existsSync`/`mkdirSync` call site, now parameterised over three call sites
+instead of one) logs the refusal and the cleanup; its own `execFileSync`
+count grows 1 → 2 (`git push origin --delete <branch>`, run from its
+`finally` block).
+
+**not request-derived** `[read]` — `projectRepoPath` / `branch` (=
+`forge/<initiativeId>`) trace to `manifest.projectRepoPath` /
+`manifest.initiativeId`, the same two fields `worktree.add` and
+`emitClaimRefusedEvent` already read unguarded one line away in this same
+function — covered by the "Recorded design assumption" above (`CycleInput`
+fields are trusted at construction; every manifest-write path passes ingest
+validation before `runOne` ever claims it). `forgeRoot` is this file's own
+install root, a server constant.
+
+`git push origin --delete <branch>` only ever runs after `probeRemoteBranch`
+re-confirms, at cleanup time, that `<branch>` exists on origin with no open
+PR, and only for a branch the caller already proved (via a pre-attempt probe)
+was ABSENT before this attempt started. Never a force-push; never reachable
+for a preserved/resumed branch.
+
 ### Extended in M7-C — `hook-runtime.ts`'s private verified-script copy (bead `forge-8vfn.8.3.2`, content half)
 
 `packages/library/studio/hook-runtime.ts` gained `writeFileSync` 0 → 1 and
