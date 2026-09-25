@@ -94,7 +94,7 @@ export type CommunityItem = {
 
 export type CommunityFile = { path: string; body: string };
 
-export const HOOK_SCAN_CATEGORIES = ['network-egress', 'env-read', 'file-read', 'obfuscation'] as const;
+export const HOOK_SCAN_CATEGORIES = ['network-egress', 'env-read', 'file-read', 'obfuscation', 'unpinned-source'] as const;
 export type HookScanCategory = (typeof HOOK_SCAN_CATEGORIES)[number];
 
 export const HOOK_FINDING_SEVERITIES = ['critical', 'info'] as const;

@@ -484,7 +484,7 @@ test('RED (zyc finding 1): a pr-merged trigger built via the real client path is
 
   const flow: FlowDefinition = {
     id: 'flow-a', name: 'Flow A', version: 1, goal: '', project: 'demo-project', kb: null,
-    costCeilingUsd: 0, origin: 'studio', nodes: [], edges: [],
+    costCeilingUsd: 0, origin: 'studio', accepts: ['code'], nodes: [], edges: [],
     triggers: trigger ? [trigger] : [],
     path: '/dev/null/flow.yaml',
   };
@@ -507,7 +507,7 @@ test('companion (zyc finding 1): issue-raised builds the SAME real webhook shape
   expect(trigger?.webhook?.id).toBe('myproj-issue-raised');
   const flow: FlowDefinition = {
     id: 'flow-a', name: 'Flow A', version: 1, goal: '', project: 'demo-project', kb: null,
-    costCeilingUsd: 0, origin: 'studio', nodes: [], edges: [],
+    costCeilingUsd: 0, origin: 'studio', accepts: ['code'], nodes: [], edges: [],
     triggers: trigger ? [trigger] : [],
     path: '/dev/null/flow.yaml',
   };

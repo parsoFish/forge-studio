@@ -1616,7 +1616,8 @@ async function handleHttp(
         result.status === 'enqueued' ? 200 :
         result.status === 'not-found' ? 404 :
         result.status === 'already-running' || result.status === 'already-done' ||
-          result.status === 'not-planned' || result.status === 'repoint-requires-confirm' ? 409 :
+          result.status === 'not-planned' || result.status === 'repoint-requires-confirm' ||
+          result.status === 'class-mismatch' ? 409 :
         500;
       sendJson(res, httpStatus, { ...result, ok: result.status === 'enqueued' }, origin);
     } catch (err) {

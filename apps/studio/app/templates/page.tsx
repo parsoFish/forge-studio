@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { StudioPage } from '@/components/StudioPage';
 import { fetchTemplateLibrary, type TemplateLibraryEntry } from '@/lib/template-client';
 import { groupTemplateLibrary, filterTemplates, templateBadges, previewClassFor } from '@/lib/template-library-view';
+import { ProvenanceBadge } from '@/components/ProvenanceBadge';
 
 // ---------------------------------------------------------------------------
 // Templates library — /templates (R3-06, WI-4). Every registry item — the
@@ -182,6 +183,10 @@ function TemplateCard({ entry, index }: { entry: TemplateLibraryEntry; index: nu
     >
       <div className="card-top">
         <span className="card-name">{entry.name || entry.id}</span>
+        {/* forge-8vfn.8.3.7: server-attested — 'ootb' renders a badge,
+            'operator' (the unbadged default) renders nothing; absent
+            (a malformed definition, entry.error set) also renders nothing. */}
+        <ProvenanceBadge provenance={entry.origin} />
         {badges.map((b) => (
           <span key={b} className="badge" style={BADGE_STYLE[b]}>{b}</span>
         ))}

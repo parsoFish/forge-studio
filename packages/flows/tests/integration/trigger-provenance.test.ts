@@ -121,6 +121,7 @@ function flowYaml(opts: { id: string; project: string | null }): string {
     'kb: null',
     'costCeilingUsd: 10',
     'origin: seed',
+    'accepts: [code]',
     'nodes:',
     '  - { id: dev, agent: developer-ralph }',
     'edges: []',

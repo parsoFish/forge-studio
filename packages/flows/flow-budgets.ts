@@ -10,7 +10,8 @@
  * (costCeilingUsd unset or 0, wedgeKillMs unset, no rate-limit recorded)
  * behaves exactly as today — no enforcement fires.
  *
- * Clocks are injectable for testability (RateLimitGate receives `now()`).
+ * Clocks are injectable for testability (RateLimitGate receives `now()` and
+ * `setTimeout`).
  */
 
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
@@ -479,6 +480,15 @@ export class WedgeDetector {
 export type RateLimitGateOptions = {
   /** Injected clock; defaults to Date.now. Tests supply a fake clock. */
   now?: () => number;
+  /**
+   * Injected timer scheduler; defaults to the real global `setTimeout`.
+   * Tests pair this with a fake `now()` to drive the poll loop below by
+   * hand — asserting the requested poll cadence instead of depending on a
+   * real timer firing on schedule under host load (forge-m7-c: a real
+   * setTimeout tick can fire seconds late here — see
+   * _1.0/reports/m7-c-clockprobe-1.log).
+   */
+  setTimeout?: (fn: () => void, ms: number) => unknown;
 };
 
 /**
@@ -488,8 +498,9 @@ export type RateLimitGateOptions = {
  *   gate.recordRateLimit(resetsAtMs) — call when an SDK error carries a reset time
  *   await gate.waitIfNeeded()        — call before spawning any node; resolves after resetsAt
  *
- * The `now()` clock is injected for testability — tests advance a fake clock
- * so the gate does not use real wall-clock time.
+ * The `now()` clock AND the `setTimeout` scheduler are injected for
+ * testability — tests drive a fake clock paired with a fake scheduler so
+ * the gate never depends on a real timer firing on schedule.
  *
  * Implementation: polls `now()` in 10ms ticks until now >= resetsAt. This keeps
  * the logic simple and testable without real timers while staying accurate in
@@ -499,9 +510,11 @@ export class RateLimitGate {
   /** @internal — exposed for test assertions only */
   resetsAt: number | null = null;
   private readonly now: () => number;
+  private readonly scheduleTimeout: (fn: () => void, ms: number) => unknown;
 
   constructor(opts: RateLimitGateOptions = {}) {
     this.now = opts.now ?? (() => Date.now());
+    this.scheduleTimeout = opts.setTimeout ?? ((fn, ms) => setTimeout(fn, ms));
   }
 
   /**
@@ -535,10 +548,10 @@ export class RateLimitGate {
           this.resetsAt = null;
           resolve();
         } else {
-          setTimeout(tick, 10);
+          this.scheduleTimeout(tick, 10);
         }
       };
-      setTimeout(tick, 10);
+      this.scheduleTimeout(tick, 10);
     });
   }
 }

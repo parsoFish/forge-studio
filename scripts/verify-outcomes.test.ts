@@ -22,7 +22,10 @@ import { sumAuthoritativeCostUsd } from '@forge/kernel';
 // others" this file's brief says not to do. Resolved dynamically instead, so
 // a missing export surfaces as its own red assertion (calling `undefined`)
 // exactly where each new case uses it, never as a whole-file load failure.
-const { classifyReflectorProgress, sumAuthoritativeCostFromLines } = await import('./lib/verify-outcomes.mjs');
+const {
+  classifyReflectorProgress, sumAuthoritativeCostFromLines,
+  REFLECT_LANDED_WAIT_MS, resolveReflectWaitDeadlineMs,
+} = await import('./lib/verify-outcomes.mjs');
 
 test('the default ground is gitpulse, never mdtoc', () => {
   assert.equal(DEFAULT_PROJECT, 'gitpulse');
@@ -30,12 +33,12 @@ test('the default ground is gitpulse, never mdtoc', () => {
 
 test('post-merge tests are SKIPPED WITH A REASON when the cycle never reached merge', () => {
   const checks = buildOutcomeChecks({
-    finalStatus: 'failed', manifestInDone: false,
+    finalStatus: 'failed', manifestLanded: false,
     wi: { total: 4, complete: 4, failed: 0 },
     tests: { ran: true, ok: true, label: 'npm test' },
     cost: 10, costCeiling: 60, reflectTheme: { present: false, reason: 'none' },
   });
-  const merged = checks.find((c) => c.name === 'cycle reached merge (done)');
+  const merged = checks.find((c) => c.name === 'cycle reached merge (merged/done)');
   const post = checks.find((c) => c.name === 'project tests green post-merge');
   assert.equal(merged.pass, false);
   assert.equal(post.skipped, true, 'a green suite on an unmerged tree is not post-merge evidence');
@@ -45,7 +48,7 @@ test('post-merge tests are SKIPPED WITH A REASON when the cycle never reached me
 
 test('post-merge tests are judged normally once the cycle reached merge', () => {
   const checks = buildOutcomeChecks({
-    finalStatus: 'done', manifestInDone: true,
+    finalStatus: 'done', manifestLanded: true,
     wi: { total: 4, complete: 4, failed: 0 },
     tests: { ran: true, ok: true, label: 'npm test' },
     cost: 10, costCeiling: 60, reflectTheme: { present: true, reason: '1 theme(s)' },
@@ -57,7 +60,7 @@ test('post-merge tests are judged normally once the cycle reached merge', () => 
 
 test('the reflect row follows the flow: absent when the selected flow declares no on:merged reflect (M7-A --flow)', () => {
   const base = {
-    finalStatus: 'done', manifestInDone: true,
+    finalStatus: 'done', manifestLanded: true,
     wi: { total: 1, complete: 1, failed: 0 },
     tests: { ran: true, ok: true, label: 'npm test' },
     cost: 5, costCeiling: 35,
@@ -68,6 +71,99 @@ test('the reflect row follows the flow: absent when the selected flow declares n
   const withReflect = buildOutcomeChecks({ ...base, reflectTheme: { present: false, reason: 'none' } });
   assert.equal(withReflect.find((c) => c.name === 'reflect wrote central project brain')?.pass, false,
     'a flow that DOES declare reflect is still failed when no theme was written');
+});
+
+// ---------------------------------------------------------------------------
+// T3 M7-A fix round — Defect 1: a MERGED cycle whose manifest is still
+// sitting in `_queue/merged/` (not yet promoted to `_queue/done/` — R4-11-F1's
+// transient pass-through) must count as LANDED. A real betterado run
+// (2026-09-25) merged the PR and closure moved the manifest to `_queue/merged/`,
+// but the reflector was killed before the same-sweep `merged/ → done/`
+// promotion ran, so the manifest never reached `done/` — the OLD gate read
+// `finalStatus=merged, manifest not in done/` and FAILED a cycle that had, in
+// fact, reached merge.
+// ---------------------------------------------------------------------------
+
+test('a confirmed merge sitting in _queue/merged/ (not yet promoted to done/) is LANDED via finalStatus alone', () => {
+  const checks = buildOutcomeChecks({
+    finalStatus: 'merged', manifestLanded: false,
+    wi: { total: 3, complete: 3, failed: 0 },
+    tests: { ran: true, ok: true, label: 'npm test' },
+    cost: 12, costCeiling: 60, reflectTheme: { present: false, reason: 'reflector killed before it could write' },
+  });
+  const merged = checks.find((c) => c.name === 'cycle reached merge (merged/done)');
+  assert.equal(merged.pass, true, 'finalStatus=merged is itself a confirmed-remote-merge signal — never weaker than finalStatus=done');
+  assert.equal(merged.detail, 'finalStatus=merged');
+});
+
+test('a confirmed merge is LANDED via the manifest sitting in _queue/merged/ even when the bridge status read is unreliable (finalStatus null)', () => {
+  const checks = buildOutcomeChecks({
+    finalStatus: null, manifestLanded: true,
+    wi: { total: 3, complete: 3, failed: 0 },
+    tests: { ran: true, ok: true, label: 'npm test' },
+    cost: 12, costCeiling: 60, reflectTheme: { present: false, reason: 'reflector killed before it could write' },
+  });
+  const merged = checks.find((c) => c.name === 'cycle reached merge (merged/done)');
+  assert.equal(merged.pass, true);
+  assert.match(merged.detail, /_queue\/merged\/ or _queue\/done\//, 'the detail must name BOTH landed queue states, not just done/');
+});
+
+test('post-merge tests still run once a merged (not-yet-done) cycle is judged landed', () => {
+  const checks = buildOutcomeChecks({
+    finalStatus: 'merged', manifestLanded: false,
+    wi: { total: 3, complete: 3, failed: 0 },
+    tests: { ran: true, ok: true, label: 'npm test' },
+    cost: 12, costCeiling: 60, reflectTheme: { present: false, reason: 'reflector killed before it could write' },
+  });
+  const post = checks.find((c) => c.name === 'project tests green post-merge');
+  assert.equal(post.skipped, undefined, 'the merged state must not skip the post-merge test check');
+  assert.equal(post.pass, true);
+});
+
+test('a cycle that never merged (finalStatus failed, manifest nowhere landed) still fails the merge gate', () => {
+  const checks = buildOutcomeChecks({
+    finalStatus: 'failed', manifestLanded: false,
+    wi: { total: 3, complete: 0, failed: 3 },
+    tests: { ran: true, ok: true, label: 'npm test' },
+    cost: 12, costCeiling: 60, reflectTheme: undefined,
+  });
+  const merged = checks.find((c) => c.name === 'cycle reached merge (merged/done)');
+  assert.equal(merged.pass, false);
+  assert.match(merged.detail, /manifest not in merged\/ or done\//);
+});
+
+// ---------------------------------------------------------------------------
+// T3 M7-A fix round — Defect 3: the reflect/landed wait must get its OWN
+// bound, measured from the moment the verdict was APPROVED — never from the
+// run's start. The same real betterado run: verdict approved 03:02, finalize
+// alone ran until 03:11 (9 of the old inline `12 * 60_000` minutes), and the
+// reflector was killed mid-run when that bound expired at ~03:14 — a bound
+// too tight for finalize + a live-resource reflect to share, and never named
+// as a constant.
+// ---------------------------------------------------------------------------
+
+test('REFLECT_LANDED_WAIT_MS is a named, generous bound — strictly bigger than the old unnamed 12-minute literal that killed a live reflector mid-run', () => {
+  assert.equal(typeof REFLECT_LANDED_WAIT_MS, 'number');
+  assert.ok(REFLECT_LANDED_WAIT_MS > 12 * 60_000,
+    `expected a bound bigger than the old inline 12-minute literal, got ${REFLECT_LANDED_WAIT_MS}ms`);
+});
+
+test('resolveReflectWaitDeadlineMs derives the reflect-wait deadline ONLY from the verdict approval time — it takes no run-start parameter at all', () => {
+  assert.equal(resolveReflectWaitDeadlineMs.length, 1,
+    'the function must accept exactly one input (the approval time) — a second (run-start) parameter would reintroduce the whole-run-clock defect');
+  const approvedAtMs = 1_700_000_000_000;
+  assert.equal(resolveReflectWaitDeadlineMs(approvedAtMs), approvedAtMs + REFLECT_LANDED_WAIT_MS);
+});
+
+test('resolveReflectWaitDeadlineMs: a run that has been going for hours before the verdict is approved gets the SAME reflect-wait window as a fast one', () => {
+  // Two runs approved at the SAME moment but with wildly different histories
+  // (one 10 minutes old, one 3 hours old going into the approval) must get
+  // an IDENTICAL deadline — proof the bound is anchored to the verdict, not
+  // to however long the run has already been running.
+  const approvedAtMs = 1_700_000_000_000;
+  const fastRunDeadline = resolveReflectWaitDeadlineMs(approvedAtMs);
+  const slowRunDeadline = resolveReflectWaitDeadlineMs(approvedAtMs);
+  assert.equal(fastRunDeadline, slowRunDeadline);
 });
 
 // ---------------------------------------------------------------------------

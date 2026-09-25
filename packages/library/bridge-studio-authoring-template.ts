@@ -111,7 +111,11 @@ export function finalizeTemplateFromLanded(
 
   // Reconstruct WITHOUT the draft-only "category" routing field — a real,
   // installed template.md never carries one (category is structural, D1).
-  const content = matter.stringify(parsed.content, persistedData);
+  // forge-8vfn.8.3.7: stamps origin:'operator' — this route lands a
+  // creation-AGENT's drafted template, initiated by and for the operator,
+  // never part of forge's shipped library — same as POST /api/studio/
+  // templates, overriding whatever (if anything) the drafted frontmatter claimed.
+  const content = matter.stringify(parsed.content, { ...persistedData, origin: 'operator' });
 
   // Layer 3 — CONTENT: the SAME real-category-loader check
   // (invalidTemplateContentReason) POST /api/studio/templates uses — never a

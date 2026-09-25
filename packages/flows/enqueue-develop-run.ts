@@ -27,6 +27,9 @@ export type EnqueueDevelopStatus =
    *  shipped initiative is never re-run from an operator action. */
   | 'already-done'
   | 'not-planned'
+  /** Seam F6 half 1 (ADR 051 decision 4): forge-develop does not declare
+   *  the manifest's `class` in its `accepts` list. */
+  | 'class-mismatch'
   | 'error';
 
 export type EnqueueDevelopResult = {

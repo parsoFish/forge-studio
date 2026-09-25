@@ -134,6 +134,7 @@ function writeGenericFlow(root: string): void {
       'kb: null',
       'costCeilingUsd: 5',
       'origin: architect',
+      'accepts: [code]',
       'nodes:',
       '  - id: integrate',
       '    agent: demo-agent',

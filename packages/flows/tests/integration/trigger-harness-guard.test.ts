@@ -30,6 +30,7 @@ const FLOW_YAML = [
   'kb: null',
   'costCeilingUsd: 5',
   'origin: seed',
+  'accepts: [code]',
   'disposable: true',
   'nodes:',
   '  - { id: pm, agent: project-manager }',

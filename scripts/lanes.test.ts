@@ -16,12 +16,27 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, chmodSync, mkdirSync, copyFileSync, realpathSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, chmodSync, mkdirSync, copyFileSync, realpathSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { writeExec as writeExecFixture, fakeBin as fakeBinFixture, laneBin as laneBinFixture } from './lanes.fixture.ts';
 
 const LANES = join(import.meta.dirname, '..', '.claude', 'skills', 'tiered-orchestration', 'scripts', 'lanes.sh');
 const PREFIX = `lanestest${process.pid}-`;
+/**
+ * The ONE confirm-window artefact every `lanes()` launch call shares — never a per-test
+ * literal (a second one is exactly how the next load-sensitive flake gets planted, register
+ * row "lanes.test.ts:528"). Not a product bound: `lanes.sh`'s own default is 60s.
+ *
+ * Register row "lanes.test.ts:761": widening this used to be the whole fix, and it kept
+ * flaking anyway — a fake `claude` that forks `python3` to read-modify-write the roster JSON
+ * can lose an unbounded amount of time to interpreter start-up under real contention, and no
+ * fixed number here ever out-runs an unbounded race. `laneBin()` below now registers with pure
+ * bash, as the very first thing the process does, so the ONLY latency left standing between
+ * "this shell got scheduled at all" and "the row exists" is bash's own dispatch — which this
+ * window is sized to absorb, generously, once and for every launch test.
+ */
+const CONFIRM_TIMEOUT_S = '20';
 
 let dir: string;
 let camp: string;
@@ -66,12 +81,8 @@ function lanes(args: string[], env: Record<string, string> = {}, timeoutMs = 300
     env: {
       ...envWithoutLanesVars(),
       LANES_SESSION_PREFIX: PREFIX,
-      // A TEST ARTEFACT, not a product bound — the product default is 60s (see lanes.sh's own
-      // header). Chosen only to keep the failure-path tests (the ones that let this expire on
-      // purpose) fast. Register row "lanes.test.ts:528": under load, a real tmux+bash+python3
-      // registration can outrun a too-tight artefact value, so this is wide enough to absorb
-      // realistic startup latency while staying far below the real 60s default.
-      LANES_CONFIRM_TIMEOUT_S: '15',
+      // See CONFIRM_TIMEOUT_S's own comment — the one shared window, never a per-call literal.
+      LANES_CONFIRM_TIMEOUT_S: CONFIRM_TIMEOUT_S,
       // Pinned so the memory floor cannot turn every launch test into a reading of whatever the
       // host had free at the time — the same reason envWithoutLanesVars() exists.
       LANES_MEMINFO: meminfo(9 * 1024 * 1024),
@@ -83,84 +94,50 @@ function lanes(args: string[], env: Record<string, string> = {}, timeoutMs = 300
   });
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
+/**
+ * Register row "lanes.test.ts:446" (traced to main, predating 09fce105 — the old shim's
+ * `json.dump(rows, open(p, "w"))` has the identical truncate-then-write shape): `lanes.sh`
+ * pipes the roster file straight into `python3 -c 'json.load(sys.stdin)'`, so a confirm poll
+ * landing mid-write reads zero bytes and python3 crashes with a JSONDecodeError that shows up
+ * in the test's own `r.stderr`. Atomic here for the same reason `register_row` in
+ * lanes.fixture.ts is: write complete content to a tmp file in the SAME directory, then
+ * `renameSync` it onto the real path — a reader never observes a partial file.
+ */
 function setRoster(rows: Array<Record<string, unknown>>) {
-  writeFileSync(rosterFile, JSON.stringify(rows));
+  const tmp = `${rosterFile}.tmp.${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(rows));
+  renameSync(tmp, rosterFile);
 }
+// writeExec/fakeBin/laneBin: thin wrappers over scripts/lanes.fixture.ts, closing over this
+// file's own `dir`/`rosterFile` so every existing call site below is unchanged.
 function writeExec(name: string, body: string) {
-  const p = join(dir, name);
-  writeFileSync(p, body);
-  chmodSync(p, 0o755);
-  return p;
+  return writeExecFixture(dir, name, body);
 }
-/**
- * A binary at `<dir>/<name>/<name>`, so its `comm` (what `pgrep -x` matches) is <name>.
- * A copy of `sleep`: it idles, and it is not the real program of that name.
- */
 function fakeBin(name: string) {
-  const d = join(dir, `bin-${name}`);
-  mkdirSync(d, { recursive: true });
-  const p = join(d, name);
-  // Copied once per name: re-copying over a running copy is ETXTBSY, and every planted
-  // process of that name wants the same binary anyway.
-  if (!existsSync(p)) {
-    copyFileSync(execFileSync('bash', ['-c', 'command -v sleep'], { encoding: 'utf8' }).trim(), p);
-    chmodSync(p, 0o755);
-  }
-  return p;
+  return fakeBinFixture(dir, name);
+}
+function laneBin(name: string, opts: { register: 'busy' | 'waiting' | 'never'; detach?: string }) {
+  return laneBinFixture(dir, rosterFile, name, opts);
 }
 /**
- * A lane program: records its argv, optionally registers itself in the roster
- * (what a real claude session does by existing), then idles.
- *
- * `register` values are the ones `claude agents --json` really emits, measured on
- * Claude Code v2.1.260 (2026-09-04, bead forge-8vfn.2.31):
- *   busy     — working
- *   waiting  — parked on a dialog: `{"status":"waiting","waitingFor":"permission prompt"}`.
- *              `waitingFor` is only present while waiting; there is NO `state` key, and no
- *              observed value anywhere contains the string "blocked".
- *   never    — the trust dialog: the session never reaches the roster at all, while its
- *              process is alive in the lane's cwd.
- *
- * `detach` spawns a grandchild through `setsid` before idling, so it survives the death of
- * the tmux session that started it — §15.100's RC-attached claude, plantable on demand.
+ * Block (bounded, event-driven) until a file a shim writes both EXISTS and has content —
+ * `launch` confirming only proves the roster row is visible, never that this shell has
+ * reached ITS OWN later lines. Register row "lanes.test.ts:446": `register_row` runs FIRST
+ * on purpose (761's fix), so under contention `launch` can return success while THIS shim
+ * is still mid-script on the argv/env/detachedpid line below it — a bare `existsSync` is not
+ * enough for a file whose WRITER forks (`printenv`), because the shell's own redirection
+ * creates the file, empty, before the forked writer has run at all.
  */
-function laneBin(name: string, opts: { register: 'busy' | 'waiting' | 'never'; detach?: string }) {
-  const argvFile = join(dir, `${name}.argv`);
-  const status =
-    opts.register === 'waiting' ? '"waiting", "waitingFor": "permission prompt"' : '"busy"';
-  const row =
-    opts.register === 'never'
-      ? ''
-      : `python3 - "$$" <<'PY'
-import json, os, sys
-p = os.environ["ROSTER"]
-rows = json.load(open(p)) if os.path.exists(p) else []
-rows.append({"name": os.environ["SESS"], "pid": int(sys.argv[1]), "kind": "interactive", "status": ${status}})
-json.dump(rows, open(p, "w"))
-PY`;
-  const detach = opts.detach
-    ? `setsid nohup '${opts.detach}' 300 </dev/null >'${join(dir, `${name}.detached`)}' 2>&1 &
-echo $! > '${join(dir, `${name}.detachedpid`)}'
-`
-    : '';
-  return writeExec(
-    name,
-    `#!/usr/bin/env bash
-if [ "$1" = --version ]; then echo '0.0.0 (test)'; exit 0; fi; printf '%s\\0' "$@" > '${argvFile}' # row 40
-printenv > '${join(dir, `${name}.env`)}'
-SESS=""; while [ $# -gt 0 ]; do [ "$1" = -n ] && SESS="$2"; shift; done
-export SESS ROSTER='${rosterFile}'
-${detach}${row}
-sleep 120
-`,
-  );
+function waitForFile(path: string, ms = 8000): void {
+  const ready = () => existsSync(path) && readFileSync(path).length > 0;
+  const deadline = performance.now() + ms; // monotonic — forge-8vfn.7.6.50
+  while (performance.now() < deadline && !ready()) spawnSync('sleep', ['0.1']);
+  assert.ok(ready(), `precondition: ${path} never appeared with content`);
 }
 /** The pid of the grandchild `laneBin(..., {detach})` spawned, once it exists. */
 function detachedPid(name: string) {
   const f = join(dir, `${name}.detachedpid`);
-  const deadline = performance.now() + 8000; // monotonic — forge-8vfn.7.6.50
-  while (performance.now() < deadline && !existsSync(f)) spawnSync('sleep', ['0.1']);
-  assert.ok(existsSync(f), `precondition: ${name} never spawned its detached process`);
+  waitForFile(f);
   const pid = Number(readFileSync(f, 'utf8').trim());
   planted.add(pid);
   return pid;
@@ -206,11 +183,15 @@ function meminfo(availableKb: number) {
   return p;
 }
 function argvOf(name: string) {
-  return readFileSync(join(dir, `${name}.argv`), 'utf8').replace(/\0$/, '').split('\0');
+  const f = join(dir, `${name}.argv`);
+  waitForFile(f);
+  return readFileSync(f, 'utf8').replace(/\0$/, '').split('\0');
 }
 /** The ENVIRONMENT the lane's program actually received — `argvOf`'s sibling (639). */
 function envOf(name: string): Record<string, string> {
-  const lines = readFileSync(join(dir, `${name}.env`), 'utf8').split('\n').filter((l) => l.includes('='));
+  const f = join(dir, `${name}.env`);
+  waitForFile(f);
+  const lines = readFileSync(f, 'utf8').split('\n').filter((l) => l.includes('='));
   return Object.fromEntries(lines.map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
 }
 function git(cwd: string, ...args: string[]) {

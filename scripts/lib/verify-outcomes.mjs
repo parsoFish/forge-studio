@@ -19,9 +19,18 @@
  * green post-merge'` row used to pass on `tests.ok` alone, independent of
  * whether the cycle ever reached merge — so a cycle that never merged could
  * still score a green post-merge row by running the project's tests on an
- * unmerged tree. Now, when the `'cycle reached merge (done)'` row does not
- * pass, the post-merge test row is `{ pass: false, skipped: true, detail }`
+ * unmerged tree. Now, when the `'cycle reached merge (merged/done)'` row does
+ * not pass, the post-merge test row is `{ pass: false, skipped: true, detail }`
  * instead of being judged on `tests.ok` — a skipped row is never a pass.
+ *
+ * T3 M7-A fix round (2026-09-25, betterado run): `'cycle reached merge
+ * (merged/done)'` used to require `finalStatus === 'done'` or the manifest
+ * sitting in `_queue/done/` — but `_queue/merged/` (packages/flows/queue.ts's
+ * `QueueState`) is ITSELF the confirmed-remote-merge state; `merged/ → done/`
+ * is a same-sweep promotion (`promoteMergedToDone`, fired after reflection)
+ * that a killed-mid-run reflector can prevent from ever happening. A cycle
+ * that reached `merged` had already reached merge — the row (and its
+ * `manifestLanded` input) now accept EITHER state.
  *
  * The module is pure: every input arrives as a parameter. No `node:fs`, no
  * `node:child_process`, no `process.cwd()`, no import from `verify-cycle.mjs`
@@ -49,6 +58,39 @@ import { sumAuthoritativeCostUsd } from '@forge/kernel';
 export const DEFAULT_PROJECT = 'gitpulse';
 
 /**
+ * T3 M7-A fix round (2026-09-25 betterado run) — the bound for stage 2/3's
+ * post-verdict LANDED wait (finalize's queue moves + PR align + the
+ * standalone reflector agent turn), always measured from the moment the
+ * verdict was APPROVED via `resolveReflectWaitDeadlineMs`, never from the
+ * run's start: the run that surfaced this had already spent 1h47m on the
+ * architect + dev-loop before the verdict was even approved, then finalize
+ * alone took 9 of the OLD unnamed `12 * 60_000` bound's 12 minutes, leaving a
+ * live-resource reflector only 3 minutes before the harness read the
+ * exhausted bound as "the whole run is done" and tore studio down mid-reflect.
+ * 30 minutes is deliberately generous — the same order of magnitude as the
+ * architect stage's own 25-minute budget (this file's sibling constant, in
+ * `verify-cycle.mjs`), so finalize and a real reflector turn can both run to
+ * completion without racing a clock that has nothing to do with either.
+ */
+export const REFLECT_LANDED_WAIT_MS = 30 * 60_000;
+
+/**
+ * Resolve stage 2/3's landed-wait deadline. A pure function of the verdict's
+ * OWN approval time — it takes no run-start (or any other) input, which is
+ * itself the fix: the prior code passed `Date.now() + 12 * 60_000` inline at
+ * the call site, indistinguishable in shape from "whatever's left of the
+ * run", and burned finalize + reflect against a bound that had no name and no
+ * documented relationship to either.
+ *
+ * @param {number} approvedAtMs when the verdict was approved (`Date.now()` at
+ *   that call site in verify-cycle.mjs)
+ * @returns {number} the deadline, in epoch ms, to pass to `waitLanded`
+ */
+export function resolveReflectWaitDeadlineMs(approvedAtMs) {
+  return approvedAtMs + REFLECT_LANDED_WAIT_MS;
+}
+
+/**
  * @typedef {{ name: string, pass: boolean, detail: string, skipped?: boolean }} OutcomeCheck
  */
 
@@ -60,9 +102,11 @@ export const DEFAULT_PROJECT = 'gitpulse';
  *
  * @param {object} params
  * @param {string} params.finalStatus the cycle's terminal status from the bridge
- * @param {boolean} params.manifestInDone whether the initiative's manifest landed
- *   in `_queue/done/` — the authoritative merge signal once the bridge's
- *   post-merge status read goes unreliable
+ *   — `'merged'` and `'done'` are BOTH confirmed-remote-merge signals (queue.ts's
+ *   `QueueState`); `merged` is not a lesser or provisional one
+ * @param {boolean} params.manifestLanded whether the initiative's manifest landed
+ *   in `_queue/merged/` OR `_queue/done/` — the authoritative merge signal once
+ *   the bridge's post-merge status read goes unreliable
  * @param {{ total: number, complete: number, failed: number }} params.wi
  *   work-item completion counts from the event log
  * @param {{ ran: boolean, ok: boolean, label: string }} params.tests the
@@ -80,17 +124,24 @@ export const DEFAULT_PROJECT = 'gitpulse';
  * @returns {OutcomeCheck[]}
  */
 export function buildOutcomeChecks({
-  finalStatus, manifestInDone, wi, tests, cost, costCeiling,
+  finalStatus, manifestLanded, wi, tests, cost, costCeiling,
   reflectTheme, liveEvidence, releaseEvidence,
 }) {
+  // R4-11-F1: `merged` and `done` are BOTH confirmed-remote-merge queue states
+  // (packages/flows/queue.ts's `QueueState`) — `merged` is where closure lands
+  // a cycle the instant the PR is confirmed merged; the SAME sweep then
+  // promotes it on to `done` (after firing reflection). A reflector that dies
+  // or is killed before that promotion runs must not turn an already-merged
+  // cycle into a gate failure.
+  const finalStatusLanded = finalStatus === 'merged' || finalStatus === 'done';
   const mergeCheck = {
-    name: 'cycle reached merge (done)',
-    pass: finalStatus === 'done' || manifestInDone,
-    detail: finalStatus === 'done'
-      ? 'finalStatus=done'
-      : (manifestInDone
-        ? 'manifest in _queue/done/ (merged; bridge status unread post-merge)'
-        : `finalStatus=${finalStatus}, manifest not in done/`),
+    name: 'cycle reached merge (merged/done)',
+    pass: finalStatusLanded || manifestLanded,
+    detail: finalStatusLanded
+      ? `finalStatus=${finalStatus}`
+      : (manifestLanded
+        ? 'manifest in _queue/merged/ or _queue/done/ (merged; bridge status unread post-merge)'
+        : `finalStatus=${finalStatus}, manifest not in merged/ or done/`),
   };
 
   const postMergeTestsCheck = mergeCheck.pass
@@ -103,7 +154,7 @@ export function buildOutcomeChecks({
       name: 'project tests green post-merge',
       pass: false,
       skipped: true,
-      detail: 'skipped: the cycle did not reach merge — see "cycle reached merge (done)"',
+      detail: 'skipped: the cycle did not reach merge — see "cycle reached merge (merged/done)"',
     };
 
   const checks = [

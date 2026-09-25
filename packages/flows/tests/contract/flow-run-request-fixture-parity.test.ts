@@ -68,6 +68,7 @@ project: ${projectId}
 kb: null
 costCeilingUsd: 5
 origin: seed
+accepts: [code]
 nodes:
   - { id: dev, agent: developer-ralph }
 edges: []

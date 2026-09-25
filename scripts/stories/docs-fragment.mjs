@@ -15,8 +15,35 @@
  * confident how-to telling an operator to do something that does not work.
  */
 import { join } from 'node:path';
+import { PLACEHOLDER } from './beats-page-read.mjs';
 
 const DIR_FOR_KIND = { tutorial: 'tutorials', 'how-to': 'how-to' };
+
+/** ANSI SGR sequence — `\x1b[` then digits/semicolons then `m`
+ *  (`\x1b[2m`, `\x1b[22m`, …). Playwright colours its own `Call log:` lines
+ *  with these; pasted verbatim they are literal control bytes in markdown. */
+const ANSI_SGR = /\x1b\[[0-9;]*m/g;
+
+/**
+ * A beat failure, made safe to paste verbatim into a `> - ` blockquote list
+ * item (forge-8vfn.2.20). Two things break that shape, both from playwright:
+ * ANSI SGR escapes around its own log lines, and a multi-line `Call log:`
+ * block appended after the message. Markdown does not know what an escape
+ * byte is, and a bare embedded newline ends the list item early — the rest of
+ * the block then reads as loose body text.
+ *
+ * ORDER MATTERS: the escapes are stripped FIRST so the `\nCall log:` search
+ * below sees the literal text rather than a copy with codes still inside it,
+ * then the cut discards the log block (and anything after it) rather than
+ * trying to reformat it, then any newline still inside the KEPT text collapses
+ * to " / " so the result is always one physical line.
+ */
+export function sanitiseFailure(text) {
+  const noAnsi = text.replace(ANSI_SGR, '');
+  const cutAt = noAnsi.indexOf('\nCall log:');
+  const kept = cutAt === -1 ? noAnsi : noAnsi.slice(0, cutAt);
+  return kept.replace(/\n+/g, ' / ');
+}
 
 /** Where this story's doc fragment belongs, from its declared kind. */
 export function docPathFor(story, root) {
@@ -37,7 +64,7 @@ function renderBeat(beat, index) {
   if (beat.status === 'red') {
     lines.push(`> **This step is RED — not verified working.** The run asserted state the product did not show:`);
     lines.push('>');
-    for (const f of beat.failures) lines.push(`> - ${f}`);
+    for (const f of beat.failures) lines.push(`> - ${sanitiseFailure(f)}`);
     lines.push('');
   }
 
@@ -50,7 +77,20 @@ function renderBeat(beat, index) {
   if (entries.length > 0) {
     lines.push('<details><summary>What you should see</summary>');
     lines.push('');
-    for (const [attr, value] of entries) lines.push(`- \`data-${attr}\` is \`${value}\``);
+    for (const [attr, value] of entries) {
+      // forge-8vfn.2.27 (labelling half). `beat.expect` (see `beats.mjs`) is
+      // the RAW declared value; a `<name>` there means the product MINTED
+      // `value` at run time, so it is expected to differ on every run. Stated
+      // as a bare fact it reads as drift on the next regeneration; labelled,
+      // a reader (or an agent diffing two generated docs) knows to ignore it.
+      const declared = beat.expect?.[attr];
+      const isPlaceholder = typeof declared === 'string' && PLACEHOLDER.test(declared);
+      lines.push(
+        isPlaceholder
+          ? `- \`data-${attr}\`: \`${declared}\` (bound at run time: \`${value}\`)`
+          : `- \`data-${attr}\` is \`${value}\``,
+      );
+    }
     lines.push('');
     lines.push('</details>');
     lines.push('');

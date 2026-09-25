@@ -9,7 +9,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -29,7 +29,7 @@ import type { WebhookPushPayload } from '../../trigger-payload.ts';
  * requires) with a `project` binding, since R2-04 requires one for any flow
  * targeted by an external trigger.
  */
-function flowYaml(opts: { id: string; project: string | null }): string {
+function flowYaml(opts: { id: string; project: string | null; accepts?: readonly string[] }): string {
   const projectLine = opts.project === null ? 'project: null' : `project: ${opts.project}`;
   return [
     `id: ${opts.id}`,
@@ -40,6 +40,7 @@ function flowYaml(opts: { id: string; project: string | null }): string {
     'kb: null',
     'costCeilingUsd: 10',
     'origin: seed',
+    `accepts: [${(opts.accepts ?? ['code']).join(', ')}]`,
     'nodes:',
     '  - { id: dev, agent: developer-ralph }',
     'edges: []',
@@ -55,19 +56,23 @@ type FixtureDirs = { forgeRoot: string; queueRoot: string; logsRoot: string };
  *   - `tick`   — project: someproj (the happy-path target; projects/someproj/ exists)
  *   - `noproj` — project: null (no-project case)
  *   - `orphan` — project: ghostproj (project binding set, but no project dir exists)
+ *   - `multi`  — project: someproj, accepts: [code, docs] (seam F6 half 1:
+ *     more than one accepted class, so a mint needs the firing trigger's own
+ *     `class:` to resolve which one — never a default)
  */
 function withFixture(fn: (dirs: FixtureDirs) => void): void {
   const dir = mkdtempSync(join(tmpdir(), 'forge-mint-triggered-'));
   try {
     const forgeRoot = dir;
-    for (const [id, project] of [
-      ['tick', 'someproj'],
-      ['noproj', null],
-      ['orphan', 'ghostproj'],
+    for (const [id, project, accepts] of [
+      ['tick', 'someproj', undefined],
+      ['noproj', null, undefined],
+      ['orphan', 'ghostproj', undefined],
+      ['multi', 'someproj', ['code', 'docs']],
     ] as const) {
       const flowDir = join(forgeRoot, 'studio', 'flows', id);
       mkdirSync(flowDir, { recursive: true });
-      writeFileSync(join(flowDir, 'flow.yaml'), flowYaml({ id, project }));
+      writeFileSync(join(flowDir, 'flow.yaml'), flowYaml({ id, project, accepts }));
     }
     mkdirSync(join(forgeRoot, 'projects', 'someproj'), { recursive: true });
 
@@ -265,5 +270,76 @@ test('W8-F5: mintTriggeredInitiative REFUSES a target ref that is not a flow-id 
       ).status,
       'minted',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8, bead forge-8vfn.6.10.15):
+// the minted manifest's class follows the target flow's declaration.
+// ---------------------------------------------------------------------------
+
+test('mintTriggeredInitiative: a single-class target flow mints exactly that class — no trigger class needed', () => {
+  withFixture(({ forgeRoot, queueRoot, logsRoot }) => {
+    const req: FlowRunRequest = {
+      target: { kind: 'flow', ref: 'tick' },
+      origin: 'cron',
+      triggeredBy: 'cron:nightly',
+      createdAt: new Date().toISOString(),
+    };
+    const result = mintTriggeredInitiative(req, { forgeRoot, queueRoot, logsRoot });
+    assert.equal(result.status, 'minted');
+    const paths = getPaths(queueRoot);
+    const onDisk = parseManifest(readFileSync(join(paths.pending, `${result.initiativeId}.md`), 'utf8'));
+    assert.equal(onDisk.class, 'code', '"tick" accepts only "code" — the minted manifest follows it');
+  });
+});
+
+test('mintTriggeredInitiative: a multi-class target flow mints the CLASS THE FIRING TRIGGER NAMED', () => {
+  withFixture(({ forgeRoot, queueRoot, logsRoot }) => {
+    const req: FlowRunRequest = {
+      target: { kind: 'flow', ref: 'multi' },
+      origin: 'cron',
+      triggeredBy: 'cron:nightly',
+      triggerClass: 'docs',
+      createdAt: new Date().toISOString(),
+    };
+    const result = mintTriggeredInitiative(req, { forgeRoot, queueRoot, logsRoot });
+    assert.equal(result.status, 'minted');
+    const paths = getPaths(queueRoot);
+    const onDisk = parseManifest(readFileSync(join(paths.pending, `${result.initiativeId}.md`), 'utf8'));
+    assert.equal(onDisk.class, 'docs', 'the manifest carries the class the firing trigger named, not a default');
+  });
+});
+
+test('mintTriggeredInitiative: a multi-class target flow with NO trigger class REFUSES by name — no default', () => {
+  withFixture(({ forgeRoot, queueRoot, logsRoot }) => {
+    const req: FlowRunRequest = {
+      target: { kind: 'flow', ref: 'multi' },
+      origin: 'cron',
+      triggeredBy: 'cron:nightly',
+      createdAt: new Date().toISOString(),
+    };
+    const before = existsSync(getPaths(queueRoot).pending) ? readdirSync(getPaths(queueRoot).pending) : [];
+    const result = mintTriggeredInitiative(req, { forgeRoot, queueRoot, logsRoot });
+    assert.equal(result.status, 'error');
+    assert.match(result.detail ?? '', /flow "multi"/, 'refuses BY NAME (names the flow)');
+    assert.match(result.detail ?? '', /code, docs/, 'names the flow\'s accepted classes');
+    const after = existsSync(getPaths(queueRoot).pending) ? readdirSync(getPaths(queueRoot).pending) : [];
+    assert.deepEqual(after, before, 'nothing was minted/queued — refused before any spend');
+  });
+});
+
+test('mintTriggeredInitiative: a multi-class target flow with a trigger class OUTSIDE its accepts REFUSES by name', () => {
+  withFixture(({ forgeRoot, queueRoot, logsRoot }) => {
+    const req: FlowRunRequest = {
+      target: { kind: 'flow', ref: 'multi' },
+      origin: 'cron',
+      triggeredBy: 'cron:nightly',
+      triggerClass: 'infra',
+      createdAt: new Date().toISOString(),
+    };
+    const result = mintTriggeredInitiative(req, { forgeRoot, queueRoot, logsRoot });
+    assert.equal(result.status, 'error');
+    assert.match(result.detail ?? '', /"infra".*not one of them/, 'names the offending value');
   });
 });

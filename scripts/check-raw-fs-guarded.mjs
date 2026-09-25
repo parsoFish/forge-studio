@@ -118,14 +118,44 @@
  *     value laundered through one of the FOUR EXCLUDED bare ids (`cycleId`,
  *     `initiativeId`, `repoPath`, `runId`) or through an unresolved dir-param
  *     leaf-append is NOT reported — those rules are calibrated for request
- *     handlers, and over the whole tree the full model reports 108 findings at
- *     `c0093918`, nearly all server-built ids, i.e. an allowlist that would
- *     train blind regeneration. CONCRETELY, the shape this does NOT catch: a
- *     brand-new DELEGATE HELPER outside the declared surface whose route caller
- *     hands it a request id under one of those four names, by plain parameter.
- *     Bring such a helper into `EXPLICIT_MODULES` (that is what those rows are
- *     for) or give it the HTTP-plumbing signal. A module outside the four walk
- *     roots (`loops/`, `scripts/`) is scanned by neither tier.
+ *     handlers. CONCRETELY, the shape this does NOT catch: a brand-new
+ *     DELEGATE HELPER outside the declared surface whose route caller hands
+ *     it a request id under one of those four names, by plain parameter, or
+ *     a brand-new dir-param-leaf-append site. Bring such a helper into
+ *     `EXPLICIT_MODULES` (that is what those rows are for) or give it the
+ *     HTTP-plumbing signal. A module outside the four walk roots (`loops/`,
+ *     `scripts/`) is scanned by neither tier.
+ *
+ *     forge-38dl (T3 lane RA) AUDITED THE RESIDUE, not widened the tier-2
+ *     model: at `c0093918` the full model reported 108 findings tree-wide,
+ *     all unaudited. Re-measured on THIS tree (paths moved: `cli/` ->
+ *     `apps/forge/`, `orchestrator/` -> `packages/*`; #878 re-keyed the
+ *     allowlist to `{file, anchor}`) it was 98, across 34 modules, over the
+ *     bead's own declared scope (`targetModules` UNION `findReachableModules`
+ *     — "the whole bridge-reachable set"); a further pass over the WHOLE
+ *     production tree (`targetModules` UNION `sweepModules`) found 16 more in
+ *     4 CLI-only lint/migration modules. Every one of the 114 findings was
+ *     read, traced to either a server-composed/charset-sanitized origin (a
+ *     mint site, a config-derived root, a `readdirSync` enumeration) or an
+ *     explicit gate before the sink in a DIFFERENT function than the sink
+ *     (`isSafeRunId` / `isSafeCycleId` / `isCanonicalInitiativeId` /
+ *     `resolveGuardedPath` / `isContainedProjectRepoPath` / a manual
+ *     realpath+startsWith containment) — zero were REAL holes — then either
+ *     allowlisted with that evidence (`check-raw-fs-guarded.allowlist.mjs`)
+ *     or, for the CLI-only ones, the operator-trust-boundary category the
+ *     allowlist's own charter already names. All 38 modules were promoted
+ *     into `EXPLICIT_MODULES` (tier 1) rather than left as a parked residue,
+ *     so `node scripts/check-raw-fs-guarded.mjs` now reports 0 findings for
+ *     BOTH `targetModules ∪ findReachableModules` and `targetModules ∪
+ *     sweepModules` at time of writing. What tier 2's restriction STILL
+ *     means, honestly: the four expensive bare ids and the dir-param-leaf-
+ *     append rule remain OFF in `SWEEP_MODEL` (widening those tree-wide was
+ *     rejected the same way it was before — see the "trains blind
+ *     regeneration" note above), so a genuinely NEW module outside
+ *     `EXPLICIT_MODULES`/the HTTP-plumbing signal, using one of those shapes,
+ *     is still invisible to the daily gate until it is brought into scope the
+ *     same way — this file's job is to keep that list of un-swept modules at
+ *     zero, not to make the sweep itself all-seeing.
  *   - TIER 1's ENTRY half was name-shaped until bead 5.34; `listEntryModules`
  *     now derives host, route tables and dispatch entries structurally.
  *   - TIER 1's reachability half inherits the sibling walker's limits: only
@@ -164,6 +194,12 @@ import { ALLOWLIST, PROJECTS_ROOT_FOLD_ALLOWLIST, applyAllowlist } from './check
 import { buildInterprocContext, anchorFor, isParamTaintedViaCallers } from './check-raw-fs-guarded.interproc.mjs';
 // Bead forge-8vfn.5.63: findBinding's destructured-declaration matcher (kept out for the same reason as the two imports above).
 import { findDestructureBinding } from './check-raw-fs-guarded.destructure.mjs';
+// forge-38dl (ruling 492): EXPLICIT_MODULES is a pure DATA list (same shape
+// as the three imports above) that this bead's audit grew by 38 rows —
+// extracted to its own module so growing it never raises this file's
+// file-size ratchet baseline. Re-exported below so every consumer's import
+// path (a bare `check-raw-fs-guarded.mjs` import) is unchanged.
+import { EXPLICIT_MODULES } from './check-raw-fs-guarded.scope-list.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -344,70 +380,9 @@ export const DIR_PARAM_NAMES = new Set([
   'repoPath',
 ]);
 
-/** Modules the import-graph walk structurally CANNOT reach, kept explicit.
- *  Every row states why the walker cannot see it (a process-spawn boundary, or
- *  a delegated helper whose request-derived arguments arrive by parameter). */
-export const EXPLICIT_MODULES = [
-  // R4-22 WI-2: the FINALIZERS registry's sole row today, copyStagingToLibrary
-  // — session-derived staging paths + a request-derived packageId both reach fs
-  // writes; same class as the legacy interactive runners below.
-  'packages/sessions/interactive-finalizers.ts',
-  // R4-22 WI-3 (ADR-043 §2): the generic interactive-turn spine, and the four
-  // legacy runners. They cannot be reached by the reachability walk (that walk
-  // follows relative imports from the bridge entry points; the
-  // packages/agents/agent-run.ts -> runInteractiveTurn dispatch crosses a PROCESS-SPAWN
-  // boundary), so this list is the only mechanism that lints them. Session-
-  // derived (kindDir, sessionId) and finalizer-bound (packageId) paths reach fs
-  // sinks in every one.
-  // Bead 5.48: the four CLI-dispatch entries that sat here are now the sibling's `DISPATCH_ENTRY_MODULES` — one declaration, consumed by both lints.
-  'packages/sessions/interactive-session.ts',
-  'packages/sessions/interactive-runner.ts',
-  'packages/sessions/kinds/architect.ts',
-  'packages/sessions/kinds/instructions.ts',
-  'packages/sessions/kinds/demo-builder.ts', 'packages/sessions/kinds/demo-generate.ts', // heir ADDED beside its parent, never swapped in (6.11.49; rationale in docs/reference/request-path-sinks.md)
-  'packages/agents/band-agent-run.ts', // shared seed; two safe sites allowlisted
-  // M4 §4 step 2: carving this module's routes out took its HTTP-plumbing
-  // signal with them, dropping it to tier 2 where `runId` is excluded; ten
-  // audited residuals silently stopped suppressing (89->78) while the check
-  // still said PASS. The tier-2 note above names this exact blind spot.
-  'packages/knowledge/bridge-studio-kb-drain.ts',
-  // M4 PR 4b: the same blind spot one file over. Splitting `bridge-studio-kbs.ts`
-  // five ways moved its sinks into modules with no HTTP-plumbing signal left:
-  // measured 92 residuals before, 88 after, four silently unsuppressed and the
-  // check still PASS. A falling count after a carve is a blinded scanner.
-  'packages/knowledge/bridge-studio-kbs.ts',
-  'packages/knowledge/bridge-studio-kb-consolidate.ts',
-  'packages/knowledge/bridge-studio-kb-routes-read.ts',
-  'packages/knowledge/bridge-studio-kb-routes-lifecycle.ts',
-  'packages/knowledge/bridge-studio-kb-routes-maintenance.ts',
-  // M4 PR 5, the same shape a third time: the drain split moved its status/log
-  // writes into heirs with no route plumbing; residuals fell 92 -> 81, 0 findings.
-  'packages/knowledge/kb-drain-model.ts',
-  'packages/knowledge/kb-drain-store.ts',
-  // M4 projects carve, this blind spot a FOURTH time: pure scaffold helpers
-  // (reached from bridge-studio-project-onboard.ts's POST /api/studio/projects with a
-  // request-derived projectRoot) carrying no HTTP-plumbing token by design.
-  'packages/projects/project-contract-scaffold.ts',
-  // CLI-side operator surfaces that take the same project/initiative ids the
-  // routes do, reached by `forge <verb>` rather than by an HTTP dispatch.
-  'packages/flows/metrics.ts',
-  'packages/projects/contract-stages.ts',
-  'packages/sessions/kinds/architect-plan.ts',
-  // Not a request handler itself — the shared config-loader HELPER that
-  // multiple request routes DELEGATE their `.forge/project.json` read to
-  // (bridge-studio-runs verdict send-back -> loadProjectConfig(projectRepoPath),
-  // contract-stages, preflight). It is the interprocedural leaf-append SITE for
-  // blind-spot #b: `join(projectRoot, '.forge', 'project.json')` on an
-  // unresolved param, invisible unless the helper's own body is scanned.
-  'packages/projects/project-config.ts',
-  // SEC-05 q80 (FORWARD DEFENSE): the skill-package install + vendored-read
-  // helpers the /api/studio/skills/install and community-install/index routes
-  // DELEGATE their per-entry filesystem walk to. The request-derived `id` and
-  // package entry paths flow into these bodies by parameter.
-  'packages/library/studio/skill-install.ts', 'packages/library/studio/skill-package.ts', 'packages/library/studio/skill-trust.ts', 'packages/library/bridge-studio-authoring-hook.ts', 'packages/library/bridge-studio-authoring-template.ts',
-  'packages/library/studio/community-install.ts',
-  'packages/library/studio/community-index.ts',
-];
+// EXPLICIT_MODULES (imported above) re-exported unchanged — see
+// check-raw-fs-guarded.scope-list.mjs for the list and the per-row rationale.
+export { EXPLICIT_MODULES };
 
 /** The HTTP-plumbing signal: a module that speaks the bridge's request/response
  *  protocol. Deliberately keyed on the PLUMBING (the node:http handler types and

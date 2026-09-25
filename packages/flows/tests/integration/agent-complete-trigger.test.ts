@@ -304,6 +304,7 @@ test('(RED) [round-3 real-path] a REAL dispatchAgentRun completion of a slug wit
         'kb: null',
         'costCeilingUsd: 5',
         'origin: seed',
+        'accepts: [code]',
         'nodes:',
         '  - { id: only, agent: developer-ralph }',
         'edges: []',

@@ -33,6 +33,7 @@ const FLOW: FlowDefinition = {
   kb: null,
   costCeilingUsd: 30,
   origin: 'seed',
+  accepts: ['code'],
   nodes: [],
   edges: [
     { from: 'architect', to: 'pm', artifact: 'plan' },

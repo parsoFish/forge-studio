@@ -149,6 +149,8 @@ function okEntry(overrides: Partial<HookLibraryEntryOk> & { id: string }): HookL
     scanVerdict: 'clean',
     trust: 'needs-review',
     runnable: false,
+    // forge-8vfn.8.3.7: server-attested, mandatory on every real entry.
+    origin: 'ootb',
     ...overrides,
   };
 }
@@ -330,6 +332,11 @@ test('buildHookDetailView: carries id/on/trust/runnable through, plus a derived 
   expect(view.runnable).toBe(true);
   expect(view.carriedByCount).toBe(1);
   expect(view.scan.verdict).toBe('clean');
+});
+
+test('forge-8vfn.8.3.7: buildHookDetailView carries the server-attested origin through verbatim (ootb and operator)', () => {
+  expect(buildHookDetailView(detailFixture({ origin: 'ootb' })).origin).toBe('ootb');
+  expect(buildHookDetailView(detailFixture({ origin: 'operator' })).origin).toBe('operator');
 });
 
 test('buildHookDetailView: an unbound hook (carriedBy empty) still reports a real derivation, not an unknown state', () => {

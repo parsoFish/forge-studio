@@ -68,6 +68,7 @@ function makeFlowYaml(id: string, origin: string): string {
     'kb: null',
     'costCeilingUsd: 5',
     `origin: ${origin}`,
+    'accepts: [code]',
     'nodes:',
     '  - id: architect',
     '    agent: test-agent',

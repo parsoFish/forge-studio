@@ -208,6 +208,10 @@ export async function fireAgentCompleteTriggers(
           createdAt,
           // R2-08-F1: absent stays absent — never coerce `undefined` to `[]`.
           ...(trigger.projects !== undefined ? { projects: trigger.projects } : {}),
+          // Seam F6 half 1 (ADR 051 decision 4): the trigger's own `class:`
+          // declaration — needed by mint-triggered-initiative.ts when the
+          // target flow accepts more than one manifest class.
+          ...(trigger.class !== undefined ? { triggerClass: trigger.class } : {}),
           ...(opts.eventProject !== undefined ? { eventProject: opts.eventProject } : {}),
         },
         { queueRoot: opts.queueRoot },

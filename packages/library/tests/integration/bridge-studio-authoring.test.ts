@@ -176,6 +176,7 @@ before(async () => {
       '  - { id: work, agent: binder-agent, gate: verdict }',
       'edges: []',
       'triggers: []',
+      'accepts: [code]',
       'kickoff:',
       '  kind: idea',
       '',
@@ -196,6 +197,7 @@ before(async () => {
       kb: null,
       costCeilingUsd: 2,
       origin: 'studio',
+      accepts: ['code'],
       nodes: [{ id: 'work', agent: 'binder-agent' }],
       edges: [],
       triggers: [],
@@ -221,6 +223,7 @@ before(async () => {
         kb: null,
         costCeilingUsd: 2,
         origin: 'studio',
+        accepts: ['code'],
         nodes: [{ id: 'work', agent: 'binder-agent' }],
         edges: [],
         triggers: fid === 'trigger-source-flow'
@@ -247,6 +250,7 @@ before(async () => {
       kb: null,
       costCeilingUsd: 2,
       origin: 'studio',
+      accepts: ['code'],
       nodes: [{ id: 'work', agent: 'flow-used-agent' }],
       edges: [],
       triggers: [],
@@ -292,6 +296,7 @@ before(async () => {
       kb: null,
       costCeilingUsd: 2,
       origin: 'studio',
+      accepts: ['code'],
       nodes: [{ id: 'a', agent: 'binder-agent' }, { id: 'b', agent: 'binder-agent' }],
       edges: [{ from: 'a', to: 'b', artifact: 'used-tpl' }],
       triggers: [],
@@ -799,6 +804,15 @@ test('a REAL edit preserves the kickoff declaration through the merge (flows-12)
   assert.match(after, /kickoff:/, 'kickoff survives a real save');
   assert.match(after, /kind: idea/);
   assert.match(after, /A genuinely changed goal\./);
+});
+
+test('a save that changes ONLY accepts or review.lenses is written, not treated as a no-op (seam F6)', async () => {
+  const res = await send('PUT', '/api/studio/flows/seeded-flow', { accepts: ['docs'], review: { lenses: ['correctness'] } });
+  assert.equal(res.status, 200);
+  assert.notEqual(((await res.json()) as Record<string, unknown>)['noop'], true, 'an accepts/review edit is an edit');
+  const after = readFileSync(join(forgeRoot, 'studio', 'flows', 'seeded-flow', 'flow.yaml'), 'utf8');
+  assert.match(after, /accepts:\s*\n\s*- docs|accepts: \[docs\]/);
+  assert.match(after, /correctness/);
 });
 
 test('flow save failure carries per-node findings in the response body (flows-10 server half)', async () => {

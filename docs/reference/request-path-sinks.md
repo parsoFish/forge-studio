@@ -19,46 +19,34 @@ before adding a row.
 
 **A ROW is the auditable unit.** Where several `file:line` locations share one
 mechanism and one fix, they are listed inside a single row — the `file:line`
-column names each of them. These counts are row counts, so they can be checked
-against the tables by counting; a count of line references could not be.
+column names each of them.
 
-| | Rows |
-|---|---|
-| Classified rows below | 72 |
-| — `guarded` | 20 |
-| — guarded, new in M7-C (the standalone-history bounded scan's guarded mtime sort + guarded first-event bounded head read, forge-omk0/forge-aug) | 2 |
-| — guarded, new in M7-C U2 (T2 review of `95cb287f`, forge-8vfn.5.16 — the hook-fire scan's bound, `statSync`/`openSync` in `packages/kernel/guarded-scan.ts`) | 2 |
-| — guarded, new in M4-projects (S3 "Rebuild contract" — `reset.ts` becomes bridge-reachable, no new mechanism) | 1 |
-| — fixed in this sweep (all were `unguarded`) | 12 |
-| — fixed later in SEC-02 (`forge-d1f`) | 3 |
-| — fixed later in R4-16 (the four `/start` routes' `projectRepoPath`) | 1 |
-| — fixed later in SEC-03 | 4 |
-| — guarded, new in R4-17 (the onboarding session's contract-stages surface) | 2 |
-| — guarded, new in R4-21 T3 (the `deriveFilePackage` recursive walk + the authoring-session start route) | 2 |
-| — guarded, new in W6-B4 (the generic session-affordance write endpoint) | 1 |
-| — `unguarded`, filed for follow-up | 10 |
-| — `accidentally-safe` (accident named on each) | 9 |
-| — not request-derived, new in M5-A (the PM's rejected-set quarantine, bead `forge-8vfn.6.1`; the class read moved out of `executor-deps.ts`, spec §5 item 9) | 2 |
-| — not request-derived, new in M5-B (the minted-remote manifest, bead `forge-8vfn.6.11.29`; the starter presentation manifest, bead `forge-8vfn.6.11.4`; the pinned gh identity, bead `forge-8vfn.6.11.35`) | 3 |
-| — not request-derived, new in M6-A (the unpriced-row emit sidecar, bead `forge-8vfn.7.6.103`) | 1 |
-| — not request-derived, new in M6-A (the SDK spawn's named CLI, bead `forge-8vfn.7.6.116`) | 1 |
-| — not request-derived, new in SEAM F1 (package-owned discovery roots, operator ruling item 81) | 1 |
-| `[unver]` items, listed separately and never counted safe | 7 |
-| bd issues filed | 4 (1 closed: `forge-d1f` by SEC-02; `forge-q80` PARTLY addressed by SEC-03 — its `POST /api/studio/projects` items are fixed, its `packageDir`/zip-slip and community-index items are not, so it stays open) |
+**Counts are DERIVED by the checker, not hand-maintained here.** This section
+used to carry a hand-typed table (`Classified rows below | 70`, `— guarded |
+19`, …) plus a hand-typed `[exec]`/`[read]` marker tally, and every PR edited
+both of them on top of appending its own new section further down this file —
+measured as the single highest-conflict edit across M7-C, six collisions in
+one day (bead-adjacent finding, M7-C sinks-doc-derived lane). Removing the
+count rather than trying to make it agree with the rows below is the
+deliberate choice, over parsing this doc's freeform narrative prose into a
+verified table: `node scripts/check-request-path-sinks.mjs` now scans this
+file's own classification rows directly and prints the live count —
+`countDocClassifications` in `scripts/check-request-path-sinks.mjs`, informed
+by this file's own header warning against an audit that overstates its own
+rigour. It counts every 5-column table row (`file:line | op | field | class |
+evidence`) by its own `class` cell (`guarded` / `unguarded` /
+`accidentally-safe` / `not request-derived` / other), plus the
+`[exec]`/`[read]`/`[unver]` verification markers wherever they appear —
+informational only, never a gate, and by construction it can never drift from
+what is actually written below it. Its total will not match this section's
+old hand-typed figures: it counts differently (every classified row across
+both tables, not a curated hand-tally), on purpose.
 
-Verification markers, counted as ROWS CARRYING a marker (not as marker
-occurrences — a row may carry more than one where it covers several routes):
-**30 rows carry `[exec]`** (live repro executed), **24 carry `[read]`**
-(classified by reading), and exactly **one row carries both** (the
-`/demo/`+`/fragment/` row, where the escape is `[exec]` and the
-no-plant-primitive-found reasoning is `[read]`). 30 + 24 − 1 = **53**, the
-classified-row total. Reconciled by recounting every row, not by arithmetic on
-the previous revision's figures.
-
-**Two count defects in the previous revision, found by that recount and stated
+**Two count defects in an earlier revision, found by a manual recount and stated
 rather than quietly overwritten** — the same failure mode SEC-01's adversarial
-review found in this exact document before, which is why the recount is
-mandatory: it claimed 24 `[exec]` / 25 `[read]` for the pre-SEC-03 49 rows
+review found in this exact document before, and exactly the class of error a
+hand-typed count invites (why this section no longer keeps one): it claimed 24
+`[exec]` / 25 `[read]` for the pre-SEC-03 49 rows
 (the two were transposed — the real figures were 25 / 24), and it claimed 10
 `[unver]` items when the `[unver]` bullet list had only 6. SEC-02 moved three
 `forge-d1f` rows from `[read]` to `[exec]` by reproducing each escape live
@@ -89,7 +77,7 @@ had fixed it and the row still said otherwise.
 | `packages/kernel/case-folding-probe.ts` (`detectVolumeCaseFolding`) | `writeFileSync` ×1, `statSync` ×2, `unlinkSync` ×1 | NOT a bridge route directly — reached from `POST /api/agents/:slug/run` via `packages/agents/materials-staging.ts` (bead forge-qn8) and from `POST /api/studio/skills/install` / `finalizeSkill` via `packages/library/skill-staging.ts` (bead forge-gp4) | **not request-derived** `[read+write]` | **M7-C 2026-09-25 (T2 review follow-up, lane-ratified under ruling 666) — a TRANSFER into this file, not new surface, and the row that closes a classification gap the campaign owed since forge-gp4.** These four calls are the one shared `detectVolumeCaseFolding` mechanism the `materials-staging.ts` row above already classified for bead forge-qn8; `skill-staging.ts` carried a verbatim copy of the same four calls since forge-gp4 (test `skill-staging-case.test.ts`) but that copy was never classified in this document nor accepted into `scripts/request-path-sinks.baseline.txt` — this row is that overdue classification, now written once for the single definition both callers share. The probe's own path is `join(dir, '.forge-case-probe-' + randomBytes(8).toString('hex') + '-AbCdEf')`: a server-generated random marker name under `dir`, which is ALWAYS the CALLER's own trusted, already-created root (`runDir` for materials, `stagingRoot` for skills) per each caller's own load-bearing PRECONDITION docstring — this module accepts `dir` as a plain parameter and trusts its caller to have honoured that precondition, exactly as before the move (the precondition moved with the code, it did not change). No caller-supplied filename or id is ever concatenated into the probe's own path. `statSync` reads the marker back under its real name and its case-flipped spelling (comparing `{dev, ino}`, never the path text); `unlinkSync` removes the marker in a `finally`, best-effort. **What this transfer does to each caller's OWN baseline row:** `packages/agents/materials-staging.ts` tightens to `writeFileSync` 1 only (see that row's own new addendum, immediately above); `packages/library/skill-staging.ts` stays flat at `writeFileSync` 1 — the forge-gp4 probe's `statSync`/`unlinkSync`/second `writeFileSync` were never in the baseline to begin with, so nothing there tightens, but nothing there was ever accounted for either, which is the gap this row and the `--write` baseline refresh close together. Each caller keeps its OWN thin wrapper (never this module's raw error) — `MaterialsStagingError` / `SkillStagingError` respectively — so a probe failure still surfaces through that route's established `catch` classification. |
 | `packages/factory/class-profiles.ts` (`readChangeClass`) | `readFileSync` 1 | NOT a bridge route — the phase executor's dependency wiring (`packages/stations/phases/executor-deps.ts`) and the dev-loop (`packages/stations/phases/developer-loop.ts`) | **not request-derived** `[read]` | **A MOVE, not new surface, and the reason the baseline changes in two places at once: `executor-deps.ts readFileSync` 2 -> 1, `class-profiles.ts readFileSync` 0 -> 1.** Byte-for-byte the same call this row's first caller already made (`parseManifest(readFileSync(input.manifestPath, 'utf8')).class`), relocated so the dev-loop can read the class too without a SECOND independent manifest read — two reads of one field being two answers the moment one of them grows a fallback (spec §5 item 9). `input.manifestPath` is the cycle's own manifest: the scheduler resolves it at claim time from `_queue/`, and every bridge route that starts a cycle passes a path already containment-checked by `manifest-path-guard.ts`. No caller-supplied component is joined here — the function takes the resolved path and reads it. Classified `[read]`, not `[exec]`: no escape shape was planted because no request-derived component reaches the sink, and the guard that would have to fail first (`isContainedProjectRepoPath`/the manifest path guard) is pinned by its own tests. **The precondition that would make this live** is a route accepting a caller-supplied manifest path, which is what those guards exist to refuse. Deliberately NOT best-effort: an unreadable manifest throws, because running a gate profile under a guessed class is worse than refusing to run. |
 | `packages/kernel/project-layout.ts` (`recordMintedRemote`) | `existsSync` 1 → 2, `mkdirSync` 0 → 1, `readFileSync` 0 → 1, `writeFileSync` 0 → 1 | NOT a bridge route directly — reached from `POST /api/studio/projects/create` via `packages/projects/project-create.ts`'s `mintRemote` | **not request-derived** `[read+write]` | **Bead `forge-8vfn.6.11.29` — four new sinks in a module that was previously almost pure paths, and the reason the baseline grows here.** The path is `mintedRemotesManifestPath(forgeRoot)` = `resolve(forgeRoot, '_logs', 'minted-remotes.json')`: **every segment is a literal except `forgeRoot`, which is the server's own install root** (`ctx.forgeRoot` / `FORGE_ROOT`), never caller input. The one caller-influenced value, `nameWithOwner`, is written **into the file as CONTENT** and never joined into the path — so no request-derived component reaches any of the four sinks, and no escape shape was planted because there is no untrusted segment to plant one in. **Why the surface had to grow at all:** `sweepStoryRemotes` has always required a creation manifest as the first of its two independent conditions, and **nothing ever wrote one** — its "refuse an unlisted repo" guard was being proven against a list that could never hold anything, so a story run that minted `parsoFish/story-s2` leaked it (`6.11.2`, reopened). Recording the mint is what makes the delete possible at all; the alternative considered and rejected was leaving every minting run to leak a repository. **Why HERE and not in `packages/projects`:** the file's SHAPE is a contract between two packages — projects appends, `scripts/stories` reads — and a second implementation of the append is how they would come to disagree about it. **Deliberately best-effort:** the writer swallows its own errors, because a project creation must not fail because its bookkeeping did; the failure is not silent in the way that matters, since an unrecorded remote is one the sweep then REFUSES to delete — the safe direction. **The precondition that would make this live** is a caller-supplied `forgeRoot`, which no route accepts. |
-| `packages/kernel/gh-identity.ts` (`ghTokenFor`, `assertGhOwner`, `ghRunnerFor`) | `exec` ×3, `execFileSync` ×1 | NOT a bridge route directly — reached from `POST /api/studio/projects/create` via `packages/projects/project-create.ts`'s creation path, and from `forge create` | **not request-derived** `[read]` | **Bead `forge-8vfn.6.11.35` (rulings 341/344), and the reason the baseline grows here.** These are PROCESS sinks, not filesystem ones: **this module composes no path at all.** Two of the three argv shapes are fixed literals plus the owner — `['auth','token','--user',owner]` and `['api','user','--jq','.login']` — and `owner` comes from `forge.config.json`'s `projects.remote.owner` (or the compiled default), never from a request. The third, `ghRunnerFor`'s returned runner, passes through argv its CALLER composed; that caller is `mintRemote`, whose own sink row already classifies the one request-influenced element (the slug `id`, which reaches `gh` only after `resolveGuardedPath`). The `cwd` is likewise passed through — `mintRemote` hands it `guarded.realPath`, never a lexical join. **What IS new here is a SECRET, and it is handled as one:** the owner's token is read once per runner, placed in the CHILD process env only, never in argv (which `ps` shows), never in this process's env, and never in a thrown message — each pinned by `gh-identity.test.ts`, including a case that asserts the secret is absent from every error. It is deliberately NOT added to `spawn-env.ts`'s `AGENT_ENV_ALLOWLIST`, so an SDK-spawned agent child still cannot see it. Classified `[read]`, not `[exec]`: no escape shape was planted because no request-derived component reaches a path here. **The precondition that would make this live** is a caller-supplied `owner` or argv, which no route accepts. |
+| `packages/kernel/gh-identity.ts` (`ghTokenFor`, `assertGhOwner`, `ghRunnerFor`) | `exec` ×3, `execFileSync` ×1 | NOT a bridge route directly — reached from `POST /api/studio/projects/create` via `packages/projects/project-create.ts`'s creation path, and from `forge create` | **not request-derived** `[read]` | **Bead `forge-8vfn.6.11.35` (rulings 341/344), and the reason the baseline grows here.** These are PROCESS sinks, not filesystem ones: **this module composes no path at all.** Two of the three argv shapes are fixed literals plus the owner — `['auth','token','--user',owner]` and `['api','user','--jq','.login']` — and `owner` comes from `forge.config.json`'s `projects.remote.owner` (or the compiled default), never from a request. The third, `ghRunnerFor`'s returned runner, passes through argv its CALLER composed; that caller is `mintRemote`, whose own sink row already classifies the one request-influenced element (the slug `id`, which reaches `gh` only after `resolveGuardedPath`). The `cwd` is likewise passed through — `mintRemote` hands it `guarded.realPath`, never a lexical join. **What IS new here is a SECRET, and it is handled as one:** the owner's token is read once per runner, placed in the CHILD process env only, never in argv (which `ps` shows), never in this process's env, and never in a thrown message — each pinned by `gh-identity.test.ts`, including a case that asserts the secret is absent from every error. It is deliberately NOT added to `spawn-env.ts`'s `AGENT_ENV_ALLOWLIST`, so an SDK-spawned agent child still cannot see it. Classified `[read]`, not `[exec]`: no escape shape was planted because no request-derived component reaches a path here. **The precondition that would make this live** is a caller-supplied `owner` or argv, which no route accepts. **M7-C sinks-doc-derived lane 2026-09-25 (bead `forge-8vfn.5.19`) — the `exec` ×3 in the second column is no longer a `scripts/request-path-sinks.baseline.txt` row; `execFileSync` ×1 is unchanged.** The scanner's sink matcher now requires a call-site name to resolve to a real `import … from 'node:fs'`/`'node:child_process'` binding, never a bare name match. `exec` here is the `GhExec`-typed PARAMETER of `ghTokenFor`/`assertGhOwner`/`ghRunnerFor` (default `defaultExec`, defined a few lines above this file's only real sink), not `node:child_process`'s own export — exactly the false-positive shape bead forge-8vfn.5.19 names. `defaultExec`'s body still calls `execFileSync('gh', …)`, which is the row's real, unaffected sink; nothing about the argv/token analysis above changes. |
 | `packages/kernel/config.ts` (`readStartersManifest`, called by `describeProjectStarters`) | `existsSync` 1 → 2, `readFileSync` 1 → 2 | `GET /api/studio/projects/starters` via `packages/projects/project-roster.ts`'s `handleProjectsStarters` | **not request-derived** `[read]` | **Bead `forge-8vfn.6.11.4` (operator ruling 301), and the reason the baseline grows here.** The path is `join(projectStartersDir(forgeRoot), 'starters.json')` — `projectStartersDir` is `join(forgeRoot, 'studio', 'starters', 'projects')`, so **every segment is a literal except `forgeRoot`, which is the server's own install root** (`ctx.forgeRoot`), never caller input. The route takes NO parameters at all: it is a bare `GET` with no path segment, no query and no body, so there is nothing request-derived to reach a sink even in principle. The file's CONTENT is untrusted-ish operator data and is treated as such — validated at the boundary (top level must be an object; every row must carry non-empty string `label` and `language`) and refused with a throw naming the file, which the route answers as 500. **Ids are NOT taken from it:** `listProjectStarters`'s directory listing is the only source of a starter id, so a manifest key can never introduce a path segment or a value the create route would whitelist. Classified `[read]`, not `[exec]`: no escape shape was planted because no request-derived component reaches either sink. **The precondition that would make this live** is a caller-supplied `forgeRoot`, which no route accepts. Sits beside the pre-existing `readdirSync` row for `listProjectStarters` in the same file. |
 | `packages/flows/queue.ts` (`listReadyForReview`) | `existsSync` 7 → 8, `readdirSync` 3 → 4 | `GET /api/runs/planned` (the forge-develop kickoff surface) via `listPlannedInitiatives` | **not request-derived** `[read]` | **`forge-8vfn.7.6.132`, T1 ruling 1124, and the reason the baseline grows here.** `enqueueFlowRun` has always claimed a `ready-for-review` manifest whose `flow_id` differs from the target — the architect hand-off, named in its own comment — and no UI surface offered it, so S10 could not start development for nineteen runs. The develop kickoff surface therefore has to enumerate that directory as well as `pending`. **Nothing request-derived reaches the sink:** the path is `getPaths(queueRoot).readyForReview` = `join(root, 'ready-for-review')` where `root` is `join(resolve(ctx.forgeRoot), '_queue')` — every segment a literal except the server's own install root, and `GET /api/runs/planned` takes no path segment, no query and no body, so there is nothing caller-supplied to reach a sink even in principle. It is the EXACT shape of `listPending` and `listInFlight` directly above it in the same file, both already baselined, and the enumeration was deliberately put HERE rather than in the caller: a raw `readdirSync` in `planned-initiatives.ts` would have been a second file for this ratchet to classify for no design gain. Manifest FILENAMES are read off disk and are server-enumerated, never caller-supplied; each is then filtered by `isRunnableSource`, which refuses a manifest whose `flow_id` cannot be read (§15.504). Classified `[read]`, not `[exec]`: no escape shape was planted because no request-derived component reaches the sink. **The precondition that would make this live** is a route accepting a caller-supplied queue root, which no route does. |
 | `packages/stations/phases/pm-rejected-set.ts` (`quarantineRejectedSet`) | `existsSync` 2, `readdirSync` 1, `mkdirSync` 1, `renameSync` 1, `writeFileSync` 1 | NOT a bridge route — the project-manager PHASE's failure path (`packages/stations/phases/project-manager.ts`) | `accidentally-safe` -> **not request-derived** `[read]` | **New module, bead forge-8vfn.6.1 (P0), and the reason the baseline grows here.** No caller-supplied value reaches any of the five sinks. The single input is `workItemsDir` = `resolve(input.worktreePath, '.forge', 'work-items')` — the SAME directory this phase already reads with `readWorkItemsFromDir` and writes with `writeDecompositionDoc`, so the module adds operations to an existing trusted root rather than a new taint path. `worktreePath` arrives on the manifest the scheduler annotates at claim time and is containment-checked upstream by `isContainedWorktreePath`. The destination is `join(dirname(workItemsDir), 'work-items-rejected-<ISO stamp>')` — no external component; the stamp is generated here and collision-suffixed. Every moved entry name comes from `readdirSync` of that same directory, i.e. server-enumerated, never caller-supplied. Classified `[read]`, not `[exec]`: the containment property asserted by `pm-rejected-set-quarantine.test.ts` is that a rejected set stops satisfying `hasWorkItemFiles`, which is the DEFECT this closes; no escape shape was planted against these paths because no request-derived component reaches them. **The precondition that would make this live** is a route that accepts a caller-supplied worktree path — which is exactly what `isContainedWorktreePath` exists to refuse. |
@@ -2742,3 +2730,67 @@ via counting fakes against the injected `HookFireScanDeps` seam), and
 over real files with real directory mtimes via `utimesSync` — 5 real fires
 recorded only in cycles older than the 50-cycle window are confirmed
 invisible on the wire).
+
+### Extended in M7-C PKG — the private copy widens to the WHOLE package (bead `forge-8vfn.8.3.6`)
+
+The extension immediately above pinned only the ENTRY script. A hook's
+sibling file — sourced via the bash idiom `. "$(dirname "$0")/lib.sh"` (PIN
+D, `hook-runtime.test.ts`) — was never copied, so `$(dirname "$0")` still
+resolved to the REAL, mutable `studio/hooks/<id>/` directory for the whole
+run: a sibling swapped after the approval gate ran was read live and executed
+unverified, even though the entry script itself was already pinned. This
+extension closes that gap by verifying and copying every file the package
+contains, not only the one `hook.yaml` names as `script:`.
+
+`packages/library/studio/hook-runtime.ts`'s counts move as follows:
+`readFileSync` **1 → 0** (tightens — `prepareHookRun`'s own single-file
+`readFileSync(scriptPath)` is gone; the re-verify now goes entirely through
+`readHookPackage`, whose own `readFileSync` calls are counted on ITS file,
+`hook-package.ts`, already carrying `readFileSync 1` in the baseline since
+before this change — reusing an already-reachable, already-classified
+function adds no new sink surface anywhere) and `mkdirSync` **0 → 1** (new —
+`writePrivatePackageCopy` recreates the package's own relative directory
+layout, e.g. `scripts/`, inside the private copy, so a nested sibling lands
+at the same relative path it had in the original package).  `writeFileSync`
+stays at **1** (same call site as the extension above; it now runs once per
+file in a loop instead of once total — a runtime frequency change, not a new
+textual call site, which is what this ratchet counts) and `rmSync` stays at
+**2** (unchanged: the copy's own error-path cleanup, and
+`cleanupPrivateScriptDir`, both still acting on the SAME mkdtemp'd root
+either way).
+
+**not request-derived** `[read+write]`, same argument as the extension
+above, one level wider: `root` is still `mkdtempSync(join(os.tmpdir(),
+'forge-hook-verified-'))` — a server-generated random directory name — and
+every `file.path` value written under it (both the `mkdirSync` targets and
+the `writeFileSync` targets) comes from `readHookPackage`'s own directory
+walk of the ALREADY-validated `studio/hooks/<id>/` tree (itself
+`guardedFile`-contained per leaf, classified on `hook-package.ts`'s own
+row), never from a request field. No symlink can appear among those paths
+either: `readHookPackage`'s walk throws on any non-regular-file,
+non-directory dirent, so `writePrivatePackageCopy` only ever recreates real
+files under real directories, never a link.
+
+The entry script is now executed by `bash <privateEntryPath>` directly
+(`$0` = the private copy's own entry path), so `$(dirname "$0")` resolves
+inside this pinned tree — the whole reason the copy had to widen. This also
+lets two things from the entry-only design fall away for good: the
+`FORGE_HOOK_VERIFIED_SCRIPT_PATH` env-var indirection and the `bash -c
+'source "$var"' <realScriptPath>` invocation that existed only to fake `$0`
+back to the real (mutable) path for a copy that held the entry script alone.
+Neither is a sink change, but it is why the exec line simplifies alongside
+this one.
+
+Pinned by two new doors in `hook-runtime-package-pin.test.ts`: a sibling
+swapped between the gate's own read and `prepareHookRun`'s re-verify is
+refused (fingerprint mismatch, the same shape as the entry-only content-half
+TOCTOU pin, generalised to any file in the package); a sibling swapped AFTER
+`prepareHookRun`'s verified read still has the APPROVED content run, because
+exec now reads the sibling from the private copy and never reopens the real
+path again (the decisive-window pin, generalised the same way). A mutation
+that reverts the copy step to "copy only the entry script" (while leaving the
+whole-package re-verify gate untouched) reds exactly the second of these —
+proof the copy width, not the re-verify gate, is what the decisive-window
+pin is actually testing. `scripts/request-path-sinks.baseline.txt` accepts
+the moved/new counts via `--write` in the same commit that adds this
+section, per this document's own rule.
