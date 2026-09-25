@@ -63,9 +63,33 @@
 # never imports it.
 set -u
 
+# Computed ONCE: every candidate pid is checked against it, and `id -u` is a
+# fork gate.sh/with-locks.sh would otherwise pay per pid on a box with
+# thousands of processes.
+LOCK_HOLDERS_UID="$(id -u)"
+
 # dev:inode, not the path string — a bind mount or a relative-vs-absolute
 # spelling can name the same file two different ways.
 lock_dev_ino() { stat -c '%d:%i' -- "$1" 2>/dev/null; }
+
+# T1 1370 — BOUND THE SCAN. Measured under host contention (three CPU
+# burners pinned alongside a real suite): the full `/proc/[0-9]*` walk this
+# file's fallback does is too slow for `gate.sh`'s own bound the moment it is
+# reached. Two cheap pre-filters shrink it to the pids that could plausibly
+# hold OUR flock: a campaign process never runs as a different user (a
+# stray other-user process cannot hold a lock any of our tools would take),
+# and a kernel thread never holds a userspace flock at all (it has no
+# backing executable — `readlink /proc/$pid/exe` fails for exactly this
+# reason, the standard, cheap way to tell one apart from a real process).
+# Neither filter is a correctness requirement — `lock_fd_holds_flock` below
+# is what confirms a hold — this is purely what makes the scan CHEAP enough
+# to reach that confirmation in time.
+lock_pid_scannable() {
+  local pid="$1" uid
+  uid="$(awk '/^Uid:/{print $2; exit}' "/proc/$pid/status" 2>/dev/null)"
+  [ "$uid" = "$LOCK_HOLDERS_UID" ] || return 1
+  readlink "/proc/$pid/exe" >/dev/null 2>&1
+}
 
 # T1 1361 (D's CI measurement, #911, `b5235313`): kernels DIFFER on this exact
 # shape. `exec N>file; flock -n N` forks the `flock` binary against the
@@ -102,6 +126,7 @@ lock_fd_candidates() {
   [ -n "$want" ] || return 0
   for pid in /proc/[0-9]*; do
     pid="${pid#/proc/}"
+    lock_pid_scannable "$pid" || continue
     [ -d "/proc/$pid/fd" ] || continue
     for fdpath in "/proc/$pid/fd"/*; do
       di="$(stat -c '%d:%i' -L -- "$fdpath" 2>/dev/null)" || continue
@@ -131,21 +156,29 @@ lock_probe_held() {
   ! flock -n "$1" true >/dev/null 2>&1
 }
 
-# NAMED AND HOLDING: one pid per line, de-duplicated (a process can hold more
-# than one fd on the same file). Reports a candidate ONLY when its OWN
-# matching fd's fdinfo shows the lock — a stale opener (released, fd still
-# open) and a co-opener (has it open, never acquired it — includes the
-# checking process's own failed `flock -n` attempt) are both excluded, never
-# just "someone besides me holds it somewhere".
+# NAMED AND HOLDING: the confirmed holder, if any. Reports a candidate ONLY
+# when its OWN matching fd's fdinfo shows the lock — a stale opener
+# (released, fd still open) and a co-opener (has it open, never acquired it
+# — includes the checking process's own failed `flock -n` attempt) are both
+# excluded, never just "someone besides me holds it somewhere".
+#
+# STOPS AT THE FIRST CONFIRMED HOLDER (T1 1370) — not an optimisation that
+# trades away correctness for speed, but a property of what this file locks:
+# every campaign lock taken through this idiom is `flock -n` EXCLUSIVE, so at
+# most one live process can ever be a confirmed holder at once. `read` over a
+# process-substitution pipe consumes output as it streams, so a match found
+# early lets this function return before the producer (`lock_fd_candidates`,
+# still iterating `/proc`) has finished — the producer's own remaining work
+# then completes asynchronously and exits on its own; nothing is left
+# running past that beyond the tail of a scan already in flight.
 lock_confirmed_holders() {
-  local lockfile="$1" pid fd seen=$'\n'
+  local lockfile="$1" pid fd
   lock_probe_held "$lockfile" || return 0
   while read -r pid fd; do
     [ -n "${pid:-}" ] || continue
-    case "$seen" in *$'\n'"$pid"$'\n'*) continue ;; esac
     if lock_fd_holds_flock "$pid" "$fd"; then
       printf '%s\n' "$pid"
-      seen="$seen$pid"$'\n'
+      return 0
     fi
   done < <(lock_fd_candidates "$lockfile")
 }

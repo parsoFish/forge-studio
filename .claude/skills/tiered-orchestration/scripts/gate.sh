@@ -143,6 +143,35 @@ is_ancestor() {
   done
   return 1
 }
+
+# T1 1370 — CHEAP BEFORE EXPENSIVE. The single most common collision on this
+# box is two `gate.sh` instances (forge-8vfn.7.6.79), and the FIRST one
+# already wrote `$1.holder` the instant it took the lock (`write_suite_lock_
+# holder`, below). Reading that one file plus one liveness check answers the
+# same question the host-wide fd scan would, for a fraction of the cost —
+# `lock_confirmed_holders` (`lock-holders.sh`) stays the fallback for a
+# holder that never writes a sidecar (heavy-slot.sh, with-locks.sh, a raw
+# `exec N>file; flock -n N`), never the first thing tried.
+#
+# Defined here, ABOVE `suite_lock_state`, rather than beside
+# `write_suite_lock_holder`/`read_suite_lock_holder` further down: this file
+# is executed top-to-bottom and `--lock-state` calls `suite_lock_state`
+# within the first hundred-odd lines, long before execution would otherwise
+# reach a definition placed near the acquisition flow — bash does not hoist.
+#
+# READ-ONLY, unlike `read_suite_lock_holder` (the UNNAMEABLE branch's
+# human-readable courtesy line, which also PRUNES a stale sidecar as a side
+# effect): this is a pure query `suite_lock_state` can call from anywhere,
+# including `--lock-state`, without mutating anything a caller did not ask
+# it to.
+sidecar_live_pid() {
+  local f="${1}.holder" pid
+  [ -f "$f" ] || return 0
+  pid="$(sed -n 's/.*pid=\([0-9]*\).*/\1/p' "$f" 2>/dev/null)"
+  [ -n "$pid" ] || return 0
+  lock_pid_alive "$pid" && printf '%s\n' "$pid"
+}
+
 suite_lock_state() {
   local f="$1" pids pid live=""
   pids="$(lock_holder_pids "$f")"
@@ -156,17 +185,23 @@ suite_lock_state() {
   done
   pids="${live# }"
   if [ -z "$pids" ]; then
-    # `/proc/locks` names nobody LIVE — either genuinely FREE, or the
-    # invisible inherited-fd shape (row 80): the lock IS held, but the pid
-    # the listing would have attributed it to exited the instant it acquired
-    # (WSL2: no row at all; a standard kernel: a row naming that dead pid,
-    # just filtered above). Confirm via the fd-scan + fresh-probe rule
-    # (`lock-holders.sh`) before believing FREE — this is the SAME real
-    # file, so a probe that fails now means something holds it even though
-    # the listing cannot see (or cannot usefully name) it. Kept as a
-    # FALLBACK rather than a replacement: `lock_holder_pids` carries its own
-    # doors for a real, separate bug (forge-s9g1's blocked-waiter-vs-holder
-    # row parsing) and stays authoritative whenever it names a LIVE holder.
+    # T1 1370: the sidecar before the scan — see `sidecar_live_pid`'s own
+    # comment for why. Skipped entirely when `/proc/locks` already named a
+    # live holder above; tried before the expensive fallback below.
+    pids="$(sidecar_live_pid "$f")"
+  fi
+  if [ -z "$pids" ]; then
+    # `/proc/locks` names nobody LIVE, and neither does a sidecar — either
+    # genuinely FREE, or the invisible inherited-fd shape (row 80): the lock
+    # IS held, but the pid the listing would have attributed it to exited
+    # the instant it acquired (WSL2: no row at all; a standard kernel: a row
+    # naming that dead pid, just filtered above), by something OTHER than a
+    # gate.sh (heavy-slot.sh, with-locks.sh, a raw `exec N>file; flock -n N`
+    # — nothing that would have left a sidecar). Confirm via the fd-scan +
+    # fresh-probe rule (`lock-holders.sh`) before believing FREE — this is
+    # the SAME real file, so a probe that fails now means something holds
+    # it even though neither cheaper read can see (or usefully name) it.
+    # LAST, not first: it is the one read here that scans the whole host.
     pids="$(lock_confirmed_holders "$f")"
     [ -z "$pids" ] && { echo FREE; return; }
   fi

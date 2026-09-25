@@ -84,6 +84,25 @@ function waitUntilHeld(lock: string, maxMs = 15000): boolean {
   return false;
 }
 
+/** T1 1370: the kernel-level `flock -n 9` and gate.sh's own userspace
+ *  `write_suite_lock_holder()` write are NOT atomic with each other — the
+ *  flock is held the instant the syscall returns, and the sidecar file is a
+ *  separate statement a few lines later. Under the same heavy scheduling
+ *  contention `waitUntilHeld`'s own comment names, the holding gate can be
+ *  preempted in that exact gap: measured directly, `waitUntilHeld` correctly
+ *  reports HELD while the sidecar has not been written yet. A single
+ *  `existsSync` right after `waitUntilHeld` returns is racing gate.sh's own
+ *  scheduling, not testing anything about this bead — so this polls,
+ *  bounded the same way, rather than asserting on one snapshot. */
+function waitUntilSidecarExists(path: string, maxMs = 15000): boolean {
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    if (existsSync(path)) return true;
+    spawnSync('sleep', ['0.05']);
+  }
+  return existsSync(path);
+}
+
 describe('forge-8vfn.7.6.79 — the sidecar names gate.sh\'s own unnameable hold', () => {
   test('a real second gate reads the first one\'s pid, never UNNAMEABLE', async () => {
     const d1 = tree();
@@ -98,7 +117,7 @@ describe('forge-8vfn.7.6.79 — the sidecar names gate.sh\'s own unnameable hold
 
       // Sidecar written WHILE held (bead's "sidecar written" case).
       assert.ok(
-        existsSync(`${lock}.holder`),
+        waitUntilSidecarExists(`${lock}.holder`),
         'a <lock>.holder sidecar must exist while this gate holds the lock through the inherited-fd take',
       );
 
