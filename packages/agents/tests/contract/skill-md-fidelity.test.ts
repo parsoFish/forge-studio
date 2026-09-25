@@ -25,7 +25,7 @@
  * the W8-B4 session report for the quoted red output; the mutation is not
  * committed.
  *
- * RUN: node --experimental-strip-types --test orchestrator/studio/skill-md-fidelity.test.ts
+ * RUN: node --experimental-strip-types --test packages/agents/tests/contract/skill-md-fidelity.test.ts
  */
 
 import { test } from 'node:test';

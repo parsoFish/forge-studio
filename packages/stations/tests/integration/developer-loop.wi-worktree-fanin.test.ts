@@ -5,7 +5,7 @@
  * comment.
  *
  * No SDK: `runRalph`'s `agent` parameter is a plain injectable function
- * (`loops/ralph/runner.ts`'s own tests stub it the same way — a fake agent
+ * (`packages/agents/ralph/runner.ts`'s own tests stub it the same way — a fake agent
  * that writes real files into `params.worktreePath` and returns
  * `{filesChanged, costUsd}`; the runner's autocommit net turns that into a
  * real commit). This file drives the SAME building blocks
@@ -56,7 +56,7 @@ function wi(id: string, dependsOn: string[]): WorkItem {
   };
 }
 
-/** A fake `AgentInvocation` (mirrors `loops/ralph/runner.test.ts`'s pattern):
+/** A fake `AgentInvocation` (mirrors `packages/agents/tests/integration/runner.test.ts`'s pattern):
  * writes ONE real file into the worktree it's handed and reports it. */
 function fileWritingAgent(filename: string, content: string): AgentInvocation {
   return async ({ worktreePath }) => {
@@ -79,7 +79,7 @@ type Fixture = {
  * A real project repo + a real cycle worktree checked out on the cycle
  * branch, exactly as `runDeveloperLoop` finds it: `input.worktreePath` is a
  * sibling of the per-WI worktrees under the same `worktreesRoot`, created via
- * `orchestrator/worktree.ts`'s `add()` — the same helper `scheduler.ts` uses
+ * `packages/flows/worktree.ts`'s `add()` — the same helper `scheduler.ts` uses
  * for the cycle worktree itself.
  */
 function setup(initiativeId: string): Fixture {

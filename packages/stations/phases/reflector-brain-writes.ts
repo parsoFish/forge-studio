@@ -308,7 +308,7 @@ function computeAndApplyRetention(opts: {
 /**
  * Read the structured event log and return parsed entries. Best-effort —
  * malformed lines are skipped, a missing file returns []. Same semantics
- * as the failure-classifier's reader (orchestrator/cycle.ts).
+ * as the failure-classifier's reader (packages/flows/cycle.ts).
  */
 function readEventLog(logFilePath: string): EventLogEntry[] {
   const out: EventLogEntry[] = [];

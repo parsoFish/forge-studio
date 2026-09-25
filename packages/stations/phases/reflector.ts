@@ -101,7 +101,7 @@ export type ReflectorDeps = {
  * cycles closed as done with reflection silently missing.
  *
  * Live invocation contract (prompt builders + tool tally) lives in
- * orchestrator/phases/reflector-binding.ts (single source of truth).
+ * packages/stations/phases/reflector-binding.ts (single source of truth).
  */
 export async function runReflector(
   input: CycleInput,
@@ -516,7 +516,7 @@ function writeLintReport(
  * reflection (M0-A round-2 defect A: a hand-written candidate list that
  * omitted `merged/` made every merged cycle ENOENT here). Rather than
  * hand-listing a subset of queue states again, this derives its candidates
- * from `getPaths()` (`orchestrator/queue.ts`'s own `QueuePaths`), covering
+ * from `getPaths()` (`packages/flows/queue.ts`'s own `QueuePaths`), covering
  * every current state — `pending` included, even though reflection realistically
  * never fires there — so a state added to the queue later can't silently slip
  * through the same way `merged/` did.

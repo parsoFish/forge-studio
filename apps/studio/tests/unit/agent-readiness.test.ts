@@ -6,7 +6,7 @@
  * server-computed F1 capability descriptor (`AgentCapabilityDescriptor`,
  * threaded onto the wire by GET /api/studio/agents + GET /api/studio/starters
  * and carried through verbatim by `parseAgentDefinition` — see
- * forge-ui/lib/studio-client.ts) — never re-derived from the client
+ * apps/studio/lib/studio-client.ts) — never re-derived from the client
  * `AgentRuntime` form state. That client re-derivation
  * (`runtimeConfigured(rt)`: sdk truthy + model/range chosen) was the exact
  * "hardcoded heuristic" the R2-02-F4 AC replaces. The content-completeness

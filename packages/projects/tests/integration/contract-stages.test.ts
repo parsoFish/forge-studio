@@ -24,7 +24,7 @@
  *   - `.forge/project.json` MISSING entirely is "absent" for the
  *     config-backed stages (contract/secrets/demo's declared half) — NOT a
  *     `{ok:false}` failure. Only a project.json that EXISTS but is malformed
- *     (invalid JSON, or fails the real `orchestrator/project-config.ts`
+ *     (invalid JSON, or fails the real `packages/projects/project-config.ts`
  *     validator — e.g. missing the required `testProcess.local.cmd`) fails
  *     the WHOLE derivation closed, reusing that module's own canonical
  *     fail-closed parser rather than a second, looser hand-rolled one (D11:

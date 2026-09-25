@@ -25,14 +25,16 @@ import { parseManifest } from '@forge/flows';
 import { testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
 import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 
-const MANIFEST_BODY = `---
+/** `cls` is interpolated so a test can drive the PM under any manifest class. */
+function manifestBody(cls: string): string {
+  return `---
 initiative_id: INIT-2026-06-06-pm-contract-test
 project: testproj
 project_repo_path: ./projects/testproj
 created_at: 2026-06-06T00:00:00Z
 iteration_budget: 3
 cost_budget_usd: 1
-class: code
+class: ${cls}
 phase: in-flight
 origin: architect
 ---
@@ -43,6 +45,9 @@ origin: architect
 
 Given the resource, when applied, then it persists in the external system.
 `;
+}
+
+const MANIFEST_BODY = manifestBody('code');
 
 type StubWi = { wiId: string; filename?: string; gate?: string[]; omitCreates?: boolean };
 
@@ -101,7 +106,10 @@ function makeStubQueryFn(initiativeId: string, wis: StubWi[]): PmQueryFn {
   };
 }
 
-function setupHarness(projectConfig?: Record<string, unknown>): {
+function setupHarness(
+  projectConfig?: Record<string, unknown>,
+  opts?: { class?: string },
+): {
   dir: string;
   worktree: string;
   logger: ReturnType<typeof createLogger>;
@@ -120,7 +128,7 @@ function setupHarness(projectConfig?: Record<string, unknown>): {
   }
   const manifestPath = join(dir, '_queue', 'in-flight', 'INIT-2026-06-06-pm-contract-test.md');
   mkdirSync(join(dir, '_queue', 'in-flight'), { recursive: true });
-  writeFileSync(manifestPath, MANIFEST_BODY);
+  writeFileSync(manifestPath, opts?.class ? manifestBody(opts.class) : MANIFEST_BODY);
   const logsDir = join(dir, '_logs');
   mkdirSync(logsDir, { recursive: true });
   const logger = createLogger('TEST-pm-contract', logsDir);
@@ -169,6 +177,77 @@ test('A2a: acceptance_gate.required + no live-acc WI → PM pass fails', async (
     assert.match(
       (end.metadata as { acceptance_gate_violation?: string }).acceptance_gate_violation ?? '',
       /acceptancetests/,
+    );
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+  }
+});
+
+test('ADR-051/C7: docs-class + acceptance_gate.required + no acceptance WI → PM pass succeeds and emits the skip event', async () => {
+  const h = setupHarness(
+    {
+      ...BASE_CONFIG,
+      testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests', required: true } },
+    },
+    { class: 'docs' },
+  );
+  try {
+    const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }, { wiId: 'WI-2' }]);
+    // A docs change has no behaviour to accept: must NOT throw, unlike the
+    // code-class regression-lock case below.
+    await runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() });
+
+    const events = readEvents(h.logger);
+    const end = events.find((e) => e.phase === 'project-manager' && e.event_type === 'end');
+    assert.ok(end, 'expected a successful pm.end event for a docs initiative with no acceptance WI');
+
+    const skip = events.find((e) => e.message === 'pm.acceptance-wi-not-required');
+    assert.ok(skip, 'expected a structured skip event so the class-scoped skip is visible, not silent');
+    const md = skip!.metadata as { change_class?: string; reason?: string };
+    assert.equal(md.change_class, 'docs');
+    assert.match(md.reason ?? '', /class profile runs no merge-boundary tests/);
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+  }
+});
+
+test('ADR-051/C7 regression lock: code-class + acceptance_gate.required + no acceptance WI → still refused, unchanged message', async () => {
+  const h = setupHarness(
+    {
+      ...BASE_CONFIG,
+      testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests', required: true } },
+    },
+    { class: 'code' },
+  );
+  try {
+    const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }, { wiId: 'WI-2' }]);
+    await assert.rejects(
+      () => runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() }),
+      /no acceptance work item/,
+    );
+    const events = readEvents(h.logger);
+    const skip = events.find((e) => e.message === 'pm.acceptance-wi-not-required');
+    assert.equal(skip, undefined, 'the code class runs merge-boundary tests — the rule must still apply, no skip event');
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+  }
+});
+
+test('ADR-051/C7: acceptance_gate.required with no class-profile table bound → refuses by name (ClassProfilePort)', async () => {
+  const h = setupHarness(
+    {
+      ...BASE_CONFIG,
+      testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests', required: true } },
+    },
+    { class: 'docs' },
+  );
+  try {
+    const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }, { wiId: 'WI-2' }]);
+    await assert.rejects(
+      // classProfiles deliberately NOT bound — the rule needs the table to
+      // decide applicability and must refuse by name, not skip silently.
+      () => runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn }),
+      /station "project-manager" needs a class profile table \(ClassProfilePort\) and none is bound/,
     );
   } finally {
     rmSync(h.dir, { recursive: true, force: true });

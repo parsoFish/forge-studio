@@ -513,7 +513,7 @@ export default function AgentBuilderPage() {
   // R2-02-F4: `capability` (the runtime-SDK + interactive facts) is the
   // server-computed F1 descriptor, threaded through verbatim — NOT
   // re-derived from `state.runtime` here (that client re-derivation was the
-  // "hardcoded heuristic" the AC replaces). See forge-ui/lib/agent-readiness.ts.
+  // "hardcoded heuristic" the AC replaces). See apps/studio/lib/agent-readiness.ts.
   //
   // R3-04-F3: `connectionsUnready` — this agent's bound tools/mcps that are
   // NOT real probe-`available`, computed from the independently-fetched

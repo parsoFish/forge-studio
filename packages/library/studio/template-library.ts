@@ -28,7 +28,7 @@ import type { ArtifactKind, DemoStepKind, FlowDefinition, FlowNode } from '@forg
 import type { Finding } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
-// Public types (BINDING shapes — orchestrator/studio/template-library.test.ts)
+// Public types (BINDING shapes — packages/library/tests/unit/template-library.test.ts)
 // ---------------------------------------------------------------------------
 
 export type TemplateCategory = 'demo-output' | 'planning' | 'project-scaffold';

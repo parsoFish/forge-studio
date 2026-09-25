@@ -50,7 +50,7 @@ function manifest(over: Partial<CreationManifest> = {}): CreationManifest {
 // SEC-05 (P1 forge-hwo) — RCE via raw north-star / title interpolation into a
 // scaffolded CODE FILE's JSDoc header.
 //
-// copyTemplate (orchestrator/project-create.ts:126-127) interpolates the
+// copyTemplate (packages/projects/project-create.ts:126-127) interpolates the
 // human-authored `title` (= manifest.name, line 126) and `northStar`
 // (line 127) RAW into every code file on the NON-JSON branch. Each starter's
 // entry module opens with:

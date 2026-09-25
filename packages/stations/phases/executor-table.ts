@@ -126,12 +126,12 @@ const execDev: NodeExecutor = async (ctx) => {
  * The STATION identity now matches the spec's word (forge-8vfn.6.10.18,
  * operator item 85): node id, band guard, `resume_from`, the requeue API
  * field and the CLI flag are all `integrate`. The canonical agent slug
- * (`demo-agent`) and the demo ARTIFACT it produces (`demo.json`, `DEMO.md`)
+ * historical: (`demo-agent`) and the demo ARTIFACT it produces (`demo.json`, `DEMO.md`)
  * intentionally keep the word `demo` — they name the artifact, not the
  * station. Seam F4: like every other band, the events this band emits carry
  * the EXECUTING node's own def slug (`resolveExecutingAgentDef`), never a
  * hardcoded canonical literal — a canonical run still resolves to
- * `demo-agent`, so this is a no-op for the shipped flow.
+ * historical: `demo-agent`, so this is a no-op for the shipped flow.
  */
 const execIntegrate: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, nodeId, state } = ctx;
@@ -382,7 +382,7 @@ const execReflect: NodeExecutor = async (ctx) => {
  * stronger claim — that the ABSENCE of an injection seam is what makes this
  * gate unfakeable — is retired there rather than left to rot. What guards it
  * now: exactly one production caller wires the real preflight
- * (`orchestrator/cycle.ts` via `createProjectGate()`), and a conformance test
+ * (`packages/flows/cycle.ts` via `createProjectGate()`), and a conformance test
  * fails if `flow-runner.ts` ever imports `packages/projects/preflight.ts` again. The
  * canonical agent def (`skills/contract-check/SKILL.md`) exists only as the
  * declaration carrier + display identity the band-guard machinery needs

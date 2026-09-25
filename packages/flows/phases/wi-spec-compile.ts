@@ -299,7 +299,7 @@ export function compileHiddenCoupling(
   for (const pair of pairs) {
     // Stem, not whole id: `WI-4a` and `WI-4b` both stem 4, so a split pair
     // reaches the lexicographic tie arm below instead of falling through to
-    // reject. `devWorkItemIdStem` is the exported SSOT (orchestrator/work-item.ts).
+    // reject. `devWorkItemIdStem` is the exported SSOT (packages/flows/work-item.ts).
     const numA = devWorkItemIdStem(pair.a);
     const numB = devWorkItemIdStem(pair.b);
     if (numA === null || numB === null) {

@@ -3,7 +3,7 @@
  * through the ACTUAL `forge studio lint` entry point (`runStudioLint`,
  * `apps/forge/studio-lint.ts`), not a hand-rolled/direct call to
  * `lintCommunityIndex` (that direct-call coverage lives in
- * `orchestrator/studio/community-index.test.ts`).
+ * `packages/library/tests/integration/community-index.test.ts`).
  *
  * WHY THIS FILE EXISTS (T2 round 2, MANDATORY M2): "this exact hole — a lint
  * implemented, unit-tested, and inert because the production caller never

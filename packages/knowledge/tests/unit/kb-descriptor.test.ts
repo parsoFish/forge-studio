@@ -2,7 +2,7 @@
  * R1-06 WI-1 group A — descriptor contract + usage-default band-vocab pins.
  *
  * Sibling to registry.test.ts (already 1767 lines) rather than an addition
- * there. Targets orchestrator/studio/kb-descriptor.ts directly — the real
+ * there. Targets packages/knowledge/studio/kb-descriptor.ts directly — the real
  * module; registry.ts only re-exports it. Harness mirrors registry.test.ts:
  * node:test + node:assert/strict with mkdtempSync fixtures.
  *

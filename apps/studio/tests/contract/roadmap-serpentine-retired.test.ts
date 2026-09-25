@@ -37,7 +37,7 @@
  * lets it be a clean, un-rottable retirement lock.
  *
  * `STATUS_COLOURS` (British plural) is unique to the serpentine — the shared
- * palette in forge-ui/lib/status-colors.ts exports `STATUS_COLOR` (singular,
+ * palette in apps/studio/lib/status-colors.ts exports `STATUS_COLOR` (singular,
  * different token), so grepping the plural has no false-positive collision.
  *
  * RUN: npx vitest run lib/roadmap-serpentine-retired.test.ts   (from forge-ui/)
@@ -50,7 +50,7 @@ import { fileURLToPath } from 'node:url';
 
 // Walk up from this test file (forge-ui/lib/) to forge-ui/ (one level) and to
 // the repo root (two levels), mirroring the convention in
-// forge-ui/lib/flow-artifact-catalog.test.ts.
+// apps/studio/tests/contract/flow-artifact-catalog.test.ts.
 const HERE = dirname(fileURLToPath(import.meta.url)); // .../apps/studio/tests/contract
 const FORGE_UI_ROOT = join(HERE, '..', '..'); // .../apps/studio
 const REPO_ROOT = join(HERE, '..', '..', '..', '..'); // repo root

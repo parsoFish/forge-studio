@@ -467,7 +467,7 @@ test('loadAgentSkillText: a def whose own SKILL.md cannot be read throws naming 
 // (e) integrate-band, non-canonical `docs-integrate`. execIntegrate spawns no
 // agent (it derives the demo bundle synchronously), but — like every other
 // band — the events it emits must carry the EXECUTING node's own def slug,
-// never the canonical `demo-agent` literal.
+// historical: never the canonical `demo-agent` literal.
 // ---------------------------------------------------------------------------
 
 test('execAgent: a non-canonical def declaring integrate-band routes to the integrate band and its events carry ITS OWN slug, not demo-agent\'s', async () => {

@@ -144,7 +144,7 @@ export type ProjectConfigHealth = {
  * bare parsed JSON and claim, in three places, that it was "the SAME validator
  * the orchestrator runs the project through". **That claim was false**, and a
  * hostile review refuted it with a live project: `loadProjectConfig`
- * (`orchestrator/project-config.ts`) reads the `.forge/quality_gate_cmd`
+ * (`packages/projects/project-config.ts`) reads the `.forge/quality_gate_cmd`
  * sidecar and calls `injectSidecarIntoTestProcess` BEFORE validating, so a
  * project that single-sources its local gate from the sidecar — a supported,
  * documented R1-03-F1 shape, and the shape the live

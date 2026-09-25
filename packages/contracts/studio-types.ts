@@ -24,7 +24,7 @@ export type AgentComposition = {
    * Library lifecycle-hook ids (R3-03-F1b, ADR-027 amendment "R3-03,
    * 2026-08-04"): REINTRODUCED with a narrowed meaning — resolves ONLY
    * against the hooks registry (`studio/hooks/<id>/`,
-   * `orchestrator/studio/hook-library.ts`), never a `composition.guards`
+   * `packages/library/studio/hook-library.ts`), never a `composition.guards`
    * platform id. A library hook definition never names an agent; binding is
    * declared here, in the Agent Builder, only — "carried by" is DERIVED from
    * real agent specs (`deriveHookUsage`), never the reverse. REQUIRED
@@ -138,7 +138,7 @@ export type AgentDefinition = {
   /** R2-03-F2 — fanout capability (absent ⇒ not fanout-capable). */
   fanout?: AgentFanout;
   /**
-   * R2-09 D1/D2 — the closed materials vocabulary (`orchestrator/studio/materials.ts`
+   * R2-09 D1/D2 — the closed materials vocabulary (`packages/agents/studio/materials.ts`
    * MATERIAL_KINDS) this agent accepts as operator-uploaded input. Top-level,
    * mirrors `fanout` (NOT nested under `composition`). Parsed leniently on
    * VALUES at load (an unknown string survives; `materials/enum` lints it) but
@@ -220,7 +220,7 @@ export type TriggerMode = (typeof TRIGGER_MODES)[number];
 
 /**
  * R2-04 (ADR-041): a declared trigger row. `on` must be a registry kind
- * (orchestrator/flow-trigger.ts TRIGGER_KINDS); per-kind config blocks are
+ * (packages/flows/flow-trigger.ts TRIGGER_KINDS); per-kind config blocks are
  * lint-enforced (`trigger-shape`): `schedule`/`concurrency` only on cron,
  * `webhook` only on webhook, `mode` only on a merged agent (reflect) target.
  */
@@ -386,7 +386,7 @@ export type KbBinding =
        * Optional band scope (R1-06, ADR-010 amendment "R1-06 band-scoped
        * reviewer grant"). Meaningless off a `flow` binding — a `project`/
        * `unique` binding declaring `band` is rejected at load time
-       * (`parseKbBinding`, orchestrator/studio/kb-descriptor.ts). Absent ⇒
+       * (`parseKbBinding`, packages/knowledge/studio/kb-descriptor.ts). Absent ⇒
        * unscoped (the pre-existing flow-binding behaviour).
        */
       band?: string;
@@ -443,7 +443,7 @@ export type CatalogEntry = { id: string; name: string; desc?: string };
 
 /**
  * A catalog `guards:` entry (ADR-027 R3-03 amendment). `kind` is DERIVED from
- * `BAND_GUARD_IDS` (`orchestrator/agent-bands.ts`) at load time — never
+ * `BAND_GUARD_IDS` (`packages/agents/agent-bands.ts`) at load time — never
  * declared in `studio/catalog.yaml` — so a `kind:` value present in the YAML
  * is parsed and then overridden, not merged or trusted (the
  * declared-data-fails-open failure class this repo already guards against
@@ -575,7 +575,7 @@ export type CommunityRegistryItem = {
 
 /**
  * Facts about ONE upstream source, keyed in `CommunityRegistry.sources` by the
- * normalized key `orchestrator/studio/community-source-url.ts` derives from a
+ * normalized key `packages/library/studio/community-source-url.ts` derives from a
  * `sourceUrl` (e.g. `github:obra/superpowers`). Written ONLY by a refresh pass
  * that actually received a 200 from the upstream API — a failed, rate-limited
  * or 404'd fetch leaves the row byte-identical (W8-B5, exit row E2).
@@ -600,7 +600,7 @@ export type CommunityRegistrySource = {
   // does not exist.
   //
   // They are CHANGE-DETECTION INPUTS, and that is their whole current job:
-  // read by `sameFacts` (orchestrator/studio/community-refresh-api.ts), the
+  // read by `sameFacts` (packages/library/studio/community-refresh-api.ts), the
   // comparison that decides whether a verified source is reported `refreshed`
   // or `unchanged` — and by nothing else. `toCommunitySkill`
   // (orchestrator/studio/registry.ts) does not project them, so they reach

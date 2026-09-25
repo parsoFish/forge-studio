@@ -24,7 +24,7 @@ brainAccess: advisory
 interactivity: Operator-driven; drafts a cleanup plan from the findings it is given and stops for operator review — never asks free-form questions.
 allowed-tools: [Read, Grep, Glob, Write]
 # disallowed-tools, not allowed-tools, is the real fence: the SDK harness
-# (orchestrator/interactive-session.ts's runAgentTurn) never sets a base
+# (packages/sessions/interactive-session.ts's runAgentTurn) never sets a base
 # `tools:` option, so allowed-tools only auto-approves permission prompts —
 # it does NOT remove anything from the model's available tool set. Anything
 # named in NEITHER list stays available by default, which is why the
@@ -54,7 +54,7 @@ guessing.
 ## Input
 
 Your session's `status.json` is inlined into your prompt as read-only context
-(`orchestrator/interactive-runner.ts`'s `buildTurnPrompt`). It carries
+(`packages/sessions/interactive-runner.ts`'s `buildTurnPrompt`). It carries
 `kb_id` and a `findings` array; each finding has `check`, `kind`, `file`, and
 `message`, and often a `fixHint`. Treat this as the complete and only set of
 findings to plan against — never invent a finding that isn't in the input,

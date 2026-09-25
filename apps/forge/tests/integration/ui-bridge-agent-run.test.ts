@@ -119,7 +119,7 @@ test('POST /api/agents/<slug>/run: an interactive agent is refused → 400', asy
 //   - the guard over real HTTP, through this bridge: the
 //     `test-interactive` synthetic fixture test immediately above.
 //   - the guard against a REAL agent's shipped frontmatter:
-//     orchestrator/agent-dispatch.test.ts's "R4-21 phase 2, WI-2" pin, which
+//     apps/studio/tests/unit/agent-dispatch.test.ts's "R4-21 phase 2, WI-2" pin, which
 //     drives the real `creation-agent` def through `resolveDispatchableAgent`.
 // Only their intersection has no subject in the tree any more, and inventing a
 // fixture to stand in for a real agent would have made the test claim
@@ -362,7 +362,7 @@ test('GET /api/agents/runs/<runId>: capped lines preserve the TAIL (most recentl
 // the `!existsSync(eventsPath)` early return and reports `state: 'running'`,
 // identically to a real, freshly-dispatched run. That makes
 // `RunView.tsx`'s `found` prop (pinned thoroughly at the component level in
-// `../apps/studio/lib/run-view-render.test.ts`, including that `found:false`
+// `../apps/studio/tests/integration/run-view-render.test.ts`, including that `found:false`
 // suppresses content) UNREACHABLE in production — the exact
 // "typed, surfaced, pinned, and unreachable" shape this initiative has
 // closed everywhere else. The fix distinguishes "no run directory at all"

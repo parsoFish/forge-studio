@@ -94,7 +94,7 @@
  *      or alias, so it correctly does not match; ITS agent-DELETE route DOES
  *      match now (see the FIX-2 header above — this is no longer excluded,
  *      it is the second known production site, listed in the CENSUS below
- *      alongside its required prune call). orchestrator/project-create.ts's
+ *      alongside its required prune call). packages/projects/project-create.ts's
  *      `skillsDir(forgeRoot)` reference is a bare `join(skillsDir(forgeRoot),
  *      ...)`, never wrapped in `resolveGuardedPath`/`guardedFile` (directly
  *      or via a traced one-hop variable), so it still does not match.
@@ -114,8 +114,8 @@
  *      after): each classified file must ALSO contain, in real code
  *      (through whatever local alias it imports under), the matching
  *      ledger-prune call — `revokeHookApprovalIfPresent(`
- *      (orchestrator/studio/hook-scan.ts) for a hook file,
- *      `removeInstallLedgerEntry(` (orchestrator/studio/skill-install-ledger.ts)
+ *      (packages/library/studio/hook-scan.ts) for a hook file,
+ *      `removeInstallLedgerEntry(` (packages/library/studio/skill-install-ledger.ts)
  *      for a skill file.
  */
 

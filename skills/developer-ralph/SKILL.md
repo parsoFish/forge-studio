@@ -39,7 +39,7 @@ budgets: {}
 
 ## Single responsibility
 
-Drive a single work item to completion via the Ralph loop pattern ([ADR 002](../../docs/decisions/002-ralph-loop-pattern.md)). Thin wrapper: prepare loop input artifacts (`PROMPT.md`, `AGENT.md`, `fix_plan.md`), invoke [`loops/ralph/runner.ts`](../../loops/ralph/runner.ts).
+Drive a single work item to completion via the Ralph loop pattern ([ADR 002](../../docs/decisions/002-ralph-loop-pattern.md)). Thin wrapper: prepare loop input artifacts (`PROMPT.md`, `AGENT.md`, `fix_plan.md`), invoke [`packages/agents/ralph/runner.ts`](../../packages/agents/ralph/runner.ts).
 
 ## Inputs / Outputs
 
@@ -69,14 +69,14 @@ Drive a single work item to completion via the Ralph loop pattern ([ADR 002](../
 2. Stamp `loops/ralph/PROMPT.md.tmpl` with work-item content + ACs → `<worktree>/PROMPT.md`.
 3. Stamp `loops/ralph/AGENT.md.tmpl` → `<worktree>/AGENT.md` (empty; loop fills it).
 4. Initialise `<worktree>/fix_plan.md` with ACs as a checklist.
-5. Invoke `loops/ralph/runner.ts` with worktree path and stop-condition config (from manifest's `iteration_budget` — no $ cap per C19).
+5. Invoke `packages/agents/ralph/runner.ts` with worktree path and stop-condition config (from manifest's `iteration_budget` — no $ cap per C19).
 6. Runner returns `{ status: 'complete' | 'failed' | 'wedged', iterations: n, cost: usd }`. The orchestrator writes `status` back to the WI spec.
 
 ## Constraints
 
 - **Quality gates verified by the orchestrator, not the agent.** The runner runs the gates itself; the agent's claim of "tests pass" is not trusted.
 - **Iteration budget is hard.** Runner stops at `iteration_budget` regardless of progress.
-- **Wedged-detector** — see [`loops/ralph/stop-conditions.ts`](../../loops/ralph/stop-conditions.ts).
+- **Wedged-detector** — see [`packages/agents/ralph/stop-conditions.ts`](../../packages/agents/ralph/stop-conditions.ts).
 
 ---
 

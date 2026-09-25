@@ -4,7 +4,7 @@
  * PINNED CONTRACT this file locks in (does not exist yet — landed BEFORE the
  * implementation, per the immutable-gates method):
  *
- *   `orchestrator/flow-trigger.ts` exports
+ *   `packages/flows/flow-trigger.ts` exports
  *
  *     export function fireAgentCompleteTriggers(
  *       flows: Array<Pick<FlowDefinition, 'id' | 'triggers'>>,
@@ -54,7 +54,7 @@
  * — flagged in the accompanying report for T1 to confirm or correct.
  *
  * Test #12 (harness-mode effect-set guard) lives in
- * orchestrator/trigger-harness-guard.test.ts, extending its existing pattern.
+ * packages/flows/tests/integration/trigger-harness-guard.test.ts, extending its existing pattern.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -243,7 +243,7 @@ test('(RED) [F2 #11, T1 ruling #1] source-agent matching is strict IDENTITY, not
  * for "a standalone agent run completes" — never calls
  * `fireAgentCompleteTriggers` anywhere. Verified by reading the full function
  * body and grepping the whole tree: zero non-test references to
- * `fireAgentCompleteTriggers` exist outside orchestrator/flow-trigger.ts
+ * `fireAgentCompleteTriggers` exist outside packages/flows/flow-trigger.ts
  * itself. `dispatchAgentRun`'s own signature has no `forgeRoot`/`queueRoot`/
  * flow-roster parameter at all, so it COULD NOT call it even if it tried.
  * This means test #11's "stages a claimable run request when a standalone
@@ -264,7 +264,7 @@ test('(RED) [F2 #11, T1 ruling #1] source-agent matching is strict IDENTITY, not
 // ---------------------------------------------------------------------------
 // This test drives the REAL dispatchAgentRun completion path, which routes
 // through runAgent's dry-bridge/no-spawn suppression seam
-// (orchestrator/run-agent.ts) BEFORE the injected fakeQueryFn is ever
+// (packages/agents/run-agent.ts) BEFORE the injected fakeQueryFn is ever
 // reached. That seam is env-only (FORGE_ARCHITECT_NO_SPAWN /
 // FORGE_DRY_BRIDGE — no injectable override), and CI sets
 // FORGE_ARCHITECT_NO_SPAWN=1 for every `npm test` run (.github/workflows/ci.yml).
@@ -367,7 +367,7 @@ test('(RED) [round-3 real-path] a REAL dispatchAgentRun completion of a slug wit
  * (test above), it would still drop `projects`/`eventProject` — the exact
  * class of defect T1 found at the other three sites (confirmed directly at
  * this module's `stageFlowRunRequest` call site by reading
- * orchestrator/flow-trigger.ts). Driven through the REAL, unmocked
+ * packages/flows/flow-trigger.ts). Driven through the REAL, unmocked
  * `fireAgentCompleteTriggers` (the function itself, not a hand-built
  * FlowRunRequest) — this is the "one real-path test per firing site"
  * requirement's answer for the scoping-specific half of this site's defect,

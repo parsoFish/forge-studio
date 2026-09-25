@@ -8,7 +8,7 @@
  * whose fetch could not be verified stays byte-identical and is reported — a
  * refresh never stamps a row fresh on a failure. That inherits
  * `commitRegistryDraft`'s evidence discipline
- * (orchestrator/interactive-finalizers.ts:606) and makes it deterministic.
+ * (packages/sessions/interactive-finalizers.ts:606) and makes it deterministic.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

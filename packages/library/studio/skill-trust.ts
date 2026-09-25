@@ -62,7 +62,7 @@ import type { Finding } from '@forge/kernel';
 import { extractProvenance, readSkillPackage, hashSkillPackage, type SkillProvenance } from './skill-package.ts';
 
 // ---------------------------------------------------------------------------
-// Types (WI-1 pinned shapes — orchestrator/studio/skill-library.test.ts)
+// Types (WI-1 pinned shapes — packages/library/tests/integration/skill-library.test.ts)
 // ---------------------------------------------------------------------------
 
 export type SkillSource = 'local' | 'community';

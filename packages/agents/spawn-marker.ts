@@ -69,7 +69,7 @@
  * `runAgent`: the session runners (`packages/sessions/*-runner.ts`), the dev
  * loop's own Ralph, and `release-finalize`. Those spawn unmarked today, and
  * saying "every agent child forge spawns carries a token" would be false.
- * `packages/agents/run-query-marker.enforce.test.ts` locks the part that IS
+ * `packages/agents/tests/contract/run-query-marker.enforce.test.ts` locks the part that IS
  * covered; the rest is recorded as handoffs, not implied away.
  *
  * AND IT IS COOPERATIVE, NOT ENFORCED. A process that actively evades — one

@@ -2,7 +2,7 @@
  * Deriving a session's ARTIFACT — the per-kind payload the session shell
  * renders — and the two guarded readers every deriver stands on.
  *
- * Split out of `studio/session-transcript.ts` (M4 exit row 5). That file did two
+ * Split out of `packages/sessions/studio/session-transcript.ts` (M4 exit row 5). That file did two
  * jobs: read a session's turn history into a transcript, and derive its artifact.
  * The artifact half is the bigger one and depends on the transcript half for
  * nothing at all, so the parent calls in and this module never calls back.

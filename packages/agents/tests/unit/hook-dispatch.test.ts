@@ -5,7 +5,7 @@
  * The defect this suite kills: at `parsoFish/main` `1df6727e` a library hook
  * could be authored, scanned, approved and bound to an agent through the full
  * Studio UI and **could never fire**. `runHookScript`
- * (`orchestrator/studio/hook-runtime.ts:138`) had zero production callers, and
+ * (`packages/library/studio/hook-runtime.ts:138`) had zero production callers, and
  * no `hooks` option was passed to any Agent SDK spawn anywhere.
  *
  * WHAT EACH TEST KILLS (immutable-gates: a green test that cannot name the

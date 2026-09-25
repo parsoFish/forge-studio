@@ -2,8 +2,8 @@
  * The reverse index: which agents compose a given skill, hook or connection
  * (ruling 13's `agentsUsing`, shaped as an index per ruling 73).
  *
- * WHY THIS EXISTS. Three library modules — `studio/hook-library.ts`,
- * `studio/connection-library.ts`, `studio/skill-trust.ts` — each carry a
+ * WHY THIS EXISTS. Three library modules — `packages/library/studio/hook-library.ts`,
+ * `packages/library/studio/connection-library.ts`, `packages/library/studio/skill-trust.ts` — each carry a
  * PRIVATE copy of "walk the agent roster and count who composes what". Library
  * is rank 2 and agents is rank 3, so library reading agent files at all is the
  * thing ruling 13 forbids: the answer has to come from the package that owns

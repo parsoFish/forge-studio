@@ -20,7 +20,7 @@
  * path, and the flush + `end` event. `../design.md` enumerates them.
  *
  * TWO THINGS THAT LOOK LIKE OVERSIGHTS AND ARE NOT — both with their reasons
- * in `../design.md`, both pinned by `tests/regression/fix-turn-capture.test.ts`:
+ * in `../design.md`, both pinned by `packages/sessions/tests/regression/fix-turn-capture.test.ts`:
  *
  *   - it does NOT call the spine's `runAgentTurn`, which is the same shape.
  *     That function reads an EMPTY `writeRoots` as UNFENCED, whereas
@@ -135,7 +135,7 @@ export type FixTurnVariant<I extends FixTurnInput, R extends FixTurnResult, P = 
  * Drive one turn of a session-less fix variant.
  *
  * Behaviourally identical, step for step, to the two bespoke runner bodies it
- * replaces — proven by `tests/regression/fix-turn-capture.test.ts`, which pins
+ * replaces — proven by `packages/sessions/tests/regression/fix-turn-capture.test.ts`, which pins
  * the exact `{prompt, options}` reaching `queryFn` (content AND key order), the
  * returned result and the full event log, across four arms including the
  * fail-closed fence and the crash path.
@@ -208,7 +208,7 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
   // Behaviour 8, HERE rather than in each kind, for the reason
   // `kinds/kind-turn.ts` gives about its own `hooksForSkill`: this file imports
   // `pinnedSdkQuery` as a VALUE, so it is the spawn-capable module the hook
-  // enumeration ratchet (`packages/agents/hook-dispatch-coverage.test.ts`)
+  // enumeration ratchet (`packages/agents/tests/contract/hook-dispatch-coverage.test.ts`)
   // sees. A kind that forgot the wiring would spawn hook-blind with nothing
   // red.
   const abortController = new AbortController();

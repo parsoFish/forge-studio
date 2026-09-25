@@ -1,7 +1,7 @@
 /**
  * forge-8vfn.5.17 — RunStatus/RunPhaseStatus/RunPhaseMeta/Run used to be
  * hand-declared in apps/studio/lib/studio-client.ts, a second copy of
- * packages/flows/run-view-types.ts (now packages/contracts/run-view-types.ts)
+ * packages/contracts/run-view-types.ts (now packages/contracts/run-view-types.ts)
  * with no parity test comparing the two (bead forge-cv9,
  * studio-client.test.ts:791).
  *

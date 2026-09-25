@@ -49,7 +49,7 @@
  *  - the mkdtemp root (appears in `cwd`) -> `<TMP>`.
  *
  * Bootstrap / regenerate:
- *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test orchestrator/run-agent-spawn-capture.test.ts
+ *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test packages/agents/tests/integration/run-agent-spawn-capture.test.ts
  * (or delete the fixture) rewrites
  * packages/kernel/tests/test-fixtures/spawn-capture/generic-one-shot.json from current code.
  */

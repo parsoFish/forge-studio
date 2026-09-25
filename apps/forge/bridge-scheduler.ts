@@ -122,7 +122,7 @@ export async function handleSchedulerRoutes(
         return true;
       }
       // W7-FIX-A3 (round-2 finding 3): Stop is IDEMPOTENT while THIS pid
-      // drains. `orchestrator/scheduler.ts`'s signal handler treats a SECOND
+      // drains. `packages/flows/scheduler.ts`'s signal handler treats a SECOND
       // SIGTERM as force-quit (`signalCount === 2` → exit), so re-signalling a
       // pid that is already draining hard-kills the in-flight cycles the first
       // Stop was politely waiting on — from nothing more than a second tab, or

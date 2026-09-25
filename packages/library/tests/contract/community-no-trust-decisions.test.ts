@@ -13,9 +13,9 @@
  * The forbidden set — the five functions that can turn a quarantined draft
  * into a trusted, palette-visible or runnable object:
  *   - approveSkillDraft            (orchestrator/studio/skill-library.ts)
- *   - approveHook                  (orchestrator/studio/hook-scan.ts)
- *   - overrideHookBlock            (orchestrator/studio/hook-scan.ts)
- *   - writeHookApprovalLedgerEntry (orchestrator/studio/hook-scan.ts)
+ *   - approveHook                  (packages/library/studio/hook-scan.ts)
+ *   - overrideHookBlock            (packages/library/studio/hook-scan.ts)
+ *   - writeHookApprovalLedgerEntry (packages/library/studio/hook-scan.ts)
  *   - repinSkillPackage            (orchestrator/studio/skill-library.ts)
  *
  * None of the community-surface files listed below may reference any of

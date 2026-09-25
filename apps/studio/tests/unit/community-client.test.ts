@@ -1,5 +1,5 @@
 /**
- * Tests for forge-ui/lib/community-client.ts (R3-07-F1/F2/F3) — DOES NOT
+ * Tests for apps/studio/lib/community-client.ts (R3-07-F1/F2/F3) — DOES NOT
  * EXIST YET. Vitest cannot even collect this file until it lands
  * (module-not-found is the expected red, mirroring connection-client.test.ts's
  * own header note).
@@ -176,7 +176,7 @@ test('parseCommunityItem: throws on an unrecognised "installState" — never sil
 
 test('parseCommunityItem: "signals.stars" is never the empty string or "0" — a malformed signals object with an empty stars string still parses (the SERVER is responsible for never emitting one; D5\'s "never a zero" is a server-side AT, not a client parse-time rejection) but this file records the contract expectation', () => {
   // This is a documentation-only assertion: the client is not the enforcement
-  // point for D5 (orchestrator/studio/community-index.test.ts owns that AT);
+  // point for D5 (packages/library/tests/integration/community-index.test.ts owns that AT);
   // this test only proves the well-formed fixture the rest of this file
   // relies on is not itself an accidental zero/empty-string case.
   expect(WELL_FORMED_SKILL_ITEM.signals?.stars).not.toBe('0');

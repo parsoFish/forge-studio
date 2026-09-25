@@ -22,7 +22,7 @@
  * `app/projects/[id]/showcase/page.tsx:107` passes `fetchReviewFindings` as a
  * port and must keep its shape.
  *
- * RUN: npx vitest run tests/regression/review-findings-checked.test.ts   (from apps/studio/)
+ * RUN: npx vitest run apps/studio/tests/regression/review-findings-checked.test.ts   (from apps/studio/)
  */
 
 import { test, expect } from 'vitest';

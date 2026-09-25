@@ -8,7 +8,7 @@
  * `deriveSessionShellViewState` (`lib/session-shell-view.ts`), which was
  * ALREADY correct — `viewState.status === 'no-session'` is reachable ONLY
  * off a genuine `errorKind === 'not-found'`, never a transport failure
- * (pinned at the pure-logic level, `tests/contract/session-shell-view.test.ts`
+ * (pinned at the pure-logic level, `apps/studio/tests/contract/session-shell-view.test.ts`
  * AT-63/AT-65). It renders via `StudioArchitectShell` + an inline
  * `FetchErrorState`, not the standalone `PageLoadError` component, so the
  * shared assertion's regexes cannot match it textually — that is why the

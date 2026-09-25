@@ -313,7 +313,7 @@ test('AT-5: the composed prompt still carries the runner-injected DATA half — 
 // ---------------------------------------------------------------------------
 
 test('AT-6: the demoTaskLines export contract survives — composed-branch output lists every element id in descriptor order, both directly and via the runner-composed prompt', async () => {
-  // Mirrors packages/projects/tests/contract/demo-descriptor-parity.test.ts's shared fixture
+  // Mirrors apps/forge/tests/contract/demo-descriptor-parity.test.ts's shared fixture
   // (deliberately NOT alphabetical, so order-preservation is actually
   // asserted, not accidentally true because of a sort).
   const FIXTURE_STEPS: Array<DemoStep & { element: string }> = [

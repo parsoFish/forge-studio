@@ -32,13 +32,13 @@
 ## Overview
 
 Forge's work is carried by three composable flows backed by a brain. The flow engine
-([`orchestrator/flow-runner.ts`](./orchestrator/flow-runner.ts)) walks a
+([`packages/flows/flow-runner.ts`](./packages/flows/flow-runner.ts)) walks a
 `FlowDefinition` (a YAML-declared DAG, ADR 028) in topological order, dispatching
 each node through a **node-executor registry** — no `classifyNode` switch. The
 forge cycle ships as two chained flows — `studio/flows/forge-architect/`
 (plan + decompose) and `studio/flows/forge-develop/` (dev → review) — handing
 off Architect → Develop (operator-selected); on a confirmed merge,
-`orchestrator/finalize-merged.ts` dispatches the **standalone reflector agent
+`packages/flows/finalize-merged.ts` dispatches the **standalone reflector agent
 run** (forge-develop's declared `{on: merged, target: {kind: agent, ref:
 reflector}}` trigger, resolved through the `reflection-close` band guard —
 W7-C1 retired the vestigial single-node reflect flow wrapper); `runCycle`
@@ -66,7 +66,7 @@ flowchart TB
         direction LR
         PM["2 · project-manager<br/>node kind: agent · wi-contract band hook (ADR 039)"]
         DV["3 · developer-loop<br/>node kind: agent · loopStrategy:'ralph' · Ralph × N worktrees<br/>runtime adapter: getAdapter(sdkId)"]
-        UN["4 · integrate + adversarial-review<br/>node kind: agent · integrate-band + review-band hooks (ADR 039)<br/>orchestrator/phases/demo-agent.ts, orchestrator/phases/adversarial-review.ts"]
+        UN["4 · integrate + adversarial-review<br/>node kind: agent · integrate-band + review-band hooks (ADR 039)<br/>orchestrator/phases/demo-agent.ts, packages/stations/phases/adversarial-review.ts"]
         RFL["reflector<br/>node kind: agent · reflection-close band hook (ADR 039)"]
     end
 
@@ -275,7 +275,7 @@ The Studio bridge writes the handoff files the phases already consume:
 Everything else runs unattended for arbitrary durations via:
 
 - **`_queue/` state-machine directories** (`pending → in-flight → ready-for-review → done | failed`).
-- **`orchestrator/scheduler.ts`** (~770 LOC persistent loop — see ADR 011 for the reconciliation of its scope) that claims initiatives, spawns each in a `git worktree`, writes a heartbeat, surfaces completion via notification.
+- **`packages/flows/scheduler.ts`** (~770 LOC persistent loop — see ADR 011 for the reconciliation of its scope) that claims initiatives, spawns each in a `git worktree`, writes a heartbeat, surfaces completion via notification.
 - **Crash recovery** by atomic claim + heartbeat: orphaned in-flight items return to `pending/` on restart.
 
 This is **not a re-invented job queue + worker pool + resource controller**. See ADR 011-013 for the line we're holding.
@@ -298,11 +298,11 @@ Every skill invocation emits a structured event to `_logs/<cycle-id>/events.json
 
 ### Flow engine + node-executor registry (ADR 028)
 
-`orchestrator/flow-runner.ts` interprets `FlowDefinition` DAGs in topological order. Node classification is table-driven — `resolveNodeKind` reads a read-only gate-id map (`GATE_KIND`) and, for agent nodes, the agent def's own declared `executor` field (`PHASE_EXECUTOR_KINDS`, `@forge/agents`) — there is no separate hardcoded agent-slug table. The dispatch loop resolves a kind onto the node context and calls the injected `PhaseExecutor` (`kernel`), which looks the kind up in `DEFAULT_NODE_EXECUTORS`. **There is no `classifyNode` switch.** Adding a new kind is a one-line row in the table plus a new entry in `DEFAULT_NODE_EXECUTORS`; no dispatch edit.
+`packages/flows/flow-runner.ts` interprets `FlowDefinition` DAGs in topological order. Node classification is table-driven — `resolveNodeKind` reads a read-only gate-id map (`GATE_KIND`) and, for agent nodes, the agent def's own declared `executor` field (`PHASE_EXECUTOR_KINDS`, `@forge/agents/studio/agent-registry.ts`) — there is no separate hardcoded agent-slug table. The dispatch loop resolves a kind onto the node context and calls the injected `PhaseExecutor` (`kernel`), which looks the kind up in `DEFAULT_NODE_EXECUTORS`. **There is no `classifyNode` switch.** Adding a new kind is a one-line row in the table plus a new entry in `DEFAULT_NODE_EXECUTORS`; no dispatch edit.
 
-**Amended 2026-08-31 (M2-B, `docs/roadmaps/1.0.md` §4 M2 Lane B, [SPEC.md](./SPEC.md) §2 Station):** the runner holds the port, not the phases. `runFlow` receives a `PhaseExecutor { run(nodeId, ctx) → CycleOutcome }` and a `ProjectGate { runPreflight }` ([SPEC.md](./SPEC.md) §6) and imports neither implementation — its ten phase imports and its preflight import are gone. The executors themselves, the injectable phase set and the band registrations live in `orchestrator/phases/executor-table.ts` and `executor-deps.ts`, which move to `@forge/factory` at the package cutover. Bands register through `registerBand`, closed over the ratified `BAND_GUARD_IDS`, instead of a hardcoded record.
+**Amended 2026-08-31 (M2-B, `docs/roadmaps/1.0.md` §4 M2 Lane B, [SPEC.md](./SPEC.md) §2 Station):** the runner holds the port, not the phases. `runFlow` receives a `PhaseExecutor { run(nodeId, ctx) → CycleOutcome }` and a `ProjectGate { runPreflight }` ([SPEC.md](./SPEC.md) §6) and imports neither implementation — its ten phase imports and its preflight import are gone. The executors themselves, the injectable phase set and the band registrations live in `packages/stations/phases/executor-table.ts` and `executor-deps.ts`, which move to `@forge/factory` at the package cutover. Bands register through `registerBand`, closed over the ratified `BAND_GUARD_IDS`, instead of a hardcoded record.
 
-**Amended 2026-07-24 (R4-01-F2, [ADR 039](./docs/decisions/039-ships-as-artifact.md)):** the four-slug declared-executor model (`'pm' | 'dev' | 'reflect'` plus one now-retired develop-flow closing-phase slug) is retired down to one row. PM, developer-loop, and reflector now resolve to the generic `agent` node kind and dispatch further inside `execAgent` via **declared data on the agent's own SKILL.md**: a `composition.guards` band-guard id (`wi-contract` for PM, `reflection-close` for the reflector — `orchestrator/agent-bands.ts`) or `runtime.loopStrategy: 'ralph'` (developer-loop, routes to the existing `execDev`/Ralph machinery). R4-01-F4 later retired that last slug — `PHASE_EXECUTOR_KINDS` is now empty.
+**Amended 2026-07-24 (R4-01-F2, [ADR 039](./docs/decisions/039-ships-as-artifact.md)):** the four-slug declared-executor model (`'pm' | 'dev' | 'reflect'` plus one now-retired develop-flow closing-phase slug) is retired down to one row. PM, developer-loop, and reflector now resolve to the generic `agent` node kind and dispatch further inside `execAgent` via **declared data on the agent's own SKILL.md**: a `composition.guards` band-guard id (`wi-contract` for PM, `reflection-close` for the reflector — `packages/agents/agent-bands.ts`) or `runtime.loopStrategy: 'ralph'` (developer-loop, routes to the existing `execDev`/Ralph machinery). R4-01-F4 later retired that last slug — `PHASE_EXECUTOR_KINDS` is now empty.
 
 The four built-in node-kind executors:
 - `execArchitect` — silent DAG marker (the PLAN gate was satisfied before queue pickup).
@@ -310,7 +310,7 @@ The four built-in node-kind executors:
 - `execAgent` — the generic F1 `runAgent` path (R2-01-F2); resolves a declared band hook or `loopStrategy:'ralph'` first (PM/dev/reflector all land here — see the amendment above), else runs a bare one-shot `runAgent` spawn for a library agent.
 - `execUnknown` — defensive fallback (no agent def, or an invalid declared `executor`); loud error log, not a silent skip.
 
-Budget helpers (`orchestrator/flow-budgets.ts`): `CostTracker` (cost-ceiling check at every clean node boundary), `WedgeDetector` (per-node heartbeat/progress watch, race via `raceWithWedge`), `RateLimitGate` (gates spawn on rate-limit backoff).
+Budget helpers (`packages/flows/flow-budgets.ts`): `CostTracker` (cost-ceiling check at every clean node boundary), `WedgeDetector` (per-node heartbeat/progress watch, race via `raceWithWedge`), `RateLimitGate` (gates spawn on rate-limit backoff).
 
 ### Swappable seams (ADR 032)
 
@@ -328,7 +328,7 @@ engine** is registry-driven (any node type is a data-table entry).
 
 The closure is `orchestrator/subsumption-proof.test.ts`: asserts the runtime adapter seam resolves a second implementation.
 
-Cycle helpers extracted to `orchestrator/cycle-helpers.ts` to break the `flow-runner ↔ cycle` circular dependency: `openPrInline`, `commitDevLoopBoundary`, `enforceDevLoopCloseInvariant`, `assertNonEmptyDelivery`, `enforceFinalCiGate`, `preservingForgeScratch`. That extraction left a three-module cycle behind it — `cycle → flow-runner → cycle-helpers → cycle` — which M2-B closed: the runner no longer imports `cycle-helpers.ts` at all (the phases reach it through the port's deps), and the CI-gate decision core the helpers reached back into `cycle.ts` for now sits below both, in `orchestrator/ci-gate.ts`.
+Cycle helpers extracted to `packages/flows/cycle-helpers.ts` to break the `flow-runner ↔ cycle` circular dependency: `openPrInline`, `commitDevLoopBoundary`, `enforceDevLoopCloseInvariant`, `assertNonEmptyDelivery`, `enforceFinalCiGate`, `preservingForgeScratch`. That extraction left a three-module cycle behind it — `cycle → flow-runner → cycle-helpers → cycle` — which M2-B closed: the runner no longer imports `cycle-helpers.ts` at all (the phases reach it through the port's deps), and the CI-gate decision core the helpers reached back into `cycle.ts` for now sits below both, in `packages/flows/ci-gate.ts`.
 
 ## What forge is *not*
 

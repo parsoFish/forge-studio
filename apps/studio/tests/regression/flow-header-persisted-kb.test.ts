@@ -32,7 +32,7 @@
  * post-save transition already has in this suite.
  *
  * Pinned RED at branch base.
- * RUN: npx vitest run --root apps/studio tests/regression/flow-header-persisted-kb.test.ts
+ * RUN: npx vitest run --root apps/studio apps/studio/tests/regression/flow-header-persisted-kb.test.ts
  */
 import { test, expect } from 'vitest';
 import * as React from 'react';

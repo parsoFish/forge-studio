@@ -8,7 +8,7 @@
  *
  *   - the flow-runner fires `on: flow-complete` triggers on a flow's terminal
  *     success (dispatch = stage a claimable flow-run request), and
- *   - orchestrator/finalize-merged.ts fires `on: merged` triggers once a merged PR
+ *   - packages/flows/finalize-merged.ts fires `on: merged` triggers once a merged PR
  *     is confirmed (dispatch = run the target inline with the merged cycle's
  *     context — e.g. forge-develop's `{on: merged, target: {kind: agent, ref:
  *     reflector}}`, the R4-09-F1 standalone-reflect target).
@@ -67,7 +67,7 @@ export type FlowTriggerEvent = (typeof FLOW_TRIGGER_EVENTS)[number];
  * are their OWN `on:` values — ADR-027's amendment — never a sub-event under
  * `on: webhook`, but they reuse the existing receiver and config shape). ONE
  * definition — `bridge-hooks.ts` (route resolution) and
- * `studio/validate-triggers.ts` (webhook-config validation) both import this
+ * `packages/flows/studio/validate-triggers.ts` (webhook-config validation) both import this
  * rather than hand-declaring their own copy, so the two can never drift
  * (forge-g99).
  */
@@ -89,7 +89,7 @@ export type FireFlowTriggersDeps = {
    * R2-08 (forge-f9g fix, W8-A1) — opt-in fire-time project-scope
    * enforcement: the choke point for dispatch mechanisms that never reach
    * `drainFlowRunRequests` (the staged-request path's own enforcement
-   * point, `orchestrator/flow-run-requests.ts`). `finalize-merged.ts`'s
+   * point, `packages/flows/flow-run-requests.ts`). `finalize-merged.ts`'s
    * inline `on: merged` dispatch is the motivating case — it never stages a
    * `FlowRunRequest`, so without this the drain's scope check simply never
    * ran for it (the exact gap the R2-08 addendum,
@@ -104,12 +104,12 @@ export type FireFlowTriggersDeps = {
    * that never mentions `eventProject` at all opts OUT (no fire-time
    * gating — every matching trigger dispatches unconditionally, exactly the
    * pre-existing behaviour). The flow-runner's `flow-complete` firing site
-   * (`orchestrator/flow-runner.ts`) deliberately omits this key: T1's
+   * (`packages/flows/flow-runner.ts`) deliberately omits this key: T1's
    * round-4 ruling requires that path to stage EVERY trigger
    * unconditionally (including an out-of-scope one) and enforce scope ONLY
    * at `drainFlowRunRequests` — filtering at THIS fire site would make the
    * drain's `skipped-out-of-scope` status unreachable for staged requests
-   * (pinned by `orchestrator/flow-runner.test.ts`'s round-4 test). An
+   * (pinned by `apps/forge/tests/unit/flow-runner.test.ts`'s round-4 test). An
    * unscoped trigger (`projects:` absent) always dispatches regardless of
    * whether this key is present.
    */

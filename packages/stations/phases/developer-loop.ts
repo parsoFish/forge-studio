@@ -56,8 +56,8 @@ import { resolveWiCostBudgetUsd, makeCostCeilingCheck, isCostCeilingHalt } from 
 
 /**
  * Wipe the Ralph scratch files (PROMPT.md / AGENT.md / fix_plan.md) so the
- * next sub-phase doesn't inherit stale state. Inlined here after the
- * reviewer-invocation.ts deletion (S4).
+ * next sub-phase doesn't inherit stale state.
+ * historical: inlined here after the reviewer-invocation.ts deletion (S4).
  */
 function wipeRalphScratch(worktreePath: string): void {
   for (const f of ['PROMPT.md', 'AGENT.md', 'fix_plan.md']) {

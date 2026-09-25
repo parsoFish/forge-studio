@@ -21,7 +21,7 @@
  * reads "last run" instead — distinct from "prior run" (an OLDER, superseded
  * attempt), naming instead "the most recent attempt, already concluded".
  *
- * RUN: npx vitest run --root apps/studio tests/regression/initiative-detail-run-label.test.ts
+ * RUN: npx vitest run --root apps/studio apps/studio/tests/regression/initiative-detail-run-label.test.ts
  */
 import { test, expect } from 'vitest';
 import * as React from 'react';

@@ -113,7 +113,7 @@ before(async () => {
   }
   // SEC-02: both containment roots the manifest path guard checks against
   // must exist on disk before any manifest referencing them is validated — a
-  // real forge root always has both (orchestrator/init.ts layoutDirs + the
+  // real forge root always has both (packages/kernel/init.ts layoutDirs + the
   // daemon's ensureLayout create them at boot).
   mkdirSync(join(forgeRoot, '_worktrees'), { recursive: true });
   mkdirSync(join(forgeRoot, 'projects'), { recursive: true });

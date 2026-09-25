@@ -67,10 +67,10 @@
  *   they were deliberate hardlink/symlink-aware defenses.
  *
  * FINDING A (BLOCKER, round-2 adversarial review) — `seedProjectBrain`
- *   (`orchestrator/project-brain-seed.ts:157`, called from this SAME route
+ *   (`packages/knowledge/project-brain-seed.ts:157`, called from this SAME route
  *   two calls after the Defect-5 fix) is the identical shape, unfixed:
  *   `projectBrainDir(forgeRoot,id)` / `projectThemesDir(...)`
- *   (`orchestrator/brain-paths.ts`) are bare `resolve()`/`join()` off a
+ *   (`packages/knowledge/brain-paths.ts`) are bare `resolve()`/`join()` off a
  *   TRUSTED `forgeRoot` with NO per-segment containment on `brain/projects/
  *   <id>/{kb.yaml,profile.md,themes/,themes/README.md}` — `id` is
  *   `SLUG_RE`-validated (no traversal), so the escape is a PRE-PLANTED
@@ -771,7 +771,7 @@ test('positive control (passes before AND after any Defect-5 fix): cloning a rea
 });
 
 // ---------------------------------------------------------------------------
-// FINDING A — seedProjectBrain (orchestrator/project-brain-seed.ts) is the
+// FINDING A — seedProjectBrain (packages/knowledge/project-brain-seed.ts) is the
 // SAME Defect-5 shape, unfixed. `id` is SLUG_RE-validated (never traverses),
 // so every fixture here is a PRE-PLANTED symlink under
 // <forgeRoot>/brain/projects/<id> — a legitimate, contained `repoPath` is
@@ -1156,7 +1156,7 @@ test('positive control (passes before AND after the SEC-03 round-3/4 fix): a nor
 
 /** Directly plant a valid-shaped, orphaned project-brain stub — no route
  *  involved, no project.json, no symlink. Mirrors seedProjectBrain's own
- *  three-file shape (orchestrator/project-brain-seed.ts) closely enough to
+ *  three-file shape (packages/knowledge/project-brain-seed.ts) closely enough to
  *  load cleanly through loadKbDescriptor, without importing that module's
  *  private builders. */
 function plantOrphanedProjectBrain(forgeRoot: string, id: string): void {

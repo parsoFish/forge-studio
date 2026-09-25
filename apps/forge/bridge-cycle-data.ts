@@ -64,7 +64,7 @@ function contentTypeFor(filename: string): string {
  *
  *  This is genuinely load-bearing, not decorative, for SOME of the seven
  *  call sites and NOT others — checked per route, not assumed: `isSafeSegment`
- *  (cli/studio-path-guard.ts, backing `isSafeSubPath`/`resolveGuardedPath`,
+ *  (packages/kernel/path-guard.ts, backing `isSafeSubPath`/`resolveGuardedPath`,
  *  which gate the `/api/artifact/`, `/api/architect/file/` and
  *  `/api/instructions/file/` routes) denies control characters (so CR/LF
  *  header-injection is ALREADY refused before this ever runs on those three
@@ -247,7 +247,7 @@ export async function handleCycleDataRoutes(
     }
     return true;
   }
-  // Feature #9: single work-item definition for the hex-detail drawer. Serves
+  // historical: Feature #9: single work-item definition for the hex-detail drawer (ADR 031 removed it). Serves
   // the on-disk WI snapshot the PM emitted — preferring the immutable cycle
   // snapshot (`_logs/<cycleId>/work-items-snapshot/<wiId>.md`), falling back to
   // the live worktree spec (`_worktrees/<initiativeId>/.forge/work-items/<wiId>.md`)
@@ -334,7 +334,7 @@ export async function handleCycleDataRoutes(
     // segments, control characters, NUL, DEL and encoded separators do not.
     // Pinned both ways in apps/forge/tests/contract/sec04-cycleid-containment.test.ts (a real
     // `.capture` name serves 200; every escape shape still refused) and per
-    // predicate in cli/studio-path-guard.test.ts.
+    // predicate in packages/kernel/tests/unit/path-guard.test.ts.
     if (!isSafeSubPath(filename)) {
       sendJson(res, 400, { error: 'invalid filename' }, origin);
       return true;
@@ -347,7 +347,7 @@ export async function handleCycleDataRoutes(
     // filename segments, all under the trusted logsRoot) through the
     // per-segment identity + nlink guard, which the lexical check cannot do.
     let body = guardedReadFile(ctx.logsRoot, [cycleId, 'artifacts', ...filenameSegments]);
-    // W7-D1 — PARITY with `deriveArtifacts` (orchestrator/run-model-derive.ts),
+    // W7-D1 — PARITY with `deriveArtifacts` (packages/flows/run-model-derive.ts),
     // which marks `pr` ready when `pr-description.md` exists in EITHER
     // `artifacts/` OR the cycle-log ROOT ("accept the legacy cycle-log-root
     // location too so older frozen logs still resolve"). This route only ever

@@ -4,7 +4,7 @@
  * semantics it checks already live in this package: the fan-out predicate
  * (`flow-fanout.ts`), the manifest path guard whose predicate this mirrors
  * (`manifest-path-guard.ts`) and the whole trigger vocabulary
- * (`studio/validate-triggers.ts`, which also owns `TriggerCheckOpts`).
+ * (`packages/flows/studio/validate-triggers.ts`, which also owns `TriggerCheckOpts`).
  *
  * Pure semantic checks — no I/O, no mutation of inputs. Consumed by the
  * bridge's flow PUT route, `forge studio lint` and `claim-validator.ts`.
@@ -59,7 +59,7 @@ export function validateFlow(
 
   // project/shape (SEC-03 Defect 3, defence in depth). The REAL enforcement is
   // `writeManifest`'s `assertManifestPathFields` at the manifest-write choke
-  // point (orchestrator/mint-triggered-initiative.ts routes through it) — this
+  // point (packages/flows/mint-triggered-initiative.ts routes through it) — this
   // is layer 2, a charset check catching a poisoned `flow.project` at the
   // PUT/lint boundary, BEFORE it ever reaches a mint. Mirrors the exact
   // predicate the choke point itself uses (`isSafeProjectName`,
@@ -226,7 +226,7 @@ export function validateFlow(
 
   // fan-out: node.fanOut must match artifact of ≥1 inbound edge (G6 — the
   // runtime enforces this SAME predicate at flow start; see
-  // orchestrator/flow-runner.ts and findFanOutViolations above)
+  // packages/flows/flow-runner.ts and findFanOutViolations above)
   for (const violation of findFanOutViolations(flow)) {
     findings.push(
       err(

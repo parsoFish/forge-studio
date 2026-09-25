@@ -517,7 +517,7 @@ export function shouldPollSessionSummary(state: SessionShellViewState): boolean 
 // a real destination resolves instead of a silently dropped back-link.
 //
 // forge-ui never imports cli/ at runtime (see this repo's SSOT-parity-test
-// convention, e.g. forge-ui/lib/trigger-kind-parity.test.ts) — this is a
+// convention, e.g. apps/studio/tests/contract/trigger-kind-parity.test.ts) — this is a
 // small, independently-declared mirror of `isPseudoProjectAnchor` and the
 // two anchor literals (packages/sessions/bridge-studio-sessions.ts), kept honest by a
 // parity test in this file's own .test.ts sibling.

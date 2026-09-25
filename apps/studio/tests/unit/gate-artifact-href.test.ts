@@ -22,7 +22,7 @@
  * gate: plan }` and `forge-develop/flow.yaml:39` is `{ id: review,
  * gate: verdict }`.
  *
- * RUN: npx vitest run tests/unit/gate-artifact-href.test.ts   (from apps/studio/)
+ * RUN: npx vitest run apps/studio/tests/unit/gate-artifact-href.test.ts   (from apps/studio/)
  */
 
 import { test, expect } from 'vitest';

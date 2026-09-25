@@ -8,7 +8,7 @@ by `@forge/library`'s `loadArtifactTemplate` / `listArtifactTemplates`;
 validated by `validateArtifactTemplate` (`orchestrator/studio/validate.ts`). Surfaced in the
 Studio UI at `/templates` (category `planning`) and `/templates/[id]`, alongside
 `studio/demo-elements/` (`demo-output`) and `studio/starters/projects/` (`project-scaffold`) —
-see `orchestrator/studio/template-library.ts` for the unifying registry.
+see `packages/library/studio/template-library.ts` for the unifying registry.
 
 ## The 8 templates
 
@@ -25,7 +25,7 @@ see `orchestrator/studio/template-library.ts` for the unifying registry.
 **Edge-backed** means the artifact is the declared `artifact:` label on a real edge in one of
 the four seed flows (`studio/flows/*/flow.yaml`) — its producer/consumer can be
 cross-validated against the flow graph's actual node topology
-(`verifyTemplateEndpoints`, `orchestrator/studio/template-library.ts`), and the templates
+(`verifyTemplateEndpoints`, `packages/library/studio/template-library.ts`), and the templates
 library's `/templates/[id]` detail page renders `endpointsVerified: true` for it.
 
 The three that are **not** edge-backed travel by **orchestrator-band re-entry** instead of a
@@ -41,9 +41,9 @@ the declaration as confirmed.
 `validateArtifactRef` (`orchestrator/studio/validate.ts`) is a **hard error** in
 `forge studio lint` (promoted from advisory 2026-08-04, this initiative — R3-06/R2-05-F1): an
 edge naming an artifact id with no `.md` file here fails lint. This is why the flow builder's
-hardcoded `ARTIFACTS` catalog (`forge-ui/lib/flow-artifact-catalog.ts`) is pinned, in both
+hardcoded `ARTIFACTS` catalog (`apps/studio/lib/flow-artifact-catalog.ts`) is pinned, in both
 directions, to this directory's id set by a CI-enforced parity test
-(`forge-ui/lib/flow-artifact-catalog.test.ts`) — a template added or removed here without that
+(`apps/studio/tests/contract/flow-artifact-catalog.test.ts`) — a template added or removed here without that
 list following is a red CI run, not a silent drift.
 
 Adding another template means: a new `.md` file here (gray-matter frontmatter + contract body),

@@ -35,7 +35,7 @@
  * always start with `INIT-` (see `work-item.ts`/`manifest.ts`), so it can
  * never literally equal `wi`.
  *
- * Mirrors orchestrator/worktree.ts's conventions: `execFileSync` with arg
+ * Mirrors packages/flows/worktree.ts's conventions: `execFileSync` with arg
  * arrays (no shell interpolation), self-heal-before-create, best-effort
  * remove. worktree.ts itself is untouched (its `add()`/`remove()` contracts
  * stay byte-identical) — this module creates the branch itself, then reuses

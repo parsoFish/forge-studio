@@ -39,7 +39,7 @@ import {
 } from './skill-package.ts';
 
 // ---------------------------------------------------------------------------
-// Types (WI-1 pinned shapes — orchestrator/studio/skill-library.test.ts)
+// Types (WI-1 pinned shapes — packages/library/tests/integration/skill-library.test.ts)
 // ---------------------------------------------------------------------------
 
 export interface InstallInput {
@@ -295,7 +295,7 @@ export function installSkillPackage(input: InstallInput): InstallResult {
  * not exist" into one `null` deliberately (no existence oracle across the
  * root), so this message must not claim to know which of the two it was.
  *
- * Pinned by `tests/regression/skill-install-symlink-containment.test.ts`,
+ * Pinned by `packages/library/tests/regression/skill-install-symlink-containment.test.ts`,
  * proven RED against the pre-fix code.
  */
 function guardedSkillMd(forgeRoot: string, id: string, caller: string): string {

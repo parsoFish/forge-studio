@@ -10,7 +10,7 @@
  *   - `name: brain-maintenance`, `surface: interactive`, `library: false`.
  *   - a `runtime:` block (`sdk: claude`, `strategy: fixed`, a real claude
  *     model id) — load-bearing because `discoverRuntimeAgentIds` (in
- *     orchestrator/studio/session-kinds.ts) scans skills/*\/SKILL.md for
+ *     packages/sessions/studio/session-kinds.ts) scans skills/*\/SKILL.md for
  *     exactly this block, and a later work item's session-kind descriptor
  *     (`agent: brain-maintenance`) only validates if this agent resolves.
  *   - `allowed-tools: [Read, Grep, Glob, Write]`; `disallowed-tools`
@@ -22,7 +22,7 @@
  *     docs/decisions/010-brain-first.md line 22).
  *
  * `discoverRuntimeAgentIds` itself is a private (non-exported) function in
- * orchestrator/studio/session-kinds.ts. Rather than modify production code
+ * packages/sessions/studio/session-kinds.ts. Rather than modify production code
  * to export it (out of scope for a test-writer, and unnecessary), Group 1
  * below keeps a TEST-LOCAL, byte-for-byte reimplementation built ONLY from
  * that module's own exported building blocks (`listSkillMdDirs`/`skillsDir`
@@ -55,7 +55,7 @@ const AGENT_SLUG = 'brain-maintenance';
 // =============================================================================
 
 /**
- * Byte-for-byte mirror of orchestrator/studio/session-kinds.ts's private
+ * Byte-for-byte mirror of packages/sessions/studio/session-kinds.ts's private
  * `discoverRuntimeAgentIds` — see file header for why this is a test-local
  * reimplementation rather than an import.
  */
@@ -292,7 +292,7 @@ test(
 );
 
 // =============================================================================
-// Group 6 — R4-19-F2 adversarial review: `orchestrator/interactive-session.ts`
+// Group 6 — R4-19-F2 adversarial review: `packages/sessions/interactive-session.ts`
 // (runAgentTurn, ~lines 170-178) never sets the SDK's base `tools:` option —
 // only `allowedTools`/`disallowedTools`. Per the SDK's own type docs
 // (node_modules/@anthropic-ai/claude-agent-sdk/entrypoints/sdk/*.d.ts),
@@ -348,7 +348,7 @@ test(
 
 // =============================================================================
 // Group 7 — R4-19-F2 adversarial review: `buildTurnPrompt`
-// (orchestrator/interactive-runner.ts:627-648) inlines the ENTIRE
+// (packages/sessions/interactive-runner.ts:627-648) inlines the ENTIRE
 // `status.json` — including `findings[].message`, which can carry verbatim
 // substrings of theme-file content (e.g. cli/brain-lint.ts's checkSourceLinks
 // does `message: \`broken link: ${link}\``, and a theme's own prose can leak

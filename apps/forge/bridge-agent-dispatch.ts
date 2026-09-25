@@ -72,7 +72,7 @@ export function newRunStamp(): string {
 
 /** The 5 detached-runner turn families the bridge spawns — each `argvPrefix`
  *  is prepended to `<sid> --project <project>` to build the full argv passed
- *  to `orchestrator/cli.ts`, and `logPrefix` names the `_logs/_<logPrefix>-
+ *  to `apps/forge/cli.ts`, and `logPrefix` names the `_logs/_<logPrefix>-
  *  <sid>/` capture dir. `demo-builder` is the one legacy case where verb and
  *  log prefix diverge (verb `demo-builder`, log prefix `demo`) — preserved
  *  exactly from the pre-collapse per-agent functions.
@@ -133,7 +133,7 @@ export const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly 
  *  below — defense-in-depth on a pre-existing, F3b-renamed function (route
  *  handlers already 404 an unknown sessionId before spawning, plus the
  *  bridge's same-origin + `x-forge-csrf` guard, so this isn't closing an
- *  exploitable hole today). Reuses `isSafeRunId` — `orchestrator/run-agent.ts`'s
+ *  exploitable hole today). Reuses `isSafeRunId` — `packages/agents/run-agent.ts`'s
  *  `SAFE_RUN_ID_RE` + `..` check — as the SSOT rather than re-deriving it. */
 // Exported (W6-B4) so packages/sessions/bridge-studio-sessions-affordances.ts's
 // generic session-affordance write endpoint can DELEGATE to this SAME spawn
@@ -207,7 +207,7 @@ export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, pro
  * expects (`[slug, '--run-id', runId, ...optional flags]`) — NOT the full
  * node-invocation array; `spawnAgentDispatch` still prepends the
  * process-invocation boilerplate (`--experimental-strip-types`,
- * `orchestrator/cli.ts`, `agent`, `dispatch`) around this helper's output.
+ * `apps/forge/cli.ts`, `agent`, `dispatch`) around this helper's output.
  *
  * Input keys are filtered through `SAFE_INPUT_KEY_RE` here (defense-in-depth,
  * unchanged from before this extraction) so no arg injects a flag. Input

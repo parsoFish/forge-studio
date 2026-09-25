@@ -13,7 +13,7 @@
  * Drives the real CLI entry point `cmdAgentRun` with agent-id `architect` —
  * the one `AGENT_RUNNERS` entry with `requiresProject: false`, so it is
  * reachable with a caller-supplied `--project` while carrying no `turnSpec`
- * (see `orchestrator/studio/session-kinds.ts`), which is what keeps it on
+ * (see `packages/sessions/studio/session-kinds.ts`), which is what keeps it on
  * this branch rather than the already-guarded turnSpec road. Runs under
  * `FORGE_ARCHITECT_NO_SPAWN=1` so no real agent turn is ever attempted.
  */

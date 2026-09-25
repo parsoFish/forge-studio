@@ -12,7 +12,7 @@
  * here — it renders faithfully under `react-dom/server`'s
  * `renderToStaticMarkup`. No jsdom.
  *
- * RUN: npx vitest run --root apps/studio tests/regression/kb-graph-empty-caption.test.ts
+ * RUN: npx vitest run --root apps/studio apps/studio/tests/regression/kb-graph-empty-caption.test.ts
  */
 
 import { test, expect } from 'vitest';

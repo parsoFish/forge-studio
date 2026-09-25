@@ -26,7 +26,7 @@ import type { Run } from './studio-client';
 import { isRunnableSource } from '@forge/contracts';
 
 /**
- * `orchestrator/run-model.ts`'s `FALLBACK_FLOW_ID`, re-declared client-side by
+ * `packages/flows/run-model.ts`'s `FALLBACK_FLOW_ID`, re-declared client-side by
  * this file's convention (see `studio-client.ts`'s type headers). `Run.flowId`
  * is ALREADY defaulted to it for a manifest that carries no `flow_id`, so
  * reading `r.flowId` raw would report a repoint away from a flow that does not

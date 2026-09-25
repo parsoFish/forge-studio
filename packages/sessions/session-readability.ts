@@ -53,7 +53,7 @@ import { deriveSessionCostUsd, resolveGuardedPath } from '@forge/kernel';
  *  (apps/forge/ui-bridge.ts) writes stderr.log/turn.pid into and `runInteractiveTurn`
  *  (packages/sessions/interactive-runner.ts) writes events.jsonl/.heartbeat into
  *  (`SPAWN_AGENT_SPECS[..].logPrefix === descriptor.id`, pinned by
- *  packages/sessions/session-tail-kind-parity.test.ts). ONE directory-entry name: the hyphen
+ *  packages/sessions/tests/contract/session-tail-kind-parity.test.ts). ONE directory-entry name: the hyphen
  *  is a literal character in the name, never a path separator, so the whole
  *  string is a single `resolveGuardedPath` segment.
  *

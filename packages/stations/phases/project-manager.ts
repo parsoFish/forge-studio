@@ -40,7 +40,7 @@ import { rejectWorkItemSet } from './pm-rejected-set.ts';
 import { writeDecompositionDoc } from './pm-decomposition-doc.ts';
 import { readPmBrainContext, readProjectContext } from './pm-prompt-context.ts';
 import { underDecomposedFlag } from './pm-class-set-rules.ts';
-import type { ClassProfilePort } from '../class-profile-port.ts';
+import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
 import { deriveKbIdFromBrainPath } from '@forge/knowledge';
 
 /**
@@ -407,8 +407,8 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       message: 'pm.work-item-emitted',
       metadata: {
         work_item_id: item.work_item_id,
-        // Carried for the Studio hex-detail drawer + the WI dependency graph
-        // (observability #11): the WI's deps, scope size, and a one-line task.
+        // historical: carried for the Studio hex-detail drawer (ADR 031 removed it)
+        // + the WI dependency graph (observability #11): the WI's deps, scope size, and a one-line task.
         depends_on: item.depends_on,
         files_in_scope: item.files_in_scope.length,
         ac_count: item.acceptance_criteria.length,
@@ -503,30 +503,44 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   }
   const itemErrorCount = Object.values(perItem).reduce((acc, errs) => acc + errs.length, 0);
 
-  // A2a (2026-06-06): live-acceptance-WI requirement (contract C7). When the
-  // project declares `acceptance_gate.required`, the decomposition MUST include
-  // ≥1 WI whose `quality_gate_cmd` targets the acceptance suite — so every
-  // initiative is proven by a real acceptance test, not an offline proxy. An
-  // initiative shipped with NO acceptance WI is a hard PM failure.
+  // A2a (2026-06-06): live-acceptance-WI requirement (contract C7), scoped by
+  // class (ADR 051 decision 2 — a phase reads the class → gate-profile table;
+  // branching on a class NAME is a conformance failure). Required only when
+  // the initiative's class profile runs project tests at the merge boundary
+  // — a class with none (e.g. docs) has no behaviour to accept, so the rule
+  // is skipped and the skip is logged, never silent. Where it does apply, an
+  // initiative shipped with NO acceptance WI is still a hard PM failure.
   let accGateViolation: string | null = null;
   const accGate = projectConfig?.acceptance_gate;
   if (accGate?.required && items.length > 0) {
-    const hasLiveAccWi = items.some((it) =>
-      (it.quality_gate_cmd ?? []).some((tok) => tok.includes(accGate.match)),
-    );
-    if (!hasLiveAccWi) {
-      // Derive the wording from the project's own gate config: a gate that
-      // requires env vars proves the change against a real external system (so
-      // call it the "live acceptance suite"); a creds-free gate is just "the
-      // acceptance suite". No project-flavoured language is hardcoded here.
-      const requiresEnv = (accGate.requires_env ?? []).length > 0;
-      const suiteName = requiresEnv
-        ? `the live acceptance suite (proving the change against the real external system; ` +
-          `requires ${accGate.requires_env!.join(', ')})`
-        : 'the acceptance suite';
-      accGateViolation =
-        `no acceptance work item: this project requires ≥1 WI whose quality_gate_cmd targets ` +
-        `"${accGate.match}" — ${suiteName}. Add an acceptance WI whose gate runs that suite.`;
+    const runsMergeBoundaryTests =
+      requireClassProfiles(p.classProfiles, 'project-manager').profileFor(manifest.class).mergeBoundaryTest
+        .length > 0;
+    if (!runsMergeBoundaryTests) {
+      logger.emit({
+        initiative_id: manifest.initiative_id, parent_event_id: parentEventId,
+        phase: 'project-manager', skill: def.slug, event_type: 'log',
+        input_refs: [], output_refs: [], message: 'pm.acceptance-wi-not-required',
+        metadata: { change_class: manifest.class, reason: 'class profile runs no merge-boundary tests' },
+      });
+    } else {
+      const hasLiveAccWi = items.some((it) =>
+        (it.quality_gate_cmd ?? []).some((tok) => tok.includes(accGate.match)),
+      );
+      if (!hasLiveAccWi) {
+        // Derive the wording from the project's own gate config: a gate that
+        // requires env vars proves the change against a real external system (so
+        // call it the "live acceptance suite"); a creds-free gate is just "the
+        // acceptance suite". No project-flavoured language is hardcoded here.
+        const requiresEnv = (accGate.requires_env ?? []).length > 0;
+        const suiteName = requiresEnv
+          ? `the live acceptance suite (proving the change against the real external system; ` +
+            `requires ${accGate.requires_env!.join(', ')})`
+          : 'the acceptance suite';
+        accGateViolation =
+          `no acceptance work item: this project requires ≥1 WI whose quality_gate_cmd targets ` +
+          `"${accGate.match}" — ${suiteName}. Add an acceptance WI whose gate runs that suite.`;
+      }
     }
   }
 

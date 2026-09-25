@@ -1,7 +1,7 @@
 /**
  * Tests for `runAgent` (R2-01-F1) — the generic agent-as-runnable primitive.
  *
- * Uses the queryFn stub pattern from `loops/ralph/claude-agent.test.ts` (the
+ * Uses the queryFn stub pattern from `packages/agents/tests/integration/claude-agent.test.ts` (the
  * canonical stub for this exact spawn path: a fake `query`-shaped function
  * that records calls and yields a fixed SDK message stream), retyped to
  * `StreamQueryFn` — the locked `RunContext.queryFn` shape — rather than
@@ -24,7 +24,7 @@ import { FORGE_ROOT } from '@forge/kernel';
 const ROOT = FORGE_ROOT;
 
 /** Build a fake SDK query() that yields a single `result` message reporting
- * the given cost — mirrors `fakeQuery` in loops/ralph/claude-agent.test.ts,
+ * the given cost — mirrors `fakeQuery` in packages/agents/tests/integration/claude-agent.test.ts,
  * retyped as `StreamQueryFn` to match RunContext.queryFn's locked shape. */
 function fakeQueryFn(costUsd: number): StreamQueryFn {
   return ((_params: { prompt: unknown; options?: unknown }) => {

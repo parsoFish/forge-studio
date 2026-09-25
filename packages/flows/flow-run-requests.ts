@@ -196,7 +196,7 @@ export type FlowRunDrainResult = {
  * given event's resolved project. Pure and side-effect-free so any dispatch
  * mechanism can consult it, not just this module's own drain:
  * `drainFlowRunRequests` below (the staged-request path) and
- * `fireFlowTriggers` (orchestrator/flow-trigger.ts — the inline `on: merged`
+ * `fireFlowTriggers` (packages/flows/flow-trigger.ts — the inline `on: merged`
  * path finalize-merged.ts drives) both call this SAME function. Before this
  * extraction, the logic lived inlined in `drainFlowRunRequests` only, and the
  * R2-08 addendum (docs/decisions/027-studio-object-model.md) worked around
@@ -273,7 +273,7 @@ export function drainFlowRunRequests(deps: DrainFlowRunDeps = {}): FlowRunDrainR
     // lint is defense in depth"), via the SINGLE extracted predicate
     // `decideTriggerProjectScope` above (forge-f9g fix, W8-A1) — this is the
     // ONLY call site for this staged-request path; `fireFlowTriggers`
-    // (orchestrator/flow-trigger.ts) is the sibling call site for the inline
+    // (packages/flows/flow-trigger.ts) is the sibling call site for the inline
     // `on: merged` path. `projects === undefined` ⇒ unscoped, the
     // pre-existing cross-project behaviour, completely unaffected. A DECLARED
     // scope (including `[]`) requires a resolved `eventProject` that is an

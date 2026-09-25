@@ -110,7 +110,7 @@ test('dispatchAgentRun: rejects an empty runId', async () => {
 // have populated it.
 //
 // Uses the SAME `queryFn` test-injection seam + one-shot-clone technique
-// orchestrator/run-agent-spawn-capture.test.ts already establishes as this
+// packages/agents/tests/integration/run-agent-spawn-capture.test.ts already establishes as this
 // codebase's correct way to capture a real spawn call without a real SDK
 // call — reused here, not reinvented. Materials files are written directly
 // to disk (bypassing stageMaterials entirely) since dispatchAgentRun's
@@ -254,7 +254,7 @@ test('dispatchAgentRun WIRING: REGRESSION — a run with NO materials directory 
 //
 // PLACEMENT NOTE: the PURE, direct tests against `discoverStagedMaterials`
 // itself (its assumed `{materials, skipped}` return shape) live in the
-// SIBLING file `orchestrator/agent-dispatch-materials-skip.test.ts`, not
+// SIBLING file `packages/agents/tests/integration/agent-dispatch-materials-skip.test.ts`, not
 // here — deliberately split out. That file's whole import goes RED as one
 // unit if `discoverStagedMaterials` never becomes exported (an assumption
 // this round makes, not given verbatim — see that file's own header for the

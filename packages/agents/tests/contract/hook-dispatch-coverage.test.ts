@@ -4,7 +4,7 @@
  *
  * ## Why a structural test exists at all
  *
- * `forge-vvp` asserted, twice, that `orchestrator/run-agent.ts` was "the sole
+ * `forge-vvp` asserted, twice, that `packages/agents/run-agent.ts` was "the sole
  * dispatch entrypoint", and prescribed a fix confined to it. Derived by
  * execution it is one of SEVEN production sites that hand-build a claude SDK
  * options bag; there is no shared options builder. Wiring one of seven would
@@ -15,7 +15,7 @@
  *
  * A fix is only complete if an EIGHTH site cannot be added hook-blind. That is
  * what the first suite below enforces, in the style of
- * `orchestrator/pinned-sdk-query.enforce.test.ts`: because that test already
+ * `packages/agents/tests/contract/pinned-sdk-query.enforce.test.ts`: because that test already
  * forbids importing the SDK's `query` anywhere except `pinned-sdk-query.ts`,
  * every real spawn site either imports `pinnedSdkQuery`/`pinnedStreamQuery` as
  * a VALUE, or reaches the SDK indirectly through the adapter registry
@@ -37,7 +37,7 @@
  * ## What this file does NOT prove
  *
  * That a hook process really runs is pinned in
- * `orchestrator/studio/hook-dispatch.test.ts`, by a real `bash` spawn writing a
+ * `packages/agents/tests/unit/hook-dispatch.test.ts`, by a real `bash` spawn writing a
  * side-effect file. Stated explicitly so plumbing coverage is never mistaken
  * for execution coverage.
  *

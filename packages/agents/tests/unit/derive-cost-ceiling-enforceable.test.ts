@@ -3,7 +3,7 @@
  *
  * ⚑ AMENDED W7-B5 (agents-21): the fact is now computed SERVER-SIDE as
  * `runtime.loopStrategy === undefined || runtime.loopStrategy === 'one-shot'`
- * (orchestrator/studio/derive.ts) — the legacy invocation path (absent
+ * (packages/agents/studio/derive.ts) — the legacy invocation path (absent
  * loopStrategy) ENFORCES a ceiling for real since W7-B5 wired it to the
  * adapter's `maxBudgetUsdPerIteration` (see run-agent-w7b5.test.ts). 'ralph'
  * and unknown declared strategies stay false: runAgent refuses to dispatch
@@ -29,7 +29,7 @@
  * full-descriptor `deepEqual` literals were amended (not duplicated here) to
  * add the new key — see the comment at those two call sites.
  *
- * RUN: node --test --experimental-strip-types orchestrator/studio/derive-cost-ceiling-enforceable.test.ts
+ * RUN: node --test --experimental-strip-types packages/agents/tests/unit/derive-cost-ceiling-enforceable.test.ts
  */
 
 import { test } from 'node:test';

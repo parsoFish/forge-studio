@@ -1,0 +1,6896 @@
+[
+  {
+    "file": ".claude/skills/tiered-orchestration/reference/measured-lessons.md",
+    "kind": "stem",
+    "cited": "e2e-journey",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/bridge-studio-writes.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/bridge-studio.ts",
+    "kind": "path",
+    "cited": "orchestrator/architect-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/dry-bridge.ts",
+    "kind": "path",
+    "cited": "tests/contract/routes-table.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/manifest-fixtures.ts",
+    "kind": "path",
+    "cited": "studio/session-transcript.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/manifest-fixtures.ts",
+    "kind": "path",
+    "cited": "tests/integration/architect-runner.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/manifest-fixtures.ts",
+    "kind": "stem",
+    "cited": "bridge-studio-sessions.test",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/studio-lint.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/skill-library.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/contract/band-agent-standalone-parity.test.ts",
+    "kind": "stem",
+    "cited": "agent-run.test",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/contract/bridge-studio-residual-containment.test.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-kbs.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/contract/bridge-studio-sibling-containment.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/contract/bridge-studio-sibling-containment.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/skill-path.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/contract/dispatch-decision-capture.test.ts",
+    "kind": "stem",
+    "cited": "demo-agent-spawn-capture.test",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/contract/dry-bridge-coverage.test.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 4
+  },
+  {
+    "file": "apps/forge/tests/contract/sec04-architect-containment.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 2
+  },
+  {
+    "file": "apps/forge/tests/contract/sec04-architect-containment.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/architect-runner.ts",
+    "count": 2
+  },
+  {
+    "file": "apps/forge/tests/contract/sec04-leaf-symlink-containment.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/instructions-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/contract/spawn-deps-parity.test.ts",
+    "kind": "stem",
+    "cited": "architect-runner",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/contract/ui-bridge-agent-history-containment.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/contract/ui-bridge-dry-spawn.test.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/contract/ui-bridge-dry-spawn.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/cli.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/contract/ui-bridge-served-file-headers.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/contract/ui-bridge-session-list-lifecycle.test.ts",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 2
+  },
+  {
+    "file": "apps/forge/tests/integration/architect-draft-round-manifests.test.ts",
+    "kind": "stem",
+    "cited": "architect-runner",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/architect-runner-integration.test.ts",
+    "kind": "path",
+    "cited": "packages/sessions/tests/integration/architect-runner.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-community-registry-crud.test.ts",
+    "kind": "stem",
+    "cited": "agent-run.test",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio-affordances.test.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio-affordances.test.ts",
+    "kind": "path",
+    "cited": "packages/sessions/bridge-studio-sessions.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio-contract-stages.test.ts",
+    "kind": "path",
+    "cited": "packages/sessions/bridge-studio-sessions.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio-flows.test.ts",
+    "kind": "path",
+    "cited": "skills/test-agent/SKILL.md",
+    "count": 2
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio-kb-ingest-activity.test.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-kbs.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio-kb-ingest-activity.test.ts",
+    "kind": "stem",
+    "cited": "bridge-studio-kbs.test",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio-package-owned-flows.test.ts",
+    "kind": "path",
+    "cited": "packages/demo-pkg/skills/x/SKILL.md",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio-triggers.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/types.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio-write.test.ts",
+    "kind": "path",
+    "cited": "cli/skill-md-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio-write.test.ts",
+    "kind": "path",
+    "cited": "skills/write-agent/SKILL.md",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio.test.ts",
+    "kind": "path",
+    "cited": "projects/test-project/.forge/project.json",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio.test.ts",
+    "kind": "path",
+    "cited": "skills/test-agent/SKILL.md",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/dry-bridge.test.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/roadmap-draft-integration.test.ts",
+    "kind": "path",
+    "cited": "packages/sessions/studio/session-transcript.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/skill-install-agent-identity.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/skill-path.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/skill-install-agent-identity.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/studio-lint-community-registry.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-agent-history.test.ts",
+    "kind": "path",
+    "cited": "packages/sessions/bridge-studio-sessions.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-agent-history.test.ts",
+    "kind": "path",
+    "cited": "scripts/e2e-journey.mjs",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-agent-history.test.ts",
+    "kind": "path",
+    "cited": "scripts/journeys/agents.mjs",
+    "count": 4
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-agent-run-ceiling.test.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-agent-run-ceiling.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/cli.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-agent-run-materials.test.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 2
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-agent-run-materials.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-agent-run-materials.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-agent-run-materials.test.ts",
+    "kind": "stem",
+    "cited": "agent-run.test",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-agent-runs-w7b5.test.ts",
+    "kind": "stem",
+    "cited": "bridge-studio-affordances",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-authoring-start.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/cli.ts",
+    "count": 2
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-authoring-start.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/interactive-runner.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-demo-generations.test.ts",
+    "kind": "path",
+    "cited": "packages/sessions/bridge-studio-sessions.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-demo-generations.test.ts",
+    "kind": "stem",
+    "cited": "demo-builder-runner",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-kb-cleanup.test.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-kbs.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-onboarding-briefing.test.ts",
+    "kind": "stem",
+    "cited": "bridge-studio-affordances",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-onboarding-start.test.ts",
+    "kind": "stem",
+    "cited": "bridge-studio-affordances",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-reflect.test.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-scheduler.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/cli.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-sendback.test.ts",
+    "kind": "stem",
+    "cited": "demo-fix-loop",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/ui-bridge-sessions-index.test.ts",
+    "kind": "path",
+    "cited": "packages/sessions/bridge-studio-sessions.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/regression/bridge-studio-demo-builder-containment.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/regression/bridge-studio-project-create-containment.test.ts",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 5
+  },
+  {
+    "file": "apps/forge/tests/regression/bridge-studio-project-create-containment.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/regression/bridge-studio-slug-message.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/skill-path.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/regression/guards-migration-catalog.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/regression/onboard-born-green.test.ts",
+    "kind": "stem",
+    "cited": "stand-up-create",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/regression/onboard-git-init.test.ts",
+    "kind": "stem",
+    "cited": "stand-up-create",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/regression/studio-provenance.test.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-kbs.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/regression/studio-provenance.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-provenance.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/regression/studio-provenance.test.ts",
+    "kind": "path",
+    "cited": "skills/test-agent/SKILL.md",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/regression/ui-bridge-instructions.test.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/regression/ui-bridge-onboarding-spawn-pid.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/cli.ts",
+    "count": 2
+  },
+  {
+    "file": "apps/forge/tests/regression/ui-bridge-session-tails.test.ts",
+    "kind": "path",
+    "cited": "packages/sessions/bridge-studio-sessions.test.ts",
+    "count": 3
+  },
+  {
+    "file": "apps/forge/tests/regression/ui-bridge-unsafe-sessionid.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/cli.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/unit/agent-composition-hooks.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/unit/flow-runner.test.ts",
+    "kind": "path",
+    "cited": "studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/unit/flow-runner.test.ts",
+    "kind": "path",
+    "cited": "studio/validate.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/unit/studio-lint.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/session-kinds.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/unit/studio-lint.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/unit/studio-lint.test.ts",
+    "kind": "path",
+    "cited": "skills/real-agent/SKILL.md",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/unit/studio-lint.test.ts",
+    "kind": "path",
+    "cited": "skills/test-agent/SKILL.md",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/ui-bridge.ts",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/app/agents/[id]/page.tsx",
+    "kind": "path",
+    "cited": "scripts/e2e-deadpaths.mjs",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/app/agents/[id]/page.tsx",
+    "kind": "path",
+    "cited": "scripts/journeys/agents.mjs",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/app/community/page.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/app/flows/[id]/run/[runId]/page.tsx",
+    "kind": "path",
+    "cited": "scripts/journeys/flows-run.mjs",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/app/flows/[id]/run/[runId]/page.tsx",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/app/hooks/page.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/app/hooks/page.tsx",
+    "kind": "path",
+    "cited": "scripts/journeys/hooks.mjs",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/app/page.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/app/projects/[id]/showcase/page.tsx",
+    "kind": "stem",
+    "cited": "demo-showcase",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/app/sessions/[kind]/[sessionId]/page.tsx",
+    "kind": "stem",
+    "cited": "views-session",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/app/sessions/page.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/Breadcrumbs.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/BridgeStatus.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/FetchErrorState.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/NotFound.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/PageLoadError.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/PageLoadError.tsx",
+    "kind": "stem",
+    "cited": "demo-showcase",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/studio/agent-builder/ReadinessPanel.tsx",
+    "kind": "path",
+    "cited": "scripts/journeys/connections.mjs",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/studio/agent-builder/RunView.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/studio/agent-builder/StandingTriggers.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/studio/ContractBuildout.tsx",
+    "kind": "stem",
+    "cited": "views-session",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/studio/FlowRunDetail.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/studio/FlowRunDetail.tsx",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/studio/InitiativeDetail.tsx",
+    "kind": "stem",
+    "cited": "roadmap-dag-render.test",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/studio/ProjectArchitectEntry.tsx",
+    "kind": "stem",
+    "cited": "views-projects",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/studio/session/CancelSessionButton.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/studio/session/SessionArchitectPanel.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/studio/session/SessionArtifactPane.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/studio/session/SessionInteractivePanel.tsx",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/studio/session/SessionTranscript.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/studio/session/StageSelector.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/components/studio/SessionsIndex.tsx",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 4
+  },
+  {
+    "file": "apps/studio/components/studio/UnresolvedHistoriesNotice.tsx",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/agent-builder-view.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/authoring-package-shape.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 2
+  },
+  {
+    "file": "apps/studio/lib/bridge-client-interviews.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/bridge-client-interviews.ts",
+    "kind": "path",
+    "cited": "skills/community-refresh/SKILL.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/bridge-client-roadmap.ts",
+    "kind": "stem",
+    "cited": "wi-status",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/dep-layout.ts",
+    "kind": "path",
+    "cited": "orchestrator/dep-levels.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/flow-node-log.ts",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/history-ledger.ts",
+    "kind": "path",
+    "cited": "orchestrator/architect-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/home-view.ts",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/hook-client.ts",
+    "kind": "stem",
+    "cited": "wi-status",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/hook-library-view.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/kickoff-form.ts",
+    "kind": "stem",
+    "cited": "wi-status",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/monitor-layout.ts",
+    "kind": "path",
+    "cited": "orchestrator/dep-levels.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/monitor-view.ts",
+    "kind": "path",
+    "cited": "scripts/journeys/monitor.mjs",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/projects-index-filter.ts",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 3
+  },
+  {
+    "file": "apps/studio/lib/projects-index-filter.ts",
+    "kind": "stem",
+    "cited": "stand-up-create",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/projects-index-filter.ts",
+    "kind": "stem",
+    "cited": "stand-up-onboard",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/projects-index-health.ts",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/route-readiness.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/session-artifact-view.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/session-client.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/session-shell-view.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/sessions-index-filter.ts",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/skill-client.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/skill-library.ts",
+    "count": 2
+  },
+  {
+    "file": "apps/studio/lib/standing-triggers.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/status-colors.ts",
+    "kind": "stem",
+    "cited": "wi-status",
+    "count": 2
+  },
+  {
+    "file": "apps/studio/lib/studio-client.ts",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/lib/studio-client.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/types.ts",
+    "count": 4
+  },
+  {
+    "file": "apps/studio/next.config.mjs",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/bridge-transport-guard.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/dom-contract-handles.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/knowledge-page-empty-state-wiring.test.ts",
+    "kind": "stem",
+    "cited": "knowledge-page-kb-maintenance.test",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/knowledge-page-tabs.test.ts",
+    "kind": "path",
+    "cited": "forge-ui/lib/knowledge-page-kb-maintenance.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/knowledge-page-tabs.test.ts",
+    "kind": "stem",
+    "cited": "knowledge-page-kb-maintenance.test",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/library-authoring-render.test.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/not-found-render.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/page-load-error-render.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/recent-runs-unresolved-render.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/roadmap-canvas-render.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/roadmap-canvas-render.test.ts",
+    "kind": "stem",
+    "cited": "roadmap-dag-render.test",
+    "count": 3
+  },
+  {
+    "file": "apps/studio/tests/contract/roadmap-serpentine-retired.test.ts",
+    "kind": "path",
+    "cited": "forge-ui/components/studio/SerpentineTimeline.tsx",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/session-shell-view.test.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/SessionInteractivePanel.test.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/standing-triggers-render.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/studio-client.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/studio-client.test.ts",
+    "kind": "path",
+    "cited": "forge-ui/app/knowledge/new/page.tsx",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/studio-client.test.ts",
+    "kind": "path",
+    "cited": "forge-ui/app/knowledge/page.tsx",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/studio-client.test.ts",
+    "kind": "path",
+    "cited": "forge-ui/tsconfig.json",
+    "count": 2
+  },
+  {
+    "file": "apps/studio/tests/contract/studio-client.test.ts",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/contract/wi-status-parity.test.ts",
+    "kind": "stem",
+    "cited": "wi-status",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/activity-log-render.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/flow-run-detail-render.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 2
+  },
+  {
+    "file": "apps/studio/tests/integration/flow-run-detail-render.test.ts",
+    "kind": "path",
+    "cited": "scripts/e2e-deadpaths.mjs",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/flow-run-node-log-render.test.ts",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/history-ledger-render.test.ts",
+    "kind": "path",
+    "cited": "scripts/journeys/flows-run.mjs",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/home-sessions-strip-render.test.ts",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 2
+  },
+  {
+    "file": "apps/studio/tests/integration/library-hub-render.test.ts",
+    "kind": "path",
+    "cited": "forge-ui/app/library/page.tsx",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/project-contract-panel-render.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/projects-index-filter.test.ts",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/run-panel-render.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/run-panel-render.test.ts",
+    "kind": "path",
+    "cited": "scripts/journeys/agents.mjs",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/run-view-render.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/run-view-render.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/agent-dispatch.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/session-artifact-view.test.ts",
+    "kind": "stem",
+    "cited": "knowledge-page-kb-maintenance.test",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/session-artifact-view.test.ts",
+    "kind": "stem",
+    "cited": "session-kinds.test",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/session-artifact-view.test.ts",
+    "kind": "stem",
+    "cited": "session-transcript.test",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/session-artifact-view.test.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/session-lifecycle-render.test.ts",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/sessions-index-render.test.ts",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/integration/w7-b5-render.test.ts",
+    "kind": "path",
+    "cited": "scripts/journeys/connections.mjs",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/regression/agent-builder-handles.test.ts",
+    "kind": "stem",
+    "cited": "kickoff-mint-before-navigate.test",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/regression/agent-run-reachable.test.ts",
+    "kind": "path",
+    "cited": "scripts/journeys/agents.mjs",
+    "count": 2
+  },
+  {
+    "file": "apps/studio/tests/regression/ArchitectQuestionForm.test.ts",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/regression/ArchitectQuestionForm.test.ts",
+    "kind": "stem",
+    "cited": "stand-up-create",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/regression/demo-timeline-mint.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/regression/detail-pages-fail-closed-wiring.test.ts",
+    "kind": "stem",
+    "cited": "demo-showcase",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/regression/flow-builder-acts.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/regression/kb-health-render.test.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-kbs.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/regression/kb-health-render.test.ts",
+    "kind": "stem",
+    "cited": "knowledge-page-kb-maintenance.test",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/regression/kickoff-form.test.ts",
+    "kind": "stem",
+    "cited": "wi-status",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/regression/kickoff-publish-and-stay.test.ts",
+    "kind": "stem",
+    "cited": "kickoff-mint-before-navigate.test",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/regression/projects-index-render.test.ts",
+    "kind": "path",
+    "cited": "forge-ui/app/projects/page.tsx",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/regression/projects-index-render.test.ts",
+    "kind": "stem",
+    "cited": "knowledge-page-kb-maintenance.test",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/regression/route-readiness.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/regression/run-lands-in-history.test.ts",
+    "kind": "stem",
+    "cited": "kickoff-mint-before-navigate.test",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/regression/run-stop-on-budget-render.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/regression/session-verdict-gate.test.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/regression/studio-provenance-detail.test.ts",
+    "kind": "stem",
+    "cited": "studio-provenance",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/unit/agent-builder-view.test.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/unit/agent-readiness.test.ts",
+    "kind": "path",
+    "cited": "scripts/journeys/connections.mjs",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/unit/artifact-mode.test.ts",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/unit/community-refresh-client.test.ts",
+    "kind": "path",
+    "cited": "scripts/journeys/community.mjs",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/unit/community-view.test.ts",
+    "kind": "path",
+    "cited": "forge-ui/app/skills/page.tsx",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/unit/community-view.test.ts",
+    "kind": "path",
+    "cited": "scripts/journeys/community.mjs",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/unit/history-ledger.test.ts",
+    "kind": "path",
+    "cited": "forge-ui/tsconfig.json",
+    "count": 3
+  },
+  {
+    "file": "apps/studio/tests/unit/hook-client.test.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/unit/hook-library-view.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/unit/hook-library-view.test.ts",
+    "kind": "stem",
+    "cited": "bridge-fetch",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/unit/hook-library-view.test.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 2
+  },
+  {
+    "file": "apps/studio/tests/unit/knowledge-id-resolution.test.ts",
+    "kind": "stem",
+    "cited": "knowledge-page-id-fastpath.test",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/unit/run-rail-collapse.test.ts",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/unit/session-client.test.ts",
+    "kind": "path",
+    "cited": "packages/sessions/bridge-studio-sessions.test.ts",
+    "count": 2
+  },
+  {
+    "file": "apps/studio/tests/unit/session-client.test.ts",
+    "kind": "stem",
+    "cited": "bridge-studio-sessions.test",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/unit/session-client.test.ts",
+    "kind": "stem",
+    "cited": "session-kinds.test",
+    "count": 1
+  },
+  {
+    "file": "apps/studio/tests/unit/session-client.test.ts",
+    "kind": "stem",
+    "cited": "session-transcript.test",
+    "count": 2
+  },
+  {
+    "file": "apps/studio/tests/unit/sessions-index-filter.test.ts",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 2
+  },
+  {
+    "file": "apps/studio/vitest.config.ts",
+    "kind": "path",
+    "cited": "forge-ui/tsconfig.json",
+    "count": 1
+  },
+  {
+    "file": "ARCHITECTURE.md",
+    "kind": "path",
+    "cited": "brain/cycles/themes/pr-as-sole-review-window.md",
+    "count": 1
+  },
+  {
+    "file": "ARCHITECTURE.md",
+    "kind": "path",
+    "cited": "brain/forge-dev/themes/human-interaction-via-own-session.md",
+    "count": 2
+  },
+  {
+    "file": "ARCHITECTURE.md",
+    "kind": "path",
+    "cited": "orchestrator/architect-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "ARCHITECTURE.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/demo-agent.ts",
+    "count": 1
+  },
+  {
+    "file": "ARCHITECTURE.md",
+    "kind": "path",
+    "cited": "orchestrator/subsumption-proof.test.ts",
+    "count": 1
+  },
+  {
+    "file": "CHANGELOG.md",
+    "kind": "path",
+    "cited": "demos/e2e/results.json",
+    "count": 1
+  },
+  {
+    "file": "CHANGELOG.md",
+    "kind": "path",
+    "cited": "docs/known-gaps.md",
+    "count": 1
+  },
+  {
+    "file": "CHANGELOG.md",
+    "kind": "path",
+    "cited": "forge-ui/tsconfig.tests.json",
+    "count": 1
+  },
+  {
+    "file": "CHANGELOG.md",
+    "kind": "path",
+    "cited": "loops/_adapters/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "CHANGELOG.md",
+    "kind": "path",
+    "cited": "orchestrator/kb-backend.ts",
+    "count": 1
+  },
+  {
+    "file": "CHANGELOG.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/developer-loop.ts",
+    "count": 1
+  },
+  {
+    "file": "CHANGELOG.md",
+    "kind": "path",
+    "cited": "scripts/check-docs-claims.mjs",
+    "count": 1
+  },
+  {
+    "file": "CHANGELOG.md",
+    "kind": "path",
+    "cited": "scripts/e2e-journey.mjs",
+    "count": 1
+  },
+  {
+    "file": "CHANGELOG.md",
+    "kind": "path",
+    "cited": "studio/starters/project.json",
+    "count": 1
+  },
+  {
+    "file": "CHANGELOG.md",
+    "kind": "stem",
+    "cited": "e2e-deadpaths",
+    "count": 1
+  },
+  {
+    "file": "CHANGELOG.md",
+    "kind": "stem",
+    "cited": "flows-author",
+    "count": 1
+  },
+  {
+    "file": "CHANGELOG.md",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 1
+  },
+  {
+    "file": "docs/how-to/S6.md",
+    "kind": "path",
+    "cited": "brain/story-s6/antipatterns.md",
+    "count": 1
+  },
+  {
+    "file": "docs/how-to/S7.md",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 1
+  },
+  {
+    "file": "docs/how-to/S9.md",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 2
+  },
+  {
+    "file": "docs/product/user-stories.md",
+    "kind": "path",
+    "cited": "docs/operator-journey.md",
+    "count": 2
+  },
+  {
+    "file": "docs/product/user-stories.md",
+    "kind": "path",
+    "cited": "scripts/journeys/sessions-index.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/product/user-stories.md",
+    "kind": "path",
+    "cited": "studio/starters/project.json",
+    "count": 1
+  },
+  {
+    "file": "docs/product/user-stories.md",
+    "kind": "stem",
+    "cited": "demo-showcase",
+    "count": 2
+  },
+  {
+    "file": "docs/product/user-stories.md",
+    "kind": "stem",
+    "cited": "flows-author",
+    "count": 4
+  },
+  {
+    "file": "docs/product/user-stories.md",
+    "kind": "stem",
+    "cited": "flows-onboard",
+    "count": 1
+  },
+  {
+    "file": "docs/product/user-stories.md",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 3
+  },
+  {
+    "file": "docs/product/user-stories.md",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 2
+  },
+  {
+    "file": "docs/product/user-stories.md",
+    "kind": "stem",
+    "cited": "stand-up-create",
+    "count": 1
+  },
+  {
+    "file": "docs/product/user-stories.md",
+    "kind": "stem",
+    "cited": "stand-up-onboard",
+    "count": 2
+  },
+  {
+    "file": "docs/reference/extension-seams.md",
+    "kind": "path",
+    "cited": "skills/my-agent/SKILL.md",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 4
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "cli/bridge-studio-instructions.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "cli/kb-drain-edit-soundness.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "orchestrator/_pkg/kernel.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "orchestrator/demo-fix-loop.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "orchestrator/interactive-runner.test.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "orchestrator/project-brain-builder-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "orchestrator/skill-path.ts",
+    "count": 5
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 5
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/session-transcript.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/skill-library.ts",
+    "count": 5
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "packages/projects/preflight.test.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "packages/sessions/bridge-studio-sessions.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "packages/sessions/demo-builder-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "path",
+    "cited": "packages/sessions/instructions-runner.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "stem",
+    "cited": "brain-fix-runner",
+    "count": 2
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "stem",
+    "cited": "preflight-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/request-path-sinks.md",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 2
+  },
+  {
+    "file": "docs/reference/studio-copy.md",
+    "kind": "path",
+    "cited": "scripts/journeys/story-registry.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-copy.md",
+    "kind": "path",
+    "cited": "scripts/story-parity.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-copy.md",
+    "kind": "stem",
+    "cited": "journeys-data",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-copy.md",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 2
+  },
+  {
+    "file": "docs/reference/studio-copy.md",
+    "kind": "stem",
+    "cited": "views-home",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-copy.md",
+    "kind": "stem",
+    "cited": "views-projects",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "apps/studio/lib/phases.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "apps/studio/lib/wi-status.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "scripts/e2e-deadpaths.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "scripts/journeys/agents.mjs",
+    "count": 2
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "scripts/journeys/connections.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "scripts/journeys/demo-showcase.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "scripts/journeys/flows-onboard.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "scripts/journeys/flows-run.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "scripts/journeys/home.mjs",
+    "count": 3
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "scripts/journeys/hooks.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "scripts/journeys/knowledge.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "scripts/journeys/monitor.mjs",
+    "count": 2
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "scripts/journeys/projects.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "scripts/journeys/sessions-index.mjs",
+    "count": 2
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "scripts/journeys/skills.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "scripts/journeys/stand-up-create.mjs",
+    "count": 2
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "scripts/journeys/story-registry.mjs",
+    "count": 2
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "scripts/journeys/templates.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "path",
+    "cited": "scripts/lib/journey-fixtures.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "stem",
+    "cited": "bridge-fetch",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "stem",
+    "cited": "demo-showcase",
+    "count": 2
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "stem",
+    "cited": "flows-author",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 4
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "docs/reference/studio-dom-contract.md",
+    "kind": "stem",
+    "cited": "views-session",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "demos/stories/S10/story.json",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "docs/architect-pm-merger-brief.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "docs/forge-studio-market-and-differentiation.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "docs/known-gaps.md",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "docs/operator-journey.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "docs/phases/developer-loop.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "docs/phases/review-loop.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "docs/reference/quarantine.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "docs/roadmaps/wave-7-walkthrough-findings.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "docs/security-request-path-audit.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/demo-agent.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "packages/kernel/README.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "scripts/e2e-deadpaths.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "scripts/e2e-journey.mjs",
+    "count": 6
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "scripts/journeys/story-registry.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "scripts/lib/story-parity.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "scripts/story-parity.mjs",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "scripts/story-parity.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "studio/starters/project.json",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "path",
+    "cited": "tests/stories/S1..S4.story.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "stem",
+    "cited": "check-baseline-shrinks",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "stem",
+    "cited": "e2e-journey",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "stem",
+    "cited": "journeys-data",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "stem",
+    "cited": "preflight-fix-runner",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/1.0-kickoffs.md",
+    "kind": "stem",
+    "cited": "story-parity",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/1.0-skills.md",
+    "kind": "path",
+    "cited": "scripts/e2e-journey.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0.md",
+    "kind": "path",
+    "cited": "docs/architect-pm-merger-brief.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0.md",
+    "kind": "path",
+    "cited": "docs/forge-studio-market-and-differentiation.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0.md",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0.md",
+    "kind": "path",
+    "cited": "docs/known-gaps.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0.md",
+    "kind": "path",
+    "cited": "docs/operator-journey.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0.md",
+    "kind": "path",
+    "cited": "docs/phases/developer-loop.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0.md",
+    "kind": "path",
+    "cited": "docs/phases/review-loop.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0.md",
+    "kind": "path",
+    "cited": "docs/roadmaps/wave-7-walkthrough-findings.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0.md",
+    "kind": "path",
+    "cited": "docs/security-request-path-audit.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/demo-agent.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0.md",
+    "kind": "path",
+    "cited": "scripts/e2e-deadpaths.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0.md",
+    "kind": "path",
+    "cited": "scripts/e2e-journey.mjs",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/1.0.md",
+    "kind": "path",
+    "cited": "scripts/story-parity.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0.md",
+    "kind": "path",
+    "cited": "studio/starters/project.json",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0.md",
+    "kind": "stem",
+    "cited": "preflight-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/1.0.md",
+    "kind": "stem",
+    "cited": "story-registry",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "docs/forge-project-contract.md",
+    "count": 10
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "docs/known-gaps.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "docs/repo-map.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/components/studio/project-builder/ContractReadiness.tsx",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/architect-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/brain-fix-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/brain-paths.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/cli.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/demo-builder-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/kb-backend.test.ts",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/kb-backend.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/kb-read-policy-guard.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/orchestrated-capture.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/pm-binding.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/reflector-binding.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/project-brain-seed.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/project-config.ts",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/kb-descriptor.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/types.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/yaml-fields.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "path",
+    "cited": "scripts/journeys/demo-builder.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "stem",
+    "cited": "architect-runner",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "stem",
+    "cited": "project-brain-builder-runner",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "stem",
+    "cited": "stand-up-onboard",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R1-contract-componentry.md",
+    "kind": "stem",
+    "cited": "views-knowledge",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "apps/forge/ui-bridge-agent-run.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 5
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "docs/investigations/R2-03-fanout-merge-resolution-spike.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "docs/repo-map.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/components/studio/FilePackage.tsx",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/agent-builder-view.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/agent-readiness.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/flow-artifact-catalog.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/flow-artifact-catalog.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/session-client.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/studio-client.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "loops/_adapters/conformance.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "loops/_adapters/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "loops/ralph/claude-agent.ts",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/agent-dispatch.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/agent-dispatch.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/architect-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/cli.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/cron-triggers.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/demo-builder-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/enqueue-flow-run.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/finalize-merged.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/flow-budgets.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/flow-run-requests.ts",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/flow-runner.ts",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/flow-trigger.ts",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/instructions-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/interactive-session.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/model-range.ts",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/phase-agent.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/project-brain-builder-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/project-config.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/run-agent.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/run-model-derive.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/run-model.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/scheduler.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/stream-deadline.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/derive.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/instructions-draft.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/materials.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/seed-data.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/session-kinds.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/session-transcript.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/skill-md-fidelity.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/types.ts",
+    "count": 4
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/wi-dispatch-scheduler.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "path",
+    "cited": "studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "stem",
+    "cited": "flows-author",
+    "count": 9
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "stem",
+    "cited": "stand-up-create",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "stem",
+    "cited": "stand-up-onboard",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "stem",
+    "cited": "swap-runtime",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
+    "kind": "stem",
+    "cited": "views-session",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "apps/forge/ui-bridge-instructions.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "cli/studio-provenance.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "docs/community-registry-writes.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "docs/forge-project-contract.md",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 4
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "docs/product/as-built-inventory.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "docs/repo-map.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/app/community/page.tsx",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/app/skills/new/page.tsx",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/app/skills/page.tsx",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/app/templates/page.tsx",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/components/studio/agent-builder/CatalogPalette.tsx",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/components/studio/FilePackage.tsx",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/community-client.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/community-view.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/connection-client.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/file-package.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/flow-artifact-catalog.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/studio-client.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/brain-paths.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/instruction-seed-match.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/project-create.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/project-repo-tx.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/run-agent.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/skill-path.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/community-index.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/community-install.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/connection-install.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/connection-library.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/connection-probe.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/connection-readiness.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/hook-library.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/hook-scan.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 7
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/skill-install-ledger.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/skill-library.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/template-library.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "packages/library/community-no-trust-decisions.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "projects/terraform-provider-betterado/AGENTS.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "scripts/journeys/community.mjs",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "scripts/journeys/connections.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "scripts/journeys/index.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "scripts/journeys/skills.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "scripts/journeys/templates.mjs",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "studio/community-index.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "studio/skill-library.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "path",
+    "cited": "studio/types.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "stem",
+    "cited": "check-docs-claims",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "stem",
+    "cited": "instructions-runner",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "stem",
+    "cited": "views-community",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "stem",
+    "cited": "views-library",
+    "count": 4
+  },
+  {
+    "file": "docs/roadmaps/archive/R3-library-componentry.md",
+    "kind": "stem",
+    "cited": "views-library-detail",
+    "count": 4
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 6
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "docs/repo-map.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "forge-ui/components/studio/DependencyDag.tsx",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "forge-ui/components/studio/GenerationGallery.tsx",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "forge-ui/components/studio/ProjectArchitectEntry.tsx",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/bridge-client.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/dep-layout.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/dependency-dag.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/recovery-attrs.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/session-artifact-view.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/session-client.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/status-colors.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/verdict-doc.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/agent-bands.ts",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/agents-md-compose.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/band-agent-run.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/constraint-author.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/constraint-blocks.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/demo-builder-runner.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/demo-descriptor-parity.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/demo-paths.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/drain-fix-loop.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/enqueue-plan-run.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/finalize-merged.ts",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/fix-work-items.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/flow-artifacts.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/flow-runner.ts",
+    "count": 4
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/interactive-finalizers.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/interactive-runner.ts",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/kb-health.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/manifest.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/adversarial-review.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/agent-scope-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/closure.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/decompose-completeness.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/demo-agent-binding.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/demo-agent.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/dev-loop-delivery-outcome.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/project-manager.ts",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/reflector-spawn-capture.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/reflector.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/wi-spec-compile.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/pinned-sdk-query.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/pm-spawn-capture.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/project-create.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/project-manager-shared-pipeline.test.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/queue.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/requeue-resume.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/run-agent.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/skill-path.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/derive.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/session-transcript.ts",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/types.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/unifier-invocation.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/unifier-items.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/wi-dispatch-scheduler.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "orchestrator/work-item.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "scripts/journeys/story-registry.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "path",
+    "cited": "studio/artifact-templates/demo-fix-spec.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "stem",
+    "cited": "architect-runner.test",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "stem",
+    "cited": "completeness-critic-runner",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "stem",
+    "cited": "demo-agent.test",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "stem",
+    "cited": "demo-fix-loop",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "stem",
+    "cited": "demo-showcase",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "stem",
+    "cited": "drain-unifier-items",
+    "count": 4
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "stem",
+    "cited": "flows-author",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "stem",
+    "cited": "flows-onboard",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 8
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "stem",
+    "cited": "journeys-data",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "stem",
+    "cited": "stand-up-create",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "stem",
+    "cited": "stand-up-onboard",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "stem",
+    "cited": "unifier-items",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "stem",
+    "cited": "views-flows",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "stem",
+    "cited": "views-projects",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "stem",
+    "cited": "views-session",
+    "count": 5
+  },
+  {
+    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
+    "kind": "stem",
+    "cited": "views-showcase",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "path",
+    "cited": "apps/forge/bridge-studio-flows.test.ts",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "path",
+    "cited": "apps/forge/dry-bridge-coverage.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "path",
+    "cited": "brain/log.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "path",
+    "cited": "cli/visualise.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "path",
+    "cited": "docs/repo-map.md",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "path",
+    "cited": "orchestrator/brain-paths.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "path",
+    "cited": "orchestrator/event-cost.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "path",
+    "cited": "orchestrator/phases/orchestrated-capture.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "path",
+    "cited": "orchestrator/pinned-sdk-query.enforce.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "path",
+    "cited": "orchestrator/pinned-sdk-query.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "path",
+    "cited": "orchestrator/project-repo-tx.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "path",
+    "cited": "orchestrator/requeue-resume.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "path",
+    "cited": "orchestrator/run-model.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "path",
+    "cited": "orchestrator/spawn-env.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "path",
+    "cited": "scripts/e2e-deadpaths.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "path",
+    "cited": "scripts/e2e-journey.mjs",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "stem",
+    "cited": "check-docs-claims",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "stem",
+    "cited": "e2e-journey",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "stem",
+    "cited": "hex-detail",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R5-hardening-operability.md",
+    "kind": "stem",
+    "cited": "swap-runtime",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "apps/forge/ui-bridge-agent-history-containment.test.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 4
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "docs/repo-map.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "forge-ui/app/community/page.tsx",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "forge-ui/components/studio/HistoryLedger.tsx",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/agent-ledger.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/flow-ledger.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/history-ledger.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/phase-log-refresh.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/status-colors.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "orchestrator/project-repo-tx.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "orchestrator/run-agent.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "orchestrator/run-model-derive.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/derive.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/materials.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "scripts/e2e-deadpaths.mjs",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "scripts/journeys/agents.mjs",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "path",
+    "cited": "scripts/journeys/flows-run.mjs",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "stem",
+    "cited": "views-agents",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "stem",
+    "cited": "views-flows",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "stem",
+    "cited": "views-home",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "stem",
+    "cited": "views-knowledge",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R6-operator-experience.md",
+    "kind": "stem",
+    "cited": "views-run",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R7-verification-infrastructure.md",
+    "kind": "path",
+    "cited": "demos/e2e/results.json",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R7-verification-infrastructure.md",
+    "kind": "path",
+    "cited": "docs/repo-map.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R7-verification-infrastructure.md",
+    "kind": "path",
+    "cited": "scripts/e2e-deadpaths.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R7-verification-infrastructure.md",
+    "kind": "path",
+    "cited": "scripts/e2e-journey.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R7-verification-infrastructure.md",
+    "kind": "path",
+    "cited": "scripts/journeys/story-registry.mjs",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R7-verification-infrastructure.md",
+    "kind": "path",
+    "cited": "scripts/lib/story-parity.mjs",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/R7-verification-infrastructure.md",
+    "kind": "path",
+    "cited": "scripts/story-parity.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R7-verification-infrastructure.md",
+    "kind": "path",
+    "cited": "scripts/story-parity.test.ts",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R7-verification-infrastructure.md",
+    "kind": "stem",
+    "cited": "journey-fixtures",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R7-verification-infrastructure.md",
+    "kind": "stem",
+    "cited": "journeys-data",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R8-distribution-release.md",
+    "kind": "path",
+    "cited": "docs/getting-started.md",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/R8-distribution-release.md",
+    "kind": "path",
+    "cited": "docs/licensing-and-dependencies.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/R8-distribution-release.md",
+    "kind": "path",
+    "cited": "docs/roadmaps/./3-library-componentry.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "path",
+    "cited": "docs/known-gaps.md",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "path",
+    "cited": "docs/repo-map.md",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "path",
+    "cited": "forge-ui/app/library/page.tsx",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "path",
+    "cited": "forge-ui/components/PlanGate.tsx",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "path",
+    "cited": "forge-ui/components/studio/HomeSessionsStrip.tsx",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/run-panel-gating.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "path",
+    "cited": "forge-ui/lib/studio-client.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "path",
+    "cited": "orchestrator/finalize-merged.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "path",
+    "cited": "orchestrator/interactive-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "path",
+    "cited": "orchestrator/kb-backend.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "path",
+    "cited": "orchestrator/skill-path.ts",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "path",
+    "cited": "scripts/journeys/story-registry.mjs",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "stem",
+    "cited": "architect-runner",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "stem",
+    "cited": "demo-showcase",
+    "count": 3
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "stem",
+    "cited": "e2e-deadpaths",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "stem",
+    "cited": "e2e-journey",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "stem",
+    "cited": "flows-author",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "stem",
+    "cited": "journeys-data",
+    "count": 2
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 4
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "stem",
+    "cited": "unifier-invocation",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "stem",
+    "cited": "unifier-items",
+    "count": 1
+  },
+  {
+    "file": "docs/roadmaps/archive/README.md",
+    "kind": "stem",
+    "cited": "views-agents",
+    "count": 1
+  },
+  {
+    "file": "docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md",
+    "kind": "path",
+    "cited": "docs/phases/review-loop.md",
+    "count": 1
+  },
+  {
+    "file": "docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md",
+    "kind": "stem",
+    "cited": "preflight-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md",
+    "kind": "stem",
+    "cited": "story-registry",
+    "count": 1
+  },
+  {
+    "file": "docs/tutorials/getting-started.md",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 1
+  },
+  {
+    "file": "docs/tutorials/getting-started.md",
+    "kind": "path",
+    "cited": "studio/starters/project.json",
+    "count": 2
+  },
+  {
+    "file": "packages/agents/agent-dispatch-cmd.ts",
+    "kind": "path",
+    "cited": "packages/sessions/studio/session-kinds.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/agent-dispatch.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/agent-run.ts",
+    "kind": "path",
+    "cited": "packages/sessions/architect-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/agent-run.ts",
+    "kind": "path",
+    "cited": "packages/sessions/demo-builder-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/agent-run.ts",
+    "kind": "path",
+    "cited": "packages/sessions/instructions-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/agents-md-compose.ts",
+    "kind": "stem",
+    "cited": "instructions-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/bridge-agents-history-rows.ts",
+    "kind": "path",
+    "cited": "orchestrator/architect-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/bridge-agents-runs.ts",
+    "kind": "path",
+    "cited": "tests/contract/routes-table.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/bridge-agents-slug.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 2
+  },
+  {
+    "file": "packages/agents/bridge-agents-studio.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/bridge-agents-studio.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/bridge-agents-studio.ts",
+    "kind": "stem",
+    "cited": "demo-agent-binding",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/design.md",
+    "kind": "path",
+    "cited": "packages/sessions/studio/session-kinds.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/failure-classifier.ts",
+    "kind": "path",
+    "cited": "docs/adr/429-quota.md",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/materials-staging.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/phases/agent-scope-guard.ts",
+    "kind": "path",
+    "cited": "docs/known-gaps.md",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/ralph/README.md",
+    "kind": "path",
+    "cited": "loops/README.md",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/ralph/runner.ts",
+    "kind": "path",
+    "cited": "loops/README.md",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/ralph/stop-conditions.ts",
+    "kind": "path",
+    "cited": "tests/events.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/README.md",
+    "kind": "path",
+    "cited": "packages/sessions/studio/session-kinds.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/routes.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/routes.ts",
+    "kind": "path",
+    "cited": "tests/contract/routes-table.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/run-agent.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/skill-path.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/skill-path.ts",
+    "kind": "path",
+    "cited": "packages/agents/skill-turn-prompt.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/studio/agent-registry.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/agents/studio/guards-migration-validate-rules.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/studio/validate-agent.test.ts",
+    "kind": "path",
+    "cited": "apps/forge/validate.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/studio/validate-agent.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/contract/agent-dispatch-resolve.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/agent-dispatch.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/agents/tests/contract/agent-dispatch-resolve.test.ts",
+    "kind": "path",
+    "cited": "tests/README.md",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/contract/agent-run-dispatch-fork.test.ts",
+    "kind": "path",
+    "cited": "tests/README.md",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/contract/hook-dispatch-coverage.test.ts",
+    "kind": "path",
+    "cited": "loops/_adapters/claude/index.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/agents/tests/contract/hook-dispatch-coverage.test.ts",
+    "kind": "path",
+    "cited": "loops/_adapters/registry.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/agents/tests/contract/hook-dispatch-coverage.test.ts",
+    "kind": "stem",
+    "cited": "brain-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/contract/hook-dispatch-coverage.test.ts",
+    "kind": "stem",
+    "cited": "preflight-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/contract/pinned-sdk-query.enforce.test.ts",
+    "kind": "stem",
+    "cited": "e2e-journey",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/contract/skill-md-prose-migration.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/instructions-runner.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/agents/tests/contract/skill-md-prose-migration.test.ts",
+    "kind": "path",
+    "cited": "tests/README.md",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/integration/agent-dispatch-project-guard.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/integration/agent-dispatch-project-guard.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/agent-dispatch.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/integration/agent-dispatch-wiring.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/integration/agent-run-turnspec-paths.test.ts",
+    "kind": "stem",
+    "cited": "session-kinds.test",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/integration/instructions-turn-prompt.test.ts",
+    "kind": "stem",
+    "cited": "instructions-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/regression/agent-bands-dispatch-hijack.test.ts",
+    "kind": "stem",
+    "cited": "agent-bands-guards-migration.test",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/regression/agent-dispatch-containment.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/regression/agent-run-log-dir-colocation.test.ts",
+    "kind": "path",
+    "cited": "packages/sessions/interactive-finalizers.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/regression/agent-run-turn-failure.test.ts",
+    "kind": "path",
+    "cited": "cli/agent-run.test.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/agents/tests/regression/agent-run-turn-failure.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/architect-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/regression/agent-run-turn-failure.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/cli.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/regression/legacy-dispatch-project-guard.test.ts",
+    "kind": "path",
+    "cited": "cli/agent-run.test.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/agents/tests/regression/legacy-dispatch-project-guard.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/agents/tests/regression/legacy-dispatch-project-guard.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/cli.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/regression/legacy-dispatch-project-guard.test.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/test-fixtures/interactive-runner-log-observer.ts",
+    "kind": "path",
+    "cited": "orchestrator/interactive-runner.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/test-fixtures/interactive-runner-log-observer.ts",
+    "kind": "stem",
+    "cited": "agent-run.test",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/test-fixtures/interactive-runner-log-observer.ts",
+    "kind": "stem",
+    "cited": "architect-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/test-fixtures/interactive-runner-log-observer.ts",
+    "kind": "stem",
+    "cited": "demo-builder-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/test-fixtures/interactive-runner-log-observer.ts",
+    "kind": "stem",
+    "cited": "instructions-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/agents/tests/unit/failure-classifier.test.ts",
+    "kind": "path",
+    "cited": "tests/README.md",
+    "count": 1
+  },
+  {
+    "file": "packages/contracts/index.ts",
+    "kind": "path",
+    "cited": "orchestrator/_pkg/contracts.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/contracts/studio-types.ts",
+    "kind": "path",
+    "cited": "cli/studio-provenance.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/contracts/studio-types.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "packages/contracts/studio-types.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/contracts/studio-types.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/skill-library.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/factory/tests/integration/demo.test.ts",
+    "kind": "stem",
+    "cited": "demo-html",
+    "count": 1
+  },
+  {
+    "file": "packages/factory/tests/regression/demo-builder-start-nonstring-project.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/factory/tests/regression/demo-capture-project-guard.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/cli.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/bridge-hooks.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/bridge-studio-runs-review.ts",
+    "kind": "stem",
+    "cited": "demo-fix-loop",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/bridge-studio-runs.ts",
+    "kind": "stem",
+    "cited": "architect-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/cycle-context.ts",
+    "kind": "stem",
+    "cited": "gh-shim",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/daemon.ts",
+    "kind": "path",
+    "cited": "orchestrator/cli.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/design.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/drain-fix-loop.ts",
+    "kind": "stem",
+    "cited": "drain-unifier-items",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/enqueue-plan-run.ts",
+    "kind": "stem",
+    "cited": "architect-runner",
+    "count": 2
+  },
+  {
+    "file": "packages/flows/fix-work-items.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/flow-artifacts.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/flow-band-vocab.ts",
+    "kind": "path",
+    "cited": "orchestrator/skill-path.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/flow-band-vocab.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/flow-runner.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/manifest-path-guard.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/flows/manifest-path-guard.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/phases/closure.ts",
+    "kind": "stem",
+    "cited": "gh-shim",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/promote-manifests.ts",
+    "kind": "stem",
+    "cited": "architect-commit",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/run-model-derive-status.ts",
+    "kind": "path",
+    "cited": "apps/studio/lib/wi-status.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/run-model-derive-status.ts",
+    "kind": "stem",
+    "cited": "hex-detail",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/scheduler-run-one.ts",
+    "kind": "stem",
+    "cited": "unifier-items",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/studio/flow-registry.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/studio/validate-flow-trigger-targets.test.ts",
+    "kind": "path",
+    "cited": "apps/forge/validate.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/studio/validate-flow-trigger-targets.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/studio/validate-flow-triggers.test.ts",
+    "kind": "path",
+    "cited": "apps/forge/validate.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/studio/validate-flow-triggers.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/studio/validate-flow.test.ts",
+    "kind": "path",
+    "cited": "apps/forge/validate.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/studio/validate-flow.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/tests/integration/agent-complete-trigger.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/agent-dispatch.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/flows/tests/integration/agent-complete-trigger.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/tests/integration/claim-validator.test.ts",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 3
+  },
+  {
+    "file": "packages/flows/tests/integration/flow-trigger-projects.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/types.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/tests/integration/flow-trigger-projects.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/tests/integration/initiative-title.test.ts",
+    "kind": "stem",
+    "cited": "architect-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/tests/integration/mint-triggered-initiative.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/tests/integration/orchestrated-capture.test.ts",
+    "kind": "stem",
+    "cited": "developer-loop.gate-events.test",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/tests/integration/trigger-provenance.test.ts",
+    "kind": "path",
+    "cited": "studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/tests/integration/worktree.test.ts",
+    "kind": "stem",
+    "cited": "unifier-items",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/tests/regression/manifest-path-fields.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/tests/regression/manifest-path-fields.test.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/tests/unit/run-model-findings.test.ts",
+    "kind": "path",
+    "cited": "scripts/journeys/flows-run.mjs",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/work-item.ts",
+    "kind": "stem",
+    "cited": "unifier-items",
+    "count": 1
+  },
+  {
+    "file": "packages/flows/worktree.ts",
+    "kind": "stem",
+    "cited": "unifier-items",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/dry-bridge.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/event-cost.ts",
+    "kind": "path",
+    "cited": "docs/investigations/2026-07-holistic-review/cost-autopsy.md",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/findings.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/ids.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/index.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/index.ts",
+    "kind": "path",
+    "cited": "cli/studio-provenance.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/index.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/logging.ts",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/logging.ts",
+    "kind": "path",
+    "cited": "orchestrator/file-change-emit.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/logging.ts",
+    "kind": "path",
+    "cited": "orchestrator/phase-transition-emit.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/logging.ts",
+    "kind": "path",
+    "cited": "orchestrator/test-run-emit.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/logging.ts",
+    "kind": "stem",
+    "cited": "demo-builder-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/logging.ts",
+    "kind": "stem",
+    "cited": "instructions-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/path-guard.ts",
+    "kind": "stem",
+    "cited": "skill-md-path-guard",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/provenance.ts",
+    "kind": "path",
+    "cited": "cli/studio-provenance.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/route-entry.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 3
+  },
+  {
+    "file": "packages/kernel/studio-object.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/tests/regression/studio-path-guard-nonstring-root.test.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/tests/regression/studio-path-guard-nonstring-segment.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/tests/unit/bridge-provenance.test.ts",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/tests/unit/ids.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/kernel/tests/unit/path-guard.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/kernel/tests/unit/path-guard.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/skill-path.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/tests/unit/project-layout-root-manages.test.ts",
+    "kind": "path",
+    "cited": "brain/projects/gitweave/profile.md",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/tests/unit/project-layout.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/tests/unit/provenance.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-provenance.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/kernel/tests/unit/studio-object.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/brain-lint-checks-integrity.ts",
+    "kind": "path",
+    "cited": "docs/LEARNINGS.md",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/brain-lint-checks-integrity.ts",
+    "kind": "path",
+    "cited": "projects/trafficGame/docs/LEARNINGS.md",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/brain-lint-checks-integrity.ts",
+    "kind": "path",
+    "cited": "tests/x.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/brain-lint-checks-integrity.ts",
+    "kind": "stem",
+    "cited": "brain-lint.test",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/brain-paths.ts",
+    "kind": "path",
+    "cited": "brain/cycles/themes/x.md",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/brain-paths.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/bridge-studio-kb-routes-lifecycle.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/knowledge/bridge-studio-kb-routes-lifecycle.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 2
+  },
+  {
+    "file": "packages/knowledge/bridge-studio-kb-routes-maintenance.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/bridge-studio-kb-routes-maintenance.ts",
+    "kind": "path",
+    "cited": "tests/contract/routes-table.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/bridge-studio-kb-routes-maintenance.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/bridge-studio-kb-routes-read.ts",
+    "kind": "path",
+    "cited": "tests/contract/routes-table.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/bridge-studio-kbs.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 3
+  },
+  {
+    "file": "packages/knowledge/bridge-studio-kbs.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/bridge-studio-kbs.ts",
+    "kind": "path",
+    "cited": "tests/contract/routes-table.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/bridge-studio-kbs.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/cycle-retention.ts",
+    "kind": "path",
+    "cited": "docs/planning/2026-05-20-refinement/06-reflect.md",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/design.md",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/design.md",
+    "kind": "path",
+    "cited": "tests/contract/routes-table.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/kb-drain-edit-soundness.ts",
+    "kind": "path",
+    "cited": "orchestrator/brain-fix-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/kb-graph.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/kb-job-state.ts",
+    "kind": "stem",
+    "cited": "brain-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/project-brain-build.ts",
+    "kind": "path",
+    "cited": "orchestrator/project-brain-builder-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/project-brain-seed.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/project-brain-seed.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 2
+  },
+  {
+    "file": "packages/knowledge/README.md",
+    "kind": "path",
+    "cited": "tests/contract/routes-table.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/routes.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/knowledge/routes.ts",
+    "kind": "path",
+    "cited": "tests/contract/routes-table.test.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/knowledge/studio/kb-descriptor.ts",
+    "kind": "path",
+    "cited": "cli/studio-provenance.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/studio/validate-kb.test.ts",
+    "kind": "path",
+    "cited": "apps/forge/validate.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/studio/validate-kb.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/contract/routes-table.test.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/knowledge/tests/integration/brain-paths-containment.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/integration/brain-paths-containment.test.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 2
+  },
+  {
+    "file": "packages/knowledge/tests/integration/bridge-studio-kbs-containment.test.ts",
+    "kind": "path",
+    "cited": "brain/leafkb/themes/planted.md",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/integration/bridge-studio-kbs-descriptors.test.ts",
+    "kind": "stem",
+    "cited": "bridge-studio-kbs.test",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/integration/bridge-studio-kbs-health.test.ts",
+    "kind": "stem",
+    "cited": "bridge-studio-kbs.test",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/integration/bridge-studio-kbs-maintenance.test.ts",
+    "kind": "path",
+    "cited": "brain/projects/alpha-two/patterns.md",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/integration/bridge-studio-kbs-maintenance.test.ts",
+    "kind": "stem",
+    "cited": "bridge-studio-kbs.test",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/integration/bridge-studio-kbs-maintenance.test.ts",
+    "kind": "stem",
+    "cited": "e2e-journey",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/integration/kb-lint-summary.test.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-kbs.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/integration/test-fixtures/bridge-studio-kbs.ts",
+    "kind": "stem",
+    "cited": "bridge-studio-kbs.test",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/regression/kb-drain-edit-soundness-invariants.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/brain-fix-runner.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/regression/kb-drain-gate-regression.test.ts",
+    "kind": "path",
+    "cited": "cli/kb-drain-edit-soundness.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/regression/test-fixtures/kb-drain-edit-soundness.ts",
+    "kind": "stem",
+    "cited": "kb-drain-edit-soundness.test",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/unit/brain-lint-filing.test.ts",
+    "kind": "stem",
+    "cited": "brain-lint.test",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/unit/brain-lint-graph.test.ts",
+    "kind": "stem",
+    "cited": "brain-lint.test",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/unit/brain-lint-integrity.test.ts",
+    "kind": "path",
+    "cited": "docs/LEARNINGS.md",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/unit/brain-lint-integrity.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/DeletedFile.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/unit/brain-lint-integrity.test.ts",
+    "kind": "stem",
+    "cited": "brain-lint.test",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/unit/brain-lint-orchestration.test.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-kbs.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/unit/brain-lint-orchestration.test.ts",
+    "kind": "stem",
+    "cited": "brain-lint.test",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/unit/brain-lint-staleness-prefixes.test.ts",
+    "kind": "stem",
+    "cited": "check-docs-claims",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/unit/project-brain-plan.test.ts",
+    "kind": "stem",
+    "cited": "project-brain-builder-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/knowledge/tests/unit/test-fixtures/brain-lint.ts",
+    "kind": "stem",
+    "cited": "brain-lint.test",
+    "count": 1
+  },
+  {
+    "file": "packages/library/bridge-studio-authoring.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/bridge-studio-authoring.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/bridge-studio-hooks.ts",
+    "kind": "path",
+    "cited": "orchestrator/skill-path.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/bridge-studio-hooks.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 1
+  },
+  {
+    "file": "packages/library/bridge-studio-instructions.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/bridge-studio-skills.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/bridge-studio-skills.ts",
+    "kind": "path",
+    "cited": "orchestrator/skill-path.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/bridge-studio-skills.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 2
+  },
+  {
+    "file": "packages/library/bridge-studio-skills.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 2
+  },
+  {
+    "file": "packages/library/bridge-studio-templates.ts",
+    "kind": "path",
+    "cited": "orchestrator/skill-path.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/bridge-studio-templates.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/community-refresh-cmd.ts",
+    "kind": "path",
+    "cited": "orchestrator/cli.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/library/design.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/library/design.md",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "packages/library/routes.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 27
+  },
+  {
+    "file": "packages/library/skill-path.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/skill-staging.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/skill-staging.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/artifact-registry.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/catalog-registry.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/community-index.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/community-index.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 3
+  },
+  {
+    "file": "packages/library/studio/community-install.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/community-registry.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/community-registry.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/community-source-url.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/community-source-url.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/connection-validate.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/hook-library.ts",
+    "kind": "path",
+    "cited": "orchestrator/skill-path.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/hook-library.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 2
+  },
+  {
+    "file": "packages/library/studio/hook-package.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 4
+  },
+  {
+    "file": "packages/library/studio/instructions-draft.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-instructions.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/library-validate.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/library/studio/skill-install-ledger.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/skill-library.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/skill-install-ledger.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/skill-install.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/skill-package.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/skill-registry.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/skill-trust.ts",
+    "kind": "path",
+    "cited": "orchestrator/skill-path.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/skill-trust.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 2
+  },
+  {
+    "file": "packages/library/studio/template-library.ts",
+    "kind": "stem",
+    "cited": "flows-author",
+    "count": 1
+  },
+  {
+    "file": "packages/library/studio/template-library.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 3
+  },
+  {
+    "file": "packages/library/tests/contract/community-no-trust-decisions.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/skill-library.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/library/tests/contract/connections-no-authoring.test.ts",
+    "kind": "path",
+    "cited": "apps/studio/app/connections/new/page.tsx",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/contract/route-table.test.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/bridge-studio-authoring-finalize.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/skill-library.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/bridge-studio-authoring-finalize.test.ts",
+    "kind": "path",
+    "cited": "skills/authored-skill/SKILL.md",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/bridge-studio-hooks.test.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/bridge-studio-skills.test.ts",
+    "kind": "path",
+    "cited": "cli/skill-md-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/bridge-studio-skills.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/skill-library.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/bridge-studio-skills.test.ts",
+    "kind": "stem",
+    "cited": "bridge-studio-kbs.test",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/community-index.test.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 4
+  },
+  {
+    "file": "packages/library/tests/integration/community-install.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/community-install.test.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 2
+  },
+  {
+    "file": "packages/library/tests/integration/connection-validate.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/hook-runtime.test.ts",
+    "kind": "stem",
+    "cited": "agent-run.test",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/hook-scan.test.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/skill-library.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/skill-library.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/skill-library.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/skill-library.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/skill-library.test.ts",
+    "kind": "path",
+    "cited": "skills/evil-alias/SKILL.md",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/skill-library.test.ts",
+    "kind": "path",
+    "cited": "skills/exfil-skill/SKILL.md",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/skill-library.test.ts",
+    "kind": "path",
+    "cited": "skills/good-leaf/SKILL.md",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/skill-library.test.ts",
+    "kind": "path",
+    "cited": "skills/SKILL.md",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/integration/skill-library.test.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 3
+  },
+  {
+    "file": "packages/library/tests/unit/hook-library.test.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 3
+  },
+  {
+    "file": "packages/library/tests/unit/library-validate.test.ts",
+    "kind": "path",
+    "cited": "apps/forge/validate.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/unit/library-validate.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/unit/skill-path.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/unit/skill-staging.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/unit/skill-staging.test.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard.test",
+    "count": 1
+  },
+  {
+    "file": "packages/library/tests/unit/template-library.test.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/bridge-studio-project-onboard.ts",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 2
+  },
+  {
+    "file": "packages/projects/bridge-studio-project-onboard.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/bridge-studio-project-preflight-write.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/bridge-studio-project-reset.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/contract-stages.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/contract-stages.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/design.md",
+    "kind": "path",
+    "cited": "packages/sessions/preflight-fix-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/design.md",
+    "kind": "stem",
+    "cited": "demo-builder-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/design.md",
+    "kind": "stem",
+    "cited": "instructions-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/design.md",
+    "kind": "stem",
+    "cited": "preflight-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/preflight.ts",
+    "kind": "path",
+    "cited": "orchestrator/cli.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/projects/project-config.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/project-contract-scaffold.ts",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 3
+  },
+  {
+    "file": "packages/projects/project-preflight-read.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/project-roster.ts",
+    "kind": "path",
+    "cited": "cli/studio-provenance.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/project-roster.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/projects/README.md",
+    "kind": "stem",
+    "cited": "preflight-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/routes.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/routes.ts",
+    "kind": "path",
+    "cited": "tests/contract/routes-table.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/studio/validate-project.test.ts",
+    "kind": "path",
+    "cited": "apps/forge/validate.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/studio/validate-project.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/tests/integration/bridge-studio-project-onboard.test.ts",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/tests/integration/contract-stages.test.ts",
+    "kind": "path",
+    "cited": "brain/projects/allgreenproj/profile.md",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/tests/integration/contract-stages.test.ts",
+    "kind": "path",
+    "cited": "brain/projects/noprofileproj/profile.md",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/tests/integration/contract-stages.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/skill-path.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/tests/integration/preflight-repo.test.ts",
+    "kind": "stem",
+    "cited": "stand-up-onboard",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/tests/integration/project-contract-scaffold.test.ts",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/tests/integration/project-create.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/cli.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/tests/integration/scaffold-write-provenance.test.ts",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 1
+  },
+  {
+    "file": "packages/projects/tests/regression/project-create-atomicity.test.ts",
+    "kind": "stem",
+    "cited": "project-create-safety.test",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/bridge-studio-architect.ts",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/bridge-studio-architect.ts",
+    "kind": "stem",
+    "cited": "instructions-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/bridge-studio-demo.ts",
+    "kind": "path",
+    "cited": "orchestrator/demo-builder-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/bridge-studio-instructions.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/bridge-studio-kickoff.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/bridge-studio-kickoff.ts",
+    "kind": "path",
+    "cited": "tests/contract/routes-table.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/bridge-studio-project-brain.ts",
+    "kind": "stem",
+    "cited": "instructions-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/bridge-studio-session-cancel.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/bridge-studio-session-helpers.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/bridge-studio-session-helpers.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/bridge-studio-session-helpers.ts",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/bridge-studio-session-index.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/bridge-studio-session-index.ts",
+    "kind": "stem",
+    "cited": "architect-runner",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/bridge-studio-sessions-affordance-shell.ts",
+    "kind": "path",
+    "cited": "cli/dry-bridge.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/bridge-studio-sessions-affordances.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/bridge-studio-sessions-affordances.ts",
+    "kind": "path",
+    "cited": "tests/contract/routes-table.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/bridge-studio-sessions.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/design.md",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/design.md",
+    "kind": "path",
+    "cited": "docs/decisions/003-skills-as-prompts.md",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/design.md",
+    "kind": "path",
+    "cited": "tests/contract/routes-table.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/design.md",
+    "kind": "stem",
+    "cited": "brain-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/design.md",
+    "kind": "stem",
+    "cited": "preflight-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/interactive-agent-step.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/interactive-agent-step.ts",
+    "kind": "stem",
+    "cited": "brain-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/interactive-agent-step.ts",
+    "kind": "stem",
+    "cited": "demo-builder-runner",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/interactive-agent-step.ts",
+    "kind": "stem",
+    "cited": "instructions-runner",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/interactive-runner.ts",
+    "kind": "path",
+    "cited": "packages/agents/agent-run.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/interactive-runner.ts",
+    "kind": "path",
+    "cited": "packages/sessions/instructions-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/interactive-runner.ts",
+    "kind": "stem",
+    "cited": "architect-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/interactive-runner.ts",
+    "kind": "stem",
+    "cited": "demo-builder-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/interactive-runner.ts",
+    "kind": "stem",
+    "cited": "instructions-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/interactive-runner.ts",
+    "kind": "stem",
+    "cited": "interactive-runner.test",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/interactive-session.ts",
+    "kind": "stem",
+    "cited": "architect-runner",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/interactive-session.ts",
+    "kind": "stem",
+    "cited": "brain-fix-runner",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/interactive-session.ts",
+    "kind": "stem",
+    "cited": "demo-builder-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/interactive-session.ts",
+    "kind": "stem",
+    "cited": "instructions-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/interactive-session.ts",
+    "kind": "stem",
+    "cited": "preflight-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/kinds/architect-critic.ts",
+    "kind": "stem",
+    "cited": "architect-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/kinds/architect-critic.ts",
+    "kind": "stem",
+    "cited": "brain-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/kinds/architect-critic.ts",
+    "kind": "stem",
+    "cited": "preflight-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/kinds/brain-fix.ts",
+    "kind": "stem",
+    "cited": "brain-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/kinds/demo-builder.ts",
+    "kind": "path",
+    "cited": "packages/sessions/demo-builder-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/kinds/demo-builder.ts",
+    "kind": "stem",
+    "cited": "instructions-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/kinds/instructions.ts",
+    "kind": "path",
+    "cited": "packages/sessions/instructions-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/kinds/project-brain.ts",
+    "kind": "path",
+    "cited": "orchestrator/project-brain-builder-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/routes.ts",
+    "kind": "path",
+    "cited": "tests/contract/routes-table.test.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/session-phases.ts",
+    "kind": "path",
+    "cited": "packages/sessions/architect-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/session-readability.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/session-resolution.ts",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/session-write-fence.ts",
+    "kind": "path",
+    "cited": "packages/sessions/brain-fix-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/studio/roadmap-draft.ts",
+    "kind": "stem",
+    "cited": "session-transcript.test",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/studio/session-artifact-derivers.ts",
+    "kind": "stem",
+    "cited": "demo-builder-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/studio/session-artifact-derivers.ts",
+    "kind": "stem",
+    "cited": "session-transcript.test",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/studio/session-artifact-derivers.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/studio/session-kinds-affordances.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/studio/session-kinds.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/studio/session-kinds.ts",
+    "kind": "path",
+    "cited": "packages/sessions/demo-builder-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/studio/session-kinds.ts",
+    "kind": "path",
+    "cited": "packages/sessions/instructions-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/studio/session-transcript.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/architect-ports-stub.ts",
+    "kind": "path",
+    "cited": "tests/integration/architect-runner.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/session-kinds-panel.test.ts",
+    "kind": "stem",
+    "cited": "interactive-runner.test",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/session-kinds-panel.test.ts",
+    "kind": "stem",
+    "cited": "session-transcript.test",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/session-kinds-vocab.test.ts",
+    "kind": "stem",
+    "cited": "session-transcript.test",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/session-transcript-cleanup-plan.test.ts",
+    "kind": "path",
+    "cited": "brain/cycles/themes/bar.md",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/session-transcript-derive.test.ts",
+    "kind": "stem",
+    "cited": "session-kinds.test",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/session-transcript-scan.test.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/session-transcript-scan.test.ts",
+    "kind": "stem",
+    "cited": "flows-run",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/session-transcript-scan.test.ts",
+    "kind": "stem",
+    "cited": "stand-up-create",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/start-default-repo-path-guard.test.ts",
+    "kind": "stem",
+    "cited": "instructions-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/test-fixtures/cleanup-plan-fixtures.ts",
+    "kind": "stem",
+    "cited": "session-kinds.test",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/test-fixtures/session-kinds-core.ts",
+    "kind": "path",
+    "cited": "packages/sessions/bridge-studio-sessions.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/test-fixtures/session-kinds-core.ts",
+    "kind": "path",
+    "cited": "packages/sessions/studio/session-kinds.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/test-fixtures/session-kinds-core.ts",
+    "kind": "path",
+    "cited": "packages/sessions/studio/session-transcript.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/test-fixtures/session-kinds-core.ts",
+    "kind": "path",
+    "cited": "studio/session-kinds.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/test-fixtures/session-kinds-core.ts",
+    "kind": "stem",
+    "cited": "bridge-studio-sessions.test",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/tests/contract/test-fixtures/session-kinds-core.ts",
+    "kind": "stem",
+    "cited": "session-transcript.test",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/tests/contract/test-fixtures/session-kinds-turnspec.ts",
+    "kind": "path",
+    "cited": "studio/session-kinds.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/test-fixtures/transcript-test-helpers.ts",
+    "kind": "path",
+    "cited": "packages/sessions/bridge-studio-sessions.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/test-fixtures/transcript-test-helpers.ts",
+    "kind": "path",
+    "cited": "packages/sessions/studio/session-kinds.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/test-fixtures/transcript-test-helpers.ts",
+    "kind": "path",
+    "cited": "studio/session-transcript.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/test-fixtures/transcript-test-helpers.ts",
+    "kind": "stem",
+    "cited": "architect-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/test-fixtures/transcript-test-helpers.ts",
+    "kind": "stem",
+    "cited": "demo-builder-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/test-fixtures/transcript-test-helpers.ts",
+    "kind": "stem",
+    "cited": "instructions-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/contract/test-fixtures/transcript-test-helpers.ts",
+    "kind": "stem",
+    "cited": "session-kinds.test",
+    "count": 4
+  },
+  {
+    "file": "packages/sessions/tests/integration/affordances-revise.test.ts",
+    "kind": "path",
+    "cited": "cli/bridge-studio-affordances.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/integration/bridge-studio-sessions-kinds.test.ts",
+    "kind": "stem",
+    "cited": "session-transcript.test",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/integration/bridge-studio-sessions-routes.test.ts",
+    "kind": "stem",
+    "cited": "session-transcript.test",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/integration/project-brain-runner.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/integration/test-fixtures/studio-sessions-builders.ts",
+    "kind": "path",
+    "cited": "packages/sessions/instructions-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/integration/test-fixtures/studio-sessions-builders.ts",
+    "kind": "path",
+    "cited": "packages/sessions/studio/session-kinds.test.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/tests/integration/test-fixtures/studio-sessions-builders.ts",
+    "kind": "path",
+    "cited": "packages/sessions/studio/session-transcript.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/integration/test-fixtures/studio-sessions-builders.ts",
+    "kind": "stem",
+    "cited": "session-kinds.test",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/tests/integration/test-fixtures/studio-sessions-builders.ts",
+    "kind": "stem",
+    "cited": "session-transcript.test",
+    "count": 4
+  },
+  {
+    "file": "packages/sessions/tests/regression/fix-turn-capture.test.ts",
+    "kind": "stem",
+    "cited": "brain-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/regression/fix-turn-capture.test.ts",
+    "kind": "stem",
+    "cited": "preflight-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/regression/interactive-runners-golden.test.ts",
+    "kind": "stem",
+    "cited": "architect-runner",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/tests/regression/interactive-runners-golden.test.ts",
+    "kind": "stem",
+    "cited": "demo-builder-runner",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/tests/regression/interactive-runners-golden.test.ts",
+    "kind": "stem",
+    "cited": "instructions-runner",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/tests/regression/interactive-runners-golden.test.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/regression/kind-turn-log-contract.test.ts",
+    "kind": "stem",
+    "cited": "instructions-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/regression/sec04-runner-containment.test.ts",
+    "kind": "path",
+    "cited": "packages/sessions/demo-builder-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/regression/sec04-runner-containment.test.ts",
+    "kind": "path",
+    "cited": "packages/sessions/instructions-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/architect-critic.test.ts",
+    "kind": "stem",
+    "cited": "architect-runner.test",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/architect-skill-prompt.test.ts",
+    "kind": "path",
+    "cited": "packages/sessions/architect-runner.ts",
+    "count": 2
+  },
+  {
+    "file": "packages/sessions/tests/unit/architect-skill-prompt.test.ts",
+    "kind": "stem",
+    "cited": "architect-runner",
+    "count": 3
+  },
+  {
+    "file": "packages/sessions/tests/unit/architect-skill-prompt.test.ts",
+    "kind": "stem",
+    "cited": "architect-runner.test",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/brain-fix.test.ts",
+    "kind": "path",
+    "cited": "brain/cycles/themes/2026-05-01-victim.md",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/brain-fix.test.ts",
+    "kind": "stem",
+    "cited": "architect-runner.test",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/brain-fix.test.ts",
+    "kind": "stem",
+    "cited": "brain-fix-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/demo-builder-runner.test.ts",
+    "kind": "stem",
+    "cited": "demo-builder-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/demo-builder-skill-prompt.test.ts",
+    "kind": "path",
+    "cited": "packages/sessions/demo-builder-runner.ts",
+    "count": 6
+  },
+  {
+    "file": "packages/sessions/tests/unit/demo-builder-skill-prompt.test.ts",
+    "kind": "stem",
+    "cited": "demo-builder-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/demo-commit-scope.test.ts",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/demo-lock-ground-emission.test.ts",
+    "kind": "stem",
+    "cited": "demo-builder-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/interactive-finalizers-toctou.test.ts",
+    "kind": "stem",
+    "cited": "session-transcript.test",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/interactive-runner-budgets.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/interactive-runner-community.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/interactive-runner-budgets.test.ts",
+    "kind": "path",
+    "cited": "packages/sessions/interactive-runner.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/interactive-runner-kb-cleanup.test.ts",
+    "kind": "stem",
+    "cited": "session-kinds.test",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/preflight-commit-scope.test.ts",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/project-brain-skill-prompt.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/skill-path.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/session-readability-resolve.test.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/session-readability.test.ts",
+    "kind": "path",
+    "cited": "packages/sessions/bridge-studio-sessions.test.ts",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/session-readability.test.ts",
+    "kind": "stem",
+    "cited": "studio-path-guard",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/test-fixtures/demo-builder-skill-prompt-setup.ts",
+    "kind": "stem",
+    "cited": "demo-builder-runner",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/unit/test-fixtures/finalizer-scratch.ts",
+    "kind": "path",
+    "cited": "packages/sessions/interactive-runner.test.ts",
+    "count": 1
+  },
+  {
+    "file": "PRINCIPLES.md",
+    "kind": "path",
+    "cited": "orchestrator/visualise.ts",
+    "count": 1
+  },
+  {
+    "file": "projects/README.md",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 1
+  },
+  {
+    "file": "README.md",
+    "kind": "path",
+    "cited": "orchestrator/subsumption-proof.test.ts",
+    "count": 1
+  },
+  {
+    "file": "README.md",
+    "kind": "path",
+    "cited": "studio/starters/project.json",
+    "count": 1
+  },
+  {
+    "file": "README.md",
+    "kind": "path",
+    "cited": "studio/validate.ts",
+    "count": 1
+  },
+  {
+    "file": "scripts/check-boundaries.mjs",
+    "kind": "path",
+    "cited": "forge-ui/tsconfig.json",
+    "count": 1
+  },
+  {
+    "file": "scripts/check-boundaries.test.ts",
+    "kind": "path",
+    "cited": "apps/studio/lib/x.ts",
+    "count": 1
+  },
+  {
+    "file": "scripts/check-disabled-reason.test.ts",
+    "kind": "path",
+    "cited": "apps/studio/components/__ratchet_probe__.tsx",
+    "count": 1
+  },
+  {
+    "file": "scripts/check-docs-shape.mjs",
+    "kind": "stem",
+    "cited": "check-docs-claims",
+    "count": 1
+  },
+  {
+    "file": "scripts/check-docs-shape.test.ts",
+    "kind": "stem",
+    "cited": "check-docs-claims",
+    "count": 6
+  },
+  {
+    "file": "scripts/check-file-size.mjs",
+    "kind": "path",
+    "cited": "apps/studio/components/__ratchet_probe__.tsx",
+    "count": 1
+  },
+  {
+    "file": "scripts/check-kb-ingest-affordance.mjs",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "scripts/check-kb-ingest-affordance.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/registry.ts",
+    "count": 1
+  },
+  {
+    "file": "scripts/check-raw-fs-guarded.mjs",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "scripts/check-raw-fs-guarded.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-costs-routes.ts",
+    "count": 1
+  },
+  {
+    "file": "scripts/check-raw-fs-guarded.test.ts",
+    "kind": "stem",
+    "cited": "architect-runner",
+    "count": 1
+  },
+  {
+    "file": "scripts/check-request-path-sinks.mjs",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "scripts/check-request-path-sinks.mjs",
+    "kind": "path",
+    "cited": "scripts/check-docs-claims.mjs",
+    "count": 1
+  },
+  {
+    "file": "scripts/check-request-path-sinks.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/reached.ts",
+    "count": 2
+  },
+  {
+    "file": "scripts/check-request-path-sinks.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/unreached.ts",
+    "count": 2
+  },
+  {
+    "file": "scripts/check-stale-path-citations.test.ts",
+    "kind": "path",
+    "cited": "packages/x/legacy-loader.ts",
+    "count": 1
+  },
+  {
+    "file": "scripts/journey-residue-sweep.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/architect-runner.ts",
+    "count": 2
+  },
+  {
+    "file": "scripts/lane-lsp.test.ts",
+    "kind": "stem",
+    "cited": "e2e-journey",
+    "count": 1
+  },
+  {
+    "file": "scripts/lib/boot-studio.mjs",
+    "kind": "stem",
+    "cited": "e2e-deadpaths",
+    "count": 1
+  },
+  {
+    "file": "scripts/lib/journey-assertions.mjs",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "scripts/lib/journey-assertions.mjs",
+    "kind": "stem",
+    "cited": "e2e-journey",
+    "count": 1
+  },
+  {
+    "file": "scripts/lib/journey-assertions.mjs",
+    "kind": "stem",
+    "cited": "sessions-index",
+    "count": 1
+  },
+  {
+    "file": "scripts/lib/journey-daemon-guard.mjs",
+    "kind": "path",
+    "cited": "docs/known-gaps.md",
+    "count": 1
+  },
+  {
+    "file": "scripts/lib/journey-daemon-guard.mjs",
+    "kind": "stem",
+    "cited": "e2e-journey",
+    "count": 2
+  },
+  {
+    "file": "scripts/lib/journey-residue.mjs",
+    "kind": "path",
+    "cited": "orchestrator/architect-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "scripts/lib/journey-residue.mjs",
+    "kind": "path",
+    "cited": "orchestrator/initiative-id.ts",
+    "count": 1
+  },
+  {
+    "file": "scripts/lib/journey-residue.mjs",
+    "kind": "path",
+    "cited": "scripts/e2e-journey.mjs",
+    "count": 2
+  },
+  {
+    "file": "scripts/lib/journey-residue.mjs",
+    "kind": "path",
+    "cited": "scripts/lib/journey-fixtures.mjs",
+    "count": 1
+  },
+  {
+    "file": "scripts/lib/journey-residue.mjs",
+    "kind": "stem",
+    "cited": "e2e-journey",
+    "count": 3
+  },
+  {
+    "file": "scripts/lib/journey-residue.mjs",
+    "kind": "stem",
+    "cited": "journey-fixtures",
+    "count": 2
+  },
+  {
+    "file": "scripts/lib/journey-runtime.mjs",
+    "kind": "stem",
+    "cited": "e2e-journey",
+    "count": 5
+  },
+  {
+    "file": "scripts/lib/post-run-boundary.mjs",
+    "kind": "stem",
+    "cited": "e2e-journey",
+    "count": 1
+  },
+  {
+    "file": "scripts/no-live-tree-plants.test.ts",
+    "kind": "path",
+    "cited": "packages/kernel/__assembly_probe__.ts",
+    "count": 1
+  },
+  {
+    "file": "scripts/owner-census.test.ts",
+    "kind": "path",
+    "cited": "scripts/shared-ac.ts",
+    "count": 1
+  },
+  {
+    "file": "scripts/perf-snapshot.mjs",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 2
+  },
+  {
+    "file": "scripts/post-run-boundary.test.ts",
+    "kind": "stem",
+    "cited": "e2e-journey",
+    "count": 1
+  },
+  {
+    "file": "scripts/probe-hygiene.test.ts",
+    "kind": "path",
+    "cited": "apps/studio/lib/__boundary_probe__.ts",
+    "count": 1
+  },
+  {
+    "file": "scripts/stories/beats-page-read.mjs",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "scripts/stories/beats.test.ts",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "scripts/stories/bridge.test.ts",
+    "kind": "path",
+    "cited": "scripts/e2e-journey.mjs",
+    "count": 1
+  },
+  {
+    "file": "scripts/stories/fence-attribution.mjs",
+    "kind": "path",
+    "cited": "apps/studio/lib/__ws_probe__.ts",
+    "count": 1
+  },
+  {
+    "file": "scripts/stories/fence-containment.test.ts",
+    "kind": "path",
+    "cited": "apps/studio/lib/__ws_probe__.ts",
+    "count": 1
+  },
+  {
+    "file": "scripts/stories/fence-containment.test.ts",
+    "kind": "path",
+    "cited": "brain/projects/gitweave/profile.md",
+    "count": 1
+  },
+  {
+    "file": "scripts/stories/gallery.mjs",
+    "kind": "path",
+    "cited": "demos/stories/S10/story.json",
+    "count": 1
+  },
+  {
+    "file": "scripts/stories/ground-attribution.test.ts",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 3
+  },
+  {
+    "file": "scripts/stories/ground-hash.mjs",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 1
+  },
+  {
+    "file": "scripts/stories/story-wait-schema.mjs",
+    "kind": "path",
+    "cited": "docs/forge-ui-dom-and-harness.md",
+    "count": 1
+  },
+  {
+    "file": "skills/brain-maintenance/brain-maintenance.test.ts",
+    "kind": "path",
+    "cited": "cli/brain-lint.ts",
+    "count": 3
+  },
+  {
+    "file": "skills/brain-maintenance/brain-maintenance.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/skill-path.ts",
+    "count": 1
+  },
+  {
+    "file": "skills/brain-query/SKILL.md",
+    "kind": "path",
+    "cited": "brain/profile.md",
+    "count": 1
+  },
+  {
+    "file": "skills/demo-design/SKILL.md",
+    "kind": "path",
+    "cited": "projects/terraform-provider-betterado/forge/skills/ado-demo/SKILL.md",
+    "count": 1
+  },
+  {
+    "file": "skills/developer-ralph/SKILL.md",
+    "kind": "path",
+    "cited": "loops/ralph/AGENT.md",
+    "count": 2
+  },
+  {
+    "file": "skills/developer-ralph/SKILL.md",
+    "kind": "path",
+    "cited": "loops/ralph/PROMPT.md",
+    "count": 2
+  },
+  {
+    "file": "skills/forge-onboard-project/SKILL.md",
+    "kind": "path",
+    "cited": "studio/starters/project.json",
+    "count": 1
+  },
+  {
+    "file": "skills/reflector/SKILL.md",
+    "kind": "path",
+    "cited": "cli/brain-lint.ts",
+    "count": 1
+  },
+  {
+    "file": "SPEC.md",
+    "kind": "path",
+    "cited": "packages/kernel/contract.test.ts",
+    "count": 1
+  },
+  {
+    "file": "studio/artifact-templates/README.md",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
+    "count": 2
+  },
+  {
+    "file": "studio/demo-elements/cli-capture.md",
+    "kind": "path",
+    "cited": "bin/mdtoc.js",
+    "count": 1
+  },
+  {
+    "file": "tests/stories/S1.story.mjs",
+    "kind": "path",
+    "cited": "cli/agent-run.ts",
+    "count": 1
+  },
+  {
+    "file": "tests/stories/S1.story.mjs",
+    "kind": "path",
+    "cited": "cli/ui-bridge.ts",
+    "count": 1
+  },
+  {
+    "file": "tests/stories/S5.story.mjs",
+    "kind": "path",
+    "cited": "apps/studio/components/studio/agent-builder/agent-builder-handles.test.ts",
+    "count": 1
+  }
+]

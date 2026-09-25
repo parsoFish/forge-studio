@@ -73,7 +73,7 @@
  * `turnStyleState`, `turnStepState`, `finalizerIdState`, or `schemaIdState` yet
  * — every AT-R422-* test is RED at branch base. Unlike the file's original
  * bring-up (where a missing STATIC import crashes the whole file), these use
- * a DYNAMIC `await import('../../../studio/session-kinds.ts')` inside each test body so a
+ * a DYNAMIC `await import('../../../packages/sessions/studio/session-kinds.ts')` inside each test body so a
  * missing named export fails only that one test (the namespace object simply
  * has `undefined` for the missing key) — the pre-existing AT-1..AT-67 tests
  * keep running and passing throughout this file's RED phase.
@@ -176,7 +176,7 @@ import { type SessionKindDescriptor } from '../../../studio/session-kinds.ts';
 // the established direction (this test file lives at
 // packages/sessions/studio/session-kinds.test.ts and imports packages/agents/agent-run.ts, the
 // mirror image of packages/agents/agent-run.ts's own `import { loadSessionKinds } from
-// '../../../studio/session-kinds.ts'` at its top) — no cycle: this
+// '../../../packages/sessions/studio/session-kinds.ts'` at its top) — no cycle: this
 // TEST file is never itself imported by production code.
 // The real Finding type (level/object/check/message) `validateSessionKinds`
 // actually returns — imported directly rather than hand-narrowed/cast so the

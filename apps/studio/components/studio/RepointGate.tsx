@@ -17,7 +17,7 @@
  * It also closes the display/payload split. `onConfirm` is invoked with
  * `pending.currentFlowId` — the SAME expression the bar displays — so a surface
  * cannot show one flow and confirm another. (`confirmRepointFrom` is a
- * compare-and-swap; see `orchestrator/enqueue-flow-run.ts`.) `currentFlowId` is
+ * compare-and-swap; see `packages/flows/enqueue-flow-run.ts`.) `currentFlowId` is
  * REQUIRED on `pending` for the same reason: a refusal that names no flow is not
  * confirmable, and must surface as an error rather than as a confirmation the
  * operator can click but never satisfy.

@@ -1,5 +1,5 @@
 /**
- * S6A — tests for orchestrator/cycle-retention.ts.
+ * S6A — tests for packages/knowledge/cycle-retention.ts.
  *
  * Pure unit tests over `assignRetention`, `collectCitedBy`, and
  * `patchArchiveFrontmatter`. No SDK, no real cycles. Filesystem fixtures

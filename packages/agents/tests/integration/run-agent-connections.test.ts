@@ -1,6 +1,6 @@
 /**
  * Acceptance tests for the R3-04-F3 / D9.1 pre-spawn connection-readiness
- * block on `runAgent` (`orchestrator/run-agent.ts`) — DOES NOT EXIST YET.
+ * block on `runAgent` (`packages/agents/run-agent.ts`) — DOES NOT EXIST YET.
  * The seam under test (a new `ctx.probeConnection` check, D9.1) does not
  * exist on `run-agent.ts` at branch base, so every "blocked" test below is
  * RED at the ASSERTION level (the module and `runAgent` itself already
@@ -8,7 +8,7 @@
  * a failing behavioural assertion, not a missing module, exactly as the T3
  * brief anticipates for a seam added to an existing file).
  *
- * Style mirrors `orchestrator/run-agent.test.ts` exactly: a REAL shipped
+ * Style mirrors `packages/agents/tests/integration/run-agent.test.ts` exactly: a REAL shipped
  * roster def (`project-scoped-review`, loaded via `listAgentDefinitions`),
  * cloned in-memory with `runtime.loopStrategy: 'one-shot'` (`oneShotClone`)
  * so `deriveAgentSpec` still reads real allowedTools/model off disk, and a
@@ -23,7 +23,7 @@
  *       the ALREADY-SHIPPED `ctx.queryFn` seam exactly (`ctx.queryFn ??
  *       pinnedStreamQuery`). Production omits it; the default is the REAL
  *       per-connection prober (`probeConnection` from
- *       `./studio/connection-probe.ts`) against `FORGE_ROOT`'s catalog. This
+ *       `./packages/library/studio/connection-probe.ts`) against `FORGE_ROOT`'s catalog. This
  *       file injects a fake for every "blocked/unblocked" scenario so no
  *       test here ever spawns a real probe child (that is
  *       `connection-probe.test.ts`'s job, per D4) — EXCEPT the "no bound
@@ -266,7 +266,7 @@ test('runAgent pre-spawn block: an agent with NO bound tools/mcps is never block
 // ---------------------------------------------------------------------------
 // Self-lifecycle suppression, BOTH env vars independently (T2 ruling round 2,
 // item 3b/4: honour FORGE_DRY_BRIDGE=1 as well as FORGE_ARCHITECT_NO_SPAWN=1
-// — "same as orchestrator/run-agent.ts does" for its own existing dry-bridge
+// — "same as packages/agents/run-agent.ts does" for its own existing dry-bridge
 // check).
 // ---------------------------------------------------------------------------
 

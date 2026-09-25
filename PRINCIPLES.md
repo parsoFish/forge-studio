@@ -62,6 +62,6 @@ The non-goals section of [`docs/decisions/`](./docs/decisions/) is also load-bea
 
 **Codified by:**
 - [ADR 008 — JSONL event log per cycle](./docs/decisions/008-jsonl-event-log.md)
-- [`orchestrator/logging.ts`](./orchestrator/logging.ts) — central event-log writer with documented schema
-- [`orchestrator/metrics.ts`](./orchestrator/metrics.ts) — aggregations (cost, iterations, duration)
+- [`packages/kernel/logging.ts`](./packages/kernel/logging.ts) — central event-log writer with documented schema
+- [`packages/flows/metrics.ts`](./packages/flows/metrics.ts) — aggregations (cost, iterations, duration)
 - [`orchestrator/visualise.ts`](./orchestrator/visualise.ts) — event-log aggregation; the **forge UI** ([`forge-ui/`](./forge-ui/)) is the live monitoring surface (`monitor/` was deleted)

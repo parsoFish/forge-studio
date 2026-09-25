@@ -53,12 +53,12 @@ general dumping ground for shared helpers.
 **Anchors.** Files here are two levels below the package root. Anything that
 needs the repo root imports `FORGE_ROOT` from `@forge/kernel` — never
 `'..'` counted from `import.meta.url`, which is correct at exactly one depth
-and wrong at every other (COMMON §15.14). `tests/regression/anchor-depth.test.ts`
+and wrong at every other (COMMON §15.14). `packages/agents/tests/regression/anchor-depth.test.ts`
 holds that proof, including the correction that the failure is a loud `ENOENT`
 rather than the silent pass the sweep first assumed.
 
 **Paths inside guards.** A guard that names another file by a literal path is
-coupled to every move. `tests/contract/hook-dispatch-coverage.test.ts` locates
+coupled to every move. `packages/agents/tests/contract/hook-dispatch-coverage.test.ts` locates
 the lock it depends on by that lock's own defining symbol instead — and asserts
 there is exactly ONE, so the check notices a deletion and a duplicate, not just
 a rename. Its first version searched for the bare token and found itself

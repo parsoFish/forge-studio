@@ -40,7 +40,7 @@ contract that evidence satisfies — the structured artefact from
 ## The demo contract (what EVERY demo must contain)
 
 A demo is **one structured artefact**: `<demo-dir>/demo.json`
-(schema = `DemoModel` in [`cli/demo-model.ts`](../../cli/demo-model.ts),
+(schema = `DemoModel` in [`packages/stations/demo-model.ts`](../../packages/stations/demo-model.ts),
 validated by the `pr_self_contained` gate). The demo dir is resolved against the
 project's `artifactRoot`: it is `demo/<initiative-id>/` for a default-layout
 project (`artifactRoot: "."`), or `<artifactRoot>/history/<initiative-id>/demo/`
@@ -179,7 +179,7 @@ collapses them gracefully when absent, but their absence means a less useful dem
    or the `capture` field** — the orchestrator's run overwrites them, and the
    `pr_self_contained` gate rejects a command it cannot run or a `capture`
    stamp without this run's nonce (enforced in
-   `orchestrator/phases/orchestrated-capture.ts`, N2).
+   `packages/flows/phases/orchestrated-capture.ts`, N2).
 5. **Commit** `demo.json` + `DEMO.md` (the bundle is born tracked — no `.forge/demos/`
    shadow).
 

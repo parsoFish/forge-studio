@@ -103,9 +103,9 @@ export function danglingEdgeFindings(files: string[], knownSlugs: ReadonlySet<st
 /**
  * checkDanglingEdges — a `related_themes[]` entry whose slug resolves to no
  * theme file anywhere in the brain is a broken graph edge with NO upstream
- * signal today: `orchestrator/kb-graph.ts:407`'s `if (nodeIds.has(relSlug))`
+ * signal today: `packages/knowledge/kb-graph.ts:407`'s `if (nodeIds.has(relSlug))`
  * silently SKIPS emitting the edge when the target doesn't exist, and the
- * `validEdges` filter at `orchestrator/kb-graph.ts:464` drops it a second
+ * `validEdges` filter at `packages/knowledge/kb-graph.ts:464` drops it a second
  * time when building the KB graph — the entry just quietly fails to render,
  * with nothing telling the reflector or a maintenance agent it's stale.
  *

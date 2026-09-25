@@ -3,7 +3,7 @@
  * `session-kinds.yaml` can still break, and the closed check-id vocabulary
  * those rules report through.
  *
- * Split out of `studio/session-kinds.ts` (M4 exit row 5). The parent parses and
+ * Split out of `packages/sessions/studio/session-kinds.ts` (M4 exit row 5). The parent parses and
  * loads; this file judges. The seam is one-way and was proven so BEFORE the
  * move rather than after it: a cycle probe with comments stripped reports ZERO
  * references from what stayed behind to anything declared here. The raw grep

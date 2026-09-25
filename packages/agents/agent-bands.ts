@@ -42,8 +42,8 @@ import type { BandGuardId } from '@forge/contracts';
 export { TOGGLE_GUARD_IDS, PLATFORM_GUARD_IDS } from '@forge/contracts';
 
 /**
- * Band guard id → the agent slug that SHIPS declaring it out of the box (the
- * example factory's own PM/reflector/demo-agent/adversarial-review/
+ * Band guard id → the agent slug that SHIPS declaring it out of the box
+ * historical: (the example factory's own PM/reflector/demo-agent/adversarial-review/
  * contract-check). Seam F4 (operator item 81) removed the runtime/lint
  * restriction that pinned a band guard to ONLY this slug: `execAgent`
  * (`executor-table.ts`) now loads whichever def actually declared the guard

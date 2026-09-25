@@ -23,7 +23,7 @@
  * inventing a second word for the same fact; 'unsaved' is this component's
  * own third state (a security scan has no "not yet scanned" idle render).
  *
- * Pinned RED at branch base. RUN: npx vitest run --root apps/studio tests/integration/flow-authoring-view.test.ts
+ * Pinned RED at branch base. RUN: npx vitest run --root apps/studio apps/studio/tests/integration/flow-authoring-view.test.ts
  */
 import { test, expect, vi, afterEach } from 'vitest';
 import * as React from 'react';

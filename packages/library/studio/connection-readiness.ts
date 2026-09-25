@@ -1,6 +1,6 @@
 /**
  * connectionsReadinessFor (WI-3's shared combinator, R3-04 D9/D-D) — the pure
- * function `orchestrator/run-agent.ts`'s pre-spawn block AND the bridge run
+ * function `packages/agents/run-agent.ts`'s pre-spawn block AND the bridge run
  * route will both consume (not built this round — WI-3). Kind-agnostic: it
  * only ever inspects `ProbeResult.state`, never `.kind`, so a probe-kind
  * change in `connection-probe.ts` can never ripple into this file.

@@ -20,7 +20,7 @@ disallowed-tools: [Write, Edit, MultiEdit, NotebookEdit, WebFetch, WebSearch, Ta
 budgets:
   # W7-B5 (agents-21): default standalone-dispatch cost ceiling — the most
   # expensive planner (sonnet; real flow-node runs have reached ~$4.79).
-  # Enforced on the generic dispatch path (orchestrator/run-agent.ts);
+  # Enforced on the generic dispatch path (packages/agents/run-agent.ts);
   # operator-overridable per kickoff. See docs/reference/agent-cost-ceilings.md.
   maxBudgetUsd: 10
 ---
@@ -60,7 +60,7 @@ After reading, emit `architect.brain-query` listing paths consulted. Include eve
 
 ## Outputs
 
-- **`<projectRepoPath>/_architect/<session-id>/PLAN.md`** (per C12). Runner renders PLAN.md + sibling PLAN.html via `cli/architect-plan.ts:writePlanDoc`.
+- **`<projectRepoPath>/_architect/<session-id>/PLAN.md`** (per C12). Runner renders PLAN.md + sibling PLAN.html via `packages/sessions/kinds/architect-plan.ts:writePlanDoc`.
 - **`<projectRepoPath>/_architect/<session-id>/manifests/INIT-*.md`** — draft manifests, NOT yet queued.
 - **No direct writes to `_queue/pending/`.** That happens only on runner finalize (operator approve).
 - **No roadmap.md write.** The roadmap is a derived view from `_queue/pending/` manifests rendered by the forge UI.

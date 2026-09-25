@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/pr.ts — the Phase-6 local↔remote sync + PR
+ * Tests for packages/flows/pr.ts — the Phase-6 local↔remote sync + PR
  * boundary primitives. These assert the NEW (review-redesign) contract:
  *
  *   - G8: `checkLocalRemoteSynced` / `assertLocalRemoteSynced` enforce

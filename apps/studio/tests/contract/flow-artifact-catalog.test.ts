@@ -1,11 +1,11 @@
 /**
- * Acceptance tests for forge-ui/lib/flow-artifact-catalog.ts (R3-06 / R2-05-F1).
+ * Acceptance tests for apps/studio/lib/flow-artifact-catalog.ts (R3-06 / R2-05-F1).
  *
  * The module under test does not exist yet — vitest cannot even collect this
  * file until it lands (module-not-found is the expected red).
  *
  * The flow builder's ArtifactPicker today hardcodes a 9-entry ARTIFACTS list
- * (forge-ui/components/studio/flow-builder/ArtifactPicker.tsx) that includes
+ * (apps/studio/components/studio/flow-builder/ArtifactPicker.tsx) that includes
  * two orphans — "reflection" and "demo" — neither of which has a template
  * file under studio/artifact-templates/. This test proves the picker's
  * catalog, once relocated to this plain-TS module, has an id set EXACTLY
@@ -14,7 +14,7 @@
  * is a fact that must stay true as templates are added/removed.
  *
  * AT numbers continue the flat R3-06 sequence started in
- * orchestrator/studio/template-library.test.ts.
+ * packages/library/tests/unit/template-library.test.ts.
  */
 import { test, expect } from 'vitest';
 import { readdirSync } from 'node:fs';
@@ -33,8 +33,8 @@ function onDiskTemplateIds(): string[] {
   // README.md documents the directory (R3-06) — it is not a template
   // definition, so it is excluded by name, mirroring the identical exclusion
   // in the two production loaders that scan this same directory
-  // (`@forge/library`'s listArtifactTemplates and
-  // orchestrator/studio/template-library.ts's listPlanningEntries). Matched
+  // (`@forge/library/studio/artifact-registry.ts`'s listArtifactTemplates and
+  // packages/library/studio/template-library.ts's listPlanningEntries). Matched
   // case-insensitively (a readme.md/Readme.md variant would otherwise slip
   // the exact-name check and, if it ever carried valid frontmatter, become a
   // phantom template) — all three sites must stay identical. If any of them

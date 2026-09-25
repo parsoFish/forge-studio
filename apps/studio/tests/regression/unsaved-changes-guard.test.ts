@@ -7,7 +7,7 @@
  * `app/projects/[id]/page.tsx` ~375-386, which registers a `beforeunload`
  * guard for exactly this class of loss.
  *
- * RUN: cd apps/studio && npx vitest run tests/regression/unsaved-changes-guard.test.ts
+ * RUN: cd apps/studio && npx vitest run apps/studio/tests/regression/unsaved-changes-guard.test.ts
  */
 import { expect, test, vi } from 'vitest';
 

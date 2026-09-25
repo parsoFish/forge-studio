@@ -1,5 +1,5 @@
 /**
- * Tests for forge-ui/lib/dependency-dag.ts (R4-15) — DOES NOT EXIST YET.
+ * Tests for apps/studio/lib/dependency-dag.ts (R4-15) — DOES NOT EXIST YET.
  * Vitest cannot even collect this file until it lands (module-not-found is
  * the expected red, matching this file set's established convention — see
  * e.g. session-artifact-view.test.ts's / session-client.test.ts's own
@@ -16,7 +16,7 @@
  * shape, never hardcoded to `RoadmapDraftRow`'s fields (AT-15 pins this
  * explicitly with a non-roadmap item shape).
  *
- * Levels come from the SHARED `topoLevels` (forge-ui/lib/dep-layout.ts) —
+ * Levels come from the SHARED `topoLevels` (apps/studio/lib/dep-layout.ts) —
  * this module is a thin wrapper that adds edges/resolvedDeps/unresolvedDeps/
  * cycle-detection on top, never a parallel reimplementation of the leveling
  * algorithm itself. `dep-layout.ts` is off-limits (not modified by this
@@ -28,7 +28,7 @@
  * NOTE on a discrepancy found while writing these tests: dep-layout.ts's
  * own header claims it is "a byte-for-byte mirror of orchestrator/dep-
  * levels.ts" — that file does not exist anywhere in this repo today (only
- * forge-ui/lib/dep-layout.ts defines `topoLevels`). Not a blocker for this
+ * apps/studio/lib/dep-layout.ts defines `topoLevels`). Not a blocker for this
  * test file (we only depend on the REAL, present `topoLevels` export), but
  * flagged per the task brief's "say so plainly" instruction rather than
  * silently treated as verified.

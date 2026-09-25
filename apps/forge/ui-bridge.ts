@@ -118,12 +118,12 @@ export type BridgeOptions = {
   scanCycles?: () => { live: Cycle[]; recent: Cycle[] };
   /**
    * Injectable for tests — defaults to the real `mergePullRequest` from
-   * orchestrator/pr.ts. Called by the POST /api/verdict 'approve' handler.
+   * packages/flows/pr.ts. Called by the POST /api/verdict 'approve' handler.
    */
   mergePr?: (worktreePath: string) => boolean;
   /**
    * Injectable for tests — defaults to the real `finalizeMergedReadyForReview`
-   * from orchestrator/finalize-merged.ts. Fired (void, non-blocking) on approve.
+   * from packages/flows/finalize-merged.ts. Fired (void, non-blocking) on approve.
    */
   finalizeAfterMerge?: (deps: { queueRoot: string; logsRoot: string }) => Promise<unknown>;
   /**
@@ -135,7 +135,7 @@ export type BridgeOptions = {
   runReleaseFinalize?: (input: ReleaseFinalizeHookInput) => Promise<{ release_status: string }>;
   /**
    * D — injectable for tests; defaults to the real `rerunReflector` from
-   * orchestrator/reflector-rerun.ts. Fired (non-blocking) when operator
+   * packages/stations/reflector-rerun.ts. Fired (non-blocking) when operator
    * reflection feedback is submitted, and at startup for any cycle whose
    * feedback out-dates its last reflector.end.
    */
@@ -594,7 +594,7 @@ async function handleHttp(
   // carry the x-forge-csrf header (that header exists to defeat CROSS-ORIGIN
   // forgery from a browser; a server-to-server webhook is neither same-origin
   // nor a browser fetch). Its trust boundary is signature/token verification
-  // (orchestrator/webhook-verify.ts), not the CSRF header, so this route is
+  // (packages/flows/webhook-verify.ts), not the CSRF header, so this route is
   // dispatched — and therefore EXEMPT — BEFORE the anti-CSRF guard below runs.
   if (await handleHookRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot }, url, method)) return;
 

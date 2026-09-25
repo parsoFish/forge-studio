@@ -1,10 +1,10 @@
 /**
  * AT2 (R4-13) — acceptance for the NOT-YET-EXISTING pure mapper
- * `queueStatusToColor` in forge-ui/lib/roadmap-status-color.ts.
+ * `queueStatusToColor` in apps/studio/lib/roadmap-status-color.ts.
  *
  * R4-13 replaces `SerpentineTimeline` (the roadmap laid out over TIME) with a
  * dependency DAG. The new DAG must colour initiative nodes from the SHARED
- * 5-tone palette (forge-ui/lib/status-colors.ts `STATUS_COLOR`:
+ * 5-tone palette (apps/studio/lib/status-colors.ts `STATUS_COLOR`:
  * idle/active/attention/complete/failed) — it must NOT port
  * SerpentineTimeline's own retiring `STATUS_COLOURS` map
  * (SerpentineTimeline.tsx:28-35) forward. That retiring map is a SIX-key
@@ -17,7 +17,7 @@
  * KEY of `STATUS_COLOR` (a semantic tone NAME — 'idle' | 'active' |
  * 'attention' | 'complete' | 'failed'), never a hex / `var(--…)` string.
  * `QueueState` is the status vocabulary carried by `RoadmapInitiative.status`
- * (forge-ui/lib/bridge-client.ts:199-215):
+ * (apps/studio/lib/bridge-client.ts:199-215):
  * pending | in-flight | ready-for-review | merged | done | failed.
  *
  * KILLS:
@@ -26,7 +26,7 @@
  *    tone instead of reusing `attention`);
  *  - failing to collapse BOTH `merged` AND `done` onto `complete`.
  *
- * RED AT BASE: forge-ui/lib/roadmap-status-color.ts does NOT exist on this
+ * RED AT BASE: apps/studio/lib/roadmap-status-color.ts does NOT exist on this
  * branch yet — the `queueStatusToColor` import below fails to resolve, so the
  * whole file fails to load and every test is RED until the implementer creates
  * the module. Marker to grep in the runner output: `R4-13-AT2`.
@@ -40,7 +40,7 @@ import { queueStatusToColor } from '@/lib/roadmap-status-color';
 import { STATUS_COLOR } from '@/lib/status-colors';
 
 // The QueueState vocabulary carried by RoadmapInitiative.status
-// (forge-ui/lib/bridge-client.ts:199-215).
+// (apps/studio/lib/bridge-client.ts:199-215).
 const QUEUE_STATES = [
   'pending',
   'in-flight',

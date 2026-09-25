@@ -2,9 +2,9 @@
  * Pure, generic dependency-DAG view model (R4-15).
  *
  * A SHARED, DOM-free, network-free view module — the same convention as
- * `forge-ui/lib/file-package.ts` (a pure `lib/*.ts` view model paired with
+ * `apps/studio/lib/file-package.ts` (a pure `lib/*.ts` view model paired with
  * one shared component whose only prop is its data,
- * `forge-ui/components/studio/DependencyDag.tsx`). Given a set of items each
+ * `apps/studio/components/studio/DependencyDag.tsx`). Given a set of items each
  * carrying an id and a list of declared dependency ids, `dependencyDagView`
  * computes a topologically-leveled DAG: nodes (input order preserved),
  * dense per-level columns, edges (direction: "from must complete before
@@ -16,7 +16,7 @@
  * project-roadmap tab is a second, differently-shaped caller (work items,
  * not initiatives) that must be able to reuse this module unchanged.
  *
- * Levels come from the SHARED `topoLevels` (forge-ui/lib/dep-layout.ts) —
+ * Levels come from the SHARED `topoLevels` (apps/studio/lib/dep-layout.ts) —
  * this module is a thin wrapper that adds edges/resolvedDeps/unresolvedDeps/
  * cycle-detection on top, never a parallel reimplementation of the leveling
  * algorithm. `dep-layout.ts` is off-limits (not modified here) and has three

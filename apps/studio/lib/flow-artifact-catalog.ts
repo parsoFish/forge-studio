@@ -6,7 +6,7 @@
  * SYNCHRONOUSLY while rendering (no loading state, no network round-trip), so
  * it cannot simply be an async fetch from `studio/artifact-templates/`.
  *
- * WHAT enforces it: `forge-ui/lib/flow-artifact-catalog.test.ts` (AT-52/AT-53)
+ * WHAT enforces it: `apps/studio/tests/contract/flow-artifact-catalog.test.ts` (AT-52/AT-53)
  * pins this module's id set EXACTLY equal to the on-disk
  * `studio/artifact-templates/` id set, in both directions — any future
  * divergence (a template added/removed on disk without this list following)

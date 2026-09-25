@@ -1,5 +1,5 @@
 /**
- * Tests for forge-ui/lib/session-artifact-view.ts (R2-10, PR2) — DOES NOT
+ * Tests for apps/studio/lib/session-artifact-view.ts (R2-10, PR2) — DOES NOT
  * EXIST YET. Vitest cannot even collect this file until it lands
  * (module-not-found is the expected red).
  *
@@ -261,7 +261,7 @@ test('AT-77: markdownDraftView: the three states (no-draft, empty-draft, has-con
 
 // ===========================================================================
 // brainStructureView / selectBrainStructureFile — REUSE pin (the SHARED
-// FilePackage machinery, forge-ui/lib/file-package.ts) — AT-78..AT-83
+// FilePackage machinery, apps/studio/lib/file-package.ts) — AT-78..AT-83
 // ===========================================================================
 
 test('AT-78: brainStructureView: themeCount passes through VERBATIM from the artifact — never re-derived from files.length (a legitimately divergent count, e.g. some theme files failed server-side parsing, must not be "corrected")', () => {
@@ -982,7 +982,7 @@ test('R4-17 AT-122 (D10): sessionArtifactView: an UNRECOGNISED artifact kind (ne
 // R4-19-F2 — cleanupPlanView, the NEW renderer for the "cleanup-plan"
 // artifact kind (kb-cleanup's brain-maintenance session), plus
 // sessionArtifactView's dispatch flip (cleanup-plan is declared LIVE at
-// birth in orchestrator/studio/session-kinds.ts — id:'cleanup-plan',
+// birth in packages/sessions/studio/session-kinds.ts — id:'cleanup-plan',
 // status:'live' — never reserved, unlike generation-gallery/contract-buildout/
 // file-package's reserved->live histories above). TEST-FIRST PIN: the export
 // does not exist yet — module-not-found on this one named import resolves to

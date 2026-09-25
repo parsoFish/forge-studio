@@ -4,7 +4,7 @@
  * return the flow's real band vocabulary: the distinct BAND_GUARD_IDS
  * declared by the SKILL.md `composition.guards` of every agent-bearing node
  * in the flow, resolved via `resolveBandGuard`
- * (orchestrator/agent-bands.ts) — not a hardcoded guess.
+ * (packages/agents/agent-bands.ts) — not a hardcoded guess.
  *
  * Real production ground truth for the 'forge-develop' flow
  * (studio/flows/forge-develop/flow.yaml), verified by reading the actual

@@ -1,6 +1,6 @@
 /**
  * Acceptance tests for the flow run-detail TIMELINE DERIVATION (R6-01 WI-2 /
- * F4) — `forge-ui/lib/flow-run-timeline.ts`, a pure module that does not
+ * F4) — `apps/studio/lib/flow-run-timeline.ts`, a pure module that does not
  * exist yet. Every assertion below is a legitimate RED against a
  * not-yet-created file.
  *
@@ -37,9 +37,9 @@
  * MEASURED GROUNDS (not invented — every number below was produced by
  * driving the REAL orchestrator code, see the task report):
  *
- * (COST) `orchestrator/run-model-derive.ts::buildNodeMeta` sets
+ * (COST) `packages/flows/run-model-derive.ts::buildNodeMeta` sets
  *   `phaseMeta[node].costUsd = sumAuthoritativeCostUsd(node's own events)`.
- *   `orchestrator/event-cost.ts`'s header documents the twice-repeated
+ *   `packages/kernel/event-cost.ts`'s header documents the twice-repeated
  *   defect this closes: a phase that emitted ≥1 `iteration` event RESTATES
  *   the same dollars on its per-WI `end` AND its phase-level rollup `end`,
  *   so a naive re-sum inflates 2-3x. Driving the real `listRuns` over a
@@ -53,7 +53,7 @@
  *   lands on a different one and the assertion names which mistake it made.
  *
  * (b) PER-NODE ARTIFACTS DO NOT EXIST. Measured:
- *   `forge-ui/components/studio/PhaseDrawer.tsx` line 307 reads
+ *   `apps/studio/components/studio/PhaseDrawer.tsx` line 307 reads
  *   `const artifactsReady = run.artifactsReady;` — the RUN-LEVEL map, keyed
  *   by artifact TYPE, rendered UNCHANGED for whichever node the drawer is
  *   open on. There is no per-node artifact data anywhere in the run model.
@@ -147,7 +147,7 @@ function rowFor(rows: FlowRunTimelineRow[], nodeId: string): FlowRunTimelineRow 
 test("a node's cost is EXACTLY phaseMeta[node].costUsd — never a re-sum, never the run's total", () => {
   // KILLS: (1) any implementation that re-sums the node's cost from events
   //   (measured naive value 7.0 — the documented 2-3x inflation in
-  //   orchestrator/event-cost.ts's header); (2) any implementation that
+  //   packages/kernel/event-cost.ts's header); (2) any implementation that
   //   attributes the RUN's costUsd (4.1) to a node.
   const rows = deriveFlowRunTimeline(developFlow(), archivedRun());
 
@@ -307,7 +307,7 @@ test('note segments compose deterministically from the node\'s own fields, in a 
   // retries · wedged. Two other real fields are measured to exist and are
   // DELIBERATELY EXCLUDED, not forgotten: `model` and `brainReads`
   // (populated conditionally by buildNodeMeta,
-  // orchestrator/run-model-derive.ts:189,192) carry no note segment —
+  // packages/flows/run-model-derive.ts:189,192) carry no note segment —
   // widening the note to include them is a product decision this test does
   // not make.
   //

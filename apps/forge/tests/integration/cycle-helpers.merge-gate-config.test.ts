@@ -11,7 +11,7 @@
  * Test 2's harness (makeInput/makeLogger/makeCallTracker/makeMockDeps, the
  * real `forge-develop.yaml` load via `flowPathForId`/`loadFlowDefinition`,
  * and the tmp-worktree+manifest fixture) copies the STYLE of
- * `orchestrator/flow-runner.test.ts`'s "R4-10-F2: a RED merge-boundary
+ * `apps/forge/tests/unit/flow-runner.test.ts`'s "R4-10-F2: a RED merge-boundary
  * full-suite gate" test (the local/ci sibling of this scenario) — not its
  * assertions, which belong to a different `failedGate` value.
  */

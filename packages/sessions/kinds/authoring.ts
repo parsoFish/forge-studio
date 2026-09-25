@@ -25,7 +25,7 @@ import type { AffordanceRouteContext } from '../bridge-studio-sessions-affordanc
 /** The ONE enumeration of "which single file at an authoring session's
  *  `staging/` root identifies the drafted package's shape" — SERVER-side
  *  source of truth (W8-B4 FIX-1). `'staging'` itself mirrors
- *  `orchestrator/studio/session-transcript.ts`'s own (unexported)
+ *  `packages/sessions/studio/session-transcript.ts`'s own (unexported)
  *  `PACKAGE_DIRNAME` literal — not imported, to avoid widening that file's
  *  export surface for a single constant this route can just as honestly
  *  hand-copy (the same convention this file's own header already documents

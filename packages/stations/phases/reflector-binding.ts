@@ -3,7 +3,7 @@
  * tool config.
  *
  * Single source of truth for what the reflector agent sees. Called by the live
- * orchestrator (orchestrator/phases/reflector.ts).
+ * orchestrator (packages/stations/phases/reflector.ts).
  *
  * The reflector is a **one-shot SDK invocation** (not a Ralph loop) that runs
  * after a successful merge. It consumes the cycle's event log + closed manifest

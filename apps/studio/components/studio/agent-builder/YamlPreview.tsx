@@ -147,7 +147,7 @@ function buildYaml(definition: Definition, catalog: Catalog): string {
   lines.push(`  ${kv('hooks', '')}`); listIds(comp.hooks);
   lines.push('');
   // materials is a TOP-LEVEL field (mirrors `fanout`), not nested under
-  // composition (D1, orchestrator/studio/materials.ts) — rendered as its
+  // composition (D1, packages/agents/studio/materials.ts) — rendered as its
   // own section, not indented under composition:.
   lines.push(sect('materials'));
   listRaw(materials);

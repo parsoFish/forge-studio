@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/architect-plan.ts — the PLAN.md operator artefact
+ * Tests for packages/sessions/kinds/architect-plan.ts — the PLAN.md operator artefact
  * renderer + feedback-comment parser. Stage S2A.
  *
  * Conventions:

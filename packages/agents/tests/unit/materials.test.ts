@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/studio/materials.ts (R2-09 "Agent-builder definition
+ * Tests for packages/agents/studio/materials.ts (R2-09 "Agent-builder definition
  * parity", design points D1-D3).
  *
  * NEW MODULE — does not exist yet. Exports under test:
@@ -368,7 +368,7 @@ describe('materials caps — named constants exported from materials.ts (R6-04-F
   // ever runs — see apps/forge/tests/integration/ui-bridge-agent-run-materials.test.ts's boundary
   // tests, which exercise this live over HTTP.
   it('MAX_MATERIALS_TOTAL_BYTES is strictly less than the bridge\'s MAX_BODY_BYTES (1 MiB, cli/ui-bridge.ts:3207) — fails loudly if a future edit inverts this', () => {
-    const MAX_BODY_BYTES_MIRROR = 1 * 1024 * 1024; // cli/ui-bridge.ts:3207 — literal, not imported (module-private, out of this WI's file scope)
+    const MAX_BODY_BYTES_MIRROR = 1 * 1024 * 1024; // apps/forge/ui-bridge.ts:3207 — literal, not imported (module-private, out of this WI's file scope)
     assert.ok(
       MAX_MATERIALS_TOTAL_BYTES < MAX_BODY_BYTES_MIRROR,
       `MAX_MATERIALS_TOTAL_BYTES (${MAX_MATERIALS_TOTAL_BYTES}) must be strictly less than MAX_BODY_BYTES (${MAX_BODY_BYTES_MIRROR})`,

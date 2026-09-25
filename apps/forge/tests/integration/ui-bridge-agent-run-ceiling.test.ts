@@ -75,7 +75,7 @@
  * PLACEMENT — ratified round 2 (a peer orchestrator reviewed round 1's
  * judgment calls):
  *   - `MAX_KICKOFF_COST_CEILING_USD` AND `DEFAULT_KICKOFF_COST_CEILING_USD`
- *     both live in `../orchestrator/config.ts` (round 1 guessed
+ *     both live in `../packages/kernel/config.ts` (round 1 guessed
  *     `run-agent.ts` for the max) — both are run-level policy bounds, not
  *     runAgent's own concern.
  *   - Part D is pinned against the EXISTING `GET /api/studio/agents` route
@@ -124,7 +124,7 @@
  *     `dispatchAgentRun`'s slug/runId guards). `costCeilingUsd` is ABSENT
  *     (not present-as-`undefined`) from the result when the flag is not
  *     given — the same "key absent, not undefined" discipline pinned
- *     throughout this WI (`orchestrator/run-agent-ceiling.test.ts`'s
+ *     throughout this WI (`packages/agents/tests/integration/run-agent-ceiling.test.ts`'s
  *     equivalent test). `inputs` is always a (possibly empty) object, never
  *     absent — it is NOT marked optional in the signature above, unlike
  *     `project`/`sessionDir`/`costCeilingUsd`. NOTE: `parseAgentDispatchArgs`
@@ -150,7 +150,7 @@
  * parsed ceiling — passes every other test in this WI while shipping a
  * feature dead on the one path an operator actually drives.
  *
- * Closed the same way `orchestrator/run-agent.ts` already lets tests observe
+ * Closed the same way `packages/agents/run-agent.ts` already lets tests observe
  * behaviour without a real spawn: an INJECTED DEPENDENCY, mirroring
  * `RunContext.queryFn`/`ctx.probeConnection`'s existing pattern exactly.
  * `cmdAgentDispatch` gains an optional third parameter:
@@ -395,7 +395,7 @@ test('POST /api/agents/<slug>/run: an agent declaring its own budget AND an oper
 
 // ---------------------------------------------------------------------------
 // R6-04 WI-2 ROUND 7 — spawner ruling, fail-closed guard, BRIDGE-ROUTE layer.
-// See orchestrator/run-agent-ceiling.test.ts's own round-7 header for the
+// See packages/agents/tests/integration/run-agent-ceiling.test.ts's own round-7 header for the
 // full finding (14 of 19 dispatchable roster agents take the legacy path,
 // which has no budget concept — an operator ceiling against one of them
 // would be validated, recorded, shown in the UI, and silently unenforced).
@@ -495,7 +495,7 @@ test('PRECEDENCE: a NaN-shaped ceiling (the string "NaN", the only wire-represen
 // against, and exactly what happened on the first real CI run. Each direct
 // `runAgent()` call below therefore unsets BOTH vars for the duration of
 // that one call, restoring in a `finally` — mirrors
-// `orchestrator/run-agent-ceiling.test.ts`'s identical
+// `packages/agents/tests/integration/run-agent-ceiling.test.ts`'s identical
 // `withoutSpawnSuppressionEnv()` helper (same name, redefined locally since
 // that file does not export it).
 // ---------------------------------------------------------------------------
@@ -829,7 +829,7 @@ test('ROUND-TRIP, absence direction: no costCeilingUsd given to buildAgentDispat
  *  yet declared on the real function, hence the cast at the one call site
  *  below rather than scattering `as unknown` casts across every test.
  *  Mirrors `RunContext.queryFn`/`ctx.probeConnection`'s existing
- *  test-injection pattern (`orchestrator/run-agent.ts`): production code
+ *  test-injection pattern (`packages/agents/run-agent.ts`): production code
  *  defaults to the real `dispatchAgentRun` when `deps`/`deps.dispatch` is
  *  omitted, so every OTHER call site (including every other test in this
  *  file and `packages/agents/tests/integration/agent-run-dispatch.test.ts`) is byte-identical. */

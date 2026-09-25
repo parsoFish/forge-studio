@@ -112,7 +112,7 @@ function makeAgentSkillMd(): string {
 /**
  * Minimal valid SKILL.md whose `composition.guards` declares a single band —
  * just enough for `loadAgentDefinition` + `resolveBandGuard`
- * (orchestrator/agent-bands.ts) to resolve a real band id off a real,
+ * (packages/agents/agent-bands.ts) to resolve a real band id off a real,
  * loadable agent def. Same shape as bridge-studio-kb-create.test.ts's
  * `bandSkillMd` fixture helper (R1-01's `listFlowBandIds` ground truth),
  * duplicated here per this repo's convention of self-contained test fixtures
@@ -922,7 +922,7 @@ test('[security] version is always positive integer after write (monotonic)', as
 // ---------------------------------------------------------------------------
 // ACCEPTANCE TESTS (T3, R2-08-F1, round-3 addendum) — the WRITE-path
 // asymmetry an adversarial reviewer found: `checkFlowTriggers`'s
-// `trigger-projects` check (orchestrator/studio/validate-triggers.ts) is
+// `trigger-projects` check (packages/flows/studio/validate-triggers.ts) is
 // gated behind `opts?.projectIds` (`if (trigger.projects !== undefined &&
 // opts?.projectIds)`), but the real `PUT /api/studio/flows/:id` handler
 // (apps/forge/bridge-studio-writes.ts, ~line 1299) calls `validateFlow(merged,

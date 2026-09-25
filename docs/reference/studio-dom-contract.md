@@ -94,7 +94,7 @@ only its generic `data-session-id`, which the rule above makes unbindable. No
 story went red, because no story reaches demo-minting through contract
 resolution — **absence of a red there was absence of coverage, not evidence the
 site was correct**, so the fix ships with its own door
-(`tests/regression/contract-resolution-mint.test.ts`).
+(`apps/studio/tests/regression/contract-resolution-mint.test.ts`).
 
 **The ratified shape is `''` before the mint, the id after, NEVER absent**
 (rulings 409/422/436/438; `NewIdeaBox.tsx:131` and the new panel key ship it).
@@ -289,7 +289,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   type of one id agrees) or
   `artifact type` (an unrecognised `?type=`, naming the valid set) → `/flows`;
   and `app/not-found.tsx` → `page` (the pathname) → `/` for any unmatched
-  path. Pinned: `apps/studio/lib/not-found-render.test.ts` (render contract) +
+  path. Pinned: `apps/studio/tests/contract/not-found-render.test.ts` (render contract) +
   `scripts/not-found-consolidation.test.ts` (every route family wired; the
   legacy hand-rolled bodies gone). Journey: `templates-not-found`
   (`scripts/journeys/templates.mjs`) probes `/templates/nope`,
@@ -1011,7 +1011,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   → the Sessions index → its `sessions-kickoff` row → the launcher itself
   (`docs/how-to/S7.md`'s "fourth kind of part") — this shelf collapses that
   to one hop straight from the parts bin. `LibraryHub.tsx`'s own render test
-  (`tests/integration/library-hub-render.test.ts`) pins one link per
+  (`apps/studio/tests/integration/library-hub-render.test.ts`) pins one link per
   `KICKOFF_ENTRIES` row and that the shelf renders after Community.
   `StudioNav` (`[data-component="studio-nav"]`) is UNCHANGED by this rebuild
   — see the Global nav entry above (W6-IA-5; Monitor added W8-B1) for the
@@ -2383,7 +2383,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   SAME two-child split, with `[data-action="go-to-session"]` in its actions
   row — gating one of two branches is how this class comes back.
   Two gates enforce it, and each is mutation-proven:
-  `apps/studio/lib/agent-run-reachable.test.ts`
+  `apps/studio/tests/regression/agent-run-reachable.test.ts`
   renders the real component — BOTH branches — and walks each control's
   ancestor chain (no scrolling ancestor; no shrinkable container; a closed
   ALLOW-list of the CSS properties a chain element may declare at all, every
@@ -3302,7 +3302,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   anchor, which no beat can do. Absent when there is no run — never an empty
   string, which would read as a mint that returned nothing. The id and the
   `open-*-run` href are derived from ONE prop and are pinned to agree
-  (`tests/regression/enqueue-outcome-render.test.ts`). `recovery-requeue`
+  (`apps/studio/tests/regression/enqueue-outcome-render.test.ts`). `recovery-requeue`
   mounts this same component, so act 2's requeued run is named by the same
   attribute rather than a second one. The roadmap tab also mounts a `strip`
   SchedulerCard above the canvas, and `/projects/<id>#roadmap` lands on the
@@ -3748,7 +3748,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   rendered through the SAME generic `SessionInteractivePanel` as every other
   turnSpec kind. That kind is retired (W8-B5b WI-3) and removed from the set;
   parity with the registry is still pinned by
-  `apps/studio/lib/generic-panel-kinds.test.ts` (every turnSpec-declared kind
+  `apps/studio/tests/contract/generic-panel-kinds.test.ts` (every turnSpec-declared kind
   except the two bespoke-panel kinds must be in the set, so a newly declared
   kind can never render a blank page again).
   **W7-A2 lifecycle bar (every kind — architect/project-brain included):**

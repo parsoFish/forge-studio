@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/phases/reflector.ts.
+ * Tests for packages/stations/phases/reflector.ts.
  *
  * Covers:
  *   - S6A: brain-lint trigger + retention tagging.

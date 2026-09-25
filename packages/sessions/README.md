@@ -76,7 +76,7 @@ The sticky-cancel rule is why the session pair is not in `@forge/kernel`, where 
 
 Until M4-sessions s6 there was a fourth: a raw `readStatus`/`writeStatus` in `kinds/architect.ts`, typed to `ArchitectStatus`, doing an unguarded `join(sessionDir, 'status.json')` write. It had **zero production callers** — the SEC-04 appliers had already moved every call site onto the guarded architect pair — and survived only because three test fixtures used it to plant a status file.
 
-It was one letter of difference from the generic pair in one direction, and an exact collision with the injected step-writer `writeStatus` destructured out of the step args in its own module in the other. It was deleted rather than renamed, and `tests/regression/kind-turn-log-contract.test.ts` now locks the property that `kinds/architect.ts` names no `status.json` leaf under **any** identifier — the lock it replaced named one spelling, and had never matched anything.
+It was one letter of difference from the generic pair in one direction, and an exact collision with the injected step-writer `writeStatus` destructured out of the step args in its own module in the other. It was deleted rather than renamed, and `packages/sessions/tests/regression/kind-turn-log-contract.test.ts` now locks the property that `kinds/architect.ts` names no `status.json` leaf under **any** identifier — the lock it replaced named one spelling, and had never matched anything.
 
 ## Three things this package does NOT export
 

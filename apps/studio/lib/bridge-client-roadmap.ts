@@ -60,7 +60,7 @@ export async function fetchWorkItem(cycleId: string, wiId: string): Promise<Work
 /**
  * W6-RV-1: forge-ui cannot import `orchestrator/` TypeScript directly in
  * production code (the same constraint `SHIPPED_TRIGGER_KINDS` documents for
- * itself in `./studio-client.ts`), so this mirrors `orchestrator/work-item.ts`'s
+ * itself in `./studio-client.ts`), so this mirrors `packages/flows/work-item.ts`'s
  * `WORK_ITEM_STATUSES` as a runtime array (not just a re-typed literal union)
  * so `./wi-status-parity.test.ts` can pin it against that SSOT — follows the
  * same precedent as `SHIPPED_TRIGGER_KINDS` / `./trigger-kind-parity.test.ts`.
@@ -74,7 +74,7 @@ export type RoadmapWorkItem = {
   title: string;
   dependsOn: string[];
   /**
-   * W6-RV-1: the WI's own status (mirrors `orchestrator/work-item.ts`'s
+   * W6-RV-1: the WI's own status (mirrors `packages/flows/work-item.ts`'s
    * `WorkItemStatus` via `WI_STATUSES` above), read straight off its
    * frontmatter. Feeds the collapsed roadmap card's "done/total" micro-badge.
    * Optional — legacy WI snapshots or a read that predates this field leave
@@ -101,7 +101,7 @@ export type RoadmapInitiative = {
   workItems?: RoadmapWorkItem[];
   /**
    * W6-RV-2: the real cycle-completion instant (ISO), sourced from
-   * `Run.completedAt` (orchestrator/run-model.ts) via `buildProjectRoadmap`
+   * `Run.completedAt` (packages/flows/run-model.ts) via `buildProjectRoadmap`
    * (apps/forge/bridge-studio.ts). Drives the roadmap canvas's completion-time X
    * axis — absent (never fabricated) for a still-open initiative, or one
    * whose cycle log carries no derivable completion; such a card lands in

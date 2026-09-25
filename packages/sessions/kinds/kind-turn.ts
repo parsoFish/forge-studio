@@ -155,7 +155,7 @@ export type KindTurnPlumbing = {
    * `runAgentTurn` options bag (`...plumbing.hooksForSkill(spec.skill)`).
    *
    * This lives on the plumbing, not in each kind, for a reason the hook
-   * enumeration ratchet (`packages/agents/hook-dispatch-coverage.test.ts`)
+   * enumeration ratchet (`packages/agents/tests/contract/hook-dispatch-coverage.test.ts`)
    * makes concrete: this file imports `pinnedSdkQuery` as a VALUE and hands
    * it to every handler, so the driver is a spawn-capable file. Leaving the
    * wiring to each kind would mean the one module every future kind spawns

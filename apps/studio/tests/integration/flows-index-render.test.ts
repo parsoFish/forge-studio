@@ -26,7 +26,7 @@
  *    `./library-card-render.test.ts` and `./run-view-render.test.ts` (no
  *    jsdom/@testing-library; react/react-dom are already forge-ui deps; the
  *    `resolve.alias['@']` + `oxc.jsx: {runtime:'automatic'}` this needs are
- *    already in `forge-ui/vitest.config.ts`). It is props-driven and never
+ *    already in `apps/studio/vitest.config.ts`). It is props-driven and never
  *    fetches, so it renders its real, final markup synchronously — no mocks
  *    needed.
  *

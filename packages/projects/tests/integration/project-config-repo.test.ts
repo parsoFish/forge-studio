@@ -6,17 +6,17 @@
  *
  *   - `repo` is optional; absent is legal (that project can never match a
  *     project-event trigger — fail-closed, pinned separately in
- *     orchestrator/project-event-resolve.test.ts).
- *   - `repo` MUST be validated against `REPO_RE` (orchestrator/trigger-payload.ts)
+ *     apps/forge/tests/contract/project-event-resolve.test.ts).
+ *   - `repo` MUST be validated against `REPO_RE` (packages/flows/trigger-payload.ts)
  *     — the SAME charset the webhook `sources` allowlist already uses. A
  *     second, hand-copied regex is explicitly forbidden ("a duplicated
  *     charset is a divergence defect this initiative already closed once").
  *
  * RED against 631154a1 — `ProjectConfig` has no `repo` field at all today
- * (grepped; confirmed absent from orchestrator/project-config.ts).
+ * (grepped; confirmed absent from packages/projects/project-config.ts).
  *
  * Kept as its own small file (not appended to the already-1025-line
- * orchestrator/project-config.test.ts) per the global small-focused-files rule.
+ * packages/projects/tests/integration/project-config.test.ts) per the global small-focused-files rule.
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

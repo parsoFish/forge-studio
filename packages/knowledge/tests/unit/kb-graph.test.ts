@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/kb-graph.ts
+ * Tests for packages/knowledge/kb-graph.ts
  *
  * Tests against the REAL brain directories (brain/cycles, brain/forge-dev)
  * because the graph is built entirely from filesystem reads — no fixtures needed.

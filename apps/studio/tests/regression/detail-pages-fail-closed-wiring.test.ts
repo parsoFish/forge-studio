@@ -72,7 +72,7 @@
  * exist") is correctly never a candidate; neither is a page that renders
  * NotFound off a purely static check (no fetch at all).
  *
- * RUN: cd forge-ui && npx vitest run tests/regression/detail-pages-fail-closed-wiring.test.ts
+ * RUN: cd forge-ui && npx vitest run apps/studio/tests/regression/detail-pages-fail-closed-wiring.test.ts
  */
 import { test, expect, describe } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -297,10 +297,10 @@ const EXEMPT_PAGES: Record<string, string> = {
   //   HTTP 404 renders NotFound; a transport failure carries no status at all
   //   and renders the existing [data-component="fetch-error"] banner instead,
   //   so a down bridge can never fabricate an absence claim. Pinned by name in
-  //   tests/regression/community-surface-wiring.test.ts ("NotFound is gated on the
+  //   apps/studio/tests/regression/community-surface-wiring.test.ts ("NotFound is gated on the
   //   not-found OUTCOME…", "the transport-failure banner SURVIVES",
   //   "fetchRegistryItem carries the HTTP status through") and enumerated over
-  //   every status shape in tests/regression/community-form.test.ts.
+  //   every status shape in apps/studio/tests/regression/community-form.test.ts.
   //   forge-4sj CLOSED the second half: the page now uses the shared
   //   PageLoadError kit (Retry + bridge-recovery resubscribe) for a non-404
   //   edit-load failure, exactly like its `[kind]/[id]` sibling below —
@@ -327,7 +327,7 @@ const EXEMPT_PAGES: Record<string, string> = {
   // The page's own NotFound (`viewState.status === 'no-session'`) was
   // ALREADY correctly gated — it is driven entirely by `fetchSessionShell`/
   // `deriveSessionShellViewState`, pinned at the pure-logic level
-  // (tests/contract/session-shell-view.test.ts AT-63/AT-65) to be reachable
+  // (apps/studio/tests/contract/session-shell-view.test.ts AT-63/AT-65) to be reachable
   // ONLY off a genuine `errorKind === 'not-found'`, never a transport
   // failure. The REAL defect was one level down: the per-kind SUMMARY
   // read's four `.catch(() => {})` sites silently discarded a fail-closed
@@ -367,7 +367,7 @@ const EXEMPT_PAGES: Record<string, string> = {
   // ran. `fetchRunDetail` catches a transport throw into
   // `resolution:'unresolved'` (no status, never the authoritative
   // "not found"); a non-404 non-2xx status maps the same way (pinned at the
-  // pure-logic level, tests/unit/run-view-client.test.ts); the page's
+  // pure-logic level, apps/studio/tests/unit/run-view-client.test.ts); the page's
   // NotFound render is gated on `resolution === 'not-found'` alone; Retry is
   // already wired; the live poll keeps watching an "unresolved" transient
   // failure rather than giving up on the first blip. No production change
@@ -383,7 +383,7 @@ const EXEMPT_PAGES: Record<string, string> = {
   // convention (never 'not-found'); `resolveRunPageState` additionally
   // downgrades a FOUND run to 'unresolved' when the flows-list read failed.
   // All of that was already exhaustively pinned at the pure-logic level
-  // (tests/regression/flow-run-detail-client.test.ts's own "KILL 1a/1b/2a/
+  // (apps/studio/tests/regression/flow-run-detail-client.test.ts's own "KILL 1a/1b/2a/
   // 2b/3" tests). What was missing was the PAGE-level wiring pin — the scan's
   // "unverified" note fired because the page uses a bespoke inline retry
   // body, not the shared FetchErrorState/PageLoadError a grep would catch,

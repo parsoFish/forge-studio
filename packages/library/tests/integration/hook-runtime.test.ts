@@ -1,23 +1,23 @@
 /**
- * Acceptance tests for orchestrator/studio/hook-runtime.ts (R3-03-F3) — DOES
+ * Acceptance tests for packages/library/studio/hook-runtime.ts (R3-03-F3) — DOES
  * NOT EXIST YET. This file is RED at branch base:
  * `Cannot find module './hook-runtime.ts'` on import. Do not stub the module
  * into existence; red is the deliverable of this round.
  *
- * Contract this file pins (docs/roadmaps/R3-library-componentry.md
+ * Contract this file pins (docs/roadmaps/archive/R3-library-componentry.md
  * §R3-03-F3):
  *
  *   Each hook's permission manifest {env, read, network} is DENY-BY-DEFAULT.
  *   At execution, the harness invokes the hook with a STRIPPED environment
  *   containing ONLY the manifest-granted vars, composing
- *   `orchestrator/spawn-env.ts`'s allowlist seam (R5-02 G8) rather than
+ *   `packages/kernel/spawn-env.ts`'s allowlist seam (R5-02 G8) rather than
  *   hand-rolling a second env filter — same seam, same mechanism. The F2
  *   scan's declared-vs-referenced mismatch is logged as a structured JSONL
  *   event. The manifest renders in the approval gate (data-level here; UI is
  *   a later round).
  *
  *   CREDENTIAL EXCLUSION (2026-08-04 peer-review finding, load-bearing — see
- *   D-M below): `orchestrator/spawn-env.ts`'s `AGENT_ENV_ALLOWLIST` is
+ *   D-M below): `packages/kernel/spawn-env.ts`'s `AGENT_ENV_ALLOWLIST` is
  *   calibrated for forge's OWN trusted agent children, which legitimately
  *   need `ANTHROPIC_API_KEY` to call the API. A hook script is UNTRUSTED
  *   third-party code and must get a strictly SMALLER base — `env: []` in a
@@ -62,7 +62,7 @@
  *       (default `process.env`) so tests never mutate the real process env —
  *       mirrors `buildChildEnv`'s own pure `(parentEnv, overrides)` shape.
  *  D-L. The env-mismatch event reuses the EXISTING closed `EventType` union
- *       from orchestrator/logging.ts (`event_type: 'error'`) with the
+ *       from packages/kernel/logging.ts (`event_type: 'error'`) with the
  *       hook-specific semantics carried in `metadata.kind:
  *       'hook-permission-mismatch'` — logging.ts's `EventType` union is
  *       NOT touched (my role must not change any production file); a new
@@ -99,7 +99,7 @@
  *       Fix pinned here (implementer's target, mine to specify only as
  *       observable behaviour, not internal shape — same "drive it from the
  *       outside" principle as the studio-lint real-entry-point redirect):
- *       `orchestrator/spawn-env.ts` gains `HOOK_ENV_BASE_ALLOWLIST`, the
+ *       `packages/kernel/spawn-env.ts` gains `HOOK_ENV_BASE_ALLOWLIST`, the
  *       minimal process-hygiene subset of `AGENT_ENV_ALLOWLIST` (PATH, HOME,
  *       SHELL, TERM, LANG, LC_*, TMPDIR/TMP/TEMP, USER, LOGNAME) —
  *       explicitly EXCLUDING every credential-bearing name
@@ -269,7 +269,7 @@ echo "APIKEY=\${ANTHROPIC_API_KEY:-ABSENT}"
   //
   // The defect it pinned, proven end-to-end by an adversarial reviewer
   // against the FIRST production caller of runHookScript
-  // (orchestrator/studio/hook-dispatch.ts): the credential fence is a
+  // (packages/agents/studio/hook-dispatch.ts): the credential fence is a
   // TWO-LAYER composition and was enforced on only one layer.
   // HOOK_ENV_BASE_ALLOWLIST correctly subtracts
   // HOOK_ENV_CREDENTIAL_EXCLUSIONS from the BASE — but buildHookChildEnv

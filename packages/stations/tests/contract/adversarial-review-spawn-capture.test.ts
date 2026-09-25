@@ -1,6 +1,6 @@
 /**
  * Characterization (golden) test — pins the EXACT `{prompt, options}` object
- * `runAdversarialReview` (`orchestrator/phases/adversarial-review.ts`) passes
+ * `runAdversarialReview` (`packages/stations/phases/adversarial-review.ts`) passes
  * into its injected `queryFn` today (via `runAgent`, `lifecycle: 'caller'`),
  * so the R4-01 `composition.hooks` → `composition.guards` vocabulary
  * migration can prove byte-level no-behavioural-delta.
@@ -48,7 +48,7 @@
  * should be trusted; a diff touching anything else in the fixture is not.
  *
  * Bootstrap / regenerate:
- *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test orchestrator/phases/adversarial-review-spawn-capture.test.ts
+ *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test packages/stations/tests/contract/adversarial-review-spawn-capture.test.ts
  * (or delete the fixture) rewrites
  * packages/kernel/tests/test-fixtures/spawn-capture/adversarial-review.json from current code.
  */

@@ -120,14 +120,46 @@ function trackingFetch(opts: { failRepos?: ReadonlySet<string> } = {}): {
 
 const FOUR_REPOS = ['obra/superpowers', 'anthropics/skills', 'travisvn/awesome-claude-skills', 'vercel-labs/agent-browser'];
 
-test('4 sources fetch CONCURRENTLY: wall-clock stays close to one fetch, not the sum of all four', async () => {
-  const { fetchImpl } = trackingFetch();
-  const started = Date.now();
+/** A fetch stub that logs each call's start and end IN THE ORDER THEY OCCUR —
+ *  never by wall-clock duration. Every worker's async function body runs
+ *  synchronously up to its first `await`, so a concurrent pool records ALL of
+ *  its "start" events before the event loop can deliver a single "end",
+ *  regardless of how CPU-starved the host is. A serial pass, by construction,
+ *  cannot do this: its second fetch cannot start until the first one's
+ *  callback has actually run, so an "end" always lands before the next
+ *  "start". This makes the concurrency proof timing-independent. */
+function orderedEventFetch(): {
+  fetchImpl: FetchLike;
+  events: () => ReadonlyArray<{ kind: 'start' | 'end'; repo: string }>;
+} {
+  const events: Array<{ kind: 'start' | 'end'; repo: string }> = [];
+  const fetchImpl: FetchLike = async (url) => {
+    const m = /\/repos\/([^/]+)\/([^/]+)$/.exec(String(url));
+    const repo = m !== null ? `${m[1]}/${m[2]}` : String(url);
+    events.push({ kind: 'start', repo });
+    await new Promise((resolve) => setTimeout(resolve, DELAY_MS));
+    events.push({ kind: 'end', repo });
+    return new Response(JSON.stringify(githubBody(repo)), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  return { fetchImpl, events: () => events };
+}
+
+test('4 sources fetch CONCURRENTLY: all four starts happen before any end (overlap), proven by event order not wall-clock', async () => {
+  const { fetchImpl, events } = orderedEventFetch();
   await refreshCommunityRegistry({ registry: registryWithRepos(FOUR_REPOS), fetchImpl, token: TOKEN, now: NOW });
-  const elapsed = Date.now() - started;
-  assert.ok(
-    elapsed < DELAY_MS * 2,
-    `4 sources took ${elapsed}ms — a serial pass would take ~${DELAY_MS * FOUR_REPOS.length}ms; a concurrent one should stay near ${DELAY_MS}ms`,
+  const log = events();
+  const firstEndIndex = log.findIndex((e) => e.kind === 'end');
+  assert.notEqual(firstEndIndex, -1, 'expected at least one fetch to complete');
+  const startsBeforeFirstEnd = log.slice(0, firstEndIndex).filter((e) => e.kind === 'start').length;
+  assert.equal(
+    startsBeforeFirstEnd,
+    FOUR_REPOS.length,
+    `only ${startsBeforeFirstEnd} of ${FOUR_REPOS.length} fetches had STARTED before the first one finished — a ` +
+      `concurrent pool starts every fetch before any of them can complete, which proves overlap independent of ` +
+      `wall-clock timing. log=${JSON.stringify(log)}`,
   );
 });
 
@@ -211,21 +243,21 @@ test('hub reads run CONCURRENTLY and a shared id is attributed by HUB DECLARATIO
     'utf8',
   );
 
-  // hub-one (declared FIRST) is SLOW; hub-two (declared SECOND) is FAST. Both
-  // publish the same id. The timeline below proves the two reads OVERLAP —
-  // hub-two's whole read happens WHILE hub-one's is still in flight — rather
-  // than one running only after the other finishes.
-  const timeline: Record<'hub1' | 'hub2', { start: number; end: number }> = {
-    hub1: { start: Infinity, end: -Infinity },
-    hub2: { start: Infinity, end: -Infinity },
-  };
+  // hub-one (declared FIRST) and hub-two (declared SECOND) both publish the
+  // same id. `events` logs each fetch's start/end IN THE ORDER THEY OCCUR (not
+  // by wall-clock duration) — the same construction as the FOUR_REPOS test
+  // above: both hubs' reads are dispatched in the same synchronous batch
+  // (`mapInBatches`), so hub-two's first start is guaranteed to be logged
+  // before hub-one's last end REGARDLESS of how CPU-starved the host is. This
+  // proves the two reads overlap rather than one running only after the other
+  // finishes, without comparing any timestamps.
+  const events: Array<{ kind: 'start' | 'end'; which: 'hub1' | 'hub2' }> = [];
   const fetchImpl: FetchLike = async (url) => {
     const u = String(url);
     const which: 'hub1' | 'hub2' = u.includes(HUB1_REPO) ? 'hub1' : 'hub2';
-    const now = Date.now();
-    timeline[which].start = Math.min(timeline[which].start, now);
+    events.push({ kind: 'start', which });
     await new Promise((resolve) => setTimeout(resolve, which === 'hub1' ? DELAY_MS : 5));
-    timeline[which].end = Math.max(timeline[which].end, Date.now());
+    events.push({ kind: 'end', which });
     if (/\/git\/trees\//.test(u)) {
       return new Response(
         JSON.stringify({ sha: 'treesha', truncated: false, tree: [{ path: 'skills/shared-thing/SKILL.md', type: 'blob', mode: '100644', sha: 'x', size: 10 }] }),
@@ -249,9 +281,14 @@ test('hub reads run CONCURRENTLY and a shared id is attributed by HUB DECLARATIO
       `https://github.com/${HUB1_REPO}`,
       'a shared id must be attributed to the FIRST-DECLARED hub — never the one whose read happened to finish first',
     );
+    const hub2FirstStart = events.findIndex((e) => e.kind === 'start' && e.which === 'hub2');
+    const hub1LastEnd = events.map((e, i) => (e.kind === 'end' && e.which === 'hub1' ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
+    assert.notEqual(hub2FirstStart, -1, 'expected hub-two to have been read at least once');
+    assert.notEqual(hub1LastEnd, -1, 'expected hub-one to have finished reading');
     assert.ok(
-      timeline.hub2.start < timeline.hub1.end,
-      `hub reads did not overlap: hub-two ran ${timeline.hub2.start}-${timeline.hub2.end}, hub-one ran ${timeline.hub1.start}-${timeline.hub1.end}`,
+      hub2FirstStart < hub1LastEnd,
+      `hub reads did not overlap: hub-two's first start was event #${hub2FirstStart}, hub-one's last end was event ` +
+        `#${hub1LastEnd} — a concurrent pool starts hub-two before hub-one's read is done. log=${JSON.stringify(events)}`,
     );
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });

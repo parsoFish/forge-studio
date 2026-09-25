@@ -612,7 +612,7 @@ test('R4-16 AT-49 (Finding B, BLOCKER): POST /lock — a symlinked session dir i
 // route itself must still construct the 400 + message naming the offending
 // value, which is what these ATs pin at the ROUTE level (the function's own
 // containment edge cases are already covered by
-// orchestrator/manifest-path-fields.test.ts — not re-litigated here).
+// packages/flows/tests/regression/manifest-path-fields.test.ts — not re-litigated here).
 // ===========================================================================
 
 /** Snapshot of session ids currently under `<repoDir()>/_demo/` — used to

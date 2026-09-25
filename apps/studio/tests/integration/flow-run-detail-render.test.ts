@@ -18,7 +18,7 @@
  * `./run-view-render.test.ts` (R6-04 WI-4), and the resolution is the same:
  * the page is a thin fetching shell, the contract lives on a props-driven
  * component. `renderToStaticMarkup` works here only because
- * `forge-ui/vitest.config.ts` already carries `resolve.alias['@']` +
+ * `apps/studio/vitest.config.ts` already carries `resolve.alias['@']` +
  * `oxc.jsx` from that same pass — this file adds NO config and NO dependency.
  *
  * ═══════════════════════════════════════════════════════════════════════
@@ -59,7 +59,7 @@
  * ═══════════════════════════════════════════════════════════════════════
  * MEASURED GROUNDS:
  *
- * (a) THERE IS NO PER-FINDING `state`. `orchestrator/flow-artifacts.ts:304`
+ * (a) THERE IS NO PER-FINDING `state`. `packages/flows/flow-artifacts.ts:304`
  *   declares `ReviewFinding = {id, severity, category, title, detail,
  *   evidence[], acRef?}` — no `state`. `validateReviewFindings` neither
  *   accepts nor produces one, and a repo-wide grep for a finding-state
@@ -186,7 +186,7 @@ test('the surface carries its own page identity and the run it is showing', () =
 test('an ARCHIVED (completed) run reports its real status, not a live-looking one', () => {
   // KILLS: hardcoding an 'active'/'running' status on the detail surface.
   // Measured: `listRuns` maps a `_queue/done/` manifest to RunStatus
-  // 'complete' (orchestrator/run-model.ts:169), and the detail page must say
+  // 'complete' (packages/flows/run-model.ts:169), and the detail page must say
   // so — the whole point of F4 is that completed runs get a surface too.
   expect(render()).toContain('data-run-status="complete"');
 });
@@ -356,10 +356,10 @@ test('a run with NO trigger renders no trigger section at all', () => {
 });
 
 test('parseRun carries `trigger` through to the client instead of dropping it', () => {
-  // KILLS the CURRENT state of the code: `forge-ui/lib/studio-client.ts`'s
+  // KILLS the CURRENT state of the code: `apps/studio/lib/studio-client.ts`'s
   // `parseRun` enumerates fields explicitly and does NOT list `trigger`, so
   // the provenance R2-08-F4 put on the server model
-  // (orchestrator/run-model.ts:127) is silently discarded before any surface
+  // (packages/flows/run-model.ts:127) is silently discarded before any surface
   // can render it. This is the "declared-data-fails-open" standing defect:
   // a field parsed and served end-to-end, then dropped at the last hop. The
   // client `Run` type must gain the field and `parseRun` must pass it on.
@@ -432,7 +432,7 @@ test('NO per-finding `state` is rendered — there is no producer for one', () =
   // KILLS: a hardcoded "open" (or any fabricated per-finding lifecycle
   // state) copied from the design mockup, which shows a `state` column that
   // NOTHING produces. Measured (a): `ReviewFinding`
-  // (orchestrator/flow-artifacts.ts:304) has id/severity/category/title/
+  // (packages/flows/flow-artifacts.ts:304) has id/severity/category/title/
   // detail/evidence/acRef and NO state; `validateReviewFindings` neither
   // accepts nor emits one; a repo-wide grep finds no producer anywhere.
   // Rendering "open" would be the UI asserting a fact the system cannot

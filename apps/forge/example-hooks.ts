@@ -28,7 +28,7 @@
  * SYNCHRONOUSLY rather than rejecting, so it never reached the `.catch()` that
  * exists for exactly this; it unwound into the handler's outer catch, which
  * tried to send a 500 on an answered response. The full account and the red
- * reproduction live in `tests/regression/reflect-rerun-sync-throw.test.ts`.
+ * reproduction live in `apps/forge/tests/regression/reflect-rerun-sync-throw.test.ts`.
  *
  * The two fixes are deliberately separate. Gating on absence closes the case
  * that was measured; wrapping the call closes the MECHANISM, so the next

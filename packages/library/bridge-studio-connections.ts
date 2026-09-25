@@ -53,7 +53,7 @@
  *         - CONFIRMED (`{ confirm: true }`): the pre-existing behaviour,
  *           unchanged — including the suppression seam below.
  *       Suppressed (FORGE_DRY_BRIDGE=1 or FORGE_ARCHITECT_NO_SPAWN=1,
- *       mirroring orchestrator/run-agent.ts's own double-env check):
+ *       mirroring packages/agents/run-agent.ts's own double-env check):
  *       `{ ok: true, suppressed: true, wouldInstall: {command, args} }` — no
  *       execution, argv only. A real (non-suppressed) install returns a
  *       structurally DISTINCT shape (no `suppressed` key): `{ ok, installed,

@@ -80,7 +80,7 @@ function decodeSegment(raw: string): string {
 // when that response was a 2xx — a refused verdict (409 wrong-phase, 422
 // unsupported value, 400 bad body, a failed finalize) never records a
 // decision that did not happen. `deriveSessionTranscript`
-// (orchestrator/studio/session-transcript.ts) renders each record as an
+// (packages/sessions/studio/session-transcript.ts) renders each record as an
 // operator turn, so a reject (and its rationale) is never invisible in the
 // session record.
 //
@@ -318,7 +318,7 @@ export async function handleStudioAffordanceRoutes(
 
       // W6-B6 post-merge review: "which verdict values are legal for THIS
       // phase" is ONE business rule with ONE source — `deriveSessionAffordances`
-      // (orchestrator/studio/session-kinds.ts) ALWAYS attaches it as
+      // (packages/sessions/studio/session-kinds.ts) ALWAYS attaches it as
       // `affordance.meta.verdicts` (the row's authored `verdicts:` list, or
       // the ADR default `['approve','reject']`). This gate reads that SAME
       // derived value — it is no longer a hand-kept per-session-kind 422

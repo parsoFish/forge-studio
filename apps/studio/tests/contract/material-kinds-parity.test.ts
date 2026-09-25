@@ -4,7 +4,7 @@
  *
  * HISTORY. `apps/studio/lib/studio-client.ts` used to hand-keep its own
  * literal `MATERIAL_KINDS = ['images', 'documents', 'audio', 'data-files']`,
- * documented as "Mirrors `orchestrator/studio/materials.ts`'s
+ * documented as "Mirrors `packages/agents/studio/materials.ts`'s
  * `MATERIAL_KINDS` verbatim ... keep it in lockstep with the server list if
  * it ever changes" — the same hand-kept-mirror shape forge-zyc proved drifts
  * silently for `SHIPPED_TRIGGER_KINDS`. `@forge/contracts` removes the
@@ -14,7 +14,7 @@
  * binding, so the two cannot drift. Mirrors
  * `bridge-port-parity.test.ts`'s own precedent (`DEFAULT_BRIDGE_PORT`).
  *
- * RUN: npx vitest run --root apps/studio tests/contract/material-kinds-parity.test.ts
+ * RUN: npx vitest run --root apps/studio apps/studio/tests/contract/material-kinds-parity.test.ts
  */
 import { test, expect } from 'vitest';
 import { readFileSync } from 'node:fs';

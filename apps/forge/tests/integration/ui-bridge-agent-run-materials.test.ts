@@ -3,12 +3,12 @@
  * staging": the agent-kickoff upload seam. `POST /api/agents/:slug/run`
  * (apps/forge/ui-bridge.ts ~line 1148-1222) gains an optional body field
  * `materials?: Array<{filename, contentBase64}>`. This is the FIRST caller of
- * `agentAcceptsMaterial` (orchestrator/studio/materials.ts) — that gate has
+ * `agentAcceptsMaterial` (packages/agents/studio/materials.ts) — that gate has
  * existed since R2-09 with zero callers; this is its named enforcement point.
  *
  * NONE of this exists at HEAD: the route does not read `body.materials` at
  * all today, `materialKindForFilename`/the three cap constants do not exist
- * in materials.ts (see orchestrator/studio/materials.test.ts's RED proof for
+ * in materials.ts (see packages/agents/tests/unit/materials.test.ts's RED proof for
  * those), and no route-level materials handling exists in apps/forge/ui-bridge.ts.
  * A materials-bearing request today is simply ignored — the field is dropped
  * on the floor and the request proceeds exactly as if `materials` were
@@ -38,7 +38,7 @@
  * → 'images', '.mp3' → 'audio', '.pdf' → 'documents' are the only mappings
  * pinned anywhere in this WI's tests, chosen because no other classification
  * among the four MATERIAL_KINDS is plausible for any of them (see the mirror
- * comment in orchestrator/studio/materials.test.ts). 'data-files' is never
+ * comment in packages/agents/tests/unit/materials.test.ts). 'data-files' is never
  * exercised — every extension that might map to it is genuinely ambiguous
  * (.csv/.json could as easily be 'documents'), so no test here depends on it.
  */

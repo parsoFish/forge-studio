@@ -272,7 +272,7 @@ test('roadmap: pending initiative with cycle_id + WI snapshot → workItems defi
 // "Summary" / "Context" / "Overview"), so a heading scrape put one word on
 // every card — and the "skip boilerplate" refinement still titled 52 cards
 // "Background" / "Constraints" / "Acceptance criteria". The ONE derivation
-// (`initiativeTitle`, orchestrator/manifest.ts) is metadata-only: frontmatter
+// (`initiativeTitle`, packages/flows/manifest.ts) is metadata-only: frontmatter
 // `title:` > initiativeId. A body heading is NEVER a title.
 // ---------------------------------------------------------------------------
 

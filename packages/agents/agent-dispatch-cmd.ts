@@ -39,7 +39,7 @@ import { skillRoots } from '@forge/kernel';
  *
  * D6: this is purely ADDITIVE — a dispatch invoked WITHOUT `--session-dir`
  * never calls this at all, so behaviour without the flag stays byte-
- * identical to before R4-17 (pinned by `packages/agents/agent-run-dispatch.test.ts`'s
+ * identical to before R4-17 (pinned by `packages/agents/tests/integration/agent-run-dispatch.test.ts`'s
  * AT-D7-3).
  *
  * `sessionDir` is a CLI flag from our OWN spawning code

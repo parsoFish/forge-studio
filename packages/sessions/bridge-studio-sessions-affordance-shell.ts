@@ -50,7 +50,7 @@ export function unhandledAffordanceBody(kind: SessionAffordanceKind, error: stri
  *  still runs its turn INSIDE `runFinalize`, unchanged). The architect's
  *  absence is RATIFIED, not a gap (ruling 382) — see `design.md` §"Why the
  *  architect has no generic writable affordance" and
- *  `tests/contract/architect-affordance-exclusion.test.ts`, which reds either
+ *  `packages/sessions/tests/contract/architect-affordance-exclusion.test.ts`, which reds either
  *  way it is undone. */
 export type LegacySpawnableAgentId = 'instructions' | 'demo-builder' | 'authoring' | 'kb-cleanup';
 

@@ -114,7 +114,7 @@ export type FlowRunnerDeps = {
 
   /**
    * R4-11-F1 — the second terminal move of a confirmed merge: promotes the
-   * manifest `merged/ → done/`. `orchestrator/finalize-merged.ts` is the
+   * manifest `merged/ → done/`. `packages/flows/finalize-merged.ts` is the
    * production caller for the normal (deferred) merge-confirmation path; a
    * flow that combines a review node with a downstream reflect node in ONE
    * DAG pass (the retired forge-cycle monolith shape, kept as a generic

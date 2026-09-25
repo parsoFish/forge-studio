@@ -1,5 +1,5 @@
 /**
- * Tests for orchestrator/enqueue-flow-run.ts (R2-04-F1 / ADR-041).
+ * Tests for packages/flows/enqueue-flow-run.ts (R2-04-F1 / ADR-041).
  *
  * The generic per-flow claimable enqueue: locate an initiative's manifest
  * across the queue, guard the states a run must never disturb, repoint it at
