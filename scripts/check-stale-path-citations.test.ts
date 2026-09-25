@@ -85,9 +85,11 @@ function noBaseline(root: string): string {
   return join(root, 'no-such-baseline.json');
 }
 
-function writeBaseline(root: string, entries: string[]): string {
+type BaselineRow = { file: string; kind: string; cited: string; count: number };
+
+function writeBaseline(root: string, rows: BaselineRow[]): string {
   const path = join(root, 'baseline.json');
-  writeFileSync(path, `${JSON.stringify(entries, null, 2)}\n`);
+  writeFileSync(path, `${JSON.stringify(rows, null, 2)}\n`);
   return path;
 }
 
@@ -103,8 +105,9 @@ describe('path-shaped citations in code comments', () => {
     try {
       const { code, out } = run(root, noBaseline(root));
       assert.equal(code, 1, out);
-      assert.match(out, /packages\/foo\/bar\.ts:1/, out);
+      assert.match(out, /packages\/foo\/bar\.ts: NEW/, out);
       assert.match(out, /packages\/ghost\/dead-module\.ts/, out);
+      assert.match(out, /\(line 1\)/, out);
     } finally {
       cleanup();
     }
@@ -179,7 +182,8 @@ describe('path-shaped citations in code comments', () => {
     try {
       const { code, out } = run(root, noBaseline(root));
       assert.equal(code, 1, out);
-      assert.match(out, /packages\/foo\/bar\.ts:2/, out);
+      assert.match(out, /packages\/foo\/bar\.ts: NEW/, out);
+      assert.match(out, /\(line 2\)/, out);
     } finally {
       cleanup();
     }
@@ -222,7 +226,8 @@ describe('path-shaped citations in markdown prose', () => {
     try {
       const { code, out } = run(root, noBaseline(root));
       assert.equal(code, 1, out);
-      assert.match(out, /docs\/guide\.md:1/, out);
+      assert.match(out, /docs\/guide\.md: NEW/, out);
+      assert.match(out, /\(line 1\)/, out);
     } finally {
       cleanup();
     }
@@ -256,7 +261,8 @@ describe('retired-module basename stems in prose', () => {
     try {
       const { code, out } = run(root, noBaseline(root));
       assert.equal(code, 1, out);
-      assert.match(out, /docs\/guide\.md:1/, out);
+      assert.match(out, /docs\/guide\.md: NEW/, out);
+      assert.match(out, /\(line 1\)/, out);
       assert.match(out, /instructions-runner/, out);
     } finally {
       cleanup();
@@ -297,14 +303,15 @@ describe('retired-module basename stems in prose', () => {
 // The baseline ratchet
 // ---------------------------------------------------------------------------
 
-describe('the baseline ratchet', () => {
-  test('a finding already in the baseline PASSES', () => {
+describe('the baseline ratchet — content-keyed (file, kind, cited) + an occurrence budget, never a line', () => {
+  test('a finding already in the baseline, at its budgeted count, PASSES', () => {
     const { root, cleanup } = fixture({
       'packages/foo/bar.ts': `// see packages/ghost/dead-module.ts\n`,
     });
     try {
-      const key = 'packages/foo/bar.ts|1|path|packages/ghost/dead-module.ts';
-      const baseline = writeBaseline(root, [key]);
+      const baseline = writeBaseline(root, [
+        { file: 'packages/foo/bar.ts', kind: 'path', cited: 'packages/ghost/dead-module.ts', count: 1 },
+      ]);
       const { code, out } = run(root, baseline);
       assert.equal(code, 0, out);
       assert.match(out, /PASS/, out);
@@ -313,7 +320,7 @@ describe('the baseline ratchet', () => {
     }
   });
 
-  test('a finding NOT in the baseline FAILS as introduced', () => {
+  test('a finding NOT in the baseline FAILS as new (implicit budget 0)', () => {
     const { root, cleanup } = fixture({
       'packages/foo/bar.ts': `// see packages/ghost/dead-module.ts\n`,
     });
@@ -327,12 +334,14 @@ describe('the baseline ratchet', () => {
     }
   });
 
-  test('a baseline entry with no matching current finding FAILS as stale', () => {
+  test('a baseline row with no matching current finding FAILS as stale', () => {
     const { root, cleanup } = fixture({
       'packages/foo/bar.ts': `export const x = 1;\n`,
     });
     try {
-      const baseline = writeBaseline(root, ['packages/foo/bar.ts|1|path|packages/ghost/gone.ts']);
+      const baseline = writeBaseline(root, [
+        { file: 'packages/foo/bar.ts', kind: 'path', cited: 'packages/ghost/gone.ts', count: 1 },
+      ]);
       const { code, out } = run(root, baseline);
       assert.equal(code, 1, out);
       assert.match(out, /stale baseline entry/, out);
@@ -341,7 +350,59 @@ describe('the baseline ratchet', () => {
     }
   });
 
-  test('--write bootstraps a baseline from every current finding when none exists yet', () => {
+  test('LINE NUMBERS ARE DISPLAY-ONLY: a line inserted ABOVE a baselined citation stays GREEN', () => {
+    // The defect this content-keyed scheme exists to fix: a LINE-keyed
+    // baseline reds the moment anything moves the citation to a new line
+    // number, including an unrelated insertion above it — measured for
+    // real when a parsoFish/main merge shifted lines under this guard's own
+    // first baseline. The key here is (file, kind, cited) with a COUNT,
+    // never the line, so inserting an unrelated line above the citation —
+    // moving it from line 1 to line 2 — must not change the verdict. Red
+    // under the original line-keyed design; green under this one.
+    const { root, cleanup } = fixture({
+      'packages/foo/bar.ts': `// see packages/ghost/dead-module.ts\n`,
+    });
+    try {
+      const baseline = writeBaseline(root, [
+        { file: 'packages/foo/bar.ts', kind: 'path', cited: 'packages/ghost/dead-module.ts', count: 1 },
+      ]);
+      assert.equal(run(root, baseline).code, 0, 'sanity: green before the insertion');
+
+      writeFileSync(
+        join(root, 'packages/foo/bar.ts'),
+        `// an unrelated new line, inserted above\n// see packages/ghost/dead-module.ts\n`,
+      );
+      const { code, out } = run(root, baseline);
+      assert.equal(code, 0, `an insertion above the citation must not red the ratchet:\n${out}`);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('a SECOND occurrence of a baselined token in the same file EXCEEDS its budget and FAILS', () => {
+    const { root, cleanup } = fixture({
+      'packages/foo/bar.ts': `// see packages/ghost/dead-module.ts\n`,
+    });
+    try {
+      const baseline = writeBaseline(root, [
+        { file: 'packages/foo/bar.ts', kind: 'path', cited: 'packages/ghost/dead-module.ts', count: 1 },
+      ]);
+      assert.equal(run(root, baseline).code, 0, 'sanity: green with one occurrence');
+
+      writeFileSync(
+        join(root, 'packages/foo/bar.ts'),
+        `// see packages/ghost/dead-module.ts\n// again: packages/ghost/dead-module.ts\n`,
+      );
+      const { code, out } = run(root, baseline);
+      assert.equal(code, 1, `a second, un-audited occurrence must exceed the budget:\n${out}`);
+      assert.match(out, /EXCEEDED budget/, out);
+      assert.match(out, /audited 1, now 2/, out);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('--write bootstraps a baseline from every current row when none exists yet', () => {
     const { root, cleanup } = fixture({
       'packages/foo/bar.ts': `// see packages/ghost/dead-module.ts\n`,
     });
@@ -350,38 +411,60 @@ describe('the baseline ratchet', () => {
       const { code } = run(root, baseline, ['--write']);
       assert.equal(code, 0);
       assert.ok(existsSync(baseline), 'a baseline file must now exist');
-      const written = JSON.parse(readFileSync(baseline, 'utf8')) as string[];
-      assert.deepEqual(written, ['packages/foo/bar.ts|1|path|packages/ghost/dead-module.ts']);
+      const written = JSON.parse(readFileSync(baseline, 'utf8')) as BaselineRow[];
+      assert.deepEqual(written, [
+        { file: 'packages/foo/bar.ts', kind: 'path', cited: 'packages/ghost/dead-module.ts', count: 1 },
+      ]);
     } finally {
       cleanup();
     }
   });
 
-  test('--write only ever SHRINKS — it drops stale entries and never adds a new one', () => {
+  test('--write only ever SHRINKS budgets — it drops stale rows and never adds one', () => {
     const { root, cleanup } = fixture({
-      // A: still a current finding. B: a baseline entry with no current match
-      // (stale — must be dropped). C: a genuinely NEW current finding that is
-      // NOT in the starting baseline (must NOT be added by --write).
+      // A: still a current finding at its budgeted count (unchanged). B: a
+      // baseline row with no current match (stale — must be dropped). C: a
+      // genuinely NEW current finding, not in the starting baseline (must
+      // NOT be added by --write).
       'packages/foo/a.ts': `// see packages/ghost/a-dead.ts\n`,
       'packages/foo/c.ts': `// see packages/ghost/c-dead.ts\n`,
     });
     try {
-      const keyA = 'packages/foo/a.ts|1|path|packages/ghost/a-dead.ts';
-      const keyB = 'packages/foo/nowhere.ts|1|path|packages/ghost/b-dead.ts';
-      const keyC = 'packages/foo/c.ts|1|path|packages/ghost/c-dead.ts';
-      const baseline = writeBaseline(root, [keyA, keyB]);
+      const rowA = { file: 'packages/foo/a.ts', kind: 'path', cited: 'packages/ghost/a-dead.ts', count: 1 };
+      const rowB = { file: 'packages/foo/nowhere.ts', kind: 'path', cited: 'packages/ghost/b-dead.ts', count: 1 };
+      const baseline = writeBaseline(root, [rowA, rowB]);
 
       const { code } = run(root, baseline, ['--write']);
       assert.equal(code, 0);
-      const written = (JSON.parse(readFileSync(baseline, 'utf8')) as string[]).sort();
-      assert.deepEqual(written, [keyA], `expected only ${keyA} to survive:\n${JSON.stringify(written)}`);
-      assert.ok(!written.includes(keyB), 'stale entry B must be dropped');
-      assert.ok(!written.includes(keyC), 'new finding C must NOT be added by --write');
+      const written = JSON.parse(readFileSync(baseline, 'utf8')) as BaselineRow[];
+      assert.deepEqual(written, [rowA], `expected only row A to survive:\n${JSON.stringify(written)}`);
 
       // And a plain check afterward still reds on C, which --write refused to launder.
       const { code: checkCode, out } = run(root, baseline);
       assert.equal(checkCode, 1, out);
       assert.match(out, /c-dead\.ts/, out);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('--write shrinks an OVER-budget row only down to its live count, never launders growth by raising it', () => {
+    const { root, cleanup } = fixture({
+      'packages/foo/bar.ts': `// see packages/ghost/dead-module.ts\n// again: packages/ghost/dead-module.ts\n`,
+    });
+    try {
+      const baseline = writeBaseline(root, [
+        { file: 'packages/foo/bar.ts', kind: 'path', cited: 'packages/ghost/dead-module.ts', count: 1 },
+      ]);
+      assert.equal(run(root, baseline).code, 1, 'sanity: this is a FAIL state before --write');
+
+      const { code } = run(root, baseline, ['--write']);
+      assert.equal(code, 0, '--write itself always exits 0');
+      const written = JSON.parse(readFileSync(baseline, 'utf8')) as BaselineRow[];
+      assert.equal(written[0]!.count, 1, 'the budget must stay at 1, never rise to match the live count of 2');
+
+      const { code: checkCode, out } = run(root, baseline);
+      assert.equal(checkCode, 1, `--write must not have silently accepted the growth:\n${out}`);
     } finally {
       cleanup();
     }

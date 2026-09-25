@@ -37,15 +37,25 @@
  * line. Line-grained, not proximity-grained — the same grain check-identity.mjs
  * and check-request-path-sinks.mjs already use for this class of lint.
  *
- * THE RATCHET. `scripts/baselines/stale-path-citations.json` — a JSON array
- * of `<file>|<line>|<kind>|<cited>` keys. FAILS on a finding not in the
- * baseline (introduced) or a baseline entry with no matching finding today
- * (stale — the citation was fixed and the baseline must be told). `--write`
- * regenerates the baseline SHRINK-ONLY: with no baseline file yet, it
- * bootstraps from every current finding (first-time creation); with one, it
- * keeps only the entries still present in the current scan and never adds a
- * new one — so `--write` can retire debt but can never launder a new dead
- * citation into the baseline.
+ * THE RATCHET (content-keyed, forge-8vfn.13 PR review). `scripts/baselines/
+ * stale-path-citations.json` — a JSON array of `{file, kind, cited, count}`
+ * rows, each an AUDITED OCCURRENCE BUDGET for that citation in that file.
+ * The key is `file, kind, cited` — NEVER the line number, which is display
+ * only. A line-keyed ratchet turns any unrelated line inserted ABOVE a
+ * baselined citation into a false red for every PR that touches that file
+ * afterward — measured the hard way on this guard's own first PR, when a
+ * main merge shifted lines under it. Mirrors `PROJECTS_ROOT_FOLD_ALLOWLIST`
+ * in check-raw-fs-guarded.allowlist.mjs, which took the identical fix for
+ * the identical reason first. A key with no baseline row has an implicit
+ * budget of 0. FAILS when a key's LIVE count exceeds its budget — new or
+ * grown, the excess occurrences named by line — or a baseline row's budget
+ * exceeds its live count (stale — the debt was paid and the ratchet must be
+ * told). `--write` regenerates SHRINK-ONLY: with no baseline file yet, it
+ * bootstraps from every current row; with one, every existing row's budget
+ * can only fall (`min(old, current)`) or the row is dropped once its live
+ * count reaches 0 — no row is ever added and no budget ever rises, so
+ * `--write` can retire debt but can never launder a new or grown citation
+ * into the baseline.
  *
  * RUN: node scripts/check-stale-path-citations.mjs [--json] [--write]
  *        [--baseline <path>] [--root <path>]
@@ -380,25 +390,85 @@ export function scanAll(root) {
   return { findings, scannedCode: code.length, scannedProse: prose.length, retiredStemCount: stems.size };
 }
 
-export function keyOf(f) {
-  return `${f.file}|${f.line}|${f.kind}|${f.cited}`;
+/** The CONTENT key a baseline row and a live finding are compared by. Never
+ *  includes the line — see the header's THE RATCHET section for why. */
+export function contentKey(f) {
+  return `${f.file}\u0000${f.kind}\u0000${f.cited}`;
 }
 
-/** Compares a live scan against a baseline (array of keys). */
-export function audit(root, baselineArray) {
+function byFileKindCited(a, b) {
+  if (a.file !== b.file) return a.file.localeCompare(b.file);
+  if (a.kind !== b.kind) return a.kind.localeCompare(b.kind);
+  return a.cited.localeCompare(b.cited);
+}
+
+/**
+ * Groups raw per-line findings into one row per (file, kind, cited): a
+ * COUNT (the number of distinct lines bearing that citation in that file)
+ * and the ordered list of lines it was found on, kept for display only.
+ */
+export function groupFindings(findings) {
+  const rows = new Map();
+  for (const f of findings) {
+    const key = contentKey(f);
+    let row = rows.get(key);
+    if (!row) {
+      row = { file: f.file, kind: f.kind, cited: f.cited, count: 0, lines: [] };
+      rows.set(key, row);
+    }
+    row.count += 1;
+    row.lines.push(f.line);
+  }
+  return rows;
+}
+
+/**
+ * Compares a live scan against a baseline — an array of `{file, kind, cited,
+ * count}` audited-occurrence-budget rows (see THE RATCHET in the header).
+ * `introduced` rows exceed their budget (or have none, budget 0); each
+ * carries `newLines`, the occurrences beyond the audited budget, for a
+ * human to find. `stale` rows have a live count BELOW their budget — the
+ * ratchet has room to tighten, reported non-fatally so `--write` has
+ * something to shrink.
+ */
+export function audit(root, baselineRows) {
   const scan = scanAll(root);
-  const currentKeys = scan.findings.map(keyOf).sort();
-  const currentSet = new Set(currentKeys);
-  const baseline = new Set(baselineArray);
-  const introduced = scan.findings.filter((f) => !baseline.has(keyOf(f)));
-  const stale = [...baseline].filter((k) => !currentSet.has(k)).sort();
+  const grouped = groupFindings(scan.findings);
+  const budgets = new Map(baselineRows.map((row) => [contentKey(row), row.count]));
+
+  const introduced = [];
+  for (const row of grouped.values()) {
+    const budget = budgets.get(contentKey(row)) ?? 0;
+    if (row.count > budget) {
+      introduced.push({
+        file: row.file, kind: row.kind, cited: row.cited,
+        budget, count: row.count, newLines: row.lines.slice(budget),
+      });
+    }
+  }
+  introduced.sort(byFileKindCited);
+
+  const stale = [];
+  for (const row of baselineRows) {
+    const current = grouped.get(contentKey(row))?.count ?? 0;
+    if (current < row.count) {
+      stale.push({ file: row.file, kind: row.kind, cited: row.cited, budget: row.count, current });
+    }
+  }
+  stale.sort(byFileKindCited);
+
+  const currentRows = [...grouped.values()]
+    .map(({ file, kind, cited, count }) => ({ file, kind, cited, count }))
+    .sort(byFileKindCited);
+
   return {
     scannedCode: scan.scannedCode,
     scannedProse: scan.scannedProse,
     retiredStems: scan.retiredStemCount,
-    total: scan.findings.length,
-    baselined: baseline.size,
-    currentKeys,
+    totalFindings: scan.findings.length,
+    totalKeys: grouped.size,
+    baselinedKeys: baselineRows.length,
+    currentRows,
     introduced,
     stale,
   };
@@ -408,11 +478,19 @@ export function audit(root, baselineArray) {
 // CLI
 // ---------------------------------------------------------------------------
 
-function readBaselineArray(path) {
+function readBaselineRows(path) {
   if (!existsSync(path)) return null; // signals "no baseline yet" to --write
   const parsed = JSON.parse(readFileSync(path, 'utf8'));
   if (!Array.isArray(parsed)) {
-    throw new Error(`${path}: expected an array of "<file>|<line>|<kind>|<cited>" strings`);
+    throw new Error(`${path}: expected an array of {file, kind, cited, count} rows`);
+  }
+  for (const row of parsed) {
+    const shapeOk = row && typeof row === 'object'
+      && typeof row.file === 'string' && typeof row.kind === 'string'
+      && typeof row.cited === 'string' && Number.isInteger(row.count) && row.count > 0;
+    if (!shapeOk) {
+      throw new Error(`${path}: every row needs {file, kind, cited, count>0} — got ${JSON.stringify(row)}`);
+    }
   }
   return parsed;
 }
@@ -428,7 +506,7 @@ function main(argv) {
   let existing;
   let result;
   try {
-    existing = readBaselineArray(baselinePath);
+    existing = readBaselineRows(baselinePath);
     result = audit(root, existing ?? []);
   } catch (err) {
     if (!(err instanceof CorpusUnreadable)) throw err;
@@ -441,19 +519,26 @@ function main(argv) {
   }
 
   if (write) {
-    // SHRINK-ONLY. No baseline on disk yet -> bootstrap from every current
-    // finding (first-time creation). A baseline that already exists -> keep
-    // only the entries still present today; a NEW finding is never added —
-    // --write can retire debt, never launder it in.
-    const currentSet = new Set(result.currentKeys);
+    // SHRINK-ONLY, count-aware. No baseline on disk yet -> bootstrap from
+    // every current row (first-time creation). A baseline that already
+    // exists -> each row's budget can only fall to `min(old, current live
+    // count)`, and a row whose live count is now 0 is dropped entirely — no
+    // row is ever added and no budget ever rises, so --write can retire
+    // debt but never launder a new or grown citation in.
+    const liveCounts = new Map(result.currentRows.map((r) => [contentKey(r), r.count]));
     const before = existing === null ? 0 : existing.length;
+    const beforeTotal = existing === null ? 0 : existing.reduce((sum, r) => sum + r.count, 0);
     const nextBaseline = existing === null
-      ? result.currentKeys
-      : [...existing].filter((k) => currentSet.has(k)).sort();
+      ? result.currentRows
+      : existing
+        .map((row) => ({ ...row, count: Math.min(row.count, liveCounts.get(contentKey(row)) ?? 0) }))
+        .filter((row) => row.count > 0)
+        .sort(byFileKindCited);
+    const afterTotal = nextBaseline.reduce((sum, r) => sum + r.count, 0);
     writeFileSync(baselinePath, `${JSON.stringify(nextBaseline, null, 2)}\n`);
     process.stdout.write(
-      `check-stale-path-citations: baseline written — ${before} -> ${nextBaseline.length} entries ` +
-      `(shrink-only; a new finding is never added by --write)\n`,
+      `check-stale-path-citations: baseline written — ${before} -> ${nextBaseline.length} row(s), ` +
+      `${beforeTotal} -> ${afterTotal} total citation(s) (shrink-only; a new/grown row is never added by --write)\n`,
     );
     return 0;
   }
@@ -464,7 +549,7 @@ function main(argv) {
   if (failed === 0) {
     if (!json) {
       process.stdout.write(
-        `check-stale-path-citations: PASS — ${result.total} finding(s) baselined ` +
+        `check-stale-path-citations: PASS — ${result.totalFindings} citation(s) across ${result.totalKeys} key(s) baselined ` +
         `(${result.scannedCode} code files, ${result.scannedProse} prose files, ` +
         `${result.retiredStems} curated retired stem(s))\n`,
       );
@@ -475,10 +560,19 @@ function main(argv) {
   if (!json) {
     for (const f of result.introduced) {
       const what = f.kind === 'stem' ? 'a retired-module bare basename' : 'a dead path citation';
-      process.stdout.write(`  ${f.file}:${f.line}: NEW — ${what}: ${f.cited}\n`);
+      const at = `line${f.newLines.length === 1 ? '' : 's'} ${f.newLines.join(', ')}`;
+      if (f.budget === 0) {
+        process.stdout.write(`  ${f.file}: NEW — ${what} "${f.cited}" (${at})\n`);
+      } else {
+        process.stdout.write(
+          `  ${f.file}: EXCEEDED budget for ${what} "${f.cited}" — audited ${f.budget}, now ${f.count} (new occurrence(s) at ${at})\n`,
+        );
+      }
     }
-    for (const k of result.stale) {
-      process.stdout.write(`  stale baseline entry: ${k} — fixed or gone; run --write to tighten the ratchet.\n`);
+    for (const s of result.stale) {
+      process.stdout.write(
+        `  stale baseline entry: ${s.file} ${s.kind} "${s.cited}" — audited ${s.budget}, now ${s.current}; run --write to tighten the ratchet.\n`,
+      );
     }
     process.stdout.write(`check-stale-path-citations: FAIL — ${failed} violation(s) (forge-8vfn.13)\n`);
   }
