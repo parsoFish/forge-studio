@@ -617,18 +617,34 @@ export function sweepStoryRemotesFromManifest({ storyId, root, readToken = readS
   return sweepStoryRemotes({ storyId, created, readToken, runGh });
 }
 
+/** A `gh repo delete` 404 means already-gone, not a failure. `gh` appends a
+ *  "needs the repo scope" hint to EVERY delete 404 regardless of cause, so
+ *  that hint is dropped rather than reported (`forge-8vfn.6.11.53`). */
+function isAlreadyGoneError(error) {
+  const msg = String(error?.message ?? error ?? '');
+  return /HTTP 404\b/.test(msg) || /\bnot found\b/i.test(msg);
+}
+
 export function sweepStoryRemotes({ storyId, created = [], readToken = readSweepDeleteToken, runGh = null }) {
   const deleted = [];
+  const alreadyGone = [];
   const refusals = [];
   const failed = [];
-  if (created.length === 0) return { deleted, refusals, failed };
+  if (created.length === 0) return { deleted, alreadyGone, refusals, failed };
 
   const prefix = `story-${String(storyId).toLowerCase()}`;
   // The manifest is the AUTHORITY; the prefix is the second, independent check.
   const authorised = [];
+  // DEDUPE THE TARGET LIST (`forge-8vfn.6.11.53`): the APPEND-ONLY manifest can
+  // carry this run's mint AND an earlier run's row for the same deterministic
+  // name (`story-s2`) — without this, the second `gh delete` 404s on what the
+  // first just removed.
+  const seen = new Set();
   for (const entry of created) {
     const nameWithOwner = typeof entry === 'string' ? entry : entry?.nameWithOwner;
     if (typeof nameWithOwner !== 'string' || nameWithOwner === '') continue;
+    if (seen.has(nameWithOwner)) continue;
+    seen.add(nameWithOwner);
     const repo = nameWithOwner.split('/').pop() ?? '';
     if (!repo.startsWith(prefix)) {
       refusals.push(
@@ -639,7 +655,7 @@ export function sweepStoryRemotes({ storyId, created = [], readToken = readSweep
     }
     authorised.push(nameWithOwner);
   }
-  if (authorised.length === 0) return { deleted, refusals, failed };
+  if (authorised.length === 0) return { deleted, alreadyGone, refusals, failed };
 
   const token = readToken();
   if (token === null) {
@@ -649,7 +665,7 @@ export function sweepStoryRemotes({ storyId, created = [], readToken = readSweep
         'The sweep does not fall back to the agents\' own gh auth: delete_repo reaches every repository the ' +
         'account owns, so it is deliberately not a permission the agents run under. Delete these by hand.',
     );
-    return { deleted, refusals, failed };
+    return { deleted, alreadyGone, refusals, failed };
   }
 
   const gh =
@@ -664,10 +680,41 @@ export function sweepStoryRemotes({ storyId, created = [], readToken = readSweep
       gh(['repo', 'delete', nameWithOwner, '--yes']);
       deleted.push(nameWithOwner);
     } catch (e) {
-      failed.push({ path: nameWithOwner, error: e?.message ?? String(e) });
+      if (isAlreadyGoneError(e)) {
+        alreadyGone.push(nameWithOwner);
+      } else {
+        failed.push({ nameWithOwner, error: e?.message ?? String(e) });
+      }
     }
   }
-  return { deleted, refusals, failed };
+  return { deleted, alreadyGone, refusals, failed };
+}
+
+/**
+ * The trailing sweep's remote-delete report, split by the stream each line
+ * prints to. Extracted from `run-story.mjs` so it is testable without running
+ * a story end to end (`forge-8vfn.6.11.53`): the inline version read
+ * `f.nameWithOwner` off an entry that actually carried the field as `path`,
+ * so a genuine failure printed `[object Object]` instead of naming the repo.
+ *
+ * @param {{deleted: string[], alreadyGone: string[], refusals: string[], failed: {nameWithOwner: string, error: string}[]}} remotes
+ * @returns {{lines: string[], warnLines: string[]}}
+ */
+export function describeRemoteSweep(remotes) {
+  return {
+    lines: [
+      ...remotes.deleted.map((r) => `[stories] trailing sweep DELETED remote ${r}`),
+      ...remotes.alreadyGone.map(
+        (r) => `[stories] trailing sweep remote ${r} already gone — not treated as a failure`,
+      ),
+    ],
+    warnLines: [
+      ...remotes.refusals.map((r) => `[stories] ${r}`),
+      ...remotes.failed.map(
+        (f) => `[stories] could not delete remote ${f.nameWithOwner ?? '(unnamed remote)'}: ${f.error ?? ''}`,
+      ),
+    ],
+  };
 }
 
 /**

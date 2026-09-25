@@ -108,6 +108,7 @@ project: null
 kb: cycles
 costCeilingUsd: 25
 origin: seed
+accepts: [code]
 nodes:
   - { id: architect, agent: architect, gate: plan }
   - { id: pm, agent: project-manager }

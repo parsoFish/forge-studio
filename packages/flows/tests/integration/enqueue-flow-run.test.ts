@@ -8,7 +8,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -308,4 +308,71 @@ test('7.6.132: an ABSENT flow id on a ready-for-review manifest is not runnable'
   // is how a sibling gets enqueued beside a live gate.
   assert.equal(isRunnableSource('ready-for-review', null, 'forge-develop'), false);
   assert.equal(isRunnableSource('ready-for-review', '', 'forge-develop'), false);
+});
+
+// ---------------------------------------------------------------------------
+// Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8, bead forge-8vfn.6.10.15):
+// "the pair is checked before spend" — this door refuses a manifest class the
+// target flow does not accept, BEFORE the manifest is repointed/written.
+// ---------------------------------------------------------------------------
+
+/** Same layout `withTmp` uses (queueRoot is `<dir>/_queue`), plus a real,
+ *  loadable flow.yaml under `<dir>/studio/flows/<flowId>/` so the door's
+ *  best-effort `loadFlowDefinition` actually resolves — the accepts check
+ *  only fires when the flow loads. */
+function withTmpFlow(accepts: string[], fn: (dirs: { forgeRoot: string; queueRoot: string }) => void): void {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'forge-enqueue-flow-run-classcheck-'));
+  try {
+    const flowDir = join(forgeRoot, 'studio', 'flows', 'retro-flow');
+    mkdirSync(flowDir, { recursive: true });
+    writeFileSync(
+      join(flowDir, 'flow.yaml'),
+      [
+        'id: retro-flow',
+        'name: Retro Flow',
+        'version: 1',
+        'goal: g',
+        'project: null',
+        'kb: null',
+        'costCeilingUsd: 5',
+        'origin: seed',
+        `accepts: [${accepts.join(', ')}]`,
+        'nodes:',
+        '  - { id: n, gate: human }',
+        'edges: []',
+        'triggers: []',
+        '',
+      ].join('\n'),
+    );
+    fn({ forgeRoot, queueRoot: join(forgeRoot, '_queue') });
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+}
+
+test('enqueueFlowRun: a manifest class the target flow does not accept → class-mismatch, refused before any write', () => {
+  withTmpFlow(['docs'], ({ forgeRoot, queueRoot }) => {
+    const sourcePath = seed(queueRoot, 'pending', manifest({ class: 'code' }));
+    const before = readFileSync(sourcePath, 'utf8');
+
+    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'retro-flow', { queueRoot, forgeRoot });
+
+    assert.equal(result.status, 'class-mismatch');
+    assert.match(result.detail ?? '', /flow retro-flow does not accept class code; it accepts docs/);
+
+    // Refused BEFORE any spend: the source manifest is byte-unchanged, and no
+    // sibling was written into pending/ (no queue write occurred at all).
+    assert.equal(readFileSync(sourcePath, 'utf8'), before, 'the source manifest is byte-unchanged');
+    const paths = getPaths(queueRoot);
+    const pendingFiles = existsSync(paths.pending) ? readdirSync(paths.pending) : [];
+    assert.deepEqual(pendingFiles, ['INIT-2026-06-21-toc.md'], 'the ONLY pending file is the untouched source — nothing new was written');
+  });
+});
+
+test('enqueueFlowRun: a manifest class the target flow DOES accept → enqueued (positive control)', () => {
+  withTmpFlow(['code', 'docs'], ({ forgeRoot, queueRoot }) => {
+    seed(queueRoot, 'pending', manifest({ class: 'docs' }));
+    const result = enqueueFlowRun('INIT-2026-06-21-toc', 'retro-flow', { queueRoot, forgeRoot });
+    assert.equal(result.status, 'enqueued');
+  });
 });
