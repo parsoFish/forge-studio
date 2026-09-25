@@ -113,16 +113,19 @@ project carried it when forge managed it under that schema; nothing about its sh
 updated to match the CURRENT (`R1-03`-migrated) config format. What that collision does to the PROOF step
 is measured below.
 
-**Files.** 125 files (124 + `project.json`), method-C digest of `seed/`: **`49416ee66caaf3d4`** — the
-FINAL value, after `project.json` was replaced a second time by the live capture ("T1 1497 — the live
-capture" below supersedes the first attempt's `5d59188fe5785cf1`, itself recorded there as history).
-Pipeline: `find . -type f -not -path "*/node_modules/*" -not -path "*/.git/*" -print0 | sort -z | xargs -0
-sha256sum`, then `sha256` over that text stream, first 16 hex chars — `scripts/stories/ground-hash.mjs`'s
-own `METHOD_C_CMD`, run verbatim. The file breakdown that follows is otherwise unchanged from the prior
-pass except for this one file's contents. NOT a whole-tree copy (the
+**Files.** 127 files, method-C digest of `seed/`: **`94e16fb026da34b0`** — the FINAL value, after
+`.gitignore` and `roadmap.md` were added verbatim from `3b2e2ca4` (see "Closing the beat-10 gap" below;
+supersedes `49416ee66caaf3d4`, itself superseding the first attempt's `5d59188fe5785cf1`, both recorded
+below as history). Pipeline: `find . -type f -not -path "*/node_modules/*" -not -path "*/.git/*" -print0 |
+sort -z | xargs -0 sha256sum`, then `sha256` over that text stream, first 16 hex chars —
+`scripts/stories/ground-hash.mjs`'s own `METHOD_C_CMD`, run verbatim. The file breakdown that follows is
+otherwise unchanged from the prior pass except as noted. NOT a whole-tree copy (the
 source repo has hundreds of Go files across the whole provider, plus docs/examples/history) — this seed
 carries:
 
+- `.gitignore` and `roadmap.md` at the repo root, both tracked at `3b2e2ca4` and carried verbatim — 2
+  files. `.gitignore` is C2's own subject (its blanket `.forge/` ignore is the live ground's real,
+  pre-rebuild behaviour); `roadmap.md` is C4's "machine-readable architecture context" (4822 bytes).
 - `.forge/quality_gate_cmd` (from `3b2e2ca4` itself, byte-identical to `e04638bc^`'s copy) plus
   `.forge/project.json` (restored — absent from `3b2e2ca4`'s own tracked tree; FINAL content is the live
   capture, "T1 1497 — the live capture" below) — 2 files.
@@ -338,30 +341,114 @@ the nine REMOVALS). Against the CURRENT nine-removal-only `expectedChanges`, the
 the full 19-entry set: `undeclared: []`, `unmatchedDeclarations: []`. Never widened past what
 `applyContractReset` demonstrably writes.
 
+**SUPERSEDED** once `.gitignore` was added to close C2 (below) — the ignore assumption this paragraph
+states did not survive contact with the fence a second time. See "Re-derived `expectedChanges`, twice"
+further down for the corrected, FINAL 20-entry set.
+
+## Closing the beat-10 gap: `.gitignore`, `roadmap.md`, and a real Brain 3 profile
+
+The first re-point measured `runPreflight` (`packages/projects/preflight.ts`) directly against a
+provisioned-and-reset copy of `story-s3`: `ok: false`, two HARD failures — **C2** (the seed carried no
+`.gitignore` at all, so forge's own scratch paths were not git-ignored) and **C4** (missing `roadmap.md`
+AND missing `brain/projects/story-s3/profile.md`). Both are now fixed AT THE SOURCE, not papered over.
+
+**`.gitignore` and `roadmap.md`, carried verbatim from `3b2e2ca4`** (both tracked there — confirmed with
+`git -C <real ground> show 3b2e2ca4:.gitignore` / `:roadmap.md`, piped straight to the seed, byte-for-byte;
+`diff` against a `git cat-file -p` re-read of each blob: no output). `.gitignore` line 12 is still the
+blanket `.forge/` ignore this whole ground's story turns on (see "Why not `c1a8fbca`" above) — this is the
+live ground's REAL behaviour at this pin, restored rather than invented. `roadmap.md`: 4822 bytes, the
+project's own architecture context C4 reads. **Files: 127** (125 + these two), method-C digest of `seed/`:
+**`94e16fb026da34b0`** (superseding `49416ee66caaf3d4`).
+
+**A real Brain 3 profile, carried via a new harness capability.** C4 also needs
+`brain/projects/<project>/profile.md` in the FORGE repo (this repo, not the seed) — keyed by the project's
+own DIRECTORY NAME, a path Brain 3 lives at entirely outside `projects/`. A plain seed copy has no way to
+carry it, so `scripts/stories/fixture-ground.mjs` grew the ability: a fixture MAY declare its own
+`tests/stories/grounds/<fixture>/brain/` (a sibling of `seed/`); `provisionFixtureGround` copies it to
+`brain/projects/<project>/` (refusing, before any write, if that destination already holds residue — the
+same door `projects/<project>` already has) and `teardownFixtureGround` removes it, even when the ground
+directory is already gone. `scripts/stories/fixture-ground-brain.test.ts` pins five cases red-first: creates
+it, teardown removes it, no-`brain/`-source creates nothing, existing residue refuses, an orphaned profile
+with no ground beside it is still removed. `sweep.mjs`'s `productFixturePathsFor` already listed
+`brain/projects/<name>` for every `storyFixtureNames(storyId)` (found by the S1 worker, M5-B) — confirmed,
+not re-implemented — and neither `run-story.mjs` nor `ground-hash.mjs` reference `brain/` at all, so this
+addition sits entirely outside the own-ground digest fence (`ownGroundManifest` hashes only
+`projects/<project>`) and needs no `expectedChanges` entry of its own.
+
+This ground's own `brain/` source: `brain/profile.md`, copied VERBATIM from
+**`brain/projects/terraform-provider-betterado/profile.md`** in THIS forge repo, `parsoFish/main`, commit
+`9c18747cabb929719213096a55562c85bb93b650` (confirmed byte-identical to the working-tree copy at the time
+of this carry — `git diff parsoFish/main -- brain/projects/terraform-provider-betterado/profile.md`: no
+output). 8544 bytes, sha256
+`48d337c449f3fbbbe0b562484a982727a25684703f9caaacd8c4783d4b3fe013`. Real, accumulated knowledge about this
+exact codebase, carried under the fixture's OWN directory name (`brain/projects/story-s3/profile.md` once
+provisioned) rather than a fabricated stand-in — the same disclosed-reuse the `kb` field already stands on
+(below). `kb-select` is unaffected — there is no such beat in S3, and the `kb` field itself is untouched.
+
+**A harness bug this carry exposed, fixed narrowly.** With `.gitignore` in place, `provisionFixtureGround`
+itself THREW: `git add --pathspec-from-file` (no `-f`) refuses an explicitly-named path the seed's own
+`.gitignore` covers — `.forge/project.json` and `.forge/quality_gate_cmd` are blanket-ignored by the
+restored `.gitignore`, exactly the trap that `.gitignore`'s own comment names ("force-tracked via `git add
+-f` so they survive this ignore"). Fixed by adding `-f` to that ONE call
+(`scripts/stories/fixture-ground.mjs`). Safe because the file list passed is ALREADY the seed's own
+curated, explicit set (never a glob, never `-A`) — `-f` cannot add anything the seed did not already name,
+it only stops an incidental ignore rule from silently dropping one. Checked against every OTHER existing
+fixture (`node-cli-with-tests`, `node-library`): both already carry a `.gitignore`, neither's ignore rules
+cover any of their own tracked files, so the change is behaviourally inert for them — confirmed by re-running
+their full test suites (no regressions, 50/50 green including the 5 new brain tests and 1 new
+git-add-past-the-seed's-own-ignore test in `fixture-ground-provision.test.ts`, red-first).
+
+## Re-derived `expectedChanges`, twice — 19 was not the final answer
+
+First pass (no `.gitignore` in the seed): `classifyOwnGroundDrift`, simulated against a
+provisioned-and-reset copy, showed the nine `.forge/skills/<id>/SKILL.md` ARRIVALS and the
+`.forge/project.json` re-serialisation ALL fall to UNDECLARED unless declared — 19 total (9 removed + 9
+added + 1 modified), proved exact: 0 undeclared, 0 unmatched.
+
+Second pass, after `.gitignore` was restored so C2 could pass: re-ran the identical simulation expecting
+the ignore to now absorb the nine arrivals the way it did on the real ground (the reasoning behind this
+session's ruling). It does **not**. `groundIgnoreFromGit` runs `git check-ignore` against the ground's git
+state AS THE RUN LEAVES IT — and beat 5's own press now ALSO fixes `.gitignore` (`gitignoreFixed: true`,
+measured by actually running `applyContractReset`; PR #72's `15a74d8a`, "reset .gitignore [untrap tracked
+contract config]", reproduced exactly). Checked against that FINAL, narrow `.gitignore`, none of
+`.forge/skills/*` is ignored, so the nine arrivals are STILL undeclared with the 19-entry set — and the
+`.gitignore` rewrite is an ELEVENTH new write the real ground's story never had to declare (there, PR #72's
+fix landed three weeks after S3 was authored, never inside a run the fence judged).
+
+```
+declared: 20, undeclared: [], unmatchedDeclarations: []
+changes.added:    9 × .forge/skills/<id>/SKILL.md
+changes.removed:  9 × forge/skills/<id>/SKILL.md
+changes.modified: .forge/project.json, .gitignore
+```
+
+Final `expectedChanges`: the original 9 `removed` + 9 `added` + `.forge/project.json` `modified` + ONE
+new entry, `.gitignore` `modified`, beat 5 — 20 total. Every path `applyContractReset` demonstrably writes
+on this ground and nothing wider. The hypothesis that carrying `.gitignore` would SHRINK the declared set
+back toward the nine removals is recorded here as REFUTED, with the evidence, rather than silently
+discarded.
+
 ## S3 IS re-pointed
 
 `tests/stories/S3.story.mjs` now declares `ground: { project: 'story-s3', fixture:
-'go-provider-old-contract', realSpawn: true, budget_usd: 25, expectedChanges: […19 entries…] }`. Every
+'go-provider-old-contract', realSpawn: true, budget_usd: 25, expectedChanges: […20 entries…] }`. Every
 real-ground token (routes, `card-id`/`project-id`, fills, narration) re-authored to `story-s3`; `NORTH_STAR`
 and `GATE` constants unchanged (verbatim from the restored contract, matching what the fixture's
 `.forge/project.json`/`quality_gate_cmd` actually carry); the `kb` field stays `terraform-provider-betterado`
 (untouched — it travelled with the byte-exact `project.json` capture), per S4's precedent for a field the
 fence does not require a fixture-side asset for.
 
-**Flagged, not fabricated: beat 10's live truth is UNVERIFIED on this fixture, and likely FALSE as
-constituted.** Ran `packages/projects/preflight.ts`'s `runPreflight` directly (not the DOM — file-scoped,
-same rigour as the drift proof) against a provisioned-and-reset copy of `story-s3`: `ok: false`, two HARD
-failures — **C2** (the seed carries no `.gitignore` at all, so forge's own scratch paths, e.g.
-`.forge/work-items/`, are not git-ignored) and **C4** (missing `roadmap.md` in the project root — present in
-the real repo at `3b2e2ca4` but never part of this seed's GATE-closure carry — AND missing
-`brain/projects/story-s3/profile.md`, forge's OWN central Brain 3, keyed by the project's directory name,
-which a never-onboarded fixture cannot have without fabricating one). Beat 10 asserts
-`preflight-status: 'ok'`/`flow-ready: 'true'` — this measurement says the fixture cannot honestly clear
-that bar as built. `.gitignore` and `roadmap.md` could be added (real, tracked files at `3b2e2ca4`, not
-fabricated) to clear C2 and half of C4; the Brain-3 half has no non-fabricated fix available to this
-session (copying the real Brain 3 under `story-s3`, or teaching C4 to key off `config.kb` instead of the
-directory name, are both product/plan-level calls). NOT fixed unilaterally here — named for the next
-planning pass, per the same standing rule every STOP in this file has followed.
+**Beat 10 is CONFIRMED, not merely declared.** `runPreflight` against a provisioned-and-reset copy of the
+corrected fixture (with `.gitignore`, `roadmap.md` and the Brain 3 profile all in place): `ok: true` — every
+HARD clause passes (C1, C1b, C2, C4, SKILLS). The remaining FAILs are all soft/advisory and expected of a
+fixture with no GitHub remote and no release-process substrate: **C6** (no GitHub `origin` — this ground has
+none), **C10** (`releaseProcess` names `CHANGELOG.md`/`PROVIDER_VERSION.txt`/`docs/` that this GATE-closure
+carry never included), **DEMO-SKILL** (no `.forge/skills/demo-design/SKILL.md` — never bound), **DEMO-ALIGN**
+(the screenshot capture step doesn't literally reference the test process — true on the real ground too).
+None are hard; `ok` is unaffected. The readiness panel's own five UI checks (north star ≤140 chars,
+instructions present, demo has capture+verify, ≥1 skill bound, kb bound) all independently pass, so
+`ready-count: 5` and `flow-ready: true` hold for real. Beat 10's assertion in `S3.story.mjs` is unchanged
+from what the story always declared — this session confirmed it rather than weakening or fabricating it.
 
-**Stories served.** S3 (`tests/stories/S3.story.mjs`), beats 1–9 and 11–12 re-pointed and file-scoped
-clean; beat 10's live-DOM truth carries the open caveat above.
+**Stories served.** S3 (`tests/stories/S3.story.mjs`), all 12 beats re-pointed and file-scoped clean; no
+open caveats remain.
