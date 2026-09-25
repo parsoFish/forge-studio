@@ -85,7 +85,9 @@ const camp = () => mkdtempSync(join(tmpdir(), 'gate-rerun-camp-'));
 // passing fixture was never affected, which is why it looked like only some
 // doors were red.
 function gate(d: string, c: string, extra: Record<string, string>) {
-  const { NODE_TEST_CONTEXT: _ntc, ...rest } = process.env;
+  // …and the two waiver variables a lane exports around its OWN gate (8.2.2:
+  // an inherited GATE_RERUN_ALONE made this file's nested gates rerun it).
+  const { NODE_TEST_CONTEXT: _ntc, GATE_RERUN_ALONE: _gra, GATE_RED_NAMED: _grn, ...rest } = process.env;
   const r = spawnSync('bash', [GATE, d, c], { encoding: 'utf8', env: { ...rest, ...extra } });
   return { out: r.stdout ?? '', status: r.status };
 }
@@ -166,6 +168,19 @@ describe('forge-8vfn.7.6.89 — the alone-rerun is gate.sh\'s own act, never a l
       /^ALONE-RERUN b\.mjs REFUSED — the single failing step's command does not cover b\.mjs/m,
       `the failing step's own command named 'a.mjs', not 'b.mjs': ${r.out}`,
     );
+
+    rmSync(d, { recursive: true, force: true });
+    rmSync(c, { recursive: true, force: true });
+  });
+
+  test('REFUSED (8.2.2): the step covers the named file but its red test is ANOTHER file — never a proof for the named one', () => {
+    const d = tree([`${RUNNER} a.mjs b.mjs`], { 'a.mjs': ALWAYS_RED, 'b.mjs': ALWAYS_GREEN });
+    const c = camp();
+
+    const r = gate(d, c, { GATE_RERUN_ALONE: 'b.mjs' });
+
+    assert.doesNotMatch(r.out, /^ALONE-RERUN b\.mjs 3\/3$/m, `b.mjs passing alone proves nothing about a.mjs's red: ${r.out}`);
+    assert.match(r.out, /^ALONE-RERUN b\.mjs REFUSED — the step's red is in a\.mjs, not b\.mjs/m, `must name the real red: ${r.out}`);
 
     rmSync(d, { recursive: true, force: true });
     rmSync(c, { recursive: true, force: true });
