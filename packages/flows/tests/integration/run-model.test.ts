@@ -174,9 +174,9 @@ test('aggregateRun: task-group-unit-tests real fixture — status gated, phases 
       Math.abs(devCost - 5.769767) < 0.1,
       `dev cost should be ~5.769767, got ${devCost}`,
     );
-    // dev band wider because float accumulation across hundreds of usage events
+    // dev band wider; costUsd: number|null (forge-8vfn.5.17, contracts/design.md), never null here
     assert.ok(
-      Math.abs(run.costUsd - 6.842707) < 0.1,
+      Math.abs((run.costUsd ?? 0) - 6.842707) < 0.1,
       `total cost should be ~6.842707, got ${run.costUsd}`,
     );
 
@@ -265,8 +265,8 @@ test('aggregateRun: complete-release-definition real fixture — status gated, 5
     assert.ok(Math.abs(pmCost - 0.777214) < 0.01, `pm cost ${pmCost}`);
     // dev band wider because float accumulation across hundreds of usage events
     assert.ok(Math.abs(devCost - 8.325460) < 0.1, `dev cost ${devCost}`);
-    // dev band wider because float accumulation across hundreds of usage events
-    assert.ok(Math.abs(run.costUsd - 9.102674) < 0.1, `total cost ${run.costUsd}`);
+    // dev band wider because float accumulation across hundreds of usage events; costUsd: number | null, see above
+    assert.ok(Math.abs((run.costUsd ?? 0) - 9.102674) < 0.1, `total cost ${run.costUsd}`);
 
     // 5 WIs, all complete
     assert.equal(run.workItems?.length, 5, 'should have 5 WIs');
