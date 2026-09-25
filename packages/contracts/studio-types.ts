@@ -1,5 +1,7 @@
 /** Forge Studio object model (ADR 027). Pure types — no logic. */
 
+import type { ManifestClass } from './manifest-types.ts';
+
 export type BrainAccess = 'mandatory' | 'advisory' | 'none';
 export type ModelStrategy = 'fixed' | 'range';
 
@@ -249,6 +251,10 @@ export type FlowTrigger = {
    */
   agent?: string;
   note?: string;
+  /** Seam F6: required only when the target flow accepts >1 class —
+   *  `mintTriggeredInitiative` reads it (as staged `triggerClass`) to
+   *  resolve the minted manifest's class. */
+  class?: ManifestClass;
 };
 
 // Stage C — per-flow kickoff. Declares which launch surface the UI renders for a
@@ -268,6 +274,8 @@ export type FlowDefinition = {
   kb: string | null;
   costCeilingUsd: number;
   origin: string;
+  /** Seam F6: manifest classes this flow accepts. Required, non-empty. */
+  accepts: ManifestClass[];
   disposable?: boolean;
   nodes: FlowNode[];
   edges: FlowEdge[];

@@ -23,6 +23,7 @@ import type {
   FlowNode,
   FlowTrigger,
 } from '@forge/contracts/studio/types.ts';
+import type { ManifestClass } from '@forge/contracts/manifest-types.ts';
 
 import {
   reqString,
@@ -32,6 +33,13 @@ import {
   optBool,
   loadYaml,
 } from '@forge/kernel/studio/yaml-fields.ts';
+
+// ADR 051's four change classes as a runtime list, imported rather than
+// hand-copied — same SSOT `@forge/factory/class-profiles.ts` reads
+// (`CHANGE_CLASSES`, `packages/flows/manifest.ts`). Both `accepts` (below)
+// and a trigger's `class` (parseFlowTrigger) are checked against this ONE
+// list, never a second copy of the four names.
+import { CHANGE_CLASSES } from '../manifest.ts';
 
 /**
  * The curated starter flow (plan → dev → review + verdict gate) the New-Flow
@@ -163,6 +171,13 @@ function parseFlowTrigger(raw: unknown, file: string, index: number): FlowTrigge
   // a missing/malformed value rather than it silently meaning "fires for all".
   if (typeof t['agent'] === 'string') out.agent = t['agent'];
   if (typeof t['note'] === 'string') out.note = t['note'];
+  // Seam F6 half 1 (ADR 051 decision 4): preserve the raw string (do NOT
+  // coerce a bad value away) so `mintTriggeredInitiative` — the one reader
+  // that has both this row AND the flow's `accepts` list in hand — can reach
+  // and refuse it by name. Membership in `accepts` cannot be checked here:
+  // `accepts` is parsed by the caller (`loadFlowDefinition`) after every
+  // trigger row.
+  if (typeof t['class'] === 'string') out.class = t['class'] as ManifestClass;
   return out;
 }
 
@@ -175,6 +190,26 @@ export function loadFlowDefinition(flowYamlPath: string): FlowDefinition {
   const goal = reqString(d, 'goal', flowYamlPath);
   const costCeilingUsd = reqNumber(d, 'costCeilingUsd', flowYamlPath);
   const origin = reqString(d, 'origin', flowYamlPath);
+
+  // Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8): required,
+  // non-empty — "a flow registers its accepted classes" is meaningless as an
+  // optional/defaulted field, so a flow with no `accepts` fails to load
+  // exactly like a flow with no `costCeilingUsd`, naming the flow and (for a
+  // bad entry) the offending value.
+  const rawAccepts = d['accepts'];
+  if (!Array.isArray(rawAccepts) || rawAccepts.length === 0) {
+    throw new Error(
+      `${flowYamlPath}: flow "${id}" requires a non-empty "accepts" array (one or more of ${CHANGE_CLASSES.join(' | ')})`,
+    );
+  }
+  const accepts: ManifestClass[] = rawAccepts.map((v, i) => {
+    if (typeof v !== 'string' || !(CHANGE_CLASSES as readonly string[]).includes(v)) {
+      throw new Error(
+        `${flowYamlPath}: flow "${id}" accepts[${i}] must be one of ${CHANGE_CLASSES.join(' | ')}, got ${JSON.stringify(v)}`,
+      );
+    }
+    return v as ManifestClass;
+  });
 
   const project =
     d['project'] === null || d['project'] === undefined
@@ -226,7 +261,7 @@ export function loadFlowDefinition(flowYamlPath: string): FlowDefinition {
     kickoff = { kind: reqString(k, 'kind', flowYamlPath) as FlowKickoffKind };
   }
 
-  return { id, name, version, goal, project, kb, costCeilingUsd, origin, disposable, nodes, edges, triggers, kickoff, path: flowYamlPath };
+  return { id, name, version, goal, project, kb, costCeilingUsd, origin, accepts, disposable, nodes, edges, triggers, kickoff, path: flowYamlPath };
 }
 
 // consumed by the M2 bridge PUT routes (no production call site until then)
@@ -244,6 +279,7 @@ export function serializeFlowDefinition(def: FlowDefinition): string {
   out['kb'] = rest.kb;
   out['costCeilingUsd'] = rest.costCeilingUsd;
   out['origin'] = rest.origin;
+  out['accepts'] = rest.accepts;
   if (rest.disposable !== undefined) out['disposable'] = rest.disposable;
   out['nodes'] = rest.nodes.map(({ id, agent, gate, fanOut, resumable, x, y }) => {
     const n: Record<string, unknown> = { id };

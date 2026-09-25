@@ -6,6 +6,13 @@ project: null
 kb: cycles
 costCeilingUsd: 25
 origin: seed
+# Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8): forge-develop runs the
+# SAME dev -> integrate -> adversarial-review -> verdict spine regardless of
+# the initiative's change class — the class selects the gate PROFILE
+# (packages/factory/class-profiles.ts: iter0FailFirst, required-paths source,
+# merge-boundary test, review lenses, ...), not a different flow topology. It
+# accepts every class the platform ships today.
+accepts: [code, docs, config, infra]
 # DEC-3 (S7): the second of the three flows that replace the forge-cycle
 # monolith. Architect (forge-architect) decomposes; Develop builds → integrates →
 # reviews; Reflect (S8) captures the brain. DEC-2: a Develop run threads the SAME
