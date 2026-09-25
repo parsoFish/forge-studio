@@ -89,10 +89,13 @@
  * declares the spawn rather than pretending otherwise. So `realSpawn` is true
  * and `budget_usd` is declared ($25, approved for the S5/S6/S7 batch).
  *
- * GROUND. `mdtoc` — the one project committed to this repo, so it is the only
- * project a CLEAN CHECKOUT has, and 1.0's exit condition is these stories
- * green on a clean checkout. It is also the project the creation agent and the
- * instructions agent are pointed at.
+ * GROUND. `story-s7`, provisioned for each run from the forge-owned fixture
+ * `tests/stories/grounds/node-library` (a byte copy of `projects/mdtoc` at
+ * `9db91ef5`, provenance beside it) and torn down after the fence has judged
+ * it (M7-D, forge-1rk5.1). It used to be the real `projects/mdtoc`; a story
+ * now never runs against a ground the operator owns, and a clean checkout
+ * still has everything it needs. It is also the project the creation agent
+ * and the instructions agent are pointed at.
  *
  * ON THE `data-*` KEYS. Every key and value below was copied from the live DOM
  * of a bridge booted from this lane's own worktree, EXCEPT beat 4's session
@@ -154,7 +157,7 @@ const HOOK_SCRIPT = '#!/usr/bin/env bash\nset -euo pipefail\necho "story-s7: ses
 
 export default {
   id: 'S7',
-  ground: { project: 'mdtoc', realSpawn: true, budget_usd: 25 },
+  ground: { project: 'story-s7', fixture: 'node-library', realSpawn: true, budget_usd: 25 },
   docs: { kind: 'how-to', title: 'Create library components' },
   beats: [
     {
@@ -605,7 +608,7 @@ export default {
       // failed FIRST on every run and the `do` steps never ran.
       act: 'Draft the project’s own working instructions, so the parts have a house style to follow',
       do: [
-        { fill: 'kickoff-project', with: 'mdtoc' },
+        { fill: 'kickoff-project', with: 'story-s7' },
         { press: 'start-session' },
       ],
       expect: {
