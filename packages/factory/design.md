@@ -67,3 +67,20 @@ boots, and asserts the caller's own tree came back untouched. If a third seam
 ever appears, that proof fails by name, and it is meant to: ADR 048 makes the
 seam set fixed and enumerated, so a third one is a decision somebody has to
 make out loud.
+
+## Reflector brain-write extraction (forge-ler4)
+
+`phases/reflector.ts`'s `runReflectorBrainWrites` is every brain write
+`runReflector` makes: the SDK spawn (which writes theme files directly) plus
+the two orchestrator-side brain writes that follow it (the retention
+frontmatter patch, per-KB health's ingest/consolidate). It is extracted, not
+inlined, so `runReflector` can wrap exactly this span — and nothing before or
+after it — in the brain-write lease (`packages/knowledge/brain-write-lease.ts`);
+everything past this function's return (lint with `fix:false`,
+user-questions.json, the recap, the final event) reads or writes only
+`_logs/`, never `brain/`.
+
+Every early-return path inside it is a LOSS — the same
+`reflection_status:'failed'` either way — so the caller only needs ok vs
+not-ok; the specific cause is already on the `cycle.reflection-lost` event
+the function emits (via `emitReflectionLost`) before returning.

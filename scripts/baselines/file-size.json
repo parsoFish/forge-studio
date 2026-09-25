@@ -19,12 +19,11 @@
   "apps/studio/app/artifact/page.tsx": 1419,
   "apps/studio/app/flows/[id]/page.tsx": 992,
   "apps/studio/app/knowledge/page.tsx": 838,
-  "apps/studio/app/projects/[id]/page.tsx": 1420,
+  "apps/studio/app/projects/[id]/page.tsx": 1350,
   "apps/studio/components/studio/PhaseDrawer.tsx": 950,
   "apps/studio/components/studio/RoadmapCanvas.tsx": 870,
-  "apps/studio/lib/bridge-client.ts": 1519,
   "apps/studio/lib/session-client.ts": 1204,
-  "apps/studio/lib/studio-client.ts": 2540,
+  "apps/studio/lib/studio-client.ts": 2309,
   "apps/studio/tests/contract/session-shell-view.test.ts": 815,
   "apps/studio/tests/contract/studio-client.test.ts": 1373,
   "apps/studio/tests/integration/agent-ledger.test.ts": 1205,
@@ -34,10 +33,7 @@
   "apps/studio/tests/unit/home-view.test.ts": 1071,
   "apps/studio/tests/unit/session-client.test.ts": 1257,
   "packages/factory/phases/developer-loop.ts": 1937,
-  "packages/factory/phases/reflector.ts": 981,
   "packages/factory/tests/unit/reflector.test.ts": 866,
-  "packages/flows/run-model-derive.ts": 988,
-  "packages/flows/scheduler.ts": 1031,
   "packages/flows/tests/integration/run-model.test.ts": 1457,
   "packages/flows/tests/integration/wi-spec-compile.test.ts": 1059,
   "packages/flows/tests/regression/manifest-path-fields.test.ts": 1029,
@@ -53,5 +49,5 @@
   "packages/library/tests/integration/skill-library.test.ts": 1965,
   "scripts/check-raw-fs-guarded.mjs": 1371,
   "scripts/check-raw-fs-guarded.test.ts": 1032,
-  "scripts/verify-cycle.mjs": 1239
+  "scripts/verify-cycle.mjs": 1206
 }

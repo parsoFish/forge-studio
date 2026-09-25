@@ -107,6 +107,10 @@ duplicated as `loadBrainNavigation`). Routing that through `KbBackend` is the
 higher-value but riskier reroot; it gets its own change so the brain's
 *planning* influence is also backend-swappable.
 
+## Amendment (M7, 2026-09-25): `KbBackend.rootDir()` — the seam's one raw-path exception
+
+Beads forge-8vfn.23 and forge-8vfn.5.25.3 moved every per-KB brain-dir resolution in `packages/sessions` and `packages/knowledge` behind the seam (a ratchet in each package now fails on a direct `resolveKbBrainDir` call). A handful of callers need a raw directory rather than a query: an agent's write-root fence, the KB DELETE's removal target, a guarded tail's base, and two boundary checks that must reject the KB root itself (which `contains()` accepts). `KbBackend` therefore gains **`rootDir(): string | null`**: the filesystem backend returns its validated `brain/<kbId>` directory, and a non-filesystem backend returns `null`, so a caller needing a path fails closed there instead of reading around the seam. Every other read keeps using the interface's own methods (`contains`, `descriptorPath`, `listPendingGuidance`, …); `rootDir()` is the exception, named as one and pinned by the conformance suite (CONF-5c).
+
 ## Amendment (2026-06-15): Artifact as a typed contract
 
 ADR-027 §2 made the inter-node artifact a **bare string label** on `FlowEdge.artifact`

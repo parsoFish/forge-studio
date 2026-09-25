@@ -16,9 +16,9 @@ import { type IncomingMessage, type ServerResponse } from 'node:http';
 import { mkdirSync, readFileSync, openSync, closeSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join, relative, resolve, sep } from 'node:path';
-import { resolveGuardedPath, guardedReadFile } from '@forge/kernel';
+import { resolveGuardedPath, guardedFile, guardedReadFile } from '@forge/kernel';
 import { loadKbDescriptor, resolveKbProcesses } from './studio/kb-descriptor.ts';
-import { resolveKbBrainDir } from './brain-paths.ts';
+import { tryGetKbBackend } from './kb-backend.ts';
 import { type KbDescriptor } from '@forge/contracts/studio/types.ts';
 import { resolutionCounts, applyAutoFixesUntilStable, type Finding } from './brain-lint.ts';
 import { listCycles } from '@forge/kernel';
@@ -26,7 +26,6 @@ import { regenerateBrainIndex } from './brain-index.ts';
 import { isDryBridge, refuseDryBridge } from '@forge/kernel';
 import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
 import {
-  findingUnderDir,
   collectKbFindings,
   runBrainLintFullMemoized,
   runBrainLintFullFresh,
@@ -36,6 +35,8 @@ import {
   applyDeterministicConsolidateFixes,
   enqueueConsolidate,
   isDeterministicNotListedFinding,
+  lastConsolidateDispatchFor,
+  recordConsolidateDispatch,
   runBrainConsolidateNow,
   type AgentFinding,
 } from './bridge-studio-kb-consolidate.ts';
@@ -171,38 +172,37 @@ export async function handleKbConsolidateActive(
 
   // ---- GET /api/studio/kbs/:id/consolidate/active — reattach discovery ----
   // W6-B14: a consolidate run mints its own runId
-  // (`${kbId}-consolidate-<base36-Date.now()-stamp>`, the maintenance route's
-  // op==='consolidate' branch below) and its terminal state already lives at
-  // `_logs/_brainfix-<runId>/events.jsonl` — the SAME file `readBrainFixState`
-  // reads for the fix-agent GET above. The one thing that was missing: a way
-  // to REDISCOVER that runId once a client has forgotten it (nav-away,
-  // reload) — `lib/kb-consolidate.ts`'s old `runConsolidateToTerminal` used
-  // to `await` its own bounded poll loop inside the SAME click handler that
-  // dispatched it, so a nav-away lost the result outright even though the
-  // consolidate run itself kept going server-side. This is that tiny GET:
-  // scan `_logs/` for this kb's own `_brainfix-<kbId>-consolidate-*` dirs and
-  // report the MOST RECENT one's state — the base36 timestamp embedded right
-  // after the fixed `-consolidate-` token sorts chronologically as a plain
-  // string for a long time yet (Date.now().toString(36) stays the same
-  // length until year ~2059), so `.sort().reverse()` picks the latest.
-  // `runId: null` means this kb has never consolidated — never a guess.
-  // Excludes `<runId>__<i>` — `runBrainConsolidateNow`'s own PER-FINDING
-  // sub-runIds (never the exposed one; see that function's own header) —
-  // which would otherwise sort AFTER their parent runId (a longer string
-  // that has the shorter one as a prefix sorts greater) and be picked
-  // instead of the real top-level run.
+  // (`${kbId}-consolidate-<base36-Date.now()-stamp>`, the op==='consolidate'
+  // branch below); its terminal state lives at
+  // `_logs/_brainfix-<runId>/events.jsonl`, the same file `readBrainFixState`
+  // reads. This GET rediscovers that runId once a client has forgotten it
+  // (nav-away/reload); `runId: null` means never consolidated — never a guess.
+  //
+  // forge-6esp: prefers `lastConsolidateDispatchFor(kbId)` (this process's
+  // own last mint, re-verified against disk through the guard below) over
+  // sorting directory names by their embedded `Date.now()` stamp — that
+  // assumed a monotonic clock, false on a host that steps backward, which
+  // can rank a stale run above a fresh one. The scan is the fallback for a
+  // kb this process never dispatched (fresh process / untouched kb).
   const consolidateActiveMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/consolidate\/active$/);
   if (consolidateActiveMatch && method === 'GET') {
     const kbId = decodeURIComponent(consolidateActiveMatch[1]);
     if (!KB_ID_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
-    const prefix = `_brainfix-${kbId}-consolidate-`;
-    const runIds = subDirs(join(ctx.forgeRoot, '_logs'))
-      .filter((d) => d.startsWith(prefix))
-      .map((d) => d.slice('_brainfix-'.length))
-      .filter((id) => !id.includes('__'))
-      .sort()
-      .reverse();
-    const runId = runIds[0] ?? null;
+    const recorded = lastConsolidateDispatchFor(kbId);
+    // SEC-04: `recorded` embeds request-derived kbId text, so its existence
+    // is checked through the guard (same primitive `readBrainFixState`'s log
+    // dir uses below), never a raw `existsSync` on a hand-joined path.
+    const recordedLive = recorded ? guardedFile(join(ctx.forgeRoot, '_logs'), [`_brainfix-${recorded}`], 'readdir') : null;
+    // Excludes `<runId>__<i>` — `runBrainConsolidateNow`'s per-finding
+    // sub-runIds, which would otherwise out-sort their parent.
+    const runId = recorded && recordedLive
+      ? recorded
+      : subDirs(join(ctx.forgeRoot, '_logs'))
+          .filter((d) => d.startsWith(`_brainfix-${kbId}-consolidate-`))
+          .map((d) => d.slice('_brainfix-'.length))
+          .filter((id) => !id.includes('__'))
+          .sort()
+          .reverse()[0] ?? null;
     if (!runId) { sendJson(res, 200, { ok: true, runId: null, state: null, cleared: false }, origin); return true; }
     sendJson(res, 200, { ok: true, runId, ...readBrainFixState(ctx.forgeRoot, runId) }, origin);
     return true;
@@ -210,6 +210,12 @@ export async function handleKbConsolidateActive(
 
   return false;
 }
+
+/** M7-C (forge-hqkm) — the ingest-activity feed's page size. Neither this
+ *  route nor its client passes a `limit`, so this is a named constant rather
+ *  than a caller-controlled bound: never open more cycles' `events.jsonl`
+ *  than needed to fill this many rows. */
+export const KB_INGEST_ACTIVITY_MAX_EVENTS = 50;
 
 /**
  * GET /api/studio/kbs/:id/ingest-activity — real reflect.kb-ingest events (R6-08 WI-2).
@@ -239,6 +245,23 @@ export async function handleKbIngestActivity(
   // folded into the filesystem path. GET-only: no dispatch branch exists on
   // this URL pattern, so nothing here can trigger an ingest (see
   // scripts/check-kb-ingest-affordance.test.ts's standing ratchet).
+  //
+  // M7-C (forge-hqkm) — bounded per request, never the whole `_logs/` corpus:
+  // `listCycles` enumerates EVERY `_logs/` dir, including the families that
+  // can never carry a `reflect.kb-ingest` event (`runPostReflectionKbHealth`
+  // only ever runs from the reflector phase of a flow cycle) — `_agent-*`,
+  // `_brainfix-*`, `_<kind>-<sessionId>`, every one underscore-first, while a
+  // real cycle id is `<ISO-ts>_<initiativeId>` (alnum-first). Excluding that
+  // whole shape before any read is the cheapest possible filter — a dir name
+  // check, not a file open. What remains is sorted NEWEST FIRST — the ISO
+  // prefix makes a plain lexical compare chronological, the same idiom
+  // `findNewestCycleId` (packages/flows/run-model.ts) already uses — and
+  // capped at `KB_INGEST_ACTIVITY_MAX_EVENTS` matching rows: once the page is
+  // full, an older cycle's `events.jsonl` is never opened. (A cycle CAN carry
+  // more than one matching event — `forge reflect --rerun` re-runs the same
+  // cycle's reflector, appending a second pass to the same log — so a match
+  // never short-circuits the scan of ITS OWN file; the bound is on how many
+  // CYCLES get opened, not on lines read within one.)
   const ingestActivityMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/ingest-activity$/);
   if (ingestActivityMatch && method === 'GET') {
     try {
@@ -246,7 +269,11 @@ export async function handleKbIngestActivity(
       if (!KB_ID_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
 
       const events: Array<{ kb: string; freshThemes: number; impl: string; cycleId: string }> = [];
-      for (const cycleId of listCycles(ctx.logsRoot)) {
+      const cycleIds = listCycles(ctx.logsRoot)
+        .filter((id) => !id.startsWith('_'))
+        .sort((a, b) => b.localeCompare(a));
+      for (const cycleId of cycleIds) {
+        if (events.length >= KB_INGEST_ACTIVITY_MAX_EVENTS) break; // page filled — never open another cycle's log
         const raw = guardedReadFile(ctx.logsRoot, [cycleId, 'events.jsonl']);
         if (raw === null) continue;
         for (const line of raw.split('\n')) {
@@ -345,8 +372,8 @@ export async function handleKbMaintenance(
         // repeat clicks. MAJOR 2: fix-auto also WRITES, so it must share the
         // exact-dir scope — the old substring `includes(kbId)` folded a sibling
         // (e.g. `alpha-two` into `alpha`) into this KB's auto-fix write set.
-        const kbBrainDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
-        const inKb = (f: Finding): boolean => kbBrainDir !== null && findingUnderDir(ctx.forgeRoot, kbBrainDir, f);
+        const kbBackend = tryGetKbBackend(ctx.forgeRoot, kbId);
+        const inKb = (f: Finding): boolean => kbBackend !== null && kbBackend.contains(f.file);
         const result = applyAutoFixesUntilStable(ctx.forgeRoot, { filter: inKb });
         sendJson(res, 200, { op: 'fix-auto', ok: true, applied: result.applied, skipped: result.skipped, rounds: result.rounds, remaining: result.remaining, counts: resolutionCounts(result.remaining) }, origin);
         return true;
@@ -433,13 +460,13 @@ export async function handleKbMaintenance(
         // ALSO refresh the global brain meta-index (cheap, and its counts
         // include this KB). The response reports both halves so the UI can
         // say what actually happened.
-        const idxBrainDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
-        if (!idxBrainDir) {
+        const idxBackend = tryGetKbBackend(ctx.forgeRoot, kbId);
+        if (!idxBackend) {
           sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin);
           return true;
         }
         const idxInKb = (f: Finding): boolean =>
-          findingUnderDir(ctx.forgeRoot, idxBrainDir, f) && typeof f.kind === 'string' && f.kind.startsWith('index.');
+          idxBackend.contains(f.file) && typeof f.kind === 'string' && f.kind.startsWith('index.');
         // Two per-KB repair lanes, both deterministic and spawn-free: the
         // auto-tier index fixers (forge sub-wiki indexes), plus the SAME
         // ensureLinkedAt repair consolidate uses for a project brain's
@@ -492,11 +519,14 @@ export async function handleKbMaintenance(
         // the kb.yaml explicitly overrides it. Only 'brain-fix' is
         // implemented today — an explicit, typed rejection beats silently
         // running the wrong obligation for a `{cmd}` or unrecognized builtin.
-        const kbDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
-        if (!kbDir) { sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin); return true; }
+        // M7-C KN1 (bead forge-8vfn.5.25.3): `descriptorPath()` is the
+        // backend's own kb.yaml resolution — re-resolved per call, so this
+        // stays TOCTOU-safe the same way `resolveKbBrainDir` was.
+        const descriptorPath = tryGetKbBackend(ctx.forgeRoot, kbId)?.descriptorPath() ?? null;
+        if (!descriptorPath) { sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin); return true; }
         let kb: KbDescriptor;
         try {
-          kb = loadKbDescriptor(join(kbDir, 'kb.yaml'));
+          kb = loadKbDescriptor(descriptorPath);
         } catch (err) {
           sendJson(res, 500, { error: `failed to load kb descriptor: ${sanitizeError(err)}` }, origin);
           return true;
@@ -529,6 +559,10 @@ export async function handleKbMaintenance(
         // than a raw `mkdirSync` on a hand-joined path.
         const brainfixLogGuard = resolveGuardedPath(ctx.forgeRoot, ['_logs', `_brainfix-${runId}`]);
         if (brainfixLogGuard.ok) mkdirSync(brainfixLogGuard.realPath, { recursive: true });
+        // forge-6esp: record this process's own dispatch BEFORE enqueueing —
+        // see `lastConsolidateDispatchFor`'s header for why the reattach GET
+        // must prefer this pointer over sorting directory names.
+        recordConsolidateDispatch(kbId, runId);
         // Fire-and-forget: dispatched async like fix-agent, pollable via the
         // existing GET .../fix-agent/:runId route. Queued per-kbId (not run
         // directly) so an overlapping dispatch against the same KB never

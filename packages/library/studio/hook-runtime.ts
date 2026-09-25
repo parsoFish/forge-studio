@@ -2,66 +2,62 @@
  * Hook execution runtime (R3-03-F3) — deny-by-default env stripping +
  * bounded, timed spawn.
  *
- * *** HONEST LIMIT, STATED UP FRONT: this module does NOT observe or
- * *** intercept a hook's actual env reads at runtime. Safety comes from
- * *** PREVENTION (stripping the child env down to exactly the
- * *** manifest-granted set before the process ever starts, composing
- * *** `orchestrator/spawn-env.ts`'s R5-02 allowlist seam over the NARROWER
- * *** `HOOK_ENV_BASE_ALLOWLIST` — a hook is untrusted third-party code, not
- * *** one of forge's own trusted agent children, so it never inherits
- * *** `AGENT_ENV_ALLOWLIST`'s `ANTHROPIC_API_KEY` by base allowlist alone —
- * *** and, since W8-B6 FIX-1, cannot obtain it by DECLARING it either: every
- * *** `HOOK_ENV_CREDENTIAL_EXCLUSIONS` name is refused on the overrides layer
- * *** too, and the refusal is emitted as a `hook-env-grant-refused` event
- * *** rather than silently dropped; see spawn-env.ts's own header for the
+ * *** HONEST LIMITS, STATED UP FRONT (not left to be inferred):
+ * ***
+ * *** ENV: this module does NOT observe or intercept a hook's actual env
+ * *** reads at runtime. Safety is PREVENTION — the child env is stripped to
+ * *** exactly the manifest-granted set before the process ever starts,
+ * *** composing `spawn-env.ts`'s R5-02 allowlist seam over the NARROWER
+ * *** `HOOK_ENV_BASE_ALLOWLIST` (a hook is untrusted third-party code, so it
+ * *** never inherits `AGENT_ENV_ALLOWLIST`'s `ANTHROPIC_API_KEY` by base
+ * *** allowlist, and since W8-B6 FIX-1 cannot obtain it by DECLARING it
+ * *** either — every `HOOK_ENV_CREDENTIAL_EXCLUSIONS` name is refused on the
+ * *** overrides layer too, reported as a `hook-env-grant-refused` event,
+ * *** never silently dropped; see `spawn-env.ts`'s header for the
  * *** confirmed-then-fixed exfiltration defect this closes). The
- * *** declared-vs-referenced mismatch check (`detectUndeclaredEnvRefs`) is a
- * *** STATIC, pre-spawn text scan for `$VAR`/`${VAR}` references against the
- * *** manifest — it flags an under-declared manifest (the hook will likely
- * *** see the var missing and may misbehave), it does NOT and cannot detect
- * *** what the running process actually reads. Two different, independently
- * *** true properties; neither substitutes for the other.
+ * *** declared-vs-referenced check (`detectUndeclaredEnvRefs`) is a STATIC,
+ * *** pre-spawn text scan for `$VAR`/`${VAR}` references against the
+ * *** manifest — it flags an under-declared manifest, it does NOT and cannot
+ * *** detect what the running process actually reads. Two different,
+ * *** independently true properties; neither substitutes for the other.
  * ***
  * *** `env` is the ONE permission dimension that gets real prevention. `read`
- * *** and `network` do NOT — 2026-08-04 finding, stated here rather than left
- * *** to be inferred: `permissions.read`/`permissions.network` are declared,
- * *** and cross-checked by hook-scan.ts's pre-approval STATIC TEXT SCAN, but
- * *** nothing at spawn time actually restricts what the real `bash` process
- * *** can touch. A hook can read any file the OS user can read, and reach the
- * *** network via anything the scan's egress patterns don't happen to match.
- * *** W8-B6 widened that list — the shapes this block used to name as the
- * *** live examples (bash's `/dev/tcp/` redirection, `python3 -c`, `ssh`,
- * *** `dig`) are all detected now — but a widened enumeration is still an
- * *** enumeration, so the LIMIT is unchanged: only the known holes are.
- * *** Real enforcement of either would mean an OS-level process
- * *** isolator (a restricted user/namespace/container/seccomp policy) — this
- * *** repo's standing rule (CLAUDE.md: "Never re-invent a job queue, worker
- * *** pool, resource controller, or process isolator") is not to hand-roll
- * *** one, so this boundary is drawn here deliberately, not left unenforced
- * *** by oversight.
+ * *** and `network` do NOT (2026-08-04 finding): both are declared and
+ * *** cross-checked by `hook-scan.ts`'s pre-approval STATIC TEXT SCAN, but
+ * *** nothing at spawn time restricts what the real `bash` process can
+ * *** touch — it can read any file the OS user can and reach the network via
+ * *** anything the scan's egress patterns don't match. W8-B6 widened that
+ * *** scan (bash's `/dev/tcp/`, `python3 -c`, `ssh`, `dig` are all detected
+ * *** now), but a widened enumeration is still an enumeration: only the known
+ * *** holes are closed. Real enforcement needs an OS-level process isolator
+ * *** — this repo's standing rule (CLAUDE.md: "never re-invent a job queue,
+ * *** worker pool, resource controller, or process isolator") is not to
+ * *** hand-roll one, so this boundary is drawn deliberately, not by oversight.
  * ***
  * *** File WRITES are not modelled at all. `HookPermissionManifest` declares
- * *** `env`/`read`/`network` only — there is no `write` field, and F2's scan
- * *** names four categories (network-egress, env-read, file-read,
- * *** obfuscation), none of which look for a write/delete. A hook can write,
- * *** overwrite, or delete anything the OS user can, completely undeclared
- * *** and unscanned. A half-enforced write permission (declared but not
- * *** checked) would be worse than this — it would read as a promise this
- * *** module cannot keep — so it is left out entirely rather than added as a
- * *** field nothing verifies.
+ * *** `env`/`read`/`network` only, and F2's scan checks network-egress,
+ * *** env-read, file-read and obfuscation — none of which is a write. A hook
+ * *** can write, overwrite or delete anything the OS user can, completely
+ * *** undeclared and unscanned. A half-enforced write permission would read
+ * *** as a promise this module cannot keep, so it is left out entirely
+ * *** rather than added as a field nothing verifies.
+ * ***
+ * *** PROCESS-GROUP CLEANUP IS ASYMMETRIC (forge-9a3 follow-up): the async
+ * *** tail SIGKILLs the whole group on timeout/overflow so a grandchild dies
+ * *** with it (`spawnBashAsync`'s `killGroup`); the sync tail's `spawnSync`
+ * *** signals only the child's own pid, so a timed-out sync hook can still
+ * *** leak one — left unchanged on purpose.
  *
- * `runHookScript` refuses to spawn anything that is not GENUINELY RUNNABLE —
- * `hookRunState(...).runnable`, i.e. approved, with the approval still covering
- * the current script, permissions and trigger hashes.
+ * `runHookScript` (sync) and `runHookScriptAsync` (async, forge-9a3) share
+ * one gate (`prepareHookRun`) and refuse to spawn anything that is not
+ * GENUINELY RUNNABLE — `hookRunState(...).runnable`, i.e. approved, with the
+ * approval still covering the current script, permissions and trigger hashes.
  *
- * A refusal, a spawn failure and a TIMEOUT are three different outcomes, and
- * since W8-B6 FIX-3 they are reported as three. `runHookScript` throws a
- * `HookRunError` carrying a typed `reason`
- * (`'not-runnable' | 'timeout' | 'spawn-failed'`), so a caller distinguishes
- * "the approval gate said no" from "the operator's script hung and, because
- * this spawn is synchronous, stalled the daemon for the whole budget" —
- * without string-matching a message. Both used to surface as "refused or
- * failed to spawn", which is prose that answers neither question.
+ * A refusal, a spawn failure and a TIMEOUT are three outcomes, mapped once
+ * (for either tail) in `finalizeHookOutcome` into a `HookRunError` with a
+ * typed `reason` (`'not-runnable' | 'timeout' | 'spawn-failed'`), so a
+ * caller distinguishes a gate refusal from a script that hung and stalled
+ * its caller for the whole budget — without string-matching a message.
  *
  * It did not always. The gate used to read `verdict === 'blocked' && !runnable`,
  * so `runnable`/`needsReview` were consulted ONLY for an already-blocked hook,
@@ -73,15 +69,17 @@
  * defers to a caller which does not exist is not a gate.
  */
 
-import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { HOOK_ENV_BASE_ALLOWLIST, HOOK_ENV_CREDENTIAL_EXCLUSIONS, buildChildEnv } from '@forge/kernel/spawn-env.ts';
 import type { EventLogger } from '@forge/kernel';
-import { hookDir, loadHookDefinition, type HookPermissionManifest } from './hook-library.ts';
+import { hookDir, loadHookDefinition, resolveHookScriptPath, type HookDefinition, type HookPermissionManifest } from './hook-library.ts';
 import { extractEnvVarNames, scanHookPackage, type HookScanReport } from './hook-scan.ts';
-import { hookRunState } from './hook-approval-ledger.ts';
+import { hookRunState, readHookApprovalLedger } from './hook-approval-ledger.ts';
+import { hashHookScript } from './hook-package.ts';
 
 // ---------------------------------------------------------------------------
 // buildHookChildEnv — composes spawn-env.ts's buildChildEnv over the
@@ -178,6 +176,41 @@ export function detectUndeclaredEnvRefs(scriptBody: string, permissions: HookPer
   return extractEnvVarNames(scriptBody).filter((name) => !declared.has(name) && !alwaysPresent.has(name));
 }
 
+// Copies the verified bytes to a private, read-only file — design.md "Hook exec".
+const PRIVATE_SCRIPT_FILENAME = 'hook-script.sh';
+
+function writePrivateScriptCopy(scriptBody: string): PrivateScriptCopy {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-hook-verified-'));
+  chmodSync(dir, 0o700);
+  const path = join(dir, PRIVATE_SCRIPT_FILENAME);
+  try {
+    writeFileSync(path, scriptBody, { mode: 0o500, flag: 'wx' });
+  } catch (err) {
+    rmSync(dir, { recursive: true, force: true });
+    throw err;
+  }
+  return { dir, path };
+}
+
+/** Called from a `finally` in both tails; never throws (would mask a real
+ *  result) — a cleanup failure is its own logged event instead. */
+function cleanupPrivateScriptDir(dir: string, id: string, logger: EventLogger, initiativeId: string): void {
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch (err) {
+    logger.emit({
+      phase: 'orchestrator',
+      skill: `hook:${id}`,
+      event_type: 'error',
+      initiative_id: initiativeId,
+      input_refs: [],
+      output_refs: [],
+      message: `Hook "${id}"'s private verified-script directory "${dir}" could not be removed after the run — ${(err as Error).message}`,
+      metadata: { kind: 'hook-private-script-cleanup-failed', hookId: id, dir },
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // runHookScript — real spawn, real stdio capture, bounded cwd + timeout.
 // ---------------------------------------------------------------------------
@@ -201,12 +234,9 @@ export interface RunHookScriptInput {
   /** Defaults to `process.env` — pure/testable per D-K (never mutates it). */
   parentEnv?: NodeJS.ProcessEnv;
   /**
-   * Wall-clock budget for this one invocation, defaulting to
-   * `HOOK_SPAWN_TIMEOUT_MS` (30s). Additive and optional: no production caller
-   * passes it — `hook-dispatch.ts` deliberately calls `runHookScript`
-   * unmodified, so every dispatched hook gets the standard budget — and it
-   * exists so the timeout path can be exercised in milliseconds rather than
-   * making a test suite wait 30 seconds to prove one branch.
+   * Wall-clock budget for this invocation, defaulting to
+   * `HOOK_SPAWN_TIMEOUT_MS` (30s) — optional, so a test can exercise the
+   * timeout path in milliseconds rather than waiting 30 real seconds.
    */
   timeoutMs?: number;
 }
@@ -223,8 +253,32 @@ export interface HookRunResult {
 /** Bounded wall-clock budget for a single hook invocation. */
 const HOOK_SPAWN_TIMEOUT_MS = 30_000;
 
-export function runHookScript(input: RunHookScriptInput): HookRunResult {
-  const { forgeRoot, id, logger, initiativeId, parentEnv = process.env, timeoutMs = HOOK_SPAWN_TIMEOUT_MS } = input;
+/** Bound on captured stdout/stderr for the async tail, matching `spawnSync`'s
+ *  documented `maxBuffer` default (confirmed empirically, not assumed). */
+const HOOK_SPAWN_MAX_BUFFER_BYTES = 1024 * 1024;
+
+// prepareHookRun — the ONE shared gate + env fence + pre-spawn logging step
+// (forge-9a3); `runHookScript`/`runHookScriptAsync` are thin tails differing
+// only in HOW they spawn `bash`.
+
+/** `dir` is what `cleanupPrivateScriptDir` removes (the whole temp dir). */
+interface PrivateScriptCopy {
+  dir: string;
+  path: string;
+}
+
+interface PreparedHookRun {
+  def: HookDefinition;
+  scriptPath: string;
+  dir: string;
+  childEnv: NodeJS.ProcessEnv;
+  undeclaredEnvRefs: string[];
+  /** The ONE thing either tail executes — callers must clean up `.dir`. */
+  privateScript: PrivateScriptCopy;
+}
+
+function prepareHookRun(input: { forgeRoot: string; id: string; logger: EventLogger; initiativeId: string; parentEnv: NodeJS.ProcessEnv }): PreparedHookRun {
+  const { forgeRoot, id, logger, initiativeId, parentEnv } = input;
 
   // BLOCKER 1 (2026-08-04, third adversarial review, FIX-FIRST): the gate
   // used to be `verdict === 'blocked' && !runnable`, which only ever
@@ -266,8 +320,24 @@ export function runHookScript(input: RunHookScriptInput): HookRunResult {
 
   const def = loadHookDefinition(id, forgeRoot);
   const dir = hookDir(id, forgeRoot);
-  const scriptPath = join(dir, def.script);
+  // Re-resolved HERE (not re-derived from a discarded earlier check) so a
+  // symlink swap has no window — forge-8vfn.8.3.2; design.md "Hook exec".
+  const scriptPath = resolveHookScriptPath(dir, def.script);
   const scriptBody = readFileSync(scriptPath, 'utf8');
+
+  // Re-hash THIS read and compare to the ledger's stored scriptHash — closes
+  // the gate-to-here TOCTOU window (forge-8vfn.8.3.2; design.md "Hook exec").
+  const approvedScriptHash = readHookApprovalLedger(forgeRoot).get(id)?.scriptHash;
+  const liveScriptHash = hashHookScript(scriptBody);
+  if (liveScriptHash !== approvedScriptHash) {
+    throw new HookRunError(
+      'not-runnable',
+      `runHookScript: hook "${id}"'s script content changed between the approval gate's check and this read (fingerprint mismatch: expected ${approvedScriptHash ?? '(no approval on record)'}, read ${liveScriptHash}) — refusing to spawn bytes that were never approved`,
+    );
+  }
+
+  // Closes the window PAST this read — see writePrivateScriptCopy.
+  const privateScript = writePrivateScriptCopy(scriptBody);
 
   // Emitted unconditionally (CLAUDE.md: "emit structured events on every
   // invocation") — the mismatch event below is CONDITIONAL, so a hook run
@@ -310,32 +380,30 @@ export function runHookScript(input: RunHookScriptInput): HookRunResult {
     });
   }
 
-  const start = Date.now();
-  const result = spawnSync('bash', [scriptPath], {
-    env: childEnv,
-    cwd: dir,
-    timeout: timeoutMs,
-    encoding: 'utf8',
-  });
-  const durationMs = Date.now() - start;
+  return { def, scriptPath, dir, childEnv, undeclaredEnvRefs, privateScript };
+}
 
-  if (result.error) {
-    // W8-B6 FIX-3: spawnSync reports an exceeded `timeout` as an ordinary
-    // `result.error` — same field a genuine spawn failure (ENOENT, EACCES)
-    // arrives in — so both used to be thrown as "failed to spawn". They are
-    // opposite problems with opposite fixes: one means the operator's hook
-    // package is broken, the other means their script hung and, because the
-    // spawn is synchronous, stalled the daemon for the whole budget. The
-    // discriminator is `code`, and the reason travels as a TYPED field rather
-    // than as words in a message a caller would have to re-parse.
-    const code = (result.error as NodeJS.ErrnoException).code;
+/** The shape both spawn tails reduce their real child-process result to,
+ *  before handing it to the ONE outcome mapper below. */
+interface HookSpawnOutcome {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+  error?: NodeJS.ErrnoException;
+}
+
+// finalizeHookOutcome — the ONE place a raw spawn result becomes a thrown
+// HookRunError or returned HookRunResult; shared by both tails (forge-9a3).
+function finalizeHookOutcome(id: string, timeoutMs: number, durationMs: number, outcome: HookSpawnOutcome, undeclaredEnvRefs: string[], logger: EventLogger, initiativeId: string): HookRunResult {
+  if (outcome.error) {
+    const code = outcome.error.code;
     if (code === 'ETIMEDOUT') {
       throw new HookRunError(
         'timeout',
-        `runHookScript: hook "${id}" exceeded its ${timeoutMs}ms wall-clock budget and was killed — it did not refuse to run, it ran too long (${result.error.message})`,
+        `runHookScript: hook "${id}" exceeded its ${timeoutMs}ms wall-clock budget and was killed — it did not refuse to run, it ran too long (${outcome.error.message})`,
       );
     }
-    throw new HookRunError('spawn-failed', `runHookScript: failed to spawn hook "${id}" — ${result.error.message}`);
+    throw new HookRunError('spawn-failed', `runHookScript: failed to spawn hook "${id}" — ${outcome.error.message}`);
   }
 
   logger.emit({
@@ -346,17 +414,142 @@ export function runHookScript(input: RunHookScriptInput): HookRunResult {
     input_refs: [],
     output_refs: [],
     duration_ms: durationMs,
-    message: `Hook "${id}" finished (exit ${result.status})`,
+    message: `Hook "${id}" finished (exit ${outcome.status})`,
   });
 
   return {
     hookId: id,
-    exitCode: result.status,
-    stdout: result.stdout ?? '',
-    stderr: result.stderr ?? '',
+    exitCode: outcome.status,
+    stdout: outcome.stdout,
+    stderr: outcome.stderr,
     durationMs,
     undeclaredEnvRefs,
   };
+}
+
+// Both tails exec prepared.privateScript via `bash -c 'source "$<var>"' <realScriptPath>` — design.md "Hook exec".
+
+const HOOK_VERIFIED_SCRIPT_ENV_VAR = 'FORGE_HOOK_VERIFIED_SCRIPT_PATH';
+
+function hookExecArgs(realScriptPath: string): string[] {
+  return ['-c', `source "$${HOOK_VERIFIED_SCRIPT_ENV_VAR}"`, realScriptPath];
+}
+
+function hookExecEnv(childEnv: NodeJS.ProcessEnv, privateScriptPath: string): NodeJS.ProcessEnv {
+  return { ...childEnv, [HOOK_VERIFIED_SCRIPT_ENV_VAR]: privateScriptPath };
+}
+
+// Tail 1 — SYNCHRONOUS.
+export function runHookScript(input: RunHookScriptInput): HookRunResult {
+  const { forgeRoot, id, logger, initiativeId, parentEnv = process.env, timeoutMs = HOOK_SPAWN_TIMEOUT_MS } = input;
+  const prepared = prepareHookRun({ forgeRoot, id, logger, initiativeId, parentEnv });
+
+  try {
+    const start = performance.now(); // monotonic: Date.now() steps back here (forge-8vfn.7.6.50)
+    const result = spawnSync('bash', hookExecArgs(prepared.scriptPath), {
+      env: hookExecEnv(prepared.childEnv, prepared.privateScript.path),
+      cwd: prepared.dir,
+      timeout: timeoutMs,
+      encoding: 'utf8',
+    });
+    const durationMs = Math.round(performance.now() - start);
+    const outcome = { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '', error: result.error as NodeJS.ErrnoException | undefined };
+    return finalizeHookOutcome(id, timeoutMs, durationMs, outcome, prepared.undeclaredEnvRefs, logger, initiativeId);
+  } finally {
+    // Every exit path — see cleanupPrivateScriptDir's doc comment.
+    cleanupPrivateScriptDir(prepared.privateScript.dir, id, logger, initiativeId);
+  }
+}
+
+// spawnBashAsync — async spawn wrapper: manual timeout + manual BOUNDED
+// capture, reduced to the same HookSpawnOutcome shape as spawnSync's result.
+
+function spawnBashAsync(execArgs: string[], cwd: string, env: NodeJS.ProcessEnv, timeoutMs: number): Promise<HookSpawnOutcome> {
+  return new Promise((resolve) => {
+    // `detached: true` makes `bash` the leader of its own process group (pid
+    // === pgid) so a group-targeted signal reaches every descendant too.
+    // Same exec scheme as the sync tail (hookExecArgs/hookExecEnv) — stdin
+    // is not touched here either.
+    const child = spawn('bash', execArgs, { env, cwd, detached: true });
+    const buf = { stdout: '', stderr: '' };
+    let overflowed = false;
+    let timedOut = false;
+    let settled = false;
+
+    // killGroup — kills the whole process GROUP, not just bash's own pid: a
+    // script's grandchild (e.g. `sleep 30 &`) survives a single-pid kill,
+    // reparented and orphaned, still holding bash's stdio pipes open
+    // (forge-9a3 follow-up, proven empirically). ESRCH means the group is
+    // already gone (a natural exit racing the timer) — expected, not an error.
+    const killGroup = (): void => {
+      if (child.pid === undefined) return;
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ESRCH') throw err;
+      }
+    };
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killGroup();
+    }, timeoutMs);
+
+    const settle = (status: number | null, error?: NodeJS.ErrnoException): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ status, stdout: buf.stdout, stderr: buf.stderr, error });
+    };
+
+    // Appends up to HOOK_SPAWN_MAX_BUFFER_BYTES total, then kills the group.
+    const onData = (key: 'stdout' | 'stderr') => (chunk: Buffer) => {
+      if (overflowed) return;
+      const next = buf[key] + chunk.toString('utf8');
+      buf[key] = next.length > HOOK_SPAWN_MAX_BUFFER_BYTES ? next.slice(0, HOOK_SPAWN_MAX_BUFFER_BYTES) : next;
+      if (next.length > HOOK_SPAWN_MAX_BUFFER_BYTES) {
+        overflowed = true;
+        killGroup();
+      }
+    };
+    child.stdout?.on('data', onData('stdout'));
+    child.stderr?.on('data', onData('stderr'));
+
+    child.on('error', (err) => settle(null, err as NodeJS.ErrnoException));
+
+    // Timeout/overflow settle on `exit`, not `close` — DELIBERATELY: `exit`
+    // fires the instant bash's own pid terminates, independent of whether
+    // every descendant's pipe has finished closing, so a caller awaiting the
+    // timeout gets a prompt answer regardless of how long an orphan unwinds.
+    child.on('exit', (code) => {
+      if (timedOut) settle(code, Object.assign(new Error('spawn bash ETIMEDOUT'), { code: 'ETIMEDOUT' }) as NodeJS.ErrnoException);
+      else if (overflowed) settle(code, Object.assign(new Error('spawn bash ENOBUFS'), { code: 'ENOBUFS' }) as NodeJS.ErrnoException);
+      // else: falls through to `close`, so capture reflects everything written.
+    });
+
+    child.on('close', (code) => settle(code));
+  });
+}
+
+// Tail 2 — ASYNC; hook-dispatch.ts awaits this, not the sync tail.
+
+export async function runHookScriptAsync(input: RunHookScriptInput): Promise<HookRunResult> {
+  const { forgeRoot, id, logger, initiativeId, parentEnv = process.env, timeoutMs = HOOK_SPAWN_TIMEOUT_MS } = input;
+  const prepared = prepareHookRun({ forgeRoot, id, logger, initiativeId, parentEnv });
+
+  try {
+    const start = performance.now(); // monotonic: Date.now() steps back here (forge-8vfn.7.6.50)
+    const outcome = await spawnBashAsync(
+      hookExecArgs(prepared.scriptPath),
+      prepared.dir,
+      hookExecEnv(prepared.childEnv, prepared.privateScript.path),
+      timeoutMs,
+    );
+    const durationMs = Math.round(performance.now() - start);
+    return finalizeHookOutcome(id, timeoutMs, durationMs, outcome, prepared.undeclaredEnvRefs, logger, initiativeId);
+  } finally {
+    cleanupPrivateScriptDir(prepared.privateScript.dir, id, logger, initiativeId);
+  }
 }
 
 // ---------------------------------------------------------------------------

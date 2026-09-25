@@ -59,6 +59,7 @@ import { getAdapter, resolveSdkId } from './_adapters/registry.ts';
 import type { QueryFn } from './_adapters/types.ts';
 import { unreadyConnectionsFor, formatUnreadyConnections } from './studio/connection-run-gate.ts';
 import type { ProbeResult } from '@forge/library/studio/connection-probe.ts';
+import { loadAndComposeProjectSkills } from './project-skills.ts';
 
 /**
  * A `runId` is used verbatim as the log directory name — `createLogger`
@@ -417,7 +418,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
     },
   });
 
-  const startedAt = Date.now();
+  const startedAt = performance.now(); // monotonic: Date.now() steps back on this host (forge-8vfn.7.6.50)
 
   // Step 2: harness safety — suppress the real spawn under dry-bridge / the
   // architect no-spawn seam, BEFORE any SDK call is made.
@@ -495,7 +496,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   }
 
   // Report + log the end event.
-  const durationMs = spawned.durationMs ?? Date.now() - startedAt;
+  const durationMs = spawned.durationMs ?? Math.round(performance.now() - startedAt);
 
   logger.emit({
     initiative_id: initiativeId,
@@ -540,9 +541,12 @@ async function runOneShotSpawn(
   runMarker: string,
   turnSink?: ReturnType<typeof makeToolEventSink>,
 ): Promise<RunAgentResult> {
+  // ADR 024 item 90 — a bound project's declared skills; see project-skills.ts.
+  const composedSystemPrompt = loadAndComposeProjectSkills(ctx, FORGE_ROOT, def.slug);
+
   const options: Record<string, unknown> = {
     cwd: ctx.cwd ?? ctx.workdir,
-    ...(ctx.systemPrompt !== undefined ? { systemPrompt: ctx.systemPrompt } : {}),
+    ...(composedSystemPrompt !== undefined ? { systemPrompt: composedSystemPrompt } : {}),
     model: modelForSpec(spec),
     permissionMode: ctx.permissionMode ?? 'acceptEdits',
     allowedTools: [...spec.allowedTools],

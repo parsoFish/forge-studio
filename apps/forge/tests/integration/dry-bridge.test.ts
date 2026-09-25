@@ -20,6 +20,8 @@ import {
   DRY_BRIDGE_ENV,
   isDryBridge,
   BRIDGE_ROUTE_CLASSIFICATION,
+  HAND_ROUTE_CLASSIFICATION,
+  deriveCarvedRouteClassification,
   refuseDryBridge,
   DRY_BRIDGE_LOG_BUCKET,
 } from '../../dry-bridge.ts';
@@ -162,6 +164,52 @@ test('the NO_SPAWN-guarded spawn routes are stub-actions via the spawn-helper me
 test('all GET routes are represented as read-only', () => {
   const row = classify('GET', '*');
   assert.equal(row?.classification, 'read-only');
+});
+
+// ---------------------------------------------------------------------------
+// bead forge-8vfn.5.30 — HAND_ROUTE_CLASSIFICATION must not duplicate a
+// carved RouteEntry.dryClassification; every carved RouteEntry must still be
+// represented in the assembled BRIDGE_ROUTE_CLASSIFICATION. Both directions
+// are asserted against `deriveCarvedRouteClassification([])` — called with
+// an EMPTY hand-rows list so every carved route surfaces regardless of what
+// HAND_ROUTE_CLASSIFICATION currently contains, independent of the
+// production dedup this exercises.
+// ---------------------------------------------------------------------------
+
+test('HAND_ROUTE_CLASSIFICATION carries no row that duplicates a carved RouteEntry.dryClassification', () => {
+  const everyCarvedRoute = deriveCarvedRouteClassification([]);
+  const offenders: string[] = [];
+  for (const row of HAND_ROUTE_CLASSIFICATION) {
+    // A row stating `action` or `guard` carries information no RouteEntry
+    // field can express, and an ` (op=...)`-suffixed route is a body-field
+    // sub-classification finer than any one RouteEntry — both are legitimate
+    // hand rows, not duplicates.
+    if (row.action !== undefined || row.guard !== undefined) continue;
+    if (row.route.includes(' (op=')) continue;
+    const dup = everyCarvedRoute.find((d) => d.method === row.method && d.route === row.route);
+    if (dup) {
+      offenders.push(
+        `${row.method} ${row.route} is hand-written in HAND_ROUTE_CLASSIFICATION but exactly duplicates a ` +
+          `RouteEntry.dryClassification ('${dup.classification}', ${dup.reason}) — derive it instead of hand-declaring it.`,
+      );
+    }
+  }
+  assert.deepEqual(offenders, [], `hand rows duplicating a carved RouteEntry:\n${offenders.join('\n')}`);
+});
+
+test('every carved RouteEntry.dryClassification is represented in BRIDGE_ROUTE_CLASSIFICATION', () => {
+  const everyCarvedRoute = deriveCarvedRouteClassification([]);
+  assert.ok(everyCarvedRoute.length > 30, `expected broad RouteEntry coverage, got ${everyCarvedRoute.length}`);
+  const offenders: string[] = [];
+  for (const d of everyCarvedRoute) {
+    const found = BRIDGE_ROUTE_CLASSIFICATION.some(
+      (r) => r.method === d.method && r.route === d.route && r.classification === d.classification,
+    );
+    if (!found) {
+      offenders.push(`${d.method} ${d.route} (dryClassification=${d.classification}) has no matching row in BRIDGE_ROUTE_CLASSIFICATION`);
+    }
+  }
+  assert.deepEqual(offenders, [], `unrepresented carved routes:\n${offenders.join('\n')}`);
 });
 
 // ---------------------------------------------------------------------------

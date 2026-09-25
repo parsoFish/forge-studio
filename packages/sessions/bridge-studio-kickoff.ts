@@ -41,8 +41,11 @@ import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { skillPathRelative } from '@forge/library/skill-path.ts';
 
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';
+import type { SessionLifecycle } from './bridge-studio-lifecycle.ts';
 
 import {
+  deriveRowLifecycle,
+  findSessionKindDescriptorSafe,
   invalidGenerationProjectReason,
   newArchitectSessionId,
   resolveKickoffModelTier,
@@ -291,13 +294,29 @@ export async function handleKickoffRoutes(
           latestStartedAt = startedAt;
         }
       }
-      if (!latest) { sendJson(res, 200, { ok: true, sessionId: null, runId: null, phase: null }, origin); return true; }
+      if (!latest) { sendJson(res, 200, { ok: true, sessionId: null, runId: null, phase: null, lifecycle: null }, origin); return true; }
+
+      const phase = typeof latestStatus?.phase === 'string' ? latestStatus.phase : null;
+      // forge-6gv.13.1 (projects-42) — `phase` stays RAW (W6-B14 tests pin it
+      // byte-identical): a leaked run (process died, no terminal marker
+      // written) reads 'running' forever, which `OnboardWithAgent` trusted
+      // alone. `lifecycle` is the ADDITIVE honest companion, via the SAME
+      // canonical staleness rule every session surface already uses
+      // (`deriveRowLifecycle`/`deriveSessionLifecycleFor`, bridge-studio-
+      // lifecycle.ts) — never a second invented check. `null` only if the
+      // registry can't resolve `onboarding` (findSessionKindDescriptorSafe's
+      // own graceful fallback).
+      const descriptor = findSessionKindDescriptorSafe(ctx.forgeRoot, 'onboarding');
+      const lifecycle: SessionLifecycle | null = descriptor && phase !== null
+        ? deriveRowLifecycle({ projectsRoot: ctx.projectsRoot, logsRoot: ctx.logsRoot }, descriptor, phase, project, latest).lifecycle
+        : null;
 
       sendJson(res, 200, {
         ok: true,
         sessionId: latest,
         runId: typeof latestStatus?.runId === 'string' ? latestStatus.runId : null,
-        phase: typeof latestStatus?.phase === 'string' ? latestStatus.phase : null,
+        phase,
+        lifecycle,
       }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);

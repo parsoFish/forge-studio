@@ -23,8 +23,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { basename, join, sep } from 'node:path';
 import matter from 'gray-matter';
 
-import type { Finding } from '@forge/kernel';
-import { listSkillMdDirs, skillsDir, SLUG_RE } from '@forge/agents/skill-path.ts';
+import { isSafeSegment, type Finding } from '@forge/kernel';
+import { skillRoots } from '@forge/kernel/discovery-roots.ts';
+import { listSkillMdDirs, SLUG_RE } from '@forge/agents/skill-path.ts';
 import { FINALIZERS } from '../interactive-finalizers.ts';
 
 import {
@@ -75,7 +76,7 @@ function allowedIdsSummary(rows: readonly { readonly id: string }[]): string {
 
 function discoverRuntimeAgentIds(forgeRoot: string): Set<string> {
   const ids = new Set<string>();
-  for (const dir of listSkillMdDirs(skillsDir(forgeRoot))) {
+  for (const dir of skillRoots(forgeRoot).flatMap(listSkillMdDirs)) {
     const skillMdPath = join(dir, 'SKILL.md');
     try {
       const raw = readFileSync(skillMdPath, 'utf8');
@@ -104,6 +105,21 @@ const CHECK_LOAD_ERROR = 'session-kinds/load-error';
 const CHECK_SLUG = 'session-kinds/slug';
 const CHECK_DUPLICATE_ID = 'session-kinds/duplicate-id';
 const CHECK_UNKNOWN_AGENT = 'session-kinds/unknown-agent';
+const CHECK_RETIRED_KIND_ID = 'session-kinds/retired-kind-id';
+
+/**
+ * forge-boqn — ids stay reserved and are never reused, the same rule ADR
+ * numbers follow (docs/decisions/README.md). `CHECK_UNKNOWN_AGENT` above
+ * only catches a retired kind re-added under its OWN (now-deleted) agent
+ * id; one re-animated under any still-live agent (e.g. `creation-agent`)
+ * passed `forge studio lint` clean, with the class held only by
+ * `packages/sessions/tests/contract/session-kinds-repo.test.ts`'s exact-
+ * count pin — never by the operator-facing validator. Append here, never
+ * remove: retiring a kind twice must still be caught the second time.
+ */
+const RETIRED_SESSION_KIND_IDS: ReadonlySet<string> = new Set([
+  'community-refresh', // W6-CR-3, retired W8-B5b (superseded by `forge community refresh`)
+]);
 const CHECK_EMPTY_STAGES = 'session-kinds/empty-stages';
 const CHECK_UNKNOWN_STAGE = 'session-kinds/unknown-stage';
 const CHECK_DEFAULT_STAGE_NOT_IN_STAGES = 'session-kinds/default-stage-not-in-stages';
@@ -176,19 +192,12 @@ const CHECK_PANEL_REQUIRES_MISPLACED = 'session-kinds/panel-requires-misplaced';
 // both are present, so this is the ONLY finding a doubly-declared descriptor
 // ever produces.
 const CHECK_TURNSPEC_PANEL_EXCLUSIVE = 'session-kinds/turnspec-panel-exclusive';
-
-/** True if `seg` contains any C0 control character (codepoint 0-31
- *  inclusive), mirroring packages/kernel/path-guard.ts's own CONTROL_CHAR_RE
- *  scan for the same range — written here as an explicit codepoint scan,
- *  not a `/[\u0000-\u001f]/`-style character-class literal, so this source
- *  file itself never has to carry a raw control byte inside a regex
- *  literal. */
-function hasControlChar(seg: string): boolean {
-  for (let i = 0; i < seg.length; i++) {
-    if (seg.charCodeAt(i) <= 0x1f) return true;
-  }
-  return false;
-}
+// doneField/nextOnDone/ceiling (interview ceiling + fall-through) are turnSpec-ONLY — panel never dispatches, no panel-* counterpart.
+const CHECK_TURNSPEC_DONEFIELD_COREQUIRED = 'session-kinds/turnspec-donefield-corequired';
+const CHECK_TURNSPEC_DANGLING_NEXT_ON_DONE = 'session-kinds/turnspec-dangling-next-on-done';
+// review finding — doneField/nextOnDone/ceiling are read only inside runAgentStyleStep (step:'agent' phases); on
+// any other step they are declared-data-fails-open (silently inert at runtime).
+const CHECK_TURNSPEC_DONEFIELD_NOT_AGENT_STEP = 'session-kinds/turnspec-donefield-not-agent-step';
 
 /**
  * turnSpec.kindDir must be a safe single path segment — it becomes
@@ -201,22 +210,11 @@ function hasControlChar(seg: string): boolean {
  * reject every legitimate shipped value. This mirrors `isSafeSegment` in
  * packages/kernel/path-guard.ts EXACTLY (no separators, no "." or "..", no C0
  * control characters) — the same predicate `resolveGuardedPath` itself
- * relies on one layer further down. NOT imported from that module because
- * `isSafeSegment` is not exported there (an internal helper of a file this
- * initiative's file-boundary does not touch); kept in exact lockstep by
- * design — any future edit to isSafeSegment must be mirrored here too.
+ * relies on one layer further down — so it IS that predicate, imported from
+ * `@forge/kernel` (the hand-mirror it replaced drifted when 5.59 added DEL and
+ * encoded-traversal rejection; lane m7-c security review, 2026-09-19).
  */
-function isSafeKindDirSegment(seg: string): boolean {
-  return (
-    seg.length > 0 &&
-    seg !== '.' &&
-    seg !== '..' &&
-    !seg.includes('/') &&
-    !seg.includes('\\') &&
-    !seg.includes(sep) &&
-    !hasControlChar(seg)
-  );
-}
+const isSafeKindDirSegment = isSafeSegment;
 
 /** Check-id bundle for `validatePhaseTable` below — one per phase-row-level
  *  rule, so a caller (turnSpec vs panel) supplies its own check-id family
@@ -526,6 +524,16 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
       findings.push(err(obj, CHECK_SLUG, `Session-kind id "${d.id}" does not match ${SLUG_RE}`));
     }
 
+    if (RETIRED_SESSION_KIND_IDS.has(d.id)) {
+      findings.push(
+        err(
+          obj,
+          CHECK_RETIRED_KIND_ID,
+          `Session kind "${d.id}" is a RETIRED id — retired ids stay reserved and are never reused, even under a different, still-live agent`,
+        ),
+      );
+    }
+
     if (!knownAgentIds.has(d.agent)) {
       const allowedAgents = [...knownAgentIds].sort().join(', ');
       findings.push(
@@ -642,22 +650,17 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
           );
         }
 
-        // structured-unsupported (AT-R422-18): "structured" IS a member of
-        // TURN_STYLES (the unknown-style check above stays silent for it),
-        // but SCHEMA_IDS ships deliberately EMPTY for R4-22 WI-1 — no schema
-        // id can ever validate, so a structured turnSpec can NEVER be made
-        // valid. Saying nothing would be a silent pass on a value that is
-        // honestly unusable; this fires unconditionally on style:
-        // "structured" while SCHEMA_IDS.length === 0, and self-expires
-        // (mirrors the SCHEMA_IDS EXPIRY CONDITION comment above) the moment
-        // a first schema id is seeded — at that point this becomes a real
-        // membership check instead of a blanket one.
-        if (ts.style === 'structured' && SCHEMA_IDS.length === 0) {
+        // structured-unsupported (bead 8vfn.6.6 item 1, supersedes AT-R422-18's
+        // blanket form now that SCHEMA_IDS is seeded): a structured turnSpec
+        // needs its OWN schema field — the unknown-schema check just below
+        // only fires when `ts.schema` IS present, so an absent one used to
+        // validate clean with nothing to resolve at runtime.
+        if (ts.style === 'structured' && ts.schema === undefined) {
           findings.push(
             err(
               obj,
               CHECK_TURNSPEC_STRUCTURED_UNSUPPORTED,
-              `Session kind "${d.id}" declares turnSpec.style "structured" but no schema is registered yet (SCHEMA_IDS is empty) — a structured turnSpec cannot be made valid until a schema id is seeded`,
+              `Session kind "${d.id}" declares turnSpec.style "structured" but no turnSpec.schema is declared — a structured turnSpec requires a schema id (one of ${allowedIdsSummary(SCHEMA_IDS)})`,
             ),
           );
         }
@@ -690,6 +693,24 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
         // `writes` (each phase's optional staging-area list) is deliberately
         // NOT validated anywhere in this block — see TurnSpecPhase's own
         // EXPIRY CONDITION doc comment above for why and when.
+        // doneField/nextOnDone co-required, ceiling meaningless without doneField, nextOnDone must resolve.
+        const doneNames = ts.phases.map((p) => p.phase);
+        for (const phase of ts.phases) {
+          const hasDone = phase.doneField !== undefined;
+          const hasNextOnDone = phase.nextOnDone !== undefined;
+          if (hasDone !== hasNextOnDone || (phase.ceiling !== undefined && !hasDone)) {
+            findings.push(err(obj, CHECK_TURNSPEC_DONEFIELD_COREQUIRED,
+              `Session kind "${d.id}" turnSpec.phases phase "${phase.phase}" declares doneField/nextOnDone/ceiling inconsistently — doneField and nextOnDone must be declared TOGETHER, and ceiling is meaningless without doneField.`));
+          }
+          if (hasNextOnDone && !doneNames.includes(phase.nextOnDone!)) {
+            findings.push(err(obj, CHECK_TURNSPEC_DANGLING_NEXT_ON_DONE,
+              `Session kind "${d.id}" turnSpec.phases phase "${phase.phase}" nextOnDone "${phase.nextOnDone}" is not a member of its own declared phases [${doneNames.join(', ')}]`));
+          }
+          if ((hasDone || hasNextOnDone || phase.ceiling !== undefined) && phase.step !== 'agent') {
+            findings.push(err(obj, CHECK_TURNSPEC_DONEFIELD_NOT_AGENT_STEP,
+              `Session kind "${d.id}" turnSpec.phases phase "${phase.phase}" declares doneField/nextOnDone/ceiling on step "${phase.step}" — only meaningful on step "agent" (runAgentStyleStep never reads them otherwise).`));
+          }
+        }
       }
 
       // panel (W6-B3, ADR-043 2026-08-15 amendment §2): additive-optional,

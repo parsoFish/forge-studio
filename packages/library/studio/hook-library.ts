@@ -275,11 +275,22 @@ export function listHookIds(root: string = FORGE_ROOT): string[] {
 // installSkillPackage (realpath + startsWith(boundary + sep)).
 // ---------------------------------------------------------------------------
 
-function resolveHookScriptPath(hookDirPath: string, scriptRel: string): string {
+export function resolveHookScriptPath(hookDirPath: string, scriptRel: string): string {
   if (isAbsolute(scriptRel)) {
     throw new Error(`hook script path must be relative to the hook directory, got an absolute path "${scriptRel}"`);
   }
-  const boundary = resolve(hookDirPath) + sep;
+
+  // Realpath the hook directory itself ONCE, up front — `hookDirPath` always
+  // exists by the time this runs (the caller already read hook.yaml from
+  // inside it). Every containment check below compares against this REAL
+  // root, never the lexical `resolve(hookDirPath)` the old code used: a hook
+  // dir reached through a symlinked ANCESTOR directory (not the script leaf
+  // itself) made `realpathSync(resolvedLiteral)` — which follows EVERY
+  // symlink, including ones in `hookDirPath`'s own ancestry — mismatch a
+  // boundary that had followed none of them, misjudging a perfectly
+  // legitimate script as an escape (forge-8vfn.8.3.2).
+  const hookDirReal = realpathSync(resolve(hookDirPath));
+  const boundary = hookDirReal + sep;
 
   // URL-encoded traversal probe (e.g. "%2e%2e/outside.sh"): decode defensively
   // and check the DECODED form too, not just the literal text — a naive
@@ -291,24 +302,30 @@ function resolveHookScriptPath(hookDirPath: string, scriptRel: string): string {
     /* malformed percent-escape ⇒ leave as literal text, the raw check below still applies */
   }
 
-  const resolvedLiteral = resolve(hookDirPath, scriptRel);
-  const resolvedDecoded = resolve(hookDirPath, decoded);
+  const resolvedLiteral = resolve(hookDirReal, scriptRel);
+  const resolvedDecoded = resolve(hookDirReal, decoded);
   if (!resolvedLiteral.startsWith(boundary) || !resolvedDecoded.startsWith(boundary)) {
     throw new Error(`hook script path "${scriptRel}" escapes the hook directory "${hookDirPath}"`);
   }
 
-  // Symlink escape: can only be checked once the entry exists on disk.
-  if (existsSync(resolvedLiteral)) {
-    const real = realpathSync(resolvedLiteral);
-    const rootReal = resolve(hookDirPath);
-    if (real !== rootReal && !real.startsWith(boundary)) {
-      throw new Error(
-        `hook script path "${scriptRel}" resolves (after following symlinks) outside the hook directory "${hookDirPath}"`,
-      );
-    }
+  // Symlink escape: can only be checked once the entry exists on disk. No
+  // entry yet ⇒ nothing further to realpath; `resolvedLiteral` is already the
+  // validated real path (every component up to and including `hookDirReal`
+  // is real, and a component that does not exist cannot itself be a symlink).
+  if (!existsSync(resolvedLiteral)) {
+    return resolvedLiteral;
   }
-
-  return resolvedLiteral;
+  const real = realpathSync(resolvedLiteral);
+  if (real !== hookDirReal && !real.startsWith(boundary)) {
+    throw new Error(
+      `hook script path "${scriptRel}" resolves (after following symlinks) outside the hook directory "${hookDirPath}"`,
+    );
+  }
+  // Return the validated REAL path, not `resolvedLiteral` — a caller that
+  // execs or reads through the returned value must never re-resolve a
+  // symlink this function already checked (TOCTOU: the symlink could be
+  // swapped between this check and that later use).
+  return real;
 }
 
 function parseHookPermissions(raw: unknown, file: string): HookPermissionManifest {

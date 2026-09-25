@@ -39,6 +39,7 @@ import { type QueryFn, type ClaudeAgentOptions } from '@forge/agents/ralph/claud
 import { getAdapter, resolveSdkId } from '@forge/agents/_adapters/registry.ts';
 import type { AgentInvocation } from '@forge/agents/_adapters/types.ts';
 import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
+import { makeProjectSkillsLoadedSink } from '@forge/agents/project-skills.ts';
 import { run as runRalph, type LoopResult } from '@forge/agents/ralph/runner.ts';
 import { matchesRateLimitSignature } from '@forge/agents/failure-classifier.ts';
 import { createWiWorktree, removeWiWorktree } from '@forge/flows/wi-worktree.ts';
@@ -54,6 +55,7 @@ import {
 import { runConcurrentDispatch, type DispatchOutcome } from '@forge/flows/wi-dispatch-scheduler.ts';
 import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '@forge/projects/project-config.ts';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import { resolveWiCostBudgetUsd, makeCostCeilingCheck, isCostCeilingHalt } from './dev-cost-bound.ts';
 
 /**
  * Wipe the Ralph scratch files (PROMPT.md / AGENT.md / fix_plan.md) so the
@@ -74,11 +76,9 @@ function wipeRalphScratch(worktreePath: string): void {
 }
 
 /**
- * Defaults for the live Ralph loop. Per CONTRACTS.md C19, the per-WI $1.0 USD
- * cap that previously lived here has been REMOVED — iteration cap is the
- * only bound on the dev-loop. Cost is still logged per event for telemetry,
- * but no $-threshold gate exists. The per-iteration turn cap stays as a
- * runtime safety bound (not a budget).
+ * Defaults for the live Ralph loop. Iteration cap bounds a WI's own turns;
+ * the cycle's cost ceiling is the CROSS-WI bound (dev-cost-bound.ts,
+ * `costCeilingCheck` below) — a runtime safety cap, not a quality gate.
  */
 const DEV_LIVE_DEFAULT_ITERATIONS_PER_WI = 5;
 // Per-iteration tool-call cap — a SAFETY BACKSTOP, not the working bound.
@@ -185,13 +185,10 @@ export function resolveGitIdentity(sinkCtx: { phase: 'developer-loop' | 'unifier
  * Behavior-preserving: the sink and agent options are forwarded unchanged;
  * net effect is fewer lines at each call site.
  *
- * Change B — `onUsageDelta` is wired inside so every agent emits per-turn
- * token-usage log events. The callback emits a `log` event with
- * `usage_delta` message carrying raw token counts (no pricing table —
- * the authoritative `cost_usd` continues to come from the iteration `result`
- * event; this is additive mid-turn granularity only).
+ * Change B — `onUsageDelta` is also wired inside, emitting a per-turn
+ * `usage_delta` log event (detail on the callback itself, below).
  */
-function makeAgentWithTelemetry(
+export function makeAgentWithTelemetry(
   logger: EventLogger,
   sinkCtx: {
     initiativeId: string;
@@ -200,7 +197,7 @@ function makeAgentWithTelemetry(
     skill: string;
     workItemId?: string;
   },
-  agentOpts: Omit<ClaudeAgentOptions, 'onToolUse' | 'onHeartbeat' | 'onUsageDelta' | 'onReasoning'>,
+  agentOpts: Omit<ClaudeAgentOptions, 'onToolUse' | 'onHeartbeat' | 'onUsageDelta' | 'onReasoning' | 'onProjectSkillsLoaded'>,
   // Runtime selection (ADR-029). Now threaded from the SKILL.md runtime.sdk via
   // the phase agent spec (devAgentSpec/unifierAgentSpec), resolved through
   // resolveSdkId at the caller so a free-text/unavailable id falls back to
@@ -226,6 +223,8 @@ function makeAgentWithTelemetry(
     onToolUse: toolSink.onToolUse,
     onHeartbeat: toolSink.onHeartbeat,
     ...(onReasoning !== undefined ? { onReasoning } : {}),
+    // Item 90: the project's declared skills reached this agent's prompt.
+    onProjectSkillsLoaded: makeProjectSkillsLoadedSink(logger, sinkCtx),
     onUsageDelta: (u) => {
       // Change B: emit per-turn token deltas as a lightweight log event so
       // the operator UI and future tooling can track mid-iteration usage.
@@ -300,15 +299,15 @@ export async function runDeveloperLoop(
   }
 
   const ordered = topologicalOrder(items);
-  // ADR 019: resume-from-demo skips the per-WI dev-loop entirely — the WI
+  // ADR 019: resume-from-integrate skips the per-WI dev-loop entirely — the WI
   // commits already exist on the preserved branch from the prior cycle. We
   // still read + validate the WI set above (the post-develop band uses it for
   // context), but run the per-WI loop over an empty list so the walk re-enters
-  // at the `demo` node without rebuilding any WI.
+  // at the `integrate` node without rebuilding any WI.
   // ADR 040: resume-from-develop (the fix loop) RUNS the full list — prior WIs
   // fast-exit via the iter-0 already-complete shortcut, fix WIs build.
-  const resumeFromDemo = input.resumeFrom === 'demo';
-  const toRun = resumeFromDemo ? [] : ordered;
+  const resumeFromIntegrate = input.resumeFrom === 'integrate';
+  const toRun = resumeFromIntegrate ? [] : ordered;
 
   // cascade-v4 #2: establish a known-green baseline ONCE before any WI work.
   // On a fresh (non-resume) dev-loop the worktree sits at the initiative
@@ -567,10 +566,8 @@ export async function runDeveloperLoop(
       iterationBudget: wi.estimated_iterations > 0
         ? Math.max(wi.estimated_iterations, DEV_LIVE_DEFAULT_ITERATIONS_PER_WI)
         : DEV_LIVE_DEFAULT_ITERATIONS_PER_WI,
-      // Per CONTRACTS.md C19: no $ cap. Carries through to the prompt header
-      // as Infinity so the agent sees "no $ ceiling — iteration cap is the
-      // only bound".
-      costBudgetUsd: Number.POSITIVE_INFINITY,
+      // M7-A: real remaining cycle budget (Infinity only if unconfigured).
+      costBudgetUsd: resolveWiCostBudgetUsd(input),
     });
 
     const tallyingQueryFn: QueryFn = ({ prompt, options }) => {
@@ -617,7 +614,6 @@ export async function runDeveloperLoop(
           return hooks !== undefined ? { hooks } : {};
         })(),
         maxTurnsPerIteration: DEV_LIVE_MAX_TURNS_PER_ITERATION,
-        // Per CONTRACTS.md C19: no $ cap on the per-WI Ralph.
         queryFn: tallyingQueryFn,
         // R2-03-F4: chain the node wedge-kill into this WI's Ralph iterations.
         ...(signal ? { externalSignal: signal } : {}),
@@ -670,9 +666,8 @@ export async function runDeveloperLoop(
           worktreePath: wiWorktree.path,
           initiativeBudget: {
             iterations: Math.max(wi.estimated_iterations, DEV_LIVE_DEFAULT_ITERATIONS_PER_WI),
-            // Per CONTRACTS.md C19: no $ cap. Pass Infinity so the runner's
-            // cost-budget stop condition never fires.
-            usd: Number.POSITIVE_INFINITY,
+            // M7-A: real remaining cycle budget; costCeilingCheck below is the cross-WI backstop.
+            usd: resolveWiCostBudgetUsd(input),
           },
           brainQueryResults: '',
           cycleId: logger.cycleId,
@@ -733,6 +728,8 @@ export async function runDeveloperLoop(
           // re-review #1: stop early if the gate command can't RUN (broken
           // gate) rather than iterating against it and burning the budget.
           gateErrored: () => lastGateErrored,
+          // M7-A: cross-WI cost-ceiling halt (dev-cost-bound.ts) — AC4.
+          costCeilingCheck: makeCostCeilingCheck(input),
           // G1 rescope (plan item 2.6): the autocommit safety net stays, but
           // when it fires the agent's commit-discipline failure becomes a
           // distinct, greppable event instead of being silently absorbed —
@@ -944,7 +941,8 @@ export async function runDeveloperLoop(
         }
       }
     } else {
-      finalStatus = 'failed';
+      // M7-A: a cost-ceiling halt settles 'pending' (resumable), not 'failed'.
+      finalStatus = isCostCeilingHalt(result) ? 'pending' : 'failed';
     }
     if (!requeueForMergeConflict && finalStatus !== 'complete') {
       writeWorkItemStatus(specPath, finalStatus);
@@ -989,6 +987,8 @@ export async function runDeveloperLoop(
         // it cascades to dependents the SAME way (see `settleWiOutcome`
         // below + prerequisiteBlockage's environment-failure class).
         ...(mergeConflict ? { failure_kind: 'merge-conflict', merge_detail: mergeDetail } : {}),
+        // M7-A: names the cost ceiling, reusing dispatchWi's failure_kind.
+        ...(isCostCeilingHalt(result) ? { failure_kind: 'cost-ceiling' } : {}),
       },
     });
 
@@ -1092,11 +1092,11 @@ export async function runDeveloperLoop(
         id: wi.work_item_id,
         status: finalStatus,
         result,
-        // A merge conflict cascades to dependents the SAME way an environment
-        // failure does (they stay pending, not failed) — prerequisiteBlockage
-        // generalizes over this single flag regardless of which non-work
-        // reason set it.
-        ...(environmentFailure || mergeConflict ? { environment: true } : {}),
+        // A merge conflict (or a cost-ceiling halt) cascades to dependents the
+        // SAME way an environment failure does (they stay pending, not
+        // failed) — prerequisiteBlockage generalizes over this single flag
+        // regardless of which non-work reason set it.
+        ...(environmentFailure || mergeConflict || isCostCeilingHalt(result) ? { environment: true } : {}),
       });
     }
     } finally {
@@ -1227,7 +1227,7 @@ export async function runDeveloperLoop(
       // ADR 019: flag resume runs so the report/UI can distinguish a
       // unifier-only resume (0 WIs run, commits already on branch) from a
       // genuine 0/N total failure.
-      resumed: resumeFromDemo,
+      resumed: resumeFromIntegrate,
       // ADR 040: which resume kind, when any — 'develop' is the fix-loop
       // re-entry (full list run, prior WIs fast-exit).
       ...(input.resumeFrom ? { resumed_from: input.resumeFrom } : {}),
@@ -1240,18 +1240,18 @@ export async function runDeveloperLoop(
   // identify what's missing, and feedback rounds can complete the work.
   // Only throw when ZERO WIs succeeded (total dev-loop failure); otherwise
   // emit the partial outcome and hand off to the post-develop band.
-  // ADR 019: on resume-from-demo zero WIs run by design (their commits are
+  // ADR 019: on resume-from-integrate zero WIs run by design (their commits are
   // already on the branch), so the total-failure guard must not fire.
-  if (!resumeFromDemo && completeCount === 0 && items.length > 0) {
+  if (!resumeFromIntegrate && completeCount === 0 && items.length > 0) {
     throw new Error(
       `developer-loop: 0/${items.length} work items completed — total failure`,
     );
   }
 
   // The dev-loop phase ends here, with only the per-WI work on the branch. The
-  // post-develop band (demo → adversarial-review → verdict, R4-10-F1) runs as
+  // post-develop band (integrate → adversarial-review → verdict, R4-10-F1) runs as
   // its own flow nodes after this; on a resume the flow-runner skips this dev
-  // node entirely and re-enters at the demo node (resume_from:'demo', R4-10-F6).
+  // node entirely and re-enters at the integrate node (resume_from:'integrate', R4-10-F6).
 }
 
 
@@ -1267,7 +1267,7 @@ export async function runDeveloperLoop(
  *
  * Exported for unit testing (real tmp git repos — see
  * `developer-loop-close-sync.test.ts`). Production callers reach this via the
- * post-develop band's close contract (execDemo, R4-10-F1).
+ * post-develop band's close contract (execIntegrate, R4-10-F1).
  */
 /**
  * cascade-v4 #1: emit `dev-loop.delivered` — the git-derived net contribution
@@ -1339,7 +1339,7 @@ export function wiDeliveryEvent(
 export function emitDeliverySummary(
   input: CycleInput,
   logger: EventLogger,
-  // Optional so the R4-10-F1 demo node can emit the delivery ground-truth
+  // Optional so the R4-10-F1 integrate node can emit the delivery ground-truth
   // (the reflector's grounding event) without threading a per-node parent id.
   parentEventId?: string,
 ): { filesChanged: number; insertions: number; deletions: number; commits: number } {
@@ -1780,7 +1780,7 @@ export function writeMergeConflictFeedback(
  * branch sync. The unifier reuses the Ralph runner with:
  *
  *   - System prompt: `buildUnifierSystemPrompt()` (SKILL.md + Ralph discipline)
- *   - Iteration cap: diff-scaled (per CONTRACTS.md C19; no $ cap)
+ *   - Iteration cap: diff-scaled (the unifier node was later retired)
  *   - Quality gate: a composed `unifierQualityGate` checking all five
  *     gates (initiative, demo, pr-self-contained, branches-in-sync, delivery).
  *

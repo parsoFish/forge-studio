@@ -21,12 +21,14 @@ import { readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 import { listAgentDefinitions } from './studio/agent-registry.ts';
+import { resolveBandGuard } from './agent-bands.ts';
 // §15.43: `normalizeProjectId` is a kernel export this file was taking via a
 // legacy re-export detour — imported from its real owner instead of moved.
 import { normalizeProjectId } from '@forge/kernel';
 // The Flow kind stays in `orchestrator/studio/registry.ts` until wave 4 —
 // handed, listed in the share report, not closed here.
 import { listFlowIds, loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
+import { flowRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
 import { agentCapabilityDescriptor } from './studio/derive.ts';
 import { runAgent, isSafeRunId, type ProjectBinding, type RunAgentResult } from './run-agent.ts';
 import { materialKindForFilename } from './studio/materials.ts';
@@ -45,8 +47,8 @@ export type MaterialReference = { path: string; kind: string };
 
 export type DispatchAgentRunOpts = {
   slug: string;
-  /** Roster dir — `skillsDir(forgeRoot)` at the call site. */
-  skillsDir: string;
+  /** Roster dir(s) — `skillRoots(forgeRoot)` at the call site (SEAM F1). */
+  skillsDir: string | readonly string[];
   /** Used verbatim as the `_logs/` run directory name (guarded). */
   runId: string;
   /** Log root; default `<FORGE_ROOT>/_logs` (absolute — never cwd-relative). */
@@ -60,7 +62,7 @@ export type DispatchAgentRunOpts = {
   /** Test-injection only (see `RunContext.queryFn`); one-shot path only. */
   queryFn?: StreamQueryFn;
   /** Injectable roster loader (tests); default `listAgentDefinitions`. */
-  loadDefs?: (skillsDir: string) => AgentDefinition[];
+  loadDefs?: (skillsDir: string | readonly string[]) => AgentDefinition[];
   /**
    * R6-04 (WI-2): an explicit per-run operator cost ceiling, threaded
    * unchanged to `runAgent`'s `ctx.kickoffCeilingUsd` (which itself wins
@@ -76,14 +78,19 @@ export type DispatchAgentRunResult = {
   result: RunAgentResult;
 };
 
+/** forge-zlu: a band-guard def refused standalone dispatch — named/exported so a caller can `instanceof` it apart from the plain-Error unknown-slug/interactive refusals below. */
+export class BandGuardDispatchRefusedError extends Error {}
+
 /**
- * Resolve a dispatchable (non-interactive, in-roster) agent by slug, or throw
- * a clear boundary error for the two rejection classes the generic run host
- * must refuse — unknown slug and interactive agent. Enforced HERE (not only in
- * the UI): the "not interactive" fact the builder surfaces is backed by a real
- * runtime guard, so a hand-crafted request can't drive an interactive agent
- * through the generic host. Both the CLI and the bridge route surface this
- * same message.
+ * Resolve a dispatchable (non-interactive, in-roster, non-band-guarded) agent
+ * by slug, or throw a clear boundary error for the rejection classes the
+ * generic run host must refuse — unknown slug, interactive agent, and
+ * band-guard agent. Enforced HERE (not only in the UI): the "not interactive"
+ * fact the builder surfaces is backed by a real runtime guard, so a
+ * hand-crafted request can't drive an interactive agent through the generic
+ * host. Both the CLI and the bridge route surface this same message.
+ *
+ * BAND-GUARD REFUSAL (forge-zlu): refuses EVERY band-guard def uniformly, including adversarial-review — its own intended standalone path is the separate `/api/agents/band-run` gate (`STANDALONE_BAND_SLUGS`, band-agent-run.ts), which never calls this resolver, so refusing it here too cannot touch that path and avoids re-deriving the same exception list.
  */
 export function resolveDispatchableAgent(slug: string, defs: AgentDefinition[]): AgentDefinition {
   const def = defs.find((d) => d.slug === slug);
@@ -95,6 +102,14 @@ export function resolveDispatchableAgent(slug: string, defs: AgentDefinition[]):
     throw new Error(
       `dispatchAgentRun: agent "${slug}" is interactive (surface: ${def.surface ?? 'interactive'}) — ` +
         `interactive agents run through their bespoke session page, not the generic run host`,
+    );
+  }
+  const band = resolveBandGuard(def);
+  if (band !== undefined) {
+    throw new BandGuardDispatchRefusedError(
+      `dispatchAgentRun: agent "${slug}" declares band guard "${band}" — band-guard agents run through their ` +
+        `flow band's pipeline (WI validation / checkpointing / retention), never as a bare standalone dispatch. ` +
+        `Dispatch it through the flow that carries that band instead.`,
     );
   }
   return def;
@@ -261,10 +276,15 @@ const NO_PROJECT_BOUND_MESSAGE = 'agent-dispatch.no-project-bound';
  */
 function loadFlowRosterBestEffort(forgeRoot: string): Array<Pick<FlowDefinition, 'id' | 'triggers'>> {
   const root = resolve(forgeRoot);
+  const roots = flowRoots(root);
   const out: Array<Pick<FlowDefinition, 'id' | 'triggers'>> = [];
   for (const flowId of listFlowIds(root)) {
+    // SEAM F1: search every flow root directly via kernel (not `@forge/
+    // flows`' `flowPathForId` — this file's boundary edge to `flow-runner.ts`
+    // is not baselined, unlike its existing edge to `flow-registry.ts`).
+    const path = resolveIdAcrossRoots(roots, flowId, ['flow.yaml'])?.path ?? join(roots[0], flowId, 'flow.yaml');
     try {
-      out.push(loadFlowDefinition(join(root, 'studio', 'flows', flowId, 'flow.yaml')));
+      out.push(loadFlowDefinition(path));
     } catch {
       /* skip a broken flow.yaml — it must not block other flows' watchers */
     }

@@ -13,7 +13,7 @@
  *   3. loadKbDescriptor REJECTS `band` on `project`/`unique` bindings with a
  *      named/typed error (band is only meaningful off a flow binding).
  *   4. deriveKbUsageDefaults maps `band: review-band` -> readers including
- *      'reviewer'; a different band (demo-band) keeps the plain
+ *      'reviewer'; a different band (integrate-band) keeps the plain
  *      planner+reflector default — review-band is the ONLY mapped band
  *      (T1 ruling Q2).
  */
@@ -165,8 +165,8 @@ describe('deriveKbUsageDefaults — band vocabulary mapping (R1-06 WI-1, T1 ruli
     );
   });
 
-  it("[companion, paired with the review-band RED pin above] a different band (demo-band) keeps exactly ['planner','reflector'] — review-band is the ONLY mapped band (T1 ruling Q2)", () => {
-    const binding = { kind: 'flow' as const, ref: 'forge-develop', band: 'demo-band' };
+  it("[companion, paired with the review-band RED pin above] a different band (integrate-band) keeps exactly ['planner','reflector'] — review-band is the ONLY mapped band (T1 ruling Q2)", () => {
+    const binding = { kind: 'flow' as const, ref: 'forge-develop', band: 'integrate-band' };
     const usage = deriveKbUsageDefaults(binding);
     assert.deepEqual(usage.readers, ['planner', 'reflector']);
   });

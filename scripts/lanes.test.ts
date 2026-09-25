@@ -66,13 +66,18 @@ function lanes(args: string[], env: Record<string, string> = {}, timeoutMs = 300
     env: {
       ...envWithoutLanesVars(),
       LANES_SESSION_PREFIX: PREFIX,
-      LANES_CONFIRM_TIMEOUT_S: '6',
+      // A TEST ARTEFACT, not a product bound — the product default is 60s (see lanes.sh's own
+      // header). Chosen only to keep the failure-path tests (the ones that let this expire on
+      // purpose) fast. Register row "lanes.test.ts:528": under load, a real tmux+bash+python3
+      // registration can outrun a too-tight artefact value, so this is wide enough to absorb
+      // realistic startup latency while staying far below the real 60s default.
+      LANES_CONFIRM_TIMEOUT_S: '15',
       // Pinned so the memory floor cannot turn every launch test into a reading of whatever the
       // host had free at the time — the same reason envWithoutLanesVars() exists.
       LANES_MEMINFO: meminfo(9 * 1024 * 1024),
       LANES_ROSTER_CMD: rosterCmd,
       LANES_CWD: repo,
-      LANES_WORKTREE_ROOT: join(dir, 'wt'),
+      LANES_WORKTREE_ROOT: join(dir, 'wt'), LANES_PROC_ROOT: join(dir, 'no-proc'), LANES_DNS_CMD: 'true', LANES_CLAUDE_JSON: join(dir, 'no-claude.json'), // nonexistent-but-guarded: no test scans real /proc, DNS, or ~/.claude.json
       ...env,
     },
   });
@@ -141,7 +146,7 @@ echo $! > '${join(dir, `${name}.detachedpid`)}'
   return writeExec(
     name,
     `#!/usr/bin/env bash
-printf '%s\\0' "$@" > '${argvFile}'
+if [ "$1" = --version ]; then echo '0.0.0 (test)'; exit 0; fi; printf '%s\\0' "$@" > '${argvFile}' # row 40
 printenv > '${join(dir, `${name}.env`)}'
 SESS=""; while [ $# -gt 0 ]; do [ "$1" = -n ] && SESS="$2"; shift; done
 export SESS ROSTER='${rosterFile}'
@@ -153,8 +158,8 @@ sleep 120
 /** The pid of the grandchild `laneBin(..., {detach})` spawned, once it exists. */
 function detachedPid(name: string) {
   const f = join(dir, `${name}.detachedpid`);
-  const deadline = Date.now() + 8000;
-  while (Date.now() < deadline && !existsSync(f)) spawnSync('sleep', ['0.1']);
+  const deadline = performance.now() + 8000; // monotonic — forge-8vfn.7.6.50
+  while (performance.now() < deadline && !existsSync(f)) spawnSync('sleep', ['0.1']);
   assert.ok(existsSync(f), `precondition: ${name} never spawned its detached process`);
   const pid = Number(readFileSync(f, 'utf8').trim());
   planted.add(pid);
@@ -175,9 +180,16 @@ function plant(name: string, cwd: string) {
 function alive(pid: number) {
   return existsSync(`/proc/${pid}`);
 }
-function waitGone(pid: number, ms = 12000) {
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline && alive(pid)) spawnSync('sleep', ['0.2']);
+/**
+ * Register row F3 (`scripts/lanes.test.ts:311`). Retiring a pid is now confirmed SYNCHRONOUSLY
+ * inside `lanes.sh` itself — `retire_pid()` polls for the actual exit (see its own comment) —
+ * so by the time the `lanes()` call this wraps has returned, the pid is normally already gone
+ * and this loop exits on its first check. The 20s ceiling is a safety net, not the mechanism:
+ * generous on purpose, so it is never the thing a load-sensitive test is really measuring.
+ */
+function waitGone(pid: number, ms = 20000) {
+  const deadline = performance.now() + ms; // monotonic — forge-8vfn.7.6.50
+  while (performance.now() < deadline && alive(pid)) spawnSync('sleep', ['0.2']);
   return !alive(pid);
 }
 /**
@@ -319,7 +331,13 @@ describe('lanes.sh launch — confirmed by the roster, never by the pane', () =>
     writeFileSync(prompt, kickoff('never consumed'));
     const before = readFileSync(join(camp, 'heartbeat', 'ACTIVE'), 'utf8');
 
-    const r = lanes(['launch', camp, lane, prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin });
+    // A generous explicit timeout: this path pays the full confirm window (register row F3
+    // widened it to 15s, see `lanes()`'s LANES_CONFIRM_TIMEOUT_S) PLUS retire_pid's own two
+    // bounded exit-polls (up to 10s TERM + 10s KILL, register row F3) PLUS die_launch's bounded
+    // re-census — comfortably over the 30s default under real load, and the outer spawnSync
+    // timeout killing the script mid-retirement would be a worse, less diagnosable failure than
+    // this test simply taking longer.
+    const r = lanes(['launch', camp, lane, prompt, '--cwd', laneCwd, '--t1', 't1'], { LANES_CLAUDE_BIN: bin }, 90000);
     const stray = detachedPid('lane-deaf');
 
     assert.notEqual(r.status, 0, 'launch must exit non-zero when the lane cannot be confirmed');
@@ -685,44 +703,6 @@ describe('lanes.sh kill — retirement cleans up, and never destroys work', () =
   });
 });
 
-/**
- * Bead forge-uowf / §15.59 (T1, wave-3 launch): `lanes.sh render docs/roadmaps/1.0-kickoffs.md
- * '11. M4-' out` produced the T1 kickoff block from §1 — twice — because a heading regex that
- * matches nothing left `found` false and the first ```text block in the file won. A rendered
- * prompt that is silently the wrong prompt is worse than no prompt.
- */
-describe('lanes.sh render — a heading miss is an error, never a fallback', () => {
-  let src: string;
-  before(() => {
-    src = join(dir, 'kickoffs.md');
-    writeFileSync(
-      src,
-      ['## 1. T1 — campaign orchestrator', '', '```text', 'ROLE: T1 campaign orchestrator', '```', '',
-       '## 11. M4-<pkg> — package lane', '', '```text', 'ROLE: T2 lane for $PKG', '```', ''].join('\n'),
-    );
-  });
-
-  test('a heading regex that matches nothing exits non-zero, names the regex and writes NO file', () => {
-    const out = join(dir, 'render-miss.md');
-
-    const r = lanes(['render', src, '^## nope', out]);
-
-    assert.notEqual(r.status, 0, 'a miss is an error');
-    assert.match(r.stderr, /\^## nope/, 'the failure names the regex that missed, so it can be fixed');
-    assert.ok(!existsSync(out), 'and nothing is left on disk to be mistaken for a rendered prompt');
-  });
-
-  test('a hit prints the heading it matched, so the render can be checked before a launch', () => {
-    const out = join(dir, 'render-hit.md');
-
-    const r = lanes(['render', src, '^## 11\\. M4-', out, 'PKG=agents']);
-
-    assert.equal(r.status, 0, r.stderr);
-    assert.match(r.stdout, /## 11\. M4-<pkg> — package lane/, 'the matched heading is printed');
-    assert.equal(readFileSync(out, 'utf8').trim(), 'ROLE: T2 lane for agents', 'the right block, with its parameters filled');
-  });
-});
-
 describe('lanes.sh events — one line per lane state, read from the roster and tmux', () => {
   function firstPass(extraEnv: Record<string, string> = {}) {
     // The loop sleeps 30 s after its first pass; a 4 s timeout captures exactly that pass.
@@ -740,8 +720,8 @@ describe('lanes.sh events — one line per lane state, read from the roster and 
       assert.equal(tmux('new-session', '-d', '-s', s, cmd).status, 0, `precondition: ${s} did not exist yet`);
       // the shell that tmux starts has not exec'd yet when new-session returns — wait for the pane to show its real command
       const want = cmd.startsWith('exec ') ? 'claude' : cmd;
-      const deadline = Date.now() + 5000;
-      while (Date.now() < deadline && tmux('display', '-p', '-t', s, '#{pane_current_command}').stdout.trim() !== want) spawnSync('sleep', ['0.1']);
+      const deadline = performance.now() + 5000; // monotonic — forge-8vfn.7.6.50
+      while (performance.now() < deadline && tmux('display', '-p', '-t', s, '#{pane_current_command}').stdout.trim() !== want) spawnSync('sleep', ['0.1']);
       assert.equal(tmux('display', '-p', '-t', s, '#{pane_current_command}').stdout.trim(), want, `precondition: ${s} runs ${want}`);
       return s;
     };

@@ -35,10 +35,10 @@
 import { requireSessionStatusIo } from './kb-drain-model.ts';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { dirname, relative, resolve, sep } from 'node:path';
 import { resolveGuardedPath, guardedReadFile, provenanceOfOrigin, type Provenance } from '@forge/kernel';
 import { loadKbDescriptor } from './studio/kb-descriptor.ts';
-import { resolveKbBrainDir } from './brain-paths.ts';
+import { tryGetKbBackend } from './kb-backend.ts';
 import { kbSites, unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
 import { type KbBinding } from '@forge/contracts/studio/types.ts';
 import type { KbDrainRunFixTurnFn, SessionStatusIoPort, GuardedWriteSessionStatusFn } from './bridge-studio-kb-drain.ts';
@@ -53,7 +53,7 @@ import {
 } from './kb-lint-summary.ts';
 import { sanitizeError } from '@forge/kernel';
 
-import { enqueueConsolidate, runBrainConsolidateNow } from './bridge-studio-kb-consolidate.ts';
+import { enqueueConsolidate, recordConsolidateDispatch, runBrainConsolidateNow } from './bridge-studio-kb-consolidate.ts';
 
 // ---------------------------------------------------------------------------
 // KBs with layer counts
@@ -228,7 +228,11 @@ export async function approveKbCleanup(
   const draftApplyRaw = (status as Record<string, unknown>)['draft_apply'];
   let draftWrites: Array<{ target: string; content: string }> | null = null;
   if (Array.isArray(draftApplyRaw) && draftApplyRaw.length > 0) {
-    const brainDir = resolveKbBrainDir(forgeRoot, kbId);
+    // M7-C KN1 (bead forge-8vfn.5.25.3): resolved through the KbBackend seam
+    // — `rootDir()` is its one deliberate raw-path exception, needed below
+    // for an EISDIR-safe boundary check (`contains()` accepts the root
+    // itself; this must reject it).
+    const brainDir = tryGetKbBackend(forgeRoot, kbId)?.rootDir() ?? null;
     if (!brainDir) {
       return { ok: false, status: 500, error: `kb-cleanup apply: kb id "${kbId}" does not resolve to any brain directory` };
     }
@@ -361,6 +365,11 @@ export async function approveKbCleanup(
   // whole compound directory name is still built from request-derived text.
   const consolidateLogGuard = resolveGuardedPath(forgeRoot, ['_logs', `_brainfix-${runId}`]);
   if (consolidateLogGuard.ok) mkdirSync(consolidateLogGuard.realPath, { recursive: true });
+  // forge-6esp: record this process's own dispatch, exactly as the sibling
+  // maintenance op=consolidate route does — see `lastConsolidateDispatchFor`'s
+  // header (bridge-studio-kb-consolidate.ts) for why `.../consolidate/active`
+  // must prefer this pointer over sorting `_brainfix-*` directory names.
+  recordConsolidateDispatch(kbId, runId);
   // `enqueueConsolidate` — the SAME per-kbId serialization queue the sibling
   // maintenance op=consolidate route uses (see its own doc comment: "Always
   // invoked via enqueueConsolidate, never directly"). Awaited so this
@@ -545,8 +554,12 @@ export function buildKbHealth(
  * against).
  */
 export function computeAgentCleanupFindings(forgeRoot: string, kbId: string): (Finding & { kind: string })[] {
-  const brainDir = resolveKbBrainDir(forgeRoot, kbId);
-  if (!brainDir) {
+  // M7-C KN1 (bead forge-8vfn.5.25.3): resolved through the KbBackend seam.
+  // `collectKbFindings` below already defaults its own `backend` param to
+  // `tryGetKbBackend` and would silently return `[]` for an unknown kbId —
+  // this existence check is what turns that into the loud throw this
+  // function's own contract promises.
+  if (tryGetKbBackend(forgeRoot, kbId) === null) {
     throw new Error(`computeAgentCleanupFindings: kb id "${kbId}" does not resolve to any real brain directory`);
   }
   const { findings } = runBrainLintFullMemoized(forgeRoot);
@@ -714,13 +727,25 @@ export function mintProjectBrainSeedingSession(
 ): string {
   const write = requireSessionStatusIo(guardedWriteSessionStatus, 'mintProjectBrainSeedingSession');
   const sessionId = newProjectBrainSessionId();
+  // forge-hph — same guard shape forge-8vfn.5.51/forge-4vt applied at the
+  // sibling /start routes (packages/sessions/bridge-studio-architect.ts and
+  // the project-brain start route): resolve through containment rather than
+  // a bare join(), which normalizes ".." instead of refusing it. Not a live
+  // escape today — `write()` below independently validates this same
+  // segment before anything is persisted — but that ordering is exactly the
+  // "accident of source order" forge-osz's own comment warns against relying
+  // on.
+  const guardedProject = resolveGuardedPath(projectsRoot, [sessionProject]);
+  if (!guardedProject.ok) {
+    throw new Error(`kb create: hand-off session project "${sessionProject}" failed containment`);
+  }
   const written = write<ProjectBrainSeedingSessionStatus>(
     projectsRoot,
     [sessionProject, '_project-brain', sessionId],
     {
       session_id: sessionId,
       project: sessionProject,
-      project_repo_path: join(projectsRoot, sessionProject),
+      project_repo_path: guardedProject.realPath,
       phase: 'briefing',
       prompt: '',
       updated_at: new Date().toISOString(),

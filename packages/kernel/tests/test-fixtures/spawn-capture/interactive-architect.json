@@ -63,6 +63,12 @@
       },
       "cwd": "<TMP>/projects/project",
       "disallowedTools": [
+        "Write",
+        "Edit",
+        "MultiEdit",
+        "NotebookEdit",
+        "WebFetch",
+        "WebSearch",
         "Task",
         "Agent"
       ],

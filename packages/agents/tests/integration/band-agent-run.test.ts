@@ -106,7 +106,7 @@ function writeManifest(stateDir: string, worktreePath: string): void {
 
 test('isStandaloneBandAgent: only a band-hook node agent that still spawns', () => {
   // `demo-agent` is a declaration carrier since spec §5 item 4 deleted the LLM
-  // demo node — the band it names runs orchestrator-side and there is no turn to
+  // integrate node — the band it names runs orchestrator-side and there is no turn to
   // re-run, so it is refused here exactly as `contract-check` always has been.
   assert.equal(isStandaloneBandAgent('demo-agent'), false);
   assert.equal(isStandaloneBandAgent('contract-check'), false);

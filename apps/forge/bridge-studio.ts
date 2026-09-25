@@ -36,9 +36,11 @@ import { checkInitiativeDeps } from '@forge/flows/scheduler.ts';
 import type { Run } from '@forge/flows/run-model.ts';
 import type { EventLogEntry } from '@forge/kernel';
 import { loadFlowDefinition, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
+import { flowPathForId } from '@forge/flows/flow-runner.ts';
 import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { resolveGuardedPath } from '@forge/kernel';
+import { flowRoots, resolveIdAcrossRoots, listIdsAcrossRoots } from '@forge/kernel/discovery-roots.ts';
 import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
 import { SLUG_RE, PROJECT_ID_RE } from '@forge/kernel';
 import { projectKbBindings } from '@forge/knowledge/kb-sites.ts';
@@ -359,24 +361,35 @@ function withReadableSessionPointers(runs: readonly Run[], probe: SessionReadabi
 // ---------------------------------------------------------------------------
 
 function loadAllFlows(forgeRoot: string): Array<FlowDefinition & { bands: string[]; provenance: Provenance }> {
-  const flowsDir = join(resolve(forgeRoot), 'studio', 'flows');
-  // ABSENT is a real, honest answer: nothing is registered yet.
-  if (!existsSync(flowsDir)) return [];
+  // SEAM F1: every flow root, `studio/flows` (roots[0]) first, then every
+  // `packages/<pkg>/flows`.
+  const roots = flowRoots(forgeRoot);
+  const primaryRoot = roots[0];
 
-  // W7-FIX-A3 (round-2 finding 5): a THROWN read is NOT an empty list. This
-  // catch turned an unreadable `studio/flows` (EACCES, ENOTDIR, a transient FS
-  // failure) into `200 {flows: []}`, and the run page derives `unregistered`
-  // — a real fact about a flow id — from exactly that answered list, so a
-  // failed read declared every flow unregistered instead of leaving the page
-  // on its retryable unresolved body. Let it throw: the route's own catch
-  // sends the 500 the client's fail-closed vocabulary already handles.
-  const entries = readdirSync(flowsDir, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name);
+  // ABSENT `studio/flows` is a real, honest answer: nothing is registered
+  // there yet (a package may still carry flows — checked below).
+  //
+  // W7-FIX-A3 (round-2 finding 5): a THROWN read of `studio/flows` is NOT an
+  // empty list. This lets it throw: an unreadable `studio/flows` (EACCES,
+  // ENOTDIR, a transient FS failure) must not become `200 {flows: []}` — the
+  // run page derives `unregistered` (a real fact about a flow id) from
+  // exactly this answered list, so a failed read must leave the page on its
+  // retryable unresolved body instead. The route's own catch sends the 500
+  // the client's fail-closed vocabulary already handles. A PACKAGE root
+  // (roots.slice(1)) degrades silently on the same failure via
+  // `listIdsAcrossRoots` — a package with no/unreadable `flows/` dir is a
+  // working, optional state, never a 500.
+  const primaryEntries = existsSync(primaryRoot)
+    ? readdirSync(primaryRoot, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name)
+    : [];
+  const packageEntries = listIdsAcrossRoots(roots.slice(1));
+  const entries = [...new Set([...primaryEntries, ...packageEntries])].sort();
 
   const flows: Array<FlowDefinition & { bands: string[]; provenance: Provenance }> = [];
   for (const entry of entries) {
-    const flowYamlPath = join(flowsDir, entry, 'flow.yaml');
+    // THROWS, naming both paths, if `entry` is a real directory under more
+    // than one root — never "first root wins".
+    const flowYamlPath = flowPathForId(entry, forgeRoot);
     if (!existsSync(flowYamlPath)) continue;
     try {
       const flow = loadFlowDefinition(flowYamlPath);
@@ -644,7 +657,7 @@ export async function handleStudioRoutes(
       for (const flowId of listFlowIds(root)) {
         let flow: FlowDefinition;
         try {
-          flow = loadFlowDefinition(join(root, 'studio', 'flows', flowId, 'flow.yaml'));
+          flow = loadFlowDefinition(flowPathForId(flowId, root));
         } catch {
           continue; // one malformed flow.yaml must not sink the whole listing
         }
@@ -695,12 +708,13 @@ export async function handleStudioRoutes(
       // shared realpath identity guard; this GET sibling was left on the
       // lexical `resolve(...).startsWith(...)` shape, which cannot fail for a
       // SLUG_RE-valid id and so let a symlinked `studio/flows/<id>` disclose
-      // an outside `flow.yaml`. Same guard, same root, id as its own segment.
-      const flowsBase = resolve(ctx.forgeRoot, 'studio', 'flows');
-      const guarded = resolveGuardedPath(flowsBase, [id, 'flow.yaml']);
+      // an outside `flow.yaml`. Same guard, id as its own segment — now
+      // searched across every flow root (SEAM F1): `studio/flows` AND every
+      // `packages/<pkg>/flows`.
+      const match = resolveIdAcrossRoots(flowRoots(ctx.forgeRoot), id, ['flow.yaml']);
       // A guard rejection and a genuinely absent flow return the SAME 404, so
       // this route cannot be used to probe which ids are planted.
-      if (!guarded.ok || !guarded.exists) {
+      if (match === null) {
         sendJson(res, 404, { error: 'unknown flow' }, origin);
         return true;
       }
@@ -709,7 +723,7 @@ export async function handleStudioRoutes(
       // flow descriptor `loadAllFlows` builds for the list route above —
       // map it through the identical shared `provenanceOfOrigin` mapping so
       // list and detail can never disagree.
-      const flow = loadFlowDefinition(guarded.realPath);
+      const flow = loadFlowDefinition(match.path);
       sendJson(res, 200, { flow: { ...flow, provenance: provenanceOfOrigin(flow.origin) } }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -852,6 +866,15 @@ export type RoadmapInitiative = {
    * the card in the canvas's projected zone with an honest "no date" marker.
    */
   completedAt?: string;
+  /**
+   * M7 findings row 59: forge-architect and forge-develop both terminate at
+   * the SAME status word (`ready-for-review`), so `status` alone cannot
+   * tell a reader which flow produced it. Read straight off the manifest
+   * already in hand (`manifest.flow_id`, the same field
+   * `canStartDevelopment` derives from below) — never fabricated, absent
+   * when the manifest carries no `flow_id` (a legacy/hand-authored one).
+   */
+  flowId?: string;
 };
 
 export type ProjectRoadmap = {
@@ -1013,6 +1036,7 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
       ...(blockedClauses.length > 0 ? { blockedClauses } : {}),
       ...(workItems !== undefined ? { workItems } : {}),
       ...(completedAt !== undefined ? { completedAt } : {}),
+      ...(manifest.flow_id ? { flowId: manifest.flow_id } : {}),
     };
   });
 

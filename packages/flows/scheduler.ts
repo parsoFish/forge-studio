@@ -1,49 +1,37 @@
 /**
- * The unattended scheduler (ADR 011): claims pending initiatives, spawns each as
- * a cycle in its own git worktree, heartbeats while it runs, moves the manifest
- * to ready-for-review or failed, and fires notifications. ADR 011 describes it as
- * "a ~150-line loop"; it is over a thousand — bead forge-8vfn.15 owns the split.
- *
- * `forge serve` runs this forever. `forge serve --once` claims one initiative
- * and exits — used in tests and for one-shot runs.
+ * The unattended scheduler (ADR 011): `serve`'s daemon loop + admission.
+ * Size split across this file + scheduler-sweeps.ts + scheduler-run-one.ts — see design.md.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, lstatSync, symlinkSync, appendFileSync, readdirSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { setInterval, clearInterval } from 'node:timers';
 import {
   claim,
   counts,
   getPaths,
   listPending,
-  moveTo,
   recover,
-  writeHeartbeat,
   type QueuePaths,
 } from './queue.ts';
 import * as worktree from './worktree.ts';
 import { isPaused } from './daemon.ts';
-import { runCycle } from './cycle.ts';
-import { flowPathForId } from './flow-runner.ts';
-import { finalizeMergedReadyForReview } from './finalize-merged.ts';
-import { drainPendingFixWorkItems } from './drain-fix-loop.ts';
 import type { PhaseWiring } from './phase-wiring.ts';
-import { drainFlowRunRequests } from './flow-run-requests.ts';
-import { syncCronTriggers, stopAllCronTriggers } from './cron-triggers.ts';
+import { stopAllCronTriggers } from './cron-triggers.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
 import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
-import type { EventLogEntry } from '@forge/kernel';
 import { notify, type NotifyConfig } from './notify.ts';
 import { loadConfig } from '@forge/kernel';
+import { isNonTerminalRefused } from './claim-validator.ts';
+import { runOne, makeProgressTee } from './scheduler-run-one.ts';
 import {
-  dispatchTerminalStatus,
-  decideAutoRetry,
-  MAX_AUTO_RETRIES,
-} from './scheduler-dispatch.ts';
-import { validateClaimable, isNonTerminalRefused } from './claim-validator.ts';
-import { pruneStaleWiWorktrees } from './wi-worktree.ts';
+  runFinalizeSweep,
+  runDrainSweep,
+  runFlowTriggerSweep,
+  runCronSync,
+  runRecoverySweep,
+  cleanupRecoveredWorktrees,
+} from './scheduler-sweeps.ts';
 
 export type SchedulerConfig = {
   queueRoot?: string;
@@ -100,7 +88,9 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
   };
   ensureLayout(cfg);
 
-  // Recovery sweep at startup.
+  // Recovery sweep at startup — deliberately NOT `runRecoverySweep`
+  // (scheduler-sweeps.ts), which try/catch-wraps everything for the
+  // interval timer; a startup failure should stay loud.
   const recoveries = recover({
     paths: getPaths(cfg.queueRoot),
     staleHeartbeatMs: cfg.staleHeartbeatMs,
@@ -224,7 +214,7 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
   // second signal force-exits — recovers the operator's intent if the drain
   // hangs (e.g., a wedged SDK call). Heartbeat + queue state is recoverable
   // either way thanks to the recovery sweep, but a clean drain is cheaper.
-  const startedAt = Date.now();
+  const startedAt = performance.now(); // monotonic — forge-8vfn.7.6.50
   let signalCount = 0;
   const onSignal = (sig: NodeJS.Signals): void => {
     signalCount += 1;
@@ -252,7 +242,7 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
         if (stop) return;
         if (inFlight.size > 0) return; // not idle if work is in flight
         const c = counts(getPaths(cfg.queueRoot));
-        const upMins = Math.floor((Date.now() - startedAt) / 60_000);
+        const upMins = Math.floor((performance.now() - startedAt) / 60_000);
         console.log(
           `[idle] ${inFlight.size} in-flight · ${c.pending} pending · uptime ${upMins}m`,
         );
@@ -300,88 +290,6 @@ export async function serve(opts: { mode: RunMode; phaseWiring: PhaseWiring } & 
   }
   await Promise.allSettled(inFlight.values());
   console.log('[serve] exited cleanly');
-}
-
-/**
- * Build a tee function that prints interesting cycle events to stdout. Filters
- * the firehose down to phase-transition + per-WI signals — enough to know what
- * the system is doing, not so much that it drowns the terminal.
- */
-function makeProgressTee(): (entry: EventLogEntry) => void {
-  return (e) => {
-    const ts = new Date(e.started_at).toISOString().slice(11, 19);
-    const id = e.initiative_id;
-    const md = (e.metadata ?? {}) as Record<string, unknown>;
-    const cost =
-      typeof e.cost_usd === 'number' && e.cost_usd > 0 ? ` · $${e.cost_usd.toFixed(2)}` : '';
-    const dur =
-      typeof e.duration_ms === 'number' && e.duration_ms > 0
-        ? ` · ${formatDur(e.duration_ms)}`
-        : '';
-
-    // Cycle boundary
-    if (e.phase === 'orchestrator' && e.skill === 'cycle') {
-      if (e.event_type === 'start') console.log(`[${ts}] ${id} · cycle started`);
-      else if (e.event_type === 'error')
-        console.log(`[${ts}] ${id} · cycle ERROR: ${e.message ?? '(no message)'}`);
-      return;
-    }
-
-    // PM phase
-    if (e.phase === 'project-manager' && e.skill === 'project-manager') {
-      if (e.event_type === 'start') console.log(`[${ts}] ${id} · PM started`);
-      else if (e.event_type === 'error')
-        console.log(
-          `[${ts}] ${id} · PM FAILED${cost}${dur} · subtype=${md.result_subtype ?? '?'} · WIs=${md.work_item_count ?? '?'}`,
-        );
-      return;
-    }
-
-    // Developer-loop per-WI Ralph
-    if (e.phase === 'developer-loop' && e.skill === 'developer-ralph') {
-      const wi = md.work_item_id ?? '?';
-      if (e.message === 'ralph.start') console.log(`[${ts}] ${id} · ${wi} dev started`);
-      else if (e.message === 'ralph.skipped')
-        console.log(`[${ts}] ${id} · ${wi} dev skipped (${md.reason ?? '?'})`);
-      else if (e.message === 'ralph.end') {
-        const status = md.status ?? '?';
-        const iters = md.iterations ?? '?';
-        const reason = md.stop_reason ? ` · ${md.stop_reason}` : '';
-        console.log(`[${ts}] ${id} · ${wi} dev ${status}${cost} · iters=${iters}${reason}`);
-      }
-      return;
-    }
-
-    // Developer-loop phase summary
-    if (e.phase === 'developer-loop' && e.event_type === 'end' && md.work_item_count) {
-      console.log(
-        `[${ts}] ${id} · dev-loop summary · ${md.complete}/${md.work_item_count} complete · ${md.failed} failed${cost}${dur}`,
-      );
-      return;
-    }
-
-    // Review phase
-    if (e.phase === 'review-loop') {
-      if (e.event_type === 'start') console.log(`[${ts}] ${id} · review started`);
-      else if (e.event_type === 'end')
-        console.log(
-          `[${ts}] ${id} · review ${md.verdict ?? md.status ?? 'done'}${cost}${dur}`,
-        );
-      else if (e.event_type === 'error')
-        console.log(`[${ts}] ${id} · review ERROR: ${e.message ?? '(no message)'}`);
-      return;
-    }
-
-    // Reflection phase
-    if (e.phase === 'reflection') {
-      if (e.event_type === 'start') console.log(`[${ts}] ${id} · reflection started`);
-      else if (e.event_type === 'end')
-        console.log(`[${ts}] ${id} · reflection done${cost}${dur}`);
-      else if (e.event_type === 'error')
-        console.log(`[${ts}] ${id} · reflection FAILED: ${e.message ?? '(no message)'}`);
-      return;
-    }
-  };
 }
 
 /**
@@ -438,522 +346,6 @@ export function checkInitiativeDeps(filename: string, paths: QueuePaths): string
   });
 }
 
-/**
- * F-24: link gitignored dependency directories from the source repo into the
- * worktree so `npm test` / `pytest` etc. can actually resolve their imports.
- * Symlinks (not copies) keep this fast — install once at the project level,
- * every cycle's worktree shares it. Idempotent; missing source is a no-op
- * (the project may not use that dep system).
- *
- * Currently links Node's `node_modules`. Generalise here when forge picks up
- * Python (`.venv`) or Rust (`target`) projects that need similar.
- */
-// Exported so wi-worktree.ts's per-WI bootstrap reuses the node_modules
-// symlink + git-exclude dance verbatim rather than duplicating it.
-export function linkProjectDeps(projectRepoPath: string, worktreePath: string): void {
-  for (const dir of ['node_modules']) {
-    const src = resolve(projectRepoPath, dir);
-    const dst = resolve(worktreePath, dir);
-    if (!existsSync(src)) continue;
-    // Skip if `git worktree add` somehow already produced this path (shouldn't,
-    // since it's gitignored, but defend against it). lstatSync, not statSync,
-    // so an existing symlink doesn't follow.
-    let alreadyExists = false;
-    try {
-      lstatSync(dst);
-      alreadyExists = true;
-    } catch {
-      /* missing — proceed */
-    }
-    if (alreadyExists) continue;
-    try {
-      symlinkSync(src, dst, 'dir');
-    } catch {
-      /* best-effort — a project that doesn't need deps shouldn't break the cycle */
-    }
-  }
-  // 2026-05-18 fix: forge itself creates the `node_modules` symlink above.
-  // A project `.gitignore` of `node_modules/` (trailing slash = directory)
-  // does NOT match a *symlink* named `node_modules`, so `git add -A` (the
-  // dev-loop boundary commit, and any per-WI agent commit) would sweep the
-  // symlink into the PR and merge it to main. Add `node_modules` to THIS
-  // worktree's git exclude so no commit path in the worktree can ever stage
-  // it — forge-side, non-invasive (does not touch the project's tracked
-  // .gitignore), and independent of how the project wrote its rule.
-  try {
-    const excludePath = execFileSync(
-      'git',
-      ['-C', worktreePath, 'rev-parse', '--git-path', 'info/exclude'],
-      { encoding: 'utf8', stdio: 'pipe' },
-    ).trim();
-    const abs = resolve(worktreePath, excludePath);
-    const existing = existsSync(abs) ? readFileSync(abs, 'utf8') : '';
-    if (!existing.split('\n').some((l) => l.trim() === 'node_modules')) {
-      writeFileSync(
-        abs,
-        existing + (existing && !existing.endsWith('\n') ? '\n' : '') + 'node_modules\n',
-      );
-    }
-  } catch {
-    /* best-effort — the boundary-commit reset below is the second guard */
-  }
-}
-
-function formatDur(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return r === 0 ? `${m}m` : `${m}m${r}s`;
-}
-
-/**
- * Run a single recovery sweep: detect stale-heartbeat / missing-worktree
- * in-flight items, return them to pending/, clean up orphaned worktrees,
- * notify. Best-effort — sweep failures are logged via the notification path
- * but never throw.
- */
-/**
- * F-W5-7 sweep: finalize ready-for-review cycles whose PR the operator has
- * merged — closure aligns local↔remote + deletes the branch + moves to done/,
- * and the reflector fires (reflection becomes available in the UI). Best-effort.
- */
-async function runFinalizeSweep(wiring: PhaseWiring): Promise<void> {
-  try {
-    for (const r of await finalizeMergedReadyForReview({ runReflector: wiring.runReflector })) {
-      if (r.status === 'finalized') {
-        console.log(`[serve] finalized ${r.initiativeId} — operator merged the PR → done + reflection`);
-      } else if (r.status === 'error') {
-        console.error(`[serve] finalize ${r.initiativeId} failed: ${r.detail}`);
-      }
-    }
-  } catch {
-    /* sweep is best-effort — never throw out of setInterval */
-  }
-}
-
-/**
- * ADR 040 fix-loop drain sweep: re-enter any ready-for-review cycle that has
- * pending fix work-items (a review send-back compiled them onto the
- * initiative's own queue) in the SAME cycle — reusing the persisted cycle_id,
- * the worktree, and the open PR; the develop agent is the single fix executor.
- * Runs AFTER the finalize sweep so a freshly-merged PR is finalized first (the
- * drain skips merged PRs — a merge always wins). Best-effort — never throws
- * out of the timer.
- */
-async function runDrainSweep(wiring: PhaseWiring): Promise<void> {
-  try {
-    for (const r of await drainPendingFixWorkItems({ notify: (m) => console.log(`[serve] ${m}`), phaseWiring: wiring })) {
-      if (r.status === 'drained') {
-        console.log(`[serve] fix loop ${r.initiativeId} — fix work items run in the same cycle (${r.detail})`);
-      } else if (r.status === 'error') {
-        console.error(`[serve] fix-loop drain ${r.initiativeId} failed: ${r.detail}`);
-      }
-    }
-  } catch {
-    /* sweep is best-effort — never throw out of setInterval */
-  }
-}
-
-/**
- * Stage C flow-trigger sweep: dispatch any flow-run requests staged by an
- * `on: complete` trigger (repoint the source initiative at the target flow +
- * make it claimable). Best-effort — never throws out of the timer. No seed flow
- * declares an `on: complete` trigger today, so this is usually a no-op.
- */
-function runFlowTriggerSweep(): void {
-  try {
-    const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-    for (const r of drainFlowRunRequests({ forgeRoot, notify: (m) => console.log(`[serve] ${m}`) })) {
-      if (r.status === 'dispatched') {
-        console.log(`[serve] flow-trigger dispatched ${r.target?.kind}:${r.target?.ref}${r.sourceInitiativeId ? ` on ${r.sourceInitiativeId}` : ' (originated)'}`);
-      } else if (r.status === 'error') {
-        console.error(`[serve] flow-trigger ${r.target?.kind}:${r.target?.ref} failed: ${r.detail}`);
-      }
-    }
-  } catch {
-    /* sweep is best-effort — never throw out of the timer */
-  }
-}
-
-/**
- * R2-04 (ADR-041): sync the scheduler's armed cron triggers against every
- * flow's declared `on: cron` set (stop what's no longer declared, arm what's
- * newly declared). Best-effort, mirroring the other sweeps — a broken flow or
- * an invalid schedule is reported inside `syncCronTriggers` via `notify` and
- * must never throw out of the startup path or the recover-timer tick. A fire
- * only ever stages a claimable flow-run request (never dispatches, never
- * spawns); `onFire` is the in-process nudge that re-runs the flow-trigger
- * drain sweep promptly instead of waiting for the next poll.
- */
-function runCronSync(): void {
-  try {
-    const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-    syncCronTriggers({
-      forgeRoot,
-      notify: (m) => console.log(`[serve] ${m}`),
-      onFire: () => runFlowTriggerSweep(),
-    });
-  } catch {
-    /* sweep is best-effort — never throw out of setInterval or startup */
-  }
-}
-
-async function runRecoverySweep(
-  cfg: { queueRoot: string; staleHeartbeatMs: number; notify: NotifyConfig },
-): Promise<void> {
-  try {
-    const recoveries = recover({
-      paths: getPaths(cfg.queueRoot),
-      staleHeartbeatMs: cfg.staleHeartbeatMs,
-      worktreeExists: worktree.exists,
-    });
-    for (const r of recoveries) {
-      cleanupRecoveredWorktrees(r.recovered, getPaths(cfg.queueRoot));
-      await notify(
-        {
-          type: 'recovered',
-          title: `Recovered ${r.recovered.length} initiative(s)`,
-          body: `Reason: ${r.reason}. Items: ${r.recovered.join(', ')}`,
-        },
-        cfg.notify,
-      );
-    }
-  } catch {
-    /* sweep is best-effort — never throw out of setInterval */
-  }
-}
-
-/** True iff `dir` exists and contains at least one entry (a directory artifact). */
-function nonEmptyDir(dir: string): boolean {
-  try {
-    return existsSync(dir) && readdirSync(dir).length > 0;
-  } catch {
-    return false;
-  }
-}
-
-async function runOne(
-  manifestPath: string,
-  filename: string,
-  cfg: Required<Omit<SchedulerConfig, 'notify'>> & { notify: NotifyConfig },
-  tee: ((entry: EventLogEntry) => void) | undefined,
-  wiring: PhaseWiring,
-): Promise<void> {
-  const paths = getPaths(cfg.queueRoot);
-  const heartbeat = setInterval(() => {
-    writeHeartbeat(filename, paths);
-  }, cfg.heartbeatIntervalMs);
-  // Hold the handle outside the try so the finally block can clean it up
-  // regardless of which path produced the result (success, failed, threw).
-  let wtHandle: worktree.WorktreeHandle | null = null;
-  // F-28: track whether the cycle landed in a "human-resolves-this" state so
-  // the finally block can preserve the worktree + branch instead of deleting
-  // the only surviving copy of the work. Set inside the try after runCycle
-  // returns; defaults to false (clean up like before for thrown errors).
-  let preserveWorktree = false;
-  try {
-    const manifest = parseManifest(manifestPath);
-    if (tee) console.log(`[serve] claimed: ${manifest.initiativeId} (${manifest.project})`);
-
-    // ADR-028 §8 (M3-6): claim-time validation — refuse before worktree/cycle.
-    // S8/DEC-3: pass the flow the manifest names (forge-cycle default retired);
-    // a manifest with no flow_id is refused by validateClaimable.
-    const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-    const claimCheck = validateClaimable(
-      manifest.initiativeId,
-      manifest.projectRepoPath,
-      forgeRoot,
-      manifest.flowId ? flowPathForId(manifest.flowId) : undefined,
-    );
-    if (!claimCheck.ok) {
-      // Emit a structured claim.refused event to the initiative's log dir
-      // (best-effort — cycle logger isn't open yet; we write directly).
-      emitClaimRefusedEvent(manifest.initiativeId, claimCheck.reason, claimCheck.terminal, forgeRoot);
-      if (claimCheck.terminal) {
-        // Terminal refusals (invalid/locked flow) → move to failed/ permanently.
-        console.error(
-          `[serve] ${manifest.initiativeId} — claim refused (terminal): ${claimCheck.reason}`,
-        );
-        moveTo(filename, 'failed', paths);
-        await notify(
-          {
-            type: 'failed',
-            title: `Claim refused (terminal): ${manifest.initiativeId}`,
-            body: claimCheck.reason,
-          },
-          cfg.notify,
-        );
-        return; // runOne done — no worktree, no cycle
-      } else {
-        // Non-terminal (project not contract-ready): move back to pending/ and
-        // log once. validateClaimable already recorded this initiativeId in the
-        // process-lifetime skip-set so tick() will not re-claim it on the next
-        // poll — no inFlight slot churn. A fresh `forge serve` after the
-        // operator fixes the project clears the set and re-checks.
-        moveTo(filename, 'pending', paths);
-        // 7.6.18: the surfaces read the MANIFEST, not this log. Clause NAMES only — the prose has colons, and `annotateManifest` writes raw.
-        annotateManifest(join(paths.pending, filename), { claim_blocked_clauses: claimCheck.blockedClauses ?? '' });
-        console.warn(`[serve] ${manifest.initiativeId} — claim refused (non-terminal, left in pending): ${claimCheck.reason}`);
-        return; // runOne done — isNonTerminalRefused() guards future polls
-      }
-    }
-
-    // Record the flow version at claim time (edit-lock seam, ADR-028 §6/M3-6).
-    // If the on-disk flow version changes mid-run the runner warns (M4 will enforce).
-    annotateManifest(manifestPath, { flow_version: String(claimCheck.flowVersion), claim_blocked_clauses: '' });
-
-    const branch = `forge/${manifest.initiativeId}`;
-    const expectedWtPath = resolve(cfg.worktreesRoot, manifest.initiativeId);
-    // ADR 019 + S9: reuse a PRESERVED worktree rather than `worktree.add`, which
-    // self-heals by rm-rf'ing the path — wiping the gitignored `.forge/work-items/`
-    // + `.forge/unifier-items/` + per-WI commits that live untracked there. Two
-    // cases need the preserved tree:
-    //   - a resume marker: 'demo' crash recovery (ADR-019) or 'develop'
-    //     fix-loop re-entry (ADR-040) — both run against the per-WI commits.
-    //   - architect→develop hand-off (S9/DEC-3): the forge-architect cycle parked
-    //     at ready-for-review with pm's `.forge/work-items/`; the develop run's
-    //     dev node consumes them. `resume_from` is cleared on the hand-off, so this
-    //     case is detected by the preserved work-items, not the resume marker.
-    // A fresh cycle (no preserved worktree) falls through to `worktree.add`.
-    const worktreePresent = worktree
-      .list(manifest.projectRepoPath)
-      .some((w) => resolve(w.path) === expectedWtPath);
-    const handoffWorkItemsPresent =
-      worktreePresent && nonEmptyDir(resolve(expectedWtPath, '.forge', 'work-items'));
-    const strategy = worktree.decideWorktreeStrategy({
-      resumeMarkerPresent: manifest.resumeFrom !== undefined,
-      worktreePresent,
-      handoffWorkItemsPresent,
-    });
-    if (strategy === 'reuse') {
-      const why = manifest.resumeFrom ? `resume-from-${manifest.resumeFrom}` : 'architect→develop hand-off';
-      if (tee) console.log(`[serve] ${why}: reusing preserved worktree ${expectedWtPath}`);
-      wtHandle = { path: expectedWtPath, branch, projectRepoPath: manifest.projectRepoPath };
-    } else {
-      wtHandle = worktree.add({
-        projectRepoPath: manifest.projectRepoPath,
-        branch,
-        worktreesRoot: cfg.worktreesRoot,
-        initiativeId: manifest.initiativeId,
-      });
-    }
-    // F-24: link the project's installed dependencies into the worktree.
-    // `git worktree add` only checks out tracked files, but `node_modules/`
-    // is gitignored — without this, `npm test` fails at module resolution
-    // before any test runs, and the dev-loop wedges trying to "fix" what
-    // looks like a broken codebase. Idempotent — missing source is a no-op.
-    linkProjectDeps(manifest.projectRepoPath, wtHandle.path);
-    annotateManifest(manifestPath, { worktree_path: wtHandle.path });
-
-    // Phase 4 step 9 (plan risk R7): before this attempt dispatches any of
-    // its OWN per-WI worktrees, sweep any left behind by a PRIOR attempt of
-    // the SAME initiative — a mid-fan-out crash, or an operator `forge
-    // requeue` (which only ever preserves/wipes the CYCLE worktree; it has
-    // no notion of per-WI scratch). Per-WI worktrees are pure scratch
-    // (ADR-019 preserves only the cycle worktree), so it is always safe to
-    // sweep them here, before any WI has been dispatched for this fresh
-    // attempt — regardless of whether `strategy` above was 'reuse' or
-    // 'add'. `createWiWorktree`'s own per-call self-heal (wi-worktree.ts)
-    // stays as the second line of defense for anything this sweep misses.
-    const wiSweep = pruneStaleWiWorktrees({
-      projectRepoPath: manifest.projectRepoPath,
-      worktreesRoot: cfg.worktreesRoot,
-      initiativeId: manifest.initiativeId,
-      logsRoot: resolve(forgeRoot, '_logs'),
-    });
-    if (tee && (wiSweep.prunedPaths.length > 0 || wiSweep.prunedBranches.length > 0)) {
-      console.log(
-        `[serve] ${manifest.initiativeId} — pruned ${wiSweep.prunedPaths.length} leftover per-WI worktree(s) and ${wiSweep.prunedBranches.length} branch(es) from a prior attempt`,
-      );
-    }
-
-    const result = await runCycle({
-      initiativeId: manifest.initiativeId,
-      manifestPath,
-      projectRepoPath: manifest.projectRepoPath,
-      worktreePath: wtHandle.path,
-      // ADR 019: thread the resume marker into the cycle so it skips PM +
-      // per-WI dev-loop and runs only the unifier + downstream phases.
-      resumeFrom: manifest.resumeFrom,
-      eventTee: tee,
-      // No verdict provider is threaded in: the review verdict arrives
-      // out-of-band as a UI action. ADR 026: a send-back appends UWIs the drain
-      // runs in place; the cycle never blocks waiting on an operator. The
-      // review phase opens the PR and stops at ready-for-review.
-    }, wiring);
-
-    if (tee) console.log(`[serve] ${manifest.initiativeId} · cycle ${result.status}`);
-    // F-28 + Phase 6: any cycle outcome that ends with the manifest in
-    // `ready-for-review/` means a human will look at the work next.
-    // Deleting the worktree + branch here would erase the only copy of the
-    // changes (the report has the diff text but not a working tree).
-    // Preserve in those states; cleanup happens when the operator merges
-    // the PR (closure aligns local↔remote) or resolves via the review CLI.
-    // `pr-open` (G9: review gate passed, PR awaiting the operator's merge)
-    // MUST preserve — the operator needs the branch/worktree until they
-    // merge in GitHub; the next cycle re-trigger confirms + aligns.
-    // 2026-05-25 (claude-harness overnight run): `failed` also preserves.
-    // The common failure mode in cycles 6/8/9 was dev-loop completed
-    // successfully but the unifier wedged at iteration-budget. Cleaning
-    // up the worktree wiped the dev-loop's committed work, forcing a
-    // full retry from scratch. Preserving on `failed` lets `forge
-    // requeue` salvage the work (the per-WI commits + tests stay on
-    // the branch). `forge requeue --reset-retries` is the operator's
-    // explicit cleanup signal — preserved worktrees only get garbage-
-    // collected when the operator decides.
-    preserveWorktree =
-      result.status === 'pr-open' ||
-      result.status === 'ready-for-review' ||
-      result.status === 'failed';
-    await dispatchTerminalStatus(
-      {
-        filename,
-        manifest: { initiativeId: manifest.initiativeId, project: manifest.project },
-        result,
-      },
-      {
-        paths,
-        notifyFn: (event) => notify(event, cfg.notify),
-      },
-    );
-  } catch (err) {
-    if (existsSync(join(paths.inFlight, filename))) {
-      try {
-        moveTo(filename, 'failed', paths);
-      } catch {
-        /* best-effort — manifest may have moved during throw */
-      }
-    }
-    await notify(
-      {
-        type: 'failed',
-        title: `Failed: ${filename}`,
-        body: err instanceof Error ? err.message : String(err),
-      },
-      cfg.notify,
-    );
-  } finally {
-    clearInterval(heartbeat);
-    // F-09 + F-28: clean up the worktree + scratch branch on terminal states
-    // only. `merged` (cycle.ts already deleted the branch via gh pr merge),
-    // `failed`, or thrown errors all clean up. `ready-for-review` preserves
-    // the worktree so the human can inspect via `forge review <id>`.
-    if (wtHandle && !preserveWorktree) {
-      try {
-        worktree.cleanup(wtHandle);
-      } catch {
-        /* best-effort — the cleanup helper itself swallows; this catches any unexpected throw */
-      }
-    }
-    if (wtHandle && preserveWorktree && tee) {
-      console.log(
-        `[serve] preserved worktree: ${wtHandle.path} (branch ${wtHandle.branch}) — resolve via 'forge review <id>'`,
-      );
-    }
-  }
-}
-
-// Terminal-status dispatch + F-27 bounded auto-retry moved to
-// ./scheduler-dispatch.ts (Phase 3 size split). Re-exported here so the
-// public API + test imports are unchanged; scheduler.ts uses
-// `dispatchTerminalStatus` internally (runOne).
-export { dispatchTerminalStatus, decideAutoRetry, MAX_AUTO_RETRIES };
-export type {
-  DispatchInput,
-  DispatchDeps,
-  DispatchOutcome,
-  AutoRetryDecision,
-} from './scheduler-dispatch.ts';
-
-// ADR-028 §8 (M3-6): re-export claim validator + version-seam utilities
-// so tests can import them from the scheduler module without reaching into
-// the implementation detail.
-export { validateClaimable, isNonTerminalRefused, clearPendingRefusalLog, clearAllPendingRefusalLogs } from './claim-validator.ts';
-export type { ClaimValidationResult } from './claim-validator.ts';
-
-type ParsedManifest = {
-  initiativeId: string;
-  project: string;
-  projectRepoPath: string;
-  /** The Studio flow this manifest runs under (S8/DEC-3 — required; no default). */
-  flowId?: string;
-  /**
-   * ADR 019 (successor develop flow, R4-10-F6) / ADR 040: resume the cycle
-   * against the preserved worktree — 'demo' skips PM + the per-WI dev-loop and
-   * re-enters at the post-develop `demo` node (WI commits already present);
-   * 'develop' (ADR 040 send-back re-entry) rebase-skips PM and RUNS the dev loop.
-   */
-  resumeFrom?: 'demo' | 'develop';
-};
-
-function parseManifest(path: string): ParsedManifest {
-  const m = parseFullManifest(readFileSync(path, 'utf8'));
-  return {
-    initiativeId: m.initiative_id,
-    project: m.project,
-    projectRepoPath: m.project_repo_path || resolve('projects', m.project),
-    flowId: m.flow_id,
-    resumeFrom: m.resume_from,
-  };
-}
-
-export function annotateManifest(path: string, fields: Record<string, string>): void {
-  const content = readFileSync(path, 'utf8');
-  const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!fmMatch) return;
-  let fm = fmMatch[1];
-  for (const [k, v] of Object.entries(fields)) {
-    // Consume the key line AND any indented continuation lines: serializeManifest
-    // (js-yaml) folds long values into `key: >-\n  value` block scalars, and a
-    // single-line replace would leave the continuation behind — the manifest then
-    // parses as the value doubled ("path path").
-    const re = new RegExp(`^${k}:[^\\n]*(?:\\n[ \\t]+[^\\n]*)*`, 'm');
-    if (re.test(fm)) {
-      fm = fm.replace(re, `${k}: ${v}`);
-    } else {
-      fm += `\n${k}: ${v}`;
-    }
-  }
-  const updated = content.replace(/^---\n[\s\S]*?\n---/, `---\n${fm}\n---`);
-  writeFileSync(path, updated);
-}
-
-/**
- * ADR-028 §8 (M3-6): emit a claim.refused event to the initiative's JSONL log.
- * Best-effort — the cycle logger is not open yet at claim time, so we write
- * directly to the log dir. Missing dir is created on the fly.
- */
-function emitClaimRefusedEvent(
-  initiativeId: string,
-  reason: string,
-  terminal: boolean,
-  forgeRoot: string,
-): void {
-  try {
-    const logDir = resolve(forgeRoot, '_logs', initiativeId);
-    if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
-    const logPath = join(logDir, 'events.jsonl');
-    const entry = {
-      event_id: `claim-refused-${Date.now()}`,
-      cycle_id: initiativeId,
-      initiative_id: initiativeId,
-      started_at: new Date().toISOString(),
-      phase: 'orchestrator',
-      skill: 'scheduler',
-      event_type: 'error',
-      input_refs: [] as string[],
-      output_refs: [] as string[],
-      message: 'claim.refused',
-      metadata: { reason, terminal },
-    };
-    appendFileSync(logPath, JSON.stringify(entry) + '\n');
-  } catch {
-    /* best-effort — never throw from a refusal path */
-  }
-}
-
 function ensureLayout(cfg: { queueRoot: string; worktreesRoot: string }): void {
   // SEC-02: `<forgeRoot>/projects` is a containment root for manifest
   // `project_repo_path` / in-place `worktree_path`, and a containment root
@@ -983,48 +375,24 @@ export function status(queueRoot = '_queue'): { counts: Record<string, number> }
   return { counts: counts(getPaths(queueRoot)) };
 }
 
-/**
- * Best-effort cleanup of orphaned worktrees + scratch branches for a set of
- * filenames recovered to `pending/`. Reads each recovered manifest to extract
- * `worktree_path` (annotated at claim time) and `project_repo_path`, then
- * spawns `worktree.cleanup()` against the corresponding handle. Idempotent —
- * a worktree that no longer exists is fine.
- */
-function cleanupRecoveredWorktrees(filenames: string[], paths: ReturnType<typeof getPaths>): void {
-  for (const filename of filenames) {
-    const recoveredPath = join(paths.pending, filename);
-    if (!existsSync(recoveredPath)) continue;
-    try {
-      const m = parseManifestFile(recoveredPath);
-      if (!m || !m.worktree_path) continue;
-      worktree.cleanup({
-        path: m.worktree_path,
-        branch: `forge/${m.initiative_id}`,
-        projectRepoPath: m.project_repo_path,
-      });
-    } catch {
-      /* malformed manifest or git error — non-fatal */
-    }
-  }
-}
+// Terminal-status dispatch + F-27 bounded auto-retry live in
+// ./scheduler-dispatch.ts (Phase 3 size split). Re-exported here so the
+// public API + test imports are unchanged.
+export { dispatchTerminalStatus, decideAutoRetry, MAX_AUTO_RETRIES } from './scheduler-dispatch.ts';
+export type {
+  DispatchInput,
+  DispatchDeps,
+  DispatchOutcome,
+  AutoRetryDecision,
+} from './scheduler-dispatch.ts';
 
-/**
- * Manifest read for cleanup hot-path. Returns null if the frontmatter is
- * malformed or required fields are missing.
- */
-function parseManifestFile(
-  manifestPath: string,
-): { initiative_id: string; project_repo_path: string; worktree_path?: string } | null {
-  try {
-    const m = parseFullManifest(readFileSync(manifestPath, 'utf8'));
-    if (!m.initiative_id || !m.project_repo_path) return null;
-    return {
-      initiative_id: m.initiative_id,
-      project_repo_path: m.project_repo_path,
-      worktree_path: m.worktree_path,
-    };
-  } catch {
-    return null;
-  }
-}
+// ADR-028 §8 (M3-6): re-export claim validator + version-seam utilities
+// so tests can import them from the scheduler module without reaching into
+// the implementation detail.
+export { validateClaimable, isNonTerminalRefused, clearPendingRefusalLog, clearAllPendingRefusalLogs } from './claim-validator.ts';
+export type { ClaimValidationResult } from './claim-validator.ts';
 
+// bead forge-8vfn.15: linkProjectDeps + annotateManifest moved to
+// scheduler-run-one.ts; re-exported so deep-importers of this module
+// (and scheduler.test.ts's dynamic import) keep resolving both names.
+export { linkProjectDeps, annotateManifest } from './scheduler-run-one.ts';

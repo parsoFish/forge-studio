@@ -24,7 +24,7 @@ import {
   type HomeAttentionItem,
   type HomeHex,
 } from '@/lib/home-view';
-import { buildMonitorSummary } from '@/lib/monitor-view';
+import { buildMonitorSummary, deriveSummaryReady } from '@/lib/monitor-view';
 import { useNowTicker } from '@/lib/use-now-ticker';
 import type { SessionIndexRow } from '@/lib/studio-client';
 import type { CancelOutcome } from '@/lib/session-lifecycle-client';
@@ -116,6 +116,12 @@ export default function HomePage() {
   // different question ("which registered objects are busy"), and conflating
   // the two answers was the defect.
   const summary = buildMonitorSummary({ ledgerRows: allLedgerRows, runs, sessions, attentionCount });
+  // forge-6gv.28: the summary strip's OWN readiness — `summary` above is
+  // computed over `allLedgerRows` (== `ledger.rows`), missing the merged
+  // ledger's agent half until `ledger.agentRowsReady` settles, so the strip
+  // must not vouch for its counts as settled off `ready` (home-data ready)
+  // alone.
+  const summaryReady = deriveSummaryReady({ homeDataReady: ready, agentRowsReady: ledger.agentRowsReady });
   const hexActiveCount = constellation.filter((h) => h.status === 'active').length;
   // W6-IA-4 sweep finding C1#2 → W7-B1 (home-sessions-15): derived from an
   // ACTUAL live run — and the page now also KNOWS whether the target is
@@ -191,7 +197,7 @@ export default function HomePage() {
           Home gets the glance and a way through; Monitor owns the depth. A
           count here that contradicts the list below is no longer
           expressible, which is precisely the defect this closes. ===== */}
-      <MonitorSummaryStrip summary={summary} variant="home" ready={ready} />
+      <MonitorSummaryStrip summary={summary} variant="home" ready={summaryReady} />
 
       {/* ===== ACTIVE SESSIONS — the in-flight interactive-session strip
           (W6-B11, IA-4's marked slot). Extracted into HomeSessionsStrip

@@ -38,6 +38,14 @@ vi.mock('@/lib/session-client', () => ({
   postSessionAffordance: (...a: unknown[]) => postSessionAffordance(...a),
 }));
 
+// The component under test is imported ONCE, at module scope (`vi.mock`
+// above is hoisted, so the mocks still apply) — the #807 fix (bb0c9d4b):
+// an in-body `await import(...)` charges that module's transform to
+// whichever test runs first (measured here under CPU starvation, up to
+// 1278ms — a meaningful bite out of the 5000ms per-test budget) instead of
+// vitest's own untimed transform/setup phase.
+import { OnboardWithAgent } from '../../components/studio/project-builder/OnboardWithAgent';
+
 let container: HTMLDivElement;
 let root: Root;
 
@@ -55,7 +63,6 @@ afterEach(() => {
 });
 
 async function mountAndPress(): Promise<void> {
-  const { OnboardWithAgent } = await import('../../components/studio/project-builder/OnboardWithAgent');
   await act(async () => {
     root.render(React.createElement(OnboardWithAgent, { projectId: 'demoproj' }));
   });

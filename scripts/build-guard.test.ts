@@ -43,6 +43,28 @@ function runGuard(env: Record<string, string>, timeoutMs = 30_000) {
 
 const lockFile = () => join(mkdtempSync(join(tmpdir(), 'build-guard-')), '.run-lock');
 
+/**
+ * A test-only `Date.now()` double, injected into the GUARD'S OWN PROCESS via
+ * `NODE_OPTIONS=--require=<this file>` — zero lines of `build-guard.mjs` are
+ * touched to make this work. `sequence[i]` is returned on the i-th call to
+ * `Date.now()` inside the guard; calls past the end of the array keep
+ * returning the last value. This is how the backward step measured on this
+ * host (`_1.0/reports/m7-c-clockprobe-1.log`: the `tsc` clocksource stepping
+ * the wall clock back ~2.85s every ~29.6s) is simulated ON DEMAND rather than
+ * waited for, per forge-8vfn.7.6.50.
+ */
+function fakeDateNowPreload(sequence: number[]) {
+  const dir = mkdtempSync(join(tmpdir(), 'build-guard-clock-'));
+  const path = join(dir, 'fake-date-now.cjs');
+  writeFileSync(
+    path,
+    `const seq = ${JSON.stringify(sequence)};\n` +
+      'let i = 0;\n' +
+      'Date.now = () => seq[Math.min(i++, seq.length - 1)];\n',
+  );
+  return path;
+}
+
 describe('build-guard: a build does not start beside a funded story run', () => {
   test('7.6.100: no FORGE_RUN_LOCK — proceeds, and SAYS it is not enforcing', () => {
     const r = runGuard({ FORGE_RUN_LOCK: '' });
@@ -124,6 +146,45 @@ describe('build-guard: a build does not start beside a funded story run', () => 
     } finally {
       try { process.kill(holder.pid!, 'SIGKILL'); } catch { /* gone */ }
       try { process.kill(guard.pid!, 'SIGKILL'); } catch { /* gone */ }
+    }
+  });
+
+  /**
+   * forge-8vfn.7.6.50: `Date.now()` is NOT monotonic on this host — measured
+   * in `_1.0/reports/m7-c-clockprobe-1.log`, which found the wall clock
+   * stepping BACKWARDS by ~2.85s every ~29.6s regardless of load. This guard
+   * computed every elapsed/deadline from `Date.now()` differences, so that
+   * step produced `free after -1s — proceeding`
+   * (this file's own sighting) — a negative duration is not a fact the guard
+   * should be able to print. `performance.now()` is monotonic by
+   * specification and cannot be moved by the injected `Date.now()` below, so
+   * the fixed guard must print the same line with a non-negative number
+   * regardless of what the wall clock does mid-wait.
+   */
+  test('forge-8vfn.7.6.50: a backward wall-clock step mid-wait must not print a negative elapsed', async () => {
+    const lock = lockFile();
+    writeFileSync(lock, '');
+    // A real, transient holder — released after ~2s — so the guard's wait
+    // loop runs long enough to observe the step and then finds the lock free.
+    const holder = spawn('flock', [lock, 'sleep', '2'], { detached: true, stdio: 'ignore' });
+    await new Promise((r) => setTimeout(r, 300));
+    // First Date.now() call (the guard's `startedAt`) returns t0; every call
+    // after returns t0 - 2850 — the measured backward step, arriving on the
+    // guard's very next Date.now() read.
+    const t0 = 2_000_000;
+    const preload = fakeDateNowPreload([t0, t0 - 2_850]);
+    try {
+      const r = runGuard(
+        { FORGE_RUN_LOCK: lock, FORGE_BUILD_LOCK_WAIT_MS: '20000', NODE_OPTIONS: `--require=${preload}` },
+      );
+      assert.equal(r.status, 0, `the lock freed, so the build should proceed:\n${r.out}`);
+      assert.doesNotMatch(
+        r.out,
+        /free after -\d+s/,
+        `Date.now() is not monotonic on this host (measured m7-c-clockprobe-1.log): a backward wall-clock step must not produce a negative elapsed:\n${r.out}`,
+      );
+    } finally {
+      try { process.kill(holder.pid!, 'SIGKILL'); } catch { /* gone */ }
     }
   });
 });

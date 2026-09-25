@@ -50,13 +50,18 @@ after(async () => {
 const routes = knowledgeRoutes({
   sessionStatusIo: refusingSessionStatusIo,
   listFlowIds: () => ['forge-develop'],
-  listFlowBandIds: () => ['review-band', 'demo-band'],
+  listFlowBandIds: () => ['review-band', 'integrate-band'],
   // M4 ruling 86: the real fix turn is injected by the assembly, so route
   // tests declare one. It THROWS: no assertion in this file expects a fix turn
   // to be dispatched, and a stub that returned a plausible result would let a
   // future change dispatch one here unnoticed.
   runFixTurn: async () => {
     throw new Error('unexpected brain-fix dispatch in this test');
+  },
+  // M7-C U8 (bead forge-u8y2): REQUIRED, same shape as `runFixTurn` above.
+  // This file exercises maintenance routes, never runs/drain.
+  sessionIsReadable: () => {
+    throw new Error('unexpected session-readability probe call in this test');
   },
 });
 
@@ -322,6 +327,56 @@ test('W6-B14: GET .../consolidate/active rediscovers the runId of a just-dispatc
   await drainConsolidate(CONSOLIDATE_KB_ID);
   const terminal = await terminalState(forgeRoot, CONSOLIDATE_KB_ID, runId);
   assert.notEqual(terminal['state'], 'running');
+});
+
+test('forge-6esp: GET .../consolidate/active rediscovers the LATEST dispatch even when the host wall clock steps backward between two mints', async () => {
+  // Reproduces bead forge-6esp with an INJECTED interleaving instead of
+  // waiting on this host's real backward step (measured ~2.9s roughly every
+  // 30s, `_1.0/reports/m7-c-clockprobe-1.log`) to land between two real
+  // dispatches under load — a deterministic red, not a hope for load.
+  //
+  // First dispatch: an ordinary run, minted and drained to terminal — exactly
+  // the kind of already-completed run the ratchet test above leaves behind
+  // in `_logs/` for the rest of this file's run.
+  const first = await post(`/api/studio/kbs/${CONSOLIDATE_KB_ID}/maintenance`, { op: 'consolidate' });
+  assert.equal(first.status, 200, JSON.stringify(first.json));
+  const staleRunId = first.json['runId'] as string;
+  assert.equal(typeof staleRunId, 'string');
+  await drainConsolidate(CONSOLIDATE_KB_ID);
+
+  // Second dispatch: the runId mint (`Date.now().toString(36)`, the
+  // maintenance route's op==='consolidate' branch) happens synchronously
+  // inside this ONE `post()` call, so patching global `Date.now` around it
+  // alone is enough to control exactly what stamp it mints — 3000ms EARLIER
+  // than real now, reproducing this host's own backward step.
+  const realNow = Date.now;
+  let freshRunId: string;
+  try {
+    Date.now = () => realNow() - 3000;
+    const second = await post(`/api/studio/kbs/${CONSOLIDATE_KB_ID}/maintenance`, { op: 'consolidate' });
+    assert.equal(second.status, 200, JSON.stringify(second.json));
+    freshRunId = second.json['runId'] as string;
+  } finally {
+    Date.now = realNow;
+  }
+  assert.equal(typeof freshRunId, 'string');
+  // Fixture precondition: the injected step must actually have produced a
+  // stamp that SORTS BEFORE the stale one — otherwise this test exercises
+  // nothing.
+  assert.ok(
+    freshRunId < staleRunId,
+    `fixture precondition failed: expected the clock-stepped runId "${freshRunId}" to sort before the stale "${staleRunId}"`,
+  );
+
+  const active = await get(`/api/studio/kbs/${CONSOLIDATE_KB_ID}/consolidate/active`);
+  assert.equal(active.status, 200, JSON.stringify(active.json));
+  assert.equal(
+    active.json['runId'],
+    freshRunId,
+    `active discovery must rediscover the run just dispatched (${freshRunId}), not a stale run whose timestamp merely sorts higher (${staleRunId})`,
+  );
+
+  await drainConsolidate(CONSOLIDATE_KB_ID);
 });
 
 test('W6-B14: GET .../consolidate/active with an invalid (non-slug) kb id -> 400', async () => {

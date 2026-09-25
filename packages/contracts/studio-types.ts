@@ -10,7 +10,7 @@ export type AgentComposition = {
   /**
    * Platform dispatch-key vocabulary (ADR-027 R3-03 amendment): the 5 toggle
    * ids (event-log, cost-guard, stall-watchdog, merge-gate, scratch-strip)
-   * and the 5 band ids (wi-contract, reflection-close, demo-band,
+   * and the 5 band ids (wi-contract, reflection-close, integrate-band,
    * review-band, onboard-preflight). Guard ids are DISPATCH KEYS — `resolveBandGuard` scans them
    * to route a flow node to another agent's canonical pipeline — so this
    * field is platform-owned, never user-authorable. Split from the
@@ -151,6 +151,9 @@ export type AgentDefinition = {
   budgets: AgentBudgets;
   allowedTools: string[]; // frontmatter `allowed-tools`
   disallowedTools: string[]; // frontmatter `disallowed-tools`
+  /** forge-6gv.20 — composer-reachable escape hatch: `true` skips
+   *  skill-tool-fence/task-agent-not-disallowed; additive, no-op if unset. */
+  toolFenceExempt?: boolean; // frontmatter `tool-fence-exempt`
   body: string; // markdown process intent
   path: string; // absolute SKILL.md path
 };

@@ -265,9 +265,21 @@ function writeStubCli(forgeRoot: string): void {
   writeFileSync(
     join(forgeRoot, 'apps', 'forge', 'cli.ts'),
     [
-      "import { writeFileSync } from 'node:fs';",
+      "import { writeFileSync, renameSync } from 'node:fs';",
       "import { join } from 'node:path';",
-      `writeFileSync(join(import.meta.dirname, '..', '..', '${ARGV_CAPTURE_FILENAME}'), JSON.stringify(process.argv.slice(2)));`,
+      // Write-then-rename, not a direct write to the final name: a plain
+      // `writeFileSync` truncates the target before its content lands, so a
+      // concurrent poller (`waitForFile` below) can `existsSync` it and read
+      // a partial/empty file mid-write — proven as a deterministic 20/20 red
+      // via a chunked-write door, root-caused to `JSON.parse` on a
+      // half-written file (forge-8vfn.5.55, AT-10 register row). `rename(2)`
+      // on the same filesystem is atomic on POSIX: the final filename never
+      // exists until the whole record is already on disk, so a reader sees
+      // nothing or the whole record — never a partial one.
+      `const __tmp = join(import.meta.dirname, '..', '..', '${ARGV_CAPTURE_FILENAME}.tmp');`,
+      `const __dest = join(import.meta.dirname, '..', '..', '${ARGV_CAPTURE_FILENAME}');`,
+      `writeFileSync(__tmp, JSON.stringify(process.argv.slice(2)));`,
+      `renameSync(__tmp, __dest);`,
       '',
     ].join('\n'),
   );
@@ -279,8 +291,11 @@ function writeStubCli(forgeRoot: string): void {
  *  over flakiness, it waits for a genuinely async, already-in-flight
  *  artifact with a hard ceiling. */
 async function waitForFile(path: string, timeoutMs = 5000): Promise<string> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
+  // performance.now(), not Date.now() (forge-8vfn.7.6.50): Date.now() is not
+  // monotonic on this host, so an elapsed check built from its difference can
+  // go wrong mid-wait.
+  const start = performance.now();
+  while (performance.now() - start < timeoutMs) {
     if (existsSync(path)) return readFileSync(path, 'utf8');
     await new Promise((r) => setTimeout(r, 50));
   }

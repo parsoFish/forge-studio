@@ -17,18 +17,22 @@
  * in-process map of async callbacks. So forge does not need (and must not
  * invent) a lifecycle-event bus: it hands the SDK a callback per bound hook,
  * and the callback spawns the hook script through the existing, already-gated
- * `runHookScript`.
+ * `runHookScriptAsync` (forge-9a3 — the ASYNC tail; see hook-runtime.ts's
+ * header for why there are two).
  *
  * ## Nothing here relaxes the runtime's two guards
  *
- * `runHookScript` refuses to spawn anything that is not GENUINELY RUNNABLE
- * (approved, with the approval still covering the current script/permissions/
- * trigger bytes) and strips the child env down to the manifest-granted set
- * over the narrow `HOOK_ENV_BASE_ALLOWLIST`. Dispatch calls it **unmodified**,
- * passes **no** `parentEnv` override (so the child env is built from the real
- * `process.env` by the same narrow allowlist), and never pre-checks or caches
- * runnability. The gate is therefore re-evaluated from its source of truth on
- * every single fire — an approval revoked mid-run stops the very next fire.
+ * `runHookScriptAsync` refuses to spawn anything that is not GENUINELY
+ * RUNNABLE (approved, with the approval still covering the current
+ * script/permissions/trigger bytes) and strips the child env down to the
+ * manifest-granted set over the narrow `HOOK_ENV_BASE_ALLOWLIST` — both via
+ * `prepareHookRun`, the ONE gate+fence step it shares with the sync
+ * `runHookScript`, never a second copy of either. Dispatch calls it
+ * **unmodified**, passes **no** `parentEnv` override (so the child env is
+ * built from the real `process.env` by the same narrow allowlist), and never
+ * pre-checks or caches runnability. The gate is therefore re-evaluated from
+ * its source of truth on every single fire — an approval revoked mid-run
+ * stops the very next fire.
  *
  * ## Derived, never stored
  *
@@ -95,19 +99,22 @@
  *
  * ## HONEST LIMITS, stated rather than left to be inferred
  *
- * **1. The spawn is SYNCHRONOUS, so a firing hook blocks the event loop.**
- * `runHookScript` uses `spawnSync` with a 30s cap (`hook-runtime.ts:194`), and
- * this module calls it unmodified — deliberately, because splitting that
- * primitive would mean a second spawn path beside its approval gate and env
- * fence, and duplicating a security gate to gain responsiveness is the wrong
- * trade. The consequence is real and belongs stated here rather than
- * discovered: inside `forge serve`, a `PostToolUse` hook fires on every tool
- * call and stalls the daemon — scheduler and Studio bridge included — for the
- * hook's whole duration. A well-behaved hook returns in milliseconds; a slow
- * or hanging one makes the bridge look wedged for up to 30 seconds. No shipped
- * agent binds a hook today, so nothing currently pays this. Making the spawn
- * non-blocking means giving `hook-runtime.ts` an async tail that SHARES the one
- * approval gate rather than copying it; filed as its own piece of work.
+ * **1. FIXED (forge-9a3, 2026-09-25) — the spawn used to be SYNCHRONOUS, so a
+ * firing hook blocked the event loop.** `runHookScript` used `spawnSync` with
+ * a 30s cap, and this module called it unmodified — so inside `forge serve` a
+ * `PostToolUse` hook, firing on every tool call, stalled the daemon —
+ * scheduler and Studio bridge included — for the hook's whole duration. Filed
+ * rather than fixed in W8-B6, because the wrong fix is a second spawn path
+ * beside the approval gate and env fence, and duplicating a security gate to
+ * gain responsiveness is the wrong trade. The fix: `hook-runtime.ts` extracted
+ * that gate + fence + pre-spawn logging into ONE shared `prepareHookRun` step
+ * and gave it a second, async tail — `runHookScriptAsync`, built on
+ * `child_process.spawn` with the same timeout budget and outcome shape. This
+ * module now calls that tail, so a firing hook no longer blocks `forge
+ * serve`'s scheduler or bridge. `runHookScript` (sync) is untouched and still
+ * has no production caller of its own; it exists for any future caller that
+ * genuinely needs synchronous semantics, proven by its own unmodified test
+ * suite.
  *
  * **2. Hook stdout is captured and logged but is NOT injected into the agent's
  * context (`hookSpecificOutput.additionalContext`). Doing so would route
@@ -144,7 +151,7 @@ import type { EventLogger } from '@forge/kernel';
 import { FORGE_ROOT } from './derive.ts';
 import { loadAgentDefinition } from './agent-registry.ts';
 import { loadHookDefinition, parseHookMatcher, type HookLifecycleEvent, type HookMatcherParse } from '@forge/library/studio/hook-library.ts';
-import { HookRunError, runHookScript, type HookRunFailureReason } from '@forge/library/studio/hook-runtime.ts';
+import { HookRunError, runHookScriptAsync, type HookRunFailureReason, type HookRunResult } from '@forge/library/studio/hook-runtime.ts';
 
 // ---------------------------------------------------------------------------
 // Structural mirrors of the SDK's hook option types. Deliberately declared
@@ -258,6 +265,45 @@ function emitHookError(
   });
 }
 
+/** The set of things an operator can distinguish about a dispatch attempt:
+ *  did the script actually execute ('ran', whatever exit code it chose),
+ *  was it never allowed to try ('refused' — approval gate or a stale
+ *  registration), did it blow its wall-clock budget ('timeout'), or did the
+ *  spawn itself fail ('error'). */
+export type HookFireOutcome = 'ran' | 'refused' | 'timeout' | 'error';
+
+/**
+ * M7-C U2 (forge-8vfn.5.16) — a hook FIRE is itself an event, not just its
+ * failure modes. Every branch of `makeCallback` below already logs a
+ * diagnostic 'error' for the non-zero-exit / refusal cases, but the
+ * exitCode===0 path returned silently, so no fact anywhere recorded that an
+ * approved, bound hook had ever actually run — the exact gap the bead names.
+ * ONE `hook.fire` event per dispatch attempt (never for the silent
+ * matcher-no-match branch, which correctly never attempts a fire at all).
+ * `event_type` stays 'log' for a real execution and 'error' for anything
+ * that never ran to completion, matching this file's existing convention.
+ */
+function emitHookFire(
+  logger: EventLogger,
+  initiativeId: string,
+  hookId: string,
+  event: HookLifecycleEvent,
+  outcome: HookFireOutcome,
+  exitCode: number | null,
+  durationMs: number | null,
+): void {
+  logger.emit({
+    phase: 'orchestrator',
+    skill: `hook:${hookId}`,
+    event_type: outcome === 'ran' ? 'log' : 'error',
+    initiative_id: initiativeId,
+    input_refs: [],
+    output_refs: [],
+    message: 'hook.fire',
+    metadata: { hookId, event, outcome, exitCode, durationMs },
+  });
+}
+
 /**
  * W8-B6 FIX-3 — turn a `runHookScript` throw into the distinction an operator
  * actually needs, from the error's TYPED reason rather than by re-parsing its
@@ -307,6 +353,7 @@ function makeCallback(
       emitHookError(logger, initiativeId, hookId, `Hook "${hookId}" could not be loaded at dispatch — not fired: ${(e as Error).message}`, {
         event,
       });
+      emitHookFire(logger, initiativeId, hookId, event, 'error', null, null);
       return { continue: true };
     }
 
@@ -317,27 +364,41 @@ function makeCallback(
         event,
         declaredOn: on,
       });
+      emitHookFire(logger, initiativeId, hookId, event, 'refused', null, null);
       return { continue: true };
     }
 
     if (!hookMatcherMatches(parseHookMatcher(matcher), input)) return { continue: true };
 
-    let result: ReturnType<typeof runHookScript>;
+    let result: HookRunResult;
     try {
-      // No `parentEnv` override: `runHookScript` defaults to the real
+      // No `parentEnv` override: `runHookScriptAsync` defaults to the real
       // `process.env` and narrows it through `buildHookChildEnv`. Dispatch
       // must never widen what a hook child can see.
-      result = runHookScript({ forgeRoot, id: hookId, logger, initiativeId });
+      //
+      // forge-9a3: ASYNC, not the sync `runHookScript` — dispatch awaiting the
+      // sync tail is exactly the defect this fixed: `spawnSync` blocks forge
+      // serve's whole event loop (scheduler + Studio bridge) for the hook's
+      // duration, and `PostToolUse` fires per tool call. Both tails share the
+      // SAME approval gate and env fence (`prepareHookRun` in
+      // hook-runtime.ts) — nothing about which tail is called here weakens
+      // either guard.
+      result = await runHookScriptAsync({ forgeRoot, id: hookId, logger, initiativeId });
     } catch (e) {
       const { failure, description } = describeHookRunFailure(e);
       emitHookError(logger, initiativeId, hookId, `Hook "${hookId}" ${description} — not fired: ${(e as Error).message}`, {
         event,
         failure,
       });
+      const outcome: HookFireOutcome = failure === 'not-runnable' ? 'refused' : failure === 'timeout' ? 'timeout' : 'error';
+      emitHookFire(logger, initiativeId, hookId, event, outcome, null, null);
       return { continue: true };
     }
 
-    if (result.exitCode === 0) return { continue: true };
+    if (result.exitCode === 0) {
+      emitHookFire(logger, initiativeId, hookId, event, 'ran', result.exitCode, result.durationMs);
+      return { continue: true };
+    }
 
     const reason = (result.stderr.trim() || result.stdout.trim() || `hook "${hookId}" exited ${result.exitCode}`).slice(0, 2000);
 
@@ -347,6 +408,7 @@ function makeCallback(
         exitCode: result.exitCode,
         blocking: true,
       });
+      emitHookFire(logger, initiativeId, hookId, event, 'ran', result.exitCode, result.durationMs);
       if (event === 'PreToolUse') {
         return {
           continue: true,
@@ -365,6 +427,7 @@ function makeCallback(
       exitCode: result.exitCode,
       blocking: false,
     });
+    emitHookFire(logger, initiativeId, hookId, event, 'ran', result.exitCode, result.durationMs);
     return { continue: true };
   };
 }

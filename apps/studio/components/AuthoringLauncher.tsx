@@ -22,11 +22,12 @@ import { defaultKickoffTier } from '@/lib/kickoff-view';
  * to; skills and hooks are forge-wide, project-agnostic library artifacts,
  * so the copy below says so explicitly rather than implying ownership.
  *
- * Rendered from `/skills/new` and `/hooks/new` (D2 in the T3 report — the
+ * Rendered from `/skills/new`, `/hooks/new` (D2 in the T3 report — the
  * closest existing precedent: a `/skills/new`/`/hooks/new` "build"
  * affordance, mirroring the mockup's `SESSIONS['build-skill']`/
- * `['build-hook']` launch point), as an alternative to those pages' own
- * manual forms — "describe it instead of filling in every field by hand".
+ * `['build-hook']` launch point), and `/templates/new` (W8-B4, its third
+ * consumer), as an alternative to those pages' own manual forms — "describe
+ * it instead of filling in every field by hand".
  */
 export function AuthoringLauncher({
   knownProjects = [],

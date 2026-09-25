@@ -114,7 +114,7 @@ const FIXTURE_SESSION_KINDS_YAML = `
     phases:
       - { phase: analyzing, step: agent, writes: [staging], next: awaiting-review }
       - { phase: awaiting-review, step: noop }
-      - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, next: committed }
+      - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, stagingDirName: staging, next: committed }
       - { phase: committed, step: terminal }
 - id: test-kind-bad-finalizer
   agent: project-brain-builder
@@ -160,7 +160,7 @@ const FIXTURE_SESSION_KINDS_YAML = `
     kindDir: _interactivetest-ghostnext-finalize
     style: agent
     phases:
-      - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, next: ghost-next-phase }
+      - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, stagingDirName: staging, next: ghost-next-phase }
 - id: test-kind-no-writes-declared
   agent: project-brain-builder
   title: Interactive Runner Test Kind (P1 - no writes declared, true carve-out)
@@ -173,6 +173,81 @@ const FIXTURE_SESSION_KINDS_YAML = `
     phases:
       - { phase: analyzing, step: agent, next: awaiting-review }
       - { phase: awaiting-review, step: noop }
+- id: test-kind-structured
+  agent: project-brain-builder
+  title: Interactive Runner Test Kind (bead 8vfn.6.6 item 1 - structured style)
+  stages: [analyzing]
+  defaultStage: analyzing
+  artifact: { kind: file-package, label: "Test artifact" }
+  turnSpec:
+    kindDir: _interactivetest-structured
+    style: structured
+    schema: interview-qa
+    phases:
+      - { phase: analyzing, step: agent, writes: [staging], next: awaiting-review }
+      - { phase: awaiting-review, step: noop }
+- id: test-kind-structured-no-schema
+  agent: project-brain-builder
+  title: Interactive Runner Test Kind (structured style, no schema declared)
+  stages: [analyzing]
+  defaultStage: analyzing
+  artifact: { kind: file-package, label: "Test artifact" }
+  turnSpec:
+    kindDir: _interactivetest-structured-noschema
+    style: structured
+    phases:
+      - { phase: analyzing, step: agent, next: awaiting-review }
+- id: test-kind-structured-bad-schema
+  agent: project-brain-builder
+  title: Interactive Runner Test Kind (structured style, unresolvable schema id)
+  stages: [analyzing]
+  defaultStage: analyzing
+  artifact: { kind: file-package, label: "Test artifact" }
+  turnSpec:
+    kindDir: _interactivetest-structured-badschema
+    style: structured
+    schema: totally-not-a-real-schema-id
+    phases:
+      - { phase: analyzing, step: agent, next: awaiting-review }
+- id: test-kind-writetorepo
+  agent: project-brain-builder
+  title: Interactive Runner Test Kind (bead 8vfn.6.6 item 3 - writeToRepoRoot, no packageId needed)
+  stages: [analyzing]
+  defaultStage: analyzing
+  artifact: { kind: file-package, label: "Test artifact" }
+  turnSpec:
+    kindDir: _interactivetest-writetorepo
+    style: agent
+    phases:
+      - { phase: committing, step: finalize, finalizer: writeToRepoRoot, next: committed }
+      - { phase: committed, step: terminal }
+- id: test-kind-turnid
+  agent: instructions-creator
+  title: Interactive Runner Test Kind (bead 8vfn.6.6 item 5 - ctx.turnId prompt seam)
+  stages: [analyzing]
+  defaultStage: analyzing
+  artifact: { kind: file-package, label: "Test artifact" }
+  turnSpec:
+    kindDir: _interactivetest-turnid
+    style: agent
+    phases:
+      - { phase: analyzing, step: agent, next: awaiting-review }
+      - { phase: awaiting-review, step: noop, awaits: verdict }
+- id: test-kind-falls-through
+  agent: instructions-creator
+  title: Interactive Runner Test Kind (bead 8vfn.6.6 item 5 - ceiling + same-turn fall-through)
+  stages: [analyzing]
+  defaultStage: analyzing
+  artifact: { kind: file-package, label: "Test artifact" }
+  turnSpec:
+    kindDir: _interactivetest-fallthrough
+    style: structured
+    schema: interview-qa
+    phases:
+      - { phase: interviewing, step: agent, next: awaiting-answers, doneField: done, nextOnDone: drafting, ceiling: 2 }
+      - { phase: awaiting-answers, step: noop, awaits: questions }
+      - { phase: drafting, step: agent, writes: [staging], next: awaiting-verdict }
+      - { phase: awaiting-verdict, step: noop, awaits: verdict }
 `;
 // NOTE (Finding 1 fixtures): both "-ghost-next-*" rows above declare a
 // `next` naming a phase absent from their OWN `phases` list. This is

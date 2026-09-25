@@ -27,13 +27,19 @@ import { deriveKbActiveJob, activeJobReason } from '../../kb-job-state.ts';
 const routes = knowledgeRoutes({
   sessionStatusIo: refusingSessionStatusIo,
   listFlowIds: () => ['forge-develop'],
-  listFlowBandIds: () => ['review-band', 'demo-band'],
+  listFlowBandIds: () => ['review-band', 'integrate-band'],
   // M4 ruling 86: the real fix turn is injected by the assembly, so route
   // tests declare one. It THROWS: no assertion in this file expects a fix turn
   // to be dispatched, and a stub that returned a plausible result would let a
   // future change dispatch one here unnoticed.
   runFixTurn: async () => {
     throw new Error('unexpected brain-fix dispatch in this test');
+  },
+  // M7-C U8 (bead forge-u8y2): REQUIRED, same shape as `runFixTurn` above.
+  // This file's kb-cleanup fixture is about DELETE orphaned-session
+  // detection, a different route — never runs/drain.
+  sessionIsReadable: () => {
+    throw new Error('unexpected session-readability probe call in this test');
   },
 });
 

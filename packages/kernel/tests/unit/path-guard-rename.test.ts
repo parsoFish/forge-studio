@@ -279,22 +279,40 @@ test('an already-existing destination is refused, never clobbered — and the so
   });
 });
 
-test('a percent-encoded segment ("..%2F..") is a literal directory-entry name, never decoded into a separator', () => {
+test('forge-8vfn.5.59 (behavior change): a percent-encoded segment ("..%2F..") is now REJECTED by isSafeSegment, not decoded — guardedRename refuses it, source untouched', () => {
+  // PRE-forge-8vfn.5.59 this test pinned the OPPOSITE: a successful rename,
+  // as proof that "..%2F.." is used as one opaque, never-decoded directory-entry
+  // name (true — `join()`/`realpathSync` never decode a literal `%2F`, so
+  // this specific string was never an actual traversal escape reachable
+  // through THIS function). That is still true today.
+  //
+  // What changed: `isSafeSegment` and `isSafeSubPath` are now the SAME
+  // predicate (the fix for the drift where a DEL byte or an encoded
+  // traversal sequence was accepted by `isSafeSegment`/`resolveGuardedPath`'s
+  // walk while `isSafeSubPath`'s pre-check rejected the identical value —
+  // see `path-guard-segment-parity.test.ts`). `isSafeSubPath` denies any
+  // percent-encoded separator/traversal sequence defensively, in case
+  // something downstream of ITS callers re-decodes once more; unifying the
+  // predicate means every caller — `resolveGuardedPath`, `guardedRename`,
+  // `guardedFile` and friends — now shares that same defensive posture,
+  // even though none of them decode either. Trading a narrow "never
+  // literally realistic filename" allowance for zero drift between the two
+  // layers is the point of forge-8vfn.5.59; this pin now records the new
+  // behavior instead of the old one.
   withRoot((root) => {
-    // If this were ever decoded (%2F -> '/'), "..%2F.." would become the two
-    // segments "..", ".." — both of which `isSafeSegment` rejects outright.
-    // A SUCCESSFUL rename here is the proof that the literal string is used
-    // as one opaque directory-entry name, never split or decoded.
     const literalDir = join(root, '..%2F..');
     mkdirSync(literalDir);
     writeFileSync(join(literalDir, 'marker.txt'), 'literal-name-marker');
 
-    guardedRename(root, ['..%2F..'], ['moved']);
+    assert.throws(
+      () => guardedRename(root, ['..%2F..'], ['moved']),
+      PathGuardContainmentError,
+      'a segment carrying a percent-encoded separator/traversal sequence must be rejected by the shared isSafeSegment predicate',
+    );
 
-    assert.equal(existsSync(literalDir), false, 'the literally-named source must be gone');
-    const moved = join(root, 'moved');
-    assert.equal(existsSync(moved), true, 'the destination must exist');
-    assert.equal(readFileSync(join(moved, 'marker.txt'), 'utf8'), 'literal-name-marker', 'contents must survive the move');
+    assert.equal(existsSync(literalDir), true, 'the source directory must still be there, untouched');
+    assert.equal(readFileSync(join(literalDir, 'marker.txt'), 'utf8'), 'literal-name-marker', 'source contents must be unchanged');
+    assert.equal(existsSync(join(root, 'moved')), false, 'nothing must have been created at the destination');
   });
 });
 

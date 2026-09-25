@@ -16,7 +16,7 @@
  * per-file overhead alone.
  */
 import { join, relative } from 'node:path';
-import { type AutoFixStableResult, type Finding } from './brain-lint.ts';
+import { type AutoFixStableResult, type Finding, resolutionCounts } from './brain-lint.ts';
 import { buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
 import { type KbEditUnsoundness, type KbEditGateResult } from './kb-drain-edit-soundness.ts';
 import { KB_DRAIN_STALE_MS } from './kb-job-state.ts';
@@ -26,8 +26,12 @@ import { KB_DRAIN_STALE_MS } from './kb-job-state.ts';
 // ---------------------------------------------------------------------------
 
 /** "max 5 rounds" per the initiative brief — a round is a full
- *  fresh-lint→auto-drain→agent-turns→fresh-lint cycle. */
-export const KB_DRAIN_MAX_ROUNDS = 5;
+ *  fresh-lint→auto-drain→agent-turns→fresh-lint cycle. Re-exported from
+ *  `@forge/contracts` (forge-8vfn.5.25.2) — that is the one definition, kept
+ *  here so this package's many existing `from './kb-drain-model.ts'`
+ *  importers do not all need to repoint at once; see its own doc comment
+ *  there for why. */
+export { KB_DRAIN_MAX_ROUNDS } from '@forge/contracts';
 
 /** Operator-confirmable default cost ceiling for one drain RUN (not one
  *  turn) — proposed at 2.00 USD, sized against a real per-finding
@@ -250,6 +254,35 @@ export function autoSkippedEntry(item: AutoFixStableResult['skipped'][number], r
 }
 
 /**
+ * knowledge-48 (forge-6gv.6.1) — shapes this round's auto-pass rows AND the
+ * round's REAL post-auto-fix backlog, in one call, so the caller cannot
+ * derive one without the other and drift them apart. Before this, every
+ * status persisted between the round's auto-fix pass and its own final
+ * re-lint carried the PREVIOUS round's `counts` verbatim (the `{0,0,0}` seed
+ * for round 1) — a polling client read "0-0-0" (this UI's own "nothing
+ * left" convention) for the round's entire duration while agent turns ran
+ * and cost climbed. `autoResult.remaining` is the real, already-computed
+ * backlog as of right after auto-fixes ran — not fabricated, not stale, just
+ * not yet the round's FINAL tally (which still needs the agent turns' own
+ * after-lint to land).
+ */
+export function shapeAutoPassRoundRows(
+  autoResult: AutoFixStableResult,
+  autoProposals: readonly KbDrainProposedChange[],
+  round: number,
+): { roundRows: KbDrainRoundRow[]; inProgressCounts: { auto: number; agent: number; user: number } } {
+  const autoRows = autoResult.applied.map((x) => autoAppliedEntry(x, round, autoProposals));
+  const claimed = new Set(autoRows.flatMap((r) => (r.proposedChanges ?? []).map((p) => p.file)));
+  const unclaimed = autoProposals.filter((p) => !claimed.has(p.file));
+  const roundRows: KbDrainRoundRow[] = [
+    ...autoRows,
+    ...(unclaimed.length > 0 ? [autoUnattributedEntry(unclaimed, round)] : []),
+    ...autoResult.skipped.map((x) => autoSkippedEntry(x, round)),
+  ];
+  return { roundRows, inProgressCounts: resolutionCounts(autoResult.remaining) };
+}
+
+/**
  * The ONE place a round row gets a terminal outcome — derived from this
  * round's real post-fix lint (`afterKeys`, the same set the no-progress and
  * oscillation decisions are made from), never from what a fixer or an agent
@@ -364,8 +397,21 @@ export function pendingRows(rows: readonly KbDrainRoundRow[]): KbDrainPerFinding
   return rows.map((row) => ({ ...row, outcome: 'pending' as const }));
 }
 
+/**
+ * A stable per-finding identity — `kind::file::message` (forge-1ep). Folding
+ * in `message` is what makes this unique: two findings of the SAME kind on
+ * the SAME file (two dangling `related_themes` entries in one theme, two
+ * broken links) previously shared a `kind::file` key, so `draftedKeys` /
+ * `refusedKeys` (keyed the same way in `bridge-studio-kb-drain.ts`) treated
+ * drafting or refusing ONE sibling as covering every sibling — including
+ * ones never dispatched at all. `message` already carries the distinguishing
+ * detail (the specific slug, the specific broken path), so no separate hash
+ * or index is needed. `progressKeySet`'s no-progress/oscillation semantics
+ * only ever compare SETS of these keys for equality/subset — widening what a
+ * key contains changes nothing about how those sets are compared.
+ */
 export function findingKey(f: Finding): string {
-  return `${f.kind ?? f.check ?? ''}::${f.file}`;
+  return `${f.kind ?? f.check ?? ''}::${f.file}::${f.message}`;
 }
 
 export function progressKeySet(findings: readonly Finding[]): Set<string> {
@@ -460,4 +506,37 @@ export function requireSessionStatusIo<T>(fn: T | undefined, caller: string): T 
     );
   }
   return fn;
+}
+
+/** M7-C U8 (bead forge-u8y2) — the readability predicate a `/sessions/<kind>/
+ *  <sessionId>` link may be minted from, declared structurally (rank-2 may
+ *  not import rank-4 `@forge/sessions`) to match the real `sessionIsReadable`
+ *  argument-for-argument. REQUIRED everywhere in this file, never optional
+ *  — see `design.md` ("The session-readability port"). */
+export type SessionReadabilityProbe = (args: {
+  projectsRoot: string;
+  logsRoot: string;
+  kind: string;
+  sessionId: string;
+  project?: string | null;
+}) => boolean;
+
+/** `_kb-cleanup` — the ONE session kind this package mints pointers for. */
+export const KB_CLEANUP_SESSION_KIND = 'kb-cleanup';
+
+/** Drops `draftSession` from any per-finding row the probe says is
+ *  unreadable — mirrors `withReadableSessionPointers` (apps/forge/bridge-studio.ts). */
+export function withReadableDraftSessions(
+  perFinding: readonly KbDrainPerFinding[],
+  probe: SessionReadabilityProbe,
+  projectsRoot: string,
+  logsRoot: string,
+): KbDrainPerFinding[] {
+  return perFinding.map((f) => {
+    const d = f.draftSession;
+    if (d === undefined) return f;
+    if (probe({ projectsRoot, logsRoot, kind: KB_CLEANUP_SESSION_KIND, sessionId: d.id, project: d.project })) return f;
+    const { draftSession: _unreadable, ...rest } = f;
+    return rest;
+  });
 }
