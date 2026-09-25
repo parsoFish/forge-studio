@@ -73,8 +73,13 @@ function validateDoSteps(raw, at) {
       // awaits answers.
       const isRepeat = Object.hasOwn(step, 'repeat');
       const isPressBound = Object.hasOwn(step, 'pressBound');
-      if ([isFill, isFillAll, isPress, isRepeat, isPressBound].filter(Boolean).length !== 1) {
-        fail(where, `expected exactly one of {fill, with}, {fillAll, with}, {press}, {pressBound} or {repeat}, got ${JSON.stringify(step)}`);
+      // `pressWithin` — bead `forge-8vfn.6.11.51`. A bare `press` clicks
+      // `.first()` of every element sharing its `data-action`, which is one
+      // PER CARD on a list surface (Home's session strip). Scopes the press
+      // to the element whose `data-<attr>` equals an earlier beat's binding.
+      const isPressWithin = Object.hasOwn(step, 'pressWithin');
+      if ([isFill, isFillAll, isPress, isRepeat, isPressBound, isPressWithin].filter(Boolean).length !== 1) {
+        fail(where, `expected exactly one of {fill, with}, {fillAll, with}, {press}, {pressBound}, {pressWithin} or {repeat}, got ${JSON.stringify(step)}`);
       }
       if (isRepeat) {
         if (!Array.isArray(step.repeat) || step.repeat.length === 0) {
@@ -151,6 +156,27 @@ function validateDoSteps(raw, at) {
         requireNonEmptyString(pb.action, `${where}.pressBound.action`);
         requireNonEmptyString(pb.bind, `${where}.pressBound.bind`);
         return Object.freeze({ pressBound: Object.freeze({ action: pb.action, bind: pb.bind }) });
+      }
+      // `forge-8vfn.6.11.51`: same refuse-rather-than-guess shape as
+      // `pressBound` above, validated exactly the same way — `scope.bind`
+      // names a binding resolved at run time, so it is checked for presence
+      // here and for being an EARLIER beat's binding in `story-file.mjs`.
+      if (Object.hasOwn(step, 'pressWithin')) {
+        const pw = step.pressWithin;
+        if (pw === null || typeof pw !== 'object') fail(`${where}.pressWithin`, 'expected an object { scope, action }');
+        requireNonEmptyString(pw.action, `${where}.pressWithin.action`);
+        const scope = pw.scope;
+        if (scope === null || typeof scope !== 'object') {
+          fail(`${where}.pressWithin.scope`, 'expected an object { attr, bind }');
+        }
+        requireNonEmptyString(scope.attr, `${where}.pressWithin.scope.attr`);
+        requireNonEmptyString(scope.bind, `${where}.pressWithin.scope.bind`);
+        return Object.freeze({
+          pressWithin: Object.freeze({
+            scope: Object.freeze({ attr: scope.attr, bind: scope.bind }),
+            action: pw.action,
+          }),
+        });
       }
       if (isPress) {
         requireNonEmptyString(step.press, `${where}.press`);
