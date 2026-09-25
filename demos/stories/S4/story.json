@@ -2,9 +2,10 @@
   "story": {
     "id": "S4",
     "ground": {
-      "project": "gitpulse",
+      "project": "story-s4",
       "realSpawn": true,
-      "budget_usd": 25
+      "budget_usd": 25,
+      "fixture": "node-cli-with-tests"
     },
     "docs": {
       "kind": "tutorial",
@@ -13,14 +14,14 @@
     "beats": [
       {
         "act": "Open Studio on the Flows pillar",
-        "say": "Two flows, both shipped with forge: one drafts a roadmap, one takes a decomposed initiative to a reviewed PR. They are starters. The pillar says so on the page — \"every flow below is a ready-made starter, build your own to customize\" — and this story is the operator taking it up on that.",
+        "say": "Three flows, all shipped with forge: one drafts a roadmap, one takes a decomposed initiative to a reviewed PR, one writes a project’s docs. They are starters. The pillar says so on the page — \"every flow below is a ready-made starter, build your own to customize\" — and this story is the operator taking it up on that.",
         "do": [],
         "expect": {
           "route": "/flows",
           "data": {
             "page": "flows-index",
             "page-ready": "true",
-            "flow-count": "2"
+            "flow-count": "3"
           }
         }
       },
@@ -55,7 +56,7 @@
           },
           {
             "fill": "flow-goal",
-            "with": "Plan a change to gitpulse and take it to a reviewed verdict, with the architect drafting the initiative before any code is written."
+            "with": "Plan a change to story-s4 and take it to a reviewed verdict, with the architect drafting the initiative before any code is written."
           }
         ],
         "expect": {
@@ -98,7 +99,7 @@
       },
       {
         "act": "Open Advanced and bind gitpulse’s knowledge base to the flow",
-        "say": "A flow that plans work on one project should read what forge already knows about that project. Binding the knowledge base here is what makes the difference between a planner that starts cold every run and one that has read the last six months of this repo’s own lessons.",
+        "say": "A flow that plans work on a project should read what forge already knows about it. `story-s4` is reprovisioned from scratch every run, so it has no knowledge base of its own yet; binding gitpulse’s real one is the closest honest stand-in, since this ground is a byte-for-byte copy of that same CLI — a planner that starts cold every run is worse than one that has read the last six months of that project’s own lessons.",
         "do": [
           {
             "press": "toggle-flow-advanced"
@@ -178,12 +179,12 @@
         }
       },
       {
-        "act": "Point the flow at gitpulse, describe the first piece of work, cap what the run may spend, and press \"Start architect\"",
+        "act": "Point the flow at story-s4, describe the first piece of work, cap what the run may spend, and press \"Start architect\"",
         "say": "A flow built ten minutes ago is now dispatching a real Agent against a real repository, so the operator sets the ceiling before starting rather than discovering the bill afterwards. Pressing Start mints a session and shows its id on the page the operator is standing on.",
         "do": [
           {
             "fill": "project",
-            "with": "gitpulse"
+            "with": "story-s4"
           },
           {
             "fill": "idea",
@@ -279,15 +280,20 @@
   "beats": [
     {
       "act": "Open Studio on the Flows pillar",
-      "say": "Two flows, both shipped with forge: one drafts a roadmap, one takes a decomposed initiative to a reviewed PR. They are starters. The pillar says so on the page — \"every flow below is a ready-made starter, build your own to customize\" — and this story is the operator taking it up on that.",
+      "say": "Three flows, all shipped with forge: one drafts a roadmap, one takes a decomposed initiative to a reviewed PR, one writes a project’s docs. They are starters. The pillar says so on the page — \"every flow below is a ready-made starter, build your own to customize\" — and this story is the operator taking it up on that.",
       "status": "green",
       "failures": [],
       "bindings": {},
       "data": {
         "page": "flows-index",
         "page-ready": "true",
-        "flow-count": "2",
+        "flow-count": "3",
         "fetch-status": "ok"
+      },
+      "expect": {
+        "page": "flows-index",
+        "page-ready": "true",
+        "flow-count": "3"
       },
       "frame": "frames/01-open-studio-on-the-flows-pillar.png"
     },
@@ -298,6 +304,15 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "flow-monitor",
+        "flow-id": "new",
+        "page-ready": "true",
+        "active-tab": "build",
+        "component": "flow-builder-canvas",
+        "node-count": "3",
+        "edge-count": "2"
+      },
+      "expect": {
         "page": "flow-monitor",
         "flow-id": "new",
         "page-ready": "true",
@@ -320,6 +335,12 @@
         "component": "flow-header",
         "goal-set": "true"
       },
+      "expect": {
+        "page": "flow-monitor",
+        "flow-id": "new",
+        "component": "flow-header",
+        "goal-set": "true"
+      },
       "frame": "frames/03-name-the-flow-and-say-what-it-is-for.png"
     },
     {
@@ -335,15 +356,27 @@
         "node-count": "4",
         "edge-count": "3"
       },
+      "expect": {
+        "page": "flow-monitor",
+        "flow-id": "new",
+        "component": "flow-builder-canvas",
+        "node-count": "4",
+        "edge-count": "3"
+      },
       "frame": "frames/04-drag-the-architect-agent-out-of-the-pale.png"
     },
     {
       "act": "Open Advanced and bind gitpulse’s knowledge base to the flow",
-      "say": "A flow that plans work on one project should read what forge already knows about that project. Binding the knowledge base here is what makes the difference between a planner that starts cold every run and one that has read the last six months of this repo’s own lessons.",
+      "say": "A flow that plans work on a project should read what forge already knows about it. `story-s4` is reprovisioned from scratch every run, so it has no knowledge base of its own yet; binding gitpulse’s real one is the closest honest stand-in, since this ground is a byte-for-byte copy of that same CLI — a planner that starts cold every run is worse than one that has read the last six months of that project’s own lessons.",
       "status": "green",
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "flow-monitor",
+        "flow-id": "new",
+        "section": "flow-advanced"
+      },
+      "expect": {
         "page": "flow-monitor",
         "flow-id": "new",
         "section": "flow-advanced"
@@ -360,6 +393,10 @@
         "seeded-starter-count": "3",
         "seeded-starters": "dev,plan,review"
       },
+      "expect": {
+        "seeded-starter-count": "3",
+        "seeded-starters": "dev,plan,review"
+      },
       "frame": "frames/06-seed-the-flow-s-starter-agents-the-roste.png"
     },
     {
@@ -373,6 +410,11 @@
         "flow-id": "story-s4",
         "page-ready": "true"
       },
+      "expect": {
+        "page": "flow-monitor",
+        "flow-id": "story-s4",
+        "page-ready": "true"
+      },
       "frame": "frames/07-press-save-flow.png"
     },
     {
@@ -382,6 +424,11 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "flow-monitor",
+        "flow-id": "story-s4",
+        "can-start": "true"
+      },
+      "expect": {
         "page": "flow-monitor",
         "flow-id": "story-s4",
         "can-start": "true"
@@ -400,23 +447,35 @@
         "section": "flow-kickoff",
         "kickoff-kind": "idea"
       },
+      "expect": {
+        "page": "flow-monitor",
+        "flow-id": "story-s4",
+        "section": "flow-kickoff",
+        "kickoff-kind": "idea"
+      },
       "frame": "frames/09-open-the-launcher.png"
     },
     {
-      "act": "Point the flow at gitpulse, describe the first piece of work, cap what the run may spend, and press \"Start architect\"",
+      "act": "Point the flow at story-s4, describe the first piece of work, cap what the run may spend, and press \"Start architect\"",
       "say": "A flow built ten minutes ago is now dispatching a real Agent against a real repository, so the operator sets the ceiling before starting rather than discovering the bill afterwards. Pressing Start mints a session and shows its id on the page the operator is standing on.",
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-09-18T00-09-48-37110d26"
+        "architectSessionId": "2026-09-25T19-30-39-be6d7a3f"
       },
       "data": {
         "page": "flow-monitor",
         "flow-id": "story-s4",
         "section": "new-idea",
-        "architect-session-id": "2026-09-18T00-09-48-37110d26"
+        "architect-session-id": "2026-09-25T19-30-39-be6d7a3f"
       },
-      "frame": "frames/10-point-the-flow-at-gitpulse-describe-the-.png"
+      "expect": {
+        "page": "flow-monitor",
+        "flow-id": "story-s4",
+        "section": "new-idea",
+        "architect-session-id": "<architectSessionId>"
+      },
+      "frame": "frames/10-point-the-flow-at-story-s4-describe-the-.png"
     },
     {
       "act": "While it works, check Monitor",
@@ -430,6 +489,11 @@
         "monitor-live": "1",
         "fetch-status": "ok"
       },
+      "expect": {
+        "page": "monitor",
+        "page-ready": "true",
+        "monitor-live": "1"
+      },
       "frame": "frames/11-while-it-works-check-monitor.png"
     },
     {
@@ -439,6 +503,12 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "architect",
+        "session-phase": "awaiting-verdict"
+      },
+      "expect": {
         "page": "session",
         "page-ready": "true",
         "session-kind": "architect",
@@ -458,30 +528,25 @@
         "gate-armed": "true",
         "plan-mode": "gate"
       },
+      "expect": {
+        "section": "architect-plan",
+        "architect-phase": "awaiting-verdict",
+        "gate-armed": "true",
+        "plan-mode": "gate"
+      },
       "frame": "frames/13-open-the-plan-and-stand-at-the-verdict.png"
     }
   ],
   "reap": {
-    "reaped": [
+    "reaped": [],
+    "skipped": [
       {
-        "pid": 3800527,
-        "dir": "_logs/_architect-2026-09-18T00-09-48-37110d26",
-        "signal": "SIGTERM",
-        "via": "cwd"
+        "pid": 1254385,
+        "dir": "_logs/_architect-2026-09-25T19-30-39-be6d7a3f",
+        "reason": "pid 1254385: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
-    "skipped": [],
-    "cancelled": [
-      {
-        "dir": "_logs/_architect-2026-09-18T00-09-48-37110d26",
-        "kind": "architect",
-        "sessionId": "2026-09-18T00-09-48-37110d26",
-        "project": "gitpulse",
-        "cancelledFrom": "awaiting-verdict",
-        "written": true,
-        "reason": null
-      }
-    ]
+    "cancelled": []
   },
   "sweep": {
     "removed": [
@@ -503,8 +568,16 @@
         "[stories] queue claim: ready-for-review/ holds 0"
       ]
     },
+    "artefacts": {
+      "dest": null,
+      "captured": [],
+      "cleared": [],
+      "refused": [],
+      "unremoved": []
+    },
     "lines": [
       "[stories] trailing sweep removed studio/flows/story-s4",
+      "[stories] trailing sweep KEPT projects/story-s4 — a fixture ground is judged before it is torn down",
       "[stories] queue claim: done/ holds 0",
       "[stories] queue claim: failed/ holds 0",
       "[stories] queue claim: in-flight/ holds 0",
@@ -556,8 +629,31 @@
       }
     ],
     "failed": [],
-    "escapes": [],
+    "escapes": [
+      {
+        "root": "forge-m7-a-tl",
+        "paths": [
+          "QUARRY.md"
+        ],
+        "live": null,
+        "owner": "unattributable",
+        "reason": "no descendant of this run was seen in forge-m7-a-tl",
+        "rootKind": "sibling-basename"
+      }
+    ],
     "groundEscapes": [],
     "reappeared": []
-  }
+  },
+  "spend": {
+    "usd": 2.1638984999999997,
+    "unmeasured": false
+  },
+  "realGrounds": {
+    "moved": []
+  },
+  "git": {
+    "sha": "6c1f6c1991104789871e364e96d87f85c05b2ad6",
+    "dirty": false
+  },
+  "storyDigest": "2aad88a2ca00dcba"
 }
