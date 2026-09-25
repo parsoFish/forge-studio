@@ -17,11 +17,13 @@ import {
   updateHook,
   deleteHook,
   revokeHookApproval,
+  testFireHook,
   HOOK_LIFECYCLE_EVENTS,
   type HookDetail,
   type HookLifecycleEvent,
+  type HookTestFireLogEntry,
 } from '@/lib/hook-client';
-import { buildHookDetailView, type HookDetailView } from '@/lib/hook-library-view';
+import { buildHookDetailView, testFireDisabledReason, type HookDetailView } from '@/lib/hook-library-view';
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
 import { useDocumentTitle } from '@/lib/document-title';
@@ -94,6 +96,10 @@ export default function HookDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [revoking, setRevoking] = useState(false);
   const [revokeError, setRevokeError] = useState<string | null>(null);
+  // forge-6gv.8.1 (library-33): test-fire.
+  const [testFiring, setTestFiring] = useState(false);
+  const [testFireError, setTestFireError] = useState<string | null>(null);
+  const [testFireResult, setTestFireResult] = useState<HookTestFireLogEntry | null>(null);
 
   const load = useCallback(async (hookId: string) => {
     setState('loading');
@@ -220,6 +226,20 @@ export default function HookDetailPage() {
       return;
     }
     void load(id);
+  }
+
+  async function handleTestFire() {
+    setTestFiring(true);
+    setTestFireError(null);
+    setTestFireResult(null);
+    const r = await testFireHook(id);
+    setTestFiring(false);
+    if (!r.ok || !r.entry) {
+      setTestFireError(r.error ?? 'test-fire failed');
+      return;
+    }
+    setTestFireResult(r.entry);
+    void load(id); // refresh testFireRuns history
   }
 
   const view = state === 'ready' && detail ? buildHookDetailView(detail) : null;
@@ -356,6 +376,10 @@ export default function HookDetailPage() {
               revoking={revoking}
               revokeError={revokeError}
               onRevoke={() => void handleRevoke()}
+              testFiring={testFiring}
+              testFireError={testFireError}
+              testFireResult={testFireResult}
+              onTestFire={() => void handleTestFire()}
             />
           </>
         )}
@@ -380,6 +404,10 @@ function HookDetailBody({
   revoking,
   revokeError,
   onRevoke,
+  testFiring,
+  testFireError,
+  testFireResult,
+  onTestFire,
 }: {
   view: HookDetailView;
   packageHash: string;
@@ -392,6 +420,10 @@ function HookDetailBody({
   revoking: boolean;
   revokeError: string | null;
   onRevoke: () => void;
+  testFiring: boolean;
+  testFireError: string | null;
+  testFireResult: HookTestFireLogEntry | null;
+  onTestFire: () => void;
 }) {
   const canApprove = view.scanVerdict !== 'blocked' && view.trust === 'needs-review';
   const canOverride = view.scanVerdict === 'blocked' && view.trust === 'needs-review';
@@ -450,8 +482,11 @@ function HookDetailBody({
       <section data-section="carried-by" data-carried-by-count={view.carriedByCount}>
         <SectionLabel>Carried by</SectionLabel>
         {view.carriedByCount === 0 ? (
-          <p style={{ fontSize: 13, color: 'var(--faint)', fontStyle: 'italic', margin: 0 }}>
-            Unbound — bind it from an agent&apos;s builder.
+          // forge-6gv.8.1 (library-10): now that dispatch (M7-C U2/B6) is
+          // real, an unbound hook GENUINELY cannot fire — say so plainly,
+          // not the neutral "bind it" framing this used to carry.
+          <p style={{ fontSize: 13, color: '#fbbf24', margin: 0 }}>
+            Unbound — this hook cannot fire until it is bound to an agent. Bind it from an agent&apos;s builder.
           </p>
         ) : (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -519,7 +554,70 @@ function HookDetailBody({
           {actionError && <span style={{ fontSize: 12, color: '#f87171' }}>{actionError}</span>}
         </section>
       )}
+
+      <TestFirePanel view={view} firing={testFiring} error={testFireError} result={testFireResult} onFire={onTestFire} />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TestFirePanel (forge-6gv.8.1, library-33) — an operator-initiated control
+// that runs the hook through the SAME path production dispatch uses
+// (POST /api/studio/hooks/:id/test-fire -> testFireHook, hook-client.ts).
+// Approval is required (testFireDisabledReason); binding is NOT.
+// ---------------------------------------------------------------------------
+
+function TestFirePanel({
+  view,
+  firing,
+  error,
+  result,
+  onFire,
+}: {
+  view: HookDetailView;
+  firing: boolean;
+  error: string | null;
+  result: HookTestFireLogEntry | null;
+  onFire: () => void;
+}) {
+  const disabledReason = testFireDisabledReason(view);
+  return (
+    <section data-section="test-fire" data-test-fire-run-count={view.testFireRuns.length} style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius, 8px)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <SectionLabel>Test-fire</SectionLabel>
+      <p style={{ fontSize: 12, color: 'var(--faint)', margin: 0 }}>
+        Runs this hook for real, through the same approval + package-pin gate production
+        dispatch uses. Binding is not required.
+      </p>
+      <div>
+        <button type="button" className="btn btn-primary btn-sm" data-action="test-fire-hook" onClick={onFire} {...disabledAttrs(firing ? 'Test-firing…' : disabledReason)}>
+          {firing ? 'Test-firing…' : 'Test-fire'}
+        </button>
+      </div>
+      {error && <span style={{ fontSize: 12, color: '#f87171' }}>{error}</span>}
+      {result && (
+        <div data-component="test-fire-result" data-test-fire-outcome={result.outcome} data-test-fire-exit-code={result.exitCode ?? ''} style={{ fontSize: 12, color: 'var(--dim)' }}>
+          {result.outcome === 'ran' ? `Ran — exit ${result.exitCode}` : `Did not complete — ${result.outcome}`}
+        </div>
+      )}
+      {view.testFireRuns.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {view.testFireRuns.map((run, i) => (
+            <div
+              key={`${run.at}-${i}`}
+              data-test-fire-run
+              data-test-fire-at={run.at}
+              data-test-fire-outcome={run.outcome}
+              data-test-fire-event={run.event}
+              style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontFamily: 'var(--font-mono, monospace)', fontSize: 11, color: 'var(--faint)' }}
+            >
+              <span>{run.at}</span>
+              <span>{run.event}</span>
+              <span>{run.outcome}{run.exitCode !== null ? ` (${run.exitCode})` : ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
