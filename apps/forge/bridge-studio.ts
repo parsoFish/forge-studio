@@ -166,33 +166,13 @@ export { allowedOrigin, sendJson, sanitizeError };
 
 export { pathOnly, parseQuery };
 
-const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB
-
-/**
- * Read and parse the JSON request body. Used by write routes.
- * Caps at MAX_BODY_BYTES; destroys the socket and rejects on oversize.
- * Shared helper (mirrors readJson in ui-bridge.ts).
- */
-export function readJson(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolveJson, rejectJson) => {
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-    req.on('data', (chunk: Buffer) => {
-      totalBytes += chunk.byteLength;
-      if (totalBytes > MAX_BODY_BYTES) {
-        req.destroy();
-        rejectJson(new Error('request body too large'));
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8');
-      try { resolveJson(raw ? JSON.parse(raw) : {}); } catch (err) { rejectJson(err); }
-    });
-    req.on('error', rejectJson);
-  });
-}
+// forge-4zk follow-up: readJson moved to `./bridge-http.ts` — the ONE
+// implementation every bridge module shares. Re-exported here (not just
+// imported) because `apps/forge/bridge-studio-writes.ts` imports `readJson`
+// FROM this file; repointing that one import site would have been an
+// equally valid fix, but re-exporting keeps this module's existing public
+// surface stable for that one real consumer.
+export { readJson } from './bridge-http.ts';
 
 // ---------------------------------------------------------------------------
 // Phase log line derivation (design §7)

@@ -81,3 +81,48 @@ export function createFactorylessWorktree(root) {
 export function isFactoryless(dir) {
   return !existsSync(join(dir, 'packages', 'factory')) && !existsSync(join(dir, 'node_modules', '@forge', 'factory'));
 }
+
+/**
+ * Create a throwaway worktree of `root`'s HEAD with `relPaths` deleted
+ * (`rm -rf` each), for proving a DATA package deletable — one with no
+ * `package.json` of its own and so no `node_modules/@forge/*` entry to
+ * unlink. `packages/forge-docs` (G3's second factory) is exactly this shape:
+ * a flow.yaml and some SKILL.mds, discovered by directory walk, never an npm
+ * workspace member. `node_modules` is still rebuilt (every `@forge/*` link
+ * mirrored verbatim, none skipped) so requiring platform packages from the
+ * scratch tree resolves normally — only `createFactorylessWorktree` above
+ * needs to skip one, because only `@forge/factory` is a real npm package.
+ *
+ * @returns {{ dir: string, cleanup: () => void }}
+ */
+export function createScratchWorktreeWithout(root, relPaths) {
+  const dir = mkdtempSync(join(tmpdir(), 'scratch-without-'));
+  rmSync(dir, { recursive: true, force: true });
+  execFileSync('git', ['-C', root, 'worktree', 'add', '--detach', dir, 'HEAD'], { stdio: 'pipe' });
+
+  const cleanup = () => {
+    try { execFileSync('git', ['-C', root, 'worktree', 'remove', '--force', dir], { stdio: 'pipe' }); } catch { /* best effort */ }
+    rmSync(dir, { recursive: true, force: true });
+  };
+
+  try {
+    for (const rel of relPaths) rmSync(join(dir, rel), { recursive: true, force: true });
+
+    const rootModules = join(root, 'node_modules');
+    const scratchModules = join(dir, 'node_modules');
+    mkdirSync(scratchModules, { recursive: true });
+    for (const entry of readdirSync(rootModules)) {
+      if (entry === '@forge') continue;
+      symlinkSync(join(rootModules, entry), join(scratchModules, entry));
+    }
+    mkdirSync(join(scratchModules, '@forge'));
+    for (const pkg of readdirSync(join(rootModules, '@forge'))) {
+      symlinkSync(readlinkSync(join(rootModules, '@forge', pkg)), join(scratchModules, '@forge', pkg));
+    }
+  } catch (err) {
+    cleanup();
+    throw err;
+  }
+
+  return { dir, cleanup };
+}
