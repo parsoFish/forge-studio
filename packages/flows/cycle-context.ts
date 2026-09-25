@@ -39,6 +39,8 @@ export type CycleInput = {
   worktreePath: string;
   cycleId?: string;
   dryRun?: boolean;
+  /** ABSOLUTE `_logs` root for this cycle's logger/snapshot/report (forge-8vfn.8.1.10); omitted ⇒ `<FORGE_ROOT>/_logs`. */
+  logsRoot?: string;
   /**
    * R2-08 (forge-f9g fix, W8-A1): the manifest's own `project` binding,
    * threaded through so a merge-time `on: merged` trigger dispatch — which

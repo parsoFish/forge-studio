@@ -185,7 +185,8 @@ function nonEmptyDir(dir: string): boolean {
 export async function runOne(
   manifestPath: string,
   filename: string,
-  cfg: Required<Omit<SchedulerConfig, 'notify'>> & { notify: NotifyConfig },
+  // logsRoot (forge-8vfn.8.1.10): ABSOLUTE; omitted ⇒ `<forgeRoot>/_logs`.
+  cfg: Required<Omit<SchedulerConfig, 'notify'>> & { notify: NotifyConfig; logsRoot?: string },
   tee: ((entry: EventLogEntry) => void) | undefined,
   wiring: PhaseWiring,
 ): Promise<void> {
@@ -195,6 +196,7 @@ export async function runOne(
   }, cfg.heartbeatIntervalMs);
   // Hoisted so the stale-branch guard and its cleanup can reach it.
   const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const logsRoot = cfg.logsRoot ? resolve(cfg.logsRoot) : resolve(forgeRoot, '_logs');
   // Hold the handle outside the try so the finally block can clean it up
   // regardless of which path produced the result (success, failed, threw).
   let wtHandle: worktree.WorktreeHandle | null = null;
@@ -225,7 +227,7 @@ export async function runOne(
       manifest.flowId ? flowPathForId(manifest.flowId) : undefined,
     );
     if (!claimCheck.ok) {
-      emitOrchestratorEvent(forgeRoot, manifest.initiativeId, 'error', 'claim.refused', {
+      emitOrchestratorEvent(logsRoot, manifest.initiativeId, 'error', 'claim.refused', {
         reason: claimCheck.reason,
         terminal: claimCheck.terminal,
       });
@@ -308,7 +310,7 @@ export async function runOne(
       if (shouldRefuseFreshAttempt(probe)) {
         const sha = probe.remoteSha as string;
         const reason = `refs/heads/${branch} (${sha.slice(0, 8)}) already exists on origin from a prior, abandoned attempt and no PR is open for it. Delete or rename the remote branch, then re-dispatch — never auto-retried, never force-pushed.`;
-        emitOrchestratorEvent(forgeRoot, manifest.initiativeId, 'error', 'stale-remote-branch.refused', {
+        emitOrchestratorEvent(logsRoot, manifest.initiativeId, 'error', 'stale-remote-branch.refused', {
           branch,
           sha,
         });
@@ -349,7 +351,7 @@ export async function runOne(
       projectRepoPath: manifest.projectRepoPath,
       worktreesRoot: cfg.worktreesRoot,
       initiativeId: manifest.initiativeId,
-      logsRoot: resolve(forgeRoot, '_logs'),
+      logsRoot,
     });
     if (tee && (wiSweep.prunedPaths.length > 0 || wiSweep.prunedBranches.length > 0)) {
       console.log(
@@ -362,6 +364,7 @@ export async function runOne(
       manifestPath,
       projectRepoPath: manifest.projectRepoPath,
       worktreePath: wtHandle.path,
+      logsRoot,
       // ADR 019: thread the resume marker into the cycle so it skips PM +
       // per-WI dev-loop and runs only the unifier + downstream phases.
       resumeFrom: manifest.resumeFrom,
@@ -433,7 +436,7 @@ export async function runOne(
         const probe = probeRemoteBranch(projectRepoPath, branch);
         if (probe.remoteSha !== null && !probe.openPrExists) {
           execFileSync('git', ['-C', projectRepoPath, 'push', 'origin', '--delete', branch], { stdio: 'pipe' });
-          emitOrchestratorEvent(forgeRoot, initiativeId, 'log', 'stale-remote-branch.cleaned-up', {
+          emitOrchestratorEvent(logsRoot, initiativeId, 'log', 'stale-remote-branch.cleaned-up', {
             branch,
             sha: probe.remoteSha,
           });
@@ -518,17 +521,17 @@ export function annotateManifest(path: string, fields: Record<string, string>): 
 /**
  * ADR-028 §8 (M3-6) + bead forge-8vfn.8.1.8: append an event to the
  * initiative's JSONL log. Best-effort — the cycle logger isn't open yet at
- * either call site. Missing dir is created on the fly.
+ * either call site. Missing dir is created on the fly. `logsRoot` (forge-8vfn.8.1.10) is ALREADY the `_logs` root.
  */
 function emitOrchestratorEvent(
-  forgeRoot: string,
+  logsRoot: string,
   initiativeId: string,
   eventType: 'error' | 'log',
   message: string,
   metadata: Record<string, unknown>,
 ): void {
   try {
-    const logDir = resolve(forgeRoot, '_logs', initiativeId);
+    const logDir = resolve(logsRoot, initiativeId);
     if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
     const entry = {
       event_id: `${message}-${Date.now()}`,

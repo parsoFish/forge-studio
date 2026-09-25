@@ -61,13 +61,13 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,156 | **12,578** | ratified 12,578 — M7-C door re-exports OD (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,065 | **13,065** | ratified 13,065 — row 94 progress-only stream deadline (forge-8vfn.8.1.9), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 59 | 20,542 | **20,504** | ratified 20,504 — row 94 heartbeat + deadline count only progress (forge-8vfn.8.1.9), lane-ratified under ruling 666; see git history for prior raises. |
-| `flows` | 83 | 23,505 | **23,305** | ratified 23,305 — row 93 ownership recorded on every attempt, hand-off cleanup (forge-8vfn.8.1.8), +4 lane-ratified under ruling 666 on top of T1 1459; see git history for prior raises. |
+| `flows` | 83 | 23,514 | **23,314** | ratified 23,314 — row 97 injectable runOne/runCycle logsRoot (forge-8vfn.8.1.10), +9 lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 14 | 2,113 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 38 | 11,129 | **11,129** | ratified 11,129 — M7-C door re-exports OD round G (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
+| `stations` | 38 | 11,132 | **11,132** | ratified 11,132 — row 97 phase pipelines pass their logger to runAgent (forge-8vfn.8.1.10), lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,837 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **459** | **125,449** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **459** | **125,461** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -201,7 +201,7 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/library-agent-facts.ts | apps/forge | rewritten | 62 |
 | apps/forge/dry-bridge.ts | kernel | rewritten | 321 |
 | packages/flows/flow-band-vocab.ts | flows | verbatim | 69 |
-| packages/flows/forge-metrics.ts | flows | verbatim | 799 |
+| packages/flows/forge-metrics.ts | flows | verbatim | 800 |
 | packages/flows/forge-requeue.ts | flows | verbatim | 274 |
 | apps/forge/forge-watch.ts | apps/forge | verbatim | 739 |
 | packages/knowledge/kb-drain-edit-soundness.ts | knowledge | verbatim | 742 |
@@ -310,10 +310,10 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/constraint-blocks.ts | projects | verbatim | 257 |
 | packages/flows/cron-triggers.ts | flows | verbatim | 250 |
 | packages/flows/ci-gate.ts | flows | verbatim | 147 |
-| packages/flows/cycle-context.ts | flows | verbatim | 361 |
+| packages/flows/cycle-context.ts | flows | verbatim | 363 |
 | packages/flows/cycle-helpers.ts | flows | verbatim | 772 |
-| packages/flows/cycle-report.ts | flows | verbatim | 30 |
-| packages/flows/cycle.ts | flows | verbatim | 542 |
+| packages/flows/cycle-report.ts | flows | verbatim | 31 |
+| packages/flows/cycle.ts | flows | verbatim | 544 |
 | packages/flows/daemon.ts | flows | verbatim | 245 |
 | packages/sessions/kinds/demo-builder.ts | sessions | verbatim | 515 |
 | packages/sessions/kinds/authoring.ts | sessions | rewritten | 141 |
@@ -357,7 +357,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/notify.ts | flows | verbatim | 73 |
 | packages/agents/phase-agent.ts | agents | verbatim | 101 |
 | packages/stations/phases/adversarial-review-binding.ts | stations | verbatim | 164 |
-| packages/stations/phases/adversarial-review.ts | stations | verbatim | 799 |
+| packages/stations/phases/adversarial-review.ts | stations | verbatim | 800 |
 | packages/agents/phases/agent-scope-guard.ts | agents | verbatim | 111 |
 | packages/flows/phases/closure.ts | flows | verbatim | 431 |
 | packages/stations/phases/executor-deps.ts | stations | verbatim | 343 |
@@ -381,11 +381,11 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/phases/gitignored-creates.ts | flows | rewritten | 79 |
 | packages/flows/plan-gate-class-check.ts | flows | rewritten | 59 |
 | packages/stations/phases/pm-binding.ts | stations | verbatim | 384 |
-| packages/stations/phases/project-manager.ts | stations | verbatim | 759 |
+| packages/stations/phases/project-manager.ts | stations | verbatim | 760 |
 | packages/flows/phases/ralph-spec-lint.ts | flows | verbatim | 469 |
 | packages/stations/phases/reflector-binding.ts | stations | verbatim | 253 |
 | packages/stations/phases/reflector.ts | stations | verbatim | 705 |
-| packages/stations/phases/reflector-brain-writes.ts | stations | verbatim | 380 |
+| packages/stations/phases/reflector-brain-writes.ts | stations | verbatim | 381 |
 | packages/stations/phases/release-finalize.ts | stations | verbatim | 299 |
 | packages/flows/phases/wi-spec-compile.ts | flows | verbatim | 532 |
 | packages/agents/pinned-sdk-query.ts | agents | verbatim | 163 |
@@ -437,7 +437,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/scheduler-dispatch.ts | flows | verbatim | 252 |
 | packages/flows/scheduler.ts | flows | verbatim | 398 |
 | packages/flows/scheduler-sweeps.ts | flows | verbatim | 177 |
-| packages/flows/scheduler-run-one.ts | flows | verbatim | 551 |
+| packages/flows/scheduler-run-one.ts | flows | verbatim | 554 |
 | packages/flows/stale-remote-branch-guard.ts | flows | verbatim | 73 |
 | packages/agents/skill-path.ts | agents | verbatim | 239 |
 | packages/agents/stream-deadline.ts | agents | verbatim | 126 |

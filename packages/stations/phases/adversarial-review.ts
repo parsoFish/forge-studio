@@ -472,6 +472,7 @@ export async function runAdversarialReview(
             prompt,
             systemPrompt,
             lifecycle: 'caller',
+            logger, // forge-8vfn.8.1.10: lets runAgent root the spawn marker at this pipeline's own logger, not <FORGE_ROOT>/_logs.
             streamGuard: { label: def.slug, signal: opts.signal },
             bindings: { initiative: { id: input.initiativeId, costBudgetUsd: input.costBudgetUsd } },
             ...(ceilingUsd !== undefined ? { kickoffCeilingUsd: ceilingUsd } : {}),

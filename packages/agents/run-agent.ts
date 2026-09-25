@@ -356,7 +356,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   // let a later run's teardown sweep an earlier run's still-live process
   // (./spawn-marker.ts).
   const runMarker = mintRunMarker(ctx.runId);
-  const logsRoot = ctx.logsRoot ?? join(FORGE_ROOT, '_logs');
+  const logsRoot = ctx.logsRoot ?? (ctx.logger ? dirname(dirname(ctx.logger.logFilePath)) : join(FORGE_ROOT, '_logs'));
 
   if (lifecycle === 'caller') {
     if (loopStrategy !== 'one-shot') {

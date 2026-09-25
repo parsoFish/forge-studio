@@ -22,7 +22,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { FORGE_ROOT } from '@forge/kernel';
 
 import type { EventLogEntry } from '@forge/kernel';
@@ -33,8 +33,9 @@ import { cycleArchivePath, cycleArchiveRelPath } from '@forge/knowledge';
 
 export type CycleReportInput = {
   cycleId: string;
-  /** Forge root, defaults to cwd. */
+  /** Forge root (default cwd); `logsRoot` overrides `<forgeRoot>/_logs` (forge-8vfn.8.1.10). */
   forgeRoot?: string;
+  logsRoot?: string;
 };
 
 /**
@@ -45,7 +46,7 @@ export type CycleReportInput = {
 export function buildCycleReport(input: CycleReportInput): string {
   const forgeRoot = resolve(input.forgeRoot ?? FORGE_ROOT);
   const cycleId = input.cycleId;
-  const cycleLogDir = resolve(forgeRoot, '_logs', cycleId);
+  const cycleLogDir = resolve(input.logsRoot ?? join(forgeRoot, '_logs'), cycleId);
 
   const events = loadEvents(cycleLogDir);
   if (events.length === 0) {
@@ -59,7 +60,7 @@ export function buildCycleReport(input: CycleReportInput): string {
 
   const initiativeId = events[0].initiative_id;
   const manifest = loadManifest(forgeRoot, initiativeId);
-  const metrics = summariseCycle(cycleId, resolve(forgeRoot, '_logs'));
+  const metrics = summariseCycle(cycleId, dirname(cycleLogDir));
   const wis = loadWorkItemsSnapshot(cycleLogDir);
   const cycleEnd = events.find((e) => e.phase === 'orchestrator' && e.event_type === 'end' && e.message === 'cycle.end');
   const cycleErr = events.find((e) => e.phase === 'orchestrator' && e.event_type === 'error');
