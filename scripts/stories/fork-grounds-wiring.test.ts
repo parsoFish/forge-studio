@@ -19,7 +19,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runnerSourceContaining } from './runner-source.mjs';
 
-const CALL = 'judgeForkGrounds(';
+// The DEFINITION site (`export function judgeForkGrounds(`, in fork-grounds.mjs)
+// also contains the bare name, so the anchor is the CALL shape specifically —
+// unique to the one place run-story.mjs invokes it.
+const CALL = '= judgeForkGrounds(';
 
 test('the runner imports snapshotForkGrounds and judgeForkGrounds from fork-grounds.mjs', () => {
   const runner = runnerSourceContaining(CALL);
@@ -44,7 +47,7 @@ test('the per-case "before" snapshot is taken before the beat loop, not after', 
 
 test('judgeForkGrounds\'s lines are printed', () => {
   const runner = runnerSourceContaining(CALL);
-  const callAt = runner.source.indexOf(`= ${CALL}`);
+  const callAt = runner.source.indexOf(CALL);
   assert.notEqual(callAt, -1);
   const after = runner.source.slice(callAt, callAt + 400);
   assert.match(after, /for \(const line of \w+\.lines\) console\.log\(line\);/);
@@ -52,8 +55,11 @@ test('judgeForkGrounds\'s lines are printed', () => {
 
 test('a non-null redReason ends the run red, regardless of the beats', () => {
   const runner = runnerSourceContaining(CALL);
-  const callAt = runner.source.indexOf(`= ${CALL}`);
-  const after = runner.source.slice(callAt, callAt + 700);
-  assert.match(after, /redReason !== null/, 'the gate must actually read redReason');
-  assert.match(after, /return 1;/, 'and end the run non-zero');
+  const callAt = runner.source.indexOf(CALL);
+  // The gate sits near the END of the run (after every other containment
+  // check), so the window is "from the call to EOF" rather than a fixed size.
+  const after = runner.source.slice(callAt);
+  const gateAt = after.indexOf('redReason !== null');
+  assert.notEqual(gateAt, -1, 'the gate must actually read redReason');
+  assert.match(after.slice(gateAt, gateAt + 200), /return 1;/, 'and end the run non-zero');
 });
