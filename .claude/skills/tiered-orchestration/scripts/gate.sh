@@ -21,6 +21,13 @@
 # each checkout (§15.148).
 set -u
 
+# T1 1352/1353, M7 findings row 80. `lock_confirmed_holders` — the fallback
+# `suite_lock_state` below reaches for when `/proc/locks` names nobody, since
+# that listing cannot see a lock held through an inherited fd (this file's own
+# `exec 9>"$FORGE_SUITE_LOCK"; flock -n 9`, heavy-slot.sh's identical idiom on
+# its own fd). See that file's header for the measured reason.
+. "$(dirname "${BASH_SOURCE[0]}")/lock-holders.sh"
+
 # forge-8vfn.7.6.79 — whether THIS gate is the one holding the suite-lock right
 # now, so the trap below removes only a sidecar it wrote itself and never a
 # sibling's (an ANCESTOR that declines to re-take the lock must not clean up
@@ -137,9 +144,32 @@ is_ancestor() {
   return 1
 }
 suite_lock_state() {
-  local f="$1" pids pid
+  local f="$1" pids pid live=""
   pids="$(lock_holder_pids "$f")"
-  [ -z "$pids" ] && { echo FREE; return; }
+  # T1 1361 (D's CI measurement, #911): a listed pid that has since EXITED is
+  # not a holder — a standard kernel (unlike WSL2) keeps the /proc/locks row
+  # under the now-dead pid that originally called flock() and exited, so
+  # "the listing named someone" is not "a live process holds it". Filtered
+  # the same way D's `suiteLockVerdict` fix filters `holders` for lock-guard.mjs.
+  for pid in $pids; do
+    lock_pid_alive "$pid" && live="$live $pid"
+  done
+  pids="${live# }"
+  if [ -z "$pids" ]; then
+    # `/proc/locks` names nobody LIVE — either genuinely FREE, or the
+    # invisible inherited-fd shape (row 80): the lock IS held, but the pid
+    # the listing would have attributed it to exited the instant it acquired
+    # (WSL2: no row at all; a standard kernel: a row naming that dead pid,
+    # just filtered above). Confirm via the fd-scan + fresh-probe rule
+    # (`lock-holders.sh`) before believing FREE — this is the SAME real
+    # file, so a probe that fails now means something holds it even though
+    # the listing cannot see (or cannot usefully name) it. Kept as a
+    # FALLBACK rather than a replacement: `lock_holder_pids` carries its own
+    # doors for a real, separate bug (forge-s9g1's blocked-waiter-vs-holder
+    # row parsing) and stays authoritative whenever it names a LIVE holder.
+    pids="$(lock_confirmed_holders "$f")"
+    [ -z "$pids" ] && { echo FREE; return; }
+  fi
   for pid in $pids; do
     is_ancestor "$pid" && { echo "ANCESTOR:$pid"; return; }
   done

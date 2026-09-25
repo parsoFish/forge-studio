@@ -172,7 +172,7 @@ describe('with-locks.sh — one ratified order, bounded, and the lock it lost is
     // The sibling holds it the same way with-locks.sh's OWN acquisition does
     // (`exec N>path; flock -n N`), from a process that is NOT with-locks.sh's
     // ancestor — so this must still be the ordinary timeout, never skipped.
-    const sibling = spawn('bash', ['-c', `exec 8>${JSON.stringify(join(d, '.suite-lock'))}; flock -n 8 || exit 9; sleep 30`], { stdio: 'ignore' });
+    const sibling = spawn('bash', ['-c', `exec 8>${JSON.stringify(join(d, '.suite-lock'))}; flock -n 8 || exit 9; exec sleep 30`], { stdio: 'ignore' });
     spawnSync('sleep', ['0.3']);
     try {
       const r = run(d, 'both', '--wait-secs', '1', '--', 'echo', 'never');

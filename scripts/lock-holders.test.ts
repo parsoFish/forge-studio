@@ -59,7 +59,7 @@ function waitReady(child: ChildProcess): Promise<void> {
  *  NOT an ancestor of whatever later runs the checker. */
 function holdInvisibleAsStranger(lock: string): ChildProcess {
   const child = spawn(
-    'bash', ['-c', `exec 8>${JSON.stringify(lock)}; flock -n 8 || exit 9; echo READY; sleep 60`],
+    'bash', ['-c', `exec 8>${JSON.stringify(lock)}; flock -n 8 || exit 9; echo READY; exec sleep 60`],
     { stdio: ['ignore', 'pipe', 'inherit'] },
   );
   return child;
@@ -69,7 +69,7 @@ function holdInvisibleAsStranger(lock: string): ChildProcess {
  *  opener case a probe-less reader over-reports as held. */
 function openThenRelease(lock: string): ChildProcess {
   const child = spawn(
-    'bash', ['-c', `exec 8>${JSON.stringify(lock)}; flock -n 8 || exit 9; flock -u 8; echo READY; sleep 60`],
+    'bash', ['-c', `exec 8>${JSON.stringify(lock)}; flock -n 8 || exit 9; flock -u 8; echo READY; exec sleep 60`],
     { stdio: ['ignore', 'pipe', 'inherit'] },
   );
   return child;
@@ -119,6 +119,31 @@ describe('lock-holders.sh — named AND confirmed, never /proc/locks alone', () 
       assert.match(r.stdout.trim(), /^STRANGER:\d+$/, r.stdout + r.stderr);
       assert.equal(Number(r.stdout.trim().split(':')[1]), holder.pid, 'the pid named must be the real holder, not a stand-in');
     } finally { holder.kill('SIGKILL'); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('CO-OPENER: a process with the file open but never holding the flock is never named — even while someone else genuinely holds it', async () => {
+    const { dir, lock } = lockFile();
+    const holder = holdInvisibleAsStranger(lock);
+    // Opens the SAME file, tries to flock it and FAILS (contended), keeps the
+    // fd open anyway — the exact shape the CHECKING process itself is in
+    // right before it asks this question (this is what let gate.sh misread a
+    // second gate's own collision as ANCESTOR OF ITSELF before this fix: the
+    // scan found its own not-yet-flocked fd and a global probe alone could
+    // not tell it apart from the real holder's).
+    const coOpener = spawn(
+      'bash', ['-c', `exec 8>${JSON.stringify(lock)}; flock -n 8 && echo BUG_ACQUIRED; echo READY; exec sleep 60`],
+      { stdio: ['ignore', 'pipe', 'inherit'] },
+    );
+    try {
+      await waitReady(holder);
+      await waitReady(coOpener);
+      const r = state(lock);
+      assert.match(r.stdout.trim(), /^STRANGER:\d+$/, r.stdout + r.stderr);
+      assert.equal(
+        Number(r.stdout.trim().split(':')[1]), holder.pid,
+        `must name the real holder only, never the co-opener: ${r.stdout}${r.stderr}`,
+      );
+    } finally { holder.kill('SIGKILL'); coOpener.kill('SIGKILL'); rmSync(dir, { recursive: true, force: true }); }
   });
 
   test('STALE OPENER: an fd left open after its own flock -u must read FREE — naming alone over-reports', async () => {

@@ -68,6 +68,13 @@
 # choose and never this file's to guess.
 set -u
 
+# T1 1352/1353, M7 findings row 80. `lock_state`/`lock_is_ancestor` — see that
+# file's header for why `/proc/locks` cannot be trusted here: the ordinary
+# ordering, heavy-slot.sh, calls this script UNDER its own hold of
+# `.suite-lock`, taken the same `exec N>file; flock -n N` way this script
+# takes it — a hold that is genuinely held and invisible to `/proc/locks`.
+. "$(dirname "${BASH_SOURCE[0]}")/lock-holders.sh"
+
 EX_USAGE=2
 EX_NO_SUITE=71     # could not take .suite-lock within the bound
 EX_NO_RUN=72       # could not take .run-lock within the bound
@@ -108,13 +115,16 @@ ts() { date -u +%H:%M:%S; }
 #
 #   REFUSES UNDER .run-lock    gate.sh · npm test · builds and tsc (7.6.100's
 #                              guard, `bf019f23`)
-#   REFUSES UNDER .suite-lock  the story runner — its suite guard refuses ANY
-#                              holder, its own caller included, until D1b makes
-#                              it ancestor-aware; it ACCEPTS a run-lock its own
-#                              ancestor holds (ruling 683), so `run` is its
-#                              launch today and `both` becomes it after D1b
-#                              (M7 findings row 74)
 #   TAKES .suite-lock ITSELF   gate.sh (#694)
+#
+# The story runner used to sit in a third row here — "REFUSES UNDER
+# .suite-lock, until D1b makes it ancestor-aware" — because its suite guard
+# refused ANY holder, its own caller included. D1b (PR #830, merged
+# `34be5841`) shipped that ancestor-awareness: `suiteLockVerdict` now accepts
+# a `.suite-lock` held by the run's own ancestor exactly as its run-lock check
+# already did (ruling 683). `both` is its launch now, matching M7 findings row
+# 74's closing note ("`both` becomes it after D1b") — there is nothing left
+# for this table to refuse the story runner under.
 #
 # So `run`/`both` around any of the first group is a guaranteed refusal, and
 # `suite`/`both` around a gate is a guaranteed wait on a lock its own caller
@@ -138,12 +148,6 @@ refuse_guaranteed_failure() {
         run|both)
           why="holding .run-lock guarantees this command's refusal — its guard refuses when the run-lock is held, awaited or merely OPEN"
           fix="run it unheld and retry on the guard's own refusal" ;;
-      esac ;;
-    *" npm run stories "*|*" --story "*)
-      case "$MODE" in
-        suite|both)
-          why="the story runner's suite guard refuses ANY .suite-lock holder, its own caller included, until D1b makes it ancestor-aware"
-          fix="launch it under 'run' (its guard accepts its own ancestor's run-lock, ruling 683)" ;;
       esac ;;
   esac
   # TAKES .suite-lock itself. Only `gate.sh`, and the remedy is different.
@@ -192,6 +196,34 @@ take() { # take <fd> <path> <label> <failure-exit>
   exit "$code"
 }
 
+# T1 1352/1353, M7 findings row 80 — THE SELF-DEADLOCK. A caller that already
+# holds `.suite-lock` (heavy-slot.sh's ratified launch: `heavy-slot.sh <camp>
+# story -- with-locks.sh <camp> both -- …`, holding it on its own fd before
+# this script ever starts) is this process's OWN ANCESTOR. `take`'s `flock -w`
+# opens fd 8 as a NEW, independent lock on the same file — an inner acquire
+# under an outer holder blocks until `$WAIT` expires even though nothing is
+# actually contending, exactly the deadlock `gate.sh`'s own suite-lock take
+# already avoids for the identical reason (this file's header, `7.6.48`).
+#
+# A STRANGER's hold is NEVER skipped this way — only an ANCESTOR's, confirmed
+# by `lock_state` (named AND currently held, never `/proc/locks` alone, since
+# this exact hold shape is invisible there). Skipping means never opening fd 8
+# at all: the trap's `flock -u 8` is then a harmless no-op on a never-opened
+# fd, and the child's `8>&-` closes an fd that was never this script's to
+# begin with.
+take_suite_or_skip() {
+  local path="$CAMP/.suite-lock" state
+  state="$(lock_state "$path")"
+  case "$state" in
+    ANCESTOR:*)
+      echo "$(ts) with-locks: .suite-lock held by ancestor pid ${state#ANCESTOR:} — proceeding without re-taking it"
+      ;;
+    *)
+      take 8 "$path" ".suite-lock" "$EX_NO_SUITE"
+      ;;
+  esac
+}
+
 # The trap releases explicitly on the way out, including SIGTERM. Process exit
 # would close the descriptors anyway; the trap is what makes a killed wrapper
 # release PROMPTLY rather than whenever its children happen to finish.
@@ -200,10 +232,10 @@ trap 'flock -u 8 2>/dev/null; flock -u 9 2>/dev/null' EXIT
 # THE ORDER. Suite first, run inside it. `both` is the only mode where the order
 # can be got wrong, which is why the order lives here and not in eleven callers.
 case "$MODE" in
-  suite) take 8 "$CAMP/.suite-lock" ".suite-lock" "$EX_NO_SUITE" ;;
-  run)   take 9 "$CAMP/.run-lock"   ".run-lock"   "$EX_NO_RUN"   ;;
-  both)  take 8 "$CAMP/.suite-lock" ".suite-lock" "$EX_NO_SUITE"
-         take 9 "$CAMP/.run-lock"   ".run-lock"   "$EX_NO_RUN"   ;;
+  suite) take_suite_or_skip ;;
+  run)   take 9 "$CAMP/.run-lock" ".run-lock" "$EX_NO_RUN" ;;
+  both)  take_suite_or_skip
+         take 9 "$CAMP/.run-lock" ".run-lock" "$EX_NO_RUN" ;;
 esac
 
 # THE CHILD MUST NOT INHERIT THE LOCK DESCRIPTORS. `exec 8>` opens an fd that a
