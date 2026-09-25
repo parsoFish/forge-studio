@@ -22,6 +22,8 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import { resolveAnchorMs } from './beats-anchor.mjs';
 
@@ -52,5 +54,35 @@ test('718(1): an anchor LATER than the wait is refused — it would search a win
   assert.throws(
     () => resolveAnchorMs({ for: 'agent', anchor: 'later-press' }, presses, 5_000),
     /anchor "later-press" was pressed AFTER/,
+  );
+});
+
+/**
+ * T1 1503 (row 98, S10 run 27) — THE DEFAULT (no `wait.anchor`) FORM MUST BE
+ * FED A TIMESTAMP TAKEN BEFORE THE ACT, NOT A FRESH ONE TAKEN AFTER.
+ *
+ * MEASURED: beat 10 presses `start-development` and waits in the same beat,
+ * with no `wait.anchor` — so `resolveAnchorMs` returns its third argument
+ * verbatim. `beats-drive.mjs` used to hand it a fresh `Date.now()` computed
+ * AFTER `performSteps` had already issued that press. The develop run's own
+ * `cycle.start` landed at 20:44:07.280Z; that fresh `Date.now()` could read no
+ * earlier than the press it followed, ~20:44:08.0Z — so `cycleStartedSince`
+ * never found a start at or after its own anchor, and the wait never ended.
+ *
+ * `resolveAnchorMs` itself cannot pin this: its unit tests (above) hand it a
+ * literal, which says nothing about WHICH clock reading `beats-drive.mjs`
+ * passes in. This is a structural door on the call site itself, precise enough
+ * to kill exactly the regression: reverting to a bare `Date.now()` here changes
+ * nothing this regex cannot see, and the assertion below reds on it.
+ */
+test('T1 1503: beats-drive.mjs anchors the default form on pressStartedMs, never a fresh Date.now() taken after the act', () => {
+  const path = fileURLToPath(new URL('./beats-drive.mjs', import.meta.url));
+  const source = readFileSync(path, 'utf8');
+  const call = /resolveAnchorMs\(beat\.wait\s*\?\?\s*null,\s*pressedAt,\s*([^)]+)\)/.exec(source);
+  assert.notEqual(call, null, `${path}: the resolveAnchorMs call site must still exist and be recognisable`);
+  assert.equal(
+    call![1].trim(), 'pressStartedMs',
+    `${path}: the third argument must be the timestamp captured BEFORE this beat's own act, not a fresh ` +
+      'Date.now() taken after performSteps has already run.',
   );
 });

@@ -475,3 +475,67 @@ test('7.6.147: S10 beat 10 with no bindings REFUSES, naming the placeholder', as
     'the remedy text must name THIS failure — run 21 was told to add a `do` block it already had');
   assert.deepEqual(v.bindings, {}, 'a refusing beat exports no bindings, like stuckVerdict');
 });
+
+/**
+ * T1 1503 (row 98, S10 run 27) — TERMINAL WINS, even when `cycleStartedSince`
+ * can never fire. MEASURED: the develop run's own `cycle.start` was stamped
+ * 20:44:07.280Z, ~1s BEFORE the beat's own anchor (~20:44:08.0Z) — so the
+ * started-gate stayed false forever and a `failed` manifest six minutes later
+ * was never read. `queueManifestTerminal` (beats-queue-terminal.mjs) answers
+ * from the queue's own mtime instead, checked before that gate ever runs.
+ */
+test('T1 1503: a queue terminal wins even when cycle.start predates the anchor', () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-2026-09-25-add-exclude-author-flag';
+  const anchor = Date.now() - 5_000;
+  liveDispatch(logs, `2026-09-25T20-36-45_${initiative}`);
+  appendFileSync(join(logs, `2026-09-25T20-36-45_${initiative}`, 'events.jsonl'),
+    `${JSON.stringify({ event_type: 'start', message: 'cycle.start', started_at: new Date(anchor - 1_000).toISOString() })}\n`);
+  const watch = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: initiative })!;
+  assert.equal(watch(null, anchor), null, 'no terminal yet — the wait is open');
+
+  // MID-WAIT: the product moves the initiative into _queue/failed/, written
+  // (mtime) at or after the anchor — exactly what run 27 measured.
+  queueFile(root, 'failed', initiative);
+
+  const stop = watch(null, anchor);
+  assert.notEqual(stop, null, 'a queue terminal must end the wait within one poll, cycle.start notwithstanding');
+  assert.equal(stop!.reason, 'cycle-ended');
+  assert.match(stop!.detail, /failed/, stop!.detail);
+});
+
+/** THE S10 RUN 22 GUARD, restated for the mtime path: a terminal the PREVIOUS
+ *  run left in the queue, older than this press's own anchor, must not end a
+ *  wait it does not belong to. */
+test('T1 1503: a queue terminal OLDER than the anchor is ignored — the wait continues', () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-run22-mtime-guard';
+  const anchor = Date.now();
+  liveDispatch(logs, `2026-09-18T10-21-56_${initiative}`);
+  queueFile(root, 'failed', initiative);
+  const before = (anchor - 60_000) / 1000;
+  utimesSync(join(root, '_queue', 'failed', `${initiative}.md`), before, before);
+
+  const watch = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: initiative })!;
+  assert.equal(watch(null, anchor), null, 'a terminal older than the anchor is the PREVIOUS run\'s, not this one\'s');
+});
+
+/** THE WANTED STATE, mid-wait, still REACHES — the `terminalAt`/grace state
+ *  `makeCycleTerminalWatch` keeps must be set from this same fast path, not
+ *  only from the started-gate's own read. */
+test('T1 1503: a queue terminal in the WANTED state, mid-wait, reaches — even with cycle.start predating the anchor', () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-1503-reached';
+  const anchor = Date.now() - 5_000;
+  liveDispatch(logs, `2026-09-25T20-36-45_${initiative}`);
+  appendFileSync(join(logs, `2026-09-25T20-36-45_${initiative}`, 'events.jsonl'),
+    `${JSON.stringify({ event_type: 'start', message: 'cycle.start', started_at: new Date(anchor - 1_000).toISOString() })}\n`);
+  const watch = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: initiative })!;
+  assert.equal(watch(null, anchor), null);
+  assert.equal(watch.reached, false, 'not reached yet');
+
+  queueFile(root, 'ready-for-review', initiative); // the WANTED state, mid-wait
+
+  assert.equal(watch(null, anchor), null, 'a first sighting starts the page grace, by design — it does not end the wait yet');
+  assert.equal(watch.reached, true, 'but it IS reached — the terminal was read despite cycle.start predating the anchor');
+});

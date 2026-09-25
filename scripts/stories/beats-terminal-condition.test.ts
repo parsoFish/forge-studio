@@ -22,7 +22,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, unlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -31,14 +31,26 @@ import { waitForConsequence } from './beats-page.mjs';
 
 const INIT = 'INIT-2026-09-19-exclude-author-flag';
 
-/** A shared cycle dir as DEC-2 leaves it after the architect run, with the initiative in `state`. */
+/** A shared cycle dir as DEC-2 leaves it after the architect run, with the initiative in `state`.
+ *
+ * T1 1503 — the manifest's own mtime is backdated to `architectStartedAt`.
+ * `queueManifestTerminal` (beats-queue-terminal.mjs) now reads that mtime as
+ * evidence of WHEN the product wrote it, and every fixture here narrates the
+ * manifest as the ARCHITECT run's leftover — i.e. written `architectStartedAt`,
+ * not whenever this helper happened to run `writeFileSync`. Leaving the real
+ * mtime at "now" would let every one of these tests pass by accident, for the
+ * wrong reason: a manifest whose fixture timestamp does not match its own
+ * narrative. */
 function sharedCycle(state: string, architectStartedAt: string): { root: string; dir: string } {
   const root = mkdtempSync(join(tmpdir(), 'terminal-condition-'));
   const dir = join(root, '_logs', `2026-09-19T01-12-19_${INIT}`);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'events.jsonl'), `${JSON.stringify({ skill: 'cycle', event_type: 'start', message: 'cycle.start', started_at: architectStartedAt })}\n${JSON.stringify({ skill: 'cycle', event_type: 'end', message: 'cycle.end', started_at: architectStartedAt })}\n`);
   mkdirSync(join(root, '_queue', state), { recursive: true });
-  writeFileSync(join(root, '_queue', state, `${INIT}.md`), '# initiative\n');
+  const manifest = join(root, '_queue', state, `${INIT}.md`);
+  writeFileSync(manifest, '# initiative\n');
+  const at = new Date(architectStartedAt).getTime() / 1000;
+  utimesSync(manifest, at, at);
   return { root, dir };
 }
 
