@@ -37,6 +37,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
 
 import { CHECK_NAMES, classifyFinding } from '../../brain-lint.ts';
 import {
@@ -594,6 +595,34 @@ test('themeTruth/brainTruthRates: a realistic corpus-shaped body (## Sources foo
       1,
       `stale 1 / verifiable 1 = rate 1 (100%) on THIS fixture — the point is it is no longer inflated by the 2 provenance citations that would have made it look like 3 missing out of 1 theme, got ${JSON.stringify(row)}`,
     );
+  } finally {
+    cleanup(root);
+  }
+});
+
+// ---------- containment: evidence: refs never reach an unguarded fs/git probe ----------
+
+test('themeTruth: an evidence: ref that escapes the checkout (`../outside.md`) or is absolute (`/etc/passwd`) is DROPPED by the containment guard before any existsSync/git probe — never counted present or stale (SEC: evidence: is returned verbatim by extractThemeReferences, bypassing normalizeCandidate\'s own M1 traversal filter, which only runs on body-derived candidates)', () => {
+  const root = buildBrainFixture({ themes: [] });
+  try {
+    // A real file OUTSIDE proj-guard's own checkout, sitting where
+    // join(checkoutRoot, '../outside.md') would land if the traversal were
+    // not contained — proves the guard, not just an absent target, is what
+    // stops it.
+    mkdirSync(join(root, 'projects'), { recursive: true });
+    writeFileSync(join(root, 'projects', 'outside.md'), 'not part of proj-guard\n');
+    writeTruthTheme(root, 'proj-guard', 'guard-theme', {
+      evidence: ['../outside.md', '/etc/passwd'],
+    });
+
+    const [t] = themeTruth(root, 'proj-guard');
+    assert.deepEqual(t.references, [], `an escaping ref must never be counted present, got ${JSON.stringify(t.references)}`);
+    assert.deepEqual(t.missing, [], `an escaping ref is DROPPED, not judged stale, got ${JSON.stringify(t.missing)}`);
+
+    const row = brainTruthRates(root).find((r) => r.project === 'proj-guard');
+    assert.ok(row, `expected a brainTruthRates row for proj-guard, got nothing`);
+    assert.equal(row!.verifiable, 0, `no reference survives the guard, so nothing is verifiable, got ${JSON.stringify(row)}`);
+    assert.equal(row!.rate, null, `0 verifiable -> rate is null, never a false 0%, got ${JSON.stringify(row)}`);
   } finally {
     cleanup(root);
   }
