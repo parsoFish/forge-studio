@@ -40,6 +40,24 @@ SUITE_LOCK_HELD=0
 # line; one lane's private wrapper did, so for every other lane the check
 # could not fire. The verdict is written by the thing that reached it, on EVERY
 # exit path, as the LAST stdout line — never appended by a wrapper afterwards.
+#
+# T1 1370, M7 findings row 83 (production incident). A gate SIGTERM'd while
+# blocked in `wait_for_suite_lock` wrote `GATE_SH_EXIT=0` here — no PASS
+# lines, a fresh log — while its `.exit` file (the CALLER's own observed
+# status) correctly said 143. A wrapper trusted the log line over the file
+# and opened a PR on an ungated tree.
+#
+# CONFIRMED BY ISOLATED EXPERIMENT: bash's EXIT trap DOES still fire on an
+# uncaught SIGTERM even while a foreground command (`flock -w`) is blocked —
+# but `$?` inside it is NOT reliably 128+signal without an explicit trap for
+# that signal. Measured directly: `ec=0` in the EXIT trap while the shell's
+# own supervising `wait` correctly saw 143. The three explicit traps below
+# make `$?` deterministic — `exit N` sets it before the EXIT trap ever reads
+# it — so the log line and a caller's own observed status can never disagree
+# again: never 0 unless every step actually completed.
+trap 'exit 143' TERM
+trap 'exit 130' INT
+trap 'exit 129' HUP
 trap 'ec=$?; [ "$SUITE_LOCK_HELD" = 1 ] && rm -f "${FORGE_SUITE_LOCK:-}.holder" 2>/dev/null; echo "GATE_SH_EXIT=$ec"' EXIT
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
