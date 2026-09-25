@@ -59,8 +59,8 @@ operator-ratified new cap — never a silent raise.
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `projects` | 46 | 10,951 | **9,061** | ratified 9,061 — M7-A reset-resolvable (+94, growth): Rebuild adds a template npm command only when package.json has the script; lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,156 | **12,578** | ratified 12,578 — M7-C door re-exports OD (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `agents` | 46 | 13,065 | **13,013** | ratified 13,013 — row 91 session-end hooks fire once for headless runs (forge-8vfn.8.1.7), lane-ratified under ruling 666; see git history for prior raises. |
-| `sessions` | 59 | 20,542 | **20,482** | ratified 20,482 — M7-C door re-exports OD, round-G circular-import fix (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
+| `agents` | 46 | 13,065 | **13,065** | ratified 13,065 — row 94 progress-only stream deadline (forge-8vfn.8.1.9), lane-ratified under ruling 666; see git history for prior raises. |
+| `sessions` | 59 | 20,542 | **20,504** | ratified 20,504 — row 94 heartbeat + deadline count only progress (forge-8vfn.8.1.9), lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 83 | 23,499 | **23,301** | ratified 23,301 — row 93 stale remote branch fail-fast + cleanup (forge-8vfn.8.1.8), T1 ruling 1459 above lane authority (+128); see git history for prior raises. |
 | `factory` | 14 | 2,113 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 38 | 11,129 | **11,129** | ratified 11,129 — M7-C door re-exports OD round G (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
