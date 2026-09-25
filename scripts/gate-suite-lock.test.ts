@@ -132,6 +132,40 @@ describe('gate.sh — the suite-lock is the TOOL\'s guarantee, not the caller\'s
     assert.equal(lockSeenByStep(d), 'HELD');
   });
 
+  /**
+   * T1 1353, M7 findings row 80. `gateUnderFlock` above holds the lock with
+   * `flock -w <lock> bash -c <cmd>` — the COMMAND form, which execs directly
+   * and keeps the same pid alive, and DOES leave a `/proc/locks` row (measured
+   * while writing this bead). The three campaign scripts that actually hold
+   * `.suite-lock` — heavy-slot.sh, with-locks.sh and this gate itself — use a
+   * DIFFERENT idiom: `exec N>file; flock -n N`, which forks the `flock`
+   * binary against an ALREADY-OPEN fd; that binary exits the instant it
+   * acquires (no command follows), so the pid `/proc/locks` would attribute
+   * the lock to is gone a moment later. The lock persists (the parent shell's
+   * own copy of the fd keeps it alive) but the listing has nothing left to
+   * point at — the OLD classifier reads this as FREE and the gate self-
+   * deadlocks waiting on a lock its own ancestor holds.
+   */
+  test('ANCESTOR via the invisible inherited-fd shape (row 80): still detected, never a self-deadlock wait', () => {
+    const d = tree(LOCK_CI);
+    const c = camp();
+    const lock = join(c, '.suite-lock');
+    const cmd = `exec 8>${JSON.stringify(lock)}; flock -n 8 || { echo NOFLOCK; exit 9; }; ` +
+      `bash ${JSON.stringify(GATE)} ${JSON.stringify(d)} ${JSON.stringify(c)} 8>&-`;
+    const r = spawnSync('bash', ['-c', cmd], { encoding: 'utf8', env: env({ FORGE_SUITE_LOCK_WAIT: '2' }) });
+
+    assert.equal(
+      lockSeenByStep(d),
+      'HELD',
+      `the step must still run excluded — a self-deadlock never runs it at all: ${r.stdout}${r.stderr}`,
+    );
+    assert.match(
+      r.stdout,
+      /^suite-lock: held by ancestor pid \d+/m,
+      `must classify ANCESTOR even though /proc/locks cannot see this hold: ${r.stdout}${r.stderr}`,
+    );
+  });
+
   test('STRANGER: a sibling\'s hold is WAITED for, never ignored', () => {
     const d = tree(LOCK_CI);
     const c = camp();

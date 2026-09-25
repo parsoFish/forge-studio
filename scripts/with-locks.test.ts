@@ -43,6 +43,23 @@ function holdLock(campDir: string, name: string, seconds = 30): ChildProcess {
 const takeable = (campDir: string, name: string) =>
   spawnSync('flock', ['-w', '1', join(campDir, name), 'true']).status === 0;
 
+/**
+ * T1 ruling 1352/1353 — the SELF-DEADLOCK shape: a parent (`heavy-slot.sh` in
+ * production) holds `.suite-lock` via `exec N>file; flock -n N`, the idiom
+ * that is genuinely held but leaves ZERO rows in `/proc/locks` once the
+ * `flock` binary that acquired it exits (see `lock-holders.test.ts`'s header
+ * for the measured reason). Runs `with-locks.sh` AS THAT PARENT'S OWN CHILD,
+ * with the held fd closed for the child (`8>&-`) so with-locks.sh does not
+ * also appear to hold it — the shape a bare ppid-walk must still resolve.
+ */
+function withLocksUnderAncestorSuiteHold(campDir: string, args: string[]): { status: number | null; stdout: string; stderr: string } {
+  const argv = args.map((a) => JSON.stringify(a)).join(' ');
+  const cmd = `exec 8>${JSON.stringify(join(campDir, '.suite-lock'))}; flock -n 8 || { echo NOFLOCK; exit 9; }; ` +
+    `bash ${JSON.stringify(SCRIPT)} ${argv} 8>&-`;
+  const r = spawnSync('bash', ['-c', cmd], { encoding: 'utf8' });
+  return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+}
+
 describe('with-locks.sh — one ratified order, bounded, and the lock it lost is named', () => {
   test('ORDER: suite-lock first, run-lock inside it', () => {
     const d = camp();
@@ -135,6 +152,45 @@ describe('with-locks.sh — one ratified order, bounded, and the lock it lost is
       assert.equal(run('/nope/not/a/campaign', 'both', '--', 'true').status, 2);
     } finally { rmSync(d, { recursive: true, force: true }); }
   });
+
+  // ---------------------------------------------------------------- 1352/1353
+  test('ANCESTOR SUITE HOLD: with-locks does not re-flock its own ancestor\'s .suite-lock — runs promptly, names the ancestor', () => {
+    const d = camp();
+    try {
+      const r = withLocksUnderAncestorSuiteHold(d, [d, 'both', '--wait-secs', '3', '--', 'echo', 'ran']);
+      assert.equal(r.status, 0, `must proceed rather than time out waiting on its own ancestor: ${r.stdout}${r.stderr}`);
+      assert.match(r.stdout, /ran/, 'the command must actually have run');
+      assert.match(
+        r.stdout, /suite-lock.*held by ancestor pid \d+/,
+        `must name the ancestor pid on one line: ${r.stdout}${r.stderr}`,
+      );
+    } finally { rmSync(d, { recursive: true, force: true }); }
+  });
+
+  test('CONTROL: a SIBLING (non-ancestor) holding .suite-lock is still waited for and the bound still fires', () => {
+    const d = camp();
+    // The sibling holds it the same way with-locks.sh's OWN acquisition does
+    // (`exec N>path; flock -n N`), from a process that is NOT with-locks.sh's
+    // ancestor — so this must still be the ordinary timeout, never skipped.
+    const sibling = spawn('bash', ['-c', `exec 8>${JSON.stringify(join(d, '.suite-lock'))}; flock -n 8 || exit 9; sleep 30`], { stdio: 'ignore' });
+    spawnSync('sleep', ['0.3']);
+    try {
+      const r = run(d, 'both', '--wait-secs', '1', '--', 'echo', 'never');
+      assert.equal(r.status, 71, `a stranger's hold must still be waited out at the bound: ${r.stdout}${r.stderr}`);
+      assert.doesNotMatch(r.stdout, /never/);
+    } finally { sibling.kill('SIGKILL'); rmSync(d, { recursive: true, force: true }); }
+  });
+
+  test('BOTH under an ancestor suite hold still takes the run-lock: a concurrent run-lock holder blocks it', () => {
+    const d = camp();
+    const runHolder = holdLock(d, '.run-lock');
+    try {
+      const r = withLocksUnderAncestorSuiteHold(d, [d, 'both', '--wait-secs', '1', '--', 'echo', 'never']);
+      assert.equal(r.status, 72, `the suite-lock skip must not also skip the run-lock: ${r.stdout}${r.stderr}`);
+      assert.doesNotMatch(r.stdout, /never/);
+      assert.match(r.stderr, /TIMED OUT after 1s waiting for \.run-lock/);
+    } finally { runHolder.kill(); rmSync(d, { recursive: true, force: true }); }
+  });
 });
 
 // ------------------------------------------------------------ 7.6.95
@@ -206,9 +262,13 @@ test('7.6.95: a launcher whose NAME contains "gate" is NOT refused', () => {
  * M7 findings row 74 (T1 1245): the story runner was listed under REFUSES UNDER
  * .run-lock, but its guard ACCEPTS a run-lock its own ancestor holds (ruling 683:
  * the ratified costed launch is `flock <run-lock> … npm run stories`) — so the table
- * refused the one launch that works (it blocked a lane's replica launch). What the
- * runner refuses today is ANY suite-lock holder, its own caller included, until D1b
- * makes that check ancestor-aware. The table says what the runner actually does.
+ * refused the one launch that works (it blocked a lane's replica launch).
+ *
+ * ROW 81 (T1 1354): D1b (PR #830, merged `34be5841`) shipped the ancestor-aware
+ * suite guard this file's own refusal used to wait on — `suiteLockVerdict` now
+ * accepts a `.suite-lock` held by the run's own ancestor exactly as the run-lock
+ * check already did. `both` is now the story runner's launch, matching row 74's
+ * closing note ("`both` becomes it after D1b").
  */
 test('row 74: run -- the story runner PROCEEDS (its guard accepts its own ancestor\'s run-lock)', () => {
   const d = camp();
@@ -218,13 +278,24 @@ test('row 74: run -- the story runner PROCEEDS (its guard accepts its own ancest
   assert.match(r.stdout, /\.run-lock taken/);
 });
 
-test('row 74: both / suite -- the story runner is REFUSED, naming the suite guard (until D1b)', () => {
+test('row 81: both / suite -- the story runner now PROCEEDS (D1b made the suite guard ancestor-aware)', () => {
   for (const mode of ['both', 'suite']) {
     const d = camp();
-    const r = run(d, mode, '--', 'echo', 'npm', 'run', 'stories', '--', '--story', 'smoke');
-    assert.equal(r.status, GUARANTEED, `${mode}: ${r.stderr}`);
-    assert.match(r.stderr, /suite-lock/, `${mode}: the reason names the lock the runner refuses under`);
-    assert.match(r.stderr, /D1b/, `${mode}: and says when that changes`);
-    assert.ok(takeable(d, '.suite-lock') && takeable(d, '.run-lock'), `${mode}: nothing was taken`);
+    try {
+      const r = run(d, mode, '--', 'echo', 'npm', 'run', 'stories', '--', '--story', 'smoke');
+      assert.notEqual(r.status, GUARANTEED, `${mode}: D1b shipped, this launch must no longer be refused: ${r.stderr}`);
+      assert.equal(r.status, 0, `${mode}: ${r.stdout}${r.stderr}`);
+      assert.match(r.stdout, /\.suite-lock taken/, `${mode}`);
+      if (mode === 'both') assert.match(r.stdout, /\.run-lock taken/, `${mode}`);
+    } finally { rmSync(d, { recursive: true, force: true }); }
   }
+});
+
+test('row 81 CONTROL: the run-lock refusal for a non-gate command (npm test) is unaffected', () => {
+  const d = camp();
+  try {
+    const r = run(d, 'run', '--', 'echo', 'npm', 'test');
+    assert.equal(r.status, GUARANTEED, `npm test's run-lock refusal must still fire: ${r.stdout}${r.stderr}`);
+    assert.match(r.stderr, /held, awaited or merely OPEN/);
+  } finally { rmSync(d, { recursive: true, force: true }); }
 });
