@@ -143,3 +143,29 @@ test('brainTruthRates: a checkout that IS its own git repository -> history:"pre
     cleanup(root);
   }
 });
+
+// ---------- D14 security review: git pathspec magic must never apply ----------
+
+test('themeTruth: an evidence: ref carrying git pathspec magic (`src/*.ts`) is judged LITERALLY — it must not read as "once tracked" just because it happens to glob-match an unrelated real tracked file (git log lacked --literal-pathspecs)', () => {
+  const root = buildBrainFixture({ themes: [] });
+  try {
+    writeTruthTheme(root, 'proj-glob', 'glob-theme', { evidence: ['src/*.ts'] });
+    // A REAL, unrelated tracked file the glob `src/*.ts` would match — proves
+    // the fix is about pathspec MAGIC, not just an absent target.
+    gitCheckout(root, 'proj-glob', { 'src/a.ts': 'export const a = 1;\n' });
+
+    const [t] = themeTruth(root, 'proj-glob');
+    assert.deepEqual(
+      t.references,
+      [],
+      `"src/*.ts" was never a literally-tracked path — must be dropped, not glob-matched against src/a.ts, got ${JSON.stringify(t.references)}`,
+    );
+    assert.deepEqual(
+      t.missing,
+      [],
+      `a literal "src/*.ts" must never read as "once tracked" via pathspec magic, got ${JSON.stringify(t.missing)}`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
