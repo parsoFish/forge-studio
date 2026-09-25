@@ -18,7 +18,19 @@ import type { ClauseResult } from '@forge/kernel';
 // source (also read by `pr-branch-sync.ts` + `reset.ts`) of what under
 // `.forge/` is tracked: `.forge/project.json`, `.forge/quality_gate_cmd`,
 // `.forge/skills/` — a blanket `.forge/` ignore violates BOTH lists.
-export const SCRATCH_PATHS = ['.forge/work-items/', '.forge/.create-complete', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
+//
+// `.forge/live-evidence/` and `.forge/preflight.json` are runtime output forge
+// writes inside a project repo. `.forge/demo/` is NOT scratch: the demo-builder
+// commits it on purpose (`demo-commit-scope.test.ts`).
+export const SCRATCH_PATHS = [
+  '.forge/work-items/',
+  '.forge/.create-complete',
+  '.forge/live-evidence/',
+  '.forge/preflight.json',
+  'AGENT.md',
+  'PROMPT.md',
+  'fix_plan.md',
+];
 export const TRACKED_CONFIG_PATHS = ['.forge/project.json', '.forge/quality_gate_cmd', '.forge/skills/'];
 
 /** `git -C dir rev-parse --git-dir` — shared so `reset.ts`'s gitignore drift
@@ -72,8 +84,7 @@ function checkC2(dir: string): ClauseResult {
       return {
         ...base,
         pass: false,
-        detail:
-          'not a git repo and no .gitignore — forge scratch (.forge/work-items/, .forge/.create-complete, AGENT.md, PROMPT.md, fix_plan.md) would be committed into the PR',
+        detail: `not a git repo and no .gitignore — forge scratch (${SCRATCH_PATHS.join(', ')}) would be committed into the PR`,
       };
     }
     const lines = readFileSync(giPath, 'utf8')
