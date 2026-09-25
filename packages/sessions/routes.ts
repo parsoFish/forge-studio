@@ -34,7 +34,7 @@ import { handleStudioSessionsRoutes } from './bridge-studio-sessions.ts';
 import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
 import { handleStudioAgentCapabilityRoute } from './bridge-studio-agent-capability.ts';
 import { handleStudioAffordanceRoutes } from './bridge-studio-sessions-affordances.ts';
-import type { approveKbCleanup } from '@forge/knowledge/bridge-studio-kbs.ts';
+import type { approveKbCleanup } from '@forge/knowledge';
 
 /**
  * The bridge-instance state these routes need, declared HERE (ruling 59 §2) so

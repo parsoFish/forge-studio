@@ -21,7 +21,7 @@
  */
 import type { RouteContext, RouteTable } from '@forge/kernel';
 import { parseManifestPort } from './session-kind-deps.ts';
-import { knowledgeRoutes } from '@forge/knowledge/routes.ts';
+import { knowledgeRoutes } from '@forge/knowledge';
 // M4 ruling 86 — the real brain-fix turn, bound at the assembly because this
 // is the one place that may import both knowledge's port and sessions' turn.
 import { realKbDrainFixTurn } from './brain-fix-turn.ts';
@@ -45,9 +45,9 @@ import { isSdkAvailable } from '@forge/agents/_adapters/registry.ts';
 import {
   seedProjectBrain,
   checkProjectBrainSeedContainment,
-} from '@forge/knowledge/project-brain-seed.ts';
-import { readArtifactRoot } from '@forge/knowledge/brain-paths.ts';
-import { projectKbBindings } from '@forge/knowledge/kb-sites.ts';
+} from '@forge/knowledge';
+import { readArtifactRoot } from '@forge/knowledge';
+import { projectKbBindings } from '@forge/knowledge';
 import { isContainedProjectRepoPath } from '@forge/flows/manifest-path-guard.ts';
 import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
 import { listStarterAgents } from '@forge/agents/studio/agent-registry.ts';
@@ -76,7 +76,7 @@ import {
 } from '@forge/sessions/bridge-studio-lifecycle.ts';
 import { parseGuardedEventsJsonl, parseGuardedFirstEvent } from '@forge/sessions/session-readability.ts';
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/session-status-io.ts';
-import type { SessionStatusIoPort } from '@forge/knowledge/kb-drain-model.ts';
+import type { SessionStatusIoPort } from '@forge/knowledge';
 // M7-C U8 (bead forge-u8y2, W8-F6 follow-up) — the real readability predicate
 // for `@forge/knowledge`'s own `sessionIsReadable` port (`kb-drain-model.ts`).
 // Bound DIRECTLY, no wrapper: that port's argument shape is declared to match

@@ -122,7 +122,7 @@ import { makePreflightWriteHandlers } from './bridge-studio-project-preflight-wr
 import { handleProjectContractResetDryRun, handleProjectContractResetApply } from './bridge-studio-project-reset.ts';
 
 /**
- * Structural mirror of `@forge/knowledge/project-brain-seed.ts`'s
+ * Structural mirror of `@forge/knowledge`'s
  * `ProjectBrainSeedResult` — `bridge-studio-project-onboard.ts` already duplicates this
  * exact shape (unexported) for the same reason: `projects` (rank 2) may not
  * import `@forge/knowledge` (same rank), not even for a type. Duplicated a
@@ -153,11 +153,11 @@ type ProjectBrainSeedResult = {
  * every package and the legacy tree freely — this file may not.
  */
 export type ProjectsRouteDeps = {
-  /** `@forge/knowledge/project-brain-seed.ts`'s `seedProjectBrain`. */
+  /** `@forge/knowledge`'s `seedProjectBrain`. */
   seedBrain: (forgeRoot: string, projectId: string, name: string) => ProjectBrainSeedResult;
-  /** `@forge/knowledge/project-brain-seed.ts`'s `checkProjectBrainSeedContainment`. */
+  /** `@forge/knowledge`'s `checkProjectBrainSeedContainment`. */
   checkBrainSeedContainment: (forgeRoot: string, projectId: string) => void;
-  /** `@forge/knowledge/brain-paths.ts`'s `readArtifactRoot`. */
+  /** `@forge/knowledge`'s `readArtifactRoot`. */
   readArtifactRoot: (projectRoot: string) => string;
   /** `@forge/flows/manifest-path-guard.ts`'s `isContainedProjectRepoPath`. */
   isContainedProjectRepoPath: (p: string, opts: { forgeRoot: string; projectsRoot?: string }) => boolean;
@@ -168,7 +168,7 @@ export type ProjectsRouteDeps = {
     forgeRoot: string,
     p: { project: string; clause: string; instruction: string; detail: string; runId: string },
   ) => void;
-  /** `@forge/knowledge/kb-sites.ts`'s `projectKbBindings`. */
+  /** `@forge/knowledge`'s `projectKbBindings`. */
   projectKbBindings: (forgeRoot: string) => Map<string, string>;
   /** `@forge/agents/studio/agent-registry.ts`'s `listStarterAgents` — injected, no
    *  package-native home. */

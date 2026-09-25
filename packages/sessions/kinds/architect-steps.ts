@@ -25,7 +25,7 @@ import {
   writePlanDoc, sessionPaths,
   type ArchitectSession, type ProposedInitiative, type CouncilTranscript, type InterviewRound,
 } from './architect-plan.ts';
-import { loadBrainIndex } from '@forge/knowledge/brain-index.ts';
+import { loadBrainIndex } from '@forge/knowledge';
 import { guardedFile, guardedReadFile, guardedWriteFile, type EventLogger } from '@forge/kernel';
 import { renderInterviewSummary, runCompletenessCriticStep, type CompletenessCriticFinding } from './architect-critic.ts';
 import { requirePorts } from './architect-ports.ts';

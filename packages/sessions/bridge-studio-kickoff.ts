@@ -34,8 +34,8 @@ import { allowedOrigin, createLogger, defaultConfigPath, loadConfig, resolveProj
 import { isSafeRunId } from '@forge/kernel';
 import { guardedReadDir, guardedWriteFile } from '@forge/kernel';
 import { readAnswersBody, type AffordanceRouteContext } from './bridge-studio-sessions-affordance-shell.ts';
-import { activeJobReason, deriveKbActiveJob } from '@forge/knowledge/kb-job-state.ts';
-import { computeAgentCleanupFindings, loadKbDescriptors, KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge/bridge-studio-kbs.ts';
+import { activeJobReason, deriveKbActiveJob } from '@forge/knowledge';
+import { computeAgentCleanupFindings, loadKbDescriptors, KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge';
 import { resolveContainedProjectDir } from '@forge/projects/contract-stages.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { skillPathRelative } from '@forge/library/skill-path.ts';

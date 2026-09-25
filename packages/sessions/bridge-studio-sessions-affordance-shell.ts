@@ -8,7 +8,7 @@ import type { AuthoringSessionPort } from '@forge/library/studio/authoring-sessi
 import type { ServerResponse } from 'node:http';
 
 import { sendJson, guardedWriteFile, type StudioContext } from '@forge/kernel';
-import type { approveKbCleanup } from '@forge/knowledge/bridge-studio-kbs.ts';
+import type { approveKbCleanup } from '@forge/knowledge';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';
 import type { SessionAffordance, SessionAffordanceKind } from './studio/session-kinds-affordances.ts';
 import { guardedWriteSessionStatus } from './session-status-io.ts';

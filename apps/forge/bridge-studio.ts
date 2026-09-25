@@ -43,7 +43,7 @@ import { resolveGuardedPath } from '@forge/kernel';
 import { flowRoots, resolveIdAcrossRoots, listIdsAcrossRoots } from '@forge/kernel';
 import type { FlowDefinition } from '@forge/contracts';
 import { SLUG_RE, PROJECT_ID_RE } from '@forge/kernel';
-import { projectKbBindings } from '@forge/knowledge/kb-sites.ts';
+import { projectKbBindings } from '@forge/knowledge';
 import { parseManifest, initiativeTitle } from '@forge/flows/manifest.ts';
 // `forge-8vfn.7.6.18` — the ONE reader of the scheduler's refusal clauses.
 import { manifestBlockedClauses } from '@forge/flows/planned-initiatives.ts';

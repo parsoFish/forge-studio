@@ -32,7 +32,7 @@ import {
   buildAnalyzePlan,
   commitProjectBrain,
   listStagedThemes,
-} from '@forge/knowledge/project-brain-build.ts';
+} from '@forge/knowledge';
 import type { KbBinding } from '@forge/contracts';
 
 import { runAgentTurn } from '../interactive-session.ts';

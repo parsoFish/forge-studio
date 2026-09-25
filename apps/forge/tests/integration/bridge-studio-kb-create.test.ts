@@ -32,7 +32,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from '../../ui-bridge.ts';
-import { loadKbDescriptor } from '@forge/knowledge/studio/kb-descriptor.ts';
+import { loadKbDescriptor } from '@forge/knowledge';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

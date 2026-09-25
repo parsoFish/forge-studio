@@ -52,7 +52,7 @@ import { join, resolve } from 'node:path';
 import { runReflector } from '../../phases/reflector.ts';
 import { createLogger } from '@forge/kernel';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
-import type { RunBrainLintResult } from '@forge/knowledge/brain-lint.ts';
+import type { RunBrainLintResult } from '@forge/knowledge';
 import { acquireIsolatedReflectorLease } from '../test-fixtures/reflector-lease-test-fixture.ts';
 import { normalizeForSnapshot, assertMatchesJsonSnapshot } from '../../../kernel/tests/test-fixtures/spawn-capture/normalize.ts';
 

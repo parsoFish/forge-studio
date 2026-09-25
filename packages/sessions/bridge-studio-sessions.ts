@@ -118,7 +118,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, parseQuery, resolveGuardedPath, type StudioContext } from '@forge/kernel';
-import { computeAgentCleanupFindings } from '@forge/knowledge/bridge-studio-kbs.ts';
+import { computeAgentCleanupFindings } from '@forge/knowledge';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
 import { deriveSessionAffordances } from './studio/session-kinds-affordances.ts';

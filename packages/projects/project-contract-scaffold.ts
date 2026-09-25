@@ -10,7 +10,7 @@
  *
  * `readArtifactRoot` INJECTION (not in the original signature — a mandatory,
  * mechanical adaptation, not an improvement). `contractArtifactTargets` used
- * to import `readArtifactRoot` directly from `@forge/knowledge/brain-paths.ts`.
+ * to import `readArtifactRoot` directly from `@forge/knowledge`.
  * `projects` and `knowledge` are BOTH rank 2 in the M4 §0 chain
  * (`scripts/check-boundaries.mjs`'s `PACKAGE_RANK`), so a package-file import
  * of `@forge/knowledge` from here is a `package-layer-order` violation —

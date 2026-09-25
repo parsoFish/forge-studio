@@ -41,7 +41,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-import { KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge/bridge-studio-kbs.ts';
+import { KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge';
 import { verdictWasAccepted } from '../../bridge-studio-sessions-affordances.ts';
 import { VERDICT_VALUES } from '../../studio/session-kinds.ts';
 import type { SessionsRouteDeps } from '../../routes.ts';

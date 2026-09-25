@@ -84,7 +84,7 @@ import { validateProjectConfig, readAgentInstructionsFile, readQualityGateSideca
 import { withStudioWrite, saveProjectRepo } from './project-repo-tx.ts';
 import { checkContractArtifactContainment, scaffoldContractArtifacts, ScaffoldContainmentError } from './project-contract-scaffold.ts';
 
-/** Structural mirror of `@forge/knowledge/project-brain-seed.ts`'s
+/** Structural mirror of `@forge/knowledge`'s
  *  `ProjectBrainSeedResult` — not imported (see this file's header). */
 type ProjectBrainSeedResult = {
   projectId: string;

@@ -3,7 +3,7 @@
  * ADR 028 §1). Carved out of `orchestrator/studio/registry.ts` (Task 13, M4-flows):
  * the package that owns the flow engine owns loading its definitions, the same
  * split the Agent kind took to `@forge/agents/studio/agent-registry.ts` and the
- * KB kind to `@forge/knowledge/studio/kb-descriptor.ts`.
+ * KB kind to `@forge/knowledge`.
  *
  * Every function below is BYTE-IDENTICAL to the block it came from; only the
  * imports are re-stated at the new depth. Validation still lives in a separate

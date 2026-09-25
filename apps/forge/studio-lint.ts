@@ -44,7 +44,7 @@ import { isStudioAgent, isUnfilteredStudioAgent, loadAgentDefinition, listStarte
 import { loadFlowDefinition, loadStarterFlow, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
 import { flowPathForId } from '@forge/flows/flow-runner.ts';
 import { discoverProjects } from '@forge/kernel';
-import { loadKbDescriptor } from '@forge/knowledge/studio/kb-descriptor.ts';
+import { loadKbDescriptor } from '@forge/knowledge';
 import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
 import {
   lintArtifactTemplates,
@@ -59,7 +59,7 @@ import { lintCommunityIndex } from '@forge/library/studio/community-index.ts';
 import { validateSessionKinds } from '@forge/sessions/studio/session-kinds-validate.ts';
 import { validateAgent } from '@forge/agents/studio/validate-agent.ts';
 import { validateArtifactRef, validateFlow } from '@forge/flows/studio/validate-flow.ts';
-import { validateKb } from '@forge/knowledge/studio/validate-kb.ts';
+import { validateKb } from '@forge/knowledge';
 import { validateDiscoveredProjects } from '@forge/projects/studio/validate-project.ts';
 import { validateLibraryFlag } from '@forge/library/studio/library-validate.ts';
 import type { Finding } from '@forge/kernel';
@@ -68,8 +68,8 @@ import { listSkillMdDirs, listSkillDirs, skillsDir as toSkillsDir } from '@forge
 import { lintSkillTrust, lintSkillRefs } from '@forge/library/studio/skill-trust.ts';
 import type { AgentDefinition, KbDescriptor } from '@forge/contracts';
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
-import { kbReadPolicyViolation } from '@forge/knowledge/kb-read-policy.ts';
-import { unroutableKbReason } from '@forge/knowledge/kb-sites.ts';
+import { kbReadPolicyViolation } from '@forge/knowledge';
+import { unroutableKbReason } from '@forge/knowledge';
 import { lintSkillToolFence, lintStarterAgentToolFence } from '@forge/library/studio-lint-tool-fence.ts';
 
 // ---------------------------------------------------------------------------

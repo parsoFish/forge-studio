@@ -12,7 +12,7 @@
 
 import { resolve } from 'node:path';
 
-import { runBrainLint, type Scope as BrainLintScope } from '@forge/knowledge/brain-lint.ts';
+import { runBrainLint, type Scope as BrainLintScope } from '@forge/knowledge';
 
 /** The repo root, derived the same way `cli.ts` derives it — this module is its sibling. */
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');

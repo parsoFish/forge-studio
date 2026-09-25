@@ -21,7 +21,7 @@
  * route-entry.ts`'s ranking; carve-rules.md's boundary section names
  * `@forge/knowledge` and `@forge/agents` explicitly):
  *
- *   1. `projectKbBindings` (`@forge/knowledge/kb-sites.ts`) — `loadProjectsWithMeta`
+ *   1. `projectKbBindings` (`@forge/knowledge`) — `loadProjectsWithMeta`
  *      derives a project's bound KB from it. `projects` (rank 2) may not
  *      import `@forge/knowledge` (same rank). Same shape as the ALREADY
  *      PRECEDENTED `seedProjectBrain` injection for the projects-onboard

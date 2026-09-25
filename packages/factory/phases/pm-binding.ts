@@ -13,7 +13,7 @@
 
 import { readFileSync } from 'node:fs';
 
-import { loadBrainIndex } from '@forge/knowledge/brain-index.ts';
+import { loadBrainIndex } from '@forge/knowledge';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';

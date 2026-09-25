@@ -20,7 +20,7 @@ import { existsSync, readdirSync, statSync, mkdirSync, appendFileSync, readFileS
 import { join, resolve } from 'node:path';
 import { serve } from '@forge/flows/scheduler.ts';
 import { requireFactoryDemo, requireInstalledFactory } from './factory-cli-wiring.ts';
-import { loadBrainIndex, regenerateBrainIndex } from '@forge/knowledge/brain-index.ts';
+import { loadBrainIndex, regenerateBrainIndex } from '@forge/knowledge';
 import { cmdBrainLint } from './cli-brain-lint.ts';
 import { cmdGate } from './cli-gate.ts';
 import { runStudioLint } from './studio-lint.ts';

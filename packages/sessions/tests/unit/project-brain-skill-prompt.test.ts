@@ -60,7 +60,7 @@ import {
 } from '../../kinds/project-brain.ts';
 import { type QueryFn } from '@forge/sessions/interactive-session.ts';
 import { writeSessionStatus } from '@forge/sessions/interactive-session.ts';
-import { cyclesRawDir } from '@forge/knowledge/brain-paths.ts';
+import { cyclesRawDir } from '@forge/knowledge';
 import { splitSkillTurnSections } from '@forge/agents/skill-path.ts';
 
 // M4 sessions s3: re-anchored on `FORGE_ROOT` when this file moved into the

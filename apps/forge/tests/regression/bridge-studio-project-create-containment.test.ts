@@ -123,8 +123,8 @@ import { tmpdir } from 'node:os';
 
 import { startBridge } from '../../ui-bridge.ts';
 import { runStudioLint } from '../../studio-lint.ts';
-import { runBrainLint } from '@forge/knowledge/brain-lint.ts';
-import { serializeKbDescriptor } from '@forge/knowledge/studio/kb-descriptor.ts';
+import { runBrainLint } from '@forge/knowledge';
+import { serializeKbDescriptor } from '@forge/knowledge';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

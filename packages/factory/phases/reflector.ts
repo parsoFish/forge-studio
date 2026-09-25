@@ -39,11 +39,11 @@ import {
   type ReflectionStatus,
   type ReflectorPhaseResult,
 } from '@forge/flows/cycle-context.ts';
-import { runBrainLint, type RunBrainLintResult } from '@forge/knowledge/brain-lint.ts';
+import { runBrainLint, type RunBrainLintResult } from '@forge/knowledge';
 import { writeCycleRecap } from '../cycle-recap.ts';
-import { cyclesThemesDir, projectThemesDir } from '@forge/knowledge/brain-paths.ts';
-import { runPostReflectionKbHealth } from '@forge/knowledge/kb-health.ts';
-import { acquireBrainWriteLease, BrainWriteLeaseContentionError } from '@forge/knowledge/brain-write-lease.ts';
+import { cyclesThemesDir, projectThemesDir } from '@forge/knowledge';
+import { runPostReflectionKbHealth } from '@forge/knowledge';
+import { acquireBrainWriteLease, BrainWriteLeaseContentionError } from '@forge/knowledge';
 import { getPaths, type QueuePaths } from '@forge/flows/queue.ts';
 import { emitReflectionLost, runReflectorBrainWrites, listFreshThemes } from './reflector-brain-writes.ts';
 

@@ -22,7 +22,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runBrainFixTurn, type QueryFn } from '../../kinds/brain-fix.ts';
-import { acquireBrainWriteLease } from '@forge/knowledge/brain-write-lease.ts';
+import { acquireBrainWriteLease } from '@forge/knowledge';
 
 /** Minimal single-KB brain fixture (mirrors brain-fix.test.ts's buildFixture). */
 function buildFixture(): { forgeRoot: string; themePath: string; before: string } {

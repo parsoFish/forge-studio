@@ -35,8 +35,8 @@ import {
   patchArchiveFrontmatter,
   type ThemeMeta,
   type RetentionTag,
-} from '@forge/knowledge/cycle-retention.ts';
-import { runPostReflectionKbHealth } from '@forge/knowledge/kb-health.ts';
+} from '@forge/knowledge';
+import { runPostReflectionKbHealth } from '@forge/knowledge';
 import type { ReflectorDeps } from './reflector.ts';
 
 /**

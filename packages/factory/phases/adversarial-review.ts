@@ -29,7 +29,7 @@ import { join } from 'node:path';
 import { profileFor, type ChangeClass } from '../class-profiles.ts';
 import { reviewCeilingUsd, changedLinesFromNumstat } from './review-budget.ts';
 import { writeRootFenceOptions } from '@forge/sessions/session-write-fence.ts';
-import { projectBrainDir } from '@forge/knowledge/brain-paths.ts';
+import { projectBrainDir } from '@forge/knowledge';
 import {
   validateReviewFindings,
   writeReviewFindingsJson,

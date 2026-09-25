@@ -51,7 +51,7 @@ import { resolveGuardedPath, guardedFile, guardedWriteFile } from '@forge/kernel
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 import { SLUG_RE, isReservedId } from '@forge/kernel';
 import { validateFlow } from '@forge/flows/studio/validate-flow.ts';
-import { readArtifactRoot } from '@forge/knowledge/brain-paths.ts';
+import { readArtifactRoot } from '@forge/knowledge';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { isDryBridge } from './dry-bridge.ts';
 import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
