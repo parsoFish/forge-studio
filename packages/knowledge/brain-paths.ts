@@ -128,6 +128,15 @@ export function resolveKbBrainDir(forgeRoot: string, kbId: string): string | nul
   return null;
 }
 
+// Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
+export function requireKbBrainDir(forgeRoot: string, kbId: string): string {
+  const kbDir = resolveKbBrainDir(forgeRoot, kbId);
+  if (!kbDir) {
+    throw new Error(`Unknown kbId: "${kbId}" — no brain/${kbId}/kb.yaml or brain/projects/${kbId}/kb.yaml found`);
+  }
+  return kbDir;
+}
+
 
 // projectDemoRelDir moved to demo-paths.ts (plan 2.5 / N3) — the demo-artifact
 // path SSOT. This module keeps readArtifactRoot: artifactRoot also governs

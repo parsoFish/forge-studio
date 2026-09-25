@@ -122,6 +122,14 @@ A theme is missing from its project brain's category index (see the
 finding's `fixHint` for the target file). Propose adding the theme's link
 to the correct category index file, naming which index file.
 
+### `truth.stale`
+A CURRENT theme cites a code path that once existed in its project's
+ground clone and does not any more (see the finding's `message` for which
+path(s), and its `fixHint`). Propose re-verifying each cited path against
+the checkout: repoint it if the code moved, or — when it is genuinely
+gone — propose marking the theme `status: historical` rather than
+dropping the citation silently.
+
 ## Never
 
 - Ingest new content, or propose that ingest run — ingest stays

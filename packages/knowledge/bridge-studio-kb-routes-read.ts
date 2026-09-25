@@ -18,8 +18,8 @@ import { basename } from 'node:path';
 import { type UnroutableKb } from './kb-sites.ts';
 import { getKbBackend, type KbBackend } from './kb-backend.ts';
 import { attachKbLintSummaries } from './kb-lint-summary.ts';
-import { KB_ID_RE, sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
-import { buildKbHealth, loadKbDescriptors } from './bridge-studio-kbs.ts';
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
+import { buildKbHealth, loadKbDescriptors, requireValidKbId } from './bridge-studio-kbs.ts';
 
 /**
  * GET /api/studio/kbs — the KB roster, with a per-KB lint summary folded in.
@@ -155,10 +155,7 @@ export async function handleKbNode(
 
       // Guard both ids (KB_ID_RE for the kb id; nodeIds may have
       // 'raw:' prefix — use a slightly broader guard for nodeId).
-      if (!KB_ID_RE.test(kbId)) {
-        sendJson(res, 400, { error: 'invalid kb id' }, origin);
-        return true;
-      }
+      if (!requireValidKbId(kbId, res, origin)) return true;
       // Node ids: allow alphanumeric, dash, underscore, colon, dot (for raw: prefixed ids)
       const NODE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9:._-]*$/;
       if (!NODE_ID_RE.test(nodeId)) {
@@ -226,10 +223,7 @@ export async function handleKbGet(
       const kbId = decodeURIComponent(kbGetMatch[1]);
 
       // Slug-guard before any fs operation
-      if (!KB_ID_RE.test(kbId)) {
-        sendJson(res, 400, { error: 'invalid kb id' }, origin);
-        return true;
-      }
+      if (!requireValidKbId(kbId, res, origin)) return true;
 
       // Containment is enforced at the choke point this route actually reads
       // through — `resolveKbBrainDir` (per-segment realpath identity walk) via

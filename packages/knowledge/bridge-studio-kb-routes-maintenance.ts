@@ -40,7 +40,7 @@ import {
   runBrainConsolidateNow,
   type AgentFinding,
 } from './bridge-studio-kb-consolidate.ts';
-import { subDirs } from './bridge-studio-kbs.ts';
+import { subDirs } from './kb-sites.ts';
 
 // ---------------------------------------------------------------------------
 // Lint-resolution helpers (the guided-resolution UI)

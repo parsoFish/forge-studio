@@ -56,6 +56,19 @@ function listLogDirs(forgeRoot: string): string[] {
   }
 }
 
+// Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
+export function kbDrainRunIdsFor(forgeRoot: string, kbId: string): string[] {
+  const dirPrefix = '_kb-drain-';
+  const runIdPrefix = `${kbId}-drain-`;
+  const ids: string[] = [];
+  for (const name of listLogDirs(forgeRoot)) {
+    if (!name.startsWith(dirPrefix)) continue;
+    const runId = name.slice(dirPrefix.length);
+    if (runId.startsWith(runIdPrefix)) ids.push(runId);
+  }
+  return ids;
+}
+
 /** The active drain run for `kbId`, if a LIVE one exists (state 'running'
  *  with a heartbeat-fresh `updatedAt`). A stale 'running' status is reported
  *  separately so the cancel route can force-terminate it. */
@@ -64,13 +77,8 @@ export function findLiveDrain(
   kbId: string,
   nowMs: number = Date.now(),
 ): { runId: string; live: boolean } | null {
-  const dirPrefix = '_kb-drain-';
-  const runIdPrefix = `${kbId}-drain-`;
-  for (const name of listLogDirs(forgeRoot)) {
-    if (!name.startsWith(dirPrefix)) continue;
-    const runId = name.slice(dirPrefix.length);
-    if (!runId.startsWith(runIdPrefix)) continue;
-    const status = readJsonFile(join(forgeRoot, '_logs', name, 'status.json'));
+  for (const runId of kbDrainRunIdsFor(forgeRoot, kbId)) {
+    const status = readJsonFile(join(forgeRoot, '_logs', `_kb-drain-${runId}`, 'status.json'));
     if (!status || status['state'] !== 'running') continue;
     const updatedMs = typeof status['updatedAt'] === 'string' ? new Date(status['updatedAt']).getTime() : NaN;
     const live = Number.isFinite(updatedMs) && nowMs - updatedMs <= KB_DRAIN_STALE_MS;
@@ -179,6 +187,18 @@ function consolidateRunning(forgeRoot: string, runId: string, nowMs: number): bo
   return nowMs - firstTs <= KB_CONSOLIDATE_STALE_MS;
 }
 
+// Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
+export function consolidateRunIdsFor(forgeRoot: string, kbId: string): string[] {
+  const consolidatePrefix = `_brainfix-${kbId}-consolidate-`;
+  const ids: string[] = [];
+  for (const name of listLogDirs(forgeRoot)) {
+    if (!name.startsWith(consolidatePrefix)) continue;
+    const runId = name.slice('_brainfix-'.length);
+    if (!runId.includes('__')) ids.push(runId);
+  }
+  return ids;
+}
+
 /**
  * The one KB-mutating job currently running for `kbId`, or null. Drain wins
  * ties (both can only coexist as queue neighbours; the drain's status file
@@ -188,11 +208,7 @@ export function deriveKbActiveJob(forgeRoot: string, kbId: string, nowMs: number
   const drain = findLiveDrain(forgeRoot, kbId, nowMs);
   if (drain?.live) return { kind: 'drain', runId: drain.runId };
 
-  const consolidatePrefix = `_brainfix-${kbId}-consolidate-`;
-  for (const name of listLogDirs(forgeRoot)) {
-    if (!name.startsWith(consolidatePrefix)) continue;
-    const runId = name.slice('_brainfix-'.length);
-    if (runId.includes('__')) continue;
+  for (const runId of consolidateRunIdsFor(forgeRoot, kbId)) {
     if (consolidateRunning(forgeRoot, runId, nowMs)) return { kind: 'consolidate', runId };
   }
   return null;
