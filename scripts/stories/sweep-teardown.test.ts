@@ -225,7 +225,28 @@ test('isRunning: MUST-3-class fix — a read failure OTHER than ENOENT is never 
   }
 });
 
-test('isRunning: a real, live process reads as running; a zombie reads as not', () => {
+/**
+ * RP's own review of the row-75 load repro asked this explicitly: does
+ * `isRunning` treat state `Z` (zombie — exited, not yet reaped) AND `X`
+ * (dead — a state `man proc` calls "should never be seen", but a starved
+ * host can stretch the window a read actually lands in) as not running? It
+ * must, and only a fixture can prove `X` at all — a real process passes
+ * through it far too fast to plant deliberately.
+ */
+test('isRunning: fixture states Z (zombie) and X (dead) both read as not running', () => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-isrunning-states-'));
+  try {
+    for (const [pid, state] of [['111', 'Z'], ['222', 'X']] as const) {
+      mkdirSync(join(root, pid));
+      writeFileSync(join(root, pid, 'stat'), `${pid} (fixture) ${state} 1 1 1 0 -1 4194304 0 0 0 0 0 0 0 0 20 0 1 0 42`);
+      assert.equal(isRunning(pid, root), false, `state ${state} must read as not running`);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('isRunning: a real, live process reads as running', () => {
   const root = mkdtempSync(join(tmpdir(), 'forge-isrunning-real-'));
   mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
   const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
@@ -266,7 +287,12 @@ test('689(iii): a daemon that DRAINS is waited for, and never killed', async () 
     setInterval(() => {}, 1000);
   `], { cwd: root, stdio: 'ignore' });
   writeFileSync(join(root, DAEMON_PID_FILE), String(child.pid));
-  await new Promise((r) => setTimeout(r, 200)); // let the handler install
+  // Wait on the EVENT (the kernel's own SigCgt record), not a fixed sleep —
+  // T1 1372's fourth load repro (RP's v2 pass, 4/20 red at runs 5/6/19/20):
+  // a 200ms guess was not always enough under doubled contention (WK's job
+  // overlapped this one), and sending SIGTERM before the handler installs
+  // triggers Node's DEFAULT SIGTERM behaviour instead of this one.
+  await waitForSigtermCaught(child.pid!);
 
   const r = stopOwnScheduler(root, 10_000);
 
@@ -287,7 +313,8 @@ test('689(iii): a daemon that ignores SIGTERM is still killed, and the note says
     setInterval(() => {}, 1000);
   `], { cwd: root, stdio: 'ignore' });
   writeFileSync(join(root, DAEMON_PID_FILE), String(child.pid));
-  await new Promise((r) => setTimeout(r, 200));
+  // Wait on the event, not the clock — see the DRAIN test above.
+  await waitForSigtermCaught(child.pid!);
 
   const r = stopOwnScheduler(root, 700);
 

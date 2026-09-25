@@ -245,6 +245,14 @@ function waitForExit(pid, ms) {
  * `procRoot` is a seam for the fixture door this bug bought itself — real
  * callers never pass it and get the real `/proc`.
  */
+// `Z` (zombie — exited, not yet reaped) and `X` (dead — a kernel state so
+// transient `man proc` calls it one that "should never be seen", but a
+// starved host can stretch that window into something a read actually lands
+// in) are the two `/proc/<pid>/stat` states that mean NOT running. RP's
+// review of the row-75 load repro asked this explicitly: both must count,
+// not only `Z`.
+const NOT_RUNNING_STATES = new Set(['Z', 'X']);
+
 export function isRunning(pid, procRoot = '/proc') {
   let stat;
   try {
@@ -256,7 +264,7 @@ export function isRunning(pid, procRoot = '/proc') {
   // character after the LAST ')' — never `split(' ')[2]`.
   const at = stat.lastIndexOf(')');
   const state = at === -1 ? '' : stat.slice(at + 2, at + 3);
-  return state !== 'Z';
+  return !NOT_RUNNING_STATES.has(state);
 }
 
 /**
