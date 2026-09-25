@@ -20,7 +20,7 @@
  * does the second move) — local↔remote is aligned, the merged branch is
  * deleted, and reflection becomes available in the UI.
  */
-import { existsSync, readdirSync, readFileSync, renameSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, renameSync, rmdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 import { parseManifest } from './manifest.ts';
@@ -30,6 +30,9 @@ import { pendingFixWorkItems } from './fix-work-items.ts';
 import { runClosure, promoteMergedToDone } from './phases/closure.ts';
 import { writeCycleReport } from './cycle-report.ts';
 import { createLogger, type EventLogger } from '@forge/kernel';
+import * as worktree from './worktree.ts';
+import type { WorktreeHandle } from './worktree.ts';
+import { pruneStaleWiWorktrees } from './wi-worktree.ts';
 import { writeVerdictJson } from './flow-artifacts.ts';
 import { isContainedProjectRepoPath, isContainedWorktreePath, isSafeCycleId } from './manifest-path-guard.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';
@@ -94,6 +97,10 @@ export type FinalizeDeps = {
   /** Resolve a flow's declared triggers by id. Default loads the flow.yaml. */
   loadFlowTriggers?: (flowId: string) => FlowTrigger[];
   notify?: (msg: string) => void;
+  /** Post-merge prune of the cycle worktree + per-WI scratch; defaults to
+   *  `worktree.cleanup` / `pruneStaleWiWorktrees`. Injectable for tests. */
+  cleanupWorktree?: (handle: WorktreeHandle) => void;
+  pruneWiWorktrees?: typeof pruneStaleWiWorktrees;
 };
 
 /** The timestamped log-dir cycle id for an initiative (most-recent), so the
@@ -166,6 +173,80 @@ function resolveMergeAgentHandler(
 }
 
 /**
+ * Prune a MERGED initiative's cycle worktree and per-WI scratch.
+ * scheduler-run-one.ts preserves the cycle worktree at ready-for-review on the
+ * promise that "cleanup happens when the operator merges"; this is that
+ * cleanup. The per-WI sweep otherwise runs only at the start of a next attempt,
+ * which a merged initiative never gets. git leaves the empty `wi/<id>/` parent,
+ * so it is removed with a non-recursive rmdir. The merge has already happened:
+ * every failure is logged as an error event and never thrown.
+ */
+/** True iff `dir` exists and holds nothing; absent is not an error. */
+function isEmptyDir(dir: string): boolean {
+  try {
+    return readdirSync(dir).length === 0;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw err;
+  }
+}
+
+function pruneMergedWorktrees(
+  input: CycleInput,
+  logger: EventLogger,
+  opts: {
+    cleanupWorktree: (handle: WorktreeHandle) => void;
+    pruneWiWorktrees: typeof pruneStaleWiWorktrees;
+    logsRoot: string;
+  },
+): void {
+  // The cycle worktree is `<worktreesRoot>/<initiativeId>` on branch
+  // `forge/<initiativeId>` (scheduler-run-one.ts).
+  const worktreesRoot = dirname(input.worktreePath);
+  const branch = `forge/${input.initiativeId}`;
+  const emit = (message: string, failed: boolean, metadata: Record<string, unknown>): void => {
+    logger.emit({
+      initiative_id: input.initiativeId,
+      phase: 'orchestrator',
+      skill: 'finalize-merged',
+      event_type: failed ? 'error' : 'log',
+      input_refs: [input.worktreePath],
+      output_refs: [],
+      message,
+      metadata,
+    });
+  };
+  const detail = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+  try {
+    opts.cleanupWorktree({ path: input.worktreePath, branch, projectRepoPath: input.projectRepoPath });
+    emit('finalize.worktree-pruned', false, { path: input.worktreePath, branch });
+  } catch (err) {
+    emit('finalize.worktree-prune-failed', true, { path: input.worktreePath, branch, detail: detail(err) });
+  }
+
+  // `worktreesRoot` derives from a worktree path already contained by
+  // isContainedWorktreePath; the initiative id must be one safe segment.
+  const wiDir = isSafeCycleId(input.initiativeId) ? join(worktreesRoot, 'wi', input.initiativeId) : null;
+  try {
+    const result = opts.pruneWiWorktrees({
+      projectRepoPath: input.projectRepoPath,
+      worktreesRoot,
+      initiativeId: input.initiativeId,
+      logsRoot: opts.logsRoot,
+    });
+    if (wiDir !== null && isEmptyDir(wiDir)) rmdirSync(wiDir);
+    emit('finalize.wi-worktrees-pruned', false, {
+      pruned_paths: result.prunedPaths,
+      pruned_branches: result.prunedBranches,
+      wi_dir: wiDir,
+    });
+  } catch (err) {
+    emit('finalize.wi-worktree-prune-failed', true, { wi_dir: wiDir, detail: detail(err) });
+  }
+}
+
+/**
  * Default per-cycle finalize: closure confirms+aligns+moves, then — on a
  * confirmed merge — fires the merged flow's declared `on: merged` triggers
  * through the generic FlowTrigger path. The SINGLE source of "merge fires
@@ -183,6 +264,10 @@ function makeDefaultFinalizeOne(
   const loadFlowTriggers = deps.loadFlowTriggers ?? defaultLoadFlowTriggers;
   const loadAgentDef = deps.loadAgentDef ?? defaultLoadAgentDef;
   const promoteMergedToDoneFn = deps.promoteMergedToDone ?? promoteMergedToDone;
+  const cleanupWorktreeFn = deps.cleanupWorktree ?? worktree.cleanup;
+  const pruneWiWorktreesFn = deps.pruneWiWorktrees ?? pruneStaleWiWorktrees;
+  // Same default as finalizeMergedReadyForReview's own `logsRoot`.
+  const logsRoot = deps.logsRoot ? resolve(deps.logsRoot) : resolve('_logs');
 
   return async (input, logger) => {
     const closure = await runClosureFn(input, logger, 'pr-open');
@@ -292,6 +377,13 @@ function makeDefaultFinalizeOne(
     // single terminal-move authority for both the →merged and merged→done
     // moves; this is the ONLY caller of the second move in production.
     promoteMergedToDoneFn(input, logger);
+
+    // Only after the merge is confirmed and the manifest is in done/.
+    pruneMergedWorktrees(input, logger, {
+      cleanupWorktree: cleanupWorktreeFn,
+      pruneWiWorktrees: pruneWiWorktreesFn,
+      logsRoot,
+    });
 
     // report.md was written once at cycle.end (pr-open). Now that the merge is
     // confirmed + finalized, regenerate it so the report reflects the MERGED
