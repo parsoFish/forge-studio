@@ -294,7 +294,8 @@ export async function runOne(
     // before this attempt; never on one merely found (it may legitimately be
     // the hand-off's/a resume's own prior push).
     const probe = probeRemoteBranch(manifest.projectRepoPath, branch);
-    if (probe.remoteSha === null) {
+    // row 93 fail-closed: ownership only on a confirmed ABSENT, never UNKNOWN.
+    if (probe.status === 'absent') {
       staleBranchOwnedByThisAttempt = {
         branch,
         projectRepoPath: manifest.projectRepoPath,
@@ -305,10 +306,26 @@ export async function runOne(
       const why = manifest.resumeFrom ? `resume-from-${manifest.resumeFrom}` : 'architect→develop hand-off';
       if (tee) console.log(`[serve] ${why}: reusing preserved worktree ${expectedWtPath}`);
       wtHandle = { path: expectedWtPath, branch, projectRepoPath: manifest.projectRepoPath };
+    } else if (probe.status === 'unknown') {
+      // row 93 fail-closed: refuse on UNKNOWN too, rather than assume absent
+      // (the defect this reopened for) — an environment failure, retryable.
+      const reason = `could not determine whether refs/heads/${branch} exists on origin (${probe.lookup} lookup failed: ${probe.reason}) — refusing rather than assuming absent.`;
+      emitOrchestratorEvent(logsRoot, manifest.initiativeId, 'error', 'stale-remote-branch.probe-failed', {
+        branch,
+        lookup: probe.lookup,
+        reason: probe.reason,
+      });
+      console.error(`[serve] ${manifest.initiativeId} — attempt refused (probe failed, retryable): ${reason}`);
+      moveTo(filename, 'failed', paths);
+      await notify(
+        { type: 'failed', title: `Stale-branch probe failed for ${manifest.initiativeId}`, body: reason },
+        cfg.notify,
+      );
+      return; // runOne done — no worktree, no cycle, zero agent spend, no ownership recorded
     } else {
       // bead forge-8vfn.8.1.8: fail fast, before any spend — fresh ('add') only; 'reuse' owns its own branch.
       if (shouldRefuseFreshAttempt(probe)) {
-        const sha = probe.remoteSha as string;
+        const sha = probe.sha;
         const reason = `refs/heads/${branch} (${sha.slice(0, 8)}) already exists on origin from a prior, abandoned attempt and no PR is open for it. Delete or rename the remote branch, then re-dispatch — never auto-retried, never force-pushed.`;
         emitOrchestratorEvent(logsRoot, manifest.initiativeId, 'error', 'stale-remote-branch.refused', {
           branch,
@@ -434,18 +451,29 @@ export async function runOne(
       const { branch, projectRepoPath, initiativeId } = staleBranchOwnedByThisAttempt;
       try {
         const probe = probeRemoteBranch(projectRepoPath, branch);
-        if (probe.remoteSha !== null && !probe.openPrExists) {
+        if (probe.status === 'unknown') {
+          // row 93 fail-closed: never delete on UNKNOWN — it may hide an open PR.
+          emitOrchestratorEvent(logsRoot, initiativeId, 'error', 'stale-remote-branch.cleanup-failed', {
+            branch,
+            lookup: probe.lookup,
+            reason: probe.reason,
+          });
+        } else if (probe.status === 'present' && probe.openPr === 'none') {
           execFileSync('git', ['-C', projectRepoPath, 'push', 'origin', '--delete', branch], { stdio: 'pipe' });
           emitOrchestratorEvent(logsRoot, initiativeId, 'log', 'stale-remote-branch.cleaned-up', {
             branch,
-            sha: probe.remoteSha,
+            sha: probe.sha,
           });
           if (tee) {
             console.log(`[serve] ${initiativeId} — deleted remote branch ${branch} (pushed by this failed attempt, no open PR)`);
           }
         }
-      } catch {
-        /* best-effort — cleanup must never change the failure outcome */
+      } catch (err) {
+        // row 93 fail-closed: never swallow silently — stays visible.
+        emitOrchestratorEvent(logsRoot, initiativeId, 'error', 'stale-remote-branch.cleanup-failed', {
+          branch,
+          reason: err instanceof Error ? err.message : String(err),
+        });
       }
     }
     // F-09 + F-28: clean up the worktree + scratch branch on terminal states

@@ -15,7 +15,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -159,6 +159,61 @@ function makePushThenFailWiring(worktreePath: string, branch: string): PhaseWiri
     executor: {
       run: async (nodeId: string) => {
         if (nodeId === 'dev') {
+          execFileSync('git', ['push', '--set-upstream', 'origin', branch], {
+            cwd: worktreePath,
+            stdio: 'pipe',
+          });
+        }
+        throw new Error(`test-stub-fails-after-push:${nodeId}`);
+      },
+    },
+    projectGate: { runPreflight: () => { throw new Error('unreachable'); } } as unknown as PhaseWiring['projectGate'],
+    runClosure: async () => { throw new Error('unreachable'); },
+    runReflector: async () => { throw new Error('unreachable'); },
+  };
+}
+
+/** A `PhaseWiring` whose 'dev' node pushes to origin, runs `afterPush`
+ *  (the row-93 fail-closed tests use this to mutate the origin's
+ *  permissions mid-attempt — no network involved, same exec-failure shape a
+ *  DNS outage produces from the guard's point of view), then fails. */
+function makePushThenMutateThenFailWiring(
+  worktreePath: string,
+  branch: string,
+  afterPush: () => void,
+): PhaseWiring {
+  return {
+    executor: {
+      run: async (nodeId: string) => {
+        if (nodeId === 'dev') {
+          execFileSync('git', ['push', '--set-upstream', 'origin', branch], {
+            cwd: worktreePath,
+            stdio: 'pipe',
+          });
+          afterPush();
+        }
+        throw new Error(`test-stub-fails-after-push:${nodeId}`);
+      },
+    },
+    projectGate: { runPreflight: () => { throw new Error('unreachable'); } } as unknown as PhaseWiring['projectGate'],
+    runClosure: async () => { throw new Error('unreachable'); },
+    runReflector: async () => { throw new Error('unreachable'); },
+  };
+}
+
+/** A `PhaseWiring` whose 'dev' node restores origin access (undoing a
+ *  start-of-attempt outage the hand-off/resume path is exempt from) and THEN
+ *  pushes, mirroring "the network recovered mid-attempt" — before failing. */
+function makeRestoreOriginThenPushThenFailWiring(
+  worktreePath: string,
+  branch: string,
+  restoreOrigin: () => void,
+): PhaseWiring {
+  return {
+    executor: {
+      run: async (nodeId: string) => {
+        if (nodeId === 'dev') {
+          restoreOrigin();
           execFileSync('git', ['push', '--set-upstream', 'origin', branch], {
             cwd: worktreePath,
             stdio: 'pipe',
@@ -428,6 +483,198 @@ test("runOne (c'): hand-off 'reuse' attempt onto a PRE-EXISTING forge/<INIT> →
       assert.ok(!logged.includes('stale-remote-branch.cleaned-up'), 'no cleanup event for a branch this attempt did not create');
       assert.ok(!logged.includes('stale-remote-branch.refused'), 'a reuse attempt must never be refused, even onto an existing branch');
     } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (d) row 93 fail-closed: a git exec failure (simulated by revoking read
+// access to the bare origin — no network involved) at the START of a FRESH
+// attempt refuses via a NAMED, retryable event — never assumes absent.
+// ---------------------------------------------------------------------------
+
+test('runOne (d): origin unreachable at attempt start on a FRESH attempt → refused via stale-remote-branch.probe-failed, never assumed absent, no ownership recorded', async () => {
+  await withSkipContractCheck(async () => {
+    const { root, repo, origin } = setupProject();
+    const initiativeId = `INIT-8vfn818d-${randomUUID()}`;
+    try {
+      const queueRoot = join(root, '_queue');
+      const worktreesRoot = join(root, '_worktrees');
+      const paths = setupQueue(queueRoot);
+      const manifestPath = writeManifest(paths, initiativeId, repo);
+      const { wiring, calls } = makeTrackingWiring();
+
+      chmodSync(origin, 0o000); // simulate a DNS/exec failure — origin unreadable
+      try {
+        await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot, join(root, '_logs')), undefined, wiring);
+      } finally {
+        chmodSync(origin, 0o755);
+      }
+
+      assert.equal(calls.length, 0, `no station/agent may run before the refusal; saw: ${calls.join(', ')}`);
+      assert.ok(existsSync(join(paths.failed, `${initiativeId}.md`)), 'manifest must land in failed/');
+      assert.ok(!existsSync(join(paths.inFlight, `${initiativeId}.md`)), 'manifest must leave in-flight/');
+      assert.ok(!existsSync(join(worktreesRoot, initiativeId)), 'no local worktree may be created for a refused attempt');
+
+      const logPath = join(root, '_logs', initiativeId, 'events.jsonl');
+      const events = readFileSync(logPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+      const probeFailed = events.find((e) => e.message === 'stale-remote-branch.probe-failed');
+      assert.ok(probeFailed, `expected a stale-remote-branch.probe-failed event, got: ${JSON.stringify(events)}`);
+      assert.equal(probeFailed.metadata.branch, `forge/${initiativeId}`);
+      assert.equal(probeFailed.metadata.lookup, 'remoteBranchSha');
+      assert.ok(String(probeFailed.metadata.reason).length > 0, 'the git exec-failure text is carried, never swallowed');
+      assert.ok(!events.some((e) => e.message === 'stale-remote-branch.refused'), 'UNKNOWN must never be surfaced as the confirmed-stale refusal');
+      // No ownership: the cleanup block never even runs for this attempt.
+      assert.ok(!events.some((e) => e.message === 'stale-remote-branch.cleaned-up'), 'no ownership recorded on UNKNOWN — nothing to clean up');
+      assert.ok(!events.some((e) => e.message === 'stale-remote-branch.cleanup-failed'), 'no ownership recorded on UNKNOWN — cleanup never runs at all');
+    } finally {
+      chmodSync(origin, 0o755);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (d') the same start-of-attempt outage on a 'reuse' (hand-off/resume)
+// attempt: never refused (exempt, as today), records NO ownership on UNKNOWN
+// — so even though THIS attempt is the one that later pushes the branch, a
+// failure after the network recovers must not delete it (the guard cannot
+// tell, at cleanup time, that this attempt owns it).
+// ---------------------------------------------------------------------------
+
+test("runOne (d'): origin unreachable at attempt start on a RESUME attempt → never refused, records no ownership, a later failure deletes nothing", async () => {
+  await withSkipContractCheck(async () => {
+    const { root, repo, origin } = setupProject();
+    const initiativeId = `INIT-8vfn818dp-${randomUUID()}`;
+    try {
+      const queueRoot = join(root, '_queue');
+      const worktreesRoot = join(root, '_worktrees');
+      const paths = setupQueue(queueRoot);
+      const branch = `forge/${initiativeId}`;
+
+      const wt = worktreeAdd({ projectRepoPath: repo, branch, worktreesRoot, initiativeId });
+      const manifestPath = writeManifest(paths, initiativeId, repo, { resumeFrom: 'develop' });
+
+      chmodSync(origin, 0o000); // outage present at the attempt's own start-of-attempt probe
+      const wiring = makeRestoreOriginThenPushThenFailWiring(wt.path, branch, () => chmodSync(origin, 0o755));
+
+      await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot, join(root, '_logs')), undefined, wiring);
+
+      assert.ok(existsSync(join(paths.failed, `${initiativeId}.md`)), 'manifest must land in failed/');
+
+      const logPath = join(root, '_logs', initiativeId, 'events.jsonl');
+      const logged = existsSync(logPath) ? readFileSync(logPath, 'utf8') : '';
+      assert.ok(!logged.includes('stale-remote-branch.refused'), 'a resume/reuse attempt must never be refused, even under an outage');
+      assert.ok(!logged.includes('stale-remote-branch.probe-failed'), 'the probe-failed refusal never applies to reuse — exempt, as today');
+      assert.ok(!logged.includes('stale-remote-branch.cleaned-up'), 'no ownership was recorded on UNKNOWN — the branch THIS attempt pushed must survive');
+      assert.ok(!logged.includes('stale-remote-branch.cleanup-failed'), 'no ownership recorded — cleanup never even runs');
+
+      // Origin was restored (chmod 755) by the wiring's own `dev` node before
+      // it pushed, so the branch THIS attempt pushed is readable again — and,
+      // per the assertions above, was never targeted for deletion.
+      assert.notEqual(remoteHeadSha(repo, branch), null, 'this attempt DID push the branch — it must still be there, unowned but undeleted');
+    } finally {
+      chmodSync(origin, 0o755);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (e) row 93 fail-closed: the origin becomes unreachable AFTER this attempt's
+// own push (simulating the network dying between push and cleanup) → cleanup
+// emits `stale-remote-branch.cleanup-failed` and NEVER deletes.
+// ---------------------------------------------------------------------------
+
+test('runOne (e): origin unreachable at CLEANUP time (after this attempt pushed) → stale-remote-branch.cleanup-failed, branch never deleted', async () => {
+  await withSkipContractCheck(async () => {
+    const { root, repo, origin } = setupProject();
+    const initiativeId = `INIT-8vfn818e-${randomUUID()}`;
+    try {
+      const queueRoot = join(root, '_queue');
+      const worktreesRoot = join(root, '_worktrees');
+      const paths = setupQueue(queueRoot);
+      const branch = `forge/${initiativeId}`;
+      const manifestPath = writeManifest(paths, initiativeId, repo);
+
+      const expectedWtPath = join(worktreesRoot, initiativeId);
+      const wiring = makePushThenMutateThenFailWiring(expectedWtPath, branch, () => chmodSync(origin, 0o000));
+
+      assert.equal(remoteHeadSha(repo, branch), null, 'precondition: nothing pushed yet');
+
+      await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot, join(root, '_logs')), undefined, wiring);
+
+      chmodSync(origin, 0o755); // restore so the assertions below can read the remote again
+
+      assert.ok(existsSync(join(paths.failed, `${initiativeId}.md`)), 'manifest must land in failed/');
+      assert.notEqual(remoteHeadSha(repo, branch), null, 'the branch this attempt pushed must survive an UNKNOWN cleanup probe');
+
+      const logPath = join(root, '_logs', initiativeId, 'events.jsonl');
+      const events = readFileSync(logPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+      const cleanupFailed = events.find((e) => e.message === 'stale-remote-branch.cleanup-failed');
+      assert.ok(cleanupFailed, `expected a stale-remote-branch.cleanup-failed event, got: ${JSON.stringify(events)}`);
+      assert.equal(cleanupFailed.metadata.branch, branch);
+      assert.ok(String(cleanupFailed.metadata.reason).length > 0);
+      assert.ok(!events.some((e) => e.message === 'stale-remote-branch.cleaned-up'), 'UNKNOWN at cleanup must never delete');
+    } finally {
+      chmodSync(origin, 0o755);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (f, e2e half): a gh failure is UNKNOWN, not "no PR" — proven at the unit
+// level in stale-remote-branch-guard.test.ts (injected `openPr` failure). The
+// runOne-level guarantee that ANY `status: 'unknown'` probe (regardless of
+// which lookup produced it) refuses via `probe-failed` and never deletes is
+// the SAME decision point test (d) already proves end to end — the branch
+// lookup and the PR lookup share one `origin` remote by construction
+// (gh-pinned.ts's "one derivation" rule), so a real `gh` failure cannot be
+// reached without the branch lookup ALSO failing first in a network-free
+// fixture; see the unit test for the isolated PR-lookup-failure proof.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// (g) row 93 fail-closed: the cleanup's OWN delete attempt throws (origin
+// readable but not writable — e.g. a permission/connectivity edge, not an
+// UNKNOWN probe) → the catch emits `stale-remote-branch.cleanup-failed`
+// instead of swallowing silently, and the failure outcome is unchanged.
+// ---------------------------------------------------------------------------
+
+test('runOne (g): the cleanup delete itself throws (origin read-only) → stale-remote-branch.cleanup-failed emitted, failure outcome unchanged, branch never deleted', async () => {
+  await withSkipContractCheck(async () => {
+    const { root, repo, origin } = setupProject();
+    const initiativeId = `INIT-8vfn818g-${randomUUID()}`;
+    try {
+      const queueRoot = join(root, '_queue');
+      const worktreesRoot = join(root, '_worktrees');
+      const paths = setupQueue(queueRoot);
+      const branch = `forge/${initiativeId}`;
+      const manifestPath = writeManifest(paths, initiativeId, repo);
+
+      const expectedWtPath = join(worktreesRoot, initiativeId);
+      // Read-only, not unreadable: `git ls-remote` (the probe) still succeeds
+      // and reports `present` + no PR — the delete itself is what throws.
+      const wiring = makePushThenMutateThenFailWiring(expectedWtPath, branch, () => chmodSync(origin, 0o555));
+
+      await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot, join(root, '_logs')), undefined, wiring);
+
+      chmodSync(origin, 0o755);
+
+      assert.ok(existsSync(join(paths.failed, `${initiativeId}.md`)), 'manifest must land in failed/ regardless of the cleanup outcome');
+      assert.notEqual(remoteHeadSha(repo, branch), null, 'a delete that itself throws must never be treated as having deleted the branch');
+
+      const logPath = join(root, '_logs', initiativeId, 'events.jsonl');
+      const events = readFileSync(logPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+      const cleanupFailed = events.find((e) => e.message === 'stale-remote-branch.cleanup-failed');
+      assert.ok(cleanupFailed, `expected a stale-remote-branch.cleanup-failed event, got: ${JSON.stringify(events)}`);
+      assert.equal(cleanupFailed.metadata.branch, branch);
+      assert.ok(String(cleanupFailed.metadata.reason).length > 0, 'the thrown delete error is carried, never swallowed silently');
+      assert.ok(!events.some((e) => e.message === 'stale-remote-branch.cleaned-up'), 'a throw must never be reported as a successful cleanup');
+    } finally {
+      chmodSync(origin, 0o755);
       rmSync(root, { recursive: true, force: true });
     }
   });
