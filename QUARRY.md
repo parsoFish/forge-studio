@@ -342,6 +342,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/pm-rejected-set.ts | stations | verbatim | 137 |
 | packages/sessions/session-write-fence.ts | sessions | verbatim | 248 |
 | packages/stations/phases/executor-table.ts | stations | verbatim | 666 |
+| packages/stations/phases/agent-skill-text.ts | stations | rewritten | 30 |
 | packages/flows/phase-wiring.ts | flows | verbatim | 48 |
 | apps/forge/factory-wiring.ts | apps/forge | verbatim | 27 |
 | apps/forge/example-hooks.ts | apps/forge | rewritten | 113 |
