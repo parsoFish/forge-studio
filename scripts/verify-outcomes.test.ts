@@ -310,3 +310,10 @@ test('sumAuthoritativeCostFromLines: a naive per-line sum (the sumCycleCost bug)
   );
   assert.ok(Math.abs(naive - authoritative - 0.46645539999999985) < 1e-9, 'the overstatement must be exactly WI-1\'s restated cost');
 });
+
+test('the claim contract check is skipped ONLY on the routine tier (--base-sha), never on a real-ground run', async () => {
+  const { serveContractEnv } = await import('./lib/verify-outcomes.mjs');
+  assert.deepEqual(serveContractEnv('abc1234'), { FORGE_SKIP_CONTRACT_CHECK: '1' });
+  assert.deepEqual(serveContractEnv(null), {});
+  assert.deepEqual(serveContractEnv(undefined), {});
+});
