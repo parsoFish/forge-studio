@@ -148,6 +148,11 @@ export async function handleHookUpdate(req: IncomingMessage, res: ServerResponse
         ...(matcher ? { matcher } : {}),
         script: def.script,
         permissions,
+        // forge-8vfn.8.3.7: PRESERVE the existing origin marker across an
+        // edit — this route rebuilds hook.yaml from structured fields
+        // (never raw bytes), so an operator-created hook that omitted this
+        // line would silently regress to reading "ootb" on its next save.
+        ...(def.origin !== undefined ? { origin: def.origin } : {}),
       };
       writeFileSync(located.yamlPath, yaml.dump(doc), 'utf8');
       sendJson(res, 200, { ok: true, id }, origin);

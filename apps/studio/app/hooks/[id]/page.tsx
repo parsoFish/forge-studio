@@ -10,6 +10,7 @@ import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import { FilePackage } from '@/components/studio/FilePackage';
 import { LibraryItemActions } from '@/components/studio/LibraryItemActions';
 import { ApprovalRecordPanel } from '@/components/studio/ApprovalRecordPanel';
+import { ProvenanceBadge } from '@/components/ProvenanceBadge';
 import {
   fetchHook,
   approveHook,
@@ -432,9 +433,14 @@ function HookDetailBody({
   return (
     <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'var(--text)', margin: '0 0 8px' }}>
-          {view.name}
-        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'var(--text)', margin: '0 0 8px' }}>
+            {view.name}
+          </h1>
+          {/* forge-8vfn.8.3.7: server-attested — 'ootb' renders a badge,
+              'operator' (the unbadged default) renders nothing. */}
+          <ProvenanceBadge provenance={view.origin} />
+        </div>
         {view.description && (
           <p style={{ fontSize: 13.5, color: 'var(--dim)', margin: 0, maxWidth: 560, lineHeight: 1.6 }}>
             {view.description}

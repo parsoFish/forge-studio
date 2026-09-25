@@ -65,7 +65,7 @@ export type AgentBudgets = {
    * `maxBudgetUsd` IS A REQUEST TO THE SDK, NOT A GUARANTEE (bead
    * `forge-jb7i`): the SDK alone enforces it, measured 36 % over. Forge's own
    * enforcement is `CostTracker`, over money already SPENT. Any bound derived
-   * from these must assume overshoot — `@forge/factory/phases/review-budget.ts`.
+   * from these must assume overshoot — `@forge/stations/phases/review-budget.ts`.
    */
   maxTurns?: number;
   maxBudgetUsd?: number;
@@ -301,6 +301,10 @@ export type ArtifactTemplate = {
   schema: ArtifactTemplateSchema;
   body: string; // prose contract
   path: string;
+  /** RAW frontmatter origin marker (forge-8vfn.8.3.7) — 'operator' when
+   *  stamped by a create route; absent for a shipped definition. Mapped to
+   *  the wire's HookTemplateOrigin by @forge/kernel's originOfHookOrTemplate. */
+  origin?: string;
 };
 
 /**
@@ -659,6 +663,8 @@ export type DemoElementDefinition = {
   /** The generator prompt — how to author + render this element for a project. */
   body: string;
   path: string;
+  /** RAW frontmatter origin marker — see ArtifactTemplate.origin above. */
+  origin?: string;
 };
 
 /**

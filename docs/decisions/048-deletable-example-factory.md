@@ -1,6 +1,7 @@
 # ADR 048 — The example factory is a deletable package (amends ADR 038)
 
 **Status:** Accepted (operator decision 2026-09-05, seam (a)).
+**Amended:** 2026-09-25 (operator rulings, M7 items 81 and 83) — clauses 2 and 4, when execution moved to `@forge/stations`. See the amendment under clause 4.
 **Date:** 2026-09-05
 **Amends:** [ADR 038](./038-north-star-platform-and-ootb.md) (Scope 1 platform vs Scope 2 OOTB content).
 **References:** spec §3 (`packages/factory` row), §5, §7 clause 2; `docs/roadmaps/1.0.md` §4 M5 Lane A; ADR 046 (package layout + boundary lint); ADR 028 (flow engine); ADR 024 (phases as subagents).
@@ -74,6 +75,21 @@ clause 2, and it is what M5-A exit row 5 closes.
 4. **What "the example" means is fixed by this ADR:** the six phase agents and their SKILL.mds, the develop `FlowDef`, the
    artifact templates, and the class → gate-profile table (ADR 051). Anything in `packages/factory` that a second, unrelated
    factory would also need is misplaced and belongs in `flows`, `agents` or `kernel`.
+
+   **Amended 2026-09-25 (operator rulings, M7 items 81 and 83).** Clause 4 now reads: stations are execution.
+   `@forge/stations`, one rank below factory, holds the phase executor table, the band implementations, and the
+   content those bands author and parse (the demo model, reflection doc, release process, cycle recap and docs gate).
+   It owns no route, no UI and no operator state. Every point where the operator interacts with a factory is a
+   session on the ADR 043 surface: the flow runner opens a gate session at a `gate:` node, and a kind's finalizer
+   applies the verdict (seam F8, item 88; lane A delivers it after this move). "The example" is the develop and plan
+   `FlowDef`s, their SKILL.mds, the artifact templates, the class → gate-profile table (ADR 051) and `forge demo
+   capture`. It registers nothing a second factory needs.
+   The bands read the class table through one port, `ClassProfilePort`, declared by stations and bound at
+   `apps/forge/factory-wiring.ts` from the example. With the example deleted there is no class table, and a station
+   that needs one refuses by name. It never falls back to a default profile (no fallbacks, CLAUDE.md).
+   Clause 2 changes to match: with the example absent there is no develop flow, no class table and no factory routes,
+   **but the executor is present**. `scripts/factory-deletable.mjs`'s live half now also proves that
+   `createPhaseExecutor` builds and that a class-needing station refuses by name.
 
 ## Consequences
 

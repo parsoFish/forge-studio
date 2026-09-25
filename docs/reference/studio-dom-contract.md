@@ -1205,7 +1205,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   (a raw tool-use COUNT with no KB attribution, rendered only for the `dev`
   node) and from `/knowledge`'s Ingest Activity tab (the reflector's WRITE
   side, `reflect.kb-ingest`) — this is the planner's own READ, on the record.
-  Source: `packages/factory/phases/project-manager.ts` emits one
+  Source: `packages/stations/phases/project-manager.ts` emits one
   `message:"brain.read"` event per KB `readPmBrainContext`'s deterministic
   pre-fetch touched (`metadata: {kbId, themeCount, reader, runId}`);
   `PhaseDrawer.tsx` reads the run's live event stream via `useCycleEvents`
@@ -1621,7 +1621,15 @@ is what this contract reads — but it cannot be the only distinguisher.
   `main[data-page="hook-library"][data-page-ready][data-hook-count][data-needs-review-count]`,
   per card
   `[data-card-type="hook"][data-hook-id][data-hook-event][data-hook-verdict][data-hook-trust][data-hook-carried-by-count]`.
-  `data-hook-carried-by-count` is DERIVED from every real agent's
+  **`forge-8vfn.8.3.7`** — every card also renders the shared `ProvenanceBadge`
+  (`components/ProvenanceBadge.tsx`) against the hook's server-attested
+  `origin` (`'ootb' | 'operator'`, a NEW field — distinct from any other
+  `provenance` name in this codebase): a hook created through `POST
+  /api/studio/hooks` (or landed by the authoring-session finalize route)
+  reads `'operator'` and renders no badge (the unbadged default); a
+  shipped hook.yaml (no `origin:` key on disk) reads `'ootb'` and renders
+  `[data-provenance="ootb"]`. Same on `/hooks/[id]` below. Never client-
+  inferred. `data-hook-carried-by-count` is DERIVED from every real agent's
   `composition.hooks` and the derivation names its own scan, so an empty count
   reads "scanned N, found none" and never "unknown". **W7-B3 (library-11)
   retires the old "no Local/Community split" carve-out** — the community
@@ -3450,9 +3458,14 @@ is what this contract reads — but it cannot be the only distinguisher.
   the project at rest — distinct from the preflight VERDICT surfaces
   (`ContractReadiness` / `[data-section="contract-resolution"]`).
   **`[data-section="contract-resolution"]` agent-tier buttons**
-  (`[data-action="resolve-clause-agent"][data-resolve-clause-id]
+  (`[data-action="resolve-clause-agent-<clauseId>"][data-resolve-clause-id]
   [data-resolve-blocked="true"|"false"]`, one per agent-tier clause —
-  `ContractResolutionPanel.tsx`) navigate to the matching builder or KB tab;
+  `ContractResolutionPanel.tsx`; the action carries the clause id, the same
+  fix M1-G (`forge-8vfn.5.6`) shipped for `select-stage-<stage>` —
+  `forge-8vfn.5.11` closed it here: the action used to be the SAME string on
+  every clause's button, so `.first()` was the only clause anything could
+  press. The qualifying `data-resolve-clause-id` attribute stays, it is what
+  this contract reads) navigate to the matching builder or KB tab;
   they never dispatch an agent turn themselves, so their label is
   route-honest per clause (`instructions`/`demo-builder`/`brain-fix` →
   "Open in instructions builder…"/"Open in demo builder…"/"Open in
@@ -3469,9 +3482,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   instead of navigating to a guessed KB (`/knowledge`'s own `?id=`
   resolution silently falls back to the first KB in the list on an unknown
   id — a wrong destination with no indication anything went wrong). The
-  USER-tier `[data-action="apply-clause-decision"]` button genuinely
-  dispatches + polls a preflight-fix agent (~90s bounded) and is labelled
-  "Apply with agent" accordingly. `forge-8vfn.8.3.1` (projects-45): its
+  USER-tier `[data-action="apply-clause-decision-<clauseId>"]` button
+  (same `forge-8vfn.5.11` per-clause fix as the agent-tier button above;
+  `data-apply-clause-id` stays alongside it) genuinely dispatches + polls a
+  preflight-fix agent (~90s bounded) and is labelled "Apply with agent"
+  accordingly. `forge-8vfn.8.3.1` (projects-45): its
   `disabled` consults the SAME per-clause poll state the row's own
   `data-agent-run-state`/`data-poll-state` already render, not just the
   click-scoped `busy` flag — `busy` clears the instant the dispatch POST
@@ -4634,7 +4649,8 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-action="view-demo-session"]` rather than navigating from inside the
   minting click (M1-G, `forge-8vfn.5.5`): `DemoTimeline`'s
   `[data-action="launch-demo-builder"]` (project page),
-  `ContractResolutionPanel`'s DEMO-clause `[data-action="resolve-clause-agent"]`,
+  `ContractResolutionPanel`'s DEMO-clause `[data-action="resolve-clause-agent-DEMO"]`
+  (`forge-8vfn.5.11`: per-clause, like `select-stage-<stage>`),
   and — new with M1-G, `forge-8vfn.5.6` — the onboarding session's own demo
   stage detail, whose `[data-action="launch-demo-builder"]`
   (`components/studio/session/DemoStageHandoff.tsx`) is the act S1 beat 7
@@ -5548,7 +5564,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   Per card: `[data-card-type="template"][data-template-id][data-template-category="demo-output"|"planning"|"project-scaffold"]`,
   `[data-template-preview="html"|"video"|"shots"|"mock"|"doc"|"scaffold"]`
   (a CSS-approximation preview kind, class `tpl-preview-<kind>`; omitted only
-  when the definition failed to parse), `[data-template-used-by-count]`. The
+  when the definition failed to parse), `[data-template-used-by-count]`.
+  **`forge-8vfn.8.3.7`** — every card also renders the shared `ProvenanceBadge`
+  against the template's server-attested `origin` (`'ootb' | 'operator'`, a
+  NEW field distinct from the existing `provenance` field above, which means
+  the category's on-disk source directory, an unrelated fact): a template
+  created through `POST /api/studio/templates` (fresh content or
+  `duplicateOf`, or landed by the authoring-session finalize route) reads
+  `'operator'` and renders no badge; a shipped definition (no `origin:`
+  frontmatter key) reads `'ootb'` and renders `[data-provenance="ootb"]`; a
+  `project-scaffold` entry (no create route at all) always reads `'ootb'`.
+  Same on `/templates/[id]` below. Never client-inferred. The
   search box is `[data-field="template-search"]` (case-insensitive match on
   name + description); a bridge-unreachable state renders
   `[data-component="fetch-error"]`, never conflated with a genuinely empty

@@ -24,12 +24,12 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { closeSync, mkdtempSync, openSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, mkdtempSync, openSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 
-import { lockHolders, lockWaiters, lockOpeners, describeLockOccupants, suiteLockVerdict, runLockVerdict, SUITE_LOCK_ENV, RUN_LOCK_ENV, EXIT_LOCK_REFUSED } from './lock-guard.mjs';
+import { lockHolders, lockWaiters, lockOpeners, describeLockOccupants, suiteLockVerdict, runLockVerdict, lockOrderVerdict, SUITE_LOCK_ENV, RUN_LOCK_ENV, EXIT_LOCK_REFUSED } from './lock-guard.mjs';
 
 const REPO = new URL('../..', import.meta.url).pathname;
 
@@ -263,4 +263,154 @@ test('7.6.33: the refusal says who holds and HOW MANY wait', () => {
 
 test('7.6.33: no holder and no waiter reads as free, not as unknown', () => {
   assert.equal(describeLockOccupants([], []), 'nothing holds it');
+});
+
+/**
+ * `lockOrderVerdict` — finding row 73 (2026-09-19 14:5x): a launcher took the
+ * run-lock first and queued for the suite-lock, the reverse of `with-locks.sh`'s
+ * ratified order (suite first, run inside it); a build meanwhile held the
+ * suite-lock and waited on the run-lock. Deadlock.
+ *
+ * THE FIXTURE IS A REAL LOCK FILE (for its inode) UNDER A FAKE /proc/locks. The
+ * check reasons about ANCESTRY — is one of `selfPids` itself a holder — not
+ * about a live `flock`, so a fabricated `/proc/locks` row naming a chosen pid is
+ * the whole fixture: no real process needs to hold anything.
+ */
+function fixtureLock(): { path: string; ino: number; dir: string } {
+  const dir = mkdtempSync(join(tmpdir(), 'lock-order-lock-'));
+  const path = join(dir, '.lock');
+  writeFileSync(path, '');
+  return { path, ino: statSync(path).ino, dir };
+}
+
+/** A fake `/proc` whose only file this check reads is `/proc/locks`. */
+function fixtureProcRoot(rows: Array<{ pid: string; ino: number }>): string {
+  const root = mkdtempSync(join(tmpdir(), 'lock-order-proc-'));
+  const lines = rows.map((r, i) => `${i + 1}: FLOCK ADVISORY WRITE ${r.pid} 08:30:${r.ino} 0 EOF`);
+  writeFileSync(join(root, 'locks'), lines.length > 0 ? `${lines.join('\n')}\n` : '');
+  return root;
+}
+
+test('lockOrderVerdict: run-lock held by an ancestor, suite-lock not — refused, naming the fix', () => {
+  const runLock = fixtureLock();
+  const suiteLock = fixtureLock();
+  const procRoot = fixtureProcRoot([{ pid: '111', ino: runLock.ino }]); // suite-lock: no row, free
+  try {
+    const v = lockOrderVerdict(
+      { [RUN_LOCK_ENV]: runLock.path, [SUITE_LOCK_ENV]: suiteLock.path },
+      procRoot,
+      new Set(['111', '222']),
+    );
+    assert.equal(v.ok, false, v.reason);
+    assert.match(v.reason, new RegExp(RUN_LOCK_ENV), 'names the lock this launch holds');
+    assert.match(v.reason, new RegExp(SUITE_LOCK_ENV), 'names the lock it is missing');
+    assert.match(v.reason, /with-locks\.sh <campaign> both -- <cmd>/, 'names the fix verbatim');
+  } finally {
+    rmSync(runLock.dir, { recursive: true, force: true });
+    rmSync(suiteLock.dir, { recursive: true, force: true });
+    rmSync(procRoot, { recursive: true, force: true });
+  }
+});
+
+test('lockOrderVerdict: both locks held by ancestors — allowed', () => {
+  const runLock = fixtureLock();
+  const suiteLock = fixtureLock();
+  const procRoot = fixtureProcRoot([
+    { pid: '111', ino: runLock.ino },
+    { pid: '333', ino: suiteLock.ino },
+  ]);
+  try {
+    const v = lockOrderVerdict(
+      { [RUN_LOCK_ENV]: runLock.path, [SUITE_LOCK_ENV]: suiteLock.path },
+      procRoot,
+      new Set(['111', '333']),
+    );
+    assert.equal(v.ok, true, v.reason);
+  } finally {
+    rmSync(runLock.dir, { recursive: true, force: true });
+    rmSync(suiteLock.dir, { recursive: true, force: true });
+    rmSync(procRoot, { recursive: true, force: true });
+  }
+});
+
+test('lockOrderVerdict: neither lock env set — allowed, today\'s costless/CI behaviour', () => {
+  const v = lockOrderVerdict({}, '/nonexistent-proc-root-lockorder-test', new Set(['111']));
+  assert.equal(v.ok, true, v.reason);
+});
+
+test('lockOrderVerdict: run-lock held by a STRANGER, not this launch\'s ancestry — unchanged, allowed', () => {
+  const runLock = fixtureLock();
+  // A pid that is nowhere in selfPids: some OTHER lane's process holds it —
+  // runLockVerdict's fact to report, not this check's to reinterpret.
+  const procRoot = fixtureProcRoot([{ pid: '999', ino: runLock.ino }]);
+  try {
+    const v = lockOrderVerdict(
+      { [RUN_LOCK_ENV]: runLock.path },
+      procRoot,
+      new Set(['111', '222']),
+    );
+    assert.equal(v.ok, true, v.reason);
+  } finally {
+    rmSync(runLock.dir, { recursive: true, force: true });
+    rmSync(procRoot, { recursive: true, force: true });
+  }
+});
+
+/**
+ * T1 ruling 1211(b) — a story run that HOLDS the suite-lock itself is not in
+ * anyone's way. The recipe is `flock .suite-lock flock .run-lock … npm run
+ * stories`: the suite-lock is taken FIRST by the run's own ancestor, so every
+ * suite queued behind it is blocked by that hold and cannot write into
+ * `projects/` while the run hashes it. Refusing on those waiters made a story
+ * run unstartable whenever lanes queued suites back to back (m7-d, 2026-09-19:
+ * 9–11 openers at every 5-minute sample, no window for 45 minutes).
+ *
+ * The verdict is taken INSIDE a real `flock` hold, from a child process, with a
+ * real waiter queued on the same lock — the shape the runner actually sees.
+ */
+function verdictInsideHold(lock: string, holdAsAncestor: boolean): Promise<{ ok: boolean; reason: string }> {
+  const probe = `import('${join(REPO, 'scripts/stories/lock-guard.mjs')}').then((m) => {
+    setTimeout(() => { process.stdout.write(JSON.stringify(m.suiteLockVerdict({ ${JSON.stringify(SUITE_LOCK_ENV)}: ${JSON.stringify(lock)} }))); }, 800);
+  });`;
+  return new Promise((resolve, reject) => {
+    // Ancestor case: the probe runs UNDER the flock that holds the lock. Control
+    // case: a sibling process holds it and the probe runs outside any hold.
+    const holder = holdAsAncestor
+      ? spawn('flock', [lock, process.execPath, '--input-type=module', '-e', probe], { stdio: ['ignore', 'pipe', 'inherit'] })
+      : spawn('flock', [lock, 'sleep', '5'], { stdio: 'ignore' });
+    const probeProc = holdAsAncestor ? holder : spawn(process.execPath, ['--input-type=module', '-e', probe], { stdio: ['ignore', 'pipe', 'inherit'] });
+    // A real waiter, queued behind the hold before the probe reads.
+    setTimeout(() => { spawn('flock', ['-w', '10', lock, 'true'], { stdio: 'ignore' }); }, 200);
+    let out = '';
+    probeProc.stdout!.on('data', (d) => { out += d; });
+    probeProc.on('close', () => {
+      if (!holdAsAncestor) holder.kill('SIGKILL');
+      try { resolve(JSON.parse(out)); } catch (e) { reject(new Error(`probe printed no verdict: ${JSON.stringify(out)} (${e})`)); }
+    });
+  });
+}
+
+test('1211(b): a story run whose OWN ANCESTOR holds the suite-lock proceeds past queued waiters, and says why', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-selfhold-'));
+  const lock = join(dir, '.suite-lock');
+  writeFileSync(lock, '');
+  try {
+    const v = await verdictInsideHold(lock, true);
+    assert.equal(v.ok, true, `the run holds the lock itself; waiters cannot proceed while it does: ${v.reason}`);
+    assert.match(v.reason, /ancestor/, 'the reason names WHY the waiters do not matter, not a bare "ok"');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('1211(b) control: the SAME waiter still refuses a run when the hold belongs to someone else', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-otherhold-'));
+  const lock = join(dir, '.suite-lock');
+  writeFileSync(lock, '');
+  try {
+    const v = await verdictInsideHold(lock, false);
+    assert.equal(v.ok, false, `a hold that is not this run's ancestor is a suite in the way: ${v.reason}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

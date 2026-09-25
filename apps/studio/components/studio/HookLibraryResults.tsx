@@ -3,6 +3,7 @@ import type { HookLibraryEntry } from '@/lib/hook-client';
 import { hookBadges } from '@/lib/hook-library-view';
 import type { CommunityItem } from '@/lib/community-client';
 import { installStateLabel } from '@/lib/community-view';
+import { ProvenanceBadge } from '@/components/ProvenanceBadge';
 
 // ---------------------------------------------------------------------------
 // HookLibraryResults — the /hooks results block (loading/error/empty-
@@ -168,6 +169,9 @@ function HookCard({ entry }: { entry: HookLibraryEntry }) {
     >
       <div className="card-top">
         <span className="card-name">{entry.name}</span>
+        {/* forge-8vfn.8.3.7: server-attested — 'ootb' renders a badge,
+            'operator' (the unbadged default) renders nothing. */}
+        <ProvenanceBadge provenance={entry.origin} />
         {badges.map((b) => (
           <span key={b} className="badge" style={BADGE_STYLE[b]}>{b}</span>
         ))}
