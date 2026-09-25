@@ -89,6 +89,7 @@ import type { BridgeIdentity } from './forge-watch.ts';
 import { finalizeMergedReadyForReview } from '@forge/flows/finalize-merged.ts';
 import type { EventLogEntry } from '@forge/kernel';
 import { makeRecordingBroadcast } from './bridge-broadcast-log.ts';
+import { makeTrailingCoalescer } from './broadcast-coalescer.ts';
 type RerunReflectorFn = InstalledFactory['rerunReflector'];
 import { isSafeRunId } from '@forge/agents/run-agent.ts';
 // M4 agents carve: the slug refusal `spawnAgentDispatch` applies is the SAME
@@ -98,6 +99,7 @@ import { isSafeRunId } from '@forge/agents/run-agent.ts';
 import { SAFE_AGENT_SLUG_RE } from '@forge/agents/bridge-agents-slug.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, isSafeSubPath } from '@forge/kernel';
+import { flowRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
 import {
   installedExample as example, peekInstalledFactory,
   resolveInstalledFactory, type InstalledFactory } from './factory-wiring.ts';
@@ -272,6 +274,8 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // "did `cycle-list-changed` fire, and was anyone listening?" is answerable
   // from bytes. See `bridge-broadcast-log.ts` for why it opens at boot.
   const broadcast = makeRecordingBroadcast<WsOutbound>(clients, forgeRoot);
+  // R27 (forge-6gv.5.2): collapses watchQueue's 6-dir fan-out into one trailing broadcast — see broadcast-coalescer.ts.
+  const queueChangeCoalescer = makeTrailingCoalescer(() => broadcast({ type: 'cycle-list-changed' }));
 
   const scanCycles = opts.scanCycles ?? ((): { live: Cycle[]; recent: Cycle[] } => {
     // The cycle ID is the _logs/<dir> name (timestamp + initiative ID); the
@@ -495,8 +499,9 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       if (!existsSync(d)) continue;
       try {
         const w = fsWatch(d, { persistent: false }, () => {
-          broadcast({ type: 'cycle-list-changed' });
-          // A new cycle may have appeared; pick up its log if so.
+          queueChangeCoalescer.trigger();
+          // A new cycle may have appeared; pick up its log if so — uncoalesced,
+          // so a live tail arms promptly regardless of the broadcast cadence.
           startTailsForLive();
         });
         queueWatchers.push(w);
@@ -697,6 +702,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   watchDemo();
 
   const close = async (): Promise<void> => {
+    queueChangeCoalescer.close();
     for (const w of queueWatchers) { try { w.close(); } catch { /* ignore */ } }
     for (const w of architectWatchers) { try { w.close(); } catch { /* ignore */ } }
     for (const w of instructionsWatchers) { try { w.close(); } catch { /* ignore */ } }
@@ -1557,9 +1563,20 @@ async function handleHttp(
       return;
     }
     // Existence through the guard family (never a raw fs probe on a
-    // request-derived segment): the flow id is a single slug segment under the
-    // trusted forgeRoot/studio/flows.
-    if (guardedFile(ctx.forgeRoot, ['studio', 'flows', flowId, 'flow.yaml'], 'read') === null) {
+    // request-derived segment): the flow id is a single slug segment,
+    // searched across every flow root (SEAM F1) — `studio/flows` AND every
+    // `packages/<pkg>/flows`. `resolveIdAcrossRoots` THROWS, naming both
+    // paths, if the id is a real flow under more than one root — never
+    // "first root wins" — so this is wrapped (every other branch below sends
+    // its own 500 on throw; `handleHttp` has no single top-level catch).
+    let flowMatch;
+    try {
+      flowMatch = resolveIdAcrossRoots(flowRoots(ctx.forgeRoot), flowId, ['flow.yaml']);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+      return;
+    }
+    if (flowMatch === null) {
       sendJson(res, 404, { error: 'flow not found', flowId }, origin);
       return;
     }

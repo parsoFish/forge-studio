@@ -50,7 +50,7 @@ import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
 // §15.6: FORGE_ROOT via `@forge/agents/skill-path.ts` is a re-export detour —
 // it type-checks and it is the wrong owner. Kernel is the owner.
 import { FORGE_ROOT } from '@forge/kernel';
-import { skillsDir } from '@forge/agents/skill-path.ts';
+import { flowRoots, resolveIdAcrossRoots, skillRoots } from '@forge/kernel/discovery-roots.ts';
 import { findFanOutViolations } from './flow-fanout.ts';
 import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';
@@ -380,11 +380,11 @@ export function checkFlowVersionSeam(
  * The caller (runCycle) must have already resolved resolveQualityGateCmd and
  * threaded inputWithGate — runFlow receives the already-resolved input (item 1).
  *
- * resumeFrom: when `input.resumeFrom === 'demo'`, the pm node rebases + skips
+ * resumeFrom: when `input.resumeFrom === 'integrate'`, the pm node rebases + skips
  * (item 3), the dev node runs but self-no-ops the per-WI work (toRun=[], still
  * emitting its start/end{resumed:true} events so the dev hex resolves complete),
- * and the `demo` node (declared `resumable`) is the resume target — the DAG walk
- * re-enters the post-develop band (demo → adversarial-review → verdict) against
+ * and the `integrate` node (declared `resumable`) is the resume target — the DAG walk
+ * re-enters the post-develop band (integrate → adversarial-review → verdict) against
  * the preserved branch without rebuilding any WI.
  *
  * Returns enough for runCycle to build the full CycleResult.
@@ -482,7 +482,7 @@ export async function runFlow({
   // of skill dirs). Node-kind resolution reads `AgentDefinition.executor` off
   // this map instead of a hardcoded slug table.
   const agents = new Map<string, AgentDefinition>(
-    listAgentDefinitions(skillsDir(FORGE_ROOT)).map((a) => [a.slug, a]),
+    listAgentDefinitions(skillRoots(FORGE_ROOT)).map((a) => [a.slug, a]),
   );
 
   for (const nodeId of order) {
@@ -575,14 +575,14 @@ export async function runFlow({
       throw err;
     }
 
-    // R4-10-F2: a node (execDemo, on a red merge-boundary full-suite gate)
+    // R4-10-F2: a node (execIntegrate, on a red merge-boundary full-suite gate)
     // requested early termination — the branch is not shippable, so STOP the
-    // DAG walk (no demo/adversarial/verdict, no PR) and route the manifest to
+    // DAG walk (no integrate/adversarial/verdict, no PR) and route the manifest to
     // ready-for-review via closure. The gate-fix WIs it compiled make the drain
     // re-enter resume_from:'develop'; only a green baseline ever reaches openPr.
-    // R4-10-F2: a node (execDemo on a red merge-boundary gate, execOnboardPreflight
+    // R4-10-F2: a node (execIntegrate on a red merge-boundary gate, execOnboardPreflight
     // on a red contract) asked to terminate. The branch is not shippable, so STOP
-    // the walk (no demo, no adversarial review, no verdict, NO PR) and route the
+    // the walk (no integrate, no adversarial review, no verdict, NO PR) and route the
     // manifest to ready-for-review via closure. One branch, run once, outside the
     // node's try: the walk ends here, so nothing can call it twice.
     if (state.terminateEarly) {
@@ -602,12 +602,18 @@ export async function runFlow({
     costTracker.checkCeiling({ throw: true, nextNodeId: nextNodeId ?? undefined });
   }
 
-  // Fire `on: flow-complete` triggers on terminal SUCCESS only (failures
-  // exit via throw before reaching here), through the generic declaration-driven
-  // path. `on: merged` triggers — e.g. forge-develop's reflect trigger — are NOT
-  // fired here: the develop flow terminates at `ready-for-review` (PR open),
-  // before the operator merges, so finalize-merged fires those post-merge.
-  await fireFlowTriggers(flow, 'flow-complete', {
+  // Fire `on: flow-complete` triggers on terminal SUCCESS only — failures exit
+  // via throw before reaching here, and forge-8vfn.5.20 closes the THIRD way
+  // out: `state.terminateEarly` (execDemo on a red merge-boundary gate,
+  // execOnboardPreflight on a red contract) breaks the walk above and routes
+  // the manifest to `ready-for-review` via `runClosure` — a parked, unshippable
+  // branch, not a completed one. Firing here would stage a downstream run
+  // against exactly that branch. Through the generic declaration-driven path.
+  // `on: merged` triggers — e.g. forge-develop's reflect trigger — are NOT
+  // fired here regardless: the develop flow terminates at `ready-for-review`
+  // (PR open), before the operator merges, so finalize-merged fires those
+  // post-merge.
+  if (!state.terminateEarly) await fireFlowTriggers(flow, 'flow-complete', {
     onFire: (trigger) => {
       logger.emit({
         initiative_id: input.initiativeId,
@@ -657,15 +663,17 @@ export async function runFlow({
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve the absolute path to a flow's `flow.yaml` by id, relative to the forge
- * root (two levels above this file's directory). The scheduler routes a cycle to
- * the flow named by the initiative manifest's `flow_id`. S8/DEC-3 retired the
- * forge-cycle default — there is no fallback; an unknown id resolves to a
- * non-existent path and runCycle throws (see orchestrator/cycle.ts).
+ * Resolve a flow's `flow.yaml` path by id, searching every flow root (SEAM
+ * F1) — `studio/flows/` first, then every `packages/<pkg>/flows/`. S8/DEC-3:
+ * still no FLOW fallback — an id absent everywhere resolves to the
+ * conventional `studio/flows/<id>/flow.yaml` (a clear downstream ENOENT).
+ * THROWS, naming both paths, if the id resolves under more than one root.
  */
-export function flowPathForId(flowId: string): string {
+export function flowPathForId(flowId: string, forgeRoot: string = FORGE_ROOT): string {
+  const roots = flowRoots(forgeRoot);
   // Bead 5.53's class, in production: a hand-counted `'..'` chain is correct
   // only at the depth the file happens to sit at, and this file just moved.
-  // Anchored on kernel's FORGE_ROOT so the next move cannot break it.
-  return resolve(FORGE_ROOT, 'studio', 'flows', flowId, 'flow.yaml');
+  // Anchored on kernel's FORGE_ROOT (via flowRoots[0]) so the next move
+  // cannot break it.
+  return resolveIdAcrossRoots(roots, flowId, ['flow.yaml'])?.path ?? resolve(roots[0], flowId, 'flow.yaml');
 }

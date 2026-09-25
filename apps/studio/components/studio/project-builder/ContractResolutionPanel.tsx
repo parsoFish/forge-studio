@@ -8,6 +8,7 @@ import { startInstructions, startDemoBuilder } from '@/lib/bridge-client';
 import { SessionMinted } from '@/components/studio/session/SessionMinted';
 import { agentResolveLabel, brainFixHref, isAgentRouteBlocked, BRAIN_FIX_UNBOUND_HINT } from '@/lib/contract-resolution-view';
 import { pollPreflightFix, pollDisplayState, type PolledPreflightFixStatus } from '@/lib/agent-dispatch';
+import { disabledAttrs } from '@/lib/disabled-reason';
 
 /**
  * Stage D — guided contract-resolution panel. Mirrors LintResolutionPanel for
@@ -80,6 +81,9 @@ export function ContractResolutionPanel({
   // forge-8vfn.5.5: the demo session a DEMO-tier clause mints, rendered here
   // instead of being consumed by a `router.push` inside the same click.
   const [demoSessionId, setDemoSessionId] = useState<string | null>(null);
+  // forge-8vfn.5.10: same fix for the 'instructions' agent-tier route, which
+  // M1-G's sweep left `router.push`ing from inside the click that minted it.
+  const [instructionsSessionId, setInstructionsSessionId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [runStatus, setRunStatus] = useState<Record<string, PolledPreflightFixStatus>>({});
   const [msg, setMsg] = useState<string | null>(null);
@@ -137,8 +141,11 @@ export function ContractResolutionPanel({
     }
     // Agent-tier clauses route to an existing builder — navigate there.
     if (r.route === 'instructions') {
+      // forge-8vfn.5.10: PUBLISH AND STAY, matching the demo-builder branch
+      // just below — `router.push` inside the minting click left the id
+      // observable to nothing and no beat could bind /sessions/instructions/<id>.
       const s = await startInstructions({ project: projectId, mode: 'init' });
-      if (s.ok && s.sessionId) router.push(`/sessions/instructions/${encodeURIComponent(s.sessionId)}`);
+      if (s.ok && s.sessionId) setInstructionsSessionId(s.sessionId);
     } else if (r.route === 'demo-builder') {
       // PUBLISH AND STAY, and note this branch does NOT navigate while the
       // 'instructions' branch above still does — the asymmetry is the point.
@@ -202,6 +209,11 @@ export function ContractResolutionPanel({
       // was the READER, not the judgement. Those two sites and their doors are
       // stale by ~100 rulings; migrating them is not this PR's business.
       data-demo-session-id={demoSessionId ?? ''}
+      // forge-8vfn.5.10, mirroring the demo key just above (ruling 307):
+      // distinctly named because this panel can render INSIDE a session page
+      // (the onboarding session hosts the same Contract Buildout), whose own
+      // root also carries a generic `data-session-id`.
+      data-instructions-session-id={instructionsSessionId ?? ''}
       data-resolution-failing-count={failing.length}
       data-resolution-auto-count={auto.length}
       data-resolution-agent-count={agent.length}
@@ -243,7 +255,7 @@ export function ContractResolutionPanel({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <ClauseRow c={c} status={runStatus[c.id]} />
                   <button
-                    data-action="resolve-clause-agent"
+                    data-action={`resolve-clause-agent-${c.id}`}
                     data-resolve-clause-id={c.id}
                     data-resolve-blocked={blocked ? 'true' : 'false'}
                     style={btn}
@@ -272,6 +284,25 @@ export function ContractResolutionPanel({
           {user.map((c) => {
             const status = runStatus[c.id];
             const clausePollState = pollDisplayState(status ?? null);
+            // forge-8vfn.8.3.1: `busy` clears the instant the dispatch POST
+            // resolves (`submitUser`, above) — but the dispatched agent keeps
+            // going behind `startPoll`, tracked separately in `runStatus`.
+            // Without also consulting that, the button re-enabled the moment
+            // the POST returned while the row still showed
+            // `data-agent-run-state="running"`, and a second click dispatched
+            // a SECOND agent onto the same clause. 'watching' and 'timed-out'
+            // both mean "not known to be done" — a poll ceiling is a fact
+            // about the WATCHER, not the run (pollDisplayState's header) — so
+            // both keep the control disabled; only a real terminal status
+            // frees it.
+            const clauseRunning = clausePollState === 'watching' || clausePollState === 'timed-out';
+            const applyDisabledReason = busy !== null
+              ? `${busyReason(busy)} — one clause at a time`
+              : clauseRunning
+                ? `${busyReason(`user:${c.id}`)} — one clause at a time`
+                : (notes[c.id] ?? '').trim() === ''
+                  ? 'state the decision (or your reasoning) first'
+                  : null;
             return (
               <div key={c.id} data-user-clause data-user-clause-id={c.id} {...(clausePollState ? { 'data-poll-state': clausePollState } : {})} style={{ marginBottom: 10 }}>
                 <ClauseRow c={c} status={status} />
@@ -287,14 +318,13 @@ export function ContractResolutionPanel({
                 />
                 <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                   <button
-                    data-action="apply-clause-decision"
+                    data-action={`apply-clause-decision-${c.id}`}
                     data-apply-clause-id={c.id}
                     style={btn}
-                    disabled={busy !== null || (notes[c.id] ?? '').trim() === ''}
-                    title={busy !== null ? `${busyReason(busy)} — one clause at a time` : (notes[c.id] ?? '').trim() === '' ? 'state the decision (or your reasoning) first' : undefined}
+                    {...disabledAttrs(applyDisabledReason)}
                     onClick={() => void submitUser(c)}
                   >
-                    {busy === `user:${c.id}` ? 'Applying…' : 'Apply with agent'}
+                    {busy === `user:${c.id}` || clauseRunning ? 'Applying…' : 'Apply with agent'}
                   </button>
                   {clausePollState === 'timed-out' && (
                     <button
@@ -313,6 +343,10 @@ export function ContractResolutionPanel({
         </div>
       )}
       <SessionMinted kind="demo" sessionId={demoSessionId} project={projectId} />
+      {/* No `?project=` — unchanged from the pre-fix `router.push` target,
+          and an exact-href-matched anchor must never carry a query string
+          (see `authoring-launcher-mint.test.ts`). */}
+      <SessionMinted kind="instructions" sessionId={instructionsSessionId} />
     </div>
   );
 }

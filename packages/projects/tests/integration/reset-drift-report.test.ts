@@ -18,6 +18,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  chmodSync,
   cpSync,
   mkdirSync,
   mkdtempSync,
@@ -25,13 +26,16 @@ import {
   readdirSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 
-import { computeContractDrift } from '../../reset.ts';
-import { projectStartersDir } from '@forge/kernel';
+import { computeContractDrift, applyContractReset } from '../../reset.ts';
+import { runPreflight, SCRATCH_PATHS } from '../../preflight.ts';
+import { projectStartersDir, PathGuardContainmentError } from '@forge/kernel';
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
 
 function isolatedForgeRoot(): string {
@@ -146,6 +150,309 @@ test('computeContractDrift on an undrifted project (nothing to move) reports ski
     const skillsRow = drift.rows.find((r) => r.section === 'skills');
     assert.equal(skillsRow!.action, 'unchanged');
     assert.deepEqual(drift.skillMoves, []);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ── operator ruling 92 follow-up (bead forge-8vfn.8.1.2): .gitignore drift ──
+//
+// A bare, starter-less forgeRoot (`resolveAppType` degrades every mode to
+// 'protected' and never throws — the same fixture shape
+// `reset-preservation.test.ts`'s "with NO starters at all" case uses) so
+// these tests isolate the .gitignore mechanism from the JSON-regeneration
+// concern entirely.
+
+/** A minimal contract-valid project (no starters needed) whose `.gitignore`
+ *  is exactly `lines`. */
+function projectWithGitignore(lines: string[]): string {
+  const dir = mkdtempSync(join(tmpdir(), 'reset-gitignore-project-'));
+  writeFileSync(join(dir, '.gitignore'), `${lines.join('\n')}\n`);
+  mkdirSync(join(dir, '.forge'), { recursive: true });
+  writeFileSync(
+    join(dir, '.forge', 'project.json'),
+    `${JSON.stringify({ name: 'gi-fixture', testProcess: { local: { cmd: ['true'] } } }, null, 2)}\n`,
+  );
+  return dir;
+}
+
+/** Same fixture, but a REAL git repo — exercises `computeGitignoreDrift`'s
+ *  git-truth branch (glob/negation forms a text-only scan cannot judge). */
+function projectWithGitignoreGitRepo(lines: string[]): string {
+  const dir = projectWithGitignore(lines);
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: dir });
+  return dir;
+}
+
+test('computeContractDrift: a blanket .forge/ line proposes the SCRATCH_PATHS stanza in its place, comments preserved verbatim', () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'reset-gitignore-nostarters-'));
+  const before = ['node_modules/', '# forge scratch — DO NOT EDIT', '.forge/', 'dist/'];
+  const dir = projectWithGitignore(before);
+  try {
+    const drift = computeContractDrift(dir, { forgeRoot });
+    assert.equal(drift.gitignoreDrift.action, 'regenerate', `expected regenerate: ${JSON.stringify(drift.gitignoreDrift)}`);
+    assert.equal(drift.gitignoreDrift.before, `${before.join('\n')}\n`);
+    const afterLines = (drift.gitignoreDrift.after ?? '').split('\n');
+    assert.ok(afterLines.includes('node_modules/'), 'unrelated lines survive verbatim');
+    assert.ok(afterLines.includes('# forge scratch — DO NOT EDIT'), 'comments survive verbatim, even ones now describing the old policy');
+    assert.ok(afterLines.includes('dist/'), 'lines after the offender survive verbatim');
+    assert.ok(!afterLines.includes('.forge/'), 'the blanket-ignore line itself is gone');
+    for (const p of SCRATCH_PATHS) assert.ok(afterLines.includes(p), `missing SCRATCH_PATHS entry ${p} in: ${afterLines.join(', ')}`);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('computeContractDrift: a project already on the canonical stanza reports gitignoreDrift unchanged', () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'reset-gitignore-nostarters-'));
+  const dir = projectWithGitignore(['node_modules/', ...SCRATCH_PATHS]);
+  try {
+    const drift = computeContractDrift(dir, { forgeRoot });
+    assert.equal(drift.gitignoreDrift.action, 'unchanged');
+    assert.equal(drift.gitignoreDrift.before, drift.gitignoreDrift.after);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('computeContractDrift: no .gitignore at all reports gitignoreDrift unchanged with before/after undefined (out of this mechanism\'s scope)', () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'reset-gitignore-nostarters-'));
+  const dir = mkdtempSync(join(tmpdir(), 'reset-gitignore-nogi-'));
+  mkdirSync(join(dir, '.forge'), { recursive: true });
+  writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({ name: 'x', testProcess: { local: { cmd: ['true'] } } }));
+  try {
+    const drift = computeContractDrift(dir, { forgeRoot });
+    assert.deepEqual(drift.gitignoreDrift, { before: undefined, after: undefined, action: 'unchanged', otherSourceViolations: [] });
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('applyContractReset: rewrites .gitignore to the canonical stanza, and preflight C2 flips FAIL → PASS (keeps S3\'s post-reset "preflight MET" true)', () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'reset-gitignore-nostarters-'));
+  const dir = projectWithGitignore(['node_modules/', '.forge/']);
+  try {
+    const before = runPreflight(dir, { forgeRoot });
+    const c2Before = before.clauses.find((c) => c.clause === 'C2');
+    assert.equal(c2Before?.pass, false, `fixture precondition: C2 must fail before reset — got: ${c2Before?.detail}`);
+
+    const drift = computeContractDrift(dir, { forgeRoot });
+    const result = applyContractReset(dir, drift);
+    assert.equal(result.gitignoreFixed, true);
+
+    const onDisk = readFileSync(join(dir, '.gitignore'), 'utf8');
+    assert.equal(onDisk, drift.gitignoreDrift.after, 'the on-disk file must match the proposed drift exactly');
+
+    const c2After = result.preflight.clauses.find((c) => c.clause === 'C2');
+    assert.equal(c2After?.pass, true, `C2 must pass after reset: ${c2After?.detail}`);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('applyContractReset: a project already on the stanza leaves .gitignore untouched and reports gitignoreFixed: false', () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'reset-gitignore-nostarters-'));
+  const dir = projectWithGitignore(['node_modules/', ...SCRATCH_PATHS]);
+  try {
+    const giBefore = readFileSync(join(dir, '.gitignore'), 'utf8');
+    const drift = computeContractDrift(dir, { forgeRoot });
+    const result = applyContractReset(dir, drift);
+    assert.equal(result.gitignoreFixed, false);
+    assert.equal(readFileSync(join(dir, '.gitignore'), 'utf8'), giBefore, 'an already-conformant .gitignore must not be rewritten (idempotent apply)');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ── ruling 92 follow-up (forge-8vfn.8.1.2, operator item 92): computeGitignoreDrift
+// must ALSO regenerate when SCRATCH_PATHS has simply grown, not only when a
+// tracked-config path is wrongly ignored ──
+
+test('computeContractDrift + applyContractReset: a git repo on the OLD 5-line stanza (missing the newer runtime-output scratch) reports+fixes gitignore drift, no tracked-config line to replace', () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'reset-gitignore-nostarters-'));
+  const OLD_STANZA = ['.forge/work-items/', '.forge/.create-complete', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
+  // No blanket `.forge/` line anywhere — TRACKED_CONFIG_PATHS is NOT wrongly
+  // ignored, so the old `gitTruthOffenders`-only mechanism finds nothing to
+  // rewrite. The gap this test pins: SCRATCH_PATHS itself grew two entries
+  // and this .gitignore (a real, once-canonical stanza) never got the memo.
+  const dir = projectWithGitignoreGitRepo(['node_modules/', ...OLD_STANZA]);
+  try {
+    const before = runPreflight(dir, { forgeRoot });
+    const c2Before = before.clauses.find((c) => c.clause === 'C2');
+    assert.equal(c2Before?.pass, false, `fixture precondition: C2 must fail on the old stanza — got: ${c2Before?.detail}`);
+
+    const drift = computeContractDrift(dir, { forgeRoot });
+    assert.equal(
+      drift.gitignoreDrift.action,
+      'regenerate',
+      `expected regenerate (missing SCRATCH_PATHS entries, even with no wrongly-ignored tracked-config line to anchor a replacement): ${JSON.stringify(drift.gitignoreDrift)}`,
+    );
+    const afterLines = (drift.gitignoreDrift.after ?? '').split('\n');
+    for (const p of SCRATCH_PATHS) assert.ok(afterLines.includes(p), `missing SCRATCH_PATHS entry ${p} in: ${afterLines.join(', ')}`);
+    assert.ok(afterLines.includes('node_modules/'), 'unrelated lines survive verbatim');
+
+    mkdirSync(join(dir, '.forge', 'skills', 'a'), { recursive: true });
+    writeFileSync(join(dir, '.forge', 'skills', 'a', 'SKILL.md'), '# a\n');
+
+    const result = applyContractReset(dir, drift);
+    assert.equal(result.gitignoreFixed, true);
+
+    const c2After = result.preflight.clauses.find((c) => c.clause === 'C2');
+    assert.equal(c2After?.pass, true, `C2 must pass after reset: ${c2After?.detail}`);
+
+    // `git check-ignore -q <path>` exits 0 (no throw) iff ignored, 1 (throws,
+    // execFileSync's default) iff not ignored.
+    assert.doesNotThrow(
+      () => execFileSync('git', ['check-ignore', '-q', '.forge/live-evidence/x.json'], { cwd: dir }),
+      '.forge/live-evidence/x.json must be ignored after reset',
+    );
+    assert.doesNotThrow(
+      () => execFileSync('git', ['check-ignore', '-q', '.forge/preflight.json'], { cwd: dir }),
+      '.forge/preflight.json must be ignored after reset',
+    );
+    assert.throws(
+      () => execFileSync('git', ['check-ignore', '-q', '.forge/skills/a/SKILL.md'], { cwd: dir }),
+      'a tracked skill file must NOT be ignored',
+    );
+    assert.throws(
+      () => execFileSync('git', ['check-ignore', '-q', '.forge/project.json'], { cwd: dir }),
+      '.forge/project.json must NOT be ignored',
+    );
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ── SEC review follow-up (forge-8vfn.8.1.2): computeGitignoreDrift hardening ──
+
+test('SECURITY: a .gitignore symlinked to a file OUTSIDE the project throws a named containment refusal — never reads its content', () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'reset-gitignore-nostarters-'));
+  const outside = mkdtempSync(join(tmpdir(), 'reset-gitignore-outside-'));
+  const SECRET = 'LEAK-CANARY-gi-symlink-7f3a';
+  writeFileSync(join(outside, 'secret.txt'), `${SECRET}\n.forge/\n`);
+  const dir = mkdtempSync(join(tmpdir(), 'reset-gitignore-symlink-project-'));
+  mkdirSync(join(dir, '.forge'), { recursive: true });
+  writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({ name: 'x', testProcess: { local: { cmd: ['true'] } } }));
+  symlinkSync(join(outside, 'secret.txt'), join(dir, '.gitignore'));
+  try {
+    let thrown: unknown;
+    try {
+      computeContractDrift(dir, { forgeRoot });
+    } catch (err) {
+      thrown = err;
+    }
+    assert.ok(thrown instanceof PathGuardContainmentError, `expected a PathGuardContainmentError, got: ${thrown}`);
+    const msg = thrown instanceof Error ? thrown.message : String(thrown);
+    assert.equal(msg.includes(SECRET), false, `the refusal must never carry the symlink target's content: ${msg}`);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('FAIL-OPEN: an unreadable (chmod 000) .gitignore is surfaced by name, never collapsed to "unchanged"', (t) => {
+  if (process.getuid && process.getuid() === 0) {
+    t.skip('running as root — chmod 000 does not block reads, the door cannot be exercised');
+    return;
+  }
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'reset-gitignore-nostarters-'));
+  const dir = projectWithGitignore(['node_modules/', '.forge/']);
+  try {
+    chmodSync(join(dir, '.gitignore'), 0o000);
+    assert.throws(
+      () => computeContractDrift(dir, { forgeRoot }),
+      (err: unknown) => {
+        // Must NOT be the pre-fix silent "unchanged" behaviour — a throw at
+        // all already proves that; also pin it is not a containment refusal
+        // (permission, not containment) so the two failure modes stay distinct.
+        assert.ok(!(err instanceof PathGuardContainmentError), 'an EACCES must not masquerade as a containment refusal');
+        assert.match(String(err), /EACCES|permission/i, `expected the permission error to be named: ${err}`);
+        return true;
+      },
+    );
+  } finally {
+    chmodSync(join(dir, '.gitignore'), 0o644);
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ONE NOTION WITH C2: a `.forge/*` glob line is detected by git-truth and rewritten (a text-only scan would miss it)', () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'reset-gitignore-nostarters-'));
+  const dir = projectWithGitignoreGitRepo(['node_modules/', '.forge/*']);
+  try {
+    const before = runPreflight(dir, { forgeRoot });
+    assert.equal(before.clauses.find((c) => c.clause === 'C2')?.pass, false, 'fixture precondition: C2 must fail on .forge/*');
+
+    const drift = computeContractDrift(dir, { forgeRoot });
+    assert.equal(drift.gitignoreDrift.action, 'regenerate', `expected regenerate: ${JSON.stringify(drift.gitignoreDrift)}`);
+    assert.ok(!(drift.gitignoreDrift.after ?? '').includes('.forge/*'), 'the glob line must be gone');
+
+    const result = applyContractReset(dir, drift);
+    const c2After = result.preflight.clauses.find((c) => c.clause === 'C2');
+    assert.equal(c2After?.pass, true, `C2 must pass after reset: ${c2After?.detail}`);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ONE NOTION WITH C2: a `.forge/**` glob line is detected by git-truth and rewritten', () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'reset-gitignore-nostarters-'));
+  const dir = projectWithGitignoreGitRepo(['node_modules/', '.forge/**']);
+  try {
+    const drift = computeContractDrift(dir, { forgeRoot });
+    assert.equal(drift.gitignoreDrift.action, 'regenerate', `expected regenerate: ${JSON.stringify(drift.gitignoreDrift)}`);
+    assert.ok(!(drift.gitignoreDrift.after ?? '').includes('.forge/**'), 'the glob line must be gone');
+
+    const result = applyContractReset(dir, drift);
+    const c2After = result.preflight.clauses.find((c) => c.clause === 'C2');
+    assert.equal(c2After?.pass, true, `C2 must pass after reset: ${c2After?.detail}`);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ONE NOTION WITH C2: a negated re-include (`!.forge/skills/`) keeps working — skills is not treated as offending', () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'reset-gitignore-nostarters-'));
+  const dir = projectWithGitignoreGitRepo(['node_modules/', '.forge/*', '!.forge/skills/']);
+  try {
+    const drift = computeContractDrift(dir, { forgeRoot });
+    // project.json/quality_gate_cmd are still ignored by `.forge/*` — regenerate expected.
+    assert.equal(drift.gitignoreDrift.action, 'regenerate', `expected regenerate: ${JSON.stringify(drift.gitignoreDrift)}`);
+    // The negation line for skills must survive untouched — this mechanism
+    // must not blanket-strip every `.forge`-prefixed line, only the ones
+    // git-truth actually names as offending.
+    assert.ok((drift.gitignoreDrift.after ?? '').includes('!.forge/skills/'), 'the negated re-include line must survive');
+
+    const result = applyContractReset(dir, drift);
+    const c2After = result.preflight.clauses.find((c) => c.clause === 'C2');
+    assert.equal(c2After?.pass, true, `C2 must pass after reset: ${c2After?.detail}`);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ONE NOTION WITH C2: an ignore from .git/info/exclude (not the project\'s own .gitignore) is named, never rewritten', () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'reset-gitignore-nostarters-'));
+  const dir = projectWithGitignoreGitRepo(['node_modules/', ...SCRATCH_PATHS]);
+  try {
+    writeFileSync(join(dir, '.git', 'info', 'exclude'), '.forge/\n');
+    const drift = computeContractDrift(dir, { forgeRoot });
+    assert.equal(drift.gitignoreDrift.otherSourceViolations.length > 0, true, 'the .git/info/exclude violation must be named');
+    assert.match(drift.gitignoreDrift.otherSourceViolations.join('; '), /\.git\/info\/exclude/);
+    // Never rewritten: this mechanism owns exactly the project's own .gitignore.
+    assert.equal(drift.gitignoreDrift.action, 'unchanged', 'the project\'s own .gitignore has nothing to rewrite');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
     rmSync(dir, { recursive: true, force: true });

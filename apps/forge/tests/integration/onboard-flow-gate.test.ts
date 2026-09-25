@@ -32,7 +32,7 @@ import { validateFlow } from '@forge/flows/studio/validate-flow.ts';
 import { validateAgent } from '@forge/agents/studio/validate-agent.ts';
 import { skillsDir } from '@forge/agents/skill-path.ts';
 import { BAND_GUARD_IDS, BAND_CANONICAL_SLUG, PLATFORM_GUARD_IDS, resolveBandGuard } from '@forge/agents/agent-bands.ts';
-import { runPreflight } from '@forge/projects/preflight.ts';
+import { runPreflight, SCRATCH_PATHS } from '@forge/projects/preflight.ts';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import type { EventLogger } from '@forge/kernel';
 import type { FlowNode } from '@forge/contracts/studio/types.ts';
@@ -202,10 +202,7 @@ function makePassingPreflightFixture(): { fixtureDir: string; cleanup: () => voi
   mkdirSync(join(fixtureDir, '.forge'), { recursive: true });
   writeFileSync(join(fixtureDir, 'roadmap.md'), '# Roadmap\n');
   writeFileSync(join(fixtureDir, '.forge', 'quality_gate_cmd'), 'true\n');
-  writeFileSync(
-    join(fixtureDir, '.gitignore'),
-    ['.forge/work-items/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n') + '\n',
-  );
+  writeFileSync(join(fixtureDir, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
   return { fixtureDir, cleanup: () => rmSync(parent, { recursive: true, force: true }) };
 }
 

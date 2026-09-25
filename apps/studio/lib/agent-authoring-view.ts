@@ -23,7 +23,7 @@
  * objects, never mutates its input.
  */
 
-import type { Agent, AgentCapabilityDescriptor, AgentRuntime } from './studio-client';
+import type { Agent, AgentCapabilityDescriptor, AgentRuntime, AgentFanout, AgentBudgets } from './studio-client';
 // Explicit `.ts` extension (moduleResolution: "bundler" tolerates it, and
 // Next/vitest already resolve `./authoring-package-shape`-style extension-
 // less siblings fine either way) — this is a VALUE import (unlike the
@@ -64,6 +64,30 @@ export type AgentBuilderState = {
    *  rather than let either side win. */
   declaredMaxBudgetUsd?: number;
   costCeilingEnforceable: boolean;
+  /**
+   * agents-15 — SKILL.md-authored, read-only in the builder UI (same class
+   * as `phase`/`allowedTools` above): never edited here, only carried
+   * through load → Definition Preview so the preview can show the
+   * definition as it will actually be saved (the server preserves it
+   * unchanged from `existing` when the PUT body omits it — see
+   * `buildAgentPutBody`, which does not send it for exactly that reason).
+   */
+  fanout?: AgentFanout;
+  /**
+   * agents-15 (forge-6gv.5.1) — the SAME read-only pass-through class as
+   * `fanout` above, reachable now that `Agent` (lib/agent-wire.ts, split out
+   * of studio-client.ts) actually parses them off the wire.
+   * `description`/`surface`/`executor` de-optionalize to `''` the same way
+   * `phase` already does above (a real, absent wire value both collapse to
+   * the same "nothing declared" builder state); `library`/`budgets` stay
+   * optional like `capability`/`fanout` — an object/boolean's ABSENCE is
+   * itself meaningful and must not be coerced into a fabricated default.
+   */
+  description: string;
+  library?: boolean;
+  surface: string;
+  executor: string;
+  budgets?: AgentBudgets;
 };
 
 export const DEFAULT_AGENT_RUNTIME: AgentRuntime = {
@@ -103,6 +127,13 @@ export function parseAgentToState(raw: Agent): AgentBuilderState {
     capability: raw.capability,
     costCeilingEnforceable: raw.costCeilingEnforceable === true,
     declaredMaxBudgetUsd: raw.declaredMaxBudgetUsd,
+    fanout: raw.fanout,
+    // agents-15 (forge-6gv.5.1)
+    description: raw.description ?? '',
+    library: raw.library,
+    surface: raw.surface ?? '',
+    executor: raw.executor ?? '',
+    budgets: raw.budgets,
   };
 }
 
@@ -151,6 +182,36 @@ export function buildAgentPutBody(state: AgentBuilderState, opts: { create: bool
   };
 }
 
+/**
+ * agents-15 — the Definition Preview's ONE data source. Spreads
+ * `buildAgentPutBody`'s own return value (so every field that function
+ * sends on save — today's composition/runtime/materials/allowedTools/
+ * disallowedTools, and whatever future field a save-path change adds —
+ * reaches the preview with no second hand-maintained list to keep in
+ * sync), then attaches the read-only pass-through fields `buildAgentPutBody`
+ * deliberately does NOT send (they are not editable in the builder, so
+ * sending them risks nothing today, but the preview must still show them:
+ * the server round-trips them unchanged into the saved SKILL.md either
+ * way). `slug` rides too — the PUT route param, not a body field, but part
+ * of the definition being previewed.
+ */
+export function buildAgentPreviewModel(state: AgentBuilderState): Record<string, unknown> {
+  return {
+    slug: state.slug,
+    ...buildAgentPutBody(state, { create: false }),
+    phase: state.phase,
+    fanout: state.fanout,
+    // agents-15 (forge-6gv.5.1): same read-only pass-through treatment as
+    // phase/fanout above — never sent by buildAgentPutBody, but real and
+    // shown here since the server round-trips them unchanged either way.
+    description: state.description,
+    library: state.library,
+    surface: state.surface,
+    executor: state.executor,
+    budgets: state.budgets,
+  };
+}
+
 /** agents-09 — the duplicate prefill: the source agent's whole composition
  *  with the slug cleared (save derives a fresh one from the editable name)
  *  and the name marked as a copy so two agents never silently share one. */
@@ -184,6 +245,10 @@ export const EMPTY_STATE: AgentBuilderState = {
   disallowedTools: [],
   phase: '',
   costCeilingEnforceable: false,
+  // agents-15 (forge-6gv.5.1)
+  description: '',
+  surface: '',
+  executor: '',
 };
 
 /**

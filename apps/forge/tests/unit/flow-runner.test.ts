@@ -261,27 +261,27 @@ describe('flow-runner full run', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 2: resumeFrom='demo' — pm NOT called; dev IS called. Uses a legacy-shaped
+// Test 2: resumeFrom='integrate' — pm NOT called; dev IS called. Uses a legacy-shaped
 // fixture flow (dev→review) to prove the generic resume-skip mechanics:
 // pm skips, dev self-no-ops, the walk resumes at the post-dev node.
 // ---------------------------------------------------------------------------
 
-describe('flow-runner resumeFrom=demo', () => {
+describe('flow-runner resumeFrom=integrate', () => {
   it('skips runProjectManager; runs the dev node (self-no-ops per-WI) then the post-dev node; rebase before the dev node', async () => {
     const tracker = makeCallTracker();
     const deps = makeMockDeps(tracker);
-    const input = makeInput({ resumeFrom: 'demo' });
+    const input = makeInput({ resumeFrom: 'integrate' });
     const logger = makeLogger();
     const flow = makeForgeCycleFlow();
 
     await runFlowT({ flow, input, logger, deps });
 
-    assert.ok(!tracker.calls.includes('runProjectManager'), 'runProjectManager must NOT be called on a demo resume');
+    assert.ok(!tracker.calls.includes('runProjectManager'), 'runProjectManager must NOT be called on an integrate resume');
     assert.ok(tracker.calls.includes('runDeveloperLoop'), 'the dev node still runs on resume (self-no-ops per-WI, emits start/end{resumed:true})');
     assert.ok(tracker.calls.includes('openPrInline'), 'this legacy-shaped fixture resumes at its post-dev node (review)');
 
     // Highest-risk resume step: rebase must have been called AND must precede the dev node.
-    assert.ok(tracker.calls.includes('rebaseForResume'), 'rebaseForResume must be called on a demo resume');
+    assert.ok(tracker.calls.includes('rebaseForResume'), 'rebaseForResume must be called on an integrate resume');
     assert.ok(
       tracker.calls.indexOf('rebaseForResume') < tracker.calls.indexOf('runDeveloperLoop'),
       'rebaseForResume must execute before the dev node',
@@ -291,14 +291,14 @@ describe('flow-runner resumeFrom=demo', () => {
     const events = (logger as ReturnType<typeof makeLogger>).events as Array<{ message?: string }>;
     assert.ok(
       events.some((e) => e.message === 'flow-runner.pm-skipped-resume'),
-      'logger must capture a flow-runner.pm-skipped-resume event on a demo resume',
+      'logger must capture a flow-runner.pm-skipped-resume event on an integrate resume',
     );
   });
 
-  it('still calls openPrInline, runClosure, runReflector on a demo resume', async () => {
+  it('still calls openPrInline, runClosure, runReflector on an integrate resume', async () => {
     const tracker = makeCallTracker();
     const deps = makeMockDeps(tracker);
-    const input = makeInput({ resumeFrom: 'demo' });
+    const input = makeInput({ resumeFrom: 'integrate' });
     const logger = makeLogger();
     const flow = makeForgeCycleFlow();
 
@@ -445,19 +445,19 @@ describe('flow-runner with real forge-architect.yaml', () => {
 // ---------------------------------------------------------------------------
 
 describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)', () => {
-  it('loads the forge-develop flow and runs dev → demo → adversarial-review → verdict — no unifier, architect, pm, or reflect', async () => {
+  it('loads the forge-develop flow and runs dev → integrate → adversarial-review → verdict — no unifier, architect, pm, or reflect', async () => {
     const flowPath = flowPathForId('forge-develop');
     const flow = loadFlowDefinition(flowPath);
 
     assert.strictEqual(flow.id, 'forge-develop', 'flow id must be forge-develop');
-    assert.strictEqual(flow.nodes.length, 4, 'forge-develop must have exactly 4 nodes (dev + demo + adversarial-review + verdict)');
+    assert.strictEqual(flow.nodes.length, 4, 'forge-develop must have exactly 4 nodes (dev + integrate + adversarial-review + verdict)');
     assert.ok(
       flow.nodes.some((n) => n.agent === 'developer-ralph'),
       'forge-develop must have a dev node (developer-ralph)',
     );
     assert.ok(
       flow.nodes.some((n) => n.agent === 'demo-agent' && n.resumable === true),
-      'forge-develop must have a resumable demo node (the unifier successor — R4-10-F1)',
+      'forge-develop must have a resumable integrate node (the unifier successor — R4-10-F1)',
     );
     assert.ok(
       flow.nodes.some((n) => n.agent === 'adversarial-review'),
@@ -483,12 +483,12 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
 
     const result = await runFlowT({ flow, input, logger, deps });
 
-    // dev → demo (pipeline + relocated delivery stats/gates) → adversarial-review
+    // dev → integrate (pipeline + relocated delivery stats/gates) → adversarial-review
     // → verdict(openPr → closure). No unifier/pm/architect/reflect.
     assert.deepEqual(
       tracker.calls,
       ['runDeveloperLoop', 'computeDeliveryStats', 'runMergeBoundaryGate', 'runIntegrate', 'runAdversarialReview', 'openPrInline', 'runClosure'],
-      'forge-develop: dev → demo → adversarial-review → verdict only',
+      'forge-develop: dev → integrate → adversarial-review → verdict only',
     );
     assert.ok(!tracker.calls.includes('runUnifier'), 'the unifier executor must NOT run on the live develop flow');
 
@@ -512,39 +512,39 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
 
     await runFlowT({ flow, input, logger, deps });
 
-    // The dev node (execDev → the ONE develop executor) re-dispatches; the demo
+    // The dev node (execDev → the ONE develop executor) re-dispatches; the integrate
     // node re-authors demo.json + the PR body; the verdict re-presents. No
-    // separate unifier re-arm — the demo node owns the re-demo now.
+    // separate unifier re-arm — the integrate node owns the re-demo now.
     assert.deepEqual(
       tracker.calls,
       ['runDeveloperLoop', 'computeDeliveryStats', 'runMergeBoundaryGate', 'runIntegrate', 'runAdversarialReview', 'openPrInline', 'runClosure'],
-      'resume_from:develop re-runs the full dev→demo→adversarial-review→verdict spine through the one develop executor',
+      'resume_from:develop re-runs the full dev→integrate→adversarial-review→verdict spine through the one develop executor',
     );
-    assert.ok(!tracker.calls.includes('runUnifier'), 're-entry never re-arms a unifier — the demo node re-authors');
+    assert.ok(!tracker.calls.includes('runUnifier'), 're-entry never re-arms a unifier — the integrate node re-authors');
   });
 
-  it('resume_from:demo (ADR-019 crash recovery, R4-10-F6) resumes at the demo node', async () => {
+  it('resume_from:integrate (ADR-019 crash recovery, R4-10-F6) resumes at the integrate node', async () => {
     const flowPath = flowPathForId('forge-develop');
     const flow = loadFlowDefinition(flowPath);
 
     const tracker = makeCallTracker();
     const deps = makeMockDeps(tracker);
     // The crash-recovery resume stamp: the dev node self-no-ops its per-WI work
-    // (inside runDeveloperLoop) but the spine still re-runs, landing on the demo
+    // (inside runDeveloperLoop) but the spine still re-runs, landing on the integrate
     // node — the successor develop flow's resume target (R4-10-F6 re-homed the
     // stamp off the retired unifier node).
-    const input = makeInput({ resumeFrom: 'demo' });
+    const input = makeInput({ resumeFrom: 'integrate' });
     const logger = makeLogger();
 
     await runFlowT({ flow, input, logger, deps });
 
-    assert.ok(tracker.calls.includes('runDeveloperLoop'), 'dev node runs (self-no-ops per-WI on a demo resume)');
-    assert.ok(tracker.calls.includes('runIntegrate'), 'the demo node re-authors the bundle (the resume target now)');
+    assert.ok(tracker.calls.includes('runDeveloperLoop'), 'dev node runs (self-no-ops per-WI on an integrate resume)');
+    assert.ok(tracker.calls.includes('runIntegrate'), 'the integrate node re-authors the bundle (the resume target now)');
     assert.ok(tracker.calls.includes('openPrInline'), 'the verdict gate re-opens/updates the PR on resume');
     assert.ok(!tracker.calls.includes('runUnifier'), 'no unifier executor on the live flow');
   });
 
-  it('demo delivery gate: a FAILED integrate band blocks the PR (never opens a review-less PR)', async () => {
+  it('integrate delivery gate: a FAILED integrate band blocks the PR (never opens a review-less PR)', async () => {
     const flowPath = flowPathForId('forge-develop');
     const flow = loadFlowDefinition(flowPath);
 
@@ -558,8 +558,8 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
     const logger = makeLogger();
 
     await assert.rejects(runFlowT({ flow, input, logger, deps }), /delivery gate: integrate band failed/);
-    assert.ok(!tracker.calls.includes('runAdversarialReview'), 'no review on a failed demo');
-    assert.ok(!tracker.calls.includes('openPrInline'), 'no PR opens on a failed demo');
+    assert.ok(!tracker.calls.includes('runAdversarialReview'), 'no review on a failed integrate run');
+    assert.ok(!tracker.calls.includes('openPrInline'), 'no PR opens on a failed integrate run');
   });
 
   it('R4-10-F2: a RED merge-boundary full-suite gate opens NO PR — compiles a gate-fix WI + stamps send-back, terminates to ready-for-review', async () => {
@@ -591,15 +591,15 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
         tracker.calls.push('runMergeBoundaryGate');
         return { ok: false, failedGate: 'local', cmd: ['npm', 'test'], output: 'dead-shared-helper: 1 failing' };
       };
-      // NOT a dry run (so the gate-fix compiler + closure run); the demo node's
+      // NOT a dry run (so the gate-fix compiler + closure run); the integrate node's
       // only inbound is wi-branches (git-state — the artifact guard skips it).
       const input = makeInput({ initiativeId: 'INIT-2026-08-02-mg', worktreePath: wt, projectRepoPath: wt, manifestPath, qualityGateCmd: ['npm', 'test'], dryRun: false });
       const logger = makeLogger();
 
       await runFlowT({ flow, input, logger, deps });
 
-      // No demo, no adversarial review, NO PR — a red baseline never merges.
-      assert.ok(!tracker.calls.includes('runIntegrate'), 'demo does not run on a red merge-gate');
+      // No integrate, no adversarial review, NO PR — a red baseline never merges.
+      assert.ok(!tracker.calls.includes('runIntegrate'), 'integrate does not run on a red merge-gate');
       assert.ok(!tracker.calls.includes('runAdversarialReview'), 'adversarial review does not run on a red merge-gate');
       assert.ok(!tracker.calls.includes('openPrInline'), 'NO PR opens on a red full-suite baseline (the preserved invariant)');
       assert.ok(tracker.calls.includes('runClosure'), 'closure runs — routes the manifest to ready-for-review for the drain');
@@ -609,13 +609,13 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
       assert.equal(gateFix.length, 1, 'one gate-fix WI compiled from the red gate');
       assert.equal(parseManifest(readFileSync(manifestPath, 'utf8')).resume_from, 'develop', 'manifest stamped resume_from:develop');
 
-      // The demo node's terminal 'end' carries status:'failed' so its hex renders
-      // failed/blocked, NOT the green 'complete' of a real demo (the demo never ran).
-      const demoEnd = (logger.events as Array<Record<string, unknown>>).find(
+      // The integrate node's terminal 'end' carries status:'failed' so its hex renders
+      // failed/blocked, NOT the green 'complete' of a real integrate run (it never ran).
+      const integrateEnd = (logger.events as Array<Record<string, unknown>>).find(
         (e) => e.event_type === 'end' && (e.metadata as Record<string, unknown>)?.agent_slug === 'demo-agent',
       );
-      assert.ok(demoEnd, 'the demo node emits a terminal end on a gate-red');
-      assert.equal((demoEnd!.metadata as Record<string, unknown>).status, 'failed', 'gate-red demo hex is NOT rendered green/complete');
+      assert.ok(integrateEnd, 'the integrate node emits a terminal end on a gate-red');
+      assert.equal((integrateEnd!.metadata as Record<string, unknown>).status, 'failed', 'gate-red integrate hex is NOT rendered green/complete');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -115,7 +115,12 @@ steps leaves the reviewer approving blind.
 ### skills (required: ≥ 1 bound skill slug)
 
 Skill slugs bound to this project. Forge uses bound skills as the palette when
-generating agent prompts and when the flow engine selects tools. A project with
+generating agent prompts and when the flow engine selects tools. Since ADR 024
+item 90, a declared skill is not just a preflight-checked fact: `loadDeclaredSkills`
+reads every one's `SKILL.md` (project-local or forge-wide) and both spawn builders
+(`runAgent`'s one-shot path, the dev-loop's per-WI Ralph) fold the text into the
+system prompt of **every** agent that runs on the project — a declared id that
+doesn't resolve throws rather than silently dropping the binding. A project with
 no bound skills relies on forge's defaults; the UI requires ≥ 1 explicit binding
 to confirm the operator has thought about the project's tooling surface.
 
@@ -318,17 +323,32 @@ Forge commits with `git add -A`; the project's `.gitignore` is the sole guard.
 
 Three categories must be covered:
 
-1. **Forge scratch:** `.forge/work-items/`, `AGENT.md`, `PROMPT.md`, `fix_plan.md`
-   must be untracked *and* ignored (git-truth check: `git ls-files
-   --error-unmatch` + `git check-ignore -q`; a *directory* scratch path is
-   probed via a sentinel child so a dir-only ignore pattern like
+1. **Forge scratch:** `.forge/work-items/`, `.forge/.create-complete`,
+   `.forge/live-evidence/`, `.forge/preflight.json`, `AGENT.md`, `PROMPT.md`,
+   `fix_plan.md` must be untracked *and* ignored (git-truth check: `git
+   ls-files --error-unmatch` + `git check-ignore -q`; a *directory* scratch
+   path is probed via a sentinel child so a dir-only ignore pattern like
    `.forge/work-items/` counts before the dir exists — the pattern will
-   ignore it the moment the dev-loop creates it).
+   ignore it the moment the dev-loop creates it). `.forge/live-evidence/`
+   (acceptance-test read-backs) and `.forge/preflight.json` (preflight
+   output) joined this list under operator item 92, once item 92 itself
+   retired the blanket `.forge/` ignore projects used to carry — see
+   `SCRATCH_PATHS` in `packages/projects/preflight-repo.ts` for the single
+   source and why a third runtime output, `.forge/demo/` (the Studio
+   demo-builder's own machinery), is deliberately NOT on this list: the demo-builder commits it (operator ruling, M7).
 2. **Build artifacts and generated outputs:** compiled binaries, `dist/`,
    coverage, graph caches — anything a build writes that isn't source.
-3. **Force-tracked contract config:** `.forge/project.json` lives inside the
-   ignored `.forge/` dir and must be explicitly tracked despite the ignore
-   (`git add --force .forge/project.json`).
+3. **Tracked contract config, never ignored:** `.forge/project.json`, the
+   `.forge/quality_gate_cmd` sidecar, and `.forge/skills/` — `TRACKED_CONFIG_PATHS`,
+   the one single source `preflight-repo.ts` and `pr-branch-sync.ts`'s
+   scratch-strip both read — are the canonical, checked-in home for a
+   project's contract, its local gate command, and its project-local skills
+   (operator ruling 92, bead forge-8vfn.8.1.2) — `.forge/` itself must NOT be
+   ignored wholesale. The check is the inverse of category 1's: the same
+   git-truth probe, but a VIOLATION if `git check-ignore -q` reports any of
+   the three as ignored (a blanket `.forge/` line silently drops all of them
+   from every commit and every `git clone`). None need `git add --force` —
+   they were never ignored in the first place.
 
 The check uses **git-truth** — a `.gitignore` entry is a no-op on
 already-tracked files.
@@ -647,8 +667,13 @@ retain the default `"."` (no migration required).
 - `_architect/` — architect session state
 - `demo/<initiative-id>/` — demo output written during the demo-agent run
 - `.forge/work-items/` — per-cycle PM output
+- `.forge/.create-complete` — the onboarding/create completion marker
+- `.forge/live-evidence/` — acceptance-test read-backs (operator item 92)
+- `.forge/preflight.json` — preflight output (operator item 92)
 
 These are excluded by the project's `.gitignore` (C2 enforces this).
+`.forge/project.json` and `.forge/skills/` are the opposite case — tracked
+contract config C2 requires **not** be ignored (see C2 above).
 
 ---
 
@@ -680,7 +705,7 @@ consistently locatable; the durable plan/verdict record is forge-owned and centr
 > the [ADR-036 amendment](../decisions/036-orchestrator-owned-gate-execution.md)
 > (APPROVED 2026-07-24), and this spec is now live: `runMergeBoundaryGate`
 > (`packages/flows/cycle-helpers.ts`) runs the full-suite gate at the develop
-> flow's merge boundary — inside the integrate band (`execDemo`, in
+> flow's merge boundary — inside the integrate band (`execIntegrate`, in
 > `packages/factory/phases/executor-table.ts` since M2-B),
 > BEFORE integrate runs, on the integrated branch tip. A red baseline compiles a
 > `gate-fix` work item (`packages/flows/gate-fix-loop.ts`) + stamps the send-back,
@@ -792,7 +817,7 @@ flow-ready — the flow engine will not accept it.
 | skills | `forge-onboard-project`, `demo` |
 | kb | `betterado` (Brain 3 at `brain/projects/betterado/` in the central forge repo) |
 | **C1 / C1b** | `testProcess.local.cmd` (via the `.forge/quality_gate_cmd` sidecar): `go test -tags all -count=1 ./...` scoped to changed packages. `testProcess.ci.cmd`: `make test && golangci-lint run ./... && make terrafmt-check`. `testProcess.ci.fixCmd`: `make fmt && make terrafmt` |
-| **C2** | `.gitignore` covers `.forge/work-items/`, compiled provider binary, `*.tfstate`, `.terraform/`. `.forge/project.json` force-tracked |
+| **C2** | `.gitignore` covers `.forge/work-items/`, `.forge/.create-complete`, compiled provider binary, `*.tfstate`, `.terraform/`. `.forge/project.json`, `.forge/quality_gate_cmd`, and `.forge/skills/` stay trackable — never a blanket `.forge/` ignore |
 | **C4** | `roadmap.md` at project root. Brain seeded with `profile.md`, release substrate context, failure-mode themes |
 | C5 | `CLAUDE.md`: never run `go build ./...`, never edit tests to pass, user owns git |
 | C6 | GitHub remote at `parsoFish/terraform-provider-betterado` |

@@ -36,7 +36,11 @@
 #       --skill openable from the lane's tree · the prompt carries `flock <campaign>/.suite-lock`
 #       · the MCP config declares no tokensave · with --branch, the worktree ~/forge-<lane> is cut
 #       from LANES_BASE_REF (parsoFish/main), installed into, and its kernel link proven to be its
-#       own — else the worktree is removed again.
+#       own — else the worktree is removed again. Also prints five advisory WARN lines (never a
+#       refusal — M7 findings rows 5b/18b/19b/40/71): foreign residents >256 MB RSS on the host,
+#       an active earlyoom's kill thresholds, whether github.com resolves, whether the resolved
+#       CLI is newer than ~/.claude.json's lastOnboardingVersion, and whether T1's cross-session
+#       socket sits under /tmp or is already unlinked. See `lanes.sh preflight`.
 #       Start tmux forge-<lane> in DIR (default /home/parso/forge), pane piped to
 #       <campaign-dir>/heartbeat/<lane>.tmux.log, run the named claude session with the lane
 #       protocol appended to its system prompt (lane-protocol.md) and the AskUserQuestion block
@@ -56,10 +60,14 @@
 #                                    STALL flag · LANE_GONE · LANE_EXITED · LANE_BLOCKED (status
 #                                    `waiting`, with waitingFor) · LANE_IDLE (idle + heartbeat
 #                                    > 10 min: the relay hole).
+#   lanes.sh preflight [--t1 NAME]   The five advisory WARN lines `launch` prints, standalone and
+#                                    without tmux — for planting a red and reading it directly.
 # Env: LANES_MODEL (opus) · LANES_PERMISSION_MODE (auto) · LANES_CWD (/home/parso/forge) ·
 #      LANES_T1 · LANES_CLAUDE_BIN · LANES_WORKTREE_ROOT ($HOME) · LANES_CONFIRM_TIMEOUT_S (60) ·
 #      LANES_BASE_REF (parsoFish/main) · LANES_MEM_FLOOR_GIB (4) · LANES_INSTALL_CMD ·
-#      LANES_MEMINFO (the last two are test seams).
+#      LANES_MEMINFO · LANES_PROC_ROOT (/proc) · LANES_DNS_CMD · LANES_CLAUDE_JSON
+#      ($HOME/.claude.json) · LANES_RETIRE_TERM_WAIT_S (10) · LANES_RETIRE_KILL_WAIT_S (10) —
+#      all but the first two pairs are test seams.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -137,13 +145,36 @@ self_chain() {
   done
   printf '%s' "$chain"
 }
-# retire_pid <pid> <why> → TERM, wait <=10s, KILL, verify /proc/<pid> is gone. Prints the pid.
+# wait_dead <pid> <ceiling-s> → poll /proc/<pid> every 0.5s until it is actually gone, or the
+# ceiling elapses. Returns 0 the moment /proc/<pid> disappears, 1 if the ceiling ran out first.
+wait_dead() {
+  local pid="$1" ceiling_s="$2" waited=0 steps
+  steps=$(( ceiling_s * 2 ))
+  while [ "$waited" -lt "$steps" ] && [ -d "/proc/$pid" ]; do sleep 0.5; waited=$((waited + 1)); done
+  [ -d "/proc/$pid" ] && return 1
+  return 0
+}
+# retire_pid <pid> <why> → TERM, wait for it to actually exit (bounded), KILL, wait again
+# (bounded), verify /proc/<pid> is gone. Prints the pid.
+#
+# scripts/lanes.test.ts:311 (register row F3). The KILL branch used to be `kill -KILL; sleep 1` —
+# one fixed second, then a SINGLE check, never revisited. SIGTERM/SIGKILL land on the target
+# near-instantly regardless of host load; what load actually delays is the REAPER — a killed
+# process stays a zombie in /proc until its parent (often a subreaper such as PID 1, once the
+# lane's own tmux/bash tree is gone) is scheduled to call wait() on it, and a starved reaper can
+# miss a fixed 1 s window the same way `waitGone`'s window, further downstream in the test, can
+# be missed. The fix is the same shape on both ends of that gap: this function now POLLS for the
+# actual exit after KILL too, instead of a blind sleep-then-check, bounded by a generous ceiling
+# that is not the thing being tested (LANES_RETIRE_KILL_WAIT_S, default 10s — matching the
+# pre-existing TERM wait, now LANES_RETIRE_TERM_WAIT_S and factored into wait_dead() so both
+# waits share one implementation).
 retire_pid() {
   local pid="$1" why="$2"
   kill -TERM "$pid" 2>/dev/null || true
-  local waited=0
-  while [ "$waited" -lt 20 ] && [ -d "/proc/$pid" ]; do sleep 0.5; waited=$((waited + 1)); done
-  if [ -d "/proc/$pid" ]; then kill -KILL "$pid" 2>/dev/null || true; sleep 1; fi
+  if ! wait_dead "$pid" "${LANES_RETIRE_TERM_WAIT_S:-10}"; then
+    kill -KILL "$pid" 2>/dev/null || true
+    wait_dead "$pid" "${LANES_RETIRE_KILL_WAIT_S:-10}" || true
+  fi
   if [ -d "/proc/$pid" ]; then echo "COULD NOT RETIRE pid $pid ($why) — still alive after TERM+KILL" >&2; return 1; fi
   echo "retired pid $pid ($why)"
 }
@@ -402,6 +433,220 @@ die_launch() {
   die "$msg"
 }
 
+# --- advisory preflight checks (WARN only, never refuse) — M7 findings-table rows 5b, 18b, 19b, --
+# 40, 71 (`_1.0/rulings/M7-brief-findings.md`). Each is a rule a human used to carry in their head;
+# each prints exactly one line into the preflight summary and never calls `die` — a launch that
+# used to succeed keeps succeeding with every one of these five tripped at once
+# (lanes-preflight.test.ts). `cmd_preflight` below runs the same five outside `launch`, so a red
+# can be planted and read without tmux.
+
+# _ancestors_at <root> <pid> → that pid and every ancestor up to init, reading <root> instead of
+# the hardcoded /proc that self_chain()/proc_cwd() use — the seam (LANES_PROC_ROOT) that makes
+# rows 5b and 71 plantable without a real host tree. Bounded at 50 hops: a broken chain must stop,
+# not spin.
+#
+# Under `set -euo pipefail`, EVERY command substitution below carries a trailing `|| true`: a pid
+# this walks (or a foreign one `preflight_foreign_residents` reads status/comm/cwd for) can exit
+# mid-scan, and with `pipefail` a vanished-file read's non-zero status — even inside a pipeline
+# whose later stage succeeds on empty input — kills the whole script with no die() message and no
+# stderr (measured live: every existing `lanes.test.ts` launch test went from green to a bare
+# `status 1, empty stderr` the moment this file's checks started scanning the REAL, busy /proc).
+# These five rows are WARN-only by the brief; a check that can abort a launch is not WARN-only.
+_ancestors_at() {
+  local root="$1" pid="$2" n=0 ppid
+  while [ -n "$pid" ] && [ "$pid" != "0" ] && [ "$n" -lt 50 ]; do
+    printf '%s ' "$pid"
+    [ -r "$root/$pid/stat" ] || break
+    ppid="$(sed 's/.*) //' "$root/$pid/stat" 2>/dev/null | awk '{print $2}' || true)"
+    [ -n "$ppid" ] && [ "$ppid" != "$pid" ] || break
+    pid="$ppid"; n=$((n + 1))
+  done
+}
+
+# row 5b — FOREIGN RESIDENTS. Every process >256 MB RSS under LANES_PROC_ROOT that is neither this
+# shell's own session (self_chain — always the REAL host; the launching shell is a fact, not a
+# seam) nor a descendant of a pid the roster names (a known lane or T1 claude session). WARN only,
+# naming pid/comm/RSS/cwd for each — a launch is not the place to referee a host's other tenants,
+# only to name them (the addendum's clickhouse-server, 0.5 GB, resident during the M7 campaign).
+preflight_foreign_residents() {
+  local root="${LANES_PROC_ROOT:-/proc}" floor_kb=262144
+  local self roster_pids pdir p rss comm cwd anc a known line
+  self=" $(self_chain) "
+  roster_pids=" $(roster | python3 -c '
+import json, sys
+print(" ".join(str(a["pid"]) for a in json.load(sys.stdin) if a.get("pid") is not None))' 2>/dev/null || true) "
+  line=""
+  for pdir in "$root"/[0-9]*; do
+    [ -d "$pdir" ] || continue
+    p="${pdir##*/}"
+    [ -r "$pdir/status" ] || continue
+    rss="$(awk '/^VmRSS:/{print $2}' "$pdir/status" 2>/dev/null || true)"
+    case "$rss" in ''|*[!0-9]*) continue ;; esac
+    [ "$rss" -gt "$floor_kb" ] || continue
+    anc=" $(_ancestors_at "$root" "$p" || true) "
+    known=0
+    for a in $anc; do
+      case "$self" in *" $a "*) known=1; break ;; esac
+      case "$roster_pids" in *" $a "*) known=1; break ;; esac
+    done
+    [ "$known" = 1 ] && continue
+    # cwd is the one most likely to fail here: /proc/<pid>/cwd needs ptrace-equivalent access, so
+    # a foreign process owned by another user (root's, say) refuses it with EACCES — exactly the
+    # tenant this row exists to name, and exactly the read that must not be allowed to take the
+    # whole preflight down for asking.
+    comm="$(tr -d '\0\n' < "$pdir/comm" 2>/dev/null || true)"; comm="${comm:-?}"
+    cwd="$(readlink "$pdir/cwd" 2>/dev/null || true)"; cwd="${cwd:-?}"
+    line="${line}${line:+; }$comm(pid $p, ${rss}kB, cwd $cwd)"
+  done
+  if [ -n "$line" ]; then
+    echo "preflight WARN: FOREIGN RESIDENTS >256MB RSS, not this session or a known lane: $line"
+  else
+    echo "preflight: no foreign residents >256MB RSS"
+  fi
+}
+
+# row 18b — EARLYOOM. If one runs, print the level at which it starts killing, so a lane can plan
+# its memory budget around a floor it did not choose — an unnamed -m/-s means the compiled-in
+# defaults, not "no policy" (earlyoom is the candidate the M7 brief names for an unexplained
+# same-instant triple kill).
+preflight_earlyoom() {
+  local root="${LANES_PROC_ROOT:-/proc}" pdir p comm cmdline tok prev m="" s=""
+  for pdir in "$root"/[0-9]*; do
+    [ -d "$pdir" ] || continue
+    p="${pdir##*/}"
+    comm="$(tr -d '\0\n' < "$pdir/comm" 2>/dev/null || true)"
+    [ "$comm" = earlyoom ] || continue
+    cmdline="$(tr '\0' ' ' < "$pdir/cmdline" 2>/dev/null || true)"
+    prev=""
+    for tok in $cmdline; do
+      case "$prev" in -m) m="$tok" ;; -s) s="$tok" ;; esac
+      prev="$tok"
+    done
+    echo "preflight: earlyoom running (pid $p), kill thresholds -m ${m:-defaults} -s ${s:-defaults}"
+    return 0
+  done
+  echo "preflight: earlyoom not running — no host-level kill floor to plan around"
+}
+
+# row 19b — DNS. `getent hosts` is a name lookup, deliberately probed apart from the API
+# reachability this preflight otherwise leaves alone — a resolver outage and a network outage
+# look identical to a lane until one is named. Seam: LANES_DNS_CMD (bounded itself, in production,
+# by the same `timeout 5` the default carries).
+preflight_dns() {
+  local cmd="${LANES_DNS_CMD:-timeout 5 getent hosts github.com}"
+  if eval "$cmd" >/dev/null 2>&1; then
+    echo "preflight: DNS github.com resolves"
+  else
+    echo "preflight WARN: DNS: github.com does not resolve — pushes and gh reads will fail transiently"
+  fi
+}
+
+# row 40 — CLI VERSION. The resolved CLI's own --version against ~/.claude.json's
+# lastOnboardingVersion: M7 lost a funded spawn to a terms banner that flipped from advisory to
+# blocking after an update the onboarding record never caught up to. <bin> defaults the way
+# `cmd_launch` derives it, so a bare `lanes.sh preflight` reads the same binary a launch would;
+# `cmd_launch` passes its own already-resolved $bin so the two never disagree.
+preflight_cli_version() {
+  local bin="${1:-${LANES_CLAUDE_BIN:-$(command -v claude || true)}}"
+  local claude_json="${2:-${LANES_CLAUDE_JSON:-$HOME/.claude.json}}"
+  local cli_version onboarding
+  [ -n "$bin" ] || { echo "preflight WARN: CLI VERSION: no claude binary resolved to check"; return 0; }
+  # `timeout` itself exits 124/127 on a bound miss or a bad binary; under pipefail that status
+  # outranks `head`/`awk` succeeding on the empty input that follows — `|| true` is load-bearing.
+  cli_version="$(timeout 5 "$bin" --version 2>/dev/null | head -1 | awk '{print $1}' || true)"
+  [ -n "$cli_version" ] || { echo "preflight WARN: CLI VERSION: '$bin --version' produced nothing in 5s"; return 0; }
+  onboarding="$(python3 -c '
+import json, sys
+try:
+    print(json.load(open(sys.argv[1])).get("lastOnboardingVersion", ""))
+except Exception:
+    print("")' "$claude_json" 2>/dev/null || true)"
+  if [ -z "$onboarding" ]; then
+    echo "preflight: CLI $cli_version (no lastOnboardingVersion recorded at $claude_json)"
+  elif [ "$onboarding" != "$cli_version" ] \
+    && [ "$(printf '%s\n%s\n' "$onboarding" "$cli_version" | sort -V | head -1 || true)" = "$onboarding" ]; then
+    echo "preflight WARN: CLI VERSION: lastOnboardingVersion $onboarding is older than the resolved CLI $cli_version — a terms banner can flip to blocking after an update (M6)"
+  else
+    echo "preflight: CLI $cli_version, lastOnboardingVersion $onboarding is current"
+  fi
+}
+
+# row 71 — T1 SOCKET. The lane protocol's SendMessage depends on T1's cross-session unix socket;
+# systemd-tmpfiles-clean unlinked one under /tmp and every lane's PARK to T1 failed silently for
+# ~40 min (ledger 1203). Reads T1's fd table and /proc/net/unix under LANES_PROC_ROOT — never a
+# tool — so a fake tree plants the red without a live socket. <t1name> defaults to t1_name()
+# (this shell's own claude ancestor), same as `cmd_launch`.
+preflight_t1_socket() {
+  local root="${LANES_PROC_ROOT:-/proc}" t1name="${1:-}" t1pid fdlink tgt ino inodes=""
+  local unixfile line linode path=""
+  [ -n "$t1name" ] || t1name="$(t1_name)"
+  if [ -z "$t1name" ]; then echo "preflight: T1 SOCKET: could not resolve T1's session name — skipped"; return 0; fi
+  t1pid="$(roster_pid "$t1name")"
+  if [ -z "$t1pid" ]; then echo "preflight: T1 SOCKET: no pid in the roster for T1 session '$t1name' — skipped"; return 0; fi
+  if [ -d "$root/$t1pid/fd" ]; then
+    for fdlink in "$root/$t1pid/fd"/*; do
+      # `-e` follows the link and asks whether ITS TARGET exists — for a socket fd the target is
+      # the string "socket:[<inode>]", never a real path, so `-e` is false for every socket fd
+      # there is. `-L` asks about the symlink itself, which /proc always populates for an open fd.
+      [ -L "$fdlink" ] || continue
+      tgt="$(readlink "$fdlink" 2>/dev/null || true)"
+      case "$tgt" in
+        socket:\[*) ino="${tgt#socket:[}"; ino="${ino%]}"; inodes="$inodes $ino" ;;
+      esac
+    done
+  fi
+  unixfile="$root/net/unix"
+  if [ -n "$inodes" ] && [ -f "$unixfile" ]; then
+    while IFS= read -r line; do
+      case "$line" in Num*) continue ;; esac
+      linode="$(printf '%s' "$line" | awk '{print $7}' || true)"
+      case " $inodes " in
+        *" $linode "*)
+          path="$(printf '%s' "$line" | awk '{ for (i = 8; i <= NF; i++) printf (i > 8 ? " " : "") $i }' || true)"
+          [ -n "$path" ] && break ;;
+      esac
+    done < "$unixfile"
+  fi
+  if [ -z "$path" ]; then
+    echo "preflight: T1 SOCKET: no named listening unix socket found for T1 pid $t1pid — SendMessage path unverified"
+    return 0
+  fi
+  case "$path" in
+    /tmp/*)
+      echo "preflight WARN: T1 unreachable by SendMessage: its socket $path is unlinked / under /tmp (tmpfiles-clean) — use the outbox" ;;
+    *)
+      if [ -e "$path" ]; then
+        echo "preflight: T1 socket $path ok (outside /tmp, present on disk)"
+      else
+        echo "preflight WARN: T1 unreachable by SendMessage: its socket $path is unlinked / under /tmp (tmpfiles-clean) — use the outbox"
+      fi
+      ;;
+  esac
+}
+
+# The five above, in findings-table order — run by `launch` (passing what it already resolved) and
+# by `preflight` (resolving its own). Never refuses: no line here may call `die`.
+preflight_advisory_lines() {
+  local t1="${1:-}" bin="${2:-}" claude_json="${3:-}"
+  preflight_foreign_residents
+  preflight_earlyoom
+  preflight_dns
+  preflight_cli_version "$bin" "$claude_json"
+  preflight_t1_socket "$t1"
+}
+
+cmd_preflight() {
+  local t1=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --t1) t1="$2"; shift 2 ;;
+      *) die "unknown flag $1 (usage: lanes.sh preflight [--t1 NAME])" ;;
+    esac
+  done
+  echo "== advisory preflight (WARN only; M7 findings rows 5b, 18b, 19b, 40, 71) =="
+  preflight_advisory_lines "$t1"
+}
+
 cmd_launch() {
   local camp="$1" lane="$2" prompt="$3"; shift 3
   local model="${LANES_MODEL:-opus}" pm="${LANES_PERMISSION_MODE:-auto}" cwd="$REPO" t1="" attended=0 open=0
@@ -467,6 +712,12 @@ cmd_launch() {
       "$(awk -v k="$mem_kb" 'BEGIN{print k/1048576}')" "$LANES_MEM_FLOOR_GIB")"
   fi
 
+  # (a2) advisory host checks — WARN only, never refuse (M7 findings rows 5b, 18b, 19b, 40, 71).
+  # None of these five may turn a launch that used to succeed into one that doesn't; each is one
+  # line in this summary (lanes-preflight.test.ts trips all five at once and asserts the launch
+  # still reaches the roster-confirm step).
+  preflight_advisory_lines "$t1" "$bin"
+
   # (c) the rendered prompt must carry the campaign's suite lock. A lane that never saw the line
   # runs its suite outside the lock (COMMON §1), and nothing downstream can tell.
   require_lockline "$camp" "$prompt" "the rendered prompt $prompt"
@@ -529,9 +780,15 @@ cmd_launch() {
   # honest "not configured" line rather than a silent non-exclusion.
   tmux send-keys -t "$s" "LANES_LANE='$lane' LANES_T1='$t1' FORGE_SUITE_LOCK='$camp/.suite-lock' FORGE_RUN_LOCK='$camp/.run-lock' FORGE_CLAUDE_CLI='$cli' $bin -n '$s' --session-id $sid --model $model --permission-mode $pm $settings --strict-mcp-config --mcp-config '$mcp' --append-system-prompt \"\$(cat '$proto')\" \"\$(cat '$prompt')\"; exit" Enter
   # Confirmed by effect: Claude Code lists the session. A pane showing text proves nothing.
+  #
+  # scripts/lanes.test.ts:528 (register row "lanes.test.ts:528" — roster-confirm window missed
+  # under load). A 2 s poll spends up to 2 s of every window as dead time: a registration that
+  # lands between two checks, including one that lands just before the deadline, is caught only
+  # if a poll happens to fall after it. Poll at the same granularity retire_pid's wait_dead()
+  # uses (0.5 s) so the window is spent watching for the event, not sleeping past it.
   local deadline=$(( $(date +%s) + ${LANES_CONFIRM_TIMEOUT_S:-60} )) row=""
   while [ "$(date +%s)" -lt "$deadline" ]; do
-    row="$(roster_row "$s")"; [ -n "$row" ] && break; sleep 2
+    row="$(roster_row "$s")"; [ -n "$row" ] && break; sleep 0.5
   done
   if [ -z "$row" ]; then
     # No row at all is ALSO the trust-dialog state, measured 2026-09-04: a lane launched into a
@@ -696,6 +953,7 @@ case "${1:-}" in
   kill)   shift; cmd_kill "$@" ;;
   reap)   shift; cmd_reap "$@" ;;
   events) shift; cmd_events "$@" ;;
+  preflight) shift; cmd_preflight "$@" ;;
   # 7.6.105 — the honest start time the census uses, exposed so it can be doored and so a
   # human can check a pid's age without trusting a directory timestamp.
   # 1043 — the census's own clock, exposed: centiseconds since boot for a pid, and `uptime`

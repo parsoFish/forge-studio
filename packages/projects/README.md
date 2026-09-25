@@ -16,12 +16,12 @@ are the **legacy** door, kept working and not recommended for new code.
 `contract.test.ts` asserts this list against what the index actually exports, in
 both directions, and is required to FAIL against an empty index.
 
-### Values (30)
+### Values (31)
 
 | area | exports |
 |---|---|
 | config | `loadProjectConfig` · `readAgentInstructionsFile` · `resolveProjectIdForRepo` |
-| preflight | `runPreflight` · `formatPreflightReport` · `buildVerdictEvent` · `SCRATCH_PATHS` · `SCAFFOLD_BUILD_OUTPUT_IGNORES` · `runContractComplianceLoop` · `formatComplianceReport` |
+| preflight | `runPreflight` · `formatPreflightReport` · `buildVerdictEvent` · `SCRATCH_PATHS` · `TRACKED_CONFIG_PATHS` · `SCAFFOLD_BUILD_OUTPUT_IGNORES` · `runContractComplianceLoop` · `formatComplianceReport` |
 | contract stages | `deriveContractStages` · `resolveContainedProjectDir` |
 | create | `scaffoldGreenfieldProject` · `listProjectStarters` · `projectStartersDir` |
 | repo transactions | `ensureStudioBranch` · `commitStudioChange` · `withStudioWrite` |
@@ -50,6 +50,16 @@ three evidenced write-path functions. `routes.ts`'s `ProjectsRouteDeps` type is 
 only by this package's own contract test, not by its one real caller
 (`apps/forge/routes.ts` supplies the deps as an inline object literal). None of
 these are hidden — `design.md` names every one and why.
+
+## Declared skills reach the agent, not just preflight
+
+`preflight-skills.ts`'s `loadDeclaredSkills(projectDir, forgeRoot)` is the read half of
+the SKILLS clause `checkSkills` only ever checked EXISTENCE for (ADR 024 item 90):
+both resolve through the same `resolveDeclaredSkillPath`, but the loader also reads
+each `SKILL.md`'s content and THROWS `MissingDeclaredSkillError` on a declared id that
+doesn't resolve, so `@forge/agents`'s two spawn builders can fold the text into every
+agent's system prompt instead of it being a fact preflight confirms and nothing else
+reads.
 
 ## What it owns
 

@@ -70,19 +70,13 @@
  * S2 beat 10's shape instead: it acts on the page it is standing on and binds
  * the session id there.
  *
- * THE WORD `integrate`, AND WHY THIS FILE DOES NOT USE IT. 1.0.md's spec calls
- * the band `integrate`; ruling 383 renames `demo` → `integrate` across the
- * product as a lane-C filler. TODAY THAT WORD DOES NOT EXIST IN THE PRODUCT: a
- * case-insensitive search of `apps/studio` for `integrat*` finds only unrelated
- * English, and the live vocabulary is `demo-band` / `review-band`
- * (`lib/studio-client.ts:645-654`, confirmed live in `studio-client.test.ts`
- * :1343) with node ids `dev` · `demo` · `adversarial-review` · `review`
- * (`lib/flow-run-detail-render.test.ts:104-109`). A beat asserting a value the
- * product does not carry is red forever (§15.175/178/201), so beat 10 asserts
- * `demo` — the truth today — and the 383 PR must amend this beat in the SAME
- * PR that performs the rename (§15.183/204: a class fix goes to every beat that
- * carries it, in one amendment). This comment is the pointer that makes that
- * amendment findable.
+ * THE WORD `integrate`. 1.0.md's spec calls the band `integrate`, and operator
+ * item 85 renamed `demo` → `integrate` across the product with no alias. The
+ * live vocabulary is now `integrate-band` / `review-band`, with node ids `dev`
+ * · `integrate` · `adversarial-review` · `review`. Beat 10 asserts
+ * `integrate`; it was amended in the SAME PR that performed the rename
+ * (§15.183/204: a class fix goes to every beat that carries it, in one
+ * amendment), so the story never asserted a value the product did not carry.
  *
  * ONE PRODUCT FINDING, RECORDED HERE AND IN `_1.0/stories/S10.md`. The same
  * destructive act has TWO different confirmation contracts. On the run-detail
@@ -727,19 +721,15 @@ export default {
       say: 'The dev station fans out over the work items the plan decomposed into. Each row on the timeline is a station with its own status and its own cost, so "what is it doing and what has it spent" is one screen, not an investigation.',
     },
     {
-      // SOURCE-DERIVED — AND THE VALUE IS THE ONE RULING 383 RENAMES.
-      // Today the node is `demo`: `lib/flow-run-detail-render.test.ts:104-109`
-      // lists the real `forge-develop` node ids as dev · demo ·
-      // adversarial-review · review, and a case-insensitive search of
-      // `apps/studio` for `integrat*` finds NO product use. The spec's word is
-      // `integrate`, and 383 makes that rename a lane-C filler. This beat
-      // asserts what the product carries TODAY, because a beat asserting a
-      // value the product does not carry is red forever (§15.175/178/201); the
-      // 383 PR amends it in the same PR that renames the band (§15.183/204).
+      // SOURCE-DERIVED. The `forge-develop` node ids are dev · integrate ·
+      // adversarial-review · review (`lib/flow-run-detail-render.test.ts`). The
+      // node was `demo` until operator item 85 renamed it; this beat was
+      // amended in the same PR as the rename (§15.183/204), so it asserts the
+      // value the product carries (§15.175/178/201).
       act: 'The built work is assembled for review',
       expect: {
         route: '/flows/forge-develop/run/<cycleId>',
-        data: { page: 'flow-run', 'timeline-row': 'true', 'node-id': 'demo', 'status': 'complete' /* §15.473: the row exists for an untouched node too */ },
+        data: { page: 'flow-run', 'timeline-row': 'true', 'node-id': 'integrate', 'status': 'complete' /* §15.473: the row exists for an untouched node too */ },
       },
       say: 'Between building and judging there is a step that puts the change together with the evidence for it — the diff, the acceptance criteria and what was actually demonstrated. The reviewer reads that, not a pile of commits.',
     },

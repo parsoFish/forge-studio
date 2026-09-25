@@ -27,7 +27,7 @@ import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
-import { runPreflight, type ClauseId } from '../../preflight.ts';
+import { runPreflight, SCRATCH_PATHS, type ClauseId } from '../../preflight.ts';
 import { checkSkills } from '../../preflight-skills.ts';
 import { loadProjectConfig } from '../../project-config.ts';
 
@@ -47,7 +47,7 @@ function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void }
   );
   writeFileSync(
     join(dir, '.gitignore'),
-    ['node_modules/', 'dist/', '.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n'),
+    ['node_modules/', 'dist/', ...SCRATCH_PATHS].join('\n'),
   );
   writeFileSync(join(dir, 'roadmap.md'), '# Roadmap\n');
   // C8 coverage (R1-04-F1): the instruction file mentions the declared gate command.
@@ -92,6 +92,15 @@ function declareSkills(dir: string, skills: string[]): void {
   const cfgPath = join(dir, '.forge', 'project.json');
   const raw = JSON.parse(readFileSync(cfgPath, 'utf8')) as Record<string, unknown>;
   raw.skills = skills;
+  writeFileSync(cfgPath, JSON.stringify(raw));
+}
+
+/** Merge `artifactRoot` into an already-written `.forge/project.json` — same
+ *  layering pattern as `declareSkills`. */
+function declareArtifactRoot(dir: string, artifactRoot: string): void {
+  const cfgPath = join(dir, '.forge', 'project.json');
+  const raw = JSON.parse(readFileSync(cfgPath, 'utf8')) as Record<string, unknown>;
+  raw.artifactRoot = artifactRoot;
   writeFileSync(cfgPath, JSON.stringify(raw));
 }
 
@@ -178,6 +187,34 @@ test('SKILLS (HARD): a mix of one resolving + one dead id still fails the clause
     assert.equal(clause(r, 'SKILLS').pass, false);
     assert.match(clause(r, 'SKILLS').detail, /1 of 2/);
     assert.doesNotMatch(clause(r, 'SKILLS').detail, /reflector/, 'the resolved id must not be named among the missing ones');
+    assert.match(clause(r, 'SKILLS').detail, /ghost-skill/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('SKILLS (HARD): a declared id that resolves ONLY under a non-default artifactRoot (<artifactRoot>/skills/<id>/SKILL.md) — the exact terraform-provider-betterado shape (M7 findings row 21) — passes', () => {
+  const p = happyProject();
+  try {
+    declareSkills(p.dir, ['ado-api-explorer']);
+    declareArtifactRoot(p.dir, 'forge');
+    mkdirSync(join(p.dir, 'forge', 'skills', 'ado-api-explorer'), { recursive: true });
+    writeFileSync(join(p.dir, 'forge', 'skills', 'ado-api-explorer', 'SKILL.md'), '# ado-api-explorer\n');
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r, 'SKILLS').pass, true, clause(r, 'SKILLS').detail);
+    assert.equal(r.ok, true);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('SKILLS (HARD): a declared id absent from BOTH the canonical location and a non-default artifactRoot still fails, naming the id', () => {
+  const p = happyProject();
+  try {
+    declareSkills(p.dir, ['ghost-skill']);
+    declareArtifactRoot(p.dir, 'forge');
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r, 'SKILLS').pass, false);
     assert.match(clause(r, 'SKILLS').detail, /ghost-skill/);
   } finally {
     p.cleanup();

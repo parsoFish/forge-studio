@@ -141,7 +141,7 @@ test('8: the fold allowlist carries the audited residual rows, folded-token-keye
   const has = (file: string, folded: string) =>
     PROJECTS_ROOT_FOLD_ALLOWLIST.some((r) => r.file === file && r.folded === folded);
   assert.ok(has('apps/forge/cli.ts', 'target'), 'the dual-mode name-or-path residual is audited');
-  assert.ok(has('packages/flows/scheduler.ts', 'm.project'), 'the guarded-downstream residual is audited');
+  assert.ok(has('packages/flows/scheduler-run-one.ts', 'm.project'), 'the guarded-downstream residual is audited');
 });
 
 /**

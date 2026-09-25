@@ -17,7 +17,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { test } from 'node:test';
@@ -106,7 +106,7 @@ function writeManifest(stateDir: string, worktreePath: string): void {
 
 test('isStandaloneBandAgent: only a band-hook node agent that still spawns', () => {
   // `demo-agent` is a declaration carrier since spec §5 item 4 deleted the LLM
-  // demo node — the band it names runs orchestrator-side and there is no turn to
+  // integrate node — the band it names runs orchestrator-side and there is no turn to
   // re-run, so it is refused here exactly as `contract-check` always has been.
   assert.equal(isStandaloneBandAgent('demo-agent'), false);
   assert.equal(isStandaloneBandAgent('contract-check'), false);
@@ -180,6 +180,38 @@ test('runBandAgentStandalone: a worktree outside the forge roots is refused', as
     }
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('runBandAgentStandalone: a manifest reached only via a symlink escaping the queue dir is refused, not followed (bead 8vfn.6.7)', async () => {
+  // `resolveInitiativeContext` guards the initiative id's CHARSET
+  // (SAFE_INITIATIVE_RE) but, before the fix, still raw-`join()`s it onto the
+  // queue dir and probes/reads with `existsSync`/`readFileSync` — both of
+  // which follow a symlink. A charset-safe id sitting at a symlinked
+  // `<id>.md` inside the queue dir must still be refused: the containment
+  // invariant has to be held by the guard, not merely by the id regex.
+  const root = mkdtempSync(join(tmpdir(), 'band-run-symlink-'));
+  const outside = mkdtempSync(join(tmpdir(), 'band-run-symlink-outside-'));
+  try {
+    // A well-formed, in-bounds-worktree manifest — but its FILE lives entirely
+    // outside the queue root, so a rejection can only be attributed to the
+    // symlink escape, never to a malformed or out-of-bounds worktree.
+    const wt = join(root, '_worktrees', 'wt');
+    mkdirSync(wt, { recursive: true });
+    writeManifest(outside, wt);
+
+    const readyDir = join(root, '_queue', 'ready-for-review');
+    mkdirSync(readyDir, { recursive: true });
+    symlinkSync(join(outside, `${INIT}.md`), join(readyDir, `${INIT}.md`));
+
+    await assert.rejects(
+      runBandAgentStandalone({ slug: 'adversarial-review', initiativeId: INIT, runId: RUN, forgeRoot: root }, depsWithRecorder().deps),
+      /no runnable manifest for initiative/,
+      'a manifest reachable only through a symlink that escapes the queue dir must never be treated as this initiative\'s own',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
   }
 });
 

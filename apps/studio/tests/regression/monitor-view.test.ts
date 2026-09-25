@@ -17,6 +17,7 @@ import { test, expect } from 'vitest';
 import {
   buildMonitorSummary,
   buildMonitorSummaryTiles,
+  deriveSummaryReady,
   isSessionLive,
   MONITOR_LIVE_ROW_STATUSES,
   MONITOR_FAILED_ROW_STATUSES,
@@ -282,3 +283,24 @@ test('summary.total always equals the row count the surface renders', () => {
  * so the guard cannot be deleted as "dead"; delete them only together with the
  * filter, and only once no producer of a session-kind LedgerRow remains.
  */
+
+// ---------------------------------------------------------------------------
+// forge-6gv.28 — deriveSummaryReady: `data-monitor-ready` (and the counts it
+// vouches for) must not read "settled" while the merged ledger is still
+// missing the standalone-agent half. Both `/monitor` and Home fed
+// `MonitorSummaryStrip`'s `ready` prop from `useStudioHomeData().ready`
+// ALONE — the class fix is a single extra input, never re-derived.
+// ---------------------------------------------------------------------------
+
+test('RED forge-6gv.28: home data ready but the agent-ledger half still loading reads NOT ready', () => {
+  expect(deriveSummaryReady({ homeDataReady: true, agentRowsReady: false })).toBe(false);
+});
+
+test('forge-6gv.28: both halves settled reads ready', () => {
+  expect(deriveSummaryReady({ homeDataReady: true, agentRowsReady: true })).toBe(true);
+});
+
+test('forge-6gv.28: home data itself not ready reads NOT ready, regardless of the agent half', () => {
+  expect(deriveSummaryReady({ homeDataReady: false, agentRowsReady: true })).toBe(false);
+  expect(deriveSummaryReady({ homeDataReady: false, agentRowsReady: false })).toBe(false);
+});

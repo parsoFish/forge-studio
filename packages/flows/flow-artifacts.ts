@@ -15,6 +15,9 @@
  * Path resolution mirrors where the phases actually write:
  *   `_queue/in-flight/<id>.md` → the manifest itself (CycleInput.manifestPath)
  *   `_logs/…`, `_queue/…`       → forge root
+ *   `project/…`                 → the project's own repo root (CycleInput.projectRepoPath),
+ *                                  for artifacts an agent writes directly into the managed
+ *                                  project (e.g. onboarding) rather than a cycle worktree
  *   `.forge/…`, `demo/…`        → the worktree
  * A required file ending in `/` is a directory and must be non-empty.
  *
@@ -36,6 +39,7 @@ import { worktreeDemoRelDir } from './demo-paths.ts';
 export type ArtifactGuardInput = {
   initiativeId: string;
   manifestPath: string;
+  projectRepoPath: string;
   worktreePath: string;
   cycleId?: string;
 };
@@ -72,6 +76,7 @@ export function resolveRequiredFile(rf: string, input: ArtifactGuardInput, forge
     p = p.split('<cycleId>').join(input.cycleId);
   }
   if (p.startsWith('_logs/') || p.startsWith('_queue/')) return resolve(forgeRoot, p);
+  if (p.startsWith('project/')) return resolve(input.projectRepoPath, p.slice('project/'.length));
   return resolve(input.worktreePath, p); // .forge/…, demo/…
 }
 
