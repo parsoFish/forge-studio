@@ -530,7 +530,7 @@ refused=0
 # (a bare flag) — the ALONE-RERUN proof below needs to know it was EXACTLY one
 # FAIL (never a REFUSAL) and which command that was.
 FAIL_COUNT=0
-FAIL_CMD=""
+FAIL_CMD=""; FAIL_LOG=""
 while IFS= read -r cmd; do
   [ -n "$cmd" ] || continue
   name="$(printf '%s' "$cmd" | tr -cs 'A-Za-z0-9' '-' | sed 's/^-//; s/-$//' | cut -c1-60)"
@@ -589,7 +589,7 @@ while IFS= read -r cmd; do
       echo "FAIL  $cmd  ($(secs "$t0"))  → $log"
       fail=1
       FAIL_COUNT=$((FAIL_COUNT + 1))
-      FAIL_CMD="$cmd"
+      FAIL_CMD="$cmd"; FAIL_LOG="$log"
     fi
   fi
 done < <("$0" --list "$R" | sed -n 's/^RUN //p')
@@ -598,7 +598,7 @@ done < <("$0" --list "$R" | sed -n 's/^RUN //p')
 # hand-typed ALONE-RERUN proves nothing). Called only here, after the loop's
 # own final count, so the two can never disagree about what ran.
 if [ -n "${GATE_RERUN_ALONE:-}" ]; then
-  ( cd "$R" && "$HERE/gate-rerun-alone.sh" "$GATE_RERUN_ALONE" "$FAIL_COUNT" "$FAIL_CMD" )
+  ( cd "$R" && "$HERE/gate-rerun-alone.sh" "$GATE_RERUN_ALONE" "$FAIL_COUNT" "$FAIL_CMD" "$FAIL_LOG" )
 fi
 
 echo "== steps this gate did NOT run (named, never silent) =="
