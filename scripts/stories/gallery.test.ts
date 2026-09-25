@@ -115,6 +115,11 @@ test('a story with no beats is not reported green', () => {
  * counts stay on the console summary line, which `run-story.mjs` prints
  * unconditionally.
  */
+// #890 made writeStoryJson hash the story file and read git provenance; these
+// three doors write into a bare temp root that has neither, so they pass
+// #890's own injection seams rather than a story file they do not exercise.
+const NO_PROVENANCE = { readStoryBytes: () => Buffer.from(''), gitSha: () => null, gitDirty: () => null };
+
 test('writeStoryJson carries realGrounds: { moved } through to story.json — no hashed, no trees (forge-8vfn.26 class)', () => {
   const root = mkdtempSync(join(tmpdir(), 'gallery-realgrounds-'));
   writeStoryJson(
@@ -124,6 +129,7 @@ test('writeStoryJson carries realGrounds: { moved } through to story.json — no
       realGrounds: { moved: [] },
     },
     root,
+    NO_PROVENANCE,
   );
   const written = JSON.parse(readFileSync(join(root, 'demos', 'stories', 'S8', 'story.json'), 'utf8'));
   assert.deepEqual(written.realGrounds, { moved: [] });
@@ -140,6 +146,7 @@ test('writeStoryJson does not itself invent hashed/trees on a realGrounds object
   writeStoryJson(
     { story: { id: 'S9', docs: { title: 't' } }, beats: [], realGrounds: { moved: ['x'] } },
     root,
+    NO_PROVENANCE,
   );
   const written = JSON.parse(readFileSync(join(root, 'demos', 'stories', 'S9', 'story.json'), 'utf8'));
   assert.deepEqual(Object.keys(written.realGrounds), ['moved']);
@@ -150,6 +157,7 @@ test('writeStoryJson omits `realGrounds` for a story that never declared it — 
   writeStoryJson(
     { story: { id: 'smoke', docs: { title: 'Find a project from Home' } }, beats: [] },
     root,
+    NO_PROVENANCE,
   );
   const written = JSON.parse(readFileSync(join(root, 'demos', 'stories', 'smoke', 'story.json'), 'utf8'));
   assert.equal('realGrounds' in written, false, 'a story with no realGrounds field must not gain one');

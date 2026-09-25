@@ -9,14 +9,14 @@ components to; none of them needs that project to change.
 `9db91ef5` — extracted with `git archive 9db91ef5 projects/mdtoc`. Method-C digest of `seed/`:
 `bcb1c45a7fe99b04`, equal to the ratified pristine-ground pin of `projects/mdtoc` at that commit.
 
-**Files.** All 19 tracked files of the source, byte-identical:
+**Files.** All 19 tracked files of the source, byte-identical, under `seed/` beside this file:
 
 ```text
-.forge/project.json                      .gitignore        docs/cli.md          src/anchor.ts
-.forge/skills/toc-anchor-rules/SKILL.md  CHANGELOG.md      package-lock.json    src/cli.ts
-.github/workflows/release.yml            CLAUDE.md         package.json         src/headings.ts
-README.md                                roadmap.md        src/toc.ts           test/acceptance/run.ts
-test/fixtures/release-notes.md           test/unit.test.ts tsconfig.json
+seed/.forge/project.json                      seed/.gitignore        seed/docs/cli.md          seed/src/anchor.ts
+seed/.forge/skills/toc-anchor-rules/SKILL.md  seed/CHANGELOG.md      seed/package-lock.json    seed/src/cli.ts
+seed/.github/workflows/release.yml            seed/CLAUDE.md         seed/package.json         seed/src/headings.ts
+seed/README.md                                seed/roadmap.md        seed/src/toc.ts           seed/test/acceptance/run.ts
+seed/test/fixtures/release-notes.md           seed/test/unit.test.ts seed/tsconfig.json
 ```
 
 **Deviations from the source.** None.
