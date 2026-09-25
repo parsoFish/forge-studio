@@ -400,9 +400,8 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       message: 'pm.work-item-emitted',
       metadata: {
         work_item_id: item.work_item_id,
-        // historical: carried for the Studio hex-detail drawer (ADR 031
-        // removed it) + the WI dependency graph (observability #11): the
-        // WI's deps, scope size, and a one-line task.
+        // historical: carried for the Studio hex-detail drawer (ADR 031 removed it)
+        // + the WI dependency graph (observability #11): the WI's deps, scope size, and a one-line task.
         depends_on: item.depends_on,
         files_in_scope: item.files_in_scope.length,
         ac_count: item.acceptance_criteria.length,
