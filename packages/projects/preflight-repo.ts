@@ -39,6 +39,12 @@ export function isGitRepoDir(dir: string): boolean {
   return spawnSync('git', ['-C', dir, 'rev-parse', '--git-dir'], { stdio: 'ignore' }).status === 0;
 }
 
+/** `git -C dir ls-files --error-unmatch <path>` — true iff `path` (relative to
+ *  `dir`) is tracked by git. Shared with `preflight-skills.ts`'s SKILLS clause. */
+export function isTrackedByGit(dir: string, path: string): boolean {
+  return spawnSync('git', ['-C', dir, 'ls-files', '--error-unmatch', path], { stdio: 'ignore' }).status === 0;
+}
+
 /** Sentinel-child probe for a `TRACKED_CONFIG_PATHS` dir entry (judges the
  *  FUTURE ignore truth; a file entry is probed directly) — reused by
  *  `reset.ts` so the two can never disagree on which probe to use. */
@@ -112,12 +118,7 @@ function checkC2(dir: string): ClauseResult {
     const isDir = p.endsWith('/');
     const pathArg = p.replace(/\/$/, '');
 
-    const isTracked =
-      spawnSync('git', ['-C', dir, 'ls-files', '--error-unmatch', pathArg], {
-        stdio: 'ignore',
-      }).status === 0;
-
-    if (isTracked) {
+    if (isTrackedByGit(dir, pathArg)) {
       violations.push(`${p} (tracked by git)`);
       continue;
     }
