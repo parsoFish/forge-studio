@@ -30,14 +30,15 @@ import { createLogger, type EventLogEntry } from '@forge/kernel';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import type { RunBrainLintResult, Finding } from '@forge/knowledge/brain-lint.ts';
 import { acquireIsolatedReflectorLease } from '../test-fixtures/reflector-lease-test-fixture.ts';
+import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 
 // The forge root the reflector code resolves to (orchestrator/phases/ ⇒ ..)
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
 
 const runReflector = (
-  input: CycleInput, logger: Parameters<typeof runReflectorReal>[1], deps: ReflectorDeps = {},
+  input: CycleInput, logger: Parameters<typeof runReflectorReal>[1], deps: Partial<ReflectorDeps> = {},
 ): ReturnType<typeof runReflectorReal> =>
-  runReflectorReal(input, logger, { acquireBrainWriteLease: acquireIsolatedReflectorLease, ...deps });
+  runReflectorReal(input, logger, { acquireBrainWriteLease: acquireIsolatedReflectorLease, agentDef: canonicalDef('reflector'), ...deps });
 
 type Harness = {
   cycleId: string;
