@@ -423,10 +423,29 @@ undo_created() {
 # old shape was kill-session then ONE census, immediately — and under load the lane program
 # can still be executing its spawn line after HUP, so the grandchild appeared after the only
 # look and the launch reported "retired nothing" while a claude burned tokens unattended
-# (C's gate at loadavg 16.7, the door at lanes.test.ts:311). The re-census stops after a full
-# second in which nothing new started at/after t0 in that cwd, or at LANES_RECENSUS_S.
-# Every look is REPORTED, so a red carries what the census saw rather than only the pid it
-# missed.
+# (C's gate at loadavg 16.7, the door at lanes.test.ts:311).
+#
+# M7-C last-flakes #2 sequel (2026-09-26). The re-census used to stop after a FIXED "quiet
+# for 1 s" window (2 ticks with nothing new) — a load-sensitive GUESS about how long a late
+# spawn line can take, not a fact about whether one still could. Measured wrong the same way
+# `retire_pid`'s old fixed KILL wait was (register row F3): under real scheduling stretch, the
+# process this pane was directly running (`claude`, or whatever a launched program is) can
+# still be mid-spawn when 1 nominal second of ticks has merely elapsed, and the census gives
+# up before the grandchild it exists to catch ever appears — a LEAKED SESSION in production,
+# not just a test red.
+#
+# The deterministic replacement: `launch_pid` is the ONE process this pane's shell was
+# directly running at the moment of the kill (captured via `/proc/<pane_pid>/task/<pane_pid>
+# /children` BEFORE `tmux kill-session` destroys tmux's own reference to the pane). As long as
+# THAT process is still alive, it could still be executing its spawn line, so a quiet tick does
+# not count — no matter how many ticks pass, the census keeps looking. Once it is confirmed
+# dead, nothing more can originate from it, and the EXISTING "2 quiet ticks" rule (one more
+# look to catch anything spawned in its final moment, then a confirming second look) resumes
+# exactly as before. `LANES_RECENSUS_S` remains the absolute ceiling — a launch_pid that never
+# dies (or could not be determined at all, which degrades to the OLD behavior rather than
+# looping forever) still bounds the wait, same as `retire_pid`'s own generous, non-tested
+# ceilings. Every look is REPORTED, so a red carries what the census saw rather than only the
+# pid it missed.
 die_launch() {
   local camp="$1" lane="$2" s="$3" cwd="$4" t0="$5" msg="$6" p found=0 quiet=0 waited=0
   local t0_wall="${LANES_T0_WALL:-}"
@@ -438,6 +457,15 @@ die_launch() {
     seen="$seen$p "; found=$((found + 1)); retire_pid "$p" "half-launched lane $lane" >&2 || true
   done
   echo "census: $found claude pid(s) in $cwd started at/after uptime ${t0}cs (wall ~${t0_wall:-?}) before the kill" >&2
+  # Captured BEFORE the kill: once tmux has ended the session there is no way to ask it which
+  # process the pane was running. A pane that failed to start one at all (or whose child has
+  # already exited and gone by the time we look) leaves launch_pid empty, which degrades to
+  # "always treat as dead" below — the pre-existing quiet-tick behavior, never a hang.
+  local pane_pid launch_pid=""
+  pane_pid="$(tmux display -p -t "$s" '#{pane_pid}' 2>/dev/null || true)"
+  if [ -n "$pane_pid" ]; then
+    launch_pid="$(awk '{print $1}' "/proc/$pane_pid/task/$pane_pid/children" 2>/dev/null || true)"
+  fi
   tmux kill-session -t "$s" 2>/dev/null && echo "ended tmux $s (undoing a launch that was never confirmed)" >&2
   while [ "$quiet" -lt 2 ] && [ "$waited" -lt "${recensus}0" ]; do
     local new=0
@@ -446,10 +474,19 @@ die_launch() {
       seen="$seen$p "; found=$((found + 1)); new=$((new + 1))
       retire_pid "$p" "half-launched lane $lane, appeared after the kill" >&2 || true
     done
-    if [ "$new" = 0 ]; then quiet=$((quiet + 1)); else quiet=0; fi
+    # A tick counts toward "quiet" only once the pane's own process is confirmed dead — while
+    # it is still running, it could still be executing its spawn line, so this never counts a
+    # tick as quiet no matter how many pass (the fixed-window flaw this replaces).
+    if [ -n "$launch_pid" ] && [ -d "/proc/$launch_pid" ]; then
+      quiet=0
+    elif [ "$new" = 0 ]; then
+      quiet=$((quiet + 1))
+    else
+      quiet=0
+    fi
     sleep 0.5; waited=$((waited + 5))
   done
-  echo "census: $found claude pid(s) retired in total; quiet for 1 s after the kill (re-census bounded at ${recensus} s)" >&2
+  echo "census: $found claude pid(s) retired in total; re-census ended $([ "$quiet" -ge 2 ] && echo "once the pane's own process (launch_pid=${launch_pid:-none}) was confirmed dead and 2 ticks stayed quiet" || echo "at the ${recensus}s ceiling") after the kill" >&2
   undo_created
   die "$msg"
 }
