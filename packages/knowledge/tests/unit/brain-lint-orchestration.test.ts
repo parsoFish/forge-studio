@@ -25,6 +25,7 @@ import {
 } from '../../brain-lint.ts';
 
 import { buildBrainFixture, cleanup, cf, writeProjectTheme } from './test-fixtures/brain-lint.ts';
+import { gitCheckout } from './test-fixtures/brain-lint-truth.ts';
 
 test('classifyFinding: AUTO tier — deterministic fixes', () => {
   assert.equal(classifyFinding(cf('checkIndexSync', 'not listed in category index: brain/cycles/patterns.md')).resolution, 'auto');
@@ -150,6 +151,28 @@ test('CHECK_NAMES drift guard: a maximal fixture tripping every check emits find
     // checkProjectBrainIndexes — a project theme with no category index files.
     writeProjectTheme(root, 'max-project', 'max-proj-theme', 'pattern');
 
+    // D14 (forge-mfv5.3.4) — checkThemeTruth: a SEPARATE project brain (not
+    // 'max-project' above, so its own checkProjectBrainIndexes finding stays
+    // isolated) with a CURRENT theme citing a path absent from its ground
+    // clone, and the clone itself PRESENT (checkout:'present' — an absent
+    // clone would make checkThemeTruth a deliberate no-op, never firing).
+    // History-backed ruling (fix round 2): a plain (non-git) clone reports
+    // history:'absent' and checkThemeTruth never fires for it — so the cited
+    // path must be a REAL git history (committed, then deleted), not a
+    // never-real filesystem gap, or this fixture stops tripping the check.
+    const truthThemesDir = join(root, 'brain', 'projects', 'max-truth-project', 'themes');
+    mkdirSync(truthThemesDir, { recursive: true });
+    writeFileSync(
+      join(truthThemesDir, 'max-truth-theme.md'),
+      '---\ntitle: Max Truth\ndescription: d\ncategory: pattern\ncreated_at: 2026-01-01\nupdated_at: 2026-01-01\n---\n\nCites `gone/max-truth-missing.go`.\n',
+    );
+    gitCheckout(
+      root,
+      'max-truth-project',
+      { 'gone/max-truth-missing.go': 'present but unrelated\n' },
+      { deleteAfterCommit: ['gone/max-truth-missing.go'] },
+    );
+
     // checkReflectorLoss — a `_queue/done/` manifest with no matching archive
     // (brain/cycles/_raw/ is never created by buildBrainFixture, so ANY
     // manifest here is automatically unmatched).
@@ -219,7 +242,7 @@ test('SEVERITY LOCK: a fixture whose ONLY problems are one dangling edge and one
   }
 });
 
-test('CHECK_NAMES: exactly the 11 expected full-scope check names (kills a registration that adds the check function but forgets to append it to FULL_SCOPE_CHECKS)', () => {
+test('CHECK_NAMES: exactly the 12 expected full-scope check names (kills a registration that adds the check function but forgets to append it to FULL_SCOPE_CHECKS)', () => {
   const expected = [
     'checkFrontmatter',
     'checkIndexSync',
@@ -232,12 +255,20 @@ test('CHECK_NAMES: exactly the 11 expected full-scope check names (kills a regis
     'checkReflectorLoss',
     'checkDanglingEdges',
     'checkDuplicateThemes',
+    // D14 (bead forge-mfv5.3.4) — the brain-lint truthfulness axis: does a
+    // CURRENT project theme's cited code still exist in its ground clone?
+    // Pinned here BEFORE brain-lint-checks-truth.ts exists (immutable-gates:
+    // the test-writer pins the registry shape, not just the check's own
+    // behaviour) — a check that fires findings but is never appended to
+    // FULL_SCOPE_CHECKS is invisible to `forge brain lint` and to every
+    // CHECK_NAMES-derived consumer (Studio KB Health, the lint-resolution UI).
+    'checkThemeTruth',
   ];
-  assert.equal(CHECK_NAMES.length, 11, `expected 11 full-scope checks, got ${CHECK_NAMES.length}: ${JSON.stringify(CHECK_NAMES)}`);
+  assert.equal(CHECK_NAMES.length, 12, `expected 12 full-scope checks, got ${CHECK_NAMES.length}: ${JSON.stringify(CHECK_NAMES)}`);
   assert.deepEqual(
     [...CHECK_NAMES].sort(),
     [...expected].sort(),
-    `CHECK_NAMES must be exactly the expected 11-name set, got ${JSON.stringify(CHECK_NAMES)}`,
+    `CHECK_NAMES must be exactly the expected 12-name set, got ${JSON.stringify(CHECK_NAMES)}`,
   );
 });
 
@@ -252,6 +283,12 @@ test('CHECK_SCOPE: every CHECK_NAMES entry has a CHECK_SCOPE mapping, and every 
   assert.equal(CHECK_SCOPE['checkDuplicateThemes'], 'themes');
   assert.equal(CHECK_SCOPE['checkCategoryScope'], 'forge-themes');
   assert.equal(CHECK_SCOPE['checkIndexSync'], 'forge-themes');
+  // D14 — checkThemeTruth walks brain/projects/<name>/themes exactly like
+  // checkProjectBrainIndexes (never the forge sub-wikis), so it shares that
+  // check's 'project-indexes' domain rather than the broader 'themes' one.
+  // Un-mapped is the declared-data-fails-open shape this table exists to
+  // stop (a per-KB consumer would silently report a false verdict for it).
+  assert.equal(CHECK_SCOPE['checkThemeTruth'], 'project-indexes');
   const KNOWN = new Set(['themes', 'forge-themes', 'project-indexes', 'global']);
   for (const name of CHECK_NAMES) {
     assert.ok(name in CHECK_SCOPE, `CHECK_SCOPE is missing an entry for "${name}" (CHECK_NAMES/CHECK_SCOPE drift)`);

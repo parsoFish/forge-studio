@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { isSafeRunId, resolveProjectsDir, loadConfig, defaultConfigPath } from '@forge/kernel';
 import { tryGetKbBackend } from './kb-backend.ts';
 import { createLogger } from '@forge/kernel';
-import { KB_ID_RE } from '@forge/kernel';
+import { requireValidKbId } from './bridge-studio-kbs.ts';
 import { enqueueConsolidate } from './bridge-studio-kb-consolidate.ts';
 import { deriveKbActiveJob, activeJobReason, KB_DRAIN_STALE_MS } from './kb-job-state.ts';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
@@ -25,6 +25,7 @@ import {
   findActiveKbDrainRun,
   latestKbDrainRun,
   initialKbDrainStatus,
+  kbDrainEventFields,
   listKbRuns,
   requestKbDrainCancel,
   runKbDrain,
@@ -65,10 +66,7 @@ export async function handleKbDrainCancel(
   if (cancelMatch && method === 'POST') {
     try {
       const kbId = decodeURIComponent(cancelMatch[1]);
-      if (!KB_ID_RE.test(kbId)) {
-        sendJson(res, 400, { error: 'invalid kb id' }, origin);
-        return true;
-      }
+      if (!requireValidKbId(kbId, res, origin)) return true;
       const active = findActiveKbDrainRun(ctx.forgeRoot, kbId);
       if (!active) {
         // W7 FIX-B-KB (knowledge-14): refuse HONESTLY — when the latest run
@@ -133,10 +131,7 @@ export async function handleKbActiveJob(
   if (activeJobMatch && method === 'GET') {
     try {
       const kbId = decodeURIComponent(activeJobMatch[1]);
-      if (!KB_ID_RE.test(kbId)) {
-        sendJson(res, 400, { error: 'invalid kb id' }, origin);
-        return true;
-      }
+      if (!requireValidKbId(kbId, res, origin)) return true;
       const job = deriveKbActiveJob(ctx.forgeRoot, kbId);
       sendJson(res, 200, { ok: true, job, ...(job ? { reason: activeJobReason(job) } : {}) }, origin);
     } catch (err) {
@@ -169,10 +164,7 @@ export async function handleKbRuns(
   if (runsMatch && method === 'GET') {
     try {
       const kbId = decodeURIComponent(runsMatch[1]);
-      if (!KB_ID_RE.test(kbId)) {
-        sendJson(res, 400, { error: 'invalid kb id' }, origin);
-        return true;
-      }
+      if (!requireValidKbId(kbId, res, origin)) return true;
       const runs = listKbRuns(ctx.forgeRoot, kbId, sessionIsReadable);
       sendJson(res, 200, { ok: true, runs }, origin);
     } catch (err) {
@@ -236,10 +228,7 @@ export async function handleKbDrainRun(
   if (specificMatch && method === 'GET') {
     const kbId = decodeURIComponent(specificMatch[1]);
     const runId = decodeURIComponent(specificMatch[2]);
-    if (!KB_ID_RE.test(kbId)) {
-      sendJson(res, 400, { error: 'invalid kb id' }, origin);
-      return true;
-    }
+    if (!requireValidKbId(kbId, res, origin)) return true;
     // Never trust runId alone to reach a dir: charset-gated (isSafeRunId,
     // blocks '/' and '..') AND kbId-prefix-checked (a syntactically valid but
     // foreign-kb runId is treated identically to an unknown one — same
@@ -320,10 +309,7 @@ export async function handleKbDrainStart(
   if (baseMatch && method === 'POST') {
     try {
       const kbId = decodeURIComponent(baseMatch[1]);
-      if (!KB_ID_RE.test(kbId)) {
-        sendJson(res, 400, { error: 'invalid kb id' }, origin);
-        return true;
-      }
+      if (!requireValidKbId(kbId, res, origin)) return true;
       if (tryGetKbBackend(ctx.forgeRoot, kbId) === null) {
         sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin);
         return true;
@@ -363,11 +349,8 @@ export async function handleKbDrainStart(
       // backlog. Without this the fetch 404s and never retries.
       createLogger(`_kb-drain-${runId}`, join(ctx.forgeRoot, '_logs')).emit({
         initiative_id: `_kb-drain-${runId}`,
-        phase: 'reflection',
-        skill: 'kb-drain',
+        ...kbDrainEventFields(),
         event_type: 'log',
-        input_refs: [],
-        output_refs: [],
         message: 'kb-drain.queued',
         metadata: { kind: 'progress', kbId, runId },
       });
@@ -408,10 +391,7 @@ export async function handleKbDrainStatus(
   if (baseMatch && method === 'GET') {
     try {
       const kbId = decodeURIComponent(baseMatch[1]);
-      if (!KB_ID_RE.test(kbId)) {
-        sendJson(res, 400, { error: 'invalid kb id' }, origin);
-        return true;
-      }
+      if (!requireValidKbId(kbId, res, origin)) return true;
       const chosen = findActiveKbDrainRun(ctx.forgeRoot, kbId) ?? latestKbDrainRun(ctx.forgeRoot, kbId);
       if (!chosen) {
         sendJson(res, 200, { ok: true, runId: null }, origin);
