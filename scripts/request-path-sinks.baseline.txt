@@ -1,5 +1,6 @@
 apps/forge/brain-fix-turn.ts existsSync 1
 apps/forge/brain-fix-turn.ts readFileSync 1
+apps/forge/bridge-review-comments.ts existsSync 1
 apps/forge/bridge-studio-writes.ts cpSync 1
 apps/forge/bridge-studio-writes.ts existsSync 2
 apps/forge/bridge-studio-writes.ts mkdirSync 2
@@ -20,7 +21,7 @@ apps/forge/forge-watch.ts rmSync 1
 apps/forge/forge-watch.ts spawn 4
 apps/forge/forge-watch.ts statSync 1
 apps/forge/forge-watch.ts writeFileSync 2
-apps/forge/ui-bridge.ts existsSync 12
+apps/forge/ui-bridge.ts existsSync 11
 apps/forge/ui-bridge.ts mkdirSync 2
 apps/forge/ui-bridge.ts openSync 3
 apps/forge/ui-bridge.ts readdirSync 4
@@ -36,7 +37,7 @@ packages/agents/agent-dispatch-cmd.ts realpathSync 5
 packages/agents/agent-dispatch-cmd.ts statSync 2
 packages/agents/agent-dispatch.ts readdirSync 1
 packages/agents/agent-run.ts existsSync 2
-packages/agents/band-agent-run.ts existsSync 3
+packages/agents/band-agent-run.ts existsSync 1
 packages/agents/band-agent-run.ts readFileSync 1
 packages/agents/bridge-agents-history-rows.ts existsSync 5
 packages/agents/bridge-agents-history-rows.ts readdirSync 4
