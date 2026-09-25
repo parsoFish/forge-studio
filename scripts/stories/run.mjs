@@ -354,6 +354,23 @@ async function main() {
       }
     }
 
+    // 4b. `forge-8vfn.8.1.6` (T1 row 6) — the SAME combination rule
+    //     `runStory` applies per beat (`effectiveCeiling`), reused rather than
+    //     re-derived, so the bridge's own env agrees with the beat-boundary
+    //     check it backstops: a cycle the bridge starts can now halt INSIDE a
+    //     beat, not only when the runner notices between two of them.
+    //     `bootOwnBridge` boots ONE bridge process for the WHOLE batch below,
+    //     so a batch mixing several costed stories takes the STRICTEST of
+    //     their effective ceilings — one shared process must not let a laxer
+    //     sibling widen a stricter one's bound. `null` when nothing in this
+    //     batch spends: `effectiveCeiling` is never asked for a story that
+    //     never asked for money.
+    const costedCeilings = stories
+      .filter((s) => s.ground.realSpawn === true || (s.ground.budget_usd ?? 0) > 0)
+      .map((s) => effectiveCeiling(s.ground.budget_usd, args.ceilingUsd).usd)
+      .filter((usd) => Number.isFinite(usd));
+    const bridgeCeilingUsd = costedCeilings.length > 0 ? Math.min(...costedCeilings) : null;
+
     if (provisionResult.refused === null) {
       // 5. Bridge identity — never drive a bridge serving another tree.
       const { probeBridgeIdentity } = await import(
@@ -374,8 +391,9 @@ async function main() {
         // printed — `note` carries the fact, never the value.
         // ONE read of the credential per boot: the options are built here, the
         // fact is logged from them, and the SAME object is what gets spawned.
-        const bridgeOpts = bridgeSpawnOptions(ROOT);
+        const bridgeOpts = bridgeSpawnOptions(ROOT, { ceilingUsd: bridgeCeilingUsd });
         console.log(`[stories] ${bridgeOpts.note}`);
+        console.log(`[stories] ${bridgeOpts.ceilingNote}`);
         const booted = await bootOwnBridge(ROOT, bridgeOpts);
         bridgeProc = booted.proc;
         uiUrl = booted.uiUrl;

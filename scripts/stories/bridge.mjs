@@ -33,6 +33,26 @@ export const STORY_BRIDGE_GH_USER = 'parsoFish';
 const GH_TOKEN_ENV = 'GH_TOKEN';
 
 /**
+ * The env name the product's own cost bound reads — `resolveCostCeilingOverride`
+ * in `packages/flows/cycle.ts`, and through it `flow-runner.ts`'s `CostTracker`
+ * and the dev-loop's per-iteration halt (`packages/stations/phases/dev-cost-bound.ts`).
+ *
+ * Bead `forge-8vfn.8.1.6` (T1 row 6) — the runner's own spend ceiling
+ * (`scripts/stories/spend.mjs`'s `effectiveCeiling`) only ever halted at a
+ * BEAT BOUNDARY: a long beat's real dev-loop wait was unbounded INSIDE
+ * itself. Setting this on the bridge's own env lets a cycle the bridge starts
+ * halt inside the beat, the same way `scripts/verify-cycle-ceiling.mjs`
+ * already threads `FORGE_COST_CEILING_USD` for the verify-cycle harness.
+ *
+ * Never placed into a spawned AGENT's env — that seam is
+ * `AGENT_ENV_ALLOWLIST` (`packages/kernel/spawn-env.ts`), which this module
+ * never touches and which the ceiling never needs to cross: the flow-runner
+ * process that enforces it (the `forge serve` daemon this bridge starts)
+ * reads it from its OWN env, never from a spawned agent's.
+ */
+const COST_CEILING_ENV = 'FORGE_COST_CEILING_USD';
+
+/**
  * Read the operator's GitHub token for {@link STORY_BRIDGE_GH_USER}, or `null`.
  *
  * ABSENCE IS A RESULT, NOT AN ERROR: a host with no `gh` login must still be
@@ -70,8 +90,12 @@ function defaultGhTokenExec() {
  * The token goes in `env` and NOWHERE else: argv is world-readable through
  * `/proc/<pid>/cmdline`, so a credential passed as a flag is a credential
  * published to every process on the host.
+ *
+ * `ceilingUsd` — the effective spend ceiling for this run (`null` when the
+ * run has none), placed into `env` the same way: present when usable, DELETED
+ * when not, so an ambient value never rides through on a costless run.
  */
-export function bridgeSpawnOptions(root, { readToken = bridgeGhToken } = {}) {
+export function bridgeSpawnOptions(root, { readToken = bridgeGhToken, ceilingUsd = null } = {}) {
   const token = readToken();
   const env = { ...process.env };
   // ABSENCE IS REPRESENTED, NOT MERELY NOT-ADDED (T1 ruling 688(ii)). This used
@@ -84,6 +108,12 @@ export function bridgeSpawnOptions(root, { readToken = bridgeGhToken } = {}) {
   // never exported, not to a shell, an agent, or a suite).
   if (token !== null) env[GH_TOKEN_ENV] = token;
   else delete env[GH_TOKEN_ENV];
+  // Same fence, same reason, for the cost ceiling (`forge-8vfn.8.1.6`): a run
+  // with no effective ceiling must boot a bridge that ALSO has none, not one
+  // that inherited a number from whatever shell started this runner.
+  const usableCeiling = typeof ceilingUsd === 'number' && Number.isFinite(ceilingUsd);
+  if (usableCeiling) env[COST_CEILING_ENV] = String(ceilingUsd);
+  else delete env[COST_CEILING_ENV];
   return {
     command: process.execPath,
     args: ['--experimental-strip-types', 'apps/forge/cli.ts', 'studio', '--no-open'],
@@ -95,6 +125,9 @@ export function bridgeSpawnOptions(root, { readToken = bridgeGhToken } = {}) {
       token !== null
         ? `bridge env carries GH_TOKEN for ${STORY_BRIDGE_GH_USER} — the community refresh can reach its declared sources`
         : `no GH_TOKEN available for ${STORY_BRIDGE_GH_USER} — the bridge still boots and a community refresh will honestly refuse`,
+    ceilingNote: usableCeiling
+      ? `bridge env carries FORGE_COST_CEILING_USD=${ceilingUsd} — a cycle this bridge starts halts INSIDE its own beat, not only at the runner's beat boundary`
+      : 'no FORGE_COST_CEILING_USD in the bridge env — this run has no effective ceiling',
   };
 }
 
