@@ -26,15 +26,35 @@
  * outlived the 5×100ms retry window and threw ENOTEMPTY at 1.8s (bd
  * forge-8vfn.5.55, known-flakes #9, load-8 recurrence). When the caller
  * knows exactly which child process is still writing (`knownWriters` — the
- * straggler test in the sibling file spawns its own), teardown stops
- * guessing at timing entirely: it kills that child and awaits its actual
- * exit before retrying the removal, so the wait is bounded by "is it dead
- * yet", not by a wall-clock budget that starves along with everything else.
- * Callers with no known writer (a real, unidentified git straggler) still
- * fall back to the scoped delay retry.
+ * straggler test in the sibling file spawns its own), teardown kills that
+ * child outright before retrying — the disposable fixture is about to be
+ * deleted anyway, so ending its writer is safe.
+ *
+ * M7-C last-flakes #3 (known-flakes.md
+ * `packages/factory/tests/integration/developer-loop.merge-conflict-requeue.test.ts:686`,
+ * moved to `packages/stations/` — same file): the OTHER three tests in the
+ * sibling file call plain `f.cleanup()` with NO known writer — a real,
+ * unidentified git straggler from production `mergeAndPublish`/
+ * `createWiWorktree` calls, not a test's own injected one.
+ *
+ * A FIRST attempt at "no known writer" generalized `knownWriters` by
+ * scanning `/proc/<pid>/fd/*` for any process with an open descriptor under
+ * `root`, on the theory that a straggler's held-open fd is the direct
+ * evidence. Measured wrong: a writer that does short, repeated
+ * open→write→close calls (git's own pack-file writes, and this file's own
+ * deterministic straggler fixture) is caught with its fd open only in a
+ * narrow window, and scanning every pid's fd table under `/proc` is not
+ * instant — 2 of 3 unloaded local runs still ENOTEMPTY'd with that fd scan
+ * in place. `waitForQuietDir()` replaces it with the thing ENOTEMPTY is
+ * actually about: rmSync's error names the exact directory it found
+ * non-empty (`err.path`) — poll THAT listing until it stops changing across
+ * a couple of consecutive reads, then retry the removal. This needs no
+ * writer identity at all, known or discovered, and does not care whether
+ * the writer holds its fd open or not — only whether the directory it is
+ * touching is still changing.
  */
 import type { ChildProcess } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { readdirSync, rmSync } from 'node:fs';
 
 export type CleanupOpts = { knownWriters?: ChildProcess[]; attempts?: number; delayMs?: number };
 
@@ -45,11 +65,14 @@ export async function cleanupFixtureRoot(root: string, opts: CleanupOpts = {}): 
       rmSync(root, { recursive: true, force: true });
       return;
     } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
+      const e = err as NodeJS.ErrnoException;
       // Scoped to this ONE named teardown error, after this test's own assertions already passed — never a blind retry.
-      if (code !== 'ENOTEMPTY' || attempt === attempts) throw err;
+      if (e.code !== 'ENOTEMPTY' || attempt === attempts) throw err;
       if (knownWriters.length > 0) {
         await Promise.all(knownWriters.map(killAndAwaitExit));
+      }
+      if (e.path) {
+        await waitForQuietDir(e.path);
       } else {
         await new Promise((resolveWait) => setTimeout(resolveWait, delayMs));
       }
@@ -75,4 +98,37 @@ function killAndAwaitExit(child: ChildProcess): Promise<void> {
       resolveExit();
     }
   });
+}
+
+/**
+ * Poll `dirPath`'s own listing until it reports the SAME entries across
+ * `quietChecks` consecutive reads (default 2, ~30ms apart) — the directory
+ * has gone quiet, whoever was writing into it (named or not) has stopped —
+ * or until `ceilingMs` elapses, whichever comes first. A directory that has
+ * vanished entirely (the straggler's own work, or a sibling cleanup) counts
+ * as quiet: there is nothing left to race. This needs no writer identity:
+ * it reads the exact evidence ENOTEMPTY is about, the directory's own
+ * contents, rather than inferring a process from `/proc`.
+ */
+async function waitForQuietDir(dirPath: string, opts: { quietChecks?: number; pollMs?: number; ceilingMs?: number } = {}): Promise<void> {
+  const { quietChecks = 2, pollMs = 30, ceilingMs = 4000 } = opts;
+  const deadline = Date.now() + ceilingMs;
+  let previous: string | null = null;
+  let stableStreak = 0;
+  while (Date.now() < deadline) {
+    let listing: string;
+    try {
+      listing = readdirSync(dirPath).sort().join('\0');
+    } catch {
+      return; // gone entirely — nothing left to race
+    }
+    if (previous !== null && listing === previous) {
+      stableStreak += 1;
+      if (stableStreak >= quietChecks) return;
+    } else {
+      stableStreak = 0;
+    }
+    previous = listing;
+    await new Promise((resolveWait) => setTimeout(resolveWait, pollMs));
+  }
 }
