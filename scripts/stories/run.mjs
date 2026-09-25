@@ -49,6 +49,7 @@ import { sweepStoryResidue } from './sweep.mjs';
 import { provisionFixtureGrounds, teardownFixtureGround } from './fixture-ground.mjs';
 import { captureAndSweepAgentLogs } from './sweep-agent-logs.mjs';
 import { restoreSweptCommitted, stopSchedulerCensusAndRelease, teardownExitCode } from './sweep-teardown.mjs';
+import { preexistingSchedulerVerdict } from './scheduler-preflight.mjs';
 import {
   decideStoryBridge,
   readProcCwd,
@@ -354,6 +355,40 @@ async function main() {
       }
     }
 
+    // 4b. `forge-8vfn.8.1.6` (T1 row 6) — the SAME combination rule
+    //     `runStory` applies per beat (`effectiveCeiling`), reused rather than
+    //     re-derived, so the bridge's own env agrees with the beat-boundary
+    //     check it backstops: a cycle the bridge starts can now halt INSIDE a
+    //     beat, not only when the runner notices between two of them.
+    //     `bootOwnBridge` boots ONE bridge process for the WHOLE batch below,
+    //     so a batch mixing several costed stories takes the STRICTEST of
+    //     their effective ceilings — one shared process must not let a laxer
+    //     sibling widen a stricter one's bound. `null` when nothing in this
+    //     batch spends: `effectiveCeiling` is never asked for a story that
+    //     never asked for money.
+    const costedCeilings = stories
+      .filter((s) => s.ground.realSpawn === true || (s.ground.budget_usd ?? 0) > 0)
+      .map((s) => effectiveCeiling(s.ground.budget_usd, args.ceilingUsd).usd)
+      .filter((usd) => Number.isFinite(usd));
+    const bridgeCeilingUsd = costedCeilings.length > 0 ? Math.min(...costedCeilings) : null;
+
+    // 4c. `forge-8vfn.8.1.6` follow-up — 4b's ceiling only ever reaches a
+    //     cycle THROUGH the bridge process this run boots: `spawnServeDetached`
+    //     (packages/flows/daemon.ts) starts nothing new while a scheduler pid
+    //     is already alive, so a LEFTOVER daemon from an earlier run (or an
+    //     operator's own) keeps its own, ceiling-less env — silently, since
+    //     the beat that presses Start still succeeds. Scoped to a run that
+    //     actually has a ceiling to lose: a costless batch never needed the
+    //     bridge's env to carry one.
+    if (bridgeCeilingUsd !== null) {
+      const sched = preexistingSchedulerVerdict(ROOT);
+      if (!sched.ok) {
+        console.error(`[stories] REFUSING: ${sched.reason}`);
+        return 1;
+      }
+      console.log(`[stories] scheduler ok — ${sched.reason}`);
+    }
+
     if (provisionResult.refused === null) {
       // 5. Bridge identity — never drive a bridge serving another tree.
       const { probeBridgeIdentity } = await import(
@@ -374,8 +409,9 @@ async function main() {
         // printed — `note` carries the fact, never the value.
         // ONE read of the credential per boot: the options are built here, the
         // fact is logged from them, and the SAME object is what gets spawned.
-        const bridgeOpts = bridgeSpawnOptions(ROOT);
+        const bridgeOpts = bridgeSpawnOptions(ROOT, { ceilingUsd: bridgeCeilingUsd });
         console.log(`[stories] ${bridgeOpts.note}`);
+        console.log(`[stories] ${bridgeOpts.ceilingNote}`);
         const booted = await bootOwnBridge(ROOT, bridgeOpts);
         bridgeProc = booted.proc;
         uiUrl = booted.uiUrl;

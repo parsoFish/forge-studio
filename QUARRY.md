@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 361 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 93 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 94 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -55,19 +55,19 @@ operator-ratified new cap — never a silent raise.
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
 | `contracts` | 5 | 1,259 | **1,263** | ratified 1,263 — M7-A seam F6 (ADR 051 decisions 2 and 4, operator item 97), lane-ratified under ruling 666; see git history for prior raises. |
-| `kernel` | 29 | 5,429 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
+| `kernel` | 30 | 5,496 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `projects` | 46 | 10,951 | **9,061** | ratified 9,061 — M7-A reset-resolvable (+94, growth): Rebuild adds a template npm command only when package.json has the script; lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,156 | **12,578** | ratified 12,578 — M7-C door re-exports OD (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `agents` | 46 | 12,965 | **12,965** | ratified 12,965 — M7-C door re-exports OD round G (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
+| `agents` | 46 | 13,013 | **13,013** | ratified 13,013 — row 91 session-end hooks fire once for headless runs (forge-8vfn.8.1.7), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 59 | 20,520 | **20,482** | ratified 20,482 — M7-C door re-exports OD, round-G circular-import fix (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `flows` | 83 | 23,501 | **23,301** | ratified 23,301 — row 93 stale remote branch fail-fast + cleanup (forge-8vfn.8.1.8), T1 ruling 1459 above lane authority (+128); see git history for prior raises. |
+| `flows` | 83 | 23,498 | **23,301** | ratified 23,301 — row 93 stale remote branch fail-fast + cleanup (forge-8vfn.8.1.8), T1 ruling 1459 above lane authority (+128); see git history for prior raises. |
 | `factory` | 14 | 2,113 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 38 | 11,129 | **11,129** | ratified 11,129 — M7-C door re-exports OD round G (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,837 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **458** | **125,256** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **459** | **125,368** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -314,7 +314,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/cycle-helpers.ts | flows | verbatim | 772 |
 | packages/flows/cycle-report.ts | flows | verbatim | 30 |
 | packages/flows/cycle.ts | flows | verbatim | 542 |
-| packages/flows/daemon.ts | flows | verbatim | 248 |
+| packages/flows/daemon.ts | flows | verbatim | 245 |
 | packages/sessions/kinds/demo-builder.ts | sessions | verbatim | 515 |
 | packages/sessions/kinds/authoring.ts | sessions | rewritten | 141 |
 | packages/sessions/kinds/demo-session-store.ts | sessions | rewritten | 177 |
@@ -425,7 +425,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/testing.ts | stations | verbatim | 23 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `settleWiOutcome`/`assertOutcomesSettled`/`WiOutcome` (phases/developer-loop.ts), `runProjectManager`/`PmQueryFn` (phases/project-manager.ts), `NodeExecutor`/`integrateDeliveryFailure` (phases/executor-table.ts) and `deriveDemoModel` (phases/derive-demo-model.ts) have no production consumer outside this package, only `apps/forge`/`packages/flows` tests reach for them.** |
 | packages/flows/requeue-resume.ts | flows | verbatim | 193 |
 | packages/flows/review-comments.ts | flows | verbatim | 224 |
-| packages/agents/run-agent.ts | agents | verbatim | 796 |
+| packages/agents/run-agent.ts | agents | verbatim | 800 |
 | packages/agents/spawn-marker.ts | agents | verbatim | 276 |
 | packages/flows/run-model-derive.ts | flows | verbatim | 43 |
 | packages/flows/run-model-derive-status.ts | flows | verbatim | 460 |
@@ -465,7 +465,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/studio/validate-agent.ts | agents | rewritten | 297 |
 | packages/agents/studio/agent-usage.ts | agents | verbatim | 122 |
 | packages/agents/studio/derive.ts | agents | verbatim | 301 |
-| packages/agents/studio/hook-dispatch.ts | agents | verbatim | 502 |
+| packages/agents/studio/hook-dispatch.ts | agents | verbatim | 546 |
 | packages/library/studio/hook-library.ts | library | verbatim | 536 |
 | packages/library/studio/hook-package.ts | library | verbatim | 502 |
 | packages/library/studio/hook-runtime.ts | library | verbatim | 619 |
@@ -547,7 +547,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/gh-identity.ts | kernel | verbatim | 107 |
 | packages/kernel/ids.ts | kernel | verbatim | 136 |
 | packages/kernel/event-cost.ts | kernel | verbatim | 143 |
-| packages/kernel/index.ts | kernel | verbatim | 86 |
+| packages/kernel/index.ts | kernel | verbatim | 90 |
 | packages/kernel/init.ts | kernel | verbatim | 171 |
 | packages/kernel/logging.ts | kernel | verbatim | 285 |
 | packages/kernel/tool-fence.ts | kernel | rewritten | 94 **Written for bead `forge-a9o9` (T1 rulings 670/691) — deny-by-default tool access, with no enumeration anywhere. Here rather than beside `makeToolEventSink` in `agents` because the spawn paths that need it span `sessions`, `agents` and `factory`, and the kernel is the only layer all three already stand on; `spawn-env.ts` next door settled the same class for env vars.** |
@@ -563,6 +563,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/project-contract.ts | kernel | verbatim | 52 |
 | packages/kernel/findings.ts | kernel | verbatim | 37 |
 | packages/kernel/project-layout.ts | kernel | verbatim | 202 |
+| packages/kernel/process-liveness.ts | kernel | rewritten | 63 **Written for bead `forge-8vfn.8.1.6` (T1 review follow-up) — the ONE `/proc/<pid>/stat`-based pid-liveness read (`isProcessRunning`; ENOENT=gone, Z/X=gone, any other read failure=not concluded gone), so `packages/flows/daemon.ts`'s `isAlive` and the story runner's scheduler preflight (`scripts/stories/scheduler-preflight.mjs`, via `scripts/stories/sweep-teardown.mjs`'s `isRunning`) cannot disagree about a zombie pid. `isAlive` delegates to it; `isRunning` delegates to it through a relative `.ts` import (proven to load under the plain `node` the story runner is launched with).** |
 | packages/knowledge/index.ts | knowledge | verbatim | 108 |
 | packages/library/index.ts | library | verbatim | 115 |
 | packages/projects/index.ts | projects | verbatim | 101 |

@@ -18,8 +18,7 @@
  *   cut between them leaves not an unbound name but a silently `undefined`
  *   exempt set, which no runtime error would announce.
  *
- * So the caller passes four arguments and reads one exit code, and every
- * value either half needs stays on its own side of the call.
+ * So the caller passes four arguments and reads one exit code, and every value either half needs stays on its own side of the call.
  *
  * `ROOT` is RE-DERIVED here rather than imported. Both files sit in
  * `scripts/stories/`, so `import.meta.url` resolves to the same repo root —
@@ -51,6 +50,7 @@ import {
   describeGroundEscapes,
   ownGroundManifest,
   mintedSessionPaths,
+  groundMintedSessionPaths,
   mintedSessionDirNames,
   mintedSessionWrites,
   classifyOwnGroundDrift,
@@ -68,8 +68,9 @@ import {
   snapshotRealGrounds,
   realGroundFenceVerdict,
 } from './fixture-ground.mjs';
-import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
+import { captureBeatDom, captureFrame, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
 import { captureAndClearMintedSessions, describeGroundClear, captureAndClearMintedLogs, describeLogsClear } from './ground-clear.mjs';
+import { loadRegisteredSessionKindIds } from './session-kind-registry.mjs'; // review finding 1 — groundMintedSessionPaths' required registry
 import { driveBeat } from './beats-drive.mjs';
 import { expandForkedBeats, describeDoorFork, frameLabelSuffix } from './beats-fork.mjs';
 import { snapshotForkGrounds, judgeForkGrounds } from './fork-grounds.mjs';
@@ -228,8 +229,8 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       verdict = costlessGuard.apply(verdict);
       bindings = { ...bindings, ...verdict.bindings };
       const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}${frameLabelSuffix(beatLabel, slug)}.png`;
-      await page.screenshot({ path: join(outDir, frame), fullPage: true });
-      beats.push({ ...verdict, frame });
+      const capture = await captureFrame(page, join(outDir, frame), { log: console.error }); // row 90 — evidence, never a verdict input
+      beats.push({ ...verdict, ...(capture.ok ? { frame } : { frame: null, frameNote: 'capture failed after retries — evidence only, see the log line above' }) });
       // Bead `forge-8vfn.6.11.42` — what the OPERATOR could see at the red,
       // captured while the page still exists. The session dir below says what
       // the product HAD; this says what was on the screen, and S2 run 8's open
@@ -453,16 +454,15 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   };
   if (ownGroundBefore !== null) {
     const groundDir = join(ROOT, 'projects', story.ground.project);
-    const minted = mintedSessionPaths(
-      logsBefore,
-      readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name),
-      logsDir,
-    );
-    // Read ONCE and shared: `beatWindowChangesFrom` below needs the same
-    // end-of-run manifest `groundChanges` compares against, and hashing the
-    // ground a second time here would let the two readings disagree about
-    // what "the end of the run" was.
+    // Read ONCE and shared with `beatWindowChangesFrom` and the ground-side
+    // minted union below (T1 1418) — never a second hash of the ground.
     const ownGroundAfter = ownGroundManifest(ROOT, story.ground.project);
+    // T1 1418 — union `_logs`-side minted sessions with ground-side ones born
+    // directly in the ground before `/brief` ever creates a `_logs` dir.
+    const minted = [...new Set([
+      ...mintedSessionPaths(logsBefore, readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name), logsDir),
+      ...groundMintedSessionPaths(ownGroundBefore, ownGroundAfter, loadRegisteredSessionKindIds(ROOT)),
+    ])].sort();
     const split = classifyOwnGroundDrift(
       groundChanges(ownGroundBefore, ownGroundAfter),
       minted,

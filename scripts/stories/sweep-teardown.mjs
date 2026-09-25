@@ -26,6 +26,10 @@ import { readProcTable, descendantsOf } from './reap.mjs';
 import { waitForCensusEmpty, describeCensus, identifyPid, verifiedKill } from './reap-census.mjs';
 import { quiesceWriters, describeQuiesce } from './quiesce.mjs';
 import { sweepProductFixtures } from './sweep.mjs';
+// The ONE `/proc`-based liveness rule (`forge-8vfn.8.1.6` follow-up) — a
+// relative .ts import, proven to work under the plain `node` this runner is
+// launched with (Node 22.21.1 strips erasable TS syntax with no flag).
+import { isProcessRunning } from '../../packages/kernel/process-liveness.ts';
 
 /**
  * Put back the COMMITTED artifacts the leading sweep removed and the run never
@@ -145,6 +149,64 @@ export const DRAIN_DONE_LINE = '[serve] exited cleanly';
  */
 export const DRAIN_GRACE_MS = 30_000;
 
+/**
+ * Does `pid`'s own cmdline actually look like `forge serve` — review finding
+ * 2. `spawnServeDetached` (`packages/flows/daemon.ts`) spawns the daemon with
+ * the literal argv `[node, --experimental-strip-types, <forgeRoot>/apps/
+ * forge/cli.ts, serve]`. `ownSchedulerPid`'s cwd check alone answers "does a
+ * process with this pid run inside our tree", never "is it our daemon" — a
+ * RECYCLED pid whose new owner happens to share cwd (any other process this
+ * SAME run spawned with `cwd: root`) would pass a cwd-only test, and that pid
+ * then seeds `reapCensusAndSweep`'s TERM/KILL census: a stranger's whole
+ * descendant tree, censused and killed as if it were our own dispatch.
+ * Binding on the two tokens `spawnServeDetached` writes into every daemon's
+ * argv, and nothing else, is the identity the product actually has for "this
+ * is the scheduler". FAILS CLOSED: an unreadable cmdline is never a match.
+ */
+function looksLikeForgeServe(pid, root) {
+  let raw;
+  try {
+    raw = readFileSync(`/proc/${pid}/cmdline`, 'utf8');
+  } catch {
+    return false; // gone, or unreadable — never trusted as a match
+  }
+  const tokens = raw.split('\0').filter((t) => t !== '');
+  return tokens.includes(join(root, 'apps', 'forge', 'cli.ts')) && tokens.includes('serve');
+}
+
+/**
+ * The scheduler daemon pid THIS RUN started, or `null` — T1 1418.
+ *
+ * The SAME ownership test `stopOwnScheduler` applies below (pid file, then a
+ * `cwd` match against `root`), PLUS `looksLikeForgeServe` (review finding 2)
+ * — factored out so a caller that only needs to KNOW whether this tree owns
+ * a running scheduler — never to stop it — does not re-derive the check.
+ * `reapCensusAndSweep`'s `schedulerPid` default uses this: a run that started
+ * a scheduler for a beat like S10's `scheduler-start` has its dispatch
+ * descendants rooted into the SAME census that already gates the trailing
+ * sweep, without a bare pid a caller could point at a process this run does
+ * not own — or a recycled one it merely shares a `cwd` with.
+ *
+ * @param {string} root the run's own worktree
+ * @returns {number|null}
+ */
+export function ownSchedulerPid(root) {
+  let pid;
+  try {
+    pid = Number(readFileSync(join(root, DAEMON_PID_FILE), 'utf8').trim());
+  } catch {
+    return null; // no daemon was started
+  }
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  let sameTree;
+  try {
+    sameTree = realpathSync(`/proc/${pid}/cwd`) === realpathSync(root);
+  } catch {
+    return null; // already gone, or its cwd is unreadable
+  }
+  return sameTree && looksLikeForgeServe(pid, root) ? pid : null;
+}
+
 export function stopOwnScheduler(root, graceMs = DRAIN_GRACE_MS) {
   const pidFile = join(root, DAEMON_PID_FILE);
   let pid;
@@ -212,59 +274,28 @@ function waitForExit(pid, ms) {
 /**
  * Is `pid` a RUNNING process — not merely a pid that exists?
  *
- * `process.kill(pid, 0)` answers the second question and this file assumed it
- * answered the first. A process that has exited but not been reaped is a ZOMBIE:
- * its pid is still in the table, `kill(pid, 0)` still succeeds, and the wait
- * above would sit there until the grace ran out and then SIGKILL something that
- * had already finished draining — turning a clean shutdown into a reported
- * failure. The test for this caught it on its first run, because a synchronous
- * wait blocks the event loop, so a child of the waiting process can never be
- * reaped while the wait is in progress.
+ * `process.kill(pid, 0)` answers the second question, not the first: a
+ * process that has exited but not been reaped is a ZOMBIE — its pid is still
+ * in the table, `kill(pid, 0)` still succeeds, and the wait above would sit
+ * there until the grace ran out and then SIGKILL something that had already
+ * finished draining, turning a clean shutdown into a reported failure.
  *
- * The daemon is not the story runner's child in production, so the zombie case
- * is not the common one — but "the pid exists" and "the process is running" are
- * different facts, and reading one for the other is how three of today's other
- * defects happened. `/proc/<pid>/stat`'s state field is the one that answers it,
- * and it is the same `/proc` read `lockHolders` and the `cwd` check already use.
- *
- * ENOENT — AND ONLY ENOENT — MEANS GONE (T1 1372, RP's second load repro).
- * The old shape treated ANY read failure as "gone", the exact conflation
- * MUST 3 closed one call site over in `reap-census.mjs`'s census: a
- * transient, unexplained read failure on a pid there is every reason to
- * believe is still alive (measured — a daemon whose own SIGTERM-ignoring
- * handler had already been confirmed installed, via the kernel's own record,
- * BEFORE the signal was even sent) is NOT the same fact as that pid having
- * exited, and reading it as exited is what let `stopOwnScheduler` report
- * `'SIGTERM'` for a daemon that never stopped ignoring it: 192ms into a
- * 300ms grace, one run in twenty under `taskset -c 0` plus three burners.
- * Any OTHER failure now reports "still running" — the safe direction for
- * `waitForExit`'s own question, since a stray extra `SIGKILL` at a pid that
- * genuinely has exited by then is caught and ignored two lines up in
- * `stopOwnScheduler`, while concluding "gone" on a guess is not reversible.
+ * MOVED to `packages/kernel/process-liveness.ts`'s `isProcessRunning`
+ * (`forge-8vfn.8.1.6` follow-up, T1 review): this file's own `/proc`-based
+ * reading and `packages/flows/daemon.ts`'s `isAlive` used to be two
+ * INDEPENDENT implementations that had drifted — `isAlive`'s old
+ * `kill(pid, 0)` counted a zombie as alive, this file's never did — and a
+ * zombie scheduler pid could pass this file's own liveness read while the
+ * product's `spawnServeDetached` (which used `isAlive`) still treated it as
+ * "already running" and started nothing new. Delegating to ONE shared rule
+ * closes that by construction. See the kernel module's own header for the
+ * full ENOENT/Z/X reasoning — it applies unchanged; only its address moved.
  *
  * `procRoot` is a seam for the fixture door this bug bought itself — real
  * callers never pass it and get the real `/proc`.
  */
-// `Z` (zombie — exited, not yet reaped) and `X` (dead — a kernel state so
-// transient `man proc` calls it one that "should never be seen", but a
-// starved host can stretch that window into something a read actually lands
-// in) are the two `/proc/<pid>/stat` states that mean NOT running. RP's
-// review of the row-75 load repro asked this explicitly: both must count,
-// not only `Z`.
-const NOT_RUNNING_STATES = new Set(['Z', 'X']);
-
 export function isRunning(pid, procRoot = '/proc') {
-  let stat;
-  try {
-    stat = readFileSync(`${procRoot}/${pid}/stat`, 'utf8');
-  } catch (err) {
-    return err?.code !== 'ENOENT'; // ENOENT: gone. Anything else: unknown, so NOT concluded gone.
-  }
-  // `comm` can contain spaces and parentheses, so the state field is the first
-  // character after the LAST ')' — never `split(' ')[2]`.
-  const at = stat.lastIndexOf(')');
-  const state = at === -1 ? '' : stat.slice(at + 2, at + 3);
-  return !NOT_RUNNING_STATES.has(state);
+  return isProcessRunning(pid, procRoot);
 }
 
 /**
@@ -524,7 +555,7 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
  * unrelated process on this four-lane host before the signal lands.
  *
  * @param {{root: string, storyId: string, sinceMs: number, groundProject?: string,
- *   evidenceDir: string, reapedPids: (number|string)[],
+ *   evidenceDir: string, reapedPids: (number|string)[], schedulerPid?: number|null,
  *   quiesce?: typeof quiesceWriters, sweep?: typeof sweepProductFixtures,
  *   censusBoundMs?: number, censusPollMs?: number, procRoot?: string,
  *   rereadDelayMs?: number, sleep?: (ms: number) => Promise<void>}} args
@@ -533,6 +564,13 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
  */
 export async function reapCensusAndSweep({
   root, storyId, sinceMs, groundProject, evidenceDir, reapedPids,
+  // T1 1418 — S10's agents are dispatched by the SCHEDULER this run started,
+  // not by the runner, so `reapedPids` reads empty and the census below would
+  // trivially pass BEFORE that dispatch is dead. Defaults to THIS run's own
+  // scheduler, verified the same ownership test `stopOwnScheduler` applies —
+  // never a bare injected pid a caller could point at a process this run does
+  // not own. `null` (a test proving the OLD, scheduler-blind shape) opts out.
+  schedulerPid = ownSchedulerPid(root),
   // M7-D — grounds the sweep must NOT remove yet (a fixture ground is judged
   // before its teardown); passed straight through to `sweepProductFixtures`.
   keepProjects,
@@ -557,8 +595,17 @@ export async function reapCensusAndSweep({
   // gone the kernel has already reparented whatever it had). MUST 2 —
   // identities captured HERE, at the moment of discovery.
   const rootIdentities = bareRoots.map((pid) => identifyPid(pid, { procRoot }));
-  const table = bareRoots.length > 0 ? procTable() : new Map();
-  const freshDescendants = bareRoots.flatMap((pid) => descendantsOf(pid, table));
+  const table = (bareRoots.length > 0 || schedulerPid !== null) ? procTable() : new Map();
+  // T1 1418 — the scheduler's OWN dispatch descendants join the SAME census
+  // and the SAME TERM/KILL escalation below, never the scheduler pid itself:
+  // it stays alive for the next story in the batch (`run.mjs` stops it at
+  // batch end, unchanged). `descendantsOf` already excludes its own root, the
+  // same guarantee `stopSchedulerCensusAndRelease` relies on for this read.
+  const schedulerDescendants = schedulerPid === null ? [] : descendantsOf(schedulerPid, table);
+  const freshDescendants = [...new Set([
+    ...bareRoots.flatMap((pid) => descendantsOf(pid, table)),
+    ...schedulerDescendants,
+  ])];
   const descendantIdentities = freshDescendants.map((pid) => identifyPid(pid, { procRoot }));
   for (const identity of descendantIdentities) {
     const r = verifiedKill(identity, 'SIGTERM', { kill, procRoot });

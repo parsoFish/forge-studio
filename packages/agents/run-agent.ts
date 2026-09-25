@@ -51,7 +51,7 @@ import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
 import { createLogger, emitGroundFileChanges, type EventLogger } from '@forge/kernel';
 import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
 import { resolveRunQuery, type StreamQueryFn } from './pinned-sdk-query.ts';
-import { sdkHooksForAgent } from './studio/hook-dispatch.ts';
+import { sdkHooksForAgent, withSessionEndHooks } from './studio/hook-dispatch.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
 import { mintRunMarker, recordRunMarker } from './spawn-marker.ts';
 import type { AgentBudgets, AgentDefinition } from '@forge/contracts';
@@ -215,6 +215,8 @@ export type RunContext = {
    * never calls it at all, real or injected (cost discipline).
    */
   probeConnection?: (id: string) => ProbeResult;
+  /** Test-injection only — an alternate forge root for `deriveAgentSpec`/`sdkHooksForAgent`. */
+  forgeRoot?: string;
   /**
    * R6-04 (WI-2): an explicit per-run operator cost ceiling (one-shot path
    * only). WINS over the agent's own declared `budgets` cap —
@@ -347,7 +349,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   // the R6-04 refusal pins were amended in the same commit.
 
   // Step 1: derive the spec from the studio SKILL.md (ADR-027).
-  const spec = deriveAgentSpec(relative(FORGE_ROOT, def.path));
+  const spec = deriveAgentSpec(relative(ctx.forgeRoot ?? FORGE_ROOT, def.path), ctx.forgeRoot ?? FORGE_ROOT);
 
   // forge-8vfn.5.50 — this run's own spawn marker, minted before EITHER
   // branch because both spawn. Per run, never a constant: a constant would
@@ -558,12 +560,12 @@ async function runOneShotSpawn(
   // SKILL.md this spec came from) rather than from a copy carried on the spec,
   // so nothing here can hold a stale binding. Absent for every agent that binds
   // none, which keeps the golden spawn-capture option bags byte-identical.
-  const oneShotHooks = sdkHooksForAgent({
+  const oneShotHooksBag = sdkHooksForAgent({
     skill: spec.skill,
     logger: () => ctx.logger ?? createLogger(ctx.runId, ctx.logsRoot ?? join(FORGE_ROOT, '_logs')),
     initiativeId: ctx.bindings?.initiative?.id ?? ctx.runId,
+    forgeRoot: ctx.forgeRoot,
   });
-  if (oneShotHooks !== undefined) options['hooks'] = oneShotHooks;
   // R6-04 (WI-2): an explicit operator ceiling WINS over the agent's own
   // declared budget — not max()/min() of the two. `??` gives exactly that:
   // `ctx.kickoffCeilingUsd` short-circuits `resolveOneShotBudgetUsd` entirely
@@ -583,109 +585,112 @@ async function runOneShotSpawn(
     options['abortController'] = abortController;
   }
 
-  const queryFn = resolveRunQuery(ctx.queryFn, runMarker);
+  return withSessionEndHooks(oneShotHooksBag, async (sdkHooks) => {
+    if (sdkHooks !== undefined) options['hooks'] = sdkHooks;
+    const queryFn = resolveRunQuery(ctx.queryFn, runMarker);
 
-  let stream: AsyncIterable<unknown> = queryFn({ prompt: ctx.prompt, options });
-  if (ctx.streamGuard && abortController) {
-    stream = withIdleDeadline(stream, { label: ctx.streamGuard.label, abortController });
-  }
+    let stream: AsyncIterable<unknown> = queryFn({ prompt: ctx.prompt, options });
+    if (ctx.streamGuard && abortController) {
+      stream = withIdleDeadline(stream, { label: ctx.streamGuard.label, abortController });
+    }
 
-  let costUsd = 0;
-  let durationMs = 0;
-  let tokensIn = 0;
-  let tokensOut = 0;
-  let resultSubtype: string | undefined;
-  // Defect fix: this path used to return `outputRefs: []` unconditionally, so
-  // every one-shot run (reflector/adversarial-review/PM/demo-agent/
-  // contract-check/release-finalizer) reported zero outputs even when it
-  // really wrote files. Derive real refs the same way the sibling adapter
-  // path does (`packages/agents/ralph/claude-agent.ts`'s `filesChanged`): accumulate
-  // file-modifying tool_use paths — via the SAME shared `extractLiveToolDetails`
-  // helper the adapter path's `fileChangeForTool` backs — into an
-  // order-preserving dedup Set.
-  const outputRefs = new Set<string>();
-  let toolSeq = 0;
+    let costUsd = 0;
+    let durationMs = 0;
+    let tokensIn = 0;
+    let tokensOut = 0;
+    let resultSubtype: string | undefined;
+    // Defect fix: this path used to return `outputRefs: []` unconditionally, so
+    // every one-shot run (reflector/adversarial-review/PM/demo-agent/
+    // contract-check/release-finalizer) reported zero outputs even when it
+    // really wrote files. Derive real refs the same way the sibling adapter
+    // path does (`packages/agents/ralph/claude-agent.ts`'s `filesChanged`): accumulate
+    // file-modifying tool_use paths — via the SAME shared `extractLiveToolDetails`
+    // helper the adapter path's `fileChangeForTool` backs — into an
+    // order-preserving dedup Set.
+    const outputRefs = new Set<string>();
+    let toolSeq = 0;
 
-  // `forge-8vfn.7.6.148` — THIS PATH NOW SAYS IT IS ALIVE.
-  //
-  // S10 run 21's project-manager emitted a `tool.Read`, went quiet for 204 s
-  // while it thought, then resumed and ended normally. The stall door read the
-  // silence as death because there was nothing else to read: the invocation
-  // path reaches `claude-agent.ts`'s interval and emits `agent_heartbeat`, and
-  // this path had NO TIMER AT ALL. Every one-shot agent — the PM, every
-  // band-guard agent, adversarial-review — was invisible while it worked.
-  //
-  // The timer lives HERE, around the spawn, rather than hoisted around both
-  // branches in `runAgent`. Hoisted, it would report "the spawn is
-  // outstanding"; here it reports "the adapter is alive", which is what the
-  // other path's heartbeat already means. One event name, one fact.
-  let heartbeatHandle: unknown = null;
-  let lastTool = '';
-  if (turnSink !== undefined) {
-    const timers = ctx.heartbeatTimers ?? {
-      setInterval: (fn: () => void, ms: number) => setInterval(fn, ms),
-      clearInterval: (handle: unknown) => clearInterval(handle as ReturnType<typeof setInterval>),
-      now: () => Date.now(),
-    };
-    const startedAt = timers.now();
-    heartbeatHandle = timers.setInterval(() => {
-      try {
-        turnSink.onHeartbeat({ tool_use_count: toolSeq, last_tool: lastTool, since_ms: timers.now() - startedAt });
-      } catch {
-        /* never let a misbehaving heartbeat sink kill the spawn */
+    // `forge-8vfn.7.6.148` — THIS PATH NOW SAYS IT IS ALIVE.
+    //
+    // S10 run 21's project-manager emitted a `tool.Read`, went quiet for 204 s
+    // while it thought, then resumed and ended normally. The stall door read the
+    // silence as death because there was nothing else to read: the invocation
+    // path reaches `claude-agent.ts`'s interval and emits `agent_heartbeat`, and
+    // this path had NO TIMER AT ALL. Every one-shot agent — the PM, every
+    // band-guard agent, adversarial-review — was invisible while it worked.
+    //
+    // The timer lives HERE, around the spawn, rather than hoisted around both
+    // branches in `runAgent`. Hoisted, it would report "the spawn is
+    // outstanding"; here it reports "the adapter is alive", which is what the
+    // other path's heartbeat already means. One event name, one fact.
+    let heartbeatHandle: unknown = null;
+    let lastTool = '';
+    if (turnSink !== undefined) {
+      const timers = ctx.heartbeatTimers ?? {
+        setInterval: (fn: () => void, ms: number) => setInterval(fn, ms),
+        clearInterval: (handle: unknown) => clearInterval(handle as ReturnType<typeof setInterval>),
+        now: () => Date.now(),
+      };
+      const startedAt = timers.now();
+      heartbeatHandle = timers.setInterval(() => {
+        try {
+          turnSink.onHeartbeat({ tool_use_count: toolSeq, last_tool: lastTool, since_ms: timers.now() - startedAt });
+        } catch {
+          /* never let a misbehaving heartbeat sink kill the spawn */
+        }
+      }, DEFAULT_HEARTBEAT_INTERVAL_MS);
+    }
+
+    try {
+      for await (const msg of stream) {
+        ctx.onMessage?.(msg);
+        if (typeof msg !== 'object' || msg === null) continue;
+        const m = msg as {
+          type?: string;
+          subtype?: string;
+          total_cost_usd?: number;
+          duration_ms?: number;
+          usage?: { input_tokens?: number; output_tokens?: number };
+          message?: unknown;
+        };
+        if (m.type === 'assistant') {
+          const details = extractLiveToolDetails(m.message, toolSeq);
+          for (const detail of details) {
+            if (detail.filePath) outputRefs.add(detail.filePath);
+            lastTool = detail.name;
+          }
+          toolSeq += details.length;
+        }
+        if (m.type !== 'result') continue;
+        if (typeof m.duration_ms === 'number') durationMs = m.duration_ms;
+        if (typeof m.total_cost_usd === 'number') costUsd = m.total_cost_usd;
+        if (m.usage) {
+          tokensIn = m.usage.input_tokens ?? 0;
+          tokensOut = m.usage.output_tokens ?? 0;
+        }
+        resultSubtype = m.subtype ?? 'success';
+        break;
       }
-    }, DEFAULT_HEARTBEAT_INTERVAL_MS);
-  }
-
-  try {
-  for await (const msg of stream) {
-    ctx.onMessage?.(msg);
-    if (typeof msg !== 'object' || msg === null) continue;
-    const m = msg as {
-      type?: string;
-      subtype?: string;
-      total_cost_usd?: number;
-      duration_ms?: number;
-      usage?: { input_tokens?: number; output_tokens?: number };
-      message?: unknown;
-    };
-    if (m.type === 'assistant') {
-      const details = extractLiveToolDetails(m.message, toolSeq);
-      for (const detail of details) {
-        if (detail.filePath) outputRefs.add(detail.filePath);
-        lastTool = detail.name;
+    } finally {
+      // Cleared however the stream ends — result, throw, or abort. A heartbeat
+      // outliving its spawn would assert the adapter is alive after it is gone,
+      // which is the same false reading in the opposite direction.
+      if (heartbeatHandle !== null) {
+        const timers = ctx.heartbeatTimers ?? { clearInterval: (h: unknown) => clearInterval(h as ReturnType<typeof setInterval>) };
+        timers.clearInterval(heartbeatHandle);
       }
-      toolSeq += details.length;
     }
-    if (m.type !== 'result') continue;
-    if (typeof m.duration_ms === 'number') durationMs = m.duration_ms;
-    if (typeof m.total_cost_usd === 'number') costUsd = m.total_cost_usd;
-    if (m.usage) {
-      tokensIn = m.usage.input_tokens ?? 0;
-      tokensOut = m.usage.output_tokens ?? 0;
-    }
-    resultSubtype = m.subtype ?? 'success';
-    break;
-  }
-  } finally {
-    // Cleared however the stream ends — result, throw, or abort. A heartbeat
-    // outliving its spawn would assert the adapter is alive after it is gone,
-    // which is the same false reading in the opposite direction.
-    if (heartbeatHandle !== null) {
-      const timers = ctx.heartbeatTimers ?? { clearInterval: (h: unknown) => clearInterval(h as ReturnType<typeof setInterval>) };
-      timers.clearInterval(heartbeatHandle);
-    }
-  }
 
-  return {
-    costUsd,
-    outputRefs: [...outputRefs],
-    tokensIn,
-    tokensOut,
-    suppressed: false,
-    durationMs,
-    resultSubtype,
-  };
+    return {
+      costUsd,
+      outputRefs: [...outputRefs],
+      tokensIn,
+      tokensOut,
+      suppressed: false,
+      durationMs,
+      resultSubtype,
+    };
+  });
 }
 
 /**
@@ -727,70 +732,69 @@ async function runInvocationSpawn(
   // ceiling. Same precedence rule as the one-shot path: an explicit operator
   // ceiling WINS over the agent's own declared budget (`??`, not max/min).
   const invocationBudgetUsd = effectiveCeilingUsd(def, ctx);
-  const agent = adapter.createAgent({
-    model: modelForSpec(spec),
-    allowedTools: [...spec.allowedTools],
-    disallowedTools: [...spec.disallowedTools],
-    // NOT `maxTurnsPerIteration` (review round 1). An earlier draft also
-    // threaded `def.budgets.maxTurns` here; that is a DIFFERENT cap from the
-    // one this lane is about, and it had never applied on this path before.
-    // `createClaudeAgent` maps it straight to the SDK's `options.maxTurns`,
-    // so onboarding-agent (`budgets: { maxTurns: 60 }`, no loopStrategy)
-    // would have started truncating standalone runs at 60 turns — and the
-    // SDK's `error_max_turns` is not mapped to a distinct run state, so a
-    // truncated run would surface as an ordinary `done`. A silent behaviour
-    // change riding along inside a cost-ceiling lane. Wiring the turn cap
-    // (with its own honest terminal state) is its own piece of work.
-    ...(invocationBudgetUsd !== undefined ? { maxBudgetUsdPerIteration: invocationBudgetUsd } : {}),
-    // W7-B5 (agents-23): the adapter's own live telemetry hooks feed the
-    // shared per-turn sink, so a standalone legacy-path run leaves a real
-    // transcript (tool calls + file changes + heartbeats), not just
-    // start/end lines.
-    ...(turnSink !== undefined ? { onToolUse: turnSink.onToolUse, onHeartbeat: turnSink.onHeartbeat } : {}),
-    // W8-B6 — same derivation as the one-shot path above; this path already
-    // holds the run's real logger, so no thunk is needed.
-    ...(() => {
-      const hooks = sdkHooksForAgent({ skill: spec.skill, logger, initiativeId });
-      return hooks !== undefined ? { hooks } : {};
-    })(),
-    // StreamQueryFn requires an options bag; the adapter's QueryFn keeps it
-    // optional — the closure always supplies one, so the cast is sound.
-    // forge-8vfn.5.50: the invocation path spawns too — and it is the path
-    // the S3 escape took (`onboarding-agent` declares no `loopStrategy`) — so
-    // it resolves its query through the SAME marker-applying seam.
-    queryFn: resolveRunQuery(ctx.queryFn, runMarker) as QueryFn,
-  });
+  // W8-B6/forge-8vfn.8.1.7 — same derivation as the one-shot path above.
+  const hooksBag = sdkHooksForAgent({ skill: spec.skill, logger, initiativeId, forgeRoot: ctx.forgeRoot });
+  return withSessionEndHooks(hooksBag, async (sdkHooks) => {
+    const agent = adapter.createAgent({
+      model: modelForSpec(spec),
+      allowedTools: [...spec.allowedTools],
+      disallowedTools: [...spec.disallowedTools],
+      // NOT `maxTurnsPerIteration` (review round 1). An earlier draft also
+      // threaded `def.budgets.maxTurns` here; that is a DIFFERENT cap from the
+      // one this lane is about, and it had never applied on this path before.
+      // `createClaudeAgent` maps it straight to the SDK's `options.maxTurns`,
+      // so onboarding-agent (`budgets: { maxTurns: 60 }`, no loopStrategy)
+      // would have started truncating standalone runs at 60 turns — and the
+      // SDK's `error_max_turns` is not mapped to a distinct run state, so a
+      // truncated run would surface as an ordinary `done`. A silent behaviour
+      // change riding along inside a cost-ceiling lane. Wiring the turn cap
+      // (with its own honest terminal state) is its own piece of work.
+      ...(invocationBudgetUsd !== undefined ? { maxBudgetUsdPerIteration: invocationBudgetUsd } : {}),
+      // W7-B5 (agents-23): the adapter's own live telemetry hooks feed the
+      // shared per-turn sink, so a standalone legacy-path run leaves a real
+      // transcript (tool calls + file changes + heartbeats), not just
+      // start/end lines.
+      ...(turnSink !== undefined ? { onToolUse: turnSink.onToolUse, onHeartbeat: turnSink.onHeartbeat } : {}),
+      ...(sdkHooks !== undefined ? { hooks: sdkHooks } : {}),
+      // StreamQueryFn requires an options bag; the adapter's QueryFn keeps it
+      // optional — the closure always supplies one, so the cast is sound.
+      // forge-8vfn.5.50: the invocation path spawns too — and it is the path
+      // the S3 escape took (`onboarding-agent` declares no `loopStrategy`) — so
+      // it resolves its query through the SAME marker-applying seam.
+      queryFn: resolveRunQuery(ctx.queryFn, runMarker) as QueryFn,
+    });
 
-  // Stamp the prompt + drive ONE iteration.
-  const promptPath = join(ctx.workdir, '.forge', 'agent-run', 'PROMPT.md');
-  if (!existsSync(dirname(promptPath))) mkdirSync(dirname(promptPath), { recursive: true });
-  writeFileSync(promptPath, ctx.prompt);
-  // `forge-qm4d` — this file lands in the OPERATOR's repo, and until now nothing
-  // said so: S1 run 5 counted it among five bridge writes no session could own.
-  // The logger is already live here (it has been emitting since the top of this
-  // function), so this is an emission, not a reordering.
-  emitGroundFileChanges({
-    forgeRoot: FORGE_ROOT, cause: `agent run ${initiativeId}`,
-    projectRoot: ctx.workdir, relPaths: ['.forge/agent-run/PROMPT.md'], logger,
-  });
+    // Stamp the prompt + drive ONE iteration.
+    const promptPath = join(ctx.workdir, '.forge', 'agent-run', 'PROMPT.md');
+    if (!existsSync(dirname(promptPath))) mkdirSync(dirname(promptPath), { recursive: true });
+    writeFileSync(promptPath, ctx.prompt);
+    // `forge-qm4d` — this file lands in the OPERATOR's repo, and until now nothing
+    // said so: S1 run 5 counted it among five bridge writes no session could own.
+    // The logger is already live here (it has been emitting since the top of this
+    // function), so this is an emission, not a reordering.
+    emitGroundFileChanges({
+      forgeRoot: FORGE_ROOT, cause: `agent run ${initiativeId}`,
+      projectRoot: ctx.workdir, relPaths: ['.forge/agent-run/PROMPT.md'], logger,
+    });
 
-  const info = await agent({
-    promptPath,
-    // Ralph's own AGENT.md / fix_plan.md scaffolding (prepareWorkspace) is
-    // deliberately NOT reused here — createClaudeAgent's closure only reads
-    // `promptPath` + `worktreePath`; these two paths exist solely to satisfy
-    // AgentInvocation's required-string shape, no files are created for them.
-    agentMdPath: join(ctx.workdir, 'AGENT.md'),
-    fixPlanPath: join(ctx.workdir, 'fix_plan.md'),
-    worktreePath: ctx.workdir,
-    iteration: 1,
-  });
+    const info = await agent({
+      promptPath,
+      // Ralph's own AGENT.md / fix_plan.md scaffolding (prepareWorkspace) is
+      // deliberately NOT reused here — createClaudeAgent's closure only reads
+      // `promptPath` + `worktreePath`; these two paths exist solely to satisfy
+      // AgentInvocation's required-string shape, no files are created for them.
+      agentMdPath: join(ctx.workdir, 'AGENT.md'),
+      fixPlanPath: join(ctx.workdir, 'fix_plan.md'),
+      worktreePath: ctx.workdir,
+      iteration: 1,
+    });
 
-  return {
-    costUsd: info.costUsd,
-    outputRefs: info.filesChanged,
-    tokensIn: info.tokensIn ?? 0,
-    tokensOut: info.tokensOut ?? 0,
-    suppressed: false,
-  };
+    return {
+      costUsd: info.costUsd,
+      outputRefs: info.filesChanged,
+      tokensIn: info.tokensIn ?? 0,
+      tokensOut: info.tokensOut ?? 0,
+      suppressed: false,
+    };
+  });
 }

@@ -25,7 +25,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, utimes
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { captureBeatDom, captureRedEvidence, describeRedEvidence, redEvidenceDir } from './red-evidence.mjs';
+import { captureBeatDom, captureFrame, captureRedEvidence, describeRedEvidence, redEvidenceDir } from './red-evidence.mjs';
 
 /** One run's stamp — `6.11.50`: every capture of a run shares exactly one. */
 const STAMP = '2026-09-07T04-00-11-553Z';
@@ -233,4 +233,37 @@ test('718(5): the red line NAMES what the dir holds, so the next reader copies a
 
 test('718(5): a green run still says nothing', () => {
   assert.deepEqual(describeRedEvidence(null, '/anywhere'), []);
+});
+
+/**
+ * Row 90 (T1 1448) — a single `page.screenshot` timeout aborted a funded run
+ * before beat 1. A frame is EVIDENCE, never a verdict input: `captureFrame`
+ * retries under a bound and, on final failure, logs one named line and
+ * returns `{ ok: false }` rather than throwing.
+ */
+test('captureFrame: fails twice then succeeds — retried, no failure logged', async () => {
+  let calls = 0;
+  const page = { screenshot: async () => { calls += 1; if (calls < 3) throw new Error('timeout'); } };
+  const logged: string[] = [];
+  const result = await captureFrame(page, '/tmp/frames/01-thing.png', { log: (l: string) => logged.push(l) });
+  assert.deepEqual(result, { ok: true });
+  assert.equal(calls, 3, 'must retry through the transient failures');
+  assert.deepEqual(logged, [], 'a capture that eventually succeeds logs nothing');
+});
+
+test('captureFrame: fails every attempt — no throw, one named line, ok:false', async () => {
+  const page = { screenshot: async () => { throw new Error('screenshot timeout of 5000ms exceeded'); } };
+  const logged: string[] = [];
+  const result = await captureFrame(page, 'frames/01-thing.png', { log: (l: string) => logged.push(l) });
+  assert.deepEqual(result, { ok: false });
+  assert.equal(logged.length, 1, `exactly one named line: ${JSON.stringify(logged)}`);
+  assert.match(logged[0], /frame capture failed for frames\/01-thing\.png after 3 attempts:.*screenshot timeout/);
+  assert.match(logged[0], /evidence only, the beat's verdict is unaffected/);
+});
+
+test('the beat loop is wired through captureFrame — no bare page.screenshot left in the runner', async () => {
+  const { runnerSourceContaining } = await import('./runner-source.mjs');
+  const runner = runnerSourceContaining('await captureFrame(page,');
+  assert.match(runner.path, /run-story\.mjs$/, 'the frame capture happens in the beat loop itself');
+  assert.doesNotMatch(runner.source, /await page\.screenshot\(/, 'row 90: a bare, unretried screenshot must not survive beside the helper');
 });
