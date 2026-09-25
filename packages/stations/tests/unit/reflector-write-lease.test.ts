@@ -28,6 +28,7 @@ import { runReflector } from '../../phases/reflector.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import { acquireIsolatedReflectorLease } from '../test-fixtures/reflector-lease-test-fixture.ts';
+import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 
 // Same forge root the reflector code itself resolves to (orchestrator/phases/ ⇒ ..).
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
@@ -138,6 +139,7 @@ test('forge-ler4: runReflector REFUSES (reflection_status:failed, cause brain-wr
       const result = await runReflector(makeInput(h), h.logger, {
         sdkQuery: fakeSdkQueryShouldNotRun,
         acquireBrainWriteLease: acquireIsolatedReflectorLease,
+        agentDef: canonicalDef('reflector'),
       });
       assert.equal(
         result.reflection_status,
@@ -172,6 +174,7 @@ test('forge-ler4: once the lease is free, runReflector proceeds normally', async
       sdkQuery: fakeSdkQueryClean,
       brainLint: () => ({ findings: [], exitCode: 0 }),
       acquireBrainWriteLease: acquireIsolatedReflectorLease,
+      agentDef: canonicalDef('reflector'),
     });
     assert.equal(result.reflection_status, 'closed');
   } finally {

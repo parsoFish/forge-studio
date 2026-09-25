@@ -26,6 +26,7 @@ import { join } from 'node:path';
 
 import { runAdversarialReview, type AdversarialReviewResult } from '../../phases/adversarial-review.ts';
 import { testClassProfilePort } from './class-profile-port-fixture.ts';
+import { canonicalDef } from './canonical-def-fixture.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import { serializeWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
@@ -196,6 +197,6 @@ export async function run(
   return runAdversarialReview(
     { initiativeId: INIT_ID, worktreePath: fx.worktree, cycleId: CYCLE_ID, logsRoot: fx.logsRoot, projectName: 'fix', changeClass: 'code' },
     logger,
-    { queryFn, classProfiles: testClassProfilePort() },
+    { queryFn, classProfiles: testClassProfilePort(), agentDef: canonicalDef('adversarial-review') },
   );
 }

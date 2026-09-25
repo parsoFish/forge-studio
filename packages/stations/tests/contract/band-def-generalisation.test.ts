@@ -15,24 +15,36 @@
  *
  * (a)/(c) capture the real spawn call via an injected `queryFn`, mirroring
  * `pm-spawn-capture.test.ts` / `adversarial-review-spawn-capture.test.ts`.
- * (b) cannot: `runDeveloperLoop` has no injectable query function (see
- * `developer-loop.cost-ceiling.test.ts`'s header) — proven instead as two
- * halves: execAgent's dispatch (a stubbed `deps.runDeveloperLoop` records
- * which def it was handed) + `buildDevSystemPrompt` (the exact function that
- * builds the per-iteration prompt) reading that def's own SKILL.md.
+ * (a) also reads back the run's own events.jsonl to prove telemetry identity
+ * (round 2 item 3): `skill`/`agent_slug` must be the executing def's OWN
+ * slug, never a canonical literal.
+ * (b) cannot capture a spawn: `runDeveloperLoop` has no injectable query
+ * function (see `developer-loop.cost-ceiling.test.ts`'s header) — proven
+ * instead as three parts: execAgent's dispatch (a stubbed
+ * `deps.runDeveloperLoop` records which def it was handed), `buildDevSystemPrompt`
+ * (the prompt), and `resolveDevSpawnModel` (round 2 item 2: model/tier come
+ * from the def, not the canonical `DEV_MODEL` constant).
  * (d) is a single direct test of the shared `loadAgentSkillText` helper every
  * binding now goes through.
+ *
+ * Round 2 item 1 (no canonical default) is proven by the TYPE SYSTEM, not a
+ * runtime test here: `agentDef` is a REQUIRED field everywhere it was
+ * threaded (`RunProjectManagerOptions`, the adversarial-review/reflector
+ * `opts`/`ReflectorDeps`, `runDeveloperLoop`'s own param) — every one of
+ * this test file's calls below supplies it explicitly, and `npx tsc --noEmit`
+ * is the enforcement (see the session report for the pinned-test ripple this
+ * produced when the defaults were removed).
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { createPhaseExecutor } from '../../phases/executor-table.ts';
 import { runAdversarialReview as realRunAdversarialReview } from '../../phases/adversarial-review.ts';
 import { runProjectManager as realRunProjectManager, type PmQueryFn } from '../../phases/project-manager.ts';
-import { buildDevSystemPrompt } from '../../phases/dev-binding.ts';
+import { buildDevSystemPrompt, resolveDevSpawnModel, DEV_MODEL, DEV_ALLOWED_TOOLS } from '../../phases/dev-binding.ts';
 import { loadAgentSkillText } from '../../phases/agent-skill-text.ts';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
@@ -48,6 +60,12 @@ import {
   type Fixture,
 } from '../test-fixtures/adversarial-review-fixture.ts';
 
+/** Every JSON line the run's own event log recorded (round 2 item 3 proof). */
+function readEvents(logsDir: string, cycleId: string): Array<{ skill?: string; event_type?: string; metadata?: Record<string, unknown> }> {
+  const path = join(logsDir, cycleId, 'events.jsonl');
+  return readFileSync(path, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+}
+
 /** A studio-agent SKILL.md valid enough to load, at `<tmp>/skills/<slug>/SKILL.md`. */
 function writeAgentSkill(
   tmp: string,
@@ -58,6 +76,7 @@ function writeAgentSkill(
     allowedTools: string[];
     disallowedTools: string[];
     marker: string;
+    model?: string;
   },
 ): AgentDefinition {
   const dir = join(tmp, 'skills', opts.slug);
@@ -79,7 +98,7 @@ function writeAgentSkill(
     'runtime:',
     '  sdk: claude',
     '  strategy: fixed',
-    '  model: claude-sonnet-4-6',
+    `  model: ${opts.model ?? 'claude-sonnet-4-6'}`,
     ...(opts.loopStrategy ? [`  loopStrategy: ${opts.loopStrategy}`] : []),
     'brainAccess: none',
     'interactivity: Fully autonomous; never blocks on the operator.',
@@ -193,6 +212,20 @@ test('execAgent: a non-canonical def declaring review-band routes to the review 
       /adversarial-review skill contract/,
       'the spawned system prompt must NOT carry the canonical adversarial-review identity',
     );
+
+    // Round 2 item 3: the run's own start/end events name WHO ran — the
+    // executing def's own slug, never the canonical 'adversarial-review' literal.
+    const events = readEvents(logsDir, 'CY-band-def-review');
+    const boundary = events.filter((e) => e.event_type === 'start' || e.event_type === 'end');
+    assert.ok(boundary.length >= 2, 'expected a start and an end event for the review band');
+    for (const e of boundary) {
+      assert.equal(e.skill, 'docs-review', `event.skill must be docs-review, not the canonical literal — got ${JSON.stringify(e)}`);
+      assert.equal(
+        (e.metadata as { agent_slug?: string } | undefined)?.agent_slug,
+        'docs-review',
+        `event.metadata.agent_slug must be docs-review — got ${JSON.stringify(e)}`,
+      );
+    }
   } finally {
     fx?.cleanup();
     rmSync(tmp, { recursive: true, force: true });
@@ -360,6 +393,40 @@ test('execAgent: a non-canonical def declaring loopStrategy ralph routes to the 
     // per-iteration system prompt reads THIS def's own SKILL.md.
     const prompt = buildDevSystemPrompt(tmp, def);
     assert.match(prompt, /MARKER-docs-writer-MARKER/, 'the dev-loop system prompt carries docs-writer\'s OWN SKILL.md body');
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// (b2) round 2 item 2 — the dev loop honours the EXECUTING def's model and
+// tools, not the canonical DEV_MODEL/DEV_ALLOWED_TOOLS constants. This is the
+// exact call (`resolveDevSpawnModel`) `developer-loop.ts`'s live spawn now
+// makes; `allowedTools`/`disallowedTools` need no derivation — they are
+// already plain fields the spawn reads straight off `agentDef`.
+// ---------------------------------------------------------------------------
+
+test('resolveDevSpawnModel: a docs-writer def with a DIFFERENT declared model resolves to ITS OWN model/tier, not developer-ralph\'s DEV_MODEL', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'band-def-dev-model-'));
+  try {
+    const def = writeAgentSkill(tmp, {
+      slug: 'docs-writer-haiku',
+      loopStrategy: 'ralph',
+      allowedTools: ['Read', 'Grep'],
+      disallowedTools: ['Bash', 'Edit', 'MultiEdit', 'NotebookEdit', 'WebFetch', 'WebSearch'],
+      marker: 'docs-writer-haiku',
+      model: 'claude-haiku-4-5-20251001',
+    });
+
+    const spawnModel = resolveDevSpawnModel(def);
+    assert.equal(spawnModel.tier, 'haiku', 'docs-writer-haiku declares haiku — the dev loop must spawn it at haiku');
+    assert.equal(spawnModel.model, 'claude-haiku-4-5-20251001');
+    assert.notEqual(spawnModel.model, DEV_MODEL, 'must NOT fall back to developer-ralph\'s canonical model');
+
+    // Tools need no derivation at all — the dev loop's live spawn reads
+    // `agentDef.allowedTools`/`agentDef.disallowedTools` directly.
+    assert.deepEqual(def.allowedTools, ['Read', 'Grep']);
+    assert.notDeepEqual(def.allowedTools, DEV_ALLOWED_TOOLS, 'must NOT fall back to developer-ralph\'s canonical tool list');
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
