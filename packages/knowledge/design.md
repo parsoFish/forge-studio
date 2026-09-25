@@ -322,3 +322,9 @@ index body (one per `./themes/<slug>.md` occurrence). Exported:
 `brain-fix-auto.ts`'s `ensureLinkedAt` used to carry its own copy of this
 exact scan — one implementation, both callers.
 
+
+### Security review findings (D14, 2026-09-25)
+
+- **Untrusted refs.** `evidence:` and body spans are theme-authored text. Every ref reaches the filesystem only through `resolveGuardedPath(projects/, [project, ...segments])`; a refused ref is dropped before `existsSync` or `git log` sees it. A non-string `evidence:` entry (a bare number, an object) is dropped the same way — never counted, never thrown on, so one malformed frontmatter value cannot crash the whole lint pass.
+- **`--literal-pathspecs`.** `wasEverTracked` runs `git -C <checkout> --literal-pathspecs log --all -- <ref>` (a global option, so it precedes `log`). Without it a wildcard or `:`-magic ref (`src/*.ts`, `:(glob)**/x`) gets pathspec expansion, a never-tracked ref glob-matches a real commit, and history-backed staleness reads a false positive.
+- **Memo lifetime.** `projectTruthRows` memoises per `cwd` so `checkThemeTruth` and the caller's following `brainTruthRates` share one git-backed computation. The bridge lints in-process (`runBrainLintFullMemoized`/`Fresh`, `bridge-studio-kb-consolidate.ts`), so a process-lifetime memo served the first pass's rows forever, including to the "fresh" re-lint after a consolidate. `runBrainLint` — the one entry point every full-scope pass funnels through — calls `resetProjectTruthRowsCache()` first, scoping the memo to exactly one pass.

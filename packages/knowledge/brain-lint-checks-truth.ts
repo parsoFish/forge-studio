@@ -50,11 +50,7 @@ function normalizeCandidate(raw: string): string | null {
 
 /** Non-empty `evidence:` is the complete reference set. `antipattern` (M3) is
  *  judged on `evidence:` alone, even empty/absent — its claim IS an absence.
- *  A non-string entry (a mistyped `evidence:` value — a bare number, an
- *  object) is DROPPED, like a guard-refused ref: never counted, never
- *  thrown on (`.startsWith` on a non-string would crash brain-lint for
- *  every theme in the run, one bad frontmatter value taking down the
- *  whole pass). */
+ *  Non-string entries are dropped (design.md § Brain-lint truthfulness axis). */
 export function extractThemeReferences(body: string, frontmatter: Record<string, unknown>): string[] {
   const evidence = frontmatter.evidence;
   const stringEvidence = Array.isArray(evidence)
@@ -85,13 +81,7 @@ function isGitWorkTree(checkoutRoot: string): boolean {
 /** Was `ref` ever committed to ANY ref (`--all`) in `checkoutRoot`'s history
  *  — only called for a ref already absent from the tree. Empty output (exit
  *  0) means never tracked; anything else is a real failure, never swallowed.
- *  `--literal-pathspecs` (a GLOBAL git option — must precede the `log`
- *  subcommand) is load-bearing: `ref` is theme-authored, untrusted text, and
- *  without it a wildcard or magic-word value (e.g. `src/*.ts`, or a
- *  `:`-prefixed pathspec magic-word) gets pathspec MAGIC, not a literal
- *  path — a ref that was never actually tracked can glob-match an unrelated
- *  real commit and read back as "once tracked", inflating history-backed
- *  staleness with a false positive. */
+ *  `--literal-pathspecs` is load-bearing: `ref` is untrusted (design.md). */
 function wasEverTracked(checkoutRoot: string, ref: string): boolean {
   const r = spawnSync(
     'git',
@@ -155,18 +145,7 @@ type ProjectTruthRow = Pick<BrainTruthRate, 'project' | 'checkout' | 'history'> 
 // Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
 const projectTruthRowsCache = new Map<string, ProjectTruthRow[]>();
 
-/** Clears the per-`cwd` memo `projectTruthRows` keeps. D14 security review:
- *  the memo is process-lifetime, keyed only by `cwd` — a long-lived bridge
- *  process that re-lints many times over the SAME `cwd` (`runBrainLintFullFresh`,
- *  `bridge-studio-kb-consolidate.ts`) would otherwise serve the FIRST pass's
- *  truth rows forever, including on a "fresh" re-lint that exists precisely
- *  to observe writes made since. `runBrainLint` (`brain-lint.ts`) — the one
- *  entry point every full-scope lint pass funnels through, CLI or bridge —
- *  calls this at its own start, so the memo's lifetime is scoped to ONE
- *  pass: `checkThemeTruth` (invoked from inside that pass) and a caller's
- *  own following `brainTruthRates` call (the CLI's `truthfulness:` summary
- *  lines, printed right after) still share one git-backed computation
- *  without re-deriving it, but nothing survives INTO the next pass. */
+/** Scopes the memo to ONE lint pass; `runBrainLint` calls it first (design.md). */
 export function resetProjectTruthRowsCache(): void {
   projectTruthRowsCache.clear();
 }
