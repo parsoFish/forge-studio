@@ -69,25 +69,23 @@ function spendFieldFor(result) {
 /**
  * Derive one index row from a completed run result.
  *
- * `clip` is EXISTENCE-CHECKED, not assumed (forge-8vfn.2.34): the webm is
- * gitignored (`.gitignore:191-195`), so a fresh clone or CI has none, and a
- * row that always claimed one made every generated index link to a file
- * nobody cloning the repo has. The check is INJECTED — `{ root, exists }`, the
- * file's existing seam style (`bridge.mjs`'s
- * `bridgeGhToken({ exec = defaultGhTokenExec } = {})`) — so a test can control
- * it without a real recording. The DEFAULT (`exists` always true) reproduces
- * today's unconditional behaviour exactly: every existing caller keeps
- * behaving the same until it deliberately opts into the real check by passing
- * `root`.
+ * `clip` is ALWAYS `<id>/story.webm` (forge-8vfn.2.34, REVISED). An earlier
+ * pass made it existence-checked against disk — the webm is gitignored
+ * (`.gitignore:191-195`), so a fresh clone or CI has none — but that only
+ * fixed the dead-`<video>` problem for whichever row path opted into the
+ * check, and the COMMITTED `demos/stories/index.html` (what a fresh clone
+ * actually sees) never did, so it kept linking to a file nobody has, forever.
+ * `firstFrame` is what actually fixes it: frames ARE tracked, so
+ * `renderGalleryIndex` gives the `<video>` a real `poster` instead of the
+ * browser's empty-player placeholder — bytes that depend only on what THIS
+ * run captured, never on what happens to be on whatever disk generated them.
  */
-export function storyRowFrom(result, { root = null, exists = () => true } = {}) {
+export function storyRowFrom(result) {
   const beats = result.beats ?? [];
   const greenBeats = beats.filter((b) => b.status === 'green').length;
   // An empty story is not green: `every` is vacuously true on an empty array,
   // which would report a story that ran nothing as a passing story.
   const status = beats.length > 0 && greenBeats === beats.length ? 'green' : 'red';
-  const clipRelative = `${result.story.id}/story.webm`;
-  const clipCheckPath = root === null ? clipRelative : join(root, 'demos', 'stories', clipRelative);
   const firstFrameRelative = beats[0]?.frame;
   return Object.freeze({
     id: result.story.id,
@@ -95,10 +93,10 @@ export function storyRowFrom(result, { root = null, exists = () => true } = {}) 
     status,
     beats: beats.length,
     greenBeats,
-    clip: exists(clipCheckPath) ? clipRelative : null,
-    // The clip-less fallback's picture: the first frame this run actually
-    // captured, so a checkout without the (gitignored) recording still shows
-    // something real rather than a broken player.
+    clip: `${result.story.id}/story.webm`,
+    // Frames ARE tracked (unlike the clip), so this is what actually fixes
+    // the fresh-clone problem: `renderGalleryIndex` gives the `<video>` a real
+    // `poster` instead of the browser's empty-player placeholder.
     firstFrame:
       typeof firstFrameRelative === 'string' && firstFrameRelative !== ''
         ? `${result.story.id}/${firstFrameRelative}`
@@ -109,13 +107,14 @@ export function storyRowFrom(result, { root = null, exists = () => true } = {}) 
 const esc = (s) =>
   String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-/** The row's media: a `<video>` when its clip exists, else the first captured
- *  frame, else a note — never a `<video>` pointed at a file that isn't there
- *  (forge-8vfn.2.34; the clip is gitignored, so most checkouts have none). */
+/** The row's media: ALWAYS a `<video>` (forge-8vfn.2.34, REVISED) — never
+ *  conditional on disk, so the generator and the committed index can never
+ *  disagree about what to render. A `poster` of the first captured frame is
+ *  added when one is known, so a checkout without the gitignored webm shows a
+ *  real picture instead of the browser's empty-player placeholder. */
 function mediaFor(row) {
-  if (row.clip) return `<video src="${esc(row.clip)}" autoplay loop muted playsinline></video>`;
-  if (row.firstFrame) return `<img src="${esc(row.firstFrame)}" alt="${esc(row.title)} — first frame">`;
-  return `<p class="no-clip">no clip recorded on this checkout</p>`;
+  const poster = row.firstFrame ? ` poster="${esc(row.firstFrame)}"` : '';
+  return `<video src="${esc(row.clip)}"${poster} autoplay loop muted playsinline></video>`;
 }
 
 /**
@@ -153,8 +152,7 @@ export function renderGalleryIndex(rows, stale = []) {
   .story.red { border-left-color: #cf222e; }
   .verdict.green { color: #1a7f37; }
   .verdict.red { color: #cf222e; font-weight: 600; }
-  video, img { max-width: 100%; border-radius: 4px; }
-  .no-clip { color: #666; font-style: italic; }
+  video { max-width: 100%; border-radius: 4px; }
   .stale-badge { color: #9a6700; font-weight: 600; }
 </style>
 </head>
