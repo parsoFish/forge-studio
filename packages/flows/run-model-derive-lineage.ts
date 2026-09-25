@@ -5,7 +5,7 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { EventLogEntry } from '@forge/kernel';
-import type { RunStatus, Run } from './run-view-types.ts';
+import type { RunStatus, Run } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // Artifact detection

@@ -5,7 +5,7 @@
 import { REFLECTION_LOST_EVENT } from './cycle-context.ts';
 import type { EventLogEntry } from '@forge/kernel';
 import { costStreamFacts, sumAuthoritativeCostUsd } from '@forge/kernel';
-import type { RunStatus, RunPhaseStatus } from './run-view-types.ts';
+import type { RunStatus, RunPhaseStatus } from '@forge/contracts';
 import { eventToNodeId } from './run-model-derive-node-id.ts';
 import { findDelivered, findLatestWiVerdict } from './run-model-derive-cost.ts';
 

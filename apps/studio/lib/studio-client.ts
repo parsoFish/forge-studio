@@ -68,8 +68,16 @@ import {
 // Types mirroring server shapes
 // ---------------------------------------------------------------------------
 
-export type RunStatus = 'planned' | 'active' | 'gated' | 'complete' | 'failed';
-export type RunPhaseStatus = 'pending' | 'active' | 'complete' | 'retrying' | 'failed';
+// forge-8vfn.5.17: RunStatus/RunPhaseStatus/RunPhaseMeta/Run used to be
+// hand-declared here (a second copy of packages/flows/run-view-types.ts, with
+// no parity test — bead forge-cv9). They now live in @forge/contracts (the
+// one package this 'use client' module may import) — imported for this
+// file's own use below AND re-exported so every existing
+// `from './studio-client'` import keeps resolving unchanged. See
+// packages/contracts/design.md for the three fields this declaration
+// resolves toward the wire-parse side, not the server's own.
+import type { RunStatus, RunPhaseStatus, RunPhaseMeta, Run } from '@forge/contracts';
+export type { RunStatus, RunPhaseStatus, RunPhaseMeta, Run };
 
 /**
  * forge-3oq: the server's own per-object provenance token — Flow / Agent /
@@ -166,116 +174,6 @@ export function parseKbLintSummary(raw: unknown): KbLintSummary | null {
     ...(typeof l.error === 'string' ? { error: l.error } : {}),
   };
 }
-
-export type RunPhaseMeta = {
-  costUsd: number;
-  retries: number;
-  model?: string;
-  lastProgressAt?: string;
-  /** R6-01 WI-1 F1: mirrors orchestrator/run-model.ts's RunPhaseMeta.lastEventAt
-   *  — latest event of ANY type attributed to this node (unlike lastProgressAt,
-   *  not filtered to progress types). Drives lib/phase-log-refresh.ts. */
-  lastEventAt?: string;
-  wedged?: boolean;
-  iter?: number;
-  iterBudget?: number;
-  brainReads?: number;
-  delivered?: { files: number; insertions: number; commits: number };
-  gateChecks?: { id: string; pass: boolean; detail?: string }[];
-  /**
-   * R6-05 WI-1: mirrors orchestrator/run-model.ts's RunPhaseMeta.findings —
-   * the adversarial-review node's finding counts, carried verbatim over the
-   * wire. Honest-absent: present only when a real review.findings.authored
-   * event fired (a genuine all-zero clean pass still populates it).
-   */
-  findings?: { total: number; blocker: number; major: number; minor: number; info: number };
-};
-
-export type Run = {
-  id: string;
-  flowId: string;
-  initiativeId: string;
-  initiative: string;
-  /**
-   * W6-SW-3 (sweep C8#1): the manifest's project slug, carried through so
-   * GateBar can thread it into `postGate` for plan gates — mirrors
-   * orchestrator/run-model.ts's `Run.project`. Optional: absent for a
-   * degraded (corrupt-manifest) run.
-   */
-  project?: string;
-  /**
-   * W8-A3 (`flows-23`): the architect session that produced this initiative —
-   * mirrors `orchestrator/run-model.ts`'s `Run.architectSessionId`, straight
-   * off the manifest. Absent when the manifest names none; never fabricated.
-   */
-  architectSessionId?: string;
-  status: RunStatus;
-  /** W7-C3 (forge-cv9): mirrors orchestrator/run-model.ts VALID_ORIGINS —
-   *  'triggered' is a real, producible origin since R2-08-F4; the narrower
-   *  client type forced consumers to handle only two of three cases. */
-  origin: 'architect' | 'human-directed' | 'triggered';
-  costUsd: number | null; // null = no cost recorded, never a fabricated 0 — forge-ygys, why: tests/integration/run-cost-null.test.ts
-  startedAt?: string;
-  /**
-   * W7-A3 (flows-29): the real cycle-end instant, mirrored from
-   * orchestrator/run-model.ts's `Run.completedAt` (W6-RV-2). Absent for a
-   * still-open run — never fabricated. MonitorSummary's ELAPSED stops here.
-   */
-  completedAt?: string;
-  phases: Record<string, RunPhaseStatus>;
-  phaseMeta: Record<string, RunPhaseMeta>;
-  artifactsReady: Partial<Record<
-    'plan' | 'work-items' | 'pr' | 'demo' | 'verdict' | 'reflection',
-    'view' | 'gate'
-  >>;
-  gate?: string;
-  gateNote?: string;
-  failedAt?: string;
-  failNote?: string;
-  /**
-   * W8-A2 (ON-7 defect 2) — mirrors orchestrator/run-model.ts's
-   * `Run.stopOnBudget` verbatim. The server has served this on the wire
-   * (`sendJson(res, 200, { run }, ...)` — the WHOLE aggregated `Run`, no
-   * field allowlist) since `stopOnBudget` first landed; this client TYPE
-   * simply never declared it, so `parseRun` silently dropped it — the same
-   * declared-data-fails-open class `trigger`/`reflectionLost`/`prUrl` below
-   * were already fixed for. `RunControls`/`RunRail` need this to tell a
-   * clean, resumable budget stop apart from an ordinary crash.
-   */
-  stopOnBudget?: { spentUsd: number; ceilingUsd: number; resumable: true; completedWorkItems: number; totalWorkItems: number; stoppedBeforeNode?: string };
-  /** 2.10: the merged cycle's reflection was lost (cause) — mirrors orchestrator/run-model.ts. */
-  reflectionLost?: string;
-  reflectionLostNote?: string;
-  /**
-   * W7-B7 (artifact-plan-17): the run's pull-request URL, derived server-side
-   * from its own `reviewer.pr-opened` event — mirrors
-   * orchestrator/run-model.ts's `Run.prUrl`. Absent when the cycle never
-   * opened a PR; never fabricated.
-   */
-  prUrl?: string;
-  workItems?: { id: string; status: RunPhaseStatus; costUsd?: number; task?: string; dependsOn?: string[]; delivered?: { files: number; insertions: number; commits: number } }[];
-  /**
-   * The seed flows this run traversed (derived from its phases ∩ each flow's nodes).
-   * A threaded spine run carries [forge-architect, forge-develop] so it
-   * surfaces under both flow monitors (each rendering its own slice). A single-flow
-   * run carries just its own flow id.
-   */
-  flowLineage: string[];
-  /**
-   * R2-08-F4 (ADR-027 amendment) / R6-01 WI-2: what started this run —
-   * mirrors `orchestrator/run-model.ts`'s `Run.trigger` verbatim. Absent
-   * when the run carries no derivable provenance (a plain
-   * architect-originated run) — NEVER a fabricated default. `kind` is left
-   * as `string` rather than importing `TriggerKindId` (an orchestrator-side
-   * type this client-only module cannot pull in — see this file's header
-   * for the re-declare-client-side convention).
-   */
-  trigger?: {
-    kind: string;
-    source: string;
-    scope: string | null;
-  };
-};
 
 // agents-15 (forge-6gv.5.1): `AgentRuntime`, `AgentCapabilityDescriptor`,
 // `ModelTier`, `AgentFanout`, `AgentBudgets`, `AgentCapability` and `Agent`
