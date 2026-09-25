@@ -150,16 +150,42 @@ export const DRAIN_DONE_LINE = '[serve] exited cleanly';
 export const DRAIN_GRACE_MS = 30_000;
 
 /**
+ * Does `pid`'s own cmdline actually look like `forge serve` — review finding
+ * 2. `spawnServeDetached` (`packages/flows/daemon.ts`) spawns the daemon with
+ * the literal argv `[node, --experimental-strip-types, <forgeRoot>/apps/
+ * forge/cli.ts, serve]`. `ownSchedulerPid`'s cwd check alone answers "does a
+ * process with this pid run inside our tree", never "is it our daemon" — a
+ * RECYCLED pid whose new owner happens to share cwd (any other process this
+ * SAME run spawned with `cwd: root`) would pass a cwd-only test, and that pid
+ * then seeds `reapCensusAndSweep`'s TERM/KILL census: a stranger's whole
+ * descendant tree, censused and killed as if it were our own dispatch.
+ * Binding on the two tokens `spawnServeDetached` writes into every daemon's
+ * argv, and nothing else, is the identity the product actually has for "this
+ * is the scheduler". FAILS CLOSED: an unreadable cmdline is never a match.
+ */
+function looksLikeForgeServe(pid, root) {
+  let raw;
+  try {
+    raw = readFileSync(`/proc/${pid}/cmdline`, 'utf8');
+  } catch {
+    return false; // gone, or unreadable — never trusted as a match
+  }
+  const tokens = raw.split('\0').filter((t) => t !== '');
+  return tokens.includes(join(root, 'apps', 'forge', 'cli.ts')) && tokens.includes('serve');
+}
+
+/**
  * The scheduler daemon pid THIS RUN started, or `null` — T1 1418.
  *
  * The SAME ownership test `stopOwnScheduler` applies below (pid file, then a
- * `cwd` match against `root`), factored out so a caller that only needs to
- * KNOW whether this tree owns a running scheduler — never to stop it — does
- * not re-derive the check. `reapCensusAndSweep`'s `schedulerPid` default uses
- * this: a run that started a scheduler for a beat like S10's `scheduler-start`
- * has its dispatch descendants rooted into the SAME census that already gates
- * the trailing sweep, without a bare pid a caller could point at a process
- * this run does not own.
+ * `cwd` match against `root`), PLUS `looksLikeForgeServe` (review finding 2)
+ * — factored out so a caller that only needs to KNOW whether this tree owns
+ * a running scheduler — never to stop it — does not re-derive the check.
+ * `reapCensusAndSweep`'s `schedulerPid` default uses this: a run that started
+ * a scheduler for a beat like S10's `scheduler-start` has its dispatch
+ * descendants rooted into the SAME census that already gates the trailing
+ * sweep, without a bare pid a caller could point at a process this run does
+ * not own — or a recycled one it merely shares a `cwd` with.
  *
  * @param {string} root the run's own worktree
  * @returns {number|null}
@@ -172,11 +198,13 @@ export function ownSchedulerPid(root) {
     return null; // no daemon was started
   }
   if (!Number.isInteger(pid) || pid <= 0) return null;
+  let sameTree;
   try {
-    return realpathSync(`/proc/${pid}/cwd`) === realpathSync(root) ? pid : null;
+    sameTree = realpathSync(`/proc/${pid}/cwd`) === realpathSync(root);
   } catch {
     return null; // already gone, or its cwd is unreadable
   }
+  return sameTree && looksLikeForgeServe(pid, root) ? pid : null;
 }
 
 export function stopOwnScheduler(root, graceMs = DRAIN_GRACE_MS) {
