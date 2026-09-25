@@ -20,6 +20,9 @@
 /** The Studio object model (ADR 027) — pure types, moved here with history. */
 export * from './studio-types.ts';
 
+/** The run view's shape (ADR 028 §3) — moved from `packages/flows`, forge-8vfn.5.17. */
+export * from './run-view-types.ts';
+
 // ── Work items ──
 
 export type WorkItemStatus = 'pending' | 'in-progress' | 'complete' | 'failed';

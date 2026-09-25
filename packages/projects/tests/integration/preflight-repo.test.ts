@@ -319,6 +319,29 @@ test('C2 (HARD): the canonical stanza (SCRATCH_PATHS ignored, .forge/project.jso
   }
 });
 
+test('C2 (HARD): the pre-item-92-followup 5-line stanza (missing the newer runtime-output scratch) now fails C2, naming the missing paths', () => {
+  // Ruling 92 follow-up (bead forge-8vfn.8.1.2, operator item 92): SCRATCH_PATHS
+  // grew two entries — `.forge/live-evidence/` (acceptance-test read-backs) and
+  // `.forge/preflight.json` (preflight output) — after item 92 retired the
+  // blanket `.forge/` ignore projects used to rely on. A project still on the
+  // OLD 5-line stanza (everything SCRATCH_PATHS had BEFORE this follow-up)
+  // must fail C2 now, naming exactly what it is missing — not silently pass
+  // because the stanza used to be complete.
+  const p = happyProject();
+  const OLD_STANZA = ['.forge/work-items/', '.forge/.create-complete', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'];
+  try {
+    writeFileSync(join(p.dir, '.gitignore'), ['node_modules/', 'dist/', ...OLD_STANZA].join('\n'));
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c = clause(r, 'C2');
+    assert.equal(c.pass, false, `the old 5-line stanza must fail C2 now that SCRATCH_PATHS has grown: ${c.detail}`);
+    assert.equal(r.ok, false);
+    assert.match(c.detail, /\.forge\/live-evidence\//, `detail must name the missing .forge/live-evidence/: ${c.detail}`);
+    assert.match(c.detail, /\.forge\/preflight\.json/, `detail must name the missing .forge/preflight.json: ${c.detail}`);
+  } finally {
+    p.cleanup();
+  }
+});
+
 test('C6 (ADVISORY): no GitHub remote warns but does NOT flip ok; states forge-side-satisfied', () => {
   const dir = tmp();
   const forgeRoot = tmp();

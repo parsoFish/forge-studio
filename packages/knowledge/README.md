@@ -10,7 +10,7 @@ of it. Deep paths (`@forge/knowledge/brain-paths.ts`) still resolve — `package
 `"./*": "./*"` — and every existing importer uses one, so they are the **legacy** door,
 kept working and not recommended. Collapsing to one door is bead `forge-8vfn.5.31`.
 
-`tests/contract/contract.test.ts` asserts this list against what the index actually
+`contract.test.ts` asserts this list against what the index actually
 exports, in both directions, and is required to FAIL against an empty index.
 
 ### Values (36)
