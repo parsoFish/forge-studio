@@ -314,6 +314,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/flow-node-kind.ts | flows | verbatim | 66 |
 | packages/flows/flow-runner.ts | flows | rewritten | 638 |
 | packages/flows/flow-fanout.ts | flows | verbatim | 34 |
+| packages/flows/flow-accepts-class.ts | flows | rewritten | 34 |
 | packages/flows/flow-trigger.ts | flows | verbatim | 214 |
 | packages/flows/gate-fix-loop.ts | flows | verbatim | 163 |
 | packages/projects/gate-recipes.ts | projects | verbatim | 146 |
