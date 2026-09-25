@@ -98,6 +98,7 @@ import {
 } from './bridge-studio-hooks-approval.ts';
 import { handleHookUpdate, handleHookDetail } from './bridge-studio-hooks-detail.ts';
 import { handleHookDecline, HOOK_DECLINE_RE } from './bridge-studio-hooks-decline.ts';
+import { handleHookTestFire, HOOK_TEST_FIRE_RE } from './bridge-studio-hooks-test-fire.ts';
 import { handleAuthoringFinalize, FINALIZE_URL } from './bridge-studio-authoring.ts';
 import {
   handleTemplateCreate,
@@ -284,6 +285,15 @@ export function libraryRoutes(deps: LibraryRouteDeps): RouteTable<LibraryRouteCo
     matches: (url) => HOOK_DECLINE_RE.test(pathOf(url)),
     dryClassification: 'exempt-local', // cli/dry-bridge.ts:288, verbatim
     handler: handleHookDecline,
+  },
+  {
+    // forge-6gv.8.1: spawns a real subprocess — see apps/forge/dry-bridge.ts's
+    // HAND_ROUTE_CLASSIFICATION row (action: 'spawn-hook').
+    method: 'POST',
+    path: '/api/studio/hooks/:id/test-fire',
+    matches: (url) => HOOK_TEST_FIRE_RE.test(pathOf(url)),
+    dryClassification: 'refuse',
+    handler: handleHookTestFire,
   },
   {
     method: 'PUT',

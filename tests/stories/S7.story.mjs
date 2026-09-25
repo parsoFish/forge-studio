@@ -118,12 +118,16 @@
  *     creates: §3.1 allows no seeded state except what a PRIOR BEAT OF THIS
  *     STORY made, and reaching across stories would make S7 pass or fail on
  *     whether S5 ran first.
- *   - Beat 13 is the one §3's row ends on, and it has no attribute at all.
- *     Every `data-*` in `forge-ui` naming a hook is `data-hook-count`,
- *     `-event`, `-id`, `-runnable`, `-trust`, `-url`, `-verdict` and
- *     `-carried-by-count`: definition, trust and binding. NOTHING names a hook
- *     EXECUTION. So "the hook fires" is named in the beat's narration and
- *     recorded as a surface the library lane must build.
+ *   - A hook EXECUTION is now a surface (forge-6gv.8.1, library-33). The hook
+ *     page carries a Test-fire control (`data-action="test-fire-hook"`) that
+ *     runs the approved hook through the same approval + package-pin gate
+ *     production dispatch uses, and records each run as a
+ *     `[data-section="test-fire"]` row (`data-test-fire-run`, `-at`,
+ *     `-outcome`, `-event`; `data-test-fire-run-count` on the section).
+ *     Beat 13 fires it and asserts the run row. Dispatch firings surface as
+ *     `data-hook-last-fire-at` / `-outcome` on the same page root, and the
+ *     story now ENDS on them (beats 23–26, T1 1316): run the agent, wait for
+ *     the session to end, walk back to the hook, read the firing.
  *
  * SWEEP. `sweep.mjs` removes `projects/story-<id>` and
  * `brain/projects/story-<id>` only. The skill, hook, template and agent this
@@ -134,6 +138,8 @@
  */
 
 /** The two doors every authoring page offers. Beat 3 forks over them; the runner walks CASES[0]. */
+import { BIND_AND_FIRE } from './S7.fire.mjs';
+
 const DOORS = ['creation-agent', 'manual-form'];
 
 /** What the operator asks the creation agent to build. */
@@ -460,6 +466,45 @@ export default {
       say: 'Trust and verdict are two different axes, and this is the trust one. Approved and runnable is the state that lets an agent carry it; until the operator pressed this, the hook was a file on disk that nothing would ever execute.',
     },
     {
+      // forge-6gv.8.1 (library-33, T1 1314). Test-fire runs the hook for real,
+      // through the approval + package-pin gate dispatch uses; binding is NOT
+      // required, so this is the first moment the operator can see the hook
+      // they approved actually execute.
+      //
+      // WHAT IS ASSERTED, AND WHY EACH KEY:
+      //   - `test-fire-at` / `-event` / `-outcome` are carried by the run ROW,
+      //     which renders only once a run is logged — so a bound `<at>` proves
+      //     a row exists. `-event` is the hook's own declared event; `-outcome`
+      //     is `ran` because HOOK_SCRIPT exits 0. `-outcome` is also on the
+      //     just-fired result block, with the same value, so the together-rule
+      //     reads either.
+      //   - `test-fire-run-count` is a placeholder, not '1': the test-fire log
+      //     lives under `studio/hooks/`, which the sweep does not own
+      //     (`forge-8vfn.2.26`), so a re-run meets its own earlier fires. The
+      //     row's attributes above are what prove THIS press ran.
+      //   - `carried-by-count: '0'` is the unbound state, whose copy the page
+      //     now states plainly ("Unbound — this hook cannot fire until it is
+      //     bound to an agent"): the test-fire works WITHOUT a binding, and the
+      //     beat asserts both facts on one page.
+      // `section` is deliberately not asserted: every panel on the page carries
+      // one, and the count attribute already lives only on the test-fire panel.
+      act: 'Test-fire the approved hook, before any agent carries it',
+      do: [{ press: 'test-fire-hook' }],
+      expect: {
+        route: '/hooks/story-s7-hook',
+        data: {
+          page: 'hook-detail',
+          'hook-id': 'story-s7-hook',
+          'test-fire-run-count': '<hookTestFireRunCount>',
+          'test-fire-at': '<hookTestFireAt>',
+          'test-fire-event': HOOK_EVENT,
+          'test-fire-outcome': 'ran',
+          'carried-by-count': '0',
+        },
+      },
+      say: 'Approval is a promise about bytes; a test-fire is the bytes running. The hook executes here through the same gate a real dispatch uses, and the page records the run — when, on which event, and how it ended — while still saying plainly that nothing will fire it on its own until an agent carries it.',
+    },
+    {
       // Fully expressible — the manual door again, and every field declares a
       // real `data-field`. `/templates/new` is reached from the Library's own
       // Templates shelf CTA.
@@ -584,165 +629,6 @@ export default {
       },
       say: 'Same shape as the skill: forge mints the session and says so where the operator already is, and reaching it is their own next act.',
     },
-    {
-      // AMEND-4 (T1 ruling 668), NAVIGATION (504) — amend-3's shape, one hop
-      // further on, and the same class of miss.
-      //
-      // MEASURED in run 2. The runner's own words are the whole diagnosis:
-      //
-      //   05:08:59.402  ✓ 19. Open the instructions session it just started
-      //   05:08:59.461  ✗ 20. Open an agent from the Agents pillar and bind the hook to it
-      //       no real-nav path to "/agents/brain-ingest" from
-      //       "/sessions/instructions/2026-09-11T05-08-59-34e16588": no
-      //       [data-nav] pillar and no link whose PATHNAME is that route
-      //
-      // **59 ms.** The next beat never waited for anything, because there was
-      // nothing on the session page to wait for — and its own `act` says "from
-      // the Agents pillar", describing an operator this story had never sent
-      // there. The hop was missing, not the assertion.
-      //
-      // WHY THE PILLAR IS NOT THE PROBLEM, since the runner's message reads as
-      // if it were. `beats-drive.mjs:308` collects every `[data-nav][href],
-      // a[href]` on the page and `:318` keeps only those matching the TARGET,
-      // so "no [data-nav] pillar" means no pillar matched THAT route — not
-      // that the page has none. `/agents/brain-ingest` is a DETAIL route and
-      // no pillar carries it; the pillar carries `/agents`. The session page
-      // renders the pillar throughout: this page mounts `StudioArchitectShell`
-      // (`app/sessions/[kind]/[sessionId]/page.tsx:390`), which mounts
-      // `<StudioNav/>` (`StudioArchitectShell.tsx:50`), which stamps
-      // `data-nav="agents"` with `href="/agents"` (`StudioNav.tsx:94`). So the
-      // index is reachable from here where the detail was not, and the beat
-      // below is the hop that makes the next one's first act possible.
-      //
-      // Same assertions as the retired Agents-pillar hop's arrival here, deliberately:
-      // route plus `page` and `page-ready`, and nothing else. No judgement
-      // content, which is what 504's class allows to be authored without going
-      // back to the operator.
-      act: 'Head back to the Agents pillar',
-      expect: {
-        route: '/agents',
-        data: { page: 'agents-index', 'page-ready': 'true' },
-      },
-      say: 'The parts are all made now — a skill, a hook, a template, a house style. None of them does anything yet. Binding happens on a worker\u2019s own page, and the way back to a worker is the Agents pillar.',
-    },
-    {
-      // THE HOP BEAT, added after S7 run 4 (T1 ruling 799(1)).
-      //
-      // Run 4 red beats 22 and 23 (run-4 numbering; 20 and 21 since the T1-1275 amend) identically — *"standing on the wrong page:
-      // `/agents` is not `/agents/brain-ingest`"*. The beat below declared that
-      // route as where it ENDS and was read as where it STOOD, but **a `do`
-      // acts where the browser stands**, and beat 19 leaves it on `/agents`
-      // (`:667`). A route in an `expect` is a post-condition, never a hop.
-      //
-      // A NAVIGATE, NOT A PRESS, measured: `handleFor`
-      // (`beats-repeat.mjs:41-45`) resolves `press` to exactly
-      // `[data-action="<key>"]`, and the card that links here
-      // (`LibraryCard.tsx:179-186`) is a `Link` carrying `data-card-type` and
-      // `data-card-id` and NO `data-action`. Reported, not fixed here: a handle
-      // is a DOM-contract change and this is a story amendment.
-      //
-      // AND WHY IT SUCCEEDS WHERE AMEND-4'S DID NOT. A no-`do` beat never
-      // `page.goto`s — `beats-drive.mjs:372-386` needs `[data-nav][href]` or
-      // `a[href]` for the target ON THIS PAGE and refuses otherwise. Run 2 hit
-      // that refusal for this same target from the SESSION page (recorded
-      // above). From `/agents` the roster renders one `<a href="/agents/<id>">`
-      // per agent, so the runner arrives by CLICKING THE CARD. Amend-4 made the
-      // link reachable and stopped one hop short of using it.
-      //
-      // 504: no `do` skips the step phase and navigates. Assertions are the
-      // three the detail page stamps (`app/agents/[id]/page.tsx:591-593`), read
-      // from source: `data-page="agents"`, `page-ready`, `agent-id`.
-      act: 'Open brain-ingest from the roster',
-      expect: {
-        route: '/agents/brain-ingest',
-        data: { page: 'agents', 'page-ready': 'true', 'agent-id': 'brain-ingest' },
-      },
-      say: 'The roster is a list of workers; binding happens on one worker\u2019s own page. This is the hop the operator makes without thinking about it, and the one the story forgot to write down.',
-    },
-    {
-      // THIS COMMENT USED TO SAY "NOT expressible — no `data-action`, so no
-      // `do` verb can name it". **It became false on 2026-09-04 and stayed in
-      // the file.** `CatalogPalette.tsx:111` has carried
-      // `data-action={`add-${g.kind}-${item.id}`}` since `4de6e5e4` (bead
-      // 5.15), documented at `studio-dom-contract.md:2213`, and its own comment
-      // says the kind is in the name ON PURPOSE — "adding a skill and adding a
-      // tool are different acts on the same widget".
-      //
-      // §15.418: A COMMENT ASSERTING WHAT THE PRODUCT CANNOT DO CARRIES AN
-      // EXPIRY DATE NOBODY SETS. It was true when written, the product grew the
-      // handle, and nothing re-read the claim — so under 504 this beat
-      // NAVIGATED and then asserted the post-condition of a click it never
-      // made. The hook zone honestly read `count=0` (`hooks: []` in the
-      // definition preview, D's read) and S7 run 3 went 21/22 on a bind that
-      // never happened. The together-rule was right throughout; there is no
-      // scoping defect here.
-      //
-      // NO `toggle-advanced` PRESS, and this is deliberate (T1 729). The five
-      // drop zones sit inside a collapsed `<details>` (`app/agents/[id]/
-      // page.tsx:720-770`) — but `CatalogPalette` renders at `:608`, a
-      // DIFFERENT COLUMN of the three-column workbench, so the chip is visible
-      // and clickable with the block shut. And this beat reads ATTRIBUTES, not
-      // pixels: `DropZone.tsx:131-132` renders `data-accepts`/`data-count`
-      // unconditionally, and a closed `<details>` hides its children from
-      // LAYOUT while keeping them in the DOM.
-      //
-      // S7 run 4 is the execution proof. If the press does not bind through the
-      // closed block this reds at `count: '0'` and the remedy is one line —
-      // and that red is INFORMATIVE, where pressing `toggle-advanced` first
-      // would make the run unable to tell "the press binds" from "the press
-      // binds only because we opened the block".
-      //
-      // `accepts` and `count` are the same zone, so one element answers both.
-      // The guard and hook zones are DISTINCT by design and must never merge,
-      // which is why this beat names the hook zone specifically.
-      // THE SAVE IS NOT OPTIONAL, and D caught that it was missing from this
-      // beat's first draft. `addToZone` (`app/agents/[id]/page.tsx:231-238`) is
-      // `setState` + `markDirty()` — nothing more. So the zone reads `count=1`
-      // from LOCAL STATE the instant the chip is clicked, while the agent still
-      // RUNS from what was last saved. Without `save-agent` (`:779`, outside the
-      // `<details>`), beat 21 would dispatch an agent that never received the
-      // hook, and this beat would assert a binding that exists only in the
-      // browser.
-      //
-      // That is the fail-open shape S7 exists to catch, one surface over: a
-      // parsed-and-surfaced value enforced nowhere. Asserting `count: '1'` off
-      // unsaved state would have been this story telling itself the truth about
-      // a screen and a lie about the system.
-      act: 'Bind the hook to the agent, and save it',
-      do: [{ press: 'add-hook-story-s7-hook' }, { press: 'save-agent' }],
-      expect: {
-        route: '/agents/brain-ingest',
-        data: { page: 'agents', 'agent-id': 'brain-ingest', accepts: 'hook', count: '1' },
-      },
-      say: 'A hook is inert until an agent carries it. Binding is the act that makes a library part part of a worker, and it is the reason the hook’s own page counts how many agents carry it.',
-    },
-    {
-      // NOT expressible — and UNLIKE beat 20's identical phrase, this one is
-      // still TRUE as of 2026-09-12, re-checked rather than inherited (§15.418:
-      // such a claim carries an expiry date nobody sets, so it cites what it
-      // checked). Beat 20's version had been false since `4de6e5e4`.
-      //
-      // NOTHING in `forge-ui` names a hook EXECUTION — the whole declared hook
-      // vocabulary is `data-hook-count`, `-event`, `-id`, `-runnable`,
-      // `-trust`, `-url`, `-verdict`, `-carried-by-count`, every one of them a
-      // fact about the DEFINITION or its TRUST, none about a run. So the beat
-      // asserts the dispatch it can see and names the firing it cannot, and
-      // `_1.0/stories/S7.md` records the missing surface. Asserting
-      // `carried-by-count` here instead would be reporting a BINDING as if it
-      // were an EXECUTION, which is the fail-open shape this story exists to
-      // catch.
-      act: 'Run the agent, and watch the hook fire on the session ending',
-      do: [{ press: 'run-agent' }],
-      expect: {
-        route: '/agents/brain-ingest',
-        data: {
-          page: 'agents',
-          'agent-id': 'brain-ingest',
-          'run-status': 'running',
-          'run-id': '<hookRunId>',
-        },
-      },
-      say: 'This is where S7 ends, and it ends on a claim the product does not yet make: that the hook the operator wrote, scanned, approved and bound actually RAN. A hook nobody can prove fired is a hook nobody should trust, and the whole gate in front of it — the scan, the package fingerprint, the approval — is spent guarding an event with no record.',
-    },
+    ...BIND_AND_FIRE,
   ],
 };

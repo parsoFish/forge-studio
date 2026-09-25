@@ -130,6 +130,7 @@ import {
   hookBadges,
   buildHookScanPanel,
   buildHookDetailView,
+  testFireDisabledReason,
 } from '../../lib/hook-library-view.ts';
 import type { HookLibraryEntry, HookLibraryEntryOk, HookDetail } from '../../lib/hook-client.ts';
 
@@ -241,20 +242,31 @@ test('needsReviewCountOf: zero when nothing needs review (empty library or all r
 // badge. Mirrors InstallStateBadge's positive-state precedent
 // (components/studio/LibraryHub.tsx): a resolved-good state gets its own
 // visible badge, not silence.
+// forge-6gv.8.1 (library-10): `okEntry`'s default `carriedBy: []` means every
+// case below is UNBOUND, so each now also carries the 'unbound' badge — the
+// index/card must not look runnable for a hook dispatch can never fire.
 test('hookBadges: an approved, clean hook gets a positive "approved" badge (library-09) — approval is no longer only the absence of a red badge', () => {
-  expect(hookBadges(okEntry({ id: 'a', trust: 'approved', scanVerdict: 'clean' }))).toEqual(['approved']);
+  expect(hookBadges(okEntry({ id: 'a', trust: 'approved', scanVerdict: 'clean' }))).toEqual(['approved', 'unbound']);
 });
 
 test('hookBadges: a never-approved hook gets "needs-review"', () => {
-  expect(hookBadges(okEntry({ id: 'a', trust: 'needs-review', scanVerdict: 'clean' }))).toEqual(['needs-review']);
+  expect(hookBadges(okEntry({ id: 'a', trust: 'needs-review', scanVerdict: 'clean' }))).toEqual(['needs-review', 'unbound']);
 });
 
 test('hookBadges: a never-approved BLOCKED hook gets BOTH "needs-review" and "blocked"', () => {
-  expect(hookBadges(okEntry({ id: 'a', trust: 'needs-review', scanVerdict: 'blocked' }))).toEqual(['needs-review', 'blocked']);
+  expect(hookBadges(okEntry({ id: 'a', trust: 'needs-review', scanVerdict: 'blocked' }))).toEqual(['needs-review', 'blocked', 'unbound']);
 });
 
 test('hookBadges: an overridden hook STILL carries "blocked" alongside "overridden" — the verdict is never laundered, even in the view', () => {
-  expect(hookBadges(okEntry({ id: 'a', trust: 'overridden', scanVerdict: 'blocked' }))).toEqual(['overridden', 'blocked']);
+  expect(hookBadges(okEntry({ id: 'a', trust: 'overridden', scanVerdict: 'blocked' }))).toEqual(['overridden', 'blocked', 'unbound']);
+});
+
+// forge-6gv.8.1 (library-10): dispatch (M7-C U2/B6) makes an unbound hook
+// genuinely unable to fire — the badge names that plainly, and a BOUND hook
+// must not carry it (never a false warning on a hook that CAN fire).
+test('hookBadges: "unbound" is present only when carriedBy is empty — never on a bound hook', () => {
+  expect(hookBadges(okEntry({ id: 'a', trust: 'approved', scanVerdict: 'clean', carriedBy: ['dev-loop'] }))).toEqual(['approved']);
+  expect(hookBadges(okEntry({ id: 'a', trust: 'needs-review', scanVerdict: 'clean', carriedBy: [] }))).toContain('unbound');
 });
 
 // ---------------------------------------------------------------------------
@@ -320,6 +332,8 @@ function detailFixture(overrides: Partial<HookDetail> = {}): HookDetail {
     scan: { verdict: 'clean', findings: [] },
     // forge-8vfn.5.16 (M7-C U2): required on every detail payload.
     recentFireCount: 0,
+    // forge-6gv.8.1 (library-33): required on every detail payload.
+    testFireRuns: [],
     ...overrides,
   };
 }
@@ -363,6 +377,41 @@ test('buildHookDetailView: a fired hook carries recentFireCount + lastFireAt + l
   expect(view.recentFireCount).toBe(7);
   expect(view.lastFireAt).toBe('2026-09-25T12:00:00.000Z');
   expect(view.lastFireOutcome).toBe('ran');
+});
+
+// forge-6gv.8.1 (library-33) — testFireRuns carries through verbatim,
+// newest first, never dropped or re-ordered by the view layer.
+test('buildHookDetailView: testFireRuns carries through verbatim', () => {
+  const run = { at: '2026-09-25T12:00:00.000Z', event: 'SessionEnd' as const, outcome: 'ran' as const, exitCode: 0, durationMs: 12, stdoutTail: 'ok', stderrTail: '' };
+  const view = buildHookDetailView(detailFixture({ testFireRuns: [run] }));
+  expect(view.testFireRuns).toEqual([run]);
+});
+
+// ---------------------------------------------------------------------------
+// testFireDisabledReason (library-33) — approval is required; BINDING is
+// NOT. This is the one property the whole feature depends on: a fresh,
+// never-bound hook must still be test-fireable once approved.
+// ---------------------------------------------------------------------------
+
+test('testFireDisabledReason: needs-review, not blocked -> a reason naming approval', () => {
+  const view = buildHookDetailView(detailFixture({ trust: 'needs-review', scanVerdict: 'clean' }));
+  expect(testFireDisabledReason(view)).toMatch(/approve/i);
+});
+
+test('testFireDisabledReason: needs-review AND blocked -> a reason naming the block', () => {
+  const view = buildHookDetailView(detailFixture({ trust: 'needs-review', scanVerdict: 'blocked' }));
+  expect(testFireDisabledReason(view)).toMatch(/block/i);
+});
+
+test('testFireDisabledReason: approved -> null (allowed) regardless of binding', () => {
+  const view = buildHookDetailView(detailFixture({ trust: 'approved', scanVerdict: 'clean', carriedBy: [] }));
+  expect(view.carriedByCount).toBe(0);
+  expect(testFireDisabledReason(view)).toBeNull();
+});
+
+test('testFireDisabledReason: overridden (was blocked) -> null (allowed)', () => {
+  const view = buildHookDetailView(detailFixture({ trust: 'overridden', scanVerdict: 'blocked' }));
+  expect(testFireDisabledReason(view)).toBeNull();
 });
 
 // ---------------------------------------------------------------------------
