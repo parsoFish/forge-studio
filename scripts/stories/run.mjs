@@ -47,7 +47,7 @@ import { ownGroundManifest } from './ground-hash.mjs';
 import { suiteLockVerdict, lockOrderVerdict, EXIT_LOCK_REFUSED } from './lock-guard.mjs';
 import { sweepStoryResidue } from './sweep.mjs';
 import { captureAndSweepAgentLogs } from './sweep-agent-logs.mjs';
-import { restoreSweptCommitted, stopSchedulerCensusAndRelease } from './sweep-teardown.mjs';
+import { restoreSweptCommitted, stopSchedulerCensusAndRelease, teardownExitCode } from './sweep-teardown.mjs';
 import {
   decideStoryBridge,
   readProcCwd,
@@ -361,6 +361,13 @@ async function main() {
     // `sweep-teardown.mjs` and the three doors in `sweep-teardown.test.ts`.
     const stop = await stopSchedulerCensusAndRelease(ROOT);
     for (const line of stop.lines) console.log(line);
+    // MUST 1 (D's review of #906) — the teardown's own outcome must reach the
+    // process's exit code, not only the log: a surviving daemon grandchild
+    // used to print "REFUSING to release…" or "RELEASE DID NOT HOLD…" right
+    // here and the process still exited 0 on an otherwise-green run.
+    const teardown = teardownExitCode(exitCode, stop);
+    exitCode = teardown.exitCode;
+    for (const line of teardown.lines) console.error(line);
 
     const put = restoreSweptCommitted(ROOT, sweptPaths);
     for (const p of put.restored) console.log(`[stories] restored ${p} — swept before the run and never regenerated`);
