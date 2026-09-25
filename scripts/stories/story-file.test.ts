@@ -573,6 +573,50 @@ test('7.6.136: every field of a valid ground survives validateStory', () => {
 });
 
 /**
+ * `forge-8vfn.7.6.140` — a declaration may narrow its licence to ONE beat's
+ * window with `beat: <n>`, 1-indexed. Absent, it keeps 7.6.136's whole-run
+ * meaning unchanged — a NARROWING a declaration can opt into, not a new
+ * requirement on the ones that already exist.
+ */
+const twoBeats = [
+  { act: 'a', expect: { route: '/x', data: { page: 'p' } }, say: 's' },
+  { act: 'b', expect: { route: '/y', data: { page: 'p' } }, say: 's' },
+];
+
+test('7.6.140: a beat-scoped declaration survives validateStory (7.6.82-shaped door); one with no beat carries no key', () => {
+  const ground = {
+    project: 'p', realSpawn: false, budget_usd: 0,
+    expectedChanges: [{ path: 'forge/skills/x/SKILL.md', change: 'removed', beat: 2 }],
+  };
+  const v = validateStory({ id: 'T', ground, docs: { kind: 'how-to' as const, title: 't' }, beats: twoBeats }) as { ground: unknown };
+  assert.deepEqual(v.ground, ground, 'the beat field must survive the same fixed-field rebuild 7.6.82 caught once');
+
+  const noBeat = { path: 'forge/skills/x/SKILL.md', change: 'removed' };
+  const v2 = validateStory({
+    id: 'T', ground: { ...ground, expectedChanges: [noBeat] },
+    docs: { kind: 'how-to' as const, title: 't' }, beats: twoBeats,
+  }) as { ground: { expectedChanges: Array<Record<string, unknown>> } };
+  assert.equal(Object.hasOwn(v2.ground.expectedChanges[0]!, 'beat'), false, 'no beat key, not an explicit `beat: undefined`');
+});
+
+test('7.6.140: a non-integer, non-positive, or out-of-range beat is refused at load, naming the field', () => {
+  const attempt = (beat: unknown, beats = twoBeats) => () => validateStory({
+    id: 'T',
+    ground: { project: 'p', realSpawn: false, budget_usd: 0, expectedChanges: [{ path: 'x', change: 'removed', beat }] },
+    docs: { kind: 'how-to' as const, title: 't' },
+    beats,
+  });
+  for (const bad of [0, -1, 1.5, 'two', null]) {
+    assert.throws(attempt(bad), /expectedChanges\[0\]\.beat/, `beat=${JSON.stringify(bad)} must be refused`);
+  }
+  assert.throws(
+    attempt(5, [twoBeats[0]!]),
+    /beat 5 does not exist.*1 beat/,
+    'a licence for a beat this story does not have would silently never open',
+  );
+});
+
+/**
  * `forge-8vfn.7.6.143` (b1), T1 ruling 1147 — A DECLARED AGENT WAIT WITH NO
  * `do` BLOCK IS REFUSED AT VALIDATION, before selection and before spend.
  *

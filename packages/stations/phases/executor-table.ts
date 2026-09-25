@@ -126,20 +126,25 @@ const execDev: NodeExecutor = async (ctx) => {
  *
  * The STATION identity now matches the spec's word (forge-8vfn.6.10.18,
  * operator item 85): node id, band guard, `resume_from`, the requeue API
- * field and the CLI flag are all `integrate`. The agent slug (`demo-agent`)
- * and the demo ARTIFACT it produces (`demo.json`, `DEMO.md`) intentionally
- * keep the word `demo` — they name the artifact, not the station.
+ * field and the CLI flag are all `integrate`. The canonical agent slug
+ * (`demo-agent`) and the demo ARTIFACT it produces (`demo.json`, `DEMO.md`)
+ * intentionally keep the word `demo` — they name the artifact, not the
+ * station. Seam F4: like every other band, the events this band emits carry
+ * the EXECUTING node's own def slug (`resolveExecutingAgentDef`), never a
+ * hardcoded canonical literal — a canonical run still resolves to
+ * `demo-agent`, so this is a no-op for the shipped flow.
  */
 const execIntegrate: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, nodeId, state } = ctx;
+  const def = resolveExecutingAgentDef(ctx);
   const start = nodeLogger.emit({
     initiative_id: input.initiativeId,
     phase: 'orchestrator',
-    skill: 'demo-agent',
+    skill: def.slug,
     event_type: 'start',
     input_refs: [input.worktreePath],
     output_refs: [],
-    metadata: { agent_phase: 'integrate', agent_slug: 'demo-agent', node_id: nodeId },
+    metadata: { agent_phase: 'integrate', agent_slug: def.slug, node_id: nodeId },
   });
 
   // Close-contract prep (items 4,5): commit stragglers + push/sync so the
@@ -188,11 +193,11 @@ const execIntegrate: NodeExecutor = async (ctx) => {
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
       phase: 'orchestrator',
-      skill: 'demo-agent',
+      skill: def.slug,
       event_type: 'end',
       input_refs: [],
       output_refs: [],
-      metadata: { agent_phase: 'integrate', agent_slug: 'demo-agent', node_id: nodeId, status: 'failed', integrate_status: 'gate-config-error' },
+      metadata: { agent_phase: 'integrate', agent_slug: def.slug, node_id: nodeId, status: 'failed', integrate_status: 'gate-config-error' },
     });
     return;
   }
@@ -229,11 +234,11 @@ const execIntegrate: NodeExecutor = async (ctx) => {
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
       phase: 'orchestrator',
-      skill: 'demo-agent',
+      skill: def.slug,
       event_type: 'end',
       input_refs: [],
       output_refs: [],
-      metadata: { agent_phase: 'integrate', agent_slug: 'demo-agent', node_id: nodeId, status: 'failed', integrate_status: 'gate-red' },
+      metadata: { agent_phase: 'integrate', agent_slug: def.slug, node_id: nodeId, status: 'failed', integrate_status: 'gate-red' },
     });
     return;
   }
@@ -254,11 +259,11 @@ const execIntegrate: NodeExecutor = async (ctx) => {
     initiative_id: input.initiativeId,
     parent_event_id: start.event_id,
     phase: 'orchestrator',
-    skill: 'demo-agent',
+    skill: def.slug,
     event_type: 'end',
     input_refs: [],
     output_refs: [result.demoJsonPath],
-    metadata: { agent_phase: 'integrate', agent_slug: 'demo-agent', node_id: nodeId, integrate_status: result.status },
+    metadata: { agent_phase: 'integrate', agent_slug: def.slug, node_id: nodeId, integrate_status: result.status },
   });
 };
 

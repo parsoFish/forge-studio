@@ -179,14 +179,12 @@ export async function runAdversarialReview(
     queryFn?: StreamQueryFn;
     signal?: AbortSignal;
     classProfiles?: ClassProfilePort;
-    /** Seam F4: the executing node's own agent def. REQUIRED — no fallback. */
-    agentDef: AgentDefinition;
+    agentDef: AgentDefinition; // seam F4: the executing node's own def, no fallback
   },
 ): Promise<AdversarialReviewResult> {
   const def = opts.agentDef;
-  // The one port (operator ruling, items 81/83): the class → gate-profile
-  // table is the example's, not the platform's. Read once, here, so every
-  // profileFor() below reads the SAME bound table rather than re-resolving it.
+  // The one port (items 81/83): the class table is the example's. Read once, so
+  // every profileFor() below reads the SAME bound table.
   const classProfiles = requireClassProfiles(opts.classProfiles, 'adversarial-review');
   const emit = (
     message: string,

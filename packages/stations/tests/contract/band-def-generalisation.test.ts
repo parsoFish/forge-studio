@@ -462,3 +462,73 @@ test('loadAgentSkillText: a def whose own SKILL.md cannot be read throws naming 
     },
   );
 });
+
+// ---------------------------------------------------------------------------
+// (e) integrate-band, non-canonical `docs-integrate`. execIntegrate spawns no
+// agent (it derives the demo bundle synchronously), but — like every other
+// band — the events it emits must carry the EXECUTING node's own def slug,
+// never the canonical `demo-agent` literal.
+// ---------------------------------------------------------------------------
+
+test('execAgent: a non-canonical def declaring integrate-band routes to the integrate band and its events carry ITS OWN slug, not demo-agent\'s', async () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'band-def-integrate-'));
+  try {
+    const def = writeAgentSkill(tmp, {
+      slug: 'docs-integrate',
+      guard: 'integrate-band',
+      loopStrategy: 'one-shot',
+      allowedTools: ['Read', 'Grep', 'Glob'],
+      disallowedTools: ['Edit', 'MultiEdit', 'NotebookEdit', 'Bash', 'WebFetch', 'WebSearch', 'Task', 'Agent'],
+      marker: 'docs-integrate',
+    });
+
+    const logsDir = mkdtempSync(join(tmpdir(), 'band-def-integrate-logs-'));
+    const logger = createLogger('CY-band-def-integrate', logsDir);
+    const ctx = makeCtx({
+      node: { id: 'integrate', agent: 'docs-integrate' },
+      agents: new Map([['docs-integrate', def]]),
+      input: {
+        initiativeId: 'INIT-2026-01-01-band-def-integrate',
+        manifestPath: '',
+        projectRepoPath: tmp,
+        worktreePath: tmp,
+        cycleId: 'CY-band-def-integrate',
+      },
+      nodeLogger: logger,
+    });
+
+    const executor = createPhaseExecutor({
+      classProfiles: testClassProfilePort(),
+      deps: {
+        // Close-contract prep + gate are stubbed no-ops/greens — this test is
+        // about event identity, not the gate machinery those already cover.
+        commitDevLoopBoundary: () => {},
+        enforceDevLoopCloseInvariant: () => {},
+        computeDeliveryStats: () => ({ commitsAhead: 1, filesChanged: 1, insertions: 1 }),
+        assertNonEmptyDelivery: () => {},
+        runMergeBoundaryGate: () => ({ ok: true, evidence: [] }),
+        runIntegrate: () => ({ status: 'complete', demoJsonPath: join(tmp, 'demo.json') }),
+      },
+    });
+
+    await executor.run('integrate', ctx);
+
+    const events = readEvents(logsDir, 'CY-band-def-integrate');
+    const boundary = events.filter((e) => e.event_type === 'start' || e.event_type === 'end');
+    assert.ok(boundary.length >= 2, 'expected a start and an end event for the integrate band');
+    for (const e of boundary) {
+      assert.equal(
+        e.skill,
+        'docs-integrate',
+        `event.skill must be docs-integrate, not the canonical 'demo-agent' literal — got ${JSON.stringify(e)}`,
+      );
+      assert.equal(
+        (e.metadata as { agent_slug?: string } | undefined)?.agent_slug,
+        'docs-integrate',
+        `event.metadata.agent_slug must be docs-integrate — got ${JSON.stringify(e)}`,
+      );
+    }
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});

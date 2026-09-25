@@ -315,6 +315,10 @@ export type ArtifactTemplate = {
   schema: ArtifactTemplateSchema;
   body: string; // prose contract
   path: string;
+  /** RAW frontmatter origin marker (forge-8vfn.8.3.7) — 'operator' when
+   *  stamped by a create route; absent for a shipped definition. Mapped to
+   *  the wire's HookTemplateOrigin by @forge/kernel's originOfHookOrTemplate. */
+  origin?: string;
 };
 
 /**
@@ -673,6 +677,8 @@ export type DemoElementDefinition = {
   /** The generator prompt — how to author + render this element for a project. */
   body: string;
   path: string;
+  /** RAW frontmatter origin marker — see ArtifactTemplate.origin above. */
+  origin?: string;
 };
 
 /**

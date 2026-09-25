@@ -199,7 +199,7 @@ pids_under() {
 # load is exactly the lag that drops the one pid the census exists to catch — and lets an
 # OLDER process in a shared cwd through if nothing had looked at it before t0.
 proc_start_epoch() {
-  local pid="$1" ticks hz up_ms now_ms
+  local pid="$1" ticks hz uptime_line now_wall up_int up_frac wall_int wall_frac up_cs wall_cs
   [ -r "/proc/$pid/stat" ] || return 1
   # Strip "pid (comm) " first — comm may hold spaces or parens — then starttime is field 20.
   ticks="$(sed 's/.*) //' "/proc/$pid/stat" 2>/dev/null | awk '{print $20}')"
@@ -211,11 +211,32 @@ proc_start_epoch() {
   # runs up to a second EARLY: measured boot fraction .749 on this box, 11 of 15 processes
   # spawned inside t0's own second computed to t0-1 and the census EXCLUDED them — CI red on
   # two doors whose claude spawns immediately, green on the two that spawn 1.5 s later. Boot
-  # time is derived here with millisecond precision from /proc/uptime and the clock read
+  # time is derived here with centisecond precision from /proc/uptime and the clock read
   # together, so a process born after `date +%s` always floors to at least that second.
-  up_ms="$(awk 'NR==1{printf "%d", $1*1000}' /proc/uptime)"; now_ms="$(date +%s%3N)"
-  [ -n "$ticks" ] && [ -n "$up_ms" ] && [ -n "$now_ms" ] || return 1
-  echo $(( (now_ms - up_ms + ticks * 1000 / hz) / 1000 ))
+  #
+  # scripts/lanes-census.test.ts:161 sequel, register row 1030-again. The PREVIOUS "together"
+  # was `awk '/proc/uptime'` immediately followed by `date +%s%3N` — two SEPARATE forks, and
+  # under real contention (load 34 in a gate) the gap between them is not negligible: MEASURED
+  # here, under `taskset -c 0` CPU starvation, a 3s drift between the two reads computed a
+  # start THREE SECONDS before the process's own t0 — the exact "computed to the second
+  # before it" this test's name warns about, just with a bigger deficit than one second. This
+  # box also steps its wall clock (1043's own finding), so a gap of any size can straddle a
+  # correction. The fix is the same shape as 1043's: close the gap, don't widen a timeout for
+  # it. Both reads below are bash BUILTINS — `read` from /proc/uptime and $EPOCHREALTIME (bash
+  # 4.2+, this box runs 5.2) — so there is no fork, and nothing for the scheduler to preempt
+  # into a multi-second gap between them.
+  IFS= read -r uptime_line < /proc/uptime || return 1
+  now_wall="$EPOCHREALTIME"
+  [ -n "$ticks" ] && [ -n "$uptime_line" ] && [ -n "$now_wall" ] || return 1
+  # Centiseconds throughout — /proc/uptime's own resolution, and CLK_TCK's when hz=100 (the
+  # default here): finer than that from EPOCHREALTIME's microseconds is precision the ticks
+  # side can't use anyway. `10#` forces base-10 so a leading-zero fraction ("08") is not read
+  # as an invalid octal literal.
+  up_int="${uptime_line%%.*}"; up_frac="${uptime_line#*.}"; up_frac="${up_frac%% *}00"; up_frac="${up_frac:0:2}"
+  wall_int="${now_wall%%.*}"; wall_frac="${now_wall#*.}"; wall_frac="${wall_frac}00"; wall_frac="${wall_frac:0:2}"
+  up_cs=$(( up_int * 100 + 10#$up_frac ))
+  wall_cs=$(( wall_int * 100 + 10#$wall_frac ))
+  echo $(( (wall_cs - up_cs + ticks * 100 / hz) / 100 ))
 }
 # pids_claude_in <cwd> <since-epoch> → claude processes in exactly <cwd> started at/after <since>.
 # The start-time bound is what makes this safe in a SHARED cwd: an older session in the same
