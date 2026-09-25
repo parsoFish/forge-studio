@@ -26,14 +26,85 @@ import { spawnSync } from 'node:child_process';
  *  it is at the use site, which the escape never did. */
 const NUL = '\u0000';
 import { portableArtifact, portableFenceEscapes, portableReapEntries, portableSweepPaths } from './artifact-paths.mjs';
+import { shortDigest, staleArtifacts } from './artifact-staleness.mjs';
 
-/** Derive one index row from a completed run result. */
+/** `git rev-parse HEAD` in `root`, or `null` when it cannot be read (a
+ *  refusal here would stop every run over a checkout mid-rebase or shallow
+ *  in a way this artifact's provenance does not need to be strict about —
+ *  the READER (`artifact-staleness.mjs`) already treats a missing/unknown
+ *  sha as its own named case rather than a crash). */
+function defaultGitSha(root) {
+  const res = spawnSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
+  return res.error === undefined && res.status === 0 ? res.stdout.trim() : null;
+}
+
+/** The three trees a story RUN writes to, excluded from the dirty check below
+ *  — the pathspec `git status --porcelain -- . ':!demos/stories'
+ *  ':!docs/tutorials' ':!docs/how-to'` uses. */
+const GENERATED_TREES = ['demos/stories', 'docs/tutorials', 'docs/how-to'];
+
+/**
+ * Whether `root`'s working tree has uncommitted changes, or `null` when that
+ * cannot be determined. SCOPED, excluding `GENERATED_TREES` (coordinator
+ * review): an unscoped status sees every artifact an EARLIER beat in the same
+ * run already wrote — its own story.json, frames and generated doc — so on
+ * any multi-story run every story after the first would read `dirty: true`
+ * for output nothing an operator touched. `git.dirty` exists to answer "did
+ * the checkout have uncommitted SOURCE changes", not "has this run's own
+ * prior beat written its own output yet".
+ *
+ * `run` is INJECTED (default the real `spawnSync`) so a test can assert the
+ * exact pathspec without needing a real recording of the confound.
+ */
+export function defaultGitDirty(root, { run = spawnSync } = {}) {
+  const res = run('git', ['-C', root, 'status', '--porcelain', '--', '.', ...GENERATED_TREES.map((t) => `:!${t}`)], {
+    encoding: 'utf8',
+  });
+  return res.error === undefined && res.status === 0 ? res.stdout.trim().length > 0 : null;
+}
+
+/**
+ * Findings row 56 + row 14 (T1 ruling 1283, option B) — whatever spend figure
+ * the RUN ALREADY carries into this writer. MEASURED: today's `result` from
+ * `run-story.mjs` is the literal `{ story, beats, reap, sweep, fence }` —
+ * `summariseRunSpend`'s result is computed there but never attached to it,
+ * and this brief forbids editing that file to add it. Rather than reach past
+ * that boundary, this reads `result.spend` IF a future caller ever adds it
+ * (kept forward-compatible with `summariseRunSpend`'s own `{measured, usd,
+ * label}` shape) and writes the HONEST GAP otherwise — never a bare `$0`,
+ * which would read as "nothing was spent" when nobody looked
+ * (`spend.mjs`'s own UNMEASURED case exists to prevent exactly that
+ * conflation).
+ */
+function spendFieldFor(result) {
+  const s = result.spend;
+  if (s !== null && typeof s === 'object' && typeof s.usd !== 'undefined') {
+    return Object.freeze({ usd: s.usd, unmeasured: s.measured === false ? (s.label ?? true) : false });
+  }
+  return Object.freeze({ usd: null, unmeasured: 'not passed to the artifact writer' });
+}
+
+/**
+ * Derive one index row from a completed run result.
+ *
+ * `clip` is ALWAYS `<id>/story.webm` (forge-8vfn.2.34, REVISED). An earlier
+ * pass made it existence-checked against disk — the webm is gitignored
+ * (`.gitignore:191-195`), so a fresh clone or CI has none — but that only
+ * fixed the dead-`<video>` problem for whichever row path opted into the
+ * check, and the COMMITTED `demos/stories/index.html` (what a fresh clone
+ * actually sees) never did, so it kept linking to a file nobody has, forever.
+ * `firstFrame` is what actually fixes it: frames ARE tracked, so
+ * `renderGalleryIndex` gives the `<video>` a real `poster` instead of the
+ * browser's empty-player placeholder — bytes that depend only on what THIS
+ * run captured, never on what happens to be on whatever disk generated them.
+ */
 export function storyRowFrom(result) {
   const beats = result.beats ?? [];
   const greenBeats = beats.filter((b) => b.status === 'green').length;
   // An empty story is not green: `every` is vacuously true on an empty array,
   // which would report a story that ran nothing as a passing story.
   const status = beats.length > 0 && greenBeats === beats.length ? 'green' : 'red';
+  const firstFrameRelative = beats[0]?.frame;
   return Object.freeze({
     id: result.story.id,
     title: result.story.docs.title,
@@ -41,23 +112,54 @@ export function storyRowFrom(result) {
     beats: beats.length,
     greenBeats,
     clip: `${result.story.id}/story.webm`,
+    // Frames ARE tracked (unlike the clip), so this is what actually fixes
+    // the fresh-clone problem: `renderGalleryIndex` gives the `<video>` a real
+    // `poster` instead of the browser's empty-player placeholder.
+    firstFrame:
+      typeof firstFrameRelative === 'string' && firstFrameRelative !== ''
+        ? `${result.story.id}/${firstFrameRelative}`
+        : null,
   });
 }
 
 const esc = (s) =>
   String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-/** Render the index page. Pure — sorted by id so regeneration is stable. */
+/** The row's media: ALWAYS a `<video>` (forge-8vfn.2.34, REVISED) — never
+ *  conditional on disk, so the generator and the committed index can never
+ *  disagree about what to render. A `poster` of the first captured frame is
+ *  added when one is known, so a checkout without the gitignored webm shows a
+ *  real picture instead of the browser's empty-player placeholder. */
+function mediaFor(row) {
+  const poster = row.firstFrame ? ` poster="${esc(row.firstFrame)}"` : '';
+  return `<video src="${esc(row.clip)}"${poster} autoplay loop muted playsinline></video>`;
+}
+
+/**
+ * Render the index page. Pure — sorted by id so regeneration is stable.
+ *
+ * `row.stale` — a reason string or `null`/absent (findings row 56 + row 14,
+ * T1 ruling 1283 option B), set by BOTH `galleryRowsFrom` and
+ * `committedGalleryRows` — marks a named row with a visible badge instead of
+ * presenting it as current. Reading it FROM THE ROW rather than a second
+ * argument is deliberate: an earlier pass took a `stale` list here, and only
+ * the disk-generation caller ever computed one, so the pinned repo-door check
+ * (which renders `committedGalleryRows`' rows with no such list) disagreed
+ * with the very first real run's output. Two callers computing the same field
+ * on the same row is a question renderGalleryIndex cannot get wrong by taking
+ * no side in it.
+ */
 export function renderGalleryIndex(rows) {
   const sorted = [...rows].sort((a, b) => a.id.localeCompare(b.id));
   const cards = sorted
-    .map(
-      (r) => `  <section class="story ${esc(r.status)}">
+    .map((r) => {
+      const badge = r.stale ? `\n    <p class="stale-badge">${esc(r.stale)}</p>` : '';
+      return `  <section class="story ${esc(r.status)}">
     <h2>${esc(r.id)} — ${esc(r.title)}</h2>
-    <p class="verdict ${esc(r.status)}">${esc(r.status)} · ${r.greenBeats}/${r.beats} beats green</p>
-    <video src="${esc(r.clip)}" autoplay loop muted playsinline></video>
-  </section>`,
-    )
+    <p class="verdict ${esc(r.status)}">${esc(r.status)} · ${r.greenBeats}/${r.beats} beats green</p>${badge}
+    ${mediaFor(r)}
+  </section>`;
+    })
     .join('\n');
 
   return `<!doctype html>
@@ -73,6 +175,7 @@ export function renderGalleryIndex(rows) {
   .verdict.green { color: #1a7f37; }
   .verdict.red { color: #cf222e; font-weight: 600; }
   video { max-width: 100%; border-radius: 4px; }
+  .stale-badge { color: #9a6700; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -88,7 +191,7 @@ ${cards}
 /** Write one story's data. Returns the id it wrote, so a caller can build the
  *  set of entries THIS RUN produced from what was actually written rather than
  *  from the stories it meant to run (T1 ruling 1009(c)). */
-export function writeStoryJson(result, root) {
+export function writeStoryJson(result, root, { gitSha = defaultGitSha, gitDirty = defaultGitDirty, readStoryBytes = readFileSync } = {}) {
   const dir = join(root, 'demos', 'stories', result.story.id);
   mkdirSync(dir, { recursive: true });
   // forge-8vfn.26: the artifact records the PRODUCT, never the checkout that ran
@@ -126,6 +229,15 @@ export function writeStoryJson(result, root) {
   if (portable.sweep && typeof portable.sweep === 'object') {
     portable = { ...portable, sweep: portableSweepPaths(portable.sweep, root) };
   }
+  // Findings row 56 + row 14, T1 ruling 1283 (option B) — provenance, so a
+  // committed artifact can be told apart from one written against a DIFFERENT
+  // checkout state or a DIFFERENT version of the story that produced it.
+  portable = {
+    ...portable,
+    git: Object.freeze({ sha: gitSha(root), dirty: gitDirty(root) }),
+    spend: spendFieldFor(result),
+    storyDigest: shortDigest(readStoryBytes(join(root, 'tests', 'stories', `${result.story.id}.story.mjs`))),
+  };
   writeFileSync(join(dir, 'story.json'), `${JSON.stringify(portableArtifact(portable, root), null, 2)}\n`);
   return result.story.id;
 }
@@ -320,16 +432,33 @@ export function untrackedGalleryTargets(root, entryIds) {
  * @returns {{rows: object[], ids: string[]}} rows in DISCOVERY order; the
  *   render sorts by id itself, so callers never depend on this order.
  */
+/** `{id -> reason}` from `staleArtifacts(root)` — ONE call per row-path
+ *  invocation, shared by both `galleryRowsFrom` and `committedGalleryRows` so
+ *  the two can never compute staleness two different ways. */
+function staleReasonMap(root) {
+  return new Map(staleArtifacts(root).map((s) => [s.id, s.reason]));
+}
+
+/** A row from `storyRowFrom`, with `stale` attached from an already-built
+ *  reason map (findings row 56 + row 14, T1 ruling 1283 option B). ONE
+ *  function so `galleryRowsFrom` and `committedGalleryRows` attach it
+ *  IDENTICALLY — they may read different story.json bytes (disk vs HEAD), but
+ *  never a different notion of "how does staleness land on a row". */
+function withStaleness(row, id, staleReasonById) {
+  return Object.freeze({ ...row, stale: staleReasonById.get(id) ?? null });
+}
+
 export function galleryRowsFrom(root) {
   const base = join(root, 'demos', 'stories');
   const rows = [];
   const ids = [];
+  const staleReasonById = staleReasonMap(root);
   if (existsSync(base)) {
     for (const entry of readdirSync(base, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       const file = join(base, entry.name, 'story.json');
       if (!existsSync(file)) continue;
-      rows.push(storyRowFrom(readStoryJson(file)));
+      rows.push(withStaleness(storyRowFrom(readStoryJson(file)), entry.name, staleReasonById));
       ids.push(entry.name);
     }
   }
@@ -393,6 +522,7 @@ export function committedGalleryRows(root) {
   }
   const rows = [];
   const ids = [];
+  const staleReasonById = staleReasonMap(root);
   for (const rel of ls.stdout.split(NUL)) {
     if (rel === '') continue;
     const show = spawnSync('git', ['-C', root, 'show', `HEAD:${rel}`], {
@@ -403,8 +533,9 @@ export function committedGalleryRows(root) {
     // not yet committed. It is not part of the committed state, so it is not
     // this check's subject — skipped, not refused.
     if (show.error === undefined && show.status === 0) {
-      rows.push(storyRowFrom(JSON.parse(show.stdout)));
-      ids.push(rel.split('/')[2]);
+      const id = rel.split('/')[2];
+      rows.push(withStaleness(storyRowFrom(JSON.parse(show.stdout)), id, staleReasonById));
+      ids.push(id);
     }
   }
   return { rows, ids };
@@ -446,6 +577,9 @@ export function regenerateGallery(root, wroteThisRun = []) {
   }
 
   mkdirSync(base, { recursive: true });
+  // `rows` already carries `.stale` — `galleryRowsFrom` attaches it (findings
+  // row 56 + row 14, T1 ruling 1283 option B), the SAME way `committedGalleryRows`
+  // does, so this and the repo-door check can never disagree about it.
   const html = renderGalleryIndex(rows);
   writeFileSync(join(base, 'index.html'), html);
   return { rows, html };
