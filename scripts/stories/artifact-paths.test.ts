@@ -196,6 +196,72 @@ test('7.6.120: a MALFORMED escape is left for the backstop, never emitted as an 
 });
 
 /*
+ * T1 ruling 1225 — `attributeEscapes` (`fence-attribution.mjs`) now stamps
+ * `owner`/`reason` onto every escape BEFORE it reaches `writeStoryJson`, and
+ * `owner`, when present, is the authority this function trusts over `live`.
+ * The defect this closes: A's S10 run 24 — an APPEARED sibling tree with NO
+ * live process at all is UNATTRIBUTABLE (never red, per ruling 1225), but the
+ * pre-1225 shape of this function keyed portability on `live == null` alone,
+ * so `writeStoryJson` still THREW on that exact escape (reproduced against
+ * this file before the fix: `portableArtifact` refused on `fence.escapes[0]
+ * .root` AND `.reason`, both still absolute) — turning a run that should have
+ * printed a clean GREEN verdict into an uncaught crash instead, before the
+ * verdict's own RED gate (which runs later in `run-story.mjs`) ever got a
+ * chance to decide anything.
+ */
+test('1225: an UNATTRIBUTABLE escape with NO live process (owner set, live null) becomes portable — the S10 run 24 defect', () => {
+  const raw = [{
+    root: '/home/parso/forge-m7-d-grp',
+    paths: ['projects/x/README.md'],
+    live: null,
+    owner: 'unattributable',
+    reason: 'no descendant of this run was seen in /home/parso/forge-m7-d-grp',
+  }];
+  const escapes = portableFenceEscapes(raw);
+  assert.equal(escapes[0].root, 'forge-m7-d-grp', 'root becomes portable even with no live process to relativise against');
+  assert.equal(escapes[0].rootKind, 'sibling-basename');
+  assert.equal(escapes[0].live, null, 'there is genuinely nothing to relativise here — live stays null, not stamped');
+  assert.equal(
+    escapes[0].reason, 'no descendant of this run was seen in forge-m7-d-grp',
+    'the reason\'s OWN prose must not reintroduce the machine path this function exists to remove',
+  );
+  assert.deepEqual(machinePathsIn(escapes), [], 'the whole point: nothing here may still name this machine');
+  assert.doesNotThrow(() => portableArtifact({ fence: { escapes } }, '/home/parso/forge-m7-d-d1c'),
+    'the crash this closes: a GREEN-eligible run must not throw before its own verdict gate runs');
+});
+
+test('1225: owner "this-run" is left ALONE and still refuses, even with live null — a real breach is never tidied', () => {
+  const raw = [{
+    root: '/home/parso/forge-m7-d-grp',
+    paths: ['x.mjs'],
+    live: null,
+    owner: 'this-run',
+    reason: 'sampled pid 4242 with its cwd inside /home/parso/forge-m7-d-grp (/home/parso/forge-m7-d-grp/sub)',
+  }];
+  const escapes = portableFenceEscapes(raw);
+  assert.equal(escapes[0].root, '/home/parso/forge-m7-d-grp', 'a THIS-RUN escape keeps its absolute root');
+  assert.equal(escapes[0].reason, raw[0].reason, 'and its reason, untouched — this one must still hit the refusal');
+  assert.equal(machinePathsIn(escapes).length, 2, 'both root and reason still name the machine');
+  assert.throws(() => portableArtifact({ fence: { escapes } }, '/home/parso/forge-m7-d-d1c'),
+    /still names this machine/, 'a genuinely fatal escape must still stop the artifact, exactly as before ruling 1225');
+});
+
+test('1225: owner "unattributable" with a LIVE process (the old "somebody else is here" shape) still becomes portable', () => {
+  const raw = [{
+    root: '/home/parso/forge-m6-c',
+    paths: ['a.mjs'],
+    live: { pid: 99, cwd: '/home/parso/forge-m6-c', via: 'cwd' },
+    owner: 'unattributable',
+    reason: 'no descendant of this run was seen in /home/parso/forge-m6-c',
+  }];
+  const escapes = portableFenceEscapes(raw);
+  assert.equal(escapes[0].root, 'forge-m6-c');
+  assert.equal(escapes[0].live.cwd, '.');
+  assert.equal(escapes[0].reason, 'no descendant of this run was seen in forge-m6-c');
+  assert.deepEqual(machinePathsIn(escapes), []);
+});
+
+/*
  * `forge-8vfn.7.6.125` — THE SECOND SEAM. 7.6.120 made `fence.escapes`
  * portable; the reap ledger still names other checkouts, so S2, S3 and S5
  * cannot be regenerated: `portableArtifact` over the COMMITTED
