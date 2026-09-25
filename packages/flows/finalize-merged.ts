@@ -29,7 +29,7 @@ import { confirmPrMerged } from './pr.ts';
 import { pendingFixWorkItems } from './fix-work-items.ts';
 import { runClosure, promoteMergedToDone } from './phases/closure.ts';
 import { writeCycleReport } from './cycle-report.ts';
-import { createLogger, type EventLogger } from '@forge/kernel';
+import { createLogger, resolveGuardedPath, type EventLogger } from '@forge/kernel';
 import * as worktree from './worktree.ts';
 import type { WorktreeHandle } from './worktree.ts';
 import { pruneStaleWiWorktrees } from './wi-worktree.ts';
@@ -215,7 +215,10 @@ function pruneMergedWorktrees(
     emit('finalize.worktree-prune-failed', true, { path: input.worktreePath, branch, detail: detail(err) });
   }
 
-  const wiDir = resolve(worktreesRoot, 'wi', input.initiativeId);
+  // `worktreesRoot` derives from a worktree path already contained by
+  // isContainedWorktreePath; the initiative id still rides as its own segment.
+  const guarded = resolveGuardedPath(worktreesRoot, ['wi', input.initiativeId]);
+  const wiDir = guarded.ok ? guarded.realPath : null;
   try {
     const result = opts.pruneWiWorktrees({
       projectRepoPath: input.projectRepoPath,
@@ -223,7 +226,7 @@ function pruneMergedWorktrees(
       initiativeId: input.initiativeId,
       logsRoot: opts.logsRoot,
     });
-    if (existsSync(wiDir) && readdirSync(wiDir).length === 0) rmdirSync(wiDir);
+    if (guarded.ok && guarded.exists && readdirSync(guarded.realPath).length === 0) rmdirSync(guarded.realPath);
     emit('finalize.wi-worktrees-pruned', false, {
       pruned_paths: result.prunedPaths,
       pruned_branches: result.prunedBranches,
