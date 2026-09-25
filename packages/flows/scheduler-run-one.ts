@@ -20,6 +20,12 @@ import { notify, type NotifyConfig } from './notify.ts';
 import { dispatchTerminalStatus } from './scheduler-dispatch.ts';
 import { validateClaimable } from './claim-validator.ts';
 import { pruneStaleWiWorktrees } from './wi-worktree.ts';
+import {
+  probeRemoteBranch,
+  shouldRefuseFreshAttempt,
+  emitStaleRemoteBranchRefused,
+  cleanupPushedBranchOnFailure,
+} from './stale-remote-branch-guard.ts';
 import type { SchedulerConfig } from './scheduler.ts'; // type-only: erased, no runtime cycle
 
 /**
@@ -192,6 +198,9 @@ export async function runOne(
   const heartbeat = setInterval(() => {
     writeHeartbeat(filename, paths);
   }, cfg.heartbeatIntervalMs);
+  // Hoisted above the try (was inside it) so the stale-branch guard below and
+  // its finally-block cleanup can both reach it.
+  const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
   // Hold the handle outside the try so the finally block can clean it up
   // regardless of which path produced the result (success, failed, threw).
   let wtHandle: worktree.WorktreeHandle | null = null;
@@ -200,6 +209,14 @@ export async function runOne(
   // the only surviving copy of the work. Set inside the try after runCycle
   // returns; defaults to false (clean up like before for thrown errors).
   let preserveWorktree = false;
+  // bead forge-8vfn.8.1.8: set ONLY on a FRESH attempt ('add') whose
+  // pre-attempt probe proved `forge/<INIT>` was absent on origin — so the
+  // finally block cleans up a branch ONLY this attempt could have pushed,
+  // never one merely found (a resume/reuse never sets this).
+  let staleBranchOwnedByThisAttempt: { branch: string; projectRepoPath: string; initiativeId: string } | null = null;
+  // True on a runCycle() 'failed' result or a thrown exception — read by the
+  // finally block's cleanup call below.
+  let cycleFailed = false;
   try {
     const manifest = parseManifest(manifestPath);
     if (tee) console.log(`[serve] claimed: ${manifest.initiativeId} (${manifest.project})`);
@@ -207,7 +224,6 @@ export async function runOne(
     // ADR-028 §8 (M3-6): claim-time validation — refuse before worktree/cycle.
     // S8/DEC-3: pass the flow the manifest names (forge-cycle default retired);
     // a manifest with no flow_id is refused by validateClaimable.
-    const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
     const claimCheck = validateClaimable(
       manifest.initiativeId,
       manifest.projectRepoPath,
@@ -280,6 +296,34 @@ export async function runOne(
       if (tee) console.log(`[serve] ${why}: reusing preserved worktree ${expectedWtPath}`);
       wtHandle = { path: expectedWtPath, branch, projectRepoPath: manifest.projectRepoPath };
     } else {
+      // bead forge-8vfn.8.1.8: FAIL FAST, before any worktree/agent spend — a
+      // FRESH attempt ('add') must never dispatch onto a `forge/<INIT>`
+      // branch a PRIOR, abandoned attempt already pushed with no PR open.
+      // Unchecked, this attempt spends a whole work item before its own push
+      // fails non-fast-forward. Exempt by construction for 'reuse' (resume /
+      // send-back / architect hand-off), which owns its own branch.
+      const probe = probeRemoteBranch(manifest.projectRepoPath, branch);
+      if (shouldRefuseFreshAttempt(probe)) {
+        const sha = probe.remoteSha as string;
+        const reason = `refs/heads/${branch} (${sha.slice(0, 8)}) already exists on origin from a prior, abandoned attempt and no PR is open for it. Delete or rename the remote branch, then re-dispatch — never auto-retried, never force-pushed.`;
+        emitStaleRemoteBranchRefused(forgeRoot, manifest.initiativeId, branch, sha);
+        console.error(`[serve] ${manifest.initiativeId} — claim refused (terminal): ${reason}`);
+        moveTo(filename, 'failed', paths);
+        await notify(
+          { type: 'failed', title: `Stale remote branch blocks ${manifest.initiativeId}`, body: reason },
+          cfg.notify,
+        );
+        return; // runOne done — no worktree, no cycle, zero agent spend
+      }
+      // Absent before this attempt — track it so the finally block can only
+      // ever clean up a branch this attempt itself goes on to push.
+      if (probe.remoteSha === null) {
+        staleBranchOwnedByThisAttempt = {
+          branch,
+          projectRepoPath: manifest.projectRepoPath,
+          initiativeId: manifest.initiativeId,
+        };
+      }
       wtHandle = worktree.add({
         projectRepoPath: manifest.projectRepoPath,
         branch,
@@ -355,6 +399,7 @@ export async function runOne(
       result.status === 'pr-open' ||
       result.status === 'ready-for-review' ||
       result.status === 'failed';
+    cycleFailed = result.status === 'failed';
     await dispatchTerminalStatus(
       {
         filename,
@@ -367,6 +412,7 @@ export async function runOne(
       },
     );
   } catch (err) {
+    cycleFailed = true;
     if (existsSync(join(paths.inFlight, filename))) {
       try {
         moveTo(filename, 'failed', paths);
@@ -384,6 +430,16 @@ export async function runOne(
     );
   } finally {
     clearInterval(heartbeat);
+    // bead forge-8vfn.8.1.8, half b: this attempt's own push landed a branch
+    // absent before it started, and the cycle still failed — delete it so the
+    // next fresh attempt isn't blocked the same way. Best-effort.
+    if (cycleFailed && staleBranchOwnedByThisAttempt) {
+      cleanupPushedBranchOnFailure({
+        ...staleBranchOwnedByThisAttempt,
+        forgeRoot,
+        onCleaned: tee ? (detail) => console.log(`[serve] ${staleBranchOwnedByThisAttempt!.initiativeId} — ${detail}`) : undefined,
+      });
+    }
     // F-09 + F-28: clean up the worktree + scratch branch on terminal states
     // only. `merged` (cycle.ts already deleted the branch via gh pr merge),
     // `failed`, or thrown errors all clean up. `ready-for-review` preserves

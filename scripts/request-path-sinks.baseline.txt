@@ -244,6 +244,10 @@ packages/flows/scheduler-sweeps.ts readFileSync 1
 packages/flows/scheduler.ts existsSync 5
 packages/flows/scheduler.ts mkdirSync 2
 packages/flows/scheduler.ts readFileSync 1
+packages/flows/stale-remote-branch-guard.ts appendFileSync 1
+packages/flows/stale-remote-branch-guard.ts execFileSync 2
+packages/flows/stale-remote-branch-guard.ts existsSync 1
+packages/flows/stale-remote-branch-guard.ts mkdirSync 1
 packages/flows/wi-merge-back.ts execFileSync 5
 packages/flows/wi-merge-back.ts rmSync 1
 packages/flows/wi-worktree.ts cpSync 1
