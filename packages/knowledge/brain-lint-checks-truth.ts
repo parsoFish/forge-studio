@@ -148,6 +148,22 @@ type ProjectTruthRow = Pick<BrainTruthRate, 'project' | 'checkout' | 'history'> 
 // Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
 const projectTruthRowsCache = new Map<string, ProjectTruthRow[]>();
 
+/** Clears the per-`cwd` memo `projectTruthRows` keeps. D14 security review:
+ *  the memo is process-lifetime, keyed only by `cwd` — a long-lived bridge
+ *  process that re-lints many times over the SAME `cwd` (`runBrainLintFullFresh`,
+ *  `bridge-studio-kb-consolidate.ts`) would otherwise serve the FIRST pass's
+ *  truth rows forever, including on a "fresh" re-lint that exists precisely
+ *  to observe writes made since. `runBrainLint` (`brain-lint.ts`) — the one
+ *  entry point every full-scope lint pass funnels through, CLI or bridge —
+ *  calls this at its own start, so the memo's lifetime is scoped to ONE
+ *  pass: `checkThemeTruth` (invoked from inside that pass) and a caller's
+ *  own following `brainTruthRates` call (the CLI's `truthfulness:` summary
+ *  lines, printed right after) still share one git-backed computation
+ *  without re-deriving it, but nothing survives INTO the next pass. */
+export function resetProjectTruthRowsCache(): void {
+  projectTruthRowsCache.clear();
+}
+
 /** Every project's checkout + history status and per-theme truth — the
  *  shared basis `brainTruthRates`/`checkThemeTruth` build on (each defined
  *  once; `isGitWorkTree` runs once per project). */

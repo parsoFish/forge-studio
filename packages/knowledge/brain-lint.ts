@@ -71,6 +71,7 @@ import {
   brainTruthRates,
   checkThemeTruth,
   formatTruthfulnessLines,
+  resetProjectTruthRowsCache,
 } from './brain-lint-checks-truth.ts';
 
 // THE SPLIT KEPT THIS PATH (M4 step 4). 27 files across packages/, cli/, apps/
@@ -498,6 +499,15 @@ function filterFindingsByScope(
 }
 
 export function runBrainLint(opts: RunBrainLintOptions): RunBrainLintResult {
+  // D14 security review: every full-scope lint pass (the CLI, and the
+  // bridge's runBrainLintFullMemoized/Fresh, which both call this) starts by
+  // dropping checkThemeTruth's per-cwd truth-row memo — this IS "the lint
+  // entry point", the one place FULL_SCOPE_CHECKS ever runs, so resetting
+  // here (never inside the memo itself) scopes it to exactly ONE pass. A
+  // caller's own following brainTruthRates(opts.cwd) call (the CLI's
+  // `truthfulness:` summary lines) still reuses THIS pass's rows — nothing
+  // resets again until the NEXT runBrainLint call.
+  resetProjectTruthRowsCache();
   // Run all checks via the FULL_SCOPE_CHECKS registry (F3 hardening) — same
   // 10 checks, same order as before this refactor, now iterated from the ONE
   // array CHECK_NAMES is also derived from, so the two can never drift. The
