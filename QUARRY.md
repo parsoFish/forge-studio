@@ -241,7 +241,8 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/log-cycles.ts | kernel | rewritten | 44 |
 | packages/kernel/discovery-roots.ts | kernel | verbatim | 148 |
 | packages/knowledge/theme-frontmatter.ts | knowledge | verbatim | 116 |
-| apps/forge/ui-bridge.ts | apps/forge | rewritten | 2265 |
+| apps/forge/ui-bridge.ts | apps/forge | rewritten | 1951 |
+| apps/forge/bridge-cycle-data.ts | apps/forge | rewritten | 382 |
 | apps/forge/bridge-broadcast-log.ts | apps/forge | rewritten | 84 |
 | apps/forge/broadcast-coalescer.ts | apps/forge | rewritten | 77 |
 | packages/agents/_adapters/aider/index.ts | agents | verbatim | 485 |
