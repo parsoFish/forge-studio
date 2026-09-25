@@ -61,22 +61,40 @@
  * guard→executor wiring (the platform-code side, ADR-039's "the platform
  * bakes only execution machinery") is not.
  *
- * `allDefinitions` is a SECOND, wider table over the SAME fixture: every
- * on-disk `SKILL.md` under `skills/` that declares a `composition:` block at
- * all — 19 defs, not just the 11 `listAgentDefinitions` returns. `isStudioAgent`
- * filters 8 of those 19 out of the composable roster (`library: false`:
- * `architect-completeness-critic`, `brain-fix`, `brain-maintenance`,
- * `creation-agent`, `demo-builder`, `instructions-creator`, `preflight-fix`,
- * `project-brain-builder`) — but the upcoming rename sweeps ALL 19 SKILL.mds
- * regardless of that flag, so `roster` alone would leave those 8 with no brake
- * at all. (Counts corrected R4-19-F2: the prose still said 16/10/6 while the
- * fixture already held 18/11/7 before this branch added brain-maintenance —
- * measured off the regenerated capture, not incremented by hand.) Enumerated by
- * disk walk (`listSkillMdDirs`), never a hardcoded slug list: a def is
- * included iff its raw frontmatter has a `composition` key (checked via
- * gray-matter on the RAW file, before `loadAgentDefinition`'s parsing) —
- * `roster` itself is untouched (same computation, same bytes) so it stays
- * the pin for the composable set specifically.
+ * `allDefinitions` is a SECOND, wider table over a DIFFERENT, narrower ROOT
+ * SCOPE than `roster`: every on-disk `SKILL.md` under the single top-level
+ * `skills/` tree that declares a `composition:` block at all — 19 defs,
+ * not just the 14 `listAgentDefinitions(skillRoots(...))` returns.
+ * `isStudioAgent` filters 8 of those 19 out of the composable roster
+ * (`library: false`: `architect-completeness-critic`, `brain-fix`,
+ * `brain-maintenance`, `creation-agent`, `demo-builder`,
+ * `instructions-creator`, `preflight-fix`, `project-brain-builder`) — but
+ * the upcoming rename sweeps ALL 19 SKILL.mds regardless of that flag, so
+ * `roster` alone would leave those 8 with no brake at all. (Counts corrected
+ * R4-19-F2: the prose still said 16/10/6 while the fixture already held
+ * 18/11/7 before this branch added brain-maintenance — measured off the
+ * regenerated capture, not incremented by hand.) Enumerated by disk walk
+ * (`listSkillMdDirs`), never a hardcoded slug list: a def is included iff
+ * its raw frontmatter has a `composition` key (checked via gray-matter on
+ * the RAW file, before `loadAgentDefinition`'s parsing).
+ *
+ * WHY `allDefinitions` DOES NOT ALSO GO MULTI-ROOT (M7-A round 2): its job is
+ * the hooks->guards migration sweep — every top-level `skills/` SKILL.md that
+ * might carry the renamed field, a fixed corpus this repo owns directly. A
+ * package-owned SKILL.md (`packages/<pkg>/skills/`, SEAM F1) belongs to that
+ * package's own migration surface, not this sweep's; folding it in here would
+ * make this table's scope drift with every package a factory ships, which is
+ * the opposite of "a fixed corpus". `roster`, by contrast, characterizes
+ * DISPATCH — what a real flow node actually resolves to at runtime — and
+ * `flow-runner.ts`'s own `runFlow` builds ITS roster from every discovery
+ * root (`listAgentDefinitions(skillRoots(FORGE_ROOT))`), package-owned defs
+ * included, so a `roster` scoped to the single top-level root was pinning a
+ * dispatch state production never has: every package-owned agent (e.g.
+ * forge-docs's `docs-writer`/`docs-review`/`docs-integrate`) resolved
+ * `resolvedKind: 'unknown'` in the `flows` table below, when the real runner
+ * dispatches them as `'agent'`. `roster` now matches `runFlow`'s own call
+ * exactly, so `allDefinitions` (19) and `roster` (14) are deliberately
+ * DIFFERENT counts over deliberately DIFFERENT root sets, not a drifted pair.
  *
  * Bootstrap / regenerate:
  *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test apps/forge/tests/contract/dispatch-decision-capture.test.ts
@@ -100,7 +118,13 @@ import { assertMatchesJsonSnapshot } from '../../../../packages/kernel/tests/tes
 
 // §15.14: moved from orchestrator/ to apps/forge/, so the '..' chain was one
 // level short. Taken from kernel, which owns the constant.
-import { FORGE_ROOT } from '@forge/kernel';
+// `skillRoots` (SEAM F1, multi-root) is also kernel's — `roster` below must
+// resolve the SAME set flow-runner.ts's own `runFlow` does (M7-A round 2:
+// this fixture used the single top-level `skillsDir` and pinned every
+// package-owned agent — e.g. forge-docs's docs-writer/docs-review/
+// docs-integrate — as an "unknown" dispatch kind, a state production never
+// has).
+import { FORGE_ROOT, skillRoots } from '@forge/kernel';
 // Beside its test (M7-A F7): the golden enumerates every flow the registry lists,
 // so a flow added as data changes it — it must not live in a frozen platform package.
 const FIXTURE_PATH = resolve(FORGE_ROOT, 'apps', 'forge', 'tests', 'test-fixtures', 'dispatch-decisions.json');
@@ -133,7 +157,12 @@ function hasCompositionBlock(skillMdPath: string): boolean {
 }
 
 test('dispatch decisions: every roster agent + every flow node, resolved via the product functions (characterization)', () => {
-  const roster = listAgentDefinitions(skillsDir(FORGE_ROOT));
+  // Multi-root (SEAM F1) — the SAME set `flow-runner.ts`'s own `runFlow`
+  // resolves its roster from (`listAgentDefinitions(skillRoots(FORGE_ROOT))`).
+  // `allDefinitionsRows` below stays on the single top-level `skillsDir` on
+  // purpose (see header) — a different, narrower corpus for the hooks->guards
+  // migration sweep, not a dispatch-roster characterization.
+  const roster = listAgentDefinitions(skillRoots(FORGE_ROOT));
   assert.ok(roster.length > 0, 'expected at least one roster agent');
 
   const rosterRows = roster

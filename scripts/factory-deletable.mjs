@@ -37,7 +37,7 @@
 import { existsSync, readFileSync, readdirSync, statSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
-import { createFactorylessWorktree, isFactoryless, porcelain } from './factory-deletable-scratch.mjs';
+import { createFactorylessWorktree, createScratchWorktreeWithout, isFactoryless, porcelain } from './factory-deletable-scratch.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 /**
@@ -221,3 +221,55 @@ if (!existsSync(join(ROOT, 'packages', 'factory'))) fail('the proof deleted the 
 console.log('factory-deletable: the tree this ran from is untouched (packages/factory present, git clean).');
 
 console.log('factory-deletable: PASS — the platform boots and serves with the example package deleted (ADR 048).');
+
+// ---------------------------------------------------------------------------
+// 3. The SECOND factory (G3, M7-A packaged shape) is deletable by the same
+//    mechanism. `packages/forge-docs` is DATA — a flow.yaml plus SKILL.mds
+//    under package-owned discovery roots (packages/kernel/discovery-roots.ts)
+//    — not an npm workspace member, so its deletion removes paths and no
+//    `node_modules` link at all. Absence must read as absence: the generic
+//    per-flow run door answers "flow not found" for it, and the first
+//    factory (and the example package this section does NOT touch) stay
+//    reachable.
+// ---------------------------------------------------------------------------
+const SECOND = { id: 'forge-docs', paths: ['packages/forge-docs'] };
+for (const p of SECOND.paths) {
+  if (!existsSync(join(ROOT, p))) fail(`${p} is not in this tree — the second factory the proof is about does not exist`);
+  const d = porcelain(ROOT, p);
+  if (d !== '') fail(`${p} has uncommitted changes; a scratch worktree of HEAD would prove the wrong tree:\n${d}`);
+}
+{
+  const { dir: scratch2, cleanup: cleanup2 } = createScratchWorktreeWithout(ROOT, SECOND.paths);
+  try {
+    if (SECOND.paths.some((p) => existsSync(join(scratch2, p)))) fail('the scratch worktree still carries the second factory — the proof would prove nothing');
+    const { startBridge } = await import(join(scratch2, 'apps', 'forge', 'ui-bridge.ts'));
+    const bridge = await startBridge({ forgeRoot: scratch2, port: 0 });
+    try {
+      const health = await fetch(`${bridge.url}/api/health`);
+      if (!health.ok) fail(`/api/health answered ${health.status} with the second factory deleted`);
+      const run = (flowId) => fetch(`${bridge.url}/api/flows/${flowId}/run`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-forge-csrf': '1', origin: bridge.url },
+        body: JSON.stringify({ initiativeId: 'INIT-2026-01-01-factory-deletable-probe' }),
+      });
+      const gone = await run(SECOND.id);
+      const goneBody = await gone.json().catch(() => ({}));
+      if (gone.status !== 404 || goneBody.error !== 'flow not found') {
+        fail(`the run door answered ${gone.status} ${JSON.stringify(goneBody)} for the deleted ${SECOND.id}; absence must read as "flow not found"`);
+      }
+      const first = await run('forge-develop');
+      const firstBody = await first.json().catch(() => ({}));
+      if (firstBody.error === 'flow not found') fail('deleting the second factory made the first one unfindable');
+      console.log(`factory-deletable: live — with ${SECOND.id} deleted the bridge serves, its run door says "flow not found", and forge-develop is still found.`);
+    } finally {
+      await bridge.close();
+    }
+  } finally {
+    cleanup2();
+  }
+  for (const p of SECOND.paths) {
+    if (porcelain(ROOT, p) !== '' || !existsSync(join(ROOT, p))) fail(`the proof MODIFIED ${p} in the tree it was run from`);
+  }
+}
+
+console.log('factory-deletable: PASS — the platform boots and serves with the second factory (packages/forge-docs) deleted too (G3).');
