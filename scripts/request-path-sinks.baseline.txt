@@ -140,9 +140,10 @@ packages/flows/enqueue-plan-run.ts readFileSync 2
 packages/flows/enqueue-plan-run.ts rmSync 1
 packages/flows/enqueue-plan-run.ts writeFileSync 1
 packages/flows/finalize-merged.ts existsSync 3
-packages/flows/finalize-merged.ts readdirSync 2
+packages/flows/finalize-merged.ts readdirSync 3
 packages/flows/finalize-merged.ts readFileSync 2
 packages/flows/finalize-merged.ts renameSync 1
+packages/flows/finalize-merged.ts rmdirSync 1
 packages/flows/finalize-merged.ts statSync 1
 packages/flows/flow-artifacts.ts existsSync 3
 packages/flows/flow-artifacts.ts mkdirSync 3
