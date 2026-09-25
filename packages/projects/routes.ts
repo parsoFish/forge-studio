@@ -159,7 +159,7 @@ export type ProjectsRouteDeps = {
   checkBrainSeedContainment: (forgeRoot: string, projectId: string) => void;
   /** `@forge/knowledge`'s `readArtifactRoot`. */
   readArtifactRoot: (projectRoot: string) => string;
-  /** `@forge/flows/manifest-path-guard.ts`'s `isContainedProjectRepoPath`. */
+  /** `@forge/flows`'s `isContainedProjectRepoPath`. */
   isContainedProjectRepoPath: (p: string, opts: { forgeRoot: string; projectsRoot?: string }) => boolean;
   /** `apps/forge/bridge-studio-writes.ts`'s `spawnPreflightFix` — sessions-owned
    *  (M4-projects routes budget row 12b), kept in its legacy home until the
@@ -173,7 +173,7 @@ export type ProjectsRouteDeps = {
   /** `@forge/agents`'s `listStarterAgents` — injected, no
    *  package-native home. */
   listStarterAgents: (forgeRoot: string) => AgentDefinition[];
-  /** `@forge/flows/studio/flow-registry.ts`'s `loadStarterFlow`. */
+  /** `@forge/flows`'s `loadStarterFlow`. */
   loadStarterFlow: (forgeRoot: string) => FlowDefinition | null;
   /** `@forge/agents`'s `agentCapabilityDescriptor`. Return
    *  type deliberately `unknown`, mirroring `project-roster.ts`'s own note:

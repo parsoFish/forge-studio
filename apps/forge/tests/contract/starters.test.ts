@@ -22,10 +22,10 @@ import type { AgentDefinition } from '@forge/contracts';
 // that needs real cross-package objects FLAT at the assembly, where importing
 // every package is what the assembly is FOR — so the row closes outright.
 import { loadAgentDefinition, listStarterAgents } from '@forge/agents';
-import { loadFlowDefinition, loadStarterFlow } from '@forge/flows/studio/flow-registry.ts';
+import { loadFlowDefinition, loadStarterFlow } from '@forge/flows';
 import { loadCatalog } from '@forge/library';
 import { validateAgent } from '@forge/agents';
-import { validateFlow } from '@forge/flows/studio/validate-flow.ts';
+import { validateFlow } from '@forge/flows';
 import { agentCapabilityDescriptor } from '@forge/agents';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');

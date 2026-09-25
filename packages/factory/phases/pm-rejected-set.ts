@@ -25,7 +25,7 @@ import { existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from 'n
 import { dirname, join } from 'node:path';
 
 import type { EventLogger } from '@forge/kernel';
-import { WORK_ITEM_FILE_PATTERN } from '@forge/flows/work-item.ts';
+import { WORK_ITEM_FILE_PATTERN } from '@forge/flows';
 
 /** What `rejectWorkItemSet` needs in order to record the quarantine itself. */
 export type RejectionEvent = {

@@ -27,7 +27,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, exist
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { WORK_ITEM_FILE_PATTERN } from '@forge/flows/work-item.ts';
+import { WORK_ITEM_FILE_PATTERN } from '@forge/flows';
 import { quarantineRejectedSet, rejectWorkItemSet } from '../../phases/pm-rejected-set.ts';
 
 /** The claim predicate every downstream reader uses, copied from enqueue-flow-run.ts:321. */

@@ -36,7 +36,7 @@ import {
   type ReviewFinding,
   type ReviewFindingsExpectation,
   type ReviewFindingsRecord,
-} from '@forge/flows/flow-artifacts.ts';
+} from '@forge/flows';
 import type { EventLogger } from '@forge/kernel';
 import { guardedReadFile, guardedWriteFile, FORGE_ROOT } from '@forge/kernel';
 import { createHash } from 'node:crypto';
@@ -44,7 +44,7 @@ import type { StreamQueryFn } from '@forge/agents';
 import { runAgent } from '@forge/agents';
 import { skillPath } from '@forge/agents';
 import { loadAgentDefinition } from '@forge/agents';
-import { readWorkItemsFromDir, type WorkItem } from '@forge/flows/work-item.ts';
+import { readWorkItemsFromDir, type WorkItem } from '@forge/flows';
 import { chunkLabel, mergeChunkRecords, partitionChangedFiles, type ReviewChunk,
   splitChunkPerFile,
   mergeSplitRecords,

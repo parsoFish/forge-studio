@@ -30,7 +30,7 @@
  * `checkProjectBrainSeedContainment`, `readArtifactRoot`) is a
  * `package-layer-order` violation — the exact boundary row this carve
  * exists to delete. `flows` is a HIGHER rank (5) than `projects` (2), so
- * `isContainedProjectRepoPath` (`@forge/flows/manifest-path-guard.ts`) is
+ * `isContainedProjectRepoPath` (`@forge/flows`) is
  * the same violation in the other direction. All three are supplied by the
  * host (`apps/forge/routes.ts`, which `classify()` gives no rule at all) to
  * `makeOnboardHandlers(deps)` at assembly time. `import type` for any of
@@ -107,7 +107,7 @@ export type OnboardDeps = {
   /** `@forge/knowledge`'s `readArtifactRoot`, threaded down into
    *  `project-contract-scaffold.ts`'s injected-parameter functions. */
   readArtifactRoot: (projectRoot: string) => string;
-  /** `@forge/flows/manifest-path-guard.ts`'s `isContainedProjectRepoPath`. */
+  /** `@forge/flows`'s `isContainedProjectRepoPath`. */
   isContainedProjectRepoPath: (p: string, opts: { forgeRoot: string; projectsRoot?: string }) => boolean;
   /**
    * How the route runs `gh`, injected (`forge-8vfn.6.11.27`). Minting is the

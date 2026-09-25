@@ -16,9 +16,9 @@ import {
   parseManifest,
   serializeManifest,
   mintAndPersistManifestCycleId,
-} from '@forge/flows/manifest.ts';
-import { promoteManifests } from '@forge/flows/promote-manifests.ts';
-import { isCanonicalInitiativeId } from '@forge/flows/initiative-id.ts';
+} from '@forge/flows';
+import { promoteManifests } from '@forge/flows';
+import { isCanonicalInitiativeId } from '@forge/flows';
 import type { ArchitectManifestPorts } from '@forge/sessions';
 import type { ParseManifestPort } from '@forge/sessions';
 

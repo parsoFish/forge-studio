@@ -23,8 +23,8 @@ import { resolve } from 'node:path';
 
 import { runReflector } from './phases/reflector.ts';
 import { createLogger } from '@forge/kernel';
-import { parseManifest } from '@forge/flows/manifest.ts';
-import { REFLECT_MODE_FILE, type ReflectMode } from '@forge/flows/cycle-context.ts';
+import { parseManifest } from '@forge/flows';
+import { REFLECT_MODE_FILE, type ReflectMode } from '@forge/flows';
 
 /** R4-09-F3: recover the reflect mode a cycle originally ran in (the durable
  *  sidecar the reflector persisted), so a rerun preserves it instead of

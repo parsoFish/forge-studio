@@ -2463,7 +2463,7 @@ sibling-trigger scan, and `packages/agents/bridge-agents-studio.ts`'s `DELETE
 `listFlowIds(forgeRoot)` — a full, server-side directory enumeration across
 every flow root, never filtered or built from the request's own `:id`/`:slug`
 — and for each enumerated id call `flowPathForId(id, forgeRoot)`
-(`@forge/flows/flow-runner.ts`), which resolves it through
+(`@forge/flows`), which resolves it through
 `resolveIdAcrossRoots` → `guardedFile` (the SAME containment guard
 `resolveGuardedPath` is built on) BEFORE this `existsSync` ever runs. The
 `existsSync` itself is a redundant, read-only existence probe on a path that

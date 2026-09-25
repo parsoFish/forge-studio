@@ -24,7 +24,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { createWiWorktree, removeWiWorktree } from '@forge/flows/wi-worktree.ts';
+import { createWiWorktree, removeWiWorktree } from '@forge/flows';
 import { writeGateFeedback } from '../../phases/developer-loop.ts';
 import { makeQualityGateFromCmd, type GateRunInfo } from '@forge/agents';
 import { runRalphLoop as runRalph, type AgentInvocation } from '@forge/agents';

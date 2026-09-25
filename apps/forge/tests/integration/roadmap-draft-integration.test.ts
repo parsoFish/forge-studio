@@ -32,7 +32,7 @@ import { mkdirSync, mkdtempSync, writeFileSync, rmSync, symlinkSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { parseManifest, serializeManifest } from '@forge/flows/manifest.ts';
+import { parseManifest, serializeManifest } from '@forge/flows';
 import { deriveSessionArtifact } from '@forge/sessions';
 import type { SessionKindDescriptor } from '@forge/sessions';
 

@@ -13,15 +13,15 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { flowPathForId, resolveNodeKind } from '@forge/flows/flow-runner.ts';
+import { flowPathForId, resolveNodeKind } from '@forge/flows';
 import { runFlowT, type TestDeps, type TestDepsPartial, type EnqueueFlowRun, type NodeExecutor, type FlowRunnerDeps } from '../test-fixtures/flow-runner-port.ts';
-import { stageFlowRunRequest, listFlowRunRequests, drainFlowRunRequests } from '@forge/flows/flow-run-requests.ts';
-import { writeWorkItem, readWorkItemsFromDir, type WorkItem } from '@forge/flows/work-item.ts';
-import { parseManifest } from '@forge/flows/manifest.ts';
-import { WedgeKillError, CostCeilingError } from '@forge/flows/flow-budgets.ts';
-import { loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
+import { stageFlowRunRequest, listFlowRunRequests, drainFlowRunRequests } from '@forge/flows';
+import { writeWorkItem, readWorkItemsFromDir, type WorkItem } from '@forge/flows';
+import { parseManifest } from '@forge/flows';
+import { WedgeKillError, CostCeilingError } from '@forge/flows';
+import { loadFlowDefinition } from '@forge/flows';
 import type { FlowDefinition } from '@forge/contracts';
-import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import type { CycleInput } from '@forge/flows';
 import { discoverProjects, type EventLogger } from '@forge/kernel';
 import type { AgentBudgets, AgentDefinition } from '@forge/contracts';
 

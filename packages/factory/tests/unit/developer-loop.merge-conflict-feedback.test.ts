@@ -31,7 +31,7 @@ import {
   writeGateFeedback,
   writeMergeConflictFeedback,
 } from '../../phases/developer-loop.ts';
-import type { MergeConflictDetail } from '@forge/flows/wi-merge-back.ts';
+import type { MergeConflictDetail } from '@forge/flows';
 import type { GateRunInfo } from '@forge/agents';
 
 function setupWorktree(): { path: string; cleanup: () => void } {

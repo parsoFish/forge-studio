@@ -37,12 +37,12 @@ import { spawn } from 'node:child_process';
 import { join, resolve, basename, dirname } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 
-import { getPaths, listInFlight } from '@forge/flows/queue.ts';
-import { parseManifest, persistManifestCostCeiling } from '@forge/flows/manifest.ts';
-import { enqueueDevelopRun } from '@forge/flows/enqueue-develop-run.ts';
-import { enqueuePlanRun } from '@forge/flows/enqueue-plan-run.ts';
-import { enqueueFlowRun } from '@forge/flows/enqueue-flow-run.ts';
-import { isSafeCycleId } from '@forge/flows/manifest-path-guard.ts';
+import { getPaths, listInFlight } from '@forge/flows';
+import { parseManifest, persistManifestCostCeiling } from '@forge/flows';
+import { enqueueDevelopRun } from '@forge/flows';
+import { enqueuePlanRun } from '@forge/flows';
+import { enqueueFlowRun } from '@forge/flows';
+import { isSafeCycleId } from '@forge/flows';
 
 import lockfile from 'proper-lockfile';
 import {
@@ -71,22 +71,22 @@ import {
 // M4 §4 step 2 — instructions, connections and community carved the same way.
 // This file's line COUNT is held constant across the carve on purpose: 18 audited
 // rows in `scripts/check-raw-fs-guarded.mjs` are keyed to `ui-bridge.ts:<line>`.
-import { handleRecoveryRoutes } from '@forge/flows/bridge-recovery.ts';
-import { handleHookRoutes } from '@forge/flows/bridge-hooks.ts';
+import { handleRecoveryRoutes } from '@forge/flows';
+import { handleHookRoutes } from '@forge/flows';
 import {
   handleStudioPostRoutes,
   applyReviewVerdict,
   applyPlanVerdict,
   type StudioPostContext,
   type ReleaseFinalizeHookInput,
-} from '@forge/flows/bridge-studio-runs.ts';
+} from '@forge/flows';
 import { isDryBridge, refuseDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnMarker } from '@forge/kernel';
 import { bindReleaseFinalize, fireReflectorRerun } from './example-hooks.ts';
-import { parseWorkItem, DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows/work-item.ts';
-import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached, markStopping } from '@forge/flows/daemon.ts';
-import { mergePullRequest } from '@forge/flows/pr.ts';
+import { parseWorkItem, DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows';
+import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached, markStopping } from '@forge/flows';
+import { mergePullRequest } from '@forge/flows';
 import type { BridgeIdentity } from './forge-watch.ts';
-import { finalizeMergedReadyForReview } from '@forge/flows/finalize-merged.ts';
+import { finalizeMergedReadyForReview } from '@forge/flows';
 import type { EventLogEntry } from '@forge/kernel';
 import { makeRecordingBroadcast } from './bridge-broadcast-log.ts';
 import { makeTrailingCoalescer } from './broadcast-coalescer.ts';
@@ -103,7 +103,7 @@ import { flowRoots, resolveIdAcrossRoots } from '@forge/kernel';
 import {
   installedExample as example, peekInstalledFactory,
   resolveInstalledFactory, type InstalledFactory } from './factory-wiring.ts';
-import * as rc from '@forge/flows/review-comments.ts';
+import * as rc from '@forge/flows';
 
 
 
@@ -1054,7 +1054,7 @@ async function handleHttp(
       return;
     }
     try {
-      const { summariseCycle } = await import('@forge/flows/metrics.ts');
+      const { summariseCycle } = await import('@forge/flows');
       const m = summariseCycle(cycleId, ctx.logsRoot);
       sendJson(res, 200, {
         cycleId,
@@ -1630,7 +1630,7 @@ async function handleHttp(
   // .../resolve marks one resolved. Writes are proper-lockfile guarded (the
   // read-modify-write is atomic per cycle). Verdict derivation is over the set:
   // any blocking, unresolved comment ⇒ send-back; else ⇒ approve.
-  // The store is platform code (`@forge/flows/review-comments.ts`), so these
+  // The store is platform code (`@forge/flows`), so these
   // routes answer with or without the example — this stopped being its surface.
   if (method === 'GET' && url.startsWith('/api/review-comments/')) {
     const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length));

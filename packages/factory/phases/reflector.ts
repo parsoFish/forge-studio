@@ -28,7 +28,7 @@ import { basename, resolve } from 'node:path';
 import { parseRetroMd } from '../reflection-doc.ts';
 
 import type { EventLogger } from '@forge/kernel';
-import { parseManifest } from '@forge/flows/manifest.ts';
+import { parseManifest } from '@forge/flows';
 import type { StreamQueryFn } from '@forge/agents';
 import { buildReflectorSystemPrompt, renderReflectorUserPrompt } from './reflector-binding.ts';
 import {
@@ -38,13 +38,13 @@ import {
   type ReflectMode,
   type ReflectionStatus,
   type ReflectorPhaseResult,
-} from '@forge/flows/cycle-context.ts';
+} from '@forge/flows';
 import { runBrainLint, type RunBrainLintResult } from '@forge/knowledge';
 import { writeCycleRecap } from '../cycle-recap.ts';
 import { cyclesThemesDir, projectThemesDir } from '@forge/knowledge';
 import { runPostReflectionKbHealth } from '@forge/knowledge';
 import { acquireBrainWriteLease, BrainWriteLeaseContentionError } from '@forge/knowledge';
-import { getPaths, type QueuePaths } from '@forge/flows/queue.ts';
+import { getPaths, type QueuePaths } from '@forge/flows';
 import { emitReflectionLost, runReflectorBrainWrites, listFreshThemes } from './reflector-brain-writes.ts';
 
 // The live turn/budget caps (60 turns / $1.50 — bench 5-fixture median was

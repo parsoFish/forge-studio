@@ -29,7 +29,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyCycleFailure, matchesRateLimitSignature } from '../../failure-classifier.ts';
-import { CostCeilingError } from '@forge/flows/flow-budgets.ts';
+import { CostCeilingError } from '@forge/flows';
 import type { EventLogEntry } from '@forge/kernel';
 
 function ev(overrides: Partial<EventLogEntry>): EventLogEntry {

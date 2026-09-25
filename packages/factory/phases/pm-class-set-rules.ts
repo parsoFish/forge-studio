@@ -17,8 +17,8 @@
  */
 
 import { profileFor } from '../class-profiles.ts';
-import type { InitiativeManifest } from '@forge/flows/manifest.ts';
-import type { WorkItem } from '@forge/flows/work-item.ts';
+import type { InitiativeManifest } from '@forge/contracts';
+import type { WorkItem } from '@forge/flows';
 
 /**
  * The flag's message, or `null` when there is nothing to say.

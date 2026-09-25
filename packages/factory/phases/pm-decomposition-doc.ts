@@ -12,8 +12,8 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import type { InitiativeManifest } from '@forge/flows/manifest.ts';
-import type { WorkItem } from '@forge/flows/work-item.ts';
+import type { InitiativeManifest } from '@forge/contracts';
+import type { WorkItem } from '@forge/flows';
 
 /**
  * Write `.forge/work-items/_decomposition.md` — a greppable WI list for a

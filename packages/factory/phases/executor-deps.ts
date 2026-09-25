@@ -11,12 +11,12 @@
 import { basename, join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import type { EventLogger } from '@forge/kernel';
-import { parseManifest } from '@forge/flows/manifest.ts';
+import { parseManifest } from '@forge/flows';
 import { runPreflight } from '@forge/projects';
 import { FORGE_ROOT } from '@forge/kernel';
 import type { ProjectGate } from '@forge/kernel';
-import { type ClosureResult, type CycleInput, type ReviewerOutcome } from '@forge/flows/cycle-context.ts';
-import { WedgeDetector, WedgeKillError } from '@forge/flows/flow-budgets.ts';
+import { type ClosureResult, type CycleInput, type ReviewerOutcome } from '@forge/flows';
+import { WedgeDetector, WedgeKillError } from '@forge/flows';
 import { runProjectManager as realRunProjectManager } from '@forge/factory/phases/project-manager.ts';
 import { runDeveloperLoop as realRunDeveloperLoop, emitDeliverySummary } from '@forge/factory/phases/developer-loop.ts';
 import { runIntegrateBand, type IntegrateResult } from '@forge/factory/phases/integrate.ts';
@@ -24,10 +24,10 @@ import { runAdversarialReview, type AdversarialReviewResult } from '@forge/facto
 import { profileFor, readChangeClass } from '@forge/factory/class-profiles.ts';
 import { changedMarkdownFiles, runClassMergeBoundary } from '@forge/factory/phases/merge-boundary.ts';
 import { runDocsGate } from '@forge/factory/gates/docs-gate.ts';
-import { runClosure, promoteMergedToDone } from '@forge/flows/phases/closure.ts';
+import { runClosure, promoteMergedToDone } from '@forge/flows';
 import { runReflector } from '@forge/factory/phases/reflector.ts';
-import { rebasePreservedBranchOntoMain } from '@forge/flows/pr.ts';
-import { openPrInline, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, runMergeBoundaryGate, preservingForgeScratch, type MergeGateEvidence, type MergeGateResult } from '@forge/flows/cycle-helpers.ts';
+import { rebasePreservedBranchOntoMain } from '@forge/flows';
+import { openPrInline, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, runMergeBoundaryGate, preservingForgeScratch, type MergeGateEvidence, type MergeGateResult } from '@forge/flows';
 
 
 /**

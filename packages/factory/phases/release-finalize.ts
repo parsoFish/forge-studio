@@ -38,8 +38,8 @@ import {
   tallyToolUse,
   type ReleaseFinalizeToolUseSummary,
 } from '../release-finalize-invocation.ts';
-import { writeReleaseJson } from '@forge/flows/flow-artifacts.ts';
-import type { ReleaseFinalizePhaseResult } from '@forge/flows/cycle-context.ts';
+import { writeReleaseJson } from '@forge/flows';
+import type { ReleaseFinalizePhaseResult } from '@forge/flows';
 
 /** Default changelog path when the project declares a release but omits the path. */
 const DEFAULT_CHANGELOG_PATH = 'CHANGELOG.md';

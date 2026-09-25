@@ -46,9 +46,9 @@ import {
   type QueryFn,
 } from '@forge/sessions';
 import { createLogger } from '@forge/kernel';
-import { parseManifest, serializeManifest, mintAndPersistManifestCycleId } from '@forge/flows/manifest.ts';
-import { promoteManifests } from '@forge/flows/promote-manifests.ts';
-import { isCanonicalInitiativeId } from '@forge/flows/initiative-id.ts';
+import { parseManifest, serializeManifest, mintAndPersistManifestCycleId } from '@forge/flows';
+import { promoteManifests } from '@forge/flows';
+import { isCanonicalInitiativeId } from '@forge/flows';
 import type { ArchitectManifestPorts } from '@forge/sessions';
 
 /** The REAL functions — this file asserts that what `promoteManifests` wrote

@@ -91,9 +91,9 @@ import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
 import { isStudioAgent, listAgentDefinitions, loadAgentDefinition } from '@forge/agents';
-import { listFlowIds, loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
+import { listFlowIds, loadFlowDefinition } from '@forge/flows';
 import { resolveBandGuard, BAND_GUARD_IDS, BAND_CANONICAL_SLUG, type BandGuardId } from '@forge/agents';
-import { resolveNodeKind, flowPathForId } from '@forge/flows/flow-runner.ts';
+import { resolveNodeKind, flowPathForId } from '@forge/flows';
 import { skillsDir, listSkillMdDirs } from '@forge/agents';
 import type { AgentDefinition } from '@forge/contracts';
 import { assertMatchesJsonSnapshot } from '../../../../packages/kernel/tests/test-fixtures/spawn-capture/normalize.ts';

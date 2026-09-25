@@ -222,7 +222,7 @@ export const ALLOWLIST = [
   // by SINK IDENTITY, never by arithmetic (COMMON 15.41/15.67): 2 stale rows against the 2 reported
   // findings, 1:1, each confirmed by reading the new line; residual asserted CONSERVED at 91.
   // M6-C (ruling 466) UNWOUND that binding: the store is platform code now, so `rc` is a namespace import
-  // of `@forge/flows/review-comments.ts` and no seam stands between the route and the sink. The guard
+  // of `@forge/flows` and no seam stands between the route and the sink. The guard
   // expression is the same call under its full name (`rc.reviewCommentsPath`), so the row below reads as
   // it always did.
   { file: 'apps/forge/ui-bridge.ts', line: 430, sink: 'existsSync',

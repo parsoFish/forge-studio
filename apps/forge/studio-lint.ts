@@ -41,8 +41,8 @@ import { basename, dirname, join } from 'node:path';
 import matter from 'gray-matter';
 
 import { isStudioAgent, isUnfilteredStudioAgent, loadAgentDefinition, listStarterAgents } from '@forge/agents';
-import { loadFlowDefinition, loadStarterFlow, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
-import { flowPathForId } from '@forge/flows/flow-runner.ts';
+import { loadFlowDefinition, loadStarterFlow, listFlowIds } from '@forge/flows';
+import { flowPathForId } from '@forge/flows';
 import { discoverProjects } from '@forge/kernel';
 import { loadKbDescriptor } from '@forge/knowledge';
 import { loadCatalog } from '@forge/library';
@@ -58,7 +58,7 @@ import { lintHookComposition, lintHookDefinitions } from '@forge/library';
 import { lintCommunityIndex } from '@forge/library';
 import { validateSessionKinds } from '@forge/sessions';
 import { validateAgent } from '@forge/agents';
-import { validateArtifactRef, validateFlow } from '@forge/flows/studio/validate-flow.ts';
+import { validateArtifactRef, validateFlow } from '@forge/flows';
 import { validateKb } from '@forge/knowledge';
 import { validateDiscoveredProjects } from '@forge/projects';
 import { validateLibraryFlag } from '@forge/library';
@@ -67,7 +67,7 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel
 import { listSkillMdDirs, listSkillDirs, skillsDir as toSkillsDir } from '@forge/agents';
 import { lintSkillTrust, lintSkillRefs } from '@forge/library';
 import type { AgentDefinition, KbDescriptor } from '@forge/contracts';
-import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
+import { listFlowBandIds } from '@forge/flows';
 import { kbReadPolicyViolation } from '@forge/knowledge';
 import { unroutableKbReason } from '@forge/knowledge';
 import { lintSkillToolFence, lintStarterAgentToolFence } from '@forge/library';

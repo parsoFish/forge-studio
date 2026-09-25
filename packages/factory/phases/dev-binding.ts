@@ -23,7 +23,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { parseWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
+import { parseWorkItem, type WorkItem } from '@forge/flows';
 import { modelForSpec } from '@forge/agents';
 import { deriveAgentSpec } from '@forge/agents';
 import { loadAgentDefinition } from '@forge/agents';

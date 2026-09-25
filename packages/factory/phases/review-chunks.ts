@@ -22,7 +22,7 @@
  * (ruling 290 as amended by 311) — never skipped, never given more budget.
  */
 
-import type { ReviewFindingsRecord } from '@forge/flows/flow-artifacts.ts';
+import type { ReviewFindingsRecord } from '@forge/flows';
 
 /** The subset of a work item this partition needs. */
 export type ChunkableWorkItem = {

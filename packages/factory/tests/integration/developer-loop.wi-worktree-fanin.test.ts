@@ -27,11 +27,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { add } from '@forge/flows/worktree.ts';
-import { createWiWorktree, removeWiWorktree, wiWorktreePath } from '@forge/flows/wi-worktree.ts';
-import { createMergeQueue, mergeWiIntoCycle } from '@forge/flows/wi-merge-back.ts';
+import { add } from '@forge/flows';
+import { createWiWorktree, removeWiWorktree, wiWorktreePath } from '@forge/flows';
+import { createMergeQueue, mergeWiIntoCycle } from '@forge/flows';
 import { gitNetDelta, prerequisiteBlockage, settleWiOutcome, type WiOutcome } from '../../phases/developer-loop.ts';
-import { topologicalOrder, writeWorkItem, writeWorkItemStatus, type WorkItem } from '@forge/flows/work-item.ts';
+import { topologicalOrder, writeWorkItem, writeWorkItemStatus, type WorkItem } from '@forge/flows';
 import { runRalphLoop as runRalph, type AgentInvocation } from '@forge/agents';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import { SCRATCH_PATHS } from '@forge/projects';

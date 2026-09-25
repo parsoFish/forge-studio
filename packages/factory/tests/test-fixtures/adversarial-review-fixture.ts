@@ -26,7 +26,7 @@ import { join } from 'node:path';
 
 import { runAdversarialReview, type AdversarialReviewResult } from '../../phases/adversarial-review.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
-import { serializeWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
+import { serializeWorkItem, type WorkItem } from '@forge/flows';
 import type { StreamQueryFn } from '@forge/agents';
 
 export const INIT_ID = 'INIT-2026-07-24-rev';

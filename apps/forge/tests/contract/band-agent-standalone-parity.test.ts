@@ -32,7 +32,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { runBandAgentStandalone } from '@forge/agents';
-import { serializeWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
+import { serializeWorkItem, type WorkItem } from '@forge/flows';
 import type { StreamQueryFn } from '@forge/agents';
 
 const INIT = 'INIT-2026-08-02-standalone-review';

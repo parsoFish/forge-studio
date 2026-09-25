@@ -22,7 +22,7 @@
  * a loop). `validateProjectConfig` and its one cross-package field parser,
  * `parseRepo`, ALSO stay here rather than moving to `project-config-validate.ts`
  * with the rest of the field parsers: `parseRepo` needs `REPO_RE` from
- * `@forge/flows/trigger-payload.ts`, the SAME already-baselined edge
+ * `@forge/flows`, the SAME already-baselined edge
  * `resolveProjectIdForRepo` needs (`scripts/baselines/boundaries.json`,
  * `package-layer-order|packages/projects/project-config.ts|packages/flows/trigger-payload.ts`).
  * Moving `parseRepo` out would add a second, unbaselined edge to the same
@@ -40,7 +40,7 @@
 
 import { join, resolve } from 'node:path';
 import { guardedReadFile } from '@forge/kernel';
-import { REPO_RE } from '@forge/flows/trigger-payload.ts';
+import { REPO_RE } from '@forge/flows';
 import { defaultConfigPath, discoverProjects, loadConfig, resolveProjectsDir } from '@forge/kernel';
 
 export type { DemoStep, DemoStepKind } from '@forge/contracts';

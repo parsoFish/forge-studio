@@ -51,7 +51,7 @@ import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
 
 import { normalizeProjectId } from '@forge/kernel';
-import { stageFlowRunRequest, drainFlowRunRequests, type FlowRunRequest } from '@forge/flows/flow-run-requests.ts';
+import { stageFlowRunRequest, drainFlowRunRequests, type FlowRunRequest } from '@forge/flows';
 
 type Resolver = (forgeRoot: string, repo: string) => string | null;
 

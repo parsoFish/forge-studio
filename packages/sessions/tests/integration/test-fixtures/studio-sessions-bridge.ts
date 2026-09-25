@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync, symlinkSync } from 'node
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { startBridge } from '../../../../../apps/forge/ui-bridge.ts';
-import { serializeManifest } from '@forge/flows/manifest.ts';
+import { serializeManifest } from '@forge/flows';
 import { guardedWriteSessionStatus } from '../../../session-status-io.ts';
 import type { ProjectBrainStatus } from '../../../kinds/project-brain.ts';
 

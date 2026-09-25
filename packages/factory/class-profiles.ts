@@ -31,8 +31,8 @@
 import { readFileSync } from 'node:fs';
 
 import type { InitiativeManifest } from '@forge/contracts';
-import { CHANGE_CLASSES, parseManifest } from '@forge/flows/manifest.ts';
-import type { RequiredPathsSource } from '@forge/flows/work-item.ts';
+import { CHANGE_CLASSES, parseManifest } from '@forge/flows';
+import type { RequiredPathsSource } from '@forge/flows';
 
 /** The manifest field's own union — not a second declaration of it. */
 export type ChangeClass = InitiativeManifest['class'];

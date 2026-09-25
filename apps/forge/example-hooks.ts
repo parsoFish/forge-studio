@@ -36,7 +36,7 @@
  * process. Neither is a substitute for the other.
  */
 import { createLogger, type EventLogEntry } from '@forge/kernel';
-import type { ReleaseFinalizeHookInput } from '@forge/flows/bridge-studio-runs.ts';
+import type { ReleaseFinalizeHookInput } from '@forge/flows';
 
 import { installedExample as example, peekInstalledFactory, type InstalledFactory } from './factory-wiring.ts';
 

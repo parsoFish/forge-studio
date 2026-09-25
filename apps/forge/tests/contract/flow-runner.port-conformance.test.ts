@@ -16,12 +16,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { runFlow } from '@forge/flows/flow-runner.ts';
+import { runFlow } from '@forge/flows';
 import { createPhaseExecutor, registeredBandIds } from '@forge/factory/phases/executor-table.ts';
 import { BAND_GUARD_IDS } from '@forge/contracts';
 import type { PhaseExecutor } from '@forge/kernel';
-import type { NodeExecContext } from '@forge/flows/flow-node-context.ts';
-import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import type { NodeExecContext } from '@forge/flows';
+import type { CycleInput } from '@forge/flows';
 import type { EventLogger } from '@forge/kernel';
 import type { FlowDefinition } from '@forge/contracts';
 

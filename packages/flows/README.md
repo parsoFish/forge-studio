@@ -16,29 +16,35 @@ Five baselined violations of that rule survive in `cycle.ts`,
 `finalize-merged.ts` and two tests — owned by M5-A, listed in `design.md`. The
 rule is the target, not a description of today.
 
-## API (121 values)
+## API (141 values)
 
 | run one flow — the station engine | `checkFlowTriggers` · `findFanOutViolations` · `flowPathForId` · `listFlowBandIds` · `loadFlowDefinition` · `loadStarterFlow` · `resolveNodeKind` · `runFlow` |
 | the cycle the develop flow runs | `CAPTURE_NONCE_ENV` · `REFLECTION_LOST_EVENT` · `REFLECT_MODE_FILE` · `assertNonEmptyDelivery` · `buildDemoCaptureArgv` · `commitDevLoopBoundary` · `commitOrchestratedCaptureArtifacts` · `compileWorkItemSpecs` · `demoJsonWantsCapture` · `enforceDevLoopCloseInvariant` · `enforceFinalCiGate` · `generateCaptureNonce` · `openPrInline` · `preflightDemoCaptureCommands` · `preservingForgeScratch` · `promoteMergedToDone` · `recordBrainGateResult` · `resolveCostCeilingOverride` · `resolveDemoCaptureTimeoutMs` · `runClosure` · `runMergeBoundaryGate` · `runOrchestratorCommand` |
-| queue state machine, manifests and initiatives | `DERIVED_CEILING_MARGIN_SHARE` · `getPaths` · `initiativeTitle` · `isContainedProjectRepoPath` · `isSafeProjectName` · `listInFlight` · `listPlannedInitiatives` · `mintAndPersistManifestCycleId` · `mintTriggeredInitiative` · `parseManifest` · `persistManifestCostCeiling` · `persistManifestSpecs` · `promoteManifests` · `serializeManifest` |
+| queue state machine, manifests and initiatives | `DERIVED_CEILING_MARGIN_SHARE` · `getPaths` · `initiativeTitle` · `isContainedProjectRepoPath` · `isSafeProjectName` · `isSafeCycleId` · `listInFlight` · `listPlannedInitiatives` · `manifestBlockedClauses` · `mintAndPersistManifestCycleId` · `mintTriggeredInitiative` · `parseManifest` · `persistManifestCostCeiling` · `persistManifestSpecs` · `promoteManifests` · `serializeManifest` · `CHANGE_CLASSES` · `isCanonicalInitiativeId` |
 | work items and their worktrees | `DEV_WORK_ITEM_ID_PATTERN` · `WORK_ITEM_FILE_PATTERN` · `createMergeQueue` · `createWiWorktree` · `enqueueGateFixWorkItems` · `gateRequiredPaths` · `mergeAndPublish` · `mergeWiIntoCycle` · `parseWorkItem` · `readWorkItemsFromDir` · `removeWiWorktree` · `reviewCapExhaustedPath` · `runConcurrentDispatch` · `serializeWorkItem` · `topologicalOrder` · `validateWorkItemSet` · `wiWorktreePath` · `writeMergeGateConfigErrorMarker` · `writeReviewCapExhaustedMarker` · `writeWorkItem` · `writeWorkItemStatus` |
 | triggers and staged flow runs | `PLAN_FLOW_ID` · `REPO_RE` · `TRIGGER_KIND_IDS` · `drainFlowRunRequests` · `enqueueDevelopRun` · `enqueueFlowRun` · `enqueuePlanRun` · `fireAgentCompleteTriggers` · `listFlowRunRequests` · `stageFlowRunRequest` |
 | scheduler and daemon | `checkInitiativeDeps` · `clearPidFile` · `daemonPaths` · `daemonState` · `decideAutoRetry` · `isAlive` · `isPaused` · `markStopping` · `pausedFlagPath` · `readPid` · `serve` · `setPaused` · `spawnServeDetached` · `writePidFile` |
-| the run model the ui reads | `_resetRunListCacheForTest` · `buildAgentSlugToNodeId` · `buildNodeMapping` · `cachedListRuns` · `eventToNodeId` |
+| the run model the ui reads | `_resetRunListCacheForTest` · `buildAgentSlugToNodeId` · `buildNodeMapping` · `cachedListRuns` · `eventToNodeId` · `summariseCycle` |
 | git and pr mechanics | `add` · `assertLocalRemoteSynced` · `checkLocalRemoteSynced` · `finalizeMergedReadyForReview` · `mergePullRequest` · `rebasePreservedBranchOntoMain` |
 | artifacts, demo paths and budgets | `CostCeilingError` · `DEMO_JSON_BASENAME` · `DEMO_MD_BASENAME` · `WedgeDetector` · `WedgeKillError` · `reviewFindingsJsonPath` · `validateReviewFindings` · `worktreeDemoDir` · `worktreeDemoJsonPath` · `worktreeDemoRelDir` · `writeReleaseJson` · `writeReviewFindingsJson` |
 | route factories the assembly plugs in | `applyPlanVerdict` · `applyReviewVerdict` · `handleHookRoutes` · `handleRecoveryRoutes` · `handleStudioPostRoutes` |
+| the review-comments sidecar | `REVIEW_COMMENTS_MAX` · `reviewCommentsPath` · `readReviewComments` · `writeReviewComments` · `appendReviewComment` · `resolveComment` · `editComment` · `deleteComment` · `deriveVerdictFromComments` |
+| studio flow surface | `deriveFlowKickoff` · `validateFlow` · `validateArtifactRef` · `listFlowIds` · `serializeFlowDefinition` |
 
 ### Types
 
-`ClosureResult` · `CouplingPair` · `CronTriggerPayload` · `CycleInput` · `CycleOutcome` · `DispatchOutcome` · `FlowRunArgs` · `FlowRunRequest` · `LintStatus` · `MergeConflictDetail` · `MergeGateEvidence` · `MergeGateResult` · `MergeQueue` · `NodeExecContext` · `NodeKind` · `PushResult` · `QueuePaths` · `QueueState` · `ReflectMode` · `ReflectionStatus` · `ReflectorPhaseResult` · `ReleaseFinalizeHookInput` · `ReleaseFinalizePhaseResult` · `ReviewFinding` · `ReviewFindingsRecord` · `ReviewerOutcome` · `Run` · `StudioPostContext` · `TriggerCheckOpts` · `TriggerPayload` · `WebhookPushPayload` · `WorkItem`
+`ClosureResult` · `CouplingPair` · `CronTriggerPayload` · `CycleInput` · `CycleOutcome` · `DispatchOutcome` · `FlowRunArgs` · `FlowRunRequest` · `LintStatus` · `MergeConflictDetail` · `MergeGateEvidence` · `MergeGateResult` · `MergeQueue` · `NodeExecContext` · `NodeKind` · `PushResult` · `QueuePaths` · `QueueState` · `ReflectMode` · `ReflectionStatus` · `ReflectorPhaseResult` · `ReleaseFinalizeHookInput` · `ReleaseFinalizePhaseResult` · `ReviewFinding` · `ReviewFindingsRecord` · `ReviewerOutcome` · `Run` · `StudioPostContext` · `TriggerCheckOpts` · `TriggerPayload` · `WebhookPushPayload` · `WorkItem` · `PhaseWiring` · `ReviewComment` · `AcceptanceCriterion` · `ReviewCommentsSidecar` · `NewReviewComment` · `DerivedVerdict` · `CycleMetrics` · `FlowHeadShape` · `ReviewFindingsExpectation`
 
 ## Three things this door is not
 
-**It is not the deep-import list.** 47 module paths under `@forge/flows/` are
-imported across the repo and they keep working; this door is the set a consumer
-should be able to reach without knowing the file layout. The two agree by
-construction — the list above was measured from the real imports, not chosen.
+**It is not a wildcard door any more.** `package.json` maps only `"."` and
+`"./testing"` (bead `forge-8vfn.5.31`) — a deep path like
+`@forge/flows/manifest.ts` no longer resolves. Every one of the 47 module
+paths that used to be reachable under `@forge/flows/` was repointed to this
+door or, for the handful with no production consumer outside this package
+(`CostTracker`, `validateCompiledWorkItemSet`,
+`hasMergeGateConfigErrorMarker`, `mergeGateConfigErrorPath`), moved behind
+`@forge/flows/testing` instead.
 
 **It does not re-export other packages' vocabulary.** `InitiativeManifest` and
 its two unions live in `@forge/contracts` (ruling 81) and `manifest.ts`

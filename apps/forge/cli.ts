@@ -18,7 +18,7 @@
 
 import { existsSync, readdirSync, statSync, mkdirSync, appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { serve } from '@forge/flows/scheduler.ts';
+import { serve } from '@forge/flows';
 import { requireFactoryDemo, requireInstalledFactory } from './factory-cli-wiring.ts';
 import { loadBrainIndex, regenerateBrainIndex } from '@forge/knowledge';
 import { cmdBrainLint } from './cli-brain-lint.ts';
@@ -31,7 +31,7 @@ import { authorConstraintBlocks } from '@forge/projects';
 import { scaffoldGreenfieldProject, listProjectStarters, type ScaffoldResult } from '@forge/projects';
 import { assertEnv, defaultConfigPath, forgeBinOnPath, loadConfig, resolveProjectsDir, runInit,
   ensureLayoutDirs, ensureDefaultConfig, resolveGuardedPath, writeProjectGroundFile, type InitReport } from '@forge/kernel';
-import { worktreeDemoDir } from '@forge/flows/demo-paths.ts';
+import { worktreeDemoDir } from '@forge/flows';
 import { cmdAgent, cmdAgentRun } from '@forge/agents';
 import { AGENT_DISPATCH_DEPS } from './session-kind-deps.ts';
 
@@ -770,7 +770,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
     try {
       const { captureCheckpoints, model: demoModel } = await requireFactoryDemo('forge demo capture');
       const { collectCapturedMedia, mergeCapturedMedia, renderDemoBundle, stampCaptureNonce } = demoModel;
-      const { CAPTURE_NONCE_ENV } = await import('@forge/flows/phases/orchestrated-capture.ts');
+      const { CAPTURE_NONCE_ENV } = await import('@forge/flows');
       const bundleDir = join(demoDir, '.capture');
       const demoJson = JSON.parse(readFileSync(jsonPath, 'utf8'));
       const cps = (demoJson?.checkpoints ?? []) as Array<{ label?: string; command?: string }>;

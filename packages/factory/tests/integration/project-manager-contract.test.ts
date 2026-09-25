@@ -20,8 +20,8 @@ import { join, resolve } from 'node:path';
 import { runProjectManager, type PmQueryFn } from '../../phases/project-manager.ts';
 import { PM_BRAIN_ACCESS } from '../../phases/pm-binding.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
-import type { CycleInput } from '@forge/flows/cycle-context.ts';
-import { parseManifest } from '@forge/flows/manifest.ts';
+import type { CycleInput } from '@forge/flows';
+import { parseManifest } from '@forge/flows';
 
 const MANIFEST_BODY = `---
 initiative_id: INIT-2026-06-06-pm-contract-test

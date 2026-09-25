@@ -16,8 +16,8 @@ import assert from 'node:assert/strict';
 
 import { underDecomposedFlag } from '../../phases/pm-class-set-rules.ts';
 import { CLASS_PROFILES } from '../../class-profiles.ts';
-import type { InitiativeManifest } from '@forge/flows/manifest.ts';
-import type { WorkItem } from '@forge/flows/work-item.ts';
+import type { InitiativeManifest } from '@forge/contracts';
+import type { WorkItem } from '@forge/flows';
 
 function manifest(cls: InitiativeManifest['class']): InitiativeManifest {
   return {

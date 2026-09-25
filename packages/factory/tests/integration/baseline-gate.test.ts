@@ -12,7 +12,7 @@ import { join } from 'node:path';
 
 import { assertGreenBaseline } from '../../phases/developer-loop.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
-import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import type { CycleInput } from '@forge/flows';
 import { classifyCycleFailure } from '@forge/agents';
 
 function setup(qualityGateCmd?: string[]): {

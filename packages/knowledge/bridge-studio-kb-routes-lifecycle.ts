@@ -80,7 +80,7 @@ function guardKbTail(kbDir: string, ...tail: readonly string[]): PathGuardResult
 export type KbCreateDeps = {
   /** `orchestrator/studio/registry.ts`'s `listFlowIds`. */
   listFlowIds: (forgeRoot: string) => string[];
-  /** `@forge/flows/flow-band-vocab.ts`'s `listFlowBandIds`. */
+  /** `@forge/flows`'s `listFlowBandIds`. */
   listFlowBandIds: (forgeRoot: string, flowId: string) => string[];
   /** The guarded session-status writer, as a port (ruling 99) — the create
    *  route mints a project-brain seeding session and this package may not

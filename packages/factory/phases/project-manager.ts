@@ -10,7 +10,8 @@ import { join, resolve } from 'node:path';
 import { pinnedStreamQuery, type StreamQueryFn } from '@forge/agents';
 
 import type { EventLogger } from '@forge/kernel';
-import { parseManifest, persistManifestSpecs, type InitiativeManifest } from '@forge/flows/manifest.ts';
+import { parseManifest, persistManifestSpecs } from '@forge/flows';
+import type { InitiativeManifest } from '@forge/contracts';
 import {
   PM_BRAIN_ACCESS,
   DECOMPOSITION_STATE_FILENAME,
@@ -26,16 +27,16 @@ import {
   validateWorkItemSet,
   type CouplingPair,
   type WorkItem,
-} from '@forge/flows/work-item.ts';
+} from '@forge/flows';
 import { loadProjectConfig, type ProjectConfig } from '@forge/projects';
 import { releaseDraftAcs } from '../release-process.ts';
-import { recordBrainGateResult, type CycleInput } from '@forge/flows/cycle-context.ts';
+import { recordBrainGateResult, type CycleInput } from '@forge/flows';
 import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents';
 import { deriveGateRecipe, renderGateRecipeBlock } from '@forge/projects';
 import { runAgent } from '@forge/agents';
 import { loadAgentDefinition } from '@forge/agents';
 import { skillPath } from '@forge/agents';
-import { compileWorkItemSpecs } from '@forge/flows/phases/wi-spec-compile.ts';
+import { compileWorkItemSpecs } from '@forge/flows';
 import { checkDecomposeCompleteness } from './decompose-completeness.ts';
 import { rejectWorkItemSet } from './pm-rejected-set.ts';
 import { writeDecompositionDoc } from './pm-decomposition-doc.ts';

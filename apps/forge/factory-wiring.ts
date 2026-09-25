@@ -19,7 +19,7 @@
  * into a silent "no example installed", which is the fail-open shape this
  * milestone keeps finding, dressed up as graceful degradation.
  */
-import type { PhaseWiring } from '@forge/flows/phase-wiring.ts';
+import type { PhaseWiring } from '@forge/flows';
 
 /**
  * Everything the assembly binds from the example. One record rather than a

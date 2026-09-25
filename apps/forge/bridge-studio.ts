@@ -27,30 +27,30 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { buildNodeMapping, buildAgentSlugToNodeId } from '@forge/flows/run-model.ts';
-import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
-import { eventToNodeId } from '@forge/flows/run-model-derive.ts';
-import { listPlannedInitiatives } from '@forge/flows/planned-initiatives.ts';
+import { buildNodeMapping, buildAgentSlugToNodeId } from '@forge/flows';
+import { cachedListRuns } from '@forge/flows';
+import { eventToNodeId } from '@forge/flows';
+import { listPlannedInitiatives } from '@forge/flows';
 import { isRunnableSource, DEVELOP_FLOW_ID } from '@forge/contracts';
-import { checkInitiativeDeps } from '@forge/flows/scheduler.ts';
-import type { Run } from '@forge/flows/run-model.ts';
+import { checkInitiativeDeps } from '@forge/flows';
+import type { Run } from '@forge/flows';
 import type { EventLogEntry } from '@forge/kernel';
-import { loadFlowDefinition, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
-import { flowPathForId } from '@forge/flows/flow-runner.ts';
+import { loadFlowDefinition, listFlowIds } from '@forge/flows';
+import { flowPathForId } from '@forge/flows';
 import { listDemoElements } from '@forge/library';
-import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
+import { listFlowBandIds } from '@forge/flows';
 import { resolveGuardedPath } from '@forge/kernel';
 import { flowRoots, resolveIdAcrossRoots, listIdsAcrossRoots } from '@forge/kernel';
 import type { FlowDefinition } from '@forge/contracts';
 import { SLUG_RE, PROJECT_ID_RE } from '@forge/kernel';
 import { projectKbBindings } from '@forge/knowledge';
-import { parseManifest, initiativeTitle } from '@forge/flows/manifest.ts';
+import { parseManifest, initiativeTitle } from '@forge/flows';
 // `forge-8vfn.7.6.18` — the ONE reader of the scheduler's refusal clauses.
-import { manifestBlockedClauses } from '@forge/flows/planned-initiatives.ts';
-import { parseWorkItem, WORK_ITEM_FILE_PATTERN } from '@forge/flows/work-item.ts';
-import type { WorkItem } from '@forge/flows/work-item.ts';
-import type { QueueState } from '@forge/flows/queue.ts';
-import { getPaths } from '@forge/flows/queue.ts';
+import { manifestBlockedClauses } from '@forge/flows';
+import { parseWorkItem, WORK_ITEM_FILE_PATTERN } from '@forge/flows';
+import type { WorkItem } from '@forge/flows';
+import type { QueueState } from '@forge/flows';
+import { getPaths } from '@forge/flows';
 import { provenanceOfOrigin, type Provenance } from '@forge/kernel';
 // M4 §4 (projects routes carve): `GET /api/studio/projects`,
 // `/api/studio/starters`, `/api/studio/projects/starters`,
@@ -741,8 +741,8 @@ export async function handleStudioRoutes(
   //
   // NOT carved (M4 §4 projects routes carve — the blocker is the allow-graph
   // itself, measured, not a ruling): `buildProjectAttention`
-  // → `scanProjectManifests` reads `@forge/flows/queue.ts` (`getPaths`,
-  // `QueueState`) and `@forge/flows/manifest.ts` (`parseManifest`) — `flows` is
+  // → `scanProjectManifests` reads `@forge/flows` (`getPaths`,
+  // `QueueState`) and `@forge/flows` (`parseManifest`) — `flows` is
   // a STRICTLY HIGHER package rank than `projects` (kernel=1 <
   // {library,knowledge,projects}=2 < agents=3 < sessions=4 < flows=5), so
   // moving it into `packages/projects/` would be a new, unbaselinable

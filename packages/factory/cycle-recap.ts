@@ -31,9 +31,10 @@ import {
 } from 'node:fs';
 import { basename, relative, resolve } from 'node:path';
 
-import { parseManifest, type InitiativeManifest } from '@forge/flows/manifest.ts';
+import { parseManifest } from '@forge/flows';
+import type { InitiativeManifest } from '@forge/contracts';
 import type { EventLogEntry } from '@forge/kernel';
-import type { LintStatus } from '@forge/flows/cycle-context.ts';
+import type { LintStatus } from '@forge/flows';
 
 export type WriteRecapInput = {
   forgeRoot: string;

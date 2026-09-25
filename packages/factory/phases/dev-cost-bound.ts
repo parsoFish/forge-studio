@@ -24,7 +24,7 @@
  * — `scripts/baselines/file-size.json`) per the roadmap's file-size ratchet.
  */
 
-import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import type { CycleInput } from '@forge/flows';
 import type { LoopResult } from '@forge/agents';
 
 /**

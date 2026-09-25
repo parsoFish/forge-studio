@@ -27,7 +27,7 @@ import { join, resolve } from 'node:path';
 
 import { runReflector as runReflectorReal, type ReflectorDeps } from '../../phases/reflector.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
-import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import type { CycleInput } from '@forge/flows';
 import type { RunBrainLintResult, Finding } from '@forge/knowledge';
 import { acquireIsolatedReflectorLease } from '../test-fixtures/reflector-lease-test-fixture.ts';
 

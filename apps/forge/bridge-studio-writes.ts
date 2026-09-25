@@ -41,20 +41,20 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, ope
 import { basename, dirname, join, resolve } from 'node:path';
 
 import { listAgentDefinitions, listStarterAgents, loadAgentDefinition, serializeAgentDefinition } from '@forge/agents';
-import { loadFlowDefinition, serializeFlowDefinition, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
-import { flowPathForId } from '@forge/flows/flow-runner.ts';
-import { deriveFlowKickoff } from '@forge/flows/studio/flow-kickoff.ts';
+import { loadFlowDefinition, serializeFlowDefinition, listFlowIds } from '@forge/flows';
+import { flowPathForId } from '@forge/flows';
+import { deriveFlowKickoff } from '@forge/flows';
 import { discoverProjects } from '@forge/kernel';
 import { skillsDir as toSkillsDir } from '@forge/agents';
 import { flowRoots, resolveIdAcrossRoots, skillRoots } from '@forge/kernel';
 import { resolveGuardedPath, guardedFile, guardedWriteFile } from '@forge/kernel';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 import { SLUG_RE, isReservedId } from '@forge/kernel';
-import { validateFlow } from '@forge/flows/studio/validate-flow.ts';
+import { validateFlow } from '@forge/flows';
 import { readArtifactRoot } from '@forge/knowledge';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { isDryBridge } from './dry-bridge.ts';
-import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
+import { cachedListRuns } from '@forge/flows';
 import {
   sendJson,
   allowedOrigin,

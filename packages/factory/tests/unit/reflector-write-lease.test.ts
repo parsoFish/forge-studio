@@ -26,7 +26,7 @@ import { join, resolve } from 'node:path';
 
 import { runReflector } from '../../phases/reflector.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
-import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import type { CycleInput } from '@forge/flows';
 import { acquireIsolatedReflectorLease } from '../test-fixtures/reflector-lease-test-fixture.ts';
 
 // Same forge root the reflector code itself resolves to (orchestrator/phases/ ⇒ ..).

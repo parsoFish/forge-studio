@@ -25,9 +25,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from '../../ui-bridge.ts';
-import { parseManifest } from '@forge/flows/manifest.ts';
-import { parseWorkItem } from '@forge/flows/work-item.ts';
-import { reviewCapExhaustedPath, writeReviewCapExhaustedMarker } from '@forge/flows/fix-work-items.ts';
+import { parseManifest } from '@forge/flows';
+import { parseWorkItem } from '@forge/flows';
+import { reviewCapExhaustedPath, writeReviewCapExhaustedMarker } from '@forge/flows';
 
 function makeManifest(forgeRoot: string, worktreePath: string, initiativeId: string, cycleId: string): string {
   return [

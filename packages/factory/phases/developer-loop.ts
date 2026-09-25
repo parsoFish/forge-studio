@@ -33,7 +33,7 @@ import {
   validateWorkItemSet,
   writeWorkItemStatus,
   type WorkItem,
-} from '@forge/flows/work-item.ts';
+} from '@forge/flows';
 import { hollowGateGuardFor, profileFor, readChangeClass } from '../class-profiles.ts';
 import { type QueryFn, type ClaudeAgentOptions } from '@forge/agents';
 import { getAdapter, resolveSdkId } from '@forge/agents';
@@ -42,19 +42,19 @@ import { makeToolEventSink } from '@forge/agents';
 import { makeProjectSkillsLoadedSink } from '@forge/agents';
 import { runRalphLoop as runRalph, type LoopResult } from '@forge/agents';
 import { matchesRateLimitSignature } from '@forge/agents';
-import { createWiWorktree, removeWiWorktree } from '@forge/flows/wi-worktree.ts';
-import { createMergeQueue, mergeAndPublish, type MergeConflictDetail } from '@forge/flows/wi-merge-back.ts';
+import { createWiWorktree, removeWiWorktree } from '@forge/flows';
+import { createMergeQueue, mergeAndPublish, type MergeConflictDetail } from '@forge/flows';
 import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '@forge/agents';
-import { assertLocalRemoteSynced, checkLocalRemoteSynced, type PushResult } from '@forge/flows/pr.ts';
+import { assertLocalRemoteSynced, checkLocalRemoteSynced, type PushResult } from '@forge/flows';
 import {
   resolveDevWiConcurrency,
   ralphGitIdentity,
   UNIFIER_GIT_IDENTITY,
   type GitIdentity,
 } from '@forge/kernel';
-import { runConcurrentDispatch, type DispatchOutcome } from '@forge/flows/wi-dispatch-scheduler.ts';
+import { runConcurrentDispatch, type DispatchOutcome } from '@forge/flows';
 import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '@forge/projects';
-import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import type { CycleInput } from '@forge/flows';
 import { resolveWiCostBudgetUsd, makeCostCeilingCheck, isCostCeilingHalt } from './dev-cost-bound.ts';
 
 /**

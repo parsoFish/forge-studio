@@ -15,7 +15,7 @@
  * without a funded run (§15.163).
  */
 import { PLAN_FLOW_ID, flowPathForId, loadFlowDefinition } from '@forge/flows';
-import { listFlowIds } from '@forge/flows/studio/flow-registry.ts';
+import { listFlowIds } from '@forge/flows';
 
 /** The flow `POST /api/develop/start` enqueues onto — the harness default. */
 export const DEVELOP_FLOW_ID = 'forge-develop';

@@ -28,7 +28,7 @@ import {
   recordBrainGateResult,
   REFLECTION_LOST_EVENT,
   type CycleInput,
-} from '@forge/flows/cycle-context.ts';
+} from '@forge/flows';
 import {
   assignRetention,
   collectCitedBy,

@@ -48,11 +48,11 @@ import {
 } from '@forge/knowledge';
 import { readArtifactRoot } from '@forge/knowledge';
 import { projectKbBindings } from '@forge/knowledge';
-import { isContainedProjectRepoPath } from '@forge/flows/manifest-path-guard.ts';
+import { isContainedProjectRepoPath } from '@forge/flows';
 import { agentCapabilityDescriptor } from '@forge/agents';
 import { listStarterAgents } from '@forge/agents';
-import { loadStarterFlow, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
-import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
+import { loadStarterFlow, listFlowIds } from '@forge/flows';
+import { listFlowBandIds } from '@forge/flows';
 import { spawnPreflightFix } from './bridge-studio-writes.ts';
 import { projectsRoutes } from '@forge/projects';
 import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions';
@@ -67,10 +67,10 @@ import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions';
 // re-export, so the package imports its own owners directly (COMMON §15.43) and
 // six would-be dependencies never became injections at all.
 import { agentsRoutes } from '@forge/agents';
-import { cachedListRuns } from '@forge/flows/run-list-cache.ts';
-import { buildAgentSlugToNodeId } from '@forge/flows/run-model.ts';
-import { loadFlowDefinition, listFlowIds as listFlowIdsForAgents } from '@forge/flows/studio/flow-registry.ts';
-import { flowPathForId as flowPathForIdForAgents } from '@forge/flows/flow-runner.ts';
+import { cachedListRuns } from '@forge/flows';
+import { buildAgentSlugToNodeId } from '@forge/flows';
+import { loadFlowDefinition, listFlowIds as listFlowIdsForAgents } from '@forge/flows';
+import { flowPathForId as flowPathForIdForAgents } from '@forge/flows';
 import {
   DEFAULT_STALL_CEILING_MS, isTurnAlive, extractErrorMessage, killTrackedRun,
 } from '@forge/sessions';

@@ -16,8 +16,8 @@
  */
 
 import { NO_EXAMPLE_INSTALLED, resolveInstalledFactory, type InstalledFactory } from './factory-wiring.ts';
-import { parseManifest } from '@forge/flows/manifest.ts';
-import { getPaths } from '@forge/flows/queue.ts';
+import { parseManifest } from '@forge/flows';
+import { getPaths } from '@forge/flows';
 import type { BandAgentDeps } from '@forge/agents';
 
 /**

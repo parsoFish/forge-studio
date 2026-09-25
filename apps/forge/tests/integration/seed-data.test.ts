@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { existsSync, readdirSync } from 'node:fs';
 
 import { listAgentDefinitions } from '@forge/agents';
-import { loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
+import { loadFlowDefinition } from '@forge/flows';
 import { discoverProjects } from '@forge/kernel';
 import { loadKbDescriptor } from '@forge/knowledge';
 import { loadCatalog } from '@forge/library';

@@ -78,7 +78,7 @@ export type BandPipelineKind = 'review';
 
 /**
  * The six queue state directories this surface reads. Declared with every field
- * REQUIRED and by name, so the real `getPaths` from `@forge/flows/queue.ts`
+ * REQUIRED and by name, so the real `getPaths` from `@forge/flows`
  * satisfies it structurally at the assembly site and a rename there breaks the
  * repo-wide typecheck rather than passing a fake in this package's own tests
  * (COMMON §15.71).
@@ -132,9 +132,9 @@ export type BandPipelineOutcome = { status: 'complete' | 'complete-with-misses' 
 export type BandAgentDeps = {
   /** `@forge/factory/phases/{demo-agent,adversarial-review}.ts`, behind one call. */
   runPipeline(call: BandPipelineCall): Promise<BandPipelineOutcome>;
-  /** `getPaths` from `@forge/flows/queue.ts`. */
+  /** `getPaths` from `@forge/flows`. */
   queuePaths(queueRoot: string): BandQueuePaths;
-  /** `parseManifest` from `@forge/flows/manifest.ts`. */
+  /** `parseManifest` from `@forge/flows`. */
   parseInitiativeManifest(content: string): BandInitiativeFields;
 };
 

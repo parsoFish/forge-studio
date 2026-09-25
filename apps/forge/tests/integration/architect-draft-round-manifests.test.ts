@@ -54,7 +54,7 @@ import { mkdtempSync, mkdirSync, readdirSync, writeFileSync, rmSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { isCanonicalInitiativeId } from '@forge/flows/initiative-id.ts';
+import { isCanonicalInitiativeId } from '@forge/flows';
 
 import { runArchitectTurn, type ArchitectStatus } from '@forge/sessions';
 import { stubArchitectManifestPorts } from '@forge/sessions/testing';

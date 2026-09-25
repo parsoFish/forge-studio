@@ -6,7 +6,7 @@
   "description": "The flow runner against a PhaseExecutor port, scheduler, daemon, queue state machine, manifest, triggers, run model, git/PR/work-item mechanics.",
   "exports": {
     ".": "./index.ts",
-    "./*": "./*"
+    "./testing": "./testing.ts"
   },
   "scripts": {
     "test": "node --test --experimental-strip-types \"**/*.test.ts\""
