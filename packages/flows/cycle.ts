@@ -116,41 +116,24 @@ export function resolveCostCeilingOverride(
  * Exported for use by flow-runner.ts's default `emitSyntheticArchitect` dep.
  */
 /**
- * The architect rows this cycle's log already holds. The log file IS the cycle,
- * so its contents answer "has this cycle already emitted its architect"; a named
- * session narrows the match. Best-effort: an unreadable log yields no rows and
- * the caller emits — a cycle must not be blocked by a bookkeeping guard.
+ * Every event on this cycle_id's own log, parsed once (bead forge-8vfn.8.1.5)
+ * — feeds the idempotency check below and, exported, the cost-ceiling reseed
+ * a RE-ENTERED `runFlow` needs. Via `guardedReadFile` (SEC-04); best-effort,
+ * `[]` if unreadable.
  */
-function readEmittedArchitectEvents(logFilePath: string, sessionId: string | undefined): EventLogEntry[] {
-  // Through `guardedReadFile`, not a raw read: the cycle's log directory is the
-  // logger's own already-resolved root and `events.jsonl` rides as the segment,
-  // so the leaf gets the same symlink/`nlink` check every other request-reachable
-  // log read gets (`metrics.ts`'s SEC-04 note). A rejected or absent file is
-  // `null` either way, and the caller emits.
+export function readPriorCycleCostEvents(logFilePath: string): EventLogEntry[] {
   const raw = guardedReadFile(dirname(logFilePath), ['events.jsonl'], 'utf8');
   if (raw === null) return [];
   const rows: EventLogEntry[] = [];
-  let sawEnd = false;
   for (const line of raw.split('\n')) {
     if (line.trim() === '') continue;
-    let e: EventLogEntry;
     try {
-      e = JSON.parse(line) as EventLogEntry;
+      rows.push(JSON.parse(line) as EventLogEntry);
     } catch {
-      continue; // a truncated final line is not a reason to restate the architect
+      continue; // a truncated final line is not a reason to fail the read
     }
-    if (e.phase !== 'architect') continue;
-    if (sessionId !== undefined) {
-      const rowSession = (e.metadata as { session_id?: unknown } | undefined)?.session_id;
-      if (rowSession !== sessionId) continue;
-    }
-    rows.push(e);
-    if (e.event_type === 'end') sawEnd = true;
   }
-  // Only a COMPLETE prior emission counts. A log holding a `start` without its
-  // `end` is a cycle that died between the two writes, and the honest repair is
-  // to emit the pair rather than to hand back a spend row that does not exist.
-  return sawEnd ? rows : [];
+  return rows;
 }
 
 export function emitSyntheticArchitectEvents(
@@ -174,14 +157,24 @@ export function emitSyntheticArchitectEvents(
   // IDEMPOTENT PER CYCLE (bead forge-8vfn.6.10.22). `runCycle` can be entered
   // twice for one `cycle_id` — the claim, then a second serve pass — and each
   // entry used to write a fresh pair whose `end` restates the architect's WHOLE
-  // spend (G2, 2026-09-05: $26.3048 logged against $23.9721 spent).
-  //
-  // The existing rows are RETURNED, never an empty array: this is handed to
-  // `runFlow` as `priorSpendEvents`, the only path by which the architect's
-  // dollars reach the CostTracker (ruling 257), so returning nothing would trade
-  // a reporting defect for a blind ceiling.
-  const alreadyEmitted = readEmittedArchitectEvents(logger.logFilePath, architectSessionId);
-  if (alreadyEmitted.length > 0) return alreadyEmitted;
+  // spend (G2, 2026-09-05: $26.3048 logged against $23.9721 spent). The log
+  // file IS the cycle, so a COMPLETE prior pair (an `end` seen, not just a
+  // `start` from a cycle that died between the two writes) is RETURNED, never
+  // an empty array — this is handed to `runFlow` as `priorSpendEvents` (ruling
+  // 257), so returning nothing would trade a reporting defect for a blind
+  // ceiling.
+  const alreadyEmitted: EventLogEntry[] = [];
+  let sawArchitectEnd = false;
+  for (const e of readPriorCycleCostEvents(logger.logFilePath)) {
+    if (e.phase !== 'architect') continue;
+    if (architectSessionId !== undefined) {
+      const rowSession = (e.metadata as { session_id?: unknown } | undefined)?.session_id;
+      if (rowSession !== architectSessionId) continue;
+    }
+    alreadyEmitted.push(e);
+    if (e.event_type === 'end') sawArchitectEnd = true;
+  }
+  if (sawArchitectEnd) return alreadyEmitted;
 
   const emitted: EventLogEntry[] = [];
   emitted.push(logger.emit({
@@ -258,11 +251,11 @@ export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<
   //
   // Emitted here (not inside runFlow) so dry-run cycles also produce the
   // architect events — the P4 tests verify this unconditional emission.
-  // Returned, not just emitted: these carry the architect's real spend, and
-  // `runFlow` builds its CostTracker after this point — so they are handed to
-  // it as `priorSpendEvents` or the architect's dollars are counted by nothing
-  // (spec §5 item 7, ruling 257).
-  const architectEvents = emitSyntheticArchitectEvents(input, logger, origin);
+  emitSyntheticArchitectEvents(input, logger, origin);
+
+  // Seed for `runFlow`'s CostTracker: every phase's spend on this log so far,
+  // architect included now the line above guarantees it (bead forge-8vfn.8.1.5).
+  const priorSpendEvents = readPriorCycleCostEvents(logger.logFilePath);
 
   // F-04 / F-06: derive the effective quality-gate command once per cycle so
   // the dev-loop and reviewer use exactly the same gate. Precedence:
@@ -311,7 +304,7 @@ export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<
       }
       const flow = loadFlowDefinition(flowPath);
       const { ceilingUsd: costCeilingUsd, source: costCeilingSource } = resolveCostCeilingOverride(input.manifestPath);
-      const flowResult = await runFlow({ flow, input: inputWithGate, logger, costCeilingUsd, costCeilingSource, priorSpendEvents: architectEvents, executor: wiring.executor, projectGate: wiring.projectGate, runClosure: wiring.runClosure });
+      const flowResult = await runFlow({ flow, input: inputWithGate, logger, costCeilingUsd, costCeilingSource, priorSpendEvents, executor: wiring.executor, projectGate: wiring.projectGate, runClosure: wiring.runClosure });
       cycleOutcome = flowResult.cycleOutcome;
       reflectionStatus = flowResult.reflectionStatus as ReflectionStatus;
       lintStatus = flowResult.lintStatus as LintStatus;

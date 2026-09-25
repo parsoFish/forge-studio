@@ -96,9 +96,9 @@ export type CostTrackerOptions = {
  *   3. Call stopReasonBeforeNextWorkItem(workItemId) at each WI boundary —
  *      non-throwing, for a caller that must skip rather than abort the node.
  *      Checks the cycle total AND that WI's own spend (spec §5 item 7, 257).
- *   4. Hand it any cost-bearing event the cycle incurred before the runner
- *      existed — the architect's, via `runFlow`'s `priorSpendEvents` — or the
- *      ceiling does not bound what the cycle actually spent.
+ *   4. Hand it any cost-bearing event incurred before the runner existed, via
+ *      `runFlow`'s `priorSpendEvents` — the architect's, plus (re-entry, bead
+ *      forge-8vfn.8.1.5) every other phase's from an earlier entry.
  *
  * Emits:
  *   - flow.cost-warn (once, at ≥70%) with { spentUsd, ceilingUsd, ceilingSource, pct }
