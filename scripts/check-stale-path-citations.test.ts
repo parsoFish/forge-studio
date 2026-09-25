@@ -246,6 +246,26 @@ describe('path-shaped citations in markdown prose', () => {
       }
     });
   }
+
+  test('QUARRY.md (EXCLUDED_PROSE_FILES) is excluded from prose scanning — dated cap-table history', () => {
+    // QUARRY.md's cap-table cells are an append-only log of dated "Raised
+    // X -> Y (…)" notes every lane writes into, citing files as they stood
+    // on that date. A main merge lands a new dated note on nearly every PR,
+    // so without a file-level exclusion (mirroring check-identity.mjs's
+    // EXCLUDED_FILES) this guard would red almost any merge that carved or
+    // moved a file an old note once named — found for real on this guard's
+    // own PR. QUARRY.md's LIVE claims (the ownership table's rows) are a
+    // different concern, verified by check-owner.mjs, not this guard.
+    const { root, cleanup } = fixture({
+      'QUARRY.md': `Raised 2026-01-01 -> 2026-02-01 (packages/ghost/dead-module.ts moved on).\n`,
+    });
+    try {
+      const { code, out } = run(root, noBaseline(root));
+      assert.equal(code, 0, `QUARRY.md must not be scanned:\n${out}`);
+    } finally {
+      cleanup();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

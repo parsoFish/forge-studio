@@ -29,8 +29,11 @@
  * trade this tree already makes in check-request-path-sinks.mjs: it does not
  * parse template-literal `${...}` interpolation or regex literals. Prose in
  * `.md` files, except `brain/` (brain-lint's job), `docs/decisions/`
- * (history — ADRs record what used to be true) and `_1.0/` (gitignored
- * campaign scratch, never a permanent artifact).
+ * (history — ADRs record what used to be true), `_1.0/` (gitignored
+ * campaign scratch, never a permanent artifact), and individual files named
+ * in EXCLUDED_PROSE_FILES below (their own reason travels with each entry —
+ * mirrors check-identity.mjs's EXCLUDED_FILES for the same class of file: a
+ * record whose job is to be accurate about the PAST, not the present).
  *
  * SUPPRESSION. A literal `historical:` anywhere on the physical line, or a
  * `(now at ...)` annotation anywhere on it, suppresses every finding on that
@@ -77,6 +80,25 @@ const CODE_EXTENSIONS = ['.ts', '.tsx', '.mjs', '.js'];
 const PROSE_EXTENSIONS = ['.md'];
 /** Prose trees excluded — each for a reason named in the header above. */
 const EXCLUDED_PROSE_TREES = ['brain', 'docs/decisions', '_1.0'];
+
+/**
+ * Individual prose files excluded, each with its own reason — mirrors
+ * check-identity.mjs's EXCLUDED_FILES. A tree-level exclusion doesn't fit a
+ * single root-level file, and QUARRY.md is exactly that shape: a per-package
+ * cap TABLE whose cells are an append-only log of dated "Raised X -> Y (…)"
+ * notes every lane writes into, each citing the files as they stood AT THAT
+ * DATE — the same kind of historical record CHANGELOG.md is, just inside a
+ * table cell instead of a section. Main merges a new dated note on nearly
+ * every PR, so without this exclusion the ratchet reds on almost any merge
+ * that carved or moved a file QUARRY.md once named — never QUARRY.md's own
+ * fault, and unfixable by repointing (the note is dated; repointing it would
+ * misstate what was true on that date). QUARRY.md's LIVE claims — the
+ * ownership table's rows, each naming a file that must exist and be tracked
+ * — are a different concern and stay verified, by check-owner.mjs.
+ */
+const EXCLUDED_PROSE_FILES = new Map([
+  ['QUARRY.md', 'cap-table cells are dated history; ownership rows are verified by check-owner'],
+]);
 
 /**
  * Directory names a citation may start with. Includes trees this repo no
@@ -185,6 +207,7 @@ function gitLogDeletions(root) {
 }
 
 function isExcludedProse(relPath) {
+  if (EXCLUDED_PROSE_FILES.has(relPath)) return true;
   return EXCLUDED_PROSE_TREES.some((t) => relPath === t || relPath.startsWith(`${t}/`));
 }
 
