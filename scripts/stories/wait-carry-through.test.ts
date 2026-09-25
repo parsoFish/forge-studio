@@ -220,7 +220,13 @@ describe('forge-8vfn.27: the runner threads ONE pressedAt across the beat loop',
     const { runnerSourceContaining } = await import('./runner-source.mjs');
     const { source } = runnerSourceContaining('await driveBeat(');
     const decl = source.indexOf('const pressedAt = new Map()');
-    const loop = source.indexOf('for (const [i, beat] of story.beats.entries())');
+    // Anchors the loop's OWN OPENING, not its exact destructuring shape: the
+    // fork verb (T1 ruling 1350) wraps `story.beats` in `expandForkedBeats(...)`
+    // so the beat loop no longer reads `for (const [i, beat] of
+    // story.beats.entries())` verbatim — `pressedAt` itself is untouched, still
+    // declared once before this same loop, so the anchor moves rather than the
+    // property it is proving.
+    const loop = source.indexOf('expandForkedBeats(story.beats,');
     assert.ok(decl !== -1, 'the runner must declare its own pressedAt map');
     assert.ok(loop !== -1, 'the beat loop must still be findable');
     assert.ok(

@@ -53,7 +53,12 @@ function printDriftReport(drift: DriftReport): void {
   }
   if (drift.gitignoreDrift.action === 'regenerate') {
     console.log('');
-    console.log('.gitignore: [regenerate] a tracked-config line (e.g. a blanket .forge/) is being replaced with the canonical scratch stanza');
+    console.log(`.gitignore: [regenerate] ${drift.gitignoreDrift.message ?? '(no message)'}`);
+  }
+  if (drift.commandAdvisories.length > 0) {
+    console.log('');
+    console.log('advisories:');
+    for (const advisory of drift.commandAdvisories) console.log(`  ${advisory.message}`);
   }
 }
 

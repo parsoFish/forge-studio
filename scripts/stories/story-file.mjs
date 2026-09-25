@@ -76,6 +76,44 @@ function validateAmong(among, data, at) {
 }
 
 /**
+ * `beats[].fork` — forge-8vfn.2.22, T1 ruling 1350. `{ over: <string>, cases:
+ * [<value>, …] }`. `over` naming a `fill` step in this beat's OWN `do` — S2
+ * beat 3's `create-app-type` — makes this a FILL fork: `beats-fork.mjs` runs
+ * the beat once per case, each on its own ground, substituting each case for
+ * that field's `with` value. `over` naming anything else — S7 beat 3's
+ * `authoring-door`, which no `fill` step fills — makes it a DOOR fork:
+ * declared and carried through, but performed ONCE, unexpanded.
+ *
+ * THE CLASSIFICATION IS NOT CHECKED HERE, on purpose. `over`'s relationship to
+ * `do` used to be a LOAD-TIME refusal ("a fork over a field nothing fills
+ * would run every case identically and silently"), which is why S7's real
+ * door fork could not load on this branch. That hazard no longer applies: a
+ * door fork is never expanded per case, so it cannot run N cases identically.
+ * `steps` (this beat's already-validated `do`) is accepted for the same
+ * signature every other per-beat validator here uses, not because this
+ * function still consults it.
+ */
+function validateFork(raw, steps, at) {
+  if (raw === undefined) return undefined;
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    fail(`${at}.fork`, `expected an object { over, cases }, got ${JSON.stringify(raw)}`);
+  }
+  requireNonEmptyString(raw.over, `${at}.fork.over`);
+  if (!Array.isArray(raw.cases) || raw.cases.length === 0) {
+    fail(`${at}.fork.cases`, `expected a non-empty array of distinct strings, got ${JSON.stringify(raw.cases)}`);
+  }
+  raw.cases.forEach((c, i) => requireNonEmptyString(c, `${at}.fork.cases[${i}]`));
+  if (new Set(raw.cases).size !== raw.cases.length) {
+    fail(
+      `${at}.fork.cases`,
+      `expected distinct cases, got ${JSON.stringify(raw.cases)} — a duplicate would run the same case ` +
+      'twice under two different labels, silently doubling the cost of a real-spawn beat',
+    );
+  }
+  return Object.freeze({ over: raw.over, cases: Object.freeze([...raw.cases]) });
+}
+
+/**
  * Validate a raw story object and return a deep-frozen structural copy.
  * Never returns, and never mutates, the input.
  */
@@ -245,6 +283,17 @@ export function validateStory(raw) {
 
     const wait = validateWait(b.wait, at);
     const steps = validateDoSteps(b.do, at);
+    // `forge-8vfn.2.22` — `fork` runs THIS BEAT once per case, substituting
+    // each case into the named `fill` step's `with` value (`beats-fork.mjs`
+    // does the substitution; this validates the declaration alone). `over`
+    // must name a field a step in this beat's OWN `do` actually fills — the
+    // same "can this ever be consumed" rule this file already applies to
+    // `wait.cycleOf` and to an unconsumable agent wait: a fork over a field
+    // nothing fills would run every case identically and silently, which
+    // would read as N green cases proving nothing. `cases` must be distinct —
+    // a duplicate would run the same case twice under two different labels,
+    // silently doubling a real-spawn beat's cost for no added coverage.
+    const fork = validateFork(b.fork, steps, at);
     // `forge-8vfn.7.6.143` (b1), T1 ruling 1147 — AN AGENT WAIT THAT NO CODE
     // PATH CAN CONSUME IS REFUSED HERE, before selection and before spend.
     //
@@ -312,6 +361,7 @@ export function validateStory(raw) {
       // validated-and-discarded, so a story that declared `costless: true`
       // would silently run with no enforcement of it at all.
       ...(b.costless === undefined ? {} : { costless: b.costless }),
+      ...(fork === undefined ? {} : { fork }),
       expect: Object.freeze({
         route: e.route,
         data: Object.freeze({ ...e.data }),

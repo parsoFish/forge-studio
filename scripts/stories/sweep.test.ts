@@ -189,6 +189,52 @@ test('the sweep can never reach a REAL flow, whatever a story is called', () => 
   }
 });
 
+// ---------------------------------------------------------------------------
+// T1 ruling 1350 (the fork brief), ruling (1)'s last bullet: a FILL fork mints
+// one ground per case — `projects/story-<id>-<case>` — and the sweep must own
+// every one of them exactly as it owns `story-<id>` today: PREFIX-BOUNDED,
+// never broader. The case names are not known to `sweep.mjs` (they live in
+// the story's own `fork.cases`), so this is read from the filesystem rather
+// than a list the caller would have to keep in sync.
+// ---------------------------------------------------------------------------
+
+test('the sweep owns projects/story-<id>-* and brain/projects/story-<id>-*, prefix-bounded', () => {
+  const root = scratch();
+  plant(join(root, 'projects', 'story-s2-typescript-api', 'marker.txt'));
+  plant(join(root, 'brain', 'projects', 'story-s2-typescript-api', 'profile.md'));
+  // A DIFFERENT story id that merely starts with the same characters — the
+  // hazard a naive `startsWith('story-s2')` (no trailing hyphen) would fail:
+  // it must survive S2's sweep untouched.
+  plant(join(root, 'projects', 'story-s20', 'marker.txt'));
+  const paths = productFixturePathsFor('S2', root);
+  assert.ok(paths.includes(join(root, 'projects', 'story-s2-typescript-api')), paths.join(' | '));
+  assert.ok(paths.includes(join(root, 'brain', 'projects', 'story-s2-typescript-api')), paths.join(' | '));
+  assert.ok(!paths.includes(join(root, 'projects', 'story-s20')), paths.join(' | '));
+});
+
+test('story-s2-typescript-api IS swept AND story-s20 (a different story id) is NOT', () => {
+  const root = scratch();
+  const forkedProject = join(root, 'projects', 'story-s2-typescript-api');
+  const forkedBrain = join(root, 'brain', 'projects', 'story-s2-typescript-api');
+  const otherStory = join(root, 'projects', 'story-s20');
+  plant(join(forkedProject, 'marker.txt'));
+  plant(join(forkedBrain, 'profile.md'));
+  plant(join(otherStory, 'marker.txt'));
+
+  const r = sweepProductFixtures('S2', root, { sinceMs: Date.now(), evidenceDir: join(root, '_evidence') });
+
+  assert.equal(existsSync(forkedProject), false, 'a fill fork\'s per-case ground is this story\'s own fixture');
+  assert.equal(existsSync(forkedBrain), false);
+  assert.equal(existsSync(otherStory), true, 'story-s20 is a DIFFERENT story id and must never be swept by S2');
+  assert.ok(r.removed.includes(forkedProject));
+  assert.ok(r.removed.includes(forkedBrain));
+});
+
+test('a story with no forked grounds on disk sweeps exactly as before — nothing extra is scanned into the report', () => {
+  const paths = productFixturePathsFor('S2', '/a/root/that/does/not/exist');
+  assert.deepEqual(paths, productFixturePathsFor('S2', '/a/root/that/does/not/exist'), 'stable and non-throwing against an absent root');
+});
+
 // ── M5-B s2: a story run leaves the tree as it found it (beads forge-8vfn.6.3,
 // the trailing-sweep half of `run.mjs`).
 //

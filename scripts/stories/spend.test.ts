@@ -18,8 +18,13 @@ import { spendGateVerdict, summariseRunSpend, spendCeilingVerdict, effectiveCeil
 import { runnerSourceContaining } from './runner-source.mjs';
 
 /** The beat loop, wherever it lives. A door names the property and the anchor;
- *  `runner-source.mjs` says which module holds it today (forge-0fli). */
-const BEAT_LOOP = 'for (const [i, beat] of story.beats.entries())';
+ *  `runner-source.mjs` says which module holds it today (forge-0fli). Anchors
+ *  the loop's iterable, not its exact destructuring: T1 ruling 1350's fork
+ *  verb wraps `story.beats` in `expandForkedBeats(...)`, so the old literal
+ *  `for (const [i, beat] of story.beats.entries())` no longer appears anywhere
+ *  — purely textual, since everything this file asserts about lives INSIDE
+ *  the loop body, which this anchor still opens onto. */
+const BEAT_LOOP = 'expandForkedBeats(story.beats,';
 
 test('a costless story runs without --approve-spend', () => {
   const v = spendGateVerdict({ realSpawn: false, budget_usd: 0 }, { approveSpend: false });
@@ -226,7 +231,10 @@ test('7.6.51: the runner enforces the ceiling at a beat boundary and exits non-z
   const observe = readFileSync(new URL('./run-observe.mjs', import.meta.url), 'utf8');
   const spendSoFarBody = observe.slice(observe.indexOf('export function spendSoFar'));
   assert.match(spendSoFarBody, /spendCeilingVerdict\(/, 'the ceiling must be consulted where the spend is computed');
-  assert.match(loopBody, /after beat \$\{i \+ 1\}/, 'the running total must be labelled per beat, not only on breach');
+  // `${i + 1}` -> `${beatLabel}` under T1 ruling 1350's fork verb, so a case's
+  // own label ("3[api]") prints rather than a bare re-derived index — the
+  // SAME per-beat labelling this assertion is about, textually renamed.
+  assert.match(loopBody, /after beat \$\{beatLabel\}/, 'the running total must be labelled per beat, not only on breach');
   assert.match(spendSoFarBody, /\[stories\] spend \$\{label\}/, 'and that label must actually reach a printed line');
   // Asserting the BEHAVIOUR, not a variable name. The first draft of this door
   // matched /ceiling\.breached/ and broke the moment 7.6.52 renamed the local —
