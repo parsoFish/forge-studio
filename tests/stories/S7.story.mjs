@@ -118,12 +118,16 @@
  *     creates: §3.1 allows no seeded state except what a PRIOR BEAT OF THIS
  *     STORY made, and reaching across stories would make S7 pass or fail on
  *     whether S5 ran first.
- *   - Beat 13 is the one §3's row ends on, and it has no attribute at all.
- *     Every `data-*` in `forge-ui` naming a hook is `data-hook-count`,
- *     `-event`, `-id`, `-runnable`, `-trust`, `-url`, `-verdict` and
- *     `-carried-by-count`: definition, trust and binding. NOTHING names a hook
- *     EXECUTION. So "the hook fires" is named in the beat's narration and
- *     recorded as a surface the library lane must build.
+ *   - A hook EXECUTION is now a surface (forge-6gv.8.1, library-33). The hook
+ *     page carries a Test-fire control (`data-action="test-fire-hook"`) that
+ *     runs the approved hook through the same approval + package-pin gate
+ *     production dispatch uses, and records each run as a
+ *     `[data-section="test-fire"]` row (`data-test-fire-run`, `-at`,
+ *     `-outcome`, `-event`; `data-test-fire-run-count` on the section).
+ *     Beat 13 fires it and asserts the run row. Dispatch firings surface as
+ *     `data-hook-last-fire-at` / `-outcome` on the same page root; the final
+ *     beat still asserts the agent RUN it can see — reshaping it to read the
+ *     last-fire record is a separate amendment, not made here.
  *
  * SWEEP. `sweep.mjs` removes `projects/story-<id>` and
  * `brain/projects/story-<id>` only. The skill, hook, template and agent this
@@ -460,6 +464,45 @@ export default {
       say: 'Trust and verdict are two different axes, and this is the trust one. Approved and runnable is the state that lets an agent carry it; until the operator pressed this, the hook was a file on disk that nothing would ever execute.',
     },
     {
+      // forge-6gv.8.1 (library-33, T1 1314). Test-fire runs the hook for real,
+      // through the approval + package-pin gate dispatch uses; binding is NOT
+      // required, so this is the first moment the operator can see the hook
+      // they approved actually execute.
+      //
+      // WHAT IS ASSERTED, AND WHY EACH KEY:
+      //   - `test-fire-at` / `-event` / `-outcome` are carried by the run ROW,
+      //     which renders only once a run is logged — so a bound `<at>` proves
+      //     a row exists. `-event` is the hook's own declared event; `-outcome`
+      //     is `ran` because HOOK_SCRIPT exits 0. `-outcome` is also on the
+      //     just-fired result block, with the same value, so the together-rule
+      //     reads either.
+      //   - `test-fire-run-count` is a placeholder, not '1': the test-fire log
+      //     lives under `studio/hooks/`, which the sweep does not own
+      //     (`forge-8vfn.2.26`), so a re-run meets its own earlier fires. The
+      //     row's attributes above are what prove THIS press ran.
+      //   - `carried-by-count: '0'` is the unbound state, whose copy the page
+      //     now states plainly ("Unbound — this hook cannot fire until it is
+      //     bound to an agent"): the test-fire works WITHOUT a binding, and the
+      //     beat asserts both facts on one page.
+      // `section` is deliberately not asserted: every panel on the page carries
+      // one, and the count attribute already lives only on the test-fire panel.
+      act: 'Test-fire the approved hook, before any agent carries it',
+      do: [{ press: 'test-fire-hook' }],
+      expect: {
+        route: '/hooks/story-s7-hook',
+        data: {
+          page: 'hook-detail',
+          'hook-id': 'story-s7-hook',
+          'test-fire-run-count': '<hookTestFireRunCount>',
+          'test-fire-at': '<hookTestFireAt>',
+          'test-fire-event': HOOK_EVENT,
+          'test-fire-outcome': 'ran',
+          'carried-by-count': '0',
+        },
+      },
+      say: 'Approval is a promise about bytes; a test-fire is the bytes running. The hook executes here through the same gate a real dispatch uses, and the page records the run — when, on which event, and how it ended — while still saying plainly that nothing will fire it on its own until an agent carries it.',
+    },
+    {
       // Fully expressible — the manual door again, and every field declares a
       // real `data-field`. `/templates/new` is reached from the Library's own
       // Templates shelf CTA.
@@ -628,10 +671,10 @@ export default {
     {
       // THE HOP BEAT, added after S7 run 4 (T1 ruling 799(1)).
       //
-      // Run 4 red beats 22 and 23 (run-4 numbering; 20 and 21 since the T1-1275 amend) identically — *"standing on the wrong page:
+      // Run 4 red beats 22 and 23 (run-4 numbering; 21 and 22 since the T1-1275 amend and the 6gv.8.1 test-fire beat) identically — *"standing on the wrong page:
       // `/agents` is not `/agents/brain-ingest`"*. The beat below declared that
       // route as where it ENDS and was read as where it STOOD, but **a `do`
-      // acts where the browser stands**, and beat 19 leaves it on `/agents`
+      // acts where the browser stands**, and beat 20 leaves it on `/agents`
       // (`:667`). A route in an `expect` is a post-condition, never a hop.
       //
       // A NAVIGATE, NOT A PRESS, measured: `handleFor`
@@ -700,7 +743,7 @@ export default {
       // `setState` + `markDirty()` — nothing more. So the zone reads `count=1`
       // from LOCAL STATE the instant the chip is clicked, while the agent still
       // RUNS from what was last saved. Without `save-agent` (`:779`, outside the
-      // `<details>`), beat 21 would dispatch an agent that never received the
+      // `<details>`), beat 22 would dispatch an agent that never received the
       // hook, and this beat would assert a binding that exists only in the
       // browser.
       //
@@ -717,17 +760,20 @@ export default {
       say: 'A hook is inert until an agent carries it. Binding is the act that makes a library part part of a worker, and it is the reason the hook’s own page counts how many agents carry it.',
     },
     {
-      // NOT expressible — and UNLIKE beat 20's identical phrase, this one is
-      // still TRUE as of 2026-09-12, re-checked rather than inherited (§15.418:
-      // such a claim carries an expiry date nobody sets, so it cites what it
-      // checked). Beat 20's version had been false since `4de6e5e4`.
+      // Was "NOT expressible", TRUE as of 2026-09-12 and FALSE as of
+      // 2026-09-25 (re-checked, §15.418: such a claim carries an expiry date
+      // nobody sets). Beat 21's identical phrase had been false since
+      // `4de6e5e4`.
       //
-      // NOTHING in `forge-ui` names a hook EXECUTION — the whole declared hook
-      // vocabulary is `data-hook-count`, `-event`, `-id`, `-runnable`,
-      // `-trust`, `-url`, `-verdict`, `-carried-by-count`, every one of them a
-      // fact about the DEFINITION or its TRUST, none about a run. So the beat
-      // asserts the dispatch it can see and names the firing it cannot, and
-      // `_1.0/stories/S7.md` records the missing surface. Asserting
+      // AMENDED 2026-09-25 (6gv.8.1): executions ARE named now — beat 13's
+      // test-fire rows, and `data-hook-last-fire-at`/`-outcome` on the hook
+      // page for dispatch firings. This beat was written when none existed
+      // (the whole vocabulary was `data-hook-count`, `-event`, `-id`,
+      // `-runnable`, `-trust`, `-url`, `-verdict`, `-carried-by-count`), and
+      // it still asserts only the agent run it can see here: reading the
+      // dispatch firing off the hook page's last-fire record needs a hop back
+      // to `/hooks/story-s7-hook`, an act change left to its own amendment.
+      // Asserting
       // `carried-by-count` here instead would be reporting a BINDING as if it
       // were an EXECUTION, which is the fail-open shape this story exists to
       // catch.
