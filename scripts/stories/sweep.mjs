@@ -88,6 +88,27 @@ function storyForkedGroundNames(storyId, root) {
 }
 
 /**
+ * `_logs/_kb-drain-story-<id>-*` — the drain runs of a KB the story created
+ * (KB ids in this suite are the story's own `story-<id>`). Prefix-bounded with
+ * the hyphen inside the prefix, the same rule as `storyForkedGroundNames`, so
+ * `story-s60`'s logs and a real KB's (`_kb-drain-mdtoc-…`) never match.
+ * M7-D, S6 fixture proof run 2: the drain's logs and the KB's seeding anchor
+ * (`projects/.kb-story-<id>`, listed below) survived every S6 run, and bead
+ * `forge-8vfn.7.6.5`'s preflight then refused the NEXT S6 run over S6's own
+ * residue.
+ */
+function storyKbDrainLogNames(storyId, root) {
+  const prefixes = storyFixtureNames(storyId).map((name) => `_kb-drain-${name}-`);
+  let entries;
+  try {
+    entries = readdirSync(join(root, '_logs'));
+  } catch {
+    return []; // no _logs yet: nothing to see, not a finding
+  }
+  return entries.filter((name) => prefixes.some((p) => name.startsWith(p)));
+}
+
+/**
  * The PRODUCT fixtures a story minted — everything it owns except the run's own
  * output. The leading sweep takes all of it; the TRAILING sweep takes only this
  * subset, because `demos/stories/<id>` is the artifact the run exists to
@@ -119,6 +140,10 @@ export function productFixturePathsFor(storyId, root) {
     // run of the same story 409 on the name and reds every beat after the save
     // for a fixture reason. Measured on S4 run 1 (bead `forge-8vfn.2.26`).
     ...names.map((name) => join(root, 'studio', 'flows', name)),
+    // A story that creates a flow-bound KB named after itself owns that KB's
+    // seeding anchor and its drain logs — `storyKbDrainLogNames` above.
+    ...names.map((name) => join(root, 'projects', `.kb-${name}`)),
+    ...storyKbDrainLogNames(storyId, root).map((name) => join(root, '_logs', name)),
   ];
 }
 
