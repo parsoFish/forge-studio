@@ -3426,9 +3426,14 @@ is what this contract reads — but it cannot be the only distinguisher.
   the project at rest — distinct from the preflight VERDICT surfaces
   (`ContractReadiness` / `[data-section="contract-resolution"]`).
   **`[data-section="contract-resolution"]` agent-tier buttons**
-  (`[data-action="resolve-clause-agent"][data-resolve-clause-id]
+  (`[data-action="resolve-clause-agent-<clauseId>"][data-resolve-clause-id]
   [data-resolve-blocked="true"|"false"]`, one per agent-tier clause —
-  `ContractResolutionPanel.tsx`) navigate to the matching builder or KB tab;
+  `ContractResolutionPanel.tsx`; the action carries the clause id, the same
+  fix M1-G (`forge-8vfn.5.6`) shipped for `select-stage-<stage>` —
+  `forge-8vfn.5.11` closed it here: the action used to be the SAME string on
+  every clause's button, so `.first()` was the only clause anything could
+  press. The qualifying `data-resolve-clause-id` attribute stays, it is what
+  this contract reads) navigate to the matching builder or KB tab;
   they never dispatch an agent turn themselves, so their label is
   route-honest per clause (`instructions`/`demo-builder`/`brain-fix` →
   "Open in instructions builder…"/"Open in demo builder…"/"Open in
@@ -3445,9 +3450,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   instead of navigating to a guessed KB (`/knowledge`'s own `?id=`
   resolution silently falls back to the first KB in the list on an unknown
   id — a wrong destination with no indication anything went wrong). The
-  USER-tier `[data-action="apply-clause-decision"]` button genuinely
-  dispatches + polls a preflight-fix agent (~90s bounded) and is labelled
-  "Apply with agent" accordingly. `forge-8vfn.8.3.1` (projects-45): its
+  USER-tier `[data-action="apply-clause-decision-<clauseId>"]` button
+  (same `forge-8vfn.5.11` per-clause fix as the agent-tier button above;
+  `data-apply-clause-id` stays alongside it) genuinely dispatches + polls a
+  preflight-fix agent (~90s bounded) and is labelled "Apply with agent"
+  accordingly. `forge-8vfn.8.3.1` (projects-45): its
   `disabled` consults the SAME per-clause poll state the row's own
   `data-agent-run-state`/`data-poll-state` already render, not just the
   click-scoped `busy` flag — `busy` clears the instant the dispatch POST
@@ -4610,7 +4617,8 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-action="view-demo-session"]` rather than navigating from inside the
   minting click (M1-G, `forge-8vfn.5.5`): `DemoTimeline`'s
   `[data-action="launch-demo-builder"]` (project page),
-  `ContractResolutionPanel`'s DEMO-clause `[data-action="resolve-clause-agent"]`,
+  `ContractResolutionPanel`'s DEMO-clause `[data-action="resolve-clause-agent-DEMO"]`
+  (`forge-8vfn.5.11`: per-clause, like `select-stage-<stage>`),
   and — new with M1-G, `forge-8vfn.5.6` — the onboarding session's own demo
   stage detail, whose `[data-action="launch-demo-builder"]`
   (`components/studio/session/DemoStageHandoff.tsx`) is the act S1 beat 7
