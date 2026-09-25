@@ -25,12 +25,15 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { measurePackages, CorpusUnreadable, EXIT_CANNOT_MEASURE, main, parseCaps } from './check-package-caps.mjs';
+import {
+  measurePackages, CorpusUnreadable, EXIT_CANNOT_MEASURE, main, parseCaps,
+  audit, noteViolation, NOTE_MAX_LENGTH,
+} from './check-package-caps.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CHECKER = join(ROOT, 'scripts/check-package-caps.mjs');
@@ -313,4 +316,114 @@ test('forge-8vfn.28: a healthy corpus still returns 0 through the same path', ()
   // The control. A refusal that fires on everything is not a refusal, and this
   // is the assertion that would catch a guard rewritten to refuse always.
   assert.equal(main([]), 0, 'the real corpus is readable and within every cap');
+});
+
+// =============================================================================
+// The note-cell shape gate (T1 ruling 1275(i))
+// =============================================================================
+//
+// QUARRY.md's cap-table note cell grew by hand-appended "**Raised X → Y
+// (…)**" entries since M2, never by replacement — one row reached 40,000+
+// characters and the table conflicted on nearly every PR because every
+// lane's raise touched the same line. `noteViolation` is the pure predicate;
+// `audit`'s `noteViolations` is the door a fixture QUARRY.md exercises
+// end-to-end, the same shape `productionFiles`'s injected-lister tests above
+// already use so this never has to touch the real corpus.
+
+/** A synthetic QUARRY.md holding exactly one capped row, for the note-shape door. */
+function fixtureQuarryRoot(note: string): string {
+  const root = mkdtempSync(join(tmpdir(), 'cap-note-probe-'));
+  SCRATCH.push(root);
+  const body = [
+    '| package | files | quarried LOC | cap | note |',
+    '|---|---|---|---|---|',
+    `| \`demo\` | 1 | 10 | **20** | ${note} |`,
+    '',
+  ].join('\n');
+  writeFileSync(join(root, 'QUARRY.md'), body);
+  return root;
+}
+
+const TWO_ENTRY_NOTE = '**Raised 10 → 15 (ruling A, M6).** the first reason. '
+  + '**Raised 15 → 20 (ruling B, M7).** the second reason.';
+const ONE_LINE_NOTE = 'ratified 20 — ruling B (M7), see git history for prior raises.';
+
+test('RED: noteViolation flags a note that still carries two dated raise entries', () => {
+  // Kills: a checker that never looks at the note cell at all, or one that
+  // only counts characters and would miss a short-but-doubled note.
+  const reason = noteViolation(TWO_ENTRY_NOTE);
+  assert.ok(reason, 'a two-entry note must be flagged');
+  assert.match(reason, /replace/i, 'the message tells the author to replace, not append');
+  assert.match(reason, /2\b/, 'the count of entries is named');
+});
+
+test('GREEN: noteViolation passes a note collapsed to one line', () => {
+  assert.equal(noteViolation(ONE_LINE_NOTE), null, `expected no violation, got: ${noteViolation(ONE_LINE_NOTE)}`);
+});
+
+test('noteViolation flags an overlong note even with no bold markers at all', () => {
+  // Kills: an implementation that ONLY counts bold spans and would let an
+  // un-marked wall of text back in, defeating the "one short sentence" rule.
+  const long = `ratified 20 — ${'x'.repeat(NOTE_MAX_LENGTH)}`;
+  const reason = noteViolation(long);
+  assert.ok(reason, 'an overlong note must be flagged even without ** markers');
+  assert.match(reason, /replace/i);
+});
+
+test('noteViolation passes a single bold-marked entry (one raise is not a violation)', () => {
+  // The rule is "more than one", not "none" — a fresh, single ratification
+  // note written in the same bold style as the history entries must pass.
+  assert.equal(noteViolation('**Raised 10 → 20 (ruling A).** short reason.'), null);
+});
+
+test('RED → GREEN, end to end: audit() flags a two-entry note cell, and a one-line note clears it', () => {
+  // The brief's own door: a fixture QUARRY with a two-entry note cell reds;
+  // collapsed to one line, it greens. No packages/ tree is planted — the
+  // empty lister means `demo` is `unmeasured`, which is a separate,
+  // independent finding from noteViolations (forge-8vfn.28's shape: an
+  // unmeasured package must not hide a note-shape problem, or the reverse).
+  const redRoot = fixtureQuarryRoot(TWO_ENTRY_NOTE);
+  const red = audit(redRoot, new Map(), () => []);
+  assert.deepEqual(red.noteViolations.map((v) => v.name), ['demo'], JSON.stringify(red.noteViolations));
+
+  const greenRoot = fixtureQuarryRoot(ONE_LINE_NOTE);
+  const green = audit(greenRoot, new Map(), () => []);
+  assert.deepEqual(green.noteViolations, [], JSON.stringify(green.noteViolations));
+});
+
+test('main() FAILS on a note-shape violation and names the package', () => {
+  // The door at the boundary, same reasoning as the CANNOT-MEASURE tests
+  // above: everything could be correct inside `audit()` and still be
+  // invisible to `gate.sh`, which reads only the process exit code.
+  //
+  // main() always reads FORGE_ROOT's own QUARRY.md (by contract: --json is
+  // the only machine-readable surface CI has), so this exercises the
+  // REAL repository's table, which this lane just collapsed to one line
+  // each — it must be clean. The `--json` output's `noteViolations` array is
+  // asserted empty directly rather than re-deriving a fixture-root main(),
+  // since `main()` takes no root parameter to inject one.
+  const out: string[] = [];
+  const orig = console.log;
+  console.log = (s: string) => { out.push(s); };
+  let code: number;
+  try {
+    code = main(['--json']);
+  } finally {
+    console.log = orig;
+  }
+  const parsed = JSON.parse(out.join('\n'));
+  assert.deepEqual(parsed.noteViolations, [], 'the real QUARRY.md must carry no multi-entry or overlong cap-table notes');
+  assert.equal(code, 0, 'a clean note table must not fail the gate');
+});
+
+test('the real QUARRY.md cap table still parses every ratified cap after the note-cell collapse', () => {
+  // Kills: a note-cell rewrite that accidentally swallowed a pipe or a `**`
+  // in the cap column itself, which would silently drop a row from `caps`.
+  const md = readFileSync(join(ROOT, 'QUARRY.md'), 'utf8');
+  const caps = parseCaps(md);
+  assert.deepEqual(
+    [...caps.keys()].sort(),
+    ['agents', 'contracts', 'factory', 'flows', 'forge-docs', 'kernel', 'knowledge', 'library', 'projects', 'sessions', 'stations'],
+  );
+  for (const [name, cap] of caps) assert.ok(Number.isInteger(cap) && cap > 0, `${name}'s cap parsed as a positive integer`);
 });
