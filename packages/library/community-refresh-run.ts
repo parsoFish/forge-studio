@@ -70,7 +70,9 @@ import { dirname, join } from 'node:path';
 import {
   GH_TOKEN_ENV,
   DEFAULT_REFRESH_TIMEOUT_MS,
+  MAX_CONCURRENT_SOURCE_FETCHES,
   CommunityRefreshError,
+  mapInBatches,
   refreshCommunityRegistry,
   type CommunityRefreshFailure,
   type CommunityRefreshOutcome,
@@ -394,9 +396,13 @@ async function discoverFromHubs(
   const known = new Set(registry.items.map((i) => i.id));
   const out: DiscoveredItem[] = [];
   const hubs: HubOutcome[] = [];
-  for (const hub of listCommunityHubs(opts.forgeRoot)) {
-    // By URL, not by `kinds` — design.md §"A second hub reader".
-    const outcome = await indexerForHub(hub)(ctx, hub, known);
+  // Hubs are READ concurrently, bounded like the source pass (7.6.16), and
+  // MERGED below in hub order — so "first hub wins" does not depend on which
+  // read finished first. Indexers only filter by `known`; the merge re-checks.
+  // By URL, not by `kinds` — design.md §"A second hub reader".
+  const hubList = listCommunityHubs(opts.forgeRoot);
+  const read = await mapInBatches(hubList, MAX_CONCURRENT_SOURCE_FETCHES, (hub) => indexerForHub(hub)(ctx, hub, known));
+  for (const outcome of read) {
     if (!outcome.ok) {
       // THE REASON IS KEPT NOW. It was produced here and discarded on the next
       // line, so every unreachable hub rendered as a silent blank and an
@@ -485,10 +491,8 @@ export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Pro
   // ever run. This asks each GitHub-shaped hub what it publishes and returns
   // what the registry is missing.
   //
-  // COST, STATED RATHER THAN HIDDEN: these fetches are serial like the source
-  // pass above, so they add to a refresh that is already 4 x 10 s worst case.
-  // Bead `forge-8vfn.7.6.16` (M7) owns making both concurrent. It is folded in
-  // here rather than given its own button because the operator's question is
+  // Both passes fetch concurrently, bounded by MAX_CONCURRENT_SOURCE_FETCHES
+  // (forge-8vfn.7.6.16). It is folded in here rather than given its own button because the operator's question is
   // one question — "make this list reflect its sources" — and answering half of
   // it behind a second control is the shape S8 beat 5 exists to refuse.
   const { discovered, hubs: hubOutcomes } = await discoverFromHubs(opts, registry, token);

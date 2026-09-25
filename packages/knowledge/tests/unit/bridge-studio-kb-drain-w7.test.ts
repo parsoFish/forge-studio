@@ -303,6 +303,13 @@ const routes = knowledgeRoutes({
   runFixTurn: async () => {
     throw new Error('unexpected brain-fix dispatch in this test');
   },
+  // M7-C U8 (bead forge-u8y2): REQUIRED, same shape as `runFixTurn` above.
+  // This file's route-table tests use clean KBs (0 findings, perFinding
+  // always []) and never seed a `_kb-cleanup` dir — the probe is never
+  // reached through this table.
+  sessionIsReadable: () => {
+    throw new Error('unexpected session-readability probe call in this test');
+  },
 });
 
 const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;
@@ -527,6 +534,12 @@ function writeConsolidateEvents(root: string, runId: string, lines: readonly str
 
 test('consolidate terminal reading — the active-job gate and listKbRuns agree on running/done/failed', () => {
   const { root } = makeDrainRoot('agree-kb');
+  // M7-C U8 (bead forge-u8y2): REQUIRED, same reason as `routes`'s stub
+  // above — this test only ever seeds `_brainfix-*` consolidate dirs, never
+  // a `_kb-cleanup` dir, so the probe must never be reached.
+  const neverReadable = () => {
+    throw new Error('unexpected session-readability probe call in this test');
+  };
   try {
     const stamp = Date.now().toString(36);
     const running = `agree-kb-consolidate-${stamp}`;
@@ -535,7 +548,7 @@ test('consolidate terminal reading — the active-job gate and listKbRuns agree 
       JSON.stringify({ event_type: 'start', ts: new Date().toISOString() }),
     ]);
     assert.deepEqual(deriveKbActiveJob(root, 'agree-kb'), { kind: 'consolidate', runId: running });
-    const runningRow = listKbRuns(root, 'agree-kb').find((r) => r.id === running);
+    const runningRow = listKbRuns(root, 'agree-kb', neverReadable).find((r) => r.id === running);
     assert.equal(runningRow?.status, 'running');
 
     // Terminal 'end' -> gate clears AND the row reports done, with the cost and
@@ -545,7 +558,7 @@ test('consolidate terminal reading — the active-job gate and listKbRuns agree 
       JSON.stringify({ event_type: 'end', ts: new Date().toISOString(), cost_usd: 0.42, metadata: { clearedCount: 2, total: 3 } }),
     ]);
     assert.equal(deriveKbActiveJob(root, 'agree-kb'), null);
-    const doneRow = listKbRuns(root, 'agree-kb').find((r) => r.id === running);
+    const doneRow = listKbRuns(root, 'agree-kb', neverReadable).find((r) => r.id === running);
     assert.equal(doneRow?.status, 'done');
     assert.equal(doneRow?.costUsd, 0.42);
     assert.equal(doneRow?.detail, 'cleared 2/3');
@@ -559,7 +572,7 @@ test('consolidate terminal reading — the active-job gate and listKbRuns agree 
       JSON.stringify({ event_type: 'error', ts: new Date().toISOString() }),
     ]);
     assert.equal(deriveKbActiveJob(root, 'agree-kb'), null);
-    const failedRow = listKbRuns(root, 'agree-kb').find((r) => r.id === failed);
+    const failedRow = listKbRuns(root, 'agree-kb', neverReadable).find((r) => r.id === failed);
     assert.equal(failedRow?.status, 'failed');
   } finally {
     rmSync(root, { recursive: true, force: true });

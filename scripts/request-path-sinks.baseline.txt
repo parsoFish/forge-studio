@@ -336,6 +336,8 @@ packages/kernel/config.ts readFileSync 2
 packages/kernel/discovery-roots.ts readdirSync 1
 packages/kernel/gh-identity.ts exec 3
 packages/kernel/gh-identity.ts execFileSync 1
+packages/kernel/guarded-scan.ts openSync 1
+packages/kernel/guarded-scan.ts statSync 2
 packages/kernel/init.ts execSync 1
 packages/kernel/init.ts existsSync 2
 packages/kernel/init.ts mkdirSync 1
@@ -610,9 +612,10 @@ packages/sessions/interactive-agent-step.ts readdirSync 1
 packages/sessions/interactive-agent-step.ts readFileSync 2
 packages/sessions/interactive-agent-step.ts rmSync 1
 packages/sessions/interactive-finalizers.ts lstatSync 1
-packages/sessions/interactive-finalizers.ts mkdirSync 1
+packages/sessions/interactive-finalizers.ts mkdirSync 2
 packages/sessions/interactive-finalizers.ts openSync 2
 packages/sessions/interactive-finalizers.ts readdirSync 1
+packages/sessions/interactive-finalizers.ts readFileSync 1
 packages/sessions/interactive-finalizers.ts realpathSync 1
 packages/sessions/interactive-session.ts existsSync 2
 packages/sessions/interactive-session.ts mkdirSync 2

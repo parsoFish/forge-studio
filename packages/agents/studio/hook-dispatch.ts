@@ -265,6 +265,45 @@ function emitHookError(
   });
 }
 
+/** The set of things an operator can distinguish about a dispatch attempt:
+ *  did the script actually execute ('ran', whatever exit code it chose),
+ *  was it never allowed to try ('refused' — approval gate or a stale
+ *  registration), did it blow its wall-clock budget ('timeout'), or did the
+ *  spawn itself fail ('error'). */
+export type HookFireOutcome = 'ran' | 'refused' | 'timeout' | 'error';
+
+/**
+ * M7-C U2 (forge-8vfn.5.16) — a hook FIRE is itself an event, not just its
+ * failure modes. Every branch of `makeCallback` below already logs a
+ * diagnostic 'error' for the non-zero-exit / refusal cases, but the
+ * exitCode===0 path returned silently, so no fact anywhere recorded that an
+ * approved, bound hook had ever actually run — the exact gap the bead names.
+ * ONE `hook.fire` event per dispatch attempt (never for the silent
+ * matcher-no-match branch, which correctly never attempts a fire at all).
+ * `event_type` stays 'log' for a real execution and 'error' for anything
+ * that never ran to completion, matching this file's existing convention.
+ */
+function emitHookFire(
+  logger: EventLogger,
+  initiativeId: string,
+  hookId: string,
+  event: HookLifecycleEvent,
+  outcome: HookFireOutcome,
+  exitCode: number | null,
+  durationMs: number | null,
+): void {
+  logger.emit({
+    phase: 'orchestrator',
+    skill: `hook:${hookId}`,
+    event_type: outcome === 'ran' ? 'log' : 'error',
+    initiative_id: initiativeId,
+    input_refs: [],
+    output_refs: [],
+    message: 'hook.fire',
+    metadata: { hookId, event, outcome, exitCode, durationMs },
+  });
+}
+
 /**
  * W8-B6 FIX-3 — turn a `runHookScript` throw into the distinction an operator
  * actually needs, from the error's TYPED reason rather than by re-parsing its
@@ -314,6 +353,7 @@ function makeCallback(
       emitHookError(logger, initiativeId, hookId, `Hook "${hookId}" could not be loaded at dispatch — not fired: ${(e as Error).message}`, {
         event,
       });
+      emitHookFire(logger, initiativeId, hookId, event, 'error', null, null);
       return { continue: true };
     }
 
@@ -324,6 +364,7 @@ function makeCallback(
         event,
         declaredOn: on,
       });
+      emitHookFire(logger, initiativeId, hookId, event, 'refused', null, null);
       return { continue: true };
     }
 
@@ -349,10 +390,15 @@ function makeCallback(
         event,
         failure,
       });
+      const outcome: HookFireOutcome = failure === 'not-runnable' ? 'refused' : failure === 'timeout' ? 'timeout' : 'error';
+      emitHookFire(logger, initiativeId, hookId, event, outcome, null, null);
       return { continue: true };
     }
 
-    if (result.exitCode === 0) return { continue: true };
+    if (result.exitCode === 0) {
+      emitHookFire(logger, initiativeId, hookId, event, 'ran', result.exitCode, result.durationMs);
+      return { continue: true };
+    }
 
     const reason = (result.stderr.trim() || result.stdout.trim() || `hook "${hookId}" exited ${result.exitCode}`).slice(0, 2000);
 
@@ -362,6 +408,7 @@ function makeCallback(
         exitCode: result.exitCode,
         blocking: true,
       });
+      emitHookFire(logger, initiativeId, hookId, event, 'ran', result.exitCode, result.durationMs);
       if (event === 'PreToolUse') {
         return {
           continue: true,
@@ -380,6 +427,7 @@ function makeCallback(
       exitCode: result.exitCode,
       blocking: false,
     });
+    emitHookFire(logger, initiativeId, hookId, event, 'ran', result.exitCode, result.durationMs);
     return { continue: true };
   };
 }

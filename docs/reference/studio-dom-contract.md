@@ -996,6 +996,23 @@ is what this contract reads — but it cannot be the only distinguisher.
   duplicated it); `KbCard` (`LibraryCard.tsx`) itself stays unused in the
   live product (its own render-test coverage,
   `lib/library-card-render.test.ts`, is unaffected).
+  **Sessions shelf (forge-8vfn.7.6.12, below the five shelves):**
+  `section[data-section="sessions"]` renders one `a[data-action=
+  "kickoff-<kind>"]` per entry of `lib/session-kind-meta.ts`'s
+  `KICKOFF_ENTRIES` — the SAME handle and the SAME single source the
+  Sessions index's own kickoff row already reads (`SessionsIndex.tsx`'s
+  `section[data-section="sessions-kickoff"]`, above); labels and hrefs are
+  never re-derived here. Unlike the five shelves above, this is not a
+  fetched "part" (no loading/error state, no count fetch, no create/browse
+  CTA) — it is a direct cross-link, the one role Sessions can have on
+  Library since it is deliberately NOT its own `StudioNav` pillar (W6-B11).
+  Before this it landed, the shortest path from the Library to a session
+  launcher was three hops — Agents index's `[data-nav="sessions-secondary"]`
+  → the Sessions index → its `sessions-kickoff` row → the launcher itself
+  (`docs/how-to/S7.md`'s "fourth kind of part") — this shelf collapses that
+  to one hop straight from the parts bin. `LibraryHub.tsx`'s own render test
+  (`tests/integration/library-hub-render.test.ts`) pins one link per
+  `KICKOFF_ENTRIES` row and that the shelf renders after Community.
   `StudioNav` (`[data-component="studio-nav"]`) is UNCHANGED by this rebuild
   — see the Global nav entry above (W6-IA-5; Monitor added W8-B1) for the
   current seven-pillar set/order/hrefs and active-state rules.
@@ -1180,7 +1197,23 @@ is what this contract reads — but it cannot be the only distinguisher.
   `data-hex-kind="phase"`. The phase DRAWER opened from a WI hex reports that
   same per-WI cost (W7-B7 flows-14, `lib/phase-drawer-meta.ts`) — the pooled
   dev-phase cost/model/retries are never attributed to a single work item
-  (model + retries rows are omitted in WI mode). A single **flowLineage** run threads across
+  (model + retries rows are omitted in WI mode). **`forge-8vfn.5.16` (M7-C
+  U2) — the `pm` node's drawer (`studio/flows/forge-architect/flow.yaml`)
+  additionally renders a "Brain reads" section, per KB touched:
+  `[data-brain-read-kb][data-brain-read-count]`. Distinct from the
+  pre-existing plain-text "brain reads: N" line inside the Progress section
+  (a raw tool-use COUNT with no KB attribution, rendered only for the `dev`
+  node) and from `/knowledge`'s Ingest Activity tab (the reflector's WRITE
+  side, `reflect.kb-ingest`) — this is the planner's own READ, on the record.
+  Source: `packages/factory/phases/project-manager.ts` emits one
+  `message:"brain.read"` event per KB `readPmBrainContext`'s deterministic
+  pre-fetch touched (`metadata: {kbId, themeCount, reader, runId}`);
+  `PhaseDrawer.tsx` reads the run's live event stream via `useCycleEvents`
+  and folds it through `lib/brain-read-view.ts`'s `deriveBrainReadSummary`
+  (never fabricates a row from the architect's own unconditional per-turn
+  `brain-query` marker, which shares the `event_type` but carries no
+  `kbId`). The section renders only when at least one row exists — absent,
+  not an empty state, when the KB list is empty.** A single **flowLineage** run threads across
   chained flow definitions (`forge-architect` → `forge-develop`; W7-C1
   retired the reflect flow wrapper — reflection is a standalone post-merge
   agent run) — each renders only its own slice of nodes, so
@@ -1627,7 +1660,35 @@ is what this contract reads — but it cannot be the only distinguisher.
   `/hooks/[id]` is
   `main[data-page="hook-detail"][data-hook-id][data-page-ready][data-hook-event][data-hook-verdict][data-hook-trust][data-hook-runnable][data-package-hash]`
   — the last five are ABSENT while loading, on a fetch error and for an unknown
-  id; no verdict is ever fabricated. It reuses the shared
+  id; no verdict is ever fabricated. **`forge-8vfn.5.16` (M7-C U2) —
+  `data-hook-recent-fire-count`, present alongside the five once loaded (`0` =
+  "the scanned window was checked, no fire found" — the same idiom
+  `data-hook-carried-by-count` already uses), plus
+  `data-hook-last-fire-at`/`data-hook-last-fire-outcome` (`"ran"|"refused"|
+  "timeout"|"error"`), present ONLY once the hook has fired within that window
+  — never fabricated for a hook that has never run. This is the FIRST
+  `data-hook-*` attribute on this page naming an EXECUTION rather than the
+  hook's definition or trust: every fire (`packages/agents/studio/hook-
+  dispatch.ts`'s `emitHookFire`) appends one `message:"hook.fire"` event to the
+  firing cycle's own log; the route (`packages/library/bridge-studio-hooks-
+  detail.ts`) folds it through `packages/library/studio/hook-fire-summary.ts`'s
+  `deriveHookFireSummary` (latest-by-`started_at` wins the outcome; the count
+  is every matching fire within scope, not just the latest). **T2 review of
+  `95cb287f` — BOUNDED, not every cycle.** A hook can fire from any agent
+  spawn (flow cycles, one-shot `_agent-*` runs, interactive session kinds,
+  bridge writes), so recency can't be read off the cycle id the way the
+  ingest-activity route's `reflect.kb-ingest` scan does (that event only ever
+  comes from a flow cycle's ISO-prefixed id); the scan instead orders cycles
+  by directory mtime (`scanHookFireSummary`'s injectable
+  `selectRecentCycles`, mirroring `sortEntriesByMtimeDesc`,
+  `packages/agents/bridge-agents-history-rows.ts`, M7-C #834) and opens at
+  most `HOOK_FIRE_SCAN_MAX_CYCLES` (50) cycle dirs, reading at most
+  `HOOK_FIRE_SCAN_TAIL_BYTES` (64KB) of each one's `events.jsonl` (the whole
+  file when smaller). The wire field and this attribute are named
+  `recentFireCount`/`data-hook-recent-fire-count`, not `fireCount`/
+  `data-hook-fire-count`, precisely because of the bound: a fire recorded
+  only in a cycle older than the scanned window is honestly invisible here,
+  never claimed as "never fired".** It reuses the shared
   `[data-component="file-package"]` renderer R3-01 built, and adds the
   **SECURITY SCAN** panel
   `[data-section="scan-report"][data-scan-verdict][data-finding-count][data-critical-count]`
@@ -3365,9 +3426,14 @@ is what this contract reads — but it cannot be the only distinguisher.
   the project at rest — distinct from the preflight VERDICT surfaces
   (`ContractReadiness` / `[data-section="contract-resolution"]`).
   **`[data-section="contract-resolution"]` agent-tier buttons**
-  (`[data-action="resolve-clause-agent"][data-resolve-clause-id]
+  (`[data-action="resolve-clause-agent-<clauseId>"][data-resolve-clause-id]
   [data-resolve-blocked="true"|"false"]`, one per agent-tier clause —
-  `ContractResolutionPanel.tsx`) navigate to the matching builder or KB tab;
+  `ContractResolutionPanel.tsx`; the action carries the clause id, the same
+  fix M1-G (`forge-8vfn.5.6`) shipped for `select-stage-<stage>` —
+  `forge-8vfn.5.11` closed it here: the action used to be the SAME string on
+  every clause's button, so `.first()` was the only clause anything could
+  press. The qualifying `data-resolve-clause-id` attribute stays, it is what
+  this contract reads) navigate to the matching builder or KB tab;
   they never dispatch an agent turn themselves, so their label is
   route-honest per clause (`instructions`/`demo-builder`/`brain-fix` →
   "Open in instructions builder…"/"Open in demo builder…"/"Open in
@@ -3384,9 +3450,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   instead of navigating to a guessed KB (`/knowledge`'s own `?id=`
   resolution silently falls back to the first KB in the list on an unknown
   id — a wrong destination with no indication anything went wrong). The
-  USER-tier `[data-action="apply-clause-decision"]` button genuinely
-  dispatches + polls a preflight-fix agent (~90s bounded) and is labelled
-  "Apply with agent" accordingly. `forge-8vfn.8.3.1` (projects-45): its
+  USER-tier `[data-action="apply-clause-decision-<clauseId>"]` button
+  (same `forge-8vfn.5.11` per-clause fix as the agent-tier button above;
+  `data-apply-clause-id` stays alongside it) genuinely dispatches + polls a
+  preflight-fix agent (~90s bounded) and is labelled "Apply with agent"
+  accordingly. `forge-8vfn.8.3.1` (projects-45): its
   `disabled` consults the SAME per-clause poll state the row's own
   `data-agent-run-state`/`data-poll-state` already render, not just the
   click-scoped `busy` flag — `busy` clears the instant the dispatch POST
@@ -4549,7 +4617,8 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-action="view-demo-session"]` rather than navigating from inside the
   minting click (M1-G, `forge-8vfn.5.5`): `DemoTimeline`'s
   `[data-action="launch-demo-builder"]` (project page),
-  `ContractResolutionPanel`'s DEMO-clause `[data-action="resolve-clause-agent"]`,
+  `ContractResolutionPanel`'s DEMO-clause `[data-action="resolve-clause-agent-DEMO"]`
+  (`forge-8vfn.5.11`: per-clause, like `select-stage-<stage>`),
   and — new with M1-G, `forge-8vfn.5.6` — the onboarding session's own demo
   stage detail, whose `[data-action="launch-demo-builder"]`
   (`components/studio/session/DemoStageHandoff.tsx`) is the act S1 beat 7
