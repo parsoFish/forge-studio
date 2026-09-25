@@ -240,6 +240,12 @@ export default {
           'kb-id': 'story-s6',
           'node-count': '1',
           'seed-session-id': '<seedSessionId>',
+          // T1 1275: the seed banner's REAL phase and liveness, not only its
+          // id. Both are placeholders (present and non-empty) because the
+          // seeding turn's phase at this instant is a race by construction;
+          // `''` — "not yet read" — never satisfies them.
+          'seed-session-phase': '<seedSessionPhase>',
+          'seed-session-running': '<seedSessionRunning>',
         },
       },
       say: `Binding is the act. A band scope says WHICH readers on that Flow this knowledge is for — ${BOUND_BAND} means the reviewer, not the planner and not the developer — so the knowledge lands in front of the agent it was written for and nowhere else. Forge writes the graph with one index node and nothing in it.`,
