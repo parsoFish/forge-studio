@@ -108,16 +108,25 @@ export function portableArtifact(value, root) {
  * function ever misses a field the artifact still REFUSES rather than shipping a
  * machine path.
  *
- * AN UNATTRIBUTED ESCAPE IS LEFT EXACTLY AS IT IS. `live === null` is what
- * `unownedEscapes` filters on to end the run. Tidying those would let a real
+ * AN ESCAPE THAT WILL RED THE RUN IS LEFT EXACTLY AS IT IS. Under T1 ruling
+ * 1225, that is `owner === 'this-run'` when `attributeEscapes`
+ * (`fence-attribution.mjs`) has already run — the field this function now
+ * TRUSTS OVER `live` whenever it is present, because ruling 1225's whole point
+ * is that "no live owner" (`live === null`) is no longer evidence of red on
+ * its own (A's S10 run 24: an APPEARED tree with nobody live in it is
+ * UNATTRIBUTABLE, not fatal, and must still reach a written artifact). A
+ * caller that never attributed (the pre-1225 shape, kept so this function's
+ * own contract does not silently change under an old input) falls back to the
+ * original `live == null` test. Tidying a truly fatal escape would let a real
  * containment breach serialise portably and ship — the failure mode of this
- * whole change, and the reason the test for it is the one that matters.
+ * whole function, and the reason the test for it is the one that matters.
  */
 export function portableFenceEscapes(escapes) {
   if (!Array.isArray(escapes)) return escapes;
   return escapes.map((e) => {
-    // Unattributed: untouched, on purpose. It must still reach the refusal.
-    if (!e || typeof e !== 'object' || e.live == null) return e;
+    if (!e || typeof e !== 'object') return e;
+    const willRedTheRun = e.owner !== undefined ? e.owner === 'this-run' : e.live == null;
+    if (willRedTheRun) return e; // left exactly as it is — must still reach the refusal below
 
     // REFUSE TO TRANSFORM WHAT WE CANNOT READ, rather than emitting an empty
     // string. `root: ""` would sail through `machinePathsIn` — portable-looking
@@ -128,7 +137,22 @@ export function portableFenceEscapes(escapes) {
     // way it fails if it ever is.
     const root = typeof e.root === 'string' ? e.root : '';
     const base = root.split(sep).filter(Boolean).pop() ?? '';
-    if (root === '' || base === '' || typeof e.live.cwd !== 'string') return e;
+    if (root === '' || base === '') return e;
+    // `reason` (T1 ruling 1225) is prose that NAMES `root` — the same
+    // "replaced inside prose" discipline `relativiseToRoot` already uses for
+    // `sweep.lines`, applied here so an UNATTRIBUTABLE escape's own reason
+    // does not reintroduce the machine path this function exists to remove.
+    const portableReason = typeof e.reason === 'string' ? { reason: e.reason.split(root).join(base) } : {};
+
+    // No live process to relativise against at all — ruling 1225's own
+    // UNATTRIBUTABLE-with-no-live-process case. Only `root` (and `reason`)
+    // need to become portable; there is no `cwd` to carry a relation from.
+    if (e.live === null) return { ...e, root: base, rootKind: 'sibling-basename', ...portableReason };
+    // Absent, or present but missing a readable `cwd`: a malformed escape,
+    // passed through UNTOUCHED (never stamped portable) rather than guessed —
+    // the `rootKind` field is a CLAIM ("this was made safe") that an
+    // unreadable input must never earn.
+    if (e.live == null || typeof e.live.cwd !== 'string') return e;
 
     // `liveProcessRoots` matches by PREFIX, so a cwd BELOW the sibling root is
     // the normal case. Keep the remainder: "somebody was working in
@@ -168,6 +192,7 @@ export function portableFenceEscapes(escapes) {
       // convention someone downstream has to remember.
       rootKind: 'sibling-basename',
       live: { ...e.live, cwd: cwdRel, cwdKind: 'relative-to-sibling-root' },
+      ...portableReason,
     };
   });
 }
