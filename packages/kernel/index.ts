@@ -74,3 +74,5 @@ export * from './log-cycles.ts';
 /** Package-owned discovery roots (SEAM F1) — `flowRoots`/`skillRoots`, plus
  *  the generic multi-root id resolvers every per-kind resolver is built on. */
 export * from './discovery-roots.ts';
+/** A small, per-key JSON-array log with bounded retention (forge-6gv.8.1). */
+export * from './bounded-log.ts';
