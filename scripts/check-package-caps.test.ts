@@ -314,3 +314,57 @@ test('forge-8vfn.28: a healthy corpus still returns 0 through the same path', ()
   // is the assertion that would catch a guard rewritten to refuse always.
   assert.equal(main([]), 0, 'the real corpus is readable and within every cap');
 });
+
+/*
+ * M7-C last-flakes #1 (2026-09-25, CI run 36017066132; known-flakes.md
+ * `scripts/guard-stdout-flush.test.ts:78`). `git ls-files --others` — half of
+ * `productionFiles()`'s listing — names whatever is untracked in the tree at
+ * that instant, including a transient PROBE a sibling `node --test` file
+ * plants and removes inside a single `mkdtempSync`-free assertion
+ * (`check-boundaries.test.ts` used to write `packages/kernel/__assembly_probe__.ts`
+ * straight into the live tree before it moved to a fixture root under
+ * `forge-8vfn.5.64`'s `no-live-tree-plants.test.ts` door). The corpus listed
+ * the probe, this gate's read lost the race, and `measurePackages` raised
+ * `CorpusUnreadable` — a REFUSED (75) with no diff behind it.
+ *
+ * `forge-8vfn.5.64` already stops every POLICED test file from planting into
+ * the live tree, which is the root fix for the one incident on record. This
+ * is the second, narrower layer the register note also asks for: a probe's
+ * NAME is never a real production file — nothing named `__..._probe__` is
+ * ever committed — so the corpus can exclude the shape outright, and an
+ * unpoliced writer (a script, a future test the 5.64 door does not reach)
+ * still cannot race this gate through it.
+ */
+test('M7-C last-flakes #1: a __*_probe__-named corpus entry is excluded, never read', () => {
+  // RED before the fix: the injected lister hands measurePackages exactly the
+  // shape `git ls-files --others` returns for a live probe that has already
+  // been removed — the path is listed, nothing is on disk — and today that is
+  // indistinguishable from a real file vanishing mid-read, so it throws
+  // CorpusUnreadable. A probe-shaped name must never reach the read at all.
+  const measured = measurePackages(CAPS_ROOT, () => ['packages/kernel/__assembly_probe__.ts']);
+  assert.equal(measured.get('kernel'), undefined,
+    'a __*_probe__-named path must be excluded from the corpus before the read — never counted, never a refusal');
+});
+
+test('M7-C last-flakes #1: a probe alongside a REAL file still measures the real one', () => {
+  // Kills the obvious wrong fix: filtering the whole listing empty, or
+  // filtering by PACKAGE rather than by the probe's own filename.
+  const root = repoWith({ 'packages/kernel/real.ts': TEN_LINES });
+  const measured = measurePackages(root, () => [
+    'packages/kernel/__assembly_probe__.ts', // not on disk — must be excluded, not read
+    'packages/kernel/real.ts', // on disk — must still be counted
+  ]);
+  assert.equal(measured.get('kernel'), 10, 'the probe is excluded but its real sibling in the same package is still measured');
+});
+
+test('M7-C last-flakes #1: the vanished-file refusal is unweakened for a NON-probe name', () => {
+  // The control for the test above: excluding the probe SHAPE must not widen
+  // into excluding every unreadable path — a real production file that
+  // vanishes mid-read (the sibling-checkout race `forge-8vfn.28` already
+  // covers) must still REFUSE.
+  assert.throws(
+    () => measurePackages(CAPS_ROOT, () => ['packages/flows/not-a-probe-and-gone.ts']),
+    (err: unknown) => err instanceof CorpusUnreadable,
+    'a non-probe path that vanishes mid-read must still raise CorpusUnreadable',
+  );
+});
