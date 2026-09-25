@@ -18,8 +18,27 @@
  * propagates. A catch-all here would turn every future breakage in the example
  * into a silent "no example installed", which is the fail-open shape this
  * milestone keeps finding, dressed up as graceful degradation.
+ *
+ * F3 (operator ruling, items 81/83): the executor and every band moved to
+ * `@forge/stations` — the platform's execution machinery, never absent, so
+ * `apps/forge` imports it STATICALLY below. The only thing left that can be
+ * "not installed" is the example's class → gate-profile table
+ * (`@forge/factory/class-profiles.ts`), so that is the only import still
+ * dynamic and try/caught. `createPhaseExecutor` takes that table by injection
+ * (`ClassProfilePort`) — this file is where a factory binds one in.
  */
 import type { PhaseWiring } from '@forge/flows/phase-wiring.ts';
+import {
+  createPhaseExecutor,
+  createProjectGate,
+  defaultRunClosure,
+  runReflector,
+  runAdversarialReview,
+  runReleaseFinalize,
+  reconcileReflectFeedback,
+  rerunReflector,
+  type ClassProfilePort,
+} from '@forge/stations';
 
 /**
  * Everything the assembly binds from the example. One record rather than a
@@ -38,14 +57,19 @@ export type InstalledFactory = {
   singleWiAllowed(changeClass: string): boolean | null;
   /** True for a string the installed class table knows (`band-agent-deps.ts`). */
   isChangeClass(value: string): boolean;
-  /** The band pipeline: the one read-only review agent (spec §5 item 5). */
-  runAdversarialReview: typeof import('@forge/factory/phases/adversarial-review.ts')['runAdversarialReview'];
+  /**
+   * The band pipeline: the one read-only review agent (spec §5 item 5). Bound
+   * with the installed `ClassProfilePort` already applied — a caller here
+   * (`band-agent-deps.ts`) supplies `queryFn`/`signal` only, same as before
+   * the station moved; it should not have to know about the class table port.
+   */
+  runAdversarialReview: typeof runAdversarialReview;
   /** The release-finalize phase behind the verdict hook. */
-  runReleaseFinalize: typeof import('@forge/factory/phases/release-finalize.ts')['runReleaseFinalize'];
+  runReleaseFinalize: typeof runReleaseFinalize;
   /** Feedback reconciliation at bridge boot. */
-  reconcileReflectFeedback: typeof import('@forge/factory/reflect-reconcile.ts')['reconcileReflectFeedback'];
+  reconcileReflectFeedback: typeof reconcileReflectFeedback;
   /** The reflector re-run the feedback route fires. */
-  rerunReflector: typeof import('@forge/factory/reflector-rerun.ts')['rerunReflector'];
+  rerunReflector: typeof rerunReflector;
 };
 
 
@@ -67,39 +91,40 @@ export function isFactoryNotInstalled(err: unknown): boolean {
 /**
  * The installed example factory, or `null` when none is installed.
  *
- * Every specifier below is a literal, so the bundler and the boundary lint can
- * both see them; they are dynamic only in WHEN they load, never in WHAT.
+ * The specifier below is a literal, so the bundler and the boundary lint can
+ * both see it; it is dynamic only in WHEN it loads, never in WHAT.
  */
 export async function resolveInstalledFactory(): Promise<InstalledFactory | null> {
   if (resolved !== undefined) return resolved;
   try {
-    const [executorTable, executorDeps, reflector, classProfiles, review, releaseFinalize, reflectReconcile, reflectorRerun] =
-      await Promise.all([
-        import('@forge/factory/phases/executor-table.ts'),
-        import('@forge/factory/phases/executor-deps.ts'),
-        import('@forge/factory/phases/reflector.ts'),
-        import('@forge/factory/class-profiles.ts'),
-        import('@forge/factory/phases/adversarial-review.ts'),
-        import('@forge/factory/phases/release-finalize.ts'),
-        import('@forge/factory/reflect-reconcile.ts'),
-        import('@forge/factory/reflector-rerun.ts'),
-      ]);
+    const classProfiles = await import('@forge/factory/class-profiles.ts');
+    // The port (operator ruling, items 81/83): the four functions the
+    // installed table exports, bound into the shape `@forge/stations`'
+    // bands take by injection — moved verbatim, so this is a re-binding, not
+    // a re-derivation.
+    const classProfilePort: ClassProfilePort = {
+      profileFor: classProfiles.profileFor,
+      readChangeClass: classProfiles.readChangeClass,
+      isChangeClass: classProfiles.isChangeClass,
+      hollowGateGuardFor: classProfiles.hollowGateGuardFor,
+    };
     resolved = {
       phaseWiring: {
-        executor: executorTable.createPhaseExecutor(),
-        projectGate: executorDeps.createProjectGate(),
-        runClosure: executorDeps.defaultRunClosure,
-        runReflector: reflector.runReflector,
+        executor: createPhaseExecutor({ classProfiles: classProfilePort }),
+        projectGate: createProjectGate(),
+        runClosure: defaultRunClosure,
+        runReflector,
       },
       singleWiAllowed(changeClass: string): boolean | null {
         const profile = (classProfiles.CLASS_PROFILES as Record<string, { singleWiAllowed: boolean } | undefined>)[changeClass];
         return profile === undefined ? null : profile.singleWiAllowed;
       },
       isChangeClass: (value: string) => classProfiles.isChangeClass(value),
-      runAdversarialReview: review.runAdversarialReview,
-      runReleaseFinalize: releaseFinalize.runReleaseFinalize,
-      reconcileReflectFeedback: reflectReconcile.reconcileReflectFeedback,
-      rerunReflector: reflectorRerun.rerunReflector,
+      runAdversarialReview: (input, logger, opts) =>
+        runAdversarialReview(input, logger, { ...opts, classProfiles: classProfilePort }),
+      runReleaseFinalize,
+      reconcileReflectFeedback,
+      rerunReflector,
     };
     return resolved;
   } catch (err) {

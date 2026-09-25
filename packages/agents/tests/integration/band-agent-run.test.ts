@@ -218,7 +218,7 @@ test('runBandAgentStandalone: a manifest reached only via a symlink escaping the
 // ---------------------------------------------------------------------------
 // The port control (Task 5.2): the whole standalone path is satisfiable by a
 // runner that imports no phase. This is what the carve buys — before it, the
-// module reached `@forge/factory/phases/adversarial-review.ts`
+// module reached `@forge/stations/phases/adversarial-review.ts`
 // from rank 3's dependency graph, and no test could run it without them.
 // ---------------------------------------------------------------------------
 

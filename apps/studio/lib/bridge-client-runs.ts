@@ -227,7 +227,7 @@ export type DemoModelCheckpoint = {
   metrics?: DemoHarnessMetricRow[];
   beforeImage?: string | null;
   afterImage?: string | null;
-  // Mirror of packages/factory/demo-model.ts — a kind:'video' checkpoint carries a relative
+  // Mirror of packages/stations/demo-model.ts — a kind:'video' checkpoint carries a relative
   // sibling path (served via the bridge artifact route, NOT a data: URI).
   beforeVideoSrc?: string | null;
   afterVideoSrc?: string | null;
@@ -269,12 +269,12 @@ export type DemoModel = {
    * dedicated "Intent & Outcome" section (MVUS req b). One entry per AC
    * with a verdict (met/partial/missed) and concrete evidence.
    */
-  // Rich structured sections (mirrors packages/factory/demo-model.ts DemoModel)
+  // Rich structured sections (mirrors packages/stations/demo-model.ts DemoModel)
   summary?: DemoSummarySection;
   apiDiff?: DemoApiDiffEntry[];
   testEvidence?: DemoTestResultRow[];
   filesChanged?: Array<{ path: string; note?: string }>;
-  // New-capability fields (sibling agent adds to packages/factory/demo-model.ts)
+  // New-capability fields (sibling agent adds to packages/stations/demo-model.ts)
   usage_example?: string;
   impact?: string[];
 };
