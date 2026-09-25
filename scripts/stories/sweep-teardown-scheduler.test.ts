@@ -73,7 +73,16 @@ test('T1 1418 RED: with no scheduler root, the clear runs while the scheduler\'s
   });
 
   assert.equal(result.census.reason, 'census-empty — no run root was recorded, so there is nothing to confirm');
-  assert.ok(result.sweep?.artefacts.cleared.includes('_queue/in-flight/INIT-mine.md.heartbeat'), `must have cleared it: ${JSON.stringify(result.sweep)}`);
+  // The live writer defeats the clear in one of two orders, and both ARE the
+  // defect: the sweep removes the heartbeat and the writer recreates it
+  // (cleared, then back — WSL), or the writer recreates it inside the sweep's
+  // own remove-and-verify window (unremoved, "still present after removal" —
+  // measured on the GitHub runner, PR #936 CI). Either way the clear ran
+  // against a writer the scheduler-blind census never saw.
+  const art = result.sweep?.artefacts;
+  const clearedThenBack = art?.cleared.includes('_queue/in-flight/INIT-mine.md.heartbeat');
+  const defeatedInWindow = art?.unremoved.some((u) => u.path === heartbeat && /still present after removal/.test(u.reason));
+  assert.ok(clearedThenBack || defeatedInWindow, `the clear must have run against the live writer: ${JSON.stringify(result.sweep)}`);
   assert.equal(
     await waitForFileToExist(heartbeat), true,
     'RED: the scheduler\'s own grandchild outlived the scheduler-blind census and rewrote the heartbeat it just cleared',
