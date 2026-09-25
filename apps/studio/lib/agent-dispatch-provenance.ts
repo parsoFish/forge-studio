@@ -15,7 +15,7 @@
  */
 
 const NOTE_BY_PHASE: Record<string, string> = {
-  // packages/factory/phases/release-finalize.ts — runs inside the approve→merge
+  // packages/stations/phases/release-finalize.ts — runs inside the approve→merge
   // finalization chain, opt-in per project.
   'release-finalize':
     'Dispatched automatically by the approve→merge finalization chain when the project declares a releaseProcess — not a flow node.',

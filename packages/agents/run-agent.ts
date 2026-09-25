@@ -692,10 +692,10 @@ async function runOneShotSpawn(
  * The legacy single-iteration invocation path (adapter `createAgent`) —
  * unchanged behaviour for defs with no declared loopStrategy, except the
  * prompt now lands in a `.forge/agent-run/` scratch dir instead of the
- * worktree root (known-gaps §8: a root-level PROMPT.md could leak into a
- * PR when a generic-agent node runs in a develop-style flow; `.forge/` is
- * already excluded by the dev-loop's scratch-strip and gitignore
- * conventions). The agent's cwd stays on the worktree.
+ * worktree root (a root-level PROMPT.md could leak into a PR from a
+ * develop-style flow). `SCRATCH_PATHS`'s `PROMPT.md` row (preflight-repo.ts,
+ * clause C2) keeps it out — not the dev-loop's scratch-strip, which never
+ * runs on this path (7.6.20). The agent's cwd stays on the worktree.
  */
 async function runInvocationSpawn(
   def: AgentDefinition,

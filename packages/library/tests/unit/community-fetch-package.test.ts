@@ -351,3 +351,76 @@ test('MEDIUM-4: the resolved identity is recorded, not the raw sourceUrl that ca
   assert.equal(out.package.resolvedUrl, 'https://github.com/parsoFish/forge-studio');
   assert.notEqual(out.package.resolvedUrl, sneaky);
 });
+
+// ---------------------------------------------------------------------------
+// forge-8vfn.7.6.88 — the HOOK package layout. A hub declaring `kinds: hooks`
+// (cc-templates) publishes no SKILL.md anywhere, so before this fix the whole
+// tree above refused as `no-skill-package` — there was no hook arm at all.
+// The three candidate roots mirror this repo's OWN hook-authoring layout
+// (`studio/hooks/<id>/hook.yaml`), the same way `candidateRoots` already
+// mirrors the SKILL.md convention, rather than inventing a new shape.
+// ---------------------------------------------------------------------------
+
+test('fetches a HOOK package when the tree holds hooks/<id>/hook.yaml and no SKILL.md', async () => {
+  const { ctx } = stubFetch({
+    [REPO_URL]: { body: { default_branch: 'main' } },
+    [treeUrl('main')]: tree([
+      { path: `hooks/${ID}/hook.yaml`, sha: 'sha-hook' },
+      { path: `hooks/${ID}/scripts/run.sh`, sha: 'sha-script' },
+    ]),
+    [blobUrl('sha-hook')]: blob(`id: ${ID}\non: SessionEnd\nscript: scripts/run.sh\n`),
+    [blobUrl('sha-script')]: blob('#!/usr/bin/env bash\necho hi\n'),
+  });
+
+  const out = ok(await fetchCommunitySkillPackage(ctx, SOURCE_URL, ID));
+
+  assert.equal(out.package.kind, 'hook', 'a hooks/<id>/hook.yaml tree with no SKILL.md must fetch as a hook package');
+  assert.deepEqual(
+    out.package.files.map((f) => f.path),
+    ['hook.yaml', 'scripts/run.sh'],
+  );
+  assert.match(out.package.files[0]!.body, /on: SessionEnd/);
+});
+
+test('fetches a HOOK package published at the repo root (hook.yaml)', async () => {
+  const { ctx } = stubFetch({
+    [REPO_URL]: { body: { default_branch: 'main' } },
+    [treeUrl('main')]: tree([{ path: 'hook.yaml', sha: 'sha-hook' }]),
+    [blobUrl('sha-hook')]: blob(`id: ${ID}\non: SessionEnd\nscript: run.sh\n`),
+  });
+
+  const out = ok(await fetchCommunitySkillPackage(ctx, SOURCE_URL, ID));
+
+  assert.equal(out.package.kind, 'hook');
+  assert.deepEqual(out.package.files.map((f) => f.path), ['hook.yaml']);
+});
+
+test('a tree with NEITHER a SKILL.md nor a hook.yaml is still refused no-skill-package (the refusal survives the new arm)', async () => {
+  const { ctx } = stubFetch({
+    [REPO_URL]: { body: { default_branch: 'main' } },
+    [treeUrl('main')]: tree([{ path: 'README.md', sha: 'sha-readme' }]),
+  });
+
+  const out = await fetchCommunitySkillPackage(ctx, SOURCE_URL, ID);
+
+  assert.equal(refusal(out).reason, 'no-skill-package');
+});
+
+test('SKILL.md wins when a repo publishes BOTH a skill and a hook package for the same id', async () => {
+  // SKILL.md scoped under skills/<id>/ (not the repo root) so its package
+  // boundary excludes the sibling hook — this test is about KIND precedence,
+  // not the separate "SKILL.md at root vendors the whole repo" behavior.
+  const { ctx } = stubFetch({
+    [REPO_URL]: { body: { default_branch: 'main' } },
+    [treeUrl('main')]: tree([
+      { path: `skills/${ID}/SKILL.md`, sha: 'sha-skill' },
+      { path: `hooks/${ID}/hook.yaml`, sha: 'sha-hook' },
+    ]),
+    [blobUrl('sha-skill')]: blob('# skill\n'),
+  });
+
+  const out = ok(await fetchCommunitySkillPackage(ctx, SOURCE_URL, ID));
+
+  assert.equal(out.package.kind, 'skill', 'an existing skill install must not silently switch kind because a hook also exists');
+  assert.deepEqual(out.package.files.map((f) => f.path), ['SKILL.md']);
+});

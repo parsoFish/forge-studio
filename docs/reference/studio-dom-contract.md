@@ -996,6 +996,23 @@ is what this contract reads — but it cannot be the only distinguisher.
   duplicated it); `KbCard` (`LibraryCard.tsx`) itself stays unused in the
   live product (its own render-test coverage,
   `lib/library-card-render.test.ts`, is unaffected).
+  **Sessions shelf (forge-8vfn.7.6.12, below the five shelves):**
+  `section[data-section="sessions"]` renders one `a[data-action=
+  "kickoff-<kind>"]` per entry of `lib/session-kind-meta.ts`'s
+  `KICKOFF_ENTRIES` — the SAME handle and the SAME single source the
+  Sessions index's own kickoff row already reads (`SessionsIndex.tsx`'s
+  `section[data-section="sessions-kickoff"]`, above); labels and hrefs are
+  never re-derived here. Unlike the five shelves above, this is not a
+  fetched "part" (no loading/error state, no count fetch, no create/browse
+  CTA) — it is a direct cross-link, the one role Sessions can have on
+  Library since it is deliberately NOT its own `StudioNav` pillar (W6-B11).
+  Before this it landed, the shortest path from the Library to a session
+  launcher was three hops — Agents index's `[data-nav="sessions-secondary"]`
+  → the Sessions index → its `sessions-kickoff` row → the launcher itself
+  (`docs/how-to/S7.md`'s "fourth kind of part") — this shelf collapses that
+  to one hop straight from the parts bin. `LibraryHub.tsx`'s own render test
+  (`apps/studio/tests/integration/library-hub-render.test.ts`) pins one link per
+  `KICKOFF_ENTRIES` row and that the shelf renders after Community.
   `StudioNav` (`[data-component="studio-nav"]`) is UNCHANGED by this rebuild
   — see the Global nav entry above (W6-IA-5; Monitor added W8-B1) for the
   current seven-pillar set/order/hrefs and active-state rules.
@@ -1188,7 +1205,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   (a raw tool-use COUNT with no KB attribution, rendered only for the `dev`
   node) and from `/knowledge`'s Ingest Activity tab (the reflector's WRITE
   side, `reflect.kb-ingest`) — this is the planner's own READ, on the record.
-  Source: `packages/factory/phases/project-manager.ts` emits one
+  Source: `packages/stations/phases/project-manager.ts` emits one
   `message:"brain.read"` event per KB `readPmBrainContext`'s deterministic
   pre-fetch touched (`metadata: {kbId, themeCount, reader, runId}`);
   `PhaseDrawer.tsx` reads the run's live event stream via `useCycleEvents`
@@ -3409,9 +3426,14 @@ is what this contract reads — but it cannot be the only distinguisher.
   the project at rest — distinct from the preflight VERDICT surfaces
   (`ContractReadiness` / `[data-section="contract-resolution"]`).
   **`[data-section="contract-resolution"]` agent-tier buttons**
-  (`[data-action="resolve-clause-agent"][data-resolve-clause-id]
+  (`[data-action="resolve-clause-agent-<clauseId>"][data-resolve-clause-id]
   [data-resolve-blocked="true"|"false"]`, one per agent-tier clause —
-  `ContractResolutionPanel.tsx`) navigate to the matching builder or KB tab;
+  `ContractResolutionPanel.tsx`; the action carries the clause id, the same
+  fix M1-G (`forge-8vfn.5.6`) shipped for `select-stage-<stage>` —
+  `forge-8vfn.5.11` closed it here: the action used to be the SAME string on
+  every clause's button, so `.first()` was the only clause anything could
+  press. The qualifying `data-resolve-clause-id` attribute stays, it is what
+  this contract reads) navigate to the matching builder or KB tab;
   they never dispatch an agent turn themselves, so their label is
   route-honest per clause (`instructions`/`demo-builder`/`brain-fix` →
   "Open in instructions builder…"/"Open in demo builder…"/"Open in
@@ -3428,9 +3450,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   instead of navigating to a guessed KB (`/knowledge`'s own `?id=`
   resolution silently falls back to the first KB in the list on an unknown
   id — a wrong destination with no indication anything went wrong). The
-  USER-tier `[data-action="apply-clause-decision"]` button genuinely
-  dispatches + polls a preflight-fix agent (~90s bounded) and is labelled
-  "Apply with agent" accordingly. `forge-8vfn.8.3.1` (projects-45): its
+  USER-tier `[data-action="apply-clause-decision-<clauseId>"]` button
+  (same `forge-8vfn.5.11` per-clause fix as the agent-tier button above;
+  `data-apply-clause-id` stays alongside it) genuinely dispatches + polls a
+  preflight-fix agent (~90s bounded) and is labelled "Apply with agent"
+  accordingly. `forge-8vfn.8.3.1` (projects-45): its
   `disabled` consults the SAME per-clause poll state the row's own
   `data-agent-run-state`/`data-poll-state` already render, not just the
   click-scoped `busy` flag — `busy` clears the instant the dispatch POST
@@ -4593,7 +4617,8 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-action="view-demo-session"]` rather than navigating from inside the
   minting click (M1-G, `forge-8vfn.5.5`): `DemoTimeline`'s
   `[data-action="launch-demo-builder"]` (project page),
-  `ContractResolutionPanel`'s DEMO-clause `[data-action="resolve-clause-agent"]`,
+  `ContractResolutionPanel`'s DEMO-clause `[data-action="resolve-clause-agent-DEMO"]`
+  (`forge-8vfn.5.11`: per-clause, like `select-stage-<stage>`),
   and — new with M1-G, `forge-8vfn.5.6` — the onboarding session's own demo
   stage detail, whose `[data-action="launch-demo-builder"]`
   (`components/studio/session/DemoStageHandoff.tsx`) is the act S1 beat 7

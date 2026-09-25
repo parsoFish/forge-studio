@@ -40,7 +40,7 @@ contract that evidence satisfies — the structured artefact from
 ## The demo contract (what EVERY demo must contain)
 
 A demo is **one structured artefact**: `<demo-dir>/demo.json`
-(schema = `DemoModel` in [`packages/factory/demo-model.ts`](../../packages/factory/demo-model.ts),
+(schema = `DemoModel` in [`packages/stations/demo-model.ts`](../../packages/stations/demo-model.ts),
 validated by the `pr_self_contained` gate). The demo dir is resolved against the
 project's `artifactRoot`: it is `demo/<initiative-id>/` for a default-layout
 project (`artifactRoot: "."`), or `<artifactRoot>/history/<initiative-id>/demo/`

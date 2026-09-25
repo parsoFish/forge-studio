@@ -222,7 +222,7 @@ export const brainFixKind: FixTurnVariant<RunBrainFixInput, RunBrainFixResult, B
  * fix` all reach a turn only through here), so it is where the brain-write
  * lease is taken: one turn writes brain/ at a time, whether the caller is a
  * Studio KB job or — via the SAME lease target — the daemon's reflector
- * (`packages/factory/phases/reflector.ts`). A turn that cannot take the lease is
+ * (`packages/stations/phases/reflector.ts`). A turn that cannot take the lease is
  * refused with a NAMED, visible outcome — never silently run ungated, which
  * is exactly how a reflector write mid-turn used to become indistinguishable
  * from the turn's own to `guardAgentKbEdits`.

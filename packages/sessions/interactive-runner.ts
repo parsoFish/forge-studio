@@ -91,7 +91,7 @@ import { guardedReadSessionStatus } from './session-status-io.ts';
 import { emitTurnCostRow, emitTurnEndedUnpricedRow } from './turn-cost-rows.ts';
 import { createLogger, resolveGuardedPath } from '@forge/kernel';
 import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
-import type { SessionKindDescriptor } from './studio/session-kinds.ts';
+import type { SessionKindDescriptor, TurnSpecPhase } from './studio/session-kinds.ts';
 import {
   InteractiveRunnerError,
   RUNNER_PHASE,
@@ -234,57 +234,30 @@ export async function runInteractiveTurn(
       result = { phase: status.phase, wrote: [], artifacts: {} };
       break;
 
-    case 'agent':
-      result = await runAgentStyleStep({
-        descriptor,
-        turnSpec,
-        phaseRow,
-        ctx,
-        sessionDir,
-        dirSegments,
-        status,
-        queryFn: ctx.queryFn,
-        logger,
-        onToolUse: sink.onToolUse,
-        onHeartbeat,
-        onText,
-        onThinking,
-        // S9 beat 8 — the turn's own spend, emitted HERE because this is where
-        // the log identity lives (`initiativeId`, `RUNNER_PHASE`,
-        // `RUNNER_SKILL`, `cycleId`); the step must not re-derive any of them.
-        // Authoritative under `kernel/event-cost.ts`: this phase emits no
-        // `iteration` events, so one plain row per turn counts exactly once —
-        // pinned by `packages/sessions/tests/unit/interactive-runner-turn-cost.test.ts`, which
-        // reads the figure back through the session route's own reader.
-        // Best-effort, like the architect's: a logging failure must not fail a
-        // turn that already ran and already cost money.
-        //
-        // 7.6.73: rendered by the shared emitter rather than inline here. This
-        // was the ONE call site that got both rows right, and three others got
-        // them wrong in three different ways — that is one absent renderer, not
-        // three bugs, so the correct copy moved out to where the others could
-        // use it.
-        onTurnCost: (costUsd, modelTier, modelId) => emitTurnCostRow(logger, {
-          initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL,
-          message: 'interactive.turn-cost',
-          // forge-8vfn.22 — the tier/model the turn actually ran on, so a
-          // cost dashboard or operator reading the log can tell them apart;
-          // both come from `runAgentStyleStep`, the only place they're
-          // resolved (never re-derived here).
+    case 'agent': { // factored so a same-turn fall-through hop (below) reuses the primary call's turn-cost/unpriced emitters.
+      const runAgentPhase = (row: TurnSpecPhase, st: InteractiveTurnStatus) => runAgentStyleStep({
+        descriptor, turnSpec, phaseRow: row, ctx, sessionDir, dirSegments, status: st,
+        queryFn: ctx.queryFn, logger, onToolUse: sink.onToolUse, onHeartbeat, onText, onThinking,
+        onTurnCost: (costUsd, modelTier, modelId) => emitTurnCostRow(logger, { // forge-8vfn.22 — the tier/model the turn actually ran on.
+          initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL, message: 'interactive.turn-cost',
           metadata: { session_id: ctx.sessionId, session_kind: descriptor.id, model_tier: modelTier, model: modelId },
         }, costUsd),
-        // 7.6.55 (ruling 849) — the turn ENDED and was never priced. Without
-        // this row the log has no terminal event at all and spend reads
-        // UNMEASURED. `cost_usd` is ABSENT, not zero: 849 refused a pricing
-        // table, and `deriveSessionCostUsd` still returns null for a log of
-        // only these rows — "cost nothing" and "never priced" stay distinct.
-        onTurnEndedUnpriced: (info) => emitTurnEndedUnpricedRow(logger, {
-          initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL,
-          message: 'interactive.turn-ended-unpriced',
+        onTurnEndedUnpriced: (info) => emitTurnEndedUnpricedRow(logger, { // 7.6.55 (ruling 849) — cost_usd stays ABSENT, not zero, when unpriced.
+          initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL, message: 'interactive.turn-ended-unpriced',
           metadata: { session_id: ctx.sessionId, session_kind: descriptor.id },
         }, info),
       });
+      result = await runAgentPhase(phaseRow, status);
+      // Same-turn fall-through: landed on its own nextOnDone; run that phase's step too, in THIS call (one hop).
+      if (phaseRow.nextOnDone !== undefined && result.phase === phaseRow.nextOnDone) {
+        const hopRow = turnSpec.phases.find((p) => p.phase === result.phase);
+        if (hopRow?.step === 'agent') {
+          const hop = await runAgentPhase(hopRow, { ...status, phase: result.phase });
+          result = { phase: hop.phase, wrote: [...result.wrote, ...hop.wrote], artifacts: hop.artifacts };
+        }
+      }
       break;
+    }
 
     case 'finalize':
       result = await runFinalizeStep({

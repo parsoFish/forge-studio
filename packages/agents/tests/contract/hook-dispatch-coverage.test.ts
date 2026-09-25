@@ -86,7 +86,7 @@ const SCAN_ROOTS = ['packages', 'apps/forge'];
  * structural fact — never "it seemed fine".
  */
 const HOOK_DISPATCH_EXEMPT: Record<string, string> = {
-  'packages/factory/phases/project-manager.ts':
+  'packages/stations/phases/project-manager.ts':
     'imports pinnedStreamQuery only to DEFAULT options.queryFn; its actual spawn goes through runAgent(def, …) (:248), which builds the bag from the same derived spec.',
   'packages/agents/_adapters/claude/index.ts':
     'the adapter registry shim. `query` is the raw stream boundary a direct-stream phase injects (that phase wires its own bag), and `createAgent` delegates to createClaudeAgent, which forwards opts.hooks.',
@@ -345,8 +345,8 @@ describe('hook dispatch covers every spawn site (the enumeration ratchet)', () =
       // the census loses two names and gains one. That is consolidation, not
       // a shrink: the same rule this block already records for kind-turn.ts.
       'packages/sessions/kinds/fix-turn.ts',
-      'packages/factory/phases/release-finalize.ts',
-      'packages/factory/phases/developer-loop.ts',
+      'packages/stations/phases/release-finalize.ts',
+      'packages/stations/phases/developer-loop.ts',
       'packages/agents/ralph/claude-agent.ts',
     ]) {
       assert.ok(files.includes(known), `the scan must see ${known}`);

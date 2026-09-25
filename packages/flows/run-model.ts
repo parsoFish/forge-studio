@@ -51,8 +51,8 @@ import { sumAuthoritativeCostUsd } from '@forge/kernel';
 // Exported types (binding API per M1 design §1)
 // ---------------------------------------------------------------------------
 
-export type { RunStatus, RunPhaseStatus, RunPhaseMeta, Run } from './run-view-types.ts';
-import type { RunStatus, Run } from './run-view-types.ts';
+export type { RunStatus, RunPhaseStatus, RunPhaseMeta, Run } from '@forge/contracts';
+import type { RunStatus, Run } from '@forge/contracts';
 
 import {
   buildNodeMapping,

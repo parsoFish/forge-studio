@@ -145,7 +145,7 @@ tree after it, and a turn takes minutes. Any OTHER process's brain/ write
 inside that window is indistinguishable from the turn's own; for a path
 INSIDE the turn's own KB the gate disposes of it on snapshot evidence alone
 (`revertChange` — an rmSync for a file the write CREATED). Meanwhile
-`packages/factory/phases/reflector.ts` writes brain themes from the daemon on
+`packages/stations/phases/reflector.ts` writes brain themes from the daemon on
 exactly the same tree, and `deriveKbActiveJob` (kb-job-state.ts) gates KB jobs
 PER-KB — it takes no account of the reflector at all. An operator clicking
 "Drain to green" while a cycle reflects is entirely reachable, and nothing

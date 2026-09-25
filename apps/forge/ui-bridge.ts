@@ -177,7 +177,7 @@ export type BridgeOptions = {
   runReleaseFinalize?: (input: ReleaseFinalizeHookInput) => Promise<{ release_status: string }>;
   /**
    * D — injectable for tests; defaults to the real `rerunReflector` from
-   * packages/factory/reflector-rerun.ts. Fired (non-blocking) when operator
+   * packages/stations/reflector-rerun.ts. Fired (non-blocking) when operator
    * reflection feedback is submitted, and at startup for any cycle whose
    * feedback out-dates its last reflector.end.
    */

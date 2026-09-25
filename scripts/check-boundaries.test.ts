@@ -54,7 +54,8 @@ test('the chain is exactly the one 1.0.md §0 states', () => {
     agents: 3,
     sessions: 4,
     flows: 5,
-    factory: 6,
+    stations: 6,
+    factory: 7,
   });
 });
 

@@ -26,7 +26,7 @@
  * MEASURED GROUNDS (not invented — read from the real producer + the real
  * event-routing code, see the task report for the full trace):
  *
- * (a) THE REAL PRODUCER. `packages/factory/phases/adversarial-review.ts:330-332`:
+ * (a) THE REAL PRODUCER. `packages/stations/phases/adversarial-review.ts:330-332`:
  *       const counts: Record<string, number> =
  *         { total: harvest.record.findings.length, blocker: 0, major: 0, minor: 0, info: 0 };
  *       for (const f of harvest.record.findings) counts[f.severity] = (counts[f.severity] ?? 0) + 1;

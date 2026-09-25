@@ -285,9 +285,7 @@ function sweepStaleCrossIdStagingLeftovers(root: string): void {
  * the two writes — three prior SEC-03 reorders each reopened the orphan one
  * layer down; transactionalization is the different axis that actually closes it.
  */
-/** Operator-owned facts (ruling 168), constants because they decide WHERE an
- *  outward-facing repository appears and how visible it is. */
-/** Fallback owner when config names none. Bead `forge-8vfn.6.11.35`: config wins. */
+/** Operator-owned facts (ruling 168): WHERE an outward-facing repo appears and how visible it is — fallback owner when config names none; config always wins (bead `forge-8vfn.6.11.35`). */
 const REMOTE_ACCOUNT = 'parsoFish';
 const REMOTE_VISIBILITY = '--private';
 

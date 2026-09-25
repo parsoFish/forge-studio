@@ -50,7 +50,7 @@ quality-gate command exists and is plausibly fast; it never runs it. And:
 package."* [ADR 036](../../docs/decisions/036-orchestrator-owned-gate-execution.md),
 amended 2026-08-31, records why this is an **injected dependency** rather than a
 direct import: `packages/flows/flow-runner.ts` holds only the `ProjectGate { runPreflight }`
-port (`@forge/kernel`); `packages/factory/phases/executor-deps.ts`'s
+port (`@forge/kernel`); `packages/stations/phases/executor-deps.ts`'s
 `createProjectGate()` is the one production wiring point that imports this
 package's real `runPreflight` and hands it in. The ADR's earlier, stronger claim —
 that the *absence* of an injection seam is what makes the gate unfakeable — did

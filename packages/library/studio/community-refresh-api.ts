@@ -60,6 +60,9 @@ export const DEFAULT_REFRESH_TIMEOUT_MS = 10_000;
  *  api.github.com), which is worth following; anything longer is a loop. */
 const MAX_REDIRECTS = 3;
 
+/** forge-8vfn.7.6.16 — DECLARED bound (GitHub's secondary rate limit throttles concurrent bursts). */
+export const MAX_CONCURRENT_SOURCE_FETCHES = 4;
+
 export type CommunityRefreshErrorKind =
   | 'missing-token'
   | 'invalid-token'
@@ -449,6 +452,13 @@ function sameFacts(a: CommunityRegistrySource, b: CommunityRegistrySource): bool
   );
 }
 
+/** Maps `items` through `worker`, `size` at a time concurrently, results in INPUT order — inline rather than a dependency. */
+export async function mapInBatches<T, R>(items: readonly T[], size: number, worker: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = [];
+  for (let i = 0; i < items.length; i += size) out.push(...(await Promise.all(items.slice(i, i + size).map(worker))));
+  return out;
+}
+
 async function fetchSourceFacts(ctx: RequestCtx, up: CommunityUpstream): Promise<Partial<CommunityRegistrySource> & { fetchedBy: string }> {
   if (up.kind === 'github') {
     const gh = await fetchGithubRepo(ctx, up.owner, up.repo);
@@ -520,14 +530,15 @@ export async function refreshCommunityRegistry(opts: {
   const needsGithub = [...upstreamByKey.values()].some((u) => u.kind === 'github');
   if (needsGithub && (ctx.token === undefined || ctx.token === '')) throw missingTokenError();
 
-  // ---- Phase 2: one request per distinct SOURCE. -------------------------
+  // ---- Phase 2: one request per SOURCE, CONCURRENTLY (forge-8vfn.7.6.16) —
+  // fetches stay outside any lock; each worker writes only its own key.
   const nextSources: Record<string, CommunityRegistrySource> = {};
   const statusByKey = new Map<string, CommunityRefreshStatus>();
   const detailByKey = new Map<string, string>();
   const errors: CommunityRefreshFailure[] = [];
   let verifiedAny = false;
 
-  for (const [key, up] of upstreamByKey) {
+  await mapInBatches([...upstreamByKey.entries()], MAX_CONCURRENT_SOURCE_FETCHES, async ([key, up]) => {
     const existing = registry.sources[key];
     try {
       const facts = await fetchSourceFacts(ctx, up);
@@ -566,7 +577,10 @@ export async function refreshCommunityRegistry(opts: {
       // byte-for-byte, or leave it absent if there never was one.
       if (existing !== undefined) nextSources[key] = existing;
     }
-  }
+  });
+  // Workers finish in any order; failures are REPORTED in source order, so one refresh reads the same twice.
+  const sourceOrder = [...upstreamByKey.keys()];
+  errors.sort((a, b) => sourceOrder.indexOf(a.source) - sourceOrder.indexOf(b.source));
 
   // NOTE ON ORPHANS: `nextSources` is built from the items' RESOLVED keys
   // only, so a source row no item refers to any more is dropped by

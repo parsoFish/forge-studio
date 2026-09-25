@@ -14,7 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { integrateDeliveryFailure } from '@forge/factory/phases/executor-table.ts';
+import { integrateDeliveryFailure } from '@forge/stations/phases/executor-table.ts';
 import { classifyCycleFailure } from '@forge/agents/failure-classifier.ts';
 import type { EventLogEntry } from '@forge/kernel';
 

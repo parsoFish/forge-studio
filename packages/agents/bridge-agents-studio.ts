@@ -355,9 +355,9 @@ export const handleStudioAgentWrite = (deps: AgentStudioRouteDeps): Handler => a
     // 4. Load existing def or scaffold minimal one. Also capture the RAW
     // on-disk bytes (D5 wiring): five phase bindings + the release
     // finalizer readFileSync the WHOLE SKILL.md verbatim into the agent's
-    // system prompt (packages/factory/phases/dev-binding.ts:63, pm-binding.ts:53,
+    // system prompt (packages/stations/phases/dev-binding.ts:63, pm-binding.ts:53,
     // reflector-binding.ts:52, adversarial-review-binding.ts:40,
-    // demo-agent-binding.ts:53, packages/factory/release-finalize-invocation.ts:51)
+    // demo-agent-binding.ts:53, packages/stations/release-finalize-invocation.ts:51)
     // — so a lossy re-serialize on save is a PROMPT change, not mere file
     // churn. Handing `originalRaw` to serializeAgentDefinition below lets it
     // take the byte-preserving fast path (comments, fanout, key order kept

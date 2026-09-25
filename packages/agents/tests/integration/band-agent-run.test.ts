@@ -17,7 +17,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { test } from 'node:test';
@@ -183,10 +183,42 @@ test('runBandAgentStandalone: a worktree outside the forge roots is refused', as
   }
 });
 
+test('runBandAgentStandalone: a manifest reached only via a symlink escaping the queue dir is refused, not followed (bead 8vfn.6.7)', async () => {
+  // `resolveInitiativeContext` guards the initiative id's CHARSET
+  // (SAFE_INITIATIVE_RE) but, before the fix, still raw-`join()`s it onto the
+  // queue dir and probes/reads with `existsSync`/`readFileSync` — both of
+  // which follow a symlink. A charset-safe id sitting at a symlinked
+  // `<id>.md` inside the queue dir must still be refused: the containment
+  // invariant has to be held by the guard, not merely by the id regex.
+  const root = mkdtempSync(join(tmpdir(), 'band-run-symlink-'));
+  const outside = mkdtempSync(join(tmpdir(), 'band-run-symlink-outside-'));
+  try {
+    // A well-formed, in-bounds-worktree manifest — but its FILE lives entirely
+    // outside the queue root, so a rejection can only be attributed to the
+    // symlink escape, never to a malformed or out-of-bounds worktree.
+    const wt = join(root, '_worktrees', 'wt');
+    mkdirSync(wt, { recursive: true });
+    writeManifest(outside, wt);
+
+    const readyDir = join(root, '_queue', 'ready-for-review');
+    mkdirSync(readyDir, { recursive: true });
+    symlinkSync(join(outside, `${INIT}.md`), join(readyDir, `${INIT}.md`));
+
+    await assert.rejects(
+      runBandAgentStandalone({ slug: 'adversarial-review', initiativeId: INIT, runId: RUN, forgeRoot: root }, depsWithRecorder().deps),
+      /no runnable manifest for initiative/,
+      'a manifest reachable only through a symlink that escapes the queue dir must never be treated as this initiative\'s own',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // The port control (Task 5.2): the whole standalone path is satisfiable by a
 // runner that imports no phase. This is what the carve buys — before it, the
-// module reached `@forge/factory/phases/adversarial-review.ts`
+// module reached `@forge/stations/phases/adversarial-review.ts`
 // from rank 3's dependency graph, and no test could run it without them.
 // ---------------------------------------------------------------------------
 

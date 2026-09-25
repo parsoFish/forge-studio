@@ -4572,36 +4572,6 @@
     "count": 1
   },
   {
-    "file": "packages/factory/demo-types.ts",
-    "kind": "stem",
-    "cited": "demo-html",
-    "count": 1
-  },
-  {
-    "file": "packages/factory/phases/adversarial-review.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
-    "file": "packages/factory/phases/developer-loop.ts",
-    "kind": "stem",
-    "cited": "reviewer-invocation",
-    "count": 1
-  },
-  {
-    "file": "packages/factory/phases/executor-table.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
-    "file": "packages/factory/phases/project-manager.ts",
-    "kind": "stem",
-    "cited": "hex-detail",
-    "count": 1
-  },
-  {
     "file": "packages/factory/tests/integration/demo.test.ts",
     "kind": "stem",
     "cited": "demo-html",
@@ -4617,12 +4587,6 @@
     "file": "packages/factory/tests/regression/demo-capture-project-guard.test.ts",
     "kind": "path",
     "cited": "orchestrator/cli.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/factory/tests/regression/executor-deps-logs-root.test.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
     "count": 1
   },
   {
@@ -5216,12 +5180,6 @@
   {
     "file": "packages/knowledge/README.md",
     "kind": "path",
-    "cited": "tests/contract/contract.test.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/knowledge/README.md",
-    "kind": "path",
     "cited": "tests/contract/routes-table.test.ts",
     "count": 1
   },
@@ -5481,12 +5439,6 @@
     "file": "packages/library/design.md",
     "kind": "stem",
     "cited": "skill-library",
-    "count": 1
-  },
-  {
-    "file": "packages/library/README.md",
-    "kind": "path",
-    "cited": "tests/contract/contract.test.ts",
     "count": 1
   },
   {
@@ -7251,12 +7203,6 @@
     "file": "SPEC.md",
     "kind": "path",
     "cited": "packages/kernel/contract.test.ts",
-    "count": 1
-  },
-  {
-    "file": "SPEC.md",
-    "kind": "path",
-    "cited": "packages/knowledge/contract.test.ts",
     "count": 1
   },
   {
