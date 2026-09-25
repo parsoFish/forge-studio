@@ -55,6 +55,7 @@
 export {
   DRY_BRIDGE_ENV,
   DRY_BRIDGE_LOG_BUCKET,
+  DRY_BRIDGE_ACTIONS,
   isDryBridge,
   emitDryBridgeRefusal,
   refuseDryBridge,

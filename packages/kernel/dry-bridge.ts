@@ -46,14 +46,22 @@ export function isDryBridge(env: Record<string, string | undefined> = process.en
   return env[DRY_BRIDGE_ENV] === '1';
 }
 
-/** The real-world reach a `refuse` route would have had. Kept as a closed
- *  union for the same reason the classification table is closed: a new kind of
- *  reach should force a decision, not be absorbed by an existing label.
- *  `spawn-hook` (forge-6gv.8.1) is distinct from `spawn-agent`: it spawns a
- *  real subprocess (a hook's own bash script via `runHookScriptAsync`), not
- *  an SDK agent turn — absorbing it into `spawn-agent` would misdescribe the
- *  409's own reach to an operator reading the refusal. */
-export type DryBridgeAction = 'spawn-agent' | 'spawn-hook' | 'git-remote' | 'daemon' | 'network';
+/** The real-world reach a `refuse` route would have had. A RUNTIME array,
+ *  not a type-only union — `DryBridgeAction` is derived from it — so a
+ *  consumer that needs to validate a value against every member (the
+ *  `BRIDGE_ROUTE_CLASSIFICATION` shape test) reads the real source of truth
+ *  instead of hand-copying it, which is exactly how `spawn-hook`
+ *  (forge-6gv.8.1) silently drifted out of a hand-written copy the moment it
+ *  was added here: a type has no runtime shape a test can read, so nothing
+ *  forced the two to agree. Kept as a closed set for the same reason the
+ *  classification table is closed: a new kind of reach should force a
+ *  decision, not be absorbed by an existing label. `spawn-hook` is distinct
+ *  from `spawn-agent`: it spawns a real subprocess (a hook's own bash script
+ *  via `runHookScriptAsync`), not an SDK agent turn — absorbing it into
+ *  `spawn-agent` would misdescribe the 409's own reach to an operator
+ *  reading the refusal. */
+export const DRY_BRIDGE_ACTIONS = ['spawn-agent', 'spawn-hook', 'git-remote', 'daemon', 'network'] as const;
+export type DryBridgeAction = (typeof DRY_BRIDGE_ACTIONS)[number];
 
 export type DryBridgeRefusalInput = {
   /** For HTTP routes the route path; for non-HTTP spawn paths a stable
