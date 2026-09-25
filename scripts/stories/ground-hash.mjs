@@ -281,6 +281,51 @@ export function mintedSessionDirNames(before, after, logsDir) {
 }
 
 /**
+ * THE SECOND MINTED PATH — T1 1418, S7's own fixture proof (2026-09-25).
+ *
+ * `mintedSessionPaths` above reads `_logs/`, but `POST /api/instructions/
+ * start` (`bridge-studio-instructions.ts:163-238`) deliberately writes ONLY
+ * the ground's own `_instructions/<id>/status.json` — the agent, and its
+ * `_logs/_<kind>-<id>` dir, spawn later, at `/brief`. For that window this
+ * run's own session has no `_logs` evidence at all, so `mintedSessionPaths`
+ * contributes nothing and the write reads as UNDECLARED — a containment
+ * failure for a session this run demonstrably started.
+ *
+ * A `_<kind>/<id>` dir born directly under the GROUND ROOT, between the same
+ * before/after manifests `run-story.mjs` already reads for the hash fence, is
+ * the same evidence read from the other side — no second filesystem walk.
+ *
+ * BOUNDED exactly like `mintedSessions`' own shape: `kind` matches
+ * `^[A-Za-z][A-Za-z0-9]*$`, directly under the ground root. And NEWLY MINTED
+ * means the whole `<kind>/<id>` PREFIX is absent from `before` — not merely
+ * that some file under it is new — so a dir that already existed and grew a
+ * sibling file is judged by the EXISTING rules (attribution / declared /
+ * undeclared) rather than waved through here.
+ *
+ * @param {{files: Map<string,string>}|null} before ground manifest before the run
+ * @param {{files: Map<string,string>}|null} after ground manifest after the run
+ * @returns {string[]} `_<kind>/<id>` paths, sorted
+ */
+export function groundMintedSessionPaths(before, after) {
+  if (before === null || after === null) return [];
+  const prefixOf = (p) => {
+    const m = /^_([A-Za-z][A-Za-z0-9]*)\/([^/]+)(?:\/|$)/.exec(p);
+    return m === null ? null : `_${m[1]}/${m[2]}`;
+  };
+  const beforePrefixes = new Set();
+  for (const p of before.files.keys()) {
+    const prefix = prefixOf(p);
+    if (prefix !== null) beforePrefixes.add(prefix);
+  }
+  const out = new Set();
+  for (const p of after.files.keys()) {
+    const prefix = prefixOf(p);
+    if (prefix !== null && !beforePrefixes.has(prefix)) out.add(prefix);
+  }
+  return [...out].sort();
+}
+
+/**
  * The tools whose `tool_use` event names a file the session WROTE.
  *
  * A BELT TO `file_change`'S BRACES, never the primary read. `makeToolEventSink`

@@ -51,6 +51,7 @@ import {
   describeGroundEscapes,
   ownGroundManifest,
   mintedSessionPaths,
+  groundMintedSessionPaths,
   mintedSessionDirNames,
   mintedSessionWrites,
   classifyOwnGroundDrift,
@@ -453,16 +454,15 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   };
   if (ownGroundBefore !== null) {
     const groundDir = join(ROOT, 'projects', story.ground.project);
-    const minted = mintedSessionPaths(
-      logsBefore,
-      readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name),
-      logsDir,
-    );
-    // Read ONCE and shared: `beatWindowChangesFrom` below needs the same
-    // end-of-run manifest `groundChanges` compares against, and hashing the
-    // ground a second time here would let the two readings disagree about
-    // what "the end of the run" was.
+    // Read ONCE and shared with `beatWindowChangesFrom` and the ground-side
+    // minted union below (T1 1418) — never a second hash of the ground.
     const ownGroundAfter = ownGroundManifest(ROOT, story.ground.project);
+    // T1 1418 — union `_logs`-side minted sessions with ground-side ones born
+    // directly in the ground before `/brief` ever creates a `_logs` dir.
+    const minted = [...new Set([
+      ...mintedSessionPaths(logsBefore, readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name), logsDir),
+      ...groundMintedSessionPaths(ownGroundBefore, ownGroundAfter),
+    ])].sort();
     const split = classifyOwnGroundDrift(
       groundChanges(ownGroundBefore, ownGroundAfter),
       minted,
