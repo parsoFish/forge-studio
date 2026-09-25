@@ -57,7 +57,7 @@ operator-ratified new cap — never a silent raise.
 | `contracts` | 5 | 1,259 | **1,263** | ratified 1,263 — M7-A seam F6 (ADR 051 decisions 2 and 4, operator item 97), lane-ratified under ruling 666; see git history for prior raises. |
 | `kernel` | 29 | 5,429 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `projects` | 45 | 10,823 | **8,933** | ratified 8,933 — M7-C door re-exports OD (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
+| `projects` | 45 | 10,857 | **8,967** | ratified 8,967 — M7-A SKILLS-tracked (+34, growth), lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,156 | **12,578** | ratified 12,578 — M7-C door re-exports OD (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 12,965 | **12,965** | ratified 12,965 — M7-C door re-exports OD round G (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 59 | 20,520 | **20,482** | ratified 20,482 — M7-C door re-exports OD, round-G circular-import fix (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
@@ -67,7 +67,7 @@ operator-ratified new cap — never a silent raise.
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,837 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **456** | **124,917** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **456** | **124,951** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -227,8 +227,8 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/preflight-gate.ts | projects | verbatim | 281 |
 | packages/projects/preflight-instructions.ts | projects | verbatim | 135 |
 | packages/projects/preflight-release.ts | projects | verbatim | 71 |
-| packages/projects/preflight-repo.ts | projects | verbatim | 223 |
-| packages/projects/preflight-skills.ts | projects | verbatim | 160 |
+| packages/projects/preflight-repo.ts | projects | verbatim | 224 |
+| packages/projects/preflight-skills.ts | projects | verbatim | 193 |
 | packages/projects/preflight-deps.ts | projects | verbatim | 158 |
 | packages/projects/project-migrate.ts | projects | verbatim | 197 |
 | packages/stations/reflect-reconcile.ts | stations | verbatim | 167 |

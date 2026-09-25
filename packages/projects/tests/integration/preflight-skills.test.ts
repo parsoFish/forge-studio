@@ -104,6 +104,20 @@ function declareArtifactRoot(dir: string, artifactRoot: string): void {
   writeFileSync(cfgPath, JSON.stringify(raw));
 }
 
+/** `git add -A` + commit, identity supplied per-invocation (same shape as
+ *  `project-create.ts`'s own scaffold commit) — for a test that must prove a
+ *  project-local skill resolves AND is TRACKED (ruling 92). */
+function commitAll(dir: string, message: string): void {
+  execFileSync('git', ['-C', dir, 'add', '-A']);
+  execFileSync('git', [
+    '-C', dir,
+    '-c', 'user.name=forge-test',
+    '-c', 'user.email=forge-test@localhost',
+    '-c', 'commit.gpgsign=false',
+    'commit', '-q', '-m', message,
+  ]);
+}
+
 function clause(report: ReturnType<typeof runPreflight>, id: ClauseId) {
   const c = report.clauses.find((x) => x.clause === id);
   assert.ok(c, `clause ${id} present`);
@@ -149,12 +163,17 @@ test('SKILLS (HARD): ALL declared skills failing to resolve — the exact terraf
   }
 });
 
-test('SKILLS (HARD): a declared id that resolves PROJECT-LOCALLY (.forge/skills/<id>/SKILL.md) passes', () => {
+test('SKILLS (HARD): a declared id that resolves PROJECT-LOCALLY (.forge/skills/<id>/SKILL.md) AND is tracked by git passes', () => {
   const p = happyProject();
   try {
     declareSkills(p.dir, ['local-only-skill']);
     mkdirSync(join(p.dir, '.forge', 'skills', 'local-only-skill'), { recursive: true });
     writeFileSync(join(p.dir, '.forge', 'skills', 'local-only-skill', 'SKILL.md'), '# local\n');
+    // Ruling 92: project-local resolution alone is not enough — a
+    // per-work-item worktree only checks out TRACKED content, so this test's
+    // own precondition is that the file is committed (see the sibling
+    // untracked-fails test below for the negative case this guards against).
+    commitAll(p.dir, 'chore: add local-only-skill');
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(clause(r, 'SKILLS').pass, true, clause(r, 'SKILLS').detail);
     assert.equal(r.ok, true);

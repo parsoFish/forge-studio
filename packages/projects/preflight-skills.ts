@@ -59,6 +59,7 @@ import { guardedFile, guardedReadFile } from '@forge/kernel';
 import type { ClauseResult } from '@forge/kernel';
 import type { ProjectConfig } from './project-config.ts';
 import { loadProjectConfig } from './project-config.ts';
+import { isGitRepoDir, isTrackedByGit } from './preflight-repo.ts';
 
 /**
  * Splits an optional `artifactRoot` into path segments for `guardedFile`.
@@ -128,6 +129,13 @@ export function loadDeclaredSkills(projectDir: string, forgeRoot: string): Decla
   });
 }
 
+/** True iff `id` resolves at the CANONICAL project-local path
+ *  (`.forge/skills/<id>/SKILL.md` under `dir`) — the one location the
+ *  tracked-check below (ruling 92) cares about. */
+function resolvesCanonicalProjectLocal(dir: string, id: string): boolean {
+  return guardedFile(dir, ['.forge', 'skills', id, 'SKILL.md'], 'read') !== null;
+}
+
 export function checkSkills(dir: string, cfg: ProjectConfig | null, forgeRoot: string): ClauseResult {
   const base = {
     clause: 'SKILLS' as const,
@@ -145,16 +153,41 @@ export function checkSkills(dir: string, cfg: ProjectConfig | null, forgeRoot: s
   const artifactSegs = artifactRootSegments(cfg?.artifactRoot);
   const missing = declared.filter((id) => resolveDeclaredSkillPath(dir, forgeRoot, id, cfg?.artifactRoot) === null);
 
-  if (missing.length === 0) {
+  // RULING 92: a canonical project-local resolution must also be TRACKED —
+  // the per-work-item worktree is cut from git and never sees an untracked file.
+  const gitRepo = isGitRepoDir(dir);
+  const untracked = gitRepo
+    ? declared.filter(
+        (id) =>
+          !missing.includes(id) &&
+          resolvesCanonicalProjectLocal(dir, id) &&
+          !isTrackedByGit(dir, `.forge/skills/${id}/SKILL.md`),
+      )
+    : [];
+
+  if (missing.length === 0 && untracked.length === 0) {
     return { ...base, pass: true, detail: `${declared.length} declared skill(s) all resolve` };
   }
-  return {
-    ...base,
-    pass: false,
-    detail:
+  const parts: string[] = [];
+  if (missing.length > 0) {
+    parts.push(
       `${missing.length} of ${declared.length} declared skill(s) do not resolve — no SKILL.md at ` +
-      '.forge/skills/<id>/ (project-local), <forgeRoot>/skills/<id>/ (forge-wide)' +
-      `${artifactSegs.length > 0 ? `, or ${artifactSegs.join('/')}/skills/<id>/ (artifactRoot)` : ''}: ` +
-      `${missing.join(', ')}. An agent dispatched against this project silently loses these bindings.`,
-  };
+        '.forge/skills/<id>/ (project-local), <forgeRoot>/skills/<id>/ (forge-wide)' +
+        `${artifactSegs.length > 0 ? `, or ${artifactSegs.join('/')}/skills/<id>/ (artifactRoot)` : ''}: ` +
+        `${missing.join(', ')}. An agent dispatched against this project silently loses these bindings.`,
+    );
+  }
+  if (untracked.length > 0) {
+    parts.push(
+      `${untracked.length} declared skill(s) resolve at .forge/skills/<id>/SKILL.md but are NOT tracked by git: ` +
+        `${untracked
+          .map(
+            (id) =>
+              `${id} (commit .forge/skills/${id}/SKILL.md — the per-work-item worktree is cut from git and ` +
+              'will not contain an untracked skill)',
+          )
+          .join('; ')}.`,
+    );
+  }
+  return { ...base, pass: false, detail: parts.join(' ') };
 }

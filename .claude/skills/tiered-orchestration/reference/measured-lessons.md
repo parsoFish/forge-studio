@@ -119,3 +119,19 @@ A probe lane driven onto each dialog in turn, Claude Code v2.1.260:
 | on the **trust** dialog | **no row at all** — a live `claude` whose `/proc/<pid>/cwd` is the lane's cwd, unregistered |
 
 There is **no `state` key**, and no value anywhere contains the string `blocked` — which is what `lanes.sh` matched on, so a lane parked on a dialog was reported as launched. The session's transcript is **not** a signal either: the last record while blocked is `{"type":"attachment"}` with no permission marker. The bead recorded the roster as emitting seven keys; it had been sampled with nothing waiting in it, and the "cleanup" it implied would have deleted the live field along with the dead one.
+
+## Forge 1.0, M7 (2026-09-25): gate preconditions, lock readers, and reruns
+
+- **A gate precondition compares exactly what the PR touched, never a container's hash.**
+  - The failure: pin-precheck compared whole-manifest fingerprints between gate and slot. When T1 reconciled UNRELATED rows of a manifest in that window, it refused PRs that had not touched those rows. This happened twice: two of lane D's PRs, then a run of green PRs held up behind an unrelated file move.
+  - The rule: judge only the rows the PR declares or touches, in-tree. Skew and moved manifests affect undeclared rows only. The T1 corollary: reconcile per row, never re-pin a whole manifest to make one PR pass.
+- **Declarations are a snapshot.** A slot re-run on an old gate log is valid only while the manifests have not moved since that gate. After a reconcile, every declared row can read "did NOT fail". Re-gate instead of re-slotting.
+- **`/proc/locks` cannot name an `exec N>file; flock -n N` holder.**
+  - WSL lists no row for it. A standard kernel lists the row under the `flock` binary's own pid, which has already exited.
+  - Name holders by scanning `/proc/<pid>/fd` for the lock file (dev + inode), and confirm each by that fd's `/proc/<pid>/fdinfo` `lock:` line.
+  - A dead listed pid is never a holder, and no row never means free.
+  - Every reader that trusted `/proc/locks` alone read heavy-slot's hold as free, or as "unnameable", and one gate waited 38 min on its own ancestor.
+- **An EXIT trap's `$?` is not the exit status after a signal.** gate.sh killed by SIGTERM logged `GATE_SH_EXIT=0` while its `.exit` said 143, and a wrapper trusted the log line. Trap each signal explicitly (`trap 'exit 143' TERM`, and likewise INT and HUP), so the log line and the `.exit` file always agree.
+- **A lint whose verdict depends on clone depth is not a gate.** A stale-path lint derived retired names from `git log --diff-filter=D`; CI's depth-1 checkout saw no deletions and reported 343 false findings. Anything the check needs from history becomes committed data, refreshed by `--write`. The check itself never reads history.
+- **A readiness signal must come from the thing being waited on.** Test plants waited for a SIGTERM handler by reading `SigCgt` in `/proc/<pid>/status`, but Node sets that bit in its own bootstrap, so it proved nothing. The flake survived three "fixes" until the plant wrote an explicit ready-marker as its script's last statement.
+- **Load proofs must not stack.** Two workers ran `taskset -c 0` burner repros at once; each read the other's contention as its own result. Check `ps -eo args | grep -c '^yes$'` is 0 before starting one.
