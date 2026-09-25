@@ -56,73 +56,52 @@ export const CATEGORY_TO_BRAIN_SUBDIR: Record<string, string> = {
 
 // ---------- checkFrontmatter ----------
 
-export function checkFrontmatter(forgeRoot: string): Finding[] {
+// Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
+export function checkFrontmatterForFile(file: string, parsed: ReturnType<typeof parseTheme>): Finding[] {
+  if (!parsed) {
+    return [{ category: 'error', file, message: 'unparseable frontmatter (gray-matter failed)', check: 'checkFrontmatter' }];
+  }
   const findings: Finding[] = [];
-  const brainRoot = join(forgeRoot, 'brain');
-  for (const file of readThemeFiles(brainRoot)) {
-    const parsed = parseTheme(file);
-    if (!parsed) {
-      findings.push({
-        category: 'error',
-        file,
-        message: 'unparseable frontmatter (gray-matter failed)',
-        check: 'checkFrontmatter',
-      });
-      continue;
+  const { data } = parsed;
+  for (const field of REQUIRED_FRONTMATTER_FIELDS) {
+    if (data[field] === undefined || data[field] === null || data[field] === '') {
+      findings.push({ category: 'error', file, message: `missing required frontmatter field: ${field}`, check: 'checkFrontmatter' });
     }
-    const { data } = parsed;
-    for (const field of REQUIRED_FRONTMATTER_FIELDS) {
-      if (data[field] === undefined || data[field] === null || data[field] === '') {
-        findings.push({
-          category: 'error',
-          file,
-          message: `missing required frontmatter field: ${field}`,
-          check: 'checkFrontmatter',
-        });
-      }
-    }
-    if (data.category && !ALLOWED_CATEGORIES.has(String(data.category))) {
-      findings.push({
-        category: 'error',
-        file,
-        message: `category "${data.category}" not in whitelist {${[...ALLOWED_CATEGORIES].join('|')}}`,
-        check: 'checkFrontmatter',
-      });
-    }
-    if (data.created_at && data.updated_at) {
-      try {
-        const c = new Date(String(data.created_at)).getTime();
-        const u = new Date(String(data.updated_at)).getTime();
-        if (!Number.isNaN(c) && !Number.isNaN(u) && c > u) {
-          findings.push({
-            category: 'error',
-            file,
-            message: 'created_at > updated_at',
-            check: 'checkFrontmatter',
-          });
-        }
-      } catch {
-        /* ignore parse failure; not load-bearing */
-      }
+  }
+  if (data.category && !ALLOWED_CATEGORIES.has(String(data.category))) {
+    findings.push({ category: 'error', file, message: `category "${data.category}" not in whitelist {${[...ALLOWED_CATEGORIES].join('|')}}`, check: 'checkFrontmatter' });
+  }
+  if (data.created_at && data.updated_at) {
+    const c = new Date(String(data.created_at)).getTime();
+    const u = new Date(String(data.updated_at)).getTime();
+    if (!Number.isNaN(c) && !Number.isNaN(u) && c > u) {
+      findings.push({ category: 'error', file, message: 'created_at > updated_at', check: 'checkFrontmatter' });
     }
   }
   return findings;
 }
 
+export function checkFrontmatter(forgeRoot: string): Finding[] {
+  const brainRoot = join(forgeRoot, 'brain');
+  return readThemeFiles(brainRoot).flatMap((file) => checkFrontmatterForFile(file, parseTheme(file)));
+}
+
 // ---------- checkIndexSync ----------
 
-export function readIndexEntries(indexFile: string): string[] {
-  if (!existsSync(indexFile)) return [];
-  const body = readFileSync(indexFile, 'utf8');
-  // Match links of shape ./themes/<slug>.md or themes/<slug>.md
+// Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
+export function slugsInIndexBody(body: string): string[] {
   const slugs: string[] = [];
   const re = /\(\.?\.?\/?(?:themes\/)([a-zA-Z0-9._-]+?)(?:\.md)?\)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(body)) !== null) {
     slugs.push(m[1]);
   }
-  // Also accept bare-style: [`<slug>`](./themes/<slug>.md) — captured by re above already.
   return slugs;
+}
+
+export function readIndexEntries(indexFile: string): string[] {
+  if (!existsSync(indexFile)) return [];
+  return slugsInIndexBody(readFileSync(indexFile, 'utf8'));
 }
 
 export function checkIndexSync(forgeRoot: string): Finding[] {

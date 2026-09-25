@@ -20,21 +20,12 @@ import { execFileSync } from 'node:child_process';
 import matter from 'gray-matter';
 import type { Finding } from './brain-lint.ts';
 import { parseThemeFile } from './theme-frontmatter.ts';
+// The ONE category tables (ADR 018 routing) — this file used to carry its
+// own copy, byte-identical to these; no second copy of a routing table.
+// slugsInIndexBody: same reason — this file used to carry its own copy of
+// the exact regex scan `readIndexEntries` already does.
+import { CATEGORY_TO_INDEX_FILE, CATEGORY_TO_BRAIN_SUBDIR, slugsInIndexBody } from './brain-lint-checks-filing.ts';
 
-const CATEGORY_TO_INDEX_FILE: Record<string, string> = {
-  pattern: 'patterns.md',
-  antipattern: 'antipatterns.md',
-  decision: 'decisions.md',
-  operation: 'operations.md',
-  reference: 'reference.md',
-};
-const CATEGORY_TO_BRAIN_SUBDIR: Record<string, string> = {
-  pattern: 'cycles',
-  antipattern: 'cycles',
-  operation: 'cycles',
-  decision: 'forge-dev',
-  reference: 'forge-dev',
-};
 const AUTO_LINK_HEADING = '### Auto-linked (re-file under a curated heading when convenient)';
 
 export type AutoFixResult = {
@@ -101,15 +92,6 @@ function linkLine(slug: string, description: string): string {
   return desc ? `- [\`${slug}\`](./themes/${slug}.md) — ${desc}` : `- [\`${slug}\`](./themes/${slug}.md)`;
 }
 
-/** Slugs already linked in an index body (one per `themes/<slug>.md` occurrence). */
-function linkedSlugs(body: string): string[] {
-  const slugs: string[] = [];
-  const re = /\(\.?\.?\/?(?:themes\/)([a-zA-Z0-9._-]+?)(?:\.md)?\)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(body)) !== null) slugs.push(m[1]);
-  return slugs;
-}
-
 /**
  * Idempotently append a theme's link line to a category index file, given the
  * EXACT index file path (rather than deriving it from `category` via
@@ -128,7 +110,7 @@ export function ensureLinkedAt(indexPath: string, themeFile: string): { ok: bool
   if (!existsSync(indexPath)) return { ok: false, detail: `category index not found: ${indexPath}` };
   const slug = basename(themeFile, '.md');
   const body = readFileSync(indexPath, 'utf8');
-  if (linkedSlugs(body).includes(slug)) return { ok: true, detail: 'already linked' };
+  if (slugsInIndexBody(body).includes(slug)) return { ok: true, detail: 'already linked' };
   const line = linkLine(slug, String(parsed.data.description ?? ''));
   let next: string;
   if (body.includes(AUTO_LINK_HEADING)) {
