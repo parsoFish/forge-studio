@@ -579,3 +579,53 @@ export async function reapCensusAndSweep({
 
   return { quiesce: quiesceResult, census, sweep: sweepResult, reappearedArtefacts, lines, warnLines };
 }
+
+/**
+ * Fold a completed `stopSchedulerCensusAndRelease` result into the run's exit
+ * code — MUST 1 (D's review of #906). `run.mjs`'s `finally` called
+ * `stopSchedulerCensusAndRelease`, printed its lines, and never read
+ * `stop.census` or `stop.release.reappeared` again: a surviving daemon
+ * grandchild printed `REFUSING to release…` or `RELEASE DID NOT HOLD…` and
+ * the process still exited 0 on an otherwise-green run. "Never a silent
+ * CLEARED" has to hold at the LAST place a run can still say so, not only in
+ * the log lines a caller may not be reading.
+ *
+ * A PURE FOLD, deliberately, so it is the seam a test can drive with an
+ * INJECTED `stop` result rather than through `main()` itself — which boots a
+ * real bridge and a real browser and cannot be unit-tested at all.
+ *
+ * `exitCode` passes through UNCHANGED when the teardown held, whatever it
+ * was — a story's own red survives a clean teardown exactly as it was. A
+ * teardown failure forces it non-zero only when it was still `0`; a run
+ * already red for its own reason keeps that SPECIFIC code, never flattened
+ * to a generic `1`.
+ *
+ * @param {number} exitCode the exit code this run had BEFORE the teardown
+ * @param {{census: {empty: boolean, reason: string}|null,
+ *           release: {reappeared?: string[]}|null}} stop
+ * @returns {{exitCode: number, lines: string[]}}
+ */
+export function teardownExitCode(exitCode, stop) {
+  const lines = [];
+  let code = exitCode;
+
+  const censusFailed = stop.census !== null && stop.census.empty === false;
+  if (censusFailed) {
+    lines.push(
+      `[stories] TEARDOWN FAILURE: the scheduler teardown's census never settled (${stop.census.reason}) — ` +
+      'this run cannot be reported green.',
+    );
+    if (code === 0) code = 1;
+  }
+
+  const reappeared = stop.release?.reappeared ?? [];
+  if (reappeared.length > 0) {
+    lines.push(
+      `[stories] TEARDOWN FAILURE: ${reappeared.join(', ')} reappeared in _queue/in-flight/ after this run's ` +
+      'teardown reported it released — this run cannot be reported green.',
+    );
+    if (code === 0) code = 1;
+  }
+
+  return { exitCode: code, lines };
+}
