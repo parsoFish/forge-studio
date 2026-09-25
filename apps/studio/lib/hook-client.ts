@@ -76,6 +76,14 @@ export function eventCarriesTool(on: HookLifecycleEvent): boolean {
 export type HookScanVerdict = 'blocked' | 'findings' | 'clean';
 export type HookTrust = 'needs-review' | 'approved' | 'overridden';
 
+/** forge-8vfn.8.3.7 — server-attested (never client-inferred): a hook has
+ *  exactly two real sources, a create/edit route (stamps 'operator') or
+ *  forge's shipped library ('ootb'). A local type, not imported from
+ *  @forge/kernel or @forge/library — apps/studio may import @forge/contracts
+ *  only (check-boundaries rule 2), same reason every other type on this
+ *  file mirrors its server shape rather than importing it. */
+export type HookOrigin = 'ootb' | 'operator';
+
 export type HookPermissions = {
   env: string[];
   read: string[];
@@ -100,6 +108,7 @@ export type HookLibraryEntryOk = {
   scanVerdict: HookScanVerdict;
   trust: HookTrust;
   runnable: boolean;
+  origin: HookOrigin;
 };
 
 export type HookLibraryEntryMalformed = {
@@ -220,6 +229,13 @@ function parseHookTrust(raw: unknown): HookTrust {
   throw new Error(`unrecognised hook trust value: ${JSON.stringify(raw)}`);
 }
 
+/** forge-8vfn.8.3.7 — exactly two real tokens; NOT the wire's own 3-value
+ *  Provenance vocabulary ('ootb'|'operator'|'unknown') a hook never emits. */
+function parseHookOrigin(raw: unknown): HookOrigin {
+  if (raw === 'ootb' || raw === 'operator') return raw;
+  throw new Error(`unrecognised hook origin: ${JSON.stringify(raw)}`);
+}
+
 function parseHookUsedByDerivation(raw: unknown): HookUsedByDerivation {
   const r = asRecord(raw);
   return { source: reqString(r, 'source'), scanned: reqNumber(r, 'scanned') };
@@ -276,6 +292,7 @@ export function parseHookLibraryEntry(raw: unknown): HookLibraryEntry {
     scanVerdict: parseHookScanVerdict(r['scanVerdict']),
     trust: parseHookTrust(r['trust']),
     runnable: reqBoolean(r, 'runnable'),
+    origin: parseHookOrigin(r['origin']),
   };
 }
 

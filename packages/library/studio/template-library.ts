@@ -21,6 +21,7 @@ import { basename, join, resolve } from 'node:path';
 
 import { listProjectStarters } from '@forge/kernel';
 import { discoverProjects, type DiscoveredProject } from '@forge/kernel';
+import { originOfHookOrTemplate, SCAFFOLD_TEMPLATE_ORIGIN, type HookTemplateOrigin } from '@forge/kernel';
 import { loadArtifactTemplate, loadDemoElement } from './artifact-registry.ts';
 import type { PackageFile } from './skill-package.ts';
 import type { ArtifactKind, DemoStepKind, FlowDefinition, FlowNode } from '@forge/contracts/studio/types.ts';
@@ -62,6 +63,11 @@ export interface TemplateLibraryEntry {
   description?: string;
   /** A malformed definition surfaces here (D7) — never dropped from the listing. */
   error?: string;
+  /** Server-attested (forge-8vfn.8.3.7, never client-inferred) — absent only
+   *  when the definition failed to parse (`error` set), same convention as
+   *  `format`/`previewKind` above. NOT `provenance` above (category source
+   *  dir, an unrelated fact) — see @forge/kernel's originOfHookOrTemplate. */
+  origin?: HookTemplateOrigin;
 }
 
 export type TemplateDetail = TemplateLibraryEntry & { files: PackageFile[] };
@@ -364,6 +370,7 @@ function listPlanningEntries(root: string, flowIndex: { scanned: number; byArtif
         previewKind: planningPreviewKind(t.kind),
         usedBy: usedByLabelsFor(edges),
         usedByDerivation,
+        origin: originOfHookOrTemplate(t.origin),
         ...(verification !== undefined ? { endpointsVerified: verification.endpointsVerified } : {}),
         ...(t.producer !== undefined ? { declaredProducer: t.producer } : {}),
         ...(t.consumer !== undefined ? { declaredConsumer: t.consumer } : {}),
@@ -409,6 +416,7 @@ function listDemoOutputEntries(root: string, demoUsage: Map<string, Set<string>>
         usedBy: usage.get(t.id) ?? [],
         usedByDerivation,
         description: t.description,
+        origin: originOfHookOrTemplate(t.origin),
       };
     } catch (e) {
       return {
@@ -438,6 +446,9 @@ function listScaffoldEntries(root: string, discoveredProjectCount: number): Temp
       previewKind: 'scaffold',
       usedBy: [],
       usedByDerivation,
+      // No create route exists for project-scaffold (SCAFFOLD_READONLY) —
+      // every entry is OOTB by construction, not a per-item guess.
+      origin: SCAFFOLD_TEMPLATE_ORIGIN,
     }),
   );
 }

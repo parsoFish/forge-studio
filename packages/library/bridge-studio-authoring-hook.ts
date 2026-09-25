@@ -261,6 +261,11 @@ export function finalizeHookFromLanded(forgeRoot: string, id: string, sanitizeEr
     // writes — never the drafted hook.yaml's own (unvalidated) script field.
     script: 'scripts/run.sh',
     permissions,
+    // forge-8vfn.8.3.7: this route lands a creation-AGENT's drafted hook —
+    // initiated by and for the operator, never part of forge's shipped
+    // library — so it stamps the SAME origin:'operator' marker
+    // POST /api/studio/hooks does, never the drafted hook.yaml's own value.
+    origin: 'operator',
   };
 
   // PHASE 2 — every destination is blessed; materialise the bytes.

@@ -60,6 +60,8 @@ function okEntry(overrides: Partial<HookLibraryEntryOk> & { id: string }): HookL
     scanVerdict: 'clean',
     trust: 'needs-review',
     runnable: false,
+    // forge-8vfn.8.3.7: server-attested, mandatory on every real entry.
+    origin: 'ootb',
     ...overrides,
   };
 }
@@ -201,6 +203,38 @@ test('the community section\'s data-count matches the (already-filtered) communi
     communityHooks: [communityHookItem('a'), communityHookItem('b')],
   });
   expect(html).toContain('data-section="community-hooks" data-count="2"');
+});
+
+// ---------------------------------------------------------------------------
+// forge-8vfn.8.3.7 — the OOTB-provenance badge (ProvenanceBadge), the SAME
+// component every other Studio object type's list card already renders
+// (components/studio/LibraryCard.tsx). An 'ootb' hook shows the badge; an
+// 'operator' hook (the unbadged default) shows nothing — a badge is only
+// ever a REAL positive signal, never fabricated.
+// ---------------------------------------------------------------------------
+
+test('forge-8vfn.8.3.7: an ootb hook renders the ProvenanceBadge ("ootb", machine-readable data-provenance)', () => {
+  const html = render({
+    status: 'ready',
+    error: null,
+    query: '',
+    filtered: [okEntry({ id: 'shipped-hook', name: 'shipped-hook', origin: 'ootb' })],
+    communityHooks: [],
+  });
+  expect(html).toContain('data-provenance="ootb"');
+  expect(html).toContain('badge-ootb');
+});
+
+test('forge-8vfn.8.3.7: an operator hook renders NO ProvenanceBadge — operator is the unbadged default', () => {
+  const html = render({
+    status: 'ready',
+    error: null,
+    query: '',
+    filtered: [okEntry({ id: 'authored-hook', name: 'authored-hook', origin: 'operator' })],
+    communityHooks: [],
+  });
+  expect(html).not.toContain('data-provenance="ootb"');
+  expect(html).not.toContain('badge-ootb');
 });
 
 test('an empty communityHooks array renders no community section at all', () => {
