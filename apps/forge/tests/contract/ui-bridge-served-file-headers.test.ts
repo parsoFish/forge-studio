@@ -10,9 +10,10 @@
  * easily (approve-and-merge, scheduler start, plan verdicts). No live
  * exploit exists — this pins a MISSING DEFENCE, not a demonstrated breach.
  *
- * `contentTypeFor` (apps/forge/ui-bridge.ts) has SEVEN call sites across FIVE route
- * families — re-derived by `grep -n "contentTypeFor" apps/forge/ui-bridge.ts`
- * before writing this file, not copied from any brief unverified:
+ * `contentTypeFor` (apps/forge/bridge-cycle-data.ts, carved out of ui-bridge.ts
+ * by forge-4zk) has SEVEN call sites across FIVE route families — re-derived
+ * by `grep -n "contentTypeFor" apps/forge/bridge-cycle-data.ts` before writing
+ * this file, not copied from any brief unverified:
  *
  *   GET /api/artifact/<cycleId>/<filename>
  *   GET /api/architect/file/<project>/<sid>/<filename>
@@ -28,10 +29,10 @@
  *      helper called directly, so a route that forgets to wire the helper
  *      in shows up here, not just in the source ratchet).
  *   2. A source-level ENUMERATION RATCHET: `contentTypeFor` must have no
- *      direct caller anywhere in apps/forge/ui-bridge.ts outside the one hardening
- *      helper (`servedFileHeaders`) — this is what catches the EIGHTH route
- *      a future change adds, which the seven fixtures above structurally
- *      cannot.
+ *      direct caller anywhere in apps/forge/bridge-cycle-data.ts outside the
+ *      one hardening helper (`servedFileHeaders`) — this is what catches the
+ *      EIGHTH route a future change adds, which the seven fixtures above
+ *      structurally cannot.
  *
  * Header-injection scope, checked per mechanism rather than assumed:
  * `isSafeSubPath`/`isSafeSegment` (cli/studio-path-guard.ts) already deny
@@ -310,7 +311,7 @@ function extractFunctionSpan(src: string, signatureNeedle: string): { start: num
   const sigIdx = src.indexOf(signatureNeedle);
   assert.ok(
     sigIdx >= 0,
-    `expected to find "${signatureNeedle}" in cli/ui-bridge.ts — the hardening helper this ratchet checks against does not exist (yet). ` +
+    `expected to find "${signatureNeedle}" in apps/forge/bridge-cycle-data.ts — the hardening helper this ratchet checks against does not exist (yet). ` +
       `Add a servedFileHeaders(filename, origin) helper that returns the complete header object (content-type + the hardening headers + ` +
       `access-control-allow-origin/vary) and route every served-file 200 response through it.`,
   );
@@ -334,8 +335,8 @@ function lineOf(src: string, idx: number): number {
   return src.slice(0, idx).split('\n').length;
 }
 
-test('enumeration ratchet: contentTypeFor has NO direct callers in cli/ui-bridge.ts outside servedFileHeaders', () => {
-  const src = readFileSync(join(import.meta.dirname, '..', '..', 'ui-bridge.ts'), 'utf8');
+test('enumeration ratchet: contentTypeFor has NO direct callers in apps/forge/bridge-cycle-data.ts outside servedFileHeaders', () => {
+  const src = readFileSync(join(import.meta.dirname, '..', '..', 'bridge-cycle-data.ts'), 'utf8');
   const helper = extractFunctionSpan(src, 'function servedFileHeaders(');
 
   // Every CALL-shaped occurrence of contentTypeFor( — i.e. not its own
@@ -359,7 +360,7 @@ test('enumeration ratchet: contentTypeFor has NO direct callers in cli/ui-bridge
     'sanity check failed: servedFileHeaders itself does not appear to call contentTypeFor — the ratchet mechanism (brace-matched span detection) may be broken, not just the code under test',
   );
   assert.deepEqual(
-    callSitesOutsideHelper.map((idx) => `cli/ui-bridge.ts:${lineOf(src, idx)}`),
+    callSitesOutsideHelper.map((idx) => `apps/forge/bridge-cycle-data.ts:${lineOf(src, idx)}`),
     [],
     'contentTypeFor was called directly outside servedFileHeaders. Every route that serves a file on the bridge origin must obtain its ' +
       'content-type via servedFileHeaders(filename, origin) — never contentTypeFor(filename) directly — so the CSP / ' +
@@ -379,8 +380,13 @@ test('enumeration re-derivation: exactly 7 res.writeHead(200, ...) call sites re
   // would have kept the test green while the guard went BLIND to the route that
   // moved — a defense-in-depth lint has to follow the dispatch it backstops.
   // So the pin now spans both files and states the split.
+  //
+  // forge-4zk: the one remaining host-side call site (the artifact route)
+  // moved again, out of `apps/forge/ui-bridge.ts` and into
+  // `apps/forge/bridge-cycle-data.ts` — same reasoning, same discipline: the
+  // FILES entry follows the carve rather than letting the count silently drop.
   const FILES = [
-    { path: join(import.meta.dirname, '..', '..', 'ui-bridge.ts'), rel: 'apps/forge/ui-bridge.ts', expected: 1 },
+    { path: join(import.meta.dirname, '..', '..', 'bridge-cycle-data.ts'), rel: 'apps/forge/bridge-cycle-data.ts', expected: 1 },
     {
       path: join(import.meta.dirname, '..', '..', '..', '..', 'packages', 'sessions', 'bridge-studio-architect.ts'),
       rel: 'packages/sessions/bridge-studio-architect.ts',

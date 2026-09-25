@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 353 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 85 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 93 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -65,9 +65,9 @@ operator-ratified new cap — never a silent raise.
 | `factory` | 14 | 2,113 | **2,297** | **Re-seeded 12,500 → 13,500 (M2-B, operator ruling).** Two effects landed together: M2-B quarried `orchestrator/phases/executor-{deps,table}.ts` (960 lines) here, where the six phases they wire already live — a `flows`-owned table importing those phases would be a `flows → factory` edge the allow-graph forbids; and the per-package columns in this table, hand-seeded and never recomputed, are now DERIVED from the rows below, which showed `factory` at 12,044 before those two files rather than the figure its cap was seeded from. The new cap applies this row's own stated rule — the measured total (13,004) rounded up to the next 500 — to a total that is now measured rather than asserted. The full column recomputation, and teaching `check-owner.mjs` to enforce it, is bead `forge-8vfn.5.18`. **DECREASE 13,500 → 13,276 (M6-C, T1 ruling 466) — the paying side of the same re-attribution.** `review-comments.ts` (**224**) left for `packages/flows`, so this cap sheds exactly what the code did: 13,500 − 224. A transfer that raised the receiving cap without lowering the sending one would hand the tree 224 lines of headroom for moving a file, which is the shape this table exists to refuse. Measured after the move: 11,100 of 13,276 (2,176 free, the same 2,176 it had at 11,324 of 13,500). The bridge seam drops from 9 specifiers to 8; `packages/factory/README.md` records the new set. **DECREASE 13,276 → 2,297 (F3, operator ruling items 81/83) — the paying side of THIS re-attribution.** The station executor and every band — 34 files, **10,905** production lines, measured on this PR's tree by `check-package-caps.mjs` — moved to the new `packages/stations` package (its own row below), and so did the 74 lines of `class-profiles.ts` that declared `ChangeClass` and `GateProfile` (205 → 131); this cap sheds exactly what the code did: 13,276 − 10,979. `class-profiles.ts`, `demo.ts`, `demo-capture.ts`, `demo-runtime.ts` and `index.ts` stay; measured after the move: 606 of 2,297 (1,691 free — headroom the package already had, kept). The bridge seam drops from `@forge/factory` specifiers to one (`class-profiles.ts`); `packages/factory/README.md` records the new set. |
 | `stations` | 37 | 11,094 | **11,096** | **NEW ROW (F3, operator ruling items 81/83) — RE-ATTRIBUTION, plus a small genuinely-new figure ratified under ruling 666.** 34 files carrying **10,905** production lines moved here verbatim from `packages/factory`, and the `ChangeClass`/`GateProfile` types moved verbatim out of `class-profiles.ts` into `class-profile-port.ts` (**74** lines); factory's cap drops by the same **10,979** (above). Genuinely new: the rest of `class-profile-port.ts` (the port type and `requireClassProfiles`, **43** lines) and `index.ts` (**33**, the door; factory's own door stayed `export {}`, so this is a real barrel, not a carried file). The sum of ratified caps grows by **76**, which the lane ratified under ruling 666 (≤100 lines, measured). M7-COMMON §6.3: a pure transfer carries no cull census. Measured on this PR's tree by `check-package-caps.mjs`: 11,055 of 11,055, zero headroom. **Raised 11,055 → 11,067 (M7-A F6, lane-ratified under ruling 666, ≤100 lines, no operator ask) — +12, GROWTH, exact measured figure.** Seam F6 (ADR 051 decisions 2 and 4, operator item 97): the review band intersects a flow's review.lenses with the class's lenses and refuses a lens the class lacks, by name, before any spawn. **Raised 11,067 → 11,096 (M7-A F4, lane-ratified under ruling 666, ≤100 lines, no operator ask) — +29, GROWTH, exact measured figure on the tree merged with main.** Seam F4 (operator item 81): every band runs the executing node's own agent def (SKILL.md, and for the dev loop its model, tools and fanout). The def is REQUIRED, with no canonical fallback. Events carry the def's slug. One SKILL.md reader (agent-skill-text.ts) replaces four canonical-path reads. The comments that would have pushed adversarial-review.ts past 800 lines were shortened instead of baselined. |
 | `forge-docs` | 3 | 352 | **352** | **NEW ROW (G3, the second factory; operator items 73/81).** A package of data only: one `flows/forge-docs/flow.yaml` (not counted, the same as `studio/flows/*`) and three SKILL.mds (docs-writer 109, docs-review 173, docs-integrate 70). The cap is the exact measured total at introduction, with no headroom. A new agent or a materially longer skill body is a deliberate raise, not absorbed drift. |
-| `apps/forge` | 20 | 6,494 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
+| `apps/forge` | 28 | 6,825 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **442** | **124,252** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **450** | **124,583** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -168,7 +168,7 @@ operator-ratified new cap — never a silent raise.
 | packages/library/bridge-studio-skills.ts | library | verbatim | 659 |
 | packages/library/bridge-studio-templates.ts | library | verbatim | 427 |
 | apps/forge/bridge-studio-writes.ts | projects | rewritten | 705 |
-| apps/forge/bridge-studio.ts | apps/forge | rewritten | 1235 |
+| apps/forge/bridge-studio.ts | apps/forge | rewritten | 1215 |
 | packages/library/community-refresh-cmd.ts | library | verbatim | 104 |
 | packages/library/community-refresh-run.ts | library | verbatim | 621 |
 | packages/library/community-registry-lock.ts | library | verbatim | 126 |
@@ -256,7 +256,15 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/bounded-log.ts | kernel | rewritten | 44 |
 | packages/kernel/discovery-roots.ts | kernel | verbatim | 148 |
 | packages/knowledge/theme-frontmatter.ts | knowledge | verbatim | 116 |
-| apps/forge/ui-bridge.ts | apps/forge | rewritten | 2277 |
+| apps/forge/ui-bridge.ts | apps/forge | rewritten | 758 |
+| apps/forge/bridge-cycle-data.ts | apps/forge | rewritten | 382 |
+| apps/forge/bridge-scheduler.ts | apps/forge | rewritten | 146 |
+| apps/forge/bridge-run-triggers.ts | apps/forge | rewritten | 285 |
+| apps/forge/bridge-review-comments.ts | apps/forge | rewritten | 191 |
+| apps/forge/bridge-agent-dispatch.ts | apps/forge | rewritten | 398 |
+| apps/forge/bridge-reflect.ts | apps/forge | rewritten | 149 |
+| apps/forge/bridge-cycle-scan.ts | apps/forge | rewritten | 259 |
+| apps/forge/bridge-http.ts | apps/forge | rewritten | 60 |
 | apps/forge/bridge-broadcast-log.ts | apps/forge | rewritten | 92 |
 | apps/forge/broadcast-coalescer.ts | apps/forge | rewritten | 77 |
 | packages/agents/_adapters/aider/index.ts | agents | verbatim | 477 |
