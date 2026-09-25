@@ -23,6 +23,7 @@ import {
   renderPmUserPrompt,
   renderProjectContextBlock,
 } from '../../phases/pm-binding.ts';
+import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 
 // ---------------------------------------------------------------------------
@@ -78,7 +79,7 @@ test('PM_MODEL is sonnet (behaviour-preserving: same model as before migration)'
 // 3. buildPmSystemPrompt invariants (table-driven)
 // ---------------------------------------------------------------------------
 
-const SYS = buildPmSystemPrompt(process.cwd());
+const SYS = buildPmSystemPrompt(process.cwd(), canonicalDef('project-manager'));
 
 test('buildPmSystemPrompt: is substantive (> 2000 chars)', () => {
   assert.ok(SYS.length > 2000, `system prompt too short: ${SYS.length} chars`);

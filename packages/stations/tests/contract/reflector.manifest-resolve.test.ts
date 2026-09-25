@@ -49,6 +49,7 @@ import { join, resolve } from 'node:path';
 import { getPaths, type QueuePaths } from '@forge/flows/queue.ts';
 import { runReflector } from '../../phases/reflector.ts';
 import { createLogger } from '@forge/kernel';
+import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 import { REFLECTION_LOST_EVENT, type CycleInput } from '@forge/flows/cycle-context.ts';
 
 // Dynamic import: `resolveCurrentManifestPath` is not exported today. If the
@@ -148,7 +149,7 @@ test('runReflector (real function, no agent invoked): a manifest genuinely gone 
     worktreePath: '',
   };
 
-  const result = await runReflector(input, logger);
+  const result = await runReflector(input, logger, { agentDef: canonicalDef('reflector') });
   assert.equal(result.reflection_status, 'failed');
   assert.equal(result.lint_status, 'skipped');
 

@@ -18,7 +18,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, symlinkSync,
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { createFactorylessWorktree, isFactoryless, porcelain } from './factory-deletable-scratch.mjs';
+import { createFactorylessWorktree, createScratchWorktreeWithout, isFactoryless, porcelain } from './factory-deletable-scratch.mjs';
 
 /** A minimal git repo shaped like forge: packages/factory + a sibling, and the workspace links. */
 function fixtureRepo(): string {
@@ -89,6 +89,85 @@ test('kills "a failed setup leaves a worktree behind": the scratch tree is regis
   try {
     const before = execFileSync('git', ['-C', root, 'worktree', 'list'], { encoding: 'utf8' }).split('\n').length;
     const { cleanup } = createFactorylessWorktree(root);
+    cleanup();
+    const after = execFileSync('git', ['-C', root, 'worktree', 'list'], { encoding: 'utf8' }).split('\n').length;
+    assert.equal(after, before, 'the worktree list is where it started');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// createScratchWorktreeWithout — the generic form for a DATA package (G3's
+// second factory, packages/forge-docs): no package.json of its own, so no
+// node_modules/@forge/* entry to unlink — only paths to `rm -rf`.
+// ---------------------------------------------------------------------------
+
+/** A minimal git repo shaped like forge PLUS a data-only "second factory"
+ *  package (a directory with real files but no package.json, mirroring
+ *  packages/forge-docs — no node_modules/@forge/<name> link exists for it). */
+function fixtureRepoWithDataPackage(): string {
+  const root = fixtureRepo();
+  mkdirSync(join(root, 'packages', 'second-thing', 'flows', 'second-thing'), { recursive: true });
+  writeFileSync(join(root, 'packages', 'second-thing', 'flows', 'second-thing', 'flow.yaml'), 'id: second-thing\n');
+  // Targeted `add` — `fixtureRepo()` already populated `node_modules` ON DISK
+  // (its own symlinks, created AFTER its commit, precisely so they are never
+  // tracked); a `git add -A` here would sweep them into THIS commit, and the
+  // scratch worktree below would then materialise them as real files instead
+  // of this helper's own rebuilt symlinks — the same bug this fixture exists
+  // to keep out of the code it is testing.
+  execFileSync('git', ['-C', root, 'add', 'packages/second-thing']);
+  execFileSync('git', ['-C', root, 'commit', '-qm', 'add data package']);
+  return root;
+}
+
+test('createScratchWorktreeWithout kills "the proof deletes the tree it is run against": the fixture keeps its data package, and its worktree is clean afterwards', () => {
+  const root = fixtureRepoWithDataPackage();
+  try {
+    assert.equal(porcelain(root, 'packages/second-thing'), '', 'precondition: the fixture is clean');
+
+    const { dir, cleanup } = createScratchWorktreeWithout(root, ['packages/second-thing']);
+    try {
+      assert.equal(existsSync(join(root, 'packages', 'second-thing', 'flows', 'second-thing', 'flow.yaml')), true, 'the ROOT keeps its data package');
+      assert.equal(porcelain(root, 'packages/second-thing'), '', 'and git sees no deletion in the root');
+    } finally {
+      cleanup();
+    }
+
+    assert.equal(existsSync(join(root, 'packages', 'second-thing', 'flows', 'second-thing', 'flow.yaml')), true, 'still there after cleanup');
+    assert.equal(porcelain(root, 'packages/second-thing'), '', 'and still clean after cleanup');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('createScratchWorktreeWithout kills "the scratch tree still carries the deleted package": it is gone, while every real npm package still resolves through node_modules', () => {
+  const root = fixtureRepoWithDataPackage();
+  try {
+    const { dir, cleanup } = createScratchWorktreeWithout(root, ['packages/second-thing']);
+    try {
+      assert.equal(existsSync(join(dir, 'packages', 'second-thing')), false, 'the scratch tree has no second-thing package');
+      // Real npm packages (factory/kernel) are untouched by this generic
+      // helper — it mirrors EVERY @forge/* link, unlike createFactorylessWorktree.
+      assert.equal(existsSync(join(dir, 'node_modules', '@forge', 'factory', 'index.ts')), true, 'a real package still resolves');
+      assert.equal(existsSync(join(dir, 'node_modules', '@forge', 'kernel', 'index.ts')), true, 'and another one does too');
+      assert.equal(existsSync(join(dir, 'node_modules', 'third-party')), true, 'third-party entries resolve through the root');
+    } finally {
+      cleanup();
+    }
+    assert.equal(existsSync(dir), false, 'cleanup removes the scratch tree');
+    const worktrees = execFileSync('git', ['-C', root, 'worktree', 'list'], { encoding: 'utf8' });
+    assert.equal(worktrees.includes(dir), false, 'and deregisters it, so the root keeps no stale worktree');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('createScratchWorktreeWithout kills "a failed setup leaves a worktree behind": the scratch tree is registered and removed as one unit', () => {
+  const root = fixtureRepoWithDataPackage();
+  try {
+    const before = execFileSync('git', ['-C', root, 'worktree', 'list'], { encoding: 'utf8' }).split('\n').length;
+    const { cleanup } = createScratchWorktreeWithout(root, ['packages/second-thing']);
     cleanup();
     const after = execFileSync('git', ['-C', root, 'worktree', 'list'], { encoding: 'utf8' }).split('\n').length;
     assert.equal(after, before, 'the worktree list is where it started');
