@@ -394,14 +394,17 @@ export function suiteLockVerdict(env = process.env, procRoot = '/proc', selfPid 
             'for a queue only its own ancestor is causing.',
         });
       }
-      // M7 row 80 (T1 1352/1353): a hold `/proc/locks` cannot show. `heavy-slot.sh`
+      // M7 row 80 (T1 1352/1353): a hold whose locker has EXITED. `heavy-slot.sh`
       // locks via `exec 8>lock; flock -n 8` — the flock binary locks the shared
-      // descriptor and exits, and on this kernel such a lock has no row, so
-      // `holders` is empty while the ancestor that owns the descriptor reads as
-      // an opener. Both facts are required: an ANCESTOR opener, and a fresh
-      // probe proving the lock IS held. A free probe (only open) or one that
-      // cannot answer (null) keeps the refusal below.
-      if (holders.length === 0) {
+      // descriptor and exits. This WSL kernel then lists no row at all; a
+      // standard kernel (the CI runner) lists it under the exited pid. Either
+      // way no LIVE process is the holder, and the ancestor that owns the
+      // descriptor reads as an opener. Required together: no live holder, an
+      // ANCESTOR opener, and a fresh probe proving the lock IS held. A live
+      // holder, a free probe (only open) or an unanswerable one (null) keeps
+      // the refusal below.
+      const liveHolders = holders.filter((h) => existsSync(`${procRoot}/${h.pid}`));
+      if (liveHolders.length === 0) {
         const opener = (lockOpeners(lockPath, procRoot) ?? []).find((o) => ancestors.has(o.pid));
         if (opener && probeHeld(lockPath) === true) {
           return Object.freeze({
