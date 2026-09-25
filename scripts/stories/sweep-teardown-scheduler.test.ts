@@ -22,10 +22,19 @@
  * — never the scheduler pid itself, which must survive for the next story in
  * the batch (`run.mjs` stops it at batch end, unchanged). `reapCensusAndSweep`
  * now defaults its `schedulerPid` parameter to `ownSchedulerPid(root)` — the
- * same pid-file-plus-cwd ownership test `stopOwnScheduler` already applies —
- * so a real caller in `run-story.mjs` needs no new argument at all; the door
- * below drives that same default. The RED test passes `schedulerPid: null`
- * explicitly, standing in for the OLD, scheduler-blind shape.
+ * same pid-file ownership test `stopOwnScheduler` already applies, PLUS an
+ * argv check (review finding 2, below) — so a real caller in `run-story.mjs`
+ * needs no new argument at all; the door below drives that same default. The
+ * RED test passes `schedulerPid: null` explicitly, standing in for the OLD,
+ * scheduler-blind shape.
+ *
+ * REVIEW FINDING 2 (below): `ownSchedulerPid` used to trust pid-file plus
+ * `cwd === root` alone. A recycled pid whose new, unrelated owner happens to
+ * share `root` as its `cwd` — any other process this SAME run spawned —
+ * would pass that test and seed this census with a stranger's descendant
+ * tree. `ownSchedulerPid` now also requires the pid's own argv to carry the
+ * two tokens `spawnServeDetached` (`packages/flows/daemon.ts`) actually
+ * spawns a daemon with; an impostor that only shares `cwd` returns `null`.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -33,7 +42,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { reapCensusAndSweep } from './sweep-teardown.mjs';
+import { reapCensusAndSweep, ownSchedulerPid } from './sweep-teardown.mjs';
 import { plantDaemonWithGrandchild, plantInitManifest, fastQuiesce, waitForFileToExist } from './sweep-teardown-plant.mjs';
 
 test('T1 1418 RED: with no scheduler root, the clear runs while the scheduler\'s own dispatched grandchild keeps rewriting the heartbeat', async (t) => {
@@ -109,4 +118,41 @@ test('T1 1418 DOOR: reapCensusAndSweep roots its census at the scheduler\'s OWN 
   // THE SCHEDULER ITSELF SURVIVES — only its dispatch descendants are
   // censused and killed here; run.mjs stops the scheduler at batch end.
   assert.doesNotThrow(() => process.kill(daemon.pid!, 0), 'the scheduler must stay alive for the next story in the batch');
+});
+
+test('review finding 2 RED: a pid with the right cwd but the WRONG argv is not the daemon — ownSchedulerPid refuses it and its child survives the census', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-sched-impostor-'));
+  const sinceMs = Date.now() - 60_000;
+  const ralphPidFile = join(root, 'ralph.pid');
+  const heartbeat = plantInitManifest(root, sinceMs);
+
+  // Same externally-observable shape as the legit plant above — a real pid
+  // in DAEMON_PID_FILE, cwd === root, a live detached grandchild rewriting
+  // the heartbeat — except its argv carries neither of spawnServeDetached's
+  // own [cli.ts, serve] tokens: an impostor, never the daemon.
+  const impostor = await plantDaemonWithGrandchild(t, root, `
+    process.on('SIGTERM', () => {});
+    setInterval(() => { try { require('node:fs').writeFileSync(${JSON.stringify(heartbeat)}, String(Date.now())); } catch {} }, 25);
+    setInterval(() => {}, 1000);
+  `, ralphPidFile, { daemonArgv: ['/not/a/real/cli.ts', 'not-serve'] });
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  assert.equal(ownSchedulerPid(root), null, 'cwd matches, but the argv does not — never trusted as the scheduler');
+
+  const evidenceDir = join(root, 'queue-claim');
+  const result = await reapCensusAndSweep({
+    root, storyId: 'S-sched-impostor', sinceMs, evidenceDir,
+    reapedPids: [], // this run's own reap saw nothing either — the impostor is the only pid anywhere
+    // schedulerPid omitted — must default to ownSchedulerPid(root), which is null here.
+    quiesce: fastQuiesce,
+    censusBoundMs: 800, censusPollMs: 20, rereadDelayMs: 150,
+  });
+
+  assert.equal(result.census.reason, 'census-empty — no run root was recorded, so there is nothing to confirm');
+  const ralphPid = Number(readFileSync(ralphPidFile, 'utf8'));
+  assert.doesNotThrow(
+    () => process.kill(ralphPid, 0),
+    'the impostor\'s child must SURVIVE — ownSchedulerPid correctly refused to vouch for a process it does not own',
+  );
+  assert.doesNotThrow(() => process.kill(impostor.pid!, 0), 'the impostor itself is untouched too — reapCensusAndSweep never signalled it');
 });
