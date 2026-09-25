@@ -548,14 +548,22 @@ export default {
       // before the drain — the step its `act` text always described.
       // `drain-state` and `drain-run-id` are both on the drain panel root, so
       // one element answers both.
+      // AMENDED 2026-09-25 (M7-D, fixture proof run 1): `drain-state: 'running'`
+      // was a TRANSIENT read — on the fixture's freshly seeded KB the drain
+      // reached `green` before the beat read the page (measured: "expected
+      // running, got green"). The act says "drain it to GREEN", so the beat now
+      // asserts that outcome: a `settle` wait sits through `running` (S8 beat
+      // 4's pattern, §15.459 — the outcome, not the path) and `drain-run-id`
+      // stays bound, which proves a drain ran in THIS beat. Stronger, not looser.
       act: 'Open the knowledge base’s Health tab and drain it to green',
       do: [{ press: 'open-kb-tab-health' }, { press: 'drain-to-green' }],
+      wait: { for: 'settle', upTo: 180_000, key: 'drain-state', while: 'running' },
       expect: {
         route: '/knowledge',
         data: {
           page: 'knowledge',
           'page-ready': 'true',
-          'drain-state': 'running',
+          'drain-state': 'green',
           'drain-run-id': '<drainRunId>',
         },
       },
