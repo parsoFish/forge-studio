@@ -56,9 +56,56 @@ test('every unit declares the ONE entry point the allow-graph is drawn against',
     const pkg = json(join(ROOT, u.dir, 'package.json'));
     assert.equal(pkg.name, u.name, `${u.dir}: package name`);
     assert.equal(pkg.exports?.['.'], './index.ts', `${u.dir}: the root entry the allow-graph is drawn against must be ./index.ts`);
-    assert.equal(pkg.exports?.['./*'], './*', `${u.dir}: the additive subpath export must be present (ADR 046, amended 2026-08-31)`);
     assert.equal(pkg.private, true, `${u.dir}: nothing here is published`);
   }
+});
+
+/**
+ * ADR 046, amended 2026-09-25 (bead `forge-8vfn.5.31`, M7-C OD). The M3-A
+ * `"./*"` subpath (amended 2026-08-31) was ADDITIVE and TRANSITIONAL: it kept
+ * the 756 deep-specifier imports the M3 big-bang move emitted resolving while
+ * nothing had been repointed yet. That repoint is done — every external
+ * importer of these nine packages now goes through `"."`, or through a
+ * small, NAMED, non-wildcard subpath where one is genuinely needed — so the
+ * wildcard's job is finished and this test asserts its retirement, not its
+ * presence.
+ *
+ * `apps/forge` (the ASSEMBLY, not one of the nine packages this bead
+ * repointed) is deliberately excluded — see the next test.
+ */
+test('every PACKAGE\'s exports is the one-door shape — no wildcard, every subpath literal and real', () => {
+  for (const p of PACKAGES) {
+    const dir = `packages/${p}`;
+    const pkg = json(join(ROOT, dir, 'package.json')) as { exports?: Record<string, string> };
+    const exportsMap = pkg.exports ?? {};
+    const keys = Object.keys(exportsMap);
+    assert.ok(keys.includes('.'), `${dir}: exports must declare "."`);
+    const wildcards = keys.filter((k) => k.includes('*'));
+    assert.deepEqual(wildcards, [], `${dir}: exports must not contain a wildcard key (ADR 046, amended 2026-09-25) — found ${wildcards.join(', ')}`);
+    for (const key of keys) {
+      if (key === '.') continue;
+      const target = exportsMap[key]!;
+      assert.ok(
+        existsSync(join(ROOT, dir, target.replace(/^\.\//, ''))),
+        `${dir}: exports["${key}"] = "${target}" names a file that does not exist on disk`,
+      );
+    }
+  }
+});
+
+/**
+ * `apps/forge` keeps the M3-A additive wildcard: bead `forge-8vfn.5.31`
+ * repointed the nine PACKAGES' external importers, not the assembly's own
+ * `"./*"` — that is a different unit with a different job (it is allowed to
+ * import everything; see `scripts/check-boundaries.mjs`'s `ASSEMBLY` class),
+ * and narrowing it was out of this bead's scope. Asserted explicitly, not
+ * left to fall out of the generic loop above, so a future narrowing of
+ * `apps/forge` is a deliberate edit to THIS test, not a silent drift two
+ * units apart from each other were supposed to share.
+ */
+test('apps/forge still declares the additive M3-A wildcard subpath — out of bead forge-8vfn.5.31\'s scope', () => {
+  const pkg = json(join(ROOT, 'apps/forge/package.json')) as { exports?: Record<string, string> };
+  assert.equal(pkg.exports?.['./*'], './*', 'apps/forge: the additive subpath export must still be present');
 });
 
 test('every unit runs its own tests — a package whose tests only run from the root is not isolated', () => {
