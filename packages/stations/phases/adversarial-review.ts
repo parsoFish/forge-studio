@@ -26,7 +26,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { profileFor, type ChangeClass } from '@forge/factory/class-profiles.ts';
+import { requireClassProfiles, type ChangeClass, type ClassProfilePort } from '../class-profile-port.ts';
 import { reviewCeilingUsd, changedLinesFromNumstat } from './review-budget.ts';
 import { writeRootFenceOptions } from '@forge/sessions/session-write-fence.ts';
 import { projectBrainDir } from '@forge/knowledge/brain-paths.ts';
@@ -180,8 +180,12 @@ function gitCapture(worktreePath: string, args: string[]): { ok: boolean; out: s
 export async function runAdversarialReview(
   input: AdversarialReviewInput,
   logger: EventLogger,
-  opts: { queryFn?: StreamQueryFn; signal?: AbortSignal } = {},
+  opts: { queryFn?: StreamQueryFn; signal?: AbortSignal; classProfiles?: ClassProfilePort } = {},
 ): Promise<AdversarialReviewResult> {
+  // The one port (operator ruling, items 81/83): the class → gate-profile
+  // table is the example's, not the platform's. Read once, here, so every
+  // profileFor() below reads the SAME bound table rather than re-resolving it.
+  const classProfiles = requireClassProfiles(opts.classProfiles, 'adversarial-review');
   const emit = (
     message: string,
     metadata: Record<string, unknown> = {},
@@ -252,11 +256,11 @@ export async function runAdversarialReview(
   const ceilingUsd =
     initiativeChangedLines === null
       ? undefined
-      : reviewCeilingUsd(def.budgets.maxBudgetUsd, initiativeChangedLines, profileFor(input.changeClass).reviewCeilingUsd);
+      : reviewCeilingUsd(def.budgets.maxBudgetUsd, initiativeChangedLines, classProfiles.profileFor(input.changeClass).reviewCeilingUsd);
   emit('review.ceiling', {
     declared_usd: def.budgets.maxBudgetUsd ?? null,
     changed_lines: initiativeChangedLines,
-    class_max_usd: profileFor(input.changeClass).reviewCeilingUsd,
+    class_max_usd: classProfiles.profileFor(input.changeClass).reviewCeilingUsd,
     ceiling_usd: ceilingUsd ?? null,
   });
 
@@ -300,7 +304,7 @@ export async function runAdversarialReview(
     // the prompt (what to critique under) and the validator (what a finding may
     // claim) — one source, so a record cannot be judged against a set the agent
     // was never shown.
-    const lenses = profileFor(input.changeClass).reviewLenses;
+    const lenses = classProfiles.profileFor(input.changeClass).reviewLenses;
 
     // Band 2 — briefing inputs from the develop output. The FULL records are
     // kept, not just the display list: the partition below cuts the diff by the

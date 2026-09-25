@@ -43,7 +43,7 @@ import {
 import { loadProjectConfig } from '@forge/projects/project-config.ts';
 
 import { renderDemoBundle, stripScratchFromDiffStat } from '../demo-model.ts';
-import { profileFor } from '@forge/factory/class-profiles.ts';
+import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
 import { judgeCaptureNonce, readStampedNonce } from './capture-nonce.ts';
 import { deriveDemoModel, type DerivedDemoInput } from './derive-demo-model.ts';
 import { derivePrBody, PR_BODY_SECTIONS } from './derive-pr-body.ts';
@@ -109,6 +109,9 @@ export function runIntegrateBand(
   input: IntegrateBandInput,
   logger: EventLogger,
   gateEvidence: readonly MergeGateEvidence[],
+  // The one port (operator ruling, items 81/83): optional; refuses by name
+  // below the moment the `capture` column is actually read.
+  classProfiles?: ClassProfilePort,
 ): IntegrateResult {
   const emit = (
     message: string,
@@ -157,7 +160,7 @@ export function runIntegrateBand(
     emit('demo.derive-error', { detail }, { event_type: 'error' });
     return { status: 'failed', reason: 'derive-failed', detail };
   }
-  const profile = profileFor(manifest.class);
+  const profile = requireClassProfiles(classProfiles, 'integrate').profileFor(manifest.class);
 
   const cfg = (() => {
     try {

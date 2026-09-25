@@ -11,7 +11,12 @@ executor a second factory can run against (operator ruling, items 81/83).
 
 Rank: between `flows` and `factory` in the allow-graph. It may import
 `contracts`, `kernel`, `library`, `knowledge`, `projects`, `agents`, `sessions`
-and `flows`. It may **never** import `factory`.
+and `flows`. It may **never** import `factory` — that is what `ClassProfilePort`
+is for: the bands read the class → gate-profile table through this injected
+port, never through a direct import of `class-profiles.ts`.
+`createPhaseExecutor` takes the port optionally; with none bound, a station
+that needs the class table throws, naming `ClassProfilePort`, rather than
+silently guessing a default profile.
 
 ## API (9 values)
 
@@ -21,10 +26,13 @@ and `flows`. It may **never** import `factory`.
 
 ### Types
 
-`FlowRunnerDeps`
+`ChangeClass` · `ClassProfilePort` · `FlowRunnerDeps` · `GateProfile`
 
 ## What is inside
 
+`class-profile-port.ts` declares the port (`ClassProfilePort`, and the
+`ChangeClass`/`GateProfile` types the table is shaped by — moved here verbatim
+from `packages/factory/class-profiles.ts`, which now imports them back down).
 `phases/` and `gates/` are the bands themselves, in the same relative layout
 they had in `packages/factory`. The root files (`demo-model.ts`, `demo-types.ts`,
 `cycle-recap.ts`, `reflect-reconcile.ts`, `reflection-doc.ts`,
@@ -39,5 +47,7 @@ Every module in this package lived in `packages/factory` until the F3 move
 so deleting the example deleted execution. `class-profiles.ts`, `demo.ts`,
 `demo-capture.ts`, `demo-runtime.ts` and `index.ts` stayed behind — the example
 factory's own class table and demo-capture machinery, not part of the
-platform's execution seam. The move was a pure transfer: `git mv` for every
-file, no behaviour change.
+platform's execution seam. `git mv` for every file, with one behaviour added:
+`ClassProfilePort`, so a band reaches the table by injection instead of a
+direct import that would have made this package unable to build without
+`packages/factory` installed.

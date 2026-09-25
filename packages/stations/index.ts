@@ -19,6 +19,9 @@
 export { createPhaseExecutor, registeredBandIds } from './phases/executor-table.ts';
 export { createProjectGate, defaultRunClosure, type FlowRunnerDeps } from './phases/executor-deps.ts';
 
+// ---- The one port: the class table a factory binds in (operator ruling, items 81/83) ----
+export { type ChangeClass, type GateProfile, type ClassProfilePort } from './class-profile-port.ts';
+
 // ---- Bands the assembly binds statically (apps/forge/factory-wiring.ts) ----
 export { runReflector } from './phases/reflector.ts';
 export { runAdversarialReview } from './phases/adversarial-review.ts';

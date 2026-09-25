@@ -169,7 +169,7 @@ describe('class profiles — no phase re-derives what the table decides', () => 
   it('kills "a phase branches on a class name": nothing in packages/factory or packages/stations compares against a class literal outside the table', () => {
     const offenders: string[] = [];
     for (const file of classTableEcosystemFiles()) {
-      if (file.endsWith('class-profiles.ts')) continue;
+      if (file.endsWith('class-profiles.ts') || file.endsWith('class-profile-port.ts')) continue;
       const source = readFileSync(file, 'utf8');
       // Only a comparison that is ABOUT a class counts. A bare `=== 'config'`
       // elsewhere in the package is not this defect, and a check that fired on
@@ -209,10 +209,14 @@ describe('class profiles — every column is enforced somewhere', () => {
     // `.reflect` elsewhere in the package is some other object's property, and
     // a check that counted it would report a column enforced when nothing reads
     // the profile at all — the precise failure this test exists to catch.
+    // F3 (operator ruling, items 81/83): the bands read the table through
+    // `ClassProfilePort` (`@forge/stations/class-profile-port.ts`) now, not by
+    // importing `class-profiles.ts` directly — a file counts as a consumer if
+    // it imports either one.
     const sources = classTableEcosystemFiles()
-      .filter((f) => !f.endsWith('class-profiles.ts'))
+      .filter((f) => !f.endsWith('class-profiles.ts') && !f.endsWith('class-profile-port.ts'))
       .map((f) => readFileSync(f, 'utf8'))
-      .filter((src) => src.includes("class-profiles.ts'"))
+      .filter((src) => src.includes("class-profiles.ts'") || src.includes("class-profile-port.ts'"))
       .join('\n');
 
     const consumed: (keyof GateProfile)[] = [];

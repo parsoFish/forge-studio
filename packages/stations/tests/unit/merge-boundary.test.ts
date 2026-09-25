@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { runClassMergeBoundary, type MergeBoundaryDeps } from '../../phases/merge-boundary.ts';
-import { CLASS_PROFILES } from '@forge/factory/class-profiles.ts';
+import { TEST_CLASS_PROFILES } from '../test-fixtures/class-profile-port-fixture.ts';
 import type { MergeGateResult } from '@forge/flows/cycle-helpers.ts';
 
 const INPUT = { initiativeId: 'INIT-x', worktreePath: '/wt', projectRepoPath: '/repo' } as never;
@@ -33,9 +33,9 @@ function deps(over: Partial<MergeBoundaryDeps> = {}): MergeBoundaryDeps {
 test('kills "the class table is decorative": the SELECTION the gate receives is the class\'s, not a constant', () => {
   const seen: Array<{ gates: readonly string[]; hasVerb: boolean }> = [];
   const d = deps({ runTestGate: (_i, _l, sel) => { seen.push(sel); return { ok: true, evidence: [] }; } });
-  runClassMergeBoundary(CLASS_PROFILES.code, INPUT, stubLogger() as never, d);
-  runClassMergeBoundary(CLASS_PROFILES.config, INPUT, stubLogger() as never, d);
-  runClassMergeBoundary(CLASS_PROFILES.docs, INPUT, stubLogger() as never, d);
+  runClassMergeBoundary(TEST_CLASS_PROFILES.code, INPUT, stubLogger() as never, d);
+  runClassMergeBoundary(TEST_CLASS_PROFILES.config, INPUT, stubLogger() as never, d);
+  runClassMergeBoundary(TEST_CLASS_PROFILES.docs, INPUT, stubLogger() as never, d);
   assert.deepEqual(seen.map((s) => [...s.gates]), [['ci', 'local'], ['local'], []]);
   assert.deepEqual(seen.map((s) => s.hasVerb), [false, false, true], 'only docs carries a verb, and the gate is told so');
 });
@@ -43,7 +43,7 @@ test('kills "the class table is decorative": the SELECTION the gate receives is 
 test('kills "the verb runs on a red suite too": a failed test gate returns immediately, one cause per boundary', () => {
   let docsRan = false;
   const red = { ok: false, failedGate: 'local', cmd: ['x'], output: 'red' } as MergeGateResult;
-  const res = runClassMergeBoundary(CLASS_PROFILES.docs, INPUT, stubLogger() as never, deps({
+  const res = runClassMergeBoundary(TEST_CLASS_PROFILES.docs, INPUT, stubLogger() as never, deps({
     runTestGate: () => red,
     docsGate: () => { docsRan = true; return []; },
   }));
@@ -53,7 +53,7 @@ test('kills "the verb runs on a red suite too": a failed test gate returns immed
 
 test('kills "a class with no verb still pays for one": code returns the test gate untouched', () => {
   let docsRan = false;
-  const res = runClassMergeBoundary(CLASS_PROFILES.code, INPUT, stubLogger() as never, deps({
+  const res = runClassMergeBoundary(TEST_CLASS_PROFILES.code, INPUT, stubLogger() as never, deps({
     docsGate: () => { docsRan = true; return []; },
   }));
   assert.deepEqual(res, { ok: true, evidence: [] });
@@ -62,7 +62,7 @@ test('kills "a class with no verb still pays for one": code returns the test gat
 
 test('kills "the docs verb is decorative": findings make the boundary RED, with the finding text as its output', () => {
   const logger = stubLogger();
-  const res = runClassMergeBoundary(CLASS_PROFILES.docs, INPUT, logger as never, deps({
+  const res = runClassMergeBoundary(TEST_CLASS_PROFILES.docs, INPUT, logger as never, deps({
     docsGate: () => [{ path: 'docs/a.md', line: 7, check: 'links', detail: 'dead link ./nope.md' }],
   }));
   assert.equal(res.ok, false);
@@ -75,14 +75,14 @@ test('kills "an empty check reads as a green one": a docs class whose diff has N
   // The whole boundary for `docs` is this verb. Over a diff with no markdown it
   // would check nothing, and nothing-checked is indistinguishable from
   // everything-passed unless it is refused here.
-  const res = runClassMergeBoundary(CLASS_PROFILES.docs, INPUT, stubLogger() as never, deps({ changedMarkdown: () => [] }));
+  const res = runClassMergeBoundary(TEST_CLASS_PROFILES.docs, INPUT, stubLogger() as never, deps({ changedMarkdown: () => [] }));
   assert.equal(res.ok, false);
   assert.equal((res as { failedGate: string }).failedGate, 'docs');
   assert.match((res as { output: string }).output, /would check nothing/);
 });
 
 test('a clean docs gate appends its OWN evidence row — a reader can tell "no finding" from "never ran"', () => {
-  const res = runClassMergeBoundary(CLASS_PROFILES.docs, INPUT, stubLogger() as never, deps({
+  const res = runClassMergeBoundary(TEST_CLASS_PROFILES.docs, INPUT, stubLogger() as never, deps({
     runTestGate: () => ({ ok: true, evidence: [{ gate: 'local', cmd: ['npm', 'test'], ok: true }] }) as MergeGateResult,
   }));
   assert.equal(res.ok, true);

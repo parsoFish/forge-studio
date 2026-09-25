@@ -55,13 +55,15 @@ test('contract: the index exports exactly the values README.md advertises — no
 test('contract: the README advertises a non-trivial API — a list that shrank to nothing would make the assertion above vacuous', () => {
   const { values, types } = readmeApi();
   assert.ok(values.length >= 8, `README.md advertises only ${values.length} value exports — expected at least the measured 9 (the executor, its two deps helpers, the five statically-bound bands, and the docs gate).`);
-  assert.ok(types.length >= 1, `README.md advertises only ${types.length} types — expected at least the 1 the door re-exports.`);
+  assert.ok(types.length >= 4, `README.md advertises only ${types.length} types — expected at least the 4 the door re-exports (ChangeClass, ClassProfilePort, FlowRunnerDeps, GateProfile).`);
 });
 
-test('contract: the door states its rank in the allow-graph', () => {
+test('contract: the door states its rank and its one port', () => {
   const text = readFileSync(README, 'utf8');
   assert.match(text, /rank/i,
     "README.md must state the package's rank in the allow-graph.");
+  assert.match(text, /ClassProfilePort/,
+    'README.md must name the ClassProfilePort seam — the whole reason a band reaches the class table by injection instead of importing it.');
 });
 
 test('contract: the door never imports factory — the port exists so it never has to', () => {
