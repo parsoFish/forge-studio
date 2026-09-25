@@ -175,10 +175,10 @@ test('brain-maintenance declares library: false', () => {
 // so this guard is only as complete as that authoring — a NEW branch added to
 // classifyFinding without a corresponding representative message here would
 // not appear in the derived emittable set. It is not a limitation for the
-// three kinds this SKILL.md currently names (edge.dangling, theme.duplicate,
-// index.project) because those three checks (checkDanglingEdges,
-// checkDuplicateThemes, checkProjectBrainIndexes) each return exactly ONE
-// kind unconditionally, regardless of message content — verified by the
+// four kinds this SKILL.md currently names (edge.dangling, theme.duplicate,
+// index.project, truth.stale) because those four checks (checkDanglingEdges,
+// checkDuplicateThemes, checkProjectBrainIndexes, checkThemeTruth) each
+// return exactly ONE kind unconditionally, regardless of message content — verified by the
 // "single-kind checks are message-independent" test below.
 // =============================================================================
 
@@ -212,6 +212,7 @@ const REPRESENTATIVE_MESSAGES: Readonly<Record<string, readonly string[]>> = {
   checkReflectorLoss: ['cycle X produced no reflection archive'],
   checkDanglingEdges: ['related_themes entry points at a non-existent slug'],
   checkDuplicateThemes: ['near-duplicate of theme other.md'],
+  checkThemeTruth: ['cites missing path(s): src/foo.go — the theme may describe code that no longer exists'],
   checkCleanupCandidates: [
     'tier-C load-bearing theme flagged for retention review',
     'tier-B routine cleanup candidate',
@@ -257,8 +258,8 @@ function extractSkillMdPerKindSlugs(raw: string): string[] {
   return slugs;
 }
 
-test('single-kind checks (checkDanglingEdges/checkDuplicateThemes/checkProjectBrainIndexes) are message-independent, justifying the Group 5 limitation note', () => {
-  for (const check of ['checkDanglingEdges', 'checkDuplicateThemes', 'checkProjectBrainIndexes']) {
+test('single-kind checks (checkDanglingEdges/checkDuplicateThemes/checkProjectBrainIndexes/checkThemeTruth) are message-independent, justifying the Group 5 limitation note', () => {
+  for (const check of ['checkDanglingEdges', 'checkDuplicateThemes', 'checkProjectBrainIndexes', 'checkThemeTruth']) {
     const kindsSeen = new Set(
       ['message A', 'a totally different message B', ''].map(
         (message) => classifyFinding({ category: 'error', file: 'theme.md', check, message }).kind,

@@ -42,13 +42,18 @@ import type { BandGuardId } from '@forge/contracts';
 export { TOGGLE_GUARD_IDS, PLATFORM_GUARD_IDS } from '@forge/contracts';
 
 /**
- * Band guard id → the ONE canonical agent slug the band's pipeline loads its
- * SKILL.md from. The band implementations (flow-runner's executor table) load
- * the canonical agent's intent themselves, so a non-canonical def declaring the
- * guard would silently run the wrong identity — every declared-dispatch consumer
- * (execAgent's runtime backstop + validate.ts's `composition/band-guard` lint)
- * checks the declarer's slug against THIS single source. Each guard stays pinned
- * to its slug until the bands generalise (R4-06+).
+ * Band guard id → the agent slug that SHIPS declaring it out of the box (the
+ * example factory's own PM/reflector/demo-agent/adversarial-review/
+ * contract-check). Seam F4 (operator item 81) removed the runtime/lint
+ * restriction that pinned a band guard to ONLY this slug: `execAgent`
+ * (`executor-table.ts`) now loads whichever def actually declared the guard
+ * on the flow node — a second factory's own agent may put itself on a band
+ * station via the same `composition.guards` declaration. This map now serves
+ * two remaining consumers: validate-agent.ts's INVERSE lint (a canonical
+ * phase agent must still CARRY its own band guard — dropping it would
+ * silently degrade the phase node to the bare generic spawn) and the
+ * dispatch-decision characterization golden, which records it purely as
+ * descriptive metadata.
  */
 export const BAND_CANONICAL_SLUG: Readonly<Record<BandGuardId, string>> = {
   'wi-contract': 'project-manager',
@@ -61,9 +66,7 @@ export const BAND_CANONICAL_SLUG: Readonly<Record<BandGuardId, string>> = {
 /**
  * First declared band guard on the def, or undefined for a bare generic
  * agent. Declaring more than one band is a `composition/band-guard` lint
- * error (validate.ts) — first-wins here is only the defensive runtime
- * order, and execAgent's slug backstop fails loud on any non-canonical
- * declarer regardless.
+ * error (validate.ts) — first-wins here is only the defensive runtime order.
  */
 export function resolveBandGuard(def: AgentDefinition): BandGuardId | undefined {
   for (const guard of def.composition.guards) {

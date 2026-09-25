@@ -21,8 +21,8 @@ import { execSync } from 'node:child_process';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import matter from 'gray-matter';
 
-import { resolveKbBrainDir } from './brain-paths.ts';
-import { collectThemeSlugTargets } from './brain-lint.ts';
+import { requireKbBrainDir } from './brain-paths.ts';
+import { collectThemeSlugTargets, extractLinks } from './brain-lint.ts';
 import { resolveGuardedPath } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
@@ -97,19 +97,6 @@ const RAW_NODE_CAP = 80;
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Resolve the absolute path to the kb's brain directory. Supports top-level
- *  brains (brain/<id>) AND central per-project brains (brain/projects/<id>,
- *  ADR 035) via the shared resolver in brain-paths. */
-function resolveKbDir(forgeRoot: string, kbId: string): string {
-  const kbDir = resolveKbBrainDir(forgeRoot, kbId);
-  if (!kbDir) {
-    throw new Error(
-      `Unknown kbId: "${kbId}" — no brain/${kbId}/kb.yaml or brain/projects/${kbId}/kb.yaml found`,
-    );
-  }
-  return kbDir;
-}
 
 /**
  * Guarded resolution of a path NESTED under an already-verified kb dir
@@ -255,18 +242,6 @@ function parseMd(raw: string): { data: Record<string, unknown>; content: string 
   }
 }
 
-/** Extract [[slug]] links from markdown body. */
-function extractWikiLinks(body: string): string[] {
-  const slugs: string[] = [];
-  const re = /\[\[([^\]]+)\]\]/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(body)) !== null) {
-    const slug = m[1].trim();
-    if (slug) slugs.push(slug);
-  }
-  return slugs;
-}
-
 /** Get the git last-author for a file. Returns undefined on failure. */
 function gitLastAuthor(filePath: string): string | undefined {
   try {
@@ -286,7 +261,7 @@ function gitLastAuthor(filePath: string): string | undefined {
 // ---------------------------------------------------------------------------
 
 export function buildKbGraph(forgeRoot: string, kbId: string): KbGraph {
-  const kbDir = resolveKbDir(forgeRoot, kbId); // throws on unknown kbId
+  const kbDir = requireKbBrainDir(forgeRoot, kbId); // throws on unknown kbId
 
   const nodes: KbNode[] = [];
   const edges: KbEdge[] = [];
@@ -456,8 +431,12 @@ export function buildKbGraph(forgeRoot: string, kbId: string): KbGraph {
       }
     }
 
-    // [[wiki-link]] edges
-    for (const linkSlug of extractWikiLinks(data.body)) {
+    // [[wiki-link]] edges. extractLinks (brain-lint.ts, the ONE wikilink scan
+    // — kb-graph.ts used to carry its own copy of the identical regex) can
+    // hand back an empty slug for a bare `[[]]`; skip it, same as the local
+    // copy this replaces did.
+    for (const linkSlug of extractLinks(data.body).wikilinks) {
+      if (!linkSlug) continue;
       if (nodeIds.has(linkSlug) && linkSlug !== fromId) {
         // Avoid duplicate edges
         const exists = edges.some((e) => e.from === fromId && e.to === linkSlug);
@@ -522,7 +501,7 @@ export function getKbNodeArticle(
   kbId: string,
   nodeId: string,
 ): KbNodeArticle | null {
-  const kbDir = resolveKbDir(forgeRoot, kbId); // throws on unknown kbId
+  const kbDir = requireKbBrainDir(forgeRoot, kbId); // throws on unknown kbId
 
   // Build the graph to resolve inbound/outbound edges
   const graph = buildKbGraph(forgeRoot, kbId);
@@ -624,7 +603,7 @@ export type PendingGuidance = {
  * Throws on unknown kbId (unknown brain dir).
  */
 export function listPendingGuidance(forgeRoot: string, kbId: string): PendingGuidance[] {
-  const kbDir = resolveKbDir(forgeRoot, kbId); // throws on unknown kbId
+  const kbDir = requireKbBrainDir(forgeRoot, kbId); // throws on unknown kbId
   const guidanceDir = guardedKbPath(kbDir, '_guidance');
   if (!guidanceDir) return [];
 
@@ -662,7 +641,7 @@ export function listPendingGuidance(forgeRoot: string, kbId: string): PendingGui
  * Returns true if the file was deleted, false if it was already gone.
  */
 export function deleteGuidanceFile(forgeRoot: string, kbId: string, filePath: string): boolean {
-  const kbDir = resolveKbDir(forgeRoot, kbId); // throws on unknown kbId
+  const kbDir = requireKbBrainDir(forgeRoot, kbId); // throws on unknown kbId
 
   // Containment (bd `forge-wze`): the caller names the file, so re-derive it
   // from its BASENAME under the guarded `_guidance` tail rather than trusting
