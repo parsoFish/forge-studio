@@ -286,6 +286,31 @@
           "resolvedKind": "review"
         }
       ]
+    },
+    {
+      "id": "forge-docs",
+      "nodes": [
+        {
+          "id": "build",
+          "agent": "docs-writer",
+          "resolvedKind": "unknown"
+        },
+        {
+          "id": "integrate",
+          "agent": "docs-integrate",
+          "resolvedKind": "unknown"
+        },
+        {
+          "id": "review",
+          "agent": "docs-review",
+          "resolvedKind": "unknown"
+        },
+        {
+          "id": "verdict",
+          "agent": null,
+          "resolvedKind": "review"
+        }
+      ]
     }
   ]
 }
