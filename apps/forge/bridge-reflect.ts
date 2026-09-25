@@ -24,6 +24,7 @@ import { isDryBridge, dryBridgeAgentTurnMarker } from '@forge/kernel';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile } from '@forge/kernel';
 import { fireReflectorRerun } from './example-hooks.ts';
 import type { InstalledFactory } from './factory-wiring.ts';
+import { readJson } from './bridge-http.ts';
 
 type RerunReflectorFn = InstalledFactory['rerunReflector'];
 
@@ -43,31 +44,6 @@ export type ReflectContext = {
  *  `makeRouteTable`'s deps, which `handleReflect` also called this file. */
 export function safeParseJson<T>(raw: string): T | null {
   try { return JSON.parse(raw) as T; } catch { return null; }
-}
-
-const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB, mirrors ui-bridge.ts's own readJson
-
-/** Private per-module copy — mirrors `readJson` in `ui-bridge.ts` (same
- *  sibling-copy convention `apps/forge/bridge-studio.ts` already uses). */
-function readJson(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolveJson, rejectJson) => {
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-    req.on('data', (chunk: Buffer) => {
-      totalBytes += chunk.byteLength;
-      if (totalBytes > MAX_BODY_BYTES) {
-        req.destroy();
-        rejectJson(new Error('request body too large'));
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8');
-      try { resolveJson(raw ? JSON.parse(raw) : {}); } catch (err) { rejectJson(err); }
-    });
-    req.on('error', rejectJson);
-  });
 }
 
 /**

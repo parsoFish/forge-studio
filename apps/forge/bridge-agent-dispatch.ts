@@ -45,6 +45,7 @@ import { sessionLogDirName } from '@forge/sessions/bridge-studio-lifecycle.ts';
 import type { SpawnTurnOutcome } from '@forge/sessions/bridge-studio-session-helpers.ts';
 import { applyPlanVerdict, type StudioPostContext } from '@forge/flows/bridge-studio-runs.ts';
 import { peekInstalledFactory } from './factory-wiring.ts';
+import { readJson } from './bridge-http.ts';
 
 /** The context the one remaining architect route needs from the host. */
 export type ArchitectContext = {
@@ -56,31 +57,6 @@ export type ArchitectContext = {
   finalizeAfterMerge: (deps: { queueRoot: string; logsRoot: string }) => Promise<unknown>;
   broadcastArchitectChanged: () => void;
 };
-
-const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB, mirrors ui-bridge.ts's own readJson
-
-/** Private per-module copy — mirrors `readJson` in `ui-bridge.ts` (same
- *  sibling-copy convention `apps/forge/bridge-studio.ts` already uses). */
-function readJson(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolveJson, rejectJson) => {
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-    req.on('data', (chunk: Buffer) => {
-      totalBytes += chunk.byteLength;
-      if (totalBytes > MAX_BODY_BYTES) {
-        req.destroy();
-        rejectJson(new Error('request body too large'));
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8');
-      try { resolveJson(raw ? JSON.parse(raw) : {}); } catch (err) { rejectJson(err); }
-    });
-    req.on('error', rejectJson);
-  });
-}
 
 /** Run-input keys are freer (camelCase like `northStar`) but still flag-safe. */
 export const SAFE_INPUT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;

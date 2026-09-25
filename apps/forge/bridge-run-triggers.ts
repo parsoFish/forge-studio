@@ -27,39 +27,13 @@ import { persistManifestCostCeiling } from '@forge/flows/manifest.ts';
 import { enqueueDevelopRun } from '@forge/flows/enqueue-develop-run.ts';
 import { enqueuePlanRun } from '@forge/flows/enqueue-plan-run.ts';
 import { enqueueFlowRun } from '@forge/flows/enqueue-flow-run.ts';
+import { readJson } from './bridge-http.ts';
 
 /** The context these run-trigger routes need from the host. */
 export type RunTriggerContext = {
   forgeRoot: string;
   queueRoot: string;
 };
-
-const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB, mirrors ui-bridge.ts's own readJson
-
-/** Private per-module copy — mirrors `readJson` in `ui-bridge.ts` (T1 ruling
- *  30's shape does not apply here: this file lives beside the host, not
- *  behind a package boundary, and follows the same sibling-copy convention
- *  `apps/forge/bridge-studio.ts` already uses). */
-function readJson(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolveJson, rejectJson) => {
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-    req.on('data', (chunk: Buffer) => {
-      totalBytes += chunk.byteLength;
-      if (totalBytes > MAX_BODY_BYTES) {
-        req.destroy();
-        rejectJson(new Error('request body too large'));
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8');
-      try { resolveJson(raw ? JSON.parse(raw) : {}); } catch (err) { rejectJson(err); }
-    });
-    req.on('error', rejectJson);
-  });
-}
 
 /**
  * The develop/plan/flow run-trigger family. Dispatched from `handleHttp`

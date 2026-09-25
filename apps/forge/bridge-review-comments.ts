@@ -28,6 +28,7 @@ import { sendJson, allowedOrigin, sanitizeError } from '@forge/kernel';
 import * as rc from '@forge/flows/review-comments.ts';
 import { isSafeCycleId } from '@forge/flows/manifest-path-guard.ts';
 import { applyReviewVerdict, type StudioPostContext } from '@forge/flows/bridge-studio-runs.ts';
+import { readJson } from './bridge-http.ts';
 
 /** True when `v` is a `{given, when, then}` shape (all string fields present). */
 function isAcShape(v: unknown): boolean {
@@ -60,31 +61,6 @@ async function withReviewCommentLock(
   } finally {
     try { await release(); } catch { /* ignore */ }
   }
-}
-
-const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB, mirrors ui-bridge.ts's own readJson
-
-/** Private per-module copy — mirrors `readJson` in `ui-bridge.ts` (same
- *  sibling-copy convention `apps/forge/bridge-studio.ts` already uses). */
-function readJson(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolveJson, rejectJson) => {
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-    req.on('data', (chunk: Buffer) => {
-      totalBytes += chunk.byteLength;
-      if (totalBytes > MAX_BODY_BYTES) {
-        req.destroy();
-        rejectJson(new Error('request body too large'));
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8');
-      try { resolveJson(raw ? JSON.parse(raw) : {}); } catch (err) { rejectJson(err); }
-    });
-    req.on('error', rejectJson);
-  });
 }
 
 /**

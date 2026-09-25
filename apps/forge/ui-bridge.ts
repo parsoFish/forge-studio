@@ -71,6 +71,7 @@ import {
   newRunStamp,
 } from './bridge-agent-dispatch.ts';
 import { handleReflect, safeParseJson } from './bridge-reflect.ts';
+import { readJson } from './bridge-http.ts';
 import {
   type Cycle,
   type LivenessReport,
@@ -724,30 +725,9 @@ async function handleHttp(
 // (feature move, no behaviour change).
 
 // forge-4zk: the reflection routes carved to `./bridge-reflect.ts` (feature
-// move, no behaviour change).
-
-const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB
-
-function readJson(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolveJson, rejectJson) => {
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-    req.on('data', (chunk: Buffer) => {
-      totalBytes += chunk.byteLength;
-      if (totalBytes > MAX_BODY_BYTES) {
-        req.destroy();
-        rejectJson(new Error('request body too large'));
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8');
-      try { resolveJson(raw ? JSON.parse(raw) : {}); } catch (err) { rejectJson(err); }
-    });
-    req.on('error', rejectJson);
-  });
-}
+// move, no behaviour change). readJson itself moved to `./bridge-http.ts`
+// (forge-4zk follow-up) — the ONE implementation every bridge module now
+// shares, instead of a same-directory mirror.
 
 // ---- Tail mechanics --------------------------------------------------------
 
