@@ -313,7 +313,7 @@ test('P1: the route and the CLI produce the same registry for the same input (ON
 // Ruling 478 — the refresh DISCOVERS as well as re-verifies
 // ---------------------------------------------------------------------------
 
-test('478: a declared GitHub hub contributes the rows it publishes that the registry lacks — proposed, never written', async () => {
+test('478 / operator item 87: a declared GitHub hub contributes the rows it publishes that the registry lacks — written as a real registry row', async () => {
   seed();
   mkdirSync(join(forgeRoot, 'studio', 'community'), { recursive: true });
   writeFileSync(
@@ -343,10 +343,14 @@ test('478: a declared GitHub hub contributes the rows it publishes that the regi
   assert.deepEqual(discovered.map((d) => d.id), ['brainstorming'], 'the hub publishes one skill the registry lacks');
   assert.equal(discovered[0]!.sourceUrl, 'https://github.com/obra/superpowers', 'the row points at the repo install-by-URL will fetch from');
 
-  // THE PROPERTY THAT MATTERS: a discovery is a suggestion, not a change. The
-  // operator adds the row through the CRUD door they already use, so D10 — forge
-  // does not crawl on its own — survives a feature whose whole job is crawling.
-  assert.ok(!readFileSync(registryPath, 'utf8').includes('brainstorming'), 'discovery must NOT write the row');
+  // Operator item 87 (T1 ledger 1216) — ruling 566's "proposes, never writes"
+  // is superseded: D10 — forge does not crawl on its own — survives in the
+  // form that matters (only this OPERATOR-DECLARED hub was ever read), but the
+  // row it publishes is no longer a suggestion nobody has acted on. A FRESH
+  // read off disk, not the in-memory response, is what proves it landed.
+  const fresh = readFileSync(registryPath, 'utf8');
+  assert.ok(fresh.includes('brainstorming'), 'the discovered row must be written to registry.yaml');
+  assert.ok(fresh.includes('https://github.com/obra/superpowers'), 'the written row must carry the sourceUrl install-by-URL will fetch from');
 });
 
 test('478: a hub forge cannot reach contributes nothing and does not fail the refresh', async () => {
