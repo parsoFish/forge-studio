@@ -71,7 +71,7 @@ import {
 import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
 import { captureAndClearMintedSessions, describeGroundClear, captureAndClearMintedLogs, describeLogsClear } from './ground-clear.mjs';
 import { driveBeat } from './beats-drive.mjs';
-import { expandForkedBeats, describeDoorFork } from './beats-fork.mjs';
+import { expandForkedBeats, describeDoorFork, frameLabelSuffix } from './beats-fork.mjs';
 import { snapshotForkGrounds, judgeForkGrounds } from './fork-grounds.mjs';
 import { resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
@@ -210,9 +210,8 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     // nothing — the caller had never passed it in any commit. 718(1)'s anchor
     // had not worked once since the commit that introduced it.
     const pressedAt = new Map();
-    // `forge-8vfn.2.22`, T1 ruling 1350 — the EXPANDED sequence
-    // (`beats-fork.mjs`): a FILL fork runs once per case, each on its own
-    // ground; a DOOR fork stays ONE entry, carrying `doorFork` for below.
+    // `forge-8vfn.2.22`, T1 ruling 1350 — the EXPANDED sequence (`beats-fork.mjs`):
+    // a FILL fork runs once per case on its own ground; a DOOR fork stays ONE entry.
     for (const [i, { beat, number, label: beatLabel, doorFork }] of expandForkedBeats(story.beats, story.ground?.project ?? null).entries()) {
       // `forge-8vfn.7.6.140` — THE BOUNDARY WHERE A BEAT-SCOPED LICENCE OPENS,
       // captured before anything in this beat can run — never taken twice for
@@ -228,8 +227,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       let verdict = await driveBeat(page, beat, i, uiUrl, bindings, undefined, probe, costlessGuard.active ? null : stallDoor, pressedAt, cycleWatchFor);
       verdict = costlessGuard.apply(verdict);
       bindings = { ...bindings, ...verdict.bindings };
-      // `beatLabel` tells a fork's cases apart by more than their numeric prefix.
-      const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}${beatLabel.includes('[') ? `-${slug(beatLabel)}` : ''}.png`;
+      const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}${frameLabelSuffix(beatLabel, slug)}.png`;
       await page.screenshot({ path: join(outDir, frame), fullPage: true });
       beats.push({ ...verdict, frame });
       // Bead `forge-8vfn.6.11.42` — what the OPERATOR could see at the red,

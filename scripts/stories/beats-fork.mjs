@@ -138,6 +138,18 @@ export function describeDoorFork(fork) {
 }
 
 /**
+ * The frame filename's OWN suffix for a case's label ("3[api]" -> "-3-api"),
+ * empty for a plain beat — moved out of `run-story.mjs` (the 800-line cap)
+ * rather than left as an inline ternary the runner has to carry.
+ * @param {string} beatLabel
+ * @param {(s: string) => string} slug the runner's own slugifier, injected
+ *   rather than duplicated
+ */
+export function frameLabelSuffix(beatLabel, slug) {
+  return beatLabel.includes('[') ? `-${slug(beatLabel)}` : '';
+}
+
+/**
  * Flatten `story.beats` into the sequence the runner actually drives.
  *
  *   · an unforked beat — one entry, unchanged;
