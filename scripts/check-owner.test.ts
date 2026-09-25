@@ -182,3 +182,42 @@ test('an UNTRACKED production file is still unowned — a file cannot dodge the 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+/**
+ * SEAM F1 (packages/kernel/discovery-roots.ts) made `packages/<pkg>/skills/
+ * <slug>/SKILL.md` a second discovery root — a package can ship an agent as
+ * data. `productionFiles()`'s SKILL.md filter only ever matched the
+ * TOP-LEVEL `skills/<slug>/SKILL.md` form, so a package-owned agent
+ * definition was invisible to this gate: not production, not unowned, not
+ * anything — `check-owner` would PASS with the file silently uncounted,
+ * which is worse than failing loud, because "unowned: 0" is a lie once a
+ * package ships one.
+ *
+ * PLANTED IN A TEMPORARY REPOSITORY, NOT THE LIVE TREE — same reason as the
+ * untracked-probe test above (`audit(root, quarry)` takes its own root).
+ */
+test('a package-owned SKILL.md is production and unowned until a QUARRY row names it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'owner-pkg-skill-'));
+  execFileSync('git', ['init', '-q'], { cwd: root });
+  const rel = 'packages/demo-pkg/skills/x/SKILL.md';
+  const abs = join(root, rel);
+  mkdirSync(dirname(abs), { recursive: true });
+  writeFileSync(abs, '---\nname: x\n---\nA package-owned agent.\n');
+  try {
+    const withoutRow = audit(root, '');
+    assert.ok(
+      withoutRow.unowned.includes(rel),
+      `a package-owned SKILL.md must be counted as production and reported unowned with no QUARRY row — got:\n${JSON.stringify(withoutRow.unowned)}`,
+    );
+
+    const withRow = audit(root, `| ${rel} | library | verbatim | 3 |\n`);
+    assert.ok(
+      !withRow.unowned.includes(rel),
+      `a QUARRY.md row naming the package-owned SKILL.md must own it — still unowned:\n${JSON.stringify(withRow.unowned)}`,
+    );
+    assert.equal(withRow.rows, 1);
+    assert.deepEqual(withRow.orphans, [], 'the row must match a real file, not describe one that is not there');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -17,7 +17,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { createLogger, emitDryBridgeSkip, dryBridgeAgentTurnMarker, DRY_BRIDGE_LOG_BUCKET } from '../../index.ts';
+import { createLogger, emitDryBridgeSkip, dryBridgeAgentTurnMarker, DRY_BRIDGE_LOG_BUCKET, DRY_BRIDGE_ACTIONS } from '../../index.ts';
 
 async function withTmp(fn: (dir: string) => Promise<void>): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), 'kernel-dry-bridge-'));
@@ -166,4 +166,18 @@ test('forge-8nw AT-3 (negative control): dryBridgeAgentTurnMarker() for the stan
       else process.env.FORGE_DRY_BRIDGE = priorDry;
     }
   });
+});
+
+// ---------------------------------------------------------------------------
+// DRY_BRIDGE_ACTIONS — the RUNTIME source of truth `DryBridgeAction` is
+// derived from (forge-6gv.8.1 follow-up: `apps/forge/tests/integration/
+// dry-bridge.test.ts` used to hand-copy this set, and it silently drifted
+// the moment `spawn-hook` was added to the type alone — a type has no
+// runtime shape a test can read, so nothing forced the two to agree).
+// ---------------------------------------------------------------------------
+
+test('DRY_BRIDGE_ACTIONS names every DryBridgeAction member, including spawn-hook', () => {
+  assert.ok(Array.isArray(DRY_BRIDGE_ACTIONS));
+  assert.ok((DRY_BRIDGE_ACTIONS as readonly string[]).includes('spawn-hook'));
+  assert.deepEqual([...DRY_BRIDGE_ACTIONS].sort(), ['daemon', 'git-remote', 'network', 'spawn-agent', 'spawn-hook'].sort());
 });

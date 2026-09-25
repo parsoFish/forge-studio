@@ -42,3 +42,12 @@ const SAFE_RUN_ID_RE = /^[A-Za-z0-9._-]+$/;
 export function isSafeRunId(runId: string): boolean {
   return SAFE_RUN_ID_RE.test(runId) && !runId.includes('..');
 }
+
+/** Compose `prefix + id` and re-validate the RESULT — never trust a
+ *  concatenation to inherit its parts' safety by construction alone (the
+ *  same discipline `bridge-agents-slug.ts` applies by hand to its own
+ *  `_agent-<slug>-<stamp>` ids). `null` on an unsafe composition. */
+export function composeSafeRunId(prefix: string, id: string): string | null {
+  const composed = `${prefix}${id}`;
+  return isSafeRunId(composed) ? composed : null;
+}
