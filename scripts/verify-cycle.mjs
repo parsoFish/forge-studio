@@ -71,6 +71,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { architectFailurePhase } from './architect-phase.mjs';
+import { isArchitectStall, shouldRetryArchitect } from './lib/architect-retry.mjs';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import { sleep } from './lib/journey-assertions.mjs';
@@ -760,47 +761,56 @@ function discoverPromotedInitiatives(project) {
  * the PLAN GATE. Returns the discovered { initiativeId, sessionId, cycleId }.
  */
 async function driveArchitect(page, watch, { project, idea, repoPath }) {
-  log('stage 1/3 — architect: POST /api/architect/start…');
-  const start = await bridgePost(watch.bridgeUrl, '/api/architect/start', {
-    project,
-    idea,
-    projectRepoPath: repoPath,
-  });
-  if (!start.ok || !start.body?.sessionId) {
-    throw new Error(`architect start failed (${start.status}): ${JSON.stringify(start.body)}`);
-  }
-  const sessionId = start.body.sessionId;
-  const sessionDir = join(repoPath, '_architect', sessionId);
-  log(`architect session ${sessionId}`);
-
-  // Best-effort: focus the dedicated architect screen for the frame gallery.
-  try {
-    await page.goto(`${watch.uiUrl}/architect/${encodeURIComponent(sessionId)}`, { waitUntil: 'domcontentloaded' });
-  } catch { /* */ }
-
-  const deadline = Date.now() + 25 * 60_000; // generous — the architect runs the real SDK
-  let answeredRounds = new Set();
-  let sawInterview = false;
-  while (Date.now() < deadline) {
-    const status = readJsonFileSafe(join(sessionDir, 'status.json'));
-    const phase = status?.phase;
-    if (phase === 'awaiting-verdict') { log('architect drafted a PLAN — at the plan gate'); break; }
-    const failed = architectFailurePhase(status);
-    if (failed) throw new Error(failed);
-    if (phase === 'awaiting-answers' && !answeredRounds.has(status.round)) {
-      const qs = readJsonFileSafe(join(sessionDir, 'questions.json')) ?? [];
-      const answers = (Array.isArray(qs) ? qs : []).map((q) => ({
-        question: q.question,
-        // Pick the first offered option, else a converge-fast freeform answer.
-        answer: q.options?.[0]?.label ?? 'Use your best judgment; proceed with the simplest robust approach that satisfies the constraints.',
-      }));
-      log(`architect interview round ${status.round}: answering ${answers.length} question(s)`);
-      const ans = await bridgePost(watch.bridgeUrl, '/api/architect/answer', { project, sessionId, answers });
-      if (!ans.ok) log(`architect answer rejected (${ans.status}): ${JSON.stringify(ans.body)}`);
-      answeredRounds.add(status.round);
-      if (!sawInterview) { sawInterview = true; await captureFrame(page, 'architect-interview'); }
+  // bead: architect-stall-retry — retry ONCE, only for a stream-deadline
+  // stall (scripts/lib/architect-retry.mjs), by starting a fresh session with
+  // the SAME start POST. Any other failure (incl. a second stall) still fails
+  // the run immediately.
+  let sessionId, sessionDir;
+  for (let attempt = 1; ; attempt++) {
+    log(`stage 1/3 — architect: POST /api/architect/start… (attempt ${attempt}/2)`);
+    const start = await bridgePost(watch.bridgeUrl, '/api/architect/start', { project, idea, projectRepoPath: repoPath });
+    if (!start.ok || !start.body?.sessionId) {
+      throw new Error(`architect start failed (${start.status}): ${JSON.stringify(start.body)}`);
     }
-    await sleep(4000);
+    sessionId = start.body.sessionId;
+    sessionDir = join(repoPath, '_architect', sessionId);
+    log(`architect session ${sessionId}`);
+
+    // Best-effort: focus the dedicated architect screen for the frame gallery.
+    try {
+      await page.goto(`${watch.uiUrl}/architect/${encodeURIComponent(sessionId)}`, { waitUntil: 'domcontentloaded' });
+    } catch { /* */ }
+
+    const deadline = Date.now() + 25 * 60_000; // generous — the architect runs the real SDK
+    let answeredRounds = new Set();
+    let sawInterview = false;
+    let stalled = false;
+    while (Date.now() < deadline) {
+      const status = readJsonFileSafe(join(sessionDir, 'status.json'));
+      const phase = status?.phase;
+      if (phase === 'awaiting-verdict') { log('architect drafted a PLAN — at the plan gate'); break; }
+      const failed = architectFailurePhase(status);
+      if (failed) {
+        if (shouldRetryArchitect(failed, attempt)) { stalled = true; break; }
+        throw new Error(isArchitectStall(failed) ? `architect stalled twice — not retrying: ${failed}` : failed);
+      }
+      if (phase === 'awaiting-answers' && !answeredRounds.has(status.round)) {
+        const qs = readJsonFileSafe(join(sessionDir, 'questions.json')) ?? [];
+        const answers = (Array.isArray(qs) ? qs : []).map((q) => ({
+          question: q.question,
+          // Pick the first offered option, else a converge-fast freeform answer.
+          answer: q.options?.[0]?.label ?? 'Use your best judgment; proceed with the simplest robust approach that satisfies the constraints.',
+        }));
+        log(`architect interview round ${status.round}: answering ${answers.length} question(s)`);
+        const ans = await bridgePost(watch.bridgeUrl, '/api/architect/answer', { project, sessionId, answers });
+        if (!ans.ok) log(`architect answer rejected (${ans.status}): ${JSON.stringify(ans.body)}`);
+        answeredRounds.add(status.round);
+        if (!sawInterview) { sawInterview = true; await captureFrame(page, 'architect-interview'); }
+      }
+      await sleep(4000);
+    }
+    if (!stalled) break;
+    log('architect stall — retrying once (attempt 2/2)');
   }
   await captureFrame(page, 'architect-awaiting-verdict');
 
