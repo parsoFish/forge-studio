@@ -25,7 +25,7 @@ import { knowledgeRoutes } from '@forge/knowledge';
 // M4 ruling 86 — the real brain-fix turn, bound at the assembly because this
 // is the one place that may import both knowledge's port and sessions' turn.
 import { realKbDrainFixTurn } from './brain-fix-turn.ts';
-import { libraryRoutes } from '@forge/library/routes.ts';
+import { libraryRoutes } from '@forge/library';
 import { libraryAgentFacts } from './library-agent-facts.ts';
 import { libraryFlowSource } from './library-flow-source.ts';
 import { authoringSessionPort } from './library-authoring-session.ts';

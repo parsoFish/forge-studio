@@ -50,7 +50,7 @@ import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { readAgentInstructionsFile } from '@forge/projects/project-config.ts';
 import { skillPathRelative, loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
-import { listInstructionSeeds } from '@forge/library/studio/artifact-registry.ts';
+import { listInstructionSeeds } from '@forge/library';
 import type { InstructionSeed } from '@forge/contracts';
 import {
   detectProjectTags,
@@ -58,7 +58,7 @@ import {
   renderSeedPromptSection,
   composedSeedsFooter,
   stripComposedSeedsFooter,
-} from '@forge/library/instruction-seed-match.ts';
+} from '@forge/library';
 
 export { type InterviewQuestion } from '../session-status-io.ts';
 

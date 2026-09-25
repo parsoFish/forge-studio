@@ -2,7 +2,7 @@
  * MIGRATION ACCEPTANCE TEST (must be RED on today's code) — B1-B3 of the
  * ADR-027-amendment-#2 `composition.hooks` → `composition.guards` rename,
  * targeting `studio/catalog.yaml` + `orchestrator/studio/registry.ts`'s
- * `loadCatalog` + `@forge/library/studio/library-validate.ts`'s `validateCatalog`.
+ * `loadCatalog` + `@forge/library`'s `validateCatalog`.
  *
  * At that migration's landing the 9 ids were unchanged (5 toggles, 4 bands —
  * `BAND_GUARD_IDS`); what moved is the section name (`hooks:` → `guards:`)
@@ -38,8 +38,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
-import { validateCatalog } from '@forge/library/studio/library-validate.ts';
+import { loadCatalog } from '@forge/library';
+import { validateCatalog } from '@forge/library/testing';
 import { loadYaml } from '@forge/kernel';
 import { BAND_GUARD_IDS } from '@forge/agents/agent-bands.ts';
 import type { Catalog } from '@forge/contracts';

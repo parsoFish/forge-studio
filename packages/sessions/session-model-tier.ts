@@ -29,7 +29,7 @@
 
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
-import { guardedSkillMdPath } from '@forge/library/skill-path.ts';
+import { guardedSkillMdPath } from '@forge/library';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';
 
 export function fixedTierForSessionKind(forgeRoot: string, descriptor: SessionKindDescriptor): string | null {

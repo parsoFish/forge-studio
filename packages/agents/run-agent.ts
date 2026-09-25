@@ -58,7 +58,7 @@ import type { AgentBudgets, AgentDefinition } from '@forge/contracts';
 import { getAdapter, resolveSdkId } from './_adapters/registry.ts';
 import type { QueryFn } from './_adapters/types.ts';
 import { unreadyConnectionsFor, formatUnreadyConnections } from './studio/connection-run-gate.ts';
-import type { ProbeResult } from '@forge/library/studio/connection-probe.ts';
+import type { ProbeResult } from '@forge/library';
 import { loadAndComposeProjectSkills } from './project-skills.ts';
 
 /**

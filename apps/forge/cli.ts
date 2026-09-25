@@ -37,7 +37,7 @@ import { AGENT_DISPATCH_DEPS } from './session-kind-deps.ts';
 
 import { cmdProjectMigrate } from '@forge/projects/project-migrate.ts';
 import { cmdProjectReset } from '@forge/projects/reset-cli.ts';
-import { cmdCommunity } from '@forge/library/community-refresh-cmd.ts';
+import { cmdCommunity } from '@forge/library';
 
 const args = process.argv.slice(2);
 const cmd = args[0];

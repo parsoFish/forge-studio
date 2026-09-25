@@ -10,6 +10,6 @@
  */
 import { listFlowIds, loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
 import { flowPathForId } from '@forge/flows/flow-runner.ts';
-import type { FlowSource } from '@forge/library/studio/template-library.ts';
+import type { FlowSource } from '@forge/library';
 
 export const libraryFlowSource: FlowSource = { listFlowIds, loadFlowDefinition, flowPathForId };

@@ -23,7 +23,7 @@ import type { AgentDefinition } from '@forge/contracts';
 // every package is what the assembly is FOR — so the row closes outright.
 import { loadAgentDefinition, listStarterAgents } from '@forge/agents/studio/agent-registry.ts';
 import { loadFlowDefinition, loadStarterFlow } from '@forge/flows/studio/flow-registry.ts';
-import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
+import { loadCatalog } from '@forge/library';
 import { validateAgent } from '@forge/agents/studio/validate-agent.ts';
 import { validateFlow } from '@forge/flows/studio/validate-flow.ts';
 import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';

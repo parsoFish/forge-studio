@@ -12,7 +12,7 @@ import { resolve, join } from 'node:path';
 import { MODEL_BY_TIER, type ModelTier, type PhaseAgentSpec } from '../phase-agent.ts';
 import { rangeTiers } from '../model-range.ts';
 import { loadAgentDefinition } from './agent-registry.ts';
-import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
+import { loadCatalog } from '@forge/library';
 import { MATERIAL_KINDS } from './materials.ts';
 import type { AgentDefinition } from '@forge/contracts';
 

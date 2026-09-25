@@ -67,7 +67,7 @@ import type { DryBridgeAction } from '@forge/kernel';
 // calls to assemble the real bridge — called here with stub deps purely to
 // read each row's `dryClassification` (see `classificationStubDeps` below).
 import { knowledgeRoutes, type KnowledgeRouteDeps } from '@forge/knowledge';
-import { libraryRoutes, type LibraryRouteDeps } from '@forge/library/routes.ts';
+import { libraryRoutes, type LibraryRouteDeps } from '@forge/library';
 import { projectsRoutes, type ProjectsRouteDeps } from '@forge/projects/routes.ts';
 import { agentsRoutes, type AgentsRouteDeps } from '@forge/agents/routes.ts';
 import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions/routes.ts';

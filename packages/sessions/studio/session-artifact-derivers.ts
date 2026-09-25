@@ -23,8 +23,8 @@ import { readFileSync, readdirSync, realpathSync, type Dirent } from 'node:fs';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 
 import type { SessionStage } from './session-kinds.ts';
-import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from '@forge/library/studio/skill-package.ts';
-import type { PackageFile } from '@forge/library/studio/skill-package.ts';
+import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from '@forge/library';
+import type { PackageFile } from '@forge/library';
 import type { RoadmapDraftArtifact } from './roadmap-draft.ts';
 
 const AGENTS_DRAFT_FILENAME = 'AGENTS.draft.md';

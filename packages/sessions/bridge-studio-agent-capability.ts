@@ -46,7 +46,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { SLUG_RE } from '@forge/kernel';
 import { isUnfilteredStudioAgent, loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
-import { guardedSkillMdPath } from '@forge/library/skill-path.ts';
+import { guardedSkillMdPath } from '@forge/library';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from '@forge/kernel';
 
 const AGENT_CAPABILITY_ROUTE_RE = /^\/api\/studio\/agents\/([^/]+)\/capability$/;

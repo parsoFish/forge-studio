@@ -17,9 +17,10 @@ import { loadFlowDefinition, serializeFlowDefinition } from '@forge/flows/studio
 import { discoverProjects } from '@forge/kernel';
 import { loadKbDescriptor, serializeKbDescriptor } from '@forge/knowledge';
 import { resolveKbProcesses } from '@forge/knowledge/testing';
-import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
-import { loadCommunityRegistry, communitySkillsFromRegistry, communityRegistryPath, resolveCommunitySource } from '@forge/library/studio/community-registry.ts';
-import { listPlainSkills } from '@forge/library/studio/skill-registry.ts';
+import { loadCatalog } from '@forge/library';
+import { communitySkillsFromRegistry } from '@forge/library';
+import { listPlainSkills } from '@forge/library';
+import { loadCommunityRegistry, communityRegistryPath, resolveCommunitySource } from '@forge/library/testing';
 import type { KbBinding, KbDescriptor } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------

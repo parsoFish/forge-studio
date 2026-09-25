@@ -18,7 +18,14 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { loadCommunityRegistry, serializeCommunityRegistry, resolveCommunitySource, communitySkillsFromRegistry, communityRegistryPath, COMMUNITY_REGISTRY_SCHEMA_VERSION } from '@forge/library/studio/community-registry.ts';
+import { communitySkillsFromRegistry } from '@forge/library';
+import {
+  loadCommunityRegistry,
+  serializeCommunityRegistry,
+  resolveCommunitySource,
+  communityRegistryPath,
+  COMMUNITY_REGISTRY_SCHEMA_VERSION,
+} from '@forge/library/testing';
 
 function withTmp<T>(fn: (dir: string) => T): T {
   const dir = mkdtempSync(join(tmpdir(), 'forge-registry-v2-'));

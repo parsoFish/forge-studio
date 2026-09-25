@@ -22,7 +22,7 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 
 import { isStudioAgent, loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
+import { loadCatalog } from '@forge/library';
 import { readdirSync } from 'node:fs';
 import {
   getAdapter,

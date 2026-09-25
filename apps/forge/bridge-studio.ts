@@ -37,7 +37,7 @@ import type { Run } from '@forge/flows/run-model.ts';
 import type { EventLogEntry } from '@forge/kernel';
 import { loadFlowDefinition, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
 import { flowPathForId } from '@forge/flows/flow-runner.ts';
-import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
+import { listDemoElements } from '@forge/library';
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { resolveGuardedPath } from '@forge/kernel';
 import { flowRoots, resolveIdAcrossRoots, listIdsAcrossRoots } from '@forge/kernel';

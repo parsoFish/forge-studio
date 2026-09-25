@@ -7,7 +7,7 @@
  *   - the id vocabulary and the ONE slug guard  → `@forge/kernel`
  *     (`orchestrator/studio/validate.ts` re-exported them to validate PROJECTS
  *     and KNOWLEDGE BASES, so they were never any one kind's);
- *   - the `skills/` tree layout                 → `@forge/library/skill-path.ts`
+ *   - the `skills/` tree layout                 → `@forge/library`
  *     (spec §3.1 gives library the Skill kind, and that is its on-disk shape);
  *   - per-turn prompt composition               → HERE, which is the
  *     "per-spawn runtime" spec §3.1 carves out to agents.
@@ -22,12 +22,12 @@
  */
 import { readFileSync } from 'node:fs';
 
-import { skillPath } from '@forge/library/skill-path.ts';
+import { skillPath } from '@forge/library';
 
 /** The id vocabulary and the one slug guard — definition in `@forge/kernel`. */
 export * from '@forge/kernel';
 /** The `skills/` tree layout — definition in `@forge/library`. */
-export * from '@forge/library/skill-path.ts';
+export * from '@forge/library';
 
 
 // ---------------------------------------------------------------------------

@@ -33,8 +33,8 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 
-import { skillPath, skillsDir } from '@forge/library/skill-path.ts';
-import { installSkillPackage, approveSkillDraft } from '@forge/library/studio/skill-install.ts';
+import { skillPath, skillsDir } from '@forge/library';
+import { installSkillPackage, approveSkillDraft } from '@forge/library/testing';
 import { isStudioAgent, listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
 
 const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');

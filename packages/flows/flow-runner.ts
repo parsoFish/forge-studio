@@ -43,7 +43,7 @@ import { CostTracker, WedgeDetector, RateLimitGate, type CeilingSource } from '.
 // §15.43: all three were reached through `orchestrator/studio/registry.ts`,
 // which only re-exports them. Imported from their real owners instead — every
 // one is a strictly lower rank, so the carve-in costs no boundary row.
-import { listArtifactTemplates } from '@forge/library/studio/artifact-registry.ts';
+import { listArtifactTemplates } from '@forge/library';
 import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
 import { normalizeProjectId } from '@forge/kernel';
 import { resolveBandGuard } from '@forge/agents/agent-bands.ts';

@@ -33,7 +33,7 @@ import { discoverProjects } from '@forge/kernel';
 import { isSafeSegment, resolveGuardedPath } from '@forge/kernel';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { resolveSessionModel } from '@forge/agents/phase-agent.ts';
-import { skillPathRelative } from '@forge/library/skill-path.ts';
+import { skillPathRelative } from '@forge/library';
 
 import { deriveSessionLifecycleFor, sessionHeartbeatMtimeMs } from './bridge-studio-lifecycle.ts';
 import { isTerminalPhase } from './session-resolution.ts';

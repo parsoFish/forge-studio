@@ -12,7 +12,7 @@
   "apps/forge/tests/integration/ui-bridge-demo-generations.test.ts": 818,
   "apps/forge/tests/regression/bridge-studio-project-create-containment.test.ts": 1204,
   "apps/forge/tests/unit/flow-runner.test.ts": 1523,
-  "apps/forge/tests/unit/registry.test.ts": 2175,
+  "apps/forge/tests/unit/registry.test.ts": 2176,
   "apps/forge/tests/unit/studio-lint.test.ts": 1112,
   "apps/forge/ui-bridge.ts": 2276,
   "apps/studio/app/agents/[id]/page.tsx": 929,

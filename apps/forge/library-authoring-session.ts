@@ -11,7 +11,7 @@
  * Claude Agent SDK into bridge start-up, which is why the route did it that
  * way before the port existed.
  */
-import type { AuthoringSessionPort } from '@forge/library/studio/authoring-session.ts';
+import type { AuthoringSessionPort } from '@forge/library';
 
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/session-status-io.ts';
 import { InteractiveFinalizerError } from '@forge/sessions/interactive-finalizers.ts';

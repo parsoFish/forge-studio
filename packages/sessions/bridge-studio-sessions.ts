@@ -124,7 +124,7 @@ import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-k
 import { deriveSessionAffordances } from './studio/session-kinds-affordances.ts';
 import { readSessionCostUsd } from './session-readability.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { skillPathRelative } from '@forge/library/skill-path.ts';
+import { skillPathRelative } from '@forge/library';
 import { deriveSessionTranscript, deriveSessionArtifact, safeReadFileInSession, type ParseManifestPort } from './studio/session-transcript.ts';
 import { tryGetKbBackend } from '@forge/knowledge';
 import { deriveContractStages } from '@forge/projects/contract-stages.ts';

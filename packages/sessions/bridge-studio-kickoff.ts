@@ -38,7 +38,7 @@ import { activeJobReason, deriveKbActiveJob } from '@forge/knowledge';
 import { computeAgentCleanupFindings, loadKbDescriptors, KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge';
 import { resolveContainedProjectDir } from '@forge/projects/contract-stages.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { skillPathRelative } from '@forge/library/skill-path.ts';
+import { skillPathRelative } from '@forge/library';
 
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';
 import type { SessionLifecycle } from './bridge-studio-lifecycle.ts';

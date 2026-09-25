@@ -26,7 +26,7 @@
 import { join } from 'node:path';
 
 import type { AgentDefinition } from '@forge/contracts';
-import type { AgentFacts, ComposingAgent } from '@forge/library/studio/agent-facts.ts';
+import type { AgentFacts, ComposingAgent } from '@forge/library';
 // DEEP imports, not the `@forge/agents` barrel, and the reason is measured:
 // importing the door pulls every module it re-exports into
 // `check-request-path-sinks`'s REACHABLE set, which made

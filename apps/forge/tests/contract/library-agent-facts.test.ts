@@ -27,7 +27,7 @@ import { tmpdir } from 'node:os';
 import { FORGE_ROOT } from '@forge/kernel';
 import { agentUsageIndex } from '@forge/agents/studio/agent-usage.ts';
 import { isStudioAgent } from '@forge/agents/studio/agent-registry.ts';
-import type { ComposableKind } from '@forge/library/studio/agent-facts.ts';
+import type { ComposableKind } from '@forge/library/testing';
 
 import { libraryAgentFacts } from '../../library-agent-facts.ts';
 

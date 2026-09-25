@@ -27,7 +27,7 @@ import { resolveNodeKind } from '@forge/flows/flow-runner.ts';
 import { runFlowT, type TestDeps } from '../test-fixtures/flow-runner-port.ts';
 import { loadAgentDefinition, listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
 import { loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
-import { loadCatalog } from '@forge/library/studio/catalog-registry.ts';
+import { loadCatalog } from '@forge/library';
 import { validateFlow } from '@forge/flows/studio/validate-flow.ts';
 import { validateAgent } from '@forge/agents/studio/validate-agent.ts';
 import { skillsDir } from '@forge/agents/skill-path.ts';

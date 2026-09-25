@@ -18,7 +18,7 @@
  * `tests/contract/routes-table.test.ts` pins which entry claims each colliding
  * URL rather than merely asserting both exist.
  */
-import type { AuthoringSessionPort } from '@forge/library/studio/authoring-session.ts';
+import type { AuthoringSessionPort } from '@forge/library';
 import type { IncomingMessage } from 'node:http';
 
 import type { RouteContext, RouteTable } from '@forge/kernel';
