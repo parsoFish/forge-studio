@@ -57,7 +57,7 @@ test('attributeEscapes: a non-descendant live in T (T never sampled) -> UNATTRIB
   // longer reads that field at all: only ancestry (`touchedRoots`) and the
   // main-checkout rule can turn an escape THIS-RUN.
   const escapes = [{ root: '/sib/tree', paths: ['a.txt'], live: { pid: 999, cwd: '/sib/tree', via: 'cwd' } }];
-  const [got] = attributeEscapes(escapes, { touchedRoots: new Map() });
+  const [got] = attributeEscapes(escapes, { touchedRoots: new Map(), longestGapMs: 0 });
   assert.equal(got.owner, 'unattributable');
   assert.match(got.reason, /no descendant of this run was seen in \/sib\/tree/);
 });
@@ -67,7 +67,7 @@ test('attributeEscapes: an APPEARED tree with NO live process at all -> UNATTRIB
   // fall straight into `unownedEscapes` and RED the run. It no longer does —
   // absence of a live owner was never evidence this run wrote the tree.
   const escapes = [{ root: '/home/parso/forge-m7-d-grp', paths: ['projects/x/README.md'], live: null }];
-  const [got] = attributeEscapes(escapes, { touchedRoots: new Map() });
+  const [got] = attributeEscapes(escapes, { touchedRoots: new Map(), longestGapMs: 0 });
   assert.equal(got.owner, 'unattributable', 'the defect this brief closes: no owner is not evidence of authorship');
 });
 
@@ -86,7 +86,7 @@ test('attributeEscapes: main-checkout non-ignored growth, no descendant seen -> 
 test('attributeEscapes: main-checkout GITIGNORED growth -> UNATTRIBUTABLE', () => {
   const escapes = [{ root: '/home/parso/forge', paths: ['projects/story-s2/README.md'] }];
   const [got] = attributeEscapes(escapes, {
-    touchedRoots: new Map(),
+    touchedRoots: new Map(), longestGapMs: 0,
     mainRoot: '/home/parso/forge',
     isIgnored: () => true,
   });
@@ -140,9 +140,9 @@ test('attributeEscapes: erroredSamples alone, however many, no longer drives bli
   assert.equal(got.owner, 'unattributable', 'a high error COUNT with no real coverage gap must never fail-close a run');
 });
 
-test('attributeEscapes: longestGapMs = 0 (the default) is NOT blind — an ordinary clean sample still excuses', () => {
+test('attributeEscapes: longestGapMs = 0 (a sampler that never failed) is NOT blind — an ordinary clean sample still excuses', () => {
   const escapes = [{ root: '/sib/tree', paths: ['a.txt'] }];
-  const [got] = attributeEscapes(escapes, { touchedRoots: new Map() });
+  const [got] = attributeEscapes(escapes, { touchedRoots: new Map(), longestGapMs: 0 });
   assert.equal(got.owner, 'unattributable');
 });
 
@@ -161,7 +161,7 @@ test('attributeEscapes: describeAttribution names THIS-RUN and UNATTRIBUTABLE li
       { root: '/sib/a', paths: ['x.txt', 'y.txt'] },
       { root: '/sib/b', paths: ['z.txt'] },
     ],
-    { touchedRoots: new Map([['/sib/a', { pid: 1, at: '/sib/a', via: 'cwd' }]]) },
+    { touchedRoots: new Map([['/sib/a', { pid: 1, at: '/sib/a', via: 'cwd' }]]), longestGapMs: 0 },
   );
   const lines = describeAttribution(attributed);
   assert.equal(lines.length, 3);
@@ -498,4 +498,29 @@ test('real process: the sampler, rooted at a spawned "run", reports its grandchi
     try { process.kill(sibling.pid!, 'SIGKILL'); } catch { /* already gone */ }
     rm(main, worktreeA, worktreeB, runnerFile, gcPidFile);
   }
+});
+
+test('attributeEscapes: NO sampler coverage figure at all is blind, never sighted — an absent reading fails closed (row 96 review)', () => {
+  // A caller that forgot to spread the sampler's result (or a sampler that
+  // never ran) must not read as a sampler with perfect coverage: `?? 0` would
+  // have made the missing figure the BEST possible one.
+  const [got] = attributeEscapes([{ root: '/sib/tree', paths: ['a.txt'] }], { touchedRoots: new Map() });
+  assert.equal(got.owner, 'this-run', `a missing longestGapMs must not excuse sibling growth: ${got.reason}`);
+  assert.match(got.reason, /no sampler coverage figure/);
+});
+
+test('startDescendantSampler: a LATE tick with no failed sample is not a coverage gap — only a window containing a failure counts (row 96 review)', async () => {
+  // Synchronous work blocks the event loop well past 3× the interval with
+  // every listing succeeding: that is the runner being busy (host load, a
+  // hashing pass), which the pre-row-96 contract always accepted. Counting it
+  // as blindness would trade one false red for another.
+  const sampler = startDescendantSampler({ rootPid: process.pid, intervalMs: 10, listPids: () => [] });
+  const until = Date.now() + 120;
+  while (Date.now() < until) { /* block the loop: no tick can run */ }
+  await new Promise((r) => setTimeout(r, 30));
+  const result = sampler.stop();
+  assert.equal(result.erroredSamples, 0);
+  assert.equal(result.longestGapMs, 0, 'no failed sample, so no failure window');
+  const [got] = attributeEscapes([{ root: '/sib/tree', paths: ['a.txt'] }], { ...result, mainRoot: null });
+  assert.equal(got.owner, 'unattributable');
 });
