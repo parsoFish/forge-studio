@@ -15,8 +15,9 @@ import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { skillPathRelative } from '@forge/agents/skill-path.ts';
 import { runBrainLint, lintThemeFiles, classify } from '@forge/knowledge/brain-lint.ts';
-import { guardAgentKbEdits, snapshotBrainTree, type KbEditGateResult } from '@forge/knowledge/kb-drain-edit-soundness.ts';
-import { resolveKbBrainDir } from '@forge/knowledge/brain-paths.ts';
+import { guardAgentKbEdits, snapshotBrainTree, noKbEdits, type KbEditGateResult } from '@forge/knowledge/kb-drain-edit-soundness.ts';
+import { tryGetKbBackend } from '@forge/knowledge';
+import { acquireBrainWriteLease, BrainWriteLeaseContentionError } from '@forge/knowledge/brain-write-lease.ts';
 
 import { writeRootFenceOptions } from '../session-write-fence.ts';
 import { runFixTurn, type FixTurnInput, type FixTurnResult, type FixTurnVariant } from './fix-turn.ts';
@@ -122,7 +123,12 @@ export const brainFixKind: FixTurnVariant<RunBrainFixInput, RunBrainFixResult, B
     // write, not permit them: an empty root list makes `canUseTool` refuse a
     // write matching no root. Fail closed. Arm 3 of
     // `tests/regression/fix-turn-capture.test.ts` pins that branch.
-    const guardedBrainDir = resolveKbBrainDir(input.forgeRoot, input.kbId);
+    // Resolved through `tryGetKbBackend`/`KbBackend.rootDir()` — the
+    // package's public door — rather than `resolveKbBrainDir` directly
+    // (M7-C KN1, bead forge-8vfn.23); `rootDir()` is the seam's one
+    // deliberate raw-path exception, precisely for a write-root fence like
+    // this one.
+    const guardedBrainDir = tryGetKbBackend(input.forgeRoot, input.kbId)?.rootDir() ?? null;
 
     // W8-B2/W8-F1 — the snapshot is the WHOLE brain, not the drained KB's own
     // dir. The audit was already brain-wide (`buildKbEditSoundnessCtx`
@@ -208,9 +214,36 @@ export const brainFixKind: FixTurnVariant<RunBrainFixInput, RunBrainFixResult, B
   },
 };
 
-/** Run one brain-fix turn. The entry point's name and shape are unchanged. */
+/**
+ * Run one brain-fix turn. The entry point's name and shape are unchanged.
+ *
+ * forge-ler4 — this is the SHARED choke point W8-B2's own header already
+ * names (the drain's round loop, `runBrainConsolidateNow`, and `forge brain
+ * fix` all reach a turn only through here), so it is where the brain-write
+ * lease is taken: one turn writes brain/ at a time, whether the caller is a
+ * Studio KB job or — via the SAME lease target — the daemon's reflector
+ * (`orchestrator/phases/reflector.ts`). A turn that cannot take the lease is
+ * refused with a NAMED, visible outcome — never silently run ungated, which
+ * is exactly how a reflector write mid-turn used to become indistinguishable
+ * from the turn's own to `guardAgentKbEdits`.
+ */
 export async function runBrainFixTurn(input: RunBrainFixInput): Promise<RunBrainFixResult> {
-  return runFixTurn(brainFixKind, input);
+  let release: (() => Promise<void>) | undefined;
+  try {
+    release = await acquireBrainWriteLease(input.forgeRoot);
+  } catch (err) {
+    if (!(err instanceof BrainWriteLeaseContentionError)) throw err;
+    return {
+      runId: input.runId,
+      cleared: false,
+      editAudit: { ...noKbEdits(), errors: [err.message] },
+    };
+  }
+  try {
+    return await runFixTurn(brainFixKind, input);
+  } finally {
+    await release();
+  }
 }
 
 /**

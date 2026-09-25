@@ -216,7 +216,7 @@
                 "with": "GitWeave's CI mirror is the same command the per-WI gate runs — declare testProcess.ci as python -m pytest tests/. There is no separate build step, so C1b is satisfied by making the mirror explicit rather than by inventing a second command."
               },
               {
-                "press": "apply-clause-decision"
+                "press": "apply-clause-decision-C1b"
               }
             ],
             "until": {

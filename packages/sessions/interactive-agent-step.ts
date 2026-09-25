@@ -17,16 +17,26 @@
  */
 import { readFileSync, readdirSync, lstatSync, mkdirSync, rmSync } from 'node:fs';
 
-import { type EventLogger, type Phase, resolveGuardedPath } from '@forge/kernel';
+import { type EventLogger, type Phase, resolveGuardedPath, guardedWriteFile } from '@forge/kernel';
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { skillPath, skillPathRelative, SLUG_RE } from '@forge/agents/skill-path.ts';
-import { resolveFinalizer, type FinalizerContext } from './interactive-finalizers.ts';
+import { skillPath, skillPathRelative, SLUG_RE, loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
+import { resolveFinalizer, finalizerNeedsPackageId, type FinalizerContext, type QueuePorts, type ProjectRepoPathGuard } from './interactive-finalizers.ts';
 import { BASH_FENCE_MODES, bashFenceModeState, type SessionKindDescriptor, type TurnSpec, type TurnSpecPhase } from './studio/session-kinds.ts';
-import { runAgentTurn, type QueryFn, type UnpricedTurnInfo } from './interactive-session.ts';
+import { runAgentTurn, runStructuredTurn, type QueryFn, type UnpricedTurnInfo } from './interactive-session.ts';
 import { hooksSpreadForAgent } from './kinds/kind-turn.ts';
+import { INTERVIEW_SCHEMA } from './kinds/instructions.ts';
+
+/** bead 8vfn.6.6 item 1 — the turnSpec.schema resolver. A Map, not the
+ *  frozen-array-+-.find() idiom other registries here use: a Map has no
+ *  prototype chain to fall through for an id like "constructor", the same
+ *  property those registries buy with `.find()`, at a third of the lines. */
+const TURN_SCHEMAS: ReadonlyMap<string, unknown> = new Map([['interview-qa', INTERVIEW_SCHEMA]]);
+function resolveTurnSchema(id: string): unknown | undefined {
+  return TURN_SCHEMAS.get(id);
+}
 import type { BashFenceMode } from './session-write-fence.ts';
 import { guardedWriteSessionStatus, statusWriteRefusalReason, CANCELLED_PHASE } from './session-status-io.ts';
 
@@ -108,6 +118,14 @@ export type RunInteractiveTurnCtx = {
   logsRoot?: string;
   /** Logger override (tests). */
   logger?: EventLogger;
+  /** Call-time seam, never a turnSpec field: picks a loadSkillTurnPrompt turn section instead of the whole SKILL.md. */
+  turnId?: (args: { descriptor: SessionKindDescriptor; phaseRow: TurnSpecPhase; status: InteractiveTurnStatus }) => string | undefined;
+  /** Extra prompt lines a caller injects (seed matching + provenance footer); appended after operator feedback. */
+  promptContext?: (args: { descriptor: SessionKindDescriptor; phaseRow: TurnSpecPhase; status: InteractiveTurnStatus }) => readonly string[];
+  /** promoteToQueue's manifest ports, bound at apps/forge (see QueuePorts). Absent ⇒ promoteToQueue refuses. */
+  manifestPorts?: QueuePorts;
+  /** writeToRepoRoot's project_repo_path re-validation, bound at apps/forge (see ProjectRepoPathGuard). Absent ⇒ writeToRepoRoot refuses. */
+  isContainedProjectRepoPath?: ProjectRepoPathGuard;
 };
 
 export type RunInteractiveTurnResult = {
@@ -227,7 +245,9 @@ export async function runAgentStyleStep(args: {
   // and `model` below can never disagree).
   const modelTier: ModelTier = requestedTier ?? agentSpec.tier;
   const model = resolveSessionModel(agentSpec, requestedTier);
-  const skill = readSkillPrompt(descriptor.agent);
+  const skill = readSkillPrompt(descriptor.agent, ctx.turnId?.({ descriptor, phaseRow, status }));
+  const extraContext = ctx.promptContext?.({ descriptor, phaseRow, status }) ?? [];
+  let doneOutput: Record<string, unknown> | null = null; // set by the structured branch; read by the tail's doneField/ceiling check.
 
   if (turnSpec.style === 'agent') {
     // bead forge-eip (W6-CR-3) — a REAL write-root fence, derived from THIS
@@ -246,7 +266,7 @@ export async function runAgentStyleStep(args: {
     // and crash the session with "produced no files".
     const writeRoots = resolveWriteRoots(sessionDir, phaseRow.writes ?? []);
     const operatorFeedback = readOperatorFeedback(sessionDir);
-    const prompt = buildTurnPrompt(descriptor, phaseRow, status, skill, writeRoots, operatorFeedback);
+    const prompt = buildTurnPrompt(descriptor, phaseRow, status, skill, writeRoots, operatorFeedback, extraContext);
     // W7-B3 (community-13): the turn budget comes from the agent's OWN
     // SKILL.md `budgets.maxTurns` — the same declared field every unattended
     // agent already carries (run-agent.ts reads it for one-shot spawns). A
@@ -286,14 +306,43 @@ export async function runAgentStyleStep(args: {
     // prompt — a turn that threw leaves the note in place for the retry.
     if (operatorFeedback !== null) clearOperatorFeedback(sessionDir);
   } else if (turnSpec.style === 'structured') {
-    // No schema registry exists yet — SCHEMA_IDS ships empty (R4-22 WI-1's
-    // own deliberately-green gap-pin, packages/sessions/studio/session-kinds.ts).
-    // Fail LOUD rather than fabricate a schema or silently fall back to the
-    // agent primitive — the declared-data-fails-open shape this campaign
-    // guards against.
-    throw new Error(
-      `runInteractiveTurn: session kind "${descriptor.id}" turnSpec.style is "structured", but no schema registry is wired yet (turnSpec.schema="${turnSpec.schema ?? '(none)'}"). No structured-style turnSpec consumer exists; wire a schema resolver before shipping one.`,
-    );
+    // bead 8vfn.6.6 item 1 — resolve against TURN_SCHEMAS; fail LOUD (never
+    // fabricate/fall back) on an undeclared or unresolvable schema id, the
+    // same declared-data-fails-open discipline the agent branch's own throws
+    // already carry.
+    if (turnSpec.schema === undefined) {
+      throw new InteractiveRunnerError(
+        `runInteractiveTurn: session kind "${descriptor.id}" turnSpec.style is "structured" but declares no turnSpec.schema — a structured turnSpec requires one.`,
+      );
+    }
+    const schema = resolveTurnSchema(turnSpec.schema);
+    if (schema === undefined) {
+      throw new InteractiveRunnerError(
+        `runInteractiveTurn: session kind "${descriptor.id}" turnSpec.schema "${turnSpec.schema}" is not registered in TURN_SCHEMAS.`,
+      );
+    }
+    const writeRoots = resolveWriteRoots(sessionDir, phaseRow.writes ?? []);
+    const operatorFeedback = readOperatorFeedback(sessionDir);
+    const prompt = buildTurnPrompt(descriptor, phaseRow, status, skill, writeRoots, operatorFeedback, extraContext);
+    const { output, costUsd } = await runStructuredTurn({
+      queryFn, prompt, schema, model,
+      allowedTools: agentSpec.allowedTools, disallowedTools: agentSpec.disallowedTools,
+      ...hooksSpreadForAgent({ skill: agentSpec.skill, logger: args.logger, initiativeId: ctx.sessionId }),
+      cwd: sessionDir, onToolUse, onHeartbeat, onText, onThinking,
+      label: `interactive-${descriptor.id}-${ctx.sessionId}`,
+      ...(args.onTurnEndedUnpriced ? { onTurnEndedUnpriced: args.onTurnEndedUnpriced } : {}),
+    });
+    doneOutput = output as Record<string, unknown> | null;
+    if (costUsd !== null) args.onTurnCost?.(costUsd, modelTier, model);
+    if (writeRoots.length > 0) {
+      if (output === null) {
+        throw new InteractiveRunnerError(
+          `runInteractiveTurn: session kind "${descriptor.id}" phase "${phaseRow.phase}" structured turn produced no output to persist under its declared writes dir.`,
+        );
+      }
+      if (guardedWriteFile(writeRoots[0]!, ['output.json'], JSON.stringify(output, null, 2)) === null) throw new InteractiveRunnerError(`runInteractiveTurn: ${phaseRow.phase}'s output.json failed containment under its writes dir (the agent's own dir — a planted symlink) — refusing to write through it.`);
+    }
+    if (operatorFeedback !== null) clearOperatorFeedback(sessionDir);
   } else {
     throw new Error(
       `runInteractiveTurn: session kind "${descriptor.id}" turnSpec.style "${turnSpec.style}" is unrecognised — expected "agent" or "structured".`,
@@ -318,9 +367,18 @@ export async function runAgentStyleStep(args: {
   // Finding 1 fix: validate `next` BEFORE persisting it — see
   // assertNextPhaseKnown's own doc comment.
   assertNextPhaseKnown(descriptor, turnSpec, phaseRow);
-  const nextPhase = phaseRow.next ?? status.phase;
-  if (phaseRow.next) {
-    writeStatus(ctx.projectRoot, dirSegments, { ...status, phase: phaseRow.next });
+  let nextPhase = phaseRow.next ?? status.phase;
+  // Interview ceiling + fall-through: doneField true, or status.round at ceiling, jumps to nextOnDone instead of next.
+  if (phaseRow.doneField !== undefined && phaseRow.nextOnDone !== undefined) {
+    const round = (status as Record<string, unknown>).round;
+    const ceilingHit = phaseRow.ceiling !== undefined && typeof round === 'number' && round >= phaseRow.ceiling;
+    if (ceilingHit || doneOutput?.[phaseRow.doneField] === true) {
+      assertNextPhaseKnown(descriptor, turnSpec, phaseRow, phaseRow.nextOnDone);
+      nextPhase = phaseRow.nextOnDone;
+    }
+  }
+  if (nextPhase !== status.phase) {
+    writeStatus(ctx.projectRoot, dirSegments, { ...status, phase: nextPhase });
   }
   return { phase: nextPhase, wrote, artifacts: {} };
 }
@@ -355,17 +413,24 @@ export async function runFinalizeStep(args: {
     );
   }
 
-  // packageId — Finding 5(c): the "declared package id" the session status
-  // itself carries (`status.package_id`, when present as a string) is
-  // preferred over the raw request identity `ctx.sessionId`; either way the
-  // resolved value MUST be `SLUG_RE`-valid or this refuses loudly — never
-  // silently sanitized/invented (see header note design call #2).
-  const statusPackageId = (status as Record<string, unknown>).package_id;
-  const rawPackageId = typeof statusPackageId === 'string' ? statusPackageId : ctx.sessionId;
-  if (!SLUG_RE.test(rawPackageId)) {
-    throw new InteractiveRunnerError(
-      `runInteractiveTurn: finalize packageId "${rawPackageId}" is not a valid slug (must match ${SLUG_RE.source}) — refusing rather than silently accepting it into an oddly-named library directory.`,
-    );
+  // packageId — Finding 5(c), now GATED (bead 8vfn.6.6 item 3) on the
+  // resolved finalizer's OWN needsPackageId (never a new turnSpec field —
+  // the finalizer's contract already says whether it uses one). The
+  // "declared package id" the session status itself carries
+  // (`status.package_id`, when present as a string) is preferred over the
+  // raw request identity `ctx.sessionId`; either way the resolved value
+  // MUST be `SLUG_RE`-valid or this refuses loudly — never silently
+  // sanitized/invented (see header note design call #2).
+  let packageId: string | undefined;
+  if (finalizerNeedsPackageId(finalizerId)) {
+    const statusPackageId = (status as Record<string, unknown>).package_id;
+    const rawPackageId = typeof statusPackageId === 'string' ? statusPackageId : ctx.sessionId;
+    if (!SLUG_RE.test(rawPackageId)) {
+      throw new InteractiveRunnerError(
+        `runInteractiveTurn: finalize packageId "${rawPackageId}" is not a valid slug (must match ${SLUG_RE.source}) — refusing rather than silently accepting it into an oddly-named library directory.`,
+      );
+    }
+    packageId = rawPackageId;
   }
 
   // libraryRoot — Finding 5(a)/(b): a dedicated, NON-scanned root, never
@@ -383,11 +448,34 @@ export async function runFinalizeStep(args: {
   }
   const libraryRoot = libraryRootGuard.realPath;
 
+  // bead 8vfn.6.6 item 4 — status + two common projections off it, so a
+  // finalizer that needs session-scoped context (writeToRepoRoot) can reach
+  // it without a new per-kind port. Derived from the already-read status,
+  // never re-read.
+  const statusRecord = status as Record<string, unknown>;
+  // Structural parse only — UNTRUSTED, forgeable status.json content;
+  // writeToRepoRoot is the one place that re-validates it (isContainedProjectRepoPath) before using it as a write root.
+  const projectRepoPath = typeof statusRecord.project_repo_path === 'string' ? statusRecord.project_repo_path : undefined;
+  const project = typeof statusRecord.project === 'string' ? statusRecord.project : undefined;
+  // forge-7m2 — AUTHORED data (the SAME `writes:`-style field as an
+  // `agent`-step phase, just meaningful on a `finalize` row instead): the
+  // committing phase row names the dir its finalizer reads FROM, exactly as
+  // an earlier `agent`-step row names the dir it writes INTO. Omitted
+  // (never defaulted) when the row doesn't declare one — a finalizer that
+  // needs it (copyStagingToLibrary) refuses loudly at that point instead.
   const finalizerCtx: FinalizerContext = {
     sessionDir,
     forgeRoot,
     libraryRoot,
-    packageId: rawPackageId,
+    status: statusRecord,
+    projectRoot: ctx.projectRoot, // commitToCentralBrain's inputs + promoteToQueue's ports below — call-time ctx seams.
+    sessionId: ctx.sessionId,
+    ...(ctx.manifestPorts !== undefined ? { manifestPorts: ctx.manifestPorts } : {}),
+    ...(ctx.isContainedProjectRepoPath !== undefined ? { isContainedProjectRepoPath: ctx.isContainedProjectRepoPath } : {}),
+    ...(packageId !== undefined ? { packageId } : {}),
+    ...(projectRepoPath !== undefined ? { project_repo_path: projectRepoPath } : {}),
+    ...(project !== undefined ? { project } : {}),
+    ...(phaseRow.stagingDirName !== undefined ? { stagingDirName: phaseRow.stagingDirName } : {}),
   };
 
   const wrote = await finalizerFn(finalizerCtx);
@@ -416,12 +504,13 @@ export async function runFinalizeStep(args: {
  * declares no `next` at all (a legitimate terminal/awaiting row) is a no-op
  * here — this only fires when `next` IS declared but names nothing real.
  */
-export function assertNextPhaseKnown(descriptor: SessionKindDescriptor, turnSpec: TurnSpec, phaseRow: TurnSpecPhase): void {
-  if (!phaseRow.next) return;
-  const known = turnSpec.phases.some((p) => p.phase === phaseRow.next);
+export function assertNextPhaseKnown(descriptor: SessionKindDescriptor, turnSpec: TurnSpec, phaseRow: TurnSpecPhase, nextOverride?: string): void {
+  const next = nextOverride ?? phaseRow.next; // nextOverride lets nextOnDone reuse this same ghost-phase guard.
+  if (!next) return;
+  const known = turnSpec.phases.some((p) => p.phase === next);
   if (!known) {
     throw new InteractiveRunnerError(
-      `runInteractiveTurn: session kind "${descriptor.id}" turnSpec phase "${phaseRow.phase}" declares next "${phaseRow.next}", which is not a phase present in turnSpec.phases — refusing to persist a ghost phase to status.json.`,
+      `runInteractiveTurn: session kind "${descriptor.id}" turnSpec phase "${phaseRow.phase}" declares next "${next}", which is not a phase present in turnSpec.phases — refusing to persist a ghost phase to status.json.`,
     );
   }
 }
@@ -535,7 +624,8 @@ function listWrittenFiles(sessionDir: string, writesDirs: readonly string[]): st
 /** Read `skills/<agentId>/SKILL.md` from the real forge install (default
  *  root — see header note). Falls back to a generic prompt if unreadable,
  *  matching `kinds/project-brain.ts`'s own skill-prompt load. */
-function readSkillPrompt(agentId: string): string {
+function readSkillPrompt(agentId: string, turnId?: string): string {
+  if (turnId !== undefined) return loadSkillTurnPrompt({ name: agentId, turnId }); // mode-conditional turn id (ctx.turnId).
   const path = skillPath(agentId);
   try {
     return readFileSync(path, 'utf8');
@@ -565,6 +655,7 @@ function buildTurnPrompt(
   skill: string,
   writeRoots: readonly string[],
   feedback: string | null,
+  extraContext: readonly string[] = [],
 ): string {
   const writes = phaseRow.writes ?? [];
   return [
@@ -585,6 +676,7 @@ function buildTurnPrompt(
     // demo-builder-runner.ts's own feedback.md sections, so the generic
     // spine's revise turn actually carries the words that triggered it.
     ...(feedback !== null ? ['', 'Operator revision feedback on the previous draft (apply it):', feedback] : []),
+    ...(extraContext.length > 0 ? ['', ...extraContext] : []), // ctx.promptContext's lines (seed matching etc.).
     '',
     'Session status (read-only context):',
     '```json',

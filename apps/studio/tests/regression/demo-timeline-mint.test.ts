@@ -42,6 +42,14 @@ vi.mock('@/lib/bridge-client', () => ({
   listDemoElements: vi.fn(async () => []),
 }));
 
+// The component under test is imported ONCE, at module scope (`vi.mock`
+// above is hoisted, so the mock still applies) — the #807 fix (bb0c9d4b):
+// an in-body `await import(...)` charges that module's transform to
+// whichever test runs first (measured here under CPU starvation, up to
+// 1368ms — a meaningful bite out of the 5000ms per-test budget) instead of
+// vitest's own untimed transform/setup phase.
+import { DemoTimeline } from '@/components/studio/project-builder/DemoTimeline';
+
 let container: HTMLDivElement;
 let root: Root;
 
@@ -70,8 +78,6 @@ const PROPS = {
 const panel = () => container.querySelector('section[data-step-count]');
 
 test('7.6.64: before the launch, DemoTimeline publishes the key EMPTY — present, never absent', async () => {
-  const { DemoTimeline } = await import('@/components/studio/project-builder/DemoTimeline');
-
   await act(async () => {
     root.render(React.createElement(DemoTimeline, PROPS));
   });
@@ -91,8 +97,6 @@ test('7.6.64: before the launch, DemoTimeline publishes the key EMPTY — presen
 });
 
 test('307: once the demo builder mints a session, the id IS published on the root S1 beat 7 binds', async () => {
-  const { DemoTimeline } = await import('@/components/studio/project-builder/DemoTimeline');
-
   await act(async () => {
     root.render(React.createElement(DemoTimeline, PROPS));
   });

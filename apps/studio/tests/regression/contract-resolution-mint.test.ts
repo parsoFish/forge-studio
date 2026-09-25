@@ -33,6 +33,14 @@ import * as React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
+// The component under test is imported ONCE, at module scope (`vi.mock`
+// below is hoisted, so the mocks still apply) — the #807 fix (bb0c9d4b):
+// an in-body `await import(...)` charges that module's transform to
+// whichever test runs first (measured here under CPU starvation, up to
+// 2264ms — well over the 5000ms per-test budget's safety margin) instead
+// of vitest's own untimed transform/setup phase.
+import { ContractResolutionPanel } from '@/components/studio/project-builder/ContractResolutionPanel';
+
 const MINTED = '2026-09-12T04-18-33-7c1de440';
 
 vi.mock('@/lib/bridge-client', () => ({
@@ -83,9 +91,6 @@ const DEMO_CLAUSE = {
 const panel = () => container.querySelector('[data-section="contract-resolution"]');
 
 async function render() {
-  const { ContractResolutionPanel } = await import(
-    '@/components/studio/project-builder/ContractResolutionPanel'
-  );
   await act(async () => {
     root.render(React.createElement(ContractResolutionPanel, {
       projectId: 'gitweave',
@@ -111,7 +116,7 @@ test('832: the key is published from first paint, empty — never absent', async
 test('832: once a demo clause mints a session, the id is on the panel root, not only the anchor', async () => {
   await render();
 
-  const resolve = container.querySelector<HTMLButtonElement>('[data-action="resolve-clause-agent"]');
+  const resolve = container.querySelector<HTMLButtonElement>('[data-action="resolve-clause-agent-demo-evidence"]');
   expect(resolve, 'the agent-tier resolve control must render').not.toBeNull();
 
   await act(async () => {

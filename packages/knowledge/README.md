@@ -10,26 +10,26 @@ of it. Deep paths (`@forge/knowledge/brain-paths.ts`) still resolve — `package
 `"./*": "./*"` — and every existing importer uses one, so they are the **legacy** door,
 kept working and not recommended. Collapsing to one door is bead `forge-8vfn.5.31`.
 
-`tests/contract/contract.test.ts` asserts this list against what the index actually
+`contract.test.ts` asserts this list against what the index actually
 exports, in both directions, and is required to FAIL against an empty index.
 
-### Values (35)
+### Values (36)
 
 | area | exports |
 |---|---|
-| brain paths | `cycleArchivePath` · `cycleArchiveRelPath` · `cyclesRawDir` · `cyclesThemesDir` · `projectBrainDir` · `projectThemesDir` · `readArtifactRoot` · `resolveKbBrainDir` |
+| brain paths | `cycleArchivePath` · `cycleArchiveRelPath` · `cyclesRawDir` · `cyclesThemesDir` · `deriveKbIdFromBrainPath` · `projectBrainDir` · `projectThemesDir` · `readArtifactRoot` · `resolveKbBrainDir` |
 | brain index | `loadBrainIndex` · `regenerateBrainIndex` |
 | brain lint | `CHECK_NAMES` · `classify` · `classifyFinding` · `lintThemeFiles` · `runBrainLint` |
 | KB descriptors | `loadKbDescriptor` · `serializeKbDescriptor` · `projectKbBindings` · `unroutableKbReason` · `kbReadPolicyViolation` |
-| KB surface | `KB_SEEDING_ANCHOR_PREFIX` · `approveKbCleanup` · `computeAgentCleanupFindings` · `loadKbDescriptors` · `activeJobReason` · `deriveKbActiveJob` · `runPostReflectionKbHealth` · `guardAgentKbEdits` · `snapshotBrainTree` |
+| KB surface | `KB_SEEDING_ANCHOR_PREFIX` · `approveKbCleanup` · `computeAgentCleanupFindings` · `loadKbDescriptors` · `activeJobReason` · `deriveKbActiveJob` · `runPostReflectionKbHealth` · `guardAgentKbEdits` · `snapshotBrainTree` · `tryGetKbBackend` |
 | project brain seeding | `checkProjectBrainSeedContainment` · `seedProjectBrain` |
 | cycle retention | `assignRetention` · `collectCitedBy` · `patchArchiveFrontmatter` |
 | HTTP routes | `knowledgeRoutes` |
 
-### Types (7)
+### Types (8)
 
 `Finding` · `RunBrainLintResult` · `Scope` · `UnroutableKb` · `KbEditGateResult` ·
-`RetentionTag` · `ThemeMeta`
+`RetentionTag` · `ThemeMeta` · `KbBackend`
 
 ## What it owns
 

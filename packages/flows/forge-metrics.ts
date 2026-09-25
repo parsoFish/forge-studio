@@ -193,10 +193,19 @@ function renderHeader(args: {
       : args.status === 'ready-for-review'
         ? '🟡'
         : '🔴';
+  // M7 findings row 59: forge-architect and forge-develop both terminate at
+  // the SAME status word (`ready-for-review`) — a reader could not tell
+  // which flow produced this report without opening events.jsonl. The flow
+  // id sits BESIDE the status word (never renamed, never elsewhere in the
+  // header) so both flows keep their shared vocabulary while staying
+  // distinguishable. Read straight off the manifest already in hand — no
+  // separate events.jsonl thread needed (`InitiativeManifest.flow_id`,
+  // ADR 028 / J5).
+  const flowIdSuffix = args.manifest?.flow_id ? ` (flow: \`${args.manifest.flow_id}\`)` : '';
   const lines: string[] = [
     `# Cycle Report — ${titleLine}`,
     '',
-    `${statusEmoji} **Status:** \`${args.status}\` · Reflection: \`${args.reflectionStatus}\``,
+    `${statusEmoji} **Status:** \`${args.status}\`${flowIdSuffix} · Reflection: \`${args.reflectionStatus}\``,
     '',
     '| | |',
     '|---|---|',

@@ -174,3 +174,149 @@ test('readSkillPackage refuses a symlinked skills/<id> — its own pin, not cove
     cleanup();
   }
 });
+
+// ---------------------------------------------------------------------------
+// forge-8vfn.5.35 — a symlinked leaf INSIDE an otherwise-contained package.
+//
+// `skills/<id>` is a real directory and `SKILL.md` is a real file (both
+// guards above pass) — but a NON-`SKILL.md` leaf under it is a symlink out
+// of the library. `walk()`'s old `Dirent.isFile()`/`isDirectory()` check does
+// not follow symlinks, so that entry was neither — silently SKIPPED, dropping
+// out of `contentHash` entirely. Not a redirect (the root guard already
+// closes that): a silent trust-gate bypass, since `skill-trust.ts`'s
+// `needs-review` fires only on a hash difference, and a dropped entry never
+// changes the hash.
+// ---------------------------------------------------------------------------
+
+function plantSkillWithSymlinkedLeaf(): { forgeRoot: string; outside: string; cleanup: () => void } {
+  const base = mkdtempSync(join(tmpdir(), 'forge-skill-leaf-escape-'));
+  const forgeRoot = join(base, 'root');
+  const outside = join(base, 'OUTSIDE');
+  mkdirSync(join(forgeRoot, 'skills', 'leafy-id'), { recursive: true });
+  mkdirSync(outside, { recursive: true });
+
+  writeFileSync(join(forgeRoot, 'skills', 'leafy-id', 'SKILL.md'), '---\nname: leafy\ndescription: d\n---\n\nbody\n', 'utf8');
+  writeFileSync(join(outside, 'exfil.txt'), 'exfiltrated content', 'utf8');
+  // An ordinary, contained package — only ONE non-SKILL.md leaf is a link.
+  symlinkSync(join(outside, 'exfil.txt'), join(forgeRoot, 'skills', 'leafy-id', 'notes.txt'), 'file');
+
+  return { forgeRoot, outside, cleanup: () => rmSync(base, { recursive: true, force: true }) };
+}
+
+test('readSkillPackage refuses a package containing a symlinked non-SKILL.md leaf that escapes the library, rather than silently dropping it from the hash', () => {
+  const { forgeRoot, cleanup } = plantSkillWithSymlinkedLeaf();
+  try {
+    assert.throws(
+      () => readSkillPackage(forgeRoot, 'leafy-id'),
+      /notes\.txt/,
+      'a symlinked leaf escaping the package must be refused BY NAME, not silently skipped',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('readSkillPackage still reads an ordinary package containing a REAL (non-symlinked) extra leaf, unchanged hash-relevant content', () => {
+  const base = mkdtempSync(join(tmpdir(), 'forge-skill-leaf-ok-'));
+  try {
+    const forgeRoot = join(base, 'root');
+    mkdirSync(join(forgeRoot, 'skills', 'plain-id'), { recursive: true });
+    writeFileSync(join(forgeRoot, 'skills', 'plain-id', 'SKILL.md'), '---\nname: plain\ndescription: d\n---\n\nbody\n', 'utf8');
+    writeFileSync(join(forgeRoot, 'skills', 'plain-id', 'notes.txt'), 'real, ordinary content', 'utf8');
+
+    const files = readSkillPackage(forgeRoot, 'plain-id');
+    assert.deepEqual(
+      files.map((f) => f.path),
+      ['SKILL.md', 'notes.txt'],
+      'an ordinary real leaf must still be walked and included, exactly as before this fix',
+    );
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// TOCTOU — the walk's own realpath validation is re-derived from a stale raw
+// path at the point of USE, not carried forward from the point of CHECK.
+//
+// `walk()` in both `readSkillPackage` and `installSkillPackage`'s
+// `walkPackageDir` computes `real = realpathSync(absPath)`, checks
+// containment against `real`, then re-touches the RAW `absPath` for the
+// actual `statSync`/`readFileSync`/recursion. `statSync`/`readFileSync`
+// follow whatever a symlink resolves to AT THE MOMENT THEY RUN — so a
+// symlink swapped between the two calls sends the classification and the
+// bytes to a DIFFERENT target than the one the containment check just
+// approved. A validated identity that is never the identity actually
+// touched is not a containment guard; it is a check with a gap after it.
+//
+// NO WIRE-OBSERVABLE ORACLE, NO WORKING SPY. A genuine race is
+// non-deterministic and unsuitable for CI. `node:test`'s `mock.method`
+// cannot redefine these modules' named ESM imports either — the same
+// empirically-verified limitation `apps/forge/tests/regression/
+// instructions-start-read-guard.test.ts` and
+// `packages/factory/tests/regression/demo-builder-start-read-guard.test.ts`
+// document and route around with a SOURCE-STRUCTURAL pin instead. This is
+// that same pattern applied here: the only honest RED-at-base assertion is
+// that every touch AFTER the containment check goes through the validated
+// `real` binding, never a second look at the raw, possibly-swapped
+// `absPath`. A wrong implementation — one that re-touches `absPath` after
+// validating `real` — is exactly what these assertions fail against today.
+// ---------------------------------------------------------------------------
+
+test('readSkillPackage: every touch after realpath validation uses the validated `real` path, never the raw `absPath` again (TOCTOU)', () => {
+  const src = readFileSync(join(import.meta.dirname, '..', '..', 'studio', 'skill-package.ts'), 'utf8');
+  assert.match(
+    src,
+    /if \(real !== rootAbs && !real\.startsWith\(boundary\)\)/,
+    'sanity: the containment check this pin sits right after has moved or been renamed — locate it before trusting the assertions below',
+  );
+  assert.doesNotMatch(
+    src,
+    /statSync\(absPath\)/,
+    'statSync must not re-touch the raw, possibly-symlinked absPath after realpath validation — classify the already-validated `real` path instead (TOCTOU)',
+  );
+  assert.doesNotMatch(
+    src,
+    /walk\(absPath, relPath\)/,
+    'recursion into a directory entry must descend through the validated `real` path, not the raw absPath (TOCTOU)',
+  );
+  assert.doesNotMatch(
+    src,
+    /readFileSync\(absPath, 'utf8'\)/,
+    'the file read must not re-touch the raw absPath after realpath validation — read the validated `real` path instead (TOCTOU)',
+  );
+  assert.match(src, /statSync\(real\)/, 'expected statSync to classify the validated real path');
+  assert.match(src, /walk\(real, relPath\)/, 'expected recursion to descend through the validated real path');
+  assert.match(src, /readFileSync\(real, 'utf8'\)/, 'expected the file read to read the validated real path');
+});
+
+test('installSkillPackage/walkPackageDir: every touch after realpath validation uses the validated `real` path, and the entry it hands back carries that real path, never the raw `absPath` (TOCTOU)', () => {
+  const src = readFileSync(join(import.meta.dirname, '..', '..', 'studio', 'skill-install.ts'), 'utf8');
+  assert.match(
+    src,
+    /if \(real !== rootAbs && !real\.startsWith\(boundary\)\)/,
+    'sanity: the containment check this pin sits right after has moved or been renamed — locate it before trusting the assertions below',
+  );
+  assert.doesNotMatch(
+    src,
+    /statSync\(absPath\)/,
+    'statSync must not re-touch the raw, possibly-symlinked absPath after realpath validation — classify the already-validated `real` path instead (TOCTOU)',
+  );
+  assert.doesNotMatch(
+    src,
+    /walk\(absPath, relPath\)/,
+    'recursion into a directory entry must descend through the validated `real` path, not the raw absPath (TOCTOU)',
+  );
+  assert.doesNotMatch(
+    src,
+    /readFileSync\(entry\.absPath\)/,
+    'installSkillPackage\'s file read must not re-touch a raw absPath carried on the walked entry — the entry must carry the validated real path instead (TOCTOU)',
+  );
+  assert.match(src, /statSync\(real\)/, 'expected statSync to classify the validated real path');
+  assert.match(src, /walk\(real, relPath\)/, 'expected recursion to descend through the validated real path');
+  assert.match(
+    src,
+    /readFileSync\(entry\.realPath\)/,
+    'expected installSkillPackage to read the walked entry\'s validated real path (RawPackageEntry.realPath), not a raw absPath',
+  );
+});

@@ -115,7 +115,12 @@ steps leaves the reviewer approving blind.
 ### skills (required: ≥ 1 bound skill slug)
 
 Skill slugs bound to this project. Forge uses bound skills as the palette when
-generating agent prompts and when the flow engine selects tools. A project with
+generating agent prompts and when the flow engine selects tools. Since ADR 024
+item 90, a declared skill is not just a preflight-checked fact: `loadDeclaredSkills`
+reads every one's `SKILL.md` (project-local or forge-wide) and both spawn builders
+(`runAgent`'s one-shot path, the dev-loop's per-WI Ralph) fold the text into the
+system prompt of **every** agent that runs on the project — a declared id that
+doesn't resolve throws rather than silently dropping the binding. A project with
 no bound skills relies on forge's defaults; the UI requires ≥ 1 explicit binding
 to confirm the operator has thought about the project's tooling surface.
 
@@ -319,11 +324,18 @@ Forge commits with `git add -A`; the project's `.gitignore` is the sole guard.
 Three categories must be covered:
 
 1. **Forge scratch:** `.forge/work-items/`, `.forge/.create-complete`,
-   `AGENT.md`, `PROMPT.md`, `fix_plan.md` must be untracked *and* ignored
-   (git-truth check: `git ls-files --error-unmatch` + `git check-ignore -q`;
-   a *directory* scratch path is probed via a sentinel child so a dir-only
-   ignore pattern like `.forge/work-items/` counts before the dir exists —
-   the pattern will ignore it the moment the dev-loop creates it).
+   `.forge/live-evidence/`, `.forge/preflight.json`, `AGENT.md`, `PROMPT.md`,
+   `fix_plan.md` must be untracked *and* ignored (git-truth check: `git
+   ls-files --error-unmatch` + `git check-ignore -q`; a *directory* scratch
+   path is probed via a sentinel child so a dir-only ignore pattern like
+   `.forge/work-items/` counts before the dir exists — the pattern will
+   ignore it the moment the dev-loop creates it). `.forge/live-evidence/`
+   (acceptance-test read-backs) and `.forge/preflight.json` (preflight
+   output) joined this list under operator item 92, once item 92 itself
+   retired the blanket `.forge/` ignore projects used to carry — see
+   `SCRATCH_PATHS` in `packages/projects/preflight-repo.ts` for the single
+   source and why a third runtime output, `.forge/demo/` (the Studio
+   demo-builder's own machinery), is deliberately NOT on this list: the demo-builder commits it (operator ruling, M7).
 2. **Build artifacts and generated outputs:** compiled binaries, `dist/`,
    coverage, graph caches — anything a build writes that isn't source.
 3. **Tracked contract config, never ignored:** `.forge/project.json`, the
@@ -656,6 +668,8 @@ retain the default `"."` (no migration required).
 - `demo/<initiative-id>/` — demo output written during the demo-agent run
 - `.forge/work-items/` — per-cycle PM output
 - `.forge/.create-complete` — the onboarding/create completion marker
+- `.forge/live-evidence/` — acceptance-test read-backs (operator item 92)
+- `.forge/preflight.json` — preflight output (operator item 92)
 
 These are excluded by the project's `.gitignore` (C2 enforces this).
 `.forge/project.json` and `.forge/skills/` are the opposite case — tracked

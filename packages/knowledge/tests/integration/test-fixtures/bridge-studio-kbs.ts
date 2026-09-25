@@ -44,6 +44,12 @@ const routes = knowledgeRoutes({
   runFixTurn: async () => {
     throw new Error('unexpected brain-fix dispatch in this test');
   },
+  // M7-C U8 (bead forge-u8y2): REQUIRED, same shape as `runFixTurn` above.
+  // This fixture drives create/delete/guidance/maintenance/health/descriptor
+  // routes, never the runs or drain routes that consult this predicate.
+  sessionIsReadable: () => {
+    throw new Error('unexpected session-readability probe call in this test');
+  },
 });
 
 const mockReq = () => ({ headers: {} }) as unknown as IncomingMessage;

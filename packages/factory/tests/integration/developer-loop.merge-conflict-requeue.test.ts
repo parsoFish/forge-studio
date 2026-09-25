@@ -24,7 +24,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -105,8 +105,25 @@ type Fixture = {
  * not flip an already-passing test to failed (COMMON §15.74's second
  * remedy shape) — but anything OTHER than ENOTEMPTY, or a straggler that
  * has not finished after the budget, still throws.
+ *
+ * A fixed `delayMs` sleep-and-hope is not honest under load: at proof-suite
+ * load 8 the injected straggler (its own 400ms wall-clock write budget)
+ * outlived the 5×100ms retry window and threw ENOTEMPTY at 1.8s (bd
+ * forge-8vfn.5.55, known-flakes #9, load-8 recurrence). When the caller
+ * knows exactly which child process is still writing (`knownWriters` — the
+ * straggler test spawns its own), teardown stops guessing at timing
+ * entirely: it kills that child and awaits its actual exit before retrying
+ * the removal, so the wait is bounded by "is it dead yet", not by a
+ * wall-clock budget that starves along with everything else. The disposable
+ * fixture is about to be deleted anyway, so ending its writer outright is
+ * safe. Callers with no known writer (a real, unidentified git straggler)
+ * still fall back to the scoped delay retry as before.
  */
-async function cleanupFixtureRoot(root: string, attempts = 5, delayMs = 100): Promise<void> {
+async function cleanupFixtureRoot(
+  root: string,
+  opts: { knownWriters?: ChildProcess[]; attempts?: number; delayMs?: number } = {},
+): Promise<void> {
+  const { knownWriters = [], attempts = 5, delayMs = 100 } = opts;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       rmSync(root, { recursive: true, force: true });
@@ -115,9 +132,33 @@ async function cleanupFixtureRoot(root: string, attempts = 5, delayMs = 100): Pr
       const code = (err as NodeJS.ErrnoException).code;
       // Scoped to this ONE named teardown error, after this test's own assertions already passed — never a blind retry.
       if (code !== 'ENOTEMPTY' || attempt === attempts) throw err;
-      await new Promise((resolveWait) => setTimeout(resolveWait, delayMs));
+      if (knownWriters.length > 0) {
+        await Promise.all(knownWriters.map(killAndAwaitExit));
+      } else {
+        await new Promise((resolveWait) => setTimeout(resolveWait, delayMs));
+      }
     }
   }
+}
+
+/** Stop a known writer outright and wait for it to actually be gone —
+ *  bounded by the OS actually delivering the exit, not by a wall-clock
+ *  guess. Already-exited children (checked via `exitCode`/`signalCode`)
+ *  resolve immediately; a `kill()` racing a child that exits on its own
+ *  between the check and the signal still resolves via the `exit` event. */
+function killAndAwaitExit(child: ChildProcess): Promise<void> {
+  return new Promise((resolveExit) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      resolveExit();
+      return;
+    }
+    child.once('exit', () => resolveExit());
+    try {
+      child.kill('SIGKILL');
+    } catch {
+      resolveExit();
+    }
+  });
 }
 
 function setup(initiativeId: string): Fixture {
@@ -694,6 +735,10 @@ test('teardown survives a straggler still writing into origin.git (bd forge-8vfn
   // directory `mergeAndPublish` pushes into, timed via a ready-file so the
   // race lands deterministically (15/15 in isolation) instead of by chance.
   const f = setup('INIT-2026-09-19-teardown-race');
+  // Declared outside `try` on purpose: a `const` scoped to the `try` block
+  // is NOT visible in `finally` (separate block scopes) — teardown needs
+  // this handle to kill/await the straggler on ENOTEMPTY.
+  let straggler: ChildProcess | undefined;
   try {
     const packDir = join(f.origin, 'objects', 'pack');
     const readyFile = join(f.root, '.straggler-ready');
@@ -704,8 +749,10 @@ test('teardown survives a straggler still writing into origin.git (bd forge-8vfn
       'let i = 0;',
       `while (Date.now() < end) { try { fs.writeFileSync(${JSON.stringify(packDir)} + '/straggler-' + (i++), 'x'); } catch {} }`,
     ].join('\n');
-    const straggler = spawn(process.execPath, ['-e', writerSrc], { detached: true, stdio: 'ignore' });
-    straggler.unref();
+    // Not `.unref()`'d: `finally` always kills and awaits this exact
+    // handle's `exit` event (never a bare guess), so it must stay ref'd or
+    // the event loop can settle before that `exit` event is ever delivered.
+    straggler = spawn(process.execPath, ['-e', writerSrc], { detached: true, stdio: 'ignore' });
 
     const deadline = Date.now() + 2000;
     while (!existsSync(readyFile) && Date.now() < deadline) { /* spin — wait for the straggler to actually be running */ }
@@ -717,7 +764,12 @@ test('teardown survives a straggler still writing into origin.git (bd forge-8vfn
   } finally {
     // Must not throw: this test's own assertions already passed, and a
     // teardown-only ENOTEMPTY racing a straggler must not flip that to a
-    // failure (COMMON §15.74's second remedy shape).
-    await f.cleanup();
+    // failure (COMMON §15.74's second remedy shape). Pass the straggler
+    // itself as a known writer so teardown kills/awaits it on ENOTEMPTY
+    // instead of guessing at a wall-clock retry budget (load-8 recurrence,
+    // bd forge-8vfn.5.55) — `f.cleanup()` has no way to know about this
+    // test's own injected child, so this bypasses it and calls the same
+    // underlying helper directly with that knowledge.
+    await cleanupFixtureRoot(f.root, { knownWriters: straggler ? [straggler] : [] });
   }
 });
