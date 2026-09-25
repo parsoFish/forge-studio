@@ -413,7 +413,7 @@ test('waitForCensusEmpty: NEVER empty after the bound — reports the survivors 
   }
 });
 
-test('waitForCensusEmpty: an unreadable census is refused, never reported empty, however long it waits', async () => {
+test('waitForCensusEmpty: a PERSISTENT unreadable census is refused, never reported empty, however long it waits', async () => {
   const r = await waitForCensusEmpty([{ pid: '100', startTime: 555 }], {
     boundMs: 60, pollMs: 20,
     listPids: () => { throw new Error('ENOENT'); },
@@ -422,6 +422,29 @@ test('waitForCensusEmpty: an unreadable census is refused, never reported empty,
   assert.equal(r.empty, false);
   assert.equal(r.survivors, null);
   assert.match(r.reason, /could not be fully confirmed/);
+});
+
+/**
+ * T1 1372's own 20-run repro under `taskset -c 0` plus three burners found
+ * this the hard way: run 19 of 20 reported `census must settle: {"empty":
+ * false,"survivors":null,...}` for a grandchild that WAS already dead — a
+ * single transient unreadable pid mid-scan (a process exiting in the narrow
+ * window between the live listing and the read of it) was read as a
+ * permanent failure on its FIRST sighting, never given the chance to clear
+ * on a later poll the way a non-empty survivor list already was.
+ */
+test('waitForCensusEmpty: MUST 3 — a TRANSIENT unknown is retried within the bound, not an immediate terminal failure', async () => {
+  let calls = 0;
+  const listPids = () => {
+    calls += 1;
+    if (calls === 1) throw new Error('transient EACCES'); // one bad read...
+    return []; // ...then the census is genuinely, honestly empty
+  };
+  const r = await waitForCensusEmpty([{ pid: '100', startTime: 555 }], {
+    boundMs: 5000, pollMs: 10, listPids, clock: fakeClock(10),
+  });
+  assert.equal(r.empty, true, `a transient unknown must not end the wait: ${JSON.stringify(r)}`);
+  assert.ok(calls >= 2, 'must have retried after the first unreadable read');
 });
 
 test('censusSurvivors: the live listing is attempted even when every recorded root fails its OWN verification — an unreadable listing is never hidden by a coincidence', () => {

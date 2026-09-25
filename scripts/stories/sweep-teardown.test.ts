@@ -8,6 +8,13 @@
  * `scripts/stories/sweep-teardown.mjs` — `restoreSweptCommitted`,
  * `stopOwnScheduler`, `releaseOwnInFlight` — and nothing here touches the fence
  * or the residue sweep, which stay in `sweep.test.ts` with `sweep.mjs`.
+ *
+ * THE REAL-PROCESS PLANTS LIVE IN `sweep-teardown-plant.mjs` (T1 1372, same
+ * split reason as `reap-plant.mjs`/`reap.test.ts`): this file was at 793/800
+ * when a flake needed a real fix rather than a bigger bound, and the plants
+ * now do their OWN event-based readiness waiting and OWN cleanup
+ * registration — logic that belongs beside the spawning, not repeated at
+ * every call site. See that file's header for the incident the split closes.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,7 +24,11 @@ import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight, stopSchedulerCensusAndRelease, reapCensusAndSweep, teardownExitCode, DAEMON_PID_FILE } from './sweep-teardown.mjs';
 import { sweepProductFixtures } from './sweep.mjs';
-import { quiesceWriters } from './quiesce.mjs';
+import {
+  killIfAlive, plantDaemonWithGrandchild, plantReapedRootWithGrandchild,
+  plantInFlightClaim, plantInitManifest, fastQuiesce, waitForFileToExist,
+  waitForSigtermCaught, waitForProcVisible,
+} from './sweep-teardown-plant.mjs';
 
 /**
  * The leading sweep's missing paired restore — T1 ruling 594, half 2.
@@ -294,60 +305,26 @@ test('689(iii) fallback: no in-flight dir, or nothing of ours in it, is silence'
  * Every planted process is cleaned up in `t.after` in the SAME test (T3 rule 9).
  */
 
-/** A daemon that ignores SIGTERM and, at spawn, forks a detached grandchild
- *  running `grandchildScript` — writing the grandchild's pid to `ralphPidFile`
- *  so the test can find and clean it up once its parent is dead. */
-function plantDaemonWithGrandchild(root: string, grandchildScript: string, ralphPidFile: string) {
-  mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
-  const daemon = spawn(process.execPath, ['-e', `
-    const { spawn } = require('node:child_process');
-    const fs = require('node:fs');
-    const child = spawn(process.execPath, ['-e', ${JSON.stringify(grandchildScript)}], {
-      cwd: ${JSON.stringify(root)}, detached: true, stdio: 'ignore',
-    });
-    fs.writeFileSync(${JSON.stringify(ralphPidFile)}, String(child.pid));
-    process.on('SIGTERM', () => {}); // ignored — the daemon itself must be force-killed
-    setInterval(() => {}, 1000);
-  `], { cwd: root, stdio: 'ignore' });
-  writeFileSync(join(root, DAEMON_PID_FILE), String(daemon.pid));
-  return daemon;
-}
-
-/** The `_queue/in-flight/` claim `releaseOwnInFlight` will find as this tree's own. */
-function plantInFlightClaim(root: string) {
-  const dir = join(root, '_queue', 'in-flight');
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'INIT-mine.md'), `---\nproject_repo_path: ${join(root, 'projects', 'gitpulse')}\n---\n`);
-  writeFileSync(join(dir, 'INIT-mine.md.heartbeat'), '2026-09-11T07:53:27.192Z');
-  return { manifest: join(dir, 'INIT-mine.md'), heartbeat: join(dir, 'INIT-mine.md.heartbeat') };
-}
-
-function killIfAlive(pid: number) {
-  try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
-}
-
 test('finding row 75 RED: the OLD sequence releases the claim while a detached grandchild is still rewriting the heartbeat', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'forge-census-red-'));
   const ralphPidFile = join(root, 'ralph.pid');
   const { heartbeat } = plantInFlightClaim(root);
 
-  const daemon = plantDaemonWithGrandchild(root, `
+  // `plantDaemonWithGrandchild` registers cleanup for BOTH pids itself —
+  // BEFORE its own readiness wait runs, so a wait that times out under load
+  // still cleans up what it spawned (T3 rule 9) — and, by event (the
+  // kernel's own SigCgt record), confirms both the daemon's and the
+  // grandchild's SIGTERM handlers are installed before returning: no fixed
+  // sleep needed here (T1 1372). KILL HOOKS REGISTERED BEFORE THE DIRECTORY
+  // REMOVAL, and that order is load-bearing, not cosmetic: node:test runs
+  // `t.after` hooks in the order they were REGISTERED, so this call's own
+  // cleanup (registered inside it) precedes the rmSync below.
+  const daemon = await plantDaemonWithGrandchild(t, root, `
     process.on('SIGTERM', () => {}); // ignored — this is the writer that must be force-killed
     setInterval(() => { try { require('node:fs').writeFileSync(${JSON.stringify(heartbeat)}, String(Date.now())); } catch {} }, 25);
     setInterval(() => {}, 1000);
   `, ralphPidFile);
-  // KILL HOOKS REGISTERED BEFORE THE DIRECTORY REMOVAL, and that order is
-  // load-bearing, not cosmetic: node:test runs `t.after` hooks in the order
-  // they were REGISTERED (confirmed directly — a fixture with the rmSync
-  // registered first leaked the planted grandchild in exactly this file,
-  // because it read a now-deleted `ralphPidFile` and silently found nothing
-  // to kill). The process must be gone before its tmpdir is.
-  t.after(() => {
-    killIfAlive(daemon.pid!);
-    try { killIfAlive(Number(readFileSync(ralphPidFile, 'utf8'))); } catch { /* never wrote */ }
-  });
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  await new Promise((r) => setTimeout(r, 150)); // let the grandchild's rewrite loop start
 
   // The OLD sequence, exactly as `run.mjs` ran it before this fix: stop, then
   // release, with nothing in between confirming the grandchild is gone.
@@ -357,9 +334,8 @@ test('finding row 75 RED: the OLD sequence releases the claim while a detached g
   const rel = releaseOwnInFlight(root);
   assert.ok(rel.released.includes('INIT-mine.md.heartbeat'), 'the old code reports it released');
 
-  await new Promise((r) => setTimeout(r, 100)); // the grandchild's next tick
   assert.equal(
-    existsSync(heartbeat), true,
+    await waitForFileToExist(heartbeat), true,
     'RED: the grandchild the daemon spawned outlived it and rewrote the heartbeat the old sequence just released',
   );
 });
@@ -369,18 +345,14 @@ test('finding row 75 DOOR: stopSchedulerCensusAndRelease kills the grandchild, c
   const ralphPidFile = join(root, 'ralph.pid');
   const { heartbeat } = plantInFlightClaim(root);
 
-  const daemon = plantDaemonWithGrandchild(root, `
+  // Cleanup for both pids is registered inside the plant call, before rmSync
+  // — see the RED test above for why that order matters.
+  const daemon = await plantDaemonWithGrandchild(t, root, `
     process.on('SIGTERM', () => {});
     setInterval(() => { try { require('node:fs').writeFileSync(${JSON.stringify(heartbeat)}, String(Date.now())); } catch {} }, 25);
     setInterval(() => {}, 1000);
   `, ralphPidFile);
-  // Kill before rmSync — see the RED test above for why the order matters.
-  t.after(() => {
-    killIfAlive(daemon.pid!);
-    try { killIfAlive(Number(readFileSync(ralphPidFile, 'utf8'))); } catch { /* never wrote */ }
-  });
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  await new Promise((r) => setTimeout(r, 150));
 
   const result = await stopSchedulerCensusAndRelease(root, { graceMs: 300, censusBoundMs: 3000, censusPollMs: 20, rereadDelayMs: 150 });
 
@@ -418,7 +390,10 @@ test('finding row 75 DOOR (second): a writer OUTSIDE the daemon\'s tree is invis
   // Kill before rmSync — see the RED test above for why the order matters.
   t.after(() => killIfAlive(sibling.pid!));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  await new Promise((r) => setTimeout(r, 100));
+  // Wait on the EVENT, not the clock (T1 1372): the daemon's own SIGTERM
+  // handler installed, and the sibling genuinely visible in /proc.
+  await waitForSigtermCaught(daemon.pid!);
+  await waitForProcVisible(sibling.pid!);
 
   const result = await stopSchedulerCensusAndRelease(root, { graceMs: 300, censusBoundMs: 2000, censusPollMs: 20, rereadDelayMs: 150 });
 
@@ -440,20 +415,16 @@ test('finding row 75 DOOR (third): a TERM-respecting grandchild exits within the
   const cleanExitMarker = join(root, 'clean-exit.marker');
   const { heartbeat } = plantInFlightClaim(root);
 
-  const daemon = plantDaemonWithGrandchild(root, `
+  // Cleanup for both pids is registered inside the plant call, before rmSync
+  // — see the RED test above for why that order matters.
+  const daemon = await plantDaemonWithGrandchild(t, root, `
     process.on('SIGTERM', () => {
       require('node:fs').writeFileSync(${JSON.stringify(cleanExitMarker)}, 'clean');
       process.exit(0);
     });
     setInterval(() => {}, 1000);
   `, ralphPidFile);
-  // Kill before rmSync — see the RED test above for why the order matters.
-  t.after(() => {
-    killIfAlive(daemon.pid!);
-    try { killIfAlive(Number(readFileSync(ralphPidFile, 'utf8'))); } catch { /* already exited, which is the point */ }
-  });
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  await new Promise((r) => setTimeout(r, 150));
 
   const result = await stopSchedulerCensusAndRelease(root, { graceMs: 300, censusBoundMs: 3000, censusPollMs: 20, rereadDelayMs: 100 });
 
@@ -477,66 +448,18 @@ test('finding row 75 DOOR (third): a TERM-respecting grandchild exits within the
  * gates the scheduler's release.
  */
 
-/** An `INIT-<id>.md` manifest `claimQueueWrites` will attribute to THIS run by
- *  `created_at`, plus its heartbeat — the artefact `captureAndClearMintedRun-
- *  Artefacts` (reached through `sweepProductFixtures`) actually clears. */
-function plantInitManifest(root: string, sinceMs: number) {
-  const dir = join(root, '_queue', 'in-flight');
-  mkdirSync(dir, { recursive: true });
-  const createdAt = new Date(sinceMs + 1000).toISOString();
-  writeFileSync(join(dir, 'INIT-mine.md'), `---\ncreated_at: '${createdAt}'\n---\n`);
-  writeFileSync(join(dir, 'INIT-mine.md.heartbeat'), '2026-09-11T07:53:27.192Z');
-  return join(dir, 'INIT-mine.md.heartbeat');
-}
-
-/** A real process standing in for a pid `reapAgentRuns` already believes it
- *  reaped — its own liveness does not matter to the door, only that a
- *  detached grandchild running `grandchildScript` outlives it. Reuses
- *  `plantDaemonWithGrandchild`'s shape without a daemon pid file: nothing
- *  here reads `DAEMON_PID_FILE`, the caller passes `root.pid` as a reaped pid
- *  directly, exactly as `reap.reaped.map(r => r.pid)` would. */
-function plantReapedRootWithGrandchild(root: string, grandchildScript: string, ralphPidFile: string) {
-  const parent = spawn(process.execPath, ['-e', `
-    const { spawn } = require('node:child_process');
-    const fs = require('node:fs');
-    const child = spawn(process.execPath, ['-e', ${JSON.stringify(grandchildScript)}], {
-      cwd: ${JSON.stringify(root)}, detached: true, stdio: 'ignore',
-    });
-    fs.writeFileSync(${JSON.stringify(ralphPidFile)}, String(child.pid));
-    setInterval(() => {}, 1000);
-  `], { cwd: root, stdio: 'ignore' });
-  return parent;
-}
-
-/**
- * `quiesceWriters` with its own defaults intact (15s / 250ms) does nothing to
- * end the wait itself — it only OBSERVES. In these doors nothing kills the
- * planted root until `reapCensusAndSweep`'s OWN census does, several lines
- * later, so the real defaults burn the full 15s bound for no reason before
- * getting there. Production pays this unchanged (`quiesceWriters` itself is
- * untouched by this fix); the doors do not need to.
- */
-function fastQuiesce(opts: Parameters<typeof quiesceWriters>[0]) {
-  return quiesceWriters({ ...opts, upToMs: 400, pollMs: 25, settleMs: 25 });
-}
-
 test('finding row 75 (agent half) RED: the OLD sequence (sweepProductFixtures alone) leaves a heartbeat a live grandchild keeps rewriting', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'forge-agent-census-red-'));
   const sinceMs = Date.now() - 60_000;
   const ralphPidFile = join(root, 'ralph.pid');
   const heartbeat = plantInitManifest(root, sinceMs);
 
-  const parent = plantReapedRootWithGrandchild(root, `
+  const parent = await plantReapedRootWithGrandchild(t, root, `
     process.on('SIGTERM', () => {}); // ignored — this is the writer that must be force-killed
     setInterval(() => { try { require('node:fs').writeFileSync(${JSON.stringify(heartbeat)}, String(Date.now())); } catch {} }, 25);
     setInterval(() => {}, 1000);
   `, ralphPidFile);
-  t.after(() => {
-    killIfAlive(parent.pid!);
-    try { killIfAlive(Number(readFileSync(ralphPidFile, 'utf8'))); } catch { /* never wrote */ }
-  });
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  await new Promise((r) => setTimeout(r, 150));
 
   // The OLD sequence: `quiesceWriters` only prints, and the trailing sweep
   // ran regardless of what it found. Standing in for that here with the sweep
@@ -545,9 +468,8 @@ test('finding row 75 (agent half) RED: the OLD sequence (sweepProductFixtures al
   const sweep = sweepProductFixtures('S-red', root, { sinceMs, evidenceDir });
   assert.ok(sweep.artefacts.cleared.includes('_queue/in-flight/INIT-mine.md.heartbeat'), `must have cleared it: ${JSON.stringify(sweep)}`);
 
-  await new Promise((r) => setTimeout(r, 100)); // the grandchild's next tick
   assert.equal(
-    existsSync(heartbeat), true,
+    await waitForFileToExist(heartbeat), true,
     'RED: the grandchild outlived reapAgentRuns and rewrote the heartbeat the old sequence just cleared',
   );
 });
@@ -558,17 +480,12 @@ test('finding row 75 (agent half) DOOR: reapCensusAndSweep kills the grandchild,
   const ralphPidFile = join(root, 'ralph.pid');
   const heartbeat = plantInitManifest(root, sinceMs);
 
-  const parent = plantReapedRootWithGrandchild(root, `
+  const parent = await plantReapedRootWithGrandchild(t, root, `
     process.on('SIGTERM', () => {});
     setInterval(() => { try { require('node:fs').writeFileSync(${JSON.stringify(heartbeat)}, String(Date.now())); } catch {} }, 25);
     setInterval(() => {}, 1000);
   `, ralphPidFile);
-  t.after(() => {
-    killIfAlive(parent.pid!);
-    try { killIfAlive(Number(readFileSync(ralphPidFile, 'utf8'))); } catch { /* never wrote */ }
-  });
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  await new Promise((r) => setTimeout(r, 150));
 
   const evidenceDir = join(root, 'queue-claim');
   const result = await reapCensusAndSweep({
@@ -645,7 +562,7 @@ test('finding row 75 (agent half) DOOR (second): a writer OUTSIDE this run\'s di
     setInterval(() => {}, 1000);
   `], { stdio: 'ignore' });
   t.after(() => killIfAlive(sibling.pid!));
-  await new Promise((r) => setTimeout(r, 100));
+  await waitForProcVisible(sibling.pid!); // wait on the event, not the clock (T1 1372)
 
   const evidenceDir = join(root, 'queue-claim');
   const result = await reapCensusAndSweep({
@@ -655,14 +572,29 @@ test('finding row 75 (agent half) DOOR (second): a writer OUTSIDE this run\'s di
   });
 
   assert.equal(result.census.empty, true, 'legitimately empty — this run dispatched nothing');
-  assert.ok(result.sweep?.artefacts.cleared.includes('_queue/in-flight/INIT-mine.md.heartbeat'), 'the clear itself still ran');
+  // The sibling writes every 20ms, racing the IMMEDIATE capture-then-verify
+  // inside `captureAndClearMintedRunArtefacts` itself (rmSync then a same-
+  // tick existsSync — no JS-level gap, but under heavy contention the OS can
+  // still preempt this process between those two syscalls and let the
+  // sibling's own write land in between). Both outcomes of that race are
+  // SAFE and are asserted on here, per T1 1372 ("assert on outcome, not
+  // timing"): either the immediate check already caught the sibling (never
+  // counted as cleared at all, reported unremoved on the spot), or it looked
+  // clear for an instant and the LATER, DELAYED re-read below catches it.
+  // What must never happen, either way, is a silent, uncontested CLEARED —
+  // asserted last, regardless of which path was taken.
+  const cleared = result.sweep?.artefacts.cleared.includes('_queue/in-flight/INIT-mine.md.heartbeat') ?? false;
+  const unremoved = (result.sweep?.artefacts.unremoved ?? []).some((u: { path: string }) => u.path.endsWith('INIT-mine.md.heartbeat'));
+  assert.ok(cleared || unremoved, `the sibling must be caught one way or the other: ${JSON.stringify(result.sweep?.artefacts)}`);
+  if (cleared) {
+    assert.ok(
+      result.reappearedArtefacts.includes('_queue/in-flight/INIT-mine.md.heartbeat'),
+      `cleared immediately, so the re-read must catch the sibling's next write: ${JSON.stringify(result.lines)}`,
+    );
+  }
   assert.ok(
-    result.reappearedArtefacts.includes('_queue/in-flight/INIT-mine.md.heartbeat'),
-    `the re-read must catch what the census could not: ${JSON.stringify(result.lines)}`,
-  );
-  assert.ok(
-    result.lines.some((l: string) => /ARTEFACT CLEAR DID NOT HOLD/.test(l)),
-    'never a silent CLEARED for a path that came back',
+    result.lines.some((l: string) => /ARTEFACT CLEAR DID NOT HOLD/.test(l) || /NOT REMOVED|still present after removal/.test(l)),
+    `never a silent CLEARED for a path a live writer outside the census still holds: ${JSON.stringify(result.lines)}`,
   );
 });
 
@@ -673,19 +605,14 @@ test('finding row 75 (agent half) DOOR (third): a TERM-respecting grandchild exi
   const cleanExitMarker = join(root, 'clean-exit.marker');
   const heartbeat = plantInitManifest(root, sinceMs);
 
-  const parent = plantReapedRootWithGrandchild(root, `
+  const parent = await plantReapedRootWithGrandchild(t, root, `
     process.on('SIGTERM', () => {
       require('node:fs').writeFileSync(${JSON.stringify(cleanExitMarker)}, 'clean');
       process.exit(0);
     });
     setInterval(() => {}, 1000);
   `, ralphPidFile);
-  t.after(() => {
-    killIfAlive(parent.pid!);
-    try { killIfAlive(Number(readFileSync(ralphPidFile, 'utf8'))); } catch { /* already exited, which is the point */ }
-  });
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  await new Promise((r) => setTimeout(r, 150));
 
   const evidenceDir = join(root, 'queue-claim');
   const result = await reapCensusAndSweep({

@@ -341,7 +341,17 @@ export function censusSurvivors(roots, { procRoot = '/proc', listPids } = {}) {
  *
  * An unreadable `/proc`, OR a chain MUST 3 could not fully read, NEVER
  * resolves to `empty: true` — an unknown census is refused, not guessed
- * clean, however long the bound runs.
+ * clean, however long the bound runs. IT IS ALSO RETRIED, exactly like a
+ * non-empty survivor list, rather than treated as an immediate terminal
+ * failure the first time it is seen. Measured, not supposed (T1 1372's own
+ * 20-run repro under load): a single unreadable pid mid-scan — a process
+ * that exits in the narrow window between the live listing and the read of
+ * it, surfacing as something other than the plain "gone" `readPpid` already
+ * handles — is a TRANSIENT condition on a busy host, not a permanent one,
+ * and giving up on the first sighting turned a real, already-dead grandchild
+ * into a reported failure one run in twenty. Only UNKNOWN that PERSISTS for
+ * the whole bound is reported; anything that resolves before then — empty or
+ * a genuine survivor — is read exactly as if the blip never happened.
  *
  * @param {ReadonlyArray<{pid: number|string, startTime: number|null}>} roots
  * @param {{boundMs?: number, pollMs?: number, procRoot?: string,
@@ -362,22 +372,23 @@ export async function waitForCensusEmpty(roots, opts = {}) {
     return { empty: true, survivors: [], waitedMs: 0, reason: 'census-empty — no run root was recorded, so there is nothing to confirm' };
   }
 
+  const unknownReason = `${procRoot} could not be fully confirmed — either the live listing could not be read, or a ` +
+    'candidate\'s ancestry hit an unreadable link; the census cannot confirm empty, so it is not treated as empty';
+
   const started = now();
   for (;;) {
     const survivors = censusSurvivors(filteredRoots, { procRoot, listPids });
+    const waited = now() - started;
     if (survivors === null) {
-      return {
-        empty: false,
-        survivors: null,
-        waitedMs: now() - started,
-        reason: `${procRoot} could not be fully confirmed — either the live listing could not be read, or a ` +
-          'candidate\'s ancestry hit an unreadable link; the census cannot confirm empty, so it is not treated as empty',
-      };
+      if (waited >= boundMs) {
+        return { empty: false, survivors: null, waitedMs: waited, reason: unknownReason };
+      }
+      await sleep(pollMs);
+      continue;
     }
     if (survivors.length === 0) {
-      return { empty: true, survivors: [], waitedMs: now() - started, reason: 'census-empty' };
+      return { empty: true, survivors: [], waitedMs: waited, reason: 'census-empty' };
     }
-    const waited = now() - started;
     if (waited >= boundMs) {
       return {
         empty: false,
