@@ -186,3 +186,59 @@ test('control: stopSchedulerCensusAndRelease with genuinely no pidfile (real ENO
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// -------------------- residual: reapCensusAndSweep re-checks _logs/ itself --
+//
+// `reapedPids` (`run-story.mjs`'s `reap.reaped.map((r) => r.pid)`) never
+// carries a PID_READ_UNKNOWN row — it lands in `reap.skipped` — so an
+// unreadable `_logs/` or `turn.pid` from THIS run's own dispatch collection
+// can pass through as an empty, CONFIRMED `reapedPids` set, and the trailing
+// sweep would clear `_queue/`, `_worktrees/` and this run's ground while an
+// agent this run failed to even enumerate might still be alive. Closed by
+// having `reapCensusAndSweep` re-run the same read independently
+// (`agentRunsReadable`, reap.mjs) rather than trusting `run-story.mjs`'s
+// derived set — `run-story.mjs` sits at its own 800-line cap and is not
+// touched here.
+
+test('ROW 101 (RED) residual: reapCensusAndSweep REFUSES when its OWN re-check of _logs/ turns up a PID_READ_UNKNOWN row, never clears', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'sweep-teardown-unknown-agentruns-'));
+  const dir = join(root, '_logs', '_agent-x');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'turn.pid'), '4242');
+  chmodSync(join(dir, 'turn.pid'), 0o000);
+  mkdirSync(join(root, '_queue', 'in-flight'), { recursive: true });
+  const claim = join(root, '_queue', 'in-flight', 'INIT-z.md.heartbeat');
+  writeFileSync(claim, 'beat');
+  try {
+    const result = await reapCensusAndSweep({
+      root, storyId: 'S-unknown-agentruns', sinceMs: Date.now() - 60_000, evidenceDir: join(root, 'queue-claim'),
+      reapedPids: [], // exactly the S10 shape — this run's own reap saw nothing
+      schedulerPid: null, // isolates this door from the scheduler-unknown one
+    });
+    assert.equal(result.sweep, null, 'nothing may be cleared while this run\'s own dispatch collection is UNKNOWN');
+    assert.equal(result.census.empty, false);
+    assert.match(result.census.reason, /dispatched-agent collection could not be confirmed/i);
+    assert.ok(
+      result.lines.some((l: string) => /REFUSING/.test(l)),
+      `expected a named REFUSING line: ${JSON.stringify(result.lines)}`,
+    );
+    assert.equal(fileStillThere(claim), true, 'the claim must still be on disk — nothing was cleared');
+  } finally {
+    chmodSync(join(dir, 'turn.pid'), 0o644);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('control: reapCensusAndSweep with a genuinely absent _logs/ (real ENOENT) proceeds exactly as before', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'sweep-teardown-unknown-agentruns-ctrl-'));
+  try {
+    const result = await reapCensusAndSweep({
+      root, storyId: 'S-agentruns-ctrl', sinceMs: Date.now() - 60_000, evidenceDir: join(root, 'queue-claim'),
+      reapedPids: [], schedulerPid: null,
+    });
+    assert.equal(result.census.reason, 'census-empty — no run root was recorded, so there is nothing to confirm');
+    assert.ok(result.sweep, 'a genuinely absent _logs/ must not be refused — there is nothing to confirm');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
