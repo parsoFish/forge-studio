@@ -34,10 +34,14 @@
  * `--approve-spend` (H2, $25 approved by the operator for the S5/S6/S7 batch
  * on 2026-08-30).
  *
- * `ground.project` is `mdtoc` — the schema requires a project id, this story's
- * subject is a KB, and mdtoc is the project beat 11's planner run is pointed
- * at. It is the one project committed to this repo, so it is the only one a
- * CLEAN CHECKOUT has, which is the condition 1.0 exits on.
+ * `ground.project` is `story-s6`, provisioned for each run from the
+ * forge-owned fixture `tests/stories/grounds/node-library` (a byte copy of
+ * `projects/mdtoc` at `9db91ef5`, provenance beside it) and torn down after
+ * the fence has judged it (M7-D, forge-1rk5.1) — the schema requires a
+ * project id, this story's subject is a KB, and story-s6 is the project beat
+ * 11's planner run is pointed at. It used to be the real `projects/mdtoc`; a
+ * story now never runs against a ground the operator owns, and a clean
+ * checkout still has everything it needs.
  *
  * ON THE `data-*` KEYS. Every key and value below was copied from the live DOM
  * of a bridge booted from this lane's own worktree. Beats 5 and 6 used to be
@@ -61,7 +65,7 @@
  * re-pinned). The first draft stepped straight from `/knowledge` to
  * `/architect/new`, and the runner was right to red it: no nav pillar and no
  * link on the Knowledge page points there, so it is not a step an operator can
- * take. Three beats now carry the real path — Projects, mdtoc, "Architect →" —
+ * take. Three beats now carry the real path — Projects, story-s6, "Architect →" —
  * and NOT ONE ASSERTION CHANGED. The amendment made the story truer about the
  * operator's journey; it did not make it easier to pass.
  *   - Beat 11 CLOSED by amend-3: it is now 11a (press, stay, bind) + 11b
@@ -192,7 +196,7 @@ const CEILING = '5';
 
 export default {
   id: 'S6',
-  ground: { project: 'mdtoc', realSpawn: true, budget_usd: 25 },
+  ground: { project: 'story-s6', fixture: 'node-library', realSpawn: true, budget_usd: 25 },
   docs: { kind: 'how-to', title: 'Create a new knowledge base' },
   beats: [
     {
@@ -408,21 +412,21 @@ export default {
     },
     {
       // Fully expressible, and deliberately with NO `do`: the project card is a
-      // real `a[href="/projects/mdtoc"]`, so the runner reaches it by the link
-      // the operator clicks. The card carries `data-card-type`/`data-card-id`
+      // real `a[href="/projects/story-s6"]`, so the runner reaches it by the
+      // link the operator clicks. The card carries `data-card-type`/`data-card-id`
       // and no `data-action`, and naming a handle that does not exist would be
       // inventing one.
-      act: 'Open mdtoc',
+      act: 'Open story-s6',
       expect: {
-        route: '/projects/mdtoc',
-        data: { page: 'projects', 'project-id': 'mdtoc', 'page-ready': 'true' },
+        route: '/projects/story-s6',
+        data: { page: 'projects', 'project-id': 'story-s6', 'page-ready': 'true' },
       },
-      say: 'mdtoc is the project this repo ships with, so it is the one a clean checkout can plan against.',
+      say: 'story-s6 is provisioned from the node-library fixture for this run, so it is the project a clean checkout can plan against.',
     },
     {
       // Fully expressible, but only because the exit is itself a `data-action`:
       // `start-work-architect` is an <a> whose href carries a query string
-      // (`/architect/new?project=mdtoc`), which the runner's `a[href="<route>"]`
+      // (`/architect/new?project=story-s6`), which the runner's `a[href="<route>"]`
       // fallback cannot match. `/architect/new` is the native "start a run" entry;
       // `section`, `roster-state` and `new-idea-ready` all live on the same
       // `[data-section="new-idea"]` element. `roster-state: 'ok'` is the
