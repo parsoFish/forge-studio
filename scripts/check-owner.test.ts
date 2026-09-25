@@ -221,3 +221,23 @@ test('a package-owned SKILL.md is production and unowned until a QUARRY row name
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+/**
+ * A package's OWN package is a valid owner (G3: a second factory ships as a
+ * package and must need no tooling edit to exist). Owners are the fixed apps
+ * plus every real directory under `packages/` of the audited root; a name
+ * that is neither is still refused.
+ */
+test('a row may be owned by any real package directory; an owner that names nothing is refused', () => {
+  const root = mkdtempSync(join(tmpdir(), 'owner-pkg-owner-'));
+  execFileSync('git', ['init', '-q'], { cwd: root });
+  const rel = 'packages/demo-pkg/skills/x/SKILL.md';
+  mkdirSync(dirname(join(root, rel)), { recursive: true });
+  writeFileSync(join(root, rel), '---\nname: x\n---\nA package-owned agent.\n');
+  try {
+    assert.deepEqual(audit(root, `| ${rel} | demo-pkg | rewritten | 3 |\n`).badOwner, [], 'its own package must be a valid owner');
+    assert.deepEqual(audit(root, `| ${rel} | demo-pkgg | rewritten | 3 |\n`).badOwner, [`${rel} (owner "demo-pkgg")`]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

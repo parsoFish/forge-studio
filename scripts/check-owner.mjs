@@ -27,7 +27,7 @@
  *
  * RUN: node scripts/check-owner.mjs [--json] [--quarry <path>] [--baseline <path>]
  */
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,15 +35,16 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
- * The packages plus the two apps — `1.0.md` §0 and spec §3. `stations` added
- * F3 (operator ruling, items 81/83): the station executor and every band
- * moved out of `factory` into its own package, between `flows` and `factory`
- * in the allow-graph.
+ * The two apps plus every real directory under `packages/` of the audited
+ * root (`1.0.md` §0, spec §3). Read from the tree, not listed: a second
+ * factory ships as a package (G3) and must need no tooling edit to exist.
  */
-export const OWNERS = Object.freeze([
-  'contracts', 'kernel', 'library', 'knowledge', 'projects',
-  'agents', 'sessions', 'flows', 'stations', 'factory', 'apps/forge', 'apps/studio',
-]);
+const APP_OWNERS = Object.freeze(['apps/forge', 'apps/studio']);
+export function ownersFor(root) {
+  const dir = join(root, 'packages');
+  const pkgs = existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name) : [];
+  return Object.freeze([...pkgs.sort(), ...APP_OWNERS]);
+}
 
 /** `1.0.md` §4 M2 Lane A. */
 export const DISPOSITIONS = Object.freeze(['verbatim', 'pruned', 'rewritten', 'deleted']);
@@ -126,7 +127,8 @@ export function audit(root, quarryMarkdown) {
 
   const unowned = [...tree].filter((p) => !seen.has(p)).sort();
   const orphans = [...seen.keys()].filter((p) => !tree.has(p)).sort();
-  const badOwner = rows.filter((r) => !OWNERS.includes(r.owner)).map((r) => `${r.path} (owner "${r.owner}")`).sort();
+  const owners = ownersFor(root);
+  const badOwner = rows.filter((r) => !owners.includes(r.owner)).map((r) => `${r.path} (owner "${r.owner}")`).sort();
   const badDisposition = rows.filter((r) => !DISPOSITIONS.includes(r.disposition)).map((r) => `${r.path} (disposition "${r.disposition}")`).sort();
   const badLoc = rows.filter((r) => !Number.isInteger(r.loc) || r.loc < 0).map((r) => r.path).sort();
 
@@ -176,7 +178,7 @@ function main(argv) {
     if (result.unowned.length > 20) process.stdout.write(`  … and ${result.unowned.length - 20} more unowned\n`);
     for (const p of result.orphans) process.stdout.write(`  orphan row: ${p} — QUARRY.md claims a file that is not in the tree\n`);
     for (const p of result.duplicates) process.stdout.write(`  duplicate row: ${p} — a file has exactly one owner\n`);
-    for (const p of result.badOwner) process.stdout.write(`  unknown owner: ${p} — one of ${OWNERS.join(', ')}\n`);
+    for (const p of result.badOwner) process.stdout.write(`  unknown owner: ${p} — one of ${ownersFor(ROOT).join(', ')}\n`);
     for (const p of result.badDisposition) process.stdout.write(`  unknown disposition: ${p} — one of ${DISPOSITIONS.join(', ')}\n`);
     for (const p of result.badLoc) process.stdout.write(`  bad loc: ${p} — the row's line count must be a non-negative integer\n`);
     if (over) process.stdout.write(`check-owner: FAIL — ${result.unowned.length} unowned files, above the baseline of ${baseline.unowned}\n`);
