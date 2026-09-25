@@ -42,6 +42,7 @@ import {
   makeCycleTerminalDoor, makeCycleTerminalWatch, STALL_CEILING_MS, TERMINAL_UI_GRACE_MS,
 } from './beats-agent-proc.mjs';
 import { resolveCycleOf } from './beats.mjs';
+import { FS_CLOCK_SLACK_MS } from './beats-queue-terminal.mjs';
 
 function realDoor(): { root: string; logs: string; door: (runId: string | null, sinceMs: number, want: string) => { done: boolean; state: string; detail: string } | null } {
   const root = mkdtempSync(join(tmpdir(), 'story-cycle-terminal-'));
@@ -515,7 +516,7 @@ test('T1 1503: a queue terminal OLDER than the anchor is ignored — the wait co
   // not do: it back-dates mtime but stamps ctime with NOW, and ctime is what
   // a rename into _queue/<state>/ moves (see the rename test below).
   queueFile(root, 'failed', initiative);
-  const settledAt = Date.now() + 50;
+  const settledAt = Date.now() + FS_CLOCK_SLACK_MS + 50;
   while (Date.now() < settledAt) { /* ctime resolution: the anchor must be strictly later */ }
   const anchor = Date.now();
 
@@ -554,7 +555,7 @@ test('T1 1503: a manifest MOVED into a terminal state after the anchor counts ev
   queueFile(root, 'in-flight', initiative);
   const old = (Date.now() - 600_000) / 1000;
   utimesSync(join(root, '_queue', 'in-flight', `${initiative}.md`), old, old);
-  const settledAt = Date.now() + 50;
+  const settledAt = Date.now() + FS_CLOCK_SLACK_MS + 50;
   while (Date.now() < settledAt) { /* the anchor is strictly after the file's last write */ }
   const anchor = Date.now();
   const watch = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: initiative })!;

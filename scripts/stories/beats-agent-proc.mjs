@@ -24,7 +24,7 @@
 import { readFileSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { cycleProgressIdleMs } from './beats-cycle-progress.mjs';
-import { queueManifestTerminal } from './beats-queue-terminal.mjs';
+import { queueManifestTerminal, FS_CLOCK_SLACK_MS } from './beats-queue-terminal.mjs';
 // T1 ruling 1471 — re-exported so `beats-page.mjs` names the wall ceiling
 // beside `STALL_CEILING_MS`/`TERMINAL_UI_GRACE_MS`, its two siblings that
 // already live in THIS file rather than in the schema that only validates what
@@ -554,7 +554,7 @@ export function makeCycleTerminalDoor(forgeRoot, opts = null) {
           // Named, never silent (§15.504), and never treated as terminal: an
           // unreadable queue only forfeits this early exit, never fabricates one.
           door.lastSeen = q.detail;
-        } else if (q.mtimeMs >= sinceMs) {
+        } else if (q.mtimeMs >= sinceMs - FS_CLOCK_SLACK_MS) {
           door.lastSeen = q.detail;
           return Object.freeze({ done: q.state === wantState, state: q.state, detail: q.detail });
         }

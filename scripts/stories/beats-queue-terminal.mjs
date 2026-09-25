@@ -52,6 +52,17 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
+/**
+ * How far a file timestamp may trail `Date.now()` and still be "at or after"
+ * an anchor. The kernel stamps mtime/ctime from its COARSE clock, which runs
+ * behind the fine clock `Date.now()` reads — measured on this host: a rename
+ * made strictly after the anchor carried a ctime 1.1 ms BEFORE it. Without a
+ * slack, a terminal the product wrote just after the press can read as "the
+ * previous run's". 250 ms is far above coarse-clock lag and far below the
+ * minutes-old terminal the S10 run 22 guard exists for.
+ */
+export const FS_CLOCK_SLACK_MS = 250;
+
 export function queueManifestTerminal(forgeRoot, initiativeId) {
   const queue = join(forgeRoot, '_queue');
   let states;
@@ -76,9 +87,15 @@ export function queueManifestTerminal(forgeRoot, initiativeId) {
     const match = names.find((n) => n.includes(initiativeId));
     if (match === undefined) continue;
     const filePath = join(stateDir, match);
+    // WHEN IT ARRIVED, not when it was last written: `moveTo`
+    // (packages/flows/queue.ts) is a bare `renameSync`, which leaves mtime
+    // alone and stamps ctime — so a manifest written before the press and
+    // moved into _queue/failed/ after it carries an OLD mtime. The later of
+    // the two is the moment this state became true.
     let mtimeMs;
     try {
-      ({ mtimeMs } = statSync(filePath));
+      const st = statSync(filePath);
+      mtimeMs = Math.max(st.mtimeMs, st.ctimeMs);
     } catch (err) {
       return { unknown: true, detail: `could not stat ${filePath}: ${err?.code ?? err?.message}` };
     }

@@ -28,6 +28,7 @@ import { join } from 'node:path';
 
 import { makeCycleTerminalDoor, makeCycleTerminalWatch, newestChannelSince, STALL_CEILING_MS } from './beats-agent-proc.mjs';
 import { waitForConsequence } from './beats-page.mjs';
+import { FS_CLOCK_SLACK_MS } from './beats-queue-terminal.mjs';
 
 const INIT = 'INIT-2026-09-19-exclude-author-flag';
 
@@ -51,12 +52,17 @@ function sharedCycle(state: string, architectStartedAt: string): { root: string;
   writeFileSync(manifest, '# initiative\n');
   const at = new Date(architectStartedAt).getTime() / 1000;
   utimesSync(manifest, at, at);
+  // The PREVIOUS run's manifest must predate this test's anchor in ctime too
+  // (utimesSync back-dates mtime only and stamps ctime NOW); the door accepts
+  // a terminal within FS_CLOCK_SLACK_MS of the anchor, so settle past it.
+  const settledAt = Date.now() + FS_CLOCK_SLACK_MS + 50;
+  while (Date.now() < settledAt) { /* settle */ }
   return { root, dir };
 }
 
 test('identity form: the ARCHITECT run\'s ready-for-review is not the terminal of the run the press started', () => {
-  const anchor = Date.now();
-  const { root } = sharedCycle('ready-for-review', new Date(anchor - 300_000).toISOString());
+  const { root } = sharedCycle('ready-for-review', new Date(Date.now() - 300_000).toISOString());
+  const anchor = Date.now(); // AFTER the previous run's files exist — see sharedCycle
   const door = makeCycleTerminalDoor(root, { cycleOf: INIT })!;
 
   assert.equal(door(null, anchor, 'ready-for-review'), null, 'no run has started since the press, so nothing has terminated for it');
@@ -64,8 +70,8 @@ test('identity form: the ARCHITECT run\'s ready-for-review is not the terminal o
 });
 
 test('identity form: once the cycle starts AFTER the anchor, its terminal counts', () => {
-  const anchor = Date.now();
-  const { root, dir } = sharedCycle('ready-for-review', new Date(anchor - 300_000).toISOString());
+  const { root, dir } = sharedCycle('ready-for-review', new Date(Date.now() - 300_000).toISOString());
+  const anchor = Date.now(); // AFTER the previous run's files exist — see sharedCycle
   appendFileSync(join(dir, 'events.jsonl'), `${JSON.stringify({ skill: 'cycle', event_type: 'start', message: 'cycle.start', started_at: new Date(anchor + 1_000).toISOString() })}\n`);
   const door = makeCycleTerminalDoor(root, { cycleOf: INIT })!;
 
@@ -75,8 +81,8 @@ test('identity form: once the cycle starts AFTER the anchor, its terminal counts
 });
 
 test('identity form: a WRONG terminal left by the previous run does not red the press early', () => {
-  const anchor = Date.now();
-  const { root } = sharedCycle('done', new Date(anchor - 300_000).toISOString());
+  const { root } = sharedCycle('done', new Date(Date.now() - 300_000).toISOString());
+  const anchor = Date.now(); // AFTER the previous run's files exist — see sharedCycle
   const watch = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: INIT })!;
 
   assert.equal(watch(null, anchor), null, 'the previous run ended in done — that is not a verdict on the run this press started');
@@ -139,8 +145,8 @@ test('a beat with no declared terminal keeps today\'s semantics: it ends when it
 });
 
 test('D review (1): once the press\'s run is proven started, the door does not re-read the log every poll (latched)', { skip: process.getuid?.() === 0 ? 'root reads mode-000 files' : false }, () => {
-  const anchor = Date.now();
-  const { root, dir } = sharedCycle('ready-for-review', new Date(anchor - 300_000).toISOString());
+  const { root, dir } = sharedCycle('ready-for-review', new Date(Date.now() - 300_000).toISOString());
+  const anchor = Date.now(); // AFTER the previous run's files exist — see sharedCycle
   appendFileSync(join(dir, 'events.jsonl'), `${JSON.stringify({ skill: 'cycle', event_type: 'start', message: 'cycle.start', started_at: new Date(anchor + 1_000).toISOString() })}\n`);
   const door = makeCycleTerminalDoor(root, { cycleOf: INIT })!;
   assert.equal(door(null, anchor, 'ready-for-review')?.done, true);
@@ -151,8 +157,8 @@ test('D review (1): once the press\'s run is proven started, the door does not r
 });
 
 test('D review (2): an UNREADABLE cycle log is named, never read as "not started" (§15.504)', { skip: process.getuid?.() === 0 ? 'root reads mode-000 files' : false }, () => {
-  const anchor = Date.now();
-  const { root, dir } = sharedCycle('ready-for-review', new Date(anchor - 300_000).toISOString());
+  const { root, dir } = sharedCycle('ready-for-review', new Date(Date.now() - 300_000).toISOString());
+  const anchor = Date.now(); // AFTER the previous run's files exist — see sharedCycle
   chmodSync(join(dir, 'events.jsonl'), 0o000);
   try {
     const door = makeCycleTerminalDoor(root, { cycleOf: INIT })!;
