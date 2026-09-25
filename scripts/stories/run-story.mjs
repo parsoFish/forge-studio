@@ -71,6 +71,7 @@ import {
 import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
 import { captureAndClearMintedSessions, describeGroundClear, captureAndClearMintedLogs, describeLogsClear } from './ground-clear.mjs';
 import { driveBeat } from './beats-drive.mjs';
+import { expandForkedBeats } from './beats-fork.mjs';
 import { resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
 import { writeStoryJson, regenerateGallery, storyRowFrom, artifactSpend } from './gallery.mjs';
@@ -207,14 +208,16 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     // nothing — the caller had never passed it in any commit. 718(1)'s anchor
     // had not worked once since the commit that introduced it.
     const pressedAt = new Map();
-    for (const [i, beat] of story.beats.entries()) {
+    // `forge-8vfn.2.22` — the EXPANDED sequence (`beats-fork.mjs`): a fork
+    // becomes one entry per case. `number` is the original beat position a
+    // ground licence is declared against; `beatLabel` ("3"/"3[api]") is shown.
+    for (const [i, { beat, number, label: beatLabel }] of expandForkedBeats(story.beats).entries()) {
       // `forge-8vfn.7.6.140` — THE BOUNDARY WHERE A BEAT-SCOPED LICENCE OPENS,
-      // captured at the moment this beat STARTS and before anything in it can
-      // run. `classifyOwnGroundDrift` reduces this (via `beatWindowChangesFrom`)
-      // to "what changed from here to the end of the run" — never taken twice
-      // for the same beat, and never taken for a beat no declaration named.
-      if (ownGroundBefore !== null && licensedBeatNumbers.has(i + 1)) {
-        groundBeatBoundaries.set(i + 1, ownGroundManifest(ROOT, story.ground.project));
+      // captured before anything in this beat can run — never taken twice for
+      // the same NUMBER, so a fork's later cases do not re-date a licence an
+      // earlier case already captured.
+      if (ownGroundBefore !== null && licensedBeatNumbers.has(number) && !groundBeatBoundaries.has(number)) {
+        groundBeatBoundaries.set(number, ownGroundManifest(ROOT, story.ground.project));
       }
       // Bead `forge-8vfn.6.11.22` / row 61 (`costlessGuardFor`, `costless-beat.mjs`) —
       // the agent-scale probe, and `costless: true`'s whole enforcement, built per beat.
@@ -223,7 +226,8 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       let verdict = await driveBeat(page, beat, i, uiUrl, bindings, undefined, probe, costlessGuard.active ? null : stallDoor, pressedAt, cycleWatchFor);
       verdict = costlessGuard.apply(verdict);
       bindings = { ...bindings, ...verdict.bindings };
-      const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}.png`;
+      // `beatLabel` tells a fork's cases apart by more than their numeric prefix.
+      const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}${beatLabel.includes('[') ? `-${slug(beatLabel)}` : ''}.png`;
       await page.screenshot({ path: join(outDir, frame), fullPage: true });
       beats.push({ ...verdict, frame });
       // Bead `forge-8vfn.6.11.42` — what the OPERATOR could see at the red,
@@ -251,7 +255,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
           startedMs,
           realSpawn: story.ground?.realSpawn === true,
           ceilingUsd: ceiling?.usd,
-          label: `after beat ${i + 1}`,
+          label: `after beat ${beatLabel}`,
           unmeasuredSnapshots,
         });
         for (const l of lines) console.log(l);
@@ -276,7 +280,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       // it looks bad cannot establish a baseline, and the whole difficulty with
       // the tail is that there is nothing to compare a slow beat against.
       const host = hostState();
-      console.log(`[stories] host after beat ${i + 1}: loadavg ${host.load}  MemAvailable ${host.memGiB}GiB`);
+      console.log(`[stories] host after beat ${beatLabel}: loadavg ${host.load}  MemAvailable ${host.memGiB}GiB`);
       const mark = verdict.status === 'green' ? '✓' : '✗';
       // §15.415: MARK A BEAT THAT PERFORMS NOTHING. Under 504 a beat with no
       // `do` navigates and then asserts — which is right for a navigation beat
@@ -291,7 +295,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       // the product or the story needs to know that nothing was pressed, and
       // that is the one fact the transcript never carried.
       const acted = Array.isArray(beat.do) && beat.do.length > 0;
-      console.log(`  ${mark} ${i + 1}. ${beat.act}${acted ? '' : '   [no-do: navigated and asserted; nothing was pressed]'}`);
+      console.log(`  ${mark} ${beatLabel}. ${beat.act}${acted ? '' : '   [no-do: navigated and asserted; nothing was pressed]'}`);
       for (const f of verdict.failures) console.log(`      ${f}`);
     }
   } finally {
