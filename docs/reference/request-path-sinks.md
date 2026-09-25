@@ -2730,3 +2730,67 @@ via counting fakes against the injected `HookFireScanDeps` seam), and
 over real files with real directory mtimes via `utimesSync` — 5 real fires
 recorded only in cycles older than the 50-cycle window are confirmed
 invisible on the wire).
+
+### Extended in M7-C PKG — the private copy widens to the WHOLE package (bead `forge-8vfn.8.3.6`)
+
+The extension immediately above pinned only the ENTRY script. A hook's
+sibling file — sourced via the bash idiom `. "$(dirname "$0")/lib.sh"` (PIN
+D, `hook-runtime.test.ts`) — was never copied, so `$(dirname "$0")` still
+resolved to the REAL, mutable `studio/hooks/<id>/` directory for the whole
+run: a sibling swapped after the approval gate ran was read live and executed
+unverified, even though the entry script itself was already pinned. This
+extension closes that gap by verifying and copying every file the package
+contains, not only the one `hook.yaml` names as `script:`.
+
+`packages/library/studio/hook-runtime.ts`'s counts move as follows:
+`readFileSync` **1 → 0** (tightens — `prepareHookRun`'s own single-file
+`readFileSync(scriptPath)` is gone; the re-verify now goes entirely through
+`readHookPackage`, whose own `readFileSync` calls are counted on ITS file,
+`hook-package.ts`, already carrying `readFileSync 1` in the baseline since
+before this change — reusing an already-reachable, already-classified
+function adds no new sink surface anywhere) and `mkdirSync` **0 → 1** (new —
+`writePrivatePackageCopy` recreates the package's own relative directory
+layout, e.g. `scripts/`, inside the private copy, so a nested sibling lands
+at the same relative path it had in the original package).  `writeFileSync`
+stays at **1** (same call site as the extension above; it now runs once per
+file in a loop instead of once total — a runtime frequency change, not a new
+textual call site, which is what this ratchet counts) and `rmSync` stays at
+**2** (unchanged: the copy's own error-path cleanup, and
+`cleanupPrivateScriptDir`, both still acting on the SAME mkdtemp'd root
+either way).
+
+**not request-derived** `[read+write]`, same argument as the extension
+above, one level wider: `root` is still `mkdtempSync(join(os.tmpdir(),
+'forge-hook-verified-'))` — a server-generated random directory name — and
+every `file.path` value written under it (both the `mkdirSync` targets and
+the `writeFileSync` targets) comes from `readHookPackage`'s own directory
+walk of the ALREADY-validated `studio/hooks/<id>/` tree (itself
+`guardedFile`-contained per leaf, classified on `hook-package.ts`'s own
+row), never from a request field. No symlink can appear among those paths
+either: `readHookPackage`'s walk throws on any non-regular-file,
+non-directory dirent, so `writePrivatePackageCopy` only ever recreates real
+files under real directories, never a link.
+
+The entry script is now executed by `bash <privateEntryPath>` directly
+(`$0` = the private copy's own entry path), so `$(dirname "$0")` resolves
+inside this pinned tree — the whole reason the copy had to widen. This also
+lets two things from the entry-only design fall away for good: the
+`FORGE_HOOK_VERIFIED_SCRIPT_PATH` env-var indirection and the `bash -c
+'source "$var"' <realScriptPath>` invocation that existed only to fake `$0`
+back to the real (mutable) path for a copy that held the entry script alone.
+Neither is a sink change, but it is why the exec line simplifies alongside
+this one.
+
+Pinned by two new doors in `hook-runtime-package-pin.test.ts`: a sibling
+swapped between the gate's own read and `prepareHookRun`'s re-verify is
+refused (fingerprint mismatch, the same shape as the entry-only content-half
+TOCTOU pin, generalised to any file in the package); a sibling swapped AFTER
+`prepareHookRun`'s verified read still has the APPROVED content run, because
+exec now reads the sibling from the private copy and never reopens the real
+path again (the decisive-window pin, generalised the same way). A mutation
+that reverts the copy step to "copy only the entry script" (while leaving the
+whole-package re-verify gate untouched) reds exactly the second of these —
+proof the copy width, not the re-verify gate, is what the decisive-window
+pin is actually testing. `scripts/request-path-sinks.baseline.txt` accepts
+the moved/new counts via `--write` in the same commit that adds this
+section, per this document's own rule.
