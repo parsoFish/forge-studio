@@ -2,9 +2,11 @@
  * S4 — create a new flow (1.0.md §3, row S4).
  *
  * Operator flow: the two flows forge ships are starters. The operator builds
- * their own in the builder, lints it clean, runs it on `gitpulse`, watches it
+ * their own in the builder, lints it clean, runs it on `story-s4`, watches it
  * on the monitor, and lands at the verdict. Authored 2026-08-30 against
  * `parsoFish/main` `da566d8b`, with the operator (H6). Green expected at M5.
+ * Re-pointed onto the forge-owned fixture ground `node-cli-with-tests` 2026-09-26
+ * (plan D3, M7-D forge-1rk5.1) — see the GROUND paragraph below.
  *
  * WHAT THE OPERATOR BUILDS, AND WHY IT IS NOT THE STARTER RENAMED. `/flows/new`
  * opens on a seeded canvas of three stations — plan → dev → review,
@@ -16,10 +18,12 @@
  * runnable: a flow whose first station is the architect is launched from an
  * IDEA (`[data-kickoff-kind="idea"]`, copied from `/flows/forge-architect`
  * live), while a generic flow's launcher is an initiative picker that offers
- * only already-planned initiatives — and `gitpulse` has none
+ * only already-planned initiatives — and `story-s4` has none
  * (`[data-action="start-work-run-flow"]` is disabled on its project page with
- * "no pending initiative to enqueue"). Building the flow the operator can
- * actually start is authoring the true flow, not routing around the product.
+ * "no pending initiative to enqueue") — true of any freshly onboarded project,
+ * and now permanently true here since the fixture reprovisions `story-s4` from
+ * scratch every run. Building the flow the operator can actually start is
+ * authoring the true flow, not routing around the product.
  *
  * WHERE IT GOES RED, AND WHO OWNS IT. Beat 4 has no `do` block. The palette's
  * chips declare `[data-palette-chip][data-chip-ref][data-chip-placeable]` and
@@ -43,11 +47,28 @@
  * ON THE `data-*` KEYS. Every key and value below was copied from the live DOM
  * of a bridge booted from this lane's worktree — `/flows`, `/flows/new`,
  * `/flows/forge-architect`, `/flows/forge-develop`, `/monitor` and
- * `/projects/gitpulse` all observed directly, including the `project` and
- * `kb-select` option VALUES the `do` steps select. The session tail (beats 11
- * and 12) is S2's own worked vocabulary, which costs a real architect spawn to
- * observe. None is invented. Where the page root does not carry a key, the
- * keys it does not carry are answered together by ONE element, per §3.1.
+ * `/projects/gitpulse` all observed directly, including the `kb-select` option
+ * VALUE the `do` steps select — `gitpulse`'s own knowledge base stays real and
+ * selectable after the re-point (see beat 5's own note). The `project` fill
+ * beat 9 sends now names `story-s4` instead, the fixture's own live option
+ * once it is provisioned (M7-D, forge-1rk5.1) — not observable on
+ * `/projects/gitpulse` before that provisioning existed, so it stands on the
+ * same rule every other fixture token in this file does, not on this live DOM
+ * copy. The session tail (beats 11 and 12) is S2's own worked vocabulary,
+ * which costs a real architect spawn to observe. None is invented. Where the
+ * page root does not carry a key, the keys it does not carry are answered
+ * together by ONE element, per §3.1.
+ *
+ * GROUND. `story-s4`, provisioned for each run from the forge-owned fixture
+ * `tests/stories/grounds/node-cli-with-tests` (a byte copy of
+ * `projects/gitpulse` at `8d853dc9e83ad30edddb7a6fcbfa90b1b1753054`, provenance
+ * beside it) and torn down after the fence has judged it (M7-D, forge-1rk5.1,
+ * plan D3). It used to be the real `projects/gitpulse`; a story now never
+ * drives real git operations against a ground the operator owns. Freezing it
+ * also closes the very risk §15.205 names below: a premise checked once
+ * against a pinned SHA cannot age out from under the story the way the
+ * previous idea did against the live repo, because nothing about the ground
+ * can move again. It is also the project beat 9's architect run is pointed at.
  *
  * THE FIXTURE, and the sweep that does not own it. The flow is named
  * `story-s4` — `story-<id>`, the reserved fixture namespace — typed already
@@ -60,17 +81,18 @@
  * `forge-8vfn.2.19` named. Recorded in `_1.0/stories/S4.md` as a `stories`
  * gap.
  *
- * COST. The flow ends at a real architect run on `gitpulse`, so `realSpawn` is
+ * COST. The flow ends at a real architect run on `story-s4`, so `realSpawn` is
  * true and `budget_usd` is declared; the runner refuses to start without
  * `--approve-spend` (H2). Unlike S1 and S2, which both died before any
  * dispatch, S4 can genuinely reach one — beat 9 is the press that spends. The
- * ceiling below is set from M0's own measurement: G1's full gitpulse cycle
- * cost $16.41 end to end, and this story runs only the planning leg of one.
+ * ceiling below is set from M0's own measurement, taken on the real repo this
+ * fixture is a byte-for-byte copy of: G1's full gitpulse cycle cost $16.41 end
+ * to end, and this story runs only the planning leg of one.
  */
 
 /** What this flow is for — the operator's own words, typed into the builder. */
 const GOAL =
-  'Plan a change to gitpulse and take it to a reviewed verdict, with the architect drafting the initiative before any code is written.';
+  'Plan a change to story-s4 and take it to a reviewed verdict, with the architect drafting the initiative before any code is written.';
 
 /**
  * The first piece of work the operator asks the new flow to plan.
@@ -93,9 +115,16 @@ const GOAL =
  *
  * This idea is the OTHER gap the architect named in round 2 — chosen from what
  * the product itself said was missing, not invented — checked against gitpulse
- * at `1f1193a` (method-C ground hash `3f4d76708ff073b3`). The ground stays
- * LIVE: pinning it was considered and refused, because a pinned ground stops
- * the story exercising the real repo, which is the whole point of S4.
+ * at `1f1193a` (method-C ground hash `3f4d76708ff073b3`). AS OF the fixture
+ * re-point (M7-D, forge-1rk5.1, plan D3; see the GROUND paragraph above), the
+ * premise is FROZEN rather than left live — re-checked directly against the
+ * pinned fixture SHA `8d853dc9e83ad30edddb7a6fcbfa90b1b1753054`
+ * (`tests/stories/grounds/node-cli-with-tests/PROVENANCE.md`): no test
+ * anywhere in that tree combines `--since` with `--compare` (only
+ * `--since-tag` does), so the premise holds there too. Pinning was refused
+ * when this note was written because it would have stopped the story
+ * exercising a real repo; the fixture IS that real repo, copied once, so the
+ * tradeoff no longer applies.
  */
 /*
  * AMEND-4 (M6, operator-confirmed in the attended sitting of 2026-09-08;
@@ -118,7 +147,7 @@ const CEILING = '25';
 
 export default {
   id: 'S4',
-  ground: { project: 'gitpulse', realSpawn: true, budget_usd: 25 },
+  ground: { project: 'story-s4', fixture: 'node-cli-with-tests', realSpawn: true, budget_usd: 25 },
   docs: { kind: 'tutorial', title: 'Create a new flow' },
   beats: [
     {
@@ -243,6 +272,17 @@ export default {
       // assertion left is that the panel holding the control is open. Recorded
       // in `_1.0/stories/S4.md` — a flow's bound KB is invisible to the DOM
       // contract that is supposed to describe its load-bearing state.
+      //
+      // `kb-select` is NOT re-pointed to `story-s4` (M7-D, forge-1rk5.1): the
+      // dropdown lists real `brain/projects/<id>/kb.yaml` descriptors read off
+      // disk (`packages/knowledge/kb-sites.ts`), and a fixture ground
+      // provisioned fresh every run never has one — `story-s4` would not be an
+      // option, and filling a value that is not one reds the beat at run time.
+      // `gitpulse`'s own Brain 3 is a separate, durable forge asset, not part
+      // of "the ground" this fixture freezes, so it stays real and selectable
+      // regardless of which copy of the CLI the run's own ground is. The
+      // assertion below never depended on which KB was chosen, so keeping it
+      // costs nothing and breaks nothing.
       act: 'Open Advanced and bind gitpulse’s knowledge base to the flow',
       do: [
         { press: 'toggle-flow-advanced' },
@@ -256,7 +296,7 @@ export default {
           section: 'flow-advanced',
         },
       },
-      say: 'A flow that plans work on one project should read what forge already knows about that project. Binding the knowledge base here is what makes the difference between a planner that starts cold every run and one that has read the last six months of this repo’s own lessons.',
+      say: 'A flow that plans work on a project should read what forge already knows about it. `story-s4` is reprovisioned from scratch every run, so it has no knowledge base of its own yet; binding gitpulse’s real one is the closest honest stand-in, since this ground is a byte-for-byte copy of that same CLI — a planner that starts cold every run is worse than one that has read the last six months of that project’s own lessons.',
     },
     {
       // AMEND-4, a NEW beat (operator ruling 384, shape settled by 459/474).
@@ -334,7 +374,7 @@ export default {
       // shipped flow whose first station is also the architect. A flow that
       // begins with the Architect must be launchable from an idea — if forge
       // offers the generic initiative picker here instead, this flow cannot be
-      // started on gitpulse at all, and the beat says so by failing.
+      // started on `story-s4` at all, and the beat says so by failing.
       act: 'Open the launcher',
       expect: {
         route: '/flows/story-s4',
@@ -352,10 +392,13 @@ export default {
       // `architect-session-id` are the same <div>, and the id is published
       // there BEFORE the navigation that consumes it (M1-G closed
       // `forge-8vfn.5.5` on exactly this surface), so beat 11 can bind it.
-      // `gitpulse` is the <select>'s own option value, read live.
-      act: 'Point the flow at gitpulse, describe the first piece of work, cap what the run may spend, and press "Start architect"',
+      // `story-s4` is the <select>'s own option value once the fixture is
+      // provisioned (M7-D, forge-1rk5.1) — the project this run's ground
+      // actually is, replacing the live `gitpulse` this beat filled before the
+      // re-point.
+      act: 'Point the flow at story-s4, describe the first piece of work, cap what the run may spend, and press "Start architect"',
       do: [
-        { fill: 'project', with: 'gitpulse' },
+        { fill: 'project', with: 'story-s4' },
         { fill: 'idea', with: IDEA },
         { fill: 'cost-ceiling-usd', with: CEILING },
         { press: 'start-architect' },
