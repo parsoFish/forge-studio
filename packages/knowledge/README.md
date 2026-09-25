@@ -11,7 +11,7 @@ of it. `package.json` maps only `"."` and one documented test-only subpath
 `@forge/knowledge/brain-paths.ts` no longer resolves. Bead `forge-8vfn.5.31` collapsed
 the legacy `"./*"` door; every importer now goes through `@forge/knowledge`.
 
-`tests/contract/contract.test.ts` asserts this list against what the index actually
+`contract.test.ts` asserts this list against what the index actually
 exports, in both directions, and is required to FAIL against an empty index.
 
 ### Values (44)

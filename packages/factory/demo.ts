@@ -24,8 +24,8 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { MAX_INLINE_IMAGE_BYTES, checkpointArtifactName } from './demo-types.ts';
-import { MAX_CAPTURED_OUTPUT_BYTES } from './demo-model.ts';
+import { MAX_INLINE_IMAGE_BYTES, checkpointArtifactName } from '@forge/stations/demo-types.ts';
+import { MAX_CAPTURED_OUTPUT_BYTES } from '@forge/stations/demo-model.ts';
 
 export type WorktreeAtRef = { path: string; repo: string };
 
@@ -229,4 +229,4 @@ export async function captureCheckpoints(
 }
 
 // Re-export the shared demo types so callers depend on one module surface.
-export type { DemoBuildStatus, HarnessMetricRow } from './demo-types.ts';
+export type { DemoBuildStatus, HarnessMetricRow } from '@forge/stations/demo-types.ts';

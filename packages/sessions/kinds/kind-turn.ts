@@ -95,6 +95,12 @@ export type KindTurnInput = {
   logsRoot?: string;
   logger?: EventLogger;
   skillPromptPath?: string;
+  /** The ONE exception to "no widening" above: instructions' runFinalizeStep
+   *  needs the SAME injected @forge/flows containment re-check writeToRepoRoot
+   *  uses (interactive-finalizers.ts's ProjectRepoPathGuard, mirrored here —
+   *  rank-5, cannot import). Already flows in opaquely via agent-run.ts's
+   *  deps.sessionKind spread; this just gives it a real type. */
+  isContainedProjectRepoPath?: (p: string, opts: { forgeRoot: string; projectsRoot?: string }) => boolean;
 };
 
 /**

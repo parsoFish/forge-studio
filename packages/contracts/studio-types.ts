@@ -65,7 +65,7 @@ export type AgentBudgets = {
    * `maxBudgetUsd` IS A REQUEST TO THE SDK, NOT A GUARANTEE (bead
    * `forge-jb7i`): the SDK alone enforces it, measured 36 % over. Forge's own
    * enforcement is `CostTracker`, over money already SPENT. Any bound derived
-   * from these must assume overshoot — `@forge/factory/phases/review-budget.ts`.
+   * from these must assume overshoot — `@forge/stations/phases/review-budget.ts`.
    */
   maxTurns?: number;
   maxBudgetUsd?: number;

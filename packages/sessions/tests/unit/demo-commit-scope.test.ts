@@ -31,8 +31,9 @@ import { FORGE_ROOT } from '@forge/kernel';
 
 import { logger, setup } from './test-fixtures/demo-builder-runner-fixtures.ts';
 import { runDemoBuilderTurn } from '../../kinds/demo-builder.ts';
-import { DEMO_HTML_REL_PATH, DEMO_SKILL_REL_PATH } from '../../kinds/demo-session-store.ts';
+import { DEMO_HTML_REL_PATH, DEMO_REL_DIR, DEMO_SKILL_REL_PATH } from '../../kinds/demo-session-store.ts';
 import { type QueryFn } from '../../interactive-session.ts';
+import { StudioWritePathIgnoredError } from '@forge/projects/project-repo-tx.ts';
 
 const FOREIGN = 'roadmap.md';
 const git = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
@@ -47,6 +48,37 @@ function repoWithForeignWork(repoPath: string): void {
   git(repoPath, ['add', '-A']);
   git(repoPath, ['-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'ground']);
   writeFileSync(join(repoPath, FOREIGN), '# roadmap the ONBOARDING agent wrote\n');
+}
+
+/** A repo whose `.gitignore` ignores the demo dir — a real project shape (a
+ *  broad `.forge/` or `.forge/demo/` ignore line), and exactly the shape that
+ *  makes `commitStudioChange` throw `StudioWritePathIgnoredError`: the path is
+ *  explicitly listed to commit, `git add` silently drops it, and the deliverable
+ *  is never actually persisted. */
+function repoWithIgnoredDemoDir(repoPath: string): void {
+  git(repoPath, ['init', '-q', '-b', 'main']);
+  git(repoPath, ['config', 'user.email', 't@example.com']);
+  git(repoPath, ['config', 'user.name', 'T']);
+  writeFileSync(join(repoPath, '.gitignore'), `${DEMO_REL_DIR}/\n`);
+  writeFileSync(join(repoPath, 'README.md'), '# ground\n');
+  git(repoPath, ['add', '-A']);
+  git(repoPath, ['-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'ground']);
+}
+
+/** Writes ONLY the sample DEMO.html (no reusable skill) — `runGenerateStep`
+ *  then throws its own "ended without producing ... SKILL.md" error, but the
+ *  partial `.forge/demo/` it already wrote is left on disk for the `finally`
+ *  to (fail to) commit. */
+function partialWriteQueryFn(): QueryFn {
+  return ({ options }) => {
+    const cwd = (options as { cwd?: string } | undefined)?.cwd ?? '.';
+    async function* gen(): AsyncGenerator<unknown> {
+      execFileSync('mkdir', ['-p', join(cwd, '.forge', 'demo')]);
+      writeFileSync(join(cwd, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>partial</body></html>');
+      yield { type: 'result', total_cost_usd: 0 };
+    }
+    return gen();
+  };
 }
 
 function queryFn(writes: boolean): QueryFn {
@@ -94,4 +126,39 @@ test('AT-7.3.6-2 a turn that DOES write commits its own demo and still leaves th
   assert.match(files, /\.forge\/demo\/DEMO\.html/, 'the deliverable it wrote belongs in its own commit');
   assert.doesNotMatch(files, /roadmap\.md/, 'the ONBOARDING agent’s file must never appear in a demo commit');
   assert.match(git(repoPath, ['status', '--porcelain']), /roadmap\.md/, 'and it stays uncommitted, exactly as the demo builder found it');
+});
+
+test('AT-7.3.6-3 a SUCCESSFUL turn whose deliverable lands in a git-ignored path must reject naming the ignored path — never report success over an uncommitted demo', async () => {
+  const { projectRoot, logsRoot, sessionId, repoPath } = setup();
+  repoWithIgnoredDemoDir(repoPath);
+
+  await assert.rejects(
+    () => runDemoBuilderTurn({
+      sessionId, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
+      queryFn: queryFn(true), logger: logger(logsRoot, sessionId),
+    }),
+    (err: unknown) => {
+      assert.ok(err instanceof StudioWritePathIgnoredError, `expected StudioWritePathIgnoredError, got ${String(err)}`);
+      assert.match((err as Error).message, /\.forge\/demo/, 'names the ignored path so the operator can act on it');
+      return true;
+    },
+  );
+});
+
+test('AT-7.3.6-4 when the step itself throws, the rejection is the step’s own error — never masked by a commit failure over the same partial write', async () => {
+  const { projectRoot, logsRoot, sessionId, repoPath } = setup();
+  repoWithIgnoredDemoDir(repoPath);
+
+  await assert.rejects(
+    () => runDemoBuilderTurn({
+      sessionId, projectRoot, forgeRoot: FORGE_ROOT, logsRoot,
+      queryFn: partialWriteQueryFn(), logger: logger(logsRoot, sessionId),
+    }),
+    (err: unknown) => {
+      assert.ok(!(err instanceof StudioWritePathIgnoredError), 'must be the step’s own error, not the commit failure over the same ignored partial write');
+      assert.match((err as Error).message, /without producing/);
+      assert.match((err as Error).message, /demo-design\/SKILL\.md/);
+      return true;
+    },
+  );
 });

@@ -63,8 +63,7 @@ import {
   sanitizeError,
   pathOnly,
   discoverProjects,
-  defaultConfigPath,
-  loadConfig,
+  defaultConfigPath, loadConfig, describeProjectStarters,
   resolveProjectsDir,
   SLUG_RE,
   PROJECT_ID_RE,
@@ -214,8 +213,11 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
         // passed `remote`, so `mintRemote` was unreachable and C6 stayed
         // unresolved on every created project (S2 run 4, beat 5).
         const mintRemote = cfg.projects?.remote?.create === true;
+        const starter = str('language') ? undefined : describeProjectStarters(ctx.forgeRoot).find((s) => s.id === appType); // 6.11.33: the starter's own declared language (6.11.4); explicit input wins
+        if (starter && starter.language === null) throw new Error(`starter "${appType}" declares no language — add one to starters.json before creating from it`);
+        const language = str('language') || starter?.language || 'typescript';
         out = scaffoldGreenfieldProject({
-          manifest: { name, appType, language: str('language') || 'typescript', northStar, ...(str('architecture') ? { architecture: str('architecture') } : {}) },
+          manifest: { name, appType, language, northStar, ...(str('architecture') ? { architecture: str('architecture') } : {}) },
           forgeRoot: ctx.forgeRoot,
           projectsRoot: projectsDir,
           ...(mintRemote ? { remote: { create: true, ...(deps.runGh ? { runGh: deps.runGh } : {}) } } : {}),

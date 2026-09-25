@@ -4,6 +4,7 @@
 - **Amended:** 2026-08-31, same sitting — §1's tsconfig project-reference clause, in favour of the blueprint spec's [§3](../superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md) "no build step" decision. The amendment and its evidence are in §1 below.
 - **Amended:** 2026-08-31 (operator ruling, M3-A) — §1's `exports` clause, to permit an **additive** `"./*": "./*"` subpath alongside the single root entry. The amendment and its evidence are in §1 below.
 - **Amended:** 2026-09-25 (M7-C OD, bead `forge-8vfn.5.31`) — §1's `exports` clause again, RETIRING the M3-A `"./*"` subpath now that its stated purpose is discharged. The amendment and its evidence are in §1 below.
+- **Amended:** 2026-09-25 (operator ruling, M7 item 83) — §2 rule 4's chain gains `stations` between `flows` and `factory`. The amendment and its reason are in §2 below.
 - **Supersedes:** [ADR 042](./042-surface-cap-scope-and-testability.md) — the `orchestrator/` surface cap and its three boundary rulings are replaced by per-package caps. ADR 042's *context* (why a cap exists) stands; its *object* does not, because `orchestrator/` ceases to exist as a unit at M3.
 - **Relates to:** [ADR 027](./027-studio-object-model.md) (definitions as data), [ADR 028](./028-flow-engine.md) (the flow engine that becomes `@forge/flows`), [ADR 043](./043-generic-interactive-surface.md) (the spine that becomes `@forge/sessions`), [ADR 045](./045-operator-workspace-and-promotion.md) (`_local/` resolution, which lands in `@forge/kernel`).
 - **Implements:** `docs/roadmaps/1.0.md` §0 (the allow-graph and the 800-line file cap) and §4 M2.
@@ -74,10 +75,13 @@ its own `test` script, and its own `tsconfig.json` extending the root.
 > named exactly that follow-up: "populates each package index as the declared
 > public door... without repointing importers... Collapsing to one door is
 > bead forge-8vfn.5.31." That repoint is now done — every external importer of
-> `@forge/{contracts,kernel,knowledge,library,projects,agents,sessions,flows}`
+> `@forge/{contracts,kernel,knowledge,library,projects,agents,sessions,flows,stations}`
 > was measured, repointed to `@forge/<pkg>` (the door `"."` already names), and
 > `"./*"` is no longer additive for any of them: it is the LAST thing still
-> legalising a deep path the door itself does not.
+> legalising a deep path the door itself does not. `stations` joined this list
+> after item 83's split carried it out of `factory`; its own door population
+> and repoint are this same bead, done on the merged tree rather than
+> re-litigated as a second amendment.
 >
 > **`exports` now reads, per package:**
 >
@@ -224,6 +228,21 @@ Four rules, stated as `1.0.md` §0 states them:
    flows ← factory ← apps/{forge, studio}`. Same-rank imports are forbidden too:
    `library`, `knowledge` and `projects` are siblings and must not know about
    each other.
+
+> **Amendment, 2026-09-25 (operator ruling, M7 item 83).** Rule 4's chain now reads
+> `contracts ← kernel ← {library, knowledge, projects} ← agents ← sessions ←
+> flows ← stations ← factory ← apps/{forge, studio}`.
+> `@forge/stations` holds execution: the phase executor table, the band
+> implementations, and the content they author and parse. None of these are
+> specific to the develop flow. Before this they lived in `@forge/factory`,
+> so deleting the example also deleted every factory's ability to run a
+> station. A second factory built from data (G3) needs execution without
+> the example, which is why the executor moved down a rank. Stations own no
+> route, no UI and no operator state: every operator interaction is a
+> session (ADR 043). The move was a pure transfer. The `stations` cap
+> equals the lines that moved, and `factory`'s cap fell by the same number
+> (QUARRY.md). The diagram above predates this amendment. Read
+> `factory --> flows` as `factory --> stations --> flows`.
 
 `scripts/check-boundaries.mjs` enforces all four with dependency-cruiser, in CI.
 Its baseline is the **set** of `<rule>|<from>|<to>` triples, not a count, so a

@@ -68,6 +68,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { cmdAgentRun } from '../../agent-run.ts';
+import type { AgentDispatchDeps } from '../../agent-dispatch-cmd.ts';
 import { writeSessionStatus } from '@forge/sessions';
 
 // ---------------------------------------------------------------------------
@@ -78,7 +79,7 @@ import { writeSessionStatus } from '@forge/sessions';
 // test runner.
 // ---------------------------------------------------------------------------
 
-export async function run(args: string[], forgeRoot: string): Promise<{ exitCode: number | null; out: string; err: string }> {
+export async function run(args: string[], forgeRoot: string, deps?: AgentDispatchDeps): Promise<{ exitCode: number | null; out: string; err: string }> {
   const origExit = process.exit;
   const origLog = console.log;
   const origErr = console.error;
@@ -89,7 +90,7 @@ export async function run(args: string[], forgeRoot: string): Promise<{ exitCode
   console.log = (...a: unknown[]) => { out.push(a.join(' ')); };
   console.error = (...a: unknown[]) => { err.push(a.join(' ')); };
   try {
-    await cmdAgentRun(args, forgeRoot);
+    await cmdAgentRun(args, forgeRoot, deps);
   } catch (e) {
     if (!/^__exit__/.test((e as Error).message)) throw e;
   } finally {
@@ -123,6 +124,13 @@ export async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> 
 
 export const TURNSPEC_ONLY_ID = 'turnspec-only-fixture-kind';
 export const KIND_DIR = '_fixturekind';
+// bead 8vfn.6.6 item 2 follow-up — a second fixture kind landing DIRECTLY on
+// a `step: finalize, finalizer: promoteToQueue` phase, so a test can drive
+// the REAL cmdAgentRun -> runTurnSpecAgent -> runInteractiveTurn ->
+// runFinalizeStep -> resolveFinalizer('promoteToQueue') chain without any
+// agent turn ever spawning (finalize never calls queryFn).
+export const PROMOTE_QUEUE_ID = 'turnspec-promote-queue-fixture-kind';
+export const PROMOTE_QUEUE_KIND_DIR = '_fixturekind-promote';
 
 export const FIXTURE_SESSION_KINDS_YAML = `
 - id: ${TURNSPEC_ONLY_ID}
@@ -139,6 +147,21 @@ export const FIXTURE_SESSION_KINDS_YAML = `
     style: agent
     phases:
       - { phase: p1, step: noop }
+- id: ${PROMOTE_QUEUE_ID}
+  agent: project-brain-builder
+  title: Fixture turnSpec kind (bead 8vfn.6.6 item 2 follow-up, promoteToQueue wiring)
+  legacyRoutes: []
+  stages: [contract]
+  defaultStage: contract
+  artifact:
+    kind: markdown-draft
+    label: Fixture artifact
+  turnSpec:
+    kindDir: ${PROMOTE_QUEUE_KIND_DIR}
+    style: agent
+    phases:
+      - { phase: committing, step: finalize, finalizer: promoteToQueue, next: committed }
+      - { phase: committed, step: terminal }
 - id: architect
   agent: architect
   title: Architect (fixture, deliberately carries NO turnSpec)
@@ -173,6 +196,25 @@ export function setupTurnspecFixture(): TurnspecFixture {
   const sessionDir = join(projectRoot, KIND_DIR, sessionId);
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'p1', updated_at: new Date(0).toISOString() });
+
+  return { forgeRoot, projectArg, projectRoot, sessionId, sessionDir };
+}
+
+/** bead 8vfn.6.6 item 2 follow-up — mirrors setupTurnspecFixture exactly, but
+ *  seeds status straight at `committing` (PROMOTE_QUEUE_ID's own
+ *  finalize:promoteToQueue phase) so a driving test reaches the finalizer on
+ *  its FIRST turn — no agent step, no queryFn call, ever needed. */
+export function setupPromoteQueueFixture(): TurnspecFixture {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'r8vfn66-promotequeue-agentrun-'));
+  mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), FIXTURE_SESSION_KINDS_YAML);
+
+  const projectArg = 'fixtureproj';
+  const projectRoot = join(forgeRoot, 'projects', projectArg);
+  const sessionId = '2026-09-25T00-00-00-promotequeue';
+  const sessionDir = join(projectRoot, PROMOTE_QUEUE_KIND_DIR, sessionId);
+  mkdirSync(sessionDir, { recursive: true });
+  writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'committing', updated_at: new Date(0).toISOString() });
 
   return { forgeRoot, projectArg, projectRoot, sessionId, sessionDir };
 }

@@ -84,7 +84,7 @@ const PASS_THROUGH_RE =
  */
 const DISCLOSED_INJECTIONS = new Map([
   [
-    'packages/factory/phases/developer-loop.ts: queryFn: tallyingQueryFn',
+    'packages/stations/phases/developer-loop.ts: queryFn: tallyingQueryFn',
     "the dev loop hands its own cost-tallying wrapper straight to createClaudeAgent, bypassing runAgent entirely, so a dev-loop Ralph child carries no marker. Closing it is a one-line wrap at that call site in packages/factory — a different package, so a handoff (filed with A1), not something this lane may repoint.",
   ],
 ]);

@@ -27,13 +27,13 @@ const src = (f: string): string => readFileSync(resolve(FORGE_ROOT, f), 'utf8');
 const READS_BRAIN_NAV = /loadBrainIndex|loadBrainNavigation/;
 
 test('R1-01-F4: planners (PM, reflector) still read the brain navigation surface post-rebind', () => {
-  assert.match(src('packages/factory/phases/pm-binding.ts'), READS_BRAIN_NAV, 'PM must still load the brain navigation');
-  assert.match(src('packages/factory/phases/reflector-binding.ts'), READS_BRAIN_NAV, 'reflector must still load the brain navigation');
+  assert.match(src('packages/stations/phases/pm-binding.ts'), READS_BRAIN_NAV, 'PM must still load the brain navigation');
+  assert.match(src('packages/stations/phases/reflector-binding.ts'), READS_BRAIN_NAV, 'reflector must still load the brain navigation');
 });
 
 test('R1-01-F4: dev-loop and the reviewer do NOT read the forge brain (policy unchanged by the rebind)', () => {
-  assert.doesNotMatch(src('packages/factory/phases/dev-binding.ts'), READS_BRAIN_NAV, 'dev-loop must not read the forge brain');
-  assert.doesNotMatch(src('packages/factory/phases/adversarial-review.ts'), READS_BRAIN_NAV, 'the reviewer must not read the forge brain');
+  assert.doesNotMatch(src('packages/stations/phases/dev-binding.ts'), READS_BRAIN_NAV, 'dev-loop must not read the forge brain');
+  assert.doesNotMatch(src('packages/stations/phases/adversarial-review.ts'), READS_BRAIN_NAV, 'the reviewer must not read the forge brain');
 });
 
 // ---------------------------------------------------------------------------

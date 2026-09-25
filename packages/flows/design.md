@@ -22,7 +22,7 @@ reach into factory, and they are disclosed rather than described away:
 | file | reaches | class |
 |---|---|---|
 | `cycle.ts` | `orchestrator/phases/executor-{table,deps}.ts` | `package-to-legacy` ×2 |
-| `finalize-merged.ts` | `@forge/factory/phases/reflector.ts` | `package-layer-order` |
+| `finalize-merged.ts` | `@forge/stations/phases/reflector.ts` | `package-layer-order` |
 | `cycle-pm-hallucination.test.ts`, `wi-dispatch-scheduler.test.ts` | factory phases | `package-layer-order` ×2 |
 
 All five are baselined, owned by **M5-A**, and listed in this lane's handoffs.

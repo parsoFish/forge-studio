@@ -362,7 +362,7 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
  * split spec. The id's sole downstream use is the `forge-autocommit:` WIP
  * commit-message tag (`autoCommitWorktreeIfDirty` in stop-conditions.ts);
  * dev-loop event attribution comes from `wi.work_item_id` in
- * packages/factory/phases/developer-loop.ts and does not depend on this function.
+ * packages/stations/phases/developer-loop.ts and does not depend on this function.
  */
 function deriveWorkItemId(specPath: string): string | undefined {
   const base = specPath.split(/[/\\]/).pop() ?? '';

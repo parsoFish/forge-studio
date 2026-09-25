@@ -43,7 +43,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
 
-import { reqString, reqObject, stringArray, optString } from '@forge/kernel';
+import { reqString, reqObject, stringArray, optString, optNumber } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
 // Closed vocabularies (frozen — rows-as-data, mirrors TRIGGER_KINDS)
@@ -211,15 +211,14 @@ export const FINALIZER_IDS: readonly FinalizerIdRow[] = Object.freeze([
 export type FinalizerId = (typeof FINALIZER_IDS)[number]['id'];
 
 
-/** EXPIRY CONDITION (deliberately empty for R4-22 WI-1): the ADR's only
- *  worked example (style: agent) never exercises `schema` at all, and no
- *  `structured`-style turnSpec consumer exists anywhere in the repo yet.
- *  Seed this the moment the first one lands. Until then, this is a
- *  deliberately-green gap-pin, not an oversight: `turnSpec.schema` has no
- *  valid value today, and validateSessionKinds says so honestly (naming the
- *  empty allowed set) rather than skipping the check or pretending
- *  membership that doesn't exist. Typed `readonly`, as TURN_STYLES. */
-export const SCHEMA_IDS: readonly SchemaIdRow[] = Object.freeze([] as SchemaIdRow[]);
+/** bead 8vfn.6.6 item 1 — seeded with the first real schema id: the exact
+ *  `INTERVIEW_SCHEMA` `kinds/instructions.ts` already relies on for a real
+ *  interview turn (reused, not duplicated — see that file's export). No
+ *  `turnSpec` row names it yet (instructions itself never gains one — barred
+ *  permanently, ADR-043 2026-08-14 amendment §1); this proves the resolver
+ *  against real content instead of an invented placeholder. Typed
+ *  `readonly`, as TURN_STYLES. */
+export const SCHEMA_IDS: readonly SchemaIdRow[] = Object.freeze([Object.freeze({ id: 'interview-qa' })]);
 export type SchemaId = (typeof SCHEMA_IDS)[number]['id'];
 
 export type AwaitsKindRow = { readonly id: string };
@@ -364,6 +363,11 @@ export type TurnSpecPhase = {
    *  no `requires` needs nothing beyond `verdict` itself, so the write
    *  route's generic check simply has nothing to enforce. */
   readonly requires?: readonly string[];
+  /** doneField names a structured-turn output key; true (or status.round >= ceiling) advances to nextOnDone
+   *  instead of next, same-turn. Co-required + validated (validateSessionKinds), turnSpec-only. */
+  readonly doneField?: string;
+  readonly nextOnDone?: string;
+  readonly ceiling?: number;
   /** forge-7m2 — the staging dirname a `step: finalize` phase's finalizer
    *  reads FROM (the read-side twin of `writes:`, which names the dir an
    *  `agent`-step phase writes INTO): AUTHORED data, like `writes:`/
@@ -496,6 +500,9 @@ function parseTurnSpecPhase(raw: unknown, file: string, descIndex: number, phase
   const awaits = optString(p, 'awaits');
   const verdicts = p.verdicts !== undefined ? stringArray(p, 'verdicts', file) : undefined;
   const requires = p.requires !== undefined ? stringArray(p, 'requires', file) : undefined;
+  const doneField = optString(p, 'doneField');
+  const nextOnDone = optString(p, 'nextOnDone');
+  const ceiling = optNumber(p, 'ceiling');
   // forge-7m2 — same omit-don't-default discipline as every other optional
   // field above.
   const stagingDirName = optString(p, 'stagingDirName');
@@ -508,6 +515,9 @@ function parseTurnSpecPhase(raw: unknown, file: string, descIndex: number, phase
     ...(awaits !== undefined ? { awaits } : {}),
     ...(verdicts !== undefined ? { verdicts } : {}),
     ...(requires !== undefined ? { requires } : {}),
+    ...(doneField !== undefined ? { doneField } : {}),
+    ...(nextOnDone !== undefined ? { nextOnDone } : {}),
+    ...(ceiling !== undefined ? { ceiling } : {}),
     ...(stagingDirName !== undefined ? { stagingDirName } : {}),
   };
 }
