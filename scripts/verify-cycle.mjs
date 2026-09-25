@@ -770,7 +770,11 @@ async function driveArchitect(page, watch, { project, idea, repoPath }) {
   let sessionId, sessionDir;
   for (let attempt = 1; ; attempt++) {
     log(`stage 1/3 — architect: POST /api/architect/start… (attempt ${attempt}/2)`);
-    const start = await bridgePost(watch.bridgeUrl, '/api/architect/start', { project, idea, projectRepoPath: repoPath });
+    const start = await bridgePost(watch.bridgeUrl, '/api/architect/start', {
+      project,
+      idea,
+      projectRepoPath: repoPath,
+    });
     if (!start.ok || !start.body?.sessionId) {
       throw new Error(`architect start failed (${start.status}): ${JSON.stringify(start.body)}`);
     }
