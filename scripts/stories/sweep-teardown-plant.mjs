@@ -102,7 +102,7 @@ export async function waitForFileToExist(path, opts = {}) {
  * existing is therefore proof that specific line has executed; nothing else
  * this module tried was.
  */
-function withReady(script, markerPath) {
+export function withReady(script, markerPath) {
   return `${script}\ntry { require('node:fs').writeFileSync(${JSON.stringify(markerPath)}, '1'); } catch {}`;
 }
 

@@ -27,7 +27,7 @@ import { sweepProductFixtures } from './sweep.mjs';
 import {
   killIfAlive, plantDaemonWithGrandchild, plantReapedRootWithGrandchild,
   plantInFlightClaim, plantInitManifest, fastQuiesce, waitForFileToExist,
-  waitForProcVisible,
+  waitForProcVisible, withReady,
 } from './sweep-teardown-plant.mjs';
 
 /**
@@ -278,26 +278,19 @@ test('689(iii): a daemon that DRAINS is waited for, and never killed', async () 
   const log = join(root, '_logs', 'daemon', 'serve.log');
   writeFileSync(log, '[serve] forever-mode\n');
   const ready = join(root, 'daemon.ready');
-  const child = spawn(process.execPath, ['-e', `
+  const child = spawn(process.execPath, ['-e', withReady(`
     process.on('SIGTERM', () => {
       setTimeout(() => {
         require('node:fs').appendFileSync(${JSON.stringify(log)}, '[serve] exited cleanly\\n');
         process.exit(0);
       }, 600);
     });
-    require('node:fs').writeFileSync(${JSON.stringify(ready)}, '1');
     setInterval(() => {}, 1000);
-  `], { cwd: root, stdio: 'ignore' });
+  `, ready)], { cwd: root, stdio: 'ignore' });
   writeFileSync(join(root, DAEMON_PID_FILE), String(child.pid));
-  // Wait on an EXPLICIT MARKER the script writes itself, not a fixed sleep —
-  // T1 1372's fourth load repro (RP's v2 pass, 4/20 red at runs 5/6/19/20):
-  // a 200ms guess was not always enough under doubled contention. The FIRST
-  // fix here (waiting on /proc's SigCgt record) was itself wrong (T1 1372's
-  // fifth pass, reproduced clean with zero burners running): node sets
-  // SIGTERM's SigCgt bit in its own bootstrap regardless of whether user code
-  // ever calls process.on('SIGTERM', ...) — see sweep-teardown-plant.mjs's
-  // header. A marker this script writes as its own last statement is the
-  // only thing that actually proves the line above it ran.
+  // Wait on the script's own marker, not a fixed sleep or /proc's SigCgt bit
+  // (T1 1372) — see sweep-teardown-plant.mjs's header for why both of those
+  // were tried and found unreliable.
   await waitForFileToExist(ready);
 
   const r = stopOwnScheduler(root, 10_000);
@@ -315,11 +308,10 @@ test('689(iii): a daemon that ignores SIGTERM is still killed, and the note says
   mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
   writeFileSync(join(root, '_logs', 'daemon', 'serve.log'), '[serve] forever-mode\n');
   const ready = join(root, 'daemon.ready');
-  const child = spawn(process.execPath, ['-e', `
+  const child = spawn(process.execPath, ['-e', withReady(`
     process.on('SIGTERM', () => {});
-    require('node:fs').writeFileSync(${JSON.stringify(ready)}, '1');
     setInterval(() => {}, 1000);
-  `], { cwd: root, stdio: 'ignore' });
+  `, ready)], { cwd: root, stdio: 'ignore' });
   writeFileSync(join(root, DAEMON_PID_FILE), String(child.pid));
   // Wait on the script's own marker, not the clock — see the DRAIN test above.
   await waitForFileToExist(ready);
@@ -458,11 +450,10 @@ test('finding row 75 DOOR (second): a writer OUTSIDE the daemon\'s tree is invis
   // that never descended from the run root.
   mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
   const daemonReady = join(root, 'daemon.ready');
-  const daemon = spawn(process.execPath, ['-e', `
+  const daemon = spawn(process.execPath, ['-e', withReady(`
     process.on('SIGTERM', () => {});
-    require('node:fs').writeFileSync(${JSON.stringify(daemonReady)}, '1');
     setInterval(() => {}, 1000);
-  `], { cwd: root, stdio: 'ignore' });
+  `, daemonReady)], { cwd: root, stdio: 'ignore' });
   writeFileSync(join(root, DAEMON_PID_FILE), String(daemon.pid));
   t.after(() => killIfAlive(daemon.pid!));
 
