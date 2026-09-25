@@ -30,3 +30,15 @@ export function appendBoundedLog<T>(root: string, segments: readonly string[], e
   const written = guardedWriteFile(root, segments, JSON.stringify(next));
   return written === null ? null : next;
 }
+
+/** `[dir, "<id>.json"]` — the one segment derivation every bounded-log
+ *  reader/writer for a namespace shares, so two call sites cannot drift. */
+export function boundedLogSegments(dir: string, id: string): string[] {
+  return [dir, `${id}.json`];
+}
+
+/** Truncate `s` to `maxChars`, appending a marker when cut — the shared
+ *  bound for content a bounded log stores (e.g. captured process output). */
+export function truncateTail(s: string, maxChars: number): string {
+  return s.length > maxChars ? `${s.slice(0, maxChars)}…(truncated)` : s;
+}
