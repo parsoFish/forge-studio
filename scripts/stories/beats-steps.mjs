@@ -20,7 +20,7 @@
 import { routeMatches, waitForHandleOrStall } from './beats-page.mjs';
 import { handleFor, runRepeatStep } from './beats-repeat.mjs';
 import { watchControlState } from './beats-control-state.mjs';
-import { READY_TIMEOUT_MS } from './beats.mjs';
+import { READY_TIMEOUT_MS, scopedPressHandle } from './beats.mjs';
 
 /** How long a press may be wrong-looking before it is called wrong (ruling 531(3)).
  *  Long enough to outlast an asynchronous route commit, short enough that it is
@@ -113,7 +113,13 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
     // the count is model-determined.
     const fillsAll = Object.hasOwn(step, 'fillAll');
     const fills = fillsAll || Object.hasOwn(step, 'fill');
-    const handle = handleFor(step);
+    // `pressWithin` — bead `forge-8vfn.6.11.51`, resolved by `resolveBoundPresses`
+    // (`beats.mjs`) into a literal `scope.value` before this ever runs. Scoped
+    // to the element carrying `data-<attr>="<value>"` rather than `handleFor`'s
+    // unscoped `[data-action="<action>"]`, which matches one element PER CARD —
+    // Home's session strip renders `open-session` once per `data-session-id`,
+    // so an unscoped press clicks whichever card `.first()` sorts to.
+    const handle = Object.hasOwn(step, 'pressWithin') ? scopedPressHandle(step.pressWithin) : handleFor(step);
 
     // T1 ruling 531(3) — STANDING ON THE WRONG PAGE, answered at t+0.
     //

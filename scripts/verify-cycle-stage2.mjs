@@ -7,7 +7,12 @@
  * flow-dependent: forge-develop keeps its batch door and its reflector.end
  * wait; any other flow goes through the generic per-flow door and, when it
  * declares no `on: merged` reflect, is landed on its manifest reaching
- * `_queue/done/` — the authoritative merge signal `assessOutcomes` reads.
+ * `_queue/merged/` OR `_queue/done/` — R4-11-F1's confirmed-remote-merge
+ * queue states (packages/flows/queue.ts's `QueueState`; `merged/ → done/` is
+ * a same-sweep promotion, not a second merge) — the same authoritative merge
+ * signal `assessOutcomes` reads (T3 M7-A fix round, 2026-09-25: a manifest
+ * that lands in `merged/` and never gets promoted, because the reflector that
+ * would trigger the promotion was killed first, is STILL a landed cycle).
  *
  * Collaborators are injected (`bridgePost`, `log`, `sleep`) so the harness's
  * own transport and logger stay the only ones.
@@ -15,6 +20,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { getPaths } from '@forge/flows';
 import { classifyReflectorProgress } from './lib/verify-outcomes.mjs';
 import { stageTwoRequest } from './verify-cycle-flow.mjs';
 
@@ -70,7 +76,15 @@ export function createStageTwo({ forgeRoot, flow, flowReflects, bridgePost, log,
    *  died loudly burned the FULL deadline and then logged the neutral "not seen
    *  before deadline" — slow-looking rather than dead (12 of run 1's 47 minutes).
    *  `classifyReflectorProgress` returns the moment the outcome is known, and a
-   *  `lost` is always named with its cause. */
+   *  `lost` is always named with its cause.
+   *
+   *  T3 M7-A fix round (2026-09-25): the caller passes `deadlineMs` as
+   *  `resolveReflectWaitDeadlineMs(approvedAtMs)` (verify-outcomes.mjs's
+   *  `REFLECT_LANDED_WAIT_MS`) — this function never reads a run-start value
+   *  or tears anything down itself; it only stops POLLING at the deadline and
+   *  says, BY NAME, whether a still-running reflector (not lost, not ended)
+   *  is what the deadline cut off — the exact ambiguity that let the harness's
+   *  teardown read a live reflector as "the run is done". */
   async function waitForReflectorEnd(cycleId, deadlineMs) {
     const logFile = join(forgeRoot, '_logs', cycleId, 'events.jsonl');
     let loggedStart = false;
@@ -94,18 +108,30 @@ export function createStageTwo({ forgeRoot, flow, flowReflects, bridgePost, log,
       }
       await sleep(3000);
     }
-    log('reflector.end not seen before deadline');
+    if (loggedStart) {
+      log('REFLECT-WAIT-BOUND-EXCEEDED: reflector.start was seen but no reflector.end/loss before the deadline — reflection is still in flight, not lost; tearing down anyway');
+    } else {
+      log('REFLECT-WAIT-BOUND-EXCEEDED: no reflector activity observed at all before the deadline');
+    }
     return false;
   }
 
-  /** A flow that fires no reflect is landed when finalize moves its manifest to done/. */
-  async function waitForManifestDone(initiativeId, deadlineMs) {
-    const done = join(forgeRoot, '_queue', 'done', `${initiativeId}.md`);
+  /** A flow that fires no reflect is landed when finalize moves its manifest to
+   *  EITHER `_queue/merged/` or `_queue/done/` (R4-11-F1: `merged` is itself the
+   *  confirmed-remote-merge state; the same-sweep `merged/ → done/` promotion
+   *  can be prevented by a killed reflector on a flow that DOES reflect, but a
+   *  flow with none declared never depends on that promotion happening at all). */
+  async function waitForManifestLanded(initiativeId, deadlineMs) {
+    const paths = getPaths(join(forgeRoot, '_queue'));
+    const filename = `${initiativeId}.md`;
+    const merged = join(paths.merged, filename);
+    const done = join(paths.done, filename);
     while (Date.now() < deadlineMs) {
       if (existsSync(done)) { log(`finalize landed ${initiativeId} in _queue/done/`); return true; }
+      if (existsSync(merged)) { log(`finalize landed ${initiativeId} in _queue/merged/`); return true; }
       await sleep(3000);
     }
-    log(`${initiativeId} not in _queue/done/ before deadline`);
+    log(`${initiativeId} not in _queue/merged/ or _queue/done/ before deadline`);
     return false;
   }
 
@@ -117,7 +143,7 @@ export function createStageTwo({ forgeRoot, flow, flowReflects, bridgePost, log,
       return waitForReflectorEnd(init.cycleId, deadlineMs);
     }
     log(`verdict approved for ${init.initiativeId} — ${flow.flowId} declares no on:merged reflect; waiting for finalize…`);
-    return waitForManifestDone(init.initiativeId, deadlineMs);
+    return waitForManifestLanded(init.initiativeId, deadlineMs);
   }
 
   return { handoff, waitLanded };
