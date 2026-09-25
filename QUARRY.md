@@ -8,8 +8,16 @@ file in the same PR.
 **Scope.** Every production file under `orchestrator/`, `cli/`, `loops/`,
 `skills/`, `packages/` and `apps/forge/` — code (`.ts .tsx .mjs .js .cjs`) plus the `SKILL.md` agent definitions,
 which are production artifacts ([ADR 024](docs/decisions/024-phases-as-subagents-invoking-skills.md):
-the `SKILL.md` **is** the agent). Test files and fixtures are excluded — a test
-travels with the module it tests.
+the `SKILL.md` **is** the agent), in either discovery-root shape SEAM F1
+(`packages/kernel/discovery-roots.ts`, operator ruling item 81) makes real: the
+top-level `skills/<slug>/SKILL.md` and a package's own
+`packages/<pkg>/skills/<slug>/SKILL.md`. Test files and fixtures are excluded — a test
+travels with the module it tests. A `flow.yaml` (top-level `studio/flows/<id>/flow.yaml`
+or its package-owned `packages/<pkg>/flows/<id>/flow.yaml` counterpart) is **not** in
+scope here, deliberately: the top-level form was never production by this gate's own
+rule (`studio/` is not a quarried tree and `.yaml` is not a code extension), so the
+package-owned form gets the identical treatment rather than net-new scope invented for
+it — neither counted nor owned by `check-owner.mjs`.
 
 **Owner** is one of the nine packages plus the two apps named by
 [`docs/roadmaps/1.0.md`](docs/roadmaps/1.0.md) §0 and §4 M2, and described in the
