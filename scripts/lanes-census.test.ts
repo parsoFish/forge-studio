@@ -261,13 +261,44 @@ function survivorsUnder(root: string): string[] {
 function killSurvivorsUnder(root: string): void {
   for (const pid of survivorsUnder(root)) spawnSync('kill', ['-KILL', pid]);
 }
+/**
+ * `killSurvivorsUnder` alone is a SINGLE look — measured insufficient under
+ * load (taskset -c 0 + 3 burners): the second, untracked process (see
+ * `killSurvivorsUnder`'s doc comment) can itself be scheduling-delayed, so a
+ * one-shot scan right after the tests finish can land BEFORE it has even
+ * appeared, exactly the class of race M7-C last-flakes #2's product fix
+ * (die_launch's own fixed "quiet for 1s" window) was about — the same shape,
+ * one layer up, in this file's OWN cleanup. This is the same remedy: poll
+ * and kill repeatedly, event-driven on OBSERVED quiet rather than a single
+ * look, bounded by `ceilingMs` so a genuinely stuck process still surfaces
+ * as a failure rather than hanging teardown forever.
+ */
+function sweepUntilQuiet(root: string, opts: { quietChecks?: number; pollS?: string; ceilingMs?: number } = {}): string[] {
+  const { quietChecks = 3, pollS = '0.1', ceilingMs = 5000 } = opts;
+  const deadline = Date.now() + ceilingMs;
+  let quietStreak = 0;
+  while (Date.now() < deadline) {
+    const found = survivorsUnder(root);
+    if (found.length === 0) {
+      quietStreak += 1;
+      if (quietStreak >= quietChecks) return [];
+    } else {
+      quietStreak = 0;
+      for (const pid of found) spawnSync('kill', ['-KILL', pid]);
+    }
+    spawnSync('sleep', [pollS]);
+  }
+  return survivorsUnder(root); // the ceiling itself is the failure evidence
+}
 // M7-C last-flakes #2 sequel: a normal, uninterrupted run of this file was
 // measured leaking (bd forge-8vfn.7.6.105 sequel) — this `process.on('exit')`
 // closes the gap `after()` cannot close on its own: a run interrupted
 // (killed) before node:test ever reaches its `after()` hook. `exit` still
 // fires for a normal or SIGTERM shutdown (never for SIGKILL — no in-process
 // hook can close that gap), and it can only run synchronous code, which both
-// cleanup passes already are.
+// cleanup passes already are. Kept to a single pass here (not the quiet-poll
+// below) — Node's own guidance for 'exit' handlers is fast and minimal; this
+// is the last-resort backstop, not the primary path.
 process.on('exit', () => {
   try {
     sweepPlanted();
@@ -279,11 +310,12 @@ process.on('exit', () => {
 after(() => {
   for (const s of sessions) spawnSync('tmux', ['kill-session', '-t', s]);
   sweepPlanted();
-  killSurvivorsUnder(dir);
   // M7-C last-flakes #2 sequel: the structural door itself — not "cleanup
-  // ran" but "cleanup WORKED". Re-scans AFTER both passes above, so a red
-  // here means even the exe-path sweep missed something.
-  const survivors = survivorsUnder(dir);
+  // ran" but "cleanup WORKED". Polls to quiet (see `sweepUntilQuiet`) rather
+  // than a single look, so a red here means the process genuinely never
+  // settled within a generous bounded window, not that this check looked
+  // once too early.
+  const survivors = sweepUntilQuiet(dir);
   assert.deepEqual(survivors, [], `planted process(es) survived cleanup: pid(s) ${survivors.join(', ')} still running an executable under ${dir}`);
   if (dir) rmSync(dir, { recursive: true, force: true });
 });
