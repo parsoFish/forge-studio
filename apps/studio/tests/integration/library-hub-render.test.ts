@@ -30,6 +30,7 @@ import type { HookLibraryEntry } from '../../lib/hook-client.ts';
 import type { ConnectionWire } from '../../lib/connection-client.ts';
 import type { TemplateLibraryEntry } from '../../lib/template-client.ts';
 import type { CommunityItem } from '../../lib/community-client.ts';
+import { KICKOFF_ENTRIES } from '../../lib/session-kind-meta.ts';
 
 // ---------------------------------------------------------------------------
 // Fixtures — minimal, real-shaped entries for each of the five shelves.
@@ -248,6 +249,33 @@ test('the old landing-page surfaces (hero pulse, attention strip, projects/agent
   expect(html).not.toContain('data-section="kbs"');
   expect(html).not.toContain('data-section="orientation"');
   expect(html).not.toContain('data-first-run');
+});
+
+// ---------------------------------------------------------------------------
+// Sessions shelf (forge-8vfn.7.6.12) — a direct link to every session kind's
+// launcher, reusing the ONE source (`KICKOFF_ENTRIES`, `lib/session-kind-meta.ts`)
+// the Sessions index's own kickoff row already reads. Before this, the
+// shortest path from the Library to a launcher was three hops (Agents index
+// -> sessions-secondary -> Sessions index -> kickoff row -> launcher); this
+// shelf collapses that to one hop straight from the parts bin.
+// ---------------------------------------------------------------------------
+
+test('the Sessions shelf renders one direct launcher link per KICKOFF_ENTRIES entry', () => {
+  const html = render(EMPTY_READY_PROPS);
+  expect(html).toContain('data-section="sessions"');
+  expect(KICKOFF_ENTRIES.length).toBeGreaterThan(0);
+  for (const entry of KICKOFF_ENTRIES) {
+    expect(html).toContain(`data-action="kickoff-${entry.kind}"`);
+    expect(html).toContain(`href="${entry.href}"`);
+  }
+});
+
+test('the Sessions shelf renders after Community, so the operator-locked shelf order is undisturbed', () => {
+  const html = render(EMPTY_READY_PROPS);
+  const communityIdx = html.indexOf('data-section="community"');
+  const sessionsIdx = html.indexOf('data-section="sessions"');
+  expect(communityIdx).toBeGreaterThan(-1);
+  expect(sessionsIdx).toBeGreaterThan(communityIdx);
 });
 
 // ---------------------------------------------------------------------------
