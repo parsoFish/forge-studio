@@ -16,7 +16,7 @@ import { REPO_RE, type TriggerPayload } from '@forge/flows/trigger-payload.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { enqueueGateFixWorkItems } from '@forge/flows/gate-fix-loop.ts';
 import { writeMergeGateConfigErrorMarker } from '@forge/flows/fix-work-items.ts';
-import { resolveBandGuard, BAND_CANONICAL_SLUG } from '@forge/agents/agent-bands.ts';
+import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
 import { runAgent } from '@forge/agents/run-agent.ts';
 import type { PhaseExecutor } from '@forge/kernel';
 import { createBandRegistry } from '@forge/kernel';
@@ -68,6 +68,26 @@ async function runWithWedge<T>(
 /** architect: silent DAG marker — runCycle already emitted the synthetic events. */
 const execArchitect: NodeExecutor = async () => { /* marker only */ };
 
+/**
+ * Seam F4 (operator item 81, ADR-039 generalisation): every band resolves
+ * the EXECUTING node's own agent def from the SAME `ctx.agents`/`ctx.node`
+ * `execAgent`'s generic path reads — never a hardcoded canonical slug — so a
+ * second factory's own agent, put on a band station via its own declared
+ * dispatch (`composition.guards`/`loopStrategy: 'ralph'`), runs under ITS
+ * identity. Mirrors execAgent's own defensive "no def" check; in practice a
+ * band exec fn is only ever reached once execAgent has already resolved this
+ * same def, so this never actually throws in production — it is here so a
+ * band called directly (a test) fails loud rather than on a bare `.slug`
+ * TypeError.
+ */
+function resolveExecutingAgentDef(ctx: NodeExecContext): AgentDefinition {
+  const def = ctx.agents.get(ctx.node.agent ?? '');
+  if (!def) {
+    throw new Error(`band: no agent definition for node "${ctx.nodeId}" (agent:"${ctx.node.agent}")`);
+  }
+  return def;
+}
+
 /** pm: skip + rebase on any resume ('integrate' crash recovery, ADR-019;
  *  'develop' fix-loop re-entry, ADR-040); otherwise run the project manager. */
 const execPm: NodeExecutor = async (ctx) => {
@@ -87,7 +107,8 @@ const execPm: NodeExecutor = async (ctx) => {
     });
     return;
   }
-  await runWithWedge(ctx, (sig) => deps.runProjectManager(input, nodeLogger, sig));
+  const def = resolveExecutingAgentDef(ctx);
+  await runWithWedge(ctx, (sig) => deps.runProjectManager(input, nodeLogger, def, sig));
 };
 
 /**
@@ -101,7 +122,8 @@ const execPm: NodeExecutor = async (ctx) => {
  */
 const execDev: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps } = ctx;
-  await runWithWedge(ctx, (sig) => deps.runDeveloperLoop(input, nodeLogger, sig));
+  const def = resolveExecutingAgentDef(ctx);
+  await runWithWedge(ctx, (sig) => deps.runDeveloperLoop(input, nodeLogger, def, sig));
 };
 
 /**
@@ -261,6 +283,7 @@ const execIntegrate: NodeExecutor = async (ctx) => {
  */
 const execAdversarialReview: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, nodeId } = ctx;
+  const def = resolveExecutingAgentDef(ctx);
   const start = nodeLogger.emit({
     initiative_id: input.initiativeId,
     phase: 'orchestrator',
@@ -271,7 +294,7 @@ const execAdversarialReview: NodeExecutor = async (ctx) => {
     metadata: { agent_phase: 'review', agent_slug: 'adversarial-review', node_id: nodeId },
   });
 
-  const result = await runWithWedge(ctx, (sig) => deps.runAdversarialReview(input, nodeLogger, sig));
+  const result = await runWithWedge(ctx, (sig) => deps.runAdversarialReview(input, nodeLogger, def, sig));
   if (result.status === 'failed') {
     throw new Error(
       `adversarial review pipeline failed (${result.reason}: ${result.detail}) — ` +
@@ -310,9 +333,10 @@ const execReview: NodeExecutor = async (ctx) => {
 const execReflect: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, state } = ctx;
   if (!state.closure?.merged) return;
+  const def = resolveExecutingAgentDef(ctx);
   try {
     try {
-      const reflectorResult = await deps.runReflector(input, nodeLogger);
+      const reflectorResult = await deps.runReflector(input, nodeLogger, def);
       state.reflectionStatus = reflectorResult.reflection_status;
       state.lintStatus = reflectorResult.lint_status;
     } catch (err) {
@@ -519,20 +543,16 @@ const execAgent: NodeExecutor = async (ctx) => {
     throw new Error(`execAgent: no agent definition for node "${ctx.nodeId}" (agent:"${node.agent}")`);
   }
 
-  // ADR-039: a declared band guard routes this node to its orchestrator band
-  // (the phase pipeline machinery) instead of the bare generic spawn.
-  // Runtime backstop mirroring the ralph guard below (and the
-  // composition/band-guard lint): the band pipelines load the CANONICAL
-  // agent's SKILL.md themselves, so a non-canonical def declaring the guard
-  // would silently run the wrong identity — fail loud instead.
+  // ADR-039 (generalised by seam F4, operator item 81): a declared band guard
+  // routes this node to its orchestrator band (the phase pipeline machinery)
+  // instead of the bare generic spawn. Every band now loads THIS declaring
+  // def's own SKILL.md (resolveExecutingAgentDef, called inside each band
+  // exec fn from the SAME ctx.agents/ctx.node this function reads) — never a
+  // hardcoded canonical slug — so a second factory's own agent, put on a band
+  // station via its own composition.guards declaration, runs under ITS
+  // identity rather than the canonical agent's.
   const bandGuard = resolveBandGuard(def);
   if (bandGuard) {
-    const canonicalSlug = BAND_CANONICAL_SLUG[bandGuard];
-    if (def.slug !== canonicalSlug) {
-      throw new Error(
-        `execAgent: agent "${def.slug}" declares band guard "${bandGuard}", which routes to the canonical ${canonicalSlug} pipeline — restricted to that slug until the bands generalise; \`forge studio lint\` flags this at authoring time`,
-      );
-    }
     const band = AGENT_BANDS.get(bandGuard);
     if (band === undefined) {
       throw new Error(
@@ -542,20 +562,17 @@ const execAgent: NodeExecutor = async (ctx) => {
     return band(ctx);
   }
 
-  // ADR-039: a declared ralph loop routes to the dev-loop pipeline — the one
-  // shipped multi-iteration executor (per-WI worktrees, merge queue, gates).
-  // `runAgent` itself REJECTS ralph defs; the loop machinery is
-  // orchestrator-band, selected here by the def's declared strategy.
-  // Runtime backstop for the lint restriction (validate.ts
-  // runtime/loop-strategy): the dev-loop pipeline ignores the declaring
-  // def's own prompt/tools, so a non-canonical ralph def would silently
-  // mis-run under the wrong identity — fail loud instead.
+  // ADR-039 (generalised by seam F4): a declared ralph loop routes to the
+  // dev-loop pipeline — the one shipped multi-iteration executor (per-WI
+  // worktrees, merge queue, gates). `runAgent` itself REJECTS ralph defs; the
+  // loop machinery is orchestrator-band, selected here by the def's declared
+  // strategy. `execDev` loads THIS declaring def's own SKILL.md for its
+  // per-iteration prompt (resolveExecutingAgentDef) — never a hardcoded
+  // developer-ralph path — so a non-canonical ralph def runs under its own
+  // identity. The loop's own per-WI machinery (worktrees/merge queue/model
+  // tier/tool fence) stays developer-ralph-specific — reported, not
+  // redesigned (dev-binding.ts).
   if (def.runtime.loopStrategy === 'ralph') {
-    if (def.slug !== 'developer-ralph') {
-      throw new Error(
-        `execAgent: agent "${def.slug}" declares loopStrategy 'ralph', which routes to the dev-loop pipeline — restricted to developer-ralph until declared fanout generalises the loop (R2-03/R4-06); \`forge studio lint\` flags this at authoring time`,
-      );
-    }
     return execDev(ctx);
   }
 

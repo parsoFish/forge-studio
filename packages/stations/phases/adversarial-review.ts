@@ -45,6 +45,7 @@ import { runAgent } from '@forge/agents/run-agent.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { FORGE_ROOT } from '@forge/agents/studio/derive.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { readWorkItemsFromDir, type WorkItem } from '@forge/flows/work-item.ts';
 import { chunkLabel, mergeChunkRecords, partitionChangedFiles, type ReviewChunk,
   splitChunkPerFile,
@@ -180,7 +181,13 @@ function gitCapture(worktreePath: string, args: string[]): { ok: boolean; out: s
 export async function runAdversarialReview(
   input: AdversarialReviewInput,
   logger: EventLogger,
-  opts: { queryFn?: StreamQueryFn; signal?: AbortSignal; classProfiles?: ClassProfilePort } = {},
+  opts: {
+    queryFn?: StreamQueryFn;
+    signal?: AbortSignal;
+    classProfiles?: ClassProfilePort;
+    // Seam F4: execAdversarialReview passes the node's own def; default = canonical.
+    agentDef?: AgentDefinition;
+  } = {},
 ): Promise<AdversarialReviewResult> {
   // The one port (operator ruling, items 81/83): the class → gate-profile
   // table is the example's, not the platform's. Read once, here, so every
@@ -213,7 +220,7 @@ export async function runAdversarialReview(
     return { status: 'failed', reason: 'spawn-suppressed', detail: 'spawn suppressed by harness env — no review authored (never faked)' };
   }
 
-  const def = loadAgentDefinition(skillPath(AGENT_SLUG));
+  const def = opts.agentDef ?? loadAgentDefinition(skillPath(AGENT_SLUG));
   assertAdversarialReviewDeclaration(def);
 
   // Band 1 — assemble the review inputs (orchestrator-owned; full stdout).
@@ -336,7 +343,7 @@ export async function runAdversarialReview(
       }
     }
 
-    const systemPrompt = buildAdversarialReviewSystemPrompt();
+    const systemPrompt = buildAdversarialReviewSystemPrompt(def);
 
     // ── Bounded by construction: one review per WORK ITEM (bead 6.10.24) ─────
     //

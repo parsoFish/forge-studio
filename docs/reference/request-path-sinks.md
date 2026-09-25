@@ -24,7 +24,7 @@ against the tables by counting; a count of line references could not be.
 
 | | Rows |
 |---|---|
-| Classified rows below | 72 |
+| Classified rows below | 73 |
 | — `guarded` | 20 |
 | — guarded, new in M7-C (the standalone-history bounded scan's guarded mtime sort + guarded first-event bounded head read, forge-omk0/forge-aug) | 2 |
 | — guarded, new in M7-C U2 (T2 review of `95cb287f`, forge-8vfn.5.16 — the hook-fire scan's bound, `statSync`/`openSync` in `packages/kernel/guarded-scan.ts`) | 2 |
@@ -43,6 +43,7 @@ against the tables by counting; a count of line references could not be.
 | — not request-derived, new in M6-A (the unpriced-row emit sidecar, bead `forge-8vfn.7.6.103`) | 1 |
 | — not request-derived, new in M6-A (the SDK spawn's named CLI, bead `forge-8vfn.7.6.116`) | 1 |
 | — not request-derived, new in SEAM F1 (package-owned discovery roots, operator ruling item 81) | 1 |
+| — not request-derived, new in seam F4 (operator item 81, ADR-039 generalisation — a band's own SKILL.md read) | 1 |
 | `[unver]` items, listed separately and never counted safe | 7 |
 | bd issues filed | 4 (1 closed: `forge-d1f` by SEC-02; `forge-q80` PARTLY addressed by SEC-03 — its `POST /api/studio/projects` items are fixed, its `packageDir`/zip-slip and community-index items are not, so it stays open) |
 
@@ -2492,6 +2493,41 @@ is never itself joined into a path here.
 moment `flowRoots`/`listFlowIds`/`flowPathForId` started searching a second
 root; the sinks are pre-existing shapes (an enumerate-then-check loop, a
 readdir walk) reached through one more path each.
+
+### Added in seam F4 (operator item 81, ADR-039 generalisation) — a band's own SKILL.md read
+
+| file | sink | before | after |
+|---|---|---|---|
+| `packages/stations/phases/agent-skill-text.ts` | `readFileSync` | 0 | 1 |
+
+**One new sink, not request-derived — the band's own def, resolved off the
+run's own agent roster, never off request text.** Seam F4 generalised the
+wi-contract/reflection-close/review-band bands (`executor-table.ts`'s
+`execPm`/`execReflect`/`execAdversarialReview`, plus the ralph loop's
+`execDev`) so each loads the FLOW NODE'S OWN declared agent's `SKILL.md`
+instead of a hardcoded canonical path (`skills/project-manager/SKILL.md` etc.)
+— consolidating four pre-existing `readFileSync(<canonical path>, 'utf8')`
+call sites (`pm-binding.ts`, `dev-binding.ts`, `reflector-binding.ts`,
+`adversarial-review-binding.ts` — each now 0, see the `tighten` list this
+script's own run reports) into this one shared `loadAgentSkillText(def)`.
+
+`def.path` is `AgentDefinition.path` — set exactly once, by
+`loadAgentDefinition` (`packages/agents/studio/agent-registry.ts`), to the
+SAME already-resolved, already-guarded path SEAM F1's `resolveIdAcrossRoots` /
+`guardedFile` produced when the run's agent roster was built
+(`listAgentDefinitions(skillRoots(FORGE_ROOT))` in `flow-runner.ts`, at
+`runFlow` start — never per-node, never re-derived from the executing node's
+own `agent` string at read time). The executing node's `agent` field (a
+flow.yaml value) selects WHICH roster entry's `def` a band receives
+(`ctx.agents.get(node.agent)`) — a `Map` lookup by key, not a path join — so
+even an operator-authored flow.yaml can only ever pick an ALREADY-DISCOVERED,
+ALREADY-GUARDED roster def; it cannot mint a new path. No fallback: a def
+whose own `path` cannot be read throws naming the def and the path
+(`loadAgentSkillText`'s own contract) rather than substituting any other
+agent's file.
+
+Net effect on this ledger: **−4 pre-existing sinks, +1 new one** — the four
+`tighten` rows below record the four call sites this consolidation zeroed out.
 
 ### Added in M7-A (bead forge-8vfn.8.1.2, operator ruling 92) — the `.gitignore` drift mechanism's three new sinks, all guard-terminal
 

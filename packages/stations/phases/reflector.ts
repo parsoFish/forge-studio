@@ -30,6 +30,9 @@ import { parseRetroMd } from '../reflection-doc.ts';
 import type { EventLogger } from '@forge/kernel';
 import { parseManifest } from '@forge/flows/manifest.ts';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
+import { skillPath } from '@forge/agents/skill-path.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { buildReflectorSystemPrompt, renderReflectorUserPrompt } from './reflector-binding.ts';
 import {
   REFLECT_MODE_FILE,
@@ -83,6 +86,16 @@ export type ReflectorDeps = {
    * unchanged.
    */
   acquireBrainWriteLease?: typeof acquireBrainWriteLease;
+  /**
+   * Seam F4 (operator item 81, ADR-039 generalisation): the executing flow
+   * node's own agent def. The reflection-close band caller
+   * (`executor-table.ts` execReflect → `deps.runReflector`) always passes it
+   * explicitly, so the system prompt AND the `runAgent` tools/model/budgets
+   * (`reflector-brain-writes.ts`) read THIS def — never a hardcoded canonical
+   * path. Absent ⇒ the canonical reflector def (every pre-F4 test),
+   * byte-identical to prior behaviour.
+   */
+  agentDef?: AgentDefinition;
 };
 
 /**
@@ -182,7 +195,8 @@ export async function runReflector(
     return { reflection_status: 'skipped', lint_status: 'skipped' };
   }
 
-  const systemPrompt = buildReflectorSystemPrompt(forgeRoot);
+  const def = deps.agentDef ?? loadAgentDefinition(skillPath('reflector'));
+  const systemPrompt = buildReflectorSystemPrompt(forgeRoot, def);
   const cycleArchivePath = resolve(forgeRoot, 'brain', 'cycles', '_raw', `${cycleId}.md`);
   const themesDir = projectThemesDir(forgeRoot, projectName);
   // F-07: ensure brain destination dirs exist before invoking the SDK; the
@@ -257,6 +271,7 @@ export async function runReflector(
     brainWrites = await runReflectorBrainWrites({
       input, logger, deps, startEventId: start.event_id, forgeRoot, cycleId,
       projectName, systemPrompt, prompt, cycleArchivePath, themesDir, startedAtMs,
+      agentDef: def,
     });
   } finally {
     await releaseLease();

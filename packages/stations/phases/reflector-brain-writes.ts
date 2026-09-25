@@ -17,8 +17,7 @@ import { resolve } from 'node:path';
 
 import type { EventLogger, EventLogEntry } from '@forge/kernel';
 import { runAgent } from '@forge/agents/run-agent.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { skillPath } from '@forge/agents/skill-path.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { classifyCrash } from '@forge/agents/failure-classifier.ts';
 import {
   tallyToolUse as tallyReflectorToolUse,
@@ -82,13 +81,15 @@ type ReflectorBrainWriteParams = {
   input: CycleInput; logger: EventLogger; deps: ReflectorDeps;
   startEventId: string | undefined; forgeRoot: string; cycleId: string; projectName: string;
   systemPrompt: string; prompt: string; cycleArchivePath: string; themesDir: string; startedAtMs: number;
+  /** Seam F4 — the executing node's own agent def; see `ReflectorDeps.agentDef`. */
+  agentDef: AgentDefinition;
 };
 export async function runReflectorBrainWrites(
   opts: ReflectorBrainWriteParams,
 ): Promise<ReflectorBrainWriteOk | { ok: false }> {
   const {
     input, logger, deps, startEventId, forgeRoot, cycleId, projectName,
-    systemPrompt, prompt, cycleArchivePath, themesDir, startedAtMs,
+    systemPrompt, prompt, cycleArchivePath, themesDir, startedAtMs, agentDef,
   } = opts;
 
   const toolUseSummary: ReflectorToolUseSummary = {
@@ -105,12 +106,14 @@ export async function runReflectorBrainWrites(
     // R4-01-F2: the spawn goes through the generic one-shot primitive.
     // `lifecycle: 'caller'` — this pipeline owns the event lifecycle (the
     // reflector.start/end pair around this call); runAgent emits nothing and
-    // returns the totals. Options (model/tools from the derived spec, caps
-    // from the SKILL.md `budgets`) are pinned byte-identical to the previous
-    // inline build by the golden spawn-capture suite. Per-message telemetry
-    // stays here via the onMessage observer (ADR-036: judgments never move
-    // into the primitive).
-    const def = loadAgentDefinition(skillPath('reflector'));
+    // returns the totals. Options (model/tools/caps from the def's own
+    // `budgets`) are pinned byte-identical to the previous inline build by
+    // the golden spawn-capture suite for the canonical def — `agentDef` is
+    // the EXECUTING node's own def (seam F4), threaded in by `reflector.ts`,
+    // never re-derived from a hardcoded canonical path here. Per-message
+    // telemetry stays here via the onMessage observer (ADR-036: judgments
+    // never move into the primitive).
+    const def = agentDef;
     // R4-01 review: the caps moved from undeletable code constants to
     // frontmatter data — fail loud if an edit removes them (mirrors the PM
     // pipeline's maxTurns guard; an uncapped unattended reflector re-opens

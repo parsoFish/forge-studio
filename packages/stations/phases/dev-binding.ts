@@ -28,8 +28,25 @@ import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath, skillPathRelative } from '@forge/agents/skill-path.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { loadAgentSkillText } from './agent-skill-text.ts';
 
 const SKILL_PATH = skillPath('developer-ralph');
+
+/**
+ * The canonical developer-ralph def. Seam F4 (operator item 81):
+ * `buildDevSystemPrompt` takes the EXECUTING node's own def and defaults to
+ * this ONLY when the caller supplies none — the production ralph-loop caller
+ * (`executor-table.ts` execDev → `deps.runDeveloperLoop`) always passes the
+ * real node def.
+ *
+ * `DEV_FANOUT_CONCURRENCY_CAP`/`devAgentSpec`/`DEV_MODEL`/`DEV_ALLOWED_TOOLS`/
+ * `DEV_DISALLOWED_TOOLS` below stay canonical-derived — the dev loop's per-WI
+ * fanout/telemetry/tool-fence machinery (`developer-loop.ts`) is genuinely
+ * dev-loop-specific and reads them directly rather than through a def
+ * parameter; reported (not redesigned) as the coupling F4 leaves in place.
+ */
+export const CANONICAL_DEV_DEFINITION = loadAgentDefinition(SKILL_PATH);
 
 /**
  * R2-03-F4 — the developer-ralph fanout concurrency cap, declared in its
@@ -57,13 +74,6 @@ export const DEV_DISALLOWED_TOOLS = devAgentSpec.disallowedTools as DevDisallowe
 /** Concrete model, derived from the spec's tier (single source: the spec). */
 export const DEV_MODEL = modelForSpec(devAgentSpec);
 
-let cachedSkillText: string | null = null;
-function loadSkillText(): string {
-  if (cachedSkillText !== null) return cachedSkillText;
-  cachedSkillText = readFileSync(SKILL_PATH, 'utf8');
-  return cachedSkillText;
-}
-
 /**
  * Build the developer-loop system prompt: the SKILL.md contract (which now
  * includes the Ralph-loop discipline block — moved there as part of the ADR 024
@@ -79,9 +89,12 @@ function loadSkillText(): string {
  *
  * @param _brainCwd - kept for signature compatibility with the bench harness;
  *   no longer used since the brain navigation index is no longer loaded.
+ * @param def - the EXECUTING node's own agent def (seam F4). Defaults to the
+ *   canonical developer-ralph def for every pre-F4 caller — byte-identical
+ *   for that def, since it IS the canonical file.
  */
-export function buildDevSystemPrompt(_brainCwd: string): string {
-  return loadSkillText();
+export function buildDevSystemPrompt(_brainCwd: string, def: AgentDefinition = CANONICAL_DEV_DEFINITION): string {
+  return loadAgentSkillText(def);
 }
 
 export type DevUserPromptInput = {

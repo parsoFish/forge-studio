@@ -43,6 +43,7 @@ import { readPmBrainContext, readProjectContext } from './pm-prompt-context.ts';
 import { underDecomposedFlag } from './pm-class-set-rules.ts';
 import type { ClassProfilePort } from '../class-profile-port.ts';
 import { deriveKbIdFromBrainPath } from '@forge/knowledge';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 
 /**
  * Injection seam for tests. The live cycle uses the pinned stream query;
@@ -73,6 +74,15 @@ export type RunProjectManagerOptions = {
    * exactly one work item — see that function's own comment.
    */
   classProfiles?: ClassProfilePort;
+  /**
+   * Seam F4 (operator item 81, ADR-039 generalisation): the executing flow
+   * node's own agent def. The wi-contract band (`executor-table.ts` execPm)
+   * always passes it explicitly, so the PM's system prompt and its `runAgent`
+   * tools/model/budgets come from THIS def's own `SKILL.md` — never a
+   * hardcoded canonical path. Absent ⇒ the canonical project-manager def
+   * (every pre-F4 caller/test), byte-identical to prior behaviour.
+   */
+  agentDef?: AgentDefinition;
 };
 
 // The live turn/budget caps are DECLARED DATA now (R4-01-F2, ADR-039):
@@ -115,6 +125,7 @@ export async function runProjectManager(
     signal: options.signal,
     constraintSourcesRoot: options.constraintSourcesRoot,
     classProfiles: options.classProfiles,
+    agentDef: options.agentDef,
   });
 
   if (result.kind === 'success') return;
@@ -134,6 +145,8 @@ type PmPassInput = {
   constraintSourcesRoot?: string;
   /** The one port (operator ruling, items 81/83) — see RunProjectManagerOptions.classProfiles. */
   classProfiles?: ClassProfilePort;
+  /** Seam F4 — see RunProjectManagerOptions.agentDef. */
+  agentDef?: AgentDefinition;
 };
 
 type PmPassOutcome =
@@ -161,8 +174,16 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     rmSync(stalePmScratch, { recursive: true, force: true });
   }
 
+  // Seam F4 (operator item 81): the wi-contract band's caller
+  // (`executor-table.ts` execPm) always passes the executing node's own
+  // agent def explicitly; every pre-F4 caller/test that doesn't falls back
+  // to the canonical project-manager def, byte-identical to prior behaviour.
+  // Resolved BEFORE the system prompt so both the prompt and the spawn
+  // options (below) read the SAME def — never a hardcoded canonical path.
+  const def = p.agentDef ?? loadAgentDefinition(skillPath('project-manager'));
+
   const forgeRoot = resolve(import.meta.dirname, '..', '..', '..');
-  const systemPrompt = buildPmSystemPrompt(forgeRoot);
+  const systemPrompt = buildPmSystemPrompt(forgeRoot, def);
   // 2026-05-25 (claude-harness cycle 8 audit): read the project-shape
   // context off-disk and inject it into the prompt. PM was hallucinating
   // tooling (jest in a node:test project, npm run build with no build
@@ -244,14 +265,14 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // with `lifecycle: 'caller'` — this pipeline owns the event lifecycle and
   // every judgment (brain gate, WI validation, checkpoint classification);
   // only the literal SDK call moved. Options are pinned byte-identical to the
-  // previous inline build by the golden spawn-capture suite:
+  // previous inline build by the golden spawn-capture suite for the canonical
+  // def (`def` resolved once, above, before the system prompt):
   //   - F-37 cwd = the worktree (Glob resolves against the actual project).
-  //   - model/tools from the derived spec (same SKILL.md source as before).
+  //   - model/tools from the executing node's own def (seam F4).
   //   - caps from the declared budgets: max(2.50, 0.2 × manifest budget).
   //   - streamGuard = the idle-deadline safety net + wedge-signal chaining
   //     (a stalled stream aborts + classifies transient instead of hanging
   //     the queue — betterado roadmap run stalled exactly here mid-PM).
-  const def = loadAgentDefinition(skillPath('project-manager'));
   const pmMaxTurns = def.budgets.maxTurns;
   if (pmMaxTurns === undefined) {
     throw new Error(

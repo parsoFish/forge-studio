@@ -11,15 +11,26 @@
  * The user prompt = a per-cycle, per-initiative briefing (dynamic data only).
  */
 
-import { readFileSync } from 'node:fs';
-
 import { loadBrainIndex } from '@forge/knowledge/brain-index.ts';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath, skillPathRelative } from '@forge/agents/skill-path.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { loadAgentSkillText } from './agent-skill-text.ts';
 
 const SKILL_PATH = skillPath('project-manager');
+
+/**
+ * The canonical project-manager def, loaded once. Seam F4 (operator item 81):
+ * `buildPmSystemPrompt` below takes the EXECUTING node's own def as an
+ * explicit parameter and defaults to this ONLY when the caller supplies none
+ * (every pre-F4 test + the exported PM_* test-facing constants below) — the
+ * production wi-contract band (`executor-table.ts` execPm →
+ * `deps.runProjectManager`) always passes the real node def, never this
+ * default.
+ */
+const CANONICAL_PM_DEFINITION = loadAgentDefinition(SKILL_PATH);
 
 export type PmAllowedTool = 'Read' | 'Grep' | 'Glob' | 'Write' | 'Edit';
 export type PmDisallowedTool = 'Bash' | 'NotebookEdit' | 'WebFetch' | 'WebSearch';
@@ -41,18 +52,13 @@ export const PM_DISALLOWED_TOOLS = pmAgentSpec.disallowedTools as PmDisallowedTo
 export const PM_MODEL = modelForSpec(pmAgentSpec);
 
 /**
- * M2-3: brainAccess from the PM SKILL.md frontmatter — used by the phase
- * runner to decide whether 0 brain reads should abort the cycle. When
- * 'mandatory' the gate fires; when 'advisory' it does not.
+ * M2-3: brainAccess from the CANONICAL project-manager SKILL.md frontmatter —
+ * used by the phase runner's brain-first gate (a wi-contract-band-specific
+ * policy, ADR-010, that stays keyed to the canonical declaration rather than
+ * the executing node's own def — see F4's own report on this coupling).
+ * 'mandatory' fires the gate; 'advisory' does not.
  */
-export const PM_BRAIN_ACCESS = loadAgentDefinition(SKILL_PATH).brainAccess;
-
-let cachedSkillText: string | null = null;
-function loadSkillText(): string {
-  if (cachedSkillText !== null) return cachedSkillText;
-  cachedSkillText = readFileSync(SKILL_PATH, 'utf8');
-  return cachedSkillText;
-}
+export const PM_BRAIN_ACCESS = CANONICAL_PM_DEFINITION.brainAccess;
 
 // Brain-index staleness window (documented, intentional — US-2.3 /
 // brain-read-policy): this cache is module-level, so a long-running
@@ -96,8 +102,15 @@ function loadBrainNavigation(cwd: string): string {
  *
  * @param brainCwd - directory containing `brain/`. For the bench this is the
  *   tempdir (with symlinked brain/); for the live cycle this is the forge root.
+ * @param def - the EXECUTING node's own agent def (seam F4, operator item
+ *   81/ADR-039 generalisation). Its own `SKILL.md` (via `loadAgentSkillText`,
+ *   `def.path`) is what the wi-contract band spawns under — never a
+ *   hardcoded canonical path — so a second factory's own agent placed on the
+ *   wi-contract band runs under ITS identity. Defaults to the canonical
+ *   project-manager def for every pre-existing caller that does not pass one
+ *   (byte-identical for that def, since it IS the canonical file).
  */
-export function buildPmSystemPrompt(brainCwd: string): string {
+export function buildPmSystemPrompt(brainCwd: string, def: AgentDefinition = CANONICAL_PM_DEFINITION): string {
   return [
     '# Brain navigation index',
     '',
@@ -107,9 +120,9 @@ export function buildPmSystemPrompt(brainCwd: string): string {
     '',
     '---',
     '',
-    '# project-manager skill contract',
+    `# ${def.slug} skill contract`,
     '',
-    loadSkillText(),
+    loadAgentSkillText(def),
   ].join('\n');
 }
 

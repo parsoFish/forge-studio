@@ -13,6 +13,7 @@
 import { basename, join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import type { EventLogger } from '@forge/kernel';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { parseManifest } from '@forge/flows/manifest.ts';
 import { FORGE_ROOT } from '@forge/agents/skill-path.ts';
 import { runPreflight } from '@forge/projects/preflight.ts';
@@ -38,11 +39,21 @@ import { openPrInline, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDev
  * touching the filesystem or spawning agents.
  */
 export type FlowRunnerDeps = {
-  runProjectManager: (input: CycleInput, logger: EventLogger, signal?: AbortSignal) => Promise<void>;
+  /**
+   * `def` (seam F4, operator item 81/ADR-039 generalisation): the executing
+   * flow node's own agent def, resolved by the band exec function
+   * (`executor-table.ts`) from `ctx.agents.get(ctx.node.agent)` — the SAME
+   * lookup `execAgent`'s generic path uses, never a hardcoded canonical slug.
+   * Threaded through so the wi-contract band's system prompt and spawn
+   * options read THIS def's own SKILL.md.
+   */
+  runProjectManager: (input: CycleInput, logger: EventLogger, def: AgentDefinition, signal?: AbortSignal) => Promise<void>;
 
+  /** `def` — see `runProjectManager`'s doc; here for the ralph dev-loop. */
   runDeveloperLoop: (
     input: CycleInput,
     logger: EventLogger,
+    def: AgentDefinition,
     signal?: AbortSignal,
   ) => Promise<void>;
 
@@ -63,11 +74,13 @@ export type FlowRunnerDeps = {
   /**
    * R4-10-F1 review node: the R4-08 adversarial-review pipeline (assemble the
    * diff, critique, persist the `review-findings` artifact for the verdict
-   * gate). Wrapped by execAdversarialReview.
+   * gate). Wrapped by execAdversarialReview. `def` — see
+   * `runProjectManager`'s doc.
    */
   runAdversarialReview: (
     input: CycleInput,
     logger: EventLogger,
+    def: AgentDefinition,
     signal?: AbortSignal,
   ) => Promise<AdversarialReviewResult>;
 
@@ -99,9 +112,11 @@ export type FlowRunnerDeps = {
     reviewerOutcome: ReviewerOutcome,
   ) => Promise<ClosureResult>;
 
+  /** `def` — see `runProjectManager`'s doc. */
   runReflector: (
     input: CycleInput,
     logger: EventLogger,
+    def: AgentDefinition,
   ) => Promise<{ reflection_status: string; lint_status: string }>;
 
   /**
@@ -211,11 +226,12 @@ export const DEFAULT_LOGS_ROOT = join(FORGE_ROOT, '_logs');
  */
 export function buildDefaultDeps(classProfiles?: ClassProfilePort): FlowRunnerDeps {
   return {
-    // Thread the optional wedge-abort signal into real phase functions.
-    runProjectManager: (input, logger, signal?) =>
-      realRunProjectManager(input, logger, { signal, classProfiles }),
-    runDeveloperLoop: (input, logger, signal?) =>
-      realRunDeveloperLoop(input, logger, signal, classProfiles),
+    // Thread the optional wedge-abort signal + the executing node's own
+    // agent def (seam F4) into real phase functions.
+    runProjectManager: (input, logger, def, signal?) =>
+      realRunProjectManager(input, logger, { signal, classProfiles, agentDef: def }),
+    runDeveloperLoop: (input, logger, def, signal?) =>
+      realRunDeveloperLoop(input, logger, signal, classProfiles, def),
     runIntegrate: (input, logger, gateEvidence) =>
       runIntegrateBand(
         {
@@ -228,7 +244,7 @@ export function buildDefaultDeps(classProfiles?: ClassProfilePort): FlowRunnerDe
         gateEvidence,
         classProfiles,
       ),
-    runAdversarialReview: (input, logger, signal?) =>
+    runAdversarialReview: (input, logger, def, signal?) =>
       realRunAdversarialReview(
         {
           initiativeId: input.initiativeId,
@@ -241,7 +257,7 @@ export function buildDefaultDeps(classProfiles?: ClassProfilePort): FlowRunnerDe
           forgeRoot: FORGE_ROOT,
         },
         logger,
-        { signal, classProfiles },
+        { signal, classProfiles, agentDef: def },
       ),
     computeDeliveryStats: (input, logger) => {
       const s = emitDeliverySummary(input, logger);
@@ -261,7 +277,7 @@ export function buildDefaultDeps(classProfiles?: ClassProfilePort): FlowRunnerDe
     },
     openPrInline,
     runClosure,
-    runReflector,
+    runReflector: (input, logger, def) => runReflector(input, logger, { agentDef: def }),
     promoteMergedToDone,
     commitDevLoopBoundary,
     enforceDevLoopCloseInvariant,

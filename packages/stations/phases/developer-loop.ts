@@ -16,8 +16,7 @@ import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 import type { EventLogger } from '@forge/kernel';
 import { classifyCrash } from '@forge/agents/failure-classifier.ts';
 import {
-  DEV_ALLOWED_TOOLS,
-  DEV_DISALLOWED_TOOLS,
+  CANONICAL_DEV_DEFINITION, DEV_ALLOWED_TOOLS, DEV_DISALLOWED_TOOLS,
   DEV_FANOUT_CONCURRENCY_CAP,
   DEV_MODEL,
   devAgentSpec,
@@ -268,6 +267,7 @@ export async function runDeveloperLoop(
   // station must build with no factory installed; refuses by name below the
   // moment it actually needs a profile.
   classProfiles?: ClassProfilePort,
+  agentDef: typeof CANONICAL_DEV_DEFINITION = CANONICAL_DEV_DEFINITION, // seam F4 (dev-binding.ts)
 ): Promise<void> {
   const workItemsDir = resolve(input.worktreePath, '.forge/work-items');
   const cp = requireClassProfiles(classProfiles, 'developer-loop');
@@ -328,7 +328,7 @@ export async function runDeveloperLoop(
   }
 
   const forgeRoot = resolve(import.meta.dirname, '..', '..', '..');
-  const systemPrompt = buildDevSystemPrompt(forgeRoot);
+  const systemPrompt = buildDevSystemPrompt(forgeRoot, agentDef);
   const sdkQueryFn = sdkQuery as unknown as QueryFn;
 
   // ADR 029: resolve the dev agent's runtime sdk ONCE (the SKILL.md
