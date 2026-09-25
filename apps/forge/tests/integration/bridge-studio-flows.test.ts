@@ -65,6 +65,7 @@ function makeFlowYaml(overrides: Partial<{
     'kb: null',
     'costCeilingUsd: 2',
     `origin: ${origin}`,
+    'accepts: [code]',
     'nodes:',
     '  - id: architect',
     '    agent: test-agent',
@@ -163,6 +164,7 @@ function makeForgeDevelopFlowYaml(): string {
     'kb: null',
     'costCeilingUsd: 10',
     'origin: seed',
+    'accepts: [code]',
     'disposable: true',
     'nodes:',
     '  - id: integrate',
@@ -864,7 +866,7 @@ test('[security] flows have no exec-command fields — no command injection surf
   // This test is a documentation-level guard: enumerate the field names and assert
   // that none of the command-like keys exist.
   const commandLikeKeys = ['cmd', 'command', 'exec', 'shell', 'run', 'script'];
-  const flowTopLevelKeys = ['id', 'name', 'version', 'goal', 'project', 'kb', 'costCeilingUsd', 'origin', 'disposable', 'nodes', 'edges', 'triggers', 'path'];
+  const flowTopLevelKeys = ['id', 'name', 'version', 'goal', 'project', 'kb', 'costCeilingUsd', 'origin', 'accepts', 'disposable', 'nodes', 'edges', 'triggers', 'path'];
   const nodeKeys = ['id', 'agent', 'gate', 'fanOut', 'resumable'];
   const edgeKeys = ['from', 'to', 'artifact'];
   const triggerKeys = ['on', 'flow'];

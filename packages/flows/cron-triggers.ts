@@ -82,6 +82,10 @@ type DeclaredCronTrigger = {
   concurrency: 'allow' | 'forbid' | 'replace';
   /** R2-08-F1: the trigger's own `projects:` declaration. Absent ⇒ unscoped. */
   projects?: string[];
+  /** Seam F6 half 1 (ADR 051 decision 4): the trigger's own `class:`
+   *  declaration — threaded onto the staged request so a mint against a
+   *  multi-class target flow can resolve its manifest class. */
+  class?: string;
   /** R2-08-F1: the declaring flow's own `project:` binding (T1 ruling: cron
    *  has no external event, so eventProject is the declaring flow's own
    *  project) — `null`/absent stays unresolved. */
@@ -131,6 +135,7 @@ function scanDeclaredCronTriggers(forgeRoot: string, notify: (msg: string) => vo
         target: t.target,
         concurrency: t.concurrency ?? 'forbid',
         projects: t.projects,
+        class: t.class,
         eventProject,
       });
     });
@@ -168,6 +173,7 @@ function makeFireFn(
           payload: { kind: 'cron', schedule: d.schedule, firedAt: new Date().toISOString() },
           // R2-08-F1: absent stays absent — never coerce `undefined` to `[]`.
           ...(d.projects !== undefined ? { projects: d.projects } : {}),
+          ...(d.class !== undefined ? { triggerClass: d.class } : {}),
           ...(d.eventProject !== null ? { eventProject: d.eventProject } : {}),
         },
         { queueRoot },

@@ -25,6 +25,9 @@ import {
 } from './manifest.ts';
 import { getPaths } from './queue.ts';
 import { WORK_ITEM_FILE_PATTERN } from './work-item.ts';
+import { loadFlowDefinition } from './studio/flow-registry.ts';
+import { flowPathForId } from './flow-runner.ts';
+import { flowAcceptsClass, flowClassRefusalMessage } from './flow-accepts-class.ts';
 // W7-FIX-A3 (round-2 finding 6): ONE predicate for the manifest id
 // convention. This module, `POST /api/flows/:id/run`'s own pre-check and
 // `enqueue-plan-run.ts` each carried a hand-copied regex for the same rule
@@ -61,6 +64,12 @@ export type EnqueueFlowRunStatus =
    * anything is written — the queued manifest is left byte-identical.
    */
   | 'repoint-requires-confirm'
+  /**
+   * Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8): the manifest's
+   * `class` is not one the target flow declares in its `accepts` — refused
+   * before any spend. Nothing is written; the queued manifest is untouched.
+   */
+  | 'class-mismatch'
   | 'error';
 
 export type EnqueueFlowRunResult = {
@@ -142,6 +151,11 @@ export function enqueueFlowRun(
      * click and the roadmap carries no flow id to disclose).
      */
     allowRepointFrom?: readonly string[];
+    /** Absolute forge install root — resolves the target flow's `flow.yaml`
+     *  for the class-accepts check. Defaults to this module's own on-disk
+     *  location (two levels up), the same convention
+     *  `mint-triggered-initiative.ts` uses. */
+    forgeRoot?: string;
   } = {},
 ): EnqueueFlowRunResult {
   if (!isCanonicalInitiativeId(initiativeId)) {
@@ -202,6 +216,32 @@ export function enqueueFlowRun(
     manifest = parseManifest(readFileSync(sourcePath, 'utf8'));
   } catch (err) {
     return { status: 'not-found', initiativeId, detail: err instanceof Error ? err.message : String(err) };
+  }
+
+  // Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8): the pair is checked
+  // BEFORE SPEND, before this initiative is ever repointed/queued — "the
+  // manifest's class is one the target flow declares it accepts". ONE
+  // predicate (`flowAcceptsClass`), shared with `validateClaimable`'s own
+  // claim-time check — never a second copy of the rule.
+  //
+  // Best-effort here: an UNLOADABLE flow is not this check's failure to
+  // report — `validateClaimable` already refuses a broken/missing flow
+  // definition terminally at claim time (a clearer diagnosis than a class
+  // mismatch for a flow that doesn't exist), so this door skips the
+  // accepts-check rather than manufacturing a second, less precise error for
+  // the same underlying problem.
+  const forgeRoot = opts.forgeRoot ?? resolve(import.meta.dirname, '..', '..');
+  try {
+    const targetFlow = loadFlowDefinition(flowPathForId(flowId, forgeRoot));
+    if (!flowAcceptsClass(targetFlow, manifest.class)) {
+      return {
+        status: 'class-mismatch',
+        initiativeId,
+        detail: flowClassRefusalMessage(flowId, manifest.class, targetFlow.accepts),
+      };
+    }
+  } catch {
+    /* unloadable flow — validateClaimable refuses it terminally at claim time */
   }
 
   // known-gaps §9 (defense-in-depth, closed with ADR 040) — DEVELOP-specific:

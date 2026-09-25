@@ -78,6 +78,7 @@ export type AdversarialReviewInput = {
   projectName?: string;
   /** Root carrying `brain/projects/` — defaults to the forge repo root. */
   forgeRoot?: string;
+  flowReview?: { flowId: string; lenses: readonly string[] }; // seam F6 (ruling 97): flow's review-lens narrowing
 };
 
 export type AdversarialReviewResult =
@@ -85,12 +86,8 @@ export type AdversarialReviewResult =
   | {
       status: 'failed';
       reason:
-        | 'derive-failed'
-        | 'author-invalid'
-        | 'scope-violation'
-        | 'budget-exhausted'
-        | 'spawn-suppressed'
-        | 'spawn-failed';
+        | 'derive-failed' | 'author-invalid' | 'scope-violation' | 'budget-exhausted'
+        | 'spawn-suppressed' | 'spawn-failed' | 'lens-narrowing-invalid';
       detail: string;
     };
 
@@ -303,7 +300,18 @@ export async function runAdversarialReview(
     // the prompt (what to critique under) and the validator (what a finding may
     // claim) — one source, so a record cannot be judged against a set the agent
     // was never shown.
-    const lenses = classProfiles.profileFor(input.changeClass).reviewLenses;
+    const classLenses = classProfiles.profileFor(input.changeClass).reviewLenses;
+    let lenses: readonly string[] = classLenses; // seam F6 (ruling 97): flowReview narrows this
+    if (input.flowReview !== undefined) {
+      const { flowId, lenses: declared } = input.flowReview;
+      const unknownLens = declared.find((l) => !classLenses.includes(l));
+      if (unknownLens !== undefined) {
+        const detail = `flow ${flowId} narrows review to lens ${unknownLens}, which class ${input.changeClass} does not have; the class's lenses are ${classLenses.join(', ')}`;
+        emit('review.lens-narrowing-refused', { flow_id: flowId, unknown_lens: unknownLens }, { event_type: 'error' });
+        return { status: 'failed', reason: 'lens-narrowing-invalid', detail };
+      }
+      lenses = classLenses.filter((l) => declared.includes(l)); // intersection, class table's order
+    }
 
     // Band 2 — briefing inputs from the develop output. The FULL records are
     // kept, not just the display list: the partition below cuts the diff by the

@@ -49,6 +49,7 @@ export function loadArtifactTemplate(mdPath: string): ArtifactTemplate {
     },
     body: content.trim(),
     path: mdPath,
+    origin: optString(d, 'origin'),
   };
 }
 
@@ -92,6 +93,7 @@ export function loadDemoElement(mdPath: string): DemoElementDefinition {
     configHint: optString(d, 'configHint') ?? '',
     body: content.trim(),
     path: mdPath,
+    origin: optString(d, 'origin'),
   };
 }
 

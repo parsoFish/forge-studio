@@ -380,6 +380,11 @@ async function processHookReceipt(
       triggerKind: trigger.on,
       payload,
       ...(trigger.projects !== undefined ? { projects: trigger.projects } : {}),
+      // Seam F6 half 1 (ADR 051 decision 4): the trigger's own `class:`
+      // declaration, read straight off the resolved trigger config — needed
+      // by mint-triggered-initiative.ts when the target flow accepts more
+      // than one manifest class.
+      ...(trigger.class !== undefined ? { triggerClass: trigger.class } : {}),
       eventProject,
     },
     { queueRoot: ctx.queueRoot },

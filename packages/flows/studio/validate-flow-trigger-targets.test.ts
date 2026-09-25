@@ -48,6 +48,7 @@ function makeFlow(overrides: Partial<FlowDefinition> = {}): FlowDefinition {
     kb: null,
     costCeilingUsd: 10,
     origin: 'seed',
+    accepts: ['code'],
     nodes: [
       { id: 'step-a', agent: 'my-agent' },
       { id: 'gate', gate: 'verdict' },

@@ -113,6 +113,7 @@ import {
   allowedOrigin,
   sanitizeError,
   pathOnly,
+  originOfHookOrTemplate,
   type StudioContext,
   type RouteContext,
 } from '@forge/kernel';
@@ -200,6 +201,10 @@ export function hookWireFields(
     on: entry.on,
     ...(entry.matcher !== undefined ? { matcher: entry.matcher } : {}),
     permissions: entry.permissions,
+    // forge-8vfn.8.3.7: server-attested, never client-inferred — the ONE
+    // shared mapping every hook/template bridge route uses (kernel's own
+    // charter, mirrors provenanceOfOrigin's role for Flow/KB).
+    origin: originOfHookOrTemplate(entry.origin),
     carriedBy: entry.carriedBy,
     carriedByDerivation: entry.carriedByDerivation,
     scanVerdict: runState.verdict,
@@ -424,6 +429,10 @@ export async function handleHookCreate(req: IncomingMessage, res: ServerResponse
         ...(matcher ? { matcher } : {}),
         script: 'scripts/run.sh',
         permissions,
+        // forge-8vfn.8.3.7: stamped server-side, unconditionally — any
+        // "origin" the client sent in the request body was never read above
+        // and is discarded here; the server, never the caller, attests it.
+        origin: 'operator',
       };
 
       mkdirSync(dirname(hookScript), { recursive: true });

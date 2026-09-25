@@ -33,10 +33,11 @@
  */
 
 import { requireSessionStatusIo } from './kb-drain-model.ts';
+import { type ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { dirname, relative, resolve, sep } from 'node:path';
-import { resolveGuardedPath, guardedReadFile, provenanceOfOrigin, type Provenance } from '@forge/kernel';
+import { resolveGuardedPath, guardedReadFile, provenanceOfOrigin, KB_ID_RE, sendJson, type Provenance } from '@forge/kernel';
 import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 import { tryGetKbBackend } from './kb-backend.ts';
 import { kbSites, unroutableKbReason, type UnroutableKb } from './kb-sites.ts';
@@ -77,27 +78,19 @@ export type KbWithCounts = {
   provenance: Provenance;
 };
 
+// Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
+export function requireValidKbId(kbId: string, res: ServerResponse, origin: string): boolean {
+  if (KB_ID_RE.test(kbId)) return true;
+  sendJson(res, 400, { error: 'invalid kb id' }, origin);
+  return false;
+}
+
 function countLayerFiles(dir: string): number {
   if (!existsSync(dir)) return 0;
   try {
     return readdirSync(dir).filter((f) => !f.startsWith('.')).length;
   } catch {
     return 0;
-  }
-}
-
-/** Sub-directory names of a dir (empty on any error). */
-export function subDirs(dir: string): string[] {
-  if (!existsSync(dir)) return [];
-  try {
-    return readdirSync(dir, { withFileTypes: true })
-      // Skip dot-prefixed dirs — a `.staging-<id>-*` brain leftover (SEC-05 4on
-      // reopen-1) must never surface as a phantom KB. Real kb/project ids are
-      // slug-safe (no leading dot).
-      .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-      .map((e) => e.name);
-  } catch {
-    return [];
   }
 }
 
@@ -765,7 +758,7 @@ export function mintProjectBrainSeedingSession(
  * flow/unique-bound KB has no natural project home, so anchoring it under the
  * bare KB id created a top-level `projects/<kbId>/` dir that `discoverProjects`
  * (orchestrator/studio/registry.ts) surfaced as a PHANTOM project. Both
- * `discoverProjects` and `subDirs` (this file) already skip dot-prefixed dirs —
+ * `discoverProjects` and `subDirs` (kb-sites.ts) already skip dot-prefixed dirs —
  * a real project/kb id is slug-validated (no leading dot) — so a dot-prefixed
  * anchor keeps the seeding session on disk + runner-reachable while filtering it
  * out of project discovery. The anchor is a pure filesystem-nesting device: the

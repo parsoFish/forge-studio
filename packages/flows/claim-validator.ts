@@ -30,6 +30,8 @@ import { runPreflight } from '@forge/projects';
 import { loadFlowDefinition } from './studio/flow-registry.ts';
 import { listAgentDefinitions } from '@forge/agents';
 import { validateFlow } from './studio/validate-flow.ts';
+import { flowAcceptsClass, flowClassRefusalMessage } from './flow-accepts-class.ts';
+import type { ManifestClass } from '@forge/contracts';
 import { skillRoots } from '@forge/kernel';
 import type { AgentDefinition } from '@forge/contracts';
 
@@ -105,6 +107,9 @@ function loadAgentMap(forgeRoot: string): ReadonlyMap<string, AgentDefinition> {
  * @param initiativeId     - used for the spin-guard (log once per id)
  * @param projectRepoPath  - absolute path to the managed project repo
  * @param forgeRoot        - the forge install root (for skills/ + studio/flows/)
+ * @param manifestClass    - the manifest's ADR 051 `class` — checked against the
+ *                           resolved flow's `accepts` list (seam F6 half 1, spec
+ *                           §5 item 8) once the flow itself loads and validates.
  * @param flowYamlPath     - absolute path to the flow definition the manifest's
  *                           `flow_id` resolves to. REQUIRED: S8/DEC-3 retired the
  *                           forge-cycle default, so a manifest that names no flow
@@ -114,6 +119,7 @@ export function validateClaimable(
   initiativeId: string,
   projectRepoPath: string,
   forgeRoot: string,
+  manifestClass: ManifestClass,
   flowYamlPath?: string,
 ): ClaimValidationResult {
   // -------------------------------------------------------------------
@@ -159,6 +165,19 @@ export function validateClaimable(
       return {
         ok: false,
         reason: `flow "${flow.id}" failed validation (${errors.length} error(s)): ${summary}`,
+        terminal: true,
+      };
+    }
+
+    // Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8): "the pair is
+    // checked before spend" — EVERY claim converges here, so this is the
+    // authoritative check regardless of which door (or none — a mint or a
+    // direct manifest write) queued the initiative. Terminal: a class the
+    // flow does not accept needs an operator/config fix, not a retry.
+    if (!flowAcceptsClass(flow, manifestClass)) {
+      return {
+        ok: false,
+        reason: flowClassRefusalMessage(flow.id, manifestClass, flow.accepts),
         terminal: true,
       };
     }

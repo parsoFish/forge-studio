@@ -50,6 +50,7 @@ project: null
 kb: null
 costCeilingUsd: 10
 origin: seed
+accepts: [code]
 nodes:
   - id: plan
     agent: architect

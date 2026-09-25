@@ -83,6 +83,7 @@ project: null
 kb: null
 costCeilingUsd: 10
 origin: seed
+accepts: [code]
 disposable: true
 nodes:
   - { id: demo, agent: demo-agent }

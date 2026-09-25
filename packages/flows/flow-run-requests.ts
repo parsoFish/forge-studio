@@ -108,6 +108,17 @@ export type FlowRunRequest = {
    * their registry kind, so they never need to set this).
    */
   triggerKind?: string;
+  /**
+   * Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8): the firing trigger's
+   * own `class:` declaration, when the flow it targets accepts more than one
+   * manifest class (`mint-triggered-initiative.ts` reads this to derive the
+   * minted manifest's class — see its own comment). Sourced from trusted
+   * flow.yaml config (the trigger row itself), NEVER from `req.payload` —
+   * same exclusion `sourceFlowId`/`triggerKind` already honour. Absent when
+   * the firing trigger declared no `class:` (legal when the target flow
+   * accepts exactly one class — nothing to name).
+   */
+  triggerClass?: string;
   createdAt: string;
 };
 

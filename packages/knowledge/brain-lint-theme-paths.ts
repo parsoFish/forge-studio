@@ -110,16 +110,15 @@ export function isForgeTheme(brainRoot: string, file: string): boolean {
 
 // ---------- helpers ----------
 
+/** Every theme file directly inside ONE theme dir (README + non-`.md` excluded). */
+export function readThemeDirFiles(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).filter((e) => e !== 'README.md' && e.endsWith('.md')).map((e) => join(dir, e));
+}
+
 export function readThemeFiles(brainRoot: string): string[] {
-  const files: string[] = [];
-  if (!existsSync(brainRoot)) return files;
-  for (const dir of themeDirs(brainRoot)) {
-    for (const entry of readdirSync(dir)) {
-      if (entry === 'README.md' || !entry.endsWith('.md')) continue;
-      files.push(join(dir, entry));
-    }
-  }
-  return files;
+  if (!existsSync(brainRoot)) return [];
+  return themeDirs(brainRoot).flatMap(readThemeDirFiles);
 }
 
 /** Absolute path to a theme slug if it exists in ANY brain theme dir (`themeDirs`). */

@@ -48,6 +48,27 @@ project: null
 kb: cycles
 costCeilingUsd: 25
 origin: seed
+accepts: [code]
+nodes:
+  - { id: architect, gate: plan }
+  - { id: pm, agent: project-manager }
+  - { id: review, gate: verdict }
+edges:
+  - { from: architect, to: pm, artifact: plan }
+  - { from: pm, to: review, artifact: work-items }
+triggers: []
+`;
+
+/** Same shape as VALID_FLOW_YAML but only accepts "docs" — seam F6 half 1. */
+const DOCS_ONLY_FLOW_YAML = `id: test-cycle
+name: Test Cycle
+version: 1
+goal: Take an approved initiative to a merged PR.
+project: null
+kb: cycles
+costCeilingUsd: 25
+origin: seed
+accepts: [docs]
 nodes:
   - { id: architect, gate: plan }
   - { id: pm, agent: project-manager }
@@ -67,6 +88,7 @@ project: null
 kb: null
 costCeilingUsd: 0
 origin: seed
+accepts: [code]
 nodes:
   - { id: pm, agent: project-manager }
 edges: []
@@ -82,6 +104,7 @@ project: null
 kb: null
 costCeilingUsd: 0
 origin: seed
+accepts: [code]
 nodes:
   - { id: broken-node }
 edges: []
@@ -135,7 +158,7 @@ test('validateClaimable: contract-ready project + valid flow → ok', () => {
     mkdirSync(projectDir, { recursive: true });
     setupContractReadyProject(projectDir);
 
-    const result = validateClaimable('INIT-test-ok', projectDir, forgeRoot, flowPath);
+    const result = validateClaimable('INIT-test-ok', projectDir, forgeRoot, 'code', flowPath);
     assert.ok(result.ok, `expected ok but got refused: ${!result.ok ? (result as Extract<ClaimValidationResult, { ok: false }>).reason : ''}`);
     if (result.ok) {
       assert.equal(result.flowVersion, 1, 'flowVersion should be 1');
@@ -163,7 +186,7 @@ test('validateClaimable: missing roadmap.md (C4 fail) → refused, non-terminal'
     );
     writeFileSync(join(projectDir, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
 
-    const result = validateClaimable('INIT-c4-fail', projectDir, forgeRoot, flowPath);
+    const result = validateClaimable('INIT-c4-fail', projectDir, forgeRoot, 'code', flowPath);
 
     assert.ok(!result.ok, 'expected refusal');
     if (!result.ok) {
@@ -193,7 +216,7 @@ test('validateClaimable: missing quality gate (C1 fail) → refused, non-termina
     mkdirSync(join(projectDir, 'brain'), { recursive: true });
     writeFileSync(join(projectDir, 'brain', 'profile.md'), '# Profile\n');
 
-    const result = validateClaimable('INIT-c1-fail', projectDir, forgeRoot, flowPath);
+    const result = validateClaimable('INIT-c1-fail', projectDir, forgeRoot, 'code', flowPath);
 
     assert.ok(!result.ok, 'expected refusal');
     if (!result.ok) {
@@ -216,7 +239,7 @@ test('validateClaimable: flow has invalid node (no agent/gate) → refused, term
     const { forgeRoot, flowPath } = setupForgeRoot(root, INVALID_FLOW_YAML);
 
     // Project doesn't even need to exist — flow check runs first
-    const result = validateClaimable('INIT-bad-flow', '/nonexistent/path', forgeRoot, flowPath);
+    const result = validateClaimable('INIT-bad-flow', '/nonexistent/path', forgeRoot, 'code', flowPath);
 
     assert.ok(!result.ok, 'expected refusal');
     if (!result.ok) {
@@ -237,7 +260,7 @@ test('validateClaimable: flow.yaml not found → refused, terminal', () => {
     clearAllPendingRefusalLogs();
     const forgeRoot = root; // no flow.yaml written
 
-    const result = validateClaimable('INIT-no-flow', '/nonexistent/path', forgeRoot,
+    const result = validateClaimable('INIT-no-flow', '/nonexistent/path', forgeRoot, 'code',
       join(root, 'studio', 'flows', 'nonexistent', 'flow.yaml'));
 
     assert.ok(!result.ok, 'expected refusal');
@@ -263,7 +286,7 @@ test('validateClaimable: zero-gate non-disposable flow → refused terminal (via
     clearAllPendingRefusalLogs();
     const { forgeRoot, flowPath } = setupForgeRoot(root, ZERO_GATE_FLOW_YAML);
 
-    const result = validateClaimable('INIT-zero-gate', '/nonexistent/path', forgeRoot, flowPath);
+    const result = validateClaimable('INIT-zero-gate', '/nonexistent/path', forgeRoot, 'code', flowPath);
 
     assert.ok(!result.ok, 'expected refusal for zero-gate flow');
     if (!result.ok) {
@@ -289,7 +312,7 @@ test('validateClaimable: non-existent project path → skips preflight, flow che
     const { forgeRoot, flowPath } = setupForgeRoot(root, VALID_FLOW_YAML);
 
     // Project dir does not exist → preflight is skipped → only flow check matters
-    const result = validateClaimable('INIT-no-project', '/does/not/exist/at/all', forgeRoot, flowPath);
+    const result = validateClaimable('INIT-no-project', '/does/not/exist/at/all', forgeRoot, 'code', flowPath);
 
     // With a valid flow and a non-existent project dir, the result should be ok
     // (preflight is skipped because existsSync returns false)
@@ -315,18 +338,18 @@ test('validateClaimable: spin-guard reset via clearPendingRefusalLog', () => {
     writeFileSync(join(projectDir, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
 
     const id = 'INIT-spin-test';
-    const r1 = validateClaimable(id, projectDir, forgeRoot, flowPath);
+    const r1 = validateClaimable(id, projectDir, forgeRoot, 'code', flowPath);
     assert.ok(!r1.ok, 'first call: refused');
     if (!r1.ok) assert.equal(r1.terminal, false);
 
     // Second call: still refused (spin-guard doesn't change the refusal outcome,
     // only suppresses duplicate console logging)
-    const r2 = validateClaimable(id, projectDir, forgeRoot, flowPath);
+    const r2 = validateClaimable(id, projectDir, forgeRoot, 'code', flowPath);
     assert.ok(!r2.ok, 'second call: still refused');
 
     // After clearing, another call is still refused (the project isn't fixed)
     clearPendingRefusalLog(id);
-    const r3 = validateClaimable(id, projectDir, forgeRoot, flowPath);
+    const r3 = validateClaimable(id, projectDir, forgeRoot, 'code', flowPath);
     assert.ok(!r3.ok, 'after clear: still refused (project unchanged)');
     if (!r3.ok) assert.equal(r3.terminal, false, 'still non-terminal after clear');
   } finally {
@@ -350,7 +373,7 @@ test('validateClaimable ok result: flowVersion matches flow.yaml version field',
     mkdirSync(projectDir, { recursive: true });
     setupContractReadyProject(projectDir);
 
-    const result = validateClaimable('INIT-v3', projectDir, forgeRoot, flowPath);
+    const result = validateClaimable('INIT-v3', projectDir, forgeRoot, 'code', flowPath);
     assert.ok(result.ok);
     if (result.ok) assert.equal(result.flowVersion, 3);
   } finally {
@@ -486,7 +509,7 @@ test('isNonTerminalRefused: true after non-terminal refusal, false after clear',
 
     assert.equal(isNonTerminalRefused(id), false, 'not in skip-set before first call');
 
-    const result = validateClaimable(id, projectDir, forgeRoot, flowPath);
+    const result = validateClaimable(id, projectDir, forgeRoot, 'code', flowPath);
     assert.ok(!result.ok, 'expected refusal');
     assert.equal((result as Extract<ClaimValidationResult, { ok: false }>).terminal, false);
 
@@ -508,7 +531,7 @@ test('isNonTerminalRefused: terminal refusal does NOT add to skip-set', () => {
     const { forgeRoot, flowPath } = setupForgeRoot(root, INVALID_FLOW_YAML);
 
     const id = 'INIT-terminal-no-skip';
-    const result = validateClaimable(id, '/nonexistent/path', forgeRoot, flowPath);
+    const result = validateClaimable(id, '/nonexistent/path', forgeRoot, 'code', flowPath);
     assert.ok(!result.ok);
     assert.equal((result as Extract<ClaimValidationResult, { ok: false }>).terminal, true);
 
@@ -530,7 +553,7 @@ test('isNonTerminalRefused: contract-ready claim does NOT add to skip-set', () =
     setupContractReadyProject(projectDir);
 
     const id = 'INIT-ready-no-skip';
-    const result = validateClaimable(id, projectDir, forgeRoot, flowPath);
+    const result = validateClaimable(id, projectDir, forgeRoot, 'code', flowPath);
     assert.ok(result.ok, 'should pass');
 
     assert.equal(isNonTerminalRefused(id), false, 'successful claim must not enter skip-set');
@@ -564,7 +587,7 @@ test('FORGE_SKIP_CONTRACT_CHECK=1: non-contract-ready project is NOT refused on 
     writeFileSync(join(projectDir, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
     // roadmap.md + brain/profile.md intentionally absent (C4 fail)
 
-    const result = validateClaimable('INIT-skip-contract', projectDir, forgeRoot, flowPath);
+    const result = validateClaimable('INIT-skip-contract', projectDir, forgeRoot, 'code', flowPath);
 
     assert.ok(
       result.ok,
@@ -588,7 +611,7 @@ test('FORGE_SKIP_CONTRACT_CHECK=1: invalid flow (structural) is STILL refused te
     const { forgeRoot, flowPath } = setupForgeRoot(root, INVALID_FLOW_YAML);
 
     // Flow check runs first and is never skipped — structural errors always refuse.
-    const result = validateClaimable('INIT-skip-contract-bad-flow', '/nonexistent/path', forgeRoot, flowPath);
+    const result = validateClaimable('INIT-skip-contract-bad-flow', '/nonexistent/path', forgeRoot, 'code', flowPath);
 
     assert.ok(!result.ok, 'expected refusal: structural flow check is never bypassed');
     if (!result.ok) {
@@ -619,7 +642,7 @@ test('FORGE_SKIP_CONTRACT_CHECK unset: contract refusal fires as before', () => 
     writeFileSync(join(projectDir, '.gitignore'), SCRATCH_PATHS.join('\n') + '\n');
     // roadmap.md absent → C4 fails → should refuse
 
-    const result = validateClaimable('INIT-normal-contract', projectDir, forgeRoot, flowPath);
+    const result = validateClaimable('INIT-normal-contract', projectDir, forgeRoot, 'code', flowPath);
 
     assert.ok(!result.ok, 'expected contract refusal when env is unset');
     if (!result.ok) {
@@ -631,5 +654,53 @@ test('FORGE_SKIP_CONTRACT_CHECK unset: contract refusal fires as before', () => 
     else process.env.FORGE_SKIP_CONTRACT_CHECK = prevEnv;
     rmSync(root, { recursive: true, force: true });
     clearAllPendingRefusalLogs();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// K. Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8, bead
+//    forge-8vfn.6.10.15): the SAME `flowAcceptsClass` predicate `enqueueFlowRun`
+//    uses, checked again at claim time — the authoritative gate every claim
+//    converges on regardless of which door (or none) queued the initiative.
+// ---------------------------------------------------------------------------
+
+test('validateClaimable: manifest class the flow does not accept → refused, terminal, names both', () => {
+  const root = tmpDir();
+  try {
+    clearAllPendingRefusalLogs();
+    const { forgeRoot, flowPath } = setupForgeRoot(root, DOCS_ONLY_FLOW_YAML);
+    const projectDir = join(root, 'projects', 'my-project');
+    mkdirSync(projectDir, { recursive: true });
+    setupContractReadyProject(projectDir);
+
+    const result = validateClaimable('INIT-class-mismatch', projectDir, forgeRoot, 'code', flowPath);
+
+    assert.ok(!result.ok, 'expected refusal');
+    if (!result.ok) {
+      assert.equal(result.terminal, true, 'a class the flow does not accept needs a config fix, not a retry');
+      assert.equal(
+        result.reason,
+        'flow test-cycle does not accept class code; it accepts docs',
+        'the ONE refusal message every door renders, verbatim',
+      );
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('validateClaimable: a manifest class the flow DOES accept → ok (positive control)', () => {
+  const root = tmpDir();
+  try {
+    clearAllPendingRefusalLogs();
+    const { forgeRoot, flowPath } = setupForgeRoot(root, DOCS_ONLY_FLOW_YAML);
+    const projectDir = join(root, 'projects', 'my-project');
+    mkdirSync(projectDir, { recursive: true });
+    setupContractReadyProject(projectDir);
+
+    const result = validateClaimable('INIT-class-ok', projectDir, forgeRoot, 'docs', flowPath);
+    assert.ok(result.ok, `expected ok but got refused: ${!result.ok ? (result as Extract<ClaimValidationResult, { ok: false }>).reason : ''}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });

@@ -58,6 +58,7 @@ function makeFlow(nodes: FlowDefinition['nodes'], edges: FlowDefinition['edges']
     kb: 'cycles',
     costCeilingUsd: 25,
     origin: 'seed',
+    accepts: ['code'],
     disposable: undefined,
     nodes,
     edges,

@@ -92,6 +92,7 @@ project: null
 kb: null
 costCeilingUsd: 10
 origin: seed
+accepts: [code]
 disposable: true
 nodes:
   - { id: step1, agent: ${agentSlug} }
@@ -241,6 +242,7 @@ project: null
 kb: null
 costCeilingUsd: 10
 origin: seed
+accepts: [code]
 disposable: true
 nodes:
   - { id: step1, agent: ghost }
@@ -259,6 +261,49 @@ triggers: []
     flowFinding !== undefined,
     `Expected a finding with object containing 'flow:bad', got: ${JSON.stringify(result.findings.map((f) => f.object))}`,
   );
+
+  cleanup(root);
+});
+
+// Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8, bead forge-8vfn.6.10.15):
+// "a flow registers its accepted classes" — a flow.yaml missing the field
+// entirely fails to LOAD (loadFlowDefinition throws), and studio-lint must
+// surface that as a `flow:<id>` `check: 'load'` error naming both the flow
+// and the missing field, exactly like every other required field.
+test('flow.yaml missing "accepts" → errorCount > 0, finding names the flow and "accepts"', () => {
+  const root = tmpRoot();
+
+  const flowDir = join(root, 'studio', 'flows', 'no-accepts');
+  mkdirSync(flowDir, { recursive: true });
+  writeFileSync(
+    join(flowDir, 'flow.yaml'),
+    `id: no-accepts
+name: No Accepts Flow
+version: 1
+goal: Test a flow.yaml missing the required accepts field.
+project: null
+kb: null
+costCeilingUsd: 10
+origin: seed
+disposable: true
+nodes:
+  - { id: step1, gate: human }
+edges: []
+triggers: []
+`,
+  );
+  writeFileSync(join(root, 'studio', 'catalog.yaml'), validCatalogYaml());
+  seedValidProject(root);
+
+  const result = runStudioLint(root);
+
+  assert.ok(result.errorCount > 0, `Expected errors but got ${result.errorCount}`);
+  const flowFinding = result.findings.find((f) => f.object === 'flow:no-accepts' && f.check === 'load');
+  assert.ok(
+    flowFinding !== undefined,
+    `Expected a flow:no-accepts load-error finding, got: ${JSON.stringify(result.findings.filter((f) => f.object.includes('no-accepts')))}`,
+  );
+  assert.match(flowFinding!.message, /accepts/, 'the finding names the missing field');
 
   cleanup(root);
 });
@@ -796,6 +841,7 @@ project: null
 kb: null
 costCeilingUsd: 10
 origin: seed
+accepts: [code]
 disposable: true
 nodes:
   - { id: step1, agent: some-agent }

@@ -97,8 +97,8 @@ export type HubOutcome = {
   kinds?: string;
   message?: string;
 };
-import { communitySourceKey } from './studio/community-source-url.ts';
-import type { CommunityRegistry, CommunityRegistrySource } from '@forge/contracts';
+import { communitySourceKey, parseCommunityUpstream } from './studio/community-source-url.ts';
+import type { CommunityRegistry, CommunityRegistryItem, CommunityRegistrySource } from '@forge/contracts';
 import { CommunityRegistryLockError, lockCommunityRegistry } from './community-registry-lock.ts';
 
 /** Per-status tallies, computed once here so the CLI's printed tally and the
@@ -145,11 +145,11 @@ export type CommunityRefreshRunResult =
        *  are carried forward byte-for-byte) and reports the failures. Callers
        *  must treat a non-empty `errors` as a failed run — the CLI exits 1. */
       errors: readonly CommunityRefreshFailure[];
-      /** M6-D / ruling 478 — rows the DECLARED hubs publish that this registry
-       *  does not carry. PROPOSALS, never writes: the operator adds one through
-       *  the CRUD door they already use, so D10's "forge does not crawl on its
-       *  own" survives — a discovery is a suggestion, not a change. Empty when
-       *  every hub is already fully indexed, unreachable, or not GitHub-shaped. */
+      /** Ruling 478 + operator item 87 (566 superseded): rows the DECLARED
+       *  hubs publish that this registry lacks. A `'skill'` row was also
+       *  appended to `items` (unless dry run); an `'mcp'` row is reported only
+       *  (see `WritableDiscoveredItem`). Only operator-declared hubs are read,
+       *  and a curated row is never overwritten (D10 holds). */
       discovered: readonly DiscoveredItem[];
       /** What each declared hub did, so a chip can say WHY it is empty rather
        *  than only that it is. A hub contributing nothing and a hub forge
@@ -331,6 +331,35 @@ function verifiedSourcesOf(
   return out;
 }
 
+/** A discovered row carries no category fact: a declared placeholder the
+ *  operator edits through the CRUD door, never an invented one (item 87). */
+const DISCOVERED_ITEM_CATEGORY = 'uncategorized';
+
+/**
+ * ONLY `'skill'` is written: `registry.yaml`'s one reader
+ * (`communitySkillsFromRegistry`) and its CRUD route take skills only, so an
+ * `'mcp'` row there would be inert dead weight. mcp/tool rows belong in
+ * `studio/catalog.yaml` — queue item 52's decision, not this path's.
+ */
+type WritableDiscoveredItem = DiscoveredItem & { kind: 'skill' };
+
+/** Item 87 — the ONE DiscoveredItem → CommunityRegistryItem conversion. The
+ *  narrowed input makes a new kind a compile error; `provenance` is derived
+ *  ("owner/repo", as curated rows write it), never invented. */
+function discoveredItemToRegistryItem(d: WritableDiscoveredItem): CommunityRegistryItem {
+  const upstream = parseCommunityUpstream(d.sourceUrl);
+  const provenance = upstream !== null && upstream.kind === 'github' ? `${upstream.owner}/${upstream.repo}` : d.sourceUrl;
+  return {
+    id: d.id,
+    kind: d.kind,
+    name: d.id,
+    category: DISCOVERED_ITEM_CATEGORY,
+    sourceUrl: d.sourceUrl,
+    provenance,
+    signals: { attributedTo: null },
+  };
+}
+
 /**
  * The ONE construction of an outbound `RequestCtx` for the community surface —
  * credential, timeout and fetch impl in a single place.
@@ -480,11 +509,6 @@ export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Pro
     };
   }
 
-  // `verified === 0` with no errors means the registry simply has nothing
-  // queryable (every row a blog post, or no rows at all). That is not a
-  // failure — but there is nothing to stamp, so the file is left alone.
-  const shouldWrite = verified > 0 && !dryRun;
-
   // Ruling 478 — the second half of what "refresh" has to mean. Re-verifying
   // rows that already exist never turns a declared hub into a browsable one, so
   // four of the nine contributed nothing through every refresh this product has
@@ -496,6 +520,10 @@ export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Pro
   // one question — "make this list reflect its sources" — and answering half of
   // it behind a second control is the shape S8 beat 5 exists to refuse.
   const { discovered, hubs: hubOutcomes } = await discoverFromHubs(opts, registry, token);
+
+  // Nothing verified and nothing discovered: nothing to stamp, file left
+  // alone. A discovered row is itself a reason to write (item 87).
+  const shouldWrite = (verified > 0 || discovered.length > 0) && !dryRun;
 
   // MOVED ABOVE THE CRITICAL SECTION (7.6.84, T1 929). It used to run after the
   // write, which made its outcomes unpersistable: the file was already closed.
@@ -539,19 +567,24 @@ export async function runCommunityRefresh(opts: RunCommunityRefreshOptions): Pro
         };
       }
       const current = reloaded.registry;
+      // Item 87: de-dupe against the RE-LOADED document (a curation edit may
+      // have landed mid-fetch; a curated row is never overwritten), skills
+      // only, appended after the existing rows.
+      const currentIds = new Set(current.items.map((i) => i.id));
+      const isWritable = (d: DiscoveredItem): d is WritableDiscoveredItem => d.kind === 'skill' && !currentIds.has(d.id);
+      const newItems = discovered.filter(isWritable).map(discoveredItemToRegistryItem);
       writeRegistryAtomically(
         path,
         serializeCommunityRegistry({
-          // schemaVersion / items / leadingComments are the RE-LOADED
-          // document's own: a refresh is not a curation edit and owns none of
-          // them. Only `sources` and `lastRefresh` below are this pass's.
+          // schemaVersion / leadingComments are the RE-LOADED document's own;
+          // `items` is that list plus this pass's discoveries.
           schemaVersion: current.schemaVersion,
           lastRefresh: result.nextRegistry.lastRefresh,
           // What each hub did on THIS pass, so the chip that renders it
           // survives a reload and a second tab.
           hubs: hubOutcomes.map((h) => ({ hubId: h.hubId, discovered: h.discovered, ...(h.reason === undefined ? {} : { reason: h.reason }) })),
           sources: mergeVerifiedSources(current, verifiedSourcesOf(result.outcomes, result.nextRegistry.sources)),
-          items: current.items,
+          items: [...current.items, ...newItems],
           leadingComments: current.leadingComments,
         }),
       );

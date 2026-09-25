@@ -133,9 +133,16 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DESIGNATED_UNGUARDED_FUNCTIONS, countDesignatedCallers, CALLER_SINK_SUFFIX } from './check-request-path-sinks-callers.mjs';
+
+// Caller-count dimension re-exported unchanged (same names, same behaviour) —
+// split into check-request-path-sinks-callers.mjs under the 800-line cap; see
+// that file's own header for the full CALLER-COUNT DIMENSION documentation.
+export { DESIGNATED_UNGUARDED_FUNCTIONS, countDesignatedCallers };
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const DEFAULT_BASELINE_PATH = join(FORGE_ROOT, 'scripts/request-path-sinks.baseline.txt');
+export const DEFAULT_DOC_PATH = join(FORGE_ROOT, 'docs/reference/request-path-sinks.md');
 
 /**
  * The trees this walk may enter. `packages/` and `apps/` joined in M2: the
@@ -188,201 +195,65 @@ export const SINK_NAMES = [
   'exec',
 ];
 
-// `(?<![.\\w$])` — unqualified calls only. See the header's "ONLY UNQUALIFIED
-// CALLS ARE COUNTED" limit for the measurement behind this trade.
-const SINK_MATCHERS = SINK_NAMES.map((name) => ({ name, re: new RegExp(`(?<![.\\w$])${name}\\s*\\(`, 'g') }));
+/**
+ * IMPORT-BOUND SINK MATCHING (bead forge-8vfn.5.19, problem 1).
+ *
+ * Measured false positive: `const exec = executors[kind] ?? execUnknown;
+ * await exec(ctx)` in packages/factory/phases/executor-table.ts was reported
+ * as a new 'exec' sink purely because the CALL SITE NAME matched — 'exec' is
+ * a local const, never node:child_process's. Had a lane run --write there, a
+ * fake sink would have entered the baseline permanently.
+ *
+ * Fix: a sink name only counts when THIS FILE's own imports bind that local
+ * name to the real node:fs/node:child_process export of the same name —
+ * never a bare-name match against a local function, a destructured
+ * property, or a parameter. `sinkRegexesFor` below is built PER FILE, same
+ * discipline as `callRegexesFor` for the designated-caller dimension: the set
+ * of names a call site may use is a property of that file's imports, not a
+ * fixed literal.
+ *
+ * Deliberately NOT extended to member calls (`fs.readFileSync(...)`) even
+ * though such a call, if `fs` is a real `node:fs` namespace import, DOES
+ * resolve to a real sink — the header's "ONLY UNQUALIFIED CALLS ARE COUNTED"
+ * trade stays in force; see that measurement. This fix closes the
+ * false-positive direction (an unrelated local counted as a sink), not the
+ * false-negative one (a real sink invisible because it's namespace-qualified
+ * or aliased through a re-export) — both pre-existing, disclosed limits.
+ */
+const SINK_MODULE_RES = [/^node:fs$/, /^fs$/, /^node:child_process$/, /^child_process$/];
+
+/** Local names each SINK_NAME is callable under IN THIS FILE, restricted to
+ *  names actually imported from a real node:fs / node:child_process module
+ *  specifier (aliased or not) — never a same-named local declaration, a
+ *  destructure off some other object, or a parameter. Returns a
+ *  Map<localName, canonicalSinkName>. */
+function importedSinkLocals(text) {
+  const bound = new Map();
+  const sinkNameSet = new Set(SINK_NAMES);
+  for (const m of text.matchAll(/(?:^|\n)\s*import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g)) {
+    if (!SINK_MODULE_RES.some((re) => re.test(m[2]))) continue;
+    for (const part of m[1].split(',')) {
+      const [imported, local] = part.split(/\s+as\s+/).map((x) => x.trim());
+      if (sinkNameSet.has(imported)) bound.set(local || imported, imported);
+    }
+  }
+  return bound;
+}
+
+/** Call-site regexes for THIS file: one per (localName -> canonicalSink)
+ *  binding, matched unqualified exactly as before (`(?<![.\w$])`). A file
+ *  with no fs/child_process import at all yields an empty array — cheap,
+ *  and correct: nothing in it can be a real sink call. */
+function sinkRegexesFor(text) {
+  return [...importedSinkLocals(text).entries()].map(([local, canonical]) => ({
+    canonical,
+    re: new RegExp(`(?<![.\\w$])${local}\\s*\\(`, 'g'),
+  }));
+}
 
 function isCommentLine(line) {
   const t = line.trimStart();
   return t.startsWith('//') || t.startsWith('*') || t.startsWith('/*');
-}
-
-/**
- * CALLER-COUNT DIMENSION (SEC-04, bd forge-ebj step 2).
- *
- * The raw-sink ratchet above keys on (file, RAW-SINK, count). That leaves a
- * systemic hole: a NEW file that only *calls* an already-unguarded shared
- * function defined in a DIFFERENT module — e.g.
- * `readSessionStatus(join(root, reqProject, sid))` — introduces the exact
- * request-derived-path defect while emitting ZERO raw-sink rows of its own, so
- * the raw-sink ratchet stays green. This dimension closes that hole: it counts
- * callers of a fixed, checked-in list of functions that resolve a session dir
- * with NO containment of their own, and fails the moment a NEW reachable caller
- * appears (or an existing file's caller count grows).
- *
- * Keys are the function names; each value records the def module + WHY the
- * function is unguarded — kept a literal a reader can audit in one glance, the
- * same discipline as SINK_NAMES. The def-module note is documentation only; the
- * def file is DETECTED per-file at count time (see countDesignatedCallers), so
- * this dimension works unchanged against a synthetic fixture tree whose def
- * module lives at a different path than the real repo's.
- *
- * Contract for a designated function: it takes a caller-supplied session dir
- * (or bare-joins request-derived segments into one) and performs NO per-segment
- * identity / charset / symlink containment. Every caller must instead route the
- * request-derived project + sessionId through
- * resolveSafeSessionDir(projectsRoot, project, kindDirName, sessionId)
- * (packages/sessions/bridge-studio-sessions.ts → resolveGuardedPath) and hand the GUARDED dir
- * to the reader/writer — never a bare join.
- */
-export const DESIGNATED_UNGUARDED_FUNCTIONS = {
-  readSessionStatus: {
-    defModule: 'orchestrator/interactive-session.ts',
-    why: 'Reads status.json from a caller-supplied sessionDir; no containment of its own — the dir it is handed must already be resolveSafeSessionDir-guarded.',
-  },
-  writeSessionStatus: {
-    defModule: 'orchestrator/interactive-session.ts',
-    why: 'Writes status.json into a caller-supplied sessionDir; same contract as readSessionStatus — the dir must already be guarded.',
-  },
-  architectSessionDir: {
-    defModule: 'apps/forge/ui-bridge.ts',
-    why: 'Bare join of projectsRoot + request-derived project + "_architect" + request-derived sessionId; folds untrusted segments into a path with no guard.',
-  },
-  instructionsSessionDir: {
-    defModule: 'packages/sessions/kinds/instructions.ts',
-    why: 'Bare join of projectRoot + "_instructions" + request-derived sessionId; no per-segment containment.',
-  },
-  projectBrainSessionDir: {
-    defModule: 'packages/sessions/kinds/project-brain.ts',
-    why: 'Bare join of projectRoot + "_project-brain" + request-derived sessionId; no per-segment containment.',
-  },
-  demoSessionDir: {
-    defModule: 'packages/sessions/kinds/demo-builder.ts',
-    why: 'Bare join of projectRoot + "_demo" + request-derived sessionId; no per-segment containment.',
-  },
-  // SEC-04 completeness (bd forge-arch): the architect module was systematically
-  // missed by the first pass — three consumers reached architect session dirs
-  // through its OWN bespoke reader/builders with no containment. Designating
-  // them closes that blind spot: a future reachable caller of any of these now
-  // trips the ratchet unless it first routes the request-derived project +
-  // sessionId through resolveGuardedPath (per-segment identity + charset +
-  // symlink; refuse/skip on ANY escape) and hands the GUARDED dir to the reader.
-  readStatus: {
-    defModule: 'packages/sessions/kinds/architect.ts',
-    why: 'Reads status.json from a caller-supplied architect sessionDir; no containment of its own — the dir it is handed must already be resolveGuardedPath-guarded (GET /api/architect/sessions disclosed an out-of-root status.json through this + a symlinked _architect).',
-  },
-  sessionPaths: {
-    defModule: 'packages/sessions/kinds/architect-plan.ts',
-    why: 'Bare resolve(projectRoot, "_architect", sessionId) — folds a request-derived sessionId into a session-dir path with no per-segment containment; callers must guard "_architect" + sessionId as their own segments before reading through it (the architect runner leg read an out-of-root status.json through this).',
-  },
-  _architectSessionDir: {
-    defModule: 'packages/flows/bridge-studio-runs.ts',
-    why: 'Bare join of projectsRoot + request-derived project + "_architect" + request-derived sessionId (the plan-verdict routes\' private copy); folds untrusted segments into a path with no guard — a valid-charset project+sessionId still resolves through a symlinked _architect (AT-47).',
-  },
-  _readStatus: {
-    defModule: 'packages/flows/bridge-studio-runs.ts',
-    why: 'Reads (and its sibling _writeStatus mutates) status.json from a caller-supplied architect sessionDir (the plan-verdict routes\' private copy); no containment of its own — the dir must already be guarded.',
-  },
-};
-
-/** Sink-token suffix that namespaces a caller-count row so it flows through
- *  compareBaseline / formatBaseline / parseBaseline unchanged (the token is a
- *  single `\\S+` field, no spaces). */
-const CALLER_SINK_SUFFIX = '@caller';
-
-/** Per designated function: `defRe` matches its DEFINITION (`function F(` /
- *  `function F<` — covers `export function F`). A file that matches `defRe` is
- *  that fn's own def file and is SKIPPED for that fn, because the definition
- *  line itself matches the call patterns and would otherwise self-count.
- *  Detection is per-file so a synthetic fixture whose def module differs from
- *  the real repo works too.
- *
- *  THERE IS NO PRECOMPILED CALL REGEX HERE, deliberately. It used to carry a
- *  `callRe` for the bare name; 7.6.68 moved call matching into
- *  `callRegexesFor` below, which must be built PER FILE because the set of
- *  names a call site may use — aliases, namespace imports — is a property of
- *  that file's imports, not of the designated function. Leaving a dead
- *  `callRe` here would be §15.534's own shape one level along: a live-looking
- *  regex with an explanatory comment, describing matching that no longer
- *  happens (C's review of 7.6.68). */
-const DESIGNATED_MATCHERS = Object.keys(DESIGNATED_UNGUARDED_FUNCTIONS).map((name) => ({
-  name,
-  defRe: new RegExp(`(?<![.\\w$])function\\s+${name}\\s*[<(]`),
-}));
-
-/** Caller-count enumeration. Returns a sorted array of { file, sink, count }
- *  rows — one per (reachable file, designated fn) pair with count > 0 — where
- *  sink is `${fnName}@caller`. Skips each fn's own def file. Comment lines are
- *  filtered by the same crude line-based filter as the raw-sink pass; the
- *  def-file detection runs over the whole file text (a `function F(` inside a
- *  block comment would falsely mark a file as a def file and under-count its
- *  callers — the same crude-comment-filter limitation the header documents).
- *
- *  These rows are DELIBERATELY NOT merged into countSinks/analyze output: the
- *  raw-sink `rows` must stay caller-free so a new pure-caller file emits no
- *  per-file raw-sink row. They are combined with the sink rows only inside
- *  runCheck, for the baseline write and the compareBaseline comparison. */
-/**
- * Every NAME a file can call `fn` by — `forge-8vfn.7.6.68`, T1 ruling 987.
- *
- * THE MATCHER MATCHES THE CALL SITE, AND AN IMPORT RENAMES THE CALL SITE.
- * Measured, all three forms, against this very check:
- *
- *     writeSessionStatus(dir, …)                        FAIL rc=1   caught
- *     import { writeSessionStatus as X }; X(dir, …)      rc=0        EVADED
- *     import * as NS; NS.writeSessionStatus(dir, …)      rc=0        EVADED
- *
- * Neither evasion needs intent. `import { X as Y }` is what people write to
- * resolve a name collision, and a namespace import is an ordinary style — and
- * `(?<![.\w$])` excludes dotted calls BY DESIGN, so the namespace form is
- * doubly invisible. §15.534: a guard that matches a call-site name is evaded by
- * a rename, and renames happen for unrelated reasons.
- *
- * OVER-MATCHING IS THE SAFE DIRECTION AND IS DELIBERATE. Any import binding the
- * designated name counts, without checking the specifier resolves to the
- * declaring module: a same-named export from elsewhere would raise a row that a
- * human then dismisses. For a containment ratchet a false positive is a
- * conversation and a false negative is a hole.
- */
-function localNamesFor(text, name) {
-  const locals = new Set([name]);
-  // `import { a, writeSessionStatus as w } from '…'` / `export { … } from '…'`
-  for (const m of text.matchAll(/(?:^|\n)\s*(?:import|export)\s*\{([^}]*)\}\s*from/g)) {
-    for (const part of m[1].split(',')) {
-      const [imported, local] = part.split(/\s+as\s+/).map((x) => x.trim());
-      if (imported === name && local) locals.add(local);
-    }
-  }
-  return [...locals];
-}
-
-function namespaceLocals(text) {
-  return [...text.matchAll(/(?:^|\n)\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from/g)].map((m) => m[1]);
-}
-
-/** Call-site regexes for one designated name in one file: the bare name, every
- *  alias it was imported under, and `<ns>.<name>` for every namespace import. */
-function callRegexesFor(text, name) {
-  const res = localNamesFor(text, name).map((local) => new RegExp(`(?<![.\\w$])${local}\\s*\\(`, 'g'));
-  for (const ns of namespaceLocals(text)) {
-    res.push(new RegExp(`(?<![.\\w$])${ns}\\.${name}\\s*\\(`, 'g'));
-  }
-  return res;
-}
-
-export function countDesignatedCallers(root, reachableFiles) {
-  const rows = [];
-  for (const relFile of reachableFiles) {
-    const absFile = join(root, relFile);
-    if (!existsSync(absFile)) continue;
-    const text = readFileSync(absFile, 'utf8');
-    const lines = text.split('\n');
-    for (const { name, defRe } of DESIGNATED_MATCHERS) {
-      if (defRe.test(text)) continue; // this fn's own def file — skip (self-match guard)
-      const regexes = callRegexesFor(text, name);
-      let n = 0;
-      for (const line of lines) {
-        if (isCommentLine(line)) continue;
-        for (const re of regexes) {
-          re.lastIndex = 0;
-          while (re.exec(line)) n += 1;
-        }
-      }
-      if (n > 0) rows.push({ file: relFile, sink: `${name}${CALLER_SINK_SUFFIX}`, count: n });
-    }
-  }
-  rows.sort((a, b) => (a.file === b.file ? a.sink.localeCompare(b.sink) : a.file.localeCompare(b.file)));
-  return rows;
 }
 
 /** Relative-import specifiers this module cares about: static `from '...'`
@@ -533,16 +404,19 @@ export function countSinks(root, reachableFiles) {
   for (const relFile of reachableFiles) {
     const absFile = join(root, relFile);
     if (!existsSync(absFile)) continue;
-    const lines = readFileSync(absFile, 'utf8').split('\n');
+    const text = readFileSync(absFile, 'utf8');
+    const matchers = sinkRegexesFor(text);
+    if (!matchers.length) continue; // no fs/child_process import at all — nothing here can be a real sink
+    const lines = text.split('\n');
     const counts = new Map();
     for (const line of lines) {
       if (isCommentLine(line)) continue;
-      for (const { name, re } of SINK_MATCHERS) {
+      for (const { canonical, re } of matchers) {
         re.lastIndex = 0;
         let m;
         let n = 0;
         while ((m = re.exec(line))) n += 1;
-        if (n > 0) counts.set(name, (counts.get(name) ?? 0) + n);
+        if (n > 0) counts.set(canonical, (counts.get(canonical) ?? 0) + n);
       }
     }
     for (const [sink, count] of counts) rows.push({ file: relFile, sink, count });
@@ -640,11 +514,130 @@ function printFailureGuidance(failures) {
 }
 
 /**
+ * Whether `relFile` has ANY classification text in the audit doc — a coarse,
+ * FILE-level check, not a per-sink one (M7 findings row 25's "unless the doc
+ * classification exists" clause). The doc's rows are freeform narrative
+ * prose keyed to file paths (see docs/reference/request-path-sinks.md), not
+ * a machine-parseable (file, sink) index, so per-sink matching would be
+ * exactly the kind of audit that overstates its own rigour the header warns
+ * against. Coarse is a deliberate, stated trade: false-negative-safe (a file
+ * the doc has never mentioned always refuses) at the cost of not catching a
+ * SECOND, undocumented sink kind added to an ALREADY-documented file — the
+ * same "prove-or-warn" model the rest of this ratchet uses.
+ */
+export function docClassifiesFile(docText, relFile) {
+  return docText.includes(relFile);
+}
+
+/**
+ * Doc-derived classification census — replaces
+ * docs/reference/request-path-sinks.md's hand-maintained "## Summary" table,
+ * which was the single highest-conflict edit across M7-C (measured: 6
+ * collisions in one day, because every PR touched both a table row there AND
+ * appended its own new section at the end). Rather than a hand-typed number
+ * that can silently drift from the rows actually written below it, this
+ * scans the doc's OWN classification-table rows (`file:line | op | field |
+ * class | evidence`) and buckets each by its own `class` cell, plus tallies
+ * the `[exec]`/`[read]`/`[unver]` verification markers wherever they occur.
+ *
+ * INFORMATIONAL ONLY, never a gate — printed every run, never compared
+ * against a stored figure. The doc's rows are freeform narrative prose (see
+ * its own structure: 70+ ad hoc section headings, arbitrarily long evidence
+ * cells), not a machine-parseable (file, sink) index, so treating a count
+ * derived from it as pass/fail-worthy would be exactly the kind of audit
+ * that overstates its own rigour — this file's own header already names
+ * that failure mode. A live, always-current print removes the churn (there
+ * is no longer a stale number IN the doc to disagree with reality) without
+ * pretending to verify prose it cannot reliably parse.
+ */
+const DOC_TABLE_ROW_RE = /^\|([^|]*)\|([^|]*)\|([^|]*)\|([^|]*)\|(.*)\|\s*$/;
+
+export function countDocClassifications(docText) {
+  const byClass = { guarded: 0, unguarded: 0, accidentallySafe: 0, notRequestDerived: 0, other: 0 };
+  const byMarker = { exec: 0, read: 0, unver: 0 };
+  let totalRows = 0;
+  for (const line of docText.split('\n')) {
+    if (/^\|\s*-{2,}/.test(line)) continue; // markdown table separator row
+    const m = DOC_TABLE_ROW_RE.exec(line);
+    if (!m) continue;
+    const classCell = m[4].trim();
+    if (!classCell || classCell.toLowerCase() === 'class') continue; // empty cell or the header row itself
+    totalRows += 1;
+    const lc = classCell.toLowerCase();
+    if (lc.includes('not request-derived')) byClass.notRequestDerived += 1;
+    else if (lc.includes('accidentally-safe')) byClass.accidentallySafe += 1;
+    else if (/\bunguarded\b/.test(lc)) byClass.unguarded += 1;
+    else if (/\bguarded\b/.test(lc)) byClass.guarded += 1;
+    else byClass.other += 1;
+    if (line.includes('[exec]')) byMarker.exec += 1;
+    if (line.includes('[read]')) byMarker.read += 1;
+    if (line.includes('[unver]')) byMarker.unver += 1;
+  }
+  return { totalRows, byClass, byMarker };
+}
+
+/** Prints the doc census line every runCheck call (check or --write). A
+ *  missing doc reads as zero rows rather than throwing — this is
+ *  informational, never a gate, so an absent doc must never take the whole
+ *  check down. */
+function printDocCensus(docPath) {
+  const docText = existsSync(docPath) ? readFileSync(docPath, 'utf8') : '';
+  const { totalRows, byClass, byMarker } = countDocClassifications(docText);
+  console.log(
+    `check-request-path-sinks: doc census (${docPath}) — ${totalRows} classified row${totalRows === 1 ? '' : 's'} ` +
+      `(guarded ${byClass.guarded}, unguarded ${byClass.unguarded}, accidentally-safe ${byClass.accidentallySafe}, not-request-derived ${byClass.notRequestDerived}, other ${byClass.other}); ` +
+      `markers: [exec] ${byMarker.exec}, [read] ${byMarker.read}, [unver] ${byMarker.unver}`
+  );
+}
+
+/** `--write`'s own body, split out so runCheck stays readable. Prints every
+ *  row the regenerated baseline changes (bead forge-8vfn.5.19 problem 2) —
+ *  `grown`/`dropped` are compareBaseline(newRows, priorRows)'s own output,
+ *  reused rather than re-derived.
+ *
+ *  M7 findings row 25's other half: --write must never RAISE a row (a grown
+ *  or brand-new pair) unless the audit doc already classifies that file —
+ *  otherwise --write is exactly the tool that lets an undocumented growth
+ *  sail into the baseline unread. Tightening (dropping) never needs doc
+ *  backing, per this ratchet's own existing rule that a lower count is never
+ *  a regression, so only `grown` is gated. Refuses (no write) and returns 1
+ *  if any grown row's file lacks doc coverage — EXCEPT when no baseline
+ *  existed yet (`hadPriorBaseline` false): the very first --write is
+ *  establishing ground truth wholesale, not raising anything incrementally,
+ *  so every row in it reads as "new" against an empty prior baseline and the
+ *  gate would otherwise block the initial capture entirely. */
+function writeBaseline({ baselinePath, docPath, rows, grown, dropped, reachableCount, totalCalls, hadPriorBaseline }) {
+  const docText = existsSync(docPath) ? readFileSync(docPath, 'utf8') : '';
+  const undocumented = hadPriorBaseline ? grown.filter((g) => !docClassifiesFile(docText, g.file)) : [];
+  if (undocumented.length) {
+    console.error(
+      `check-request-path-sinks: --write REFUSED — ${undocumented.length} row(s) would RAISE the baseline with no classification in ${docPath}:`
+    );
+    for (const u of undocumented) console.error(`  ✗ ${u.file} ${u.sink}: ${u.baselineCount} -> ${u.count}`);
+    console.error('  Add a row to docs/reference/request-path-sinks.md classifying the new/grown site first (M7 findings row 25 — --write never raises an undocumented row).');
+    return 1;
+  }
+
+  if (grown.length || dropped.length) {
+    console.log(
+      `check-request-path-sinks: --write is changing ${grown.length + dropped.length} existing row(s) — read every line before committing (bead forge-8vfn.5.19: --write regenerates the WHOLE baseline, it is not a re-key):`
+    );
+    for (const g of grown) console.log(`  raise:  ${g.file} ${g.sink}: ${g.baselineCount} -> ${g.count}`);
+    for (const d of dropped) console.log(`  ${d.count === 0 ? 'remove' : 'lower '}: ${d.file} ${d.sink}: ${d.baselineCount} -> ${d.count}`);
+  }
+  writeFileSync(baselinePath, formatBaseline(rows));
+  console.log(
+    `check-request-path-sinks: baseline written — ${reachableCount} reachable modules, ${rows.length} (file,sink) rows, ${totalCalls} total sink calls`
+  );
+  return 0;
+}
+
+/**
  * Run the check (or `--write` the baseline). Root and baseline path are
  * injectable so tests can point this at a temp fixture tree instead of the
  * real repo. Returns a process exit code; never calls process.exit itself.
  */
-export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PATH, write = false } = {}) {
+export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PATH, docPath = DEFAULT_DOC_PATH, write = false } = {}) {
   const { reachable, rows: sinkRows } = analyze(root);
   // Combine the raw-sink rows with the caller-count dimension into ONE row
   // stream. Both key on (file, sink, count) and flow through compareBaseline /
@@ -654,13 +647,20 @@ export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PA
     a.file === b.file ? a.sink.localeCompare(b.sink) : a.file.localeCompare(b.file)
   );
   const totalCalls = rows.reduce((sum, r) => sum + r.count, 0);
+  printDocCensus(docPath);
 
   if (write) {
-    writeFileSync(baselinePath, formatBaseline(rows));
-    console.log(
-      `check-request-path-sinks: baseline written — ${reachable.length} reachable modules, ${rows.length} (file,sink) rows, ${totalCalls} total sink calls`
-    );
-    return 0;
+    // bead forge-8vfn.5.19, problem 2: --write is not a re-key — it
+    // regenerates the WHOLE baseline from the current tree, so accepting one
+    // intended row silently rewrites every other row that has drifted since
+    // the baseline was last written (measured: cli/brain-lint.ts existsSync
+    // 22->20, orchestrator/fix-work-items.ts's three rows deleted outright).
+    // Fix: print every row that changes, so nothing is silently absorbed —
+    // a human reads this before committing the regenerated file.
+    const hadPriorBaseline = existsSync(baselinePath);
+    const priorRows = hadPriorBaseline ? parseBaseline(readFileSync(baselinePath, 'utf8')) : [];
+    const { failures: grown, tighten: dropped } = compareBaseline(rows, priorRows);
+    return writeBaseline({ baselinePath, docPath, rows, grown, dropped, reachableCount: reachable.length, totalCalls, hadPriorBaseline });
   }
 
   if (!existsSync(baselinePath)) {
@@ -672,12 +672,18 @@ export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PA
   const baselineRows = parseBaseline(readFileSync(baselinePath, 'utf8'));
   const { failures, tighten } = compareBaseline(rows, baselineRows);
 
+  // M7 findings row 25: growth-only baselines never tighten themselves — a
+  // stale-HIGH row (baseline above the real count, e.g. "pr.ts execFileSync
+  // baselined 5, real 2") used to pass forever because `tighten` was
+  // informational-only. It now FAILS, with the exact figure, same as growth.
   if (tighten.length) {
-    console.log(`check-request-path-sinks: ${tighten.length} tightenable line${tighten.length === 1 ? '' : 's'} (sink count dropped or a sink disappeared — never a regression):`);
+    console.error(
+      `check-request-path-sinks: FAIL (${tighten.length} stale baseline row${tighten.length === 1 ? '' : 's'} — real count below baseline; M7 findings row 25, a stale-HIGH row must not pass forever)`
+    );
     for (const t of tighten) {
-      console.log(`  tighten: ${t.file} ${t.sink} ${t.baselineCount} -> ${t.count}`);
+      console.error(`  ✗ stale: ${t.file} ${t.sink}: baseline ${t.baselineCount} -> now ${t.count}`);
     }
-    console.log('  These do not fail the check. Run --write if you want the baseline to reflect them.');
+    console.error('  Run: node scripts/check-request-path-sinks.mjs --write   (tightening never needs doc backing — a lower count is never a regression)');
   }
 
   if (failures.length) {
@@ -688,8 +694,9 @@ export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PA
       console.error(`  ✗ ${f.file} ${f.sink}: baseline ${f.baselineCount} -> now ${f.count}`);
     }
     printFailureGuidance(failures);
-    return 1;
   }
+
+  if (tighten.length || failures.length) return 1;
 
   console.log(
     `check-request-path-sinks: PASS — ${reachable.length} reachable modules, ${rows.length} (file,sink) rows, ${totalCalls} total sink calls, baseline ${baselineRows.length} lines`

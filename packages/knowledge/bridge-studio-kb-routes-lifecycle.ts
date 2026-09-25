@@ -24,7 +24,7 @@ import { tryGetKbBackend } from './kb-backend.ts';
 import { KB_BINDING_KINDS, type KbBinding } from '@forge/contracts';
 import { deriveKbActiveJob, activeJobReason } from './kb-job-state.ts';
 import { KB_ID_RE, isReservedId, sendJson, allowedOrigin, sanitizeError, pathOnly, type RouteContext } from '@forge/kernel';
-import { KB_SEEDING_ANCHOR_PREFIX, loadKbDescriptors, mintProjectBrainSeedingSession } from './bridge-studio-kbs.ts';
+import { KB_SEEDING_ANCHOR_PREFIX, loadKbDescriptors, mintProjectBrainSeedingSession, requireValidKbId } from './bridge-studio-kbs.ts';
 
 // ---------------------------------------------------------------------------
 // Guidance size cap
@@ -438,10 +438,7 @@ export async function handleKbGuidance(
       const kbId = decodeURIComponent(guidanceMatch[1]);
 
       // 1. Slug-guard kbId before any fs operation (blocks path traversal)
-      if (!KB_ID_RE.test(kbId)) {
-        sendJson(res, 400, { error: 'invalid kb id' }, origin);
-        return true;
-      }
+      if (!requireValidKbId(kbId, res, origin)) return true;
 
       // 2. Containment: resolve the kb dir through the guarded choke point —
       // the KbBackend seam's `rootDir()` (M7-C KN1, bead forge-8vfn.5.25.3),

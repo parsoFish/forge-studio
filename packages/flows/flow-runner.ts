@@ -452,6 +452,10 @@ export async function runFlow({
     shouldStopBeforeWorkItem: (workItemId: string) => costTracker.stopReasonBeforeNextWorkItem(workItemId),
     // M7-A: the SAME tracker's live remaining-budget reading (field doc above).
     remainingCostBudgetUsd: () => costTracker.remainingUsd,
+    // Operator ruling 97 (seam F6 half 2): THIS flow's own declared review
+    // lenses narrowing, read once off the already-loaded `flow` — never
+    // re-read by the review band itself (field doc on CycleInput).
+    flowReview: flow.review ? { flowId: flow.id, lenses: flow.review.lenses } : undefined,
   };
 
   const order = topoSort(flow);

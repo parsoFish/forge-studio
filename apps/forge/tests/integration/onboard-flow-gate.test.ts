@@ -222,6 +222,7 @@ const ONBOARD_FIXTURE_FLOW_YAML = [
   'kb: cycles',
   'costCeilingUsd: 5',
   'origin: studio',
+  'accepts: [code]',
   'nodes:',
   '  - { id: onboard, agent: onboarding-agent }',
   '  - { id: contract-check, agent: contract-check, gate: contract }',

@@ -30,7 +30,7 @@ import { assertManifestPathFields } from './manifest-path-guard.ts';
  * functions could not close, because the boundary check counts type-only
  * imports too.
  */
-export type { ManifestPhase, InitiativeOrigin, InitiativeManifest } from '@forge/contracts';
+export type { ManifestPhase, InitiativeOrigin, InitiativeManifest, ManifestClass } from '@forge/contracts';
 import type { InitiativeOrigin, InitiativeManifest, ManifestPhase } from '@forge/contracts';
 
 const INITIATIVE_ORIGINS: readonly InitiativeOrigin[] = ['architect', 'human-directed', 'triggered'];
