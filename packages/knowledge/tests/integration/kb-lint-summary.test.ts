@@ -270,18 +270,18 @@ describe('kb-lint-summary — list descriptor honesty (AT-1, AT-2, AT-3, AT-7)',
     assert.ok(alpha?.lint, `expected lint for "alpha", got ${JSON.stringify(alpha)}`);
 
     // Arithmetic (CHECK_SCOPE + LINT_THEME_FILE_CHECKS, packages/knowledge/brain-lint.ts):
-    // alpha's brainDir is brain/projects/alpha. Of the CHECK_NAMES.length=10
-    // full-scope checks, only checkProjectBrainIndexes has
-    // CHECK_SCOPE==='project-indexes' AND dirname(brainDir)===brain/projects
-    // — so it is the ONLY "applicable" check (1). alpha's own themes/ dir is
-    // EMPTY, so ownThemeFiles.length===0 and NO check is "coveredByOwn"
-    // (LINT_THEME_FILE_CHECKS requires ownThemeFiles.length>0). checksRun =
-    // applicable(1) + coveredByOwn(0), no double-count = 1.
-    const expectedChecksRun = 1;
+    // alpha's brainDir is brain/projects/alpha. Of the CHECK_NAMES.length=12
+    // full-scope checks, TWO share CHECK_SCOPE==='project-indexes' over
+    // brain/projects/* — checkProjectBrainIndexes AND checkThemeTruth (D14,
+    // forge-mfv5.3.4: same domain, `isApplicableScoped` doesn't distinguish
+    // which check matched) — both "applicable" (2). alpha's own themes/ dir
+    // is EMPTY (ownThemeFiles.length===0), so NO check is "coveredByOwn".
+    // checksRun = applicable(2) + coveredByOwn(0) = 2.
+    const expectedChecksRun = 2;
     assert.equal(
       alpha!.lint!.checksRun,
       expectedChecksRun,
-      `expected checksRun=${expectedChecksRun} (only checkProjectBrainIndexes applicable; see arithmetic comment above), got ${JSON.stringify(alpha!.lint)}`,
+      `expected checksRun=${expectedChecksRun} (checkProjectBrainIndexes + checkThemeTruth both applicable; see arithmetic comment above), got ${JSON.stringify(alpha!.lint)}`,
     );
     assert.equal(alpha!.lint!.checksTotal, CHECK_NAMES.length);
     assert.ok(
