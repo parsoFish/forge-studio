@@ -260,14 +260,12 @@ function cmdBrain(rest: string[]): void | Promise<void> {
   process.exit(2);
 }
 
-// `--<name> value` lookup, shared by every `cmd*`/`runCreate` flag parser below
-// (four identical local closures, deduplicated — bead 6.11.33's cap offset).
+// `--<name> value` lookup shared by the cmd*/runCreate flag parsers (6.11.33 dedupe).
 function flagValue(rest: string[], name: string): string | undefined {
   const i = rest.indexOf(`--${name}`);
   return i >= 0 ? rest[i + 1] : undefined;
 }
-// As `flagValue`, but never hands back the NEXT flag's own name as this
-// flag's value — for commands where flags can sit adjacent with none given.
+// As `flagValue`, but never returns the NEXT flag's name as this flag's value.
 function flagValueStrict(rest: string[], name: string): string | undefined {
   const v = flagValue(rest, name);
   return v !== undefined && !v.startsWith('--') ? v : undefined;
@@ -694,11 +692,7 @@ async function cmdDemoBuilderRun(rest: string[]): Promise<void> {
 // help — DEC-6 retires cycle management from the CLI, not the contract check, and
 // the operator runs `forge preflight <project>` directly. The forge-onboard-project
 // skill runs it too. Neither is operator cycle-management, so both stay dispatchable.
-// Named apart from the shared `flagValue` above (bead 6.11.33's consolidation
-// deliberately left this one alone): unlike that one, the flag NAME here
-// already carries its own `--` prefix (call sites pass '--dir', '--project',
-// …), and a missing/adjacent value is a hard usage error for `forge demo`
-// (console.error + exit 2) rather than a silent `undefined`.
+// Not the shared `flagValue`: names carry their own `--`, and a missing value is a hard usage error (exit 2).
 function demoFlagValue(rest: string[], flag: string): string | undefined {
   const i = rest.indexOf(flag);
   if (i < 0) return undefined;
