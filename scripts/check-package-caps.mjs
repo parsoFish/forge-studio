@@ -45,6 +45,18 @@ const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const FORMULA = "productionFiles() from scripts/check-owner.mjs (CODE extensions + skills/*/SKILL.md, minus *.test.* and test-fixtures/, over git ls-files --cached --others --exclude-standard)";
 
 /**
+ * A package name, same shape as `@forge/kernel`'s `SLUG_RE`
+ * (`packages/kernel/ids.ts`): lowercase, kebab-case, e.g. `forge-docs`. Kept
+ * as a local literal rather than importing the kernel module — this gate and
+ * `check-owner.mjs` are dependency-light lint scripts, not package consumers
+ * — but the pattern must not drift from it, since a package name IS a slug.
+ * Before this, both the cap-table row pattern and the `--cap-override`
+ * package pattern were `[a-z]+`, so a hyphenated package could never get a
+ * cap row parsed, at all — not "over cap", not "uncapped", just invisible.
+ */
+const PACKAGE_NAME_RE = /[a-z][a-z0-9]*(?:-[a-z0-9]+)*/;
+
+/**
  * 75 is the campaign's REFUSED code — the one `gate.sh` already renders as
  * REFUSED rather than as a red. One code across the guards (check-file-size
  * exports the same), because a second number here would make an unmeasurable
@@ -127,7 +139,7 @@ export function parseCaps(markdown) {
     if (!t.startsWith('|')) continue;
     const cells = t.slice(1, t.endsWith('|') ? -1 : undefined).split('|').map((c) => c.trim());
     if (cells.length < 4) continue;
-    const name = cells[0].match(/^`([a-z]+)`$/);
+    const name = cells[0].match(new RegExp(`^\`(${PACKAGE_NAME_RE.source})\`$`));
     if (!name) continue; // a header, the **total** row, or `apps/forge`
     const cap = cells[3].replace(/\*/g, '').replace(/,/g, '').trim();
     if (!/^\d+$/.test(cap)) continue;
@@ -141,7 +153,7 @@ function parseOverrides(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] !== '--cap-override') continue;
     const spec = argv[i + 1];
-    const m = spec?.match(/^([a-z]+)=(\d+)$/);
+    const m = spec?.match(new RegExp(`^(${PACKAGE_NAME_RE.source})=(\\d+)$`));
     if (!m) {
       throw new Error(`--cap-override expects <package>=<number>, got ${spec === undefined ? '(nothing)' : `"${spec}"`}`);
     }

@@ -193,6 +193,9 @@ const WELL_FORMED_DETAIL = {
   packageHash: 'sha256:' + 'a'.repeat(64),
   // forge-8vfn.5.16 (M7-C U2): required on every detail payload.
   recentFireCount: 0,
+  // forge-6gv.8.1 (library-33): required on every detail payload, always an
+  // array (possibly empty) — an operator's test-fire history.
+  testFireRuns: [],
   files: [
     { path: 'hook.yaml', body: 'id: pre-pr-security-review\non: PreToolUse\n', hash: 'sha256:' + 'b'.repeat(64) },
     { path: 'scripts/run.sh', body: '#!/usr/bin/env bash\necho ok\n', hash: 'sha256:' + 'c'.repeat(64) },
@@ -267,4 +270,27 @@ test('parseHookDetail: an unrecognised lastFireOutcome value THROWS — never co
   expect(() =>
     parseHookDetail({ ...WELL_FORMED_DETAIL, recentFireCount: 1, lastFireAt: '2026-09-25T12:00:00.000Z', lastFireOutcome: 'succeeded' }),
   ).toThrow();
+});
+
+// ---------------------------------------------------------------------------
+// forge-6gv.8.1 (library-33) — testFireRuns: required, always an array
+// (never coerced to [] from a missing/malformed field — the same "files"
+// discipline above), an operator's past test-fires, newest first.
+// ---------------------------------------------------------------------------
+
+test('parseHookDetail: testFireRuns missing or non-array THROWS — never coerced to []', () => {
+  const { testFireRuns: _drop, ...missing } = WELL_FORMED_DETAIL;
+  expect(() => parseHookDetail(missing)).toThrow();
+  expect(() => parseHookDetail({ ...WELL_FORMED_DETAIL, testFireRuns: 'nope' })).toThrow();
+});
+
+test('parseHookDetail: a real testFireRuns entry round-trips verbatim', () => {
+  const run = { at: '2026-09-25T12:00:00.000Z', event: 'SessionEnd', outcome: 'ran', exitCode: 0, durationMs: 42, stdoutTail: 'ok', stderrTail: '' };
+  const parsed = parseHookDetail({ ...WELL_FORMED_DETAIL, testFireRuns: [run] });
+  expect(parsed.testFireRuns).toEqual([run]);
+});
+
+test('parseHookDetail: a testFireRuns entry with an unrecognised outcome THROWS', () => {
+  const run = { at: '2026-09-25T12:00:00.000Z', event: 'SessionEnd', outcome: 'succeeded', exitCode: 0, durationMs: 42, stdoutTail: '', stderrTail: '' };
+  expect(() => parseHookDetail({ ...WELL_FORMED_DETAIL, testFireRuns: [run] })).toThrow();
 });

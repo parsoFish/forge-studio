@@ -75,9 +75,31 @@ const CODE = ['.ts', '.tsx', '.mjs', '.js', '.cjs'];
 const NOT_PRODUCTION = /(\.test\.[cm]?[jt]sx?$)|(^|\/)test-fixtures\//;
 
 /**
+ * A SKILL.md agent definition, in either of the two shapes SEAM F1
+ * (`packages/kernel/discovery-roots.ts`, operator ruling item 81) makes
+ * discoverable: the operator-authored top-level root, and a package's own
+ * `skills/` root — "a factory now ships as a package". Both are equally
+ * production (ADR 024 — the SKILL.md IS the agent), so both must be equally
+ * visible to ownership and to the owning package's cap
+ * (`check-package-caps.mjs`, which reuses `productionFiles()`).
+ *
+ * `flow.yaml` is deliberately NOT given the same treatment here. The
+ * top-level `studio/flows/<id>/flow.yaml` is not production by this gate's
+ * own rule today — `studio/` is not one of `QUARRIED_TREES` and `.yaml` is
+ * not in `CODE` — so it is neither counted nor owned. A package-owned
+ * `packages/<pkg>/flows/<id>/flow.yaml` is held to the SAME treatment
+ * (neither counted nor owned) rather than invented net-new scope for this
+ * gate: `packages/` files that are code still count as this package's
+ * production, but a bare flow manifest does not, exactly as it does not
+ * today for the top-level form.
+ */
+const SKILL_MD_RE = /^(?:packages\/[^/]+\/)?skills\/[^/]+\/SKILL\.md$/;
+
+/**
  * The production files the quarry must account for: code under the four
- * legacy trees, plus the SKILL.md agent definitions, which are production
- * artifacts (ADR 024 — the SKILL.md IS the agent) and move as such.
+ * legacy trees, plus the SKILL.md agent definitions (top-level or
+ * package-owned — see `SKILL_MD_RE`), which are production artifacts
+ * (ADR 024 — the SKILL.md IS the agent) and move as such.
  */
 export function productionFiles(root) {
   // `--others --exclude-standard` for the same reason `check-file-size.mjs`
@@ -93,7 +115,7 @@ export function productionFiles(root) {
     .split('\n')
     .filter(Boolean)
     .filter((p) => !NOT_PRODUCTION.test(p))
-    .filter((p) => CODE.some((e) => p.endsWith(e)) || /^skills\/[^/]+\/SKILL\.md$/.test(p))
+    .filter((p) => CODE.some((e) => p.endsWith(e)) || SKILL_MD_RE.test(p))
     .sort();
 }
 

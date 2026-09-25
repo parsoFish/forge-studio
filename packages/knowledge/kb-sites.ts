@@ -28,7 +28,8 @@ import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 
 export type KbSite = { base: string; name: string };
 
-function subDirs(dir: string): string[] {
+// Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
+export function subDirs(dir: string): string[] {
   if (!existsSync(dir)) return [];
   try {
     return readdirSync(dir, { withFileTypes: true })
