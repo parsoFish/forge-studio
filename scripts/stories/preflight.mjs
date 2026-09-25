@@ -19,6 +19,7 @@
  */
 import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
 import { METHOD_C_CMD } from './ground-hash.mjs';
+import { FIXTURE_ROOT } from './fixture-ground.mjs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import lockfile from 'proper-lockfile';
@@ -342,6 +343,23 @@ export function groundPinVerdict(ground, { declaredPin, measured } = {}) {
   }
   if (ground?.project === null || ground?.project === undefined) {
     return Object.freeze({ ok: true, reason: 'story declares no ground — nothing to pin' });
+  }
+  // M7-D — a FIXTURE ground needs no declared pin at all. Everything above
+  // exists because a REAL ground drifts and nothing enforces that
+  // `projects/gitpulse` is in the state a story's premise assumes. A fixture
+  // is provisioned fresh from a tracked seed every run and torn down after,
+  // so it cannot drift between runs — there is nothing for a caller to pin
+  // but the seed itself, which is already the pin. Placed AFTER the costless
+  // early-return (a fixture that costs nothing still needs no pin, same as
+  // any other costless story) and BEFORE the declared-pin checks below, which
+  // exist only to compare a REAL ground against a caller-supplied hash.
+  if (typeof ground?.fixture === 'string' && ground.fixture.length > 0) {
+    return Object.freeze({
+      ok: true,
+      reason:
+        `story declares a FIXTURE ground ("${ground.fixture}") — provisioned fresh from ` +
+        `${FIXTURE_ROOT}/${ground.fixture}/seed each run, so the seed is the pin, checked at provisioning`,
+    });
   }
   if (typeof declaredPin !== 'string' || declaredPin.length === 0) {
     return Object.freeze({

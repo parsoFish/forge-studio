@@ -15,7 +15,10 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderGalleryIndex, storyRowFrom } from './gallery.mjs';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { renderGalleryIndex, storyRowFrom, writeStoryJson } from './gallery.mjs';
 
 const rows = [
   { id: 'S5', title: 'Create an agent', status: 'red', beats: 4, greenBeats: 2, clip: 'S5/story.webm' },
@@ -89,4 +92,73 @@ test('a story with no beats is not reported green', () => {
   // a story that ran nothing would report as a passing story.
   const row = storyRowFrom({ story: { id: 'x', docs: { title: 't' } }, beats: [] });
   assert.notEqual(row.status, 'green');
+});
+
+/**
+ * The real-ground fence's verdict (`realGroundFenceVerdict`,
+ * `fixture-ground.mjs`) once went RED on the console only: `run-story.mjs`
+ * never put it into the `result` object `writeStoryJson` serialises, so a run
+ * that failed on this fence left no record of it in its own artifact.
+ * `writeStoryJson` — the function that actually builds `story.json` — is
+ * where that contract is pinned: carried through when given, absent when
+ * not, so a non-fixture story's artifact is unchanged.
+ *
+ * `realGrounds` carries ONLY `moved` (`forge-8vfn.26` class): `hashed` and
+ * `trees` are FACTS ABOUT THE CHECKOUT THAT RAN THE STORY (how many real
+ * grounds this host and its sibling worktrees happen to hold), not about the
+ * product. `story.json` is COMMITTED, so a fixture run on a stranger's clean
+ * checkout (1 hashed, 1 tree) would leave the SAME committed artifact dirty
+ * against a lane host with sixteen worktrees (23 hashed, 16 trees) — the
+ * exact class `artifact-paths.mjs`'s own header exists to prevent ("a story
+ * artifact records the PRODUCT, never the checkout that ran it"). `moved`
+ * stays: it is `[]` on every clean run, on every host, deterministically. The
+ * counts stay on the console summary line, which `run-story.mjs` prints
+ * unconditionally.
+ */
+// #890 made writeStoryJson hash the story file and read git provenance; these
+// three doors write into a bare temp root that has neither, so they pass
+// #890's own injection seams rather than a story file they do not exercise.
+const NO_PROVENANCE = { readStoryBytes: () => Buffer.from(''), gitSha: () => null, gitDirty: () => null };
+
+test('writeStoryJson carries realGrounds: { moved } through to story.json — no hashed, no trees (forge-8vfn.26 class)', () => {
+  const root = mkdtempSync(join(tmpdir(), 'gallery-realgrounds-'));
+  writeStoryJson(
+    {
+      story: { id: 'S8', docs: { title: 'Onboard a node-library fixture' } },
+      beats: [],
+      realGrounds: { moved: [] },
+    },
+    root,
+    NO_PROVENANCE,
+  );
+  const written = JSON.parse(readFileSync(join(root, 'demos', 'stories', 'S8', 'story.json'), 'utf8'));
+  assert.deepEqual(written.realGrounds, { moved: [] });
+});
+
+test('writeStoryJson does not itself invent hashed/trees on a realGrounds object that carries them — the shape discipline is the CALLER\'s, not smuggled back in by the builder', () => {
+  // A belt to the caller's brace: even if a caller regressed and passed
+  // `hashed`/`trees` back in, the builder must not be the reason hashed/trees LOOK safe to
+  // reintroduce — it is a pure pass-through, so whatever the caller gives it
+  // is whatever story.json gets. This is the CONTROL that proves the field
+  // above is scoped by the CALLER's discipline (pinned as a wiring door in
+  // fixture-wiring.test.ts), not by anything writeStoryJson does.
+  const root = mkdtempSync(join(tmpdir(), 'gallery-realgrounds-'));
+  writeStoryJson(
+    { story: { id: 'S9', docs: { title: 't' } }, beats: [], realGrounds: { moved: ['x'] } },
+    root,
+    NO_PROVENANCE,
+  );
+  const written = JSON.parse(readFileSync(join(root, 'demos', 'stories', 'S9', 'story.json'), 'utf8'));
+  assert.deepEqual(Object.keys(written.realGrounds), ['moved']);
+});
+
+test('writeStoryJson omits `realGrounds` for a story that never declared it — a non-fixture artifact is unchanged', () => {
+  const root = mkdtempSync(join(tmpdir(), 'gallery-realgrounds-'));
+  writeStoryJson(
+    { story: { id: 'smoke', docs: { title: 'Find a project from Home' } }, beats: [] },
+    root,
+    NO_PROVENANCE,
+  );
+  const written = JSON.parse(readFileSync(join(root, 'demos', 'stories', 'smoke', 'story.json'), 'utf8'));
+  assert.equal('realGrounds' in written, false, 'a story with no realGrounds field must not gain one');
 });

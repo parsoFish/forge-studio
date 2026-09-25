@@ -1,0 +1,87 @@
+# release.yml — the CI half of the forge release contract (C10).
+#
+# Forge SHIPS this workflow; forge NEVER runs tag/publish. The forge
+# release-finalizer commits the finalised changelog + version bump to the PR
+# branch BEFORE merge; on merge to the default branch this workflow reads that
+# committed version, creates the git tag, and cuts the GitHub release. Publishing
+# to a registry (npm, crates.io, a container registry, …) is an OPTIONAL extra
+# step you add per project — the skeleton below stops at tag + release.
+#
+# Installed for mdtoc (a Node project): the version-read step reads
+# package.json's `version` (which forge's finalizer bumps pre-merge). Publishing
+# to npm is left commented out — mdtoc tags + cuts a GitHub release only.
+#
+# Trigger: a push to the default branch that touches the changelog. We guard the
+# job on "the version actually changed" so ordinary commits don't cut releases.
+
+name: release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # The finalised changelog is the release signal — forge commits it pre-merge.
+      - CHANGELOG.md
+
+permissions:
+  contents: write # create tags + releases
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so tag uniqueness can be checked
+
+      - name: Read the finalised version
+        id: version
+        run: |
+          # mdtoc is a Node project — the finalizer bumps package.json's version.
+          VERSION=$(jq -r .version package.json)
+          if [ -z "$VERSION" ]; then
+            echo "no version found in CHANGELOG.md — nothing to release"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # Skip if the tag already exists (idempotent on re-run).
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "tag v$VERSION already exists — skipping"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Extract the changelog entry for this version
+        id: notes
+        if: steps.version.outputs.release == 'true'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # Pull the section between this version's heading and the next ## heading.
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" {grab=1; next}
+            grab && /^## / {exit}
+            grab {print}
+          ' CHANGELOG.md > release-notes.md
+          echo "notes_path=release-notes.md" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag and GitHub release
+        if: steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+          gh release create "v$VERSION" \
+            --title "v$VERSION" \
+            --notes-file "${{ steps.notes.outputs.notes_path }}"
+
+      # OPTIONAL — publish to a registry. Forge intentionally leaves this to you;
+      # uncomment + fill the publish command for your stack.
+      # - name: Publish
+      #   if: steps.version.outputs.release == 'true'
+      #   run: |
+      #     # npm publish   # or: cargo publish, goreleaser, docker push, …
