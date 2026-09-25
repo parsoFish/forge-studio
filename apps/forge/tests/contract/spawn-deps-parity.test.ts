@@ -25,7 +25,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { FORGE_ROOT } from '@forge/kernel/ids.ts';
-import { SPAWN_AGENT_SPECS } from '../../ui-bridge.ts';
+import { SPAWN_AGENT_SPECS } from '../../bridge-agent-dispatch.ts';
 
 const CLI_SRC = readFileSync(join(FORGE_ROOT, 'apps', 'forge', 'cli.ts'), 'utf8');
 const DEPS_SRC = readFileSync(join(FORGE_ROOT, 'apps', 'forge', 'session-kind-deps.ts'), 'utf8');

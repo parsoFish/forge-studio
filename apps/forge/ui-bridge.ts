@@ -19,36 +19,23 @@
  * M2-C adds POST handlers for verdicts (file writes guarded by proper-lockfile).
  */
 
-import { createServer, type IncomingMessage, type ServerResponse, type OutgoingHttpHeaders } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import {
   closeSync,
   existsSync,
-  mkdirSync,
   openSync,
-  readFileSync,
   readSync,
-  readdirSync,
   statSync,
-  watch as fsWatch,
   type FSWatcher,
 } from 'node:fs';
 import { } from 'node:crypto';
-import { spawn } from 'node:child_process';
-import { join, resolve, basename, dirname } from 'node:path';
+import { join, resolve } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 
-import { getPaths, listInFlight } from '@forge/flows/queue.ts';
-import { parseManifest, persistManifestCostCeiling } from '@forge/flows/manifest.ts';
-import { enqueueDevelopRun } from '@forge/flows/enqueue-develop-run.ts';
-import { enqueuePlanRun } from '@forge/flows/enqueue-plan-run.ts';
-import { enqueueFlowRun } from '@forge/flows/enqueue-flow-run.ts';
-import { isSafeCycleId } from '@forge/flows/manifest-path-guard.ts';
-
-import lockfile from 'proper-lockfile';
+import { getPaths } from '@forge/flows/queue.ts';
 import {
   handleStudioRoutes,
   handleStudioWriteRoutes,
-  sanitizeError,
   sendJson,
   allowedOrigin,
   CSRF_HEADER,
@@ -59,15 +46,6 @@ import { makeRouteTable, dispatchRoute, type AssembledRouteTable } from './route
 // per-route handler in `packages/library/routes.ts`, which the `routeTable`
 // imported on the line above already carries and `dispatchRoute` claims first.
 import { sessionIsReadable } from '@forge/sessions/session-resolution.ts';
-import type { SpawnTurnOutcome } from '@forge/sessions/bridge-studio-session-helpers.ts';
-import {
-  sessionLogDirName,
-  // W8-A2 (ON-7 defect 4) — reused for the standalone-run stalled
-  // derivation (`readStandaloneLivenessFacts`/`applyStandaloneStaleness`
-  // below): the SAME stall ceiling, ownership-proof liveness check, and
-  // crash-message extraction sessions already use — never a second,
-  // independently-invented staleness rule.
-} from '@forge/sessions/bridge-studio-lifecycle.ts';
 // M4 §4 step 2 — instructions, connections and community carved the same way.
 // This file's line COUNT is held constant across the carve on purpose: 18 audited
 // rows in `scripts/check-raw-fs-guarded.mjs` are keyed to `ui-bridge.ts:<line>`.
@@ -75,15 +53,33 @@ import { handleRecoveryRoutes } from '@forge/flows/bridge-recovery.ts';
 import { handleHookRoutes } from '@forge/flows/bridge-hooks.ts';
 import {
   handleStudioPostRoutes,
-  applyReviewVerdict,
-  applyPlanVerdict,
   type StudioPostContext,
   type ReleaseFinalizeHookInput,
 } from '@forge/flows/bridge-studio-runs.ts';
-import { isDryBridge, refuseDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnMarker } from '@forge/kernel';
-import { bindReleaseFinalize, fireReflectorRerun } from './example-hooks.ts';
-import { parseWorkItem, DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows/work-item.ts';
-import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached, markStopping } from '@forge/flows/daemon.ts';
+import { isDryBridge, emitDryBridgeRefusal, dryBridgeAgentTurnMarker } from '@forge/kernel';
+import { bindReleaseFinalize } from './example-hooks.ts';
+import { handleCycleDataRoutes, servedFileHeaders } from './bridge-cycle-data.ts';
+import { handleSchedulerRoutes } from './bridge-scheduler.ts';
+import { handleRunTriggerRoutes } from './bridge-run-triggers.ts';
+import { handleReviewCommentRoutes } from './bridge-review-comments.ts';
+import {
+  handleArchitect,
+  spawnAgentTurn,
+  spawnAgentDispatch,
+  SPAWN_AGENT_SPECS,
+  SAFE_INPUT_KEY_RE,
+  newRunStamp,
+} from './bridge-agent-dispatch.ts';
+import { handleReflect, safeParseJson } from './bridge-reflect.ts';
+import { readJson } from './bridge-http.ts';
+import {
+  type Cycle,
+  type LivenessReport,
+  scanCyclesFromDisk,
+  computeLivenessReport,
+  watchDirsFlat,
+  watchProjectSubdirs,
+} from './bridge-cycle-scan.ts';
 import { mergePullRequest } from '@forge/flows/pr.ts';
 import type { BridgeIdentity } from './forge-watch.ts';
 import { finalizeMergedReadyForReview } from '@forge/flows/finalize-merged.ts';
@@ -91,52 +87,14 @@ import type { EventLogEntry } from '@forge/kernel';
 import { makeRecordingBroadcast } from './bridge-broadcast-log.ts';
 import { makeTrailingCoalescer } from './broadcast-coalescer.ts';
 type RerunReflectorFn = InstalledFactory['rerunReflector'];
-import { isSafeRunId } from '@forge/agents/run-agent.ts';
-// M4 agents carve: the slug refusal `spawnAgentDispatch` applies is the SAME
-// one the carved `POST /api/agents/:slug/run` route applies, so the package
-// owns the single definition and the host imports it. Two copies of a
-// defense-in-depth guard drift; one does not.
-import { SAFE_AGENT_SLUG_RE } from '@forge/agents/bridge-agents-slug.ts';
-import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
-import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, isSafeSubPath } from '@forge/kernel';
-import { flowRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import {
   installedExample as example, peekInstalledFactory,
   resolveInstalledFactory, type InstalledFactory } from './factory-wiring.ts';
-import * as rc from '@forge/flows/review-comments.ts';
 
 
-
-/** W7-D1: the ONE artifact `deriveArtifacts` also resolves from the cycle-log
- *  root, for frozen cycles written before the mirror-into-`artifacts/` change.
- *  Kept as a named constant so the route and the deriver's own comment name the
- *  same single file, and so widening it is a deliberate edit rather than a
- *  string that quietly grows. */
-const LEGACY_ROOT_ARTIFACT = 'pr-description.md';
 
 const TAIL_POLL_MS = 200;
-const RECENT_CYCLES_MAX = 20;
-// Feature #8 — daemon-stall liveness. Mirrors packages/flows/scheduler.ts's
-// staleHeartbeatMs default (5min); the UI flips to `daemon-stalled` only at a
-// GENEROUS multiple, because the surface means "wedged or dead", not "slow".
-const DEFAULT_STALE_HEARTBEAT_MS = 5 * 60_000;
-const STALL_MULTIPLE = 6;
-
-type Cycle = {
-  cycleId: string;
-  initiativeId: string;
-  project?: string;
-  // R4-11-F1: `merged` is the transient pass-through state a confirmed-merge
-  // manifest briefly occupies between closure's two terminal moves (→merged,
-  // then merged→done in the same sweep) — distinct from the unrelated
-  // `CycleOutcome`/`CycleResult.status` `'merged'` VALUE (an event outcome).
-  status: 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed' | 'pending';
-  startedAt?: string;
-  endedAt?: string;
-  /** Feature #10: cross-initiative dependency edges (manifest
-   *  `depends_on_initiatives`) — drives the UI's per-project roadmap spine. */
-  dependsOnInitiatives?: string[];
-};
 
 type WsOutbound =
   | { type: 'snapshot'; cycles: { live: Cycle[]; recent: Cycle[] } }
@@ -277,141 +235,16 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // R27 (forge-6gv.5.2): collapses watchQueue's 6-dir fan-out into one trailing broadcast — see broadcast-coalescer.ts.
   const queueChangeCoalescer = makeTrailingCoalescer(() => broadcast({ type: 'cycle-list-changed' }));
 
-  const scanCycles = opts.scanCycles ?? ((): { live: Cycle[]; recent: Cycle[] } => {
-    // The cycle ID is the _logs/<dir> name (timestamp + initiative ID); the
-    // queue dirs only carry status. This scan walks _logs/ first to build
-    // a list of cycles (most-recent per initiative), then cross-references
-    // queue dirs to label each with its current status.
-    const live: Cycle[] = [];
-    const recent: Cycle[] = [];
+  // forge-4zk: the default filesystem scan moved to
+  // `scanCyclesFromDisk` (`./bridge-cycle-scan.ts`), parameterised on
+  // logsRoot/queuePaths instead of closing over them (feature move, no
+  // behaviour change).
+  const scanCycles = opts.scanCycles ?? ((): { live: Cycle[]; recent: Cycle[] } => scanCyclesFromDisk(logsRoot, queuePaths));
 
-    type LogDirInfo = { cycleId: string; initiativeId: string; mtime: number };
-    const latestPerInit = new Map<string, LogDirInfo>();
-    if (existsSync(logsRoot)) {
-      for (const name of readdirSync(logsRoot)) {
-        const dir = join(logsRoot, name);
-        let mtime = 0;
-        try {
-          if (!statSync(dir).isDirectory()) continue;
-          mtime = statSync(dir).mtimeMs;
-        } catch { continue; }
-        // Cycle ID format: `<ISO-ish-timestamp>_<INIT-…>`.
-        const m = name.match(/_(INIT-.+)$/);
-        if (!m) continue;
-        const initId = m[1];
-        const cur = latestPerInit.get(initId);
-        if (!cur || cur.mtime < mtime) {
-          latestPerInit.set(initId, { cycleId: name, initiativeId: initId, mtime });
-        }
-      }
-    }
-
-    const queueStatusFor = (initId: string): { status: Cycle['status']; project?: string; dependsOnInitiatives?: string[] } | null => {
-      const fn = `${initId}.md`;
-      const lookups: Array<[string, Cycle['status']]> = [
-        [queuePaths.inFlight, 'in-flight'],
-        [queuePaths.readyForReview, 'ready-for-review'],
-        // R4-11-F1: `merged` — the brief pass-through window between a
-        // confirmed merge and its promotion to `done/` in the same sweep.
-        [queuePaths.merged, 'merged'],
-        [queuePaths.done, 'done'],
-        [queuePaths.failed, 'failed'],
-        [queuePaths.pending, 'pending'],
-      ];
-      for (const [dir, status] of lookups) {
-        const fp = join(dir, fn);
-        if (existsSync(fp)) {
-          let project: string | undefined;
-          let dependsOnInitiatives: string[] | undefined;
-          try {
-            const m = parseManifest(readFileSync(fp, 'utf8'));
-            project = m.project;
-            dependsOnInitiatives = m.depends_on_initiatives;
-          } catch { /* ignore */ }
-          return { status, project, dependsOnInitiatives };
-        }
-      }
-      return null;
-    };
-
-    const candidates: Array<{ cycle: Cycle; mtime: number }> = [];
-    for (const info of latestPerInit.values()) {
-      const q = queueStatusFor(info.initiativeId);
-      if (!q) continue; // log dir exists but the queue manifest is gone — orphan, skip
-      candidates.push({
-        cycle: {
-          cycleId: info.cycleId,
-          initiativeId: info.initiativeId,
-          project: q.project,
-          status: q.status,
-          dependsOnInitiatives: q.dependsOnInitiatives,
-        },
-        mtime: info.mtime,
-      });
-    }
-    // Also surface in-flight / ready-for-review manifests that don't yet
-    // have a log dir (just-claimed, pre-first-event).
-    const seenInits = new Set([...candidates.map((c) => c.cycle.initiativeId)]);
-    for (const name of listInFlight(queuePaths)) {
-      const id = name.replace(/\.md$/, '');
-      if (seenInits.has(id)) continue;
-      let project: string | undefined;
-      let dependsOnInitiatives: string[] | undefined;
-      try {
-        const m = parseManifest(readFileSync(join(queuePaths.inFlight, name), 'utf8'));
-        project = m.project;
-        dependsOnInitiatives = m.depends_on_initiatives;
-      } catch { /* */ }
-      candidates.push({
-        cycle: { cycleId: id, initiativeId: id, project, status: 'in-flight', dependsOnInitiatives },
-        mtime: Date.now(),
-      });
-    }
-
-    candidates.sort((a, b) => b.mtime - a.mtime);
-    for (const { cycle } of candidates) {
-      // R4-11-F1: `merged` deliberately classifies as RECENT, not live — it's
-      // the tail end of a finished cycle finalizing (merged → done, same
-      // finalize sweep), not an actively-running one. That sweep spans the
-      // post-merge CI watch plus the reflector run, so a manifest legitimately
-      // sits in `merged/` for minutes on every normal finalize, not
-      // instantaneously.
-      if (cycle.status === 'in-flight' || cycle.status === 'ready-for-review') {
-        live.push(cycle);
-      } else if (recent.length < RECENT_CYCLES_MAX) {
-        recent.push(cycle);
-      }
-    }
-    return { live, recent };
-  });
-
-  // Feature #8 — max heartbeat age across in-flight cycles, from the
-  // `.heartbeat` file (mtime = last beat) the scheduler writes alongside each
-  // in-flight manifest. Authoritative liveness signal; cheaper than scanning
-  // every cycle's events. Never throws — a stat error skips that cycle.
-  const computeLiveness = (): LivenessReport => {
-    const staleHeartbeatMs = DEFAULT_STALE_HEARTBEAT_MS;
-    const stallThresholdMs = staleHeartbeatMs * STALL_MULTIPLE;
-    let maxAge = 0;
-    let count = 0;
-    const now = Date.now();
-    for (const filename of listInFlight(queuePaths)) {
-      const hbPath = join(queuePaths.inFlight, filename + '.heartbeat');
-      if (!existsSync(hbPath)) continue;
-      try {
-        const age = now - statSync(hbPath).mtimeMs;
-        count += 1;
-        if (age > maxAge) maxAge = age;
-      } catch { /* skip unreadable heartbeat */ }
-    }
-    return {
-      inFlightCount: count,
-      maxHeartbeatAgeMs: count > 0 ? maxAge : 0,
-      staleHeartbeatMs,
-      stallThresholdMs,
-      stalled: count > 0 && maxAge > stallThresholdMs,
-    };
-  };
+  // Feature #8 — the derivation moved to `computeLivenessReport`
+  // (`./bridge-cycle-scan.ts`), parameterised on queuePaths instead of
+  // closing over it (feature move, no behaviour change).
+  const computeLiveness = (): LivenessReport => computeLivenessReport(queuePaths);
 
   const ensureTailFor = (cycleId: string): void => {
     if (tails.has(cycleId)) return;
@@ -493,104 +326,44 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     tails.clear();
   };
 
+  // forge-4zk: the dir-watch mechanics moved to `watchDirsFlat` /
+  // `watchProjectSubdirs` (`./bridge-cycle-scan.ts`) — `watchArchitect` /
+  // `watchInstructions` / `watchDemo` were three byte-identical bodies
+  // differing only in the sub-directory name and the broadcast payload;
+  // `watchProjectSubdirs` is that ONE body, parameterised (feature move +
+  // de-duplication, no behaviour change: same fs.watch calls, same
+  // recursive-then-fallback shape, same watcher arrays).
   const watchQueue = (): void => {
-    const dirs = [queuePaths.pending, queuePaths.inFlight, queuePaths.readyForReview, queuePaths.merged, queuePaths.done, queuePaths.failed];
-    for (const d of dirs) {
-      if (!existsSync(d)) continue;
-      try {
-        const w = fsWatch(d, { persistent: false }, () => {
-          queueChangeCoalescer.trigger();
-          // A new cycle may have appeared; pick up its log if so — uncoalesced,
-          // so a live tail arms promptly regardless of the broadcast cadence.
-          startTailsForLive();
-        });
-        queueWatchers.push(w);
-      } catch { /* fs.watch unavailable */ }
-    }
+    queueWatchers.push(...watchDirsFlat(
+      [queuePaths.pending, queuePaths.inFlight, queuePaths.readyForReview, queuePaths.merged, queuePaths.done, queuePaths.failed],
+      () => {
+        queueChangeCoalescer.trigger();
+        // A new cycle may have appeared; pick up its log if so — uncoalesced,
+        // so a live tail arms promptly regardless of the broadcast cadence.
+        startTailsForLive();
+      },
+    ));
   };
 
   // ADR 020 — watch each project's `_architect/` dir (recursively where the
   // platform supports it) so the runner's file-checkpoint writes (questions,
   // PLAN, status) push a re-fetch signal to the UI. Mirrors `watchQueue`.
   const watchArchitect = (): void => {
-    if (!existsSync(projectsRoot)) return;
-    let projects: string[];
-    try { projects = readdirSync(projectsRoot); } catch { return; }
-    for (const name of projects) {
-      const archDir = join(projectsRoot, name, '_architect');
-      if (!existsSync(archDir)) continue;
-      try {
-        const w = fsWatch(archDir, { persistent: false, recursive: true }, () => {
-          broadcast({ type: 'architect-list-changed' });
-        });
-        architectWatchers.push(w);
-      } catch {
-        // recursive watch unsupported — fall back to a non-recursive watch on
-        // the _architect dir (catches new sessions; the UI re-fetches anyway).
-        try {
-          const w = fsWatch(archDir, { persistent: false }, () => {
-            broadcast({ type: 'architect-list-changed' });
-          });
-          architectWatchers.push(w);
-        } catch { /* fs.watch unavailable */ }
-      }
-    }
+    architectWatchers.push(...watchProjectSubdirs(projectsRoot, '_architect', () => broadcast({ type: 'architect-list-changed' })));
   };
 
   // Stage A — watch each project's `_instructions/` dir so the runner's
   // file-checkpoint writes (questions, AGENTS.draft.md, status) push a re-fetch
   // signal to the UI. Mirrors `watchArchitect`.
   const watchInstructions = (): void => {
-    if (!existsSync(projectsRoot)) return;
-    let projects: string[];
-    try { projects = readdirSync(projectsRoot); } catch { return; }
-    for (const name of projects) {
-      const instrDir = join(projectsRoot, name, '_instructions');
-      if (!existsSync(instrDir)) continue;
-      try {
-        const w = fsWatch(instrDir, { persistent: false, recursive: true }, () => {
-          broadcast({ type: 'instructions-list-changed' });
-        });
-        instructionsWatchers.push(w);
-      } catch {
-        // recursive watch unsupported — fall back to a non-recursive watch on
-        // the _instructions dir (catches new sessions; the UI re-fetches anyway).
-        try {
-          const w = fsWatch(instrDir, { persistent: false }, () => {
-            broadcast({ type: 'instructions-list-changed' });
-          });
-          instructionsWatchers.push(w);
-        } catch { /* fs.watch unavailable */ }
-      }
-    }
+    instructionsWatchers.push(...watchProjectSubdirs(projectsRoot, '_instructions', () => broadcast({ type: 'instructions-list-changed' })));
   };
 
   // Stage B — watch each project's `_demo/` dir so the runner's file-checkpoint
   // writes (status, DEMO.html generation) push a re-fetch signal to the UI.
   // Mirrors `watchInstructions`.
   const watchDemo = (): void => {
-    if (!existsSync(projectsRoot)) return;
-    let projects: string[];
-    try { projects = readdirSync(projectsRoot); } catch { return; }
-    for (const name of projects) {
-      const demoDir = join(projectsRoot, name, '_demo');
-      if (!existsSync(demoDir)) continue;
-      try {
-        const w = fsWatch(demoDir, { persistent: false, recursive: true }, () => {
-          broadcast({ type: 'demo-list-changed' });
-        });
-        demoWatchers.push(w);
-      } catch {
-        // recursive watch unsupported — fall back to a non-recursive watch on
-        // the _demo dir (catches new sessions; the UI re-fetches anyway).
-        try {
-          const w = fsWatch(demoDir, { persistent: false }, () => {
-            broadcast({ type: 'demo-list-changed' });
-          });
-          demoWatchers.push(w);
-        } catch { /* fs.watch unavailable */ }
-      }
-    }
+    demoWatchers.push(...watchProjectSubdirs(projectsRoot, '_demo', () => broadcast({ type: 'demo-list-changed' })));
   };
 
   /** W7-C2 (A12) — the one place that knows which kinds have a `*-list-changed` WS event; a kind with none honestly no-ops. */
@@ -722,19 +495,6 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
 
 // ---- HTTP handlers ---------------------------------------------------------
 
-type LivenessReport = {
-  /** in-flight cycles considered (those with a `.heartbeat` file). */
-  inFlightCount: number;
-  /** max heartbeat age across in-flight cycles, ms (0 when none in flight). */
-  maxHeartbeatAgeMs: number;
-  /** the project's stale threshold (default 5min). */
-  staleHeartbeatMs: number;
-  /** the generous stall threshold (6× stale) the UI flips state at. */
-  stallThresholdMs: number;
-  /** true when maxHeartbeatAgeMs > stallThresholdMs AND a cycle is in flight. */
-  stalled: boolean;
-};
-
 type HttpContext = {
   /** F1 — this bridge process's identity, served from GET /api/health. */
   identity: BridgeIdentity;
@@ -792,136 +552,6 @@ type HttpContext = {
   /** D — re-run the reflector on operator feedback. Injectable; defaults to the real helper. */
   rerunReflector: RerunReflectorFn;
 };
-
-/** Content-type by extension for served artifacts. `.html` → `text/html` so the
- *  PLAN/DEMO pages render in the operator's browser (ADR 020 + Phase E); all
- *  else stays `text/plain`. Module-private and, by convention enforced in
- *  `apps/forge/tests/contract/ui-bridge-served-file-headers.test.ts` (a source-level ratchet over
- *  this file), callable ONLY from `servedFileHeaders` below — every route
- *  that serves a file on the bridge origin must go through the hardened
- *  helper, never this alone. */
-function contentTypeFor(filename: string): string {
-  return filename.toLowerCase().endsWith('.html')
-    ? 'text/html; charset=utf-8'
-    : 'text/plain; charset=utf-8';
-}
-
-/** Reduce a filename to a header-safe charset before it rides inside
- *  `content-disposition: inline; filename="..."`. Strips anything outside
- *  `[A-Za-z0-9._-]` — a bare `"`, CR, LF or any other byte that could break
- *  out of the quoted string or smuggle a second header is gone — and falls
- *  back to a fixed placeholder if that empties the name entirely.
- *  `basename()` runs first so a `filename` that still carries `/`-joined
- *  path segments contributes only its leaf.
- *
- *  This is genuinely load-bearing, not decorative, for SOME of the seven
- *  call sites and NOT others — checked per route, not assumed: `isSafeSegment`
- *  (cli/studio-path-guard.ts, backing `isSafeSubPath`/`resolveGuardedPath`,
- *  which gate the `/api/artifact/`, `/api/architect/file/` and
- *  `/api/instructions/file/` routes) denies control characters (so CR/LF
- *  header-injection is ALREADY refused before this ever runs on those three
- *  routes — a 400, not a sanitised 200) but has no opinion on a bare `"`, so
- *  THIS function is what stops a quote breaking out of the quoted-string on
- *  those routes and on `/api/demo-builder/fragment/` (whose `element`
- *  component is checked only by a lexical `startsWith(base)`, same gap).
- *  `/api/demo-builder/generation/`'s `GENERATION_FILENAME_RE` is a strict
- *  `[A-Za-z0-9._-]+` allowlist that already excludes `"` and control
- *  characters — this function is unreachable-but-harmless for that route.
- *  `/api/demo-builder/demo/` and `/api/demo-builder/history/<project>/<id>`
- *  always pass the fixed literal `'DEMO.html'`, never request-derived
- *  input. */
-function sanitizeHeaderFilename(filename: string): string {
-  const leaf = basename(filename);
-  const cleaned = leaf.replace(/[^A-Za-z0-9._-]/g, '_');
-  return cleaned.length > 0 ? cleaned : 'file';
-}
-
-/** WI-3 (regate row `artifact-plan-45`, bead forge-6gv.3.2) — the COMPLETE
- *  header set for a route serving an AGENT-AUTHORED file on the bridge's own
- *  origin (artifact / PLAN / DEMO / instructions-draft / fragment /
- *  generation-snapshot). Before this helper, `contentTypeFor` alone reached
- *  `res.writeHead` at seven call sites with no `content-security-policy`, no
- *  `x-content-type-options` and no `content-disposition` — script inside such
- *  a file would run AS the bridge origin (localhost:4123) and could drive
- *  every mutating route the CSRF check only guards with a header a
- *  same-origin fetch can add just as easily (approve-and-merge, scheduler
- *  start, plan verdicts). No live exploit exists today: a survey of every
- *  HTML file these routes can actually serve on this host — 109
- *  `_logs/**\/artifacts/*.html` files plus every `.forge/demo/**.html`,
- *  `_demo/**\/DEMO.html` and `_architect/**\/PLAN.html` — found zero
- *  `<script>`, zero inline `onclick=`/`onload=`, zero external `<link>`
- *  stylesheets (the only `src=` values are `data:image/png;base64,…`
- *  screenshots). A script-blocking CSP therefore breaks nothing that exists
- *  today and closes the class before an agent-authored file changes that.
- *
- *  Deliberately STRUCTURAL, not per-site: this is the only function in the
- *  file allowed to call `contentTypeFor` (enforced by the source-level
- *  ratchet in `apps/forge/tests/contract/ui-bridge-served-file-headers.test.ts`), so a content-type
- *  can never be obtained here without the hardening headers riding along —
- *  the eighth route someone adds next year gets this for free by using the
- *  helper, and the ratchet fails loudly if they reach for `contentTypeFor`
- *  directly instead.
- *
- *  Two INDEPENDENT script defences, on purpose: `sandbox` with no
- *  `allow-scripts` (the document gets an opaque origin — cannot run script,
- *  cannot reach the bridge, cannot read its own cookies/storage) AND
- *  `default-src 'none'` (a CSP script-src belt for a UA that ignores or only
- *  partially applies the sandbox directive). `style-src 'unsafe-inline'` +
- *  `img-src data:` + `font-src data:` are exactly what the surveyed files
- *  use (inlined CSS, base64 screenshots) — nothing wider is opened.
- *  `content-type` stays `text/html` for `.html` (never `text/plain`):
- *  `apps/studio/app/artifact/page.tsx`, `apps/studio/components/PlanGate.tsx` and
- *  `apps/studio/components/studio/artifact/ArchitectPlanGate.tsx` all render
- *  these files in a `sandbox=""` iframe and expect the browser to actually
- *  RENDER the markup — `text/plain` would show raw source, a user-visible
- *  regression. `content-disposition: inline` (never `attachment`) for the
- *  same reason: `attachment` forces a download instead of an iframe render.
- *  See `sanitizeHeaderFilename` for which routes it is actually load-bearing
- *  on versus redundant-with-an-already-strict-guard. */
-function servedFileHeaders(filename: string, origin: string): OutgoingHttpHeaders {
-  return {
-    'content-type': contentTypeFor(filename),
-    'x-content-type-options': 'nosniff',
-    'content-security-policy':
-      "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'",
-    'content-disposition': `inline; filename="${sanitizeHeaderFilename(filename)}"`,
-    'access-control-allow-origin': origin,
-    'vary': 'origin',
-  };
-}
-
-/** True when `v` is a `{given, when, then}` shape (all string fields present). */
-function isAcShape(v: unknown): boolean {
-  if (!v || typeof v !== 'object') return false;
-  const o = v as Record<string, unknown>;
-  return typeof o.given === 'string' && typeof o.when === 'string' && typeof o.then === 'string';
-}
-
-/**
- * Atomically read-modify-write the review-comment sidecar for a cycle under a
- * proper-lockfile guard (mirrors applyReviewVerdict). The sidecar file is
- * created empty first so the lock has a target even on the first comment.
- * `mutate` is a pure transform; the write persists its result.
- */
-async function withReviewCommentLock(
-  logsRoot: string,
-  cycleId: string,
-  mutate: (sidecar: rc.ReviewCommentsSidecar) => rc.ReviewCommentsSidecar,
-): Promise<rc.ReviewCommentsSidecar> {
-  // Ensure the sidecar exists so proper-lockfile has a target (rc.writeReviewComments
-  // throws on a traversal cycleId — that propagates as a 500, never a write).
-  if (!existsSync(rc.reviewCommentsPath(logsRoot, cycleId))) {
-    rc.writeReviewComments(logsRoot, cycleId, { cycleId, comments: [] });
-  }
-  const release = await lockfile.lock(rc.reviewCommentsPath(logsRoot, cycleId), { retries: { retries: 5, minTimeout: 50 } });
-  try {
-    const next = mutate(rc.readReviewComments(logsRoot, cycleId));
-    rc.writeReviewComments(logsRoot, cycleId, next);
-    return next;
-  } finally {
-    try { await release(); } catch { /* ignore */ }
-  }
-}
 
 // ---------------------------------------------------------------------------
 // R6-06 WI-1 — agent run-history ledger (GET /api/agents/:slug/history) +
@@ -1001,230 +631,9 @@ async function handleHttp(
     sendJson(res, 200, ctx.liveness(), origin);
     return;
   }
-  if (method === 'GET' && url.startsWith('/api/events/')) {
-    const cycleId = decodeURIComponent(url.slice('/api/events/'.length));
-    // SEC-04 (bd forge-ebj) — cycleId is request-derived and, until now,
-    // folded raw into `join(logsRoot, cycleId, 'events.jsonl')` with no
-    // per-segment guard: a `%2F`-smuggled `../..` cycleId escaped `_logs`
-    // entirely, and a symlinked `events.jsonl` leaf inside a real cycle dir
-    // was followed out of root. Route the WHOLE path (cycleId as its OWN
-    // segment under the trusted logsRoot, leaf included) through the guard;
-    // a rejected/absent path both collapse to 404 (no existence oracle).
-    // W7-A2 (sessions-kinds-24, home-sessions-11): a guard-CLEAN path whose
-    // events.jsonl simply does not exist yet (a session minted seconds ago,
-    // or one whose turn never ran) is 200 `{events: []}` — never a console
-    // 404 on the operator's first screen. A guard-REJECTED path (traversal,
-    // symlinked leaf/dir) stays 404 exactly as before — the sec04 pins
-    // (apps/forge/tests/contract/sec04-cycleid-containment.test.ts) hold.
-    const eventsGuard = resolveGuardedPath(ctx.logsRoot, [cycleId, 'events.jsonl']);
-    if (eventsGuard.ok && !eventsGuard.exists) {
-      sendJson(res, 200, { cycleId, events: [] }, origin);
-      return;
-    }
-    const raw = guardedReadFile(ctx.logsRoot, [cycleId, 'events.jsonl']);
-    if (raw === null) {
-      sendJson(res, 404, { error: 'no events.jsonl for cycle', cycleId }, origin);
-      return;
-    }
-    try {
-      const events: EventLogEntry[] = [];
-      for (const line of raw.split('\n')) {
-        if (!line.trim()) continue;
-        try { events.push(JSON.parse(line)); } catch { /* skip malformed */ }
-      }
-      sendJson(res, 200, { cycleId, events }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return;
-  }
-  if (method === 'GET' && url.startsWith('/api/cost/')) {
-    // U1: cost summary per cycle (total + per-phase + per-skill).
-    const cycleId = decodeURIComponent(url.slice('/api/cost/'.length));
-    // SEC-04 (bd forge-ebj) — `summariseCycle` folds `cycleId` into
-    // `join(logsRoot, cycleId, 'events.jsonl')` internally; gate the
-    // request-derived cycleId (as its OWN segment under the trusted logsRoot)
-    // through the per-segment identity guard BEFORE that read so a
-    // `%2F`-smuggled `../..` cycleId or a symlinked cycle dir is refused. A
-    // legitimately in-flight cycle whose dir does not yet exist stays valid
-    // (create-mode ⇒ ok), so an empty summary is unaffected.
-    const costCycleGuard = resolveGuardedPath(ctx.logsRoot, [cycleId]);
-    if (!costCycleGuard.ok) {
-      sendJson(res, 400, { error: 'invalid cycleId' }, origin);
-      return;
-    }
-    try {
-      const { summariseCycle } = await import('@forge/flows/metrics.ts');
-      const m = summariseCycle(cycleId, ctx.logsRoot);
-      sendJson(res, 200, {
-        cycleId,
-        totalUsd: m.total_cost_usd,
-        perPhase: m.per_phase, // { phase: { cost_usd, iterations, duration_ms } }
-        perSkill: m.per_skill, // { skill: { invocations, cost_usd, duration_ms } }
-      }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return;
-  }
-  if (method === 'GET' && url.startsWith('/api/graph/')) {
-    const cycleId = decodeURIComponent(url.slice('/api/graph/'.length));
-    // Prefer the immutable cycle snapshot; fall back to the live worktree graph
-    // while the cycle is still in-flight (the snapshot is only mirrored at cycle
-    // end). Without this fallback a RESUMED cycle — whose PM phase is skipped, so
-    // it has no snapshot until it finishes — serves no graph, and the WI hexes
-    // vanish from the live hex view for the whole run. Mirrors /api/work-item.
-    // SEC-04 (bd forge-ebj) — BOTH the snapshot path (cycleId under the
-    // trusted logsRoot) and the live-worktree fallback (initiativeId, derived
-    // from the request-supplied cycleId, under the trusted forgeRoot) are
-    // request-derived. Route each through the per-segment identity guard with
-    // the untrusted id as its OWN segment; a traversed cycleId or a symlinked
-    // leaf/dir at either location is refused rather than followed out of root.
-    const initiativeId = (cycleId.match(/_(INIT-.+)$/) ?? [, cycleId])[1] as string;
-    const raw =
-      guardedReadFile(ctx.logsRoot, [cycleId, 'work-items-snapshot', '_graph.md']) ??
-      guardedReadFile(ctx.forgeRoot, ['_worktrees', initiativeId, '.forge', 'work-items', '_graph.md']);
-    if (raw === null) {
-      sendJson(res, 404, { error: 'no _graph.md for cycle', cycleId }, origin);
-      return;
-    }
-    try {
-      sendJson(res, 200, { cycleId, mermaid: raw }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return;
-  }
-  // Feature #9: single work-item definition for the hex-detail drawer. Serves
-  // the on-disk WI snapshot the PM emitted — preferring the immutable cycle
-  // snapshot (`_logs/<cycleId>/work-items-snapshot/<wiId>.md`), falling back to
-  // the live worktree spec (`_worktrees/<initiativeId>/.forge/work-items/<wiId>.md`)
-  // while the cycle is still in-flight (the snapshot is only mirrored at cycle
-  // end). The cycleId encodes the initiativeId as `<timestamp>_<INIT-...>`.
-  if (method === 'GET' && url.startsWith('/api/work-item/')) {
-    const rest = decodeURIComponent(url.slice('/api/work-item/'.length));
-    const slash = rest.indexOf('/');
-    if (slash < 0) {
-      sendJson(res, 400, { error: 'expected /api/work-item/<cycleId>/<wiId>' }, origin);
-      return;
-    }
-    const cycleId = rest.slice(0, slash);
-    const wiId = rest.slice(slash + 1);
-    if (!cycleId || !wiId || !DEV_WORK_ITEM_ID_PATTERN.test(wiId)) {
-      sendJson(res, 400, { error: 'cycleId and a WI-<n>[<letter>] wiId are required' }, origin);
-      return;
-    }
-    // SEC-04 (bd forge-ebj) — cycleId is request-derived and was folded raw
-    // into both `_logs/<cycleId>/...` and `_worktrees/<initiativeId>/...`; a
-    // symlinked cycleId DIRECTORY and a symlinked `WI-<n>.md` LEAF both escaped
-    // (wiId is already charset-gated above, but the cycleId hop was not).
-    // Route each candidate (untrusted id as its OWN segment under a trusted
-    // root, leaf included) through the per-segment identity guard.
-    const initiativeId = (cycleId.match(/_(INIT-.+)$/) ?? [, cycleId])[1] as string;
-    const found =
-      guardedReadFile(ctx.logsRoot, [cycleId, 'work-items-snapshot', `${wiId}.md`]) ??
-      guardedReadFile(ctx.forgeRoot, ['_worktrees', initiativeId, '.forge', 'work-items', `${wiId}.md`]);
-    if (found === null) {
-      sendJson(res, 404, { error: 'work item not found in snapshot or live worktree', cycleId, wiId }, origin);
-      return;
-    }
-    try {
-      const w = parseWorkItem(found);
-      sendJson(res, 200, {
-        work_item_id: w.work_item_id,
-        acceptance_criteria: w.acceptance_criteria,
-        files_in_scope: w.files_in_scope,
-        quality_gate_cmd: w.quality_gate_cmd ?? [],
-        body: w.body,
-      }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return;
-  }
-  // Cycle-scoped artifact (PLAN.md / DEMO.md / etc.). The UI's /plan
-  // and /demo sub-pages fetch these so the operator's interaction
-  // points (verdict form) link to richer in-app views instead of
-  // having to dig into the filesystem.
-  // Path normalisation + a startsWith(logsRoot) check defeat
-  // ../-escape attempts.
-  if (method === 'GET' && url.startsWith('/api/artifact/')) {
-    const rest = decodeURIComponent(url.slice('/api/artifact/'.length));
-    const slash = rest.indexOf('/');
-    if (slash < 0) {
-      sendJson(res, 400, { error: 'expected /api/artifact/<cycleId>/<filename>' }, origin);
-      return;
-    }
-    const cycleId = rest.slice(0, slash);
-    const filename = rest.slice(slash + 1);
-    if (!cycleId || !filename) {
-      sendJson(res, 400, { error: 'cycleId and filename are required' }, origin);
-      return;
-    }
-    // The startsWith(safeBase) check below builds safeBase from the SAME
-    // cycleId, so a traversal INSIDE cycleId (e.g. '..') normalises into both
-    // sides identically and passes it — validate the segment itself
-    // (2026-07-24 adversarial review; same predicate as isSafeRunId).
-    if (!/^[A-Za-z0-9._-]+$/.test(cycleId) || cycleId.includes('..')) {
-      sendJson(res, 400, { error: 'invalid cycleId' }, origin);
-      return;
-    }
-    // W7-C3 (bd forge-0u4), re-cut by the W7-C3 review (A-M6) — the FILENAME
-    // dimension is enumerated as a DENY of the shapes that matter, sharing
-    // the guard's OWN per-segment predicate (`isSafeSubPath`) so the cheap
-    // 400 layer and the containment 404 layer cannot drift. The first cut was
-    // an allow-list charset (`/^[A-Za-z0-9._-]+$/` + `.includes('..')`) and
-    // was a fails-closed regression: it 400'd 55 of 508 real on-disk artifact
-    // files (10.8%, all `.capture/{before,after}/*.out` demo evidence named
-    // from AC titles) while every real attack shape was ALREADY refused by
-    // `guardedReadFile` below. Legitimate names with spaces, parentheses,
-    // em-dashes and a leading `..` pass; separators, `.`/`..` segments, empty
-    // segments, control characters, NUL, DEL and encoded separators do not.
-    // Pinned both ways in apps/forge/tests/contract/sec04-cycleid-containment.test.ts (a real
-    // `.capture` name serves 200; every escape shape still refused) and per
-    // predicate in cli/studio-path-guard.test.ts.
-    if (!isSafeSubPath(filename)) {
-      sendJson(res, 400, { error: 'invalid filename' }, origin);
-      return;
-    }
-    const filenameSegments = filename.split('/');
-    // SEC-04 (bd forge-ebj) — the lexical `startsWith(safeBase)` above was
-    // blind to a SYMLINKED leaf: `artifacts/<filename>` real-located inside a
-    // genuine cycle dir but pointing out of root passed it and readFileSync
-    // followed it. Route the WHOLE path (cycleId + fixed `artifacts` + the
-    // filename segments, all under the trusted logsRoot) through the
-    // per-segment identity + nlink guard, which the lexical check cannot do.
-    let body = guardedReadFile(ctx.logsRoot, [cycleId, 'artifacts', ...filenameSegments]);
-    // W7-D1 — PARITY with `deriveArtifacts` (orchestrator/run-model-derive.ts),
-    // which marks `pr` ready when `pr-description.md` exists in EITHER
-    // `artifacts/` OR the cycle-log ROOT ("accept the legacy cycle-log-root
-    // location too so older frozen logs still resolve"). This route only ever
-    // read `artifacts/`, so a frozen pre-mirror cycle advertised a PR tab in
-    // `artifactsReady` and 404'd when the operator clicked it — a declaration
-    // enforced by nothing, found by the Wave D crawl on
-    // 2026-06-18T10-27-18_INIT-2026-06-17-release-definition-permissions-coverage.
-    //
-    // Deliberately ONE exact filename, and only as a FALLBACK after the
-    // modern location misses: the cycle-log root also holds events.jsonl,
-    // report.md, retro.md and user-questions.json, none of which may become
-    // servable as a side effect. It goes through the SAME `guardedReadFile`,
-    // so a symlinked legacy copy is refused exactly as a symlinked modern one
-    // is. All four directions pinned in sec04-cycleid-containment.test.ts.
-    if (body === null && filename === LEGACY_ROOT_ARTIFACT) {
-      body = guardedReadFile(ctx.logsRoot, [cycleId, LEGACY_ROOT_ARTIFACT]);
-    }
-    if (body === null) {
-      sendJson(res, 404, { error: 'artifact not found', cycleId, filename }, origin);
-      return;
-    }
-    try {
-      res.writeHead(200, servedFileHeaders(filename, origin));
-      res.end(body);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return;
-  }
+  // forge-4zk: the events/cost/graph/work-item/artifact GET family carved to
+  // `./bridge-cycle-data.ts` (feature move, no behaviour change).
+  if (await handleCycleDataRoutes(req, res, { logsRoot: ctx.logsRoot, forgeRoot: ctx.forgeRoot }, url, method)) return;
 
   // ---- Architect (ADR 020) ----------------------------------------------
   if (await handleArchitect(req, res, ctx, url, method)) return;
@@ -1295,958 +704,30 @@ async function handleHttp(
   };
   if (await handleStudioPostRoutes(req, res, studioPostCtx, url, method)) return;
 
-  // Scheduler lifecycle.
-  if (method === 'GET' && url === '/api/scheduler/status') {
-    const state = daemonState(ctx.forgeRoot, ctx.queueRoot);
-    sendJson(res, 200, state, origin);
-    return;
-  }
-  if (method === 'POST' && url === '/api/scheduler/start') {
-    if (isDryBridge()) {
-      refuseDryBridge(res, origin, { route: '/api/scheduler/start', method, action: 'daemon', logsRoot: ctx.logsRoot });
-      return;
-    }
-    try {
-      // M7-5 (ADR-031): start the detached `forge serve` daemon DIRECTLY via
-      // the shared helper — the bridge no longer shells out to a `forge start`
-      // CLI command (it's been deleted). Behaviour is identical: detached
-      // child, stdout/stderr → _logs/daemon/serve.log, pid → forge.pid.
-      // `spawnServeDetached` is the ONE liveness authority (null = a live
-      // daemon already owns the pid file); the route never re-derives it.
-      const result = spawnServeDetached(ctx.forgeRoot);
-      if (result === null) {
-        // W7-FIX-A3 (round-2 finding 4): Start is NOT Resume. A daemon that is
-        // already running was not started by this click, and its `.paused`
-        // flag is a deliberate, queue-wide decision another tab may have just
-        // made — clearing it here (as this route used to, before the check)
-        // meant a stale tab's Start silently resumed claiming with no operator
-        // intent. The real state is reported instead; Resume is the control
-        // that clears the flag.
-        const state = daemonState(ctx.forgeRoot, ctx.queueRoot);
-        sendJson(res, 200, { ok: true, alreadyRunning: true, state }, origin);
-        return;
-      }
-      // W7-FIX-A3 (A3-05): a FRESH start keeps the card's promise ("queued
-      // work will run once you start it"). `.paused` is a queue flag
-      // independent of process liveness, so pause → stop → Start used to bring
-      // the daemon back with the stale flag armed and every claim refused. The
-      // scheduler re-reads the flag on every poll, so clearing it here — after
-      // the spawn, inside the branch that actually started something — is
-      // honest for the daemon we just launched and leaves a running one alone.
-      setPaused(false, ctx.queueRoot);
-      // Best-effort wait for the daemon to come up before reporting state.
-      await sleep(800);
-      const after = daemonState(ctx.forgeRoot, ctx.queueRoot);
-      sendJson(res, 200, { ok: true, started: true, state: after }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return;
-  }
-  // Pause / resume — toggle the `<queueRoot>/.paused` flag the scheduler
-  // reads each poll. In-flight cycles keep running; only new claims stop.
-  if (method === 'POST' && (url === '/api/scheduler/pause' || url === '/api/scheduler/resume')) {
-    try {
-      const pause = url.endsWith('/pause');
-      setPaused(pause, ctx.queueRoot, pause ? 'paused from UI' : '');
-      sendJson(res, 200, { ok: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return;
-  }
-  // Stop — SIGTERM the daemon; it drains in-flight cycles then exits. We
-  // don't block the request on the drain — the status poll reflects
-  // `running:false` once it's down. W7-FIX-A3 (A3-07): the signalled pid is
-  // MARKED (`_logs/daemon/stopping`) so `daemonState` reports `stopping:true`
-  // to every poller for as long as that pid drains — Stop is not a silent
-  // control, and a second tab / a reload sees the same transitional state.
-  if (method === 'POST' && url === '/api/scheduler/stop') {
-    if (isDryBridge()) {
-      refuseDryBridge(res, origin, { route: '/api/scheduler/stop', method, action: 'daemon', logsRoot: ctx.logsRoot });
-      return;
-    }
-    try {
-      const { pidFile, stoppingFile } = daemonPaths(ctx.forgeRoot);
-      const pid = readPid(pidFile);
-      if (pid === null || !isAlive(pid)) {
-        clearPidFile(ctx.forgeRoot);
-        sendJson(res, 200, { ok: true, alreadyStopped: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) }, origin);
-        return;
-      }
-      // W7-FIX-A3 (round-2 finding 3): Stop is IDEMPOTENT while THIS pid
-      // drains. `orchestrator/scheduler.ts`'s signal handler treats a SECOND
-      // SIGTERM as force-quit (`signalCount === 2` → exit), so re-signalling a
-      // pid that is already draining hard-kills the in-flight cycles the first
-      // Stop was politely waiting on — from nothing more than a second tab, or
-      // one whose 10s poll had not yet flipped to `stopping`. The marker this
-      // route writes is exactly the fact needed to make the repeat a no-op; a
-      // marker naming any OTHER pid is stale and never suppresses a real Stop.
-      if (readPid(stoppingFile) === pid) {
-        sendJson(res, 200, { ok: true, alreadyStopping: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) }, origin);
-        return;
-      }
-      process.kill(pid, 'SIGTERM');
-      markStopping(ctx.forgeRoot, pid);
-      sendJson(res, 200, { ok: true, stopping: true, state: daemonState(ctx.forgeRoot, ctx.queueRoot) }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return;
-  }
+  // forge-4zk: the scheduler-lifecycle family carved to `./bridge-scheduler.ts`
+  // (feature move, no behaviour change).
+  if (await handleSchedulerRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot }, url, method)) return;
 
-  // Start development (S7 / DEC-3) — the roadmap "start development" button.
-  // Repoints each initiative's manifest at the forge-develop flow and makes it
-  // claimable (the real enqueue behind the develop trigger). Batch (plan-
-  // everything-before-kickoff): the roadmap can decompose N initiatives up
-  // front, so kickoff accepts N ids at once and reports a per-id result
-  // rather than one HTTP status for the whole request. The global CSRF guard
-  // above (x-forge-csrf) already gates this POST.
-  if (method === 'POST' && url === '/api/develop/start') {
-    try {
-      const body = (await readJson(req)) as Record<string, unknown>;
-      const rawIds = body['initiativeIds'];
-      if (!Array.isArray(rawIds) || rawIds.length === 0) {
-        sendJson(res, 400, { error: 'initiativeIds required (non-empty string array)' }, origin);
-        return;
-      }
-      // Validate the WHOLE batch before any enqueue — a mixed-validity request
-      // is rejected outright (no silent filtering, no partial side effects).
-      const invalid = rawIds
-        .map((v, i) => ({ v, i }))
-        .filter(({ v }) => typeof v !== 'string' || v.length === 0);
-      if (invalid.length > 0) {
-        const named = invalid.map(({ v, i }) => `[${i}]=${JSON.stringify(v)}`).join(', ');
-        sendJson(res, 400, { error: `initiativeIds contains invalid entries (must be non-empty strings): ${named}` }, origin);
-        return;
-      }
-      // Dedupe, preserving first-occurrence order — one enqueue + one result per id.
-      const initiativeIds = [...new Set(rawIds as string[])];
+  // forge-4zk: the develop/plan/flow run-trigger family carved to
+  // `./bridge-run-triggers.ts` (feature move, no behaviour change).
+  if (await handleRunTriggerRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot }, url, method)) return;
 
-      // forge-shc WI-1 (T1 ruling): an operator per-run cost-ceiling override
-      // is accepted ONLY on a single-id batch — a single scalar can't map
-      // onto N manifests unambiguously. Validated fully BEFORE any enqueue
-      // side effect (mirrors the 3-stage discipline at
-      // `POST /api/agents/:slug/run` — batch-shape, then value bounds — a
-      // refused request never repoints or stamps any manifest).
-      let costCeilingUsd: number | undefined;
-      if (body.costCeilingUsd !== undefined) {
-        if (initiativeIds.length > 1) {
-          sendJson(
-            res,
-            400,
-            { error: `costCeilingUsd may only be supplied with a single initiativeId (got ${initiativeIds.length})` },
-            origin,
-          );
-          return;
-        }
-        const v = body.costCeilingUsd;
-        if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0 || v > MAX_KICKOFF_COST_CEILING_USD) {
-          sendJson(
-            res,
-            400,
-            { error: `invalid costCeilingUsd: ${JSON.stringify(v)} (must be a finite number > 0 and <= ${MAX_KICKOFF_COST_CEILING_USD})` },
-            origin,
-          );
-          return;
-        }
-        costCeilingUsd = v;
-      }
-
-      // W8-A3 (`flows-37`, review round 2 finding 2): the operator's answer to a
-      // repoint, forwarded like the other two doors. Without it NO client could
-      // confirm through this route at all — the per-card "Start development"
-      // control posts exactly ONE named initiative and was left telling the
-      // operator to "confirm the repoint" through a route with no way to.
-      //
-      // Review round 3, S2-4: it is REFUSED for a multi-id batch, before any
-      // enqueue runs — the same shape `costCeilingUsd` uses 30 lines above, and
-      // for the same reason. A confirmation that accompanies N ids rubber-stamps
-      // N moves the calling surface cannot show, which is the shape this lane
-      // exists to remove; leaving that as a client-side convention while the
-      // route accepted it is precisely the doctrine this module writes down and
-      // would then have violated.
-      const developConfirmRepointFrom = typeof (body as Record<string, unknown>)?.['confirmRepointFrom'] === 'string'
-        ? ((body as Record<string, unknown>)['confirmRepointFrom'] as string)
-        : undefined;
-      if (developConfirmRepointFrom !== undefined && initiativeIds.length > 1) {
-        sendJson(
-          res,
-          400,
-          { error: 'confirmRepointFrom is only valid for a single-initiative request — a batch cannot confirm a move it cannot show' },
-          origin,
-        );
-        return;
-      }
-
-      const results = initiativeIds.map((initiativeId) => {
-        // Per-item isolation: a throw on one item must not 500 away the
-        // results of items whose side effects already applied.
-        try {
-          const result = enqueueDevelopRun(initiativeId, { queueRoot: ctx.queueRoot, confirmRepointFrom: developConfirmRepointFrom });
-          if (result.status === 'enqueued' && costCeilingUsd !== undefined) {
-            // Single-id-only invariant (checked above) means this fires at
-            // most once per request — stamp only when the operator supplied
-            // an explicit, already-validated ceiling; never fabricate one.
-            // shc review finding 2: fold the REAL outcome into the per-item
-            // result as `ceilingStamped` — a silently-failed stamp (the
-            // manifest went missing/unwritable between enqueue and stamp)
-            // must stay distinguishable from a landed one, never reported as
-            // an unconditional success.
-            const pendingPath = join(getPaths(ctx.queueRoot).pending, `${initiativeId}.md`);
-            const ceilingStamped = persistManifestCostCeiling(pendingPath, costCeilingUsd);
-            return { ...result, ok: result.status === 'enqueued', ceilingStamped };
-          }
-          return { ...result, ok: result.status === 'enqueued' };
-        } catch (err) {
-          return { status: 'error' as const, initiativeId, ok: false, detail: sanitizeError(err) };
-        }
-      });
-      const ok = results.every((r) => r.ok);
-      sendJson(res, 200, { ok, results }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return;
-  }
-
-
-  // Plan (R4-05 / F4) — the roadmap's per-initiative "Plan" trigger. Repoints
-  // ONE WI-less initiative's manifest at the forge-architect flow (decompose
-  // only) and makes it claimable — the same manifest-move queue-state
-  // transition as "start development" above, just single-id: unlike the batch
-  // develop/start route, there is exactly one outcome per request here, so it
-  // maps directly onto real HTTP statuses instead of a per-id results array.
-  // No in-request spawn — the scheduler claims it later and runs
-  // execPm -> runProjectManager.
-  if (method === 'POST' && url.startsWith('/api/initiatives/') && url.endsWith('/plan')) {
-    const initiativeId = decodeURIComponent(url.slice('/api/initiatives/'.length, url.length - '/plan'.length));
-    if (!initiativeId) {
-      sendJson(res, 400, { error: 'initiativeId required' }, origin);
-      return;
-    }
-    // W8-A3 (`flows-37`, review round 1 S2-2): the third door onto a repoint.
-    // Same compare-and-swap forward as `POST /api/flows/:id/run`; the rule
-    // itself lives on `enqueuePlanRun`.
-    let planBody: unknown;
-    try {
-      planBody = await readJson(req);
-    } catch {
-      planBody = {};
-    }
-    const planConfirmRepointFrom = typeof (planBody as Record<string, unknown>)?.['confirmRepointFrom'] === 'string'
-      ? ((planBody as Record<string, unknown>)['confirmRepointFrom'] as string)
-      : undefined;
-    try {
-      const result = enqueuePlanRun(initiativeId, { queueRoot: ctx.queueRoot, confirmRepointFrom: planConfirmRepointFrom });
-      const httpStatus =
-        result.status === 'enqueued' ? 200 :
-        result.status === 'not-found' ? 404 :
-        result.status === 'already-running' || result.status === 'repoint-requires-confirm' ? 409 :
-        500;
-      sendJson(res, httpStatus, { ...result, ok: result.status === 'enqueued' }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return;
-  }
-
-  // W7-A3 (flows-02/03) — per-flow run trigger: enqueue an EXISTING
-  // initiative onto THIS flow (`enqueueFlowRun`, the ADR-041 generic per-flow
-  // claimable enqueue). The flow monitor's generic "Start Run" used to POST the
-  // flow id as an initiativeId to /api/runs (always 400, silently). Same
-  // status→HTTP mapping as the plan route above; the scheduler claims it later.
-  if (method === 'POST' && url.startsWith('/api/flows/') && url.endsWith('/run')) {
-    const flowId = decodeURIComponent(url.slice('/api/flows/'.length, url.length - '/run'.length));
-    if (!/^[a-z0-9][a-z0-9-]*$/.test(flowId)) {
-      sendJson(res, 400, { error: 'invalid flow id' }, origin);
-      return;
-    }
-    // Existence through the guard family (never a raw fs probe on a
-    // request-derived segment): the flow id is a single slug segment,
-    // searched across every flow root (SEAM F1) — `studio/flows` AND every
-    // `packages/<pkg>/flows`. `resolveIdAcrossRoots` THROWS, naming both
-    // paths, if the id is a real flow under more than one root — never
-    // "first root wins" — so this is wrapped (every other branch below sends
-    // its own 500 on throw; `handleHttp` has no single top-level catch).
-    let flowMatch;
-    try {
-      flowMatch = resolveIdAcrossRoots(flowRoots(ctx.forgeRoot), flowId, ['flow.yaml']);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-      return;
-    }
-    if (flowMatch === null) {
-      sendJson(res, 404, { error: 'flow not found', flowId }, origin);
-      return;
-    }
-    let body: unknown;
-    try {
-      body = await readJson(req);
-    } catch {
-      sendJson(res, 400, { error: 'invalid JSON body' }, origin);
-      return;
-    }
-    const initiativeId = typeof (body as Record<string, unknown>)?.['initiativeId'] === 'string'
-      ? ((body as Record<string, unknown>)['initiativeId'] as string)
-      : '';
-    if (!initiativeId) {
-      sendJson(res, 400, { error: 'initiativeId required' }, origin);
-      return;
-    }
-    // W8-A3 (`flows-37`): the operator's confirmation, forwarded verbatim as the
-    // FLOW they were shown — a compare-and-swap, not a boolean override (review
-    // round 3, S2-3). A non-string is carried as `undefined`, i.e. no
-    // confirmation at all, so an accidental client serialization fails closed.
-    // The RULE is the enqueue's; this line only carries the operator's answer.
-    const confirmRepointFrom = typeof (body as Record<string, unknown>)?.['confirmRepointFrom'] === 'string'
-      ? ((body as Record<string, unknown>)['confirmRepointFrom'] as string)
-      : undefined;
-    try {
-      // W7-FIX-A3 (A3-01, round-2 finding 6): the OPERATOR route refuses a
-      // shipped initiative — and the rule now lives ON `enqueueFlowRun`
-      // (`allowFinishedSource`, default off) rather than as a pre-check bolted
-      // onto this one route, so the sibling operator route
-      // (`POST /api/develop/start`) is closed by the same guard instead of
-      // still yanking a merged manifest out of `done/`. The route only maps
-      // the status onto its HTTP code; the id rule + the fs probe are the
-      // enqueue's own (one INIT predicate, no third copy of the regex here).
-      const result = enqueueFlowRun(initiativeId, flowId, { queueRoot: ctx.queueRoot, confirmRepointFrom });
-      const httpStatus =
-        result.status === 'enqueued' ? 200 :
-        result.status === 'not-found' ? 404 :
-        result.status === 'already-running' || result.status === 'already-done' ||
-          result.status === 'not-planned' || result.status === 'repoint-requires-confirm' ||
-          result.status === 'class-mismatch' ? 409 :
-        500;
-      sendJson(res, httpStatus, { ...result, ok: result.status === 'enqueued' }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return;
-  }
-
-  // Review-comment sidecar (S7 / DEC-5) — the visual review page's anchored
-  // comments. GET reads them + the derived verdict; POST appends one; POST
-  // .../resolve marks one resolved. Writes are proper-lockfile guarded (the
-  // read-modify-write is atomic per cycle). Verdict derivation is over the set:
-  // any blocking, unresolved comment ⇒ send-back; else ⇒ approve.
-  // The store is platform code (`@forge/flows/review-comments.ts`), so these
-  // routes answer with or without the example — this stopped being its surface.
-  if (method === 'GET' && url.startsWith('/api/review-comments/')) {
-    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length));
-    if (!cycleId || !isSafeCycleId(cycleId)) { sendJson(res, 400, { error: 'expected /api/review-comments/<cycleId>' }, origin); return; }
-    const sidecar = rc.readReviewComments(ctx.logsRoot, cycleId);
-    sendJson(res, 200, { ...sidecar, derivedVerdict: rc.deriveVerdictFromComments(sidecar.comments) }, origin);
-    return;
-  }
-  // W7-B7 (artifact-plan-15): edit + delete for authored comments. A
-  // non-blocking comment has no resolve affordance, so delete is the only way
-  // to clear it; edit fixes a typo'd concern without losing its anchor id.
-  // Same lock + derive-on-every-mutate shape as append/resolve.
-  if (method === 'POST' && url.startsWith('/api/review-comments/') && url.endsWith('/edit')) {
-    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length, url.length - '/edit'.length));
-    try {
-      const body = (await readJson(req)) as Record<string, unknown>;
-      const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
-      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
-      const patchBody = typeof body['body'] === 'string' ? body['body'].trim() : undefined;
-      const patchBlocking = typeof body['blocking'] === 'boolean' ? body['blocking'] : undefined;
-      if (patchBody === '') { sendJson(res, 400, { error: 'body must be non-empty when provided' }, origin); return; }
-      if (patchBody === undefined && patchBlocking === undefined) { sendJson(res, 400, { error: 'nothing to edit — provide body and/or blocking' }, origin); return; }
-      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
-        rc.editComment(sidecar, commentId, { body: patchBody, blocking: patchBlocking }),
-      );
-      sendJson(res, 200, { ...result, derivedVerdict: rc.deriveVerdictFromComments(result.comments) }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return;
-  }
-  if (method === 'POST' && url.startsWith('/api/review-comments/') && url.endsWith('/delete')) {
-    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length, url.length - '/delete'.length));
-    try {
-      const body = (await readJson(req)) as Record<string, unknown>;
-      const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
-      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
-      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => rc.deleteComment(sidecar, commentId));
-      sendJson(res, 200, { ...result, derivedVerdict: rc.deriveVerdictFromComments(result.comments) }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return;
-  }
-  if (method === 'POST' && url.startsWith('/api/review-comments/') && url.endsWith('/resolve')) {
-    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length, url.length - '/resolve'.length));
-    try {
-      const body = (await readJson(req)) as Record<string, unknown>;
-      const commentId = typeof body['commentId'] === 'string' ? body['commentId'] : '';
-      if (!cycleId || !isSafeCycleId(cycleId) || !commentId) { sendJson(res, 400, { error: 'cycleId and commentId required' }, origin); return; }
-      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) => rc.resolveComment(sidecar, commentId));
-      sendJson(res, 200, { ...result, derivedVerdict: rc.deriveVerdictFromComments(result.comments) }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return;
-  }
-  if (method === 'POST' && url.startsWith('/api/review-comments/')) {
-    const cycleId = decodeURIComponent(url.slice('/api/review-comments/'.length));
-    try {
-      const body = (await readJson(req)) as Record<string, unknown>;
-      const region = typeof body['region'] === 'string' ? body['region'].trim() : '';
-      const text = typeof body['body'] === 'string' ? body['body'].trim() : '';
-      if (!cycleId || !isSafeCycleId(cycleId) || !region || !text) { sendJson(res, 400, { error: 'cycleId, region, body required' }, origin); return; }
-      if (rc.readReviewComments(ctx.logsRoot, cycleId).comments.length >= rc.REVIEW_COMMENTS_MAX) {
-        sendJson(res, 409, { error: `review-comment cap reached (${rc.REVIEW_COMMENTS_MAX}) for this cycle` }, origin);
-        return;
-      }
-      const ac = isAcShape(body['ac']) ? (body['ac'] as { given: string; when: string; then: string }) : undefined;
-      const result = await withReviewCommentLock(ctx.logsRoot, cycleId, (sidecar) =>
-        rc.appendReviewComment(sidecar, { region, body: text, blocking: Boolean(body['blocking']), ac }),
-      );
-      sendJson(res, 200, {
-        ...result,
-        comment: result.comments[result.comments.length - 1],
-        derivedVerdict: rc.deriveVerdictFromComments(result.comments),
-      }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return;
-  }
-
-  // Review verdict — the M2-C intervention surface. Delegates to applyReviewVerdict.
-  if (method === 'POST' && url === '/api/verdict') {
-    try {
-      const body = await readJson(req);
-      const b = body as Record<string, unknown>;
-      await applyReviewVerdict(req, res, studioPostCtx, {
-        initiativeId: typeof b['initiativeId'] === 'string' ? b['initiativeId'] : '',
-        kind: (b['kind'] as 'approve' | 'send-back') ?? 'send-back',
-        rationale: typeof b['rationale'] === 'string' ? b['rationale'] : '',
-        acceptanceCriteria: Array.isArray(b['acceptanceCriteria'])
-          ? (b['acceptanceCriteria'] as Array<{ given: string; when: string; then: string }>)
-          : undefined,
-        concernKind: b['concernKind'] as 'packaging' | 'code-fix' | undefined,
-        qualityGateCmd: Array.isArray(b['qualityGateCmd']) ? (b['qualityGateCmd'] as string[]) : undefined,
-      });
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return;
-  }
+  // forge-4zk: the review-comments + verdict family carved to
+  // `./bridge-review-comments.ts` (feature move, no behaviour change).
+  if (await handleReviewCommentRoutes(req, res, studioPostCtx, url, method)) return;
 
   res.writeHead(404);
   res.end();
 }
 
-// ---- Architect routes (ADR 020) -------------------------------------------
+// forge-4zk: the architect spawn machinery + the one remaining architect
+// route (POST /api/plan-verdict) carved to `./bridge-agent-dispatch.ts`
+// (feature move, no behaviour change).
 
-/** Run-input keys are freer (camelCase like `northStar`) but still flag-safe. */
-const SAFE_INPUT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
-
-/** Timestamp stamp + short random suffix for a generated run id
- *  (YYYY-MM-DDTHH-mm-ss-SSS-xxxx): the ms precision plus 4 base36 chars so two
- *  dispatches of the same slug in the same millisecond (a programmatic driver,
- *  e.g. R4-02 fanout) don't collide onto one `_logs/<runId>/` dir. */
-function newRunStamp(): string {
-  const ts = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
-  return `${ts}-${Math.random().toString(36).slice(2, 6)}`;
-}
-
-/** The 5 detached-runner turn families the bridge spawns — each `argvPrefix`
- *  is prepended to `<sid> --project <project>` to build the full argv passed
- *  to `orchestrator/cli.ts`, and `logPrefix` names the `_logs/_<logPrefix>-
- *  <sid>/` capture dir. `demo-builder` is the one legacy case where verb and
- *  log prefix diverge (verb `demo-builder`, log prefix `demo`) — preserved
- *  exactly from the pre-collapse per-agent functions.
- *
- *  R4-21 phase 2, WI-2 (D5's sibling concern): `authoring` is the first row
- *  that does NOT go through a bespoke `<verb> run <sid> --project <p>` CLI
- *  command — it rides the GENERIC `forge agent run <agent-id> <sid> --project
- *  <p>` dispatch fork (ADR-043 §3, `packages/agents/agent-run.ts`'s `cmdAgentRun`), so its
- *  argvPrefix is `['agent', 'run', 'authoring']` rather than `['<verb>',
- *  'run']`. The 4 legacy rows carry an EXPLICIT argv prefix instead of the
- *  former `{verb}` + implicit `'run'` shape specifically so this one row can
- *  differ in SHAPE (3 tokens, not 2) while the legacy rows stay
- *  byte-equivalent to their pre-existing argv — `['architect','run']`,
- *  `['instructions','run']`, `['demo-builder','run']`,
- *  `['project-brain','run']` are the SAME tokens the old `{verb}+'run'`
- *  construction produced, just spelled as a literal array.
- *
- *  W6-B2 review fix (MEDIUM 1) — exported (with SPAWN_AGENT_SPECS below) so
- *  packages/sessions/tests/contract/session-tail-kind-parity.test.ts can import the real table directly
- *  and assert, for every studio/session-kinds.yaml descriptor with a
- *  corresponding entry here, that `logPrefix === descriptor.id` — the
- *  coincidence ensureSessionTail's `_${kind}-${sessionId}` derivation
- *  (this file, near ensureTailFor) relies on. Without this ratchet, a
- *  future rename of either side drifts silently: ensureSessionTail just
- *  no-ops (ensureTailFor's existsSync guard swallows the miss), so a
- *  session's WS tail would quietly stop activating with no error anywhere. */
-export type SpawnableAgentId = 'architect' | 'instructions' | 'demo-builder' | 'project-brain' | 'authoring' | 'kb-cleanup';
-
-export const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly string[]; logPrefix: string }> = {
-  architect: { argvPrefix: ['architect', 'run'], logPrefix: 'architect' },
-  instructions: { argvPrefix: ['instructions', 'run'], logPrefix: 'instructions' },
-  'demo-builder': { argvPrefix: ['demo-builder', 'run'], logPrefix: 'demo' },
-  'project-brain': { argvPrefix: ['project-brain', 'run'], logPrefix: 'project-brain' },
-  authoring: { argvPrefix: ['agent', 'run', 'authoring'], logPrefix: 'authoring' },
-  // R4-19-F2 — the kb-cleanup session, riding the SAME generic
-  // runInteractiveTurn spine as authoring (ADR-043 §3): `forge agent run
-  // kb-cleanup <sid> --project <p>`.
-  'kb-cleanup': { argvPrefix: ['agent', 'run', 'kb-cleanup'], logPrefix: 'kb-cleanup' },
-};
-
-/** Spawn one `<agentId>`-runner turn as a detached child (the scheduler-daemon
- *  spawn pattern). Best-effort + fire-and-forget — the runner checkpoints to
- *  the session dir and the relevant `broadcast*Changed` signal drives the UI
- *  re-fetch. `FORGE_ARCHITECT_NO_SPAWN=1` disables the spawn for harness /
- *  curl runs that pre-seed session state (mirrors `FORGE_BRIDGE_DEBUG`).
- *
- *  The runner's stderr (uncaught exceptions, SDK errors) is captured to
- *  `_logs/_<logPrefix>-<sid>/stderr.log` so stalls are diagnosable via the
- *  existing GET /api/<family>/file/<project>/<sid>/stderr.log endpoints.
- *
- *  R2-01-F3b: collapses the 4 near-byte-identical `spawn<X>Turn` helpers
- *  (architect/instructions/demo-builder/project-brain) that differed only in
- *  the CLI verb and the log-dir prefix — same guard, same detached-spawn
- *  shape, same argv per agent as before the collapse.
- *
- *  R2-01 final-review fix (e): guard `sessionId` against path traversal
- *  before it's used to build the `_logs/_<logPrefix>-<sessionId>/` dir name
- *  below — defense-in-depth on a pre-existing, F3b-renamed function (route
- *  handlers already 404 an unknown sessionId before spawning, plus the
- *  bridge's same-origin + `x-forge-csrf` guard, so this isn't closing an
- *  exploitable hole today). Reuses `isSafeRunId` — `orchestrator/run-agent.ts`'s
- *  `SAFE_RUN_ID_RE` + `..` check — as the SSOT rather than re-deriving it. */
-// Exported (W6-B4) so packages/sessions/bridge-studio-sessions-affordances.ts's
-// generic session-affordance write endpoint can DELEGATE to this SAME spawn
-// helper instead of reimplementing it, injected via its AffordanceRouteContext
-// (mirrors SessionsRouteContext's ensureSessionTail injection, in
-// packages/sessions/bridge-studio-sessions.ts) — the sessions route modules
-// never import FROM this file (see its own header for the reasoning), so this
-// stays exported and passed by reference at the wiring call site, never
-// imported directly.
-//
-// Both paths above were `cli/bridge-studio-{affordances,sessions}.ts` until the
-// sessions carve moved them and ruling 87 deleted the affordances host file
-// outright. The comment kept naming files that no longer existed; repointed
-// with the M4-flows host carve.
-export function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, project: string, sessionId: string): SpawnTurnOutcome {
-  // W7-C2 T1 review (A7) — this helper no longer swallows. Its outcome is
-  // REPORTED to the caller (`SpawnTurnOutcome`, in
-  // packages/sessions/bridge-studio-sessions-affordances.ts) so a route can
-  // refuse to claim `{ok:true, phase:
-  // 'analyzing'}` for a turn that never started; a session left in a working
-  // phase with no log dir can never be derived as `stalled`
-  // (packages/sessions/bridge-studio-lifecycle.ts), so a swallowed failure showed the
-  // operator `working` forever with `needsYou:false`. A DELIBERATE no-spawn
-  // (FORGE_ARCHITECT_NO_SPAWN / the dry bridge) is `ok` with
-  // `spawned:false` — not a failure. Callers that genuinely have nothing to
-  // do with the outcome ignore the return value exactly as before.
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return { ok: true, spawned: false };
-  if (!isSafeRunId(sessionId)) {
-    console.error(`spawnAgentTurn: unsafe sessionId (path-traversal risk), refusing to spawn: ${JSON.stringify(sessionId)}`);
-    return { ok: false, error: 'unsafe sessionId (path-traversal risk) — refusing to spawn' };
-  }
-  const { argvPrefix, logPrefix } = SPAWN_AGENT_SPECS[agentId];
-  try {
-    const logDir = join(forgeRoot, '_logs', `_${logPrefix}-${sessionId}`);
-    mkdirSync(logDir, { recursive: true });
-    const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
-    const proc = spawn(
-      process.execPath,
-      ['--experimental-strip-types', 'apps/forge/cli.ts', ...argvPrefix, sessionId, '--project', project],
-      { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] },
-    );
-    closeSync(stderrFd);
-    proc.unref();
-    // W7-A2 — track the turn's pid so the generic cancel route
-    // (packages/sessions/bridge-studio-session-cancel.ts → killTrackedTurn) can SIGTERM a
-    // live turn, and the lifecycle derivation can tell "re-run in flight"
-    // from "crashed" (isTurnAlive additionally proves ownership via the
-    // sessionId in the process's own argv above). Same logDir, same guard
-    // posture as stderr.log; best-effort like the rest of this helper.
-    if (typeof proc.pid === 'number') {
-      guardedWriteFile(join(forgeRoot, '_logs'), [`_${logPrefix}-${sessionId}`, 'turn.pid'], `${proc.pid}\n`);
-    }
-    return { ok: true, spawned: true };
-  } catch (err) {
-    // W7-C2 T1 review (A7) — surfaced, never swallowed: logged here for the
-    // bridge operator AND returned so the route can answer honestly.
-    console.error(`spawnAgentTurn: failed to start the ${agentId} turn for session ${sessionId}:`, err);
-    return { ok: false, error: sanitizeError(err) };
-  }
-}
-
-
-
-
-
-
-
-
-
-
-/**
- * Pure argv builder for `forge agent dispatch <slug> --run-id <runId> [...]`
- * (R6-04 WI-2 extraction, mirrors `parseAgentDispatchArgs`'s pure argv PARSER
- * on the other side of the CLI boundary, packages/agents/agent-run.ts). Extracted from
- * `spawnAgentDispatch` so the argv-building itself becomes independently
- * testable (no spawn, no mock) — this function has no side effects and
- * performs no safety checks of its own (`spawnAgentDispatch` still owns the
- * `isSafeRunId`/`SAFE_AGENT_SLUG_RE` refusal, unchanged, before ever calling
- * this). Returns EXACTLY the array `cmdAgentDispatch`'s `rest` parameter
- * expects (`[slug, '--run-id', runId, ...optional flags]`) — NOT the full
- * node-invocation array; `spawnAgentDispatch` still prepends the
- * process-invocation boilerplate (`--experimental-strip-types`,
- * `orchestrator/cli.ts`, `agent`, `dispatch`) around this helper's output.
- *
- * Input keys are filtered through `SAFE_INPUT_KEY_RE` here (defense-in-depth,
- * unchanged from before this extraction) so no arg injects a flag. Input
- * VALUES are arbitrary — safe as a single `k=v` arg since `spawn()` runs no
- * shell.
- */
-export function buildAgentDispatchArgs(
-  slug: string,
-  runId: string,
-  project?: string,
-  inputs?: Record<string, string>,
-  /** R4-17, D6/D7 — when given, threaded through as `forge agent dispatch`'s
-   *  `--session-dir <abs>` so the dispatch process can write the terminal
-   *  phase into that session's status.json when the run ends (D7). Omitted
-   *  by the generic `POST /api/agents/:slug/run` route (D6: byte-identical
-   *  behaviour without it) — only `POST /api/studio/onboarding/start` passes
-   *  it today. `sessionDir` is always OUR OWN already-created, already-
-   *  realpath-verified directory (never request-derived text folded in
-   *  here), so no extra validation is needed at this spawn-arg boundary; the
-   *  process on the receiving end (`cmdAgentDispatch`, packages/agents/agent-run.ts)
-   *  guards its own write through it regardless.
-   */
-  sessionDir?: string,
-  /** R6-04 (WI-2) — the operator's per-kickoff cost ceiling, already
-   *  validated (finite, > 0, <= MAX_KICKOFF_COST_CEILING_USD) by the route
-   *  before this is ever called. */
-  costCeilingUsd?: number,
-  /** Bead forge-c6h — the bridge's own SNAPSHOT `ctx.projectsRoot` (resolved
-   *  once at `startBridge`), threaded through as `forge agent dispatch`'s
-   *  `--projects-root <abs>` so the spawned subprocess's
-   *  `writeSessionTerminalPhase` (packages/agents/agent-run.ts) can honour THIS exact
-   *  root verbatim instead of re-deriving its own from `forge.config.json`/
-   *  env at write time — the re-derivation was the defect (see that
-   *  function's docstring). `cmdAgentDispatch` re-validates this value
-   *  itself (absolute/exists/contained-in-forgeRoot) before trusting it, so
-   *  no extra validation is needed at this spawn-arg boundary. */
-  projectsRoot?: string,
-): string[] {
-  const args = [slug, '--run-id', runId];
-  if (project) args.push('--project', project);
-  for (const [k, v] of Object.entries(inputs ?? {})) {
-    if (!SAFE_INPUT_KEY_RE.test(k)) continue;
-    args.push('--input', `${k}=${v}`);
-  }
-  if (sessionDir) args.push('--session-dir', sessionDir);
-  if (costCeilingUsd !== undefined) args.push('--cost-ceiling-usd', String(costCeilingUsd));
-  if (projectsRoot) args.push('--projects-root', projectsRoot);
-  return args;
-}
-
-/**
- * Spawn `forge agent dispatch <slug> --run-id <runId> [--project <p>] [--input
- * k=v …]` detached — the generic sibling of `spawnAgentTurn` (R2-01-F3
- * dispatch half). Dry-bridge / no-spawn guarded; best-effort (a spawn error
- * never bubbles into the request). slug/runId/project are pre-validated by the
- * route; input keys are re-checked in `buildAgentDispatchArgs` (defense-in-
- * depth) so no arg injects a flag.
- */
-function spawnAgentDispatch(
-  forgeRoot: string,
-  slug: string,
-  runId: string,
-  project?: string,
-  inputs?: Record<string, string>,
-  sessionDir?: string,
-  costCeilingUsd?: number,
-  /** Bead forge-c6h — see `buildAgentDispatchArgs`'s matching parameter. */
-  projectsRoot?: string,
-): void {
-  // Argv construction is pure (no I/O, no side effects) — safe to build
-  // above the spawn-suppression early-return below, so it stays observable
-  // as ordinary function composition rather than something only a real spawn
-  // attempt could exercise.
-  const dispatchArgs = buildAgentDispatchArgs(slug, runId, project, inputs, sessionDir, costCeilingUsd, projectsRoot);
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
-  if (!isSafeRunId(runId) || !SAFE_AGENT_SLUG_RE.test(slug)) {
-    console.error(`spawnAgentDispatch: unsafe slug/runId, refusing to spawn: ${JSON.stringify({ slug, runId })}`);
-    return;
-  }
-  const args = ['--experimental-strip-types', 'apps/forge/cli.ts', 'agent', 'dispatch', ...dispatchArgs];
-  try {
-    const logDir = join(forgeRoot, '_logs', runId);
-    mkdirSync(logDir, { recursive: true });
-    const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
-    const proc = spawn(process.execPath, args, { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] });
-    closeSync(stderrFd);
-    proc.unref();
-    // W7-B5 (agents-30): EVERY dispatch records its child pid at
-    // `_logs/<runId>/turn.pid` so the cancel route (`POST /api/agents/runs/
-    // :runId/cancel`) can reach it. Ownership proof at kill time is the
-    // runId in the child's own argv (`--run-id <runId>` — a whole element),
-    // via the same `isTurnAlive` the session cancel uses. Guarded write,
-    // best-effort like stderr.log.
-    if (typeof proc.pid === 'number') {
-      guardedWriteFile(join(forgeRoot, '_logs'), [runId, 'turn.pid'], `${proc.pid}\n`);
-    }
-    // W7-FIX-A2 (W7A2-01) — a session-bound dispatch (`--session-dir
-    // <projectsRoot>/<project>/_<kind>/<sid>`, today only onboarding) records
-    // its pid where the generic cancel route looks: `_logs/_<kind>-<sid>/
-    // turn.pid` (`sessionLogDirName`, packages/sessions/bridge-studio-lifecycle.ts — the
-    // SAME template `spawnAgentTurn` uses). Before this, onboarding was the
-    // one kind `killTrackedTurn` could never find, so cancel returned
-    // `killed:false` and left the agent running. `isTurnAlive` proves
-    // ownership through the `--session-dir` value's basename (the sid) in
-    // the child's own argv. kind/sid are derived from the ALREADY-validated
-    // sessionDir the route built (never request text); the guarded write
-    // refuses anything that does not resolve under `_logs`. Best-effort like
-    // stderr.log — never bubbles into the request.
-    if (sessionDir !== undefined && typeof proc.pid === 'number') {
-      const sid = basename(sessionDir);
-      const kind = basename(dirname(sessionDir)).replace(/^_/, '');
-      if (kind.length > 0 && isSafeRunId(sid)) {
-        guardedWriteFile(join(forgeRoot, '_logs'), [sessionLogDirName(kind, sid), 'turn.pid'], `${proc.pid}\n`);
-      }
-    }
-  } catch { /* best-effort */ }
-}
-
-
-
-
-
-
-
-
-
-/** Parse an already-read JSON string; null on malformed content. Companion to
- *  the guarded read primitives (which return raw contents, not parsed JSON) so
- *  a SEC-04 guarded read can replace a `readJsonFile(join(dir, leaf))` call
- *  without re-following the leaf: the guard read the bytes, this parses them. */
-function safeParseJson<T>(raw: string): T | null {
-  try { return JSON.parse(raw) as T; } catch { return null; }
-}
-
-
-/**
- * `POST /api/plan-verdict` — all that remains of the architect host handler.
- *
- * The five `/api/architect/*` arms carved to `@forge/sessions`
- * (`bridge-studio-architect.ts`); this one did NOT, and the reason is a
- * dependency measurement rather than an ownership opinion: `ctx.mergePr`,
- * `ctx.finalizeAfterMerge` and `ctx.queueRoot` appear in this whole function
- * only inside this arm, and the handler it delegates to is flows'
- * (`applyPlanVerdict`), which also serves `/api/runs/:id/gates/plan`.
- */
-async function handleArchitect(
-  req: IncomingMessage,
-  res: ServerResponse,
-  ctx: HttpContext,
-  url: string,
-  method: string,
-): Promise<boolean> {
-  const origin = allowedOrigin(req);
-  // POST /api/plan-verdict — delegates to applyPlanVerdict in bridge-studio.ts.
-  if (method === 'POST' && url === '/api/plan-verdict') {
-    try {
-      const body = (await readJson(req)) as Record<string, unknown>;
-      const planCtx: StudioPostContext = {
-        readBody: async () => body,
-        forgeRoot: ctx.forgeRoot,
-        logsRoot: ctx.logsRoot,
-        queueRoot: ctx.queueRoot,
-        projectsRoot: ctx.projectsRoot,
-        mergePr: ctx.mergePr,
-        finalizeAfterMerge: ctx.finalizeAfterMerge,
-        broadcastArchitectChanged: ctx.broadcastArchitectChanged, singleWiAllowedFor: (c: string) => peekInstalledFactory()?.singleWiAllowed(c) ?? null,
-        spawnArchitectTurnFn: (forgeRoot, project, sessionId) => spawnAgentTurn(forgeRoot, 'architect', project, sessionId),
-      };
-      await applyPlanVerdict(req, res, planCtx, {
-        project: typeof body['project'] === 'string' ? body['project'] : '',
-        sessionId: typeof body['sessionId'] === 'string' ? body['sessionId'] : '',
-        kind: (body['kind'] as 'approve' | 'revise' | 'reject') ?? 'reject',
-        rationale: typeof body['rationale'] === 'string' ? body['rationale'] : undefined,
-        entryRoute: '/api/plan-verdict',
-      });
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return true;
-  }
-
-  return false;
-}
-
-// ---- Instructions-creator routes (Stage A) --------------------------------
-//
-// Mirrors the architect routes: an operator-driven, file-checkpointed runner
-// that authors a managed project's AGENTS.md (interview → draft → verdict →
-// finalize). The bridge spawns one CLI turn per operator action via the
-// shared `spawnAgentTurn(forgeRoot, 'instructions', project, sessionId)`.
-
-
-
-// ---- Demo-builder routes (Stage B) ----------------------------------------
-//
-// Mirrors the instructions routes: an operator-driven, file-checkpointed runner
-// that authors a managed project's DEMO.html (generate → review → lock). Unlike
-// instructions (whose output lives in the session dir), the demo-builder agent
-// writes DEMO.html into the PROJECT REPO under .forge/demo/ — so the file route
-// serves from `project_repo_path`, not the session dir. The bridge spawns one
-// CLI turn per operator action, via the shared
-// `spawnAgentTurn(forgeRoot, 'demo-builder', project, sessionId)` — note the
-// log-dir prefix stays `_demo-<sid>` (not `_demo-builder-<sid>`), matching
-// the pre-collapse `spawnDemoBuilderTurn` exactly.
-
-// R1-3b — the project-brain turn spawns via
-// `spawnAgentTurn(forgeRoot, 'project-brain', project, sessionId)`.
-
-
-
-
-
-
-
-
-
-// ---- Reflection routes (the third human moment, in-UI) --------------------
-//
-// The reflector emits `_logs/<cycleId>/user-questions.json` (StructuredQuestion[])
-// as its Stage-2 file handoff; the operator's answers land in
-// `user-feedback.md`. The /reflect/<cycleId> page renders the questions and
-// POSTs the answers here — converting the old reflect slash command into
-// an in-UI page, consistent with the in-UI architect + review moments.
-async function handleReflect(
-  req: IncomingMessage,
-  res: ServerResponse,
-  ctx: HttpContext,
-  url: string,
-  method: string,
-): Promise<boolean> {
-  const origin = allowedOrigin(req);
-
-  if (method === 'GET' && url.startsWith('/api/reflect/') && !url.endsWith('/answer')) {
-    const cycleId = decodeURIComponent(url.slice('/api/reflect/'.length));
-    if (!cycleId) { sendJson(res, 400, { error: 'expected /api/reflect/<cycleId>' }, origin); return true; }
-    // SEC-04 (bd forge-ebj) — cycleId was folded raw into `join(logsRoot,
-    // cycleId)` and each leaf raw-appended: a `%2F`-smuggled `../..` cycleId
-    // disclosed an out-of-root user-questions.json, and a symlinked leaf inside
-    // a real cycle dir was followed. Gate the request-derived cycleId (its OWN
-    // segment under the trusted logsRoot) through the per-segment identity
-    // guard first — a traversed/symlinked cycle dir is a 400 with NO read —
-    // then route every leaf read through the guard too (leaf-symlink close).
-    const reflectCycleGuard = resolveGuardedPath(ctx.logsRoot, [cycleId]);
-    if (!reflectCycleGuard.ok) {
-      sendJson(res, 400, { error: 'invalid cycleId' }, origin);
-      return true;
-    }
-    const questionsRaw = guardedReadFile(ctx.logsRoot, [cycleId, 'user-questions.json']);
-    const questions = questionsRaw !== null ? (safeParseJson<unknown[]>(questionsRaw) ?? []) : [];
-    const answered = guardedFile(ctx.logsRoot, [cycleId, 'user-feedback.md'], 'read') !== null;
-    // R4-09-F3: the durable reflect mode (REFLECT_MODE_FILE) — the authoritative
-    // signal the UI uses to render the automated read-only view, independent of
-    // per-question inferred-marker compliance.
-    const modeRaw = guardedReadFile(ctx.logsRoot, [cycleId, 'reflect-mode.json']);
-    const modeDoc = modeRaw !== null ? safeParseJson<{ mode?: string }>(modeRaw) : null;
-    const mode = modeDoc?.mode === 'automated' ? 'automated' : modeDoc?.mode === 'interactive' ? 'interactive' : undefined;
-    sendJson(res, 200, { cycleId, questions, answered, ...(mode ? { mode } : {}) }, origin);
-    return true;
-  }
-
-  if (method === 'POST' && url.startsWith('/api/reflect/') && url.endsWith('/answer')) {
-    // R5-01-F1 (task A-finalfix FIX 1): reflect-answer is `stub-actions`, not
-    // `refuse` — it does two things, writing user-feedback.md (bookkeeping)
-    // and detached-firing rerunReflector (the real agent turn). Only the
-    // latter is dry-bridge-gated below; the write always proceeds so the
-    // route's normal 200 stays truthful ("feedback captured").
-    const cycleId = decodeURIComponent(url.slice('/api/reflect/'.length, url.length - '/answer'.length));
-    try {
-      const body = (await readJson(req)) as { answers?: { question: string; answer: string }[]; freeform?: string };
-      // SEC-04 (bd forge-ebj) — the WRITE twin of the reflect GET read. cycleId
-      // was folded raw into `join(logsRoot, cycleId)` and `user-feedback.md`
-      // raw-appended: a `%2F`-smuggled `../..` cycleId overwrote an out-of-root
-      // user-feedback.md, and a symlinked leaf was followed. Gate the cycleId
-      // (its OWN segment under the trusted logsRoot) first — reject a
-      // traversed/symlinked dir (400, no write) and keep the "cycle not found"
-      // 404 for a genuinely absent in-root cycle.
-      const dirGuard = resolveGuardedPath(ctx.logsRoot, [cycleId]);
-      if (!dirGuard.ok) { sendJson(res, 400, { error: 'invalid cycleId', cycleId }, origin); return true; }
-      if (!dirGuard.exists) { sendJson(res, 404, { error: 'cycle not found', cycleId }, origin); return true; }
-      const dir = dirGuard.realPath;
-      const lines = [`# Reflection feedback — ${cycleId}`, '', '## Answers to numbered questions', ''];
-      for (const a of body.answers ?? []) {
-        lines.push(`### ${a.question}`, '', a.answer || '_(skipped)_', '');
-      }
-      lines.push('## Free-form feedback', '', (body.freeform ?? '').trim() || '_(none)_', '');
-      // Route the leaf through the guard too: a symlinked user-feedback.md
-      // inside the (now identity-verified) real cycle dir is refused, never
-      // followed out of root. A rejected leaf writes NOTHING (fail closed).
-      if (guardedWriteFile(ctx.logsRoot, [cycleId, 'user-feedback.md'], lines.join('\n')) === null) {
-        sendJson(res, 400, { error: 'invalid cycle path', cycleId }, origin);
-        return true;
-      }
-      const dryMarker = dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/reflect/:cycleId/answer', cycleId);
-      sendJson(res, 200, { ok: true, ...dryMarker }, origin);
-      if (!isDryBridge()) {
-        // D — auto-rerun the reflector so the feedback is distilled into retro.md +
-        // brain themes. Detached (don't block the HTTP response on a full reflector
-        // pass), but observable: fired, skipped or failed, it emits into the cycle's
-        // events.jsonl (not console), so a lost rerun is visible and the startup
-        // reconcile can recover it. The UI owns reflection without the CLI.
-        //
-        // Absence of the example, and a synchronous throw from the rerun, are both
-        // `example-hooks.ts`'s to handle — its header carries the measured incident.
-        fireReflectorRerun({
-          rerunReflector: ctx.rerunReflector,
-          cycleId,
-          logsRoot: ctx.logsRoot,
-          queueRoot: ctx.queueRoot,
-          feedbackPath: join(dir, 'user-feedback.md'),
-        });
-      }
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return true;
-  }
-
-  return false;
-}
-
-const MAX_BODY_BYTES = 1 * 1024 * 1024; // 1 MiB
-
-function readJson(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolveJson, rejectJson) => {
-    const chunks: Buffer[] = [];
-    let totalBytes = 0;
-    req.on('data', (chunk: Buffer) => {
-      totalBytes += chunk.byteLength;
-      if (totalBytes > MAX_BODY_BYTES) {
-        req.destroy();
-        rejectJson(new Error('request body too large'));
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => {
-      const raw = Buffer.concat(chunks).toString('utf8');
-      try { resolveJson(raw ? JSON.parse(raw) : {}); } catch (err) { rejectJson(err); }
-    });
-    req.on('error', rejectJson);
-  });
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
+// forge-4zk: the reflection routes carved to `./bridge-reflect.ts` (feature
+// move, no behaviour change). readJson itself moved to `./bridge-http.ts`
+// (forge-4zk follow-up) — the ONE implementation every bridge module now
+// shares, instead of a same-directory mirror.
 
 // ---- Tail mechanics --------------------------------------------------------
 
