@@ -72,6 +72,8 @@ import {
   giTextCovers,
   type PreflightReport,
 } from './preflight.ts';
+import { resolveCommandRow, type CommandAdvisory } from './reset-command-resolve.ts';
+export type { CommandAdvisory } from './reset-command-resolve.ts';
 
 // ---------------------------------------------------------------------------
 // Types (Q5's proposal, refined — see the deviations noted per field below)
@@ -145,6 +147,8 @@ export type GitignoreDrift = {
   /** Entries ignored by a source OTHER than the root `.gitignore` — named
    *  (C2 still fails), never rewritten: this owns exactly one file. */
   otherSourceViolations: string[];
+  /** Which regeneration case happened ('replace'/'append'); set only when `action === 'regenerate'`. */
+  message?: string;
 };
 
 export type DriftReport = {
@@ -180,6 +184,8 @@ export type DriftReport = {
   rows: DriftRow[];
   skillMoves: SkillMove[];
   gitignoreDrift: GitignoreDrift;
+  /** An 'add' row's command that doesn't resolve here — never silently added or dropped. */
+  commandAdvisories: CommandAdvisory[];
 };
 
 export type ResetResult = {
@@ -508,16 +514,20 @@ function computeGitignoreDrift(projectDir: string): GitignoreDrift {
   }
 
   let rewritten: string[];
+  let message: string;
   if (rewritableLines.size > 0) {
     const firstOffender = Math.min(...rewritableLines);
     rewritten = lines.flatMap((l, i) => (!rewritableLines.has(i) ? [l] : i === firstOffender ? missing : []));
+    message = 'a tracked-config line (e.g. a blanket .forge/) is being replaced with the canonical scratch stanza';
   } else {
     // Nothing to replace: append, keeping the file's trailing newline.
     const trailingBlank = lines.length > 0 && lines[lines.length - 1] === '';
     rewritten = trailingBlank ? [...lines.slice(0, -1), ...missing, ''] : [...lines, ...missing];
+    message = `appending ${missing.length} missing scratch-path ${missing.length === 1 ? 'entry' : 'entries'}: ${missing.join(', ')}`;
   }
   const after = rewritten.join('\n');
-  return { before: raw, after, action: after === raw ? 'unchanged' : 'regenerate', otherSourceViolations: other };
+  if (after === raw) return { before: raw, after, action: 'unchanged', otherSourceViolations: other };
+  return { before: raw, after, action: 'regenerate', otherSourceViolations: other, message };
 }
 
 /**
@@ -586,12 +596,19 @@ export function computeContractDrift(
     driftRow('buildProcess', config?.buildProcess, starter?.buildProcess, mode('fillOnly'), across((s) => s.buildProcess)),
   ];
 
+  // An 'add' row never writes a command this project cannot run.
+  const commandAdvisories: CommandAdvisory[] = [];
+  const resolvedRows: DriftRow[] = rows.map((row) => {
+    const resolved = resolveCommandRow(row, dir);
+    if (resolved.advisory) commandAdvisories.push(resolved.advisory);
+    return resolved.row;
+  });
   const { row: skillsRow, skillMoves } = computeSkillsDrift(dir, config?.skills, config?.artifactRoot);
-  rows.push(skillsRow);
+  resolvedRows.push(skillsRow);
 
   const gitignoreDrift = computeGitignoreDrift(dir);
 
-  return { projectDir: dir, projectId, appType, forgeRoot, rows, skillMoves, gitignoreDrift };
+  return { projectDir: dir, projectId, appType, forgeRoot, rows: resolvedRows, skillMoves, gitignoreDrift, commandAdvisories };
 }
 
 // ---------------------------------------------------------------------------
