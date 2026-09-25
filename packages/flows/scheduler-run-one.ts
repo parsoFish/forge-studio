@@ -20,12 +20,7 @@ import { notify, type NotifyConfig } from './notify.ts';
 import { dispatchTerminalStatus } from './scheduler-dispatch.ts';
 import { validateClaimable } from './claim-validator.ts';
 import { pruneStaleWiWorktrees } from './wi-worktree.ts';
-import {
-  probeRemoteBranch,
-  shouldRefuseFreshAttempt,
-  emitStaleRemoteBranchRefused,
-  cleanupPushedBranchOnFailure,
-} from './stale-remote-branch-guard.ts';
+import { probeRemoteBranch, shouldRefuseFreshAttempt } from './stale-remote-branch-guard.ts';
 import type { SchedulerConfig } from './scheduler.ts'; // type-only: erased, no runtime cycle
 
 /**
@@ -198,9 +193,7 @@ export async function runOne(
   const heartbeat = setInterval(() => {
     writeHeartbeat(filename, paths);
   }, cfg.heartbeatIntervalMs);
-  // Hoisted above the try (was inside it) so the stale-branch guard below and
-  // its finally-block cleanup can both reach it.
-  const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'); // hoisted so the guard + its cleanup can reach it
   // Hold the handle outside the try so the finally block can clean it up
   // regardless of which path produced the result (success, failed, threw).
   let wtHandle: worktree.WorktreeHandle | null = null;
@@ -209,14 +202,8 @@ export async function runOne(
   // the only surviving copy of the work. Set inside the try after runCycle
   // returns; defaults to false (clean up like before for thrown errors).
   let preserveWorktree = false;
-  // bead forge-8vfn.8.1.8: set ONLY on a FRESH attempt ('add') whose
-  // pre-attempt probe proved `forge/<INIT>` was absent on origin — so the
-  // finally block cleans up a branch ONLY this attempt could have pushed,
-  // never one merely found (a resume/reuse never sets this).
-  let staleBranchOwnedByThisAttempt: { branch: string; projectRepoPath: string; initiativeId: string } | null = null;
-  // True on a runCycle() 'failed' result or a thrown exception — read by the
-  // finally block's cleanup call below.
-  let cycleFailed = false;
+  let staleBranchOwnedByThisAttempt: { branch: string; projectRepoPath: string; initiativeId: string } | null = null; // bead forge-8vfn.8.1.8: absent on origin before this attempt started
+  let cycleFailed = false; // a 'failed' result, or a thrown exception
   try {
     const manifest = parseManifest(manifestPath);
     if (tee) console.log(`[serve] claimed: ${manifest.initiativeId} (${manifest.project})`);
@@ -232,9 +219,7 @@ export async function runOne(
       manifest.flowId ? flowPathForId(manifest.flowId) : undefined,
     );
     if (!claimCheck.ok) {
-      // Emit a structured claim.refused event to the initiative's log dir
-      // (best-effort — cycle logger isn't open yet; we write directly).
-      emitClaimRefusedEvent(manifest.initiativeId, claimCheck.reason, claimCheck.terminal, forgeRoot);
+      emitOrchestratorEvent(forgeRoot, manifest.initiativeId, 'error', 'claim.refused', { reason: claimCheck.reason, terminal: claimCheck.terminal });
       if (claimCheck.terminal) {
         // Terminal refusals (invalid/locked flow) → move to failed/ permanently.
         console.error(
@@ -296,33 +281,19 @@ export async function runOne(
       if (tee) console.log(`[serve] ${why}: reusing preserved worktree ${expectedWtPath}`);
       wtHandle = { path: expectedWtPath, branch, projectRepoPath: manifest.projectRepoPath };
     } else {
-      // bead forge-8vfn.8.1.8: FAIL FAST, before any worktree/agent spend — a
-      // FRESH attempt ('add') must never dispatch onto a `forge/<INIT>`
-      // branch a PRIOR, abandoned attempt already pushed with no PR open.
-      // Unchecked, this attempt spends a whole work item before its own push
-      // fails non-fast-forward. Exempt by construction for 'reuse' (resume /
-      // send-back / architect hand-off), which owns its own branch.
+      // bead forge-8vfn.8.1.8: fail fast, before any spend — fresh ('add') only; 'reuse' owns its own branch.
       const probe = probeRemoteBranch(manifest.projectRepoPath, branch);
       if (shouldRefuseFreshAttempt(probe)) {
         const sha = probe.remoteSha as string;
         const reason = `refs/heads/${branch} (${sha.slice(0, 8)}) already exists on origin from a prior, abandoned attempt and no PR is open for it. Delete or rename the remote branch, then re-dispatch — never auto-retried, never force-pushed.`;
-        emitStaleRemoteBranchRefused(forgeRoot, manifest.initiativeId, branch, sha);
+        emitOrchestratorEvent(forgeRoot, manifest.initiativeId, 'error', 'stale-remote-branch.refused', { branch, sha });
         console.error(`[serve] ${manifest.initiativeId} — claim refused (terminal): ${reason}`);
         moveTo(filename, 'failed', paths);
-        await notify(
-          { type: 'failed', title: `Stale remote branch blocks ${manifest.initiativeId}`, body: reason },
-          cfg.notify,
-        );
+        await notify({ type: 'failed', title: `Stale remote branch blocks ${manifest.initiativeId}`, body: reason }, cfg.notify);
         return; // runOne done — no worktree, no cycle, zero agent spend
       }
-      // Absent before this attempt — track it so the finally block can only
-      // ever clean up a branch this attempt itself goes on to push.
       if (probe.remoteSha === null) {
-        staleBranchOwnedByThisAttempt = {
-          branch,
-          projectRepoPath: manifest.projectRepoPath,
-          initiativeId: manifest.initiativeId,
-        };
+        staleBranchOwnedByThisAttempt = { branch, projectRepoPath: manifest.projectRepoPath, initiativeId: manifest.initiativeId };
       }
       wtHandle = worktree.add({
         projectRepoPath: manifest.projectRepoPath,
@@ -430,15 +401,19 @@ export async function runOne(
     );
   } finally {
     clearInterval(heartbeat);
-    // bead forge-8vfn.8.1.8, half b: this attempt's own push landed a branch
-    // absent before it started, and the cycle still failed — delete it so the
-    // next fresh attempt isn't blocked the same way. Best-effort.
+    // bead forge-8vfn.8.1.8: delete ONLY a branch this attempt pushed, never a force-push. Best-effort.
     if (cycleFailed && staleBranchOwnedByThisAttempt) {
-      cleanupPushedBranchOnFailure({
-        ...staleBranchOwnedByThisAttempt,
-        forgeRoot,
-        onCleaned: tee ? (detail) => console.log(`[serve] ${staleBranchOwnedByThisAttempt!.initiativeId} — ${detail}`) : undefined,
-      });
+      const { branch, projectRepoPath, initiativeId } = staleBranchOwnedByThisAttempt;
+      try {
+        const probe = probeRemoteBranch(projectRepoPath, branch);
+        if (probe.remoteSha !== null && !probe.openPrExists) {
+          execFileSync('git', ['-C', projectRepoPath, 'push', 'origin', '--delete', branch], { stdio: 'pipe' });
+          emitOrchestratorEvent(forgeRoot, initiativeId, 'log', 'stale-remote-branch.cleaned-up', { branch, sha: probe.remoteSha });
+          if (tee) console.log(`[serve] ${initiativeId} — deleted remote branch ${branch} (pushed by this failed attempt, no open PR)`);
+        }
+      } catch {
+        /* best-effort — cleanup must never change the failure outcome */
+      }
     }
     // F-09 + F-28: clean up the worktree + scratch branch on terminal states
     // only. `merged` (cycle.ts already deleted the branch via gh pr merge),
@@ -511,35 +486,31 @@ export function annotateManifest(path: string, fields: Record<string, string>): 
 }
 
 /**
- * ADR-028 §8 (M3-6): emit a claim.refused event to the initiative's JSONL log.
- * Best-effort — the cycle logger is not open yet at claim time, so we write
- * directly to the log dir. Missing dir is created on the fly.
+ * ADR-028 §8 (M3-6) + bead forge-8vfn.8.1.8: append an event to the
+ * initiative's JSONL log. Best-effort — the cycle logger isn't open yet at
+ * either call site. Missing dir is created on the fly.
  */
-function emitClaimRefusedEvent(
-  initiativeId: string,
-  reason: string,
-  terminal: boolean,
-  forgeRoot: string,
+function emitOrchestratorEvent(
+  forgeRoot: string, initiativeId: string, eventType: 'error' | 'log', message: string, metadata: Record<string, unknown>,
 ): void {
   try {
     const logDir = resolve(forgeRoot, '_logs', initiativeId);
     if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
-    const logPath = join(logDir, 'events.jsonl');
     const entry = {
-      event_id: `claim-refused-${Date.now()}`,
+      event_id: `${message}-${Date.now()}`,
       cycle_id: initiativeId,
       initiative_id: initiativeId,
       started_at: new Date().toISOString(),
       phase: 'orchestrator',
       skill: 'scheduler',
-      event_type: 'error',
+      event_type: eventType,
       input_refs: [] as string[],
       output_refs: [] as string[],
-      message: 'claim.refused',
-      metadata: { reason, terminal },
+      message,
+      metadata,
     };
-    appendFileSync(logPath, JSON.stringify(entry) + '\n');
+    appendFileSync(join(logDir, 'events.jsonl'), JSON.stringify(entry) + '\n');
   } catch {
-    /* best-effort — never throw from a refusal path */
+    /* best-effort — never throw from a refusal/hygiene path */
   }
 }

@@ -2642,41 +2642,32 @@ one pre-existing, unrelated tightenable line in
 `packages/flows/scheduler-dispatch.ts` (`existsSync 4 -> 3`) that neither
 split touched; sweeping it in would mix another lane's slack into this one.
 
-### New — `stale-remote-branch-guard.ts` (bead `forge-8vfn.8.1.8`)
+### New — `stale-remote-branch-guard.ts`, consolidated onto `scheduler-run-one.ts` (bead `forge-8vfn.8.1.8`)
 
-`packages/flows/stale-remote-branch-guard.ts` is a brand-new module
-`scheduler-run-one.ts` calls before creating a worktree (the stale-remote-
-branch fail-fast refusal) and again from its `finally` block (the matching
-on-failure cleanup). It gains `execFileSync` 0 → 2 (`git ls-remote` in
-`probeRemoteBranch`, `git push origin --delete` in
-`cleanupPushedBranchOnFailure`) and `appendFileSync`/`existsSync`/`mkdirSync`
-0 → 1 each (`appendGuardEvent`, writing `_logs/<initiativeId>/events.jsonl`).
+`packages/flows/stale-remote-branch-guard.ts` is a brand-new module holding
+only the pure probe (`probeRemoteBranch`: `execFileSync` 0 → 1, `git
+ls-remote`) — no event logging, no delete. `packages/flows/scheduler-run-one.ts`
+owns both: its existing, already-baselined `emitClaimRefusedEvent` (renamed
+`emitOrchestratorEvent`, unchanged sink count — one `appendFileSync`/
+`existsSync`/`mkdirSync` call site, now parameterised over three call sites
+instead of one) logs the refusal and the cleanup; its own `execFileSync`
+count grows 1 → 2 (`git push origin --delete <branch>`, run from its
+`finally` block).
 
-**not request-derived** `[read]` — every argument reaching these five sinks
-(`projectRepoPath`, `branch` = `forge/<initiativeId>`, `forgeRoot`) is one of:
-  - `manifest.projectRepoPath` / `manifest.initiativeId`, read one call site
-    away from `worktree.add`'s and `emitClaimRefusedEvent`'s own identical,
-    already-unguarded uses of the same two fields in this same function — the
-    "Recorded design assumption" above already covers `CycleInput`'s fields:
-    trusted at construction because every path a manifest reaches disk by
-    passes ingest validation (`writeManifest`) before `runOne` ever claims it.
-    This module adds no new trust decision, only two new readers of a value
-    the rest of `scheduler-run-one.ts` already treats this way.
-  - `forgeRoot`, this module's own install root
-    (`resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')`, threaded
-    in from `scheduler-run-one.ts`) — a server constant, never client-derived,
-    identical to `emitClaimRefusedEvent`'s own `forgeRoot` argument in the
-    same file.
+**not request-derived** `[read]` — `projectRepoPath` / `branch` (=
+`forge/<initiativeId>`) trace to `manifest.projectRepoPath` /
+`manifest.initiativeId`, the same two fields `worktree.add` and
+`emitClaimRefusedEvent` already read unguarded one line away in this same
+function — covered by the "Recorded design assumption" above (`CycleInput`
+fields are trusted at construction; every manifest-write path passes ingest
+validation before `runOne` ever claims it). `forgeRoot` is this file's own
+install root, a server constant.
 
-`git push origin --delete <branch>` — the one sink here with a write side
-effect on a REMOTE, not the local filesystem — only ever runs after
-`probeRemoteBranch` re-confirms, at cleanup time, that `<branch>` both exists
-on origin and has no open PR, and only when the caller has already proven, via
-a probe taken before this attempt did anything, that the branch was ABSENT
-before it started (`scheduler-run-one.ts`'s `staleBranchOwnedByThisAttempt`
-tracking). Never a force-push; never reachable for a preserved/resumed branch
-— the caller gates this whole module out of the 'reuse' worktree-strategy
-path.
+`git push origin --delete <branch>` only ever runs after `probeRemoteBranch`
+re-confirms, at cleanup time, that `<branch>` exists on origin with no open
+PR, and only for a branch the caller already proved (via a pre-attempt probe)
+was ABSENT before this attempt started. Never a force-push; never reachable
+for a preserved/resumed branch.
 
 ### Extended in M7-C — `hook-runtime.ts`'s private verified-script copy (bead `forge-8vfn.8.3.2`, content half)
 

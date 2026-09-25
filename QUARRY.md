@@ -61,13 +61,13 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,156 | **12,578** | ratified 12,578 — M7-C door re-exports OD (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 12,965 | **12,965** | ratified 12,965 — M7-C door re-exports OD round G (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 59 | 20,520 | **20,482** | ratified 20,482 — M7-C door re-exports OD, round-G circular-import fix (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `flows` | 82 | 23,373 | **23,173** | ratified 23,173 — row 86 post-merge worktree prune, id-segment guarded (forge-8vfn.8.1.3), lane-ratified under ruling 666; see git history for prior raises. |
+| `flows` | 83 | 23,473 | **23,173** | ratified 23,173 — row 86 post-merge worktree prune, id-segment guarded (forge-8vfn.8.1.3), lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 14 | 2,113 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 38 | 11,129 | **11,129** | ratified 11,129 — M7-C door re-exports OD round G (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,837 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **457** | **125,128** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **458** | **125,228** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -437,8 +437,8 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/scheduler-dispatch.ts | flows | verbatim | 252 |
 | packages/flows/scheduler.ts | flows | verbatim | 398 |
 | packages/flows/scheduler-sweeps.ts | flows | verbatim | 177 |
-| packages/flows/scheduler-run-one.ts | flows | verbatim | 545 |
-| packages/flows/stale-remote-branch-guard.ts | flows | verbatim | 172 |
+| packages/flows/scheduler-run-one.ts | flows | verbatim | 516 |
+| packages/flows/stale-remote-branch-guard.ts | flows | verbatim | 73 |
 | packages/agents/skill-path.ts | agents | verbatim | 239 |
 | packages/agents/stream-deadline.ts | agents | verbatim | 74 |
 | packages/agents/testing.ts | agents | verbatim | 13 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `studio/materials.ts`'s exports, `DEFAULT_IDLE_DEADLINE_MS`, `registeredSdkIds`, `DispatchAgentRunOpts`/`DispatchAgentRunResult` have no production consumer outside this package, only `apps/forge`/`packages/sessions` tests reach for them.** |
