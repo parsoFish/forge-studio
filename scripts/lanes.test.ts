@@ -16,7 +16,7 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, chmodSync, mkdirSync, copyFileSync, realpathSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, chmodSync, mkdirSync, copyFileSync, realpathSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeExec as writeExecFixture, fakeBin as fakeBinFixture, laneBin as laneBinFixture } from './lanes.fixture.ts';
@@ -94,8 +94,19 @@ function lanes(args: string[], env: Record<string, string> = {}, timeoutMs = 300
   });
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
+/**
+ * Register row "lanes.test.ts:446" (traced to main, predating 09fce105 — the old shim's
+ * `json.dump(rows, open(p, "w"))` has the identical truncate-then-write shape): `lanes.sh`
+ * pipes the roster file straight into `python3 -c 'json.load(sys.stdin)'`, so a confirm poll
+ * landing mid-write reads zero bytes and python3 crashes with a JSONDecodeError that shows up
+ * in the test's own `r.stderr`. Atomic here for the same reason `register_row` in
+ * lanes.fixture.ts is: write complete content to a tmp file in the SAME directory, then
+ * `renameSync` it onto the real path — a reader never observes a partial file.
+ */
 function setRoster(rows: Array<Record<string, unknown>>) {
-  writeFileSync(rosterFile, JSON.stringify(rows));
+  const tmp = `${rosterFile}.tmp.${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(rows));
+  renameSync(tmp, rosterFile);
 }
 // writeExec/fakeBin/laneBin: thin wrappers over scripts/lanes.fixture.ts, closing over this
 // file's own `dir`/`rosterFile` so every existing call site below is unchanged.
