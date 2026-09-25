@@ -661,6 +661,13 @@ export function describeReap(report) {
     ...report.reaped.map(
       (r) => `[stories] reaped dispatched agent pid ${r.pid} (${r.signal}, by ${r.via ?? 'record'}) — ${r.dir}`,
     ),
+    // Findings row 62 — named on its OWN line, not folded into the one above:
+    // a reader scanning for why a story's spend read UNMEASURED should not
+    // have to notice a trailing clause on a reap line about something else.
+    ...report.reaped
+      .filter((r) => typeof r.terminatedBeforeFirstPricedEvent === 'number')
+      .map((r) => `[stories] ${r.dir} was signalled before its first priced event arrived ` +
+        `(${r.terminatedBeforeFirstPricedEvent} ms) — its spend reads UNMEASURED for that reason`),
     ...report.skipped.map((s) => `[stories] NOT reaped: ${s.reason}`),
     ...(report.cancelled ?? []).map((c) =>
       c.written
@@ -668,4 +675,40 @@ export function describeReap(report) {
         : `[stories] session NOT cancelled: ${c.kind ?? 'unknown'}/${c.sessionId ?? 'unknown'} — ${c.reason}`,
     ),
   ];
+}
+
+/**
+ * The reason a spend reading came back UNMEASURED, when it was because THIS
+ * teardown signalled the agent before its first priced event landed —
+ * findings row 62. `null` when nothing in the reap report was terminated that
+ * way, which is the common case and leaves `summariseRunSpend`'s own generic
+ * label standing.
+ *
+ * The FIRST such entry, deliberately: `ceilingHaltVerdict` already reports
+ * "first: …" for its own multi-turn findings (`spend.mjs`), and a run with
+ * more than one early-terminated dispatch is naming the shape of a single
+ * teardown policy, not several independent causes.
+ */
+function terminatedBeforeFirstPricedEventReason(reap) {
+  const hit = (reap?.reaped ?? []).find((r) => typeof r?.terminatedBeforeFirstPricedEvent === 'number');
+  return hit === undefined ? null : `terminated before first priced event (${hit.terminatedBeforeFirstPricedEvent} ms)`;
+}
+
+/**
+ * Override `summariseRunSpend`'s generic UNMEASURED label with the SPECIFIC
+ * reason findings row 62 names, when the reap report has one — otherwise
+ * `spend` passes through byte-for-byte, MEASURED or UNMEASURED alike.
+ *
+ * Gated on `spend.measured === false` alone, never on the reap report's
+ * presence: a measured spend is a real number and must never be overwritten
+ * by a label about a dispatch that, whatever the reap says, priced itself
+ * after all.
+ *
+ * @param {{reaped?: ReadonlyArray<object>}} reap
+ * @param {Readonly<{measured: boolean, usd: number|null, label: string}>} spend
+ */
+export function withPricedTerminationLabel(reap, spend) {
+  if (spend.measured !== false) return spend;
+  const reason = terminatedBeforeFirstPricedEventReason(reap);
+  return reason === null ? spend : Object.freeze({ ...spend, label: `UNMEASURED — ${reason}` });
 }
