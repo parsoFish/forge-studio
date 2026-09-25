@@ -500,3 +500,47 @@ export function sdkHooksForAgent(input: SdkHooksForAgentInput): SdkHooksOption |
   if (byEvent.size === 0) return undefined;
   return Object.fromEntries(byEvent) as SdkHooksOption;
 }
+
+function splitSessionEndHooks(hooks: SdkHooksOption | undefined): {
+  forSdk: SdkHooksOption | undefined;
+  sessionEnd: SdkHookCallback[];
+} {
+  if (hooks === undefined) return { forSdk: undefined, sessionEnd: [] };
+  const { SessionEnd, ...rest } = hooks;
+  const forSdk = Object.keys(rest).length > 0 ? (rest as SdkHooksOption) : undefined;
+  return { forSdk, sessionEnd: (SessionEnd ?? []).flatMap((matcher) => matcher.hooks) };
+}
+
+async function fireSessionEndHooks(callbacks: SdkHookCallback[]): Promise<void> {
+  for (const callback of callbacks) {
+    try {
+      await callback({ hook_event_name: 'SessionEnd', reason: 'other' }, undefined, { signal: new AbortController().signal });
+    } catch (e) {
+      console.error(`fireSessionEndHooks: hook callback threw — swallowed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+}
+
+/**
+ * forge-8vfn.8.1.7 — `SessionEnd`'s SDK `ExitReason`s (`clear|resume|logout|
+ * prompt_input_exit|other`) are all interactive teardown actions a headless
+ * `query()` never performs, so a SessionEnd callback left in a headless
+ * spawn's `options.hooks` would be registered and never fired. Wraps a
+ * headless spawn call: splits SessionEnd out of `bag`, runs `run(forSdk)`,
+ * then fires the SessionEnd callbacks itself EXACTLY ONCE from its own
+ * `finally` (success, error or abort alike — never rethrows, since a throw
+ * here would replace the run's real outcome). `interactive-session.ts` is a
+ * genuine long-lived SDK session and never uses this wrapper — its own
+ * SessionEnd firing is real and unaffected.
+ */
+export async function withSessionEndHooks<T>(
+  bag: SdkHooksOption | undefined,
+  run: (forSdk: SdkHooksOption | undefined) => Promise<T>,
+): Promise<T> {
+  const { forSdk, sessionEnd } = splitSessionEndHooks(bag);
+  try {
+    return await run(forSdk);
+  } finally {
+    await fireSessionEndHooks(sessionEnd);
+  }
+}

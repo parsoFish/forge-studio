@@ -708,18 +708,24 @@ async function optionsFor(def: AgentDefinition): Promise<Record<string, unknown>
 }
 
 describe('runAgent reaches the SDK options bag with the bound hooks (end-to-end plumbing)', () => {
-  it('an agent binding a REAL library hook lands it under its declared lifecycle event (kills: HEAD, where no hooks key ever reached any spawn)', async () => {
+  it('an agent binding a REAL library hook lands it under its declared lifecycle event — EXCEPT SessionEnd, which forge-8vfn.8.1.7 now dispatches itself rather than handing to the SDK (kills: HEAD, where no hooks key ever reached any spawn; also kills a SessionEnd registration handed to the SDK, which a headless query() can never fire)', async () => {
     // post-merge-brain-ingest is an OOTB package under studio/hooks/, declared
-    // `on: SessionEnd`. Deliberately NOT approved here: this pin is about the
-    // plumbing reaching the SDK, and approving a package in the real install
+    // `on: SessionEnd`; pre-pr-security-review is the OTHER OOTB package,
+    // declared `on: PreToolUse`. Deliberately NOT approved here: this pin is
+    // about the plumbing reaching (or, for SessionEnd, deliberately NOT
+    // reaching) the SDK options bag — approving a package in the real install
     // to satisfy a test would be the "guard widened to fit the fixture" shape.
-    const options = await optionsFor(fixtureAgent('w8b6-bound-fixture', ['post-merge-brain-ingest']));
+    const options = await optionsFor(fixtureAgent('w8b6-bound-fixture', ['post-merge-brain-ingest', 'pre-pr-security-review']));
     const hooks = options['hooks'] as Record<string, Array<{ hooks: unknown[] }>> | undefined;
-    assert.ok(hooks, 'runAgent must pass a hooks option for an agent that binds one');
-    assert.deepEqual(Object.keys(hooks), ['SessionEnd'], 'keyed by the hook.yaml-declared event, read off disk');
-    assert.equal(hooks['SessionEnd']!.length, 1);
-    assert.equal(hooks['SessionEnd']![0]!.hooks.length, 1);
-    assert.equal(typeof hooks['SessionEnd']![0]!.hooks[0], 'function');
+    assert.ok(hooks, 'runAgent must pass a hooks option for an agent that binds a non-SessionEnd hook');
+    assert.deepEqual(
+      Object.keys(hooks),
+      ['PreToolUse'],
+      'SessionEnd must NEVER reach the SDK options bag for a headless one-shot spawn (forge-8vfn.8.1.7): the SDK ExitReasons are all interactive teardown actions a query() call never performs, so a SessionEnd registration here would be permanently dead; PreToolUse (tool-scoped) still lands under its own declared event exactly as before',
+    );
+    assert.equal(hooks['PreToolUse']!.length, 1);
+    assert.equal(hooks['PreToolUse']![0]!.hooks.length, 1);
+    assert.equal(typeof hooks['PreToolUse']![0]!.hooks[0], 'function');
   });
 
   it('an agent binding nothing produces NO hooks key at all — the shape every shipped agent spawns with (kills: an always-on key, which would diff every golden spawn-capture fixture)', async () => {

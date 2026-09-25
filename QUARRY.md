@@ -59,7 +59,7 @@ operator-ratified new cap — never a silent raise.
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `projects` | 46 | 10,951 | **9,061** | ratified 9,061 — M7-A reset-resolvable (+94, growth): Rebuild adds a template npm command only when package.json has the script; lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,156 | **12,578** | ratified 12,578 — M7-C door re-exports OD (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `agents` | 46 | 12,965 | **12,965** | ratified 12,965 — M7-C door re-exports OD round G (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
+| `agents` | 46 | 13,013 | **13,013** | ratified 13,013 — row 91 session-end hooks fire once for headless runs (forge-8vfn.8.1.7), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 59 | 20,520 | **20,482** | ratified 20,482 — M7-C door re-exports OD, round-G circular-import fix (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 82 | 23,370 | **23,173** | ratified 23,173 — row 86 post-merge worktree prune, id-segment guarded (forge-8vfn.8.1.3), lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 14 | 2,113 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
@@ -67,7 +67,7 @@ operator-ratified new cap — never a silent raise.
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,837 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **458** | **125,192** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **458** | **125,240** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -425,7 +425,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/testing.ts | stations | verbatim | 23 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `settleWiOutcome`/`assertOutcomesSettled`/`WiOutcome` (phases/developer-loop.ts), `runProjectManager`/`PmQueryFn` (phases/project-manager.ts), `NodeExecutor`/`integrateDeliveryFailure` (phases/executor-table.ts) and `deriveDemoModel` (phases/derive-demo-model.ts) have no production consumer outside this package, only `apps/forge`/`packages/flows` tests reach for them.** |
 | packages/flows/requeue-resume.ts | flows | verbatim | 193 |
 | packages/flows/review-comments.ts | flows | verbatim | 224 |
-| packages/agents/run-agent.ts | agents | verbatim | 796 |
+| packages/agents/run-agent.ts | agents | verbatim | 800 |
 | packages/agents/spawn-marker.ts | agents | verbatim | 276 |
 | packages/flows/run-model-derive.ts | flows | verbatim | 43 |
 | packages/flows/run-model-derive-status.ts | flows | verbatim | 460 |
@@ -464,7 +464,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/studio/validate-agent.ts | agents | rewritten | 297 |
 | packages/agents/studio/agent-usage.ts | agents | verbatim | 122 |
 | packages/agents/studio/derive.ts | agents | verbatim | 301 |
-| packages/agents/studio/hook-dispatch.ts | agents | verbatim | 502 |
+| packages/agents/studio/hook-dispatch.ts | agents | verbatim | 546 |
 | packages/library/studio/hook-library.ts | library | verbatim | 536 |
 | packages/library/studio/hook-package.ts | library | verbatim | 502 |
 | packages/library/studio/hook-runtime.ts | library | verbatim | 619 |
