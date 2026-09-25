@@ -4,28 +4,29 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, lstatSync, realpathSync, symlinkSync, linkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { FINALIZERS, resolveFinalizer, copyStagingToLibrary } from '../../interactive-finalizers.ts';
+import { FINALIZERS, resolveFinalizer, copyStagingToLibrary, promoteToQueue, commitToCentralBrain } from '../../interactive-finalizers.ts';
 
 // ---------------------------------------------------------------------------
 // Registry structure — FINALIZERS + resolveFinalizer.
 // ---------------------------------------------------------------------------
 
-test('FINALIZERS is seeded with EXACTLY the one real turnSpec finalizer: copyStagingToLibrary', () => {
+test('FINALIZERS is seeded with the real turnSpec-dispatchable finalizers: copyStagingToLibrary, writeToRepoRoot, promoteToQueue, commitToCentralBrain (bead 8vfn.6.6 items 2+4) — and no more', () => {
   // ADR-043 §5 seeds the registry incrementally. R4-22 WI-2 pinned "exactly
-  // one" as a ratchet against a PRE-population of the other ADR-043-named
-  // finalizers (promoteToQueue, writeToRepoRoot, commitToCentralBrain,
-  // demo's snapshot-restore lock) before their own WIs build them.
-  // `commitRegistryDraft` (W6-CR-3) briefly widened this ratchet as the
-  // `community-refresh` kind's `committing` finalizer; that kind — and this
-  // finalizer with it — was retired in W8-B5b, so the ratchet narrows back
-  // to its original single row.
+  // one" as a ratchet against a PRE-population of the remaining ADR-043-named
+  // finalizers before their own WIs build them; 8vfn.6.6 built writeToRepoRoot
+  // (a real, generalized form of instructions' own runFinalizeStep), then
+  // promoteToQueue/commitToCentralBrain (item 2 — architect's/project-brain's
+  // own real finalize steps, called through injected ports / a direct
+  // rank-2 import respectively, never re-implemented). Demo's
+  // snapshot-restore lock stays out — it has no descriptor row (panel or
+  // turnSpec) naming it and never migrates onto turnSpec (ADR-043 2026-08-14
+  // amendment §1) — the ratchet still kills THAT one specifically.
   const ids = FINALIZERS.map((row) => row.id).sort();
   assert.deepEqual(
     ids,
-    ['copyStagingToLibrary'],
-    `Got ${JSON.stringify(ids)}. This ratchet kills a pre-population of the remaining ADR-043-named ` +
-      `finalizers (promoteToQueue, writeToRepoRoot, commitToCentralBrain, demo's snapshot-restore lock) before ` +
-      `their own WIs build them.`,
+    ['commitToCentralBrain', 'copyStagingToLibrary', 'promoteToQueue', 'writeToRepoRoot'],
+    `Got ${JSON.stringify(ids)}. This ratchet kills a pre-population of demo's snapshot-restore lock, the one ` +
+      `ADR-043 §5 finalizer that never migrates onto turnSpec.`,
   );
 });
 
@@ -78,11 +79,18 @@ test('resolveFinalizer("copyStagingToLibrary") resolves to the SAME function ref
 
 test('resolveFinalizer is TOTAL: an unknown id returns undefined, never throws', () => {
   assert.equal(resolveFinalizer('does-not-exist'), undefined);
+  // bead 8vfn.6.6 item 2 — promoteToQueue/commitToCentralBrain are now REAL,
+  // registered finalizers (see the FINALIZERS-membership test above); this
+  // probe moved to demo's snapshot-restore lock, the one ADR-043 §5 name
+  // that still resolves to undefined and always will (never migrates onto
+  // turnSpec).
+  assert.equal(resolveFinalizer('promoteToQueue'), promoteToQueue);
+  assert.equal(resolveFinalizer('commitToCentralBrain'), commitToCentralBrain);
   assert.equal(
-    resolveFinalizer('promoteToQueue'),
+    resolveFinalizer('recordLockedDemo'),
     undefined,
-    'ADR-043 names 4 more finalizers for LATER WIs — none of them exist yet; resolving one today must be undefined, ' +
-      'never a silent no-op stub',
+    'demo\'s snapshot-restore lock is a real ADR-043 §5 name that never gains a turnSpec row — resolving it today ' +
+      'must be undefined, never a silent no-op stub',
   );
 });
 
