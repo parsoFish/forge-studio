@@ -31,7 +31,7 @@ import { readdirSync, mkdirSync, writeFileSync, renameSync, rmSync } from 'node:
 import { join, dirname, relative } from 'node:path';
 import { chromium } from 'playwright-core';
 import { spendGateVerdict, summariseRunSpend, effectiveCeiling } from './spend.mjs';
-import { costlessSpendUsd, applyCostlessGuard } from './costless-beat.mjs';
+import { costlessGuardFor } from './costless-beat.mjs';
 import { readRunEvents, hostState, collectSpendDirs, spendSoFar, finalSpendHalt } from './run-observe.mjs';
 import {
   applyFence,
@@ -73,7 +73,7 @@ import { captureAndClearMintedSessions, describeGroundClear, captureAndClearMint
 import { driveBeat } from './beats-drive.mjs';
 import { resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
-import { writeStoryJson, regenerateGallery, storyRowFrom } from './gallery.mjs';
+import { writeStoryJson, regenerateGallery, storyRowFrom, artifactSpend } from './gallery.mjs';
 import { collectAgentRuns, reapAgentRuns, describeReap, withPricedTerminationLabel } from './reap.mjs';
 import { reappeared } from './quiesce.mjs';
 import { reapCensusAndSweep } from './sweep-teardown.mjs';
@@ -216,25 +216,12 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       if (ownGroundBefore !== null && licensedBeatNumbers.has(i + 1)) {
         groundBeatBoundaries.set(i + 1, ownGroundManifest(ROOT, story.ground.project));
       }
-      // Bead `forge-8vfn.6.11.22` — an agent-scale wait samples the agent's own
-      // process as it polls, so an unsatisfied one says what that process was
-      // doing instead of leaving it to be reconstructed afterwards by hand.
-      // Built per beat from the route it is about; null for every other beat.
-      //
-      // Findings row 61 (`costless-beat.mjs`) — `costless: true` asserts a
-      // beat dispatches nothing, so neither watcher has anything to watch;
-      // the before/after readings and the enforcing comparison live in that
-      // module, since only the probe/door skip below needs `page`/`bindings`.
-      const costlessBeat = beat.costless === true;
-      const probe = costlessBeat ? null : makeAgentProcProbe(ROOT, resolveBeatRoute(beat, bindings).route);
-      const realSpawn = story.ground?.realSpawn === true;
-      const spendBeforeCostless = costlessBeat ? costlessSpendUsd(ROOT, startedMs, realSpawn) : null;
-      let verdict = await driveBeat(
-        page, beat, i, uiUrl, bindings, undefined, probe, costlessBeat ? null : stallDoor, pressedAt, cycleWatchFor
-      );
-      if (costlessBeat) {
-        verdict = applyCostlessGuard(verdict, spendBeforeCostless, costlessSpendUsd(ROOT, startedMs, realSpawn));
-      }
+      // Bead `forge-8vfn.6.11.22` / row 61 (`costlessGuardFor`, `costless-beat.mjs`) —
+      // the agent-scale probe, and `costless: true`'s whole enforcement, built per beat.
+      const costlessGuard = costlessGuardFor(beat, ROOT, startedMs, story.ground?.realSpawn === true);
+      const probe = costlessGuard.active ? null : makeAgentProcProbe(ROOT, resolveBeatRoute(beat, bindings).route);
+      let verdict = await driveBeat(page, beat, i, uiUrl, bindings, undefined, probe, costlessGuard.active ? null : stallDoor, pressedAt, cycleWatchFor);
+      verdict = costlessGuard.apply(verdict);
       bindings = { ...bindings, ...verdict.bindings };
       const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}.png`;
       await page.screenshot({ path: join(outDir, frame), fullPage: true });
@@ -347,8 +334,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // before writing a terminal event is reported as UNMEASURED with the reason.
   // Never `$0.00`: a zero meaning "nothing was spent" and a zero meaning
   // "nobody looked" printing the same is what four H6 runs cost to learn.
-  // Findings row 62 — names THIS teardown's own SIGTERM, not the generic label.
-  const spend = withPricedTerminationLabel(reap, summariseRunSpend({
+  const spend = withPricedTerminationLabel(reap, summariseRunSpend({ // row 62: names THIS teardown's own SIGTERM
     realSpawn: story.ground?.realSpawn === true,
     // `dispatchedRuns` above is the REAP set and stays that way; the spend set
     // is a different question with a different answer (`forge-rzrs`).
@@ -630,20 +616,8 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     );
   }
 
-  // Findings row 56 (second half) — `spend` (computed above, already printed)
-  // never reached the artifact `writeStoryJson` serialises, so `story.json`'s
-  // `spend` field always read absent to a reader downstream (PR #890's
-  // `spendFieldFor`, not in this tree). Narrowed to exactly
-  // `{measured, usd, label}` — never the whole `spend` object, whose `priced`
-  // and `notes` are console diagnostics, not the artifact's stable contract.
-  //
-  // `realGrounds` rides into the artifact only for a fixture run, so a
-  // non-fixture story's `story.json` is unchanged by this feature.
-  const result = {
-    story, beats, reap, sweep, fence,
-    spend: { measured: spend.measured, usd: spend.usd, label: spend.label },
-    ...(realGrounds !== null ? { realGrounds } : {}),
-  };
+  // Row 56 (`artifactSpend`, gallery.mjs) narrows `spend` to what #890's `spendFieldFor` reads; `realGrounds` is fixture-only.
+  const result = { story, beats, reap, sweep, fence, spend: artifactSpend(spend), ...(realGrounds !== null ? { realGrounds } : {}) };
   const wroteThisRun = [writeStoryJson(result, ROOT)];
 
   // Ruling 308's second half — the ground's Brain 3 was HELD through the fence

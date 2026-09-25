@@ -61,3 +61,31 @@ export function applyCostlessGuard(verdict, beforeUsd, afterUsd) {
     failures: Object.freeze([...verdict.failures, v.reason]),
   });
 }
+
+/**
+ * The whole per-beat decision, as ONE call — the runner needs three things at
+ * three different points in its loop (whether to skip the two real-spawn
+ * watchers, immediately; the BEFORE reading, before `driveBeat` runs; and the
+ * enforcement itself, after it returns), and collapsing those into a single
+ * function call rather than three loose statements is what keeps the loop's
+ * own share of this feature to the one line that cannot move — the probe/
+ * stall-door skip, built from `page`/`bindings`, which only the loop holds.
+ *
+ * `apply` closes over `before` rather than the caller re-threading it, so the
+ * loop cannot pass the wrong reading to the wrong beat's enforcement — the
+ * shape `pressedAt`'s own header warns a hand-threaded value invites.
+ *
+ * @param {Readonly<object>} beat
+ * @param {string} root
+ * @param {number} startedMs
+ * @param {boolean} realSpawn
+ * @returns {{active: boolean, apply: (verdict: Readonly<object>) => Readonly<object>}}
+ */
+export function costlessGuardFor(beat, root, startedMs, realSpawn) {
+  const active = beat.costless === true;
+  const before = active ? costlessSpendUsd(root, startedMs, realSpawn) : null;
+  return {
+    active,
+    apply: (verdict) => (active ? applyCostlessGuard(verdict, before, costlessSpendUsd(root, startedMs, realSpawn)) : verdict),
+  };
+}
