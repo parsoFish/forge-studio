@@ -75,6 +75,7 @@ function plainFlowYaml(id: string, extra: string[] = []): string {
     'kb: null',
     'costCeilingUsd: 2',
     'origin: studio',
+    'accepts: [code]',
     'nodes:',
     '  - id: work',
     '    agent: worker',

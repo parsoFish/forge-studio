@@ -36,6 +36,7 @@ const FLOW_YAML = [
   'kb: null',
   'costCeilingUsd: 2',
   'origin: studio',
+  'accepts: [code]',
   'nodes:',
   '  - id: architect',
   '    agent: test-agent',

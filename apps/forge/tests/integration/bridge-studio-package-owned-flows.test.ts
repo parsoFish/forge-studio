@@ -49,6 +49,7 @@ function makeFlowYaml(id: string): string {
     'kb: null',
     'costCeilingUsd: 2',
     'origin: studio',
+    'accepts: [code]',
     'nodes:',
     '  - id: n',
     '    gate: human',
