@@ -42,7 +42,6 @@ import {
   siblingWorktreeEscapes,
   unownedEscapes,
   removePaths,
-  sweepProductFixtures,
   sweepStoryRemotesFromManifest,
   describeRemoteSweep,
 } from './sweep.mjs';
@@ -67,7 +66,8 @@ import { resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
 import { writeStoryJson, regenerateGallery, storyRowFrom } from './gallery.mjs';
 import { collectAgentRuns, reapAgentRuns, describeReap } from './reap.mjs';
-import { quiesceWriters, describeQuiesce, reappeared } from './quiesce.mjs';
+import { reappeared } from './quiesce.mjs';
+import { reapCensusAndSweep } from './sweep-teardown.mjs';
 import { recordReapedCancellations, reapReasonFor } from './reap-cancel.mjs';
 // Needed by ROOT below, not by the moved body — the one import here that a
 // scan of the body alone would have missed.
@@ -365,17 +365,38 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // the bridge this run booted — still shutting down — put `kb.yaml` back at
   // .935Z, 33 ms before the verdict printed. The fence's line was true when
   // written and false at process exit, and that line is what a lane pastes
-  // into a ledger. The reap above has just signalled every agent this story
-  // dispatched; a `kill` returning is not the process ending, so this waits
-  // for them to be GONE (whole-parentage, §15.206) and then for the tree
-  // itself to read the same twice. The bridge deliberately is NOT waited on:
-  // `run.mjs` boots one and drives every story through it, so it must outlive
-  // this sweep — which is exactly why the re-read after the fence exists.
-  const quiesce = await quiesceWriters({ root: ROOT, pids: reap.reaped.map((r) => r.pid) });
-  for (const line of describeQuiesce(quiesce)) console.log(line);
-
-  const sweep = sweepProductFixtures(story.id, ROOT, { sinceMs: startedMs, groundProject: story.ground?.project, evidenceDir: join(outDir, 'queue-claim') });
-  for (const l of sweep.lines) console.log(l); // 7.6.74: the removals AND the cycle's own queue writes, which no story-id glob reaches
+  // into a ledger.
+  //
+  // Finding row 75 (T1 rulings 1258, 1332) — `quiesceWriters` only ever
+  // PRINTED whether the tree settled, and the trailing sweep below ran
+  // regardless of what it found: measured as a heartbeat written back 13s
+  // after this runner printed CLEARED, a loop still committing into the
+  // ground 2.7 minutes later. `reapCensusAndSweep` closes the gap: it still
+  // runs `quiesceWriters` (unchanged), then takes a FRESH, post-reap census of
+  // every reaped pid's descendants — `reapAgentRuns`'s own snapshot is stale
+  // the instant it returns — with the same TERM-then-bounded-wait-then-KILL
+  // escalation the scheduler half uses, and only a census-empty result reaches
+  // `_queue/*/<id>.md.heartbeat`, `_worktrees/<id>` and this run's ground
+  // `_logs/<ts>_<id>` (`sweepProductFixtures` / `captureAndClearMintedRun-
+  // Artefacts`). A re-read afterwards catches a writer the census cannot see
+  // — one outside this run's own dispatch tree entirely. See its header in
+  // `sweep-teardown.mjs` and the doors in `sweep-teardown.test.ts`.
+  const trailing = await reapCensusAndSweep({
+    root: ROOT, storyId: story.id, sinceMs: startedMs,
+    groundProject: story.ground?.project, evidenceDir: join(outDir, 'queue-claim'),
+    reapedPids: reap.reaped.map((r) => r.pid),
+  });
+  for (const line of trailing.lines) console.log(line); // 7.6.74: the removals AND the cycle's own queue writes, which no story-id glob reaches
+  for (const line of trailing.warnLines) console.warn(line);
+  // A REFUSED or PARTIALLY-HELD sweep still leaves every downstream read below
+  // something to read — never `undefined.length` on the branch that has
+  // nothing to report (`ownGroundDrift`'s own reasoning, echoed here).
+  const sweep = trailing.sweep ?? {
+    removed: [], failed: [],
+    claim: { ok: true, claimed: [], left: [], unattributable: [], failed: [], lines: [] },
+    artefacts: { dest: null, captured: [], cleared: [], refused: [], unremoved: [] },
+    lines: [],
+  };
   // Bead `forge-8vfn.6.11.29` — the OTHER half of the trailing sweep: the
   // GitHub remotes this run minted. Unreached until now, so every run that
   // minted one leaked it.
@@ -383,7 +404,6 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   const remoteReport = describeRemoteSweep(remotes);
   for (const line of remoteReport.lines) console.log(line);
   for (const line of remoteReport.warnLines) console.warn(line);
-  for (const f of sweep.failed) console.warn(`[stories] trailing sweep could not remove ${f.path}: ${f.error}`);
 
   // And the fence, over everything the product wrote that carries no story id.
   const fence = applyFence(
@@ -654,6 +674,41 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       `minted are STILL in projects/${story.ground?.project} after being captured and removed ` +
       `(${ownGroundDrift.clear.unremoved.join(', ')}). The next run will refuse on the ground hash. ` +
       'The run is RED regardless of its beats.',
+    );
+    return 1;
+  }
+  // Finding row 75 (T1 rulings 1258, 1332) — a census that never settled means
+  // the trailing sweep above was REFUSED, not merely skipped: something this
+  // run dispatched was still alive and this run cannot say it is not still
+  // writing into `_queue/`, `_worktrees/` or this run's own ground. Silence
+  // here is exactly the failure this census exists to close, so it is fatal
+  // rather than a note.
+  if (!trailing.census.empty) {
+    console.error(
+      `[stories] ${story.id}: CONTAINMENT FAILURE — the trailing sweep was refused: ${trailing.census.reason} ` +
+      '(named above). The run is RED regardless of its beats.',
+    );
+    return 1;
+  }
+  // The re-read half of the same finding: a writer OUTSIDE the census — no
+  // ancestry through anything this run dispatched — recreated a path the
+  // sweep reported CLEARED. Never a silent CLEARED for a path that came back.
+  if (trailing.reappearedArtefacts.length > 0) {
+    console.error(
+      `[stories] ${story.id}: CONTAINMENT FAILURE — ${trailing.reappearedArtefacts.length} artefact(s) this ` +
+      `run's trailing sweep cleared reappeared after being re-read (${trailing.reappearedArtefacts.join(', ')}, ` +
+      'named above). The run is RED regardless of its beats.',
+    );
+    return 1;
+  }
+  // T1 ruling 1332 — `fence.reappeared` NAMED a removal that did not stick and
+  // stopped there; "never a silent CLEARED" is a sentence printed, not
+  // enforced, until it also ends the run.
+  if (fence.reappeared.length > 0) {
+    console.error(
+      `[stories] ${story.id}: CONTAINMENT FAILURE — ${fence.reappeared.length} path(s) this run removed ` +
+      `reappeared when re-read (${fence.reappeared.join(', ')}, named above). The run is RED regardless of ` +
+      'its beats.',
     );
     return 1;
   }
