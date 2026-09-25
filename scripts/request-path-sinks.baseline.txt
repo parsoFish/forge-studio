@@ -306,7 +306,10 @@ packages/knowledge/brain-lint-checks-integrity.ts existsSync 6
 packages/knowledge/brain-lint-checks-integrity.ts readdirSync 4
 packages/knowledge/brain-lint-checks-integrity.ts readFileSync 2
 packages/knowledge/brain-lint-checks-integrity.ts statSync 1
-packages/knowledge/brain-lint-theme-paths.ts existsSync 5
+packages/knowledge/brain-lint-checks-truth.ts existsSync 2
+packages/knowledge/brain-lint-checks-truth.ts readdirSync 1
+packages/knowledge/brain-lint-checks-truth.ts spawnSync 2
+packages/knowledge/brain-lint-theme-paths.ts existsSync 6
 packages/knowledge/brain-lint-theme-paths.ts readdirSync 3
 packages/knowledge/brain-lint.ts existsSync 2
 packages/knowledge/brain-lint.ts readFileSync 1
