@@ -285,13 +285,26 @@ export async function runOne(
       worktreePresent,
       handoffWorkItemsPresent,
     });
+    // bead forge-8vfn.8.1.8: probe origin for EVERY attempt, 'reuse' included —
+    // a hand-off/resume can still be the FIRST attempt to push this branch (row
+    // 93(b): the architect never pushed it), so ownership for cleanup below must
+    // not depend on strategy. Record ownership only when the branch was ABSENT
+    // before this attempt; never on one merely found (it may legitimately be
+    // the hand-off's/a resume's own prior push).
+    const probe = probeRemoteBranch(manifest.projectRepoPath, branch);
+    if (probe.remoteSha === null) {
+      staleBranchOwnedByThisAttempt = {
+        branch,
+        projectRepoPath: manifest.projectRepoPath,
+        initiativeId: manifest.initiativeId,
+      };
+    }
     if (strategy === 'reuse') {
       const why = manifest.resumeFrom ? `resume-from-${manifest.resumeFrom}` : 'architect→develop hand-off';
       if (tee) console.log(`[serve] ${why}: reusing preserved worktree ${expectedWtPath}`);
       wtHandle = { path: expectedWtPath, branch, projectRepoPath: manifest.projectRepoPath };
     } else {
       // bead forge-8vfn.8.1.8: fail fast, before any spend — fresh ('add') only; 'reuse' owns its own branch.
-      const probe = probeRemoteBranch(manifest.projectRepoPath, branch);
       if (shouldRefuseFreshAttempt(probe)) {
         const sha = probe.remoteSha as string;
         const reason = `refs/heads/${branch} (${sha.slice(0, 8)}) already exists on origin from a prior, abandoned attempt and no PR is open for it. Delete or rename the remote branch, then re-dispatch — never auto-retried, never force-pushed.`;
@@ -306,13 +319,6 @@ export async function runOne(
           cfg.notify,
         );
         return; // runOne done — no worktree, no cycle, zero agent spend
-      }
-      if (probe.remoteSha === null) {
-        staleBranchOwnedByThisAttempt = {
-          branch,
-          projectRepoPath: manifest.projectRepoPath,
-          initiativeId: manifest.initiativeId,
-        };
       }
       wtHandle = worktree.add({
         projectRepoPath: manifest.projectRepoPath,
