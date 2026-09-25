@@ -494,84 +494,40 @@ export default {
       say: 'A template is one markdown definition file — the shape an artifact comes out in. It is the least dramatic thing in the library and the one that decides whether two runs produce comparable output.',
     },
     {
-      // AMEND-1, NAVIGATION (ruling 504). Route and readiness only: no `do`,
-      // no fill, no press, no product claim. The runner reaches a beat's route
-      // by clicking a link on the CURRENT page whose pathname matches it, so a
-      // beat declaring a route the operator can actually walk to IS the act —
-      // this is the runner's own model, not an invention.
+      // AMEND (T1 1275/1276, forge-8vfn.7.6.12). Beats 15–17 used to walk
+      // three hops — the Agents pillar, its Sessions entry, the Sessions
+      // index's kickoff row — because nothing in the Library linked to a
+      // session launcher (the IA finding amend-1 recorded). The Library now
+      // carries a Sessions shelf (`[data-section="sessions"]`) linking each
+      // kind's launcher straight from the parts bin, so the three hops
+      // collapse to the ONE the product now offers.
       //
-      // WHY THREE HOPS, AND WHY THAT IS A FINDING. `/sessions/instructions/new`
-      // is linked from exactly ONE place in the whole product —
-      // `SessionsIndex`'s kickoff row (`KICKOFF_ENTRIES`,
-      // `apps/studio/lib/session-kind-meta.ts`) — and `/sessions` is NOT one of
-      // `StudioNav`'s seven pillars (Home / Monitor / Projects / Flows /
-      // Agents / Library / Knowledge). So from a template page the shortest
-      // real path an operator can walk is: a pillar to Agents, its
-      // `sessions-secondary` entry to Sessions, then the kickoff link. Three
-      // hops to reach the launcher for a component kind the library itself
-      // offers. Recorded as an IA finding in
-      // `_1.0/gate-manifests/M1-C-S7.amend-1.md`, not filed as a story defect.
-      //
-      // Agents rather than Home: `AgentsIndexView` calls its link "this kind's
-      // secondary-nav entry point" in its own comment, and beat 14 goes to an
-      // agent anyway, so this is the operator's own direction of travel.
-      act: 'Head for the Agents pillar',
+      // Why this is TWO beats and not one: the previous beat leaves the
+      // operator on `/templates/story-s7-template`, and a beat acts on the page
+      // the operator is standing on (ruling 504; the runner never falls back
+      // to `page.goto`). The template page has no Sessions shelf, so the
+      // launcher press needs the Library underfoot first. This beat is that
+      // pure navigation, through the Library pillar.
+      act: 'Back to the Library',
       expect: {
-        route: '/agents',
-        data: { page: 'agents-index', 'page-ready': 'true' },
+        route: '/library',
+        data: { page: 'library', 'page-ready': 'true', section: 'sessions' },
       },
-      say: 'Instructions are the fourth kind of part, and the only door to them is through Sessions — which is not a pillar. Getting there is three clicks from the parts bin.',
+      say: 'Instructions are the fourth kind of part, and their door now sits in the parts bin with the other three.',
     },
     {
-      // AMEND-1, NAVIGATION (504). Same shape.
-      act: 'Follow the Sessions entry',
-      expect: {
-        route: '/sessions',
-        data: { page: 'sessions-index', 'page-ready': 'true' },
-      },
-      say: 'Every session forge has ever run is here, and so is the only list of the kinds it can start.',
-    },
-    {
-      // AMEND-3 (T1 ruling 638) — THE HOP AMEND-1 STOPPED ONE SHORT OF.
-      //
-      // Amend-1 added the two navigation beats above to make the instructions
-      // launcher REACHABLE, and they land the operator on `/sessions` — the
-      // page that LINKS to the launcher. They never land on the launcher
-      // itself, and the next beat's first act is a `fill` for a field that
-      // only exists there.
-      //
-      // MEASURED in run 1, and the timestamps are the whole finding:
-      //
-      //   04:15:06.202  ✓ 15. Follow the Sessions entry
-      //   04:15:06.207  while waiting on [data-field="kickoff-project"]: no element carries that handle yet
-      //   04:15:21.252  ✗ 16. … Timeout 14999ms exceeded
-      //
-      // The wait armed FIVE MILLISECONDS after the previous beat went green and
-      // spent the full DOM bound. **Nothing navigated in between.** It was not
-      // racing a transition — it was waiting on a page that never had the
-      // field and never would.
-      //
-      // WHY A PURE NAVIGATION BEAT IS THE FIX, and not a longer wait or a
-      // harness change: `driveBeat` runs `performSteps`
-      // (`beats-drive.mjs:182`) BEFORE route resolution (`:245`) and before the
-      // navigation section (`:374`). That is ruling 504 working exactly as
-      // written — a beat's `do` acts on the page the operator is STANDING on.
-      // A beat with no `do` skips the step phase entirely and reaches the
-      // navigation section, which is why this shape works where a `fill` does
-      // not. Same instrument as beats 3b and 13b.
-      //
-      // The assertions are measured, not assumed: a walk of this route (no
-      // agent, no spend) read `data-page="session-kickoff"` with
-      // `data-page-ready="true"` 250 ms after the click, and `/sessions`
-      // carries exactly ONE link to `/sessions/instructions/new` — the
-      // Sessions index's kickoff row, which is the IA finding amend-1 already
-      // recorded.
-      act: 'Open the instructions launcher',
+      // AMEND (T1 1275/1276). The press is the Library Sessions shelf's own
+      // `data-action="kickoff-instructions"` — the same handle the Sessions
+      // index's kickoff row uses, one vocabulary for "start this kind of
+      // session" whatever the entry point. Expectations unchanged from the
+      // retired third hop: the launcher, ready.
+      act: 'Open the instructions launcher straight from the Library',
+      do: [{ press: 'kickoff-instructions' }],
       expect: {
         route: '/sessions/instructions/new',
         data: { page: 'session-kickoff', 'page-ready': 'true' },
       },
-      say: 'Three hops from the parts bin to the door for the fourth kind of part, and this is the third: the launcher itself. The story walks it rather than teleporting, because an operator cannot teleport.',
+      say: 'One click from the parts bin to the launcher. The story walks it rather than teleporting, because an operator cannot teleport.',
     },
     {
       // AMEND-1, beat 13a of a split — the same class as beat 3 (rulings
@@ -658,7 +614,7 @@ export default {
       // index is reachable from here where the detail was not, and the beat
       // below is the hop that makes the next one's first act possible.
       //
-      // Same assertions as beat 15's arrival at this route, deliberately:
+      // Same assertions as the retired Agents-pillar hop's arrival here, deliberately:
       // route plus `page` and `page-ready`, and nothing else. No judgement
       // content, which is what 504's class allows to be authored without going
       // back to the operator.
@@ -667,15 +623,15 @@ export default {
         route: '/agents',
         data: { page: 'agents-index', 'page-ready': 'true' },
       },
-      say: 'The parts are all made now — a skill, a hook, a template, a house style. None of them does anything yet. Binding happens on a worker\u2019s own page, and the only way back to a worker is the pillar the operator started from.',
+      say: 'The parts are all made now — a skill, a hook, a template, a house style. None of them does anything yet. Binding happens on a worker\u2019s own page, and the way back to a worker is the Agents pillar.',
     },
     {
       // THE HOP BEAT, added after S7 run 4 (T1 ruling 799(1)).
       //
-      // Run 4 red beats 22 and 23 identically — *"standing on the wrong page:
+      // Run 4 red beats 22 and 23 (run-4 numbering; 20 and 21 since the T1-1275 amend) identically — *"standing on the wrong page:
       // `/agents` is not `/agents/brain-ingest`"*. The beat below declared that
       // route as where it ENDS and was read as where it STOOD, but **a `do`
-      // acts where the browser stands**, and beat 20 leaves it on `/agents`
+      // acts where the browser stands**, and beat 19 leaves it on `/agents`
       // (`:667`). A route in an `expect` is a post-condition, never a hop.
       //
       // A NAVIGATE, NOT A PRESS, measured: `handleFor`
@@ -744,7 +700,7 @@ export default {
       // `setState` + `markDirty()` — nothing more. So the zone reads `count=1`
       // from LOCAL STATE the instant the chip is clicked, while the agent still
       // RUNS from what was last saved. Without `save-agent` (`:779`, outside the
-      // `<details>`), beat 22 would dispatch an agent that never received the
+      // `<details>`), beat 21 would dispatch an agent that never received the
       // hook, and this beat would assert a binding that exists only in the
       // browser.
       //
@@ -761,10 +717,10 @@ export default {
       say: 'A hook is inert until an agent carries it. Binding is the act that makes a library part part of a worker, and it is the reason the hook’s own page counts how many agents carry it.',
     },
     {
-      // NOT expressible — and UNLIKE beat 21's identical phrase, this one is
+      // NOT expressible — and UNLIKE beat 20's identical phrase, this one is
       // still TRUE as of 2026-09-12, re-checked rather than inherited (§15.418:
       // such a claim carries an expiry date nobody sets, so it cites what it
-      // checked). Beat 21's version had been false since `4de6e5e4`.
+      // checked). Beat 20's version had been false since `4de6e5e4`.
       //
       // NOTHING in `forge-ui` names a hook EXECUTION — the whole declared hook
       // vocabulary is `data-hook-count`, `-event`, `-id`, `-runnable`,
