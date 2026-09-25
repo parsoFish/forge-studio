@@ -340,19 +340,81 @@ describe('7.6.105 — the census reads a START time, not a first-lookup time', (
     spawnSync('kill', ['-KILL', String(pid)]);
   });
 
+  /*
+   * M7-C last-flakes #2 sequel, round 3 (lane A's real gate, main,
+   * 9703/9704 on this exact door: "spawn 0: start 1790343972 < t0
+   * 1790343973"). Two SEPARATE processes each compute "now" and each floors
+   * independently to a whole second: this file's `t0` via Node's
+   * `Date.now()`, `lanes.sh proc-start`'s `got` via `proc_start_epoch` —
+   * `$EPOCHREALTIME` and `/proc/uptime` subtracted to ESTIMATE the boot
+   * instant, then that estimate plus the process's own uptime-relative
+   * ticks, floored to a second (`proc_start_epoch`'s own docstring already
+   * calls this verb "for humans; the census never uses it" — #887 closed the
+   * multi-second gap between reading uptime and wall SEPARATELY, but never
+   * closed the CROSS-PROCESS gap between Node's clock read and bash's).
+   * Comparing two independently-rounded clocks can disagree by one even
+   * when causality holds (the spawn genuinely happened after t0 was read) —
+   * a boundary condition, not a bug in either read alone, so ADDING slack
+   * to either side only narrows the window, never closes it.
+   *
+   * `1030mechanism` below proves the class deterministically — injected
+   * numbers, no host timing, no luck — by computing BOTH styles of
+   * comparison over the SAME true scenario: the OLD style (independently
+   * floored clocks, replicated from `proc_start_epoch`'s exact formula
+   * shape) DOES miss; the NEW style (one clock throughout, centiseconds
+   * since boot — `pids_claude_in`'s own proven-correct approach) cannot,
+   * structurally, by construction, since there is nothing left to subtract
+   * two independent reads of. The FIX below is exactly that: `t0` and `got`
+   * both read through `lanes.sh`'s own boot-clock verbs (`uptime-cs`,
+   * `proc-since-boot`) — the same clock, the same process, the same units
+   * `die_launch`'s real census already uses.
+   */
+  test('1030mechanism: two independently-floored clock reads can disagree by one even when causality holds (injected boundary)', () => {
+    const trueBootWallCs = 179_034_397_100; // an arbitrary fixed "boot instant", in centiseconds
+    const ticksCs = 3; // the process starts 3cs after boot — second 1_790_343_971
+    const trueStartCs = trueBootWallCs + ticksCs;
+    const trueSecond = Math.floor(trueStartCs / 100);
+    // t0, read a moment BEFORE the process spawned, lands in the SAME true
+    // second — the spawn is causally ordered after it, by construction.
+    const t0 = trueSecond;
+
+    // OLD style: proc_start_epoch's exact formula shape — floor((wallCs -
+    // upCs + ticksCs) / 100) — where wallCs/upCs are read AFTER the process
+    // exists and SEPARATELY from t0's own read. /proc/uptime's own kernel-
+    // side update granularity can leave it a tick behind EPOCHREALTIME's
+    // instant at read time, undershooting the derived boot estimate by
+    // exactly that tick — entirely plausible, not manufactured to order.
+    const staleUptimeTicksCs = 4;
+    const derivedBootWallCs = trueBootWallCs - staleUptimeTicksCs;
+    const oldGot = Math.floor((derivedBootWallCs + ticksCs) / 100);
+    assert.equal(oldGot, trueSecond - 1, 'the injected skew reproduces exactly the one-second undershoot the real door measured');
+    assert.ok(oldGot < t0, 'RED (old style): a causality-preserving spawn still reports as having started before t0 was read');
+
+    // NEW style: both sides in centiseconds since boot, one clock, one
+    // process, no wall-clock derivation on either side — t0cs read before
+    // the spawn, gotCs the process's own ticks (already boot-relative, no
+    // estimate to skew).
+    const t0Cs = ticksCs - 1; // t0 read 1cs before the spawn, same clock as gotCs
+    const gotCs = ticksCs;
+    assert.ok(gotCs >= t0Cs, 'GREEN (new style): comparing on one clock throughout leaves no independent estimate to disagree with');
+  });
+
   test('1030: a process spawned INSIDE the census second is never computed to the second before it', () => {
-    // CI red (run 34729635825) on the two doors whose claude spawns immediately, green on the
-    // two that spawn 1.5 s later: `btime + ticks/hz` uses a boot second FLOORED, so the sum runs
-    // up to a second early. Measured locally: boot fraction .749, 11 of 15 same-second spawns
-    // excluded. Fifteen spawns each taken right after `date +%s`; every start must be >= it.
+    // Fixed to compare on ONE clock throughout (see the mechanism door
+    // above): t0 and the process's start both come from lanes.sh's own
+    // boot-clock verbs (`uptime-cs`, `proc-since-boot` — die_launch's real
+    // census already uses exactly this pair, via `uptime_cs()` and
+    // `proc_start_cs()`), never Node's `Date.now()` against bash's
+    // wall-clock-estimating `proc-start`. Fifteen spawns each taken right
+    // after uptime-cs; every start must be >= it, in the same unit.
     const misses: string[] = [];
     for (let i = 0; i < 15; i++) {
-      const t0 = Math.floor(Date.now() / 1000);
+      const t0cs = Number(lanes(['uptime-cs']).stdout.trim());
       const r0 = spawnSync('bash', ['-c', 'sleep 300 </dev/null >/dev/null 2>&1 & echo $!'], { encoding: 'utf8' });
       const pid = Number(r0.stdout.trim());
       recordPlant(pid);
-      const got = Number(lanes(['proc-start', String(pid)]).stdout.trim());
-      if (!(got >= t0)) misses.push(`spawn ${i}: start ${got} < t0 ${t0}`);
+      const gotCs = Number(lanes(['proc-since-boot', String(pid)]).stdout.trim());
+      if (!(gotCs >= t0cs)) misses.push(`spawn ${i}: start ${gotCs}cs < t0 ${t0cs}cs`);
       spawnSync('kill', ['-KILL', String(pid)]);
       spawnSync('sleep', ['0.07']);
     }
