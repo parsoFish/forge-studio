@@ -23,8 +23,9 @@ import { createBandRegistry } from '@forge/kernel';
 import { BAND_GUARD_IDS, type BandGuardId } from '@forge/contracts';
 import type { NodeExecContext } from '@forge/flows/flow-node-context.ts';
 import type { NodeKind } from '@forge/flows/flow-node-kind.ts';
-import { type FlowRunnerDeps, DEFAULT_DEPS, raceWithWedge } from './executor-deps.ts';
+import { type FlowRunnerDeps, buildDefaultDeps, raceWithWedge } from './executor-deps.ts';
 import { FORGE_ROOT } from '@forge/agents/skill-path.ts';
+import type { ClassProfilePort } from '../class-profile-port.ts';
 
 /**
  * What an executor sees: the runner's node context PLUS the deps this table was
@@ -634,12 +635,19 @@ export function registeredBandIds(): readonly string[] {
  * has already resolved the node kind onto `ctx.kind`; this dispatches it, hands
  * the executor the deps this table was built with, and returns the run's
  * outcome as of this node.
+ *
+ * `classProfiles` is the one port (operator ruling, items 81/83): optional,
+ * because this package must build a working executor with no factory
+ * installed at all. Threaded into every band that reads the class table
+ * (`buildDefaultDeps`); with none bound, a band that actually needs a profile
+ * throws by name rather than falling back to a default — never silently.
  */
 export function createPhaseExecutor(opts: {
   deps?: Partial<FlowRunnerDeps>;
   overrides?: Partial<Record<NodeKind, NodeExecutor>>;
+  classProfiles?: ClassProfilePort;
 } = {}): PhaseExecutor<NodeExecContext> {
-  const deps: FlowRunnerDeps = { ...DEFAULT_DEPS, ...opts.deps };
+  const deps: FlowRunnerDeps = { ...buildDefaultDeps(opts.classProfiles), ...opts.deps };
   const executors: Record<NodeKind, NodeExecutor> = { ...DEFAULT_NODE_EXECUTORS, ...(opts.overrides ?? {}) };
   return {
     async run(_nodeId, ctx) {

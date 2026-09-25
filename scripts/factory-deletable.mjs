@@ -123,6 +123,48 @@ try {
   if (!isFactoryless(scratch)) fail('the scratch worktree still carries the example package — the proof would prove nothing');
   console.log(`factory-deletable: scratch worktree ${scratch} has no packages/factory and no workspace link to one.`);
 
+  // THE STATION-EXECUTOR PROBE (F3, operator ruling items 81/83). The executor
+  // and every band moved OUT of the example into @forge/stations precisely so
+  // a second factory can run on the platform without this one — so with the
+  // example deleted, @forge/stations must still resolve, createPhaseExecutor
+  // must still build a working executor, and a station that needs the class
+  // table must still refuse BY NAME rather than silently proceeding under a
+  // guessed profile. Independent of the bridge below: no HTTP involved.
+  {
+    const { createPhaseExecutor } = await import(join(scratch, 'packages', 'stations', 'phases', 'executor-table.ts'));
+    const executor = createPhaseExecutor();
+    const probeCtx = {
+      kind: 'agent',
+      node: { agent: 'developer-ralph' },
+      nodeId: 'dev',
+      input: {
+        initiativeId: 'FACTORY-DELETABLE-classprofile-probe',
+        worktreePath: join(scratch, '_nonexistent-worktree'),
+        manifestPath: join(scratch, '_nonexistent-worktree', 'manifest.md'),
+      },
+      nodeLogger: { emit: (p) => ({ ...p, event_id: 'e1' }) },
+      costLogger: { emit: (p) => ({ ...p, event_id: 'e1' }) },
+      wedgeDetector: { active: false },
+      nodeBudget: undefined,
+      state: {},
+      agents: new Map([['developer-ralph', { slug: 'developer-ralph', composition: { guards: [] }, runtime: { loopStrategy: 'ralph' } }]]),
+      inboundArtifacts: [],
+    };
+    let refusal;
+    try {
+      await executor.run('dev', probeCtx);
+    } catch (err) {
+      refusal = err;
+    }
+    if (!refusal) {
+      fail('with no example installed, createPhaseExecutor() built a station that did NOT refuse — a class-needing band must never silently proceed with no ClassProfilePort bound');
+    }
+    if (!/station "developer-loop" needs a class profile table \(ClassProfilePort\)/.test(String(refusal.message))) {
+      fail(`the developer-loop station's refusal did not name the station and the port as expected: ${refusal.message}`);
+    }
+    console.log('factory-deletable: live — @forge/stations resolves, createPhaseExecutor builds, and the developer-loop station refuses BY NAME with no class table bound.');
+  }
+
   const { startBridge } = await import(join(scratch, 'apps', 'forge', 'ui-bridge.ts'));
   const bridge = await startBridge({ forgeRoot: scratch, port: 0 });
   try {

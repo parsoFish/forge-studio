@@ -130,7 +130,7 @@ export type BandPipelineOutcome = { status: 'complete' | 'complete-with-misses' 
 
 /** Everything above this package's rank, bound once at `apps/forge/cli.ts`. */
 export type BandAgentDeps = {
-  /** `@forge/factory/phases/{demo-agent,adversarial-review}.ts`, behind one call. */
+  /** `@forge/stations/phases/{demo-agent,adversarial-review}.ts`, behind one call. */
   runPipeline(call: BandPipelineCall): Promise<BandPipelineOutcome>;
   /** `getPaths` from `@forge/flows/queue.ts`. */
   queuePaths(queueRoot: string): BandQueuePaths;

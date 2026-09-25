@@ -15,7 +15,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 
-import { type DemoBuildStatus } from './demo-types.ts';
+import { type DemoBuildStatus } from '@forge/stations/demo-types.ts';
 
 function sh(
   cmd: string,

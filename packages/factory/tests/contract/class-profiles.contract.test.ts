@@ -18,8 +18,20 @@ import { gateRequiredPaths, type RequiredPathsSource, type WorkItem } from '@for
 import { CHANGE_CLASSES as CHANGE_CLASSES_FROM_THE_VALIDATOR } from '@forge/flows/manifest.ts';
 
 const FACTORY_DIR = join(import.meta.dirname, '..', '..');
+/**
+ * F3 (operator ruling, items 81/83): the executor and every band that read
+ * this table moved to `@forge/stations`, behind the `ClassProfilePort` — a
+ * pure transfer, not a change of who must obey this table. Scanning only
+ * `packages/factory` after the move would find almost no consumers (they all
+ * moved) and no branches (there is almost nothing left to branch), which
+ * would make both checks below pass VACUOUSLY — exactly the "column nobody
+ * reads" and "phase re-derives the class" shapes this file exists to catch.
+ * The table's writ is the whole class → gate-profile ecosystem, not one
+ * package's directory, so both scans below cover the station package too.
+ */
+const STATIONS_DIR = join(FACTORY_DIR, '..', 'stations');
 
-/** Every production `.ts` file in packages/factory, recursively. */
+/** Every production `.ts` file under `dir`, recursively. */
 function productionFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -33,6 +45,11 @@ function productionFiles(dir: string): string[] {
     out.push(full);
   }
   return out;
+}
+
+/** `packages/factory` and `packages/stations`, together — see `STATIONS_DIR`'s comment. */
+function classTableEcosystemFiles(): string[] {
+  return [...productionFiles(FACTORY_DIR), ...productionFiles(STATIONS_DIR)];
 }
 
 const COLUMNS: ReadonlyArray<keyof GateProfile> = [
@@ -149,10 +166,10 @@ describe('class profiles — the table is keyed by the manifest field, not by a 
 });
 
 describe('class profiles — no phase re-derives what the table decides', () => {
-  it('kills "a phase branches on a class name": nothing in packages/factory compares against a class literal outside the table', () => {
+  it('kills "a phase branches on a class name": nothing in packages/factory or packages/stations compares against a class literal outside the table', () => {
     const offenders: string[] = [];
-    for (const file of productionFiles(FACTORY_DIR)) {
-      if (file.endsWith('class-profiles.ts')) continue;
+    for (const file of classTableEcosystemFiles()) {
+      if (file.endsWith('class-profiles.ts') || file.endsWith('class-profile-port.ts')) continue;
       const source = readFileSync(file, 'utf8');
       // Only a comparison that is ABOUT a class counts. A bare `=== 'config'`
       // elsewhere in the package is not this defect, and a check that fired on
@@ -192,10 +209,14 @@ describe('class profiles — every column is enforced somewhere', () => {
     // `.reflect` elsewhere in the package is some other object's property, and
     // a check that counted it would report a column enforced when nothing reads
     // the profile at all — the precise failure this test exists to catch.
-    const sources = productionFiles(FACTORY_DIR)
-      .filter((f) => !f.endsWith('class-profiles.ts'))
+    // F3 (operator ruling, items 81/83): the bands read the table through
+    // `ClassProfilePort` (`@forge/stations/class-profile-port.ts`) now, not by
+    // importing `class-profiles.ts` directly — a file counts as a consumer if
+    // it imports either one.
+    const sources = classTableEcosystemFiles()
+      .filter((f) => !f.endsWith('class-profiles.ts') && !f.endsWith('class-profile-port.ts'))
       .map((f) => readFileSync(f, 'utf8'))
-      .filter((src) => src.includes("class-profiles.ts'"))
+      .filter((src) => src.includes("class-profiles.ts'") || src.includes("class-profile-port.ts'"))
       .join('\n');
 
     const consumed: (keyof GateProfile)[] = [];
