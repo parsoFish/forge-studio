@@ -9,6 +9,8 @@ coverage/
 # forge scratch (C2 hygiene)
 .forge/work-items/
 .forge/.create-complete
+.forge/live-evidence/
+.forge/preflight.json
 AGENT.md
 PROMPT.md
 fix_plan.md
