@@ -23,7 +23,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync, rmSync } from 'nod
 import { execFileSync } from 'node:child_process';
 import { join, relative } from 'node:path';
 import { readProcTable, descendantsOf } from './reap.mjs';
-import { waitForCensusEmpty, describeCensus } from './reap-census.mjs';
+import { waitForCensusEmpty, describeCensus, identifyPid, verifiedKill } from './reap-census.mjs';
 import { quiesceWriters, describeQuiesce } from './quiesce.mjs';
 import { sweepProductFixtures } from './sweep.mjs';
 
@@ -341,9 +341,19 @@ export function releaseOwnInFlight(root) {
  * distinction). Removing either check independently reds its own door; see
  * `sweep-teardown.test.ts`'s mutation notes.
  *
+ * MUST 2 (D's review of #906) — EVERY SIGNAL HERE GOES THROUGH `verifiedKill`,
+ * NEVER A BARE `process.kill(pid, sig)`. The daemon pid and every descendant
+ * the pre-signal snapshot found are recorded as `{pid, startTime}` identities
+ * (`identifyPid`) the INSTANT they are found, and re-verified immediately
+ * before each signal: a pid this run recorded can be recycled by an unrelated
+ * process on this four-lane host before the signal lands, and `kill()` taking
+ * a bare number cannot tell the difference.
+ *
  * @param {string} root the run's own worktree
  * @param {{graceMs?: number, censusBoundMs?: number, censusPollMs?: number,
  *          rereadDelayMs?: number, procRoot?: string,
+ *          procTable?: () => Map<number, {ppid: number, pgrp: number}>,
+ *          kill?: (pid: number|string, sig: NodeJS.Signals) => void,
  *          sleep?: (ms: number) => Promise<void>,
  *          release?: (root: string) => {released: string[], failed: object[]}}} [opts]
  * @returns {Promise<{sched: object, census: object|null,
@@ -356,6 +366,8 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
   const censusPollMs = opts.censusPollMs ?? 100;
   const rereadDelayMs = opts.rereadDelayMs ?? 250;
   const procRoot = opts.procRoot ?? '/proc';
+  const procTable = opts.procTable ?? (() => readProcTable());
+  const kill = opts.kill ?? ((pid, sig) => process.kill(pid, sig));
   const sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const release = opts.release ?? releaseOwnInFlight;
 
@@ -366,7 +378,10 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
   } catch { /* no pid file — no daemon was started, and stopOwnScheduler below says so */ }
   // BEFORE ANY SIGNAL. `stopOwnScheduler` has not run yet, so the daemon (if
   // it exists) is still alive and its children's ppid still points at it.
-  const descendants = daemonPid !== null ? descendantsOf(daemonPid, readProcTable()) : [];
+  // MUST 2 — every identity is captured HERE, at the moment of discovery.
+  const daemonIdentity = daemonPid !== null ? identifyPid(daemonPid, { procRoot }) : null;
+  const descendants = daemonPid !== null ? descendantsOf(daemonPid, procTable()) : [];
+  const descendantIdentities = descendants.map((pid) => identifyPid(pid, { procRoot }));
 
   const sched = stopOwnScheduler(root, graceMs);
   const lines = [];
@@ -384,15 +399,23 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
 
   // The daemon did not drain, so a dispatch it started (detached, with its OWN
   // process group) may have outlived it. TERM every pid the pre-signal
-  // snapshot found — the daemon's own kill never reached them.
-  for (const pid of descendants) {
-    try { process.kill(pid, 'SIGTERM'); } catch { /* already gone */ }
+  // snapshot found — the daemon's own kill never reached them. Each signal is
+  // re-verified against the identity recorded above (MUST 2).
+  for (const identity of descendantIdentities) {
+    const r = verifiedKill(identity, 'SIGTERM', { kill, procRoot });
+    if (!r.signalled) lines.push(`[stories] census: ${r.reason}`);
   }
-  const censusOf = () => waitForCensusEmpty([sched.stopped, ...descendants], { boundMs: censusBoundMs, pollMs: censusPollMs, procRoot });
+  const roots = [daemonIdentity, ...descendantIdentities].filter((r) => r !== null);
+  const censusOf = () => waitForCensusEmpty(roots, { boundMs: censusBoundMs, pollMs: censusPollMs, procRoot });
   let census = await censusOf();
   if (!census.empty && census.survivors !== null) {
     for (const pid of census.survivors) {
-      try { process.kill(Number(pid), 'SIGKILL'); } catch { /* already gone */ }
+      // A fresh identity, captured now and verified again inside
+      // `verifiedKill` immediately before the signal — MUST 2's discipline
+      // applies to every pid this module ever signals, not only the ones
+      // recorded at the top.
+      const r = verifiedKill(identifyPid(pid, { procRoot }), 'SIGKILL', { kill, procRoot });
+      if (!r.signalled) lines.push(`[stories] census: ${r.reason}`);
     }
     census = await censusOf();
   }
@@ -467,6 +490,13 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
  * still descend from a pid this run dispatched), and narrowing its role here
  * would be a second, silent behaviour change nobody asked for.
  *
+ * MUST 2 (D's review of #906) — EVERY SIGNAL HERE GOES THROUGH `verifiedKill`,
+ * NEVER A BARE `process.kill(pid, sig)`. `reapedPids` and every descendant the
+ * fresh snapshot below finds are recorded as `{pid, startTime}` identities
+ * (`identifyPid`) the INSTANT they are found, and re-verified immediately
+ * before each signal — a pid this run recorded can be recycled by an
+ * unrelated process on this four-lane host before the signal lands.
+ *
  * @param {{root: string, storyId: string, sinceMs: number, groundProject?: string,
  *   evidenceDir: string, reapedPids: (number|string)[],
  *   quiesce?: typeof quiesceWriters, sweep?: typeof sweepProductFixtures,
@@ -491,21 +521,27 @@ export async function reapCensusAndSweep({
   const quiesceResult = await quiesce({ root, pids: reapedPids });
   const lines = [...describeQuiesce(quiesceResult)];
 
-  const roots = (reapedPids ?? []).filter((p) => p !== null && p !== undefined);
+  const bareRoots = (reapedPids ?? []).filter((p) => p !== null && p !== undefined);
   // BEFORE ANY SIGNAL OF THIS PASS — `reapAgentRuns`'s own snapshot is already
   // stale, so this is a fresh one, and it has to precede the TERM below for
   // the same reason the scheduler half's does (5.45: once a pid is truly
-  // gone the kernel has already reparented whatever it had).
-  const table = roots.length > 0 ? procTable() : new Map();
-  const freshDescendants = roots.flatMap((pid) => descendantsOf(pid, table));
-  for (const pid of freshDescendants) {
-    try { kill(pid, 'SIGTERM'); } catch { /* already gone */ }
+  // gone the kernel has already reparented whatever it had). MUST 2 —
+  // identities captured HERE, at the moment of discovery.
+  const rootIdentities = bareRoots.map((pid) => identifyPid(pid, { procRoot }));
+  const table = bareRoots.length > 0 ? procTable() : new Map();
+  const freshDescendants = bareRoots.flatMap((pid) => descendantsOf(pid, table));
+  const descendantIdentities = freshDescendants.map((pid) => identifyPid(pid, { procRoot }));
+  for (const identity of descendantIdentities) {
+    const r = verifiedKill(identity, 'SIGTERM', { kill, procRoot });
+    if (!r.signalled) lines.push(`[stories] census: ${r.reason}`);
   }
-  const censusOf = () => waitForCensusEmpty([...roots, ...freshDescendants], { boundMs: censusBoundMs, pollMs: censusPollMs, procRoot, listPids });
+  const roots = [...rootIdentities, ...descendantIdentities];
+  const censusOf = () => waitForCensusEmpty(roots, { boundMs: censusBoundMs, pollMs: censusPollMs, procRoot, listPids });
   let census = await censusOf();
   if (!census.empty && census.survivors !== null) {
     for (const pid of census.survivors) {
-      try { kill(Number(pid), 'SIGKILL'); } catch { /* already gone */ }
+      const r = verifiedKill(identifyPid(pid, { procRoot }), 'SIGKILL', { kill, procRoot });
+      if (!r.signalled) lines.push(`[stories] census: ${r.reason}`);
     }
     census = await censusOf();
   }

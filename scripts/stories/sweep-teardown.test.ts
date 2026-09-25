@@ -589,6 +589,48 @@ test('finding row 75 (agent half) DOOR: reapCensusAndSweep kills the grandchild,
   assert.throws(() => process.kill(parent.pid!, 0), 'and the reaped root too');
 });
 
+/**
+ * D's review of #906, MUST 2, doored AT THE ORCHESTRATION LEVEL (not only in
+ * `reap-census.test.ts`'s `verifiedKill` unit and real-process doors): a pid
+ * `descendantsOf` finds in the pre-signal snapshot, but that CANNOT be
+ * identified (no readable `stat` — the fixture below never creates one for
+ * it, standing in for a pid already recycled or gone the instant the
+ * snapshot was taken) must never reach the injected `kill` at all. This is
+ * the exact wiring the review asked to see proven, not merely the shared
+ * primitive underneath it.
+ */
+test('finding row 75 (agent half) DOOR: MUST 2 — a snapshotted descendant with no verifiable identity is never signalled', async (t) => {
+  const procRoot = mkdtempSync(join(tmpdir(), 'reap-census-must2-proc-'));
+  // The root (100) gets a real, matching identity — it must remain a
+  // legitimate, usable census root so the test proves the ONE unidentifiable
+  // descendant is skipped, not that the whole census gave up.
+  mkdirSync(join(procRoot, '100'));
+  writeFileSync(join(procRoot, '100', 'stat'), '100 (root) S 1 1 1 0 -1 4194304 0 0 0 0 0 0 0 0 20 0 1 0 42');
+  // pid 555 is what `descendantsOf` finds via the mocked table below, but it
+  // has NO stat file here at all — `identifyPid` reads it as `startTime:
+  // null`, standing in for a pid this run can no longer verify as its own.
+  t.after(() => rmSync(procRoot, { recursive: true, force: true }));
+
+  const sent: Array<[number, string]> = [];
+  const result = await reapCensusAndSweep({
+    root: '/does-not-matter', storyId: 'S-must2', sinceMs: Date.now(), evidenceDir: '/does-not-matter',
+    reapedPids: [100],
+    quiesce: async () => ({ pids: { gone: [], alive: [], waitedMs: 0, timedOut: false }, tree: { quiet: true, waitedMs: 0, timedOut: false, reads: 1 }, settled: true }),
+    sweep: () => ({ removed: [], failed: [], claim: { claimed: [] }, artefacts: { cleared: [] }, lines: [] }),
+    procTable: () => new Map([[100, { ppid: 1, pgrp: 100 }], [555, { ppid: 100, pgrp: 100 }]]),
+    kill: (pid: number, sig: string) => { sent.push([pid, sig]); },
+    listPids: () => ['100'], // 555 is not even alive — the point is it must never be SIGNALLED, not that it survives
+    procRoot,
+    censusBoundMs: 200, censusPollMs: 20,
+  });
+
+  assert.ok(!sent.some(([pid]) => String(pid) === '555'), `pid 555 must never be signalled without a verified identity: ${JSON.stringify(sent)}`);
+  assert.ok(
+    result.lines.some((l: string) => /555.*no longer the recorded process/.test(l)),
+    `the refusal must be named: ${JSON.stringify(result.lines)}`,
+  );
+});
+
 test('finding row 75 (agent half) DOOR (second): a writer OUTSIDE this run\'s dispatch tree recreates a cleared artefact — caught only by the re-read', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'forge-agent-census-sibling-'));
   const sinceMs = Date.now() - 60_000;
@@ -659,11 +701,21 @@ test('finding row 75 (agent half) DOOR (third): a TERM-respecting grandchild exi
   assert.equal(existsSync(heartbeat), false);
 });
 
-test('finding row 75 (agent half): a non-empty census refuses the sweep entirely — nothing is cleared, nothing is claimed', async () => {
+test('finding row 75 (agent half): a non-empty census refuses the sweep entirely — nothing is cleared, nothing is claimed', async (t) => {
   // A pure unit check, fully injected: `procTable`/`kill`/`listPids` never
   // touch the real /proc or a real process at all — pid 999 is fabricated and
   // `listPids` reports it alive on every call, so the census can never settle.
-  // The spy must then never be called.
+  // MUST 2 (D's review): a root now needs a MATCHING recorded identity to be
+  // usable at all, so the fixture procRoot gives 999 a real `stat` — the same
+  // shape `identifyPid` reads at snapshot time and `verifiedKill` re-reads
+  // before any signal — kept static across every call in this test so the
+  // identity always matches and 999 survives for the full bound on its own
+  // ground, not because its identity could not be verified at all.
+  const procRoot = mkdtempSync(join(tmpdir(), 'reap-census-refuse-proc-'));
+  mkdirSync(join(procRoot, '999'));
+  writeFileSync(join(procRoot, '999', 'stat'), '999 (fixture) S 1 1 1 0 -1 4194304 0 0 0 0 0 0 0 0 20 0 1 0 42');
+  t.after(() => rmSync(procRoot, { recursive: true, force: true }));
+
   let sweepCalled = false;
   const killed: Array<[number, string]> = [];
   const result = await reapCensusAndSweep({
@@ -674,7 +726,7 @@ test('finding row 75 (agent half): a non-empty census refuses the sweep entirely
     procTable: () => new Map([[999, { ppid: 1, pgrp: 999 }]]),
     kill: (pid: number, sig: string) => { killed.push([pid, sig]); },
     listPids: () => ['999'],
-    procRoot: '/nonexistent-proc-root-for-this-test',
+    procRoot,
     censusBoundMs: 100, censusPollMs: 20,
   });
 
@@ -682,5 +734,10 @@ test('finding row 75 (agent half): a non-empty census refuses the sweep entirely
   assert.equal(result.sweep, null);
   assert.equal(sweepCalled, false, 'the clear must never run when the census could not settle');
   assert.ok(result.lines.some((l: string) => /REFUSING to run the trailing sweep/.test(l)));
-  assert.ok(killed.some(([pid, sig]) => pid === 999 && sig === 'SIGKILL'), 'the survivor must still have been escalated to SIGKILL');
+  assert.ok(
+    killed.some(([pid, sig]) => String(pid) === '999' && sig === 'SIGKILL'),
+    // census.survivors comes from the (mocked) live listing, which reports
+    // pids as strings — the escalation must still reach it regardless.
+    `the survivor must still have been escalated to SIGKILL: ${JSON.stringify(killed)}`,
+  );
 });
