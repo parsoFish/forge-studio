@@ -101,6 +101,33 @@ else
   say "_1.0/=absent"
 fi
 
+# --- studio-port/<port> (M7-A row 82): the early-REFUSING teardown bug left a
+# `forge studio` bridge + its Next UI child running, reparented to init,
+# refusing every later run on the host. `_logs/daemon/forge.pid` tracks only
+# the ONE daemon pid — a studio holds two ports of its own and is never
+# written there. Gates ONLY when the listening process's OWN cwd resolves
+# inside this worktree (`/proc/<pid>/cwd`) — a healthy studio belonging to a
+# DIFFERENT checkout on this shared host must never fail THIS worktree's
+# census. Ports are injectable (RESIDUE_STUDIO_PORTS, comma-separated) so a
+# test plants an ephemeral listener instead of ever touching the host's real
+# 4123/4124. The health probe alongside is informational only — it cannot by
+# itself prove "belongs to this tree", so it never gates on its own.
+IFS=',' read -r -a STUDIO_PORTS <<< "${RESIDUE_STUDIO_PORTS:-4123,4124}"
+REAL_R=$(cd "$R" && pwd -P)
+for port in "${STUDIO_PORTS[@]}"; do
+  pid=$(ss -ltnp 2>/dev/null | awk -v p=":${port}\$" '$4 ~ p' | grep -oP 'pid=\K[0-9]+' | head -1)
+  inside=0
+  if [ -n "$pid" ] && [ -d "/proc/$pid" ]; then
+    cwd=$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)
+    case "$cwd" in
+      "$REAL_R"|"$REAL_R"/*) inside=1 ;;
+    esac
+  fi
+  gate "studio-port/$port" "$inside"
+  health=$(curl -s -o /dev/null -w '%{http_code}' --max-time 1 "http://127.0.0.1:$port/api/health" 2>/dev/null || true)
+  say "studio-port/$port/health=${health:-000} (informational — the cwd check above is what gates)"
+done
+
 if [ "${#NONZERO[@]}" -eq 0 ]; then
   say "VERDICT clean — every gating item above is zero or absent"
   exit 0
