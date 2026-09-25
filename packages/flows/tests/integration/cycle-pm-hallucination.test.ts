@@ -258,7 +258,15 @@ test('runProjectManager: single WI with explicit depends_on = [] succeeds', asyn
       },
     ]);
 
-    await runProjectManager(h.input, h.logger, { queryFn });
+    // A one-WI decomposition reads the class table (the under-decomposed flag);
+    // this test is about the depends_on shape, so any bound table will do.
+    const classProfiles = {
+      profileFor: () => ({ singleWiAllowed: true }),
+      readChangeClass: () => 'code',
+      isChangeClass: (v: unknown) => v === 'code',
+      hollowGateGuardFor: () => false,
+    } as unknown as NonNullable<NonNullable<Parameters<typeof runProjectManager>[2]>['classProfiles']>;
+    await runProjectManager(h.input, h.logger, { queryFn, classProfiles });
 
     const events = readEvents(h.logger);
     const end = events.find((e) => e.event_type === 'end' && e.phase === 'project-manager');
