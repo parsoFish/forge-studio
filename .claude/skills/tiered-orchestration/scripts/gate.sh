@@ -531,6 +531,21 @@ refused=0
 # FAIL (never a REFUSAL) and which command that was.
 FAIL_COUNT=0
 FAIL_CMD=""
+# M7 findings row 76a — EVERY GATE_* VAR THIS SCRIPT READS AS CONFIGURATION,
+# SCRUBBED FROM EACH STEP'S OWN ENVIRONMENT. `eval "$cmd"` below runs inside
+# THIS shell's subshell, so it inherits this process's full environment —
+# including any control var a caller exported for gate.sh's OWN behaviour,
+# never meant for the tree being gated. `GATE_RERUN_ALONE` (read at
+# `${GATE_RERUN_ALONE:-}` below, after this loop) is the one such var this
+# file has today: a caller running gate.sh over the whole worktree with
+# GATE_RERUN_ALONE set was handing that var straight to `npm test`, and
+# `npm test` runs `gate-rerun-alone.test.ts`, whose own fixtures spawn NESTED
+# gate.sh invocations that inherited the ambient var as if each fixture had
+# asked for it itself — `gate-rerun-alone.test.ts:174` reds on the leak alone,
+# with no code defect in the tree being gated. A LIST, not one `unset`, so a
+# future GATE_* control var this file grows is scrubbed by construction
+# rather than by remembering to extend a second copy.
+GATE_CONTROL_VARS="GATE_RERUN_ALONE"
 while IFS= read -r cmd; do
   [ -n "$cmd" ] || continue
   name="$(printf '%s' "$cmd" | tr -cs 'A-Za-z0-9' '-' | sed 's/^-//; s/-$//' | cut -c1-60)"
@@ -551,7 +566,7 @@ while IFS= read -r cmd; do
   # filesystem, so a reader either sees the previous complete log or this one,
   # never a half-written file — and a gate already executing this script keeps
   # its own inode rather than following a path that changed underneath it.
-  if ( eval "$cmd" ) > "$log.part" 2>&1; then
+  if ( unset $GATE_CONTROL_VARS; eval "$cmd" ) > "$log.part" 2>&1; then
     mv -f "$log.part" "$log"
     echo "PASS  $cmd  ($(secs "$t0"))"
   else
