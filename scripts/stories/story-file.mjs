@@ -76,6 +76,41 @@ function validateAmong(among, data, at) {
 }
 
 /**
+ * `beats[].fork` — forge-8vfn.2.22. `{ over: <fill field>, cases: [<value>,
+ * …] }` runs the beat once per case, substituting each case for that field's
+ * `with` value (`beats-fork.mjs`). `steps` is this beat's ALREADY-VALIDATED
+ * `do` array, so `over` is checked against what the beat can actually consume
+ * rather than against the raw input.
+ */
+function validateFork(raw, steps, at) {
+  if (raw === undefined) return undefined;
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    fail(`${at}.fork`, `expected an object { over, cases }, got ${JSON.stringify(raw)}`);
+  }
+  requireNonEmptyString(raw.over, `${at}.fork.over`);
+  if (!Array.isArray(raw.cases) || raw.cases.length === 0) {
+    fail(`${at}.fork.cases`, `expected a non-empty array of distinct strings, got ${JSON.stringify(raw.cases)}`);
+  }
+  raw.cases.forEach((c, i) => requireNonEmptyString(c, `${at}.fork.cases[${i}]`));
+  if (new Set(raw.cases).size !== raw.cases.length) {
+    fail(
+      `${at}.fork.cases`,
+      `expected distinct cases, got ${JSON.stringify(raw.cases)} — a duplicate would run the same case ` +
+      'twice under two different labels, silently doubling the cost of a real-spawn beat',
+    );
+  }
+  if (!steps.some((s) => Object.hasOwn(s, 'fill') && s.fill === raw.over)) {
+    fail(
+      `${at}.fork.over`,
+      `names ${JSON.stringify(raw.over)}, which no \`fill\` step in this beat's own \`do\` fills — a fork ` +
+      'over a field nothing fills would run every case identically and silently. Name the `fill` step\'s ' +
+      'field this fork varies.',
+    );
+  }
+  return Object.freeze({ over: raw.over, cases: Object.freeze([...raw.cases]) });
+}
+
+/**
  * Validate a raw story object and return a deep-frozen structural copy.
  * Never returns, and never mutates, the input.
  */
@@ -245,6 +280,17 @@ export function validateStory(raw) {
 
     const wait = validateWait(b.wait, at);
     const steps = validateDoSteps(b.do, at);
+    // `forge-8vfn.2.22` — `fork` runs THIS BEAT once per case, substituting
+    // each case into the named `fill` step's `with` value (`beats-fork.mjs`
+    // does the substitution; this validates the declaration alone). `over`
+    // must name a field a step in this beat's OWN `do` actually fills — the
+    // same "can this ever be consumed" rule this file already applies to
+    // `wait.cycleOf` and to an unconsumable agent wait: a fork over a field
+    // nothing fills would run every case identically and silently, which
+    // would read as N green cases proving nothing. `cases` must be distinct —
+    // a duplicate would run the same case twice under two different labels,
+    // silently doubling a real-spawn beat's cost for no added coverage.
+    const fork = validateFork(b.fork, steps, at);
     // `forge-8vfn.7.6.143` (b1), T1 ruling 1147 — AN AGENT WAIT THAT NO CODE
     // PATH CAN CONSUME IS REFUSED HERE, before selection and before spend.
     //
@@ -312,6 +358,7 @@ export function validateStory(raw) {
       // validated-and-discarded, so a story that declared `costless: true`
       // would silently run with no enforcement of it at all.
       ...(b.costless === undefined ? {} : { costless: b.costless }),
+      ...(fork === undefined ? {} : { fork }),
       expect: Object.freeze({
         route: e.route,
         data: Object.freeze({ ...e.data }),
