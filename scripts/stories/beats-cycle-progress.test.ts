@@ -111,3 +111,24 @@ test('cycleWaitDeadline: the tighter of the two always wins, whichever it is', (
   assert.equal(wide.deadline, 10_000);
   assert.equal(wide.firedBy, 'wall');
 });
+
+test('cycleWaitDeadline: a write that PREDATES the wait never shortens it below the plain deadline (row 95 review)', () => {
+  // The cycle dir already existed when the wait began — its last write was
+  // ten minutes earlier. Progress may only EXTEND a wait, never make it end
+  // sooner than the fixed deadline it replaced.
+  const startedAt = 1_000_000;
+  const { deadline } = cycleWaitDeadline({
+    startedAt, timeoutMs: 60_000, lastActivityAt: startedAt - 600_000, wallCeilingMs: 10_000_000,
+  });
+  assert.equal(deadline, startedAt + 60_000);
+});
+
+test('cycleProgressIdleMs: a .heartbeat touch alone is liveness, not progress — only events.jsonl and review chunks count (T1 1471; row 95 review)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cycle-progress-hb-'));
+  writeFileSync(join(dir, 'events.jsonl'), '{}\n');
+  const old = new Date(Date.now() - 300_000);
+  utimesSync(join(dir, 'events.jsonl'), old, old);
+  writeFileSync(join(dir, '.heartbeat'), String(Date.now())); // fresh: a hung agent's ticker keeps doing this
+  const idle = cycleProgressIdleMs(dir);
+  assert.ok(idle !== null && idle >= 299_000, `a fresh heartbeat must not read as progress: idle=${idle}`);
+});
