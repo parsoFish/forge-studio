@@ -32,7 +32,7 @@
   "apps/studio/tests/unit/history-ledger.test.ts": 892,
   "apps/studio/tests/unit/home-view.test.ts": 1071,
   "apps/studio/tests/unit/session-client.test.ts": 1257,
-  "packages/stations/phases/developer-loop.ts": 1937,
+  "packages/stations/phases/developer-loop.ts": 1942,
   "packages/stations/tests/unit/reflector.test.ts": 866,
   "packages/flows/tests/integration/run-model.test.ts": 1457,
   "packages/flows/tests/integration/wi-spec-compile.test.ts": 1059,

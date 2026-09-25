@@ -77,7 +77,7 @@ first-action convention referenced above: `mandatory` access is enforced at
 the orchestrator, not just requested in the prompt — the PM phase runner
 fails a set outright if the agent made zero brain-query calls and the
 orchestrator's own prompt-injected brain context was also empty
-(`packages/factory/phases/project-manager.ts`).
+(`packages/stations/phases/project-manager.ts`).
 
 ## Architect — the human moment that starts a cycle
 
@@ -137,7 +137,7 @@ manifest promote into `_queue/pending/`, where the scheduler picks it up.
 ## Plan — decomposing the initiative into work items
 
 *Unattended.* Code identifier: `pm` / `project-manager`
-(`skills/project-manager/SKILL.md`, `packages/factory/phases/project-manager.ts`).
+(`skills/project-manager/SKILL.md`, `packages/stations/phases/project-manager.ts`).
 Reads the architect's confirmed initiative and decomposes its acceptance
 criteria directly into **work items** — atomic, dependency-ordered units the
 build station can verify. There's no intermediate feature list: the PM maps
@@ -166,7 +166,7 @@ acceptance criteria to outcome-sized work items in one pass.
   that fails validation — a hidden-coupling collision, a brain-first skip, a
   checkpoint that capped decomposition mid-flight — is moved wholesale to a
   timestamped `work-items-rejected-<stamp>` sibling directory with the
-  failure reason recorded beside it (`packages/factory/phases/pm-rejected-set.ts`).
+  failure reason recorded beside it (`packages/stations/phases/pm-rejected-set.ts`).
   This replaced an earlier design that deleted the stale directory and
   retried the PM once with an augmented prompt: the failed set is now kept
   as evidence (a rejected decomposition is the best record of *why* it
@@ -188,7 +188,7 @@ acceptance criteria to outcome-sized work items in one pass.
 ## Build — the Ralph loop
 
 *Unattended; the fan-out station.* Code identifier: `dev` / `developer-ralph`
-(`skills/developer-ralph/SKILL.md`, `packages/factory/phases/developer-loop.ts`).
+(`skills/developer-ralph/SKILL.md`, `packages/stations/phases/developer-loop.ts`).
 Walks the work items in topological order, running one Ralph loop per work
 item in its own git worktree, skipping dependents of a failed prerequisite.
 Concurrency is capped (`concurrencyCap: 1` today) and per-item isolation
@@ -221,7 +221,7 @@ this station** (vocabulary ruling 383, executed forge-8vfn.6.10.18) — the flow
 node id, band guard, `resume_from` value, requeue API field and CLI flag are
 all `integrate` now. Two things intentionally kept the word `demo`: the skill
 directory (`skills/demo-agent/`, a name, not the station) and the executor
-(`execIntegrate` in `packages/factory/phases/executor-table.ts`, registered
+(`execIntegrate` in `packages/stations/phases/executor-table.ts`, registered
 against the `demo-agent` skill's declared band). Name that mapping once, here.
 
 Takes the branch the build station finished and turns it into what a
@@ -247,12 +247,12 @@ spawned on any path.
   the project's declared `testProcess.*` gates the class selects, then (only
   on a green gate) the class's own orchestrator verb — `docs` selects no
   test suite at all and is checked by `forge gate docs` instead
-  (`packages/factory/phases/merge-boundary.ts`).
+  (`packages/stations/phases/merge-boundary.ts`).
 
 ## Review — the one read-only agent
 
 *Unattended; read-only by design.* Code identifier: `adversarial-review`
-(`skills/adversarial-review/SKILL.md`, `packages/factory/phases/adversarial-review.ts`).
+(`skills/adversarial-review/SKILL.md`, `packages/stations/phases/adversarial-review.ts`).
 One agent, no execution tools ([ADR 036](../decisions/036-orchestrator-owned-gate-execution.md)
 stands: gates are orchestrator verbs, never agent-authored scripts). It
 critiques the diff the integrate station derived, producing a per-acceptance-criterion
@@ -284,7 +284,7 @@ send-back is a re-dispatch of the one build executor, not a new topology.
 ## Reflect — closing the loop
 
 *Unattended; a standalone agent, not a flow node.* Code identifier:
-`reflector` (`skills/reflector/SKILL.md`, `packages/factory/phases/reflector.ts`).
+`reflector` (`skills/reflector/SKILL.md`, `packages/stations/phases/reflector.ts`).
 `forge-develop` terminates at "ready for review" (PR open), before merge, so
 the flow's own `flow-complete` trigger can't be the merge signal — merge is
 async and confirmed later. The flow declares `{on: merged, target: {kind:
