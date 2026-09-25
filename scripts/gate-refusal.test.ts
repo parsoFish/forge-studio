@@ -201,10 +201,15 @@ test('699: an ordinary failing step is still FAIL with rc 1 — the distinction 
  * mis-pointed package and the fix.
  */
 
+/** Pretty-printed, one field per line — the shape every real package.json in
+ *  this repo has (checked: packages/stations/package.json). `gate.sh` reads
+ *  "name" by anchoring to the start of a line, so a single-line
+ *  `JSON.stringify` fixture would silently never match — a fixture rebuilt
+ *  from a description of the real shape, not the shape itself. */
 function pkgWithName(root: string, dirName: string, pkgName: string): string {
   const d = join(root, 'packages', dirName);
   mkdirSync(d, { recursive: true });
-  writeFileSync(join(d, 'package.json'), JSON.stringify({ name: pkgName, version: '0.0.0' }));
+  writeFileSync(join(d, 'package.json'), JSON.stringify({ name: pkgName, version: '0.0.0' }, null, 2) + '\n');
   return d;
 }
 
