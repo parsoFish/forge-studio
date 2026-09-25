@@ -21,11 +21,12 @@ import assert from 'node:assert/strict';
 import { runnerSourceContaining } from './runner-source.mjs';
 
 test('the result object writeStoryJson serialises carries spend: { measured, usd, label }', () => {
-  const CALL = 'const result = { story, beats, reap, sweep, fence,';
+  const CALL = 'const result = {';
   const runner = runnerSourceContaining(CALL);
 
   const callAt = runner.source.indexOf(CALL);
   const callBlock = runner.source.slice(callAt, runner.source.indexOf('};', callAt) + 2);
+  assert.match(callBlock, /story, beats, reap, sweep, fence/, 'must still be the artifact\'s own result literal');
 
   assert.match(
     callBlock,

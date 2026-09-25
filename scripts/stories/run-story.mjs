@@ -615,9 +615,23 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     );
   }
 
+  // Findings row 56 (second half) — `summariseRunSpend`'s reading (`spend`,
+  // computed above and already printed to the console) never reached the
+  // artifact `writeStoryJson` serialises, so `story.json`'s `spend` field
+  // always read absent and a reader downstream (PR #890's `spendFieldFor`,
+  // not in this tree) reported `{usd: null, unmeasured: 'not passed to the
+  // artifact writer'}` whatever the run actually spent. Narrowed to exactly
+  // `{measured, usd, label}` — never the whole `spend` object, whose `priced`
+  // and `notes` are diagnostic detail for the console, not the artifact's
+  // stable contract.
+  //
   // `realGrounds` rides into the artifact only for a fixture run, so a
   // non-fixture story's `story.json` is unchanged by this feature.
-  const result = { story, beats, reap, sweep, fence, ...(realGrounds !== null ? { realGrounds } : {}) };
+  const result = {
+    story, beats, reap, sweep, fence,
+    spend: { measured: spend.measured, usd: spend.usd, label: spend.label },
+    ...(realGrounds !== null ? { realGrounds } : {}),
+  };
   const wroteThisRun = [writeStoryJson(result, ROOT)];
 
   // Ruling 308's second half — the ground's Brain 3 was HELD through the fence
