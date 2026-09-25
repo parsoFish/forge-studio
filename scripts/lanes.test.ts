@@ -22,6 +22,20 @@ import { join } from 'node:path';
 
 const LANES = join(import.meta.dirname, '..', '.claude', 'skills', 'tiered-orchestration', 'scripts', 'lanes.sh');
 const PREFIX = `lanestest${process.pid}-`;
+/**
+ * The ONE confirm-window artefact every `lanes()` launch call shares — never a per-test
+ * literal (a second one is exactly how the next load-sensitive flake gets planted, register
+ * row "lanes.test.ts:528"). Not a product bound: `lanes.sh`'s own default is 60s.
+ *
+ * Register row "lanes.test.ts:761": widening this used to be the whole fix, and it kept
+ * flaking anyway — a fake `claude` that forks `python3` to read-modify-write the roster JSON
+ * can lose an unbounded amount of time to interpreter start-up under real contention, and no
+ * fixed number here ever out-runs an unbounded race. `laneBin()` below now registers with pure
+ * bash, as the very first thing the process does, so the ONLY latency left standing between
+ * "this shell got scheduled at all" and "the row exists" is bash's own dispatch — which this
+ * window is sized to absorb, generously, once and for every launch test.
+ */
+const CONFIRM_TIMEOUT_S = '20';
 
 let dir: string;
 let camp: string;
@@ -66,12 +80,8 @@ function lanes(args: string[], env: Record<string, string> = {}, timeoutMs = 300
     env: {
       ...envWithoutLanesVars(),
       LANES_SESSION_PREFIX: PREFIX,
-      // A TEST ARTEFACT, not a product bound — the product default is 60s (see lanes.sh's own
-      // header). Chosen only to keep the failure-path tests (the ones that let this expire on
-      // purpose) fast. Register row "lanes.test.ts:528": under load, a real tmux+bash+python3
-      // registration can outrun a too-tight artefact value, so this is wide enough to absorb
-      // realistic startup latency while staying far below the real 60s default.
-      LANES_CONFIRM_TIMEOUT_S: '15',
+      // See CONFIRM_TIMEOUT_S's own comment — the one shared window, never a per-call literal.
+      LANES_CONFIRM_TIMEOUT_S: CONFIRM_TIMEOUT_S,
       // Pinned so the memory floor cannot turn every launch test into a reading of whatever the
       // host had free at the time — the same reason envWithoutLanesVars() exists.
       LANES_MEMINFO: meminfo(9 * 1024 * 1024),
@@ -109,8 +119,8 @@ function fakeBin(name: string) {
   return p;
 }
 /**
- * A lane program: records its argv, optionally registers itself in the roster
- * (what a real claude session does by existing), then idles.
+ * A lane program: registers itself in the roster (what a real claude session does by
+ * existing), records its argv/env, then idles.
  *
  * `register` values are the ones `claude agents --json` really emits, measured on
  * Claude Code v2.1.260 (2026-09-04, bead forge-8vfn.2.31):
@@ -121,23 +131,29 @@ function fakeBin(name: string) {
  *   never    — the trust dialog: the session never reaches the roster at all, while its
  *              process is alive in the lane's cwd.
  *
+ * Register row "lanes.test.ts:761": the registration used to fork `python3` to
+ * read-modify-write the roster JSON, and it ran AFTER argv/env were captured — two forks
+ * and a full interpreter start-up standing between "the shim exists" and "the row exists".
+ * Under real contention (host load 18-20) that start-up alone outran the confirm loop's
+ * whole window, twice, and widening the window is not a fix for an unbounded race: no fixed
+ * number out-runs "the scheduler hasn't given python3 a timeslice yet". `register_row` below
+ * is the FIRST thing this process does and never forks — it is bash's own string
+ * arithmetic against a roster it already knows always looks like `[]` or `[{...}]` (that
+ * shape is a fixture invariant: only `setRoster()` and this function ever write it), so the
+ * row exists the moment this shell itself gets scheduled to run at all — which is exactly
+ * the one thing CONFIRM_TIMEOUT_S is sized to wait out.
+ *
  * `detach` spawns a grandchild through `setsid` before idling, so it survives the death of
  * the tmux session that started it — §15.100's RC-attached claude, plantable on demand.
  */
 function laneBin(name: string, opts: { register: 'busy' | 'waiting' | 'never'; detach?: string }) {
   const argvFile = join(dir, `${name}.argv`);
-  const status =
+  const statusline =
     opts.register === 'waiting' ? '"waiting", "waitingFor": "permission prompt"' : '"busy"';
-  const row =
+  const register =
     opts.register === 'never'
       ? ''
-      : `python3 - "$$" <<'PY'
-import json, os, sys
-p = os.environ["ROSTER"]
-rows = json.load(open(p)) if os.path.exists(p) else []
-rows.append({"name": os.environ["SESS"], "pid": int(sys.argv[1]), "kind": "interactive", "status": ${status}})
-json.dump(rows, open(p, "w"))
-PY`;
+      : `register_row '${rosterFile}' "$SESS" "$$" '${statusline}'\n`;
   const detach = opts.detach
     ? `setsid nohup '${opts.detach}' 300 </dev/null >'${join(dir, `${name}.detached`)}' 2>&1 &
 echo $! > '${join(dir, `${name}.detachedpid`)}'
@@ -146,12 +162,12 @@ echo $! > '${join(dir, `${name}.detachedpid`)}'
   return writeExec(
     name,
     `#!/usr/bin/env bash
-if [ "$1" = --version ]; then echo '0.0.0 (test)'; exit 0; fi; printf '%s\\0' "$@" > '${argvFile}' # row 40
+if [ "$1" = --version ]; then echo '0.0.0 (test)'; exit 0; fi
+register_row() { local roster="$1" sess="$2" pid="$3" statusline="$4" existing body len row; if [ -s "$roster" ]; then existing="$(< "$roster")"; else existing='[]'; fi; len=\${#existing}; body="\${existing:1:len-2}"; row="{\\"name\\": \\"$sess\\", \\"pid\\": $pid, \\"kind\\": \\"interactive\\", \\"status\\": $statusline}"; if [ -z "$body" ]; then printf '[%s]' "$row" > "$roster"; else printf '[%s,%s]' "$body" "$row" > "$roster"; fi; }
+SESS=""; prev=""; for a in "$@"; do [ "$prev" = -n ] && SESS="$a"; prev="$a"; done
+${register}printf '%s\\0' "$@" > '${argvFile}' # row 40
 printenv > '${join(dir, `${name}.env`)}'
-SESS=""; while [ $# -gt 0 ]; do [ "$1" = -n ] && SESS="$2"; shift; done
-export SESS ROSTER='${rosterFile}'
-${detach}${row}
-sleep 120
+${detach}sleep 120
 `,
   );
 }
