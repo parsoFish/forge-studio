@@ -13,6 +13,13 @@
  * The spec calls this "enforced by dependency-cruiser; the violation
  * baseline may only shrink". This script is that enforcement.
  *
+ * F3 (operator ruling, items 81/83) inserted `stations` between `flows` and
+ * `factory` in `PACKAGE_RANK` below: the station executor and every band
+ * moved out of the example into `packages/stations`, one rank the example may
+ * import and the platform's flows may not. The `docs/roadmaps/1.0.md` §0
+ * quote above is the chain as ratified before that move; the roadmap's own
+ * update is the lane's, not this pure-transfer's.
+ *
  * WHY A BASELINE OF VIOLATIONS AND NOT A COUNT. A count lets one violation
  * be swapped for another without the gate noticing. The baseline is the SET
  * of `<rule>|<from>|<to>` triples, so a new edge fails even when an old one
@@ -53,7 +60,8 @@ export const PACKAGE_RANK = Object.freeze({
   agents: 3,
   sessions: 4,
   flows: 5,
-  factory: 6,
+  stations: 6,
+  factory: 7,
 });
 
 /** The three legacy trees packages may never reach into. */

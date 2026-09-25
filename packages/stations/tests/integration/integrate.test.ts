@@ -16,6 +16,7 @@ import { serializeManifest, type InitiativeManifest } from '@forge/flows/manifes
 import type { EventLogEntry } from '@forge/kernel';
 
 import { runIntegrateBand, PR_DESCRIPTION_REL } from '../../phases/integrate.ts';
+import { testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
 
 const INITIATIVE_ID = 'INIT-2026-09-05-integrate';
 
@@ -123,6 +124,7 @@ describe('integrate band — what it writes', () => {
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: writeManifest(manifest({ class: 'docs' })), projectRepoPath: root },
       logger,
       GATES,
+      testClassProfilePort(),
     );
     assert.equal(result.status, 'complete');
     const prBody = readFileSync(join(root, PR_DESCRIPTION_REL), 'utf8');
@@ -141,6 +143,7 @@ describe('integrate band — what it writes', () => {
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: writeManifest(manifest({ class: 'docs' })), projectRepoPath: root },
       logger,
       GATES,
+      testClassProfilePort(),
     );
     assert.ok(!readFileSync(join(root, PR_DESCRIPTION_REL), 'utf8').includes('STALE'));
   });
@@ -151,6 +154,7 @@ describe('integrate band — what it writes', () => {
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: writeManifest(manifest({ class: 'docs' })), projectRepoPath: root },
       logger,
       [{ gate: 'ci', cmd: ['npm', 'run', 'ci'], ok: false, outputTail: 'red' }],
+      testClassProfilePort(),
     );
     assert.ok(readFileSync(join(root, PR_DESCRIPTION_REL), 'utf8').includes('npm run ci'));
     const demoJson = JSON.parse(readFileSync(join(root, 'demo', INITIATIVE_ID, 'demo.json'), 'utf8'));
@@ -165,6 +169,7 @@ describe('integrate band — the class decides, and a class it cannot serve fail
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: writeManifest(), projectRepoPath: root },
       logger,
       GATES,
+      testClassProfilePort(),
     );
     assert.equal(result.status, 'failed');
     assert.equal(result.status === 'failed' ? result.reason : '', 'config-error');
@@ -178,6 +183,7 @@ describe('integrate band — the class decides, and a class it cannot serve fail
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: writeManifest(manifest({ class: 'docs' })), projectRepoPath: root },
       logger,
       GATES,
+      testClassProfilePort(),
     );
     assert.equal(result.status, 'complete');
   });
@@ -188,6 +194,7 @@ describe('integrate band — the class decides, and a class it cannot serve fail
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: writeManifest(manifest({ class: 'config' })), projectRepoPath: root },
       logger,
       GATES,
+      testClassProfilePort(),
     );
     const derived = events.find((e) => (e as { message?: string }).message === 'demo.input.derived');
     assert.equal((derived as { metadata?: Record<string, unknown> }).metadata?.change_class, 'config');
@@ -200,6 +207,7 @@ describe('integrate band — the class decides, and a class it cannot serve fail
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: writeManifest(), projectRepoPath: root },
       logger,
       GATES,
+      testClassProfilePort(),
     );
     assert.equal(result.status === 'failed' ? result.reason : '', 'config-error');
   });
@@ -214,6 +222,7 @@ describe('integrate band — a broken input is named, never guessed', () => {
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: writeManifest(manifest({ class: 'docs' })), projectRepoPath: root },
       logger,
       GATES,
+      testClassProfilePort(),
     );
     assert.equal(result.status === 'failed' ? result.reason : '', 'derive-failed');
     assert.ok(!existsSync(join(root, 'demo', INITIATIVE_ID)), 'nothing is written for a branch with no diff');
@@ -225,6 +234,7 @@ describe('integrate band — a broken input is named, never guessed', () => {
       { initiativeId: INITIATIVE_ID, worktreePath: root, manifestPath: join(root, 'nope.md'), projectRepoPath: root },
       logger,
       GATES,
+      testClassProfilePort(),
     );
     assert.equal(result.status === 'failed' ? result.reason : '', 'derive-failed');
     assert.ok(!existsSync(join(root, 'demo', INITIATIVE_ID)), 'nothing is written before the manifest is read');

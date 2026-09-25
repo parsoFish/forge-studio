@@ -35,7 +35,7 @@ already has for the `onboard-preflight` band.
 
 The develop flow's `integrate` node carries `agent: "demo-agent"` (ADR-039 declared
 dispatch); at runtime `execAgent`
-([`packages/factory/phases/executor-table.ts`](../../packages/factory/phases/executor-table.ts))
+([`packages/stations/phases/executor-table.ts`](../../packages/stations/phases/executor-table.ts))
 resolves the declared `integrate-band` guard and routes the node to `execIntegrate`, which
 runs the band **directly, orchestrator-side**. No agent is spawned, no prompt is
 assembled, and no budget is drawn.
@@ -50,8 +50,8 @@ The band is spec §5 item 4's `integrate` step. In order:
 3. **empty-branch guard** — a dev loop that produced nothing opens no PR;
 4. **merge-boundary gate** — the full suite on the integrated tip, failing LOUD
    on a project-config error (no agent can fix a config it cannot see);
-5. **derive** ([`derive-demo-model.ts`](../../packages/factory/phases/derive-demo-model.ts),
-   [`derive-pr-body.ts`](../../packages/factory/phases/derive-pr-body.ts)) — the
+5. **derive** ([`derive-demo-model.ts`](../../packages/stations/phases/derive-demo-model.ts),
+   [`derive-pr-body.ts`](../../packages/stations/phases/derive-pr-body.ts)) — the
    `demo.json`, the `DEMO.md` and `.forge/pr-description.md` are built from the
    work items' acceptance criteria, the gate evidence those gates just produced,
    and the diff;
