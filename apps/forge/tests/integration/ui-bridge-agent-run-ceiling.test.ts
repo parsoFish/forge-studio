@@ -182,7 +182,8 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge, buildAgentDispatchArgs } from '../../ui-bridge.ts';
+import { startBridge } from '../../ui-bridge.ts';
+import { buildAgentDispatchArgs } from '../../bridge-agent-dispatch.ts';
 import { cmdAgentDispatch, parseAgentDispatchArgs } from '@forge/agents';
 import { DRY_BRIDGE_LOG_BUCKET } from '../../dry-bridge.ts';
 import { runAgent } from '@forge/agents';
