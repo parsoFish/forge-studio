@@ -15,7 +15,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import {
-  sendJson, allowedOrigin, sanitizeError, pathOnly, createLogger, isDryBridge, refuseDryBridge, appendBoundedLog, type RouteContext,
+  sendJson, allowedOrigin, sanitizeError, pathOnly, createLogger, isDryBridge, refuseDryBridge, appendBoundedLog, isSafeRunId, type RouteContext,
 } from '@forge/kernel';
 import { loadHookDefinition, type HookLifecycleEvent } from './studio/hook-library.ts';
 import { HookRunError, runHookScriptAsync } from './studio/hook-runtime.ts';
@@ -59,12 +59,21 @@ export async function handleHookTestFire(req: IncomingMessage, res: ServerRespon
     return true;
   }
 
+  // `locateHook` already proved `id` is a valid slug (`assertSkillSlug` via
+  // `hookYamlPath` — lowercase/digits/hyphens only, no `/`, `.`, `..`), a
+  // strict subset of `isSafeRunId`'s charset. Checked again here anyway,
+  // never trusting a composed cycle id to inherit its part's safety by
+  // construction alone (the same discipline `bridge-agents-slug.ts` applies
+  // to its own `_agent-<slug>-<stamp>` ids) — security review, forge-6gv.8.1.
+  const cycleId = `_hook-test-fire-${id}`;
+  if (!isSafeRunId(cycleId)) { sendJson(res, 500, { error: 'internal: unsafe test-fire cycle id' }, origin); return true; }
+
   try {
     const def = loadHookDefinition(id, ctx.forgeRoot);
     // ONE dir per HOOK (not per test-fire), mirroring the `_agent-*`/
     // `_bridge-*` standalone-run convention — prepareHookRun's own start/end
     // bookkeeping only; the UI-facing run HISTORY is the bounded log below.
-    const logger = createLogger(`_hook-test-fire-${id}`, ctx.logsRoot);
+    const logger = createLogger(cycleId, ctx.logsRoot);
     let entry: HookTestFireLogEntry;
     try {
       const result = await runHookScriptAsync({ forgeRoot: ctx.forgeRoot, id, logger, initiativeId: `test-fire-${id}` });
