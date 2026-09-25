@@ -47,9 +47,12 @@ const NOT_RUNNING_STATES = new Set(['Z', 'X']);
  * @param procRoot the `/proc`-shaped root to read from (tests only)
  */
 export function isProcessRunning(pid: number | string, procRoot = '/proc'): boolean {
+  // Only a positive integer can name a process; nothing else reaches the path.
+  const n = Number(pid);
+  if (!Number.isInteger(n) || n <= 0) return false;
   let stat: string;
   try {
-    stat = readFileSync(`${procRoot}/${pid}/stat`, 'utf8');
+    stat = readFileSync(`${procRoot}/${n}/stat`, 'utf8');
   } catch (err) {
     // ENOENT: gone. Anything else: unknown, so NOT concluded gone.
     return (err as NodeJS.ErrnoException)?.code !== 'ENOENT';
