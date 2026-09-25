@@ -84,7 +84,9 @@ import { flowDeclaresMergedReflect, flowDefinition, knownFlowIds, resolveFlowSel
 import { createStageTwo } from './verify-cycle-stage2.mjs';
 import { captureHandle, killGroupIfLive, runGuarded } from './verify-cycle-teardown.mjs';
 import { getPaths } from '@forge/flows';
+import { runPreflight } from '@forge/projects';
 import { DEFAULT_PROJECT, buildOutcomeChecks, resolveReflectWaitDeadlineMs, serveContractEnv } from './lib/verify-outcomes.mjs';
+import { refuseUnlessContractReady } from './lib/verify-cycle-preflight.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -950,6 +952,7 @@ async function main() {
   // Pre-run: resolve the idea, clean prior state, reset the repo (routine).
   log(`spine drive · project=${PROJECT} handle=${RUN_HANDLE} ceiling=$${COST_CEILING}${COST_CEILING_BINDS ? ' (BINDS the run via FORGE_COST_CEILING_USD)' : ' (post-run assertion only — the run is bound by its manifest)'}${BASE_SHA ? ` base=${BASE_SHA}` : ''}${SEND_BACK ? ' send-back=yes' : ''}${REQUIRE_LIVE_EVIDENCE ? ' live-evidence=required' : ''}`);
   const repoPath = projectRepoPath();
+  refuseUnlessContractReady({ repoPath, baseSha: BASE_SHA, forgeRoot: FORGE_ROOT, log, runPreflight });
   const idea = resolveIdea();
   if (!idea) process.exit(1);
   cleanProjectRunState(PROJECT, repoPath);
