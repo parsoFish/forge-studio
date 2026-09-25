@@ -42,9 +42,8 @@ import {
   siblingWorktreeEscapes,
   unownedEscapes,
   removePaths,
-  sweepStoryRemotesFromManifest,
-  describeRemoteSweep,
 } from './sweep.mjs';
+import { sweepStoryRemotesFromManifest, describeRemoteSweep } from './sweep-remotes.mjs';
 import {
   snapshotSiblingGrounds,
   siblingGroundEscapes,
