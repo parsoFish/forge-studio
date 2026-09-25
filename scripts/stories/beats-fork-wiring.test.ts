@@ -11,20 +11,29 @@
  * door in this branch uses.
  *
  *   1. the loop drives the EXPANDED sequence, not `story.beats` directly —
- *      every case of a fork must reach `driveBeat` as its own beat;
+ *      every case of a fork must reach `driveBeat` as its own beat — and
+ *      THREADS `story.ground.project` into the expansion (T1 ruling 1350),
+ *      the one piece of information `expandForkedBeats` needs to substitute a
+ *      fill fork's per-case ground;
  *   2. a beat-scoped ground licence (`ground.expectedChanges[].beat`) is keyed
  *      on the ORIGINAL beat number the expansion carries, captured once per
  *      number rather than re-taken for every later case;
  *   3. the printed beat line carries the case label (`"2[cli]"`), not a bare
  *      re-derived index — so a reader (and the run's own console transcript)
- *      can tell which case produced which verdict.
+ *      can tell which case produced which verdict;
+ *   4. a DOOR fork's beat line calls `describeDoorFork` — the one line that
+ *      says the fork was carried but not driven.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runnerSourceContaining } from './runner-source.mjs';
 
-test('the beat loop imports expandForkedBeats from beats-fork.mjs', () => {
-  const runner = runnerSourceContaining('expandForkedBeats(story.beats)');
+/** Every wiring assertion below anchors on THIS call — the one place
+ *  `story.ground.project` reaches the flattener. */
+const EXPAND_CALL = "expandForkedBeats(story.beats, story.ground?.project ?? null)";
+
+test('the beat loop imports expandForkedBeats from beats-fork.mjs, and threads story.ground.project', () => {
+  const runner = runnerSourceContaining(EXPAND_CALL);
   assert.match(
     runner.path.split('/').pop() ?? '',
     /^run-story\.mjs$/,
@@ -36,8 +45,17 @@ test('the beat loop imports expandForkedBeats from beats-fork.mjs', () => {
   );
 });
 
+test('the beat loop imports describeDoorFork from beats-fork.mjs', () => {
+  const runner = runnerSourceContaining(EXPAND_CALL);
+  assert.match(
+    runner.source,
+    /import \{[^}]*describeDoorFork[^}]*\} from '\.\/beats-fork\.mjs'/s,
+    'a door fork\'s one line is a shared, tested function — never composed inline twice',
+  );
+});
+
 test('the ground-scoped licence boundary is captured ONCE per original beat number, not per case', () => {
-  const runner = runnerSourceContaining('expandForkedBeats(story.beats)');
+  const runner = runnerSourceContaining(EXPAND_CALL);
   // `groundBeatBoundaries.has(...)` guards the capture so a second (or third)
   // case of the same forked beat does not re-take — and so re-date — the
   // "before anything in this beat can run" manifest past what an earlier
@@ -50,7 +68,7 @@ test('the ground-scoped licence boundary is captured ONCE per original beat numb
 });
 
 test('the printed beat line carries the case label, not a bare re-derived index', () => {
-  const runner = runnerSourceContaining('expandForkedBeats(story.beats)');
+  const runner = runnerSourceContaining(EXPAND_CALL);
   // The label is threaded from the expansion (e.g. "2[cli]") into the
   // console line that used to read `${i + 1}. ${beat.act}` — pinned by
   // absence: that literal template must no longer appear verbatim.
@@ -58,5 +76,14 @@ test('the printed beat line carries the case label, not a bare re-derived index'
     runner.source,
     /\$\{i \+ 1\}\. \$\{beat\.act\}/,
     'the beat-loop print must use the expansion\'s own label, not a bare index',
+  );
+});
+
+test('a DOOR fork\'s beat line reports it via describeDoorFork, conditioned on the expansion\'s own doorFork', () => {
+  const runner = runnerSourceContaining(EXPAND_CALL);
+  assert.match(
+    runner.source,
+    /doorFork \? .*describeDoorFork\(doorFork\)/,
+    'the beat-mark line must call describeDoorFork exactly when this entry carries a doorFork',
   );
 });
