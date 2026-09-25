@@ -86,25 +86,15 @@ export function validateAgent(
   // runtime/loop-strategy — error (R4-01-F2 review finding). Mirrors the
   // executor enum check: parsed leniently at load, so a bad value must be a
   // lint error here (runAgent also rejects unknown values at spawn, but that
-  // is a runtime crash, not an authoring-time signal). And 'ralph' is
-  // restricted to the canonical developer-ralph slug: execAgent routes a
-  // declared ralph loop to the dev-loop pipeline, which is per-WI machinery
-  // that ignores the declaring def's own prompt/tools — any other agent
-  // declaring it would mis-run. Lifts when declared fanout generalises the
-  // loop machinery (R2-03 / R4-06-F2).
+  // is a runtime crash, not an authoring-time signal). Seam F4 (operator item
+  // 81) generalised the ralph loop off the canonical developer-ralph slug:
+  // execAgent now loads the DECLARING def's own SKILL.md for the dev-loop's
+  // per-iteration prompt, so any agent may declare it (the loop's per-WI
+  // worktree/merge-queue/model-tier machinery stays dev-loop-specific).
   const loopStrategy = def.runtime.loopStrategy;
   if (loopStrategy !== undefined && loopStrategy !== 'ralph' && loopStrategy !== 'one-shot') {
     findings.push(
       err(obj, 'runtime/loop-strategy', `unknown loopStrategy "${loopStrategy}" — must be ralph|one-shot`),
-    );
-  }
-  if (loopStrategy === 'ralph' && def.slug !== 'developer-ralph') {
-    findings.push(
-      err(
-        obj,
-        'runtime/loop-strategy',
-        `loopStrategy "ralph" is restricted to developer-ralph — the ralph loop is the dev-loop pipeline, which ignores this agent's own def (lifts with R2-03/R4-06 declared fanout)`,
-      ),
     );
   }
 
@@ -168,31 +158,18 @@ export function validateAgent(
     }
   }
 
-  // composition/band-guard — error (R4-01 whole-branch review). Band guards
-  // are declared DISPATCH (execAgent routes them to the canonical PM/reflector
-  // pipelines, which load their own SKILL.md and ignore the declaring def) —
-  // the exact wrong-identity hazard the ralph restriction above closes, so
-  // they get the same treatment: each guard is restricted to its canonical
-  // slug until the bands generalise (R4-06+); at most one band guard per def;
-  // a band-guard def must declare the one-shot loop the band spawns with.
+  // composition/band-guard — error (R4-01 whole-branch review; generalised by
+  // seam F4, operator item 81). Band guards are declared DISPATCH: execAgent
+  // now loads the DECLARING def's own SKILL.md for whichever band it routes
+  // to (never a hardcoded canonical slug), so any agent — including a second
+  // factory's own — may declare a band guard. Two invariants still hold
+  // regardless of who declares it: at most one band guard per def, and a
+  // band-guard def must declare the one-shot loop the band spawns with.
   // The INVERSE also lints: the canonical phase agents must CARRY their band
   // guard — deleting it would silently degrade the phase node to the bare
   // generic spawn (no WI validation, no brain gate) with lint green.
-  // Single source shared with execAgent's runtime backstop (agent-bands.ts) —
-  // the "lint must mirror the dispatch it backstops" rule made structural.
   const CANONICAL_BAND_SLUGS: Record<string, string> = BAND_CANONICAL_SLUG;
   const declaredBands = def.composition.guards.filter((h) => h in CANONICAL_BAND_SLUGS);
-  for (const band of declaredBands) {
-    if (CANONICAL_BAND_SLUGS[band] !== def.slug) {
-      findings.push(
-        err(
-          obj,
-          'composition/band-guard',
-          `band guard "${band}" is restricted to ${CANONICAL_BAND_SLUGS[band]} — it routes this node to that agent's canonical pipeline, ignoring this def (lifts when the bands generalise)`,
-        ),
-      );
-    }
-  }
   if (declaredBands.length > 1) {
     findings.push(
       err(obj, 'composition/band-guard', `at most one band guard per agent (got: ${declaredBands.join(', ')})`),

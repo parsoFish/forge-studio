@@ -24,64 +24,42 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { parseWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
-import { modelForSpec } from '@forge/agents/phase-agent.ts';
-import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { MODEL_BY_TIER, type ModelTier } from '@forge/agents/phase-agent.ts';
+import { deriveAgentSpec, resolveModelTier } from '@forge/agents/studio/derive.ts';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath, skillPathRelative } from '@forge/agents/skill-path.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { loadAgentSkillText } from './agent-skill-text.ts';
 
 const SKILL_PATH = skillPath('developer-ralph');
-
-/**
- * R2-03-F4 — the developer-ralph fanout concurrency cap, declared in its
- * SKILL.md `fanout:` block (R2-03-F2). Feeds `resolveDevWiConcurrency` as the
- * definition-level source (the operator env var still overrides it). Absent
- * ⇒ undefined ⇒ the resolver's config/default. developer-ralph declares 1
- * (byte-identical to the pre-F4 default).
- */
-export const DEV_FANOUT_CONCURRENCY_CAP = loadAgentDefinition(SKILL_PATH).fanout?.concurrencyCap;
 
 export type DevAllowedTool = 'Read' | 'Write' | 'Edit' | 'MultiEdit' | 'Bash' | 'Grep' | 'Glob';
 export type DevDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
 
-/**
- * ADR 024 / M2-3: the developer-loop spec derived from SKILL.md (single
- * source). The orchestrator resolves the model from the tier declared in the
- * frontmatter.
- */
+/** ADR 024 / M2-3 — canonical-only, TEST-facing (dev-binding.test.ts pins
+ *  these against the SKILL.md source). Production reads the EXECUTING def
+ *  directly (`resolveDevSpawnModel`/`agentDef.allowedTools`/etc. below). */
 export const devAgentSpec = deriveAgentSpec(skillPathRelative('developer-ralph'));
-
-/** Tool lists derived from the spec — exported for downstream consumers. */
 export const DEV_ALLOWED_TOOLS = devAgentSpec.allowedTools as DevAllowedTool[];
 export const DEV_DISALLOWED_TOOLS = devAgentSpec.disallowedTools as DevDisallowedTool[];
+export const DEV_MODEL = MODEL_BY_TIER[devAgentSpec.tier];
+export const DEV_FANOUT_CONCURRENCY_CAP = loadAgentDefinition(SKILL_PATH).fanout?.concurrencyCap;
 
-/** Concrete model, derived from the spec's tier (single source: the spec). */
-export const DEV_MODEL = modelForSpec(devAgentSpec);
-
-let cachedSkillText: string | null = null;
-function loadSkillText(): string {
-  if (cachedSkillText !== null) return cachedSkillText;
-  cachedSkillText = readFileSync(SKILL_PATH, 'utf8');
-  return cachedSkillText;
+/** Seam F4: model tier/id for ANY def — replaces DEV_MODEL at the live spawn. */
+export function resolveDevSpawnModel(def: AgentDefinition): { tier: ModelTier; model: string } {
+  const { tier } = resolveModelTier(def);
+  return { tier, model: MODEL_BY_TIER[tier] };
 }
 
 /**
- * Build the developer-loop system prompt: the SKILL.md contract (which now
- * includes the Ralph-loop discipline block — moved there as part of the ADR 024
- * prose migration so the skill is the single source of intent).
+ * Build the developer-loop system prompt: the SKILL.md contract. F-34
+ * strip-back: no brain navigation index (dev-loop-specific — see git log).
  *
- * F-34 strip-back: previously this loaded the entire brain navigation index
- * (~17 KB) and mandated brain-first reads on every iteration. In practice the
- * brain context is for design (architect / PM / reflector); the dev agent's
- * job is to make code true to the WI's acceptance criteria, full stop. The
- * architect / PM have already encoded relevant brain themes into the WI body.
- * Stripping the navigation index + the mandate cut ~17 KB of context the
- * agent was anchoring on instead of focusing on the WI.
- *
- * @param _brainCwd - kept for signature compatibility with the bench harness;
- *   no longer used since the brain navigation index is no longer loaded.
+ * @param _brainCwd - kept for signature compatibility with the bench harness.
+ * @param def - the executing node's own agent def (seam F4) — no default (no fallback).
  */
-export function buildDevSystemPrompt(_brainCwd: string): string {
-  return loadSkillText();
+export function buildDevSystemPrompt(_brainCwd: string, def: AgentDefinition): string {
+  return loadAgentSkillText(def);
 }
 
 export type DevUserPromptInput = {

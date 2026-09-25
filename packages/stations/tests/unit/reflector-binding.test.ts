@@ -25,6 +25,7 @@ import {
   renderReflectorUserPrompt,
 } from '../../phases/reflector-binding.ts';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
+import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 
 // ---------------------------------------------------------------------------
 // reflectorAgentSpec shape
@@ -99,7 +100,7 @@ function makeFakeBrainCwd(): { dir: string; cleanup: () => void } {
 test('buildReflectorSystemPrompt: contains all key invariants and no per-cycle data', () => {
   const { dir, cleanup } = makeFakeBrainCwd();
   try {
-    const sys = buildReflectorSystemPrompt(dir);
+    const sys = buildReflectorSystemPrompt(dir, canonicalDef('reflector'));
 
     // Substantive content
     assert.ok(sys.length > 2000, 'system prompt should be substantive');
@@ -227,7 +228,7 @@ test('renderReflectorUserPrompt: scopes reflection to the whole initiative (DEC-
 test('reflector SKILL contract (system prompt) writes the CENTRAL forge-owned brain, not the old in-repo path', () => {
   const { dir, cleanup } = makeFakeBrainCwd();
   try {
-    const sys = buildReflectorSystemPrompt(dir);
+    const sys = buildReflectorSystemPrompt(dir, canonicalDef('reflector'));
     // F3/ADR-035: project themes are central under brain/projects/<name>/themes.
     assert.ok(sys.includes('brain/projects/<project>/themes'), 'should point themes at the central brain/projects/<project>/themes/');
     // The retired ADR-018 in-repo path must be gone everywhere in the contract.

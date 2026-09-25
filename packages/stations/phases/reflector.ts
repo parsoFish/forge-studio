@@ -30,6 +30,7 @@ import { parseRetroMd } from '../reflection-doc.ts';
 import type { EventLogger } from '@forge/kernel';
 import { parseManifest } from '@forge/flows/manifest.ts';
 import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
+import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { buildReflectorSystemPrompt, renderReflectorUserPrompt } from './reflector-binding.ts';
 import {
   REFLECT_MODE_FILE,
@@ -83,6 +84,8 @@ export type ReflectorDeps = {
    * unchanged.
    */
   acquireBrainWriteLease?: typeof acquireBrainWriteLease;
+  /** Seam F4: the executing node's own agent def. REQUIRED — no fallback. */
+  agentDef: AgentDefinition;
 };
 
 /**
@@ -103,12 +106,13 @@ export type ReflectorDeps = {
 export async function runReflector(
   input: CycleInput,
   logger: EventLogger,
-  deps: ReflectorDeps = {},
+  deps: ReflectorDeps,
 ): Promise<ReflectorPhaseResult> {
+  const def = deps.agentDef;
   const start = logger.emit({
     initiative_id: input.initiativeId,
     phase: 'reflection',
-    skill: 'reflector',
+    skill: def.slug,
     event_type: 'start',
     input_refs: [input.manifestPath, logger.logFilePath],
     output_refs: [],
@@ -147,7 +151,7 @@ export async function runReflector(
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
       phase: 'reflection',
-      skill: 'reflector',
+      skill: def.slug,
       event_type: 'error',
       input_refs: [manifestPath],
       output_refs: [],
@@ -159,6 +163,7 @@ export async function runReflector(
       parentEventId: start.event_id,
       cause: 'manifest-unreadable',
       detail: err instanceof Error ? err.message : String(err),
+      skill: def.slug,
     });
     return { reflection_status: 'failed', lint_status: 'skipped' };
   }
@@ -172,7 +177,7 @@ export async function runReflector(
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
       phase: 'reflection',
-      skill: 'reflector',
+      skill: def.slug,
       event_type: 'end',
       input_refs: [manifestPath],
       output_refs: [],
@@ -182,7 +187,7 @@ export async function runReflector(
     return { reflection_status: 'skipped', lint_status: 'skipped' };
   }
 
-  const systemPrompt = buildReflectorSystemPrompt(forgeRoot);
+  const systemPrompt = buildReflectorSystemPrompt(forgeRoot, def);
   const cycleArchivePath = resolve(forgeRoot, 'brain', 'cycles', '_raw', `${cycleId}.md`);
   const themesDir = projectThemesDir(forgeRoot, projectName);
   // F-07: ensure brain destination dirs exist before invoking the SDK; the
@@ -249,6 +254,7 @@ export async function runReflector(
       parentEventId: start.event_id,
       cause: 'brain-write-lease-contention',
       detail: err.message,
+      skill: def.slug,
     });
     return { reflection_status: 'failed', lint_status: 'skipped' };
   }
@@ -257,6 +263,7 @@ export async function runReflector(
     brainWrites = await runReflectorBrainWrites({
       input, logger, deps, startEventId: start.event_id, forgeRoot, cycleId,
       projectName, systemPrompt, prompt, cycleArchivePath, themesDir, startedAtMs,
+      agentDef: def,
     });
   } finally {
     await releaseLease();
@@ -276,6 +283,7 @@ export async function runReflector(
     initiativeId: input.initiativeId,
     parentEventId: start.event_id,
     brainLint: deps.brainLint,
+    skill: def.slug,
   });
 
   // REF-1: derive user-questions.json from the agent-written user-questions.md.
@@ -321,7 +329,7 @@ export async function runReflector(
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
       phase: 'reflection',
-      skill: 'reflector',
+      skill: def.slug,
       event_type: 'log',
       input_refs: [logger.logFilePath],
       output_refs: [recapResult.recapPath],
@@ -338,7 +346,7 @@ export async function runReflector(
     initiative_id: input.initiativeId,
     parent_event_id: start.event_id,
     phase: 'reflection',
-    skill: 'reflector',
+    skill: def.slug,
     event_type: 'end',
     input_refs: [logger.logFilePath, manifestPath],
     output_refs: [resolve(cycleLogDir, 'retro.md')],
@@ -374,8 +382,10 @@ function runPostReflectionLint(opts: {
   initiativeId: string;
   parentEventId?: string;
   brainLint?: (opts: { cwd: string; cycleId: string }) => RunBrainLintResult;
+  /** Seam F4: the executing node's own agent slug (`def.slug`). */
+  skill: string;
 }): LintStatus {
-  const { forgeRoot, cycleId, cycleLogDir, logger, initiativeId, parentEventId, brainLint } = opts;
+  const { forgeRoot, cycleId, cycleLogDir, logger, initiativeId, parentEventId, brainLint, skill } = opts;
   const lintImpl =
     brainLint ??
     ((o: { cwd: string; cycleId: string }) =>
@@ -393,7 +403,7 @@ function runPostReflectionLint(opts: {
         initiative_id: initiativeId,
         parent_event_id: parentEventId,
         phase: 'reflection',
-        skill: 'reflector',
+        skill,
         event_type: 'log',
         input_refs: [],
         output_refs: [],
@@ -406,7 +416,7 @@ function runPostReflectionLint(opts: {
       initiative_id: initiativeId,
       parent_event_id: parentEventId,
       phase: 'reflection',
-      skill: 'reflector',
+      skill,
       event_type: 'log',
       input_refs: [],
       output_refs: [],
@@ -424,7 +434,7 @@ function runPostReflectionLint(opts: {
       initiative_id: initiativeId,
       parent_event_id: parentEventId,
       phase: 'reflection',
-      skill: 'reflector',
+      skill,
       event_type: 'log',
       input_refs: [],
       output_refs: [resolve(cycleLogDir, 'brain-lint.md')],
@@ -441,7 +451,7 @@ function runPostReflectionLint(opts: {
     initiative_id: initiativeId,
     parent_event_id: parentEventId,
     phase: 'reflection',
-    skill: 'reflector',
+    skill,
     event_type: 'log',
     input_refs: [],
     output_refs: [resolve(cycleLogDir, 'brain-lint.md')],

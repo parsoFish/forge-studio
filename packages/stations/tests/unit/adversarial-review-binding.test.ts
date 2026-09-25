@@ -8,6 +8,7 @@ import {
   REVIEW_INPUT_REL_DIR,
   type AdversarialReviewUserPromptInput,
 } from '../../phases/adversarial-review-binding.ts';
+import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 
 function baseInput(): AdversarialReviewUserPromptInput {
   return {
@@ -24,8 +25,9 @@ function baseInput(): AdversarialReviewUserPromptInput {
 }
 
 test('system prompt inlines the adversarial-review skill, byte-stable across calls', () => {
-  const a = buildAdversarialReviewSystemPrompt();
-  assert.equal(a, buildAdversarialReviewSystemPrompt());
+  const def = canonicalDef('adversarial-review');
+  const a = buildAdversarialReviewSystemPrompt(def);
+  assert.equal(a, buildAdversarialReviewSystemPrompt(def));
   assert.ok(a.includes('name: adversarial-review'));
 });
 
