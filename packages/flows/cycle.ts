@@ -222,7 +222,8 @@ export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<
   if (!input.dryRun && !input.cycleId && !persistedCycleId) {
     persistManifestCycleId(input.manifestPath, cycleId);
   }
-  const logger = createLogger(cycleId, join(FORGE_ROOT, '_logs'), {
+  const logsRoot = input.logsRoot ? resolve(input.logsRoot) : join(FORGE_ROOT, '_logs'); // forge-8vfn.8.1.10
+  const logger = createLogger(cycleId, logsRoot, {
     tee: input.eventTee,
   });
 
@@ -340,7 +341,7 @@ export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<
     // copied work-items + demo dirs (otherwise the report runs before the
     // copy completes and silently shows the no-snapshot fallback).
     await snapshotCycleArtefacts(input, cycleId).catch(() => { /* best-effort */ });
-    writeCycleReportSafely(cycleId);
+    writeCycleReportSafely(cycleId, logsRoot);
     return result;
   }
 
@@ -377,7 +378,7 @@ export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<
   // Generate the human-facing report as the final cycle step. Best-effort —
   // a failed report write does not fail the cycle (the merge already
   // happened; the report is meta).
-  writeCycleReportSafely(cycleId);
+  writeCycleReportSafely(cycleId, logsRoot);
 
   return result;
 }
@@ -395,7 +396,8 @@ export async function snapshotCycleArtefacts(
   input: CycleInput,
   cycleId: string,
 ): Promise<void> {
-  const cycleLogDir = resolve(FORGE_ROOT, '_logs', cycleId);
+  const logsRoot = input.logsRoot ? resolve(input.logsRoot) : join(FORGE_ROOT, '_logs');
+  const cycleLogDir = resolve(logsRoot, cycleId);
   if (!existsSync(cycleLogDir)) mkdirSync(cycleLogDir, { recursive: true });
 
   // Work-item specs: the PM's output, valuable evidence for the report's
@@ -456,9 +458,9 @@ export async function snapshotCycleArtefacts(
  * fail the cycle itself — the merge has already happened by the time we
  * reach this point.
  */
-function writeCycleReportSafely(cycleId: string): void {
+function writeCycleReportSafely(cycleId: string, logsRoot: string): void {
   try {
-    writeCycleReport({ cycleId });
+    writeCycleReport({ cycleId, logsRoot });
   } catch (err) {
     process.stderr.write(
       `[cycle-report] failed to write report for ${cycleId}: ${err instanceof Error ? err.message : String(err)}\n`,

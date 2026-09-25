@@ -15,7 +15,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -26,7 +26,6 @@ import { add as worktreeAdd } from '../../worktree.ts';
 import type { PhaseWiring } from '../../phase-wiring.ts';
 import type { SchedulerConfig } from '../../scheduler.ts';
 import type { NotifyConfig } from '../../notify.ts';
-import { FORGE_ROOT } from '@forge/kernel';
 
 function sh(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, stdio: 'pipe', encoding: 'utf8' });
@@ -105,7 +104,8 @@ ${opts.resumeFrom ? `resume_from: ${opts.resumeFrom}\n` : ''}---
 function makeCfg(
   queueRoot: string,
   worktreesRoot: string,
-): Required<Omit<SchedulerConfig, 'notify'>> & { notify: NotifyConfig } {
+  logsRoot: string,
+): Required<Omit<SchedulerConfig, 'notify'>> & { notify: NotifyConfig; logsRoot: string } {
   return {
     queueRoot,
     worktreesRoot,
@@ -115,6 +115,9 @@ function makeCfg(
     pollIntervalMs: 5_000,
     recoverIntervalMs: 5 * 60_000,
     notify: { desktop: false, webhook_url: null },
+    // bead forge-8vfn.8.1.10: this attempt's own tmp root â€” `runOne` must
+    // never write into this checkout's real `_logs/` (logs-residue-guard).
+    logsRoot,
   };
 }
 
@@ -170,20 +173,6 @@ function makePushThenFailWiring(worktreePath: string, branch: string): PhaseWiri
   };
 }
 
-/** `_logs/` entries for `initiativeId` land either at `_logs/<initiativeId>/`
- *  (the guard's own direct-append event) or `_logs/<timestamp>_<initiativeId>/`
- *  (a real `runCycle` â€” cycle.ts's `newCycleId`). Both are swept here so a
- *  test that reaches `runCycle` leaves no litter in the real repo tree. */
-function cleanupRealLogs(initiativeId: string): void {
-  const logsRoot = join(FORGE_ROOT, '_logs');
-  if (!existsSync(logsRoot)) return;
-  for (const entry of readdirSync(logsRoot)) {
-    if (entry === initiativeId || entry.endsWith(`_${initiativeId}`)) {
-      rmSync(join(logsRoot, entry), { recursive: true, force: true });
-    }
-  }
-}
-
 function withSkipContractCheck<T>(fn: () => Promise<T>): Promise<T> {
   const prev = process.env.FORGE_SKIP_CONTRACT_CHECK;
   process.env.FORGE_SKIP_CONTRACT_CHECK = '1';
@@ -210,14 +199,14 @@ test('runOne (a): fresh attempt onto a stale forge/<INIT> branch already on orig
       const manifestPath = writeManifest(paths, initiativeId, repo);
       const { wiring, calls } = makeTrackingWiring();
 
-      await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot), undefined, wiring);
+      await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot, join(root, '_logs')), undefined, wiring);
 
       assert.equal(calls.length, 0, `no station/agent may run before the refusal; saw: ${calls.join(', ')}`);
       assert.ok(existsSync(join(paths.failed, `${initiativeId}.md`)), 'manifest must land in failed/');
       assert.ok(!existsSync(join(paths.inFlight, `${initiativeId}.md`)), 'manifest must leave in-flight/');
       assert.ok(!existsSync(join(worktreesRoot, initiativeId)), 'no local worktree may be created for a refused attempt');
 
-      const logPath = join(FORGE_ROOT, '_logs', initiativeId, 'events.jsonl');
+      const logPath = join(root, '_logs', initiativeId, 'events.jsonl');
       assert.ok(existsSync(logPath), 'a named refusal event must be logged');
       const events = readFileSync(logPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
       const refusal = events.find((e) => e.message === 'stale-remote-branch.refused');
@@ -229,7 +218,6 @@ test('runOne (a): fresh attempt onto a stale forge/<INIT> branch already on orig
       // exactly as an operator would need to find it to resolve by hand.
       assert.equal(remoteHeadSha(repo, branch), sha);
     } finally {
-      cleanupRealLogs(initiativeId);
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -261,18 +249,17 @@ test("runOne (a'): resuming a preserved worktree (resume_from) is never refused,
       const manifestPath = writeManifest(paths, initiativeId, repo, { resumeFrom: 'develop' });
       const { wiring, calls } = makeTrackingWiring();
 
-      await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot), undefined, wiring);
+      await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot, join(root, '_logs')), undefined, wiring);
 
       assert.ok(calls.length > 0, 'the resume run must reach real flow machinery, not be refused');
       // Refuted, not refused: the manifest fails via the GENERIC cycle-error
       // path (the stub throws), never via the stale-remote-branch refusal.
-      const logPath = join(FORGE_ROOT, '_logs', initiativeId, 'events.jsonl');
+      const logPath = join(root, '_logs', initiativeId, 'events.jsonl');
       const refusalLogged = existsSync(logPath)
         ? readFileSync(logPath, 'utf8').includes('stale-remote-branch.refused')
         : false;
       assert.equal(refusalLogged, false, 'a resume run must never emit the stale-remote-branch refusal event');
     } finally {
-      cleanupRealLogs(initiativeId);
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -299,7 +286,7 @@ test('runOne (b): a fresh attempt that pushes forge/<INIT> itself, then fails â†
 
       assert.equal(remoteHeadSha(repo, branch), null, 'precondition: nothing pushed yet');
 
-      await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot), undefined, wiring);
+      await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot, join(root, '_logs')), undefined, wiring);
 
       assert.ok(existsSync(join(paths.failed, `${initiativeId}.md`)), 'manifest must land in failed/');
       assert.equal(
@@ -308,14 +295,13 @@ test('runOne (b): a fresh attempt that pushes forge/<INIT> itself, then fails â†
         'the branch THIS attempt pushed must be deleted from origin once the cycle fails',
       );
 
-      const logPath = join(FORGE_ROOT, '_logs', initiativeId, 'events.jsonl');
+      const logPath = join(root, '_logs', initiativeId, 'events.jsonl');
       const events = readFileSync(logPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
       assert.ok(
         events.some((e) => e.message === 'stale-remote-branch.cleaned-up' && e.metadata.branch === branch),
         `expected a stale-remote-branch.cleaned-up event, got: ${JSON.stringify(events)}`,
       );
     } finally {
-      cleanupRealLogs(initiativeId);
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -345,17 +331,16 @@ test("runOne (b'): resuming a preserved worktree onto a PRE-EXISTING forge/<INIT
       // branch survives a failed attempt that never touched it.
       const { wiring } = makeTrackingWiring();
 
-      await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot), undefined, wiring);
+      await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot, join(root, '_logs')), undefined, wiring);
 
       assert.equal(remoteHeadSha(repo, branch), sha, 'a branch this attempt did not push must never be deleted');
 
-      const logPath = join(FORGE_ROOT, '_logs', initiativeId, 'events.jsonl');
+      const logPath = join(root, '_logs', initiativeId, 'events.jsonl');
       const cleanedUp = existsSync(logPath)
         ? readFileSync(logPath, 'utf8').includes('stale-remote-branch.cleaned-up')
         : false;
       assert.equal(cleanedUp, false, 'no cleanup event may fire for a branch this attempt never pushed');
     } finally {
-      cleanupRealLogs(initiativeId);
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -389,7 +374,7 @@ test("runOne (c): hand-off 'reuse' attempt pushes forge/<INIT> itself (absent on
 
       assert.equal(remoteHeadSha(repo, branch), null, 'precondition: nothing on origin yet');
 
-      await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot), undefined, wiring);
+      await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot, join(root, '_logs')), undefined, wiring);
 
       assert.ok(existsSync(join(paths.failed, `${initiativeId}.md`)), 'manifest must land in failed/');
       assert.equal(
@@ -398,14 +383,13 @@ test("runOne (c): hand-off 'reuse' attempt pushes forge/<INIT> itself (absent on
         'the branch THIS hand-off attempt pushed must be deleted from origin once it fails',
       );
 
-      const logPath = join(FORGE_ROOT, '_logs', initiativeId, 'events.jsonl');
+      const logPath = join(root, '_logs', initiativeId, 'events.jsonl');
       const events = readFileSync(logPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
       assert.ok(
         events.some((e) => e.message === 'stale-remote-branch.cleaned-up' && e.metadata.branch === branch),
         `expected a stale-remote-branch.cleaned-up event, got: ${JSON.stringify(events)}`,
       );
     } finally {
-      cleanupRealLogs(initiativeId);
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -435,16 +419,15 @@ test("runOne (c'): hand-off 'reuse' attempt onto a PRE-EXISTING forge/<INIT> â†’
       const manifestPath = writeManifest(paths, initiativeId, repo);
       const wiring = makePushThenFailWiring(wt.path, branch);
 
-      await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot), undefined, wiring);
+      await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot, join(root, '_logs')), undefined, wiring);
 
       assert.equal(remoteHeadSha(repo, branch), sha, 'a branch this attempt did not create must never be deleted');
 
-      const logPath = join(FORGE_ROOT, '_logs', initiativeId, 'events.jsonl');
+      const logPath = join(root, '_logs', initiativeId, 'events.jsonl');
       const logged = existsSync(logPath) ? readFileSync(logPath, 'utf8') : '';
       assert.ok(!logged.includes('stale-remote-branch.cleaned-up'), 'no cleanup event for a branch this attempt did not create');
       assert.ok(!logged.includes('stale-remote-branch.refused'), 'a reuse attempt must never be refused, even onto an existing branch');
     } finally {
-      cleanupRealLogs(initiativeId);
       rmSync(root, { recursive: true, force: true });
     }
   });

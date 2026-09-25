@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 
 import {
   assertNonEmptyDelivery,
@@ -446,7 +446,7 @@ function cycleManifestFixture(extra: Partial<InitiativeManifest> = {}): Initiati
 
 test('P4: runCycle emits architect end event with real cost_usd + duration_ms from manifest fields', async () => {
   const root = mkdtempSync(join(tmpdir(), 'forge-p4-'));
-  const forgeRoot = resolve(import.meta.dirname, '..', '..', '..', '..');
+  const logsRoot = join(root, '_logs'); // forge-8vfn.8.1.10: never the repo's own _logs
   const cycleId = `TEST-p4-arch-${process.pid}-${Date.now()}`;
   try {
     // Write a manifest that carries real architect telemetry.
@@ -463,11 +463,11 @@ test('P4: runCycle emits architect end event with real cost_usd + duration_ms fr
       projectRepoPath: root,
       worktreePath: root,
       cycleId,
+      logsRoot,
       dryRun: true,
     }, UNREACHED_PHASE_WIRING);
 
-    // The cycle emits into the real _logs/ dir (same pattern as snapshotCycleArtefacts test).
-    const logPath = join(forgeRoot, '_logs', cycleId, 'events.jsonl');
+    const logPath = join(logsRoot, cycleId, 'events.jsonl');
     assert.ok(existsSync(logPath), `expected events.jsonl at ${logPath}`);
     const events: EventLogEntry[] = readFileSync(logPath, 'utf8')
       .split('\n').filter(Boolean)
@@ -486,14 +486,13 @@ test('P4: runCycle emits architect end event with real cost_usd + duration_ms fr
     const archStart = events.find((e) => e.phase === 'architect' && e.event_type === 'start');
     assert.ok(archStart, 'expected an architect start event');
   } finally {
-    rmSync(join(forgeRoot, '_logs', cycleId), { recursive: true, force: true });
     rmSync(root, { recursive: true, force: true });
   }
 });
 
 test('spec §5 item 7: the architect\'s cost is IN the cycle total, not just in the log (kills: an architect_cost_usd that shows on the report and in Studio while every ceiling the run is stopped by counts it as $0)', async () => {
   const root = mkdtempSync(join(tmpdir(), 'forge-arch-cost-'));
-  const forgeRoot = resolve(import.meta.dirname, '..', '..', '..', '..');
+  const logsRoot = join(root, '_logs'); // forge-8vfn.8.1.10: never the repo's own _logs
   const cycleId = `TEST-arch-cost-${process.pid}-${Date.now()}`;
   try {
     const manifestPath = join(root, 'INIT-2026-06-08-p4test.md');
@@ -516,10 +515,11 @@ test('spec §5 item 7: the architect\'s cost is IN the cycle total, not just in 
       projectRepoPath: root,
       worktreePath: root,
       cycleId,
+      logsRoot,
       dryRun: false,
     }, UNREACHED_PHASE_WIRING).catch(() => { /* the first station is unreached by design */ });
 
-    const logPath = join(forgeRoot, '_logs', cycleId, 'events.jsonl');
+    const logPath = join(logsRoot, cycleId, 'events.jsonl');
     const events: EventLogEntry[] = readFileSync(logPath, 'utf8')
       .split('\n').filter(Boolean)
       .map((l) => JSON.parse(l) as EventLogEntry);
@@ -528,14 +528,13 @@ test('spec §5 item 7: the architect\'s cost is IN the cycle total, not just in 
     assert.ok(warn, 'the architect\'s $8 against the $10 ceiling is 80% — the runner\'s tracker must have counted it');
     assert.equal((warn!.metadata as Record<string, unknown>)?.spentUsd, 8);
   } finally {
-    rmSync(join(forgeRoot, '_logs', cycleId), { recursive: true, force: true });
     rmSync(root, { recursive: true, force: true });
   }
 });
 
 test('P4: runCycle emits architect end event without cost/duration for legacy manifest (no telemetry fields)', async () => {
   const root = mkdtempSync(join(tmpdir(), 'forge-p4-legacy-'));
-  const forgeRoot = resolve(import.meta.dirname, '..', '..', '..', '..');
+  const logsRoot = join(root, '_logs'); // forge-8vfn.8.1.10: never the repo's own _logs
   const cycleId = `TEST-p4-legacy-${process.pid}-${Date.now()}`;
   try {
     const manifestPath = join(root, 'INIT-2026-06-08-p4test.md');
@@ -548,10 +547,11 @@ test('P4: runCycle emits architect end event without cost/duration for legacy ma
       projectRepoPath: root,
       worktreePath: root,
       cycleId,
+      logsRoot,
       dryRun: true,
     }, UNREACHED_PHASE_WIRING);
 
-    const logPath = join(forgeRoot, '_logs', cycleId, 'events.jsonl');
+    const logPath = join(logsRoot, cycleId, 'events.jsonl');
     assert.ok(existsSync(logPath), `expected events.jsonl at ${logPath}`);
     const events: EventLogEntry[] = readFileSync(logPath, 'utf8')
       .split('\n').filter(Boolean)
@@ -564,7 +564,6 @@ test('P4: runCycle emits architect end event without cost/duration for legacy ma
     assert.equal(archEnd!.cost_usd, undefined, 'cost_usd must be absent for legacy manifest');
     assert.equal(archEnd!.duration_ms, undefined, 'duration_ms must be absent for legacy manifest');
   } finally {
-    rmSync(join(forgeRoot, '_logs', cycleId), { recursive: true, force: true });
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -587,18 +586,17 @@ test('snapshotCycleArtefacts: mirrors demo.json + DEMO.html + PLAN.html into _lo
   writeFileSync(join(projectRepo, '_architect', 'sid1', 'manifests', `${initiativeId}.md`), '# manifest');
   writeFileSync(join(projectRepo, '_architect', 'sid1', 'PLAN.html'), '<html>plan</html>');
 
-  const forgeRoot = resolve(import.meta.dirname, '..', '..', '..', '..');
-  const artifacts = join(forgeRoot, '_logs', cycleId, 'artifacts');
+  const logsRoot = join(root, '_logs'); // forge-8vfn.8.1.10: never the repo's own _logs
+  const artifacts = join(logsRoot, cycleId, 'artifacts');
   try {
     await snapshotCycleArtefacts(
-      { initiativeId, manifestPath: 'm', projectRepoPath: projectRepo, worktreePath: worktree },
+      { initiativeId, manifestPath: 'm', projectRepoPath: projectRepo, worktreePath: worktree, logsRoot },
       cycleId,
     );
     assert.ok(existsSync(join(artifacts, 'demo.json')), 'demo.json mirrored');
     assert.ok(existsSync(join(artifacts, 'DEMO.html')), 'DEMO.html mirrored');
     assert.ok(existsSync(join(artifacts, 'PLAN.html')), 'PLAN.html mirrored');
   } finally {
-    rmSync(join(forgeRoot, '_logs', cycleId), { recursive: true, force: true });
     rmSync(root, { recursive: true, force: true });
   }
 });
