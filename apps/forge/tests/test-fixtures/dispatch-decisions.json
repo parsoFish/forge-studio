@@ -43,6 +43,27 @@
       "dispatchPath": "ralph"
     },
     {
+      "slug": "docs-integrate",
+      "band": "integrate-band",
+      "canonicalSlug": "demo-agent",
+      "loopStrategy": "one-shot",
+      "dispatchPath": "band:integrate-band"
+    },
+    {
+      "slug": "docs-review",
+      "band": "review-band",
+      "canonicalSlug": "adversarial-review",
+      "loopStrategy": "one-shot",
+      "dispatchPath": "band:review-band"
+    },
+    {
+      "slug": "docs-writer",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": "ralph",
+      "dispatchPath": "ralph"
+    },
+    {
       "slug": "onboarding-agent",
       "band": null,
       "canonicalSlug": null,
@@ -293,17 +314,17 @@
         {
           "id": "build",
           "agent": "docs-writer",
-          "resolvedKind": "unknown"
+          "resolvedKind": "agent"
         },
         {
           "id": "integrate",
           "agent": "docs-integrate",
-          "resolvedKind": "unknown"
+          "resolvedKind": "agent"
         },
         {
           "id": "review",
           "agent": "docs-review",
-          "resolvedKind": "unknown"
+          "resolvedKind": "agent"
         },
         {
           "id": "verdict",
