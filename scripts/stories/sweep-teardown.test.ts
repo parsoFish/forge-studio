@@ -17,6 +17,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight, stopSchedulerCensusAndRelease, reapCensusAndSweep, DAEMON_PID_FILE } from './sweep-teardown.mjs';
 import { sweepProductFixtures } from './sweep.mjs';
+import { quiesceWriters } from './quiesce.mjs';
 
 /**
  * The leading sweep's missing paired restore — T1 ruling 594, half 2.
@@ -507,6 +508,18 @@ function plantReapedRootWithGrandchild(root: string, grandchildScript: string, r
   return parent;
 }
 
+/**
+ * `quiesceWriters` with its own defaults intact (15s / 250ms) does nothing to
+ * end the wait itself — it only OBSERVES. In these doors nothing kills the
+ * planted root until `reapCensusAndSweep`'s OWN census does, several lines
+ * later, so the real defaults burn the full 15s bound for no reason before
+ * getting there. Production pays this unchanged (`quiesceWriters` itself is
+ * untouched by this fix); the doors do not need to.
+ */
+function fastQuiesce(opts: Parameters<typeof quiesceWriters>[0]) {
+  return quiesceWriters({ ...opts, upToMs: 400, pollMs: 25, settleMs: 25 });
+}
+
 test('finding row 75 (agent half) RED: the OLD sequence (sweepProductFixtures alone) leaves a heartbeat a live grandchild keeps rewriting', async (t) => {
   const root = mkdtempSync(join(tmpdir(), 'forge-agent-census-red-'));
   const sinceMs = Date.now() - 60_000;
@@ -561,6 +574,7 @@ test('finding row 75 (agent half) DOOR: reapCensusAndSweep kills the grandchild,
   const result = await reapCensusAndSweep({
     root, storyId: 'S-green', sinceMs, evidenceDir,
     reapedPids: [parent.pid],
+    quiesce: fastQuiesce,
     censusBoundMs: 3000, censusPollMs: 20, rereadDelayMs: 150,
   });
 
@@ -635,6 +649,7 @@ test('finding row 75 (agent half) DOOR (third): a TERM-respecting grandchild exi
   const result = await reapCensusAndSweep({
     root, storyId: 'S-term', sinceMs, evidenceDir,
     reapedPids: [parent.pid],
+    quiesce: fastQuiesce,
     censusBoundMs: 3000, censusPollMs: 20, rereadDelayMs: 100,
   });
 

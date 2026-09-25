@@ -11,12 +11,21 @@
  * Both exist because a run that ends badly used to leave the tree lying about
  * itself: files git still tracks reported as deleted, and a scheduler still
  * running that would red the NEXT run's beat 7 at t+0.
+ *
+ * A THIRD SHAPE JOINED THEM AT FINDING ROW 75 (T1 rulings 1258, 1332):
+ * `reapCensusAndSweep` census-gates the STORY's OWN trailing sweep the same
+ * way `stopSchedulerCensusAndRelease` census-gates the scheduler's — one file,
+ * because both are "confirm the writer is actually dead before trusting a
+ * clear", and a second copy of that reasoning is how one of the two would
+ * drift from the other.
  */
 import { existsSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, relative } from 'node:path';
 import { readProcTable, descendantsOf } from './reap.mjs';
 import { waitForCensusEmpty, describeCensus } from './reap-census.mjs';
+import { quiesceWriters, describeQuiesce } from './quiesce.mjs';
+import { sweepProductFixtures } from './sweep.mjs';
 
 /**
  * Put back the COMMITTED artifacts the leading sweep removed and the run never
@@ -416,4 +425,121 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
   }
 
   return { sched, census, release: { ...rel, reappeared }, lines };
+}
+
+/**
+ * `quiesceWriters` + the story's trailing sweep, WITH THE GAP CLOSED — finding
+ * row 75's OTHER half (T1 rulings 1258, 1332). `run-story.mjs` used to call
+ * `quiesceWriters` (which only PRINTS whether the tree settled) and then call
+ * `sweepProductFixtures` regardless of what it found — the exact shape that
+ * closed at the scheduler in `stopSchedulerCensusAndRelease`, at the second
+ * call site the same finding named: `_queue/*<state>/<id>.md.heartbeat`,
+ * `_worktrees/<id>`, this run's `_logs/<ts>_<id>` cycle dir
+ * (`captureAndClearMintedRunArtefacts`, reached through `sweepProductFixtures`).
+ *
+ * `reapAgentRuns` (run-story.mjs, unchanged, called before this) already
+ * snapshots-then-signals every pid it can attribute to this run — descendants,
+ * process group, marker-swept stragglers — TERM then bounded-wait then KILL.
+ * What it does NOT do is confirm the kernel finished tearing each one down
+ * before returning: `kill()` not throwing says a signal was DELIVERED, never
+ * that the target is gone, and under this campaign's own CPU-starvation
+ * conditions that gap is measured, not theoretical (T3 rule 9; the scheduler
+ * half's own header quotes the 13s/2.7min numbers).
+ *
+ * SO THIS TAKES A SECOND, FRESH SNAPSHOT of every reaped pid's descendants —
+ * `reapAgentRuns`'s own snapshot is stale the instant it returns — TERMs
+ * anything still there directly (belt over `reapAgentRuns`'s own kill, for a
+ * straggler its bounded wait gave up on or a child spawned in the narrow
+ * window between that snapshot and its signal), censuses with the SAME
+ * `waitForCensusEmpty` the scheduler half uses, escalates to SIGKILL on
+ * survivors, and re-censuses once. Only a census-empty result reaches the
+ * clear; a non-empty one REFUSES IT ENTIRELY and says why, by name.
+ *
+ * THE RE-READ IS A SEPARATE CHECK, not a formality: a writer that shares no
+ * ancestry with anything this run dispatched at all — the second door T1 1332
+ * names — is invisible to a tree-membership census by construction, and only
+ * re-reading the exact paths `captureAndClearMintedRunArtefacts` reported
+ * CLEARED can catch it.
+ *
+ * `quiesceWriters` itself is UNCHANGED and still only prints — its own
+ * git-porcelain tree-quiet check is a different, broader question (does
+ * ANYTHING in the whole tree keep moving) than this census (does something
+ * still descend from a pid this run dispatched), and narrowing its role here
+ * would be a second, silent behaviour change nobody asked for.
+ *
+ * @param {{root: string, storyId: string, sinceMs: number, groundProject?: string,
+ *   evidenceDir: string, reapedPids: (number|string)[],
+ *   quiesce?: typeof quiesceWriters, sweep?: typeof sweepProductFixtures,
+ *   censusBoundMs?: number, censusPollMs?: number, procRoot?: string,
+ *   rereadDelayMs?: number, sleep?: (ms: number) => Promise<void>}} args
+ * @returns {Promise<{quiesce: object, census: object, sweep: object|null,
+ *   reappearedArtefacts: string[], lines: string[], warnLines: string[]}>}
+ */
+export async function reapCensusAndSweep({
+  root, storyId, sinceMs, groundProject, evidenceDir, reapedPids,
+  quiesce = quiesceWriters, sweep = sweepProductFixtures,
+  // Injected exactly like `reapAgentRuns`'s own `procTable`/`kill` seam
+  // (reap.mjs) — not for symmetry, but because a fixed or fabricated root
+  // pid in a test must never reach the REAL `/proc`: `descendantsOf(1, ...)`
+  // against a real process table is every process on the host, and this
+  // function would then SIGTERM all of them.
+  procTable = () => readProcTable(),
+  kill = (pid, sig) => process.kill(pid, sig),
+  censusBoundMs = 5000, censusPollMs = 100, procRoot = '/proc', listPids,
+  rereadDelayMs = 250, sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
+}) {
+  const quiesceResult = await quiesce({ root, pids: reapedPids });
+  const lines = [...describeQuiesce(quiesceResult)];
+
+  const roots = (reapedPids ?? []).filter((p) => p !== null && p !== undefined);
+  // BEFORE ANY SIGNAL OF THIS PASS — `reapAgentRuns`'s own snapshot is already
+  // stale, so this is a fresh one, and it has to precede the TERM below for
+  // the same reason the scheduler half's does (5.45: once a pid is truly
+  // gone the kernel has already reparented whatever it had).
+  const table = roots.length > 0 ? procTable() : new Map();
+  const freshDescendants = roots.flatMap((pid) => descendantsOf(pid, table));
+  for (const pid of freshDescendants) {
+    try { kill(pid, 'SIGTERM'); } catch { /* already gone */ }
+  }
+  const censusOf = () => waitForCensusEmpty([...roots, ...freshDescendants], { boundMs: censusBoundMs, pollMs: censusPollMs, procRoot, listPids });
+  let census = await censusOf();
+  if (!census.empty && census.survivors !== null) {
+    for (const pid of census.survivors) {
+      try { kill(Number(pid), 'SIGKILL'); } catch { /* already gone */ }
+    }
+    census = await censusOf();
+  }
+  lines.push(...describeCensus(census));
+
+  if (!census.empty) {
+    lines.push(
+      `[stories] REFUSING to run the trailing sweep — ${census.reason} — clearing _queue/, _worktrees/ or ` +
+      'this run\'s ground now would race a live writer, which is the defect this census exists to close. ' +
+      'Nothing was cleared; the next run\'s residue door will report it, at $0.',
+    );
+    return { quiesce: quiesceResult, census, sweep: null, reappearedArtefacts: [], lines, warnLines: [] };
+  }
+
+  const sweepResult = sweep(storyId, root, { sinceMs, groundProject, evidenceDir });
+  lines.push(
+    ...sweepResult.lines, // 7.6.74: the removals AND the cycle's own queue writes, which no story-id glob reaches
+  );
+  const warnLines = (sweepResult.failed ?? []).map(
+    (f) => `[stories] trailing sweep could not remove ${f.path}: ${f.error}`,
+  );
+
+  // RE-READ, because the census above cannot see a writer that shares no
+  // ancestry with anything this run dispatched at all (T1 1332) — that
+  // writer was never a candidate for the kill or the census above, so only
+  // reading the exact paths back can catch it.
+  await sleep(rereadDelayMs);
+  const reappearedArtefacts = (sweepResult.artefacts?.cleared ?? []).filter((rel) => existsSync(join(root, rel)));
+  for (const rel of reappearedArtefacts) {
+    lines.push(
+      `[stories] ARTEFACT CLEAR DID NOT HOLD: ${rel} reappeared after the census reported empty — a writer ` +
+      'outside the census survived it. NOT claiming this clear is clean.',
+    );
+  }
+
+  return { quiesce: quiesceResult, census, sweep: sweepResult, reappearedArtefacts, lines, warnLines };
 }
