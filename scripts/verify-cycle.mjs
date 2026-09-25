@@ -29,9 +29,11 @@
  * The gate assertions (ADR 022 §1 + S9):
  *   1. the cycle reached merge (finalStatus `merged`/`done`, or manifest in `_queue/merged|done/`);
  *   2. the dev-loop completed N/N work items (no complete:0 / failed);
- *   3. the project's own tests are green post-merge (its .forge quality gate, else npm test);
+ *   3. the project's own tests are green post-merge (its .forge quality gate, else
+ *      npm test);
  *   4. total cycle cost is under the declared ceiling;
- *   5. reflect wrote a central project-brain theme this run (brain/projects/<project>/themes/, mtime within the run).
+ *   5. reflect wrote a central project-brain theme this run
+ *      (brain/projects/<project>/themes/, mtime within the run).
  * Plus, for live-resource projects (and any run with --require-live-evidence):
  *   6. the merged cycle's demo carries LIVE evidence — a real REST GET checkpoint.
  *
@@ -43,13 +45,19 @@
  * --idea-file, else the body of the corpus manifest at _queue/done/<run-handle>.md.
  *
  * Options:
- *   --project <name>        managed project to run against (default gitpulse, an independent repo; NEVER run against mdtoc — it is committed inside forge itself). betterado is the live-ADO tier.
- *   --idea-file <path>      the initiative idea fed to the architect (forge-root relative). Falls back to the corpus manifest body.
- *   --base-sha <sha>        base commit to reset the harness repo to (routine tier); also the ONLY thing that skips the pre-stage-1 contract preflight below (its frozen corpus deliberately fails C2).
+ *   --project <name>        managed project to run against (default gitpulse, an
+ *                           independent repo; NEVER run against mdtoc — it is
+ *                           committed inside forge itself). betterado is the
+ *                           live-ADO tier.
+ *   --idea-file <path>      the initiative idea fed to the architect (forge-root
+ *                           relative). Falls back to the corpus manifest body.
+ *   --base-sha <sha>        base commit to reset the harness repo to (routine).
  *   --cost-ceiling <usd>    BINDS the run (threaded as FORGE_COST_CEILING_USD) and
  *                           fails the gate above it; the default only asserts.
- *   --flow <id>             the flow stage 2 hands the plan to (default forge-develop); see verify-cycle-flow.mjs and verify-cycle-stage2.mjs.
- *   --require-live-evidence force the live-demo-evidence gate on (default: on for known live-resource projects). --no-live-evidence opts out.
+ *   --flow <id>             the flow stage 2 hands the plan to (default forge-develop);
+ *                           see verify-cycle-flow.mjs and verify-cycle-stage2.mjs.
+ *   --require-live-evidence force the live-demo-evidence gate on (default: on for
+ *                           known live-resource projects). --no-live-evidence opts out.
  *   --force-reset           allow resetting a repo with uncommitted changes.
  *   --send-back             after develop first reaches ready-for-review, POST a
  *                           real send-back verdict, re-serve to drain the re-queued
@@ -78,7 +86,7 @@ import { captureHandle, killGroupIfLive, runGuarded } from './verify-cycle-teard
 import { getPaths } from '@forge/flows';
 import { runPreflight } from '@forge/projects';
 import { DEFAULT_PROJECT, buildOutcomeChecks, resolveReflectWaitDeadlineMs, serveContractEnv } from './lib/verify-outcomes.mjs';
-import { contractPreflightVerdict, shouldRunContractPreflight } from './lib/verify-cycle-preflight.mjs';
+import { refuseUnlessContractReady } from './lib/verify-cycle-preflight.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -944,11 +952,7 @@ async function main() {
   // Pre-run: resolve the idea, clean prior state, reset the repo (routine).
   log(`spine drive · project=${PROJECT} handle=${RUN_HANDLE} ceiling=$${COST_CEILING}${COST_CEILING_BINDS ? ' (BINDS the run via FORGE_COST_CEILING_USD)' : ' (post-run assertion only — the run is bound by its manifest)'}${BASE_SHA ? ` base=${BASE_SHA}` : ''}${SEND_BACK ? ' send-back=yes' : ''}${REQUIRE_LIVE_EVIDENCE ? ' live-evidence=required' : ''}`);
   const repoPath = projectRepoPath();
-  // Refuse before ANY spend (architect/studio) on a hard contract-clause failure — the SAME judgement claim-validator.ts applies at claim time, run here so a not-contract-ready project costs $0, not an architect turn. Skipped on --base-sha (routine tier; frozen corpus deliberately fails C2).
-  if (shouldRunContractPreflight(BASE_SHA)) {
-    const verdict = contractPreflightVerdict(runPreflight(repoPath, { forgeRoot: FORGE_ROOT, requireRunnableGate: true }));
-    if (!verdict.ok) { for (const c of verdict.failingHard) log(`  ✗ ${c.clause} — ${c.detail}`); log(verdict.message); process.exit(1); }
-  }
+  refuseUnlessContractReady({ repoPath, baseSha: BASE_SHA, forgeRoot: FORGE_ROOT, log, runPreflight });
   const idea = resolveIdea();
   if (!idea) process.exit(1);
   cleanProjectRunState(PROJECT, repoPath);

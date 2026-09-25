@@ -14,12 +14,16 @@
  * pass; advisory failures never block) BEFORE stage 1, so a not-contract-ready
  * project is refused before anything is spawned.
  *
- * Pure, like `verify-cycle-stage-outcome.mjs`'s `classifyServeStageOutcome`:
- * a judgement only a live `runPreflight()` call could exercise is a judgement
- * nobody exercises in a test. This module does no fs / child_process /
- * process.exit — `verify-cycle.mjs`'s thin call site owns the impure
- * `runPreflight(...)` call and the log-and-exit; this module only judges an
- * already-computed report and decides whether to run it at all.
+ * `contractPreflightVerdict` and `shouldRunContractPreflight` are PURE, like
+ * `verify-cycle-stage-outcome.mjs`'s `classifyServeStageOutcome`: a judgement
+ * only a live `runPreflight()` call could exercise is a judgement nobody
+ * exercises in a test. `refuseUnlessContractReady` is the thin ORCHESTRATION
+ * around them — it does call the injected `runPreflight`, `log` and
+ * `process.exit` — kept here (not in `verify-cycle.mjs`) so the call site
+ * in that 1200-line file stays a single line, and so THIS function stays
+ * testable: every impure dependency arrives as a parameter, never imported
+ * directly, so a test can drive it with fakes and assert on what they
+ * recorded instead of shelling out to a real project dir.
  */
 
 /**
@@ -66,4 +70,38 @@ export function contractPreflightVerdict(preflightResult) {
  */
 export function shouldRunContractPreflight(baseSha) {
   return !baseSha;
+}
+
+/**
+ * Refuse before ANY spend (architect/studio) when the project fails a hard
+ * contract clause. This is `verify-cycle.mjs`'s ENTIRE pre-stage-1 call site,
+ * moved here so that file gains only an import and a single call line: decide
+ * whether to run at all (`shouldRunContractPreflight`), run the INJECTED
+ * `runPreflight` (never imported directly — that is what keeps this testable
+ * without `@forge/projects` or a real project dir), judge it
+ * (`contractPreflightVerdict`), and on refusal log every failing hard clause
+ * (id + detail) plus the summary message before exiting non-zero. Called
+ * BEFORE any studio/architect spawn, so a refusal here has nothing to tear
+ * down.
+ *
+ * Returns normally (no exit) when skipped (routine tier) or contract-ready.
+ *
+ * @param {object} params
+ * @param {string} params.repoPath absolute path to the managed project repo
+ * @param {string | null | undefined} params.baseSha `--base-sha`, if given —
+ *   the routine tier; when set, `runPreflight` is never called at all
+ * @param {string} params.forgeRoot forge install root, passed through to `runPreflight`
+ * @param {(msg: string) => void} params.log
+ * @param {(projectDir: string, opts?: object) => PreflightReport} params.runPreflight
+ *   injected (e.g. `runPreflight` from `@forge/projects`) so this stays
+ *   testable with a fake report instead of a real project on disk
+ * @returns {void}
+ */
+export function refuseUnlessContractReady({ repoPath, baseSha, forgeRoot, log, runPreflight }) {
+  if (!shouldRunContractPreflight(baseSha)) return;
+  const verdict = contractPreflightVerdict(runPreflight(repoPath, { forgeRoot, requireRunnableGate: true }));
+  if (verdict.ok) return;
+  for (const c of verdict.failingHard) log(`  ✗ ${c.clause} — ${c.detail}`);
+  log(verdict.message);
+  process.exit(1);
 }
