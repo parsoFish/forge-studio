@@ -379,7 +379,27 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
         });
       }
     }
-    if (stallDoor !== null && sessionScope === null && doorWorthRunning(timeoutMs, STALL_CEILING_MS)) {
+    // Bead `forge-8vfn.8.1.4`. NOT CONSULTED WHILE A CYCLEWATCH IS WATCHING.
+    // This door's own channel search (`makeAgentChannelDoor`, born-after-the-
+    // anchor or the page's named run) knows nothing of `cycleOf` — the develop
+    // station CONTINUES the architect's cycle dir, born BEFORE the press this
+    // wait anchors on, so the search finds nothing and the door reports
+    // `no-channel` about a cycle that is genuinely open and streaming events.
+    // That false finding then travelled as far as `beatVerdict` at the beat's
+    // fresh re-read, which knows nothing of WHY the wait ended and answered
+    // green because the beat's plain `expect.data` had held since the press.
+    //
+    // `cycleWatch` is the RIGHT door for a beat that named one: it resolves the
+    // SAME identity (`cycleDirForInitiative`, above) this door cannot, and it
+    // already ends the wait — a poll up, `watching` — the instant the product
+    // publishes a terminal that is not the one wanted. A cycle that never
+    // starts at all is not silently believed either: `terminalHeld` stays
+    // false forever, so the deadline branch below still reds it, at the
+    // beat's own declared bound rather than this door's fixed ceiling. Reusing
+    // `cycleDirForInitiative` a SECOND time here, inside this door, would be a
+    // second resolver for one question; not consulting this door at all keeps
+    // there being exactly one.
+    if (!watching && stallDoor !== null && sessionScope === null && doorWorthRunning(timeoutMs, STALL_CEILING_MS)) {
       // 718(1): the search window opens at the beat's declared ANCHOR when it
       // has one — the press whose work this beat is watching — and at this
       // wait's own start otherwise. The BOUND is unaffected either way: it is
