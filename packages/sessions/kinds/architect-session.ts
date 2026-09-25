@@ -35,8 +35,8 @@ import { deriveSessionCostUsd } from '@forge/kernel';
 // here can cycle back into `@forge/sessions` (agents' `agent-run.ts` imports
 // it) while THIS module is still mid-load — a live TDZ
 // (`ReferenceError: Cannot access 'architectKind' before initialization`),
-// not a bundler quirk. `phase-agent.ts`/`studio/derive.ts`/`skill-path.ts`
-// only reach `@forge/contracts`/`@forge/kernel`/`@forge/library`, so these
+// not a bundler quirk. `phase-agent.ts`/`packages/agents/studio/derive.ts`/
+// `skill-path.ts` only reach `@forge/contracts`/`@forge/kernel`/`@forge/library`, so these
 // deep imports break the cycle.
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import type { ModelTier } from '@forge/agents/phase-agent.ts';

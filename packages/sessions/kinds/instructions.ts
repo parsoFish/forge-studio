@@ -53,8 +53,8 @@ import { withStudioWrite } from '@forge/projects';
 // (`TypeError: skillPathRelative is not a function` under a bundler that
 // resolves re-exports as ordered assignments; `ReferenceError: Cannot access
 // ... before initialization` under Node's own loader), not a bundler-only
-// quirk. `phase-agent.ts`/`studio/derive.ts`/`skill-path.ts` only reach
-// `@forge/contracts`/`@forge/kernel`/`@forge/library`, so these deep imports
+// quirk. `phase-agent.ts`/`packages/agents/studio/derive.ts`/`skill-path.ts`
+// only reach `@forge/contracts`/`@forge/kernel`/`@forge/library`, so these deep imports
 // break the cycle.
 import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';

@@ -41,10 +41,11 @@ rather than importing what they need.
 
 ### Eight literal production subpaths, forced by a cycle
 
-`package.json` also maps `"./phase-agent.ts"`, `"./studio/derive.ts"`,
-`"./skill-path.ts"`, `"./pinned-sdk-query.ts"`, `"./studio/hook-dispatch.ts"`,
-`"./tool-event-emit.ts"`, `"./stream-deadline.ts"` and
-`"./studio/agent-registry.ts"` — bead `forge-8vfn.5.31`'s repoint work
+`package.json` also maps eight literal subpaths — `phase-agent.ts`,
+`packages/agents/studio/derive.ts`, `skill-path.ts`,
+`pinned-sdk-query.ts`, `packages/agents/studio/hook-dispatch.ts`,
+`tool-event-emit.ts`, `stream-deadline.ts` and
+`packages/agents/studio/agent-registry.ts` — bead `forge-8vfn.5.31`'s repoint work
 surfaced a live cross-package cycle: `agent-run.ts`/`agent-dispatch-cmd.ts`
 import `@forge/sessions` (an already-baselined allow-graph violation), and a
 dozen-plus `packages/sessions/*.ts`/`kinds/*.ts` files call `deriveAgentSpec(
@@ -60,7 +61,7 @@ architect-session.ts`'s own module doc for the full chain that was measured.
 
 ### The one test-only subpath
 
-`@forge/agents/testing` exports `studio/materials.ts`'s vocabulary
+`@forge/agents/testing` exports `packages/agents/studio/materials.ts`'s vocabulary
 (`MATERIAL_KINDS`, `MAX_MATERIALS_COUNT`, `MAX_MATERIAL_BYTES`,
 `MAX_MATERIALS_TOTAL_BYTES`), `DEFAULT_IDLE_DEADLINE_MS`, `registeredSdkIds`,
 and `DispatchAgentRunOpts`/`DispatchAgentRunResult` — each has no production

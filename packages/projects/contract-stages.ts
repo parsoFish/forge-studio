@@ -59,7 +59,7 @@ import { join, sep } from 'node:path';
 // contract.test.ts` with `ReferenceError: Cannot access 'SESSION_STAGES'
 // before initialization` — the door eagerly pulls in sessions' whole module
 // graph, and something reachable from it cycles back here before
-// `studio/session-kinds.ts`'s module finishes initializing. This edge is
+// `packages/sessions/studio/session-kinds.ts`'s module finishes initializing. This edge is
 // already a baselined `package-layer-order` violation (projects, rank 2,
 // reaching sessions, rank 4); going through the door does not fix that
 // violation, it only adds a live TDZ crash on top of it. Kept deep per the

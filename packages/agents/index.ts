@@ -34,9 +34,11 @@
  * `packages/sessions/kinds/registry.ts` (or the originating kind file)
  * while IT is still mid-load, which is a live cross-package cycle, not a bug
  * in any one file. Those sessions files were repointed to the deep, leaf,
- * non-cyclic paths below instead (`phase-agent.ts`, `studio/derive.ts`,
- * `skill-path.ts`, `pinned-sdk-query.ts`, `studio/hook-dispatch.ts`,
- * `tool-event-emit.ts`, `stream-deadline.ts`, `studio/agent-registry.ts` —
+ * non-cyclic paths below instead (`phase-agent.ts`,
+ * `packages/agents/studio/derive.ts`, `skill-path.ts`,
+ * `pinned-sdk-query.ts`, `packages/agents/studio/hook-dispatch.ts`,
+ * `tool-event-emit.ts`, `stream-deadline.ts`,
+ * `packages/agents/studio/agent-registry.ts` —
  * each reaches no higher than `@forge/kernel`/`@forge/library`), which is
  * why those eight files are legal literal `package.json#exports` subpaths
  * despite this being a one-door package —

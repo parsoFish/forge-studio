@@ -1,7 +1,7 @@
 /**
  * `@forge/agents/testing` — the test-only subpath (bead forge-8vfn.5.31).
  *
- * `studio/materials.ts`'s exports have no production consumer outside this
+ * `packages/agents/studio/materials.ts`'s exports have no production consumer outside this
  * package today — only two `apps/forge` tests reach for them. Folding them
  * into the main door (`index.ts`) would widen the package's PRODUCTION public
  * API on the strength of a test's convenience; a dedicated subpath keeps the

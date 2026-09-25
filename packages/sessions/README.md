@@ -28,9 +28,9 @@ The test that holds this file honest is `contract.test.ts` beside it: it reads t
 | `session-resolution.ts` | `invalidProjectReason` · `sessionIsReadable` · `findSessionProject` |
 | `session-status-io.ts` | `guardedReadSessionStatus` · `guardedWriteSessionStatus` · `CANCELLED_PHASE` |
 | `session-write-fence.ts` | `writeRootFenceOptions` |
-| `studio/session-kinds-validate.ts` | `validateSessionKinds` |
-| `studio/session-kinds.ts` | `SESSION_STAGES` · `loadSessionKinds` |
-| `studio/session-transcript.ts` | `deriveSessionArtifact` · `safeReadFileInSession` |
+| `packages/sessions/studio/session-kinds-validate.ts` | `validateSessionKinds` |
+| `packages/sessions/studio/session-kinds.ts` | `SESSION_STAGES` · `loadSessionKinds` |
+| `packages/sessions/studio/session-transcript.ts` | `deriveSessionArtifact` · `safeReadFileInSession` |
 | `turn-cost-rows.ts` | `EMIT_FAILED_SIDECAR` · `EMIT_FAILED_STDERR_MARKER` · `emitTurnCostRow` · `emitTurnEndedUnpricedRow` |
 
 ### Types
@@ -39,15 +39,16 @@ The test that holds this file honest is `contract.test.ts` beside it: it reads t
 
 ## One door, plus a documented cycle-avoidance exception and one test-only subpath
 
-`package.json` maps `"."`, `"./testing"`, and — kept deep on purpose —
-`"./studio/session-kinds.ts"` and `"./studio/session-transcript.ts"`.
+`package.json` maps `"."`, `"./testing"`, and — kept deep on purpose — two
+literal subpaths pointing at `packages/sessions/studio/session-kinds.ts`
+and `packages/sessions/studio/session-transcript.ts`.
 `packages/projects/contract-stages.ts` imports `SESSION_STAGES` and three
 transcript symbols through those two deep paths rather than the door: going
 through `@forge/sessions` there crashed `packages/sessions/contract.test.ts`
 with `ReferenceError: Cannot access 'SESSION_STAGES' before initialization` —
 the door eagerly pulls in this package's whole module graph, and something
-reachable from it cycles back into `contract-stages.ts` before
-`studio/session-kinds.ts` finishes initializing. Bead `forge-8vfn.5.31` kept
+reachable from it cycles back into `contract-stages.ts` before that
+same file's module finishes initializing. Bead `forge-8vfn.5.31` kept
 this one deep import rather than "fixing" the door at the cost of a live TDZ
 crash; every other consumer of this package goes through the door.
 

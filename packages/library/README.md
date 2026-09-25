@@ -6,7 +6,7 @@ Spec §3.1 gives this package the Skill and Artifact kinds. What it does **not**
 
 ## The public API
 
-These 54 values and 13 types are exported from `index.ts`, plus one documented test-only subpath (below), and nothing else is. The list is not curated: it is the set other packages, `apps/` and the legacy tree actually import, measured across the repo. `tests/contract/contract.test.ts` parses this table and fails if the index and this file disagree, so neither can drift alone.
+These 54 values and 13 types are exported from `index.ts`, plus one documented test-only subpath (below), and nothing else is. The list is not curated: it is the set other packages, `apps/` and the legacy tree actually import, measured across the repo. `contract.test.ts` parses this table and fails if the index and this file disagree, so neither can drift alone.
 
 | symbol | kind | what it is for |
 |---|---|---|
