@@ -23,7 +23,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { readBoundedLog, appendBoundedLog } from '../../bounded-log.ts';
+import { readBoundedLog, appendBoundedLog, boundedLogSegments, truncateTail } from '../../bounded-log.ts';
 
 const createdDirs: string[] = [];
 function makeRoot(): string {
@@ -79,5 +79,22 @@ describe('appendBoundedLog', () => {
     const root = makeRoot();
     const result = appendBoundedLog<Entry>(root, ['..', 'escape.json'], { at: 'x', n: 1 }, 10);
     assert.equal(result, null);
+  });
+});
+
+describe('boundedLogSegments', () => {
+  it('builds [dir, "<id>.json"] — the one derivation every reader/writer shares', () => {
+    assert.deepEqual(boundedLogSegments('_hook-test-fires', 'my-hook'), ['_hook-test-fires', 'my-hook.json']);
+  });
+});
+
+describe('truncateTail', () => {
+  it('leaves a short string unchanged', () => {
+    assert.equal(truncateTail('ok', 10), 'ok');
+  });
+
+  it('truncates a long string to maxChars and appends a marker', () => {
+    const result = truncateTail('a'.repeat(20), 10);
+    assert.equal(result, `${'a'.repeat(10)}…(truncated)`);
   });
 });
