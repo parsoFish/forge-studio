@@ -103,6 +103,12 @@ test('extractThemeReferences: an EMPTY evidence[] list does not count as "presen
   assert.deepEqual(refs, ['x/y.go'], `empty evidence[] must fall back to body extraction, got ${JSON.stringify(refs)}`);
 });
 
+test('extractThemeReferences: a non-string evidence[] entry (a mistyped frontmatter value — a bare number, an object) is DROPPED, never thrown on — the string entries alongside it are still judged (D14 security review: `.startsWith` on a non-string would crash brain-lint for every theme in the run)', () => {
+  const frontmatter = { evidence: [42, { a: 1 }, 'src/a.ts'] as unknown as string[] };
+  const refs = extractThemeReferences('', frontmatter);
+  assert.deepEqual(refs, ['src/a.ts'], `the two non-string entries must be dropped, the string entry judged, got ${JSON.stringify(refs)}`);
+});
+
 // ---------- 3. extraction: fenced blocks are commands, not assertions ----------
 
 test('extractThemeReferences: a path inside a fenced code block is ignored; the SAME-SHAPED single-backtick span in the fence is a false-positive trap for a fence-unaware regex, and an inline span outside the fence is kept', () => {
