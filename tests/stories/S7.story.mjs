@@ -199,7 +199,7 @@ export default {
       // standing on.
       act: 'Describe the skill to the creation agent instead of writing the package by hand',
       do: [
-        { fill: 'authoring-launcher-project', with: 'mdtoc' },
+        { fill: 'authoring-launcher-project', with: 'story-s7' },
         { fill: 'authoring-launcher-prompt', with: SKILL_BRIEF },
         { press: 'start-authoring' },
       ],
