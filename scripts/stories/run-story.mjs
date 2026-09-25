@@ -31,7 +31,7 @@ import { join, dirname, relative } from 'node:path';
 import { chromium } from 'playwright-core';
 import { spendGateVerdict, summariseRunSpend, effectiveCeiling } from './spend.mjs';
 import { costlessGuardFor } from './costless-beat.mjs';
-import { readRunEvents, hostState, collectSpendDirs, spendSoFar, finalSpendHalt } from './run-observe.mjs';
+import { readRunEvents, hostState, collectSpendDirs, spendSoFar, finalSpendHalt, makeWaitSpendGuard } from './run-observe.mjs';
 import {
   applyFence,
   describeFence,
@@ -175,8 +175,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // watches — the develop station continues the architect's cycle, so there is
   // no new dispatch dir for the anchor form to find. Null for every beat that
   // does not declare it, which is every beat but S10's kickoff pair.
-  const cycleWatchFor = (wantState, cycleOf = null) =>
-    makeCycleTerminalWatch(ROOT, wantState, cycleOf === null ? null : { cycleOf });
+  const cycleWatchFor = (wantState, cycleOf = null) => makeCycleTerminalWatch(ROOT, wantState, cycleOf === null ? null : { cycleOf });
   // What earlier beats bound, for the routes later beats build from it. Rebuilt
   // per beat rather than mutated — a beat's verdict states what IT learned.
   let bindings = {};
@@ -198,6 +197,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // compared them.
   const ceiling = costs ? effectiveCeiling(story.ground?.budget_usd, fundedCeilingUsd) : null;
   if (ceiling !== null) console.log(`[stories] ${ceiling.reason}`);
+  const waitSpendGuard = costs ? makeWaitSpendGuard({ root: ROOT, startedMs, realSpawn: story.ground?.realSpawn === true, ceilingUsd: ceiling?.usd }) : null; // T1 1471 — the $ guard every agent wait's poll loop consults
   try {
     // `forge-8vfn.27` — ONE map for the whole run, declared HERE and threaded
     // into every beat. `driveBeat`'s ninth parameter defaults to a fresh Map,
@@ -225,7 +225,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       // the agent-scale probe, and `costless: true`'s whole enforcement, built per beat.
       const costlessGuard = costlessGuardFor(beat, ROOT, startedMs, story.ground?.realSpawn === true);
       const probe = costlessGuard.active ? null : makeAgentProcProbe(ROOT, resolveBeatRoute(beat, bindings).route);
-      let verdict = await driveBeat(page, beat, i, uiUrl, bindings, undefined, probe, costlessGuard.active ? null : stallDoor, pressedAt, cycleWatchFor);
+      let verdict = await driveBeat(page, beat, i, uiUrl, bindings, undefined, probe, costlessGuard.active ? null : stallDoor, pressedAt, cycleWatchFor, waitSpendGuard);
       verdict = costlessGuard.apply(verdict);
       bindings = { ...bindings, ...verdict.bindings };
       const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}${frameLabelSuffix(beatLabel, slug)}.png`;

@@ -224,6 +224,39 @@ export const PROGRESS_KEY_SHAPE = /^[A-Za-z][A-Za-z0-9-]*$/;
 export const MAX_DECLARED_WAIT_MS = 30 * 60 * 1000;
 
 /**
+ * THE ABSOLUTE WALL CEILING for a `cycleOf` agent wait, in ms — T1 ruling 1471
+ * (S10 run 26).
+ *
+ * S10's beat 10 hit `MAX_DECLARED_WAIT_MS` at 18:18:10 while a review chunk had
+ * persisted at 18:14:35, four minutes earlier: the product was progressing and
+ * the wall clock ended the wait anyway, killing the reviewer and the cycle
+ * after $14.61. The fix (`beats-agent-proc.mjs`'s `makeCycleTerminalWatch`)
+ * makes `upTo` an INACTIVITY window for a `cycleOf` wait — it resets on every
+ * new cycle event — which means a cycle that never stops writing could
+ * otherwise never stop the wait. This is the OTHER side: a hard ceiling on
+ * TOTAL elapsed time, counted from the wait's own start and never reset by
+ * progress, so a run that is technically always "making progress" cannot sit a
+ * host forever.
+ *
+ * NEVER DECLARED BY A STORY. This is not a field `validateWait` accepts — a
+ * story still declares `upTo` exactly as before, capped at
+ * `MAX_DECLARED_WAIT_MS` as it always has been, and that cap is what bounds
+ * the INACTIVITY window. This constant is the runtime's own backstop above
+ * that, the same relationship `wait-bound.mjs`'s derived bound has to
+ * `MAX_DECLARED_WAIT_MS` — a second, more generous number that exists only to
+ * catch the case the first one cannot.
+ *
+ * 3x `MAX_DECLARED_WAIT_MS`, a measurement-shaped choice rather than an
+ * invented one: S10's own five measured develop cycles ran 17-29 minutes
+ * end-to-end with no gap the reset would need to cross, so three lots of the
+ * existing 30-minute cap (90 minutes) is generous against every real run this
+ * campaign has on file while still being a HARD stop — a cycle resetting the
+ * window every few minutes for an hour and a half is no longer "progress", it
+ * is a runaway.
+ */
+export const CYCLE_WAIT_WALL_CEILING_MS = 3 * MAX_DECLARED_WAIT_MS;
+
+/**
  * Validate a beat's optional `wait` (bead `forge-8vfn.6.11.10`, T1 ruling
  * 220) and RETURN it, so `validateStory`'s field list carries it through.
  *

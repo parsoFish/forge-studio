@@ -308,3 +308,69 @@ export function spendSoFar({ root, startedMs, realSpawn, ceilingUsd, label, unme
   }
   return { spend, verdict: v, unpriced, emitFailures, stop, lines };
 }
+
+/**
+ * How often a `waitForConsequence` poll may re-read the spend ledger — T1
+ * ruling 1471.
+ *
+ * `waitForConsequence` polls every `CONSEQUENCE_POLL_MS` (100 ms,
+ * `beats-page-read.mjs`); an agent wait can legitimately run for tens of
+ * minutes. Calling `spendSoFar` at 100 ms cadence would re-parse every
+ * dispatch dir's full event log thousands of times over one wait AND poison
+ * `classifyUnmeasuredDispatch`'s own trend detector, which compares two reads
+ * to tell a live turn from a reaped one — 100 ms is far too short a window to
+ * see an in-flight turn's log grow, so every healthy dispatch would read as
+ * REAPED on nearly every tick. `makeWaitSpendGuard` re-reads at most this
+ * often; between reads it answers from its own last verdict.
+ */
+export const WAIT_SPEND_POLL_MS = 5_000;
+
+/**
+ * Build the $ guard `waitForConsequence` consults on every poll of ONE agent
+ * wait — T1 ruling 1471 (S10 run 26): "the run's own $ ceiling bounds the
+ * whole wait", checked continuously rather than only at the beat boundary
+ * either side of it, so a wait long enough to matter is never long enough to
+ * outrun the ceiling unnoticed.
+ *
+ * REUSES `spendSoFar` RATHER THAN A SECOND SPEND VERDICT. That function
+ * already carries every fail-closed rule this needs — a breach on a NUMBER, an
+ * unenforceable ceiling when a turn ends unpriced, a halt when a ledger row
+ * fails to write or its sidecar cannot be read (`ceilingHaltVerdict`) — and
+ * reinventing a subset here would be the exact species this campaign keeps
+ * meeting: two notions of "is this run over budget" that can disagree.
+ *
+ * ITS OWN `unmeasuredSnapshots` MAP, never the beat loop's. `spendSoFar`'s
+ * unmeasured diagnostic compares this call's dispatch-dir reading against the
+ * PREVIOUS one to tell a live turn from a reaped one; sharing the beat loop's
+ * map would mix a wait's 100 ms-throttled cadence into the beat boundary's
+ * much sparser one and corrupt both trends.
+ *
+ * `null` — no guard at all — for a run with no usable ceiling: a costless
+ * story, or one whose `ceilingUsd` did not resolve to a finite number
+ * (`effectiveCeiling`'s own "NO USABLE CEILING" case). An unbounded run is
+ * already that function's own finding; this must not invent a second one.
+ *
+ * `pollMs` defaults to `WAIT_SPEND_POLL_MS` and exists so a test can shrink it
+ * — a real run never overrides it, exactly as `quiesce.mjs`'s `pollMs` seam is
+ * only ever exercised by its own doors.
+ *
+ * @returns {null | (() => Readonly<{breached: boolean, reason: string|null}>)}
+ */
+export function makeWaitSpendGuard({ root, startedMs, realSpawn, ceilingUsd, pollMs = WAIT_SPEND_POLL_MS, clock = { now: () => Date.now() } }) {
+  if (typeof ceilingUsd !== 'number' || !Number.isFinite(ceilingUsd)) return null;
+  const snapshots = new Map();
+  let checkedAt = -Infinity;
+  let cached = Object.freeze({ breached: false, reason: null });
+  return () => {
+    const now = clock.now();
+    if (now - checkedAt < pollMs) return cached;
+    checkedAt = now;
+    const { stop } = spendSoFar({
+      root, startedMs, realSpawn, ceilingUsd, label: 'during an agent wait', unmeasuredSnapshots: snapshots,
+    });
+    cached = stop.halt
+      ? Object.freeze({ breached: true, reason: `${stop.headline}: ${stop.reason}` })
+      : Object.freeze({ breached: false, reason: null });
+    return cached;
+  };
+}
