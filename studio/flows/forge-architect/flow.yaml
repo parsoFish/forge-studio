@@ -6,6 +6,12 @@ project: null
 kb: cycles
 costCeilingUsd: 10
 origin: seed
+# Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8): the architect DECIDES
+# an initiative's class from the idea it is handed (ADR 051 decision 1) — it
+# does not filter which classes of work it is willing to plan. It accepts
+# every class the platform ships today; the plan gate later confirms the
+# class the architect chose.
+accepts: [code, docs, config, infra]
 nodes:
   - { id: architect, agent: architect, gate: plan }
   - { id: pm, agent: project-manager }

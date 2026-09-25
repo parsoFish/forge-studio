@@ -139,7 +139,7 @@ test('W7A4-01: mintTriggeredInitiative (the trigger producer) writes a human `ti
     mkdirSync(flowDir, { recursive: true });
     writeFileSync(join(flowDir, 'flow.yaml'), [
       'id: tick', 'name: Nightly tick', 'version: 1', 'goal: A trigger-originated flow test fixture.',
-      'project: someproj', 'kb: null', 'costCeilingUsd: 10', 'origin: seed',
+      'project: someproj', 'kb: null', 'costCeilingUsd: 10', 'origin: seed', 'accepts: [code]',
       'nodes:', '  - { id: dev, agent: developer-ralph }', 'edges: []', 'triggers: []', '',
     ].join('\n'));
     mkdirSync(join(root, 'projects', 'someproj'), { recursive: true });

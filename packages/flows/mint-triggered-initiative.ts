@@ -140,6 +140,36 @@ export function mintTriggeredInitiative(
     if (!flow.project) {
       return { status: 'no-project', detail: `flow "${flowId}" has no project binding — external triggers need one (lint: trigger-cron/trigger-webhook/trigger-agent-complete)` };
     }
+
+    // Seam F6 half 1 (ADR 051 decision 4, spec §5 item 8): a triggered
+    // initiative has no architect turn to set its class, so it is DERIVED
+    // from the target flow's own declaration — the flow knows what kind of
+    // work it runs, this call site does not guess. Exactly one accepted
+    // class: no ambiguity, use it. More than one: the firing TRIGGER must
+    // have named which one via its own `class:` (threaded onto the staged
+    // request as `triggerClass` by the firing site — cron/webhook/
+    // agent-complete, never re-derived here: more than one trigger row can
+    // target the same flow, so only the firing site knows which one fired).
+    // No default in either arm.
+    let mintedClass: InitiativeManifest['class'];
+    if (flow.accepts.length === 1) {
+      mintedClass = flow.accepts[0];
+    } else {
+      const triggerClass = req.triggerClass;
+      const isAccepted = (v: string): v is InitiativeManifest['class'] =>
+        (flow.accepts as readonly string[]).includes(v);
+      if (!triggerClass || !isAccepted(triggerClass)) {
+        return {
+          status: 'error',
+          detail:
+            `flow "${flowId}" accepts multiple classes (${flow.accepts.join(', ')}) and its firing trigger ` +
+            (triggerClass ? `names "${triggerClass}", which is not one of them` : 'names none of them') +
+            ` — declare "class:" on the trigger, one of ${flow.accepts.join(', ')}`,
+        };
+      }
+      mintedClass = triggerClass;
+    }
+
     const cfg = loadConfig(defaultConfigPath(forgeRoot));
     const projectRepoPath = join(resolveProjectsDir(forgeRoot, cfg), flow.project);
     if (!existsSync(projectRepoPath)) {
@@ -198,14 +228,10 @@ export function mintTriggeredInitiative(
       created_at: now.toISOString(),
       iteration_budget: budgets.defaultIterationBudget,
       cost_budget_usd: budgets.defaultCostBudgetUsd,
-      // ADR 051. A triggered initiative has no architect turn to set its class,
-      // so it is DECLARED here, at one greppable site, rather than defaulted
-      // inside the parser where no reader could see it. `code` is what every
-      // trigger kind that ships today mints (a merged PR, a raised issue, a
-      // cron sweep of a project repo). Spec §5 item 8 replaces this line with
-      // the TARGET FLOW's declared class, which is where the answer belongs:
-      // the flow knows what kind of work it runs, this call site is guessing.
-      class: 'code',
+      // ADR 051 / seam F6 half 1 (spec §5 item 8): the target flow's declared
+      // class (or its firing trigger's, when the flow accepts more than
+      // one) — resolved above, never a hardcoded guess.
+      class: mintedClass,
       // The architect writes criteria; a trigger has none to write. Empty is
       // the honest value and `validateManifest` accepts it — the "an
       // initiative must state criteria" rule belongs to the plan gate, which a

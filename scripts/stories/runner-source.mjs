@@ -15,19 +15,25 @@
  * So: a door names the PROPERTY and the anchor that identifies its code, and
  * this resolves which module holds it today.
  *
- * ANCHORS MUST BE CODE-SHAPED, and this cannot enforce it. The match is
- * `source.includes(anchor)`, and a COMMENT counts as a hit. Today that biases
- * safe: a comment mentioning moved code adds a second module and you get the
- * ambiguity refusal below, which is loud. The unsafe case is real though — if
- * code moves away and only a comment mentioning it remains behind, there is
- * exactly ONE hit, on prose, and this returns the wrong module for a door to
- * slice. `run.mjs`'s own seam comment names `run-story.mjs` and is exactly that
- * shape. So pick anchors carrying a `(` or an `=`: prose rarely contains them.
- * Said rather than checked, deliberately — a code-shaped-anchor rule would have
- * to guess which punctuation counts, and refusing a legitimate anchor to prevent
- * a hypothetical one is a worse trade than a sentence. It is a sentence and not
- * a mechanism, and the next author should know which of those they are relying
- * on (C, reviewing forge-0fli).
+ * ANCHORS SHOULD STILL BE CODE-SHAPED — pick one carrying a `(` or an `=`;
+ * prose rarely contains them — and this still cannot enforce THAT: a
+ * code-shaped-anchor rule would have to guess which punctuation counts, and
+ * refusing a legitimate anchor to prevent a hypothetical one is a worse trade
+ * than leaving it said rather than checked (C, reviewing `forge-0fli`).
+ *
+ * WHAT IS NOW CHECKED (`forge-8vfn.7.6.112`) is the sharper, DECIDABLE half of
+ * the same hazard. The match is `source.includes(anchor)`, and a COMMENT
+ * counts as a hit exactly like code does. Two modules hitting already refuses
+ * below, loudly — but one hit that happens to sit on a comment is silent: if
+ * code carrying an anchor moves away and only a comment naming it stays
+ * behind, there is exactly ONE hit, on prose, and this used to return that
+ * module for a door to slice. `run.mjs`'s own seam comment naming
+ * `run-story.mjs` is exactly that shape. So `everyHitIsCommentShaped` below
+ * refuses whenever EVERY line carrying the anchor in the winning module is
+ * comment-shaped (left-trimmed `//`, `*`, `/*`) — never a guess about what
+ * code looks like, only whether a line is one of the two comment forms this
+ * tree uses. A legitimate anchor always keeps at least one non-comment hit,
+ * so nothing that resolves today stops resolving.
  *
  * IT REFUSES RATHER THAN GUESSING, in both directions (§15.504). No module
  * containing the anchor means the door cannot run — which is not the same as
@@ -58,6 +64,22 @@ export function runnerModules(dir = HERE) {
 }
 
 /**
+ * True when EVERY line of `source` containing `anchor`, left-trimmed, opens
+ * with a comment marker (`//`, `*`, `/*`). `forge-8vfn.7.6.112` — C's
+ * mechanism, which does not guess whether an anchor "looks like code": it
+ * only asks whether every hit sits on one of the two comment shapes this tree
+ * uses, which is mechanically decidable. A legitimate anchor always has at
+ * least one non-comment hit, so this never fires on an anchor that works
+ * today; it fires exactly on the hazard the header above names — code moves
+ * away, a comment naming it stays behind, and there is exactly one hit, on
+ * prose.
+ */
+function everyHitIsCommentShaped(source, anchor) {
+  const hitLines = source.split('\n').filter((line) => line.includes(anchor));
+  return hitLines.length > 0 && hitLines.every((line) => /^(\/\/|\*|\/\*)/.test(line.trimStart()));
+}
+
+/**
  * The source of the single runner module containing `anchor`.
  * @param {string} anchor a literal substring that identifies the code
  * @returns {{ path: string, source: string }}
@@ -79,5 +101,13 @@ export function runnerSourceContaining(anchor, dir = HERE) {
         + 'would be taken from whichever sorted first',
     );
   }
-  return hits[0];
+  const [winner] = hits;
+  if (everyHitIsCommentShaped(winner.source, anchor)) {
+    throw new Error(
+      `runnerSourceContaining: ${JSON.stringify(anchor)} in ${winner.path.split('/').pop()} is on `
+        + 'comment-shaped lines only — every occurrence is prose, not code, so this refuses rather '
+        + 'than slicing a door from a comment (forge-8vfn.7.6.112)',
+    );
+  }
+  return winner;
 }

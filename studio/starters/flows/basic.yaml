@@ -6,6 +6,10 @@ project: null
 kb: null
 costCeilingUsd: 5
 origin: starter
+# Seam F6 half 1 (ADR 051 decision 4): the New-Flow canvas seeds a fresh flow
+# from this template — accepting every class keeps the seed permissive; the
+# operator narrows `accepts` once they know what their own flow is for.
+accepts: [code, docs, config, infra]
 nodes:
   - { id: plan, agent: plan }
   - { id: dev, agent: dev }
