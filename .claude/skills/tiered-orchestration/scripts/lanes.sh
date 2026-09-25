@@ -66,7 +66,9 @@
 #      LANES_T1 · LANES_CLAUDE_BIN · LANES_WORKTREE_ROOT ($HOME) · LANES_CONFIRM_TIMEOUT_S (60) ·
 #      LANES_BASE_REF (parsoFish/main) · LANES_MEM_FLOOR_GIB (4) · LANES_INSTALL_CMD ·
 #      LANES_MEMINFO · LANES_PROC_ROOT (/proc) · LANES_DNS_CMD · LANES_CLAUDE_JSON
-#      ($HOME/.claude.json) · LANES_RETIRE_TERM_WAIT_S (10) · LANES_RETIRE_KILL_WAIT_S (10) —
+#      ($HOME/.claude.json) · LANES_RETIRE_TERM_WAIT_S (10) · LANES_RETIRE_KILL_WAIT_S (10) ·
+#      LANES_HEARTBEAT_DAEMON (1 — launch starts lane-heartbeat-daemon.sh; 0 is a test-only
+#      opt-out, never a production one: every real lane gets the daemon) —
 #      all but the first two pairs are test seams.
 set -euo pipefail
 
@@ -875,6 +877,24 @@ cmd_launch() {
   echo "preflight: MemAvailable ok · prompt carries '$(lockline_of "$camp")' · mcp $mcp (0 tokensave) · /proc/$pid/cmdline carries --strict-mcp-config"
   active_add "$camp" "$lane"
   printf '%s\n' "$sid" > "$camp/heartbeat/$lane.session"
+  # Heartbeat daemon (campaign row 84): instruments this lane's OWN quiet stretches — detached
+  # job process counts and worktree-file recency — through heartbeat.sh, the one writer.
+  # --worktree-glob/--exclude-tree are passed explicitly so they respect LANES_WORKTREE_ROOT (the
+  # daemon's own fallback default is plain $HOME, which a test or an alternate root must not see);
+  # --job-pattern and --log-glob are left at the daemon's own documented defaults. It self-reports
+  # its pid to heartbeat/<lane>.hb-daemon.pid, so nothing here needs to trust `$!` through the
+  # nohup/setsid fork chain (die_launch's own census exists for exactly that untrustworthiness).
+  # LANES_HEARTBEAT_DAEMON=0 is a TEST-ONLY opt-out (lanes.test.ts defaults it off so the rest of
+  # this file's launch tests do not each leak a real, long-lived background process scanning the
+  # host's own /proc); every production launch gets the daemon.
+  if [ "${LANES_HEARTBEAT_DAEMON:-1}" != "0" ]; then
+    local wtroot="${LANES_WORKTREE_ROOT:-$HOME}"
+    nohup setsid "$HERE/lane-heartbeat-daemon.sh" "$camp" "$lane" \
+      --worktree-glob "$wtroot/forge-$lane-*" --exclude-tree "$wtroot/forge-$lane-run" \
+      >"$camp/heartbeat/$lane.hb-daemon.log" 2>&1 < /dev/null &
+    disown 2>/dev/null || true
+    echo "heartbeat daemon: started for $lane (pid recorded at $camp/heartbeat/$lane.hb-daemon.pid once up; log $camp/heartbeat/$lane.hb-daemon.log)"
+  fi
   echo "launched $s  [$row]  model=$model permission-mode=$pm cwd=$cwd t1=$t1 attended=$attended"
   echo "talk:    SendMessage(to: \"$s\", notify_when_idle: true)"
   echo "attach:  tmux attach -t $s   (detach: C-b d)     later: claude --resume $sid"
@@ -920,6 +940,19 @@ cmd_kill() {
   fi
   active_drop "$camp" "$lane"
   rm -f "$camp/heartbeat/.armed-$lane" "$camp/heartbeat/STALL-$lane"
+  # Stop this lane's heartbeat daemon (campaign row 84): the stop-file first, in case it is
+  # between beats and can exit its own loop cleanly; then retire it by pid, the same way as the
+  # lane session above — a daemon asleep in its own `sleep $INTERVAL` does not notice a stop-file
+  # until its next iteration, up to --interval seconds away, and `kill` must not wait that long.
+  : > "$camp/heartbeat/$lane.hb-stop"
+  local hbd_pidfile="$camp/heartbeat/$lane.hb-daemon.pid" hbd_pid
+  if [ -f "$hbd_pidfile" ]; then
+    hbd_pid="$(cat "$hbd_pidfile" 2>/dev/null || true)"
+    if [ -n "$hbd_pid" ] && [ -d "/proc/$hbd_pid" ]; then
+      retire_pid "$hbd_pid" "lane $lane heartbeat daemon" || true
+    fi
+  fi
+  rm -f "$hbd_pidfile" "$camp/heartbeat/$lane.hb-stop"
   local wt="${LANES_WORKTREE_ROOT:-$HOME}/forge-$lane"
   if [ -d "$wt" ]; then
     # Ending the pane is not retiring the lane: §15.100 found an RC-attached claude alive with

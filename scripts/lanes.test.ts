@@ -89,6 +89,12 @@ function lanes(args: string[], env: Record<string, string> = {}, timeoutMs = 300
       LANES_ROSTER_CMD: rosterCmd,
       LANES_CWD: repo,
       LANES_WORKTREE_ROOT: join(dir, 'wt'), LANES_PROC_ROOT: join(dir, 'no-proc'), LANES_DNS_CMD: 'true', LANES_CLAUDE_JSON: join(dir, 'no-claude.json'), // nonexistent-but-guarded: no test scans real /proc, DNS, or ~/.claude.json
+      // Same guard, one door further: a launch that succeeds here also starts a REAL
+      // lane-heartbeat-daemon.sh scanning the host's own /proc every --interval, forever, once
+      // this test's own campaign dir is gone — off by default for every test but the one that
+      // exists to prove it starts and stops (scripts/lane-heartbeat-daemon.test.ts covers the
+      // daemon's own behaviour in full; this file only proves the launch/kill wiring).
+      LANES_HEARTBEAT_DAEMON: '0',
       ...env,
     },
   });
@@ -681,6 +687,36 @@ describe('lanes.sh kill — retirement cleans up, and never destroys work', () =
     assert.ok(existsSync(join(wt, 'work.txt')), 'uncommitted work survives retirement');
     assert.match(r.stdout, /KEPT worktree/, 'and the operator is told');
     assert.equal(readFileSync(join(camp, 'heartbeat', 'ACTIVE'), 'utf8').trim(), 'NONE');
+  });
+});
+
+/**
+ * Row 84: `launch`/`kill` own the daemon's lifecycle; its own detection behaviour is covered in
+ * full by `scripts/lane-heartbeat-daemon.test.ts`. This proves only the wiring — why every OTHER
+ * test here defaults `LANES_HEARTBEAT_DAEMON: '0'`: a real one outliving its campaign dir scans
+ * this host's own /proc forever.
+ */
+describe('lanes.sh — the lane heartbeat daemon (row 84)', () => {
+  test('launch starts a live daemon (its own pidfile); kill retires it', () => {
+    const bin = laneBin('lane-hb', { register: 'busy' });
+    const lane = 'hb';
+    const s = `${PREFIX}${lane}`;
+    sessions.add(s);
+    const prompt = join(dir, 'prompt-hb.md');
+    writeFileSync(prompt, kickoff('HB KICKOFF'));
+    setRoster([{ name: 't1-hb', pid: process.pid, kind: 'interactive', status: 'busy' }]);
+
+    const r = lanes(['launch', camp, lane, prompt, '--cwd', dir], { LANES_CLAUDE_BIN: bin, LANES_HEARTBEAT_DAEMON: '1' });
+    assert.equal(r.status, 0, r.stderr);
+
+    const pidFile = join(camp, 'heartbeat', `${lane}.hb-daemon.pid`);
+    waitForFile(pidFile);
+    const pid = Number(readFileSync(pidFile, 'utf8').trim());
+    planted.add(pid);
+    assert.ok(alive(pid), 'launch started a live heartbeat daemon, confirmed by its own pidfile');
+
+    assert.equal(lanes(['kill', camp, lane]).status, 0);
+    assert.ok(waitGone(pid), 'kill retired the daemon by the same pidfile');
   });
 });
 
