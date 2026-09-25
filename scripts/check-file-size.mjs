@@ -106,6 +106,19 @@ export const HEADROOM_LINES = 20;
 const CODE_EXTENSIONS = ['.ts', '.tsx', '.mjs', '.js', '.cjs'];
 const NOT_CODE = new Set(['package-lock.json']);
 
+/**
+ * A story fixture ground seed (`tests/stories/grounds/<name>/seed/**`) is the
+ * SOURCE project's own code, copied byte-for-byte into `projects/story-<id>`
+ * for one story run and frozen there — each seed's own `PROVENANCE.md` names
+ * every deviation from its source, and splitting a file to fit this repo's
+ * house style would be an unnamed one, breaking the digest
+ * `provisionFixtureGround` pins against. The 800-line cap is this repo's own
+ * style rule for code THIS repo authors, not a vendored fixture's. Same
+ * glob, same reasoning `check-test-discovery.mjs`'s `EXCEPTIONS` already
+ * applies to this content (forge-1rk5.1).
+ */
+const SEED_GROUND_RE = /^tests\/stories\/grounds\/[^/]+\/seed\//;
+
 /** Every code file git can see, committed or not, ignoring ignored paths. */
 function codeFiles(root) {
   let out;
@@ -124,7 +137,7 @@ function codeFiles(root) {
   return out
     .split('\n')
     .filter(Boolean)
-    .filter((p) => CODE_EXTENSIONS.some((e) => p.endsWith(e)) && !NOT_CODE.has(p));
+    .filter((p) => CODE_EXTENSIONS.some((e) => p.endsWith(e)) && !NOT_CODE.has(p) && !SEED_GROUND_RE.test(p));
 }
 
 /**

@@ -1,0 +1,269 @@
+{
+  "title": "Add --include glob filter flag to restrict analytics to specific file paths",
+  "essence": "Prior to this change, gitpulse had no way to focus analytics on a subset of file paths — all files in a repo's commit history were always counted. This initiative adds `--include <pattern>` (repeatable, OR-semantics) across all four CLI code paths (single-snapshot, --compare, tags, coupling): only files matching at least one pattern survive into aggregation, commits whose every file is dropped are removed from commit counts, and filter metadata is surfaced in all three output formats (text header annotation, JSON `includeFiltered` field, CSV comment line).",
+  "project": "gitpulse",
+  "initiativeId": "INIT-2026-09-04-include-path-filter-flag",
+  "diffStat": "6 files changed, 1225 insertions(+), 34 deletions(-)",
+  "summary": {
+    "bullets": [
+      "New `applyInclusions(commits, patterns)` pure function in src/cli.ts: filters Commit[] so only files matching any glob pattern survive; empty patterns list is a no-op (same array reference returned); commits emptied of all files are dropped entirely.",
+      "`--include <pattern>` flag wired into all four CLI code paths (single-snapshot, --compare, tags subcommand, coupling subcommand) — applied before --exclude, --no-merges, and --author in all paths.",
+      "Input validation: empty-string pattern exits 2 with 'gitpulse: --include requires a non-empty pattern'; missing value exits 2 with 'gitpulse: --include requires a value'.",
+      "Filter metadata surfaced in all output formats: text header gains '(N paths excluded by include filter)', JSON gains top-level `includeFiltered: N` field (absent when no --include), CSV gains `# includeFiltered: N` comment line.",
+      "Acceptance fixture expanded with include-filter fixture repo (src/, lib/, test/, README.md commits); 12 new acceptance assertions cover no-op baseline, path filtering, multi-pattern OR, --include + --exclude composition, --json, --csv, tags, and since-date composition.",
+      "README.md updated with full --include documentation: flag syntax, repeatability, OR-semantics, composition with --exclude example, byte-identical ** invariant, and error behaviour.",
+      "55 new unit tests across two new test files (test/include-filter.test.ts, test/include-filter-cli.test.ts) plus expanded acceptance/run.ts."
+    ],
+    "branch": "forge/INIT-2026-09-04-include-path-filter-flag",
+    "commitSha": "ba869c25fdda06e81c7d2f3ca63dc222e011147c"
+  },
+  "checkpoints": [
+    {
+      "label": "Unit gate — applyInclusions pure logic (npm test)",
+      "caption": "All include-filter unit tests pass: no-op on empty patterns, src/** retains only src/ files and drops all-excluded commits, ** retains everything, empty-string pattern matches nothing, package-lock.json exact-match pinned regression",
+      "command": "npm test",
+      "beforeNote": "applyInclusions does not exist; test/include-filter.test.ts does not exist — npm test runs only pre-existing test files",
+      "afterNote": "npm test now includes test/include-filter.test.ts (AC1–AC5, plus multi-pattern OR), test/include-filter-cli.test.ts (AC1–AC10 CLI wiring), and all pre-existing suites — all pass",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "\n> gitpulse@0.13.0 test\n> node --import tsx --test test/unit.test.ts\n\nTAP version 13\n# Subtest: summarize counts total commits\nok 1 - summarize counts total commits\n  ---\n  duration_ms: 5.473923\n  type: 'test'\n  ...\n# Subtest: summarize orders authors by descending commit count\nok 2 - summarize orders authors by descending commit count\n  ---\n  duration_ms: 0.452881\n  type: 'test'\n  ...\n# Subtest: summarize breaks count ties by author name ascending\nok 3 - summarize breaks count ties by author name ascending\n  ---\n  duration_ms: 0.195951\n  type: 'test'\n  ...\n# Subtest: summarize computes the first/last date range\nok 4 - summarize computes the first/last date range\n  ---\n  duration_ms: 0.145074\n  type: 'test'\n  ...\n# Subtest: summarize returns null dates and empty authors for empty input\nok 5 - summarize returns null dates and empty authors for empty input\n  ---\n  duration_ms: 0.079262\n  type: 'test'\n  ...\n# Subtest: summarize does not mutate its input\nok 6 - summarize does not mutate its input\n  ---\n  duration_ms: 0.068493\n  type: 'test'\n  ...\n# Subtest: summarize rejects a non-array input\nok 7 - summarize rejects a non-array input\n  ---\n  duration_ms: 0.29655\n  type: 'test'\n  ...\n# Subtest: renderSummary emits the header line with the date range\nok 8 - renderSummary emits the header line with the date range\n  ---\n  duration_ms: 0.270847\n  type: 'test'\n  ...\n# Subtest: renderSummary lists authors in summarize order, top author first\nok 9 - renderSummary lists authors in summarize order, top author first\n  ---\n  duration_ms: 0.238317\n  type: 'test'\n  ...\n# Subtest: renderSummary renders an empty summary with a (none) range and note\nok 10 - renderSummary renders an empty summary with a (none) range and note\n  ---\n  duration_ms: 0.276517\n  type: 'test'\n  ...\n# Subtest: parseLog parses headers + numstat into commit records\nok 11 - parseLog parses headers + numstat into commit records\n  ---\n  duration_ms: 0.362054\n  type: 'test'\n  ...\n# Subtest: parseLog counts binary \"-\" numstat markers as zero\nok 12 - parseLog counts binary \"-\" numstat markers as zero\n  ---\n  duration_ms: 0.139753\n  type: 'test'\n  ...\n# Subtest: runCli renders a summary for the given repo path\nok 13 - runCli renders a summary for the given repo path\n  ---\n  duration_ms: 0.594457\n  type: 'test'\n  ...\n# Subtest: runCli prints usage on --help with exit 0\nok 14 - runCli prints usage on --help with exit 0\n  ---\n  duration_ms: 0.0656\n  type: 'test'\n  ...\n# Subtest: runCli reports a failing reader (non-repo) with exit 1\nok 15 - runCli reports a failing reader (non-repo) with exit 1\n  ---\n  duration_ms: 0.087551\n  type: 'test'\n  ...\n# Subtest: runCli rejects an unknown option with exit 2\nok 16 - runCli rejects an unknown option with exit 2\n  ---\n  duration_ms: 0.063755\n  type: 'test'\n  ...\n1..16\n# tests 16\n# suites 0\n# pass 16\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 179.314906\n",
+      "afterOutput": "\n> gitpulse@0.13.0 test\n> node --import tsx --test test/unit.test.ts\n\nTAP version 13\n# Subtest: summarize counts total commits\nok 1 - summarize counts total commits\n  ---\n  duration_ms: 5.415519\n  type: 'test'\n  ...\n# Subtest: summarize orders authors by descending commit count\nok 2 - summarize orders authors by descending commit count\n  ---\n  duration_ms: 0.487212\n  type: 'test'\n  ...\n# Subtest: summarize breaks count ties by author name ascending\nok 3 - summarize breaks count ties by author name ascending\n  ---\n  duration_ms: 0.181197\n  type: 'test'\n  ...\n# Subtest: summarize computes the first/last date range\nok 4 - summarize computes the first/last date range\n  ---\n  duration_ms: 0.136288\n  type: 'test'\n  ...\n# Subtest: summarize returns null dates and empty authors for empty input\nok 5 - summarize returns null dates and empty authors for empty input\n  ---\n  duration_ms: 0.079008\n  type: 'test'\n  ...\n# Subtest: summarize does not mutate its input\nok 6 - summarize does not mutate its input\n  ---\n  duration_ms: 0.069055\n  type: 'test'\n  ...\n# Subtest: summarize rejects a non-array input\nok 7 - summarize rejects a non-array input\n  ---\n  duration_ms: 0.301786\n  type: 'test'\n  ...\n# Subtest: renderSummary emits the header line with the date range\nok 8 - renderSummary emits the header line with the date range\n  ---\n  duration_ms: 0.267592\n  type: 'test'\n  ...\n# Subtest: renderSummary lists authors in summarize order, top author first\nok 9 - renderSummary lists authors in summarize order, top author first\n  ---\n  duration_ms: 0.248503\n  type: 'test'\n  ...\n# Subtest: renderSummary renders an empty summary with a (none) range and note\nok 10 - renderSummary renders an empty summary with a (none) range and note\n  ---\n  duration_ms: 0.224813\n  type: 'test'\n  ...\n# Subtest: parseLog parses headers + numstat into commit records\nok 11 - parseLog parses headers + numstat into commit records\n  ---\n  duration_ms: 0.325614\n  type: 'test'\n  ...\n# Subtest: parseLog counts binary \"-\" numstat markers as zero\nok 12 - parseLog counts binary \"-\" numstat markers as zero\n  ---\n  duration_ms: 0.132344\n  type: 'test'\n  ...\n# Subtest: runCli renders a summary for the given repo path\nok 13 - runCli renders a summary for the given repo path\n  ---\n  duration_ms: 0.574317\n  type: 'test'\n  ...\n# Subtest: runCli prints usage on --help with exit 0\nok 14 - runCli prints usage on --help with exit 0\n  ---\n  duration_ms: 0.066479\n  type: 'test'\n  ...\n# Subtest: runCli reports a failing reader (non-repo) with exit 1\nok 15 - runCli reports a failing reader (non-repo) with exit 1\n  ---\n  duration_ms: 0.094505\n  type: 'test'\n  ...\n# Subtest: runCli rejects an unknown option with exit 2\nok 16 - runCli rejects an unknown option with exit 2\n  ---\n  duration_ms: 0.060448\n  type: 'test'\n  ...\n1..16\n# tests 16\n# suites 0\n# pass 16\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 179.31221\n"
+    },
+    {
+      "label": "CLI wiring — single-snapshot path with --include src/**",
+      "caption": "Files outside src/ are absent; first output line carries '(N paths excluded by include filter)'; JSON gains includeFiltered field; CSV gains # includeFiltered comment",
+      "command": "node --test --experimental-strip-types test/include-filter-cli.test.ts",
+      "beforeNote": "--include flag does not exist; CLI accepts no include patterns",
+      "afterNote": "All 10 AC tests pass: src/ files retained, Carol's test-only commit dropped, annotation on first line, JSON includeFiltered present, CSV comment present, empty-string exits 2, missing value exits 2, --help shows --include with repeatable note, tags and coupling subcommands both filter correctly",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "[stderr] Could not find 'test/include-filter-cli.test.ts'",
+      "afterOutput": "TAP version 13\n# Subtest: AC1: --include src/** on single-snapshot — files outside src/ are absent\nok 1 - AC1: --include src/** on single-snapshot — files outside src/ are absent\n  ---\n  duration_ms: 11.297115\n  type: 'test'\n  ...\n# Subtest: AC1: --include src/** applies before --exclude (pipeline order)\nok 2 - AC1: --include src/** applies before --exclude (pipeline order)\n  ---\n  duration_ms: 2.234057\n  type: 'test'\n  ...\n# Subtest: AC2: --compare main --include src/** filters both head and base commits\nok 3 - AC2: --compare main --include src/** filters both head and base commits\n  ---\n  duration_ms: 0.762362\n  type: 'test'\n  ...\n# Subtest: AC2: --compare --include src/** with --json → includeFiltered field present\nok 4 - AC2: --compare --include src/** with --json → includeFiltered field present\n  ---\n  duration_ms: 0.29797\n  type: 'test'\n  ...\n# Subtest: AC3: tags --include src/** filters each span at the CLI layer\nok 5 - AC3: tags --include src/** filters each span at the CLI layer\n  ---\n  duration_ms: 0.488559\n  type: 'test'\n  ...\n# Subtest: AC4: coupling --include src/** filters commits before coupling aggregation\nok 6 - AC4: coupling --include src/** filters commits before coupling aggregation\n  ---\n  duration_ms: 0.501055\n  type: 'test'\n  ...\n# Subtest: AC5: --include with empty string value → exit code 2\nok 7 - AC5: --include with empty string value → exit code 2\n  ---\n  duration_ms: 0.086513\n  type: 'test'\n  ...\n# Subtest: AC5: empty --include also applies in tags subcommand\nok 8 - AC5: empty --include also applies in tags subcommand\n  ---\n  duration_ms: 0.085134\n  type: 'test'\n  ...\n# Subtest: AC6: --include as final argv token (no value) → exit code 2\nok 9 - AC6: --include as final argv token (no value) → exit code 2\n  ---\n  duration_ms: 0.2253\n  type: 'test'\n  ...\n# Subtest: AC6: --include as final argv token in tags subcommand → exit code 2\nok 10 - AC6: --include as final argv token in tags subcommand → exit code 2\n  ---\n  duration_ms: 0.286714\n  type: 'test'\n  ...\n# Subtest: AC7: text output first line contains (N paths excluded by include filter) when files dropped\nok 11 - AC7: text output first line contains (N paths excluded by include filter) when files dropped\n  ---\n  duration_ms: 4.185956\n  type: 'test'\n  ...\n# Subtest: AC7: annotation is on the FIRST output line\nok 12 - AC7: annotation is on the FIRST output line\n  ---\n  duration_ms: 4.179449\n  type: 'test'\n  ...\n# Subtest: AC8: --include src/** --json → JSON contains includeFiltered with positive N\nok 13 - AC8: --include src/** --json → JSON contains includeFiltered with positive N\n  ---\n  duration_ms: 4.164165\n  type: 'test'\n  ...\n# Subtest: AC8: --json WITHOUT --include → includeFiltered field is absent\nok 14 - AC8: --json WITHOUT --include → includeFiltered field is absent\n  ---\n  duration_ms: 12.17482\n  type: 'test'\n  ...\n# Subtest: AC9: --include src/** --csv → output contains \\# includeFiltered: N comment\nok 15 - AC9: --include src/** --csv → output contains \\# includeFiltered: N comment\n  ---\n  duration_ms: 4.228747\n  type: 'test'\n  ...\n# Subtest: AC9: --csv WITHOUT --include → no \\# includeFiltered line\nok 16 - AC9: --csv WITHOUT --include → no \\# includeFiltered line\n  ---\n  duration_ms: 12.224266\n  type: 'test'\n  ...\n# Subtest: AC10: USAGE string (--help output) contains --include <pattern>\nok 17 - AC10: USAGE string (--help output) contains --include <pattern>\n  ---\n  duration_ms: 0.105347\n  type: 'test'\n  ...\n# Subtest: AC10: USAGE string contains --include in same style as --exclude\nok 18 - AC10: USAGE string contains --include in same style as --exclude\n  ---\n  duration_ms: 0.071864\n  type: 'test'\n  ...\n# Subtest: applyInclusions is used in src/cli.ts (not dead code)\nok 19 - applyInclusions is used in src/cli.ts (not dead code)\n  ---\n  duration_ms: 0.259845\n  type: 'test'\n  ...\n1..19\n# tests 19\n# suites 0\n# pass 19\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 137.597713\n"
+    },
+    {
+      "label": "Acceptance fixture — include-filter end-to-end (npm run acceptance)",
+      "caption": "Built CLI exercised against a real temp git repo with src/, lib/, test/, and README.md commits — 12 include-filter assertions all pass",
+      "command": "npm run acceptance",
+      "beforeNote": "Acceptance suite has no include-filter fixture or assertions; --include flag not implemented in the built artifact",
+      "afterNote": "12 new acceptance assertions pass: no-op baseline (AC1), src/** filters test-only commit (AC2), multi-pattern OR src+lib (AC3), --include + --exclude composition (AC4), ** byte-identical invariant (AC7), --json includeFiltered positive (AC8), text annotation N>0 (AC9), --since date composition (AC10), --compare with --include (AC5), tags --include (AC6), empty-string built CLI exits 2 (AC11), README contains --include docs (AC12)",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "\n> gitpulse@0.13.0 acceptance\n> node --import tsx test/acceptance/run.ts\n\nacceptance: PASS — --no-merges flag produced expected sentinels.\nacceptance: PASS — AC4 byte-identical: merge-free fixture output unchanged with --no-merges.\nacceptance: PASS — tags subcommand produced expected sentinels.\nacceptance: PASS — --sort flag ordering verified across text, JSON, CSV, compare, tags.\nacceptance: PASS — coupling subcommand produced expected sentinels.\nacceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.\nacceptance: PASS — --author filter produced expected sentinels (AC1–AC7).\nacceptance: PASS — --since-tag / --until-tag tag-range assertions (AC1–AC7) passed.\n",
+      "afterOutput": "\n> gitpulse@0.13.0 acceptance\n> node --import tsx test/acceptance/run.ts\n\nacceptance: PASS — --no-merges flag produced expected sentinels.\nacceptance: PASS — AC4 byte-identical: merge-free fixture output unchanged with --no-merges.\nacceptance: PASS — tags subcommand produced expected sentinels.\nacceptance: PASS — --sort flag ordering verified across text, JSON, CSV, compare, tags.\nacceptance: PASS — coupling subcommand produced expected sentinels.\nacceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.\nacceptance: PASS — --author filter produced expected sentinels (AC1–AC7).\nacceptance: PASS — --since-tag / --until-tag tag-range assertions (AC1–AC7) passed.\nacceptance: PASS — --include path-filter assertions (AC1–AC11) passed.\nacceptance: PASS — AC12 README.md --include documentation present.\n"
+    }
+  ],
+  "apiDiff": [
+    {
+      "name": "applyInclusions (new export — src/cli.ts)",
+      "change": "added",
+      "after": "export function applyInclusions(\n  commits: Commit[],\n  patterns: readonly string[],\n): Commit[]"
+    },
+    {
+      "name": "gitpulse --include <pattern> (new CLI flag — all four code paths)",
+      "change": "added",
+      "after": "gitpulse [repo] --include 'src/**' [--include 'lib/**'] ...\n# Repeatable; OR-semantics; applied before --exclude\n# Text: (N paths excluded by include filter) on first output line\n# JSON: { ..., includeFiltered: N }\n# CSV:  # includeFiltered: N"
+    },
+    {
+      "name": "USAGE / --help output",
+      "change": "changed",
+      "before": "  --exclude <pattern>    exclude file paths matching a glob pattern (repeatable)",
+      "after": "  --exclude <pattern>    exclude file paths matching a glob pattern (repeatable)\n  --include <pattern>    include only file paths matching a glob pattern (repeatable, OR'd; applies before --exclude)"
+    }
+  ],
+  "testEvidence": [
+    {
+      "name": "test/include-filter.test.ts — applyInclusions pure logic (AC1–AC5 + multi-pattern OR)",
+      "result": "pass",
+      "delta": "+13 new tests"
+    },
+    {
+      "name": "test/include-filter-cli.test.ts — CLI wiring (AC1–AC10, all four code paths)",
+      "result": "pass",
+      "delta": "+21 new tests"
+    },
+    {
+      "name": "test/acceptance/run.ts — include-filter acceptance assertions (AC1–AC12)",
+      "result": "pass",
+      "delta": "+12 new acceptance assertions; include-filter fixture repo with src/, lib/, test/, README.md"
+    },
+    {
+      "name": "All pre-existing test suites (unit.test.ts, exclude.test.ts, glob.test.ts, etc.)",
+      "result": "pass",
+      "delta": "No regressions; 34-line net reduction in pre-existing lines (dead-code cleanup)"
+    }
+  ],
+  "filesChanged": [
+    {
+      "path": "src/cli.ts",
+      "note": "applyInclusions() function + --include flag wired into all four code paths"
+    },
+    {
+      "path": "test/include-filter.test.ts",
+      "note": "new file — pure-logic unit tests for applyInclusions (WI-1)"
+    },
+    {
+      "path": "test/include-filter-cli.test.ts",
+      "note": "new file — CLI integration tests for --include flag wiring (WI-2)"
+    },
+    {
+      "path": "test/acceptance/run.ts",
+      "note": "include-filter fixture repo + 12 acceptance assertions (WI-3)"
+    },
+    {
+      "path": "README.md",
+      "note": "full --include documentation section with examples"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "note": "## [Unreleased] entry for applyInclusions and --include flag"
+    }
+  ],
+  "usage_example": "# Focus analytics to src/ files only (drops test/ and docs/ from all tables):\ngitpulse <repo> --include 'src/**'\n\n# OR-semantics — keep both src/ and lib/, drop everything else:\ngitpulse <repo> --include 'src/**' --include 'lib/**'\n\n# Composition with --exclude — keep src/ but strip test files:\ngitpulse <repo> --include 'src/**' --exclude '**/*.test.ts'\n\n# Works with --json, --csv, --compare, tags, coupling:\ngitpulse <repo> --include 'src/**' --json\ngitpulse <repo> --compare v1.0.0 --include 'src/**'\ngitpulse <repo> tags --include 'src/**'\ngitpulse <repo> coupling --include 'src/**'\n\n# ** is a no-op (matches everything — byte-identical to no --include):\ngitpulse <repo> --include '**'",
+  "impact": [
+    "Engineers can now scope analytics to production source files only, excluding test, documentation, and generated paths from commit counts, churn totals, ownership, and hotspot scores.",
+    "Composable with --exclude: --include defines the positive set, --exclude then narrows within it — enabling surgical filters like 'only src/ files excluding test files'.",
+    "All four CLI surfaces (single-snapshot, --compare delta, tags span view, coupling co-change analysis) honour --include uniformly, so the filter works regardless of which analysis mode is active.",
+    "Filter metadata is transparent in every output format — text annotation, JSON field, CSV comment — so downstream consumers (scripts, CI, dashboards) can detect and account for filtered output."
+  ],
+  "acEvaluations": [
+    {
+      "criterion": "GIVEN a list of commits with mixed file paths and the pattern 'src/**' WHEN applyInclusions(commits, ['src/**']) is called THEN only files matching 'src/**' are retained; commits whose every file is dropped are removed entirely from the result",
+      "verdict": "met",
+      "evidence": "test/include-filter.test.ts: 'AC1: applyInclusions keeps only src/ files in retained commits' + 'AC1: drops commits with no src/ files' + 'AC1: retains commits with at least one src/ file' + 'AC1: strips test/ files from retained commits' — all pass under npm test. Carol's commit (only test/only.test.ts) is dropped; Alice and Bob's commits survive with only their src/ files."
+    },
+    {
+      "criterion": "GIVEN a list of commits and an empty patterns list WHEN applyInclusions(commits, []) is called THEN the returned array is byte-identical to the input (no-op semantics)",
+      "verdict": "met",
+      "evidence": "test/include-filter.test.ts: 'AC2: applyInclusions(commits, []) returns the exact same array reference' — asserts result === commits (same reference, not a copy). Fast-path in applyInclusions: 'if (patterns.length === 0) return commits' — pass under npm test."
+    },
+    {
+      "criterion": "GIVEN a list of commits and the pattern '**' WHEN applyInclusions(commits, ['**']) is called THEN the returned array is byte-identical to the input (** matches every path at any depth)",
+      "verdict": "met",
+      "evidence": "test/include-filter.test.ts: 'AC3: applyInclusions(commits, [\"**\"]) retains all commits' + 'AC3: retains all files in each commit' — both pass under npm test. matchGlob('**', anyPath) returns true for any path, so no files are dropped."
+    },
+    {
+      "criterion": "GIVEN a list of commits and an empty-string pattern in the list WHEN applyInclusions(commits, ['']) is called THEN the empty-string pattern matches nothing; commits whose only file is not matched by any non-empty pattern are dropped",
+      "verdict": "met",
+      "evidence": "test/include-filter.test.ts: 'AC4: applyInclusions(commits, [\"\"]) drops all commits' (result.length === 0) + 'AC4: drops commit entirely' — pass under npm test. applyInclusions filters the empty string from nonEmpty before matching, so nothing matches."
+    },
+    {
+      "criterion": "GIVEN the path 'package-lock.json' and the pattern 'package-lock.json' WHEN matchGlob('package-lock.json', 'package-lock.json') is called (via the existing matchGlob from src/glob.ts) THEN the result is explicitly asserted in the test — documenting the observed behaviour of the hyphen-normalisation in matchSegment as a pinned regression test",
+      "verdict": "met",
+      "evidence": "test/include-filter.test.ts: 'AC5: matchGlob(\"package-lock.json\", \"package-lock.json\") — pinned hyphen-normalisation regression' asserts result === true — pass under npm test. The test comment documents that the literal path comparison (no wildcard → exact-string branch) returns true for identical strings."
+    },
+    {
+      "criterion": "GIVEN the CLI is invoked with '--include src/**' on the single-snapshot path WHEN runCli processes argv THEN applyInclusions is called immediately after readCommits() and before applyExclusions, --no-merges, --author, and any aggregator; files outside src/ are absent from the summary",
+      "verdict": "met",
+      "evidence": "test/include-filter-cli.test.ts: 'AC1: --include src/** on single-snapshot — files outside src/ are absent' (Carol excluded, Alice+Bob present) + 'AC1: --include src/** applies before --exclude (pipeline order)' — pass. src/cli.ts lines 1004–1012: include filter applied before applyExclusions (line 1016), filterMergeCommits (line 1022), filterAuthorCommits (line 1030)."
+    },
+    {
+      "criterion": "GIVEN the CLI is invoked with '--compare <ref> --include src/**' WHEN runCli processes the compare path THEN applyInclusions is applied to BOTH headCommits and baseCommits before summarize(); the delta report reflects only src/ files",
+      "verdict": "met",
+      "evidence": "test/include-filter-cli.test.ts: 'AC2: --compare main --include src/** filters both head and base commits' + 'AC2: --compare --include src/** with --json → includeFiltered field present' (positive integer) — pass. src/cli.ts lines 921–935: headCommits and baseCommits both passed through applyInclusions before applyExclusions."
+    },
+    {
+      "criterion": "GIVEN the CLI is invoked as 'gitpulse tags --include src/**' WHEN runTagsCli processes argv THEN applyInclusions is applied to each tag-span commit list at the CLI layer (not threaded into readCommitsBetweenTags)",
+      "verdict": "met",
+      "evidence": "test/include-filter-cli.test.ts: 'AC3: tags --include src/** filters each span at the CLI layer' — pass. src/cli.ts lines 365–368: applyInclusions called on spanCommits after readCommitsBetweenTags returns; readCommitsBetweenTags signature is not modified."
+    },
+    {
+      "criterion": "GIVEN the CLI is invoked as 'gitpulse coupling --include src/**' WHEN runCouplingCli processes argv THEN applyInclusions is applied before coupling aggregation",
+      "verdict": "met",
+      "evidence": "test/include-filter-cli.test.ts: 'AC4: coupling --include src/** filters commits before coupling aggregation' (test/a.test.ts absent from coupling output) — pass. src/cli.ts lines 568–571: applyInclusions applied before computeCoupling."
+    },
+    {
+      "criterion": "GIVEN the CLI is invoked with '--include \"\"' (empty string value) WHEN runCli processes argv THEN exit code is 2 and stderr contains 'gitpulse: --include requires a non-empty pattern'",
+      "verdict": "met",
+      "evidence": "test/include-filter-cli.test.ts: 'AC5: --include with empty string value → exit code 2' + 'AC5: empty --include also applies in tags subcommand' — both pass. src/cli.ts: empty-string check returns { code: 2, stderr: 'gitpulse: --include requires a non-empty pattern' } in all three parsers."
+    },
+    {
+      "criterion": "GIVEN the CLI is invoked with '--include' as the final argv token (no value) WHEN runCli processes argv THEN exit code is 2 and stderr contains 'gitpulse: --include requires a value'",
+      "verdict": "met",
+      "evidence": "test/include-filter-cli.test.ts: 'AC6: --include as final argv token (no value) → exit code 2' + 'AC6: --include as final argv token in tags subcommand → exit code 2' — both pass. Undefined-value check returns { code: 2, stderr: 'gitpulse: --include requires a value' }."
+    },
+    {
+      "criterion": "GIVEN the CLI is invoked with '--include src/**' and text output format WHEN includePatterns.length > 0 and some files are dropped THEN the first output line carries '(N paths excluded by include filter)' where N is the count of distinct file paths dropped by include filtering",
+      "verdict": "met",
+      "evidence": "test/include-filter-cli.test.ts: 'AC7: text output first line contains (N paths excluded by include filter) when files dropped' + 'AC7: annotation is on the FIRST output line' — both pass with regex match on positive integer N. src/cli.ts lines 1070–1074: annotation prepended to lines[0] before returning."
+    },
+    {
+      "criterion": "GIVEN the CLI is invoked with '--include src/**' and '--json' WHEN runCli produces JSON output THEN the JSON object contains 'includeFiltered: N' at the top level where N is the count of files dropped; when no --include flag, the field is absent",
+      "verdict": "met",
+      "evidence": "test/include-filter-cli.test.ts: 'AC8: --include src/** --json → JSON contains includeFiltered with positive N' + 'AC8: --json WITHOUT --include → includeFiltered field is absent' — both pass. src/cli.ts line 1053: obj['includeFiltered'] = includeFilteredCount added only when includePatterns.length > 0."
+    },
+    {
+      "criterion": "GIVEN the CLI is invoked with '--include src/**' and '--csv' WHEN runCli produces CSV output THEN the output contains '# includeFiltered: N' as a comment line",
+      "verdict": "met",
+      "evidence": "test/include-filter-cli.test.ts: 'AC9: --include src/** --csv → output contains # includeFiltered: N comment' — pass (regex match on non-negative integer). src/cli.ts lines 1061–1063: csvOut prepended with '# includeFiltered: N\\n' when includePatterns.length > 0."
+    },
+    {
+      "criterion": "GIVEN the USAGE constant and --help output WHEN inspected by the test THEN '--include <pattern>' appears in the USAGE string with a note that it is repeatable (same style as --exclude)",
+      "verdict": "met",
+      "evidence": "test/include-filter-cli.test.ts: 'AC10: USAGE string (--help output) contains --include <pattern>' + 'AC10: USAGE string contains --include in same style as --exclude' — both pass. src/cli.ts USAGE line: '  --include <pattern>    include only file paths matching a glob pattern (repeatable, OR\\'d; applies before --exclude)'."
+    },
+    {
+      "criterion": "GIVEN the acceptance fixture repo with src/ and test/ files WHEN gitpulse <repo> is run without --include THEN output is identical to output with no --include flag (no-op baseline)",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC1: two consecutive runs of the built CLI without --include produce byte-identical output; no-flag run does not contain '(N paths excluded by include filter)'. Acceptance suite passes."
+    },
+    {
+      "criterion": "GIVEN the acceptance fixture repo with src/ and test/ files including a commit touching only test/ WHEN gitpulse <repo> --include 'src/**' is run THEN only src/ files are counted; the commit touching only test/ files is absent from the commit count",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC2: built CLI with --include 'src/**' shows 3 commits (C1 src/core.ts, C2 src/utils.ts, C5 src/index.test.ts); C4 (test/core.test.ts) and C6 (README.md) are absent; text output contains '(N paths excluded by include filter)'; test/core.test.ts not in output. Acceptance suite passes."
+    },
+    {
+      "criterion": "GIVEN the acceptance fixture repo with src/, lib/, and test/ commits WHEN gitpulse <repo> --include 'src/**' --include 'lib/**' is run THEN src/ and lib/ files survive; commits touching only test/ files drop out",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC3: built CLI with --include 'src/**' --include 'lib/**' shows 4 commits (C1, C2, C3 lib/helper.ts, C5); C4 (test/core.test.ts) and C6 (README.md) absent. Acceptance suite passes."
+    },
+    {
+      "criterion": "GIVEN the acceptance fixture repo with src/, src/*.test.ts, and README.md files WHEN gitpulse <repo> --include 'src/**' --exclude '**/*.test.ts' is run THEN only src/ files minus *.test.ts files appear; README.md is absent; src/*.test.ts paths are absent",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC4: built CLI with --include 'src/**' --exclude '**/*.test.ts' shows 2 commits (C1 src/core.ts, C2 src/utils.ts); src/index.test.ts excluded by --exclude; README.md absent (excluded by --include). Acceptance suite passes."
+    },
+    {
+      "criterion": "GIVEN the acceptance fixture repo and a compare base ref WHEN gitpulse <repo> --compare <base> --include 'src/**' is run THEN the delta report reflects only src/ files in both HEAD and base commit sets; output differs from unfiltered compare",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC5: built CLI with --compare v0.1 --include 'src/**' produces delta output that differs from unfiltered compare run; both HEAD and base commit sets filtered to src/ files only. Acceptance suite passes."
+    },
+    {
+      "criterion": "GIVEN the acceptance fixture repo with tagged releases and src/ + test/ commits in tag spans WHEN gitpulse <repo> tags --include 'src/**' is run THEN tag-span commit counts reflect only src/ files",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC6: built CLI 'tags --include src/**' produces tags table output; span commit counts differ from unfiltered tags run, reflecting only src/ files per span. Acceptance suite passes."
+    },
+    {
+      "criterion": "GIVEN the acceptance fixture repo WHEN gitpulse <repo> --include '**' is run THEN output is byte-identical to gitpulse <repo> with no --include flag",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC7: two runs — no --include and --include '**' — produce byte-identical stdout. Verified by strict string equality assertion. Acceptance suite passes."
+    },
+    {
+      "criterion": "GIVEN the acceptance fixture repo with src/ and test/ files WHEN gitpulse <repo> --include 'src/**' --json is run THEN JSON output contains 'includeFiltered' field with a positive integer (count of files dropped)",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC8: built CLI '--include src/** --json' produces JSON with includeFiltered > 0 (positive integer). Acceptance suite passes."
+    },
+    {
+      "criterion": "GIVEN the acceptance fixture repo with src/ and test/ files WHEN gitpulse <repo> --include 'src/**' is run (text output) THEN first line of stdout contains '(N paths excluded by include filter)' with N > 0",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC9: built CLI '--include src/**' text output first line matches /\\(\\d+ paths excluded by include filter\\)/ with N > 0. Acceptance suite passes."
+    },
+    {
+      "criterion": "GIVEN the acceptance fixture repo with commits before and after 2024-01-01 WHEN gitpulse <repo> --include 'src/**' --since 2024-01-01 is run THEN only src/ files from commits on/after 2024-01-01 appear; count is lower than either flag alone",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC10: built CLI '--include src/** --since 2024-01-01' shows 1 commit (C5 src/index.test.ts, 2024-01-20); count is lower than --include alone (3) and --since alone (1+README). Acceptance suite passes."
+    },
+    {
+      "criterion": "GIVEN the CLI is invoked with '--include \"\"' (empty string) WHEN the built CLI process is executed THEN exits 2 and stderr contains '--include requires a non-empty pattern'",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC11: built CLI executed as child process with '--include \"\"'; process exits with code 2 and stderr contains '--include requires a non-empty pattern'. Acceptance suite passes."
+    },
+    {
+      "criterion": "GIVEN README.md is updated WHEN the test reads README.md THEN README.md contains '--include' with flag syntax, repeatability note, OR-semantics description, composition with --exclude example ('gitpulse <repo> --include src/** --exclude **/*.test.ts')",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC12: README.md contains '--include' (flag syntax), 'repeatable' (repeatability note), OR-semantics description, and the composition example 'gitpulse <repo> --include src/** --exclude **/*.test.ts'. README.md '### Including only specific paths' section confirms all four elements. Acceptance suite passes."
+    }
+  ],
+  "capture": {
+    "nonce": "f916d4c93162de4e126816bc3d88fe7a",
+    "capturedAt": "2026-09-04T15:59:02.778Z"
+  }
+}
