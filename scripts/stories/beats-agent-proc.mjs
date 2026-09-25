@@ -24,6 +24,7 @@
 import { readFileSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { cycleProgressIdleMs } from './beats-cycle-progress.mjs';
+import { queueManifestTerminal, FS_CLOCK_SLACK_MS } from './beats-queue-terminal.mjs';
 // T1 ruling 1471 — re-exported so `beats-page.mjs` names the wall ceiling
 // beside `STALL_CEILING_MS`/`TERMINAL_UI_GRACE_MS`, its two siblings that
 // already live in THIS file rather than in the schema that only validates what
@@ -538,6 +539,30 @@ export function makeCycleTerminalDoor(forgeRoot, opts = null) {
     // boolean that stood for both. A declaration is consumed by the waiter it
     // declared, or by nothing.
     door.sawCycle = true;
+    // T1 1503 (row 98, S10 run 27) — TERMINAL WINS, BEFORE ANY WINDOW
+    // ARITHMETIC. `queueManifestTerminal` (beats-queue-terminal.mjs) has the
+    // full measurement: `cycleStartedSince` below can never fire when the
+    // product's own `cycle.start` lands before this beat's anchor, and run 27
+    // sat inside the wait forever on exactly that gap while a `failed`
+    // manifest waited unread six minutes away. The queue's mtime is the same
+    // kind of evidence `cycle.start` is — the product's word — so it is read
+    // FIRST, unconditionally, never gated on the started-proof below.
+    if (cycleOf !== null) {
+      const q = queueManifestTerminal(forgeRoot, cycleOf);
+      if (q !== null) {
+        if (q.unknown === true) {
+          // Named, never silent (§15.504), and never treated as terminal: an
+          // unreadable queue only forfeits this early exit, never fabricates one.
+          door.lastSeen = q.detail;
+        } else if (q.mtimeMs >= sinceMs - FS_CLOCK_SLACK_MS) {
+          door.lastSeen = q.detail;
+          return Object.freeze({ done: q.state === wantState, state: q.state, detail: q.detail });
+        }
+        // `mtimeMs < sinceMs` — the S10 run 22 hazard, a terminal the PREVIOUS
+        // run left behind. Not evidence for THIS press; fall through as if the
+        // queue had said nothing.
+      }
+    }
     // T1 1231 — BY IDENTITY, THE CYCLE PREDATES THE PRESS. DEC-2 threads one
     // cycle id through the architect and develop runs, so the queue already
     // reads the ARCHITECT run's terminal when the develop press lands (S10 run

@@ -34,7 +34,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, mkdtempSync, mkdirSync, writeFileSync, utimesSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, mkdirSync, renameSync, writeFileSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -42,6 +42,7 @@ import {
   makeCycleTerminalDoor, makeCycleTerminalWatch, STALL_CEILING_MS, TERMINAL_UI_GRACE_MS,
 } from './beats-agent-proc.mjs';
 import { resolveCycleOf } from './beats.mjs';
+import { FS_CLOCK_SLACK_MS } from './beats-queue-terminal.mjs';
 
 function realDoor(): { root: string; logs: string; door: (runId: string | null, sinceMs: number, want: string) => { done: boolean; state: string; detail: string } | null } {
   const root = mkdtempSync(join(tmpdir(), 'story-cycle-terminal-'));
@@ -474,4 +475,94 @@ test('7.6.147: S10 beat 10 with no bindings REFUSES, naming the placeholder', as
   assert.match(v.failures[0], /NOT "give the beat a `do` block"/,
     'the remedy text must name THIS failure — run 21 was told to add a `do` block it already had');
   assert.deepEqual(v.bindings, {}, 'a refusing beat exports no bindings, like stuckVerdict');
+});
+
+/**
+ * T1 1503 (row 98, S10 run 27) — TERMINAL WINS, even when `cycleStartedSince`
+ * can never fire. MEASURED: the develop run's own `cycle.start` was stamped
+ * 20:44:07.280Z, ~1s BEFORE the beat's own anchor (~20:44:08.0Z) — so the
+ * started-gate stayed false forever and a `failed` manifest six minutes later
+ * was never read. `queueManifestTerminal` (beats-queue-terminal.mjs) answers
+ * from the queue's own mtime instead, checked before that gate ever runs.
+ */
+test('T1 1503: a queue terminal wins even when cycle.start predates the anchor', () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-2026-09-25-add-exclude-author-flag';
+  const anchor = Date.now() - 5_000;
+  liveDispatch(logs, `2026-09-25T20-36-45_${initiative}`);
+  appendFileSync(join(logs, `2026-09-25T20-36-45_${initiative}`, 'events.jsonl'),
+    `${JSON.stringify({ event_type: 'start', message: 'cycle.start', started_at: new Date(anchor - 1_000).toISOString() })}\n`);
+  const watch = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: initiative })!;
+  assert.equal(watch(null, anchor), null, 'no terminal yet — the wait is open');
+
+  // MID-WAIT: the product moves the initiative into _queue/failed/, written
+  // (mtime) at or after the anchor — exactly what run 27 measured.
+  queueFile(root, 'failed', initiative);
+
+  const stop = watch(null, anchor);
+  assert.notEqual(stop, null, 'a queue terminal must end the wait within one poll, cycle.start notwithstanding');
+  assert.equal(stop!.reason, 'cycle-ended');
+  assert.match(stop!.detail, /failed/, stop!.detail);
+});
+
+/** THE S10 RUN 22 GUARD, restated for the mtime path: a terminal the PREVIOUS
+ *  run left in the queue, older than this press's own anchor, must not end a
+ *  wait it does not belong to. */
+test('T1 1503: a queue terminal OLDER than the anchor is ignored — the wait continues', () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-run22-mtime-guard';
+  liveDispatch(logs, `2026-09-18T10-21-56_${initiative}`);
+  // Genuinely BEFORE the anchor — mtime AND ctime. `utimesSync` alone would
+  // not do: it back-dates mtime but stamps ctime with NOW, and ctime is what
+  // a rename into _queue/<state>/ moves (see the rename test below).
+  queueFile(root, 'failed', initiative);
+  const settledAt = Date.now() + FS_CLOCK_SLACK_MS + 50;
+  while (Date.now() < settledAt) { /* ctime resolution: the anchor must be strictly later */ }
+  const anchor = Date.now();
+
+  const watch = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: initiative })!;
+  assert.equal(watch(null, anchor), null, 'a terminal older than the anchor is the PREVIOUS run\'s, not this one\'s');
+});
+
+/** THE WANTED STATE, mid-wait, still REACHES — the `terminalAt`/grace state
+ *  `makeCycleTerminalWatch` keeps must be set from this same fast path, not
+ *  only from the started-gate's own read. */
+test('T1 1503: a queue terminal in the WANTED state, mid-wait, reaches — even with cycle.start predating the anchor', () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-1503-reached';
+  const anchor = Date.now() - 5_000;
+  liveDispatch(logs, `2026-09-25T20-36-45_${initiative}`);
+  appendFileSync(join(logs, `2026-09-25T20-36-45_${initiative}`, 'events.jsonl'),
+    `${JSON.stringify({ event_type: 'start', message: 'cycle.start', started_at: new Date(anchor - 1_000).toISOString() })}\n`);
+  const watch = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: initiative })!;
+  assert.equal(watch(null, anchor), null);
+  assert.equal(watch.reached, false, 'not reached yet');
+
+  queueFile(root, 'ready-for-review', initiative); // the WANTED state, mid-wait
+
+  assert.equal(watch(null, anchor), null, 'a first sighting starts the page grace, by design — it does not end the wait yet');
+  assert.equal(watch.reached, true, 'but it IS reached — the terminal was read despite cycle.start predating the anchor');
+});
+
+/** A RENAME DOES NOT TOUCH MTIME. `moveTo` (packages/flows/queue.ts) is a bare
+ *  `renameSync`, so a manifest last WRITTEN before the press keeps its old
+ *  mtime in _queue/failed/ — only its ctime records the move. Reading mtime
+ *  alone would ignore a genuine terminal as "the previous run's". */
+test('T1 1503: a manifest MOVED into a terminal state after the anchor counts even though its mtime is older (rename keeps mtime)', () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-1503-renamed';
+  liveDispatch(logs, `2026-09-25T20-36-45_${initiative}`);
+  queueFile(root, 'in-flight', initiative);
+  const old = (Date.now() - 600_000) / 1000;
+  utimesSync(join(root, '_queue', 'in-flight', `${initiative}.md`), old, old);
+  const settledAt = Date.now() + FS_CLOCK_SLACK_MS + 50;
+  while (Date.now() < settledAt) { /* the anchor is strictly after the file's last write */ }
+  const anchor = Date.now();
+  const watch = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: initiative })!;
+  assert.equal(watch(null, anchor), null, 'still in flight');
+  mkdirSync(join(root, '_queue', 'failed'), { recursive: true });
+  renameSync(join(root, '_queue', 'in-flight', `${initiative}.md`), join(root, '_queue', 'failed', `${initiative}.md`));
+  const stop = watch(null, anchor);
+  assert.notEqual(stop, null, 'the move happened after the anchor — a stale mtime must not hide it');
+  assert.equal(stop!.reason, 'cycle-ended');
 });

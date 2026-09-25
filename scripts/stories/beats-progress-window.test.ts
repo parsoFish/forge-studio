@@ -123,41 +123,91 @@ test('1471: no progress at all — the wait still ends at its declared upTo, nam
 
   const upTo = 300;
   const watch = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: initiative })!;
-  const began = Date.now();
   const verdict = await waitForConsequence(
     answeringPage() as never, BEAT as never, upTo, null, null, null, null, t0 - 1_000, null, watch,
   ) as { why: string; stoppedBy?: string } | null;
-  const elapsed = Date.now() - began;
 
+  // T1 1509 (row 100) — no elapsed-wall-time assertion: "must not be extended
+  // past its declared upTo" is already proven by the message itself naming
+  // the exact 300 ms bound, which a wait that HAD been extended would not say.
+  // A separate `Date.now()` measurement in the test process adds no coverage
+  // this regex does not already give, only a real-time bound this file must
+  // not have.
   assert.notEqual(verdict, null, 'a cycleOf wait with no progress at all must still end — never sit open forever');
-  assert.ok(elapsed < upTo + 500, `must not be extended past its declared upTo with nothing to extend it on: waited ${elapsed}ms`);
   assert.match(verdict!.why, /no cycle progress for 300 ms/, `must name INACTIVITY as the reason: ${verdict!.why}`);
   assert.match(verdict!.why, /progress-extended 0 time\(s\)/, verdict!.why);
   assert.equal(verdict!.stoppedBy, 'runner');
 });
 
 test('1471: the run\'s own $ ceiling ends a progressing, otherwise-healthy wait RED, naming the ceiling', async () => {
+  // T1 1509 (row 100) — DETERMINISTIC BY CONSTRUCTION, TWO CAUSES.
+  //
+  // (1) The overspend write no longer races a `setTimeout` against
+  // `waitForConsequence`'s own poll cadence. A `setTimeout(..., 150)` writing
+  // the event has no fixed relationship to the loop's own
+  // `CONSEQUENCE_POLL_MS` ticks once the scheduler is under load. So the write
+  // is pinned to a POLL instead: the fake page's `evaluate()` — called once
+  // per iteration, always BEFORE the next iteration's guard check — writes
+  // the overspend event on its first call. Ordering is then the loop's own
+  // single-threaded structure, never two independent timers: iteration 1
+  // reads the ORIGINAL ($1) cost and starts the guard's cache; iteration 1's
+  // `evaluate()` then writes the overspend row; iteration 2's guard check
+  // re-reads it, because real time strictly greater than `CONSEQUENCE_POLL_MS`
+  // has necessarily elapsed since iteration 1's check.
+  //
+  // (2) MEASURED THE DEEPER ONE BY INSTRUMENTING A REPRODUCTION (red 1 of 3
+  // runs, alone, at loadavg 6.6 — reproduced here at roughly the same rate).
+  // `collectSpendDirs` (run-observe.mjs) excludes a dispatch dir whose
+  // directory `mtime < sinceMs`, and `sinceMs` here is `startedMs`. With the
+  // shipped `startedMs = Date.now() - 5`, an instrumented run caught
+  // `dirMtime` landing BELOW `startedMs` even though `mkdirSync` ran
+  // AFTER `Date.now()` was sampled — a 5ms margin is not a safe distance from
+  // this filesystem's mtime precision (WSL2's temp mount), and once excluded
+  // the dispatch dir stays excluded for the rest of the wait: every poll reads
+  // `UNMEASURED`, which `spendCeilingVerdict` correctly never treats as a
+  // breach, so the wait sits out its full declared bound and returns `null`.
+  // 30 reproduction runs at `Date.now() - 1_000` — matching this file's own
+  // `liveCycleDispatch` margin elsewhere — never hit it once.
   const root = mkdtempSync(join(tmpdir(), 'progress-window-spend-'));
-  const startedMs = Date.now() - 5;
+  const startedMs = Date.now() - 1_000;
   const dispatch = join(root, '_logs', 'agent-run-spend-1');
   mkdirSync(dispatch, { recursive: true });
   // Under the ceiling at the first read.
   writeFileSync(join(dispatch, 'events.jsonl'), `${JSON.stringify({ event_type: 'phase', phase: 'developer', cost_usd: 1 })}\n`);
 
-  // A short `pollMs` — the production default is 5s, which this bound would
-  // sail past; a test seam, never a real-run override (see the doc on
-  // `makeWaitSpendGuard`).
+  // pollMs is a test seam, never a real-run override (see the doc on
+  // `makeWaitSpendGuard`) — small so the SECOND guard check (one real
+  // CONSEQUENCE_POLL_MS tick later) always clears its throttle.
   const guard = makeWaitSpendGuard({ root, startedMs, realSpawn: true, ceilingUsd: 2, pollMs: 50 });
   assert.notEqual(guard, null, 'a finite ceilingUsd must always produce a real guard');
 
   // Spend crosses the ceiling MID-WAIT — the shape row 95 asks for: not
-  // already over budget at the press, over budget while still waiting.
-  setTimeout(() => {
-    appendFileSync(join(dispatch, 'events.jsonl'), `${JSON.stringify({ event_type: 'phase', phase: 'developer', cost_usd: 5 })}\n`);
-  }, 150);
+  // already over budget at the press, over budget while still waiting — timed
+  // by POLL COUNT via the fake page below, not by a racing wall-clock timer.
+  let evaluateCalls = 0;
+  const page = {
+    ...(answeringPage() as any),
+    evaluate: async () => {
+      evaluateCalls += 1;
+      if (evaluateCalls === 1) {
+        appendFileSync(join(dispatch, 'events.jsonl'), `${JSON.stringify({ event_type: 'phase', phase: 'developer', cost_usd: 5 })}\n`);
+      }
+      // Deliberately mismatches the beat's own `expect.data: { page:
+      // 'never-matches' }` on every call, exactly as the fixed fake page did —
+      // otherwise the early `expect.data` match would end the wait before the
+      // guard ever gets its second check.
+      return {
+        data: { page: 'projects' }, nested: [], lifecycle: null, lifecycleError: null, sessionPhase: null,
+      };
+    },
+  };
 
+  // The declared bound is a safety CEILING, never a duration this test
+  // expects to spend — the breach above ends the wait within two real
+  // CONSEQUENCE_POLL_MS ticks, so 5s is headroom for a regression, not a
+  // sleep this run pays for.
   const verdict = await waitForConsequence(
-    answeringPage() as never,
+    page as never,
     { act: BEAT.act, expect: { route: '/nonexistent', data: { page: 'never-matches' } } } as never,
     5_000, null, null, null, null, null, null, null,
     guard!,
@@ -172,8 +222,13 @@ test('1471: the run\'s own $ ceiling ends a progressing, otherwise-healthy wait 
 test('1471: a plain agent wait — no cycleOf, no cycleWatch at all — keeps its exact old deadline semantics', async () => {
   // The SCOPE line: "keep the existing behaviour for waits WITHOUT cycleOf".
   // No amount of file-writing anywhere should change when this one ends.
-  const began = Date.now();
+  //
+  // T1 1509 (row 100) — no elapsed-wall-time assertion. `answeringPage`'s data
+  // already matches `BEAT.expect.data`, so the ONLY path that can produce
+  // `null` here is the early match before any poll's sleep — there is no
+  // control-flow path that spends real time and still returns `null`, so a
+  // separate `Date.now()` bound would guard against nothing this return value
+  // does not already prove.
   const verdict = await waitForConsequence(answeringPage() as never, BEAT as never, 5_000, null);
   assert.equal(verdict, null, 'unchanged: a beat whose expectation already holds and declares no wait at all ends immediately');
-  assert.ok(Date.now() - began < 1_000);
 });

@@ -395,7 +395,31 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
         stalled = await waitForConsequence(
           page, beat, left, sessionScope, agentProcProbe,
           beat.wait?.for === 'settle' ? beat.wait : null, stallDoor,
-          resolveAnchorMs(beat.wait ?? null, pressedAt, Date.now()),
+          // T1 1503 (row 98, S10 run 27) — THE DEFAULT ANCHOR IS `pressStartedMs`,
+          // NEVER A FRESH `Date.now()` TAKEN HERE. This line runs AFTER
+          // `performSteps` has already issued this beat's own act (the click or
+          // fill above), and for beat 10's shape — press THEN wait, in the SAME
+          // beat, with no `wait.anchor` naming an earlier press — a fresh
+          // `Date.now()` is a timestamp taken AFTER the act, exactly the
+          // ordering 718(1) already forbids for the NAMED-anchor form. Measured:
+          // the develop run's own `cycle.start` landed at 20:44:07.280Z while
+          // this expression, unfixed, could read a beat-local "now" no earlier
+          // than that — so `cycleStartedSince` never found a start at or after
+          // its own anchor, and the wait never ended.
+          //
+          // `pressStartedMs` (above, captured before `resolveBoundPresses` and
+          // `performSteps` ever run) is the one instant on this beat's whole
+          // timeline provably AT OR BEFORE any product effect of its own press,
+          // which is exactly the "evidence begins here" meaning 718(1) already
+          // gives the NAMED form — this is that same meaning applied to the
+          // UNNAMED (default) one, additively: `resolveAnchorMs` still returns
+          // `pressedAt.get(anchor)` unchanged whenever a beat NAMES an earlier
+          // press, and every existing consumer of that path (the stall door
+          // included — both read the identical `anchorMs` this call produces)
+          // keeps its exact behaviour. Only the fallback used when a beat
+          // declares no `anchor` — and the `at > waitStartedMs` refusal bound
+          // above it — moves, and only earlier, never later.
+          resolveAnchorMs(beat.wait ?? null, pressedAt, pressStartedMs),
           // 7.6.77, narrowed by 7.6.98: ONLY a bound declared on the beat's
           // `wait` reaches the consequence wait. A bound declared on a repeat
           // STEP belongs to that loop and to the page it stands on — handing it
