@@ -32,6 +32,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const GATE = join(import.meta.dirname, '..', '.claude', 'skills', 'tiered-orchestration', 'scripts', 'gate.sh');
+const HEAVY_SLOT = join(import.meta.dirname, '..', '.claude', 'skills', 'tiered-orchestration', 'scripts', 'heavy-slot.sh');
 
 /**
  * The step records EXCLUSION, not a /proc/locks row — and the difference is a
@@ -199,6 +200,49 @@ describe('gate.sh — the suite-lock is the TOOL\'s guarantee, not the caller\'s
       lockSeenByStep(d),
       'FREE',
       'the step must never observe a FREE lock: either it waited for the stranger or it never ran',
+    );
+  });
+
+  /**
+   * ROW 80c (T1 1370) — THE PRODUCTION SHAPE, not a synthetic one. The
+   * incident: `heavy-slot.sh <camp> suite -- gate.sh …` deadlocked for
+   * 38 minutes — gate.sh read heavy-slot.sh's own inherited-fd hold
+   * (`exec 8>file; flock -n 8`, this file's own header idiom, on ITS OWN fd
+   * rather than a synthetic shell's) as "HELD BY AN UNNAMEABLE HOLDER …
+   * waiting" and waited out its own ancestor. #912's lock-holders fallback
+   * fixed the SYNTHETIC version of this shape (`ANCESTOR via the invisible
+   * inherited-fd shape` above); this proves it under the REAL wrapper the
+   * incident actually used, not a stand-in for it.
+   *
+   * `HEAVY_SLOT_FLOOR_SUITE_KB=0` — heavy-slot.sh's own admission floor
+   * defaults to 4 GiB `MemAvailable`; this door is not about memory
+   * admission, and a busy CI box legitimately dipping under that floor must
+   * not make this door flaky.
+   */
+  test('ROW 80c: heavy-slot.sh <camp> suite -- gate.sh completes promptly, naming heavy-slot.sh as the ancestor', () => {
+    const d = tree(LOCK_CI);
+    const c = camp();
+
+    const r = spawnSync(
+      'bash',
+      [HEAVY_SLOT, c, 'suite', '--', 'bash', GATE, d, c],
+      { encoding: 'utf8', env: env({ HEAVY_SLOT_FLOOR_SUITE_KB: '0', FORGE_SUITE_LOCK_WAIT: '5' }), timeout: 30000 },
+    );
+
+    assert.equal(
+      lockSeenByStep(d),
+      'HELD',
+      `the step must run excluded — a self-deadlock never runs it at all: ${r.stdout}${r.stderr}`,
+    );
+    assert.match(
+      r.stdout,
+      /^suite-lock: held by ancestor pid \d+/m,
+      `must name heavy-slot.sh as the ancestor, never wait it out: ${r.stdout}${r.stderr}`,
+    );
+    assert.doesNotMatch(
+      r.stdout,
+      /UNNAMEABLE|WAITING on stranger|NOT TAKEN/,
+      `must never fall into the stranger/unnameable wait — the deadlock this row exists to close: ${r.stdout}${r.stderr}`,
     );
   });
 

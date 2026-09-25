@@ -292,3 +292,11 @@ export function costBreakdownFromLines(lines) {
     architectUsd: sumAuthoritativeCostUsd(events.filter((e) => e.phase === 'architect')),
   };
 }
+
+/** The claim-time contract check is skipped ONLY on the routine tier, whose
+ *  repo is reset to a frozen `--base-sha` that deliberately fails C2. A
+ *  real-ground run (no base sha, e.g. G2/G3) keeps it: a $0 refusal at claim
+ *  is the right outcome for a project that is not contract-ready. */
+export function serveContractEnv(baseSha) {
+  return baseSha ? { FORGE_SKIP_CONTRACT_CHECK: '1' } : {};
+}

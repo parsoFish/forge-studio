@@ -84,7 +84,7 @@ import { flowDeclaresMergedReflect, flowDefinition, knownFlowIds, resolveFlowSel
 import { createStageTwo } from './verify-cycle-stage2.mjs';
 import { captureHandle, killGroupIfLive, runGuarded } from './verify-cycle-teardown.mjs';
 import { getPaths } from '@forge/flows';
-import { DEFAULT_PROJECT, buildOutcomeChecks, resolveReflectWaitDeadlineMs } from './lib/verify-outcomes.mjs';
+import { DEFAULT_PROJECT, buildOutcomeChecks, resolveReflectWaitDeadlineMs, serveContractEnv } from './lib/verify-outcomes.mjs';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -529,19 +529,16 @@ async function ensureWatch(watch) {
 }
 
 function startServe() {
-  // FORGE_SKIP_CONTRACT_CHECK=1: bypass the preflight hard-clause check in
-  // validateClaimable for the routine-tier harness, where the corpus repo is
-  // reset to a frozen SHA that deliberately fails C2 scratch-hygiene. This
-  // harness tests ENGINE EXECUTION, not project onboarding — the contract gate
-  // is orthogonal here. Flow-validity + zero-gate structural checks are never
-  // skipped (they fire before the env is consulted in claim-validator.ts).
-  log('contract-readiness claim check skipped (routine-tier execution test)');
+  // The claim contract check is skipped only on the routine tier (--base-sha,
+  // a frozen corpus that deliberately fails C2); see serveContractEnv.
+  const contractEnv = serveContractEnv(BASE_SHA);
+  log(contractEnv.FORGE_SKIP_CONTRACT_CHECK ? 'contract-readiness claim check skipped (routine tier, --base-sha)' : 'contract-readiness claim check ON (real ground)');
   return spawn(
     process.execPath,
     ['--experimental-strip-types', 'apps/forge/cli.ts', 'serve', '--once'],
     {
       cwd: FORGE_ROOT,
-      env: forgeSpawnEnv({ FORGE_SKIP_CONTRACT_CHECK: '1' }),
+      env: forgeSpawnEnv(contractEnv),
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,
     },

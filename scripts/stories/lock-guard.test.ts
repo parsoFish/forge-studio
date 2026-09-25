@@ -24,7 +24,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { closeSync, mkdtempSync, openSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, mkdirSync, mkdtempSync, openSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
@@ -236,11 +236,22 @@ test('7.6.33: a WAITER is not a holder — /proc/locks decides, the fd walk cann
     const held = lockHolders(lock);
     const waiting = lockWaiters(lock);
 
-    assert.equal(held.length, 1, `exactly one process HOLDS it: ${JSON.stringify(held)}`);
-    assert.equal(String(held[0].pid), String(holder.pid), 'and it is the one that got there first');
+    // ROW 80B WIDENED "exactly one holder" TO "at least the flock pid, honestly".
+    // `lockHolders` now reads fdinfo, and `flock LOCK sleep N` (no `-c`) forks:
+    // the flock binary calls flock(2) then forks a CHILD that execs "sleep",
+    // inheriting the already-locked fd. Both pids reference the SAME open file
+    // description and both carry a `lock:` line in their own fdinfo, so BOTH are
+    // correctly named holders — measured, not assumed (`ps --ppid` confirms the
+    // parent/child pair). This is a widening, not a regression: killing either
+    // pid alone would leave the lock held by the other, so a reader told only
+    // the old single pid could wait on a holder that was never the true barrier.
+    const heldPids = held.map((h) => String(h.pid));
+    assert.ok(heldPids.includes(String(holder.pid)), `the flock pid must be named a holder: ${JSON.stringify(held)}`);
     assert.equal(waiting.length, 1, `and exactly one is WAITING: ${JSON.stringify(waiting)}`);
     assert.equal(String(waiting[0].pid), String(waiter.pid));
-    assert.ok(held[0].cwd !== undefined, 'cwd still comes from /proc/<pid>/cwd — /proc/locks does not carry it');
+    assert.ok(!heldPids.includes(String(waiter.pid)), 'a queued pid must never appear as a holder');
+    const mine = held.find((h) => String(h.pid) === String(holder.pid));
+    assert.ok(mine.cwd !== undefined, 'cwd still comes from /proc/<pid>/cwd — /proc/locks does not carry it');
   } finally {
     holder.kill('SIGKILL');
     waiter.kill('SIGKILL');
@@ -271,10 +282,18 @@ test('7.6.33: no holder and no waiter reads as free, not as unknown', () => {
  * ratified order (suite first, run inside it); a build meanwhile held the
  * suite-lock and waited on the run-lock. Deadlock.
  *
- * THE FIXTURE IS A REAL LOCK FILE (for its inode) UNDER A FAKE /proc/locks. The
+ * THE FIXTURE IS A REAL LOCK FILE (for its inode) UNDER A FAKE `/proc`. The
  * check reasons about ANCESTRY — is one of `selfPids` itself a holder — not
- * about a live `flock`, so a fabricated `/proc/locks` row naming a chosen pid is
- * the whole fixture: no real process needs to hold anything.
+ * about a live `flock`, so no real process needs to actually take the lock;
+ * a chosen pid's fd + fdinfo are fabricated directly, naming it a holder.
+ *
+ * ROW 80B: this used to fabricate ONLY a `/proc/locks` row, because
+ * `lockHolders` read that table directly. It no longer does — `/proc/locks`
+ * is corroboration only now, and `lockHolders` names a holder solely from a
+ * live pid's own fd + fdinfo (`fdOccupants`). A fixture that populated only
+ * the table `lockHolders` no longer consults could never produce a holder,
+ * so every row here is now a real fd + fdinfo pair; `/proc/locks` itself is
+ * left empty on purpose, to prove it plays no part.
  */
 function fixtureLock(): { path: string; ino: number; dir: string } {
   const dir = mkdtempSync(join(tmpdir(), 'lock-order-lock-'));
@@ -283,18 +302,28 @@ function fixtureLock(): { path: string; ino: number; dir: string } {
   return { path, ino: statSync(path).ino, dir };
 }
 
-/** A fake `/proc` whose only file this check reads is `/proc/locks`. */
-function fixtureProcRoot(rows: Array<{ pid: string; ino: number }>): string {
+/** A fake `/proc`: `/proc/locks` stays EMPTY (corroboration this fixture
+ *  proves unnecessary); each row gets a real fd + fdinfo `lock:` line on the
+ *  named lock file, which is what `lockHolders` now actually reads. */
+function fixtureProcRoot(rows: Array<{ pid: string; lockPath: string }>): string {
   const root = mkdtempSync(join(tmpdir(), 'lock-order-proc-'));
-  const lines = rows.map((r, i) => `${i + 1}: FLOCK ADVISORY WRITE ${r.pid} 08:30:${r.ino} 0 EOF`);
-  writeFileSync(join(root, 'locks'), lines.length > 0 ? `${lines.join('\n')}\n` : '');
+  writeFileSync(join(root, 'locks'), '');
+  for (const { pid, lockPath } of rows) {
+    const ino = statSync(lockPath).ino;
+    const target = realpathSync(lockPath);
+    mkdirSync(join(root, pid, 'fd'), { recursive: true });
+    symlinkSync(target, join(root, pid, 'fd', '8'));
+    const fdinfoDir = join(root, pid, 'fdinfo');
+    mkdirSync(fdinfoDir, { recursive: true });
+    writeFileSync(join(fdinfoDir, '8'), `pos:\t0\nflags:\t0100000\nmnt_id:\t1\nino:\t1\nlock:\t1: FLOCK  ADVISORY  WRITE 0 08:30:${ino} 0 EOF\n`);
+  }
   return root;
 }
 
 test('lockOrderVerdict: run-lock held by an ancestor, suite-lock not — refused, naming the fix', () => {
   const runLock = fixtureLock();
   const suiteLock = fixtureLock();
-  const procRoot = fixtureProcRoot([{ pid: '111', ino: runLock.ino }]); // suite-lock: no row, free
+  const procRoot = fixtureProcRoot([{ pid: '111', lockPath: runLock.path }]); // suite-lock: no fd, free
   try {
     const v = lockOrderVerdict(
       { [RUN_LOCK_ENV]: runLock.path, [SUITE_LOCK_ENV]: suiteLock.path },
@@ -316,8 +345,8 @@ test('lockOrderVerdict: both locks held by ancestors — allowed', () => {
   const runLock = fixtureLock();
   const suiteLock = fixtureLock();
   const procRoot = fixtureProcRoot([
-    { pid: '111', ino: runLock.ino },
-    { pid: '333', ino: suiteLock.ino },
+    { pid: '111', lockPath: runLock.path },
+    { pid: '333', lockPath: suiteLock.path },
   ]);
   try {
     const v = lockOrderVerdict(
@@ -342,7 +371,7 @@ test('lockOrderVerdict: run-lock held by a STRANGER, not this launch\'s ancestry
   const runLock = fixtureLock();
   // A pid that is nowhere in selfPids: some OTHER lane's process holds it —
   // runLockVerdict's fact to report, not this check's to reinterpret.
-  const procRoot = fixtureProcRoot([{ pid: '999', ino: runLock.ino }]);
+  const procRoot = fixtureProcRoot([{ pid: '999', lockPath: runLock.path }]);
   try {
     const v = lockOrderVerdict(
       { [RUN_LOCK_ENV]: runLock.path },
