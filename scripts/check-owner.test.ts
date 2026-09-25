@@ -145,6 +145,160 @@ test('it FAILS when QUARRY.md is absent — ownership has no other source', () =
   assert.match(out, /does not exist/);
 });
 
+// ---------------------------------------------------------------------------
+// forge-8vfn.5.18 — the NUMBERS: disposition summary, per-row loc, per-
+// package columns. `check-owner` verified every file had exactly one row;
+// nothing verified the row said anything TRUE.
+// ---------------------------------------------------------------------------
+
+test('it FAILS on a row LOC that disagrees with the real file — the defect this bead is about', () => {
+  // `--json` rather than the prose list: the prose list is capped (readable,
+  // not a flood — see the near-real-tree drift this bead itself found), and
+  // this asserts the underlying finding, not where it lands in a printed
+  // top-15. A dedicated fixture below covers the cap itself.
+  const subject = aQuarriedProductionFile();
+  withQuarry(
+    (rows) => rows.map((l) => (l.trim().startsWith(`| ${subject} |`) ? l.replace(/\|\s*\d+\s*\|$/, '| 999999 |') : l)),
+    (q, b) => {
+      const { code, out } = run(['--quarry', q, '--baseline', b, '--json']);
+      assert.equal(code, 1, `a wrong row loc must fail — got exit 0:\n${out}`);
+      const json = JSON.parse(out) as { locDrift: { path: string; quarried: number; measured: number }[] };
+      const found = json.locDrift.find((d) => d.path === subject);
+      assert.ok(found, `${subject} must be in locDrift — got:\n${JSON.stringify(json.locDrift)}`);
+      assert.equal(found!.quarried, 999999, 'the row names the QUARRY number');
+      assert.ok(Number.isInteger(found!.measured) && found!.measured >= 0, 'and the real, measured number');
+    },
+  );
+});
+
+test('the loc drift list in prose output is capped, not a flood — a fixture with many offenders', () => {
+  // Doctors EVERY packages/ row's loc to a shared wrong value in an isolated
+  // fixture QUARRY, rather than relying on the live tree's own drift count
+  // (which the data-fix commit in this bead reduces to zero).
+  const rows = readFileSync(QUARRY, 'utf8').split('\n');
+  let mutated = 0;
+  const doctored = rows.map((l) => {
+    const t = l.trim();
+    if (/^\| packages\/[^|]+\.ts \|/.test(t) && mutated < 20) {
+      mutated += 1;
+      return l.replace(/\|\s*\d+\s*\|$/, '| 1 |');
+    }
+    return l;
+  });
+  assert.ok(mutated >= 16, `fixture needs enough packages/ rows to exceed the 15-row cap, got ${mutated}`);
+  const dir = mkdtempSync(join(tmpdir(), 'quarry-cap-'));
+  const quarryPath = join(dir, 'QUARRY.md');
+  const baselinePath = join(dir, 'owner.json');
+  writeFileSync(quarryPath, `${doctored.join('\n')}\n`);
+  writeFileSync(baselinePath, `${JSON.stringify({ unowned: 0 })}\n`);
+  try {
+    const { code, out } = run(['--quarry', quarryPath, '--baseline', baselinePath]);
+    assert.equal(code, 1, out);
+    const printed = (out.match(/^  loc drift: /gm) ?? []).length;
+    assert.equal(printed, 15, `the printed list must be capped at 15 — got ${printed}`);
+    assert.match(out, /more loc drift row\(s\)/, 'and say how many more, not just stop silently');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('it FAILS on a disposition summary count that disagrees with the per-file table', () => {
+  withQuarry(
+    (rows) => rows.map((l) => (l.trim().startsWith('| `verbatim`') ? l.replace(/\|\s*\d+\s*\|$/, '| 999999 |') : l)),
+    (q, b) => {
+      const { code, out } = run(['--quarry', q, '--baseline', b]);
+      assert.equal(code, 1, `a wrong disposition summary count must fail — got exit 0:\n${out}`);
+      assert.ok(
+        out.includes('disposition summary drift: `verbatim` — header says 999999'),
+        `the disposition and the header number must be named — got:\n${out}`,
+      );
+    },
+  );
+});
+
+test('it FAILS on a per-package "files" column that disagrees with the rows', () => {
+  withQuarry(
+    (rows) => rows.map((l) => (l.trim().startsWith('| `kernel` |') ? l.replace(/^(\|\s*`kernel`\s*\|)\s*\d+\s*\|/, '$1 999999 |') : l)),
+    (q, b) => {
+      const { code, out } = run(['--quarry', q, '--baseline', b]);
+      assert.equal(code, 1, `a wrong package files column must fail — got exit 0:\n${out}`);
+      assert.ok(
+        out.includes('package table drift: `kernel` files — header says 999999'),
+        `the package and the header number must be named — got:\n${out}`,
+      );
+    },
+  );
+});
+
+test('it FAILS on the **total** row when it disagrees with the sum of the packages', () => {
+  withQuarry(
+    (rows) => rows.map((l) => (l.trim().startsWith('| **total**') ? l.replace(/(\|\s*\*\*total\*\*\s*\|\s*\*\*)\d+(\*\*\s*\|)/, '$1999999$2') : l)),
+    (q, b) => {
+      const { code, out } = run(['--quarry', q, '--baseline', b]);
+      assert.equal(code, 1, `a wrong total row must fail — got exit 0:\n${out}`);
+      assert.ok(
+        out.includes('package table drift: `total` files — header says 999999'),
+        `the total row and the header number must be named — got:\n${out}`,
+      );
+    },
+  );
+});
+
+test('--write recomputes loc, the disposition summary and the package columns from the rows, then the checker passes', () => {
+  const subject = aQuarriedProductionFile();
+  withQuarry(
+    (rows) => rows.map((l) => {
+      if (l.trim().startsWith(`| ${subject} |`)) return l.replace(/\|\s*\d+\s*\|$/, '| 999999 |');
+      if (l.trim().startsWith('| `verbatim`')) return l.replace(/\|\s*\d+\s*\|$/, '| 999999 |');
+      if (l.trim().startsWith('| `kernel` |')) return l.replace(/^(\|\s*`kernel`\s*\|)\s*\d+\s*\|/, '$1 999999 |');
+      return l;
+    }),
+    (q, b) => {
+      const before = run(['--quarry', q, '--baseline', b]);
+      assert.equal(before.code, 1, `the doctored quarry must start red:\n${before.out}`);
+
+      const written = run(['--quarry', q, '--baseline', b, '--write']);
+      assert.equal(written.code, 0, `--write must exit 0 — got:\n${written.out}`);
+      assert.match(written.out, /check-owner: WROTE/);
+
+      const after = run(['--quarry', q, '--baseline', b]);
+      assert.equal(after.code, 0, `the checker must pass after --write — got:\n${after.out}`);
+      assert.match(after.out, /check-owner: PASS/);
+
+      const rewritten = readFileSync(q, 'utf8');
+      assert.ok(!rewritten.includes('999999'), `every doctored number must have been recomputed — got:\n${rewritten}`);
+    },
+  );
+});
+
+test('--write fixes the loc NUMBER on a row that carries a ceiling-rekey note, and keeps the note', () => {
+  // A handful of real rows glue a rationale note onto the loc cell with no
+  // separating pipe — `664 **Ceiling re-keyed +4 (…):** …` — because a past
+  // `--write`-shaped bug (caught before it reached QUARRY.md) compared the
+  // FULL cell string to a bare number and overwrote the whole cell, silently
+  // deleting the note. This fixture reproduces that shape without depending
+  // on which real row still carries one today.
+  const subject = aQuarriedProductionFile();
+  withQuarry(
+    (rows) => rows.map((l) => (
+      l.trim().startsWith(`| ${subject} |`)
+        ? l.replace(/\|\s*(\d+)\s*\|$/, '| $1 **A note that must survive --write.** |')
+        : l
+    )),
+    (q, b) => {
+      const written = run(['--quarry', q, '--baseline', b, '--write']);
+      assert.equal(written.code, 0, written.out);
+
+      const after = readFileSync(q, 'utf8');
+      assert.ok(after.includes('A note that must survive --write.'), `the note must survive an unrelated --write — got:\n${after}`);
+      const afterCell = after.split('\n').find((l) => l.trim().startsWith(`| ${subject} |`))!;
+      // Only the leading digits may ever change; the note stays attached
+      // verbatim, whether or not the number itself needed correcting.
+      assert.match(afterCell, /^\| [^|]+ \| [^|]+ \| [^|]+ \| \d+ \*\*A note that must survive --write\.\*\* \|$/, afterCell);
+    },
+  );
+});
+
 test('an UNTRACKED production file is still unowned — a file cannot dodge the gate by not being committed', () => {
   // The tree is PLANTED, not assumed. `orchestrator/` is empty as of M6-C, but
   // it stays in check-owner's QUARRIED_TREES so a file reappearing there is
