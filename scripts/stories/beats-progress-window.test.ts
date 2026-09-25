@@ -77,24 +77,27 @@ test('1471 (the incident): a cycleOf wait must NOT end at upTo while review chun
   const t0 = Date.now();
   const dispatch = liveCycleDispatch(root, initiative, t0 - 1_000);
 
-  const upTo = 350; // ms — short and injected, standing in for the declared MAX_DECLARED_WAIT_MS.
-  // Chunks keep landing well PAST `upTo`, exactly as run 26 measured (a chunk
-  // persisted 4 minutes into a 30-minute bound). Each one is fresh cycle
-  // progress, so the window must keep resetting.
+  const upTo = 600; // ms — short and injected, standing in for the declared MAX_DECLARED_WAIT_MS.
+  // Chunks keep landing well inside `upTo`'s own window (a wide margin against
+  // scheduler jitter under load — the incident's own ratio was far more
+  // generous still: a chunk every few minutes against a 30-minute bound) but
+  // the RUN as a whole lands well PAST `upTo`, exactly as run 26 measured (a
+  // chunk persisted 4 minutes into a 30-minute bound that fired anyway). Each
+  // one is fresh cycle progress, so the window must keep resetting.
   const chunks = join(dispatch, 'artifacts', 'review-chunks');
   mkdirSync(chunks, { recursive: true });
   let chunkIndex = 0;
   const timer = setInterval(() => {
     chunkIndex += 1;
     writeFileSync(join(chunks, `chunk-WI-${chunkIndex}.json`), `{"label":"WI-${chunkIndex}"}\n`);
-  }, 130);
-  // The product terminates at 900ms — well past `upTo` (350ms) and past
-  // several progress resets, which is the entire point: the window must have
+  }, 80);
+  // The product terminates at 1800ms — three times `upTo` (600ms) and past
+  // many progress resets, which is the entire point: the window must have
   // been extended THROUGH that point for the wait to still be open here.
   setTimeout(() => {
     clearInterval(timer);
     queueFile(root, 'ready-for-review', initiative);
-  }, 900);
+  }, 1_800);
 
   const watch = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: initiative })!;
   const verdict = await waitForConsequence(

@@ -25,7 +25,8 @@
 // The product's stall ceiling, single-sourced from the module that owns the
 // runner's other agent-evidence reads and bound to the TypeScript constant by
 // `beats-offsession-stall.test.ts` (T1 ruling 580).
-import { STALL_CEILING_MS, doorWorthRunning } from './beats-agent-proc.mjs';
+import { STALL_CEILING_MS, doorWorthRunning, CYCLE_WAIT_WALL_CEILING_MS } from './beats-agent-proc.mjs';
+import { cycleWaitDeadline } from './beats-cycle-progress.mjs';
 import { readProgress, progressTracker } from './beats-progress.mjs';
 
 /** A `<name>` expectation: bind whatever the page rendered, for a later beat's route. */
@@ -265,11 +266,20 @@ async function readRunId(page) {
  * its own terms — the same catch-and-let-the-verdict-explain shape every
  * other wait in this function already uses.
  */
-export async function waitForConsequence(page, beat, timeoutMs, sessionScope, probe = null, settle = null, stallDoor = null, anchorMs = null, progress = null, cycleWatch = null) {
+export async function waitForConsequence(page, beat, timeoutMs, sessionScope, probe = null, settle = null, stallDoor = null, anchorMs = null, progress = null, cycleWatch = null, spendGuard = null) {
   const wanted = Object.entries(beat.expect.data);
   if (wanted.length === 0) return null;
   const startedAt = Date.now();
   const deadline = startedAt + timeoutMs;
+  // T1 ruling 1471 (S10 run 26) — state for the INACTIVITY window a `cycleOf`
+  // wait now gets (below, beside the deadline check). `lastActivityAt` is the
+  // newest cycle write this wait has SEEN, never invented: an absent reading
+  // must fail CLOSED to the plain deadline above, not be read as fresh
+  // progress. `progressExtensions` is reported in the red, in the spirit of
+  // `wait-bound.mjs`'s "THE CLAMP IS NEVER HIDDEN" — nothing about why a wait
+  // outlived its declared `upTo` is left for a reader to reconstruct.
+  let lastActivityAt = null;
+  let progressExtensions = 0;
   // THE KEYS THIS WAIT NEEDS COLLECTED, DECLARED — bead `forge-8vfn.6.11.45`'s
   // rule, applied to the two waits that read a key the BEAT need not mention.
   //
@@ -303,6 +313,23 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
   // measurement named (§15.356).
   const runId = stallDoor === null ? null : await readRunId(page);
   for (;;) {
+    // T1 ruling 1471 — THE RUN'S OWN $ CEILING BOUNDS THE WHOLE WAIT, checked
+    // FIRST and ahead of the DOM read: a run's own funding is a harder fact
+    // than anything this beat expects, and S10 run 26's incident is precisely
+    // that a beat kept sitting a healthy-looking wait past the point the run
+    // could still afford it. `spendGuard` is `null` for a costless story or a
+    // run with no usable ceiling — see `makeWaitSpendGuard` (`run-observe.mjs`)
+    // — never invented here.
+    if (spendGuard !== null) {
+      const guard = spendGuard();
+      if (guard.breached) {
+        return Object.freeze({
+          afterMs: Date.now() - startedAt,
+          why: `the run's own $ ceiling ended this wait: ${guard.reason}`,
+          stoppedBy: 'runner',
+        });
+      }
+    }
     const observed = await readObserved(page, beat, alsoWanted);
     const seen = resolveExpectations(beat.expect.data, observed);
     // T1 1231 — a declared terminal is a CONDITION: the watch is read BEFORE
@@ -457,13 +484,72 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
         return Object.freeze({ afterMs: Date.now() - startedAt, why, stoppedBy: 'runner' });
       }
     }
-    if (Date.now() >= deadline) {
+    // T1 ruling 1471 (S10 run 26) — FOR A `cycleOf` WAIT, `upTo` IS AN
+    // INACTIVITY WINDOW, not a wall clock. Beat 10 hit `upTo` at 18:18:10 with
+    // a review chunk persisted at 18:14:35, four minutes earlier — adversarial
+    // review was running serially over four chunks, and the product was
+    // demonstrably progressing when the declared bound killed it anyway. So
+    // for a wait whose `cycleWatch` resolves a cycle BY IDENTITY (`cycleOf`),
+    // `deadline` above is only the FALLBACK; the real deadline is recomputed
+    // every poll from the cycle's own last write.
+    //
+    // A wait with no `cycleOf` — `cycleWatch.cycleOf === null`, including
+    // every wait with no `cycleWatch` at all — keeps `deadline` exactly as it
+    // was: that form watches a channel born after the press, which has no
+    // stable identity to read progress FROM (7.6.143's own reason), and the
+    // scope this bead was ruled to (§: "keep the existing behaviour for waits
+    // WITHOUT cycleOf").
+    let effectiveDeadline = deadline;
+    let progressNote = null;
+    if (watching && typeof cycleWatch.cycleOf === 'string' && cycleWatch.cycleOf !== '') {
+      // ONE `now`, READ ONCE, for both halves of this poll's reading. `idle` is
+      // "how long ago, relative to `pollNow`, did the cycle last write" — so
+      // `activityAt` must be derived from that SAME `pollNow`, never a second,
+      // later `Date.now()` call. Two separate reads here would reproduce, in
+      // miniature, exactly the class this bead exists to close: a gap between
+      // two clock reads standing in for real inactivity, this time inside the
+      // runner's own bookkeeping rather than between poll ticks.
+      const pollNow = Date.now();
+      const idle = cycleWatch.progressIdleMs(pollNow);
+      // AN ABSENT READING FAILS CLOSED (§15.504-shaped): no cycle dir yet, or
+      // one with nothing written, is NOT fresh progress — it leaves
+      // `lastActivityAt` exactly where it was, which for a wait that has never
+      // seen a write at all is `null`, and `inactivityDeadline` below then
+      // falls back to the plain, unreset `deadline`. The permissive misreading
+      // this guards against is treating "no reading" as "just wrote".
+      if (idle !== null) {
+        const activityAt = pollNow - idle;
+        if (lastActivityAt === null || activityAt > lastActivityAt) {
+          if (lastActivityAt !== null) progressExtensions += 1;
+          lastActivityAt = activityAt;
+        }
+      }
+      // PURE from here — `cycleWaitDeadline` (`beats-cycle-progress.mjs`) composes
+      // the inactivity bound against the ABSOLUTE WALL CEILING, counted from
+      // THIS WAIT'S OWN START and never reset by progress: a cycle that resets
+      // the inactivity window forever is still bounded, or the fix for run 26
+      // becomes a new way to hang a host. `CYCLE_WAIT_WALL_CEILING_MS` lives
+      // beside `MAX_DECLARED_WAIT_MS` (`story-wait-schema.mjs`) and is never a
+      // field a story can declare.
+      const { deadline: cycleDeadline, firedBy } = cycleWaitDeadline({
+        startedAt, timeoutMs, lastActivityAt, wallCeilingMs: CYCLE_WAIT_WALL_CEILING_MS,
+      });
+      effectiveDeadline = cycleDeadline;
+      // SAY WHY IT ENDED — in the spirit of `wait-bound.mjs`'s "THE CLAMP IS
+      // NEVER HIDDEN": which bound actually fired, how many times progress
+      // pushed it out, and when the cycle was last seen writing.
+      progressNote = firedBy === 'wall'
+        ? `the absolute wall ceiling of ${CYCLE_WAIT_WALL_CEILING_MS} ms fired regardless of progress (progress-extended ${progressExtensions} time(s))`
+        : `no cycle progress for ${timeoutMs} ms (last write ${lastActivityAt === null ? 'never seen' : new Date(lastActivityAt).toISOString()}), progress-extended ${progressExtensions} time(s)`;
+    }
+    if (Date.now() >= effectiveDeadline) {
       // Never null for an unreached terminal: the caller judges null on the LIVE
       // page, and an expectation that answered from t = 0 would read green.
       if (!terminalHeld) {
         return Object.freeze({
           afterMs: Date.now() - startedAt,
-          why: `the declared terminal ${cycleWatch.wantState} was never reached in ${timeoutMs} ms — last seen: ${cycleWatch.lastSeen}.`,
+          why: `the declared terminal ${cycleWatch.wantState} was never reached in ${timeoutMs} ms — last seen: ${cycleWatch.lastSeen}` +
+            (progressNote === null ? '.' : ` — ${progressNote}.`),
           stoppedBy: 'runner',
         });
       }
