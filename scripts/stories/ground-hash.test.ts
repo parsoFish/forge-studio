@@ -31,6 +31,7 @@ import {
   snapshotSiblingGrounds,
   siblingGroundEscapes,
   mintedSessionPaths,
+  groundMintedSessionPaths,
   classifyOwnGroundDrift,
   groundIgnoreFromGit,
   groundIgnoreNoneForTests,
@@ -265,6 +266,60 @@ test('594: a path that merely PREFIXES a minted one is not covered by it', () =>
     groundIgnoreNoneForTests(),
   );
   assert.equal(undeclared.length, 1, 'prefix matching would licence a directory the run never minted');
+});
+
+/**
+ * T1 1418 / S7 fixture proof (2026-09-25) — the SECOND minted path.
+ * `POST /api/instructions/start` writes only the ground's own
+ * `_instructions/<id>/status.json`; the agent spawns later, at `/brief`, so
+ * for that window this run's own session has no `_logs/_<kind>-<id>` dir at
+ * all and `mintedSessionPaths` (the `_logs` half) sees nothing. A `_<kind>/<id>`
+ * born directly in the ground between the same before/after manifests
+ * `run-story.mjs` already reads is the same evidence, read from the ground's
+ * own side — no second filesystem walk.
+ */
+test('T1 1418: a NEW _<kind>/<id> born in the ground is minted, ground-side, with no _logs evidence at all', () => {
+  const before = { files: new Map([['CLAUDE.md', 'h1']]) };
+  const after = { files: new Map([['CLAUDE.md', 'h1'], ['_instructions/abc123/status.json', 'h2']]) };
+  assert.deepEqual(groundMintedSessionPaths(before, after), ['_instructions/abc123']);
+});
+
+test('T1 1418: a non-session file addition is never minted ground-side — the rule stays bounded to _<kind>/<id>', () => {
+  const before = { files: new Map() };
+  const after = { files: new Map([['src/x.ts', 'h1']]) };
+  assert.deepEqual(groundMintedSessionPaths(before, after), []);
+});
+
+test('T1 1418: a _<kind>/<id> dir that EXISTED before and grew a new file is NOT newly minted', () => {
+  // The naive "was this exact path added?" reading would wrongly licence
+  // this — `_foo/id1/b.txt` IS new — so the rule has to test the whole
+  // `_foo/id1` PREFIX against the before manifest, not each added file alone.
+  const before = { files: new Map([['_foo/id1/a.txt', 'h1']]) };
+  const after = { files: new Map([['_foo/id1/a.txt', 'h1'], ['_foo/id1/b.txt', 'h2']]) };
+  assert.deepEqual(groundMintedSessionPaths(before, after), []);
+});
+
+test('T1 1418: unioned into classifyOwnGroundDrift — S7\'s own shape reads PRODUCED, not UNDECLARED', () => {
+  const before = { files: new Map([['CLAUDE.md', 'h1']]) };
+  const after = { files: new Map([['CLAUDE.md', 'h1'], ['_instructions/abc123/status.json', 'h2']]) };
+  // No `_logs` evidence at all — mintedSessionPaths would contribute nothing;
+  // the ground-side rule is the ONLY source here, exactly S7's defect.
+  const minted = groundMintedSessionPaths(before, after);
+  const { produced, undeclared } = classifyOwnGroundDrift(groundChanges(before, after), minted, new Map(), groundIgnoreNoneForTests());
+  assert.equal(undeclared.length, 0, undeclared.join(' | '));
+  assert.equal(produced.length, 1);
+
+  // The converse, held beside it: a plain file is still UNDECLARED, and a dir
+  // that already existed before the run is still judged by the EXISTING
+  // rules (attribution / declared / undeclared) rather than auto-licensed.
+  const plain = classifyOwnGroundDrift({ added: ['src/x.ts'], removed: [], modified: [] }, [], new Map(), groundIgnoreNoneForTests());
+  assert.equal(plain.undeclared.length, 1);
+  const grewBefore = { files: new Map([['_foo/id1/a.txt', 'h1']]) };
+  const grewAfter = { files: new Map([['_foo/id1/a.txt', 'h1'], ['_foo/id1/b.txt', 'h2']]) };
+  const grewMinted = groundMintedSessionPaths(grewBefore, grewAfter);
+  assert.deepEqual(grewMinted, []);
+  const grew = classifyOwnGroundDrift(groundChanges(grewBefore, grewAfter), grewMinted, new Map(), groundIgnoreNoneForTests());
+  assert.equal(grew.undeclared.length, 1, 'not auto-licensed just because it looks like a session dir');
 });
 
 test('594 REGRESSION: the ownership test runs against the shape `groundManifest` REALLY emits', () => {
