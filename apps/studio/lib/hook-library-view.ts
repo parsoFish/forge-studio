@@ -179,3 +179,17 @@ export function buildHookDetailView(detail: HookDetail): HookDetailView {
     testFireRuns: detail.testFireRuns,
   };
 }
+
+// ---------------------------------------------------------------------------
+// testFireDisabledReason (forge-6gv.8.1, library-33) — the test-fire button's
+// disabled state. Approval is required (mirrors `canApprove`/`canOverride`'s
+// own `trust === 'needs-review'` test); BINDING is deliberately NOT checked
+// — an operator testing an unbound hook before binding it is the point.
+// ---------------------------------------------------------------------------
+
+export function testFireDisabledReason(view: HookDetailView): string | null {
+  if (view.trust !== 'needs-review') return null;
+  return view.scanVerdict === 'blocked'
+    ? 'This hook is blocked — approve or override it before test-firing.'
+    : 'Approve this hook before test-firing it.';
+}
