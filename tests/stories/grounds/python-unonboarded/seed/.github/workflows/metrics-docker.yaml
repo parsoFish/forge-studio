@@ -1,0 +1,66 @@
+---
+name: Metrics Docker CI
+
+'on':
+  pull_request:
+    paths:
+      - "metrics/**"
+
+permissions:
+  contents: read
+
+jobs:
+  metrics-docker:
+    name: Build, Test & Size Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install metrics dependencies
+        run: pip install --no-cache-dir -r metrics/requirements.txt
+
+      - name: Run metrics unit tests (no database required)
+        run: >-
+          pytest metrics/tests/
+          -m "not integration"
+          --ignore=metrics/tests/test_alembic_migrations.py
+          --ignore=metrics/tests/test_postgresql_event_store.py
+          --ignore=metrics/tests/test_docker_compose.py
+          -q
+
+      - name: Build Docker image
+        run: docker build -t metrics:ci metrics/
+
+      - name: Check image size (200 MB gate)
+        run: |
+          SIZE=$(docker image inspect metrics:ci --format='{{.Size}}')
+          LIMIT=$((200 * 1024 * 1024))
+          echo "Image size: ${SIZE} bytes (limit: ${LIMIT} bytes)"
+          if [ "${SIZE}" -gt "${LIMIT}" ]; then
+            echo "ERROR: ${SIZE} bytes > 200 MB limit (${LIMIT} bytes)" >&2
+            exit 1
+          fi
+          echo "Image size check passed."
+
+      - name: Start compose stack
+        run: docker compose up -d --wait
+        working-directory: metrics
+        timeout-minutes: 2
+
+      - name: Run integration tests against compose stack
+        env:
+          TEST_DATABASE_URL: >-
+            postgresql+asyncpg://gitweave:gitweave@localhost:5432/gitweave
+        run: pytest metrics/tests/ -q
+
+      - name: Tear down compose stack
+        if: always()
+        run: docker compose down -v
+        working-directory: metrics

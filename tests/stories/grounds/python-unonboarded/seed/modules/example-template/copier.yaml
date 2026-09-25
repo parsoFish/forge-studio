@@ -1,0 +1,21 @@
+_metadata:
+  name: example_template
+  version: "20260305.0"
+  description: >-
+    A minimal GitWeave template module demonstrating the copier.yaml metadata
+    contract. Use this as a starting point for new modules.
+  min_copier_version: "8.0.0"
+
+project_name:
+  type: str
+  help: Name of the project to scaffold
+
+enable_ci:
+  type: bool
+  help: Include a GitHub Actions CI workflow?
+  default: true
+
+http_port:
+  type: int
+  help: HTTP port the service will listen on
+  default: 8080
