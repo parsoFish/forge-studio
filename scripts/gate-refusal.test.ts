@@ -183,3 +183,95 @@ test('699: an ordinary failing step is still FAIL with rc 1 — the distinction 
   assert.match(r.out, /^FAIL {2}node -e/m, 'a step that ran and lost is a failure');
   assert.notEqual(r.status, 3, 'and must never borrow the refusal code');
 });
+
+/**
+ * M7 findings row 79. A worktree's `node_modules` can PREDATE a package added
+ * on `main`: `npm ci` ran before `packages/stations` existed, so
+ * `node_modules/@forge/stations` was never created. Nothing above this
+ * refuses on that — the kernel-only BORROWED check in `gate.sh` guards ONE
+ * hard-coded name, and a missing link is not a wrong symlink target
+ * (`[ ! -e … ]`, never reached by that check's `readlink -f` comparison). The
+ * gate ran the full suite against that stale install and the result was
+ * VOID, indistinguishable in the log from a green one.
+ *
+ * So `gate.sh` walks every `packages/*\/package.json` in the tree being gated
+ * and resolves `node_modules/<its own "name" field>` — e.g. `@forge/stations`
+ * — checking it EXISTS and REALPATHs to that package's own `packages/<dir>`.
+ * A miss REFUSES before a single step runs, naming every missing or
+ * mis-pointed package and the fix.
+ */
+
+function pkgWithName(root: string, dirName: string, pkgName: string): string {
+  const d = join(root, 'packages', dirName);
+  mkdirSync(d, { recursive: true });
+  writeFileSync(join(d, 'package.json'), JSON.stringify({ name: pkgName, version: '0.0.0' }));
+  return d;
+}
+
+function linkPkg(root: string, pkgName: string, targetDir: string) {
+  const [scope, short] = pkgName.split('/');
+  const scopeDir = join(root, 'node_modules', scope);
+  mkdirSync(scopeDir, { recursive: true });
+  symlinkSync(targetDir, join(scopeDir, short));
+}
+
+/** The kernel-only BORROWED check earlier in `gate.sh` must pass in every
+ *  fixture below, or IT refuses first and masks the preflight under test. */
+function withKernelLink(root: string) {
+  linkPkg(root, '@forge/kernel', pkgWithName(root, 'kernel', '@forge/kernel'));
+}
+
+const HARMLESS_CI = `jobs:
+  build-and-test:
+    steps:
+      - name: Should never run
+        run: echo SHOULD-NOT-RUN
+`;
+
+test('M7 row 79: a package with NO node_modules/@forge/<name> link REFUSES before any step runs, naming it', () => {
+  const dir = tree(HARMLESS_CI);
+  withKernelLink(dir);
+  linkPkg(dir, '@forge/a', pkgWithName(dir, 'a', '@forge/a'));
+  pkgWithName(dir, 'b', '@forge/b'); // packages/b exists; node_modules/@forge/b does not
+
+  const r = gate(dir);
+
+  assert.equal(r.status, 2, r.out + r.err);
+  assert.match(r.out, /GATE_WORKSPACE_LINKS_STALE/, 'a missing workspace link voids the verdict before any step runs');
+  assert.match(r.out, /missing: node_modules\/@forge\/b/, 'names the missing package by its own "name" field, not its directory');
+  assert.doesNotMatch(r.out, /SHOULD-NOT-RUN/, 'the preflight runs before the step loop — nothing should have executed');
+});
+
+test('M7 row 79: a link that REALPATHs into ANOTHER checkout REFUSES, naming it', () => {
+  const dir = tree(HARMLESS_CI);
+  const otherCheckout = mkdtempSync(join(tmpdir(), 'gate-other-checkout-'));
+  withKernelLink(dir);
+  linkPkg(dir, '@forge/a', pkgWithName(dir, 'a', '@forge/a'));
+  pkgWithName(dir, 'b', '@forge/b');
+  const strangerB = pkgWithName(otherCheckout, 'b', '@forge/b');
+  linkPkg(dir, '@forge/b', strangerB); // b's link resolves OUTSIDE this tree
+
+  const r = gate(dir);
+
+  assert.equal(r.status, 2, r.out + r.err);
+  assert.match(r.out, /GATE_WORKSPACE_LINKS_STALE/);
+  assert.match(r.out, /mis-pointed: node_modules\/@forge\/b/, 'a link into another checkout is named, not treated as missing');
+  assert.doesNotMatch(r.out, /SHOULD-NOT-RUN/);
+});
+
+test('M7 row 79: every link REALPATHing into ITS OWN tree passes the preflight — the gate proceeds', () => {
+  const dir = tree(`jobs:
+  build-and-test:
+    steps:
+      - name: Harmless
+        run: echo workspace-links-ok
+`);
+  withKernelLink(dir);
+  linkPkg(dir, '@forge/a', pkgWithName(dir, 'a', '@forge/a'));
+  linkPkg(dir, '@forge/b', pkgWithName(dir, 'b', '@forge/b'));
+
+  const r = gate(dir);
+
+  assert.doesNotMatch(r.out, /GATE_WORKSPACE_LINKS_STALE/, 'correct links must not be refused');
+  assert.match(r.out, /^PASS {2}echo workspace-links-ok/m, 'the preflight got out of the way and the step loop actually ran');
+});
