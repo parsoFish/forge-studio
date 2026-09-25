@@ -214,6 +214,41 @@ describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HU
     }
   });
 
+  /*
+   * M7-C last-flakes #2 (known-flakes.md `scripts/lanes-census.test.ts:200`):
+   * a 1.5 s scripted late-spawn only guarantees a MINIMUM delay — `sleep`
+   * never returns early, but under CPU contention the process that runs
+   * NEXT after it wakes can be scheduled arbitrarily later, and the
+   * recensus loop's own per-iteration `pids_claude_in` shells out to a real
+   * subprocess each tick, which is far more CPU-bound (fork+exec) than a
+   * sleeping wait — so under load the loop's REAL margin over the spawn can
+   * close even though its NOMINAL 5 s budget (`LANES_RECENSUS_S`'s default)
+   * never changes. Staged deterministically, with no host load needed: a 6 s
+   * late spawn against the default 5 s window is missed EVERY time,
+   * regardless of speed — `census: 0 claude pid(s) ... retired in total`,
+   * so `waitGone` times out because nothing was ever killed, not because
+   * its own verification window was too short. Widening the recensus
+   * window to comfortably outlast the spawn (here 12 s, matching
+   * `waitGone`'s own generous default) is what actually removes the flake;
+   * a bigger `waitGone` number alone could never have helped here, since
+   * the census gave up before touching the pid at all.
+   */
+  test('M7-C last-flakes #2: a spawn 6 s late is still retired once the recensus window comfortably outlasts it', () => {
+    const bin = laneBin('lane-margin', { lateSpawnS: 6 });
+    const { r } = launchUnconfirmed('margin', bin, { LANES_RECENSUS_S: '12' });
+    const self = pidFrom('lane-margin.selfpid', 8000);
+    const stray = pidFrom('lane-margin.detachedpid', 12000);
+    try {
+      assert.ok(
+        waitGone(stray),
+        `a spawn 6 s late is still retired once the recensus window (12 s) comfortably covers it (pid ${stray}); die_launch stderr:\n${r.stderr}`,
+      );
+      assert.match(r.stderr, new RegExp(`retired pid ${stray}\\b`), 'the pid it retired is printed');
+    } finally {
+      spawnSync('kill', ['-KILL', String(self)]);
+    }
+  });
+
   test('1023: a non-numeric LANES_RECENSUS_S is reported and defaulted — the re-census still runs', () => {
     // Before this, the loop's `-lt` test errored on 'soon0' and the function fell out after
     // ONE census: exactly the one-shot shape it stopped having, silently. The late-spawn
