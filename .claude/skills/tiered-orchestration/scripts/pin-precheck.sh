@@ -209,6 +209,32 @@ manifest_claims_path() {
   return 1
 }
 
+# T1 1293 — A MOVED MANIFEST REFUSES ONLY ON THE ROWS THIS MERGE OWNS. The gate
+# records one fingerprint per manifest, and M6-C (~390 rows) is reconciled after
+# every sibling merge, so comparing whole-manifest fingerprints voided every gate
+# longer than a merge interval (D's #830/#831 refused for rows they never touched):
+# the 7.6.130 shape one file over. So when a relevant manifest moved, the rows for
+# the paths this merge TOUCHES are verified against THIS tree: a row that still
+# matches the bytes the gate verified is untouched by the move, whatever else the
+# reconcile rewrote. A DECLARED row is left to the declared-row check below (it
+# must still fail). A whole-manifest declaration keeps every row this merge's and
+# refuses as before. (Recovering the gate-time manifest from `.pre-` backups was
+# tried first and measured unrecoverable for most real gates: a head=-only
+# reconcile rewrites `.counts` with no backup.)
+owned_rows_verify() {              # owned_rows_verify <man> <mname> -> 0 when every touched, undeclared row still verifies in $R
+  local man="$1" mname="$2" d cpath row bad=0
+  for d in $EXPECT; do [ "$d" = "$mname" ] && return 1; done
+  while IFS= read -r cpath; do
+    [ -n "$cpath" ] || continue
+    manifest_claims_path "$man" "$cpath" || continue
+    case " $EXPECT " in *" $mname:$cpath "*) continue ;; esac
+    row="$(awk -v p="$cpath" '{ q=$2; sub(/^\*/,"",q); if (q == p) print }' "$man")"
+    [ -n "$row" ] || continue
+    (cd "$R" && printf '%s\n' "$row" | sha256sum -c --quiet >/dev/null 2>&1) || { echo "  touched row no longer verifies here: $cpath"; bad=1; }
+  done <<<"$CHANGED"
+  return "$bad"
+}
+
 pin_relevant_refused=0
 for man in "$CAMP"/gate-manifests/*.sha256; do
   [ -f "$man" ] || continue
@@ -235,6 +261,10 @@ for man in "$CAMP"/gate-manifests/*.sha256; do
   manifest_is_relevant "$man" "$mname" && relevant=1
 
   if [ "$relevant" -eq 1 ]; then
+    if owned_rows_verify "$man" "$mname"; then
+      echo "PIN_SIBLING_MOVED $mname ($log_one → $now_one) — manifest moved on untouched rows — noted; every row this merge touches still verifies in this tree, and its declared rows are checked below"
+      continue
+    fi
     echo "PIN_PRECHECK_REFUSED: $mname changed between the gate and this precheck ($log_one → $now_one) and THIS merge declares or touches it — the gate's pin block is a verdict about a manifest that no longer exists. Re-gate; do NOT paste the old numbers."
     pin_relevant_refused=1
   else
@@ -379,9 +409,13 @@ for m in "$CAMP"/gate-manifests/*.sha256; do
   # only a tree that DOES contain it can have the log and the bytes disagree in a
   # way worth acting on.
   n_log="$(sed -n "s/^${man}\.sha256: \([0-9][0-9]*\) FAILED of .*/\1/p" "$LOG" | head -1)"
+  # T1 1293: a COUNT that moved is not a refusal on its own. A reconcile of rows
+  # this merge does not own changes the count (D's #830/#831 refused for exactly
+  # that); every row that fails NOW is still accounted one by one below, and every
+  # declared row must still fail (the loop after this one) — the two checks that
+  # speak for the rows this merge owns.
   if [ -n "$n_log" ] && [ "$n_log" != "$n_actual" ]; then
-    echo "PIN_PRECHECK_REFUSED: $man — the gate log says $n_log FAILED, this tree says $n_actual, and this tree DOES contain the sha the manifest was verified at; the tree moved between the gate and the merge, so the gate's verdict is not about these bytes"
-    rc=3
+    echo "PIN_PRECHECK_NOTE: $man — the gate log says $n_log FAILED, this tree says $n_actual: the manifest moved between the gate and this merge; noted, not refused — each failing row is accounted below and each declared row must still fail (T1 1293)"
   fi
 
   for p in $actual; do

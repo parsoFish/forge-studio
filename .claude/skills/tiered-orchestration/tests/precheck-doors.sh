@@ -58,13 +58,13 @@ bash "$PP" "$T/gate.log" "$T/repo" "$T/camp" --changed-paths-file "$T/c.txt" 2>&
 rm -rf "$T"
 
 T="$(fixture)"; move "$T" MINE; echo README.md > "$T/c.txt"
-[ "$(rc_of "$T/gate.log" "$T/repo" "$T/camp" --expect-pin-fail MINE:src/a.ts --changed-paths-file "$T/c.txt")" = 2 ] \
-  && ok "merge DECLARES the manifest that moved -> refuses" || bad "declared+moved" "expected rc 2"
+[ "$(rc_of "$T/gate.log" "$T/repo" "$T/camp" --expect-pin-fail MINE:src/a.ts --changed-paths-file "$T/c.txt")" != 0 ] \
+  && ok "merge DECLARES a row of the manifest that moved -> refuses (at the declared-row check since T1 1293)" || bad "declared+moved" "expected a refusal"
 rm -rf "$T"
 
 T="$(fixture)"; move "$T" OTHER; echo src/b.ts > "$T/c.txt"
-[ "$(rc_of "$T/gate.log" "$T/repo" "$T/camp" --changed-paths-file "$T/c.txt")" = 2 ] \
-  && ok "undeclared but TOUCHES a claimed path -> refuses" || bad "touches a claim" "expected rc 2"
+[ "$(rc_of "$T/gate.log" "$T/repo" "$T/camp" --changed-paths-file "$T/c.txt")" = 0 ] \
+  && ok "TOUCHES a glob-claimed path with no row, manifest moved elsewhere -> proceeds (T1 1293 narrowing)" || bad "touches a claim" "expected rc 0"
 rm -rf "$T"
 
 T="$(fixture)"; grep -v '^PIN_MANIFEST ' "$T/gate.log" > "$T/old.log"; echo README.md > "$T/c.txt"
@@ -72,6 +72,46 @@ T="$(fixture)"; grep -v '^PIN_MANIFEST ' "$T/gate.log" > "$T/old.log"; echo READ
   && ok "gate log with no per-manifest lines -> refuses, no aggregate fallback" || bad "no per-manifest lines" "expected rc 2"
 rm -rf "$T"
 
+echo "T1 1293 — a moved manifest refuses only on the rows THIS merge declares or touches"
+# OTHER pins two files; the gate saw it, then OTHER's owner reconciles ONE row to
+# bytes main moved to, while this PR's tree still holds the bytes the gate saw.
+recon_fixture() {                  # recon_fixture <row-to-move: a|c> -> root
+  local T; T="$(fixture)"; echo c > "$T/repo/src/c.ts"
+  (cd "$T/repo" && sha256sum src/a.ts src/c.ts) > "$T/camp/gate-manifests/OTHER.sha256"
+  { echo "== pins =="
+    echo "PIN_MANIFESTS=$(sha256sum "$T"/camp/gate-manifests/*.sha256 "$T"/camp/gate-manifests/*.counts | sha256sum | cut -c1-16)"
+    for n in MINE OTHER; do
+      echo "PIN_MANIFEST $n=$(sha256sum "$T/camp/gate-manifests/$n.sha256" "$T/camp/gate-manifests/$n.counts" | sha256sum | cut -c1-16)"
+    done
+    echo "MINE.sha256: 0 FAILED of 1 — tree at deadbeef; last verified at deadbeef"
+    echo "OTHER.sha256: 0 FAILED of 2 — tree at deadbeef; last verified at deadbeef"
+  } > "$T/gate.log"
+  # The reconcile rehashes ONE row to new bytes (main moved that file); this tree
+  # keeps the bytes the gate verified.
+  local keep; keep="$(cat "$T/repo/src/$1.ts")"
+  echo "moved by a sibling merge" > "$T/repo/src/$1.ts"
+  (cd "$T/repo" && sha256sum src/a.ts src/c.ts) > "$T/camp/gate-manifests/OTHER.sha256"
+  echo "$keep" > "$T/repo/src/$1.ts"
+  echo "paths=2 head=deadbeef owner=OTHER" > "$T/camp/gate-manifests/OTHER.counts"
+  echo "$T"
+}
+# 1. The reconcile moved an UNTOUCHED row (src/c.ts); this merge touches src/a.ts -> proceeds, noted.
+T="$(recon_fixture c)"; echo src/a.ts > "$T/c.txt"
+out="$(bash "$PP" "$T/gate.log" "$T/repo" "$T/camp" --changed-paths-file "$T/c.txt" 2>&1)"; r=$?
+{ [ "$r" = 0 ] || [ "$r" = 4 ]; } && ! printf '%s' "$out" | grep -q 'PIN_PRECHECK_REFUSED' && printf '%s' "$out" | grep -q '^PIN_SIBLING_MOVED OTHER .*manifest moved on untouched rows — noted' \
+  && ok "manifest moved on an UNTOUCHED row; the touched row still verifies here -> proceeds, noted" \
+  || bad "untouched row moved" "rc=$r out=$(printf '%s' "$out" | grep -E 'OTHER|REFUSED' | head -2)"
+rm -rf "$T"
+# 2. The reconcile moved the row this merge TOUCHES (src/a.ts) -> refuses.
+T="$(recon_fixture a)"; echo src/a.ts > "$T/c.txt"
+[ "$(rc_of "$T/gate.log" "$T/repo" "$T/camp" --changed-paths-file "$T/c.txt")" = 2 ] \
+  && ok "manifest moved on the TOUCHED row (no longer verifies here) -> refuses" || bad "touched row moved" "expected rc 2"
+rm -rf "$T"
+# 3. A whole-manifest declaration keeps every row relevant -> an untouched-row move still refuses.
+T="$(recon_fixture c)"; echo README.md > "$T/c.txt"
+[ "$(rc_of "$T/gate.log" "$T/repo" "$T/camp" --expect-pin-fail OTHER --changed-paths-file "$T/c.txt")" = 2 ] \
+  && ok "whole-manifest declaration + untouched-row move -> refuses (every row is this merge's)" || bad "whole-manifest declared" "expected rc 2"
+rm -rf "$T"
 echo "7.6.80 half two — UNKNOWN never resolves toward proceeding (§15.504)"
 
 T="$(fixture)"; echo src/b.ts > "$T/c.txt"
@@ -323,6 +363,17 @@ out="$(bash "$PP" "$T/gate.log" "$T/repo" "$T/camp" --expect-pin-fail OTHER:src/
 [ "$r" = 3 ] && printf '%s' "$out" | grep -q 'does NOT change src/a.ts' \
   && ok "a changed path that merely CONTAINS the declared one does not satisfy it" \
   || bad "substring" "rc=$r out=$(printf '%s' "$out" | tail -2)"
+rm -rf "$T"
+
+# 4. D's #830/#831: the gate saw OTHER 1 FAILED (a sibling-stale row); OTHER's owner
+#    then reconciled it, so this tree (which contains the new head=) says 0 FAILED.
+#    The count moved on a row this merge does not own -> proceeds, noted.
+T="$(gitfixture)"; break_other "$T"; regen_log "$T" 1; stale_line "OTHER:src/a.ts" OTHER "$T"; echo README.md > "$T/c.txt"
+(cd "$T/repo" && sha256sum src/a.ts) > "$T/camp/gate-manifests/OTHER.sha256"
+out="$(bash "$PP" "$T/gate.log" "$T/repo" "$T/camp" --changed-paths-file "$T/c.txt" 2>&1)"; r=$?
+[ "$r" = 0 ] && printf '%s' "$out" | grep -q '^PIN_PRECHECK_NOTE: OTHER — the gate log says 1 FAILED, this tree says 0' \
+  && ok "a reconcile of an unowned row changes the FAILED count -> noted, proceeds (D's #830/#831)" \
+  || bad "count moved on unowned row" "rc=$r out=$(printf '%s' "$out" | grep -E 'REFUSED|NOTE' | head -2)"
 rm -rf "$T"
 
 printf '\nprecheck-doors: %d ok, %d FAILED\n' "$pass" "$fail"
