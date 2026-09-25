@@ -41,8 +41,9 @@ import { basename, join } from 'node:path';
 import matter from 'gray-matter';
 
 import { deriveAgentSpec } from '@forge/agents';
-import { FORGE_ROOT, skillPath, skillPathRelative, skillsDir, listSkillMdDirs } from '@forge/agents';
+import { skillPath, skillPathRelative, skillsDir, listSkillMdDirs } from '@forge/agents';
 import { MODEL_BY_TIER } from '@forge/agents';
+import { FORGE_ROOT } from '@forge/kernel';
 import { classifyFinding, CHECK_NAMES, type Finding } from '@forge/knowledge';
 
 const AGENT_SLUG = 'brain-maintenance';
