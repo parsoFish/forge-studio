@@ -48,7 +48,9 @@ test('7.6.132: every develop-kickoff surface imports the shared predicate', () =
   for (const rel of SURFACES) {
     const src = readFileSync(join(ROOT, rel), 'utf8');
     assert.match(
-      src, /import \{[^}]*isRunnableSource[^}]*\} from ['"][^'"]*runnable-source\.ts['"]/,
+      // The ONE rule, read either through contracts' door (forge-8vfn.5.31: external
+      // consumers import `@forge/contracts`) or from its own module inside the package.
+      src, /import \{[^}]*isRunnableSource[^}]*\} from ['"](?:@forge\/contracts|[^'"]*runnable-source\.ts)['"]/,
       `${rel} must read the ONE rule rather than re-derive it — three hand copies is how all three `
       + 'drifted from the server, and a fourth surface would drift the same way',
     );
