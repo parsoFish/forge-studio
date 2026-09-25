@@ -61,6 +61,8 @@ import {
 } from './ground-hash.mjs';
 import {
   teardownFixtureGround,
+  describeRealFence,
+  describeFixtureTeardown,
   realGroundDirs,
   snapshotRealGrounds,
   realGroundFenceVerdict,
@@ -107,16 +109,8 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // and the fence said nothing. The ground is hashed by METHOD C here and
   // again after the run, which is what the launcher already did by hand.
   const groundsBefore = snapshotSiblingGrounds(story.ground?.project ?? null, { root: ROOT });
-  // M7-D — a FIXTURE run must never move a REAL ground: every `projects/*`
-  // outside the `story-` namespace, in this tree and every sibling worktree.
-  // This generalises the sibling-ground fence above ("the ground THIS STORY
-  // declares") to "every real ground THIS RUN DOES NOT OWN". Only a fixture
-  // run pays for it: a real-ground run's own ground is one of these dirs, and
-  // `groundsBefore`/`ownGroundBefore` already cover it. The worktree list is
-  // `siblingDirs`, not `snapshotSiblingWorktrees(...).keys()`, which skips a
-  // sibling whose `git status` read fails and would take its grounds out of
-  // the fence unnamed; it is kept so a tree added or removed during the run
-  // is named rather than judged.
+  // M7-D — the real-ground fence (a fixture run must never move a real ground);
+  // scope and the `siblingDirs` choice: `realGroundDirs`'s header, fixture-ground.mjs.
   const realTreesBefore = story.ground?.fixture ? siblingDirs(ROOT) : null;
   const realBefore = realTreesBefore === null
     ? null
@@ -189,8 +183,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // block it is declared in would not exist by then. One Map for the whole
   // run either way — never a module-level Map (this box runs four lanes).
   const unmeasuredSnapshots = new Map();
-  // M7-D — the real-ground fence's evidence for `story.json` (set with
-  // `realFence` below), so a run that reds on it records why in its artifact.
+  // M7-D — the real-ground fence's evidence for `story.json` (set with `realFence` below).
   let realGrounds = null;
   const costs = story.ground?.realSpawn === true || (story.ground?.budget_usd ?? 0) > 0;
   // 7.6.52: BOTH NUMBERS PRINT BEFORE A DOLLAR IS SPENT, agreeing or not. A run
@@ -590,41 +583,20 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     after: [ROOT, ...realTreesAfter],
   });
   if (realBefore !== null) {
-    for (const line of realFence.treeLines) console.log(`[stories] ${line}`);
-    for (const line of realFence.moved) console.error(`[stories] REAL GROUND MOVED ${line}`);
-    for (const dir of realFence.unreadable) {
-      console.error(`[stories] REAL GROUND UNREADABLE ${dir} — method C could not hash it, so nothing proves it unmoved`);
-    }
-    // Printed even at zero (`forge-e8dn`): it is the one line that proves the
-    // fence looked at all.
-    console.log(`[stories] ${realFence.summary}`);
+    for (const { level, line } of describeRealFence(realFence)) console[level](line);
+    console.log(`[stories] ${realFence.summary}`); // printed even at zero (`forge-e8dn`)
     // Only `moved` reaches `story.json` (`forge-8vfn.26` class): `hashed` and
     // `trees` count this host's worktrees, not the product. Set on a clean run
     // too, so the artifact states what it checked.
     realGrounds = { moved: realFence.moved };
 
-    // LAST: the fixture ground itself. `sweepProductFixtures` above kept it
-    // (`keepProjects`) so the own-ground drift and this fence could both read
-    // it; nothing after this point needs `projects/<project>` on disk.
-    // Row 75 × D1: `reapCensusAndSweep` refused the trailing sweep while a writer
-    // from this run was still alive, so the ground stays too — an `rmSync` under
-    // a live writer is the race the census closes. The CONTAINMENT FAILURE below
-    // reds the run; the next run's leading sweep removes the ground.
+    // LAST, and only on an empty trailing census (row 75 × D1): see
+    // `describeFixtureTeardown`'s header, fixture-ground.mjs.
     const teardown = trailing.census.empty
       ? teardownFixtureGround(ROOT, { storyId: story.id, project: story.ground.project })
       : { removed: false, error: `not torn down — ${trailing.census.reason}` };
-    if (teardown.removed) {
-      console.log(`[stories] fixture ground: torn down projects/${story.ground.project}`);
-    } else if (teardown.error !== undefined) {
-      console.warn(
-        `[stories] fixture ground: could not tear down projects/${story.ground.project}: ${teardown.error} — ` +
-        `the leading sweep of the next run that includes ${story.id} removes it`,
-      );
-    } else {
-      // Printed even when there was nothing to remove: a silent no-op reads
-      // the same as a teardown nobody wired in.
-      console.log(`[stories] fixture ground: projects/${story.ground.project} already absent`);
-    }
+    const td = describeFixtureTeardown(teardown, { storyId: story.id, project: story.ground.project });
+    console[td.level](td.line);
   }
 
   // The other half of `forge-8vfn.7.5.2`. A bounded wait can always be

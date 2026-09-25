@@ -291,6 +291,16 @@ export function teardownFixtureGround(root, { storyId, project }) {
  * only, so the product never treats one as a project.
  *
  * @param {string} root
+ * SCOPE (moved from `run-story.mjs`): a FIXTURE run must never move a REAL
+ * ground — every `projects/*` outside the `story-` namespace, in this tree and
+ * every sibling worktree. It generalises the sibling-ground fence ("the ground
+ * THIS STORY declares") to "every real ground THIS RUN DOES NOT OWN". Only a
+ * fixture run pays for it: a real-ground run's own ground is one of these
+ * dirs, already covered by its own-ground hashes. The runner passes
+ * `siblingDirs`, not `snapshotSiblingWorktrees(...).keys()`, which skips a
+ * sibling whose `git status` read fails and would take its grounds out of the
+ * fence unnamed; a tree added or removed during the run is named, not judged.
+ *
  * @param {{worktrees: string[]}} opts
  * @returns {string[]} sorted absolute directories
  */
@@ -470,4 +480,48 @@ export function provisionFixtureGrounds(root, stories) {
     provisioned.push(Object.freeze({ storyId: s.id, project: s.ground.project, digest: r.digest, commit: r.commit }));
   }
   return Object.freeze({ provisioned: Object.freeze(provisioned), refused: null, rollbackFailures: Object.freeze([]) });
+}
+
+/**
+ * The real-ground fence's console lines, as `{level, line}` (moved out of
+ * `run-story.mjs` at its 800-line cap; the verdict itself is
+ * `realGroundFenceVerdict`, and the run's red gate stays in the runner). The
+ * `summary` line stays in the runner too, printed even at zero (`forge-e8dn`):
+ * it is the one line that proves the fence looked at all.
+ */
+export function describeRealFence(realFence) {
+  return [
+    ...realFence.treeLines.map((l) => ({ level: 'log', line: `[stories] ${l}` })),
+    ...realFence.moved.map((l) => ({ level: 'error', line: `[stories] REAL GROUND MOVED ${l}` })),
+    ...realFence.unreadable.map((dir) => ({
+      level: 'error',
+      line: `[stories] REAL GROUND UNREADABLE ${dir} — method C could not hash it, so nothing proves it unmoved`,
+    })),
+  ];
+}
+
+/**
+ * WHEN THE TEARDOWN RUNS (moved from `run-story.mjs`). LAST: the trailing
+ * sweep kept the fixture ground (`keepProjects`) so the own-ground drift and
+ * the real-ground fence could both read it; nothing after the fence needs
+ * `projects/<project>` on disk. And ONLY on an empty trailing census (row 75 ×
+ * D1): when `reapCensusAndSweep` refused the sweep because a writer from this
+ * run was still alive, the ground stays too — an `rmSync` under a live writer
+ * is the race the census closes. The runner's CONTAINMENT FAILURE reds that
+ * run, and the next run's leading sweep removes the ground.
+ *
+ * The fixture-ground teardown's one line. Printed even when there was nothing
+ * to remove: a silent no-op reads the same as a teardown nobody wired in.
+ */
+export function describeFixtureTeardown(teardown, { storyId, project }) {
+  if (teardown.removed) return { level: 'log', line: `[stories] fixture ground: torn down projects/${project}` };
+  if (teardown.error !== undefined) {
+    return {
+      level: 'warn',
+      line:
+        `[stories] fixture ground: could not tear down projects/${project}: ${teardown.error} — ` +
+        `the leading sweep of the next run that includes ${storyId} removes it`,
+    };
+  }
+  return { level: 'log', line: `[stories] fixture ground: projects/${project} already absent` };
 }
