@@ -121,7 +121,14 @@ export function mintedSessionDirsToClear(producedPaths) {
  * length cap, and an explicit refusal of stringified nullish.
  */
 const MAX_MINTED_DIR_CHARS = 128;
-const MINTED_DIR_SHAPE = /^_[A-Za-z][A-Za-z0-9]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+/**
+ * The id-half of the shape, on its own — EXPORTED so `groundMintedSessionPaths`
+ * (`ground-hash.mjs`, review finding 1) tightens its own id capture to the
+ * SAME charset rather than growing a second copy of it. `MINTED_DIR_SHAPE`
+ * below is composed from this, not duplicated beside it.
+ */
+export const MINTED_ID_CHARS = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const MINTED_DIR_SHAPE = new RegExp(`^_[A-Za-z][A-Za-z0-9]*/${MINTED_ID_CHARS.source.slice(1, -1)}$`);
 /** `${undefined}` and friends resolve to a real, plausible directory name. */
 const NULLISH_SEGMENTS = new Set(['null', 'undefined', 'NaN', 'false', '[object Object]']);
 

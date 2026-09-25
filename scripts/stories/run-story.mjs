@@ -18,8 +18,7 @@
  *   cut between them leaves not an unbound name but a silently `undefined`
  *   exempt set, which no runtime error would announce.
  *
- * So the caller passes four arguments and reads one exit code, and every
- * value either half needs stays on its own side of the call.
+ * So the caller passes four arguments and reads one exit code, and every value either half needs stays on its own side of the call.
  *
  * `ROOT` is RE-DERIVED here rather than imported. Both files sit in
  * `scripts/stories/`, so `import.meta.url` resolves to the same repo root —
@@ -71,6 +70,7 @@ import {
 } from './fixture-ground.mjs';
 import { captureBeatDom, captureFrame, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
 import { captureAndClearMintedSessions, describeGroundClear, captureAndClearMintedLogs, describeLogsClear } from './ground-clear.mjs';
+import { loadRegisteredSessionKindIds } from './session-kind-registry.mjs'; // review finding 1 — groundMintedSessionPaths' required registry
 import { driveBeat } from './beats-drive.mjs';
 import { expandForkedBeats, describeDoorFork, frameLabelSuffix } from './beats-fork.mjs';
 import { snapshotForkGrounds, judgeForkGrounds } from './fork-grounds.mjs';
@@ -461,7 +461,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     // directly in the ground before `/brief` ever creates a `_logs` dir.
     const minted = [...new Set([
       ...mintedSessionPaths(logsBefore, readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name), logsDir),
-      ...groundMintedSessionPaths(ownGroundBefore, ownGroundAfter),
+      ...groundMintedSessionPaths(ownGroundBefore, ownGroundAfter, loadRegisteredSessionKindIds(ROOT)),
     ])].sort();
     const split = classifyOwnGroundDrift(
       groundChanges(ownGroundBefore, ownGroundAfter),
