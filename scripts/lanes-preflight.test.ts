@@ -14,7 +14,7 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, mkdirSync, chmodSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, mkdirSync, chmodSync, symlinkSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -56,8 +56,16 @@ function lanes(args: string[], env: Record<string, string> = {}, timeoutMs = 150
   });
   return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
+/**
+ * Register row "lanes.test.ts:446": `lanes.sh` pipes the roster file straight into
+ * `python3 -c 'json.load(sys.stdin)'`, so a confirm poll landing mid-write reads zero bytes
+ * and crashes with a JSONDecodeError in the test's own stderr. Atomic: write to a tmp file in
+ * the SAME directory, then rename onto the real path — a reader never sees a partial file.
+ */
 function setRoster(rows: Array<Record<string, unknown>>) {
-  writeFileSync(rosterFile, JSON.stringify(rows));
+  const tmp = `${rosterFile}.tmp.${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(rows));
+  renameSync(tmp, rosterFile);
 }
 function writeExec(name: string, body: string) {
   const p = join(dir, name);
@@ -354,11 +362,18 @@ printf '%s\\0' "$@" > '${argvFile}'
 SESS=""; while [ $# -gt 0 ]; do [ "$1" = -n ] && SESS="$2"; shift; done
 export SESS ROSTER='${rosterFile}'
 python3 - "$$" <<'PY'
+# Register row "lanes.test.ts:446": lanes.sh pipes the roster file into
+# 'json.load(sys.stdin)', so a confirm poll landing between truncate and write on a bare
+# open(p, "w") reads zero bytes and crashes with a JSONDecodeError in the test's own stderr.
+# Atomic: write complete content to a tmp file in the SAME directory, then os.replace (a
+# rename(2), atomic) onto the real path.
 import json, os, sys
 p = os.environ["ROSTER"]
 rows = json.load(open(p)) if os.path.exists(p) else []
 rows.append({"name": os.environ["SESS"], "pid": int(sys.argv[1]), "kind": "interactive", "status": "busy"})
-json.dump(rows, open(p, "w"))
+tmp = p + ".tmp." + str(os.getpid())
+json.dump(rows, open(tmp, "w"))
+os.replace(tmp, p)
 PY
 sleep 120
 `,

@@ -34,6 +34,7 @@ import {
   classifyOwnGroundDrift,
   groundIgnoreFromGit,
   groundIgnoreNoneForTests,
+  beatWindowChangesFrom,
 } from './ground-hash.mjs';
 
 function fixture(): string {
@@ -642,5 +643,83 @@ describe('7.6.136: declared ground changes', () => {
       changesOf([], [], [p]), [], new Map(), noIgnore, [{ path: p, change: 'removed' }]);
     assert.equal(split.undeclared.length, 1, 'the licence names a removal; a modification is a different fact');
     assert.equal(split.unmatchedDeclarations.length, 1, 'and the removal it declared did not happen');
+  });
+});
+
+/**
+ * `forge-8vfn.7.6.140` — a declaration may narrow its licence to ONE beat's
+ * window: DECLARED only if the path changed from that beat's boundary onward,
+ * never for a change already sitting in the ground before the beat opened.
+ *
+ * RED AT BASE (the incident this closes): `ground.expectedChanges` is
+ * licensed once per WHOLE RUN today, so a path that changed at beat 1 and a
+ * path that changed at beat 8 are indistinguishable to a declaration — a
+ * story could declare `beat: 8` believing it pins WHEN the change is allowed
+ * and get no such protection.
+ */
+describe('7.6.140: beat-scoped declarations', () => {
+  const p = 'forge/skills/ado-demo/SKILL.md';
+  const noIgnore = groundIgnoreNoneForTests();
+  const changesOf = (removed: string[] = [], added: string[] = [], modified: string[] = []) =>
+    ({ added, removed, modified });
+  const manifestOf = (files: Record<string, string>) => ({ files: new Map(Object.entries(files)) });
+
+  test('changed INSIDE the declared beat’s window: DECLARED, naming the beat', () => {
+    // Boundary (beat 2 starts) still has the OLD hash; the run ends without it
+    // — the removal happened at or after beat 2, inside the licensed window.
+    const boundary = manifestOf({ [p]: 'old-hash' });
+    const after = manifestOf({});
+    const windows = new Map([[2, groundChanges(boundary, after)]]);
+    const split = classifyOwnGroundDrift(
+      changesOf([p]), [], new Map(), noIgnore, [{ path: p, change: 'removed', beat: 2 }], windows);
+    assert.deepEqual(split.undeclared, []);
+    assert.equal(split.declared.length, 1);
+    assert.match(split.declared[0]!, /from beat 2 onward/);
+  });
+
+  test('changed BEFORE the declared beat’s window opened: UNDECLARED, naming why', () => {
+    // Boundary (beat 2 starts) ALREADY shows the removal — it happened before
+    // beat 2, so beat 2's licence never covered it, however the overall
+    // before/after comparison reads.
+    const boundary = manifestOf({});
+    const after = manifestOf({});
+    const windows = new Map([[2, groundChanges(boundary, after)]]); // nothing moved in the window
+    const split = classifyOwnGroundDrift(
+      changesOf([p]), [], new Map(), noIgnore, [{ path: p, change: 'removed', beat: 2 }], windows);
+    assert.equal(split.declared.length, 0, 'a change already present before the window opened is not licensed by it');
+    assert.equal(split.undeclared.length, 1);
+    assert.match(split.undeclared[0]!, /already changed before beat 2 started/);
+  });
+
+  test('a beat number with no captured boundary: UNDECLARED, saying the licence cannot be verified', () => {
+    const split = classifyOwnGroundDrift(
+      changesOf([p]), [], new Map(), noIgnore, [{ path: p, change: 'removed', beat: 9 }], new Map());
+    assert.equal(split.declared.length, 0);
+    assert.equal(split.undeclared.length, 1);
+    assert.match(split.undeclared[0]!, /no ground boundary was captured for that beat/);
+  });
+
+  test('no `beat` at all keeps the WHOLE-RUN meaning unchanged — positive control', () => {
+    const split = classifyOwnGroundDrift(changesOf([p]), [], new Map(), noIgnore, [{ path: p, change: 'removed' }]);
+    assert.deepEqual(split.undeclared, []);
+    assert.equal(split.declared.length, 1);
+    assert.doesNotMatch(split.declared[0]!, /from beat/, 'an undated declaration is not narrated as beat-scoped');
+  });
+
+  test('beatWindowChangesFrom: derives one window per beat from its boundary manifest to the end', () => {
+    const after = manifestOf({ a: '1' });
+    const boundaries = new Map([
+      [2, manifestOf({})], // 'a' was added inside beat 2's window
+      [5, manifestOf({ a: '1' })], // 'a' already present by beat 5 — no change in ITS window
+    ]);
+    const windows = beatWindowChangesFrom(boundaries, after);
+    assert.deepEqual(windows.get(2)!.added, ['a']);
+    assert.deepEqual(windows.get(5)!.added, []);
+  });
+
+  test('beatWindowChangesFrom: a beat whose boundary was never captured is ABSENT, not empty', () => {
+    const boundaries = new Map([[3, undefined as unknown as { files: Map<string, string> } | null]]);
+    const windows = beatWindowChangesFrom(boundaries, manifestOf({}));
+    assert.equal(windows.has(3), false, 'absent means "cannot verify", which must not read the same as "nothing changed"');
   });
 });

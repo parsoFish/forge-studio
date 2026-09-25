@@ -458,6 +458,7 @@ project: null
 kb: null
 costCeilingUsd: 5
 origin: seed
+accepts: [code]
 nodes:
   - { id: audit, agent: project-scoped-review }
 edges: []
@@ -499,6 +500,7 @@ project: null
 kb: null
 costCeilingUsd: 5
 origin: seed
+accepts: [code]
 nodes:
   - { id: audit, agent: project-scoped-review }
 edges: []
@@ -1276,6 +1278,7 @@ project: null
 kb: null
 costCeilingUsd: 5
 origin: seed
+accepts: [code]
 nodes:
   - { id: critique, agent: adversarial-review }
 edges: []
@@ -1308,6 +1311,7 @@ project: null
 kb: null
 costCeilingUsd: 5
 origin: seed
+accepts: [code]
 nodes:
   - { id: critique, agent: adversarial-review }
 edges: []
