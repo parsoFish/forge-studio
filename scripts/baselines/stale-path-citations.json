@@ -72,18 +72,6 @@
     "count": 1
   },
   {
-    "file": "apps/forge/tests/contract/demo-descriptor-parity.test.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
-    "file": "apps/forge/tests/contract/dispatch-decision-capture.test.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
     "file": "apps/forge/tests/contract/dispatch-decision-capture.test.ts",
     "kind": "stem",
     "cited": "demo-agent-spawn-capture.test",
@@ -420,12 +408,6 @@
     "count": 1
   },
   {
-    "file": "apps/forge/tests/regression/demo-capture-fails-loud.test.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
     "file": "apps/forge/tests/regression/guards-migration-catalog.test.ts",
     "kind": "path",
     "cited": "orchestrator/studio/registry.ts",
@@ -567,12 +549,6 @@
     "file": "apps/studio/app/agents/[id]/page.tsx",
     "kind": "path",
     "cited": "scripts/journeys/agents.mjs",
-    "count": 1
-  },
-  {
-    "file": "apps/studio/app/artifact/page.tsx",
-    "kind": "stem",
-    "cited": "demo-agent",
     "count": 1
   },
   {
@@ -1434,12 +1410,6 @@
     "count": 1
   },
   {
-    "file": "ARCHITECTURE.md",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
     "file": "CHANGELOG.md",
     "kind": "path",
     "cited": "demos/e2e/results.json",
@@ -1512,12 +1482,6 @@
     "count": 1
   },
   {
-    "file": "docs/explanation/example-factory.md",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 3
-  },
-  {
     "file": "docs/how-to/S6.md",
     "kind": "path",
     "cited": "brain/story-s6/antipatterns.md",
@@ -1552,12 +1516,6 @@
     "kind": "path",
     "cited": "studio/starters/project.json",
     "count": 1
-  },
-  {
-    "file": "docs/product/user-stories.md",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 3
   },
   {
     "file": "docs/product/user-stories.md",
@@ -1602,28 +1560,10 @@
     "count": 2
   },
   {
-    "file": "docs/reference/agent-cost-ceilings.md",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
     "file": "docs/reference/extension-seams.md",
     "kind": "path",
     "cited": "skills/my-agent/SKILL.md",
     "count": 1
-  },
-  {
-    "file": "docs/reference/extension-seams.md",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
-    "file": "docs/reference/project-contract.md",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 6
   },
   {
     "file": "docs/reference/request-path-sinks.md",
@@ -1707,7 +1647,7 @@
     "file": "docs/reference/request-path-sinks.md",
     "kind": "path",
     "cited": "orchestrator/studio/validate.ts",
-    "count": 2
+    "count": 1
   },
   {
     "file": "docs/reference/request-path-sinks.md",
@@ -2084,12 +2024,6 @@
   {
     "file": "docs/roadmaps/1.0-kickoffs.md",
     "kind": "stem",
-    "cited": "demo-agent",
-    "count": 2
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "stem",
     "cited": "e2e-journey",
     "count": 1
   },
@@ -2205,12 +2139,6 @@
     "file": "docs/roadmaps/1.0.md",
     "kind": "path",
     "cited": "studio/starters/project.json",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0.md",
-    "kind": "stem",
-    "cited": "demo-agent",
     "count": 1
   },
   {
@@ -2559,7 +2487,7 @@
     "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
     "kind": "path",
     "cited": "orchestrator/flow-run-requests.ts",
-    "count": 4
+    "count": 3
   },
   {
     "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
@@ -2571,7 +2499,7 @@
     "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
     "kind": "path",
     "cited": "orchestrator/flow-trigger.ts",
-    "count": 4
+    "count": 3
   },
   {
     "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
@@ -3458,12 +3386,6 @@
   {
     "file": "docs/roadmaps/archive/R4-ootb-suite.md",
     "kind": "stem",
-    "cited": "demo-agent",
-    "count": 12
-  },
-  {
-    "file": "docs/roadmaps/archive/R4-ootb-suite.md",
-    "kind": "stem",
     "cited": "demo-agent.test",
     "count": 1
   },
@@ -3800,12 +3722,6 @@
   {
     "file": "docs/roadmaps/archive/R6-operator-experience.md",
     "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/archive/R6-operator-experience.md",
-    "kind": "stem",
     "cited": "flows-run",
     "count": 3
   },
@@ -4004,12 +3920,6 @@
   {
     "file": "docs/roadmaps/archive/README.md",
     "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/archive/README.md",
-    "kind": "stem",
     "cited": "demo-showcase",
     "count": 3
   },
@@ -4076,12 +3986,6 @@
   {
     "file": "docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md",
     "kind": "stem",
-    "cited": "demo-agent",
-    "count": 2
-  },
-  {
-    "file": "docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md",
-    "kind": "stem",
     "cited": "preflight-fix-runner",
     "count": 1
   },
@@ -4107,12 +4011,6 @@
     "file": "packages/agents/agent-dispatch-cmd.ts",
     "kind": "path",
     "cited": "packages/sessions/studio/session-kinds.test.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/agent-dispatch-cmd.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
     "count": 1
   },
   {
@@ -4144,12 +4042,6 @@
     "kind": "stem",
     "cited": "instructions-runner",
     "count": 1
-  },
-  {
-    "file": "packages/agents/band-agent-run.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 3
   },
   {
     "file": "packages/agents/bridge-agents-history-rows.ts",
@@ -4194,12 +4086,6 @@
     "count": 1
   },
   {
-    "file": "packages/agents/design.md",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
     "file": "packages/agents/failure-classifier.ts",
     "kind": "path",
     "cited": "docs/adr/429-quota.md",
@@ -4212,27 +4098,9 @@
     "count": 1
   },
   {
-    "file": "packages/agents/phase-agent.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
     "file": "packages/agents/phases/agent-scope-guard.ts",
     "kind": "path",
     "cited": "docs/known-gaps.md",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/phases/agent-scope-guard.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/pinned-sdk-query.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
     "count": 1
   },
   {
@@ -4275,12 +4143,6 @@
     "file": "packages/agents/run-agent.ts",
     "kind": "path",
     "cited": "cli/dry-bridge.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/run-agent.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
     "count": 1
   },
   {
@@ -4392,12 +4254,6 @@
     "count": 1
   },
   {
-    "file": "packages/agents/tests/integration/agent-dispatch-project-guard.test.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
     "file": "packages/agents/tests/integration/agent-dispatch-wiring.test.ts",
     "kind": "path",
     "cited": "cli/studio-path-guard.test.ts",
@@ -4410,34 +4266,10 @@
     "count": 1
   },
   {
-    "file": "packages/agents/tests/integration/band-agent-run.test.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
     "file": "packages/agents/tests/integration/instructions-turn-prompt.test.ts",
     "kind": "stem",
     "cited": "instructions-runner",
     "count": 1
-  },
-  {
-    "file": "packages/agents/tests/integration/run-agent-connections.test.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/tests/integration/run-agent-oneshot-outputs.test.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/tests/integration/run-agent-spawn-capture.test.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 3
   },
   {
     "file": "packages/agents/tests/regression/agent-bands-dispatch-hijack.test.ts",
@@ -4449,12 +4281,6 @@
     "file": "packages/agents/tests/regression/agent-dispatch-containment.test.ts",
     "kind": "path",
     "cited": "orchestrator/studio/registry.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/tests/regression/agent-dispatch-containment.test.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
     "count": 1
   },
   {
@@ -4770,18 +4596,6 @@
     "count": 3
   },
   {
-    "file": "packages/flows/tests/integration/flow-artifacts.test.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
-    "file": "packages/flows/tests/integration/flow-band-vocab.test.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
     "file": "packages/flows/tests/integration/flow-trigger-projects.test.ts",
     "kind": "path",
     "cited": "orchestrator/studio/types.ts",
@@ -4812,12 +4626,6 @@
     "count": 1
   },
   {
-    "file": "packages/flows/tests/integration/run-model-last-event-at.test.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 4
-  },
-  {
     "file": "packages/flows/tests/integration/trigger-provenance.test.ts",
     "kind": "path",
     "cited": "studio/registry.ts",
@@ -4839,12 +4647,6 @@
     "file": "packages/flows/tests/regression/manifest-path-fields.test.ts",
     "kind": "stem",
     "cited": "studio-path-guard",
-    "count": 1
-  },
-  {
-    "file": "packages/flows/tests/regression/station-rename-integrate.test.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
     "count": 1
   },
   {
@@ -5850,12 +5652,6 @@
     "count": 1
   },
   {
-    "file": "packages/projects/preflight-demo.ts",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
     "file": "packages/projects/preflight.ts",
     "kind": "path",
     "cited": "orchestrator/cli.ts",
@@ -6554,12 +6350,6 @@
   {
     "file": "packages/sessions/tests/regression/interactive-runners-golden.test.ts",
     "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
-    "file": "packages/sessions/tests/regression/interactive-runners-golden.test.ts",
-    "kind": "stem",
     "cited": "demo-builder-runner",
     "count": 2
   },
@@ -7062,34 +6852,10 @@
     "count": 1
   },
   {
-    "file": "skills/contract-check/SKILL.md",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
-    "file": "skills/demo-agent/SKILL.md",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 5
-  },
-  {
     "file": "skills/demo-design/SKILL.md",
     "kind": "path",
     "cited": "projects/terraform-provider-betterado/forge/skills/ado-demo/SKILL.md",
     "count": 1
-  },
-  {
-    "file": "skills/demo-design/SKILL.md",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
-    "file": "skills/demo/SKILL.md",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 4
   },
   {
     "file": "skills/developer-ralph/SKILL.md",
@@ -7110,12 +6876,6 @@
     "count": 1
   },
   {
-    "file": "skills/README.md",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
     "file": "skills/reflector/SKILL.md",
     "kind": "path",
     "cited": "cli/brain-lint.ts",
@@ -7128,39 +6888,15 @@
     "count": 1
   },
   {
-    "file": "studio/artifact-templates/pr.md",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 2
-  },
-  {
     "file": "studio/artifact-templates/README.md",
     "kind": "path",
     "cited": "orchestrator/studio/validate.ts",
     "count": 2
   },
   {
-    "file": "studio/artifact-templates/README.md",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 2
-  },
-  {
-    "file": "studio/artifact-templates/wi-branches.md",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 2
-  },
-  {
     "file": "studio/demo-elements/cli-capture.md",
     "kind": "path",
     "cited": "bin/mdtoc.js",
-    "count": 1
-  },
-  {
-    "file": "studio/starters/README.md",
-    "kind": "stem",
-    "cited": "demo-agent",
     "count": 1
   },
   {
