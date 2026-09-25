@@ -32,7 +32,8 @@ import { join } from 'node:path';
  * so a busy host delaying the poller can never manufacture inactivity.
  *
  * TWO SIGNALS, READ SEPARATELY, because they are two different writes. The
- * cycle's own channel — `events.jsonl` / `.heartbeat` — is one. A review chunk
+ * cycle's own event log — `events.jsonl`, never `.heartbeat` (liveness, not
+ * progress) — is one. A review chunk
  * lands at a THIRD path: `writeChunkRecord`
  * (`packages/stations/phases/adversarial-review.ts`) persists
  * `<cycleDir>/artifacts/review-chunks/chunk-<key>.json` as its own write,
@@ -51,9 +52,11 @@ export function cycleProgressIdleMs(dir, now = Date.now()) {
   const consider = (t) => {
     if (typeof t === 'number' && Number.isFinite(t) && (newest === null || t > newest)) newest = t;
   };
-  for (const name of ['.heartbeat', 'events.jsonl']) {
-    try { consider(statSync(join(dir, name)).mtimeMs); } catch { /* absent is not silence — nothing to see there yet */ }
-  }
+  // NOT `.heartbeat`: a liveness ticker keeps touching it while the agent is
+  // hung, and T1 1471 named only events.jsonl growth and persisted review
+  // chunks as progress — a heartbeat alone would let a stuck cycle reset the
+  // window until the wall ceiling.
+  try { consider(statSync(join(dir, 'events.jsonl')).mtimeMs); } catch { /* absent is not silence — nothing to see there yet */ }
   try {
     const chunkDir = join(dir, 'artifacts', 'review-chunks');
     for (const name of readdirSync(chunkDir)) {
@@ -91,7 +94,10 @@ export function cycleProgressIdleMs(dir, now = Date.now()) {
  * @returns {{deadline: number, firedBy: 'inactivity'|'wall'}}
  */
 export function cycleWaitDeadline({ startedAt, timeoutMs, lastActivityAt, wallCeilingMs }) {
-  const inactivityDeadline = lastActivityAt === null ? startedAt + timeoutMs : lastActivityAt + timeoutMs;
+  // Progress only ever EXTENDS the wait: a write that predates the wait's own
+  // start (the cycle dir already existed) never pulls the deadline in below
+  // the plain `startedAt + timeoutMs` it replaced.
+  const inactivityDeadline = lastActivityAt === null ? startedAt + timeoutMs : Math.max(startedAt, lastActivityAt) + timeoutMs;
   const wallDeadline = startedAt + wallCeilingMs;
   const deadline = Math.min(inactivityDeadline, wallDeadline);
   return { deadline, firedBy: deadline === wallDeadline && wallDeadline <= inactivityDeadline ? 'wall' : 'inactivity' };
