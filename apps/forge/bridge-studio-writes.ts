@@ -174,6 +174,8 @@ function flowEditableProjection(def: FlowDefinition): string {
     project: def.project ?? null,
     kb: def.kb ?? null,
     costCeilingUsd: def.costCeilingUsd,
+    accepts: def.accepts,
+    review: def.review ?? null,
     nodes: def.nodes,
     edges: def.edges,
     triggers: def.triggers,
@@ -531,6 +533,8 @@ export async function handleStudioWriteRoutes(
       const accepts = Array.isArray(b['accepts'])
         ? (b['accepts'] as FlowDefinition['accepts'])
         : (existing?.accepts ?? ['code']);
+      // `review` (ADR 051 d2 as amended) rides the merge the same way, or a save strips it.
+      const review = b['review'] !== undefined ? (b['review'] as FlowDefinition['review']) : existing?.review;
 
       // Bump version: n+1 for existing, 1 for new
       const version = (existing?.version ?? 0) + 1;
@@ -545,6 +549,7 @@ export async function handleStudioWriteRoutes(
         costCeilingUsd,
         origin: existing?.origin ?? 'studio',
         accepts,
+        ...(review !== undefined ? { review } : {}),
         disposable: existing?.disposable,
         nodes: nodes as FlowDefinition['nodes'],
         edges: edges as FlowDefinition['edges'],
