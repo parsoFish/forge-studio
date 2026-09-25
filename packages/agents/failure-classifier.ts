@@ -67,14 +67,24 @@ export type CrashClassification = {
   reason: string;
 };
 
+/** Resolver failures (forge-8vfn.8.1.11) — the host could not resolve the remote. Shared by
+ *  `classifyCrash` (via TRANSIENT_CRASH_SIGNATURES) and `classifyCycleFailure`. */
+const DNS_FAILURE_SIGNATURES = [
+  'could not resolve host', // git stderr: "fatal: unable to access '…': Could not resolve host: …"
+  'enotfound', // Node/npm/gh DNS error code
+  'eai_again', // libc resolver transient-failure code ("temporary failure in name resolution")
+  'getaddrinfo', // the POSIX resolver call Node/gh name in their own error text
+] as const;
+
 /** Environment/API-pressure signatures — a fresh spawn under better conditions can succeed. */
 const TRANSIENT_CRASH_SIGNATURES = [
   'rate_limit', 'rate-limit', '429', '529',
   'usage limit', 'hit your limit', 'overloaded',
   'stream-deadline',
   'sigkill', 'signal 9',
-  'econnreset', 'etimedout', 'enotfound', 'econnrefused', 'epipe',
+  'econnreset', 'etimedout', 'econnrefused', 'epipe',
   'socket hang up', 'network error', 'fetch failed',
+  ...DNS_FAILURE_SIGNATURES,
 ] as const;
 
 /** Deterministic-from-the-first-crash signatures — the same inputs overflow again. */
@@ -151,6 +161,13 @@ const RATE_LIMIT_TEXT_SIGNATURES = [
 export function matchesRateLimitSignature(text: string): boolean {
   const t = text.toLowerCase();
   return RATE_LIMIT_TEXT_SIGNATURES.some((s) => t.includes(s));
+}
+
+/** True iff `text` names a resolver failure. The phrasings are specific enough that a bare
+ *  substring scan of an error's own message/reason is safe (no marker anchoring needed). */
+export function matchesDnsFailureSignature(text: string): boolean {
+  const t = text.toLowerCase();
+  return DNS_FAILURE_SIGNATURES.some((s) => t.includes(s));
 }
 
 /**
@@ -264,7 +281,7 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   let uwiLoopCapExhausted = false;
   let rateLimited = false, brainSkipped = false, trivialPass = false;
   let gateErrored = false, gateTimedOut = false, transientLint = false;
-  let crashDeterministic = false;
+  let crashDeterministic = false, dnsFailure = false;
   // W8-A2 (ON-7 defect 2a): the flow's own budget guard (CostTracker.
   // checkCeiling, flow-budgets.ts) firing. Captured verbatim so the reason
   // string below can quote the flow's own accounting instead of re-deriving
@@ -351,6 +368,13 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
       // W8-F3: read the error's OWN fields only — see
       // `errorOwnFieldsSignalRateLimit`.
       if (errorOwnFieldsSignalRateLimit(msg, md)) { rateLimited = true; ev(e); }
+      // forge-8vfn.8.1.11: git's stderr rides in metadata.reason for the push-failure events and in
+      // the message for the orchestrator's throw — scan both, the error's own fields only.
+      const reason = typeof md.reason === 'string' ? md.reason : '';
+      if (matchesDnsFailureSignature(msg) || matchesDnsFailureSignature(reason)) {
+        dnsFailure = true;
+        ev(e);
+      }
       if (msg.includes('agent_threw') || md.kind === 'agent_threw') { agentThrew = true; ev(e); }
     }
     // N9: the CLI's limit death surfaces in reasoning/log events while the
@@ -490,6 +514,8 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // of this initiative stay QUEUED behind a retrying prerequisite rather than
   // collapsing behind a dead one.
   if (rateLimited) return T('transient', 'agent rate-limited / usage-limited / stream stalled (environment failure — transient API pressure, NOT a work failure) — auto-retry', evidence, true);
+  // forge-8vfn.8.1.11: the resolver outage CAUSES the terminal-looking signals below, so it wins.
+  if (dnsFailure) return T('transient', 'DNS resolution failed while pushing/fetching against the git remote ("Could not resolve host" / ENOTFOUND / EAI_AGAIN / getaddrinfo — environment failure: the host\'s resolver was down or flaky, NOT a work failure) — auto-retry once DNS recovers', evidence, true);
 
   // Terminal first — manifest/env/code defects auto-retry can't fix.
   // W8-A2 (ON-7 defect 2a): a CostCeilingError is the flow's OWN budget
