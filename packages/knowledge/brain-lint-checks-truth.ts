@@ -49,12 +49,19 @@ function normalizeCandidate(raw: string): string | null {
 }
 
 /** Non-empty `evidence:` is the complete reference set. `antipattern` (M3) is
- *  judged on `evidence:` alone, even empty/absent — its claim IS an absence. */
+ *  judged on `evidence:` alone, even empty/absent — its claim IS an absence.
+ *  A non-string entry (a mistyped `evidence:` value — a bare number, an
+ *  object) is DROPPED, like a guard-refused ref: never counted, never
+ *  thrown on (`.startsWith` on a non-string would crash brain-lint for
+ *  every theme in the run, one bad frontmatter value taking down the
+ *  whole pass). */
 export function extractThemeReferences(body: string, frontmatter: Record<string, unknown>): string[] {
   const evidence = frontmatter.evidence;
-  const hasEvidence = Array.isArray(evidence);
-  if (frontmatter.category === 'antipattern') return hasEvidence ? [...(evidence as string[])] : [];
-  if (hasEvidence && (evidence as string[]).length > 0) return [...(evidence as string[])];
+  const stringEvidence = Array.isArray(evidence)
+    ? evidence.filter((e): e is string => typeof e === 'string')
+    : null;
+  if (frontmatter.category === 'antipattern') return stringEvidence ?? [];
+  if (stringEvidence && stringEvidence.length > 0) return stringEvidence;
 
   const seen = new Set<string>();
   const refs: string[] = [];
