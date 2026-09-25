@@ -222,6 +222,18 @@ test('realGroundDirs lists every non-story, non-dot project directory across the
   assert.deepEqual(dirs, expected);
 });
 
+test('realGroundDirs excludes a FILL FORK\'s own per-case ground, not only the bare story-<id>', () => {
+  // T1 ruling 1350 (the fork brief's own gap-close, ruling 3): a fill fork's
+  // per-case grounds (`story-s2-api`, `-cli`, ...) are `story-`-prefixed like
+  // any other story fixture, so the SAME `entry.name.startsWith('story-')`
+  // guard that keeps `story-<id>` out of the real-ground fence already keeps
+  // every per-case ground out too — confirmed here rather than assumed.
+  const root = scratch();
+  makeProjectsEntries(join(root, 'projects'), ['gitpulse/', 'story-s2/', 'story-s2-api/', 'story-s2-cli/']);
+  const dirs = realGroundDirs(root, { worktrees: [] });
+  assert.deepEqual(dirs, [join(root, 'projects', 'gitpulse')]);
+});
+
 // ── realGroundDirs' skip must be ENOENT-only ─────────────────────────────
 //
 // `realGroundDirs`'s `catch { continue; }` around `readdirSync(projectsDir)`
