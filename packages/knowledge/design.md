@@ -216,3 +216,109 @@ rather than by holding two concurrent leases in one process — that hits
 (`lib/lockfile.js`) and breaks `release()`, an artifact that never occurs
 across `node --test`'s per-file worker processes.
 
+## Brain-lint truthfulness axis (forge-mfv5.3.4)
+
+Rationale moved here from `brain-lint-checks-truth.ts` and from the doc
+comments of helpers the same M7-D pass extracted while culling duplication
+elsewhere in the package (QUARRY.md ruling 118: "prose is never overhead, so
+it moves rather than being charged"). Each source location keeps a one-line
+`// Why: design.md § Brain-lint truthfulness axis` pointer back here.
+
+**Two-round design (`brain-lint-checks-truth.ts` file header).** Round 1
+(d14-review.md) excludes forge-provenance citations (C1), normalises the
+self-citation prefix (C2), blocks `../` escapes (M1), and judges
+`antipattern` themes on declared `evidence:` only (M3) — checking every span
+against the checkout had driven betterado's stale rate to 99%. Round 2
+(d14-fix1-rereview.md, T2 ruling): most remaining verdicts cited something
+never tracked (a token string, a Go idiom, a module pin, a generated
+artifact) — "stale" now means "once had, now gone": an absent reference
+counts only when `git log --all` finds it; a never-tracked absence is
+dropped, not judged.
+
+**`themeTruth`'s resolution states.** Every theme under
+`brain/projects/<project>/themes/` (C2: a theme's own `projects/<project>/`
+self-citation strips first; a foreign prefix does not). Each candidate
+resolves PRESENT (in the tree), MISSING (absent but `git log --all` finds it
+— once tracked, now gone), or DROPPED (absent and never tracked, or no git
+history — never evidence of staleness). `hasHistoryOverride` lets
+`projectTruthRows` skip a redundant `rev-parse`.
+
+**`projectTruthRowsCache` memoisation.** Keyed by `cwd`. Never invalidated —
+nothing in this module writes to `brain/projects/` or a project checkout, so
+a walk can't go stale within one process. `forge brain lint` calls
+`projectTruthRows` TWICE per run (once via `checkThemeTruth`'s registry
+entry, once via the CLI's own `brainTruthRates` call for the `truthfulness:`
+lines) over the SAME git-backed rows; this halves the `git log --all` spawns
+(`wasEverTracked`, the expensive part) without changing what either caller
+sees.
+
+**`brainTruthRates`'s rate gating.** One row per project, sorted by name.
+`verifiable`/`unverifiable`/`stale` count whatever `themeTruth` resolved
+(never `missing` without git — see above), so `stale` is naturally 0 with no
+history. `rate` is additionally gated on `history`: a rate claims "we know
+the true count", which no history to check absences against cannot claim —
+never guessed.
+
+### Helpers the D14 cull moved here
+
+**`requireValidKbId` (`bridge-studio-kbs.ts`).** KB_ID_RE-validates `kbId`;
+400s and returns false on a miss. Nine route handlers
+(`bridge-studio-kb-routes-{read,lifecycle}.ts`, `kb-drain-routes.ts`) had
+their own copy of this exact 4-line guard.
+
+**`subDirs` (`kb-sites.ts`).** Sub-directory names of a dir (empty on any
+error). Skips dot-prefixed dirs — a `.staging-<id>-*` brain leftover (SEC-05
+4on reopen-1) must never surface as a phantom KB. Real kb/project ids are
+slug-safe (no leading dot). Exported: `bridge-studio-kbs.ts` used to carry a
+byte-identical second copy of this exact walk (its own `_logs` run-id
+listing in `bridge-studio-kb-routes-maintenance.ts` was its only outside
+caller) — one implementation, both repointed here.
+
+**`kbDrainRunIdsFor` (`kb-job-state.ts`).** Run ids under `_logs/` matching
+this kb's own `_kb-drain-<kbId>-drain-*` prefix (SERVER-enumerated directory
+names, never a caller-supplied path). Exported: `findLiveDrain` and
+`kb-drain-store.ts`'s `findKbDrainRuns` both used to carry their own copy of
+this exact filter — one implementation, both callers.
+
+**`consolidateRunIdsFor` (`kb-job-state.ts`).** Consolidate run ids matching
+`_brainfix-<kbId>-consolidate-*` (`__<i>` sub-runs excluded). Shared by
+`deriveKbActiveJob` and `kb-drain-store.ts`'s `listKbRuns` — one filter, not
+two copies.
+
+**`kbDrainEventFields` (`bridge-studio-kb-drain.ts`).** The 4 fields every
+kb-drain JSONL event shares — `phase`/`skill` classify it in the event log,
+`input_refs`/`output_refs` are always empty (a kb-drain event never traces
+file provenance). One literal; every `logger.emit(...)` call and
+`kb-drain-routes.ts`'s own queued event spreads it rather than repeating it.
+Returns FRESH arrays each call — never a shared reference a caller could
+mutate into a later emit.
+
+**`revertProseChanges` (`kb-drain-edit-soundness.ts`).** Restores every
+gated change to its pre-turn content — a created file is removed, an
+edited/deleted file is written back byte-for-byte. `relPath` comes from our
+OWN walk of the trusted `brainDir`, never request or agent text. Exported:
+`kb-drain-store.ts` re-exports this ONE implementation (its consumer,
+`bridge-studio-kb-drain.ts`, keeps importing it from there) rather than
+carrying a second, independent copy.
+
+**`requireKbBrainDir` (`brain-paths.ts`).** `resolveKbBrainDir`, but throws
+the one "Unknown kbId" message instead of returning `null` — for a caller
+whose own contract is "this kbId resolves or the call fails", never a
+silent unresolved path threaded further in. `kb-backend.ts` and
+`kb-graph.ts` each used to carry this exact check + message independently;
+one implementation, both repointed.
+
+**`checkFrontmatterForFile` (`brain-lint-checks-filing.ts`).** The
+per-theme frontmatter checks (required fields, category whitelist,
+created_at/updated_at order) — the ONE implementation both the full-scan
+`checkFrontmatter` and `lintThemeFiles`' per-KB own-theme lens
+(`brain-lint.ts`, Studio's list/detail routes) apply to a theme file. A
+second, independently-maintained copy in `lintThemeFiles` is exactly the
+drift the M1-D fix (CLI/Studio agreement) exists to rule out. `parsed` is
+`null` when the theme failed to parse at all (gray-matter threw).
+
+**`slugsInIndexBody` (`brain-lint-checks-filing.ts`).** Slugs linked in an
+index body (one per `./themes/<slug>.md` occurrence). Exported:
+`brain-fix-auto.ts`'s `ensureLinkedAt` used to carry its own copy of this
+exact scan — one implementation, both callers.
+

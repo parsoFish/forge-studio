@@ -128,13 +128,7 @@ export function resolveKbBrainDir(forgeRoot: string, kbId: string): string | nul
   return null;
 }
 
-/**
- * `resolveKbBrainDir`, but throws the one "Unknown kbId" message instead of
- * returning `null` — for a caller whose own contract is "this kbId resolves
- * or the call fails", never a silent unresolved path threaded further in.
- * `kb-backend.ts` and `kb-graph.ts` each used to carry this exact check +
- * message independently; one implementation, both repointed.
- */
+// Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
 export function requireKbBrainDir(forgeRoot: string, kbId: string): string {
   const kbDir = resolveKbBrainDir(forgeRoot, kbId);
   if (!kbDir) {

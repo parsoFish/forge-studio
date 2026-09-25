@@ -56,15 +56,7 @@ export const CATEGORY_TO_BRAIN_SUBDIR: Record<string, string> = {
 
 // ---------- checkFrontmatter ----------
 
-/**
- * The per-theme frontmatter checks (required fields, category whitelist,
- * created_at/updated_at order) — the ONE implementation both the full-scan
- * `checkFrontmatter` below and `lintThemeFiles`' per-KB own-theme lens
- * (`brain-lint.ts`, Studio's list/detail routes) apply to a theme file. A
- * second, independently-maintained copy in `lintThemeFiles` is exactly the
- * drift the M1-D fix (CLI/Studio agreement) exists to rule out. `parsed` is
- * `null` when the theme failed to parse at all (gray-matter threw).
- */
+// Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
 export function checkFrontmatterForFile(file: string, parsed: ReturnType<typeof parseTheme>): Finding[] {
   if (!parsed) {
     return [{ category: 'error', file, message: 'unparseable frontmatter (gray-matter failed)', check: 'checkFrontmatter' }];
@@ -96,9 +88,7 @@ export function checkFrontmatter(forgeRoot: string): Finding[] {
 
 // ---------- checkIndexSync ----------
 
-/** Slugs linked in an index body (one per `./themes/<slug>.md` occurrence).
- *  Exported: `brain-fix-auto.ts`'s `ensureLinkedAt` used to carry its own
- *  copy of this exact scan — one implementation, both callers. */
+// Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
 export function slugsInIndexBody(body: string): string[] {
   const slugs: string[] = [];
   const re = /\(\.?\.?\/?(?:themes\/)([a-zA-Z0-9._-]+?)(?:\.md)?\)/g;

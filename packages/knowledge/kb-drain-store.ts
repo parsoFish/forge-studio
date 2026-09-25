@@ -207,11 +207,6 @@ export function listKbRuns(forgeRoot: string, kbId: string, sessionIsReadable: S
       // fall through to the dot anchor
     }
   }
-  // M7-C U8 (bead forge-u8y2): `sessionIsReadable` needs the logs root too —
-  // the consolidate-loop's own `logsRoot` local went with that loop when it
-  // moved into `consolidateRunIdsFor` (kb-job-state.ts), but this later
-  // check still needs it.
-  const logsRoot = join(forgeRoot, '_logs');
   const projectsRoot = resolveProjectsDir(forgeRoot, loadConfig(defaultConfigPath(forgeRoot)));
   const cleanupDir = join(projectsRoot, anchor, '_kb-cleanup');
   let sids: string[] = [];
@@ -236,7 +231,9 @@ export function listKbRuns(forgeRoot: string, kbId: string, sessionIsReadable: S
     if (sessionKbId !== null && sessionKbId !== kbId) continue;
     // M7-C U8 (bead forge-u8y2) — never mint a row for a session pointer that
     // resolves nowhere. Same predicate, same reason, as `withReadableDraftSessions`.
-    if (!sessionIsReadable({ projectsRoot, logsRoot, kind: KB_CLEANUP_SESSION_KIND, sessionId: sid, project: anchor })) continue;
+    // logsRoot inlined: the consolidate loop's own local went with it into
+    // consolidateRunIdsFor (kb-job-state.ts); no other user in this function.
+    if (!sessionIsReadable({ projectsRoot, logsRoot: join(forgeRoot, '_logs'), kind: KB_CLEANUP_SESSION_KIND, sessionId: sid, project: anchor })) continue;
     rows.push({ kind: 'cleanup', id: sid, when: whenFromSessionId(sid), status: phase, costUsd: null, detail: null, project: anchor });
   }
 

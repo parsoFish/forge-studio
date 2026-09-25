@@ -56,11 +56,7 @@ function listLogDirs(forgeRoot: string): string[] {
   }
 }
 
-/** Run ids under `_logs/` matching this kb's own `_kb-drain-<kbId>-drain-*`
- *  prefix (SERVER-enumerated directory names, never a caller-supplied path).
- *  Exported: `findLiveDrain` below and `kb-drain-store.ts`'s
- *  `findKbDrainRuns` both used to carry their own copy of this exact
- *  filter — one implementation, both callers. */
+// Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
 export function kbDrainRunIdsFor(forgeRoot: string, kbId: string): string[] {
   const dirPrefix = '_kb-drain-';
   const runIdPrefix = `${kbId}-drain-`;
@@ -191,9 +187,7 @@ function consolidateRunning(forgeRoot: string, runId: string, nowMs: number): bo
   return nowMs - firstTs <= KB_CONSOLIDATE_STALE_MS;
 }
 
-/** Consolidate run ids matching `_brainfix-<kbId>-consolidate-*`
- *  (`__<i>` sub-runs excluded). Shared by `deriveKbActiveJob` below and
- *  `kb-drain-store.ts`'s `listKbRuns` — one filter, not two copies. */
+// Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
 export function consolidateRunIdsFor(forgeRoot: string, kbId: string): string[] {
   const consolidatePrefix = `_brainfix-${kbId}-consolidate-`;
   const ids: string[] = [];

@@ -279,12 +279,7 @@ export type KbDrainOpts = {
   heartbeatMs?: number;
 };
 
-/** The 4 fields every kb-drain JSONL event shares — `phase`/`skill` classify
- *  it in the event log, `input_refs`/`output_refs` are always empty (a
- *  kb-drain event never traces file provenance). One literal; every
- *  `logger.emit(...)` call below and in `kb-drain-routes.ts`'s own queued
- *  event spreads it rather than repeating it. Returns FRESH arrays each call
- *  — never a shared reference a caller could mutate into a later emit. */
+// Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
 export function kbDrainEventFields(): { phase: 'reflection'; skill: 'kb-drain'; input_refs: string[]; output_refs: string[] } {
   return { phase: 'reflection', skill: 'kb-drain', input_refs: [], output_refs: [] };
 }

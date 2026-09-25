@@ -78,9 +78,7 @@ export type KbWithCounts = {
   provenance: Provenance;
 };
 
-/** KB_ID_RE-validate `kbId`; 400s and returns false on a miss. Nine route
- *  handlers (bridge-studio-kb-routes-{read,lifecycle}.ts, kb-drain-routes.ts)
- *  had their own copy of this exact 4-line guard. */
+// Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
 export function requireValidKbId(kbId: string, res: ServerResponse, origin: string): boolean {
   if (KB_ID_RE.test(kbId)) return true;
   sendJson(res, 400, { error: 'invalid kb id' }, origin);

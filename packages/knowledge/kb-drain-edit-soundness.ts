@@ -439,14 +439,7 @@ export type KbEditGateResult = {
   errors: string[];
 };
 
-/**
- * Restore every gated change to its pre-turn content — a created file is
- * removed, an edited/deleted file is written back byte-for-byte. `relPath`
- * comes from our OWN walk of the trusted `brainDir`, never request or agent
- * text. Exported: `kb-drain-store.ts` re-exports this ONE implementation
- * (its consumer, `bridge-studio-kb-drain.ts`, keeps importing it from there)
- * rather than carrying a second, independent copy.
- */
+// Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
 export function revertProseChanges(brainDir: string, changes: readonly KbEditChange[]): void {
   for (const c of changes) {
     const abs = join(brainDir, c.relPath);
