@@ -10,19 +10,53 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { EMIT_FAILED_SIDECAR } from '@forge/sessions';
 import { summariseRunSpend, spendCeilingVerdict, endedUnpricedTurns, ceilingHaltVerdict, classifyUnmeasuredDispatch } from './spend.mjs';
+import { FS_CLOCK_SLACK_MS } from './beats-queue-terminal.mjs';
 import { join, basename } from 'node:path';
 
-/** One dispatched run's event rows, or [] — an unreadable log is UNMEASURED,
- *  never a silent zero (bead `forge-8vfn.6.11.8`). */
+/**
+ * One dispatched run's event rows, or [] — an unreadable log is UNMEASURED,
+ * never a silent zero (bead `forge-8vfn.6.11.8`).
+ *
+ * m7-d-guard-unknown-audit.md rows 24-25. ENOENT is a genuine absence — no
+ * dispatch has written here yet, decided upstream by `summariseRunSpend`,
+ * which knows whether a spawn was real. Anything else (EACCES, EIO, EMFILE)
+ * means the log may EXIST and be unreadable, which must never render the same
+ * as "nothing here" — the run would keep spending with this dir's portion
+ * invisible. A torn/unparseable line used to vanish as a silent `{}`, exactly
+ * the crash-mid-write case this module exists for; it is now EVIDENCE,
+ * mirroring `readEmitFailures`' own unparseable-line pattern below.
+ *
+ * BOTH FACTS ARE CARRIED ON THE ARRAY ITSELF (`.unknown`), never a second
+ * return shape: every existing caller that only wants rows (`reap.mjs`'s
+ * default pricing reader, `readDispatchSnapshot`'s `.length`) keeps working
+ * unchanged; `spendSoFar` is the one caller that looks for `.unknown`.
+ *
+ * @returns {object[] & {unknown?: {dir: string, error: string}[]}}
+ */
 export function readRunEvents(dir) {
+  let text;
   try {
-    return readFileSync(join(dir, 'events.jsonl'), 'utf8')
-      .split('\n')
-      .filter((l) => l.trim() !== '')
-      .map((l) => { try { return JSON.parse(l); } catch { return {}; } });
-  } catch {
-    return [];
+    text = readFileSync(join(dir, 'events.jsonl'), 'utf8');
+  } catch (err) {
+    const rows = [];
+    if (err && err.code !== 'ENOENT') {
+      rows.unknown = [{ dir, error: `${err?.code ?? 'read failed'}: ${err?.message ?? String(err)}` }];
+    }
+    return rows;
   }
+  const rows = [];
+  const unknown = [];
+  for (const line of text.split('\n')) {
+    if (line.trim() === '') continue;
+    try {
+      rows.push(JSON.parse(line));
+    } catch {
+      rows.push({ event_id: null, cost_usd: null, error: 'unparseable event line' });
+      unknown.push({ dir, error: 'unparseable event line' });
+    }
+  }
+  if (unknown.length > 0) rows.unknown = unknown;
+  return rows;
 }
 
 /** How much of `stderr.log`'s tail a snapshot carries — generous enough to
@@ -170,33 +204,54 @@ export function hostState() {
  * by `event_id` — a cycle channel re-logs the architect's own terminal row, so
  * a union without that notion of sameness double-counts (T1 864).
  *
+ * m7-d-guard-unknown-audit.md rows 26-27, PLUS the coarse-clock exclusion
+ * below. ENOENT on the `_logs/` readdir really is "this run dispatched
+ * nothing" (UNMEASURED is decided upstream by `summariseRunSpend`); anything
+ * else means `_logs/` EXISTS and cannot be enumerated — the worst case in the
+ * cluster, since it blinds the ceiling to 100% of the run's spend for as long
+ * as the condition persists. A per-entry stat failure that is not ENOENT has
+ * the same shape one level down: that ONE dispatch dir's spend would vanish
+ * permanently and silently from every subsequent read. Both are named on the
+ * returned array itself (`.unknown`), never silent.
+ *
  * @param {string} root the worktree
  * @param {number} sinceMs this run's start; older dispatches are not its spend
- * @returns {string[]} absolute directory paths
+ * @returns {string[] & {unknown?: {dir: string, error: string}[]}} absolute directory paths
  */
 export function collectSpendDirs(root, sinceMs) {
   const logsDir = join(root, '_logs');
   let entries;
   try {
     entries = readdirSync(logsDir, { withFileTypes: true }).filter((e) => e.isDirectory());
-  } catch {
-    // An absent `_logs` is a run that dispatched nothing. UNMEASURED is decided
-    // upstream, by `summariseRunSpend`, which knows whether a spawn was real.
-    return [];
+  } catch (err) {
+    const dirs = [];
+    if (err && err.code !== 'ENOENT') {
+      dirs.unknown = [{ dir: logsDir, error: `${err?.code ?? 'read failed'}: ${err?.message ?? String(err)}` }];
+    }
+    return dirs;
   }
   const dirs = [];
+  const unknown = [];
   for (const e of entries) {
     const dir = join(logsDir, e.name);
     let mtimeMs;
     try {
       mtimeMs = statSync(dir).mtimeMs;
-    } catch {
+    } catch (err) {
+      if (err && err.code === 'ENOENT') continue; // raced away between readdir and stat — honestly gone
+      unknown.push({ dir, error: `${err?.code ?? 'read failed'}: ${err?.message ?? String(err)}` });
       continue;
     }
-    if (mtimeMs < sinceMs) continue;
+    // FS_CLOCK_SLACK_MS (`beats-queue-terminal.mjs`) — a dispatch dir created
+    // right at run start can carry a kernel-coarse mtime that trails
+    // `Date.now()`'s own anchor (measured on this host: a write strictly
+    // AFTER an anchor stamped 1.1ms BEFORE it). Without the slack, a dir born
+    // at `sinceMs` is invisible to the ceiling for the run's entire life.
+    if (mtimeMs < sinceMs - FS_CLOCK_SLACK_MS) continue;
     if (!existsSync(join(dir, 'events.jsonl'))) continue;
     dirs.push(dir);
   }
+  if (unknown.length > 0) dirs.unknown = unknown;
   return dirs;
 }
 
@@ -277,7 +332,13 @@ export function spendSoFar({ root, startedMs, realSpawn, ceilingUsd, label, unme
     (acc, r) => ({ failures: acc.failures.concat(r.failures), unreadable: acc.unreadable.concat(r.unreadable) }),
     { failures: [], unreadable: [] },
   );
-  const stop = ceilingHaltVerdict({ spend, ceilingUsd, unpriced, emitFailures });
+  // m7-d-guard-unknown-audit.md rows 24-27 — spend reads that could not be
+  // trusted at all: an unreadable `_logs/`, a stat failure on one dispatch
+  // dir, an unreadable `events.jsonl`, or a torn line inside one. None of
+  // these render as "$0" or "nothing here"; `ceilingHaltVerdict` halts on
+  // them exactly as it halts on a ledger row that failed to write.
+  const spendUnknown = [...(dirs.unknown ?? []), ...events.flatMap((e) => e.unknown ?? [])];
+  const stop = ceilingHaltVerdict({ spend, ceilingUsd, unpriced, emitFailures, spendUnknown });
   const lines = [`[stories] spend ${label}: ${v.reason}`];
   for (const n of spend.notes ?? []) lines.push(`[stories] spend: ${n}`);
   // `forge-8vfn.7.6.76` — THE ARM ITSELF, PRINTED. A classifier only reachable
@@ -306,7 +367,10 @@ export function spendSoFar({ root, startedMs, realSpawn, ceilingUsd, label, unme
   for (const u of emitFailures.unreadable) {
     lines.push(`[stories] spend ${label}: the emit-failure sidecar could not be READ at ${u.dir} — ${u.error}`);
   }
-  return { spend, verdict: v, unpriced, emitFailures, stop, lines };
+  for (const u of spendUnknown) {
+    lines.push(`[stories] spend ${label}: this run's own spend could not be fully READ at ${u.dir} — ${u.error}`);
+  }
+  return { spend, verdict: v, unpriced, emitFailures, spendUnknown, stop, lines };
 }
 
 /**

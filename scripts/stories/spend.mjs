@@ -470,10 +470,18 @@ export function endedUnpricedTurns(eventLists) {
  * operator-actionable INFRASTRUCTURE fault, where `unenforceable` is a product
  * behaviour, and a run can plausibly have both.
  *
- * @param {{spend: ReturnType<typeof summariseRunSpend>, ceilingUsd: number, unpriced: ReturnType<typeof endedUnpricedTurns>, emitFailures?: {failures: object[], unreadable: {dir: string, error: string}[]}}} args
+ * m7-d-guard-unknown-audit.md rows 24-27 add a THIRD way the ledger cannot be
+ * trusted, alongside a row that failed to write: the run's own spend could not
+ * be fully READ at all — an unreadable `_logs/`, a stat failure on one
+ * dispatch dir, an unreadable `events.jsonl`, or a torn line inside one
+ * (`collectSpendDirs`/`readRunEvents`, `run-observe.mjs`). Same consequence —
+ * the spend total is a FLOOR, not a measurement — so `spendUnknown` shares the
+ * `row-write-failed` halt, distinguished only in the printed detail.
+ *
+ * @param {{spend: ReturnType<typeof summariseRunSpend>, ceilingUsd: number, unpriced: ReturnType<typeof endedUnpricedTurns>, emitFailures?: {failures: object[], unreadable: {dir: string, error: string}[]}, spendUnknown?: {dir: string, error: string}[]}} args
  * @returns {Readonly<{halt: boolean, kind: 'breach'|'row-write-failed'|'unenforceable'|null, headline: string|null, reason: string, note: string}>}
  */
-export function ceilingHaltVerdict({ spend, ceilingUsd, unpriced, emitFailures }) {
+export function ceilingHaltVerdict({ spend, ceilingUsd, unpriced, emitFailures, spendUnknown }) {
   const v = spendCeilingVerdict(spend, ceilingUsd);
   if (v.breached) {
     return Object.freeze({
@@ -507,10 +515,18 @@ export function ceilingHaltVerdict({ spend, ceilingUsd, unpriced, emitFailures }
   const unreadable = shapeOk
     ? (emitFailures?.unreadable ?? [])
     : [{ dir: '(caller)', error: `emitFailures is present but malformed (${Array.isArray(emitFailures) ? 'array' : typeof emitFailures}) — unreadable is UNKNOWN, not absent` }];
-  if (enforceable && (wrote.length > 0 || unreadable.length > 0)) {
+  // rows 24-27 — a malformed `spendUnknown` is treated the same as an absent
+  // one (an empty array), never as a shape error to halt on in its own right:
+  // unlike `emitFailures`, every caller of `spendSoFar` constructs this list
+  // itself from `collectSpendDirs`/`readRunEvents`, so there is no external
+  // fixture that could hand this a wrong shape the way `emitFailures` can.
+  const spendUnknownList = Array.isArray(spendUnknown) ? spendUnknown : [];
+  if (enforceable && (wrote.length > 0 || unreadable.length > 0 || spendUnknownList.length > 0)) {
     const detail = wrote.length > 0
       ? `${wrote.length} ledger row(s) FAILED TO WRITE (first: message=${wrote[0]?.message ?? 'unrecorded'}, error=${wrote[0]?.error ?? 'unrecorded'})`
-      : `the emit-failure sidecar could not be READ (${unreadable[0]?.dir}: ${unreadable[0]?.error}) — unreadable is UNKNOWN, not absent`;
+      : unreadable.length > 0
+        ? `the emit-failure sidecar could not be READ (${unreadable[0]?.dir}: ${unreadable[0]?.error}) — unreadable is UNKNOWN, not absent`
+        : `this run's own spend could not be fully READ (${spendUnknownList[0].dir}: ${spendUnknownList[0].error}) — a dispatch directory's spend is UNKNOWN, never zero`;
     return Object.freeze({
       halt: true, kind: 'row-write-failed', headline: 'LEDGER INCOMPLETE',
       reason:
