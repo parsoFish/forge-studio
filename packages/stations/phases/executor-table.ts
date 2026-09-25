@@ -16,7 +16,7 @@ import { REPO_RE, type TriggerPayload } from '@forge/flows/trigger-payload.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { enqueueGateFixWorkItems } from '@forge/flows/gate-fix-loop.ts';
 import { writeMergeGateConfigErrorMarker } from '@forge/flows/fix-work-items.ts';
-import { resolveBandGuard, BAND_CANONICAL_SLUG } from '@forge/agents/agent-bands.ts';
+import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
 import { runAgent } from '@forge/agents/run-agent.ts';
 import type { PhaseExecutor } from '@forge/kernel';
 import { createBandRegistry } from '@forge/kernel';
@@ -68,6 +68,15 @@ async function runWithWedge<T>(
 /** architect: silent DAG marker — runCycle already emitted the synthetic events. */
 const execArchitect: NodeExecutor = async () => { /* marker only */ };
 
+/** Seam F4: every band resolves the executing node's own def (never a canonical slug). */
+function resolveExecutingAgentDef(ctx: NodeExecContext): AgentDefinition {
+  const def = ctx.agents.get(ctx.node.agent ?? '');
+  if (!def) {
+    throw new Error(`band: no agent definition for node "${ctx.nodeId}" (agent:"${ctx.node.agent}")`);
+  }
+  return def;
+}
+
 /** pm: skip + rebase on any resume ('integrate' crash recovery, ADR-019;
  *  'develop' fix-loop re-entry, ADR-040); otherwise run the project manager. */
 const execPm: NodeExecutor = async (ctx) => {
@@ -87,7 +96,8 @@ const execPm: NodeExecutor = async (ctx) => {
     });
     return;
   }
-  await runWithWedge(ctx, (sig) => deps.runProjectManager(input, nodeLogger, sig));
+  const def = resolveExecutingAgentDef(ctx);
+  await runWithWedge(ctx, (sig) => deps.runProjectManager(input, nodeLogger, def, sig));
 };
 
 /**
@@ -101,7 +111,8 @@ const execPm: NodeExecutor = async (ctx) => {
  */
 const execDev: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps } = ctx;
-  await runWithWedge(ctx, (sig) => deps.runDeveloperLoop(input, nodeLogger, sig));
+  const def = resolveExecutingAgentDef(ctx);
+  await runWithWedge(ctx, (sig) => deps.runDeveloperLoop(input, nodeLogger, def, sig));
 };
 
 /**
@@ -115,20 +126,25 @@ const execDev: NodeExecutor = async (ctx) => {
  *
  * The STATION identity now matches the spec's word (forge-8vfn.6.10.18,
  * operator item 85): node id, band guard, `resume_from`, the requeue API
- * field and the CLI flag are all `integrate`. The agent slug (`demo-agent`)
- * and the demo ARTIFACT it produces (`demo.json`, `DEMO.md`) intentionally
- * keep the word `demo` — they name the artifact, not the station.
+ * field and the CLI flag are all `integrate`. The canonical agent slug
+ * (`demo-agent`) and the demo ARTIFACT it produces (`demo.json`, `DEMO.md`)
+ * intentionally keep the word `demo` — they name the artifact, not the
+ * station. Seam F4: like every other band, the events this band emits carry
+ * the EXECUTING node's own def slug (`resolveExecutingAgentDef`), never a
+ * hardcoded canonical literal — a canonical run still resolves to
+ * `demo-agent`, so this is a no-op for the shipped flow.
  */
 const execIntegrate: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, nodeId, state } = ctx;
+  const def = resolveExecutingAgentDef(ctx);
   const start = nodeLogger.emit({
     initiative_id: input.initiativeId,
     phase: 'orchestrator',
-    skill: 'demo-agent',
+    skill: def.slug,
     event_type: 'start',
     input_refs: [input.worktreePath],
     output_refs: [],
-    metadata: { agent_phase: 'integrate', agent_slug: 'demo-agent', node_id: nodeId },
+    metadata: { agent_phase: 'integrate', agent_slug: def.slug, node_id: nodeId },
   });
 
   // Close-contract prep (items 4,5): commit stragglers + push/sync so the
@@ -177,11 +193,11 @@ const execIntegrate: NodeExecutor = async (ctx) => {
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
       phase: 'orchestrator',
-      skill: 'demo-agent',
+      skill: def.slug,
       event_type: 'end',
       input_refs: [],
       output_refs: [],
-      metadata: { agent_phase: 'integrate', agent_slug: 'demo-agent', node_id: nodeId, status: 'failed', integrate_status: 'gate-config-error' },
+      metadata: { agent_phase: 'integrate', agent_slug: def.slug, node_id: nodeId, status: 'failed', integrate_status: 'gate-config-error' },
     });
     return;
   }
@@ -218,11 +234,11 @@ const execIntegrate: NodeExecutor = async (ctx) => {
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
       phase: 'orchestrator',
-      skill: 'demo-agent',
+      skill: def.slug,
       event_type: 'end',
       input_refs: [],
       output_refs: [],
-      metadata: { agent_phase: 'integrate', agent_slug: 'demo-agent', node_id: nodeId, status: 'failed', integrate_status: 'gate-red' },
+      metadata: { agent_phase: 'integrate', agent_slug: def.slug, node_id: nodeId, status: 'failed', integrate_status: 'gate-red' },
     });
     return;
   }
@@ -243,11 +259,11 @@ const execIntegrate: NodeExecutor = async (ctx) => {
     initiative_id: input.initiativeId,
     parent_event_id: start.event_id,
     phase: 'orchestrator',
-    skill: 'demo-agent',
+    skill: def.slug,
     event_type: 'end',
     input_refs: [],
     output_refs: [result.demoJsonPath],
-    metadata: { agent_phase: 'integrate', agent_slug: 'demo-agent', node_id: nodeId, integrate_status: result.status },
+    metadata: { agent_phase: 'integrate', agent_slug: def.slug, node_id: nodeId, integrate_status: result.status },
   });
 };
 
@@ -261,17 +277,18 @@ const execIntegrate: NodeExecutor = async (ctx) => {
  */
 const execAdversarialReview: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, nodeId } = ctx;
+  const def = resolveExecutingAgentDef(ctx);
   const start = nodeLogger.emit({
     initiative_id: input.initiativeId,
     phase: 'orchestrator',
-    skill: 'adversarial-review',
+    skill: def.slug,
     event_type: 'start',
     input_refs: [input.worktreePath],
     output_refs: [],
-    metadata: { agent_phase: 'review', agent_slug: 'adversarial-review', node_id: nodeId },
+    metadata: { agent_phase: 'review', agent_slug: def.slug, node_id: nodeId },
   });
 
-  const result = await runWithWedge(ctx, (sig) => deps.runAdversarialReview(input, nodeLogger, sig));
+  const result = await runWithWedge(ctx, (sig) => deps.runAdversarialReview(input, nodeLogger, def, sig));
   if (result.status === 'failed') {
     throw new Error(
       `adversarial review pipeline failed (${result.reason}: ${result.detail}) — ` +
@@ -283,11 +300,11 @@ const execAdversarialReview: NodeExecutor = async (ctx) => {
     initiative_id: input.initiativeId,
     parent_event_id: start.event_id,
     phase: 'orchestrator',
-    skill: 'adversarial-review',
+    skill: def.slug,
     event_type: 'end',
     input_refs: [],
     output_refs: [result.findingsPath],
-    metadata: { agent_phase: 'review', agent_slug: 'adversarial-review', node_id: nodeId, counts: result.counts },
+    metadata: { agent_phase: 'review', agent_slug: def.slug, node_id: nodeId, counts: result.counts },
   });
 };
 
@@ -310,9 +327,10 @@ const execReview: NodeExecutor = async (ctx) => {
 const execReflect: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, state } = ctx;
   if (!state.closure?.merged) return;
+  const def = resolveExecutingAgentDef(ctx);
   try {
     try {
-      const reflectorResult = await deps.runReflector(input, nodeLogger);
+      const reflectorResult = await deps.runReflector(input, nodeLogger, def);
       state.reflectionStatus = reflectorResult.reflection_status;
       state.lintStatus = reflectorResult.lint_status;
     } catch (err) {
@@ -327,7 +345,7 @@ const execReflect: NodeExecutor = async (ctx) => {
       nodeLogger.emit({
         initiative_id: input.initiativeId,
         phase: 'reflection',
-        skill: 'reflector',
+        skill: def.slug,
         event_type: 'error',
         input_refs: [],
         output_refs: [],
@@ -519,20 +537,10 @@ const execAgent: NodeExecutor = async (ctx) => {
     throw new Error(`execAgent: no agent definition for node "${ctx.nodeId}" (agent:"${node.agent}")`);
   }
 
-  // ADR-039: a declared band guard routes this node to its orchestrator band
-  // (the phase pipeline machinery) instead of the bare generic spawn.
-  // Runtime backstop mirroring the ralph guard below (and the
-  // composition/band-guard lint): the band pipelines load the CANONICAL
-  // agent's SKILL.md themselves, so a non-canonical def declaring the guard
-  // would silently run the wrong identity — fail loud instead.
+  // ADR-039 (seam F4): a declared band guard routes to its band, which loads
+  // THIS declaring def's own SKILL.md — never a hardcoded canonical slug.
   const bandGuard = resolveBandGuard(def);
   if (bandGuard) {
-    const canonicalSlug = BAND_CANONICAL_SLUG[bandGuard];
-    if (def.slug !== canonicalSlug) {
-      throw new Error(
-        `execAgent: agent "${def.slug}" declares band guard "${bandGuard}", which routes to the canonical ${canonicalSlug} pipeline — restricted to that slug until the bands generalise; \`forge studio lint\` flags this at authoring time`,
-      );
-    }
     const band = AGENT_BANDS.get(bandGuard);
     if (band === undefined) {
       throw new Error(
@@ -542,20 +550,9 @@ const execAgent: NodeExecutor = async (ctx) => {
     return band(ctx);
   }
 
-  // ADR-039: a declared ralph loop routes to the dev-loop pipeline — the one
-  // shipped multi-iteration executor (per-WI worktrees, merge queue, gates).
-  // `runAgent` itself REJECTS ralph defs; the loop machinery is
-  // orchestrator-band, selected here by the def's declared strategy.
-  // Runtime backstop for the lint restriction (validate.ts
-  // runtime/loop-strategy): the dev-loop pipeline ignores the declaring
-  // def's own prompt/tools, so a non-canonical ralph def would silently
-  // mis-run under the wrong identity — fail loud instead.
+  // ADR-039 (seam F4): a declared ralph loop routes to the dev-loop pipeline,
+  // which now spawns under THIS declaring def, not a hardcoded canonical one.
   if (def.runtime.loopStrategy === 'ralph') {
-    if (def.slug !== 'developer-ralph') {
-      throw new Error(
-        `execAgent: agent "${def.slug}" declares loopStrategy 'ralph', which routes to the dev-loop pipeline — restricted to developer-ralph until declared fanout generalises the loop (R2-03/R4-06); \`forge studio lint\` flags this at authoring time`,
-      );
-    }
     return execDev(ctx);
   }
 

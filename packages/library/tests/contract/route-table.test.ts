@@ -86,6 +86,10 @@ const TABLE = libraryRoutes({ agentFacts: fixtureAgentFacts('/nonexistent-forge-
  * decline.ts, forge-8vfn.5.2) — a genuinely NEW route, not carved from an
  * if-chain (bridge-studio-hooks.ts sits at the 800-line hard cap, so the
  * route lives in a sibling file from birth; see that file's own header).
+ *
+ * PLUS ANOTHER: `POST /api/studio/hooks/:id/test-fire` (bridge-studio-hooks-
+ * test-fire.ts, forge-6gv.8.1) — likewise genuinely new, never dispatched by
+ * any if-chain (hooks had no test-fire control before this bead).
  */
 const PINNED: ReadonlyArray<readonly [string, string]> = [
   // ---- bridge-studio-catalog.ts (1) ----
@@ -102,13 +106,15 @@ const PINNED: ReadonlyArray<readonly [string, string]> = [
   ['PUT', '/api/studio/skills/:id'],
   ['DELETE', '/api/studio/skills/:id'],
   ['GET', '/api/studio/skills/:id'],
-  // ---- bridge-studio-hooks.ts (8) + bridge-studio-hooks-decline.ts (1) ----
+  // ---- bridge-studio-hooks.ts (8) + bridge-studio-hooks-decline.ts (1)
+  // + bridge-studio-hooks-test-fire.ts (1) ----
   ['GET', '/api/studio/hooks'],
   ['POST', '/api/studio/hooks'],
   ['POST', '/api/studio/hooks/:id/approve'],
   ['POST', '/api/studio/hooks/:id/override'],
   ['POST', '/api/studio/hooks/:id/revoke-approval'],
   ['POST', '/api/studio/hooks/:id/decline'],
+  ['POST', '/api/studio/hooks/:id/test-fire'],
   ['PUT', '/api/studio/hooks/:id'],
   ['DELETE', '/api/studio/hooks/:id'],
   ['GET', '/api/studio/hooks/:id'],

@@ -16,12 +16,13 @@
  *     "we also need to include the community source and refreshing that to be
  *      a full and complete list consuming from the community sources"
  *
- * So beats 3-6 stand between opening the browser and installing anything, and
+ * So beats 3-8 stand between opening the browser and installing anything, and
  * they are the beats that hold this surface to its own promise. Beat 3 pins
  * the BEFORE — nine declared hubs of which FOUR contribute nothing — beat 4
- * refreshes, and beats 5 and 6 are the completeness claim: after a refresh
- * every declared source contributes what it publishes, and no row is still a
- * hand-curated seed. `_1.0/stories/S8.md` records what actually happens.
+ * refreshes, and beats 5-8 are the completeness claim: after a refresh every
+ * declared source contributes what it publishes or says why not, the rows the
+ * refresh discovered are WRITTEN into the registry (beat 6, operator item 87),
+ * and no row is still a hand-curated seed. `_1.0/stories/S8.md` records what actually happens.
  *
  * TWO DOORS, AND WHAT BEAT 9 NOW MEASURES. §3's row says "install by id AND by
  * URL — they are different paths". At authoring time they were not: this lane
@@ -35,7 +36,7 @@
  * **Operator ruling 477 built the missing half** (M6-D): a row whose upstream
  * forge can actually read a package out of now offers the install, and pressing
  * it fetches the package, vendors it, and lands it `needs-review` behind the
- * same trust gate every other install passes through. Beat 9's assertion is
+ * same trust gate every other install passes through. Beat 11's assertion is
  * UNCHANGED — it always asserted `install-action: 'install'`, and it was red
  * for the whole campaign because the product answered `browse-upstream`.
  *
@@ -60,7 +61,7 @@
  *
  * ON THE `data-*` KEYS. Every key and value below was copied from the live DOM
  * of a bridge booted from this lane's own worktree (pid 2560406,
- * `/proc/<pid>/cwd` verified), EXCEPT the post-install states of beats 14-16,
+ * `/proc/<pid>/cwd` verified), EXCEPT the post-install states of beats 16-18,
  * which are transcribed from `/hooks/pre-pr-security-review` — a real hook in
  * the same `needs-review` state this install lands in — and from
  * `docs/reference/studio-dom-contract.md`'s `data-install-state` vocabulary.
@@ -89,7 +90,7 @@
  *
  * WHERE A BEAT CANNOT BE EXPRESSED it says so and stands anyway:
  *
- *   - Beat 11 filters with the search box rather than the kind buttons.
+ *   - Beat 13 filters with the search box rather than the kind buttons.
  *     `[data-action="filter-kind"]` is carried by FIVE buttons that differ
  *     only on `data-kind`, and `[data-action="filter-hub"]` by nine that
  *     differ only on `data-hub-id`; §3.1's `press` verb names a `data-action`
@@ -109,9 +110,10 @@
  *     ever exported.
  *
  * SWEEP. `sweep.mjs` removes `projects/story-<id>` and
- * `brain/projects/story-<id>` only. Beat 8 writes a row into the repo-tracked
+ * `brain/projects/story-<id>` only. Beat 10 writes a row into the repo-tracked
  * `studio/community/registry.yaml`, beat 4 rewrites the same file's
- * `meta.lastRefresh`, and beat 14 vendors a package into `studio/hooks/`.
+ * `meta.lastRefresh` AND appends every discovered skill row (operator item
+ * 87), and beat 16 vendors a package into `studio/hooks/`.
  * None of the three is swept, so a second run meets a registry that already
  * carries `story-s8-skill` and a hook that is already installed. Bead
  * `forge-8vfn.2.26`, filed by the S4 lane for the same class and hit again by
@@ -245,9 +247,10 @@ export default {
     {
       // AMEND-3 (M6-D, T1 566/893/922) — this beat asserted `hub-declared-only:
       // 'false'` for `skills-sh`, which is `itemCount === 0` on a hub CHIP, and
-      // no indexer can move it: discovery PROPOSES and never writes
-      // (`community-hub-index.ts`'s own first rule), while a chip counts
-      // `registry.yaml` rows. The beat encoded a product design the product does
+      // no indexer could move it then: discovery PROPOSED and never wrote,
+      // while a chip counts `registry.yaml` rows. (Operator item 87, #892,
+      // superseded that: the refresh now WRITES discovered skill rows — beat 6
+      // reads them. `skills-sh` still cannot move: it is unreachable.) The beat encoded a product design the product does
       // not have and forbids by rule, so it amends to the product's truth rather
       // than the product bending to it — 566, with A's S9 amend-4 as precedent.
       //
@@ -281,7 +284,44 @@ export default {
           'hub-reason': 'not-reachable',
         },
       },
-      say: 'This is what "browse the registry" has to mean, and it has three honest endings rather than one. A source forge can reach contributes what it publishes — the MCP registry proposes rows here, and says how much of itself it was read. A source forge cannot reach says so on its own chip: skills.sh sits outside the fetch allowlist, because letting forge call a new origin is a decision about dependencies, not a refresh. And a source forge reads and finds nothing forge can install is a third thing again — claude-code-templates publishes hooks, and install-by-URL knows only skill packages. What none of these does is write to your registry: discovery PROPOSES, and a human promotes. A list that grew by itself would be a list you did not choose.',
+      say: 'This is what "browse the registry" has to mean, and it has three honest endings rather than one. A source forge can reach contributes what it publishes — the MCP registry proposes rows here, and says how much of itself it was read. A source forge cannot reach says so on its own chip: skills.sh sits outside the fetch allowlist, because letting forge call a new origin is a decision about dependencies, not a refresh. And a source forge reads and finds nothing forge can install is a third thing again — claude-code-templates publishes hooks, and install-by-URL knows only skill packages.',
+    },
+    {
+      // AMEND (T1 1340, operator item 87 via #892 ee29c42c) — NEW BEAT. The
+      // refresh now APPENDS every skill row a declared GitHub hub publishes and
+      // the registry lacks (`community-refresh-run.ts`'s critical-section write,
+      // re-deduped against a curated row of the same id, which is never
+      // overwritten). Ruling 566's "proposes, never writes" is superseded, and
+      // beat 5's `say` no longer claims it.
+      //
+      // WHAT PROVES THE WRITE: a registry CARD (`CommunityCard`,
+      // `app/community/page.tsx`), not the "discovered" panel. The card is
+      // rendered from the registry as reloaded after the refresh, so it is the
+      // row itself. `item-category: 'uncategorized'` is the category the write
+      // assigns (`DISCOVERED_ITEM_CATEGORY`) and NO curated row carries it
+      // (measured: 0 of 9 on this tree), so a curated row cannot answer this
+      // beat. `item-hub` bound means the row counts on a hub chip (chips count
+      // `items` by `hub.id`, `hubCountsFrom`) — the "chip counts real rows"
+      // half of item 87.
+      //
+      // `item-id` and `item-hub` are PLACEHOLDERS on purpose: which skills an
+      // upstream hub publishes is the hub's, not this story's, and a literal id
+      // would red on an upstream rename. The fence restores `registry.yaml` by
+      // delta after every run (`sweep.mjs`), so each run's refresh starts from
+      // the committed registry and discovers again.
+      act: 'Read the rows the refresh wrote into the registry',
+      expect: {
+        route: '/community',
+        data: {
+          page: 'community-browser',
+          'page-ready': 'true',
+          'item-kind': 'skill',
+          'item-category': 'uncategorized',
+          'item-id': '<writtenRowId>',
+          'item-hub': '<writtenRowHub>',
+        },
+      },
+      say: 'A refresh does not only report what the sources publish — it writes it. Every skill a declared hub publishes that the registry did not carry is now a real row, counted on its hub’s chip and installable like any other, and a row the operator curated by hand is never overwritten. forge still reads only the hubs the operator declared.',
     },
     {
       // 7.6.91 (T1 975). THE THIRD STATE, ASSERTED RATHER THAN NARRATED. Beat 5
@@ -509,7 +549,7 @@ export default {
       // `/hooks/pre-pr-security-review`, a real hook sitting in exactly this
       // state, rather than observed post-install (which would have vendored
       // the package before the story ran). `hook-event` is read from the
-      // package's own `hook.yaml`, which beat 12 has the operator reading.
+      // package's own `hook.yaml`, which beat 14 has the operator reading.
       act: 'Follow it to the page that owns the trust decision',
       do: [{ press: 'open-owning-page' }],
       expect: {
@@ -528,7 +568,7 @@ export default {
     {
       // Fully expressible. `approve-hook` is enabled only when the verdict is
       // not blocked and trust is `needs-review` — approval can never launder a
-      // blocked verdict, which is why beat 13 comes first. The ledger stores
+      // blocked verdict, which is why beat 15 comes first. The ledger stores
       // approvals and revocations only and has no "declined" state
       // (`forge-8vfn.5.2`), so this beat asserts approval rather than a
       // decision either way.
@@ -567,7 +607,7 @@ export default {
       // root's. Grounded on the HOOK deliberately — see WHY BEAT 18 IS
       // GROUNDED ON THE HOOK in the header: the skill groups already carry
       // community skills nobody installed, so a skill assertion here would be
-      // green before beat 14 ever ran and would report a CATALOGUE ENTRY as
+      // green before beat 16 ever ran and would report a CATALOGUE ENTRY as
       // though it were an INSTALL. The hook group carries two chips today,
       // both forge's own.
       act: 'Find the installed hook in the palette an agent composes from',

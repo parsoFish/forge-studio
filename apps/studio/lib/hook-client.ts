@@ -179,6 +179,24 @@ export type HookDetail = HookLibraryEntryOk & {
    *  never fabricated. */
   lastFireAt?: string;
   lastFireOutcome?: HookFireOutcome;
+  /** forge-6gv.8.1 (library-33) — an operator's past test-fires, newest
+   *  first. Always an array (possibly empty), never absent. */
+  testFireRuns: HookTestFireLogEntry[];
+};
+
+/** forge-6gv.8.1 (library-33) — mirrors `bridge-studio-hooks-test-fire.ts`'s
+ *  own `HookTestFireLogEntry` wire shape. Reuses `HookFireOutcome` (the
+ *  server's test-fire log never records 'refused' — an unapproved hook is
+ *  rejected with a 409 before anything is logged — but the type union is
+ *  shared rather than duplicated). */
+export type HookTestFireLogEntry = {
+  at: string;
+  event: HookLifecycleEvent;
+  outcome: HookFireOutcome;
+  exitCode: number | null;
+  durationMs: number | null;
+  stdoutTail: string;
+  stderrTail: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -377,6 +395,8 @@ export function parseHookDetail(raw: unknown): HookDetail {
   if (rawOutcome !== undefined && !(HOOK_FIRE_OUTCOMES as readonly string[]).includes(rawOutcome as string)) {
     throw new Error(`unrecognised lastFireOutcome: ${JSON.stringify(rawOutcome)}`);
   }
+  const testFireRunsRaw = r['testFireRuns'];
+  if (!Array.isArray(testFireRunsRaw)) throw new Error(`expected "testFireRuns" to be an array, got ${JSON.stringify(testFireRunsRaw)}`);
 
   return {
     ...entry,
@@ -387,6 +407,32 @@ export function parseHookDetail(raw: unknown): HookDetail {
     recentFireCount: reqNumber(r, 'recentFireCount'),
     ...(r['lastFireAt'] !== undefined ? { lastFireAt: reqString(r, 'lastFireAt') } : {}),
     ...(rawOutcome !== undefined ? { lastFireOutcome: rawOutcome as HookFireOutcome } : {}),
+    testFireRuns: testFireRunsRaw.map(parseHookTestFireLogEntry),
+  };
+}
+
+function reqNullableNumber(r: Record<string, unknown>, key: string): number | null {
+  const v = r[key];
+  if (v === null || typeof v === 'number') return v;
+  throw new Error(`expected "${key}" to be a number or null, got ${JSON.stringify(v)}`);
+}
+
+/** forge-6gv.8.1 (library-33) — one `testFireRuns[]` entry. Same refusal
+ *  discipline as every other parser here: a malformed entry throws. */
+export function parseHookTestFireLogEntry(raw: unknown): HookTestFireLogEntry {
+  const r = asRecord(raw);
+  const outcome = r['outcome'];
+  if (!(HOOK_FIRE_OUTCOMES as readonly string[]).includes(outcome as string)) {
+    throw new Error(`unrecognised test-fire outcome: ${JSON.stringify(outcome)}`);
+  }
+  return {
+    at: reqString(r, 'at'),
+    event: parseHookLifecycleEvent(r['event']),
+    outcome: outcome as HookFireOutcome,
+    exitCode: reqNullableNumber(r, 'exitCode'),
+    durationMs: reqNullableNumber(r, 'durationMs'),
+    stdoutTail: reqString(r, 'stdoutTail'),
+    stderrTail: reqString(r, 'stderrTail'),
   };
 }
 
@@ -512,4 +558,31 @@ export async function deleteHook(id: string): Promise<{ ok: boolean; error?: str
 export async function revokeHookApproval(id: string): Promise<{ ok: boolean; error?: string }> {
   const r = await hookClientPost(`/api/studio/hooks/${encodeURIComponent(id)}/revoke-approval`, {});
   return { ok: r.ok, error: r.error };
+}
+
+/** forge-6gv.8.1 (library-33) — run the hook for real through the same gate
+ *  production dispatch uses. `status` is surfaced so the caller can render
+ *  a 409 (unapproved) distinctly from an unreachable bridge — mirroring
+ *  `fetchHook`'s own convention. */
+export async function testFireHook(
+  id: string,
+): Promise<{ ok: boolean; status?: number; entry?: HookTestFireLogEntry; error?: string }> {
+  try {
+    const res = await bridgeFetch(`/api/studio/hooks/${encodeURIComponent(id)}/test-fire`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = (data as { error?: string })?.error;
+      return { ok: false, status: res.status, error: err ?? `HTTP ${res.status}` };
+    }
+    try {
+      return { ok: true, status: res.status, entry: parseHookTestFireLogEntry(data) };
+    } catch (err) {
+      return { ok: false, status: res.status, error: String(err) };
+    }
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
 }
