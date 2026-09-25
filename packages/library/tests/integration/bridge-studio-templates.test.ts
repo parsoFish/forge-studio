@@ -100,6 +100,70 @@ test('AT-41: GET /api/studio/templates returns { templates: [...] } with the lib
 });
 
 // ---------------------------------------------------------------------------
+// OOTB-provenance (bead forge-8vfn.8.3.7, M7-C item 76). Every fixture seeded
+// in `before()` above carries no `origin:` frontmatter key at all — the exact
+// shape every shipped template carries today (studio/artifact-templates/*.md,
+// studio/demo-elements/*.md, studio/starters/projects/<id>/) — and
+// project-scaffold has no create route at all (SCAFFOLD_READONLY), so it is
+// OOTB by construction, never a per-item guess.
+// ---------------------------------------------------------------------------
+
+test('AT-46: a shipped template (planning), a shipped template (demo-output) and a scaffold (no create route) all read origin:"ootb" on the list route', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/templates`);
+  const body = (await res.json()) as { templates: Array<Record<string, unknown>> };
+  const plan = body.templates.find((t) => t['id'] === 'plan');
+  const narrative = body.templates.find((t) => t['id'] === 'narrative');
+  const scaffold = body.templates.find((t) => t['id'] === 'cli');
+  assert.equal(plan!['origin'], 'ootb', `planning fixture with no origin: key must read ootb, got ${JSON.stringify(plan!['origin'])}`);
+  assert.equal(narrative!['origin'], 'ootb', `demo-output fixture with no origin: key must read ootb, got ${JSON.stringify(narrative!['origin'])}`);
+  assert.equal(scaffold!['origin'], 'ootb', `a project-scaffold entry (no create route) must always read ootb, got ${JSON.stringify(scaffold!['origin'])}`);
+});
+
+test('AT-47: a shipped template reads origin:"ootb" on the detail route too', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/templates/plan`);
+  const body = (await res.json()) as Record<string, unknown>;
+  assert.equal(body['origin'], 'ootb');
+});
+
+test('AT-48: POST /api/studio/templates stamps origin:"operator" server-side, ignoring any client-supplied origin, read back on list + detail', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/templates`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify({
+      category: 'planning',
+      id: 'created-origin-template',
+      content: '---\nid: created-origin-template\nname: Created Origin Template\nkind: file\norigin: ootb\n---\n\nBody.\n',
+    }),
+  });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+
+  const listRes = await fetch(`${bridgeUrl}/api/studio/templates`);
+  const listBody = (await listRes.json()) as { templates: Array<Record<string, unknown>> };
+  const entry = listBody.templates.find((t) => t['id'] === 'created-origin-template');
+  assert.ok(entry, 'the created template must appear in the list');
+  assert.equal(entry!['origin'], 'operator', `a route-created template must read origin:"operator" (never the client-claimed "ootb"), got ${JSON.stringify(entry!['origin'])}`);
+
+  const detailRes = await fetch(`${bridgeUrl}/api/studio/templates/created-origin-template`);
+  const detailBody = (await detailRes.json()) as Record<string, unknown>;
+  assert.equal(detailBody['origin'], 'operator');
+});
+
+test('AT-49: duplicateOf also stamps origin:"operator" on the new copy, independent of the source template\'s own origin', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/templates`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify({ category: 'planning', id: 'duplicated-origin-template', duplicateOf: 'plan' }),
+  });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+
+  const detailRes = await fetch(`${bridgeUrl}/api/studio/templates/duplicated-origin-template`);
+  const detailBody = (await detailRes.json()) as Record<string, unknown>;
+  assert.equal(detailBody['origin'], 'operator', `a duplicate must read origin:"operator" even though its source ("plan") is ootb, got ${JSON.stringify(detailBody['origin'])}`);
+});
+
+// ---------------------------------------------------------------------------
 // GET /api/studio/templates/:id — AT-42, AT-43, AT-44
 // ---------------------------------------------------------------------------
 
