@@ -82,6 +82,7 @@ import { classifyCriticFindings } from './verify-cycle-plan-gate.mjs';
 import { sumRunCost } from './verify-cycle-cost.mjs';
 import { flowDeclaresMergedReflect, flowDefinition, knownFlowIds, resolveFlowSelection } from './verify-cycle-flow.mjs';
 import { createStageTwo } from './verify-cycle-stage2.mjs';
+import { captureHandle, killGroupIfLive, runGuarded } from './verify-cycle-teardown.mjs';
 import { getPaths } from '@forge/flows';
 import { DEFAULT_PROJECT, buildOutcomeChecks, resolveReflectWaitDeadlineMs } from './lib/verify-outcomes.mjs';
 
@@ -482,14 +483,18 @@ async function startWatch() {
   };
   // Reuse-existing-watch optimization (PRESERVED, M7-7): probe the bridge
   // health endpoint + the UI homepage; only spawn fresh if either is absent.
+  // `spawned: false` is load-bearing for scripts/verify-cycle-teardown.mjs —
+  // a studio this run only REUSED is never the one it tears down.
   if ((await probe('http://127.0.0.1:4123/api/health')) && (await probe('http://localhost:4124/'))) {
     log('reusing existing forge studio on 4124/4123');
-    return { proc: null, uiUrl: 'http://localhost:4124', bridgeUrl: 'http://127.0.0.1:4123' };
+    return { proc: null, uiUrl: 'http://localhost:4124', bridgeUrl: 'http://127.0.0.1:4123', spawned: false, handle: null };
   }
   // M7-7: spawn the canonical `forge studio` launcher; readiness via its
   // deterministic 'forge-studio-ready {json}' stdout line. W7-C3: the spawn/
   // ready/timeout-group-kill core is the shared scripts/lib/boot-studio.mjs
-  // (one implementation; sole caller since 7.6.131 retired the journeys).
+  // (one implementation; sole caller since 7.6.131 retired the journeys). A
+  // boot that times out or dies before ready self-cleans there (kills its own
+  // group) — nothing more for this run to track before the promise settles.
   // Budget: 150s = the pre-existing 120s (bridge start + port takeover +
   // `next start` bind + first-request probe) + the ~30s cold `next build`
   // allowance (W6-P3 review finding #4, measured 18.06s + 50% margin —
@@ -504,15 +509,10 @@ async function startWatch() {
       if (l.trim()) log(`[watch] ${l}`);
     }
   };
-  // Track from SPAWN, not from ready (`onSpawn`): a boot that never reaches
-  // ready must still leave the fatal handler something to kill — the
-  // half-booted studio already holds ports 4123/4124.
-  const fresh = await spawnStudioReady({
-    fullEnv: forgeSpawnEnv(), timeoutMs: 150_000, log: teeLog,
-    onSpawn: (proc) => { activeWatchProc = proc; },
-  });
+  const fresh = await spawnStudioReady({ fullEnv: forgeSpawnEnv(), timeoutMs: 150_000, log: teeLog });
   fresh.proc.on('exit', (code, signal) => log(`[watch] EXITED code=${code} signal=${signal}`));
-  return { proc: fresh.proc, uiUrl: fresh.uiUrl, bridgeUrl: fresh.bridgeUrl };
+  // handle = what verify-cycle-teardown.mjs signals at exit (M7-A row 82).
+  return { proc: fresh.proc, uiUrl: fresh.uiUrl, bridgeUrl: fresh.bridgeUrl, spawned: true, handle: captureHandle(fresh.proc) };
 }
 
 /** Health-probe the watch bridge; restart it if it died mid-run. The bridge
@@ -524,21 +524,8 @@ async function ensureWatch(watch) {
     if (r.ok) return watch;
   } catch { /* dead — fall through to restart */ }
   log('!! watch bridge is DOWN mid-run — restarting it (state is disk-backed, safe)…');
-  try { process.kill(-watch.proc.pid, 'SIGKILL'); } catch { /* already gone */ }
-  const fresh = await startWatch();
-  activeWatchProc = fresh.proc;
-  return fresh;
-}
-
-function stopWatch(proc) {
-  if (!proc) return Promise.resolve();
-  return new Promise((res) => {
-    let settled = false;
-    const done = () => { if (settled) return; settled = true; res(); };
-    proc.on('exit', done);
-    try { process.kill(-proc.pid, 'SIGTERM'); } catch { /* */ }
-    setTimeout(() => { try { process.kill(-proc.pid, 'SIGKILL'); } catch { /* */ } done(); }, 3000);
-  });
+  if (watch.handle) killGroupIfLive(watch.handle, 'SIGKILL');
+  return startWatch();
 }
 
 function startServe() {
@@ -908,7 +895,9 @@ async function runServeStage(page, label) {
   return outcome;
 }
 
-let activeWatchProc = null;
+// The two ports a spawned studio holds (bridge + Next UI) — the teardown
+// verification target (verify-cycle-teardown.mjs `verifyTornDown`).
+const STUDIO_PORTS = [4123, 4124];
 
 // ---- post-run boundary check (R5-01-F3) ----
 // The boundary being protected is the FORGE repo itself, never the managed
@@ -985,220 +974,230 @@ async function main() {
   }
 
   log('starting forge watch…');
-  let watch = await startWatch();
-  activeWatchProc = watch.proc;
-  log(`watch ready: ui=${watch.uiUrl} bridge=${watch.bridgeUrl}`);
+  // Every exit below (return OR throw, incl. the REFUSING throw further
+  // down) runs through this ONE finally, which tears down a studio this run
+  // SPAWNED and never one it only REUSED (M7-A row 82; verify-cycle-teardown.mjs).
+  let watch = null;
+  await runGuarded(
+    { getWatch: () => watch, ports: STUDIO_PORTS, log, onIncomplete: () => { process.exitCode = 1; } },
+    async () => {
+    watch = await startWatch();
+    log(`watch ready: ui=${watch.uiUrl} bridge=${watch.bridgeUrl}`);
 
-  const browser = await chromium.launch();
-  const ctx = await browser.newContext({
-    viewport: { width: 1400, height: 1400 },
-    recordVideo: { dir: VIDEO_DIR, size: { width: 1400, height: 1400 } },
-  });
-  const page = await ctx.newPage();
-  page.on('pageerror', (err) => console.error(`[pageerror] ${err.message}`));
-
-  await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(
-    () => document.querySelector('main')?.getAttribute('data-page-ready') === 'true',
-    undefined,
-    { timeout: 15000 },
-  ).catch(() => log('page-ready timed out'));
-  await captureFrame(page, 'initial-load');
-
-  // ===== STAGE 1: architect (interview + plan gate) → forge-architect serve =====
-  // Plan-everything-before-kickoff: the session may promote N dependent
-  // initiatives; ONE serve pass decomposes them all (the dependency gate is
-  // flow_id-aware — decompose flows never wait on prerequisite merges).
-  const { initiatives, sessionId: architectSessionId } = await driveArchitect(page, watch, { project: PROJECT, idea, repoPath });
-  const architectStage = await runServeStage(page, 'architect');
-  // Focus the first threaded cycle in the dashboard for the frame gallery.
-  try {
-    await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector(`[data-cycle-id="${initiatives[0].cycleId}"]`, { timeout: 10000 });
-    await page.locator(`[data-cycle-id="${initiatives[0].cycleId}"]`).first().click();
-    await captureFrame(page, 'decision-pm-work-items');
-  } catch (err) { log(`cycle focus failed: ${err.message}`); }
-
-  // ===== STAGE 2+3: batch hand-off → serve/approve loop until all initiatives land =====
-  // All initiatives enqueue for develop at once; the scheduler's merge-gate
-  // holds dependents until their prerequisite reaches done/. Each serve pass
-  // builds whatever is eligible; each ready-for-review cycle gets the verdict
-  // approve; the loop repeats until every initiative merged (or passes run out).
-  if (!architectStage.ok) { // 6.10.6 — gate the hand-off; nothing downstream can tell later
-    log('REFUSING the develop hand-off — the architect stage did not succeed (reasons above).');
-    await watch.stop?.();
-    process.exit(1);
-  }
-  await stageTwo.handoff(watch.bridgeUrl, initiatives.map((i) => i.initiativeId));
-  const remaining = new Map(initiatives.map((i) => [i.initiativeId, i]));
-  const approveFailures = new Map();
-  let sendBackDone = !SEND_BACK;
-  const maxPasses = initiatives.length + 2;
-  for (let pass = 1; remaining.size > 0 && pass <= maxPasses; pass++) {
-    // SCOPE (6.10.6): only the architect hand-off is GATED — the develop passes have
-    // their own convergence logic. Their outcome is still classified and logged.
-    await runServeStage(page, `develop-pass-${pass}`);
-    await sleep(2000);
-    watch = await ensureWatch(watch);
-    for (const init of [...remaining.values()]) {
-      let status = await cycleStatusFromBridge(watch.bridgeUrl, init.cycleId);
-      log(`develop status for ${init.initiativeId} after pass ${pass}: ${status}`);
-      if (status === 'done') { remaining.delete(init.initiativeId); continue; }
-      if (status !== 'ready-for-review') continue;
-      await captureFrame(page, `after-develop-${init.initiativeId}`);
-
-      // Optional send-back pass (ADR-026 in-place drain) — first initiative only.
-      if (!sendBackDone) {
-        sendBackDone = true;
-        await captureDecisionReviewEvaluation(page, watch.uiUrl, init.cycleId);
-        log('posting send-back verdict to /api/verdict…');
-        const sendBackOk = await postSendBack(watch.bridgeUrl, init.initiativeId);
-        if (sendBackOk) {
-          await captureFrame(page, 'decision-send-back');
-          await runServeStage(page, 'sendback-drain');
-          await sleep(2000);
-          try {
-            await page.goto(`${watch.uiUrl}/artifact?run=${encodeURIComponent(init.cycleId)}&type=verdict&mode=gate`, { waitUntil: 'domcontentloaded' });
-            await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15_000 })
-              .catch(() => log('decision-re-review: [data-section="demo-comparison"] not found within 15 s'));
-          } catch (err) { log(`decision-re-review: navigation error — ${err.message}`); }
-          await captureFrame(page, 'decision-re-review');
-          try { await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' }); } catch { /* */ }
-          status = await cycleStatusFromBridge(watch.bridgeUrl, init.cycleId);
-          if (status !== 'ready-for-review') continue;
-        } else {
-          log('send-back was skipped (POST failed); continuing to auto-approve');
-        }
-      }
-
-      const ok = await autoApprove(watch.bridgeUrl, init.initiativeId);
-      if (!ok) {
-        // A rejected verdict (e.g. gh merge conflict) will not fix itself by
-        // re-running serve passes — retry once (transient bridge blips), then
-        // abort loudly instead of burning passes against a 409.
-        approveFailures.set(init.initiativeId, (approveFailures.get(init.initiativeId) ?? 0) + 1);
-        if ((approveFailures.get(init.initiativeId) ?? 0) >= 2) {
-          throw new Error(`verdict approve failed twice for ${init.initiativeId} — aborting (see [watch] mergePullRequest output above)`);
-        }
-        continue;
-      }
-      // Own bound from THIS approval instant, never runStartMs (REFLECT_LANDED_WAIT_MS).
-      await stageTwo.waitLanded(init, resolveReflectWaitDeadlineMs(Date.now()));
-      await sleep(2000);
-      await captureFrame(page, `final-state-${init.initiativeId}`);
-      remaining.delete(init.initiativeId);
-    }
-  }
-  if (remaining.size > 0) {
-    log(`unfinished initiatives after ${maxPasses} serve passes: ${[...remaining.keys()].join(', ')}`);
-  }
-
-  // Collect gate inputs BEFORE tearing the bridge down — cycleStatusFromBridge
-  // against a stopped watch reads null and fails the merge gate spuriously.
-  const perInit = [];
-  for (const init of initiatives) {
-    const finalStatus = await cycleStatusFromBridge(watch.bridgeUrl, init.cycleId);
-    const finalEvents = await cycleEventCountFromLog(init.cycleId);
-    const cost = sumCycleCost(init.cycleId, architectSessionId);
-    const { checks, wi } = assessOutcomes({
-      finalStatus, cost, repoPath,
-      cycleId: init.cycleId, initiativeId: init.initiativeId,
-      project: PROJECT, runStartMs,
+    const browser = await chromium.launch();
+    const ctx = await browser.newContext({
+      viewport: { width: 1400, height: 1400 },
+      recordVideo: { dir: VIDEO_DIR, size: { width: 1400, height: 1400 } },
     });
-    perInit.push({ init, finalStatus, finalEvents, cost, checks, wi });
-  }
+    const page = await ctx.newPage();
+    page.on('pageerror', (err) => console.error(`[pageerror] ${err.message}`));
 
-  // Capture the video path BEFORE closing.
-  let videoSrc = null;
-  try { videoSrc = await page.video()?.path(); } catch { /* */ }
+    await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(
+      () => document.querySelector('main')?.getAttribute('data-page-ready') === 'true',
+      undefined,
+      { timeout: 15000 },
+    ).catch(() => log('page-ready timed out'));
+    await captureFrame(page, 'initial-load');
 
-  await browser.close();
-  await stopWatch(watch.proc);
-
-  if (videoSrc && existsSync(videoSrc)) {
-    const dest = join(OUT_DIR, 'cycle.webm');
+    // ===== STAGE 1: architect (interview + plan gate) → forge-architect serve =====
+    // Plan-everything-before-kickoff: the session may promote N dependent
+    // initiatives; ONE serve pass decomposes them all (the dependency gate is
+    // flow_id-aware — decompose flows never wait on prerequisite merges).
+    const { initiatives, sessionId: architectSessionId } = await driveArchitect(page, watch, { project: PROJECT, idea, repoPath });
+    const architectStage = await runServeStage(page, 'architect');
+    // Focus the first threaded cycle in the dashboard for the frame gallery.
     try {
-      renameSync(videoSrc, dest);
-      log(`video → ${dest}`);
-    } catch (err) {
-      log(`failed to move video: ${err.message}`);
+      await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector(`[data-cycle-id="${initiatives[0].cycleId}"]`, { timeout: 10000 });
+      await page.locator(`[data-cycle-id="${initiatives[0].cycleId}"]`).first().click();
+      await captureFrame(page, 'decision-pm-work-items');
+    } catch (err) { log(`cycle focus failed: ${err.message}`); }
+
+    // ===== STAGE 2+3: batch hand-off → serve/approve loop until all initiatives land =====
+    // All initiatives enqueue for develop at once; the scheduler's merge-gate
+    // holds dependents until their prerequisite reaches done/. Each serve pass
+    // builds whatever is eligible; each ready-for-review cycle gets the verdict
+    // approve; the loop repeats until every initiative merged (or passes run out).
+    if (!architectStage.ok) { // 6.10.6 — gate the hand-off; nothing downstream can tell later
+      log('REFUSING the develop hand-off — the architect stage did not succeed (reasons above).');
+      // `throw`, never `process.exit()` (M7-A row 82): a hard exit here skips
+      // the `runGuarded` finally below and leaves a spawned studio running,
+      // reparented to init. Throwing lets that finally tear it down, then
+      // propagates to main().catch, which exits non-zero once teardown is done.
+      throw new Error('REFUSING the develop hand-off — the architect stage did not succeed (reasons above)');
     }
-  } else {
-    log('no video file produced');
-  }
+    await stageTwo.handoff(watch.bridgeUrl, initiatives.map((i) => i.initiativeId));
+    const remaining = new Map(initiatives.map((i) => [i.initiativeId, i]));
+    const approveFailures = new Map();
+    let sendBackDone = !SEND_BACK;
+    const maxPasses = initiatives.length + 2;
+    for (let pass = 1; remaining.size > 0 && pass <= maxPasses; pass++) {
+      // SCOPE (6.10.6): only the architect hand-off is GATED — the develop passes have
+      // their own convergence logic. Their outcome is still classified and logged.
+      await runServeStage(page, `develop-pass-${pass}`);
+      await sleep(2000);
+      watch = await ensureWatch(watch);
+      for (const init of [...remaining.values()]) {
+        let status = await cycleStatusFromBridge(watch.bridgeUrl, init.cycleId);
+        log(`develop status for ${init.initiativeId} after pass ${pass}: ${status}`);
+        if (status === 'done') { remaining.delete(init.initiativeId); continue; }
+        if (status !== 'ready-for-review') continue;
+        await captureFrame(page, `after-develop-${init.initiativeId}`);
 
-  writeIndexHtml();
-  log(`index → ${join(OUT_DIR, 'index.html')}`);
+        // Optional send-back pass (ADR-026 in-place drain) — first initiative only.
+        if (!sendBackDone) {
+          sendBackDone = true;
+          await captureDecisionReviewEvaluation(page, watch.uiUrl, init.cycleId);
+          log('posting send-back verdict to /api/verdict…');
+          const sendBackOk = await postSendBack(watch.bridgeUrl, init.initiativeId);
+          if (sendBackOk) {
+            await captureFrame(page, 'decision-send-back');
+            await runServeStage(page, 'sendback-drain');
+            await sleep(2000);
+            try {
+              await page.goto(`${watch.uiUrl}/artifact?run=${encodeURIComponent(init.cycleId)}&type=verdict&mode=gate`, { waitUntil: 'domcontentloaded' });
+              await page.waitForSelector('[data-section="demo-comparison"]', { timeout: 15_000 })
+                .catch(() => log('decision-re-review: [data-section="demo-comparison"] not found within 15 s'));
+            } catch (err) { log(`decision-re-review: navigation error — ${err.message}`); }
+            await captureFrame(page, 'decision-re-review');
+            try { await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' }); } catch { /* */ }
+            status = await cycleStatusFromBridge(watch.bridgeUrl, init.cycleId);
+            if (status !== 'ready-for-review') continue;
+          } else {
+            log('send-back was skipped (POST failed); continuing to auto-approve');
+          }
+        }
 
-  // ---- gate: outcome assertions (ADR 022 + S9 reflect-writes-brain) ----
-  // Per-initiative assertions (collected pre-teardown above) plus an
-  // aggregate cost-ceiling check (the ceiling is per RUN; a multi-initiative
-  // plan shares one budget).
-  const totalCost = perInit.reduce((acc, r) => acc + r.cost, 0);
-  const checks = perInit.flatMap((r) =>
-    r.checks.map((c) => ({ ...c, name: perInit.length > 1 ? `${r.init.initiativeId}: ${c.name}` : c.name })));
-  checks.push({
-    name: 'aggregate cost under ceiling',
-    pass: totalCost <= COST_CEILING,
-    detail: `$${totalCost.toFixed(2)} across ${perInit.length} initiative(s) ≤ $${COST_CEILING}${COST_CEILING_BINDS ? ' (bound: FORGE_COST_CEILING_USD)' : ' (assertion only)'}`,
-  });
+        const ok = await autoApprove(watch.bridgeUrl, init.initiativeId);
+        if (!ok) {
+          // A rejected verdict (e.g. gh merge conflict) will not fix itself by
+          // re-running serve passes — retry once (transient bridge blips), then
+          // abort loudly instead of burning passes against a 409.
+          approveFailures.set(init.initiativeId, (approveFailures.get(init.initiativeId) ?? 0) + 1);
+          if ((approveFailures.get(init.initiativeId) ?? 0) >= 2) {
+            throw new Error(`verdict approve failed twice for ${init.initiativeId} — aborting (see [watch] mergePullRequest output above)`);
+          }
+          continue;
+        }
+        // Own bound from THIS approval instant, never runStartMs (REFLECT_LANDED_WAIT_MS).
+        await stageTwo.waitLanded(init, resolveReflectWaitDeadlineMs(Date.now()));
+        await sleep(2000);
+        await captureFrame(page, `final-state-${init.initiativeId}`);
+        remaining.delete(init.initiativeId);
+      }
+    }
+    if (remaining.size > 0) {
+      log(`unfinished initiatives after ${maxPasses} serve passes: ${[...remaining.keys()].join(', ')}`);
+    }
 
-  // Post-run boundary check (R5-01-F3) — always printed, success or failure
-  // (a fatal crash prints it too, via the main().catch handler below). A
-  // degraded check (null: git failed during the run) fails the gate explicitly
-  // rather than passing silently.
-  const boundaryResult = runBoundaryCheck();
-  checks.push({
-    name: 'post-run boundary: forge repo/PR state unchanged',
-    pass: boundaryResult !== null && boundaryResult.clean,
-    detail: boundaryResult === null
-      ? 'boundary check could not run — see log'
-      : boundaryResult.clean
-        ? (boundaryResult.prsSkipped ? 'clean (pr-state skipped: gh unavailable)' : 'clean')
-        : `${boundaryResult.violations.length} violation(s) — see boundary report above`,
-  });
+    // Collect gate inputs BEFORE tearing the bridge down — cycleStatusFromBridge
+    // against a stopped watch reads null and fails the merge gate spuriously.
+    const perInit = [];
+    for (const init of initiatives) {
+      const finalStatus = await cycleStatusFromBridge(watch.bridgeUrl, init.cycleId);
+      const finalEvents = await cycleEventCountFromLog(init.cycleId);
+      const cost = sumCycleCost(init.cycleId, architectSessionId);
+      const { checks, wi } = assessOutcomes({
+        finalStatus, cost, repoPath,
+        cycleId: init.cycleId, initiativeId: init.initiativeId,
+        project: PROJECT, runStartMs,
+      });
+      perInit.push({ init, finalStatus, finalEvents, cost, checks, wi });
+    }
 
-  const gatePassed = checks.every((c) => c.pass);
+    // Capture the video path BEFORE closing.
+    let videoSrc = null;
+    try { videoSrc = await page.video()?.path(); } catch { /* */ }
 
-  log('--- verdict (3-stage spine) ---');
-  for (const c of checks) log(`  ${c.pass ? '✓' : '✗'} ${c.name} — ${c.detail}`);
+    // The studio is torn down once, by `runGuarded`'s finally below — not
+    // here (M7-A row 82: a second, different teardown per exit path is the
+    // scattered shape that let the REFUSING branch's copy go missing).
+    await browser.close();
 
-  const summary = {
-    runHandle: RUN_HANDLE,
-    initiatives: perInit.map((r) => ({
-      initiativeId: r.init.initiativeId,
-      cycleId: r.init.cycleId,
-      finalStatus: r.finalStatus,
-      totalEvents: r.finalEvents,
-      costUsd: Number(r.cost.toFixed(4)),
-      workItems: r.wi,
-    })),
-    project: PROJECT,
-    flow: { id: FLOW.flowId, door: FLOW.door, reflectExpected: FLOW_REFLECTS },
-    baseSha: BASE_SHA,
-    costUsd: Number(totalCost.toFixed(4)),
-    costCeilingUsd: COST_CEILING,
-    checks,
-    gate: gatePassed ? 'pass' : 'fail',
-    framesCaptured: readdirSync(FRAMES_DIR).filter((f) => f.endsWith('.png')).length,
-    completedAt: new Date().toISOString(),
-  };
-  writeFileSync(join(OUT_DIR, 'summary.json'), JSON.stringify(summary, null, 2));
-  log(`summary → ${join(OUT_DIR, 'summary.json')}`);
-  log(`final: ${perInit.map((r) => `${r.init.initiativeId}=${r.finalStatus}`).join(', ')}, $${totalCost.toFixed(2)}, ${summary.framesCaptured} frames`);
-  log(`done — gate ${gatePassed ? 'PASS ✓' : 'FAIL ✗'}`);
-  if (!gatePassed) process.exitCode = 1;
+    if (videoSrc && existsSync(videoSrc)) {
+      const dest = join(OUT_DIR, 'cycle.webm');
+      try {
+        renameSync(videoSrc, dest);
+        log(`video → ${dest}`);
+      } catch (err) {
+        log(`failed to move video: ${err.message}`);
+      }
+    } else {
+      log('no video file produced');
+    }
+
+    writeIndexHtml();
+    log(`index → ${join(OUT_DIR, 'index.html')}`);
+
+    // ---- gate: outcome assertions (ADR 022 + S9 reflect-writes-brain) ----
+    // Per-initiative assertions (collected pre-teardown above) plus an
+    // aggregate cost-ceiling check (the ceiling is per RUN; a multi-initiative
+    // plan shares one budget).
+    const totalCost = perInit.reduce((acc, r) => acc + r.cost, 0);
+    const checks = perInit.flatMap((r) =>
+      r.checks.map((c) => ({ ...c, name: perInit.length > 1 ? `${r.init.initiativeId}: ${c.name}` : c.name })));
+    checks.push({
+      name: 'aggregate cost under ceiling',
+      pass: totalCost <= COST_CEILING,
+      detail: `$${totalCost.toFixed(2)} across ${perInit.length} initiative(s) ≤ $${COST_CEILING}${COST_CEILING_BINDS ? ' (bound: FORGE_COST_CEILING_USD)' : ' (assertion only)'}`,
+    });
+
+    // Post-run boundary check (R5-01-F3) — always printed, success or failure
+    // (a fatal crash prints it too, via the main().catch handler below). A
+    // degraded check (null: git failed during the run) fails the gate explicitly
+    // rather than passing silently.
+    const boundaryResult = runBoundaryCheck();
+    checks.push({
+      name: 'post-run boundary: forge repo/PR state unchanged',
+      pass: boundaryResult !== null && boundaryResult.clean,
+      detail: boundaryResult === null
+        ? 'boundary check could not run — see log'
+        : boundaryResult.clean
+          ? (boundaryResult.prsSkipped ? 'clean (pr-state skipped: gh unavailable)' : 'clean')
+          : `${boundaryResult.violations.length} violation(s) — see boundary report above`,
+    });
+
+    const gatePassed = checks.every((c) => c.pass);
+
+    log('--- verdict (3-stage spine) ---');
+    for (const c of checks) log(`  ${c.pass ? '✓' : '✗'} ${c.name} — ${c.detail}`);
+
+    const summary = {
+      runHandle: RUN_HANDLE,
+      initiatives: perInit.map((r) => ({
+        initiativeId: r.init.initiativeId,
+        cycleId: r.init.cycleId,
+        finalStatus: r.finalStatus,
+        totalEvents: r.finalEvents,
+        costUsd: Number(r.cost.toFixed(4)),
+        workItems: r.wi,
+      })),
+      project: PROJECT,
+      flow: { id: FLOW.flowId, door: FLOW.door, reflectExpected: FLOW_REFLECTS },
+      baseSha: BASE_SHA,
+      costUsd: Number(totalCost.toFixed(4)),
+      costCeilingUsd: COST_CEILING,
+      checks,
+      gate: gatePassed ? 'pass' : 'fail',
+      framesCaptured: readdirSync(FRAMES_DIR).filter((f) => f.endsWith('.png')).length,
+      completedAt: new Date().toISOString(),
+    };
+    writeFileSync(join(OUT_DIR, 'summary.json'), JSON.stringify(summary, null, 2));
+    log(`summary → ${join(OUT_DIR, 'summary.json')}`);
+    log(`final: ${perInit.map((r) => `${r.init.initiativeId}=${r.finalStatus}`).join(', ')}, $${totalCost.toFixed(2)}, ${summary.framesCaptured} frames`);
+    log(`done — gate ${gatePassed ? 'PASS ✓' : 'FAIL ✗'}`);
+    if (!gatePassed) process.exitCode = 1;
+    },
+  );
 }
 
 main().catch((err) => {
   console.error('[verify] fatal');
   console.error(err.stack ?? err.message);
-  // Never leave the spawned watch behind: an orphaned scheduler from a dead
-  // harness keeps claiming _queue work with STALE loaded modules (2026-07-11
-  // incident — a pre-merge `forge serve` orphan ran the PM on hours-old code).
-  if (activeWatchProc && !activeWatchProc.killed) {
-    try { activeWatchProc.kill('SIGTERM'); } catch { /* best effort */ }
-  }
+  // The spawned watch is already torn down by now — `runGuarded`'s finally
+  // (inside main(), wrapping every stage) runs BEFORE this rejection reaches
+  // here, on every exit: normal return or any thrown error (M7-A row 82).
   // A crashed run still prints the boundary report (R5-01-F3 always-print) —
   // print-only here; the exit code is already 1.
   if (boundaryBaseline && !boundaryReported) runBoundaryCheck();
