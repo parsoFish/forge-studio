@@ -59,13 +59,6 @@ function inheritedFdHolder(lock: string, seconds = 30): ChildProcess {
   settle();
   return c;
 }
-const procLocksRows = (lock: string): string[] => {
-  const ino = spawnSync('stat', ['-c', '%i', lock], { encoding: 'utf8' }).stdout.trim();
-  return spawnSync('awk', [
-    '-v', `ino=${ino}`, '{ n = split($6, a, ":"); if (n == 3 && a[3] == ino) print $5 }', '/proc/locks',
-  ], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean);
-};
-
 describe('lock-state — the probe is the fact, the census is the attribution', () => {
   test('NOBODY: free, exit 0, nothing waiting, nothing open', () => {
     const lock = lockFile();
@@ -97,35 +90,26 @@ describe('lock-state — the probe is the fact, the census is the attribution', 
     assert.match(r.stdout, /WAITING:[1-9]/, `the queue must be counted: ${r.stdout}`);
   });
 
-  test('AN INHERITED-FD HOLD: the reader never says FREE, whatever the kernel can name', () => {
+  test('AN INHERITED-FD HOLD: the reader names the live ancestor directly, on EITHER kernel (row 80b)', () => {
     const lock = lockFile();
-    inheritedFdHolder(lock);
+    const h = inheritedFdHolder(lock);
 
-    // THE PREMISE IS ENVIRONMENT-DEPENDENT AND THIS DOOR NO LONGER PRETENDS
-    // OTHERWISE. The first version asserted `procLocksRows(lock)` is empty —
-    // "this shape must produce no /proc/locks row" — which is true on WSL2,
-    // where the campaign runs and where the blind spot was measured, and FALSE
-    // in CI, which named the holder as pid 25484 and red-ed the build. I had
-    // encoded one box's kernel behaviour as a property of Linux, in the very
-    // door meant to prove I was not guessing.
+    // THIS DOOR USED TO BRANCH ON KERNEL, AND BOTH BRANCHES ENCODED THE OLD
+    // WRONG READING row 80b exists to fix. The first version asserted
+    // `procLocksRows(lock)` is empty and the reader says `unnameable` — true on
+    // WSL2, where the census was blind — and in the OTHER branch asserted the
+    // reader names `rows[0]`, the pid FROM THE KERNEL ROW — which on a standard
+    // kernel (CI) is the EXITED `flock` binary's pid, a dead process, not the
+    // live bash ancestor that actually holds the descriptor. Naming a dead pid
+    // as "the holder" is the second measured defect row 80b closes.
     //
-    // What is true EVERYWHERE is the behaviour under test: a lock held on an
-    // inherited descriptor is HELD, and this reader says so. Where the census
-    // can name the holder it names it; where it cannot it says `unnameable`.
-    // Either way it never reports FREE, which is the failure that matters —
-    // a caller acting on FREE starts work beside a funded run.
-    const rows = procLocksRows(lock);
+    // `lockHolders` now reads `/proc/<pid>/fdinfo/<fd>` directly: the live
+    // bash ancestor's own fd carries the `lock:` line on BOTH kernels
+    // (measured on this host), so the correct answer no longer depends on
+    // what `/proc/locks` can or cannot show. One assertion, not two branches.
     const r = run('say', lock);
     assert.equal(r.status, 3, 'held is held; a reader that exits 0 here sends a caller into a live lock');
-    if (rows.length === 0) {
-      // The WSL2 shape, and the one the probe exists for: the census is blind
-      // and only `flock -n` can see the hold.
-      assert.match(r.stdout, /HELD \(unnameable — inherited fd\)/);
-    } else {
-      // The CI shape: the census CAN name it, so the reader must — reporting
-      // `unnameable` here would be the opposite lie.
-      assert.match(r.stdout, new RegExp(`HELD ${rows[0]}\\(cwd `));
-    }
+    assert.match(r.stdout, new RegExp(`HELD ${h.pid}\\(cwd `), `the live ancestor must be named directly: ${r.stdout}`);
   });
 
   test('THE PARENT IS NAMED, not judged — the case a `ppid === 1` flag computes FALSE for', () => {
