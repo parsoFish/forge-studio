@@ -230,7 +230,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       const realSpawn = story.ground?.realSpawn === true;
       const spendBeforeCostless = costlessBeat ? costlessSpendUsd(ROOT, startedMs, realSpawn) : null;
       let verdict = await driveBeat(
-        page, beat, i, uiUrl, bindings, undefined, probe, costlessBeat ? null : stallDoor, pressedAt, cycleWatchFor,
+        page, beat, i, uiUrl, bindings, undefined, probe, costlessBeat ? null : stallDoor, pressedAt, cycleWatchFor
       );
       if (costlessBeat) {
         verdict = applyCostlessGuard(verdict, spendBeforeCostless, costlessSpendUsd(ROOT, startedMs, realSpawn));
