@@ -44,6 +44,7 @@ import {
   removePaths,
   sweepProductFixtures,
   sweepStoryRemotesFromManifest,
+  describeRemoteSweep,
 } from './sweep.mjs';
 import {
   snapshotSiblingGrounds,
@@ -57,6 +58,7 @@ import {
   groundChanges,
   groundIgnoreFromGit,
   seedIgnoredBorn,
+  beatWindowChangesFrom,
 } from './ground-hash.mjs';
 import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
 import { captureAndClearMintedSessions, describeGroundClear, captureAndClearMintedLogs, describeLogsClear } from './ground-clear.mjs';
@@ -105,6 +107,14 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // the agent COMMITTED its writes so the ground's own `git status` reported
   // nothing at all (§15.327). Hence a hash, never a status.
   const ownGroundBefore = ownGroundManifest(ROOT, story.ground?.project ?? null);
+  // `forge-8vfn.7.6.140` — the beat numbers any declaration actually names, so
+  // the loop below hashes the ground ONLY at a boundary some licence needs it
+  // (a story with no `beat:` declarations pays nothing extra), and the
+  // manifest captured at each — keyed 1-indexed to match `beat: <n>`.
+  const licensedBeatNumbers = new Set(
+    (story.ground?.expectedChanges ?? []).map((d) => d.beat).filter((b) => typeof b === 'number'),
+  );
+  const groundBeatBoundaries = new Map();
   const seeded = story.ground?.seedIgnoredBorn ? seedIgnoredBorn(join(ROOT, 'projects', story.ground.project), story.ground.seedIgnoredBorn) : []; // 7.6.52 — after the pre-run hash, deliberately
   const logsDir = join(ROOT, '_logs');
   const logsBefore = readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name);
@@ -154,6 +164,11 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // 7.6.51/7.6.71: set when a beat boundary ends the run on money — breached, or
   // gone blind — and the verdict below is RED in the halt's own words, not a beat's.
   let spendHalt = null;
+  // `forge-8vfn.7.6.76` — declared OUTSIDE the `try` below, unlike `pressedAt`:
+  // `finalSpendHalt` reads it AFTER that block closes, and a Map scoped to the
+  // block it is declared in would not exist by then. One Map for the whole
+  // run either way — never a module-level Map (this box runs four lanes).
+  const unmeasuredSnapshots = new Map();
   const costs = story.ground?.realSpawn === true || (story.ground?.budget_usd ?? 0) > 0;
   // 7.6.52: BOTH NUMBERS PRINT BEFORE A DOLLAR IS SPENT, agreeing or not. A run
   // whose funded and declared ceilings differ must say so up front rather than
@@ -176,6 +191,14 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     // had not worked once since the commit that introduced it.
     const pressedAt = new Map();
     for (const [i, beat] of story.beats.entries()) {
+      // `forge-8vfn.7.6.140` — THE BOUNDARY WHERE A BEAT-SCOPED LICENCE OPENS,
+      // captured at the moment this beat STARTS and before anything in it can
+      // run. `classifyOwnGroundDrift` reduces this (via `beatWindowChangesFrom`)
+      // to "what changed from here to the end of the run" — never taken twice
+      // for the same beat, and never taken for a beat no declaration named.
+      if (ownGroundBefore !== null && licensedBeatNumbers.has(i + 1)) {
+        groundBeatBoundaries.set(i + 1, ownGroundManifest(ROOT, story.ground.project));
+      }
       // Bead `forge-8vfn.6.11.22` — an agent-scale wait samples the agent's own
       // process as it polls, so an unsatisfied one says what that process was
       // doing instead of leaving it to be reconstructed afterwards by hand.
@@ -212,6 +235,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
           realSpawn: story.ground?.realSpawn === true,
           ceilingUsd: ceiling?.usd,
           label: `after beat ${i + 1}`,
+          unmeasuredSnapshots,
         });
         for (const l of lines) console.log(l);
         if (stop.halt) { // 7.6.71 (849(d)): a BREACH stops on a number; a turn that ENDED unpriced stops because the ceiling above it went blind
@@ -305,7 +329,10 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // is judged here, by the same verdict the boundaries use; a halt makes the
   // run RED in its own words rather than letting it read as complete.
   if (costs) {
-    const late = finalSpendHalt({ root: ROOT, startedMs, realSpawn: story.ground?.realSpawn === true, ceilingUsd: ceiling?.usd, alreadyHalted: spendHalt !== null });
+    const late = finalSpendHalt({
+      root: ROOT, startedMs, realSpawn: story.ground?.realSpawn === true, ceilingUsd: ceiling?.usd,
+      alreadyHalted: spendHalt !== null, unmeasuredSnapshots,
+    });
     for (const l of late.lines) console.log(l);
     if (late.stop) {
       console.error(`[stories] ${late.stop.headline} after the last beat boundary — ${late.stop.reason} (${ceiling.reason}).`);
@@ -353,9 +380,9 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // GitHub remotes this run minted. Unreached until now, so every run that
   // minted one leaked it.
   const remotes = sweepStoryRemotesFromManifest({ storyId: story.id, root: ROOT });
-  for (const r of remotes.deleted) console.log(`[stories] trailing sweep DELETED remote ${r}`);
-  for (const r of remotes.refusals) console.warn(`[stories] ${r}`);
-  for (const f of remotes.failed) console.warn(`[stories] could not delete remote ${f.nameWithOwner ?? f}: ${f.error ?? ''}`);
+  const remoteReport = describeRemoteSweep(remotes);
+  for (const line of remoteReport.lines) console.log(line);
+  for (const line of remoteReport.warnLines) console.warn(line);
   for (const f of sweep.failed) console.warn(`[stories] trailing sweep could not remove ${f.path}: ${f.error}`);
 
   // And the fence, over everything the product wrote that carries no story id.
@@ -396,14 +423,22 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name),
       logsDir,
     );
+    // Read ONCE and shared: `beatWindowChangesFrom` below needs the same
+    // end-of-run manifest `groundChanges` compares against, and hashing the
+    // ground a second time here would let the two readings disagree about
+    // what "the end of the run" was.
+    const ownGroundAfter = ownGroundManifest(ROOT, story.ground.project);
     const split = classifyOwnGroundDrift(
-      groundChanges(ownGroundBefore, ownGroundManifest(ROOT, story.ground.project)),
+      groundChanges(ownGroundBefore, ownGroundAfter),
       minted,
       mintedSessionWrites(minted, logsDir, groundDir),
       groundIgnoreFromGit(groundDir),
       // 7.6.136 — the ground changes this story DECLARES its product makes,
       // read from the PINNED story file so the licence cannot widen at runtime.
       story.ground?.expectedChanges ?? [],
+      // 7.6.140 — narrows a declaration that named `beat: <n>` to the window
+      // from that beat's own boundary (captured live, above) to this manifest.
+      beatWindowChangesFrom(groundBeatBoundaries, ownGroundAfter),
     );
     ownGroundDrift.produced = split.produced;
     ownGroundDrift.undeclared = split.undeclared;

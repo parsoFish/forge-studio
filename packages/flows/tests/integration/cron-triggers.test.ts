@@ -27,6 +27,7 @@ project: null
 kb: null
 costCeilingUsd: 5
 origin: seed
+accepts: [code]
 nodes:
   - { id: dev, agent: developer-ralph }
 edges: []
@@ -256,6 +257,7 @@ project: ${project}
 kb: null
 costCeilingUsd: 5
 origin: seed
+accepts: [code]
 nodes:
   - { id: dev, agent: developer-ralph }
 edges: []
