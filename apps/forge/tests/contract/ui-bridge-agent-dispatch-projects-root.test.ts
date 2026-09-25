@@ -24,7 +24,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildAgentDispatchArgs } from '../../ui-bridge.ts';
+import { buildAgentDispatchArgs } from '../../bridge-agent-dispatch.ts';
 import { parseAgentDispatchArgs } from '@forge/agents/agent-dispatch-cmd.ts';
 
 function containsFlagPair(args: string[], flag: string, value: string): boolean {
