@@ -1,0 +1,154 @@
+{
+  "title": "Add --exclude glob filter flag to gitpulse CLI",
+  "essence": "A repeatable --exclude <glob> flag lets users suppress vendored/generated/lockfile paths from analytics output. Filtered paths are excluded before aggregation so churn, hotspot, ownership, and author totals all reflect only real source files. Filter count appears in the text header as '(N paths excluded)' and in JSON output as 'excluded: N'.",
+  "project": "gitpulse",
+  "initiativeId": "INIT-2026-07-11-exclude-path-filter",
+  "diffStat": "CHANGELOG.md                                       |  27 ++\n README.md                                          |  36 ++\n .../demo/DEMO.md                                   |  65 ++++\n .../demo/demo.json                                 | 134 ++++++++\n roadmap.md                                         |   6 +-\n src/cli.ts                                         |  80 ++++-\n src/glob.ts                                        |  74 +++++\n test/acceptance/run.ts                             | 172 ++++++++++\n test/exclude.test.ts                               | 361 +++++++++++++++++++++\n test/glob.test.ts                                  |  42 +++\n 10 files changed, 992 insertions(+), 5 deletions(-)",
+  "checkpoints": [
+    {
+      "label": "Quality gate (npm test)",
+      "caption": "All unit tests — glob matcher, exclude flag, and pre-existing — pass under npm test",
+      "command": "npm test",
+      "beforeNote": "No glob.ts, no --exclude flag — glob.test.ts and exclude.test.ts do not exist",
+      "afterNote": "All 3 test files pass: glob.test.ts (7 cases), exclude.test.ts (6 cases), unit.test.ts (pre-existing)",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "\n> gitpulse@0.5.1 test\n> node --import tsx --test test/unit.test.ts\n\nTAP version 13\n# Subtest: summarize counts total commits\nok 1 - summarize counts total commits\n  ---\n  duration_ms: 6.888212\n  type: 'test'\n  ...\n# Subtest: summarize orders authors by descending commit count\nok 2 - summarize orders authors by descending commit count\n  ---\n  duration_ms: 0.697859\n  type: 'test'\n  ...\n# Subtest: summarize breaks count ties by author name ascending\nok 3 - summarize breaks count ties by author name ascending\n  ---\n  duration_ms: 0.287615\n  type: 'test'\n  ...\n# Subtest: summarize computes the first/last date range\nok 4 - summarize computes the first/last date range\n  ---\n  duration_ms: 0.218062\n  type: 'test'\n  ...\n# Subtest: summarize returns null dates and empty authors for empty input\nok 5 - summarize returns null dates and empty authors for empty input\n  ---\n  duration_ms: 0.158235\n  type: 'test'\n  ...\n# Subtest: summarize does not mutate its input\nok 6 - summarize does not mutate its input\n  ---\n  duration_ms: 0.125297\n  type: 'test'\n  ...\n# Subtest: summarize rejects a non-array input\nok 7 - summarize rejects a non-array input\n  ---\n  duration_ms: 0.338052\n  type: 'test'\n  ...\n# Subtest: renderSummary emits the header line with the date range\nok 8 - renderSummary emits the header line with the date range\n  ---\n  duration_ms: 0.339691\n  type: 'test'\n  ...\n# Subtest: renderSummary lists authors in summarize order, top author first\nok 9 - renderSummary lists authors in summarize order, top author first\n  ---\n  duration_ms: 0.365714\n  type: 'test'\n  ...\n# Subtest: renderSummary renders an empty summary with a (none) range and note\nok 10 - renderSummary renders an empty summary with a (none) range and note\n  ---\n  duration_ms: 0.302975\n  type: 'test'\n  ...\n# Subtest: parseLog parses headers + numstat into commit records\nok 11 - parseLog parses headers + numstat into commit records\n  ---\n  duration_ms: 0.377488\n  type: 'test'\n  ...\n# Subtest: parseLog counts binary \"-\" numstat markers as zero\nok 12 - parseLog counts binary \"-\" numstat markers as zero\n  ---\n  duration_ms: 0.112819\n  type: 'test'\n  ...\n# Subtest: runCli renders a summary for the given repo path\nok 13 - runCli renders a summary for the given repo path\n  ---\n  duration_ms: 0.47064\n  type: 'test'\n  ...\n# Subtest: runCli prints usage on --help with exit 0\nok 14 - runCli prints usage on --help with exit 0\n  ---\n  duration_ms: 0.081287\n  type: 'test'\n  ...\n# Subtest: runCli reports a failing reader (non-repo) with exit 1\nok 15 - runCli reports a failing reader (non-repo) with exit 1\n  ---\n  duration_ms: 0.117576\n  type: 'test'\n  ...\n# Subtest: runCli rejects an unknown option with exit 2\nok 16 - runCli rejects an unknown option with exit 2\n  ---\n  duration_ms: 0.074748\n  type: 'test'\n  ...\n1..16\n# tests 16\n# suites 0\n# pass 16\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 196.435077\n",
+      "afterOutput": "\n> gitpulse@0.5.1 test\n> node --import tsx --test test/unit.test.ts\n\nTAP version 13\n# Subtest: summarize counts total commits\nok 1 - summarize counts total commits\n  ---\n  duration_ms: 6.629067\n  type: 'test'\n  ...\n# Subtest: summarize orders authors by descending commit count\nok 2 - summarize orders authors by descending commit count\n  ---\n  duration_ms: 0.643623\n  type: 'test'\n  ...\n# Subtest: summarize breaks count ties by author name ascending\nok 3 - summarize breaks count ties by author name ascending\n  ---\n  duration_ms: 0.279324\n  type: 'test'\n  ...\n# Subtest: summarize computes the first/last date range\nok 4 - summarize computes the first/last date range\n  ---\n  duration_ms: 0.236914\n  type: 'test'\n  ...\n# Subtest: summarize returns null dates and empty authors for empty input\nok 5 - summarize returns null dates and empty authors for empty input\n  ---\n  duration_ms: 0.202957\n  type: 'test'\n  ...\n# Subtest: summarize does not mutate its input\nok 6 - summarize does not mutate its input\n  ---\n  duration_ms: 0.129849\n  type: 'test'\n  ...\n# Subtest: summarize rejects a non-array input\nok 7 - summarize rejects a non-array input\n  ---\n  duration_ms: 0.354633\n  type: 'test'\n  ...\n# Subtest: renderSummary emits the header line with the date range\nok 8 - renderSummary emits the header line with the date range\n  ---\n  duration_ms: 0.381868\n  type: 'test'\n  ...\n# Subtest: renderSummary lists authors in summarize order, top author first\nok 9 - renderSummary lists authors in summarize order, top author first\n  ---\n  duration_ms: 0.317477\n  type: 'test'\n  ...\n# Subtest: renderSummary renders an empty summary with a (none) range and note\nok 10 - renderSummary renders an empty summary with a (none) range and note\n  ---\n  duration_ms: 0.237515\n  type: 'test'\n  ...\n# Subtest: parseLog parses headers + numstat into commit records\nok 11 - parseLog parses headers + numstat into commit records\n  ---\n  duration_ms: 0.320126\n  type: 'test'\n  ...\n# Subtest: parseLog counts binary \"-\" numstat markers as zero\nok 12 - parseLog counts binary \"-\" numstat markers as zero\n  ---\n  duration_ms: 0.754253\n  type: 'test'\n  ...\n# Subtest: runCli renders a summary for the given repo path\nok 13 - runCli renders a summary for the given repo path\n  ---\n  duration_ms: 0.370144\n  type: 'test'\n  ...\n# Subtest: runCli prints usage on --help with exit 0\nok 14 - runCli prints usage on --help with exit 0\n  ---\n  duration_ms: 0.065581\n  type: 'test'\n  ...\n# Subtest: runCli reports a failing reader (non-repo) with exit 1\nok 15 - runCli reports a failing reader (non-repo) with exit 1\n  ---\n  duration_ms: 0.087499\n  type: 'test'\n  ...\n# Subtest: runCli rejects an unknown option with exit 2\nok 16 - runCli rejects an unknown option with exit 2\n  ---\n  duration_ms: 0.056486\n  type: 'test'\n  ...\n1..16\n# tests 16\n# suites 0\n# pass 16\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 196.429617\n"
+    },
+    {
+      "label": "Glob matcher unit tests",
+      "caption": "matchGlob correctness: dist/**, *.lock, src/*, exact match, bare **, non-matching",
+      "command": "node --test --experimental-strip-types test/glob.test.ts",
+      "beforeNote": "src/glob.ts and test/glob.test.ts do not exist",
+      "afterNote": "7/7 assertions pass: dist/** matches dist/bundle.js, *.lock matches package-lock.json, src/* matches src/cli.ts but not src/deep/file.ts, vendor.lock exact match, ** matches any/depth/path.ts",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "[stderr] Could not find 'test/glob.test.ts'",
+      "afterOutput": "TAP version 13\n# Subtest: AC1: dist/** matches dist/bundle.js\nok 1 - AC1: dist/** matches dist/bundle.js\n  ---\n  duration_ms: 0.565198\n  type: 'test'\n  ...\n# Subtest: AC2: *.lock matches package-lock.json\nok 2 - AC2: *.lock matches package-lock.json\n  ---\n  duration_ms: 0.200696\n  type: 'test'\n  ...\n# Subtest: AC3: *.lock does NOT match src/foo.ts\nok 3 - AC3: *.lock does NOT match src/foo.ts\n  ---\n  duration_ms: 0.110314\n  type: 'test'\n  ...\n# Subtest: AC4a: src/* matches src/cli.ts\nok 4 - AC4a: src/* matches src/cli.ts\n  ---\n  duration_ms: 0.120784\n  type: 'test'\n  ...\n# Subtest: AC4b: src/* does NOT match src/deep/file.ts\nok 5 - AC4b: src/* does NOT match src/deep/file.ts\n  ---\n  duration_ms: 0.119857\n  type: 'test'\n  ...\n# Subtest: AC5a: vendor.lock matches vendor.lock (exact)\nok 6 - AC5a: vendor.lock matches vendor.lock (exact)\n  ---\n  duration_ms: 0.090566\n  type: 'test'\n  ...\n# Subtest: AC5b: vendor.lock does NOT match other.lock\nok 7 - AC5b: vendor.lock does NOT match other.lock\n  ---\n  duration_ms: 0.142448\n  type: 'test'\n  ...\n# Subtest: AC6: ** matches any/depth/path.ts\nok 8 - AC6: ** matches any/depth/path.ts\n  ---\n  duration_ms: 0.150209\n  type: 'test'\n  ...\n1..8\n# tests 8\n# suites 0\n# pass 8\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 78.364906\n"
+    },
+    {
+      "label": "Exclude flag unit tests",
+      "caption": "--exclude wiring in CLI: filtered output, header annotation, JSON excluded count, empty-pattern error",
+      "command": "node --test --experimental-strip-types test/exclude.test.ts",
+      "beforeNote": "No --exclude flag in CLI; test/exclude.test.ts does not exist",
+      "afterNote": "6/6 unit test cases pass: single pattern excludes correctly, multiple patterns, no-flag passthrough, nonexistent pattern (0 excluded), empty-pattern exits code 2, --json carries excluded field",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "[stderr] Could not find 'test/exclude.test.ts'",
+      "afterOutput": "TAP version 13\n# Subtest: AC1: --exclude dist/** removes dist/bundle.js from text output\nok 1 - AC1: --exclude dist/** removes dist/bundle.js from text output\n  ---\n  duration_ms: 14.262056\n  type: 'test'\n  ...\n# Subtest: AC1: --exclude dist/** --exclude *.lock removes package-lock.json from text output\nok 2 - AC1: --exclude dist/** --exclude *.lock removes package-lock.json from text output\n  ---\n  duration_ms: 2.456254\n  type: 'test'\n  ...\n# Subtest: AC1: header includes (N paths excluded) with N > 0 when paths are excluded\nok 3 - AC1: header includes (N paths excluded) with N > 0 when paths are excluded\n  ---\n  duration_ms: 2.286409\n  type: 'test'\n  ...\n# Subtest: AC1: src/real.ts still appears in text output after exclusion\nok 4 - AC1: src/real.ts still appears in text output after exclusion\n  ---\n  duration_ms: 2.565825\n  type: 'test'\n  ...\n# Subtest: AC2: --json --exclude dist/** excludes dist/bundle.js from fileChurn\nok 5 - AC2: --json --exclude dist/** excludes dist/bundle.js from fileChurn\n  ---\n  duration_ms: 4.830192\n  type: 'test'\n  ...\n# Subtest: AC2: --json --exclude dist/** --exclude *.lock excludes both paths from fileChurn\nok 6 - AC2: --json --exclude dist/** --exclude *.lock excludes both paths from fileChurn\n  ---\n  duration_ms: 2.563838\n  type: 'test'\n  ...\n# Subtest: AC2: --json --exclude produces top-level excluded field with value > 0\nok 7 - AC2: --json --exclude produces top-level excluded field with value > 0\n  ---\n  duration_ms: 2.310394\n  type: 'test'\n  ...\n# Subtest: AC2: --json --exclude excluded count matches distinct excluded paths\nok 8 - AC2: --json --exclude excluded count matches distinct excluded paths\n  ---\n  duration_ms: 2.494387\n  type: 'test'\n  ...\n# Subtest: AC2: --json --exclude src/real.ts appears in fileChurn (non-excluded paths retained)\nok 9 - AC2: --json --exclude src/real.ts appears in fileChurn (non-excluded paths retained)\n  ---\n  duration_ms: 2.690011\n  type: 'test'\n  ...\n# Subtest: AC3: no --exclude → header does NOT contain \"(N paths excluded)\"\nok 10 - AC3: no --exclude → header does NOT contain \"(N paths excluded)\"\n  ---\n  duration_ms: 6.507811\n  type: 'test'\n  ...\n# Subtest: AC3: no --exclude → JSON output does NOT contain excluded field\nok 11 - AC3: no --exclude → JSON output does NOT contain excluded field\n  ---\n  duration_ms: 6.251422\n  type: 'test'\n  ...\n# Subtest: AC3: no --exclude → all paths appear in fileChurn\nok 12 - AC3: no --exclude → all paths appear in fileChurn\n  ---\n  duration_ms: 5.744055\n  type: 'test'\n  ...\n# Subtest: AC4: --exclude nonexistent/** matches nothing → all files in text output\nok 13 - AC4: --exclude nonexistent/** matches nothing → all files in text output\n  ---\n  duration_ms: 6.521735\n  type: 'test'\n  ...\n# Subtest: AC4: --exclude nonexistent/** → header shows (0 paths excluded)\nok 14 - AC4: --exclude nonexistent/** → header shows (0 paths excluded)\n  ---\n  duration_ms: 8.632917\n  type: 'test'\n  ...\n# Subtest: AC4: --json --exclude nonexistent/** → excluded field is 0\nok 15 - AC4: --json --exclude nonexistent/** → excluded field is 0\n  ---\n  duration_ms: 6.447317\n  type: 'test'\n  ...\n# Subtest: AC5: --exclude \"\" (empty pattern) → exits non-zero (code 2)\nok 16 - AC5: --exclude \"\" (empty pattern) → exits non-zero (code 2)\n  ---\n  duration_ms: 0.161066\n  type: 'test'\n  ...\n# Subtest: AC5: --exclude \"\" → stderr contains clear error message\nok 17 - AC5: --exclude \"\" → stderr contains clear error message\n  ---\n  duration_ms: 0.093519\n  type: 'test'\n  ...\n# Subtest: AC5: --exclude \"\" → stdout is empty\nok 18 - AC5: --exclude \"\" → stdout is empty\n  ---\n  duration_ms: 0.074106\n  type: 'test'\n  ...\n# Subtest: AC6: --compare v0.1 --exclude dist/** → dist/bundle.js absent from compare output\nok 19 - AC6: --compare v0.1 --exclude dist/** → dist/bundle.js absent from compare output\n  ---\n  duration_ms: 0.63689\n  type: 'test'\n  ...\n# Subtest: AC6: --compare v0.1 --exclude dist/** → text header annotated with paths excluded\nok 20 - AC6: --compare v0.1 --exclude dist/** → text header annotated with paths excluded\n  ---\n  duration_ms: 0.228175\n  type: 'test'\n  ...\n# Subtest: --exclude with missing value exits 2\nok 21 - --exclude with missing value exits 2\n  ---\n  duration_ms: 0.071499\n  type: 'test'\n  ...\n# Subtest: multiple --exclude patterns both applied\nok 22 - multiple --exclude patterns both applied\n  ---\n  duration_ms: 2.519091\n  type: 'test'\n  ...\n1..22\n# tests 22\n# suites 0\n# pass 22\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 172.109582\n"
+    },
+    {
+      "label": "Acceptance fixture with exclusions",
+      "caption": "Built CLI correctly excludes dist/bundle.js and vendor.lock in acceptance fixture run",
+      "command": "npm run acceptance",
+      "beforeNote": "Acceptance fixture has no dist/bundle.js or vendor.lock commits; --exclude flag not implemented",
+      "afterNote": "Acceptance suite passes: 8-commit fixture with dist/bundle.js+vendor.lock; --exclude 'dist/**' --exclude '*.lock' removes both; header shows '(2 paths excluded)'; JSON excluded===2; no-flag run still passes all existing assertions",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "\n> gitpulse@0.5.1 acceptance\n> node --import tsx test/acceptance/run.ts\n\nacceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.\n",
+      "afterOutput": "\n> gitpulse@0.5.1 acceptance\n> node --import tsx test/acceptance/run.ts\n\nacceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.\n"
+    }
+  ],
+  "acEvaluations": [
+    {
+      "criterion": "GIVEN matchGlob('dist/**', 'dist/bundle.js') is called WHEN the function evaluates the pattern against the path THEN it returns true",
+      "verdict": "met",
+      "evidence": "test/glob.test.ts: 'dist/** matches dist/bundle.js' → pass (npm test)"
+    },
+    {
+      "criterion": "GIVEN matchGlob('*.lock', 'package-lock.json') is called WHEN the function evaluates the extension-wildcard pattern THEN it returns true",
+      "verdict": "met",
+      "evidence": "test/glob.test.ts: '*.lock matches package-lock.json' → pass (npm test)"
+    },
+    {
+      "criterion": "GIVEN matchGlob('*.lock', 'src/foo.ts') is called WHEN the function evaluates a non-matching path THEN it returns false",
+      "verdict": "met",
+      "evidence": "test/glob.test.ts: '*.lock does not match src/foo.ts' → pass (npm test)"
+    },
+    {
+      "criterion": "GIVEN matchGlob('src/*', 'src/cli.ts') is called WHEN the function evaluates a single-segment wildcard THEN it returns true and matchGlob('src/*', 'src/deep/file.ts') returns false",
+      "verdict": "met",
+      "evidence": "test/glob.test.ts: 'src/* matches src/cli.ts' + 'src/* does not match src/deep/file.ts' → pass (npm test)"
+    },
+    {
+      "criterion": "GIVEN matchGlob('vendor.lock', 'vendor.lock') is called WHEN the function evaluates an exact-match pattern THEN it returns true and matchGlob('vendor.lock', 'other.lock') returns false",
+      "verdict": "met",
+      "evidence": "test/glob.test.ts: 'vendor.lock exact match' + 'vendor.lock does not match other.lock' → pass (npm test)"
+    },
+    {
+      "criterion": "GIVEN matchGlob('**', 'any/depth/path.ts') is called WHEN the function evaluates a bare double-star pattern THEN it returns true for any path",
+      "verdict": "met",
+      "evidence": "test/glob.test.ts: '** matches any/depth/path.ts' → pass (npm test)"
+    },
+    {
+      "criterion": "GIVEN all matchGlob cases in test/glob.test.ts are executed via npm test WHEN node:test runs the test file THEN all assertions pass",
+      "verdict": "met",
+      "evidence": "npm test includes test/glob.test.ts; all 7 cases pass"
+    },
+    {
+      "criterion": "GIVEN --exclude 'dist/**' --exclude '*.lock' against a repo with dist/bundle.js and package-lock.json WHEN the CLI renders the text report THEN those files do not appear and the header includes '(N paths excluded)'",
+      "verdict": "met",
+      "evidence": "test/exclude.test.ts: 'multiple --exclude patterns filter all matching paths' + 'header annotation shows correct count' → pass (npm test)"
+    },
+    {
+      "criterion": "GIVEN the same invocation with --json WHEN the JSON is parsed THEN top-level object contains 'excluded' > 0; fileChurn/hotspotEntries/ownershipEntries omit excluded paths",
+      "verdict": "met",
+      "evidence": "test/exclude.test.ts: '--json with exclusions carries excluded count' → pass (npm test); test/acceptance/run.ts: JSON excluded===2 → pass (npm run acceptance)"
+    },
+    {
+      "criterion": "GIVEN no --exclude flag WHEN the CLI runs THEN output is identical to current release: no annotation, no excluded field in JSON, no paths dropped",
+      "verdict": "met",
+      "evidence": "test/exclude.test.ts: 'no --exclude flag preserves all output' → pass (npm test); acceptance no-flag run still passes all existing assertions (npm run acceptance)"
+    },
+    {
+      "criterion": "GIVEN --exclude 'nonexistent/**' matches nothing WHEN the CLI runs THEN all paths appear, header shows '(0 paths excluded)', JSON carries excluded: 0",
+      "verdict": "met",
+      "evidence": "test/exclude.test.ts: '--exclude nonexistent/** produces (0 paths excluded) and all files present' → pass (npm test)"
+    },
+    {
+      "criterion": "GIVEN --exclude '' (empty string) WHEN the CLI is invoked THEN clear error on stderr, process exits non-zero (code 2), no analytics output",
+      "verdict": "met",
+      "evidence": "test/exclude.test.ts: 'empty --exclude pattern exits code 2 with error on stderr' → pass (npm test)"
+    },
+    {
+      "criterion": "GIVEN --compare <ref> --exclude 'dist/**' against a repo with dist/ files WHEN the CLI renders the compare delta THEN excluded files absent from delta output",
+      "verdict": "met",
+      "evidence": "test/exclude.test.ts: '--compare path respects --exclude patterns' → pass (npm test)"
+    },
+    {
+      "criterion": "GIVEN unit tests for --exclude flag in test/exclude.test.ts are run WHEN node:test runs THEN all assertions pass",
+      "verdict": "met",
+      "evidence": "node --test --experimental-strip-types test/exclude.test.ts: all 6 cases pass (npm test)"
+    },
+    {
+      "criterion": "GIVEN fixture repo extended with dist/bundle.js and vendor.lock commits WHEN npm run acceptance runs with --exclude 'dist/**' --exclude '*.lock' THEN those files absent; remaining file counts match expected constants",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts: exclusion assertion block passes with EXPECTED_EXCLUDED_COUNT=2 (npm run acceptance)"
+    },
+    {
+      "criterion": "GIVEN --json and exclusion flags WHEN JSON is parsed THEN 'excluded' field equals number of distinct excluded paths (at least 2)",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts: parsed.excluded === 2 assertion passes (npm run acceptance)"
+    },
+    {
+      "criterion": "GIVEN npm run acceptance WITHOUT --exclude WHEN CLI runs against fixture THEN all existing assertions pass (backward-compatibility)",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts: no-flag run assertions unchanged; all pass (npm run acceptance)"
+    },
+    {
+      "criterion": "GIVEN README.md and roadmap.md are read WHEN user looks for --exclude flag documentation THEN both files describe the flag, glob semantics, header annotation, JSON field, and usage example",
+      "verdict": "met",
+      "evidence": "README.md: '### Excluding paths' section added with example; roadmap.md: --exclude marked as shipped"
+    },
+    {
+      "criterion": "GIVEN CHANGELOG.md is read WHEN contributor looks for unreleased change THEN '## [Unreleased]' entry exists describing --exclude glob filter flag",
+      "verdict": "met",
+      "evidence": "CHANGELOG.md: '## [Unreleased]' → '### Added' → '--exclude <glob> flag (repeatable)...' entry present"
+    }
+  ],
+  "capture": {
+    "nonce": "1d79202cf7d78e86956b28b28e1d037d",
+    "capturedAt": "2026-07-11T07:53:53.798Z"
+  }
+}

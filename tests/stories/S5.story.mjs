@@ -19,9 +19,12 @@
  * placeholder (which takes any non-empty value) is the honest assertion of
  * "there is a real figure here".
  *
- * GROUND. `mdtoc` — the one project committed to this repo, so it is the only
- * project a CLEAN CHECKOUT has, and 1.0's exit condition is these stories
- * green on a clean checkout. The agent is minted by beat 7. The flow ends at
+ * GROUND. `story-s5`, provisioned for each run from the forge-owned fixture
+ * `tests/stories/grounds/node-library` (a byte copy of `projects/mdtoc` at
+ * `9db91ef5`, provenance beside it) and torn down after the fence has judged
+ * it (M7-D, forge-1rk5.1). It used to be the real `projects/mdtoc`; a story
+ * now never runs against a ground the operator owns, and a clean checkout
+ * still has everything it needs. The agent is minted by beat 7. The flow ends at
  * a real standalone dispatch, so `realSpawn` is true and `budget_usd` is
  * declared: the runner refuses to start without `--approve-spend` (H2, $25
  * approved by the operator for the S5/S6/S7 batch on 2026-08-30). Beat 10 sets
@@ -118,7 +121,7 @@ const RUN_CEILING = '2';
 
 export default {
   id: 'S5',
-  ground: { project: 'mdtoc', realSpawn: true, budget_usd: 25 },
+  ground: { project: 'story-s5', fixture: 'node-library', realSpawn: true, budget_usd: 25 },
   docs: { kind: 'how-to', title: 'Create a new agent' },
   beats: [
     {
@@ -332,7 +335,7 @@ export default {
     {
       // Fully expressible since bead `forge-8vfn.5.15`. `run-agent` was always a
       // real `data-action`, but the project picker was `[data-run-project]`
-      // alone — a bespoke boolean — so CHOOSING mdtoc could not be said, and a
+      // alone — a bespoke boolean — so CHOOSING the ground could not be said, and a
       // press on its own would have dispatched against "no project" while the
       // act sentence claimed otherwise: green for the wrong reason. The picker
       // now carries `data-field="run-project"`, and `fill` sets a <select> with
@@ -341,9 +344,9 @@ export default {
       // boolean, and this beat hands no inputs, so nothing is lost. `run-id` and
       // `run-status` are both on the run panel section, so one element answers
       // both.
-      act: 'Run the agent standalone against mdtoc',
+      act: 'Run the agent standalone against the story\'s own project',
       do: [
-        { fill: 'run-project', with: 'mdtoc' },
+        { fill: 'run-project', with: 'story-s5' },
         { press: 'run-agent' },
       ],
       expect: {

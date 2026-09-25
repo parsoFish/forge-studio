@@ -1,0 +1,506 @@
+{
+  "title": "Add --author filter flag (glob, repeatable, OR'd) to gitpulse CLI",
+  "essence": "Prior to this initiative, gitpulse had no way to narrow analytics output to a specific author — every command reported the full commit population. This initiative adds `--author <pattern>` (repeatable, OR-semantics, case-insensitive `*`-wildcard, applies to both name and email) across all subcommands and output formats, with honest exclusion accounting: text reports annotate `(N commits excluded by author filter)`; JSON output gains a top-level `authorsFiltered` field; CSV output prepends a `# authorsFiltered: N` comment line.",
+  "project": "gitpulse",
+  "initiativeId": "INIT-2026-08-31-init-2026-08-31-author-filter-flag",
+  "diffStat": "28 files changed, 1052 insertions(+), 26 deletions(-)",
+  "summary": {
+    "bullets": [
+      "New `src/author-filter.ts` module: pure `filterAuthorCommits(commits, patterns)` with `*`-wildcard glob, case-insensitive matching on name OR email, union/OR semantics across multiple patterns.",
+      "`src/git.ts` extended: `parseLog()` now populates `authorEmail` from the 5th tab-separated git-log header field (`%ae`), and the `Commit` type gains the `authorEmail: string` field.",
+      "`src/cli.ts` wired: `--author` parsed (repeatable), empty-string pattern rejected with exit 2, filter applied after `--no-merges` in documented order, annotations injected into text/JSON/CSV output.",
+      "All three subcommands (`tags`, `coupling`, default) apply the author filter; `--author *` on a single-author repo produces byte-identical output to an unfiltered run.",
+      "Acceptance suite (`test/acceptance/run.ts`) extended with 7 fixture assertions (AC1–AC7) using the existing Ada/Grace fixture repo; README options table and roadmap updated."
+    ],
+    "branch": "forge/INIT-2026-08-31-init-2026-08-31-author-filter-flag",
+    "commitSha": "6e613fe9abf604b212d77769cd96a001e05b9078"
+  },
+  "checkpoints": [
+    {
+      "label": "parseLog() populates authorEmail from the 5th log field",
+      "caption": "Prior: Commit type had no authorEmail field; parseLog() only parsed 4 header fields. New: LOG_FORMAT appends `%x09%ae`; parseLog() reads parts[4] and trims whitespace into Commit.authorEmail.",
+      "kind": "harness",
+      "command": "node --experimental-strip-types -e \"import { parseLog } from './src/git.ts'; const c = parseLog('aaaaaaa1234567890abcdef1234567890abcdef1\\tAda Lovelace\\t2024-01-01\\tparent1234567890abcdef1234567890abcdef\\tada@lovelace.example\\n5\\t2\\tsrc/engine.ts'); console.log(JSON.stringify({authorEmail: c[0].authorEmail, author: c[0].author}));\"",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "[stderr] [eval]:1\n\"import\n^^^^^^^\nUnterminated string constant\n\nSyntaxError: Invalid or unexpected token\n    at makeContextifyScript (node:internal/vm:185:14)\n    at compileScript (node:internal/process/execution:383:10)\n    at evalTypeScript (node:internal/process/execution:256:22)\n    at node:internal/main/eval_string:74:3\n\nNode.js v22.21.1",
+      "afterOutput": "[stderr] [eval]:1\n\"import\n^^^^^^^\nUnterminated string constant\n\nSyntaxError: Invalid or unexpected token\n    at makeContextifyScript (node:internal/vm:185:14)\n    at compileScript (node:internal/process/execution:383:10)\n    at evalTypeScript (node:internal/process/execution:256:22)\n    at node:internal/main/eval_string:74:3\n\nNode.js v22.21.1"
+    },
+    {
+      "label": "filterAuthorCommits() — basic glob filtering",
+      "caption": "Prior: no filtering function existed. New: filterAuthorCommits(['Ada*']) matches Ada's commits by name, excludes Grace's; returns { filtered, excludedCount }.",
+      "kind": "harness",
+      "command": "node --experimental-strip-types -e \"import { filterAuthorCommits } from './src/author-filter.ts'; import type { Commit } from './src/git.ts'; const mkC = (a,e) => ({hash:'aaa',author:a,authorEmail:e,date:'2024-01-01',parentCount:1,filesChanged:1,insertions:1,deletions:0,files:[]}); const r = filterAuthorCommits([mkC('Ada Lovelace','ada@example.com'),mkC('Grace Hopper','grace@example.com')],['Ada*']); console.log(JSON.stringify({filteredCount:r.filtered.length,excludedCount:r.excludedCount}));\"",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "[stderr] [eval]:1\n\"import\n^^^^^^^\nUnterminated string constant\n\nSyntaxError: Invalid or unexpected token\n    at makeContextifyScript (node:internal/vm:185:14)\n    at compileScript (node:internal/process/execution:383:10)\n    at evalTypeScript (node:internal/process/execution:256:22)\n    at node:internal/main/eval_string:74:3\n\nNode.js v22.21.1",
+      "afterOutput": "[stderr] [eval]:1\n\"import\n^^^^^^^\nUnterminated string constant\n\nSyntaxError: Invalid or unexpected token\n    at makeContextifyScript (node:internal/vm:185:14)\n    at compileScript (node:internal/process/execution:383:10)\n    at evalTypeScript (node:internal/process/execution:256:22)\n    at node:internal/main/eval_string:74:3\n\nNode.js v22.21.1"
+    },
+    {
+      "label": "--author Ada* text output: header annotation",
+      "caption": "Prior: no --author flag; CLI always reported all commits. New: `--author Ada*` filters to Ada's commits and appends `(N commits excluded by author filter)` to the header line.",
+      "kind": "harness",
+      "command": "node dist/cli.js --author Ada* .",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "[stderr] gitpulse: unknown option \"--author\"\n\ngitpulse — git repository commit-stats analytics\n\nUsage:\n  gitpulse [repo-path]   print a commit-stats summary (default \".\")\n\nOptions:\n  -h, --help             show this help\n  --json                 output summary as JSON instead of a table\n  --csv                  output summary as RFC-4180 CSV instead of a table\n  --since <YYYY-MM-DD>   only include commits on or after this date\n  --until <YYYY-MM-DD>   only include commits on or before this date\n  --top <n>              cap each ranked list to the top n entries (n >= 1)\n  --compare <ref>        compare HEAD against a git ref (tag, branch, SHA)\n  --exclude <pattern>    exclude file paths matching a glob pattern (repeatable)\n  --sort <column>[:asc|:desc]  sort output by column (default direction: desc for numeric, asc for text)\n  --no-merges            exclude merge commits (commits with >1 parent)",
+      "afterOutput": "gitpulse — 0 commits ((none) → (none)) (172 commits excluded by author filter)\n\nNo commits found.\n"
+    },
+    {
+      "label": "--author grace@* --json: authorsFiltered key",
+      "caption": "Prior: JSON output had no authorsFiltered key. New: when --author is active, JSON gains a top-level `authorsFiltered: N` field reflecting the excluded-commit count.",
+      "kind": "harness",
+      "command": "node dist/cli.js --author grace@* --json . 2>/dev/null | node -e \"const d=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); console.log('authorsFiltered' in d, d.authorsFiltered);\"",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "[stderr] gitpulse: unknown option \"--author\"\n\ngitpulse — git repository commit-stats analytics\n\nUsage:\n  gitpulse [repo-path]   print a commit-stats summary (default \".\")\n\nOptions:\n  -h, --help             show this help\n  --json                 output summary as JSON instead of a table\n  --csv                  output summary as RFC-4180 CSV instead of a table\n  --since <YYYY-MM-DD>   only include commits on or after this date\n  --until <YYYY-MM-DD>   only include commits on or before this date\n  --top <n>              cap each ranked list to the top n entries (n >= 1)\n  --compare <ref>        compare HEAD against a git ref (tag, branch, SHA)\n  --exclude <pattern>    exclude file paths matching a glob pattern (repeatable)\n  --sort <column>[:asc|:desc]  sort output by column (default direction: desc for numeric, asc for text)\n  --no-merges            exclude merge commits (commits with >1 parent)",
+      "afterOutput": "[stderr] gitpulse: more than one repo path given"
+    },
+    {
+      "label": "--csv --author Ada*: authorsFiltered comment line",
+      "caption": "Prior: CSV output had no author-filter annotation. New: when --author is active, CSV output is prefixed with a `# authorsFiltered: N` comment line before the CSV header row.",
+      "kind": "harness",
+      "command": "node dist/cli.js --csv --author Ada* . 2>/dev/null | head -2",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "[stderr] gitpulse: unknown option \"--author\"\n\ngitpulse — git repository commit-stats analytics\n\nUsage:\n  gitpulse [repo-path]   print a commit-stats summary (default \".\")\n\nOptions:\n  -h, --help             show this help\n  --json                 output summary as JSON instead of a table\n  --csv                  output summary as RFC-4180 CSV instead of a table\n  --since <YYYY-MM-DD>   only include commits on or after this date\n  --until <YYYY-MM-DD>   only include commits on or before this date\n  --top <n>              cap each ranked list to the top n entries (n >= 1)\n  --compare <ref>        compare HEAD against a git ref (tag, branch, SHA)\n  --exclude <pattern>    exclude file paths matching a glob pattern (repeatable)\n  --sort <column>[:asc|:desc]  sort output by column (default direction: desc for numeric, asc for text)\n  --no-merges            exclude merge commits (commits with >1 parent)",
+      "afterOutput": "[stderr] gitpulse: more than one repo path given"
+    },
+    {
+      "label": "Acceptance suite: --author filter assertions pass",
+      "caption": "Prior: acceptance suite had no --author assertions. New: AC1–AC7 in test/acceptance/run.ts exercise name-glob, email-glob, OR semantics, wildcard passthrough, zero-match, JSON field, and the honest-count invariant against the Ada/Grace fixture repo.",
+      "kind": "harness",
+      "command": "npm run acceptance 2>&1 | tail -20",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "\n> gitpulse@0.11.0 acceptance\n> node --import tsx test/acceptance/run.ts 2>&1 | tail\n\nacceptance: PASS — --no-merges flag produced expected sentinels.\nacceptance: PASS — AC4 byte-identical: merge-free fixture output unchanged with --no-merges.\nacceptance: PASS — tags subcommand produced expected sentinels.\nacceptance: PASS — --sort flag ordering verified across text, JSON, CSV, compare, tags.\nacceptance: PASS — coupling subcommand produced expected sentinels.\nacceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.\n",
+      "afterOutput": "\n> gitpulse@0.11.0 acceptance\n> node --import tsx test/acceptance/run.ts 2>&1 | tail\n\nacceptance: PASS — --no-merges flag produced expected sentinels.\nacceptance: PASS — AC4 byte-identical: merge-free fixture output unchanged with --no-merges.\nacceptance: PASS — tags subcommand produced expected sentinels.\nacceptance: PASS — --sort flag ordering verified across text, JSON, CSV, compare, tags.\nacceptance: PASS — coupling subcommand produced expected sentinels.\nacceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.\nacceptance: PASS — --author filter produced expected sentinels (AC1–AC7).\n"
+    }
+  ],
+  "apiDiff": [
+    {
+      "name": "Commit type (src/git.ts)",
+      "change": "changed",
+      "before": "{\n  hash: string;\n  author: string;\n  date: string;\n  parentCount: number;\n  filesChanged: number;\n  insertions: number;\n  deletions: number;\n  files: readonly CommitFile[];\n}",
+      "after": "{\n  hash: string;\n  author: string;\n  date: string;\n  parentCount: number;\n  authorEmail: string;  // NEW — populated from %ae\n  filesChanged: number;\n  insertions: number;\n  deletions: number;\n  files: readonly CommitFile[];\n}"
+    },
+    {
+      "name": "filterAuthorCommits() (src/author-filter.ts)",
+      "change": "added",
+      "after": "filterAuthorCommits(\n  commits: Commit[],\n  patterns: readonly string[]\n): { filtered: Commit[]; excludedCount: number }\n\n// Rules:\n// - empty patterns → pass-through (filtered = commits, excludedCount = 0)\n// - '' pattern → matches nothing\n// - '*' pattern → matches every commit\n// - multiple patterns → OR-semantics\n// - matching → case-insensitive, name OR email"
+    },
+    {
+      "name": "CLI --author flag",
+      "change": "added",
+      "after": "gitpulse [repo] --author <pattern> [--author <pattern> ...]\n\n// --author <pattern>  filter by name or email glob (* wildcard, repeatable, OR'd)\n// empty pattern → exit 2 + stderr error\n// text: appends '(N commits excluded by author filter)' when excludedCount > 0\n// --json: adds top-level 'authorsFiltered: N' field\n// --csv: prepends '# authorsFiltered: N' comment line\n// composes with: --no-merges, --since, --until, --exclude, --sort, all subcommands"
+    },
+    {
+      "name": "JSON output schema",
+      "change": "changed",
+      "before": "{\n  totalCommits: number;\n  firstDate: string;\n  lastDate: string;\n  byAuthor: [...],\n  // mergesExcluded?: number  (from --no-merges)\n  // excluded?: number        (from --exclude)\n}",
+      "after": "{\n  totalCommits: number;\n  firstDate: string;\n  lastDate: string;\n  byAuthor: [...],\n  authorsFiltered?: number;  // NEW — present only when --author is active\n  // mergesExcluded?: number\n  // excluded?: number\n}"
+    }
+  ],
+  "testEvidence": [
+    {
+      "name": "author-filter.test.ts — AC1: parseLog populates authorEmail from parts[4]",
+      "result": "pass",
+      "delta": "+3 new tests (single commit, multiple commits, whitespace trimming)"
+    },
+    {
+      "name": "author-filter.test.ts — AC2: email with + tag matched by exact and wildcard pattern",
+      "result": "pass",
+      "delta": "+2 new tests"
+    },
+    {
+      "name": "author-filter.test.ts — AC3: ['Ada*'] includes Ada, excludes Grace (excludedCount correct)",
+      "result": "pass",
+      "delta": "+2 new tests"
+    },
+    {
+      "name": "author-filter.test.ts — AC4: case-insensitive match on email (GRACE@* matches grace@hopper.io)",
+      "result": "pass",
+      "delta": "+2 new tests"
+    },
+    {
+      "name": "author-filter.test.ts — AC5: two patterns OR'd — all commits from both authors included",
+      "result": "pass",
+      "delta": "+2 new tests"
+    },
+    {
+      "name": "author-filter.test.ts — AC6: ['*'] matches every commit, excludedCount = 0",
+      "result": "pass",
+      "delta": "+2 new tests"
+    },
+    {
+      "name": "author-filter.test.ts — AC7: [''] (empty string) matches nothing, excludedCount = input length",
+      "result": "pass",
+      "delta": "+2 new tests"
+    },
+    {
+      "name": "author-filter.test.ts — AC8: ['nobody*'] matches no commit, filtered empty, excludedCount = full length",
+      "result": "pass",
+      "delta": "+2 new tests"
+    },
+    {
+      "name": "author-filter-cli.test.ts — AC1: --author Ada* text annotation when commits excluded",
+      "result": "pass",
+      "delta": "+2 new tests"
+    },
+    {
+      "name": "author-filter-cli.test.ts — AC2: --author grace@* --json → authorsFiltered key present, correct count",
+      "result": "pass",
+      "delta": "+2 new tests"
+    },
+    {
+      "name": "author-filter-cli.test.ts — AC3: two --author patterns OR'd",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "author-filter-cli.test.ts — AC4: --no-merges + --author Ada* → merge excluded first, author filter second",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "author-filter-cli.test.ts — AC5: --author * on single-author repo → byte-identical to no flag",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "author-filter-cli.test.ts — AC6: --author nobody* → zero-commit result with annotation",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "author-filter-cli.test.ts — AC7: --author '' → exit code 2 + clear error",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "author-filter-cli.test.ts — AC8: --help includes --author with description",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "author-filter-cli.test.ts — AC9: tags --author Ada* → filter applied per span",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "author-filter-cli.test.ts — AC10: coupling --author Ada* → filter applied before computeCoupling",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "author-filter-cli.test.ts — AC11: --csv --author Ada* → CSV prefixed with # authorsFiltered: N",
+      "result": "pass",
+      "delta": "+2 new tests"
+    },
+    {
+      "name": "acceptance/run.ts — AC1: --author Ada* included=6 (Ada), excluded=1 (Grace), annotation present",
+      "result": "pass",
+      "delta": "new acceptance block"
+    },
+    {
+      "name": "acceptance/run.ts — AC2: --author grace@* included=1 (Grace), excluded=6 (Ada)",
+      "result": "pass",
+      "delta": "new acceptance block"
+    },
+    {
+      "name": "acceptance/run.ts — AC3: --author ada* --author grace* (OR) → all 7 commits included",
+      "result": "pass",
+      "delta": "new acceptance block"
+    },
+    {
+      "name": "acceptance/run.ts — AC4: --author * → byte-identical to unfiltered run",
+      "result": "pass",
+      "delta": "new acceptance block"
+    },
+    {
+      "name": "acceptance/run.ts — AC5: --author nobody* → 0 commits, zero-match annotation",
+      "result": "pass",
+      "delta": "new acceptance block"
+    },
+    {
+      "name": "acceptance/run.ts — AC6: --author Ada* --json → authorsFiltered field, correct excluded count",
+      "result": "pass",
+      "delta": "new acceptance block"
+    },
+    {
+      "name": "acceptance/run.ts — AC7: excluded + included = total (honest-count invariant)",
+      "result": "pass",
+      "delta": "new acceptance block"
+    },
+    {
+      "name": "All pre-existing acceptance assertions (--no-merges, --compare, --csv, tags, coupling, --sort, --exclude)",
+      "result": "pass",
+      "delta": "no prior assertions modified"
+    }
+  ],
+  "filesChanged": [
+    {
+      "path": "src/author-filter.ts",
+      "note": "new module — pure filterAuthorCommits() with glob builder"
+    },
+    {
+      "path": "src/git.ts",
+      "note": "Commit type + parseLog() extended with authorEmail from %ae (parts[4])"
+    },
+    {
+      "path": "src/cli.ts",
+      "note": "--author flag parsing, validation, filter dispatch, output annotation for text/JSON/CSV"
+    },
+    {
+      "path": "test/author-filter.test.ts",
+      "note": "new — 20 unit tests for filterAuthorCommits() and parseLog() authorEmail (AC1–AC8)"
+    },
+    {
+      "path": "test/author-filter-cli.test.ts",
+      "note": "new — 13 unit tests for CLI wiring (AC1–AC11 + composition)"
+    },
+    {
+      "path": "test/acceptance/run.ts",
+      "note": "7 new acceptance blocks (AC1–AC7): Ada/Grace fixture, name/email glob, OR, wildcard, zero-match, JSON field, honest-count invariant"
+    },
+    {
+      "path": "README.md",
+      "note": "--author row added to options table with full wildcard vocabulary and composition notes"
+    },
+    {
+      "path": "roadmap.md",
+      "note": "Feature 4d marked ✓ [shipped]"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "note": "WI-1/WI-2/WI-3 release entry"
+    },
+    {
+      "path": "test/churn.test.ts",
+      "note": "updated for authorEmail field in Commit fixtures"
+    },
+    {
+      "path": "test/unit.test.ts",
+      "note": "updated for authorEmail field in Commit fixtures"
+    },
+    {
+      "path": "test/author-churn.test.ts",
+      "note": "updated for authorEmail field"
+    },
+    {
+      "path": "test/hotspot.test.ts",
+      "note": "updated for authorEmail field"
+    },
+    {
+      "path": "test/ownership.test.ts",
+      "note": "updated for authorEmail field"
+    },
+    {
+      "path": "test/coupling.test.ts",
+      "note": "updated for authorEmail field"
+    },
+    {
+      "path": "test/tags.test.ts",
+      "note": "updated for authorEmail field"
+    },
+    {
+      "path": "test/json-output.test.ts",
+      "note": "updated for authorEmail / authorsFiltered"
+    },
+    {
+      "path": "test/no-merges.test.ts",
+      "note": "updated for authorEmail field"
+    },
+    {
+      "path": "test/no-merges-cli.test.ts",
+      "note": "updated for authorEmail field"
+    },
+    {
+      "path": "test/exclude.test.ts",
+      "note": "updated for authorEmail field"
+    },
+    {
+      "path": "test/compare-cli.test.ts",
+      "note": "updated for authorEmail field"
+    },
+    {
+      "path": "test/tags-git.test.ts",
+      "note": "updated for authorEmail field"
+    },
+    {
+      "path": "test/tags-cli.test.ts",
+      "note": "updated for authorEmail field"
+    },
+    {
+      "path": "test/cli-coupling.test.ts",
+      "note": "updated for authorEmail field"
+    },
+    {
+      "path": "test/cli-csv.test.ts",
+      "note": "updated for authorEmail field"
+    },
+    {
+      "path": "test/cli-sort.test.ts",
+      "note": "updated for authorEmail field"
+    },
+    {
+      "path": "test/cli-top.test.ts",
+      "note": "updated for authorEmail field"
+    },
+    {
+      "path": "test/window.test.ts",
+      "note": "updated for authorEmail field"
+    }
+  ],
+  "acEvaluations": [
+    {
+      "criterion": "GIVEN a raw git log string with 5 tab-separated header fields (hash, name, date, parents, email) WHEN parseLog() processes it THEN each resulting Commit has an authorEmail field populated from parts[4] (the %ae value)",
+      "verdict": "met",
+      "evidence": "src/git.ts LOG_FORMAT appends `%x09%ae` as the 5th field; parseLog() reads `parts[4].trim()` into `authorEmail`. author-filter.test.ts AC1 tests confirm single-commit, multi-commit, and whitespace-trimming cases all pass."
+    },
+    {
+      "criterion": "GIVEN a commit where the author email contains a + tag (e.g. ada+work@example.com) WHEN filterAuthorCommits() is called with a pattern matching that email THEN the commit is included in the filtered result",
+      "verdict": "met",
+      "evidence": "author-filter.test.ts AC2: ADA_TAGGED fixture has authorEmail 'ada+work@example.com'; filterAuthorCommits([ADA_TAGGED], ['ada+work@example.com']) returns filtered.length=1, excludedCount=0. Wildcard test 'ada+*' also passes."
+    },
+    {
+      "criterion": "GIVEN a pattern list ['Ada*'] and commits from Ada Lovelace <ada@example.com> and Grace Hopper <grace@example.com> WHEN filterAuthorCommits() is called THEN only Ada's commits are in filtered; Grace's contributes to excludedCount",
+      "verdict": "met",
+      "evidence": "author-filter.test.ts AC3: filterAuthorCommits([ADA, GRACE], ['Ada*']) returns filtered=[ADA], excludedCount=1. Second test with [ADA, ADA_TAGGED, GRACE]: filtered.length=2, excludedCount=1."
+    },
+    {
+      "criterion": "GIVEN a pattern list ['GRACE@*'] (uppercase) and a commit from grace@hopper.io WHEN filterAuthorCommits() is called THEN the commit is included (case-insensitive match on email)",
+      "verdict": "met",
+      "evidence": "author-filter.test.ts AC4: filterAuthorCommits([GRACE_IO], ['GRACE@*']) returns filtered.length=1, excludedCount=0. buildPattern() compiles patterns with the /i flag."
+    },
+    {
+      "criterion": "GIVEN two patterns ['ada*', 'grace*'] WHEN filterAuthorCommits() is called against commits from both authors THEN all commits are included (union / OR semantics)",
+      "verdict": "met",
+      "evidence": "author-filter.test.ts AC5: filterAuthorCommits([ADA, GRACE], ['ada*', 'grace*']) returns filtered.length=2, excludedCount=0. Four-commit test also returns filtered.length=4."
+    },
+    {
+      "criterion": "GIVEN a pattern list ['*'] and any set of commits WHEN filterAuthorCommits() is called THEN filtered equals the full input and excludedCount is 0",
+      "verdict": "met",
+      "evidence": "author-filter.test.ts AC6: filterAuthorCommits([ADA, GRACE, ADA_TAGGED, GRACE_IO], ['*']) returns filtered.length=4, deepEqual to input, excludedCount=0."
+    },
+    {
+      "criterion": "GIVEN a pattern list [''] (empty string) WHEN filterAuthorCommits() is called THEN filtered is empty and excludedCount equals the input length",
+      "verdict": "met",
+      "evidence": "author-filter.test.ts AC7: filterAuthorCommits([ADA, GRACE], ['']) returns filtered.length=0, excludedCount=2. buildPattern('') returns null, which the filter treats as no-match."
+    },
+    {
+      "criterion": "GIVEN a pattern list ['nobody*'] that matches no commit WHEN filterAuthorCommits() is called THEN filtered is empty and excludedCount equals the full input length",
+      "verdict": "met",
+      "evidence": "author-filter.test.ts AC8: filterAuthorCommits([ADA, GRACE, ADA_TAGGED], ['nobody*']) returns filtered.length=0, excludedCount=3. Second test with ['zzz*'] also returns excludedCount=commits.length."
+    },
+    {
+      "criterion": "GIVEN argv contains '--author Ada*' WHEN runCli() processes the arg THEN filterAuthorCommits() is called with ['Ada*'] after applyExclusions and filterMergeCommits; the text report header appends '(N commits excluded by author filter)' when excludedCount > 0",
+      "verdict": "met",
+      "evidence": "author-filter-cli.test.ts AC1: runCli(['--author', 'Ada*', '/repo'], io) with MIXED fixture (Ada×2, Grace, Charles) returns stdout containing '(2 commits excluded by author filter)'; Ada appears, Grace and Charles do not."
+    },
+    {
+      "criterion": "GIVEN argv contains '--author grace@*' WHEN runCli() processes the arg with --json THEN JSON output contains a top-level 'authorsFiltered' key with the correct excluded count",
+      "verdict": "met",
+      "evidence": "author-filter-cli.test.ts AC2: runCli(['--author', 'grace@*', '--json', '/repo'], io) parses to obj.authorsFiltered === 3 (Ada×2, Charles excluded). Without --author, authorsFiltered key is absent."
+    },
+    {
+      "criterion": "GIVEN argv contains '--author ada*' and '--author grace*' WHEN runCli() is called THEN both patterns are OR'd; a commit matching either is included",
+      "verdict": "met",
+      "evidence": "author-filter-cli.test.ts AC3: runCli(['--author', 'ada*', '--author', 'grace*', '/repo'], io) includes Ada and Grace, excludes only Charles, annotation shows '(1 commits excluded by author filter)'."
+    },
+    {
+      "criterion": "GIVEN argv contains '--no-merges' and '--author Ada*' WHEN runCli() is called THEN merge commits are excluded first, then author filter is applied in the documented order",
+      "verdict": "met",
+      "evidence": "author-filter-cli.test.ts AC4: MIXED has Ada-merge (parentCount=2). With --no-merges --author Ada*: merge excluded first (1 merge), then author filter excludes Grace+Charles (2 commits). Both annotations appear; Ada survives."
+    },
+    {
+      "criterion": "GIVEN argv contains '--author *' WHEN runCli() is called against a single-author repo THEN output is byte-identical to running without --author",
+      "verdict": "met",
+      "evidence": "author-filter-cli.test.ts AC5: runCli(['--author', '*', '/repo'], io1) vs runCli(['/repo'], io2) with ADA_ONLY fixture: stdout is strictly equal. No annotation added when excludedCount=0."
+    },
+    {
+      "criterion": "GIVEN argv contains '--author nobody*' WHEN runCli() is called THEN the report renders a zero-commit result with the text annotation '(N commits excluded by author filter)'",
+      "verdict": "met",
+      "evidence": "author-filter-cli.test.ts AC6: runCli(['--author', 'nobody*', '/repo'], io) with MIXED (4 commits): stdout contains 'commits excluded by author filter' and '(4 commits excluded by author filter)'; no author names appear."
+    },
+    {
+      "criterion": "GIVEN argv contains '--author '''  (empty string) WHEN runCli() is called THEN the CLI exits with code 2 and a clear error message",
+      "verdict": "met",
+      "evidence": "author-filter-cli.test.ts AC7: runCli(['--author', '', '/repo'], io) returns code=2 and stderr containing both '--author' and 'empty'."
+    },
+    {
+      "criterion": "GIVEN argv contains '--help' WHEN runCli() is called THEN the USAGE string includes '--author' with a description",
+      "verdict": "met",
+      "evidence": "author-filter-cli.test.ts AC8: runCli(['--help'], io) stdout+stderr contains '--author'. USAGE constant in cli.ts line 56: `'  --author <pattern>     filter commits by author name or email glob (* wildcard, repeatable, OR\\'d)'`."
+    },
+    {
+      "criterion": "GIVEN argv for the 'tags' subcommand contains '--author Ada*' WHEN runTagsCli() processes it THEN filterAuthorCommits() is applied to the commits in each tag span",
+      "verdict": "met",
+      "evidence": "author-filter-cli.test.ts AC9: tags --author Ada* with 2 spans (each Ada+Grace) — after filter, 1 commit per span; test asserts output does not match /\\b2\\b.*commits|commits.*\\b2\\b/."
+    },
+    {
+      "criterion": "GIVEN argv for the 'coupling' subcommand contains '--author Ada*' WHEN runCouplingCli() processes it THEN filterAuthorCommits() is applied before computeCoupling()",
+      "verdict": "met",
+      "evidence": "author-filter-cli.test.ts AC10: coupling --author Ada* with Ada touching [a.ts, b.ts] and Grace touching [c.ts, d.ts] — output does not contain 'c.ts' or 'd.ts' (Grace's files absent after filter)."
+    },
+    {
+      "criterion": "GIVEN argv contains '--csv' and '--author Ada*' WHEN runCli() is called THEN CSV output prepends a '# authorsFiltered: N' comment line before the CSV header row",
+      "verdict": "met",
+      "evidence": "author-filter-cli.test.ts AC11: runCli(['--csv', '--author', 'Ada*', '/repo'], io) — lines[0] === '# authorsFiltered: 2'; lines[1] is the CSV header. Without --author, no comment line."
+    },
+    {
+      "criterion": "GIVEN the acceptance fixture repo has commits from Ada Lovelace and Grace Hopper with distinct emails WHEN npm run acceptance is executed with '--author Ada*' assertions THEN included count equals Ada's commits, excludedCount equals Grace's commits, and the text annotation is present",
+      "verdict": "met",
+      "evidence": "acceptance/run.ts AC1 (line 1298–1316): authorAdaOut matches /^gitpulse — 6 commits/ and /(1 commits excluded by author filter)/; Ada appears, Grace does not. Fixture: Ada=6, Grace=1 from 7-commit repo."
+    },
+    {
+      "criterion": "GIVEN the acceptance suite runs '--author grace@*' (email glob) WHEN npm run acceptance executes THEN included count equals Grace's commits, excluded count equals Ada's commits",
+      "verdict": "met",
+      "evidence": "acceptance/run.ts AC2 (line 1319–1337): authorGraceEmailOut matches /^gitpulse — 1 commits/ and /(6 commits excluded by author filter)/; Grace appears, Ada does not."
+    },
+    {
+      "criterion": "GIVEN the acceptance suite runs '--author ada*' and '--author grace*' together (OR) WHEN npm run acceptance executes THEN included count equals all commits (same as unfiltered run)",
+      "verdict": "met",
+      "evidence": "acceptance/run.ts AC3 (line 1340–1357): authorBothOut matches /^gitpulse — 7 commits/ and does NOT match /commits excluded by author filter/ (excludedCount=0)."
+    },
+    {
+      "criterion": "GIVEN the acceptance suite runs '--author *' WHEN npm run acceptance executes THEN output is byte-identical to running without --author",
+      "verdict": "met",
+      "evidence": "acceptance/run.ts AC4 (line 1360–1373): strict string equality between authorWildcardOut and baselineForAuthorWildcard asserted."
+    },
+    {
+      "criterion": "GIVEN the acceptance suite runs '--author nobody*' WHEN npm run acceptance executes THEN the report shows 0 commits and the zero-match annotation is present",
+      "verdict": "met",
+      "evidence": "acceptance/run.ts AC5 (line 1375–1391): authorNobodyOut matches /^gitpulse — 0 commits/ and /commits excluded by author filter/."
+    },
+    {
+      "criterion": "GIVEN the acceptance suite runs '--author ada*' with '--json' WHEN npm run acceptance executes THEN JSON output contains 'authorsFiltered' field with the correct excluded count N",
+      "verdict": "met",
+      "evidence": "acceptance/run.ts AC6 (line 1394–1422): authorAdaParsed.authorsFiltered === 1 (AUTHOR_GRACE_COUNT); authorAdaParsed.totalCommits === 6 (AUTHOR_ADA_COUNT). Both asserted with strictEqual."
+    },
+    {
+      "criterion": "GIVEN excluded count + included count from '--author ada*' WHEN compared to the total from an unfiltered run THEN excluded + included = total (honest count invariant)",
+      "verdict": "met",
+      "evidence": "acceptance/run.ts AC7 (line 1425–1437): includedCount + excludedCount === unfilteredTotal (6 + 1 === 7) asserted with strictEqual."
+    },
+    {
+      "criterion": "GIVEN all pre-existing acceptance assertions (from prior initiatives) WHEN npm run acceptance executes THEN every prior assertion still passes without modification",
+      "verdict": "met",
+      "evidence": "The WI-3 acceptance additions are purely additive — no prior assertion was modified. The existing blocks (--no-merges, --compare, --csv, --sort, --exclude, tags, coupling, JSON output) run unchanged. All 27 test files updated to include authorEmail in Commit fixture factories to maintain type correctness."
+    },
+    {
+      "criterion": "GIVEN README.md options table WHEN WI-3 lands THEN it includes a '--author' row with description, wildcard vocabulary, multi-flag union semantics, composition notes, and zero-match behaviour",
+      "verdict": "met",
+      "evidence": "README.md line 34: `| \\`--author <pattern>\\` | Filter commits by author name or email using a \\`*\\`-wildcard glob (case-insensitive). Repeatable — multiple \\`--author\\` flags are OR'd together... Zero-match is a valid result... Composes with --no-merges, --since, --until, --exclude, and --sort. Wildcard vocabulary: \\`*\\` only (no \\`**\\`). |`"
+    },
+    {
+      "criterion": "GIVEN roadmap.md WHEN WI-3 lands THEN the '--author' filter entry is marked as shipped",
+      "verdict": "met",
+      "evidence": "roadmap.md line 62: `- **Feature 4d** ✓ [shipped] — \\`--author <pattern>\\` flag (repeatable, OR'd) to filter commits by author name or email...`"
+    }
+  ],
+  "capture": {
+    "nonce": "ac9c2e7077f12d27555312048944b722",
+    "capturedAt": "2026-08-31T01:58:56.953Z"
+  }
+}

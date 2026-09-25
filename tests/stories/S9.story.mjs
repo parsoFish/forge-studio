@@ -34,12 +34,16 @@
  * kind would report §3's clause as kept; taking both is what makes it
  * measurable that it is kept for some kinds and not others.
  *
- * GROUND. `mdtoc` — the one project committed to this repo, so it is the only
- * project a CLEAN CHECKOUT has, and it is the only option in either kickoff's
- * own `[data-field="kickoff-project"]` select (read live: `|mdtoc`). Both
- * kickoffs end in a REAL dispatch, so `realSpawn` is true and `budget_usd` is
- * declared ($25, approved by the operator 2026-08-30 for this batch); the
- * runner refuses to start without `--approve-spend` (H2).
+ * GROUND. `story-s9`, provisioned for each run from the forge-owned fixture
+ * `tests/stories/grounds/node-library` (a byte copy of `projects/mdtoc` at
+ * `9db91ef5`, provenance beside it) and torn down after the fence has judged
+ * it (M7-D, forge-1rk5.1). It used to be the real `projects/mdtoc`, the one
+ * project a CLEAN CHECKOUT had; a story now never runs against a ground the
+ * operator owns, and it is still the only option in either kickoff's own
+ * `[data-field="kickoff-project"]` select. Both kickoffs end in a REAL
+ * dispatch, so `realSpawn` is true and `budget_usd` is declared ($25,
+ * approved by the operator 2026-08-30 for this batch); the runner refuses to
+ * start without `--approve-spend` (H2).
  *
  * THIS STORY WILL ACTUALLY SPEND, UNLIKE THE SEVEN BEFORE IT. S1, S2, S5, S6
  * and S7 each approved $25 and spent $0, because the gate is evaluated before
@@ -87,12 +91,13 @@
  *     can prove exists.
  *
  * SWEEP. `sweep.mjs` removes `projects/story-<id>` and
- * `brain/projects/story-<id>` only. Both sessions here are anchored to
- * `mdtoc`, so each run leaves a session directory under `projects/mdtoc/`
- * that nothing sweeps, and a second run meets the duplicate-session guard —
- * `[data-action="start-session"]` reads "Start another session" and arms on
- * the first click instead of posting. Bead `forge-8vfn.2.26`; cited, not
- * re-filed. This lane swept by hand between runs.
+ * `brain/projects/story-<id>` only, and since M7-D (forge-1rk5.1) `story-s9`
+ * IS that reserved prefix: both sessions here are anchored under
+ * `projects/story-s9/`, the fixture ground itself, so the leading sweep and
+ * the fixture's own teardown both remove it whole between runs — the
+ * duplicate-session guard bead `forge-8vfn.2.26` recorded was the real
+ * `projects/mdtoc` ground's own gap, not this one's; cited for history, not
+ * re-filed.
  */
 
 /** What the operator asks the assistant to build — the same job S7's operator does by hand. */
@@ -107,7 +112,7 @@ const AUTHORING_AGENT = 'creation-agent';
 
 export default {
   id: 'S9',
-  ground: { project: 'mdtoc', realSpawn: true, budget_usd: 25 },
+  ground: { project: 'story-s9', fixture: 'node-library', realSpawn: true, budget_usd: 25 },
   docs: { kind: 'how-to', title: 'Drive forge through the assistant' },
   beats: [
     {
@@ -161,7 +166,7 @@ export default {
     },
     {
       // Fully expressible. `kickoff-project` is the selector (live options are
-      // exactly `|mdtoc`) and `kickoff-prompt` is the free-text brief —
+      // exactly `|story-s9`) and `kickoff-prompt` is the free-text brief —
       // `authoring` is the ONE kickoff kind whose `/start` body requires one,
       // so Start stays disabled until it is filled. The start button answers
       // the keys the root does not; `existing-count` is on it always, and
@@ -169,7 +174,7 @@ export default {
       // rather than an armed "Start another".
       act: 'Point it at a project and tell it what to build',
       do: [
-        { fill: 'kickoff-project', with: 'mdtoc' },
+        { fill: 'kickoff-project', with: 'story-s9' },
         { fill: 'kickoff-prompt', with: AUTHORING_BRIEF },
       ],
       expect: {
@@ -415,7 +420,7 @@ export default {
       // and the second half of what this story's $25 ceiling is for.
       act: 'Start it and let both of them run',
       do: [
-        { fill: 'kickoff-project', with: 'mdtoc' },
+        { fill: 'kickoff-project', with: 'story-s9' },
         { press: 'start-session' },
       ],
       expect: {

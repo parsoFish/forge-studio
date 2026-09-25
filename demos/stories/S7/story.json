@@ -2,9 +2,10 @@
   "story": {
     "id": "S7",
     "ground": {
-      "project": "mdtoc",
+      "project": "story-s7",
       "realSpawn": true,
-      "budget_usd": 25
+      "budget_usd": 25,
+      "fixture": "node-library"
     },
     "docs": {
       "kind": "how-to",
@@ -47,7 +48,7 @@
         "do": [
           {
             "fill": "authoring-launcher-project",
-            "with": "mdtoc"
+            "with": "story-s7"
           },
           {
             "fill": "authoring-launcher-prompt",
@@ -57,6 +58,13 @@
             "press": "start-authoring"
           }
         ],
+        "fork": {
+          "over": "authoring-door",
+          "cases": [
+            "creation-agent",
+            "manual-form"
+          ]
+        },
         "expect": {
           "route": "/skills/new",
           "data": {
@@ -250,6 +258,27 @@
         }
       },
       {
+        "act": "Test-fire the approved hook, before any agent carries it",
+        "say": "Approval is a promise about bytes; a test-fire is the bytes running. The hook executes here through the same gate a real dispatch uses, and the page records the run — when, on which event, and how it ended — while still saying plainly that nothing will fire it on its own until an agent carries it.",
+        "do": [
+          {
+            "press": "test-fire-hook"
+          }
+        ],
+        "expect": {
+          "route": "/hooks/story-s7-hook",
+          "data": {
+            "page": "hook-detail",
+            "hook-id": "story-s7-hook",
+            "test-fire-run-count": "<hookTestFireRunCount>",
+            "test-fire-at": "<hookTestFireAt>",
+            "test-fire-event": "SessionEnd",
+            "test-fire-outcome": "ran",
+            "carried-by-count": "0"
+          }
+        }
+      },
+      {
         "act": "Go back to the Library once more",
         "say": "Third kind, same parts bin.",
         "do": [],
@@ -290,33 +319,26 @@
         }
       },
       {
-        "act": "Head for the Agents pillar",
-        "say": "Instructions are the fourth kind of part, and the only door to them is through Sessions — which is not a pillar. Getting there is three clicks from the parts bin.",
+        "act": "Back to the Library",
+        "say": "Instructions are the fourth kind of part, and their door now sits in the parts bin with the other three.",
         "do": [],
         "expect": {
-          "route": "/agents",
+          "route": "/library",
           "data": {
-            "page": "agents-index",
-            "page-ready": "true"
+            "page": "library",
+            "page-ready": "true",
+            "section": "sessions"
           }
         }
       },
       {
-        "act": "Follow the Sessions entry",
-        "say": "Every session forge has ever run is here, and so is the only list of the kinds it can start.",
-        "do": [],
-        "expect": {
-          "route": "/sessions",
-          "data": {
-            "page": "sessions-index",
-            "page-ready": "true"
+        "act": "Open the instructions launcher straight from the Library",
+        "say": "One click from the parts bin to the launcher. The story walks it rather than teleporting, because an operator cannot teleport.",
+        "do": [
+          {
+            "press": "kickoff-instructions"
           }
-        }
-      },
-      {
-        "act": "Open the instructions launcher",
-        "say": "Three hops from the parts bin to the door for the fourth kind of part, and this is the third: the launcher itself. The story walks it rather than teleporting, because an operator cannot teleport.",
-        "do": [],
+        ],
         "expect": {
           "route": "/sessions/instructions/new",
           "data": {
@@ -331,7 +353,7 @@
         "do": [
           {
             "fill": "kickoff-project",
-            "with": "mdtoc"
+            "with": "story-s7"
           },
           {
             "press": "start-session"
@@ -363,7 +385,7 @@
       },
       {
         "act": "Head back to the Agents pillar",
-        "say": "The parts are all made now — a skill, a hook, a template, a house style. None of them does anything yet. Binding happens on a worker’s own page, and the only way back to a worker is the pillar the operator started from.",
+        "say": "The parts are all made now — a skill, a hook, a template, a house style. None of them does anything yet. Binding happens on a worker’s own page, and the way back to a worker is the Agents pillar.",
         "do": [],
         "expect": {
           "route": "/agents",
@@ -408,8 +430,8 @@
         }
       },
       {
-        "act": "Run the agent, and watch the hook fire on the session ending",
-        "say": "This is where S7 ends, and it ends on a claim the product does not yet make: that the hook the operator wrote, scanned, approved and bound actually RAN. A hook nobody can prove fired is a hook nobody should trust, and the whole gate in front of it — the scan, the package fingerprint, the approval — is spent guarding an event with no record.",
+        "act": "Run the agent",
+        "say": "The hook is bound, so this run is the first time anything other than the operator can set it off. It fires on the session ending — so the story waits for the ending.",
         "do": [
           {
             "press": "run-agent"
@@ -422,6 +444,52 @@
             "agent-id": "brain-ingest",
             "run-status": "running",
             "run-id": "<hookRunId>"
+          }
+        }
+      },
+      {
+        "act": "Wait for the run to end",
+        "say": "A session that ends is the event this hook was written for. Until the run finishes there is nothing to fire on.",
+        "do": [],
+        "wait": {
+          "for": "agent",
+          "upTo": 300000
+        },
+        "expect": {
+          "route": "/agents/brain-ingest",
+          "data": {
+            "page": "agents",
+            "agent-id": "brain-ingest",
+            "run-status": "done",
+            "run-id": "<hookRunId>"
+          }
+        }
+      },
+      {
+        "act": "Back to the Library",
+        "say": "The record of what a hook did lives with the hook, not with whichever agent happened to trigger it.",
+        "do": [],
+        "expect": {
+          "route": "/library",
+          "data": {
+            "page": "library",
+            "page-ready": "true",
+            "section": "hooks"
+          }
+        }
+      },
+      {
+        "act": "Open the hook, and see the session ending fire it",
+        "say": "This is where S7 ends: the hook the operator wrote, scanned, approved and bound actually ran, and its own page says when and how it ended. A hook nobody can prove fired is a hook nobody should trust — this one has a record.",
+        "do": [],
+        "expect": {
+          "route": "/hooks/story-s7-hook",
+          "data": {
+            "page": "hook-detail",
+            "hook-id": "story-s7-hook",
+            "carried-by-count": "1",
+            "hook-last-fire-at": "<hookLastFireAt>",
+            "hook-last-fire-outcome": "ran"
           }
         }
       }
@@ -439,6 +507,11 @@
         "page-ready": "true",
         "section": "skills"
       },
+      "expect": {
+        "page": "library",
+        "page-ready": "true",
+        "section": "skills"
+      },
       "frame": "frames/01-open-the-library.png"
     },
     {
@@ -452,6 +525,11 @@
         "page-ready": "true",
         "section": "skill-new"
       },
+      "expect": {
+        "page": "skill-builder",
+        "page-ready": "true",
+        "section": "skill-new"
+      },
       "frame": "frames/02-press-new-skill.png"
     },
     {
@@ -460,10 +538,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "authoringSessionId": "2026-09-12T04-41-51-a505bb70"
+        "authoringSessionId": "2026-09-25T17-07-31-107c96d1"
       },
       "data": {
-        "minted-session-id": "2026-09-12T04-41-51-a505bb70"
+        "minted-session-id": "2026-09-25T17-07-31-107c96d1"
+      },
+      "expect": {
+        "minted-session-id": "<authoringSessionId>"
       },
       "frame": "frames/03-describe-the-skill-to-the-creation-agent.png"
     },
@@ -474,6 +555,12 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "authoring",
+        "session-phase": "analyzing"
+      },
+      "expect": {
         "page": "session",
         "page-ready": "true",
         "session-kind": "authoring",
@@ -493,6 +580,12 @@
         "page-ready": "true",
         "skill-trust": "draft"
       },
+      "expect": {
+        "page": "skill-detail",
+        "skill-id": "story-s7-skill",
+        "page-ready": "true",
+        "skill-trust": "draft"
+      },
       "frame": "frames/05-read-what-it-drafted-give-the-package-it.png"
     },
     {
@@ -502,6 +595,12 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "skill-detail",
+        "skill-id": "story-s7-skill",
+        "page-ready": "true",
+        "skill-trust": "ready"
+      },
+      "expect": {
         "page": "skill-detail",
         "skill-id": "story-s7-skill",
         "page-ready": "true",
@@ -520,6 +619,11 @@
         "page-ready": "true",
         "section": "hooks"
       },
+      "expect": {
+        "page": "library",
+        "page-ready": "true",
+        "section": "hooks"
+      },
       "frame": "frames/07-go-back-to-the-library.png"
     },
     {
@@ -533,6 +637,11 @@
         "page-ready": "true",
         "section": "hook-new"
       },
+      "expect": {
+        "page": "hook-builder",
+        "page-ready": "true",
+        "section": "hook-new"
+      },
       "frame": "frames/08-press-new-hook.png"
     },
     {
@@ -542,6 +651,12 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "hook-detail",
+        "hook-id": "story-s7-hook",
+        "page-ready": "true",
+        "hook-event": "SessionEnd"
+      },
+      "expect": {
         "page": "hook-detail",
         "hook-id": "story-s7-hook",
         "page-ready": "true",
@@ -562,6 +677,13 @@
         "finding-count": "0",
         "critical-count": "0"
       },
+      "expect": {
+        "page": "hook-detail",
+        "hook-id": "story-s7-hook",
+        "scan-verdict": "clean",
+        "finding-count": "0",
+        "critical-count": "0"
+      },
       "frame": "frames/10-read-the-security-scan-before-trusting-i.png"
     },
     {
@@ -570,12 +692,18 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "hookPackageHash": "sha256:ae605d2524973232eea650baf308a968f44cb3cd1d21e37d49fcaf74d714439d"
+        "hookPackageHash": "sha256:6ba142ca73c3cb8101e5551c0b29df11f59f3235203fd58a564d9c3364bac3fb"
       },
       "data": {
         "page": "hook-detail",
         "hook-id": "story-s7-hook",
-        "package-hash": "sha256:ae605d2524973232eea650baf308a968f44cb3cd1d21e37d49fcaf74d714439d",
+        "package-hash": "sha256:6ba142ca73c3cb8101e5551c0b29df11f59f3235203fd58a564d9c3364bac3fb",
+        "package-file-count": "2"
+      },
+      "expect": {
+        "page": "hook-detail",
+        "hook-id": "story-s7-hook",
+        "package-hash": "<hookPackageHash>",
         "package-file-count": "2"
       },
       "frame": "frames/11-check-what-is-actually-in-the-package-ev.png"
@@ -592,7 +720,42 @@
         "hook-trust": "approved",
         "hook-runnable": "true"
       },
+      "expect": {
+        "page": "hook-detail",
+        "hook-id": "story-s7-hook",
+        "hook-trust": "approved",
+        "hook-runnable": "true"
+      },
       "frame": "frames/12-approve-the-hook.png"
+    },
+    {
+      "act": "Test-fire the approved hook, before any agent carries it",
+      "say": "Approval is a promise about bytes; a test-fire is the bytes running. The hook executes here through the same gate a real dispatch uses, and the page records the run — when, on which event, and how it ended — while still saying plainly that nothing will fire it on its own until an agent carries it.",
+      "status": "green",
+      "failures": [],
+      "bindings": {
+        "hookTestFireRunCount": "1",
+        "hookTestFireAt": "2026-09-25T15:11:45.382Z"
+      },
+      "data": {
+        "page": "hook-detail",
+        "hook-id": "story-s7-hook",
+        "test-fire-run-count": "1",
+        "test-fire-at": "2026-09-25T15:11:45.382Z",
+        "test-fire-event": "SessionEnd",
+        "test-fire-outcome": "ran",
+        "carried-by-count": "0"
+      },
+      "expect": {
+        "page": "hook-detail",
+        "hook-id": "story-s7-hook",
+        "test-fire-run-count": "<hookTestFireRunCount>",
+        "test-fire-at": "<hookTestFireAt>",
+        "test-fire-event": "SessionEnd",
+        "test-fire-outcome": "ran",
+        "carried-by-count": "0"
+      },
+      "frame": "frames/13-test-fire-the-approved-hook-before-any-a.png"
     },
     {
       "act": "Go back to the Library once more",
@@ -605,7 +768,12 @@
         "page-ready": "true",
         "section": "templates"
       },
-      "frame": "frames/13-go-back-to-the-library-once-more.png"
+      "expect": {
+        "page": "library",
+        "page-ready": "true",
+        "section": "templates"
+      },
+      "frame": "frames/14-go-back-to-the-library-once-more.png"
     },
     {
       "act": "Press \"+ New template\" and write the template the hook’s output is filed into",
@@ -617,37 +785,33 @@
         "page": "template-detail",
         "page-ready": "true"
       },
-      "frame": "frames/14-press-new-template-and-write-the-templat.png"
+      "expect": {
+        "page": "template-detail",
+        "page-ready": "true"
+      },
+      "frame": "frames/15-press-new-template-and-write-the-templat.png"
     },
     {
-      "act": "Head for the Agents pillar",
-      "say": "Instructions are the fourth kind of part, and the only door to them is through Sessions — which is not a pillar. Getting there is three clicks from the parts bin.",
+      "act": "Back to the Library",
+      "say": "Instructions are the fourth kind of part, and their door now sits in the parts bin with the other three.",
       "status": "green",
       "failures": [],
       "bindings": {},
       "data": {
-        "page": "agents-index",
+        "page": "library",
         "page-ready": "true",
-        "fetch-status": "ok"
+        "section": "sessions"
       },
-      "frame": "frames/15-head-for-the-agents-pillar.png"
+      "expect": {
+        "page": "library",
+        "page-ready": "true",
+        "section": "sessions"
+      },
+      "frame": "frames/16-back-to-the-library.png"
     },
     {
-      "act": "Follow the Sessions entry",
-      "say": "Every session forge has ever run is here, and so is the only list of the kinds it can start.",
-      "status": "green",
-      "failures": [],
-      "bindings": {},
-      "data": {
-        "page": "sessions-index",
-        "page-ready": "true",
-        "fetch-status": "ok"
-      },
-      "frame": "frames/16-follow-the-sessions-entry.png"
-    },
-    {
-      "act": "Open the instructions launcher",
-      "say": "Three hops from the parts bin to the door for the fourth kind of part, and this is the third: the launcher itself. The story walks it rather than teleporting, because an operator cannot teleport.",
+      "act": "Open the instructions launcher straight from the Library",
+      "say": "One click from the parts bin to the launcher. The story walks it rather than teleporting, because an operator cannot teleport.",
       "status": "green",
       "failures": [],
       "bindings": {},
@@ -655,7 +819,11 @@
         "page": "session-kickoff",
         "page-ready": "true"
       },
-      "frame": "frames/17-open-the-instructions-launcher.png"
+      "expect": {
+        "page": "session-kickoff",
+        "page-ready": "true"
+      },
+      "frame": "frames/17-open-the-instructions-launcher-straight-.png"
     },
     {
       "act": "Draft the project’s own working instructions, so the parts have a house style to follow",
@@ -663,10 +831,13 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "instructionsSessionId": "2026-09-12T04-42-56-20946267"
+        "instructionsSessionId": "2026-09-25T17-08-21-efed3a1f"
       },
       "data": {
-        "minted-session-id": "2026-09-12T04-42-56-20946267"
+        "minted-session-id": "2026-09-25T17-08-21-efed3a1f"
+      },
+      "expect": {
+        "minted-session-id": "<instructionsSessionId>"
       },
       "frame": "frames/18-draft-the-project-s-own-working-instruct.png"
     },
@@ -681,11 +852,16 @@
         "page-ready": "true",
         "session-kind": "instructions"
       },
+      "expect": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "instructions"
+      },
       "frame": "frames/19-open-the-instructions-session-it-just-st.png"
     },
     {
       "act": "Head back to the Agents pillar",
-      "say": "The parts are all made now — a skill, a hook, a template, a house style. None of them does anything yet. Binding happens on a worker’s own page, and the only way back to a worker is the pillar the operator started from.",
+      "say": "The parts are all made now — a skill, a hook, a template, a house style. None of them does anything yet. Binding happens on a worker’s own page, and the way back to a worker is the Agents pillar.",
       "status": "green",
       "failures": [],
       "bindings": {},
@@ -693,6 +869,10 @@
         "page": "agents-index",
         "page-ready": "true",
         "fetch-status": "ok"
+      },
+      "expect": {
+        "page": "agents-index",
+        "page-ready": "true"
       },
       "frame": "frames/20-head-back-to-the-agents-pillar.png"
     },
@@ -703,6 +883,11 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "agents",
+        "page-ready": "true",
+        "agent-id": "brain-ingest"
+      },
+      "expect": {
         "page": "agents",
         "page-ready": "true",
         "agent-id": "brain-ingest"
@@ -721,62 +906,151 @@
         "accepts": "hook",
         "count": "1"
       },
+      "expect": {
+        "page": "agents",
+        "agent-id": "brain-ingest",
+        "accepts": "hook",
+        "count": "1"
+      },
       "frame": "frames/22-bind-the-hook-to-the-agent-and-save-it.png"
     },
     {
-      "act": "Run the agent, and watch the hook fire on the session ending",
-      "say": "This is where S7 ends, and it ends on a claim the product does not yet make: that the hook the operator wrote, scanned, approved and bound actually RAN. A hook nobody can prove fired is a hook nobody should trust, and the whole gate in front of it — the scan, the package fingerprint, the approval — is spent guarding an event with no record.",
+      "act": "Run the agent",
+      "say": "The hook is bound, so this run is the first time anything other than the operator can set it off. It fires on the session ending — so the story waits for the ending.",
       "status": "green",
       "failures": [],
       "bindings": {
-        "hookRunId": "_agent-brain-ingest-2026-09-12T04-42-58-649-14px"
+        "hookRunId": "_agent-brain-ingest-2026-09-25T17-08-23-640-73rf"
       },
       "data": {
         "page": "agents",
         "agent-id": "brain-ingest",
         "run-status": "running",
-        "run-id": "_agent-brain-ingest-2026-09-12T04-42-58-649-14px"
+        "run-id": "_agent-brain-ingest-2026-09-25T17-08-23-640-73rf"
       },
-      "frame": "frames/23-run-the-agent-and-watch-the-hook-fire-on.png"
+      "expect": {
+        "page": "agents",
+        "agent-id": "brain-ingest",
+        "run-status": "running",
+        "run-id": "<hookRunId>"
+      },
+      "frame": "frames/23-run-the-agent.png"
+    },
+    {
+      "act": "Wait for the run to end",
+      "say": "A session that ends is the event this hook was written for. Until the run finishes there is nothing to fire on.",
+      "status": "green",
+      "failures": [],
+      "bindings": {
+        "hookRunId": "_agent-brain-ingest-2026-09-25T17-08-23-640-73rf"
+      },
+      "data": {
+        "page": "agents",
+        "agent-id": "brain-ingest",
+        "run-status": "done",
+        "run-id": "_agent-brain-ingest-2026-09-25T17-08-23-640-73rf"
+      },
+      "expect": {
+        "page": "agents",
+        "agent-id": "brain-ingest",
+        "run-status": "done",
+        "run-id": "<hookRunId>"
+      },
+      "frame": "frames/24-wait-for-the-run-to-end.png"
+    },
+    {
+      "act": "Back to the Library",
+      "say": "The record of what a hook did lives with the hook, not with whichever agent happened to trigger it.",
+      "status": "green",
+      "failures": [],
+      "bindings": {},
+      "data": {
+        "page": "library",
+        "page-ready": "true",
+        "section": "hooks"
+      },
+      "expect": {
+        "page": "library",
+        "page-ready": "true",
+        "section": "hooks"
+      },
+      "frame": "frames/25-back-to-the-library.png"
+    },
+    {
+      "act": "Open the hook, and see the session ending fire it",
+      "say": "This is where S7 ends: the hook the operator wrote, scanned, approved and bound actually ran, and its own page says when and how it ended. A hook nobody can prove fired is a hook nobody should trust — this one has a record.",
+      "status": "green",
+      "failures": [],
+      "bindings": {
+        "hookLastFireAt": "2026-09-25T17:08:31.881Z"
+      },
+      "data": {
+        "page": "hook-detail",
+        "hook-id": "story-s7-hook",
+        "hook-last-fire-at": "2026-09-25T17:08:31.881Z",
+        "hook-last-fire-outcome": "ran",
+        "carried-by-count": "1"
+      },
+      "expect": {
+        "page": "hook-detail",
+        "hook-id": "story-s7-hook",
+        "carried-by-count": "1",
+        "hook-last-fire-at": "<hookLastFireAt>",
+        "hook-last-fire-outcome": "ran"
+      },
+      "frame": "frames/26-open-the-hook-and-see-the-session-ending.png"
     }
   ],
   "reap": {
-    "reaped": [
-      {
-        "pid": 4118736,
-        "dir": "_logs/_agent-brain-ingest-2026-09-12T04-42-58-649-14px",
-        "signal": "SIGTERM",
-        "via": "descendant"
-      },
-      {
-        "pid": 4118603,
-        "dir": "_logs/_agent-brain-ingest-2026-09-12T04-42-58-649-14px",
-        "signal": "SIGTERM",
-        "via": "cwd"
-      }
-    ],
+    "reaped": [],
     "skipped": [
       {
-        "pid": 4107758,
-        "dir": "_logs/_authoring-2026-09-12T04-41-51-a505bb70",
-        "reason": "pid 4107758: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 2499746,
+        "dir": "_logs/_agent-brain-ingest-2026-09-25T17-08-23-640-73rf",
+        "reason": "pid 2499746: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+      },
+      {
+        "pid": 2494104,
+        "dir": "_logs/_authoring-2026-09-25T17-07-31-107c96d1",
+        "reason": "pid 2494104: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
-    "cancelled": [
-      {
-        "dir": "_logs/_agent-brain-ingest-2026-09-12T04-42-58-649-14px",
-        "kind": null,
-        "sessionId": null,
-        "project": null,
-        "cancelledFrom": null,
-        "written": false,
-        "reason": "no start event names the session — nothing to terminate"
-      }
-    ]
+    "cancelled": []
   },
   "sweep": {
     "removed": [],
-    "failed": []
+    "failed": [],
+    "claim": {
+      "ok": true,
+      "claimed": [],
+      "left": [],
+      "unattributable": [],
+      "failed": [],
+      "lines": [
+        "[stories] queue claim: done/ holds 0",
+        "[stories] queue claim: failed/ holds 0",
+        "[stories] queue claim: in-flight/ holds 0",
+        "[stories] queue claim: merged/ holds 0",
+        "[stories] queue claim: pending/ holds 0",
+        "[stories] queue claim: ready-for-review/ holds 0"
+      ]
+    },
+    "artefacts": {
+      "dest": null,
+      "captured": [],
+      "cleared": [],
+      "refused": [],
+      "unremoved": []
+    },
+    "lines": [
+      "[stories] trailing sweep KEPT projects/story-s7 — a fixture ground is judged before it is torn down",
+      "[stories] queue claim: done/ holds 0",
+      "[stories] queue claim: failed/ holds 0",
+      "[stories] queue claim: in-flight/ holds 0",
+      "[stories] queue claim: merged/ holds 0",
+      "[stories] queue claim: pending/ holds 0",
+      "[stories] queue claim: ready-for-review/ holds 0"
+    ]
   },
   "fence": {
     "restored": [
@@ -784,8 +1058,6 @@
       "studio/hook-approvals.yaml"
     ],
     "removed": [
-      "projects/mdtoc/_authoring/",
-      "projects/mdtoc/_instructions/",
       "skills/story-s7-skill/",
       "studio/artifact-templates/story-s7-template.md",
       "studio/hooks/story-s7-hook/",
@@ -793,45 +1065,11 @@
     ],
     "removedContents": [
       {
-        "path": "projects/mdtoc/_authoring/",
-        "entries": [
-          {
-            "path": "2026-09-12T04-41-51-a505bb70/prompt.md",
-            "bytes": 154
-          },
-          {
-            "path": "2026-09-12T04-41-51-a505bb70/status.json",
-            "bytes": 498
-          },
-          {
-            "path": "2026-09-12T04-41-51-a505bb70/verdicts.json",
-            "bytes": 74
-          },
-          {
-            "path": "2026-09-12T04-41-51-a505bb70/staging/SKILL.md",
-            "bytes": 3862
-          }
-        ],
-        "truncated": false,
-        "total": 4
-      },
-      {
-        "path": "projects/mdtoc/_instructions/",
-        "entries": [
-          {
-            "path": "2026-09-12T04-42-56-20946267/status.json",
-            "bytes": 276
-          }
-        ],
-        "truncated": false,
-        "total": 1
-      },
-      {
         "path": "skills/story-s7-skill/",
         "entries": [
           {
             "path": "SKILL.md",
-            "bytes": 4089
+            "bytes": 3741
           }
         ],
         "truncated": false,
@@ -842,7 +1080,7 @@
         "entries": [
           {
             "path": "hook.yaml",
-            "bytes": 188
+            "bytes": 205
           },
           {
             "path": "scripts/run.sh",
@@ -854,8 +1092,31 @@
       }
     ],
     "failed": [],
-    "escapes": [],
+    "escapes": [
+      {
+        "root": "forge-m7-a-rb",
+        "paths": [
+          "scripts/check-raw-fs-guarded.allowlist.mjs"
+        ],
+        "live": null,
+        "owner": "unattributable",
+        "reason": "no descendant of this run was seen in forge-m7-a-rb",
+        "rootKind": "sibling-basename"
+      }
+    ],
     "groundEscapes": [],
     "reappeared": []
-  }
+  },
+  "spend": {
+    "usd": 0.2600152,
+    "unmeasured": false
+  },
+  "realGrounds": {
+    "moved": []
+  },
+  "git": {
+    "sha": "4a959fa0cce6a899cf0ffc9837ffe4a23fe8cd93",
+    "dirty": false
+  },
+  "storyDigest": "2ffdddb8d67da86f"
 }

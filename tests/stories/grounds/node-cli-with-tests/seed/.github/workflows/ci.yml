@@ -1,0 +1,39 @@
+# ci.yml — gitpulse's merge bar (forge contract C1b).
+#
+# Build + the pure unit gate + the creds-free acceptance gate. This is the
+# project's own CI; the forge per-WI quality gate (`npm test`) is a strict subset
+# of it, and the once-per-cycle acceptance gate (`npm run acceptance`) is the
+# other half. gitpulse is creds-free, so CI needs no secrets.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install (dev deps only — zero runtime deps)
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit gate
+        run: npm test
+
+      - name: Acceptance gate (built CLI vs a deterministic fixture repo)
+        run: npm run acceptance

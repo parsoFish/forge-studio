@@ -1,0 +1,100 @@
+{
+  "title": "Add --json flag to gitpulse CLI for machine-readable analytics output",
+  "essence": "The gitpulse CLI gains a --json flag that serialises the already-computed Summary struct to stdout as stable, two-space-indented JSON, enabling downstream tools (scripts, CI dashboards) to consume analytics programmatically without recomputation. Error behaviour (exit codes 1 and 2) is unchanged; --top cap applies to all arrays in JSON output exactly as for table output.",
+  "project": "gitpulse",
+  "initiativeId": "INIT-2026-06-21-json-output-flag",
+  "diffStat": "5 files changed, 359 insertions(+), 6 deletions(-)",
+  "checkpoints": [
+    {
+      "label": "JSON output (--json, 4 commits)",
+      "caption": "CLI run with --json against fixture repo — full summary as JSON",
+      "beforeNote": "No --json flag existed; only human-readable table output was available; downstream tools could not parse stdout programmatically",
+      "afterNote": "With --json: stdout is a single JSON object with keys totalCommits=4, byAuthor[0].author='Ada Lovelace', byAuthor[0].commits=3, firstDate='2021-03-01', lastDate='2021-03-07', plus authorChurn, fileChurn, ownershipEntries, hotspotEntries; stderr empty; exit 0"
+    },
+    {
+      "label": "Error path (non-repo)",
+      "caption": "CLI invoked with --json and a non-git path — errors still on stderr",
+      "beforeNote": "Error behaviour only defined for table mode",
+      "afterNote": "With --json and an invalid repo: exit code 1, stdout empty, stderr carries the error message — identical to non-json error behaviour"
+    },
+    {
+      "label": "Unknown flag rejection (--json --frobnicate)",
+      "caption": "CLI invoked with both --json and an unknown flag",
+      "beforeNote": "Unknown flags caused exit 2 in table mode only",
+      "afterNote": "With --json --frobnicate: exit 2, stderr matches /unknown option/, stdout empty — flag parsing order-independent"
+    },
+    {
+      "label": "--json --top 2 array cap",
+      "caption": "CLI invoked with --json --top 2 against 3-author fixture — all arrays bounded",
+      "beforeNote": "--top cap only applied to table output",
+      "afterNote": "With --json --top 2: byAuthor has exactly 2 entries, authorChurn 2 entries, fileChurn ≤2, hotspotEntries ≤2, ownershipEntries ≤2 — consistent with table behaviour"
+    }
+  ],
+  "acEvaluations": [
+    {
+      "criterion": "GIVEN the CLI is invoked with --json and a stub reader returning commits WHEN runCli executes successfully THEN result.code is 0, result.stdout is valid JSON parseable by JSON.parse, result.stderr is empty, and JSON has keys: totalCommits, firstDate, lastDate, byAuthor, authorChurn, fileChurn, ownershipEntries, hotspotEntries",
+      "verdict": "met",
+      "evidence": "test/json-output.test.ts: 'AC1: --json exits 0 and stdout is valid JSON' → pass; 'AC1: --json stdout JSON carries all required top-level keys' → pass; 'AC1: --json does not leak table output to stderr' → pass (npm test 16/16 green). All 16 unit tests pass including 5 AC1-covering cases."
+    },
+    {
+      "criterion": "GIVEN the CLI is invoked with --json and a reader that throws WHEN the reader throws an error THEN result.code is 1, result.stdout is empty, and result.stderr carries the error message (same as without --json)",
+      "verdict": "met",
+      "evidence": "test/json-output.test.ts: 'AC2: --json with throwing reader exits 1' → pass; 'AC2: --json with throwing reader has empty stdout' → pass; 'AC2: --json with throwing reader carries the error message in stderr' → pass; 'AC2: --json error behaviour matches non-json error behaviour' → pass (npm test 16/16 green)."
+    },
+    {
+      "criterion": "GIVEN the CLI is invoked with --json --frobnicate WHEN arg parsing runs THEN result.code is 2, result.stderr matches /unknown option/, and result.stdout is empty",
+      "verdict": "met",
+      "evidence": "test/json-output.test.ts: 'AC3: --json --frobnicate exits 2' → pass; 'AC3: --json --frobnicate stderr matches /unknown option/' → pass; 'AC3: --json --frobnicate stdout is empty' → pass; 'AC3: --frobnicate --json also exits 2 with /unknown option/' → pass (npm test 16/16 green)."
+    },
+    {
+      "criterion": "GIVEN the CLI is invoked with --json --top 2 and a stub reader with >=3 authors WHEN the run succeeds THEN JSON.parse(stdout).byAuthor has exactly 2 entries, and authorChurn, fileChurn, hotspotEntries, ownershipEntries are all capped at 2 entries",
+      "verdict": "met",
+      "evidence": "test/json-output.test.ts: 'AC4: --json --top 2 byAuthor has exactly 2 entries' → pass; 'AC4: --json --top 2 authorChurn has exactly 2 entries' → pass; 'AC4: --json --top 2 fileChurn has at most 2 entries' → pass; 'AC4: --json --top 2 ownershipEntries has at most 2 entries' → pass; 'AC4: --json --top 2 with file-bearing commits caps fileChurn to 2' → pass (npm test 16/16 green)."
+    },
+    {
+      "criterion": "GIVEN serializeSummary is called with a populated Summary WHEN the function executes THEN the return value is valid JSON (JSON.parse succeeds) and the top-level keys match: totalCommits, firstDate, lastDate, byAuthor, authorChurn, fileChurn, ownershipEntries, hotspotEntries",
+      "verdict": "met",
+      "evidence": "test/json-output.test.ts: 'AC5: serializeSummary returns valid JSON with all required top-level keys' → pass; 'AC5: serializeSummary output is round-trip stable (JSON.parse → JSON.stringify)' → pass (npm test 16/16 green). serializeSummary calls JSON.stringify(s, null, 2) — the Summary type already matches the documented shape."
+    },
+    {
+      "criterion": "GIVEN the deterministic fixture repo (Ada Lovelace: 3 commits, Grace Hopper: 1 commit; dates 2021-03-01 to 2021-03-07) WHEN the built CLI is invoked with --json <fixture-repo> THEN JSON.parse(stdout).totalCommits === 4, byAuthor[0].author === 'Ada Lovelace', byAuthor[0].commits === 3, firstDate === '2021-03-01', lastDate === '2021-03-07', and the acceptance run exits 0",
+      "verdict": "met",
+      "evidence": "npm run demo output: 'acceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.' JSON read-back in demo/pulse-capture.md: totalCommits=4 PASS, byAuthor[0].author='Ada Lovelace' PASS, byAuthor[0].commits=3 PASS, firstDate='2021-03-01' PASS, lastDate='2021-03-07' PASS. test/acceptance/run.ts runs these assertions at lines 228-245 and exits 0."
+    },
+    {
+      "criterion": "GIVEN the acceptance suite runs with --json against the fixture repo WHEN the JSON run completes THEN stdout is parseable JSON (JSON.parse does not throw) with all eight top-level keys present: totalCommits, firstDate, lastDate, byAuthor, authorChurn, fileChurn, ownershipEntries, hotspotEntries",
+      "verdict": "met",
+      "evidence": "npm run demo: acceptance PASS. test/acceptance/run.ts lines 243-255 assert all 8 required keys present: ['totalCommits','firstDate','lastDate','byAuthor','authorChurn','fileChurn','ownershipEntries','hotspotEntries']. All keys confirmed present in pulse-capture.md ## JSON read-back section."
+    },
+    {
+      "criterion": "GIVEN the demo evidence is written (npm run demo) WHEN the --demo flag is passed THEN the captured pulse-capture.md evidence block includes the JSON read-back assertion results",
+      "verdict": "met",
+      "evidence": "npm run demo produced demo/pulse-capture.md with '## JSON read-back' section showing: totalCommits=4 PASS, byAuthor[0].author='Ada Lovelace' PASS, byAuthor[0].commits=3 PASS, firstDate='2021-03-01' PASS, lastDate='2021-03-07' PASS, all 8 keys PASS. Result: PASS — JSON output parsed successfully with all sentinel values matching."
+    }
+  ],
+  "testEvidence": [
+    { "name": "AC5: serializeSummary returns valid JSON with all required top-level keys", "result": "pass" },
+    { "name": "AC5: serializeSummary output is round-trip stable (JSON.parse → JSON.stringify)", "result": "pass" },
+    { "name": "AC1: --json exits 0 and stdout is valid JSON", "result": "pass" },
+    { "name": "AC1: --json stdout JSON carries all required top-level keys", "result": "pass" },
+    { "name": "AC1: --json stdout totalCommits matches fixture", "result": "pass" },
+    { "name": "AC1: --json stdout firstDate and lastDate are sentinel values from fixture", "result": "pass" },
+    { "name": "AC1: --json does not leak table output to stderr", "result": "pass" },
+    { "name": "AC2: --json with throwing reader exits 1", "result": "pass" },
+    { "name": "AC2: --json with throwing reader has empty stdout", "result": "pass" },
+    { "name": "AC2: --json with throwing reader carries the error message in stderr", "result": "pass" },
+    { "name": "AC2: --json error behaviour matches non-json error behaviour", "result": "pass" },
+    { "name": "AC3: --json --frobnicate exits 2", "result": "pass" },
+    { "name": "AC3: --json --frobnicate stderr matches /unknown option/", "result": "pass" },
+    { "name": "AC3: --json --frobnicate stdout is empty", "result": "pass" },
+    { "name": "AC3: --frobnicate --json also exits 2 with /unknown option/", "result": "pass" },
+    { "name": "AC4: --json --top 2 byAuthor has exactly 2 entries", "result": "pass" },
+    { "name": "AC4: --json --top 2 authorChurn has exactly 2 entries", "result": "pass" },
+    { "name": "AC4: --json --top 2 fileChurn has at most 2 entries", "result": "pass" },
+    { "name": "AC4: --json --top 2 hotspotEntries has at most 2 entries", "result": "pass" },
+    { "name": "AC4: --json --top 2 ownershipEntries has at most 2 entries", "result": "pass" },
+    { "name": "AC4: --json --top 2 with file-bearing commits caps fileChurn to 2", "result": "pass" },
+    { "name": "without --json flag, stdout is still a human-readable table", "result": "pass" },
+    { "name": "acceptance: --json JSON read-back against fixture repo (npm run acceptance)", "result": "pass" }
+  ]
+}

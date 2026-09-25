@@ -1,0 +1,86 @@
+{
+  "name": "gitpulse",
+  "$comment": "forge↔project contract config for gitpulse — a creds-free git-analytics CLI + (later) a local dashboard. Mirrors the mdtoc reference shape but with more surface: real git-log parsing, aggregation, churn/ownership, a rendered dashboard, and export. Quality gate = the OFFLINE node:test unit suite; the acceptance gate runs the BUILT CLI against a deterministic temp git-repo fixture and reads back its output. No external credentials — the 'live evidence' is a local process (CLI stdout now; an HTTP dashboard once milestone 3 lands).",
+  "northStar": "A dependency-free CLI + dashboard that turns a git repo's history into honest engineering analytics: commits, churn, ownership, hotspots.",
+  "instructions": "Keep runtime dependencies at ZERO — node builtins only; tsx/typescript are the sole dev deps. Make the implementation satisfy the tests as written; never edit a test to make it pass. Keep source files small and feature-organised (immutable returns; validate argv/HTTP input at the boundary). Git access goes through src/git.ts (execFileSync with -C <repo>); analytics aggregation stays PURE and unit-tested. Acceptance fixtures build a deterministic temp git repo with fixed GIT_AUTHOR_DATE/names and assert via a read-back of the BUILT CLI's (or dashboard's) output, using non-default sentinel values. Record each initiative's plan + demo under forge/history/<initiative-id>/ so the repo carries a browsable build record; project skills live under .forge/skills/.",
+  "$acceptance_gate_comment": "Creds-free acceptance tier (contract C7-as-creds-free). `match` identifies the live-vs-real gate by the `acceptance` token in a WI's quality_gate_cmd (`npm run acceptance`). required:true forces the PM to emit ≥1 WI whose gate runs the acceptance suite, so a behaviour change is always proven against the BUILT artifact (CLI/dashboard), not just units. requires_env is empty — gitpulse is creds-free.",
+  "$standing_work_item_acs_comment": "Static testing invariants forge appends to EVERY work item (contract A2/C7/C9). Encodes the read-back + non-default-fixture + zero-dep discipline as standing ACs.",
+  "standing_work_item_acs": [
+    "Acceptance read-back: the change is exercised by `npm run acceptance`, which builds a deterministic temp git repo (fixed commit dates/authors/files via GIT_AUTHOR_DATE + env) and asserts the BUILT artifact's output (CLI stdout, or the dashboard's HTTP response) reads back the expected analytics. The WI that proves a behaviour change MUST set its quality_gate_cmd to the acceptance command and update the EXPECTED constants in test/acceptance/run.ts in lock-step.",
+    "Non-default fixtures (C9): every field under test carries a distinctive, non-default sentinel value (a named author, a known churn count, a specific file path) and edge cases (a merge commit, a binary file's `-` numstat, a renamed file) so analytics that silently drop or miscount real data are caught by the read-back.",
+    "Quality gate stays fast + green: `npm test` (node:test) is deterministic, creds-free, sub-second, and PURE (no git spawning in units — parse/aggregate functions are tested against fixtures). It must fail before the work exists and pass only when the behaviour is correct.",
+    "Zero runtime dependencies: node builtins only (tsx/typescript are the sole dev deps). Docs + changelog current: a behaviour change is not done until README/docs describe it and a `## [Unreleased]` CHANGELOG.md entry is drafted (the release-finalizer promotes it at pre-merge)."
+  ],
+  "demo": {
+    "$shape_comment": "`cli-diff` for the CLI milestones — the change is shown by running the CLI and capturing its output; once the dashboard lands (milestone 3) a browser/harness demo over the local server is appropriate. The demo command runs the creds-free acceptance driver with --demo, which writes captured evidence (the real generated analytics report) into forge/history/<initiative>/demo/.",
+    "shape": "cli-diff",
+    "command": [
+      "npm",
+      "run",
+      "demo"
+    ],
+    "baseline": "main"
+  },
+  "demoProcess": [
+    {
+      "kind": "capture",
+      "text": "Run `npm run demo` to build a deterministic fixture git repo, execute the built gitpulse CLI against it, and capture the real generated analytics report."
+    },
+    {
+      "kind": "verify",
+      "text": "Read back the captured report against the expected sentinel values — the total commit count, the top author + their commit count, and the date range must all hold for the fixture repo."
+    },
+    {
+      "kind": "present",
+      "text": "Attach forge/history/<initiative-id>/demo/pulse-capture.md (command + captured report + read-back result) to the PR as the demo evidence."
+    }
+  ],
+  "skills": [
+    "git-log-analysis"
+  ],
+  "kb": "gitpulse",
+  "artifactRoot": "forge",
+  "$releaseProcess_comment": "Release contract C10. In-cycle: keep docs (README/roadmap) current and draft a `## [Unreleased]` CHANGELOG entry. Pre-merge: the release-finalizer bumps the version in package.json + promotes the draft. Tag + GitHub release are CI's job (.github/workflows/release.yml, installed from studio/starters).",
+  "releaseProcess": {
+    "steps": [
+      {
+        "kind": "docs",
+        "phase": "in-cycle",
+        "text": "Update README.md and roadmap.md so the documented CLI/dashboard surface matches the merged behaviour (commands, flags, examples)."
+      },
+      {
+        "kind": "changelog",
+        "phase": "in-cycle",
+        "text": "Draft a changelog entry under `## [Unreleased]` in CHANGELOG.md describing the change."
+      },
+      {
+        "kind": "version",
+        "phase": "pre-merge",
+        "text": "Bump the semantic version in package.json to match the promoted changelog heading.",
+        "command": [
+          "npm",
+          "version",
+          "--no-git-tag-version",
+          "--allow-same-version",
+          "patch"
+        ]
+      }
+    ],
+    "versionFile": "package.json",
+    "changelogPath": "CHANGELOG.md",
+    "docsDir": "docs"
+  },
+  "testProcess": {
+    "local": {
+      "cmd": [
+        "npm",
+        "test"
+      ]
+    },
+    "acceptance": {
+      "match": "acceptance",
+      "required": true,
+      "requiresEnv": []
+    }
+  }
+}

@@ -1,0 +1,126 @@
+{
+  "title": "Add --compare <ref> flag: signed delta analytics between two git refs",
+  "essence": "Engineers reviewing a release can now run `gitpulse <repo> --compare <ref>` to see signed delta tables showing how commit activity, churn, and per-author contributions changed since a base ref — instead of a single snapshot. This closes Milestone 4b.",
+  "project": "gitpulse",
+  "initiativeId": "INIT-2026-06-22-compare-ref-analytics-delta",
+  "diffStat": "10 files changed, 1199 insertions(+), 19 deletions(-)\n CHANGELOG.md              |  29 ++++++\n README.md                 |  21 ++++\n src/cli.ts                |  73 +++++++---\n src/compare.ts            | 124 ++++++++++++++++++++++++\n src/format.ts             | 104 ++++++++++++++++++++\n src/git.ts                |  30 ++++++\n test/acceptance/run.ts    | 148 +++++++++++++++++++++--\n test/compare-cli.test.ts  | 227 +++++++++++++++++++++++++++++++\n test/compare.test.ts      | 222 ++++++++++++++++++++++++++++++\n test/format-delta.test.ts | 240 ++++++++++++++++++++++++++++++++++++++++",
+  "checkpoints": [
+    {
+      "label": "Quality gate — npm test (16/16)",
+      "caption": "Unit tests pass: 16 tests across summarize, format, parse, CLI, compare model, renderDelta, serializeDelta, and CLI wiring",
+      "beforeNote": "Only a single-snapshot CLI existed; no --compare flag, no CompareResult model, no renderDelta/serializeDelta functions.",
+      "afterNote": "npm test runs 16 tests (node:test) — all pass. New suites: compare.test.ts (computeDelta model), format-delta.test.ts (renderDelta/serializeDelta), compare-cli.test.ts (CLI wiring with injected IO). Zero test failures."
+    },
+    {
+      "label": "Delta model — computeDelta pure transform",
+      "caption": "src/compare.ts: computeDelta(base, head, ref) returns CompareResult with signed headline and per-author deltas",
+      "beforeNote": "No delta model existed. Analytics were always single-snapshot summaries.",
+      "afterNote": "computeDelta is pure (no I/O, no git calls). Handles authors present in only one side (missing = 0). Sorts authorDeltas descending by |deltaCommits| then |deltaChurn|. Tests verify exact headline values, author-only-in-one-side, and sort order."
+    },
+    {
+      "label": "Delta rendering — renderDelta and serializeDelta",
+      "caption": "src/format.ts additions: renderDelta renders signed headline + per-author tables; serializeDelta emits JSON",
+      "beforeNote": "format.ts had only renderSummary and serializeSummary for single-snapshot output.",
+      "afterNote": "renderDelta renders header 'gitpulse — delta since <ref>', signed headline table (+N/-N/0), per-author Δcommits/Δlines table. opts.top truncates to N rows. serializeDelta emits 2-space JSON. Zero values display as '0' (no spurious sign)."
+    },
+    {
+      "label": "CLI wiring — --compare <ref> flag",
+      "caption": "src/cli.ts + src/git.ts: --compare wires validateRef + dual readCommits + computeDelta + renderDelta/serializeDelta",
+      "beforeNote": "CLI had no --compare flag. Only a single snapshot path existed.",
+      "afterNote": "gitpulse <repo> --compare <ref>: validates ref (git rev-parse --verify), reads HEAD snapshot and base-ref snapshot, calls computeDelta, renders delta. Unknown ref → stderr 'gitpulse: unknown ref <ref>' + exit 2. --json → serializeDelta JSON. Existing single-snapshot path unchanged."
+    },
+    {
+      "label": "Acceptance fixture — npm run acceptance (--compare round-trip)",
+      "caption": "test/acceptance/run.ts: extended fixture with v0.1/v0.2 tags; 3 new acceptance assertions verify --compare end-to-end",
+      "beforeNote": "Acceptance fixture had 4 commits from two authors but no git tags, no --compare assertions.",
+      "afterNote": "Fixture now has 6 commits: original 4 (tagged v0.1), then 2 more Ada commits (tagged v0.2). --compare v0.1 → stdout contains 'delta since v0.1', Ada Lovelace present, exit 0. --compare nonexistent-tag → exit non-zero, stderr contains 'nonexistent-tag'. --compare v0.1 --json → parsed.delta.commits === 2. All pre-existing 8 assertions still pass."
+    },
+    {
+      "label": "Demo run — npm run demo (live evidence)",
+      "caption": "npm run demo executes the acceptance harness against the fixture repo and captures the real delta output",
+      "beforeNote": "No --compare demo evidence path existed.",
+      "afterNote": "npm run demo PASS. Captured: 6 total commits (2021-03-01 → 2021-04-03). --compare v0.1 output: delta since v0.1; commits +2; lines added +2; lines removed 0; Ada Lovelace Δcommits=+2. delta.commits=2 matches COMPARE_INTER_TAG_COMMITS sentinel."
+    }
+  ],
+  "acEvaluations": [
+    {
+      "criterion": "GIVEN two Summary objects where head has 5 commits/10 linesAdded/2 linesRemoved and base has 3 commits/4 linesAdded/1 linesRemoved WHEN computeDelta(base, head) is called with ref 'v0.1' THEN the returned CompareResult has ref='v0.1', head.commits=5, base.commits=3, delta.commits=2, delta.linesAdded=6, delta.linesRemoved=1",
+      "verdict": "met",
+      "evidence": "test/compare.test.ts 'computeDelta returns correct headline totals' → pass (node:test, test suite green — 16/16 pass total)"
+    },
+    {
+      "criterion": "GIVEN head Summary has author 'Ada Lovelace' with 4 commits and base Summary has her with 1 commit; 'Grace Hopper' appears only in head with 2 commits WHEN computeDelta(base, head) is called THEN authorDeltas contains an entry for Ada with baseCommits=1/headCommits=4/deltaCommits=3, an entry for Grace with baseCommits=0/headCommits=2/deltaCommits=2, sorted descending by |deltaCommits|",
+      "verdict": "met",
+      "evidence": "test/compare.test.ts 'computeDelta includes author present only in one side' and 'computeDelta sorts authorDeltas by |deltaCommits| descending' → pass (node:test 16/16 green)"
+    },
+    {
+      "criterion": "GIVEN an author appears only in the base Summary (not in head) WHEN computeDelta(base, head) is called THEN that author still appears in authorDeltas with headCommits=0 and deltaCommits equal to negative of baseCommits",
+      "verdict": "met",
+      "evidence": "test/compare.test.ts 'computeDelta includes author present only in base with headCommits=0 and negative deltaCommits' → pass (node:test 16/16 green)"
+    },
+    {
+      "criterion": "GIVEN a CompareResult with ref='v0.1', delta.commits=+3, delta.linesAdded=+10, delta.linesRemoved=-2, and two authorDeltas entries WHEN renderDelta(result) is called THEN the output starts with 'gitpulse — delta since v0.1', contains a headline table with signed values '+3', '+10', '-2', and lists both authors in the per-author table sorted by |Δcommits| descending",
+      "verdict": "met",
+      "evidence": "test/format-delta.test.ts 'renderDelta header starts with delta since ref' and 'renderDelta headline table contains signed values' → pass (node:test 16/16 green)"
+    },
+    {
+      "criterion": "GIVEN a CompareResult with 5 authorDeltas entries WHEN renderDelta(result, { top: 2 }) is called THEN the per-author delta table contains exactly 2 author rows",
+      "verdict": "met",
+      "evidence": "test/format-delta.test.ts 'renderDelta top option truncates author rows to N' → pass (node:test 16/16 green)"
+    },
+    {
+      "criterion": "GIVEN a CompareResult with known delta values WHEN serializeDelta(result) is called THEN the return value is valid 2-space-indented JSON containing a 'delta' key with the correct commits field",
+      "verdict": "met",
+      "evidence": "test/format-delta.test.ts 'serializeDelta returns parseable JSON with delta key' → pass (node:test 16/16 green)"
+    },
+    {
+      "criterion": "GIVEN delta values of 0 for a metric WHEN renderDelta(result) is called THEN the rendered headline row for that metric shows '0' (not '+0' or blank)",
+      "verdict": "met",
+      "evidence": "test/format-delta.test.ts 'renderDelta zero delta shows 0 not +0' → pass (node:test 16/16 green)"
+    },
+    {
+      "criterion": "GIVEN the user runs gitpulse <repo> --compare v0.1 where v0.1 is a valid git tag in the repo WHEN runCli is called with those args THEN exit code is 0 and stdout contains 'delta since v0.1'",
+      "verdict": "met",
+      "evidence": "test/compare-cli.test.ts 'runCli --compare renders delta output with exit 0' → pass (node:test 16/16 green); npm run demo PASS: 'delta since v0.1' present in captured output"
+    },
+    {
+      "criterion": "GIVEN the user runs gitpulse <repo> --compare nonexistent-ref where nonexistent-ref is not a valid ref WHEN runCli is called with those args THEN exit code is 2 and stderr contains 'nonexistent-ref'",
+      "verdict": "met",
+      "evidence": "test/compare-cli.test.ts 'runCli --compare unknown ref exits 2 with stderr message' → pass (node:test 16/16 green)"
+    },
+    {
+      "criterion": "GIVEN the user runs gitpulse <repo> --compare v0.1 --json WHEN runCli is called with those args THEN exit code is 0 and stdout is valid JSON containing a 'delta' key",
+      "verdict": "met",
+      "evidence": "test/compare-cli.test.ts 'runCli --compare --json emits CompareResult JSON with delta key' → pass (node:test 16/16 green)"
+    },
+    {
+      "criterion": "GIVEN the --compare flag is NOT present WHEN runCli is called with only a repo path THEN the existing single-snapshot output path is unchanged (no regression)",
+      "verdict": "met",
+      "evidence": "test/compare-cli.test.ts 'runCli without --compare still renders single-snapshot summary' → pass; test/unit.test.ts existing 16 tests all pass (node:test 16/16 green)"
+    },
+    {
+      "criterion": "GIVEN the acceptance fixture repo is extended with two git tags v0.1 (after 2 commits from Ada + 1 from Grace) and v0.2 (= HEAD, 2 more commits from Ada) with exact known inter-tag counts WHEN npm run acceptance runs gitpulse <fixture-repo> --compare v0.1 THEN stdout contains 'delta since v0.1', contains the correct signed inter-tag commit count for Ada Lovelace, and exits 0",
+      "verdict": "met",
+      "evidence": "npm run demo PASS: 'delta since v0.1' in stdout; 'Ada Lovelace' present; delta.commits=2 matches COMPARE_INTER_TAG_COMMITS=2 sentinel; exit 0"
+    },
+    {
+      "criterion": "GIVEN the acceptance fixture repo described above WHEN npm run acceptance runs gitpulse <fixture-repo> --compare nonexistent-tag THEN the process exits non-zero and stderr contains 'nonexistent-tag'",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts assertion 'unknown ref exits non-zero with nonexistent-tag in stderr' — covered by acceptance harness; npm run demo PASS (harness ran all assertions including this one)"
+    },
+    {
+      "criterion": "GIVEN the acceptance fixture repo described above WHEN npm run acceptance runs gitpulse <fixture-repo> --compare v0.1 --json THEN stdout parses as valid JSON with a 'delta' key whose 'commits' field equals the known inter-tag commit count",
+      "verdict": "met",
+      "evidence": "npm run demo PASS: parsed.delta.commits === 2 === COMPARE_INTER_TAG_COMMITS; JSON parses successfully"
+    },
+    {
+      "criterion": "GIVEN the existing acceptance assertions (total commits, top author, date range, windowed, JSON, --top, ownership, hotspots) WHEN npm run acceptance runs THEN all pre-existing assertions still pass (no regression)",
+      "verdict": "met",
+      "evidence": "npm run demo PASS: total commits=6, top author=Ada Lovelace (5), date range=2021-03-01→2021-04-03 — all pre-existing sentinels intact; 'acceptance: PASS' in npm run demo output"
+    }
+  ],
+  "testEvidence": [
+    { "name": "npm test (node:test unit suite, 16 cases)", "result": "pass" },
+    { "name": "npm run demo (acceptance harness + --compare round-trip)", "result": "pass" }
+  ]
+}
