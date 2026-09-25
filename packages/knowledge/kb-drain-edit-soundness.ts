@@ -439,17 +439,17 @@ export type KbEditGateResult = {
   errors: string[];
 };
 
-/** Restore one change to its pre-turn content — a created file removed, an
- *  edited/deleted file written back byte-for-byte. `relPath` comes from our
- *  OWN walk of the trusted `brainDir`, never request or agent text. */
-function revertChange(brainDir: string, c: KbEditChange): void {
-  const abs = join(brainDir, c.relPath);
-  if (c.before === null) {
-    rmSync(abs, { force: true });
-    return;
+// Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
+export function revertProseChanges(brainDir: string, changes: readonly KbEditChange[]): void {
+  for (const c of changes) {
+    const abs = join(brainDir, c.relPath);
+    if (c.before === null) {
+      rmSync(abs, { force: true });
+      continue;
+    }
+    mkdirSync(dirname(abs), { recursive: true });
+    writeFileSync(abs, c.before, 'utf8');
   }
-  mkdirSync(dirname(abs), { recursive: true });
-  writeFileSync(abs, c.before, 'utf8');
 }
 
 /**
@@ -725,7 +725,7 @@ export function guardAgentKbEdits(
         repaired.push({ ...c, after: fix });
         continue;
       }
-      revertChange(brainRoot, c);
+      revertProseChanges(brainRoot, [c]);
       refused.push(c);
     } catch (err) {
       // The disposal itself failed (a theme replaced by a DIRECTORY of the

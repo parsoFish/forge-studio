@@ -279,6 +279,11 @@ export type KbDrainOpts = {
   heartbeatMs?: number;
 };
 
+// Why: design.md § Brain-lint truthfulness axis (forge-mfv5.3.4)
+export function kbDrainEventFields(): { phase: 'reflection'; skill: 'kb-drain'; input_refs: string[]; output_refs: string[] } {
+  return { phase: 'reflection', skill: 'kb-drain', input_refs: [], output_refs: [] };
+}
+
 /**
  * Drive a single KB's `forge brain lint` findings to a fixed point: drain
  * every AUTO-tier finding deterministically, then dispatch one real agent
@@ -358,11 +363,8 @@ export async function runKbDrain(
     const emitProgress = (message: string, metadata: Record<string, unknown> = {}): void => {
       logger.emit({
         initiative_id: cycleId,
-        phase: 'reflection',
-        skill: 'kb-drain',
+        ...kbDrainEventFields(),
         event_type: 'log',
-        input_refs: [],
-        output_refs: [],
         message,
         metadata: { kind: 'progress', kbId, runId, ...metadata },
       });
@@ -370,11 +372,8 @@ export async function runKbDrain(
 
     logger.emit({
       initiative_id: cycleId,
-      phase: 'reflection',
-      skill: 'kb-drain',
+      ...kbDrainEventFields(),
       event_type: 'start',
-      input_refs: [],
-      output_refs: [],
       message: 'kb-drain.start',
       metadata: { kbId, runId },
     });
@@ -741,11 +740,8 @@ export async function runKbDrain(
 
     logger.emit({
       initiative_id: cycleId,
-      phase: 'reflection',
-      skill: 'kb-drain',
+      ...kbDrainEventFields(),
       event_type: 'end',
-      input_refs: [],
-      output_refs: [],
       cost_usd: status.costUsd,
       message: `kb-drain.end (state=${status.state})`,
       metadata: { kbId, runId, state: status.state, round: status.round, costUsd: status.costUsd },
@@ -761,11 +757,8 @@ export async function runKbDrain(
       const crashLogger = createLogger(cycleId, join(forgeRoot, '_logs'));
       crashLogger.emit({
         initiative_id: cycleId,
-        phase: 'reflection',
-        skill: 'kb-drain',
+        ...kbDrainEventFields(),
         event_type: 'error',
-        input_refs: [],
-        output_refs: [],
         message: 'kb-drain.crashed',
         metadata: { kbId, runId, error: err instanceof Error ? err.message : String(err) },
       });

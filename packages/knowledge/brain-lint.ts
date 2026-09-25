@@ -3,7 +3,7 @@
  *
  * CLI: `forge brain lint [--scope <s>] [--project <name>] [--file <path>] [--cycle <id>] [--fix]`
  *
- * Implements 13 checks (per `brain/LINT.md`):
+ * Implements 14 checks (per `brain/LINT.md`):
  *
  *   1. checkFrontmatter        — required fields + category whitelist
  *   2. checkIndexSync          — themes appear in their category index exactly once
@@ -17,6 +17,7 @@
  *  11. checkCategoryScope      — theme category routes to the brain sub-wiki it lives in
  *  12. checkDanglingEdges      — `related_themes[]` entries that resolve to no theme file
  *  13. checkDuplicateThemes    — near-duplicate theme pairs (title collision / keyword Jaccard)
+ *  14. checkThemeTruth         — a project theme's cited code still exists in its ground clone (D14, forge-mfv5.3.4)
  *
  * Each check is a pure function `(forgeRoot) => Finding[]`. The CLI aggregates,
  * prints a human-readable report, and exits non-zero iff ≥1 error.
@@ -43,9 +44,9 @@ import {
   ALLOWED_CATEGORIES,
   CATEGORY_TO_BRAIN_SUBDIR,
   CATEGORY_TO_INDEX_FILE,
-  REQUIRED_FRONTMATTER_FIELDS,
   checkCategoryScope,
   checkFrontmatter,
+  checkFrontmatterForFile,
   checkIndexSync,
   checkProjectBrainIndexes,
   readIndexEntries,
@@ -66,6 +67,12 @@ import {
   danglingEdgeFindings,
   duplicateThemeFindings,
 } from './brain-lint-checks-graph.ts';
+import {
+  brainTruthRates,
+  checkThemeTruth,
+  formatTruthfulnessLines,
+  resetProjectTruthRowsCache,
+} from './brain-lint-checks-truth.ts';
 
 // THE SPLIT KEPT THIS PATH (M4 step 4). 27 files across packages/, cli/, apps/
 // and scripts/ import `brain-lint.ts` directly — `packages/knowledge/index.ts`
@@ -124,6 +131,15 @@ export {
   danglingEdgeFindings,
   duplicateThemeFindings,
 } from './brain-lint-checks-graph.ts';
+export {
+  brainTruthRates,
+  checkThemeTruth,
+  extractThemeReferences,
+  formatTruthfulnessLines,
+  themeTruth,
+  FORGE_PROVENANCE_ROOTS,
+} from './brain-lint-checks-truth.ts';
+export type { ThemeTruth, BrainTruthRate } from './brain-lint-checks-truth.ts';
 
 /**
  * R6-08 4on (F3 hardening) — the single source of truth for the 12 full-scope
@@ -151,6 +167,7 @@ const FULL_SCOPE_CHECKS: ReadonlyArray<readonly [name: string, fn: (cwd: string)
   ['checkReflectorLoss', checkReflectorLoss],
   ['checkDanglingEdges', checkDanglingEdges],
   ['checkDuplicateThemes', checkDuplicateThemes],
+  ['checkThemeTruth', checkThemeTruth],
 ];
 
 /**
@@ -203,6 +220,7 @@ export const CHECK_SCOPE: Readonly<Record<string, CheckScope>> = {
   checkReflectorLoss: 'global',
   checkDanglingEdges: 'themes',
   checkDuplicateThemes: 'themes',
+  checkThemeTruth: 'project-indexes', // D14 — shares checkProjectBrainIndexes's domain (brain/projects/*)
 };
 
 // ---------- lintThemeFiles (explicit file list, project-aware) ----------
@@ -267,26 +285,15 @@ export function lintThemeFiles(forgeRoot: string, files: string[]): Finding[] {
   for (const file of files) {
     const parsed = parseTheme(file);
     if (!parsed) {
-      findings.push({ category: 'error', file, message: 'unparseable frontmatter (gray-matter failed)', check: 'checkFrontmatter' });
+      findings.push(...checkFrontmatterForFile(file, null));
       continue;
     }
+    // checkFrontmatterForFile is the ONE frontmatter-check implementation
+    // (brain-lint-checks-filing.ts) — shared with the full-scan checkFrontmatter,
+    // never a second copy of the field/category/date-order rules here.
+    findings.push(...checkFrontmatterForFile(file, parsed));
     const { data } = parsed;
-    for (const field of REQUIRED_FRONTMATTER_FIELDS) {
-      if (data[field] === undefined || data[field] === null || data[field] === '') {
-        findings.push({ category: 'error', file, message: `missing required frontmatter field: ${field}`, check: 'checkFrontmatter' });
-      }
-    }
     const cat = String(data.category ?? '');
-    if (data.category && !ALLOWED_CATEGORIES.has(cat)) {
-      findings.push({ category: 'error', file, message: `category "${data.category}" not in whitelist {${[...ALLOWED_CATEGORIES].join('|')}}`, check: 'checkFrontmatter' });
-    }
-    if (data.created_at && data.updated_at) {
-      const c = new Date(String(data.created_at)).getTime();
-      const u = new Date(String(data.updated_at)).getTime();
-      if (!Number.isNaN(c) && !Number.isNaN(u) && c > u) {
-        findings.push({ category: 'error', file, message: 'created_at > updated_at', check: 'checkFrontmatter' });
-      }
-    }
     for (const link of extractLinks(parsed.content).relLinks) {
       if (!existsSync(resolve(dirname(file), link))) {
         findings.push({ category: 'error', file, message: `broken link: ${link}`, check: 'checkSourceLinks' });
@@ -410,6 +417,8 @@ export function classifyFinding(f: Finding): { kind: string; resolution: Resolut
       return { kind: 'edge.dangling', resolution: 'agent', fixHint: 'Repoint the related_themes entry at the correct existing slug (very often the same title carrying a date prefix), or drop the entry entirely if the target theme is genuinely gone.' };
     case 'checkDuplicateThemes':
       return { kind: 'theme.duplicate', resolution: 'agent', fixHint: 'Keep the richer file as survivor, fold in any unique facts from the other file, repoint related_themes/wikilinks/index entries at the survivor, then delete the loser.' };
+    case 'checkThemeTruth':
+      return { kind: 'truth.stale', resolution: 'agent', fixHint: 'Re-verify each cited path still exists in the project checkout and repoint or drop it, or mark the theme `status: historical` if the code it describes is genuinely gone.' };
     default:
       return { kind: 'unknown', resolution: 'user' };
   }
@@ -490,6 +499,8 @@ function filterFindingsByScope(
 }
 
 export function runBrainLint(opts: RunBrainLintOptions): RunBrainLintResult {
+  // One truth-row memo per pass (design.md § Brain-lint truthfulness axis).
+  resetProjectTruthRowsCache();
   // Run all checks via the FULL_SCOPE_CHECKS registry (F3 hardening) — same
   // 10 checks, same order as before this refactor, now iterated from the ONE
   // array CHECK_NAMES is also derived from, so the two can never drift. The
@@ -645,6 +656,10 @@ if (isCli) {
     const opts = parseArgs(process.argv.slice(2));
     const result = runBrainLint(opts);
     process.stdout.write(formatFindings(result.findings, opts.cwd) + '\n');
+    // D14 — unconditional truthfulness lines; M2 — --project scopes them.
+    const rates = brainTruthRates(opts.cwd);
+    const scoped = opts.project ? rates.filter((r) => r.project === opts.project) : rates;
+    for (const line of formatTruthfulnessLines(scoped)) process.stdout.write(line + '\n');
     process.exit(result.exitCode);
   } catch (err) {
     process.stderr.write(`brain-lint: ${err instanceof Error ? err.message : String(err)}\n`);

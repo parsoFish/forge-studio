@@ -12,8 +12,8 @@
  */
 import { requireSessionStatusIo } from './kb-drain-model.ts';
 import type { GuardedWriteSessionStatusFn } from './kb-drain-model.ts';
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { tryGetKbBackend } from './kb-backend.ts';
 import { loadConfig, defaultConfigPath, resolveProjectsDir, guardedWriteFile } from '@forge/kernel';
@@ -21,7 +21,7 @@ import { loadKbDescriptor } from './studio/kb-descriptor.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
 import { buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
 import { auditKbEdit, buildKbEditSoundnessCtx } from './kb-drain-edit-soundness.ts';
-import { parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs } from './kb-job-state.ts';
+import { parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs, kbDrainRunIdsFor, consolidateRunIdsFor } from './kb-job-state.ts';
 import {
   DEFAULT_KB_DRAIN_MAX_COST_USD,
   KB_DRAIN_MAX_ROUNDS,
@@ -84,29 +84,13 @@ export function readKbDrainStatus(forgeRoot: string, runId: string): KbDrainStat
   }
 }
 
-/** Every drain run recorded for `kbId`, discovered by enumerating `_logs/`
- *  (SERVER-enumerated directory names, never a caller-supplied path — same
- *  "server-enumerated names, holding no client string" class as
- *  `packages/flows/metrics.ts`'s `listCycles`) and filtering to this kb's own
- *  `_kb-drain-<kbId>-drain-*` prefix. Used by BOTH the 409-active check
- *  (`POST /drain`) and the active-or-latest reattach route
+/** Every drain run recorded for `kbId` — `kbDrainRunIdsFor` (kb-job-state.ts)
+ *  discovers the run ids, this reads each one's status. Used by BOTH the
+ *  409-active check (`POST /drain`) and the active-or-latest reattach route
  *  (`GET /drain`). */
 export function findKbDrainRuns(forgeRoot: string, kbId: string): Array<{ runId: string; status: KbDrainStatus }> {
-  const logsRoot = join(forgeRoot, '_logs');
-  if (!existsSync(logsRoot)) return [];
-  let entries: string[];
-  try {
-    entries = readdirSync(logsRoot);
-  } catch {
-    return [];
-  }
-  const dirPrefix = '_kb-drain-';
-  const runIdPrefix = `${kbId}-drain-`;
   const runs: Array<{ runId: string; status: KbDrainStatus }> = [];
-  for (const name of entries) {
-    if (!name.startsWith(dirPrefix)) continue;
-    const runId = name.slice(dirPrefix.length);
-    if (!runId.startsWith(runIdPrefix)) continue;
+  for (const runId of kbDrainRunIdsFor(forgeRoot, kbId)) {
     const status = readKbDrainStatus(forgeRoot, runId);
     if (status) runs.push({ runId, status });
   }
@@ -204,18 +188,7 @@ export function listKbRuns(forgeRoot: string, kbId: string, sessionIsReadable: S
   // Consolidate runs — `_brainfix-<kbId>-consolidate-*` top-level dirs
   // (per-finding `__<i>` sub-runs excluded, mirroring the consolidate/active
   // route's own exclusion in packages/knowledge/bridge-studio-kbs.ts).
-  const logsRoot = join(forgeRoot, '_logs');
-  let entries: string[] = [];
-  try {
-    entries = existsSync(logsRoot) ? readdirSync(logsRoot) : [];
-  } catch {
-    entries = [];
-  }
-  const consolidatePrefix = `_brainfix-${kbId}-consolidate-`;
-  for (const name of entries) {
-    if (!name.startsWith(consolidatePrefix)) continue;
-    const runId = name.slice('_brainfix-'.length);
-    if (runId.includes('__')) continue;
+  for (const runId of consolidateRunIdsFor(forgeRoot, kbId)) {
     const r = readConsolidateRunRow(forgeRoot, runId);
     rows.push({ kind: 'consolidate', id: runId, when: r.when, status: r.status, costUsd: r.costUsd, detail: r.detail });
   }
@@ -258,7 +231,9 @@ export function listKbRuns(forgeRoot: string, kbId: string, sessionIsReadable: S
     if (sessionKbId !== null && sessionKbId !== kbId) continue;
     // M7-C U8 (bead forge-u8y2) — never mint a row for a session pointer that
     // resolves nowhere. Same predicate, same reason, as `withReadableDraftSessions`.
-    if (!sessionIsReadable({ projectsRoot, logsRoot, kind: KB_CLEANUP_SESSION_KIND, sessionId: sid, project: anchor })) continue;
+    // logsRoot inlined: the consolidate loop's own local went with it into
+    // consolidateRunIdsFor (kb-job-state.ts); no other user in this function.
+    if (!sessionIsReadable({ projectsRoot, logsRoot: join(forgeRoot, '_logs'), kind: KB_CLEANUP_SESSION_KIND, sessionId: sid, project: anchor })) continue;
     rows.push({ kind: 'cleanup', id: sid, when: whenFromSessionId(sid), status: phase, costUsd: null, detail: null, project: anchor });
   }
 
@@ -301,21 +276,11 @@ export function isKbDrainCancelRequested(forgeRoot: string, runId: string): bool
 // Structural-only gate helpers (W7-B2, orch-01)
 // ---------------------------------------------------------------------------
 
-/** Restore every gated change to its pre-turn content — a created file is
- *  removed, an edited/deleted file is written back byte-for-byte. Paths are
- *  snapshot-derived (our OWN walk of the trusted `brainDir`), never
- *  request/agent text. */
-export function revertProseChanges(brainDir: string, changes: readonly KbEditChange[]): void {
-  for (const c of changes) {
-    const abs = join(brainDir, c.relPath);
-    if (c.before === null) {
-      rmSync(abs, { force: true });
-      continue;
-    }
-    mkdirSync(dirname(abs), { recursive: true });
-    writeFileSync(abs, c.before, 'utf8');
-  }
-}
+// `revertProseChanges` — the ONE implementation lives in
+// kb-drain-edit-soundness.ts (this file already imports from it, above);
+// re-exported here because bridge-studio-kb-drain.ts's own import of it
+// keeps this module path.
+export { revertProseChanges } from './kb-drain-edit-soundness.ts';
 
 export function newDraftSessionId(): string {
   const iso = new Date().toISOString().slice(0, 19).replace(/:/g, '-');

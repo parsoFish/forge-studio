@@ -124,6 +124,14 @@ export function beatVerdict(beat, observed, { boundMs = null, bound = {} } = {})
     // while the generated documentation never mentions it — the tests, demos
     // and docs drifting apart inside the one script §3 built to stop that.
     data: Object.freeze({ ...observed.data, ...seen }),
+    // The RAW declared expectations, alongside `data`'s observed/bound values
+    // (forge-8vfn.2.27, labelling half). `data` alone cannot tell a renderer
+    // which key was declared `<placeholder>`-bound — it only carries the
+    // value that came back — so a doc generated from it records an
+    // environment-derived id as if it were a fixed fact, and a regenerated
+    // doc that differs there reads as drift rather than as the same story
+    // binding a fresh value.
+    expect: Object.freeze({ ...beat.expect.data }),
   });
 }
 

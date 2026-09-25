@@ -227,7 +227,9 @@ test('R6-08 4on: a lone checkFrontmatter defect (missing description) on the top
     // design those two report 'n/a'; the remaining 9 forge-themes checks
     // genuinely DID scan this KB (readThemeFiles walks brain/cycles/
     // themes) and correctly report 'pass' on this single-defect fixture.
-    const NEVER_APPLICABLE_TO_CYCLES = new Set(['checkProjectBrainIndexes', 'checkReflectorLoss']);
+    // checkThemeTruth judges project brains against their checkouts (brain/projects/*), so it
+    // never scans a top-level 'cycles' KB either — the same scan domain as checkProjectBrainIndexes.
+    const NEVER_APPLICABLE_TO_CYCLES = new Set(['checkProjectBrainIndexes', 'checkReflectorLoss', 'checkThemeTruth']);
     for (const name of FULL_SCOPE_CHECK_NAMES) {
       if (name === 'checkFrontmatter') continue;
       const entry = byName.get(name);
