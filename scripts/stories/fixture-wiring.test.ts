@@ -735,3 +735,17 @@ test('replaceAnchor and findCallSpan FAIL LOUDLY when their anchor is not found,
   assert.throws(() => findCallSpan('const x = 1;', 'notACall('), /anchor not found/);
   assert.throws(() => findCallSpan('foo(bar', 'foo('), /no balanced closing \)/);
 });
+
+// Finding row 75 × D1 (the #906 rebase): `reapCensusAndSweep` REFUSES the
+// trailing sweep while a writer from this run is still alive. The fixture
+// ground's teardown is an `rmSync` of `projects/<project>`, so it must honour the
+// same refusal — tearing a ground down under a live writer is the exact race
+// the census exists to close. Refused → the ground stays as evidence and the
+// next run's leading sweep removes it.
+test('the fixture-ground teardown is gated on the trailing census being empty', () => {
+  const src = stripComments(readSource('run-story.mjs'));
+  const call = src.indexOf('teardownFixtureGround(ROOT');
+  assert.ok(call > 0, 'teardownFixtureGround is called');
+  const guard = src.lastIndexOf('trailing.census.empty', call);
+  assert.ok(guard > 0 && call - guard < 400, 'the teardown call sits inside a trailing.census.empty guard');
+});
