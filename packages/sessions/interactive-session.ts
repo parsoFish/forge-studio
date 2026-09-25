@@ -88,6 +88,32 @@ import { writeRootFenceOptions, type BashFenceMode } from './session-write-fence
  *  without flooding the filesystem. */
 export const HEARTBEAT_THROTTLE_MS = 2000;
 
+/** PROGRESS predicate shared by every turn loop (forge-8vfn.8.1.9, incl.
+ *  `kinds/fix-turn.ts`): an `assistant` message or the terminal `result` is
+ *  progress; everything else (`tool_progress`/`system`/…) is not — feeds
+ *  `isProgress` below and gates the heartbeat tick so the Studio stall
+ *  detector sees real silence. Exported so no caller re-derives it. */
+export function isProgressMessage(msg: unknown): boolean {
+  if (msg === null || typeof msg !== 'object') return false;
+  const type = (msg as { type?: unknown }).type;
+  return type === 'assistant' || type === 'result';
+}
+
+/** Throttled `.heartbeat` tick: fires at most once per HEARTBEAT_THROTTLE_MS,
+ *  called only from a progress branch. Shared by every turn loop below and
+ *  `kinds/fix-turn.ts`. */
+export function makeHeartbeatTick(onHeartbeat: (() => void) | undefined): () => void {
+  let lastHeartbeatMs = 0;
+  return () => {
+    if (!onHeartbeat) return;
+    const now = Date.now();
+    if (now - lastHeartbeatMs >= HEARTBEAT_THROTTLE_MS) {
+      onHeartbeat();
+      lastHeartbeatMs = now;
+    }
+  };
+}
+
 /**
  * W6-B1: the literal `onThinking` fires with for every `redacted_thinking`
  * content block, NEVER the block's own (encrypted, non-human-readable) data —
@@ -383,7 +409,7 @@ export async function runStructuredTurn<T>(args: {
   let turnCostUsd: number | null = null;
   let toolSeq = 0;
   const reads: string[] = [];
-  let lastHeartbeatMs = 0;
+  const tickHeartbeat = makeHeartbeatTick(args.onHeartbeat);
   // `SeenUsage`/`recordUsage`/`unpricedReason`/`unpricedTokens` are declared
   // below, between this function and `runAgentTurn`, because both primitives
   // use them. 7.6.55 built them for the agent turn; 7.6.73 found the same
@@ -394,14 +420,8 @@ export async function runStructuredTurn<T>(args: {
   for await (const msg of withIdleDeadline(args.queryFn({ prompt: args.prompt, options }), {
     label: args.label ?? 'interactive-structured',
     abortController,
+    isProgress: isProgressMessage,
   })) {
-    if (args.onHeartbeat) {
-      const now = Date.now();
-      if (now - lastHeartbeatMs >= HEARTBEAT_THROTTLE_MS) {
-        args.onHeartbeat();
-        lastHeartbeatMs = now;
-      }
-    }
     const m = msg as {
       type?: string;
       structured_output?: unknown;
@@ -410,6 +430,7 @@ export async function runStructuredTurn<T>(args: {
       };
     };
     if (m.type === 'assistant') {
+      tickHeartbeat(); // forge-8vfn.8.1.9 — progress only; see isProgressMessage above
       recordUsage(seen, (m.message as { usage?: unknown } | undefined)?.usage);
       if (args.onToolUse) {
         const details = extractLiveToolDetails(m.message, toolSeq);
@@ -437,6 +458,7 @@ export async function runStructuredTurn<T>(args: {
       continue;
     }
     if (m.type !== 'result') continue;
+    tickHeartbeat();
     if (m.structured_output && typeof m.structured_output === 'object') {
       structured = m.structured_output as T;
     }
@@ -682,20 +704,14 @@ export async function runAgentTurn(args: {
   // 7.6.55 — read from the assistant messages this loop used to walk past.
   const seen: SeenUsage = { sawAny: false, tokensOutSum: 0, tokensInLast: 0, cacheReadLast: 0, cacheCreateLast: 0 };
   let toolSeq = 0;
-  let lastHeartbeatMs = 0;
+  const tickHeartbeat = makeHeartbeatTick(args.onHeartbeat);
 
   try {
   for await (const msg of withIdleDeadline(args.queryFn({ prompt: args.prompt, options }), {
     label: args.label ?? 'agent-turn',
     abortController,
+    isProgress: isProgressMessage,
   })) {
-    if (args.onHeartbeat) {
-      const now = Date.now();
-      if (now - lastHeartbeatMs >= HEARTBEAT_THROTTLE_MS) {
-        args.onHeartbeat();
-        lastHeartbeatMs = now;
-      }
-    }
     if (typeof msg !== 'object' || msg === null) continue;
     const m = msg as {
       type?: string;
@@ -705,6 +721,7 @@ export async function runAgentTurn(args: {
       };
     };
     if (m.type === 'assistant') {
+      tickHeartbeat(); // forge-8vfn.8.1.9 — progress only; see isProgressMessage above
       recordUsage(seen, (m.message as { usage?: unknown } | undefined)?.usage);
       if (args.onToolUse) {
         const details = extractLiveToolDetails(m.message, toolSeq);
@@ -729,6 +746,7 @@ export async function runAgentTurn(args: {
       continue;
     }
     if (m.type !== 'result') continue;
+    tickHeartbeat();
     if (typeof m.total_cost_usd === 'number') costUsd = m.total_cost_usd;
     break;
   }

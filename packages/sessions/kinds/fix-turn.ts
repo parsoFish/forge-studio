@@ -43,6 +43,8 @@ import { createLogger, type EventLogger, type Phase } from '@forge/kernel';
 
 import {
   REDACTED_THINKING_MARKER,
+  isProgressMessage,
+  makeHeartbeatTick,
   makeHeartbeatWriter,
   makeReasoningSink,
   makeThinkingSink,
@@ -155,7 +157,8 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
   // where the logger has not yet written anything into the cycle dir.
   const heartbeatDir = resolve(logsRoot, cycleId);
   mkdirSync(heartbeatDir, { recursive: true });
-  const onHeartbeat = makeHeartbeatWriter(heartbeatDir);
+  // forge-8vfn.8.1.9 — ticks only from a progress branch below, same as the spine.
+  const tickHeartbeat = makeHeartbeatTick(makeHeartbeatWriter(heartbeatDir));
 
   const startEv = logger.emit({
     initiative_id: cycleId,
@@ -227,9 +230,8 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
     for await (const msg of withIdleDeadline(queryImpl({ prompt: spawn.prompt, options }), {
       label: `${variant.eventSkill}-${input.runId}`,
       abortController,
+      isProgress: isProgressMessage,
     })) {
-      onHeartbeat();
-
       if (typeof msg !== 'object' || msg === null) continue;
       const m = msg as {
         type?: string;
@@ -240,6 +242,7 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
       };
 
       if (m.type === 'assistant') {
+        tickHeartbeat(); // forge-8vfn.8.1.9 — progress only; see isProgressMessage
         const details = extractLiveToolDetails(m.message, toolSeq);
         for (const d of details) sink.onToolUse(d);
         toolSeq += details.length;
@@ -259,6 +262,7 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
         continue;
       }
       if (m.type !== 'result') continue;
+      tickHeartbeat();
       if (typeof m.total_cost_usd === 'number') costUsd = m.total_cost_usd;
       break;
     }

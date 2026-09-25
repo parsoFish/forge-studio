@@ -360,3 +360,92 @@ test("runOne (b'): resuming a preserved worktree onto a PRE-EXISTING forge/<INIT
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// (c) architect→develop hand-off (row 93(b)): a 'reuse' attempt can be the
+// FIRST to push forge/<INIT> — ownership must be recorded on 'reuse' too, not
+// only on 'add', or a failed hand-off leaves its own push on origin forever.
+// ---------------------------------------------------------------------------
+
+test("runOne (c): hand-off 'reuse' attempt pushes forge/<INIT> itself (absent on origin beforehand), then fails → the branch it pushed is deleted", async () => {
+  await withSkipContractCheck(async () => {
+    const { root, repo } = setupProject();
+    const initiativeId = `INIT-8vfn818c-${randomUUID()}`;
+    try {
+      const queueRoot = join(root, '_queue');
+      const worktreesRoot = join(root, '_worktrees');
+      const paths = setupQueue(queueRoot);
+      const branch = `forge/${initiativeId}`;
+
+      // The architect→develop hand-off: a preserved worktree WITH work-items,
+      // no resume_from marker — decideWorktreeStrategy must read this as
+      // 'reuse' via handoffWorkItemsPresent, exactly like S10's live case.
+      const wt = worktreeAdd({ projectRepoPath: repo, branch, worktreesRoot, initiativeId });
+      mkdirSync(join(wt.path, '.forge', 'work-items'), { recursive: true });
+      writeFileSync(join(wt.path, '.forge', 'work-items', 'WI-1.md'), '# WI-1\n');
+
+      const manifestPath = writeManifest(paths, initiativeId, repo);
+      const wiring = makePushThenFailWiring(wt.path, branch);
+
+      assert.equal(remoteHeadSha(repo, branch), null, 'precondition: nothing on origin yet');
+
+      await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot), undefined, wiring);
+
+      assert.ok(existsSync(join(paths.failed, `${initiativeId}.md`)), 'manifest must land in failed/');
+      assert.equal(
+        remoteHeadSha(repo, branch),
+        null,
+        'the branch THIS hand-off attempt pushed must be deleted from origin once it fails',
+      );
+
+      const logPath = join(FORGE_ROOT, '_logs', initiativeId, 'events.jsonl');
+      const events = readFileSync(logPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+      assert.ok(
+        events.some((e) => e.message === 'stale-remote-branch.cleaned-up' && e.metadata.branch === branch),
+        `expected a stale-remote-branch.cleaned-up event, got: ${JSON.stringify(events)}`,
+      );
+    } finally {
+      cleanupRealLogs(initiativeId);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (c') the same hand-off 'reuse' path, but forge/<INIT> already existed on
+// origin BEFORE this attempt — never refused (reuse), and never deleted (this
+// attempt did not create it, even though it pushes more commits onto it).
+// ---------------------------------------------------------------------------
+
+test("runOne (c'): hand-off 'reuse' attempt onto a PRE-EXISTING forge/<INIT> → never refused, never deleted on failure", async () => {
+  await withSkipContractCheck(async () => {
+    const { root, repo } = setupProject();
+    const initiativeId = `INIT-8vfn818cp-${randomUUID()}`;
+    try {
+      const queueRoot = join(root, '_queue');
+      const worktreesRoot = join(root, '_worktrees');
+      const paths = setupQueue(queueRoot);
+      const branch = `forge/${initiativeId}`;
+      const sha = pushAbandonedBranch(repo, branch); // pre-existing — NOT this attempt's push
+
+      const wt = worktreeAdd({ projectRepoPath: repo, branch, worktreesRoot, initiativeId });
+      mkdirSync(join(wt.path, '.forge', 'work-items'), { recursive: true });
+      writeFileSync(join(wt.path, '.forge', 'work-items', 'WI-1.md'), '# WI-1\n');
+
+      const manifestPath = writeManifest(paths, initiativeId, repo);
+      const wiring = makePushThenFailWiring(wt.path, branch);
+
+      await runOne(manifestPath, `${initiativeId}.md`, makeCfg(queueRoot, worktreesRoot), undefined, wiring);
+
+      assert.equal(remoteHeadSha(repo, branch), sha, 'a branch this attempt did not create must never be deleted');
+
+      const logPath = join(FORGE_ROOT, '_logs', initiativeId, 'events.jsonl');
+      const logged = existsSync(logPath) ? readFileSync(logPath, 'utf8') : '';
+      assert.ok(!logged.includes('stale-remote-branch.cleaned-up'), 'no cleanup event for a branch this attempt did not create');
+      assert.ok(!logged.includes('stale-remote-branch.refused'), 'a reuse attempt must never be refused, even onto an existing branch');
+    } finally {
+      cleanupRealLogs(initiativeId);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

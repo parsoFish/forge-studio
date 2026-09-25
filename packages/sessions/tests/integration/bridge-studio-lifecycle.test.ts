@@ -276,6 +276,8 @@ const AMBIGUOUS_SID = '2026-08-09T09-00-00';
 const KILL_SID = '2026-08-10T10-00-00';
 const CANCEL_TERMINAL_SID = '2026-08-11T11-00-00';
 const ONBOARDING_KILL_SID = '2026-08-12T08-00-00';
+// bead forge-8vfn.8.1.9 — architect's own 120s ceiling vs the 180s default.
+const ARCHITECT_STALLED_SID = '2026-08-13T09-00-00';
 
 function writeStatus(dir: string, status: Record<string, unknown>, mtimeMs?: number): void {
   mkdirSync(dir, { recursive: true });
@@ -376,6 +378,19 @@ before(async () => {
     session_id: STALLED_KB_SID, project: 'projc', phase: 'drafting', kb_id: 'k', findings: [],
   }, T.stale);
   writeLog('kb-cleanup', STALLED_KB_SID, { 'events.jsonl': '{"event_type":"start"}\n', '.heartbeat': 'x', 'stderr.log': '' }, T.stale);
+
+  // --- bead forge-8vfn.8.1.9 — architect drafting (working), `.heartbeat`
+  // 150s stale: past architect's OWN 120s ceiling but still inside the 180s
+  // DEFAULT, so this only reads stalled if `stallCeilingForKind('architect')`
+  // is really what's applied. `.heartbeat` now advances only on real
+  // progress (never on a `tool_progress`/`system`/… SDK message), so its
+  // mtime IS the last-progress fact this reads.
+  const architectStaleMs = now - 150_000;
+  writeStatus(join(projectsRoot, 'proja', '_architect', ARCHITECT_STALLED_SID), {
+    session_id: ARCHITECT_STALLED_SID, project: 'proja', phase: 'drafting', updated_at: new Date(T.statusOld).toISOString(),
+  }, T.statusOld);
+  writeLog('architect', ARCHITECT_STALLED_SID, { 'events.jsonl': '{"event_type":"start"}\n', 'stderr.log': '' }, T.statusOld);
+  writeLog('architect', ARCHITECT_STALLED_SID, { '.heartbeat': new Date(architectStaleMs).toISOString() }, architectStaleMs);
 
   // --- kb-cleanup drafting, OLD stderr, then a fresh heartbeat/status (re-run) ⇒ working
   writeStatus(join(projectsRoot, 'projc', '_kb-cleanup', RERUN_KB_SID), {
@@ -487,6 +502,13 @@ test('index: a working kb-cleanup silent 30 minutes with an EMPTY stderr is stal
   const w = row(rows, 'kb-cleanup', RERUN_KB_SID);
   assert.equal(w.state, 'working');
   assert.equal(w.needsYou, false);
+});
+
+test('index (bead forge-8vfn.8.1.9): an architect session drafting with `.heartbeat` 150s stale reads stalled — proving the architect-specific 120s ceiling applies, not the 180s default a kb-cleanup row would still pass at', async () => {
+  const a = row(await indexRows(), 'architect', ARCHITECT_STALLED_SID);
+  assert.equal(a.state, 'stalled', `expected stalled at 150s past architect's 120s ceiling; got ${a.state} (idleMs=${a.idleMs})`);
+  assert.equal(a.needsYou, true);
+  assert.ok(typeof a.idleMs === 'number' && a.idleMs >= 120_000 && a.idleMs < 180_000, `idleMs must sit between the two ceilings, got ${a.idleMs}`);
 });
 
 test('index: a terminal session reads state=terminal, needsYou=false', async () => {
