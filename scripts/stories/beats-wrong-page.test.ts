@@ -128,12 +128,15 @@ test('531(3) (RED) a press whose handle is on no element of this page reds at t+
 test('531(3) (positive control) a handle absent at t+0 ON the declared route still waits its bound', async () => {
   // S2 beat 12's shape: the field exists only once the architect has ASKED, and
   // the beat is standing on its own session page. This rule must never touch it.
+  // `began` BEFORE the fake is built: `appearsAfterMs` counts from the fake's
+  // own construction, so reading the clock after it let `took` land a few ms
+  // short of 400 on a fast runner (398 ms, PR #948 CI run 36195500057).
+  const began = Date.now();
   const page = fakeStudio({
     start: '/sessions/architect/s1',
     on: { 'open-session': ['/sessions/architect/s1'] },
     appearsAfterMs: 400,
   });
-  const began = Date.now();
   const verdict = await driveBeat(page as never, { ...beat4, wait: { for: 'agent', upTo: 3_000 } }, 1, 'http://localhost:4124');
   const took = Date.now() - began;
 
