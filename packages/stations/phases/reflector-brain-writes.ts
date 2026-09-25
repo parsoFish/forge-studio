@@ -52,13 +52,15 @@ export function emitReflectionLost(
     cause: string;
     detail: string;
     extraMetadata?: Record<string, unknown>;
+    /** Seam F4: the executing node's own agent slug (`def.slug`). */
+    skill: string;
   },
 ): void {
   logger.emit({
     initiative_id: opts.initiativeId,
     ...(opts.parentEventId !== undefined ? { parent_event_id: opts.parentEventId } : {}),
     phase: 'reflection',
-    skill: 'reflector',
+    skill: opts.skill,
     event_type: 'error',
     input_refs: [],
     output_refs: [],
@@ -91,6 +93,9 @@ export async function runReflectorBrainWrites(
     input, logger, deps, startEventId, forgeRoot, cycleId, projectName,
     systemPrompt, prompt, cycleArchivePath, themesDir, startedAtMs, agentDef,
   } = opts;
+  // Seam F4: this pass's own def (`reflector.ts` threads it) — used for the
+  // spawn AND every emitted event's `skill`, never a hardcoded canonical one.
+  const def = agentDef;
 
   const toolUseSummary: ReflectorToolUseSummary = {
     brainReads: 0,
@@ -104,16 +109,9 @@ export async function runReflectorBrainWrites(
 
   try {
     // R4-01-F2: the spawn goes through the generic one-shot primitive.
-    // `lifecycle: 'caller'` — this pipeline owns the event lifecycle (the
-    // reflector.start/end pair around this call); runAgent emits nothing and
-    // returns the totals. Options (model/tools/caps from the def's own
-    // `budgets`) are pinned byte-identical to the previous inline build by
-    // the golden spawn-capture suite for the canonical def — `agentDef` is
-    // the EXECUTING node's own def (seam F4), threaded in by `reflector.ts`,
-    // never re-derived from a hardcoded canonical path here. Per-message
-    // telemetry stays here via the onMessage observer (ADR-036: judgments
-    // never move into the primitive).
-    const def = agentDef;
+    // `lifecycle: 'caller'` — this pipeline owns the event lifecycle; runAgent
+    // emits nothing and returns the totals. Options (model/tools/caps) come
+    // from THIS def (seam F4), never a hardcoded canonical path.
     // R4-01 review: the caps moved from undeletable code constants to
     // frontmatter data — fail loud if an edit removes them (mirrors the PM
     // pipeline's maxTurns guard; an uncapped unattended reflector re-opens
@@ -149,7 +147,7 @@ export async function runReflectorBrainWrites(
       initiative_id: input.initiativeId,
       parent_event_id: startEventId,
       phase: 'reflection',
-      skill: 'reflector',
+      skill: def.slug,
       event_type: 'error',
       input_refs: [logger.logFilePath],
       output_refs: [],
@@ -165,6 +163,7 @@ export async function runReflectorBrainWrites(
       cause: 'crash',
       detail: errMsg,
       extraMetadata: { crash_kind: crash.kind, crash_reason: crash.reason },
+      skill: def.slug,
     });
     return { ok: false };
   }
@@ -188,6 +187,7 @@ export async function runReflectorBrainWrites(
       cause,
       detail: `reflector SDK run ended with result subtype "${resultSubtype}" — reflection outputs are incomplete`,
       extraMetadata: { result_subtype: resultSubtype, cost_usd: costUsd, duration_ms: durationMs },
+      skill: def.slug,
     });
     return { ok: false };
   }
@@ -207,6 +207,7 @@ export async function runReflectorBrainWrites(
       parentEventId: startEventId,
       cause: 'brain-gate-failed',
       detail: 'F-13 brain-first gate failed (zero brain reads) — reflection abandoned before retention/lint/recap',
+      skill: def.slug,
     });
     return { ok: false };
   }
@@ -227,7 +228,7 @@ export async function runReflectorBrainWrites(
     initiative_id: input.initiativeId,
     parent_event_id: startEventId,
     phase: 'reflection',
-    skill: 'reflector',
+    skill: def.slug,
     event_type: 'log',
     input_refs: [cycleArchivePath],
     output_refs: [cycleArchivePath],
@@ -264,7 +265,7 @@ export async function runReflectorBrainWrites(
       initiative_id: input.initiativeId,
       parent_event_id: startEventId,
       phase: 'reflection',
-      skill: 'reflector',
+      skill: def.slug,
       event_type: 'error',
       input_refs: [],
       output_refs: [],

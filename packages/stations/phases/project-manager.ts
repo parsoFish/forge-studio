@@ -33,8 +33,6 @@ import { recordBrainGateResult, type CycleInput } from '@forge/flows/cycle-conte
 import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents/tool-event-emit.ts';
 import { deriveGateRecipe, renderGateRecipeBlock } from '@forge/projects/gate-recipes.ts';
 import { runAgent } from '@forge/agents/run-agent.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { skillPath } from '@forge/agents/skill-path.ts';
 import { compileWorkItemSpecs } from '@forge/flows/phases/wi-spec-compile.ts';
 import { checkDecomposeCompleteness } from './decompose-completeness.ts';
 import { rejectWorkItemSet } from './pm-rejected-set.ts';
@@ -74,15 +72,8 @@ export type RunProjectManagerOptions = {
    * exactly one work item — see that function's own comment.
    */
   classProfiles?: ClassProfilePort;
-  /**
-   * Seam F4 (operator item 81, ADR-039 generalisation): the executing flow
-   * node's own agent def. The wi-contract band (`executor-table.ts` execPm)
-   * always passes it explicitly, so the PM's system prompt and its `runAgent`
-   * tools/model/budgets come from THIS def's own `SKILL.md` — never a
-   * hardcoded canonical path. Absent ⇒ the canonical project-manager def
-   * (every pre-F4 caller/test), byte-identical to prior behaviour.
-   */
-  agentDef?: AgentDefinition;
+  /** Seam F4: the executing node's own agent def. REQUIRED — no fallback. */
+  agentDef: AgentDefinition;
 };
 
 // The live turn/budget caps are DECLARED DATA now (R4-01-F2, ADR-039):
@@ -100,12 +91,12 @@ const PM_TURN_WARNING_FRACTION = 0.8;
 export async function runProjectManager(
   input: CycleInput,
   logger: EventLogger,
-  options: RunProjectManagerOptions = {},
+  options: RunProjectManagerOptions,
 ): Promise<void> {
   const start = logger.emit({
     initiative_id: input.initiativeId,
     phase: 'project-manager',
-    skill: 'project-manager',
+    skill: options.agentDef.slug,
     event_type: 'start',
     input_refs: [input.manifestPath],
     output_refs: [],
@@ -145,8 +136,8 @@ type PmPassInput = {
   constraintSourcesRoot?: string;
   /** The one port (operator ruling, items 81/83) — see RunProjectManagerOptions.classProfiles. */
   classProfiles?: ClassProfilePort;
-  /** Seam F4 — see RunProjectManagerOptions.agentDef. */
-  agentDef?: AgentDefinition;
+  /** Seam F4 — see RunProjectManagerOptions.agentDef. REQUIRED. */
+  agentDef: AgentDefinition;
 };
 
 type PmPassOutcome =
@@ -174,13 +165,8 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     rmSync(stalePmScratch, { recursive: true, force: true });
   }
 
-  // Seam F4 (operator item 81): the wi-contract band's caller
-  // (`executor-table.ts` execPm) always passes the executing node's own
-  // agent def explicitly; every pre-F4 caller/test that doesn't falls back
-  // to the canonical project-manager def, byte-identical to prior behaviour.
-  // Resolved BEFORE the system prompt so both the prompt and the spawn
-  // options (below) read the SAME def — never a hardcoded canonical path.
-  const def = p.agentDef ?? loadAgentDefinition(skillPath('project-manager'));
+  // Seam F4: no fallback — read once, before the prompt, for both it and the spawn.
+  const def = p.agentDef;
 
   const forgeRoot = resolve(import.meta.dirname, '..', '..', '..');
   const systemPrompt = buildPmSystemPrompt(forgeRoot, def);
@@ -222,7 +208,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     initiative_id: input.initiativeId,
     parent_event_id: parentEventId,
     phase: 'project-manager',
-    skill: 'project-manager',
+    skill: def.slug,
     event_type: 'log',
     input_refs: brainContext.map((b) => b.path),
     output_refs: [],
@@ -252,7 +238,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       initiative_id: input.initiativeId,
       parent_event_id: parentEventId,
       phase: 'project-manager',
-      skill: 'project-manager',
+      skill: def.slug,
       event_type: 'brain-query',
       input_refs: brainContext.filter((b) => b.path.startsWith(`brain/${kbId}/`) || b.path.startsWith(`brain/projects/${kbId}/`)).map((b) => b.path),
       output_refs: [],
@@ -304,7 +290,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     initiativeId: input.initiativeId,
     parentEventId,
     phase: 'project-manager',
-    skill: 'project-manager',
+    skill: def.slug,
   });
   let pmToolSeq = 0;
 
@@ -337,7 +323,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
           initiative_id: input.initiativeId,
           parent_event_id: parentEventId,
           phase: 'project-manager',
-          skill: 'project-manager',
+          skill: def.slug,
           event_type: 'log',
           input_refs: [],
           output_refs: [],
@@ -364,7 +350,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       initiative_id: input.initiativeId,
       parent_event_id: parentEventId,
       phase: 'project-manager',
-      skill: 'project-manager',
+      skill: def.slug,
       event_type: 'tool_use',
       input_refs: ['brain/'],
       output_refs: [],
@@ -414,7 +400,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       initiative_id: input.initiativeId,
       parent_event_id: parentEventId,
       phase: 'project-manager',
-      skill: 'project-manager',
+      skill: def.slug,
       event_type: 'log',
       input_refs: [input.manifestPath],
       output_refs: [resolve(workItemsDir, `${item.work_item_id}.md`)],
@@ -510,7 +496,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   if (underDecomposed !== null) {
     logger.emit({
       initiative_id: manifest.initiative_id, parent_event_id: parentEventId,
-      phase: 'project-manager', skill: 'project-manager', event_type: 'log',
+      phase: 'project-manager', skill: def.slug, event_type: 'log',
       input_refs: [], output_refs: [], message: 'pm.under-decomposed',
       metadata: { change_class: manifest.class, work_item_count: items.length, detail: underDecomposed },
     });
@@ -555,7 +541,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       initiative_id: input.initiativeId,
       parent_event_id: parentEventId,
       phase: 'project-manager',
-      skill: 'project-manager',
+      skill: def.slug,
       event_type: 'error',
       input_refs: [input.manifestPath],
       output_refs: [],
@@ -600,7 +586,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       initiative_id: input.initiativeId,
       parent_event_id: parentEventId,
       phase: 'project-manager',
-      skill: 'project-manager',
+      skill: def.slug,
       event_type: 'error',
       input_refs: [input.manifestPath],
       output_refs: [workItemsDir],
@@ -619,7 +605,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     initiative_id: input.initiativeId,
     parent_event_id: parentEventId,
     phase: 'project-manager',
-    skill: 'project-manager',
+    skill: def.slug,
     event_type: 'log',
     input_refs: [input.manifestPath],
     output_refs: [resolve(workItemsDir, '_graph.md')],
@@ -631,7 +617,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     initiative_id: input.initiativeId,
     parent_event_id: parentEventId,
     phase: 'project-manager',
-    skill: 'project-manager',
+    skill: def.slug,
     event_type: failed ? 'error' : 'end',
     input_refs: [input.manifestPath],
     output_refs: [workItemsDir],
@@ -684,7 +670,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
         initiative_id: input.initiativeId,
         parent_event_id: parentEventId,
         phase: 'project-manager',
-        skill: 'project-manager',
+        skill: def.slug,
         event_type: 'log',
         input_refs: [input.manifestPath],
         output_refs: [workItemsDir],
@@ -720,7 +706,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     .join('; ');
 
   // 8vfn.6.1 / §15.167 — claimants read the DIRECTORY. Story: pm-rejected-set.ts.
-  return rejectWorkItemSet(workItemsDir, summary, { logger, initiativeId: input.initiativeId, parentEventId });
+  return rejectWorkItemSet(workItemsDir, summary, { logger, initiativeId: input.initiativeId, parentEventId, skill: def.slug });
 }
 
 /** Heading for the project-contract standing-AC section injected per WI. */

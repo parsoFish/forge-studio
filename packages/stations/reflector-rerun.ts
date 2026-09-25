@@ -25,6 +25,8 @@ import { runReflector } from './phases/reflector.ts';
 import { createLogger } from '@forge/kernel';
 import { parseManifest } from '@forge/flows/manifest.ts';
 import { REFLECT_MODE_FILE, type ReflectMode } from '@forge/flows/cycle-context.ts';
+import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
+import { skillPath } from '@forge/agents/skill-path.ts';
 
 /** R4-09-F3: recover the reflect mode a cycle originally ran in (the durable
  *  sidecar the reflector persisted), so a rerun preserves it instead of
@@ -98,6 +100,8 @@ export async function rerunReflector(input: RerunInput): Promise<void> {
 
   const logger = createLogger(input.cycleId, logsRoot);
   const mode = readReflectMode(input.cycleId, logsRoot);
+  // Seam F4: no flow node here — name + load the canonical reflector explicitly.
+  const agentDef = loadAgentDefinition(skillPath('reflector'));
   await runReflector(
     {
       initiativeId: m.initiative_id,
@@ -108,5 +112,6 @@ export async function rerunReflector(input: RerunInput): Promise<void> {
       ...(mode ? { mode } : {}),
     },
     logger,
+    { agentDef },
   );
 }

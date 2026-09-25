@@ -39,14 +39,7 @@ import { openPrInline, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDev
  * touching the filesystem or spawning agents.
  */
 export type FlowRunnerDeps = {
-  /**
-   * `def` (seam F4, operator item 81/ADR-039 generalisation): the executing
-   * flow node's own agent def, resolved by the band exec function
-   * (`executor-table.ts`) from `ctx.agents.get(ctx.node.agent)` — the SAME
-   * lookup `execAgent`'s generic path uses, never a hardcoded canonical slug.
-   * Threaded through so the wi-contract band's system prompt and spawn
-   * options read THIS def's own SKILL.md.
-   */
+  /** `def` (seam F4): the executing node's own def, never a hardcoded canonical slug. */
   runProjectManager: (input: CycleInput, logger: EventLogger, def: AgentDefinition, signal?: AbortSignal) => Promise<void>;
 
   /** `def` — see `runProjectManager`'s doc; here for the ralph dev-loop. */
@@ -231,7 +224,7 @@ export function buildDefaultDeps(classProfiles?: ClassProfilePort): FlowRunnerDe
     runProjectManager: (input, logger, def, signal?) =>
       realRunProjectManager(input, logger, { signal, classProfiles, agentDef: def }),
     runDeveloperLoop: (input, logger, def, signal?) =>
-      realRunDeveloperLoop(input, logger, signal, classProfiles, def),
+      realRunDeveloperLoop(input, logger, def, signal, classProfiles),
     runIntegrate: (input, logger, gateEvidence) =>
       runIntegrateBand(
         {

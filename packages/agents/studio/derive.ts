@@ -41,6 +41,36 @@ const TIER_BY_MODEL: Record<string, ModelTier> = Object.fromEntries(
 );
 
 /**
+ * Resolve the model tier(s) a def's declared `runtime` strategy spawns at —
+ * the ONE piece of `deriveAgentSpec` below that any def-holding caller (not
+ * just a canonical, path-loaded one) may need on its own. Everything else a
+ * spawn needs (`allowedTools`/`disallowedTools`/`runtime.sdk`/`budgets`/
+ * `fanout`) is already a plain field on `AgentDefinition` — no derivation.
+ *
+ * Shared by `deriveAgentSpec` (canonical, path-loaded) and any band that
+ * resolves a model from its OWN already-loaded def (seam F4 round 2 — e.g.
+ * the dev loop's per-def spawn, `dev-binding.ts`).
+ */
+export function resolveModelTier(def: AgentDefinition, root = FORGE_ROOT): { tier: ModelTier; allowedTiers?: ModelTier[] } {
+  if (def.runtime.strategy === 'fixed') {
+    if (!def.runtime.model) {
+      throw new Error(`${def.path}: cannot resolve model — strategy:fixed requires a model field`);
+    }
+    const tier = TIER_BY_MODEL[def.runtime.model];
+    if (!tier) {
+      throw new Error(`${def.path}: unknown model ${def.runtime.model} — not in MODEL_BY_TIER`);
+    }
+    return { tier };
+  }
+  // strategy:range — pick cheapest tier in the range as the spawn default.
+  if (!def.runtime.range || def.runtime.range.length === 0) {
+    throw new Error(`${def.path}: cannot resolve model — strategy:range requires a non-empty range field`);
+  }
+  const tiers = rangeTiers(def.runtime.range, loadCatalog(join(root, 'studio', 'catalog.yaml')));
+  return { tier: tiers[0]!, allowedTiers: tiers }; // cheapest-first; escalation is applied at spawn time
+}
+
+/**
  * Derive the PhaseAgentSpec view from a studio SKILL.md (ADR-027).
  *
  * @param skillPathFromRoot MUST be forge-root-relative (e.g.
@@ -51,39 +81,10 @@ const TIER_BY_MODEL: Record<string, ModelTier> = Object.fromEntries(
 export function deriveAgentSpec(skillPathFromRoot: string, root = FORGE_ROOT): PhaseAgentSpec {
   const def = loadAgentDefinition(resolve(root, skillPathFromRoot));
   if (!def.phase) throw new Error(`${def.path}: cannot derive spec — no phase field`);
-
-  let tier: ModelTier;
   // ADR-043 §3 amendment (wave-6): the full SKILL-declared tier envelope, set
   // ONLY for strategy:range (see PhaseAgentSpec.allowedTiers's own doc for
   // why strategy:fixed leaves this undefined rather than restating [tier]).
-  let allowedTiers: ModelTier[] | undefined;
-
-  if (def.runtime.strategy === 'fixed') {
-    if (!def.runtime.model) {
-      throw new Error(
-        `${def.path}: cannot derive spec — strategy:fixed requires a model field`,
-      );
-    }
-    const resolved = TIER_BY_MODEL[def.runtime.model];
-    if (!resolved) {
-      throw new Error(
-        `${def.path}: unknown model ${def.runtime.model} — not in MODEL_BY_TIER`,
-      );
-    }
-    tier = resolved;
-  } else {
-    // strategy:range — pick cheapest tier in the range as the spawn default
-    if (!def.runtime.range || def.runtime.range.length === 0) {
-      throw new Error(
-        `${def.path}: cannot derive spec — strategy:range requires a non-empty range field`,
-      );
-    }
-    const catalogPath = join(root, 'studio', 'catalog.yaml');
-    const catalog = loadCatalog(catalogPath);
-    const tiers = rangeTiers(def.runtime.range, catalog);
-    tier = tiers[0]; // cheapest-first; escalation is applied at spawn time
-    allowedTiers = tiers;
-  }
+  const { tier, allowedTiers } = resolveModelTier(def, root);
 
   return {
     phase: def.phase,

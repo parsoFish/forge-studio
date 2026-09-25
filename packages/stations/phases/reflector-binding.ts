@@ -19,21 +19,9 @@
 import { loadBrainIndex } from '@forge/knowledge/brain-index.ts';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { skillPath, skillPathRelative } from '@forge/agents/skill-path.ts';
+import { skillPathRelative } from '@forge/agents/skill-path.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { loadAgentSkillText } from './agent-skill-text.ts';
-
-const SKILL_PATH = skillPath('reflector');
-
-/**
- * The canonical reflector def. Seam F4 (operator item 81):
- * `buildReflectorSystemPrompt` takes the EXECUTING node's own def and
- * defaults to this ONLY when the caller supplies none — the production
- * reflection-close band caller (`executor-table.ts` execReflect →
- * `deps.runReflector`) always passes the real node def.
- */
-const CANONICAL_REFLECTOR_DEFINITION = loadAgentDefinition(SKILL_PATH);
 
 export type ReflectorAllowedTool = 'Read' | 'Grep' | 'Glob' | 'Write' | 'Edit' | 'Bash';
 export type ReflectorDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
@@ -92,14 +80,10 @@ function loadBrainNavigation(cwd: string): string {
  * intent lives in SKILL.md; per-cycle data (cycle id, manifest paths, worktree
  * paths) goes in the user prompt only.
  *
- * @param brainCwd - directory containing `brain/`. For the bench this is the
- *   tempdir (with symlinked brain/); for the live cycle this is the forge root.
- * @param def - the EXECUTING node's own agent def (seam F4, operator item
- *   81/ADR-039 generalisation). Defaults to the canonical reflector def for
- *   every pre-F4 caller — byte-identical for that def, since it IS the
- *   canonical file.
+ * @param brainCwd - directory containing `brain/`. Bench: tempdir; live: forgeRoot.
+ * @param def - the executing node's own agent def (seam F4) — no default (no fallback).
  */
-export function buildReflectorSystemPrompt(brainCwd: string, def: AgentDefinition = CANONICAL_REFLECTOR_DEFINITION): string {
+export function buildReflectorSystemPrompt(brainCwd: string, def: AgentDefinition): string {
   return [
     '# Brain navigation index',
     '',

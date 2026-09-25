@@ -21,15 +21,7 @@ import { loadAgentSkillText } from './agent-skill-text.ts';
 
 const SKILL_PATH = skillPath('project-manager');
 
-/**
- * The canonical project-manager def, loaded once. Seam F4 (operator item 81):
- * `buildPmSystemPrompt` below takes the EXECUTING node's own def as an
- * explicit parameter and defaults to this ONLY when the caller supplies none
- * (every pre-F4 test + the exported PM_* test-facing constants below) — the
- * production wi-contract band (`executor-table.ts` execPm →
- * `deps.runProjectManager`) always passes the real node def, never this
- * default.
- */
+/** Kept only for `PM_BRAIN_ACCESS` (ADR-010 platform policy) + PM_* test constants. */
 const CANONICAL_PM_DEFINITION = loadAgentDefinition(SKILL_PATH);
 
 export type PmAllowedTool = 'Read' | 'Grep' | 'Glob' | 'Write' | 'Edit';
@@ -100,17 +92,10 @@ function loadBrainNavigation(cwd: string): string {
  *
  * Build the PM system prompt: brain navigation index + the SKILL.md contract.
  *
- * @param brainCwd - directory containing `brain/`. For the bench this is the
- *   tempdir (with symlinked brain/); for the live cycle this is the forge root.
- * @param def - the EXECUTING node's own agent def (seam F4, operator item
- *   81/ADR-039 generalisation). Its own `SKILL.md` (via `loadAgentSkillText`,
- *   `def.path`) is what the wi-contract band spawns under — never a
- *   hardcoded canonical path — so a second factory's own agent placed on the
- *   wi-contract band runs under ITS identity. Defaults to the canonical
- *   project-manager def for every pre-existing caller that does not pass one
- *   (byte-identical for that def, since it IS the canonical file).
+ * @param brainCwd - directory containing `brain/`. Bench: the tempdir; live: forgeRoot.
+ * @param def - the executing node's own agent def (seam F4) — no default (no fallback).
  */
-export function buildPmSystemPrompt(brainCwd: string, def: AgentDefinition = CANONICAL_PM_DEFINITION): string {
+export function buildPmSystemPrompt(brainCwd: string, def: AgentDefinition): string {
   return [
     '# Brain navigation index',
     '',

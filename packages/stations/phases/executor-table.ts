@@ -68,18 +68,7 @@ async function runWithWedge<T>(
 /** architect: silent DAG marker — runCycle already emitted the synthetic events. */
 const execArchitect: NodeExecutor = async () => { /* marker only */ };
 
-/**
- * Seam F4 (operator item 81, ADR-039 generalisation): every band resolves
- * the EXECUTING node's own agent def from the SAME `ctx.agents`/`ctx.node`
- * `execAgent`'s generic path reads — never a hardcoded canonical slug — so a
- * second factory's own agent, put on a band station via its own declared
- * dispatch (`composition.guards`/`loopStrategy: 'ralph'`), runs under ITS
- * identity. Mirrors execAgent's own defensive "no def" check; in practice a
- * band exec fn is only ever reached once execAgent has already resolved this
- * same def, so this never actually throws in production — it is here so a
- * band called directly (a test) fails loud rather than on a bare `.slug`
- * TypeError.
- */
+/** Seam F4: every band resolves the executing node's own def (never a canonical slug). */
 function resolveExecutingAgentDef(ctx: NodeExecContext): AgentDefinition {
   const def = ctx.agents.get(ctx.node.agent ?? '');
   if (!def) {
@@ -287,11 +276,11 @@ const execAdversarialReview: NodeExecutor = async (ctx) => {
   const start = nodeLogger.emit({
     initiative_id: input.initiativeId,
     phase: 'orchestrator',
-    skill: 'adversarial-review',
+    skill: def.slug,
     event_type: 'start',
     input_refs: [input.worktreePath],
     output_refs: [],
-    metadata: { agent_phase: 'review', agent_slug: 'adversarial-review', node_id: nodeId },
+    metadata: { agent_phase: 'review', agent_slug: def.slug, node_id: nodeId },
   });
 
   const result = await runWithWedge(ctx, (sig) => deps.runAdversarialReview(input, nodeLogger, def, sig));
@@ -306,11 +295,11 @@ const execAdversarialReview: NodeExecutor = async (ctx) => {
     initiative_id: input.initiativeId,
     parent_event_id: start.event_id,
     phase: 'orchestrator',
-    skill: 'adversarial-review',
+    skill: def.slug,
     event_type: 'end',
     input_refs: [],
     output_refs: [result.findingsPath],
-    metadata: { agent_phase: 'review', agent_slug: 'adversarial-review', node_id: nodeId, counts: result.counts },
+    metadata: { agent_phase: 'review', agent_slug: def.slug, node_id: nodeId, counts: result.counts },
   });
 };
 
@@ -351,7 +340,7 @@ const execReflect: NodeExecutor = async (ctx) => {
       nodeLogger.emit({
         initiative_id: input.initiativeId,
         phase: 'reflection',
-        skill: 'reflector',
+        skill: def.slug,
         event_type: 'error',
         input_refs: [],
         output_refs: [],
@@ -543,14 +532,8 @@ const execAgent: NodeExecutor = async (ctx) => {
     throw new Error(`execAgent: no agent definition for node "${ctx.nodeId}" (agent:"${node.agent}")`);
   }
 
-  // ADR-039 (generalised by seam F4, operator item 81): a declared band guard
-  // routes this node to its orchestrator band (the phase pipeline machinery)
-  // instead of the bare generic spawn. Every band now loads THIS declaring
-  // def's own SKILL.md (resolveExecutingAgentDef, called inside each band
-  // exec fn from the SAME ctx.agents/ctx.node this function reads) — never a
-  // hardcoded canonical slug — so a second factory's own agent, put on a band
-  // station via its own composition.guards declaration, runs under ITS
-  // identity rather than the canonical agent's.
+  // ADR-039 (seam F4): a declared band guard routes to its band, which loads
+  // THIS declaring def's own SKILL.md — never a hardcoded canonical slug.
   const bandGuard = resolveBandGuard(def);
   if (bandGuard) {
     const band = AGENT_BANDS.get(bandGuard);
@@ -562,16 +545,8 @@ const execAgent: NodeExecutor = async (ctx) => {
     return band(ctx);
   }
 
-  // ADR-039 (generalised by seam F4): a declared ralph loop routes to the
-  // dev-loop pipeline — the one shipped multi-iteration executor (per-WI
-  // worktrees, merge queue, gates). `runAgent` itself REJECTS ralph defs; the
-  // loop machinery is orchestrator-band, selected here by the def's declared
-  // strategy. `execDev` loads THIS declaring def's own SKILL.md for its
-  // per-iteration prompt (resolveExecutingAgentDef) — never a hardcoded
-  // developer-ralph path — so a non-canonical ralph def runs under its own
-  // identity. The loop's own per-WI machinery (worktrees/merge queue/model
-  // tier/tool fence) stays developer-ralph-specific — reported, not
-  // redesigned (dev-binding.ts).
+  // ADR-039 (seam F4): a declared ralph loop routes to the dev-loop pipeline,
+  // which now spawns under THIS declaring def, not a hardcoded canonical one.
   if (def.runtime.loopStrategy === 'ralph') {
     return execDev(ctx);
   }

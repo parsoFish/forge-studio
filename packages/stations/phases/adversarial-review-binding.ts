@@ -17,21 +17,8 @@
  * dynamic lives in the user prompt.
  */
 
-import { skillPath } from '@forge/agents/skill-path.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
 import { loadAgentSkillText } from './agent-skill-text.ts';
-
-const AGENT_SKILL_PATH = skillPath('adversarial-review');
-
-/**
- * The canonical adversarial-review def. Seam F4 (operator item 81):
- * `buildAdversarialReviewSystemPrompt` takes the EXECUTING node's own def and
- * defaults to this ONLY when the caller supplies none — the production
- * review-band caller (`executor-table.ts` execAdversarialReview →
- * `deps.runAdversarialReview`) always passes the real node def.
- */
-const CANONICAL_REVIEW_DEFINITION = loadAgentDefinition(AGENT_SKILL_PATH);
 
 /** Orchestrator-assembled inputs the agent Reads (worktree-relative). */
 export const REVIEW_INPUT_REL_DIR = '.forge/review-input';
@@ -39,12 +26,8 @@ export const REVIEW_INPUT_REL_DIR = '.forge/review-input';
 /** The one file the agent authors (worktree-relative, under .forge/). */
 export const REVIEW_FINDINGS_FILENAME = 'review-findings.json';
 
-/**
- * @param def - the EXECUTING node's own agent def (seam F4). Defaults to the
- *   canonical adversarial-review def for every pre-F4 caller — byte-identical
- *   for that def, since it IS the canonical file.
- */
-export function buildAdversarialReviewSystemPrompt(def: AgentDefinition = CANONICAL_REVIEW_DEFINITION): string {
+/** @param def - the executing node's own agent def (seam F4) — no default (no fallback). */
+export function buildAdversarialReviewSystemPrompt(def: AgentDefinition): string {
   return [
     `# ${def.slug} skill contract`,
     '',
