@@ -511,30 +511,6 @@
   },
   {
     "file": "apps/forge/ui-bridge.ts",
-    "kind": "path",
-    "cited": "cli/studio-path-guard.test.ts",
-    "count": 1
-  },
-  {
-    "file": "apps/forge/ui-bridge.ts",
-    "kind": "path",
-    "cited": "cli/studio-path-guard.ts",
-    "count": 1
-  },
-  {
-    "file": "apps/forge/ui-bridge.ts",
-    "kind": "path",
-    "cited": "orchestrator/cli.ts",
-    "count": 2
-  },
-  {
-    "file": "apps/forge/ui-bridge.ts",
-    "kind": "stem",
-    "cited": "hex-detail",
-    "count": 1
-  },
-  {
-    "file": "apps/forge/ui-bridge.ts",
     "kind": "stem",
     "cited": "sessions-index",
     "count": 1
