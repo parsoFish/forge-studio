@@ -71,12 +71,14 @@
  *
  * So this story walks BOTH: the skill goes through the creation agent (beats
  * 3-4), the hook and the template go through the manual forms (beats 6-7 and
- * 10). Beat 3 additionally DECLARES a `fork` over the two doors, so the
- * requirement that each door works for each kind stands in the pinned artifact
- * even though §3.1's `beats[]` is flat and `validateStory` — which keeps only
- * the fields it knows — drops it. Same shape as S2 beat 3's fork over the
- * three starters; bead `forge-8vfn.2.22`. Recorded in `_1.0/stories/S7.md`:
- * today S7 covers 1 of 2 declared doors per kind.
+ * 10). Beat 3 additionally DECLARES a `fork` over the two doors — `over:
+ * 'authoring-door'` names no `fill` step in this beat's own `do`, which makes
+ * it a DOOR fork (T1 ruling 1350): declared, carried by `validateStory`, and
+ * reported by the runner as declared-not-driven, but performed ONCE — this
+ * beat still walks only the creation-agent door, exactly as before the
+ * ruling. Same declared shape as S2 beat 3's fork over the three starters,
+ * a FILL fork instead — bead `forge-8vfn.2.22`. Recorded in
+ * `_1.0/stories/S7.md`: today S7 covers 1 of 2 declared doors per kind.
  *
  * H2 — THIS STORY IS COSTED, AND ITS BRIEF SAID IT WOULD NOT BE. The brief
  * `_1.0/briefs/M1-C-S7.md` records "costed (H2): no — no real spawn", written
@@ -198,8 +200,9 @@ export default {
         { fill: 'authoring-launcher-prompt', with: SKILL_BRIEF },
         { press: 'start-authoring' },
       ],
-      // Not in §3.1's schema, and dropped by `validateStory` — see THE FORK
-      // above. Both doors on this page must reach the same approved package;
+      // A DOOR fork (T1 ruling 1350) — see THE FORK above — validated and
+      // carried by `validateStory`, reported by the runner as declared, not
+      // driven. Both doors on this page must reach the same approved package;
       // a story that proves one of two proves the door, not the promise.
       // It stays on the MINTING half: the fork is over which door starts the
       // work, not over how the operator reaches what it started.
