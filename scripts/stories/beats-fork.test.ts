@@ -2,26 +2,20 @@
  * beats-fork.test.ts — forge-8vfn.2.22 (PR-B item 1), the runner half.
  *
  * `expandForkedBeats` flattens `story.beats` into the sequence the runner
- * actually drives: one entry per case for a beat that forked, one entry for
- * every other beat. Each entry carries the ORIGINAL 1-indexed beat number
- * (ground-licensing — `ground.expectedChanges[].beat` — is declared against
- * that number, never against a flattened position) and a display LABEL:
- * `"3"` for an ordinary beat, `"3[api]"` for a case, matching the brief's own
- * example (`3` → `3[typescript-api]`).
+ * actually drives: one entry per case for a FILL fork, one entry (unchanged)
+ * for a DOOR fork or an unforked beat. Each entry carries the ORIGINAL
+ * 1-indexed beat number (ground-licensing — `ground.expectedChanges[].beat` —
+ * is declared against that number, never against a flattened position) and a
+ * display LABEL: `"3"` for an ordinary beat, `"3[api]"` for a case, matching
+ * the brief's own example (`3` -> `3[typescript-api]`).
  *
- * WHAT THIS DOES NOT DO, on purpose — S2's own comments (lines ~59–90) and
- * the state each case leaves. S2's fork creates a project named
- * `ground.project` ("story-s2") EVERY case, so a second case's own
- * `create-project` press would meet the first case's leftover repo — the same
- * 409-already-exists shape S1's onboarding form hits, for a different reason.
- * Per-case ground reset between cases is not something this harness owns
- * anywhere today (`sweepProductFixtures` runs ONCE, at the end of the WHOLE
- * run) and this module does not invent one: it substitutes the case into the
- * beat and hands the result to the SAME driver every other beat gets, running
- * every case against the SAME shared ground. A story whose cases collide on
- * shared state reds honestly, on the product's own conflict — reported as a
- * finding, not silently made to pass by a cleanup step nobody asked this bead
- * to build.
+ * THIS FILE COVERS THE MECHANICS ONLY — case substitution, numbering and
+ * labelling — called with no `groundProject`, which is also the exact
+ * behaviour a fill fork had before T1 ruling 1350. The ruling itself — every
+ * case on its OWN ground (`substituteGroundProject`, the whole-remainder
+ * decision), and a door fork's single-entry, declared-not-driven shape — is
+ * `beats-fork-ground.test.ts`'s job, including the real S2 and S7 pinned
+ * artifacts.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
