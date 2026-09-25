@@ -14,7 +14,7 @@ import * as worktree from './worktree.ts';
 import { runCycle } from './cycle.ts';
 import { flowPathForId } from './flow-runner.ts';
 import type { PhaseWiring } from './phase-wiring.ts';
-import { parseManifest as parseFullManifest } from './manifest.ts';
+import { parseManifest as parseFullManifest, type InitiativeManifest } from './manifest.ts';
 import type { EventLogEntry } from '@forge/kernel';
 import { notify, type NotifyConfig } from './notify.ts';
 import { dispatchTerminalStatus } from './scheduler-dispatch.ts';
@@ -212,6 +212,7 @@ export async function runOne(
       manifest.initiativeId,
       manifest.projectRepoPath,
       forgeRoot,
+      manifest.changeClass,
       manifest.flowId ? flowPathForId(manifest.flowId) : undefined,
     );
     if (!claimCheck.ok) {
@@ -406,6 +407,9 @@ type ParsedManifest = {
   initiativeId: string;
   project: string;
   projectRepoPath: string;
+  /** ADR 051's manifest `class` — checked against the resolved flow's
+   *  `accepts` list at claim time (seam F6 half 1, spec §5 item 8). */
+  changeClass: InitiativeManifest['class'];
   /** The Studio flow this manifest runs under (S8/DEC-3 — required; no default). */
   flowId?: string;
   /**
@@ -423,6 +427,7 @@ function parseManifest(path: string): ParsedManifest {
     initiativeId: m.initiative_id,
     project: m.project,
     projectRepoPath: m.project_repo_path || resolve('projects', m.project),
+    changeClass: m.class,
     flowId: m.flow_id,
     resumeFrom: m.resume_from,
   };

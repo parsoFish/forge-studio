@@ -166,6 +166,9 @@ jobs:
           npm run stories -- --story smoke
           npm run stories -- --story proof
 
+      - name: Name stale story artifacts (never red — T1 1283)
+        run: node scripts/stories/artifact-staleness.mjs
+
       - name: Upload story artifacts
         if: always()
         uses: actions/upload-artifact@v4

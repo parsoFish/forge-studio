@@ -2,6 +2,7 @@
 
 **Status:** Accepted (operator decision 2026-09-05, as drafted, including the disclosed `packages/sessions` repoint).
 **Date:** 2026-09-05
+**Amended:** 2026-09-25 (operator item 97, M7) — decision 2: a flow may narrow its class's review lenses. See the amendment under decision 2. Decision 4's accepted classes are now implemented as `accepts:` on the FlowDef.
 **References:** spec §5 items 1, 2, 3, 8, 9; [`docs/roadmaps/1.0.md`](../roadmaps/1.0.md) §4 M5 Lane A, §5 H7; [ADR 037](./037-compiled-wi-contracts.md) (compiled work-item contracts); [ADR 024](./024-phases-as-subagents-invoking-skills.md) (phases as subagents invoking skills); [ADR 036](./036-orchestrator-owned-gate-execution.md) (orchestrator-owned gate execution); [ADR 048](./048-deletable-example-factory.md) (deletable example factory).
 **The table this ADR governs is data, not prose:** `packages/factory/class-profiles.ts`, held to its shape by `packages/factory/tests/contract/class-profiles.contract.test.ts`.
 
@@ -33,6 +34,14 @@ without a resolvable class is a validation error at the plan gate, not a default
 source, which `testProcess.*` runs at the merge boundary, capture, review lenses, reflect, single-WI allowed); the values
 are the operator's. Every phase reads the table. A phase that branches on a class name instead is a conformance-test
 failure, because a re-derived profile is a profile that can drift from the table it claims to obey.
+
+   **Amended 2026-09-25 (operator item 97, M7).** A flow may **narrow** its class's review lenses with `review.lenses` on
+   its FlowDef. It may take a subset and never add one. The review band reviews under the intersection, in the table's
+   order. A listed lens the class does not have is **refused by name before any review spawn**; it is never dropped
+   silently and never added. The table stays the only source of a lens: a flow selects from the table and declares
+   nothing of its own, so the "re-derived profile" this decision forbids still cannot arise. This is what lets a second
+   factory (the forge-docs example of G3) review a `docs` initiative under one lens without a second table. An absent
+   field means the class's full lens set, as before.
 
 **3. `acceptance_criteria` is typed frontmatter,** an array of `{given, when, then}`, shared by the architect (writes it),
 the project manager (compiles it into work items), the review agent (returns a verdict per entry) and PLAN.html (renders

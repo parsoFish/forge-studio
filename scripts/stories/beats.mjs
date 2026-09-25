@@ -124,6 +124,14 @@ export function beatVerdict(beat, observed, { boundMs = null, bound = {} } = {})
     // while the generated documentation never mentions it — the tests, demos
     // and docs drifting apart inside the one script §3 built to stop that.
     data: Object.freeze({ ...observed.data, ...seen }),
+    // The RAW declared expectations, alongside `data`'s observed/bound values
+    // (forge-8vfn.2.27, labelling half). `data` alone cannot tell a renderer
+    // which key was declared `<placeholder>`-bound — it only carries the
+    // value that came back — so a doc generated from it records an
+    // environment-derived id as if it were a fixed fact, and a regenerated
+    // doc that differs there reads as drift rather than as the same story
+    // binding a fresh value.
+    expect: Object.freeze({ ...beat.expect.data }),
   });
 }
 
@@ -185,6 +193,15 @@ export function stuckVerdict(beat, observed, failure) {
  * that presses a half-built handle reds as "no such control", which reads as a
  * product defect.
  *
+ * ALSO RESOLVES `pressWithin` — bead `forge-8vfn.6.11.51`. `data-action`
+ * handles render once PER CARD (Home's session strip is the measured case:
+ * one `[data-action="open-session"]` per `data-session-id`), so a bare press
+ * clicks whichever one `.first()` sorts to, not the one an earlier beat's
+ * binding names. `pressWithin: { scope: { attr, bind }, action }` resolves
+ * `bind` into a literal `scope.value` here, the same refuse-rather-than-guess
+ * rule as `pressBound`: an unresolved `scope.bind` is refused, never pressed
+ * against every card at once.
+ *
  * @param {ReadonlyArray<object>} steps
  * @param {Record<string,string>} bindings
  * @returns {{steps: object[], unbound: string|null}}
@@ -192,16 +209,41 @@ export function stuckVerdict(beat, observed, failure) {
 export function resolveBoundPresses(steps, bindings) {
   let unbound = null;
   const out = (steps ?? []).map((step) => {
-    if (step?.pressBound === undefined) return step;
-    const { action, bind } = step.pressBound;
-    if (!Object.hasOwn(bindings ?? {}, bind)) {
-      unbound ??= bind;
-      return step;
+    if (step?.pressBound !== undefined) {
+      const { action, bind } = step.pressBound;
+      if (!Object.hasOwn(bindings ?? {}, bind)) {
+        unbound ??= bind;
+        return step;
+      }
+      const { pressBound, ...rest } = step;
+      return { ...rest, press: `${action}${bindings[bind]}` };
     }
-    const { pressBound, ...rest } = step;
-    return { ...rest, press: `${action}${bindings[bind]}` };
+    if (step?.pressWithin !== undefined) {
+      const { scope, action } = step.pressWithin;
+      if (!Object.hasOwn(bindings ?? {}, scope.bind)) {
+        unbound ??= scope.bind;
+        return step;
+      }
+      const { pressWithin, ...rest } = step;
+      return { ...rest, pressWithin: { scope: { attr: scope.attr, value: bindings[scope.bind] }, action } };
+    }
+    return step;
   });
   return { steps: out, unbound };
+}
+
+/**
+ * The CSS selector for a `pressWithin` step already resolved to a literal
+ * `scope.value` (by `resolveBoundPresses` above) — the `data-action="<action>"`
+ * control INSIDE the element carrying `data-<attr>="<value>"`, rather than the
+ * unscoped `[data-action="<action>"]` `handleFor` builds for a bare `press`.
+ * `forge-8vfn.6.11.51`.
+ *
+ * @param {{scope: {attr: string, value: string}, action: string}} resolved
+ * @returns {string}
+ */
+export function scopedPressHandle({ scope, action }) {
+  return `[data-${scope.attr}="${scope.value}"] [data-action="${action}"]`;
 }
 
 /**

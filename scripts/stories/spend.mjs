@@ -130,16 +130,60 @@ export function summariseRunSpend({ realSpawn, events = [] }) {
     usd: null,
     label:
       'UNMEASURED — this run dispatched a real agent and no priced event reached its log. ' +
-      'TWO causes produce this, and they need opposite responses — read the first spawn before choosing ' +
-      '(§15.458): (a) the turn RAN and was reaped mid-hang, writing no terminal event ' +
-      '(forge-8vfn.6.11.17) — its events.jsonl carries many lines and its pid was alive; ' +
-      '(b) the turn NEVER STARTED — the SDK child exited non-zero within seconds, leaving ONE `start` ' +
-      'line in events.jsonl and the reason in the session\'s stderr.log. ' +
-      'DISCRIMINATOR: `wc -l <session>/events.jsonl` (one line = start-and-nothing) and stderr\'s exit ' +
-      'code. A terms banner in stderr proves NOTHING either way — it appears in its advisory form on ' +
-      'healthy runs and its blocking form on dead ones, one verb apart. ' +
+      'Read the first spawn before deciding why (§15.458), with `classifyUnmeasuredDispatch` ' +
+      '(bead `forge-8vfn.7.6.76`) rather than by eye: ONE read of "many lines, pid alive" cannot tell a ' +
+      'turn reaped mid-hang (forge-8vfn.6.11.17) from a healthy first spawn that just has not priced ' +
+      'itself yet — both look identical viewed once, and only the TREND across two reads decides it. ' +
       'This is NOT $0.00.',
     priced: 0,
+  });
+}
+
+/**
+ * Which of THREE arms a dispatch that dispatched a real agent and priced
+ * nothing is actually in — bead `forge-8vfn.7.6.76`.
+ *
+ * ONE READ CANNOT TELL THEM APART. The prior text offered two causes keyed to
+ * "many lines, pid alive" — but that is also exactly what a healthy first
+ * spawn looks like: still working, still writing, nothing priced YET. Viewed
+ * once, a live turn and a reaped one are the same symptom. The TREND across
+ * two reads is what decides it — growth means something is still writing;
+ * pid gone or a static count means nothing is.
+ *
+ * `previous` defaults to an empty read (0 lines, no pid) so the very first
+ * call — with nothing to compare against yet — reads as growth from zero
+ * rather than needing a null check at every call site.
+ *
+ * @param {{pid: number|null, alive: boolean, eventLines: number, stderrTail?: string, exitCode?: number|null}} current
+ * @param {{pid: number|null, alive: boolean, eventLines: number}} [previous]
+ * @returns {Readonly<{arm: 'in-flight'|'reaped'|'never-started', detail: string}>}
+ */
+export function classifyUnmeasuredDispatch(current, previous = { pid: null, alive: false, eventLines: 0 }) {
+  // NEVER STARTED — the SDK child exited within seconds, leaving ONE `start`
+  // line and nothing more coming; `alive` false is what makes this terminal
+  // rather than merely "just began", which a still-alive one-liner is (it
+  // falls through to IN FLIGHT below, correctly, with grew=1).
+  if (current.eventLines <= 1 && !current.alive) {
+    return Object.freeze({
+      arm: 'never-started',
+      detail: `NEVER STARTED — events.jsonl carries ${current.eventLines} line(s) (start-and-nothing) and exit code ${current.exitCode ?? 'unrecorded'}`,
+    });
+  }
+  const grew = current.eventLines - previous.eventLines;
+  // REAPED/DIED — pid absent OR the count did not move. OR, deliberately: a
+  // pid that still answers `kill(pid, 0)` over a static log is a stuck or
+  // zombie shape, not evidence of live work.
+  if (!current.alive || grew <= 0) {
+    return Object.freeze({
+      arm: 'reaped',
+      detail:
+        `REAPED/DIED — ${current.alive ? 'events.jsonl is static' : 'pid is gone'} ` +
+        `(events.jsonl ${previous.eventLines}→${current.eventLines} lines); stderr tail: ${current.stderrTail || '(empty)'}`,
+    });
+  }
+  return Object.freeze({
+    arm: 'in-flight',
+    detail: `IN FLIGHT — pid ${current.pid} alive and events.jsonl grew by ${grew} line(s) since the previous read`,
   });
 }
 

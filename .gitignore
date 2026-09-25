@@ -40,6 +40,13 @@ _queue/in-flight/*
 !_queue/in-flight/.gitkeep
 _queue/ready-for-review/*
 !_queue/ready-for-review/.gitkeep
+# R4-11-F1: `merged` is a transient pass-through queue state (packages/flows/
+# queue.ts) between a confirmed remote merge and the same-sweep `done/`
+# promotion — a real manifest can sit here (T3 M7-A, 2026-09-25: a reflector
+# killed before firing the promotion left one behind), so it needs the SAME
+# ignore-with-.gitkeep-exception treatment as every other queue state dir.
+_queue/merged/*
+!_queue/merged/.gitkeep
 _queue/done/*
 !_queue/done/.gitkeep
 _queue/failed/*

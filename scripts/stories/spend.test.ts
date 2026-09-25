@@ -14,7 +14,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { spendGateVerdict, summariseRunSpend, spendCeilingVerdict, effectiveCeiling } from './spend.mjs';
+import { spendGateVerdict, summariseRunSpend, spendCeilingVerdict, effectiveCeiling, classifyUnmeasuredDispatch } from './spend.mjs';
 import { runnerSourceContaining } from './runner-source.mjs';
 
 /** The beat loop, wherever it lives. A door names the property and the anchor;
@@ -338,39 +338,83 @@ test('7.6.52: run.mjs refuses a given-but-unusable --ceiling instead of falling 
 });
 
 /**
- * The UNMEASURED verdict names BOTH causes — bead `forge-8vfn.7.6.56`.
+ * The UNMEASURED verdict points to the DISCRIMINATOR, not to prose the reader
+ * applies by eye — bead `forge-8vfn.7.6.76`, supersedes `forge-8vfn.7.6.56`.
  *
- * The first version named only the mid-hang cause, as though it were the only
- * one. D's S7 run 4 priced UNMEASURED for the OTHER reason: the SDK child
- * exited 1 a second in on a terms gate, leaving one `start` line and the reason
- * in stderr. Same symptom, opposite diagnosis, and **completely different
- * operator actions** — investigate a hang, versus accept terms once.
- *
- * The verdict is the last word a reader gets, so naming one cause sends them to
- * the wrong place: D burned S7 beat 5's full 300 s timeout on a page that could
- * never render, having correctly-but-shallowly concluded "state never reached".
- *
- * The banner is NOT the discriminator and the text says so. Run 14's healthy
- * spawn carried it in its advisory form ("WILL take effect … Run `claude` to
- * review") with 126 event lines and a clean exit; D's dead turn carried
- * "HAS taken effect … you MUST run" with one line and `exited with code 1`.
- * One verb apart, opposite consequence — and it persists AFTER acceptance, so
- * it is noise in both directions (§15.466).
+ * 7.6.56 made the label name both causes and a manual "run `wc -l` and check
+ * stderr" recipe. That recipe does not actually discriminate: "many lines,
+ * pid alive" was offered as the mid-hang signature, and it is ALSO exactly
+ * what a healthy first spawn looks like mid-flight — still working, still
+ * writing, nothing priced yet. A reader applying the old recipe by eye would
+ * misdiagnose a live run as reaped. `classifyUnmeasuredDispatch` (`spend.mjs`)
+ * replaces the manual recipe with a mechanism: two reads, not one, and three
+ * arms instead of two prose paragraphs (`AT-7.6.76-*` below).
  */
-test('7.6.56: UNMEASURED names both causes and the discriminator, not just the hang', () => {
+test('7.6.56: UNMEASURED points at the mechanism, names the ambiguity it replaces, and is still NOT $0.00', () => {
   const v = summariseRunSpend({ realSpawn: true, events: [[{ kind: 'start' }]] });
   assert.equal(v.measured, false);
-  // BOTH causes, not one.
-  assert.match(v.label, /reaped mid-hang/, 'the hang cause');
-  assert.match(v.label, /NEVER STARTED/, 'the never-started cause');
-  assert.match(v.label, /opposite responses/, 'and that they differ');
-  // The discriminator a reader can actually run.
-  assert.match(v.label, /events\.jsonl/);
-  assert.match(v.label, /stderr/);
-  // And the trap: the banner must be explicitly disqualified, or a reader
-  // greps for it and concludes from noise.
-  assert.match(v.label, /banner .*proves NOTHING/i);
+  assert.match(v.label, /classifyUnmeasuredDispatch/, 'points a reader at the mechanism, not a recipe');
+  assert.match(v.label, /reaped mid-hang/, 'still names the hang cause this replaces confusion about');
+  assert.match(v.label, /TREND/, 'says why one read cannot decide it');
   assert.match(v.label, /NOT \$0\.00/, 'and it still is not zero');
+});
+
+/**
+ * `classifyUnmeasuredDispatch` — the mechanism itself, bead `forge-8vfn.7.6.76`.
+ *
+ * THREE ARMS, from two reads of the same dispatch. The old single-read prose
+ * conflated IN FLIGHT and REAPED because both show "many lines, pid alive" at
+ * one instant; only the TREND between two reads tells them apart.
+ */
+test('AT-7.6.76-1 (RED) a growing fixture (pid alive, events grew) is IN FLIGHT, naming N', () => {
+  const previous = { pid: 4242, alive: true, eventLines: 5 };
+  const current = { pid: 4242, alive: true, eventLines: 12, stderrTail: '', exitCode: null };
+  const v = classifyUnmeasuredDispatch(current, previous);
+  assert.equal(v.arm, 'in-flight');
+  assert.match(v.detail, /IN FLIGHT/);
+  assert.match(v.detail, /grew by 7 line/, `must name N: ${v.detail}`);
+  assert.match(v.detail, /4242/, 'names the pid too');
+});
+
+test('AT-7.6.76-2 (RED) a static log with a dead pid is REAPED\\/DIED, carrying the stderr tail', () => {
+  const previous = { pid: 4242, alive: true, eventLines: 12 };
+  const current = { pid: 4242, alive: false, eventLines: 12, stderrTail: 'FATAL: worker exited', exitCode: null };
+  const v = classifyUnmeasuredDispatch(current, previous);
+  assert.equal(v.arm, 'reaped');
+  assert.match(v.detail, /REAPED\/DIED/);
+  assert.match(v.detail, /FATAL: worker exited/, `stderr tail must ride along: ${v.detail}`);
+});
+
+test('AT-7.6.76-3 a static log with a STILL-ALIVE pid is also REAPED\\/DIED — a stuck shape, not live work', () => {
+  const previous = { pid: 4242, alive: true, eventLines: 12 };
+  const current = { pid: 4242, alive: true, eventLines: 12, stderrTail: '', exitCode: null };
+  const v = classifyUnmeasuredDispatch(current, previous);
+  assert.equal(v.arm, 'reaped', 'pid alive is not enough on its own — nothing moved');
+});
+
+test('AT-7.6.76-4 (RED) exactly one event line with a dead pid is NEVER STARTED, naming the exit code', () => {
+  const current = { pid: 4242, alive: false, eventLines: 1, stderrTail: '', exitCode: 1 };
+  const v = classifyUnmeasuredDispatch(current);
+  assert.equal(v.arm, 'never-started');
+  assert.match(v.detail, /NEVER STARTED/);
+  assert.match(v.detail, /exit code 1/, `must name the exit code: ${v.detail}`);
+});
+
+test('AT-7.6.76-5 one line but the pid is STILL alive reads as freshly IN FLIGHT, not never-started', () => {
+  // It only just began — the terminal fact (b) needs is that the SDK child
+  // already exited; a live one-liner has not had the chance to prove either
+  // way yet, and misreading it as never-started would be a false positive on
+  // the very first beat of a healthy run.
+  const current = { pid: 99, alive: true, eventLines: 1, stderrTail: '', exitCode: null };
+  const v = classifyUnmeasuredDispatch(current);
+  assert.equal(v.arm, 'in-flight');
+});
+
+test('AT-7.6.76-6 with no previous read at all, growth is measured from zero', () => {
+  const current = { pid: 7, alive: true, eventLines: 3, stderrTail: '', exitCode: null };
+  const v = classifyUnmeasuredDispatch(current);
+  assert.equal(v.arm, 'in-flight');
+  assert.match(v.detail, /grew by 3 line/);
 });
 
 /**
