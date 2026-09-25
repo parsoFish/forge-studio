@@ -151,13 +151,17 @@ export default {
   docs: { kind: 'tutorial', title: 'Create a new flow' },
   beats: [
     {
-      // Fully expressible; all three keys are the page root's own.
+      // Fully expressible; all three keys are the page root's own. Three, not
+      // two: the flows pillar lists `studio/flows/` AND every
+      // `packages/<pkg>/flows/`, and `packages/forge-docs` ships the docs
+      // factory as a flow (9953a09b, G3) — re-authored M7-D, measured on the
+      // S4 fixture proof run 1 ("expected 2, got 3").
       act: 'Open Studio on the Flows pillar',
       expect: {
         route: '/flows',
-        data: { page: 'flows-index', 'page-ready': 'true', 'flow-count': '2' },
+        data: { page: 'flows-index', 'page-ready': 'true', 'flow-count': '3' },
       },
-      say: 'Two flows, both shipped with forge: one drafts a roadmap, one takes a decomposed initiative to a reviewed PR. They are starters. The pillar says so on the page — "every flow below is a ready-made starter, build your own to customize" — and this story is the operator taking it up on that.',
+      say: 'Three flows, all shipped with forge: one drafts a roadmap, one takes a decomposed initiative to a reviewed PR, one writes a project\u2019s docs. They are starters. The pillar says so on the page — "every flow below is a ready-made starter, build your own to customize" — and this story is the operator taking it up on that.',
     },
     {
       // Fully expressible. `/flows` carries TWO CTAs at the same href —
