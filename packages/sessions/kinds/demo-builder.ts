@@ -91,19 +91,33 @@ export type RunDemoBuilderTurnInput = KindTurnInput;
  * committed rather than leaving the project repo checked out on `forge-studio`
  * with uncommitted writes. No `catch` — only `finally` — so the error still
  * propagates unchanged.
+ *
+ * forge-8vfn.7.3.6 round 2: "the error still propagates unchanged" only held
+ * for `run()` throwing. When `run()` SUCCEEDED, a commit failure (e.g.
+ * `StudioWritePathIgnoredError` — the deliverable landed under a git-ignored
+ * path) was swallowed by a bare `catch`, so the turn reported success over an
+ * uncommitted demo and nobody was told. A commit failure after a SUCCESSFUL
+ * `run()` now propagates; a commit failure after `run()` THREW is still
+ * swallowed so the original error — not the commit's — is what the caller sees.
  */
 async function withStudioRepo<T>(
   status: DemoBuilderStatus,
   run: () => Promise<T> | T,
 ): Promise<T> {
   try { ensureStudioBranch(status.project_repo_path); } catch { /* non-git project */ }
+  let succeeded = false;
   try {
-    return await run();
+    const result = await run();
+    succeeded = true;
+    return result;
   } finally {
     try {
       const own = [DEMO_REL_DIR, DEMO_SKILL_REL_PATH, '.forge/skills/demo'].filter((p) => existsSync(join(status.project_repo_path, p))); // 7.3.6 — why: tests/unit/demo-commit-scope.test.ts
       if (own.length > 0) commitStudioChange(status.project_repo_path, `forge-studio: demo machinery (${status.phase})`, own);
-    } catch { /* best-effort */ }
+    } catch (commitErr) {
+      if (succeeded) throw commitErr; // run() succeeded — a swallowed commit failure is a silent data loss.
+      // run() itself threw — that error propagates unchanged; the commit's failure is best-effort only.
+    }
   }
 }
 
