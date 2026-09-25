@@ -30,7 +30,8 @@ import { makeAgentProcProbe, makeAgentChannelDoor, makeCycleTerminalWatch } from
 import { readdirSync, mkdirSync, writeFileSync, renameSync, rmSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { chromium } from 'playwright-core';
-import { spendGateVerdict, summariseRunSpend, effectiveCeiling, costlessBeatVerdict } from './spend.mjs';
+import { spendGateVerdict, summariseRunSpend, effectiveCeiling } from './spend.mjs';
+import { costlessSpendUsd, applyCostlessGuard } from './costless-beat.mjs';
 import { readRunEvents, hostState, collectSpendDirs, spendSoFar, finalSpendHalt } from './run-observe.mjs';
 import {
   applyFence,
@@ -220,45 +221,19 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       // doing instead of leaving it to be reconstructed afterwards by hand.
       // Built per beat from the route it is about; null for every other beat.
       //
-      // Findings row 61 — a beat declaring `costless: true` asserts it
-      // dispatches nothing at all, so neither the real-spawn process probe nor
-      // the agent-channel stall door has anything to watch on it: both are
-      // skipped outright rather than built and left to poll for a dispatch
-      // that was never supposed to happen.
+      // Findings row 61 (`costless-beat.mjs`) — `costless: true` asserts a
+      // beat dispatches nothing, so neither watcher has anything to watch;
+      // the before/after readings and the enforcing comparison live in that
+      // module, since only the probe/door skip below needs `page`/`bindings`.
       const costlessBeat = beat.costless === true;
       const probe = costlessBeat ? null : makeAgentProcProbe(ROOT, resolveBeatRoute(beat, bindings).route);
-      // The reading taken BEFORE the beat runs, so the comparison after it can
-      // say what THIS beat spent rather than the run's whole total so far.
-      // Read even when the story is not a costed one: a costless declaration
-      // is the beat's own assertion, independent of the story's ground.
-      const spendBeforeCostless = costlessBeat
-        ? summariseRunSpend({
-          realSpawn: story.ground?.realSpawn === true,
-          events: collectSpendDirs(ROOT, startedMs).map(readRunEvents),
-        }).usd
-        : null;
+      const realSpawn = story.ground?.realSpawn === true;
+      const spendBeforeCostless = costlessBeat ? costlessSpendUsd(ROOT, startedMs, realSpawn) : null;
       let verdict = await driveBeat(
         page, beat, i, uiUrl, bindings, undefined, probe, costlessBeat ? null : stallDoor, pressedAt, cycleWatchFor,
       );
-      // THE ASSERTION IS ENFORCED, NEVER TRUSTED — the same two-reading shape
-      // `spendCeilingVerdict` uses for the story's own ceiling, read here for
-      // one beat's own window. A beat that declared costless and dispatched
-      // something anyway is RED regardless of what its own `expect` judged,
-      // because the declaration is itself a claim about the product and this
-      // is where it is checked.
       if (costlessBeat) {
-        const spendAfterCostless = summariseRunSpend({
-          realSpawn: story.ground?.realSpawn === true,
-          events: collectSpendDirs(ROOT, startedMs).map(readRunEvents),
-        }).usd;
-        const costlessVerdict = costlessBeatVerdict(spendBeforeCostless, spendAfterCostless);
-        if (!costlessVerdict.ok) {
-          verdict = Object.freeze({
-            ...verdict,
-            status: 'red',
-            failures: Object.freeze([...verdict.failures, costlessVerdict.reason]),
-          });
-        }
+        verdict = applyCostlessGuard(verdict, spendBeforeCostless, costlessSpendUsd(ROOT, startedMs, realSpawn));
       }
       bindings = { ...bindings, ...verdict.bindings };
       const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}.png`;

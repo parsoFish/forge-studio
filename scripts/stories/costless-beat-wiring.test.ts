@@ -9,54 +9,58 @@
  * BEAT LOOP's source statically via `runnerSourceContaining`, the same
  * convention `run-story-spend-field.test.ts` uses.
  *
- * The anchor is the CALL SITE, `costlessBeatVerdict(spendBeforeCostless,
- * spendAfterCostless)`, never the bare function name: `costlessBeatVerdict(`
- * alone is ambiguous the moment the call exists — it also matches
- * `spend.mjs`'s own `export function costlessBeatVerdict(` — and
- * `runnerSourceContaining` refuses an ambiguous anchor by design
- * (`runner-source-comment.test.ts`'s own "definition + call site" case).
+ * SPLIT ACROSS TWO MODULES, and the doors below follow the split. Wiring the
+ * feature straight into `run-story.mjs`'s beat loop took that file from 772 to
+ * 825 lines — over the 800-line hard cap — so the readings-and-comparison half
+ * moved to `costless-beat.mjs` (`costlessSpendUsd` / `applyCostlessGuard`),
+ * and only the probe/stall-door skip — which needs `page`/`bindings`, which
+ * only the loop holds — stayed in `run-story.mjs` itself:
  *
- *   1. a beat declaring `costless: true` gets no real-spawn/agent-wait
- *      machinery at all — the probe and the stall door are both skipped, since
- *      neither has anything to watch on a beat that asserts nothing is
- *      dispatched;
+ *   1. a beat declaring `costless: true` gets no real-spawn probe and no
+ *      agent-channel stall door, checked in `run-story.mjs`;
  *   2. its own spend reading is taken before and after `driveBeat` runs, and
- *      `costlessBeatVerdict` — never a re-derived comparison — decides whether
- *      the beat's own assertion held.
+ *      `applyCostlessGuard` — which calls `costlessBeatVerdict`, never a
+ *      re-derived comparison — decides whether the beat's own assertion held,
+ *      checked in `costless-beat.mjs`.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runnerSourceContaining } from './runner-source.mjs';
 
-const CALL = 'costlessBeatVerdict(spendBeforeCostless, spendAfterCostless)';
-
-test('costlessBeatVerdict is imported from spend.mjs into the beat loop', () => {
-  const runner = runnerSourceContaining(CALL);
+test('a costless beat gets no real-spawn probe and no stall door, in the beat loop itself', () => {
+  const runner = runnerSourceContaining('costlessBeat ? null : makeAgentProcProbe(');
+  assert.match(runner.path, /run-story\.mjs$/, 'the probe skip needs `page`/`bindings`, which only the loop holds');
   assert.match(
     runner.source,
-    /import \{[^}]*costlessBeatVerdict[^}]*\} from '\.\/spend\.mjs'/s,
-    'the beat loop must import the pure comparison rather than re-deriving one',
+    /costlessBeat\s*\?\s*null\s*:\s*stallDoor/,
+    'a beat declaring costless: true must not be handed the agent-channel stall door either',
+  );
+  assert.match(
+    runner.source,
+    /import \{[^}]*costlessSpendUsd[^}]*applyCostlessGuard[^}]*\} from '\.\/costless-beat\.mjs'|import \{[^}]*applyCostlessGuard[^}]*costlessSpendUsd[^}]*\} from '\.\/costless-beat\.mjs'/s,
+    'the loop must import the readings-and-comparison half rather than re-deriving one inline',
   );
 });
 
-test('a costless beat gets no real-spawn probe and no stall door', () => {
+test('applyCostlessGuard calls costlessBeatVerdict and reddens the verdict on a failed comparison', () => {
+  const CALL = 'const v = costlessBeatVerdict(beforeUsd, afterUsd);';
   const runner = runnerSourceContaining(CALL);
-  assert.match(
-    runner.source,
-    /costless(Beat)?\s*(===\s*true)?\s*\?\s*null\s*:\s*makeAgentProcProbe\(/,
-    'a beat declaring costless: true must not build a real-spawn process probe',
-  );
-  assert.match(
-    runner.source,
-    /costless(Beat)?\s*(===\s*true)?\s*\?\s*null\s*:\s*stallDoor/,
-    'a beat declaring costless: true must not be handed the agent-channel stall door',
-  );
-});
-
-test('a costless beat\'s verdict is reddened from costlessBeatVerdict, not trusted on the declaration alone', () => {
-  const runner = runnerSourceContaining(CALL);
+  assert.match(runner.path, /costless-beat\.mjs$/);
   const callAt = runner.source.indexOf(CALL);
-  const nearby = runner.source.slice(Math.max(0, callAt - 400), callAt + 400);
+  const nearby = runner.source.slice(Math.max(0, callAt - 200), callAt + 400);
   assert.match(nearby, /\.ok/, 'the comparison\'s ok field must gate the redden');
   assert.match(nearby, /status:\s*'red'/, 'a failed comparison must redden the beat\'s own verdict');
+});
+
+test('the beat loop applies the guard with readings taken before and after driveBeat', () => {
+  const CALL = 'applyCostlessGuard(verdict, spendBeforeCostless,';
+  const runner = runnerSourceContaining(CALL);
+  assert.match(runner.path, /run-story\.mjs$/);
+  const callAt = runner.source.indexOf(CALL);
+  const before = runner.source.slice(0, callAt);
+  assert.match(
+    before,
+    /spendBeforeCostless\s*=\s*costlessBeat\s*\?\s*costlessSpendUsd\(/,
+    'the BEFORE reading must be taken before driveBeat runs, only when the beat declared costless',
+  );
 });
