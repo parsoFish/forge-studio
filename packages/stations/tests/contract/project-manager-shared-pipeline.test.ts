@@ -39,6 +39,7 @@ import { parseManifest, serializeManifest, type InitiativeManifest } from '@forg
 import { promoteManifests } from '@forge/flows/promote-manifests.ts';
 import { enqueuePlanRun, PLAN_FLOW_ID } from '@forge/flows/enqueue-plan-run.ts';
 import { getPaths } from '@forge/flows/queue.ts';
+import { testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
 
 const INITIATIVE_ID = 'INIT-2026-07-18-shared-pipeline';
 
@@ -203,6 +204,7 @@ test('F5: the SAME runProjectManager pass over each entry path\'s manifest produ
     await runProjectManager(inputA, createLogger('TEST-shared-pipeline-a', logsDir), {
       queryFn: makeStubQueryFn(INITIATIVE_ID),
       constraintSourcesRoot: sourcesRoot,
+      classProfiles: testClassProfilePort(),
     });
     const snapshotA = readWiDirSnapshot(worktree);
     assert.ok(Object.keys(snapshotA).length > 0, 'sanity: entry path 1 produced compiled work items');
@@ -227,6 +229,7 @@ test('F5: the SAME runProjectManager pass over each entry path\'s manifest produ
     await runProjectManager(inputB, createLogger('TEST-shared-pipeline-b', logsDir), {
       queryFn: makeStubQueryFn(INITIATIVE_ID),
       constraintSourcesRoot: sourcesRoot,
+      classProfiles: testClassProfilePort(),
     });
     const snapshotB = readWiDirSnapshot(worktree);
 

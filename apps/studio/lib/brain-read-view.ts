@@ -1,7 +1,7 @@
 /**
  * forge-8vfn.5.16 (M7-C U2) — pure reducer over a run's raw event stream
  * (from `useCycleEvents`), folding every real `message:"brain.read"` event
- * (emitted by `packages/factory/phases/project-manager.ts`, one per KB
+ * (emitted by `packages/stations/phases/project-manager.ts`, one per KB
  * `readPmBrainContext`'s deterministic pre-fetch actually touched) into one
  * row per KB. Feeds PhaseDrawer.tsx's `data-brain-read-kb`/
  * `data-brain-read-count` — a surface distinct from both the pre-existing
