@@ -63,3 +63,44 @@ export const AGENT_PROVENANCE: Provenance = 'unknown';
  * greppability reason as `AGENT_PROVENANCE`.
  */
 export const PROJECT_PROVENANCE: Provenance = 'unknown';
+
+/**
+ * Hook/template origin (bead forge-8vfn.8.3.7). Unlike Flow/KB above, which
+ * predate this feature and need the THIRD `unknown` bucket for genuine
+ * legacy ambiguity, a library hook or template has exactly two possible
+ * sources: authored through its create route (which stamps
+ * `origin: 'operator'` into the item's own definition file — hook.yaml, or
+ * the template's frontmatter — at write time, the SAME mechanism the
+ * `'studio'` token uses above for Flow/KB), or shipped in the repo as part
+ * of forge's OOTB library (never touched by a create route, so it carries no
+ * `origin` key at all). Absence is therefore a genuine positive signal here
+ * — reporting `unknown` would UNDERSTATE a fact the server actually has, the
+ * opposite of the fabrication `provenanceOfOrigin` guards against.
+ *
+ * A NEW type (never `Provenance`) and a NEW field name (never `provenance`):
+ * `TemplateLibraryEntry.provenance` (packages/library/studio/template-
+ * library.ts) already means the category's on-disk source directory, and
+ * `CommunitySkill`/`InstructionSeed`/`CatalogConnectionEntry.provenance`
+ * (packages/contracts) already mean an upstream citation — reusing either
+ * name would collide two unrelated facts onto one wire key.
+ */
+export type HookTemplateOrigin = 'ootb' | 'operator';
+
+/** The ONE raw-origin -> HookTemplateOrigin mapping every hook/template
+ *  bridge route shares. Anything other than the literal stamped `'operator'`
+ *  — absent, malformed, or a stray value from hand-editing the file — reads
+ *  as `'ootb'`: the only other source a hook/template definition can come
+ *  from is forge's own shipped library. */
+export function originOfHookOrTemplate(raw?: string | null): HookTemplateOrigin {
+  return raw === 'operator' ? 'operator' : 'ootb';
+}
+
+/**
+ * `project-scaffold` templates (studio/starters/projects/<id>/) have no
+ * create route at all (`SCAFFOLD_READONLY`, packages/library/bridge-studio-
+ * templates.ts) — a whole directory tree curated in the repo, never
+ * single-file-authorable from Studio. Every entry is OOTB by construction,
+ * not a per-item guess — the same "no per-item signal, so a named
+ * whole-category constant" shape as `AGENT_PROVENANCE`/`PROJECT_PROVENANCE`.
+ */
+export const SCAFFOLD_TEMPLATE_ORIGIN: HookTemplateOrigin = 'ootb';
