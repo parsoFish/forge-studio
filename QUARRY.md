@@ -63,7 +63,7 @@ operator-ratified new cap — never a silent raise.
 | `sessions` | 59 | 20,520 | **20,482** | ratified 20,482 — M7-C door re-exports OD, round-G circular-import fix (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 83 | 23,499 | **23,301** | ratified 23,301 — row 93 stale remote branch fail-fast + cleanup (forge-8vfn.8.1.8), T1 ruling 1459 above lane authority (+128); see git history for prior raises. |
 | `factory` | 14 | 2,113 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 38 | 11,132 | **11,129** | ratified 11,129 — M7-C door re-exports OD round G (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
+| `stations` | 38 | 11,132 | **11,132** | ratified 11,132 — row 97 phase pipelines pass their logger to runAgent (forge-8vfn.8.1.10), lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,837 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |

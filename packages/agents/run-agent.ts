@@ -356,7 +356,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   // let a later run's teardown sweep an earlier run's still-live process
   // (./spawn-marker.ts).
   const runMarker = mintRunMarker(ctx.runId);
-  const logsRoot = ctx.logsRoot ?? (ctx.logger ? dirname(dirname(ctx.logger.logFilePath)) : join(FORGE_ROOT, '_logs')); // forge-8vfn.8.1.10: an injected logger's own root wins over the repo default — a tmpdir harness logger must not leak the marker into the repo.
+  const logsRoot = ctx.logsRoot ?? (ctx.logger ? dirname(dirname(ctx.logger.logFilePath)) : join(FORGE_ROOT, '_logs'));
 
   if (lifecycle === 'caller') {
     if (loopStrategy !== 'one-shot') {
