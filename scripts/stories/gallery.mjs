@@ -38,10 +38,28 @@ function defaultGitSha(root) {
   return res.error === undefined && res.status === 0 ? res.stdout.trim() : null;
 }
 
-/** Whether `root`'s working tree has uncommitted changes, or `null` when that
- *  cannot be determined. */
-function defaultGitDirty(root) {
-  const res = spawnSync('git', ['-C', root, 'status', '--porcelain'], { encoding: 'utf8' });
+/** The three trees a story RUN writes to, excluded from the dirty check below
+ *  — the pathspec `git status --porcelain -- . ':!demos/stories'
+ *  ':!docs/tutorials' ':!docs/how-to'` uses. */
+const GENERATED_TREES = ['demos/stories', 'docs/tutorials', 'docs/how-to'];
+
+/**
+ * Whether `root`'s working tree has uncommitted changes, or `null` when that
+ * cannot be determined. SCOPED, excluding `GENERATED_TREES` (coordinator
+ * review): an unscoped status sees every artifact an EARLIER beat in the same
+ * run already wrote — its own story.json, frames and generated doc — so on
+ * any multi-story run every story after the first would read `dirty: true`
+ * for output nothing an operator touched. `git.dirty` exists to answer "did
+ * the checkout have uncommitted SOURCE changes", not "has this run's own
+ * prior beat written its own output yet".
+ *
+ * `run` is INJECTED (default the real `spawnSync`) so a test can assert the
+ * exact pathspec without needing a real recording of the confound.
+ */
+export function defaultGitDirty(root, { run = spawnSync } = {}) {
+  const res = run('git', ['-C', root, 'status', '--porcelain', '--', '.', ...GENERATED_TREES.map((t) => `:!${t}`)], {
+    encoding: 'utf8',
+  });
   return res.error === undefined && res.status === 0 ? res.stdout.trim().length > 0 : null;
 }
 
