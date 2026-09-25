@@ -21,12 +21,24 @@
  * the "must be force-killed" assumption a door is built on was never true for
  * that run.
  *
- * SO THIS WAITS ON THE EVENT, NOT THE CLOCK. `/proc/<pid>/status`'s `SigCgt:`
- * field is the kernel's own record of which signals a process has installed a
- * handler for — bit 14 (signal 15, SIGTERM) flips from 0 to 1 the instant
- * `process.on('SIGTERM', ...)` registers, whatever that took. Waiting on it
- * is waiting on the exact fact a door needs to be true, not a duration that
- * merely USED to be enough.
+ * THE FIRST FIX HERE WAS WRONG, AND STAYS DOCUMENTED AS SUCH (T1 1372's fifth
+ * pass, found by re-running clean after RP's fourth pass, not under any load
+ * at all). It waited on `/proc/<pid>/status`'s `SigCgt:` field — the kernel's
+ * per-process "signals with a handler installed" mask — for SIGTERM's bit.
+ * MEASURED WRONG: a freshly spawned node child with ZERO signal-handling code
+ * of its own ALREADY shows that bit set, because node's own bootstrap installs
+ * internal SIGTERM handling before a single line of user script runs. The
+ * wait therefore returned in single-digit milliseconds regardless of whether
+ * the SCRIPT'S OWN `process.on('SIGTERM', ...)` line had executed at all —
+ * worse than the fixed sleep it replaced, and reproduced with zero burners
+ * running, so it was never a contention artifact.
+ *
+ * SO THIS WAITS ON AN EXPLICIT MARKER THE SCRIPT WRITES ITSELF, as its own
+ * literal last statement, after everything before it — including whatever
+ * `process.on('SIGTERM', ...)` call the script makes — has run. `withReady`
+ * appends that write to a caller's script text; nothing here infers readiness
+ * from kernel state a runtime's own bootstrap can set for reasons that have
+ * nothing to do with user code.
  */
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -55,28 +67,6 @@ export async function waitForProcVisible(pid, opts = {}) {
   return v !== null;
 }
 
-/** SIGTERM = signal 15; `SigCgt`'s bits are 1-indexed by signal number, so
- *  bit 14 (0-indexed) is SIGTERM's. */
-const SIGTERM_BIT = 1n << 14n;
-
-/** Has `pid` installed a handler for SIGTERM — `process.on('SIGTERM', ...)`
- *  having actually RUN, not merely been scheduled? Reads the kernel's own
- *  record (`/proc/<pid>/status`'s `SigCgt:` mask) rather than any timing. */
-export async function waitForSigtermCaught(pid, opts = {}) {
-  const procRoot = opts.procRoot ?? '/proc';
-  const v = await pollUntil(() => {
-    let status;
-    try {
-      status = readFileSync(`${procRoot}/${pid}/status`, 'utf8');
-    } catch {
-      return false; // gone, or not there yet — either way, not caught yet
-    }
-    const m = /^SigCgt:\s+([0-9a-fA-F]+)/m.exec(status);
-    return m !== null && (BigInt(`0x${m[1]}`) & SIGTERM_BIT) !== 0n;
-  }, opts);
-  return v !== null;
-}
-
 /** The pid a plant's own script wrote to `ralphPidFile` once it exists and
  *  parses — the FILE having been written is itself an event, never assumed
  *  from elapsed time. */
@@ -93,27 +83,42 @@ export async function waitForRalphPid(ralphPidFile, opts = {}) {
   }, opts);
 }
 
-/** The grandchild `ralphPidFile` names, confirmed alive and with its OWN
- *  SIGTERM handler installed — every `grandchildScript` in this suite
- *  registers one, whether a no-op or a clean-exit handler, so this wait is
- *  the SAME event regardless of which door is planting it. Throws rather
- *  than returning a half-ready pid: a plant a door's assertions cannot trust
- *  is worse than a test that fails loudly before it even starts asserting.
- */
-export async function waitForGrandchildReady(ralphPidFile, opts = {}) {
-  const pid = await waitForRalphPid(ralphPidFile, opts);
-  if (pid === null) throw new Error(`sweep-teardown-plant: ${ralphPidFile} was never written`);
-  if (!(await waitForProcVisible(pid, opts))) throw new Error(`sweep-teardown-plant: grandchild pid ${pid} never became visible in /proc`);
-  if (!(await waitForSigtermCaught(pid, opts))) throw new Error(`sweep-teardown-plant: grandchild pid ${pid} never installed its SIGTERM handler`);
-  return pid;
-}
-
 /** Does `path` exist — waited on rather than assumed from a fixed delay after
  *  a still-alive writer's interval. The SAME event a fixed sleep was standing
- *  in for, asked for directly instead of guessed at. */
+ *  in for, asked for directly instead of guessed at. Also the READY-MARKER
+ *  wait every plant below uses: a script written via `withReady` writes its
+ *  own marker as its literal last statement. */
 export async function waitForFileToExist(path, opts = {}) {
   const v = await pollUntil(() => existsSync(path), opts);
   return v !== null;
+}
+
+/**
+ * `script`, with a write to `markerPath` appended as its own final statement.
+ * JS in a `-e` string runs top to bottom and `setInterval`/`spawn` calls do
+ * not block, so anything appended after them — including this — still runs
+ * in the same synchronous pass, immediately after everything the caller's
+ * script does, including any `process.on('SIGTERM', ...)` call. The marker
+ * existing is therefore proof that specific line has executed; nothing else
+ * this module tried was.
+ */
+function withReady(script, markerPath) {
+  return `${script}\ntry { require('node:fs').writeFileSync(${JSON.stringify(markerPath)}, '1'); } catch {}`;
+}
+
+/** The grandchild `ralphPidFile` names, confirmed alive and having reached
+ *  the end of its own script — including whatever `process.on('SIGTERM',
+ *  ...)` call it makes, whether a no-op or a clean-exit handler — via its OWN
+ *  ready marker at `readyMarkerPath` (written by `withReady`). Throws rather
+ *  than returning a half-ready pid: a plant a door's assertions cannot trust
+ *  is worse than a test that fails loudly before it even starts asserting.
+ */
+export async function waitForGrandchildReady(ralphPidFile, readyMarkerPath, opts = {}) {
+  const pid = await waitForRalphPid(ralphPidFile, opts);
+  if (pid === null) throw new Error(`sweep-teardown-plant: ${ralphPidFile} was never written`);
+  if (!(await waitForProcVisible(pid, opts))) throw new Error(`sweep-teardown-plant: grandchild pid ${pid} never became visible in /proc`);
+  if (!(await waitForFileToExist(readyMarkerPath, opts))) throw new Error(`sweep-teardown-plant: grandchild pid ${pid} never reached its own ready marker`);
+  return pid;
 }
 
 export function killIfAlive(pid) {
@@ -143,25 +148,29 @@ function registerCleanup(t, pid, ralphPidFile) {
  *  `t` is the test's own `TestContext`: cleanup for BOTH pids is registered
  *  BEFORE either readiness wait runs (see `registerCleanup`), so the caller
  *  needs no `t.after` of its own for either pid. Returns once BOTH the
- *  daemon's own no-op handler and the grandchild's own handler are confirmed
- *  installed by the kernel — never a guess about how long that takes under
- *  load. */
+ *  daemon's own no-op handler and the grandchild's own handler have ACTUALLY
+ *  RUN (their own ready markers, `withReady` — see this module's header for
+ *  why `SigCgt` could not answer this) — never a guess about how long that
+ *  takes under load. */
 export async function plantDaemonWithGrandchild(t, root, grandchildScript, ralphPidFile) {
   mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
+  const daemonReady = `${ralphPidFile}.daemon-ready`;
+  const grandchildReady = `${ralphPidFile}.ready`;
   const daemon = spawn(process.execPath, ['-e', `
     const { spawn } = require('node:child_process');
     const fs = require('node:fs');
-    const child = spawn(process.execPath, ['-e', ${JSON.stringify(grandchildScript)}], {
+    const child = spawn(process.execPath, ['-e', ${JSON.stringify(withReady(grandchildScript, grandchildReady))}], {
       cwd: ${JSON.stringify(root)}, detached: true, stdio: 'ignore',
     });
     fs.writeFileSync(${JSON.stringify(ralphPidFile)}, String(child.pid));
     process.on('SIGTERM', () => {}); // ignored — the daemon itself must be force-killed
+    ${withReady('', daemonReady)}
     setInterval(() => {}, 1000);
   `], { cwd: root, stdio: 'ignore' });
   writeFileSync(join(root, DAEMON_PID_FILE), String(daemon.pid));
   registerCleanup(t, daemon.pid, ralphPidFile);
-  if (!(await waitForSigtermCaught(daemon.pid))) throw new Error(`sweep-teardown-plant: daemon pid ${daemon.pid} never installed its SIGTERM handler`);
-  await waitForGrandchildReady(ralphPidFile);
+  if (!(await waitForFileToExist(daemonReady))) throw new Error(`sweep-teardown-plant: daemon pid ${daemon.pid} never reached its own ready marker`);
+  await waitForGrandchildReady(ralphPidFile, grandchildReady);
   return daemon;
 }
 
@@ -175,17 +184,18 @@ export async function plantDaemonWithGrandchild(t, root, grandchildScript, ralph
  *  confirmed ready (see `waitForGrandchildReady`) — the parent installs no
  *  handler of its own, so there is nothing else to wait for on it. */
 export async function plantReapedRootWithGrandchild(t, root, grandchildScript, ralphPidFile) {
+  const grandchildReady = `${ralphPidFile}.ready`;
   const parent = spawn(process.execPath, ['-e', `
     const { spawn } = require('node:child_process');
     const fs = require('node:fs');
-    const child = spawn(process.execPath, ['-e', ${JSON.stringify(grandchildScript)}], {
+    const child = spawn(process.execPath, ['-e', ${JSON.stringify(withReady(grandchildScript, grandchildReady))}], {
       cwd: ${JSON.stringify(root)}, detached: true, stdio: 'ignore',
     });
     fs.writeFileSync(${JSON.stringify(ralphPidFile)}, String(child.pid));
     setInterval(() => {}, 1000);
   `], { cwd: root, stdio: 'ignore' });
   registerCleanup(t, parent.pid, ralphPidFile);
-  await waitForGrandchildReady(ralphPidFile);
+  await waitForGrandchildReady(ralphPidFile, grandchildReady);
   return parent;
 }
 
