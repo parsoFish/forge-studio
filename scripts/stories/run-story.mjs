@@ -71,7 +71,7 @@ import {
 import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
 import { captureAndClearMintedSessions, describeGroundClear, captureAndClearMintedLogs, describeLogsClear } from './ground-clear.mjs';
 import { driveBeat } from './beats-drive.mjs';
-import { expandForkedBeats } from './beats-fork.mjs';
+import { expandForkedBeats, describeDoorFork } from './beats-fork.mjs';
 import { resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
 import { writeStoryJson, regenerateGallery, storyRowFrom, artifactSpend } from './gallery.mjs';
@@ -208,10 +208,10 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     // nothing — the caller had never passed it in any commit. 718(1)'s anchor
     // had not worked once since the commit that introduced it.
     const pressedAt = new Map();
-    // `forge-8vfn.2.22` — the EXPANDED sequence (`beats-fork.mjs`): a fork
-    // becomes one entry per case. `number` is the original beat position a
-    // ground licence is declared against; `beatLabel` ("3"/"3[api]") is shown.
-    for (const [i, { beat, number, label: beatLabel }] of expandForkedBeats(story.beats).entries()) {
+    // `forge-8vfn.2.22`, T1 ruling 1350 — the EXPANDED sequence
+    // (`beats-fork.mjs`): a FILL fork runs once per case, each on its own
+    // ground; a DOOR fork stays ONE entry, carrying `doorFork` for below.
+    for (const [i, { beat, number, label: beatLabel, doorFork }] of expandForkedBeats(story.beats, story.ground?.project ?? null).entries()) {
       // `forge-8vfn.7.6.140` — THE BOUNDARY WHERE A BEAT-SCOPED LICENCE OPENS,
       // captured before anything in this beat can run — never taken twice for
       // the same NUMBER, so a fork's later cases do not re-date a licence an
@@ -295,7 +295,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       // the product or the story needs to know that nothing was pressed, and
       // that is the one fact the transcript never carried.
       const acted = Array.isArray(beat.do) && beat.do.length > 0;
-      console.log(`  ${mark} ${beatLabel}. ${beat.act}${acted ? '' : '   [no-do: navigated and asserted; nothing was pressed]'}`);
+      console.log(`  ${mark} ${beatLabel}. ${beat.act}${acted ? '' : '   [no-do: navigated and asserted; nothing was pressed]'}${doorFork ? `   [${describeDoorFork(doorFork)}]` : ''}`);
       for (const f of verdict.failures) console.log(`      ${f}`);
     }
   } finally {
