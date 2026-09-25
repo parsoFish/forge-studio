@@ -24,7 +24,7 @@
 import { readFileSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { cycleProgressIdleMs } from './beats-cycle-progress.mjs';
-import { queueManifestTerminal, FS_CLOCK_SLACK_MS } from './beats-queue-terminal.mjs';
+import { queueManifestTerminal, FS_CLOCK_SLACK_MS, channelTerminalState } from './beats-queue-terminal.mjs';
 // T1 ruling 1471 — re-exported so `beats-page.mjs` names the wall ceiling
 // beside `STALL_CEILING_MS`/`TERMINAL_UI_GRACE_MS`, its two siblings that
 // already live in THIS file rather than in the schema that only validates what
@@ -322,105 +322,6 @@ export function scanSummary(logsDir, sinceMs) {
 }
 
 /**
- * THE CHANNEL'S OWN TERMINAL STATE, read BEFORE silence is interpreted
- * (`forge-flvq`).
- *
- * MEASURED on S10 run 15 beat 8. The door said the channel
- * `…_INIT-2026-09-12-exclude-author-flag` "has written nothing for 180s, past
- * the product's own 180s stall ceiling", and stopped at 332s of a declared
- * 360000 ms bound. TRUE, AND THE CONCLUSION WAS WRONG: the channel had
- * TERMINATED three minutes earlier — `_queue/failed/` held the initiative, the
- * last `events.jsonl` row was `event_type=error`, and a 12.5 KB `report.md`
- * with `artifacts/` was on disk. The product had already said the cycle failed;
- * the door waited out 180s of a dead channel and reported a stall.
- *
- * A FINISHED TURN AND A HUNG TURN ARE IDENTICAL TO A SILENCE DETECTOR. That is
- * not a bug in the silence measurement — it is a question silence cannot
- * answer. It masked the real blocker: the reader's first impression of run 15
- * was "the dev agent stalled" when the truth was "the PM's work-item set was
- * rejected and the cycle failed".
- *
- * THIS IS NOT A NEW MECHANISM. `stopReasonFor` already does exactly this for a
- * SESSION — it believes the product's own published terminal phase rather than
- * re-deriving one — and `beats-page.mjs` states the principle: *believing a
- * terminal verdict the product published is the opposite of second-guessing
- * it*. An off-session channel simply had no equivalent.
- *
- * THE STATES ARE READ FROM DISK, NOT FROM A LIST, for `queue-claim.mjs`'s
- * reason in its own words: a constant cannot see a seventh state someone adds
- * later, and the failure mode of missing one is silence. `journey-residue.mjs`
- * exports a six-name `QUEUE_STATES`; this deliberately does not import it.
- *
- * AND AN UNREADABLE CHECK IS NOT AN OPEN CHANNEL. If neither the queue nor the
- * event log can be read, this returns `unknown` rather than null — the caller
- * must not report "still open, therefore stalled" on the strength of a check
- * that did not happen. §15.430's rule, one layer up: an absent path is not an
- * empty one.
- *
- * @returns {null | {state: string, detail: string, unknown?: true}}
- */
-export function channelTerminalState(forgeRoot, dir) {
-  const name = dir.slice(dir.lastIndexOf('/') + 1);
-  // `_<kind>-<timestamp>_<INITIATIVE>` — the dispatch dir names what it ran.
-  // THE LEADING UNDERSCORE IS PART OF THE PREFIX, not a separator: a dispatch
-  // dir is `_`-prefixed by construction (`isDispatchDir`), so splitting on the
-  // FIRST `_` yields the whole name and matches nothing. My own doors caught
-  // that — `_dev-…_INIT-x` gave an "initiative" of `dev-…_INIT-x`, the queue
-  // lookup found no file, and the verdict fell through to the events branch,
-  // which was right for the wrong reason.
-  const body = name.startsWith('_') ? name.slice(1) : name;
-  const initiative = body.includes('_') ? body.slice(body.indexOf('_') + 1) : null;
-  let queueSaw = null;
-  let queueReadable = false;
-  if (initiative !== null) {
-    const queue = join(forgeRoot, '_queue');
-    let states = null;
-    try {
-      states = readdirSync(queue, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort();
-      queueReadable = true;
-    } catch { /* absent or unreadable — NOT empty */ }
-    for (const state of states ?? []) {
-      let names = [];
-      try { names = readdirSync(join(queue, state)); } catch { queueReadable = false; continue; }
-      if (names.some((n) => n.includes(initiative))) { queueSaw = state; break; }
-    }
-  }
-
-  let lastEvent = null;
-  let eventsReadable = false;
-  try {
-    const raw = readFileSync(join(dir, 'events.jsonl'), 'utf8');
-    eventsReadable = true;
-    const rows = raw.split('\n').filter((l) => l.trim() !== '');
-    for (let i = rows.length - 1; i >= 0; i -= 1) {
-      try { const ev = JSON.parse(rows[i]); if (typeof ev?.event_type === 'string') { lastEvent = ev.event_type; break; } } catch { /* a torn row is not a verdict */ }
-    }
-  } catch { /* unreadable */ }
-
-  // `pending` and `in-flight` are the states of a channel still doing something;
-  // anything else the product moved it INTO is the product's own terminal word.
-  const OPEN_STATES = new Set(['pending', 'in-flight']);
-  if (queueSaw !== null && !OPEN_STATES.has(queueSaw)) {
-    return {
-      state: queueSaw,
-      detail: `the product moved ${initiative} into _queue/${queueSaw}/` +
-        (lastEvent === null ? '' : ` and its last event is ${lastEvent}`),
-    };
-  }
-  if (lastEvent === 'error') {
-    return { state: 'error', detail: `its last events.jsonl row is event_type=error` };
-  }
-  if (!queueReadable && !eventsReadable) {
-    return {
-      state: 'unknown',
-      unknown: true,
-      detail: 'neither _queue/ nor events.jsonl could be read, so this channel\'s terminal state is UNKNOWN rather than open',
-    };
-  }
-  return null;
-}
-
-/**
  * THE CYCLE-TERMINAL DOOR — `forge-8vfn.7.6.118`, T1 ruling 1086, §15.559.
  *
  * A wait that ends on a WALL CLOCK asks "has my patience run out". This asks
@@ -539,28 +440,23 @@ export function makeCycleTerminalDoor(forgeRoot, opts = null) {
     // boolean that stood for both. A declaration is consumed by the waiter it
     // declared, or by nothing.
     door.sawCycle = true;
-    // T1 1503 (row 98, S10 run 27) — TERMINAL WINS, BEFORE ANY WINDOW
-    // ARITHMETIC. `queueManifestTerminal` (beats-queue-terminal.mjs) has the
-    // full measurement: `cycleStartedSince` below can never fire when the
-    // product's own `cycle.start` lands before this beat's anchor, and run 27
-    // sat inside the wait forever on exactly that gap while a `failed`
-    // manifest waited unread six minutes away. The queue's mtime is the same
-    // kind of evidence `cycle.start` is — the product's word — so it is read
+    // T1 1503 (row 98) — TERMINAL WINS, BEFORE ANY WINDOW ARITHMETIC.
+    // `queueManifestTerminal`'s own doc has the measurement: `cycleStartedSince`
+    // below can never fire when `cycle.start` lands before this beat's anchor,
+    // so the queue's mtime (the same kind of product-word evidence) is read
     // FIRST, unconditionally, never gated on the started-proof below.
     if (cycleOf !== null) {
       const q = queueManifestTerminal(forgeRoot, cycleOf);
       if (q !== null) {
         if (q.unknown === true) {
-          // Named, never silent (§15.504), and never treated as terminal: an
-          // unreadable queue only forfeits this early exit, never fabricates one.
+          // Named, never silent (§15.504): forfeits this early exit only.
           door.lastSeen = q.detail;
         } else if (q.mtimeMs >= sinceMs - FS_CLOCK_SLACK_MS) {
           door.lastSeen = q.detail;
           return Object.freeze({ done: q.state === wantState, state: q.state, detail: q.detail });
         }
-        // `mtimeMs < sinceMs` — the S10 run 22 hazard, a terminal the PREVIOUS
-        // run left behind. Not evidence for THIS press; fall through as if the
-        // queue had said nothing.
+        // `mtimeMs < sinceMs` — S10 run 22's hazard, a PREVIOUS run's terminal.
+        // Fall through as if the queue had said nothing.
       }
     }
     // T1 1231 — BY IDENTITY, THE CYCLE PREDATES THE PRESS. DEC-2 threads one
