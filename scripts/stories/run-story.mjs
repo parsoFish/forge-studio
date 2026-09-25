@@ -69,7 +69,7 @@ import {
   snapshotRealGrounds,
   realGroundFenceVerdict,
 } from './fixture-ground.mjs';
-import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
+import { captureBeatDom, captureFrame, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
 import { captureAndClearMintedSessions, describeGroundClear, captureAndClearMintedLogs, describeLogsClear } from './ground-clear.mjs';
 import { driveBeat } from './beats-drive.mjs';
 import { expandForkedBeats, describeDoorFork, frameLabelSuffix } from './beats-fork.mjs';
@@ -229,8 +229,8 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       verdict = costlessGuard.apply(verdict);
       bindings = { ...bindings, ...verdict.bindings };
       const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}${frameLabelSuffix(beatLabel, slug)}.png`;
-      await page.screenshot({ path: join(outDir, frame), fullPage: true });
-      beats.push({ ...verdict, frame });
+      const capture = await captureFrame(page, join(outDir, frame), { log: console.error }); // row 90 — evidence, never a verdict input
+      beats.push({ ...verdict, ...(capture.ok ? { frame } : { frame: null, frameNote: 'capture failed after retries — evidence only, see the log line above' }) });
       // Bead `forge-8vfn.6.11.42` — what the OPERATOR could see at the red,
       // captured while the page still exists. The session dir below says what
       // the product HAD; this says what was on the screen, and S2 run 8's open
