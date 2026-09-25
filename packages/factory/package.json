@@ -6,7 +6,20 @@
   "description": "THE example: the develop flow, its agents and SKILL.mds, its artifact templates, its class-to-gate table. Deleting this package leaves `forge studio` bootable.",
   "exports": {
     ".": "./index.ts",
-    "./*": "./*"
+    "./phases/executor-table.ts": "./phases/executor-table.ts",
+    "./phases/executor-deps.ts": "./phases/executor-deps.ts",
+    "./phases/reflector.ts": "./phases/reflector.ts",
+    "./class-profiles.ts": "./class-profiles.ts",
+    "./phases/adversarial-review.ts": "./phases/adversarial-review.ts",
+    "./phases/release-finalize.ts": "./phases/release-finalize.ts",
+    "./reflect-reconcile.ts": "./reflect-reconcile.ts",
+    "./reflector-rerun.ts": "./reflector-rerun.ts",
+    "./demo.ts": "./demo.ts",
+    "./demo-model.ts": "./demo-model.ts",
+    "./gates/docs-gate.ts": "./gates/docs-gate.ts",
+    "./phases/derive-demo-model.ts": "./phases/derive-demo-model.ts",
+    "./phases/project-manager.ts": "./phases/project-manager.ts",
+    "./phases/developer-loop.ts": "./phases/developer-loop.ts"
   },
   "scripts": {
     "test": "node --test --experimental-strip-types \"**/*.test.ts\""
