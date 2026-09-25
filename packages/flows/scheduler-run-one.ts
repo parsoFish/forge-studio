@@ -537,7 +537,8 @@ function emitOrchestratorEvent(
       message,
       metadata,
     };
-    appendFileSync(join(logDir, 'events.jsonl'), JSON.stringify(entry) + '\n');
+    const logPath = join(logDir, 'events.jsonl');
+    appendFileSync(logPath, JSON.stringify(entry) + '\n');
   } catch {
     /* best-effort — never throw from a refusal/hygiene path */
   }
