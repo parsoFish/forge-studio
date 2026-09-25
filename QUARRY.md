@@ -59,7 +59,7 @@ operator-ratified new cap — never a silent raise.
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `projects` | 46 | 10,951 | **9,061** | ratified 9,061 — M7-A reset-resolvable (+94, growth): Rebuild adds a template npm command only when package.json has the script; lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,156 | **12,578** | ratified 12,578 — M7-C door re-exports OD (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `agents` | 46 | 13,065 | **13,065** | ratified 13,065 — row 94 progress-only stream deadline (forge-8vfn.8.1.9), lane-ratified under ruling 666; see git history for prior raises. |
+| `agents` | 46 | 13,091 | **13,091** | ratified 13,091 — row 99 DNS failure classified environment/transient (forge-8vfn.8.1.11), +26 lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 59 | 20,542 | **20,504** | ratified 20,504 — row 94 heartbeat + deadline count only progress (forge-8vfn.8.1.9), lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 83 | 23,575 | **23,375** | ratified 23,375 — row 93 fail-closed tri-state stale-branch probe (forge-8vfn.8.1.8), +61 lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 14 | 2,113 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
@@ -67,7 +67,7 @@ operator-ratified new cap — never a silent raise.
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,837 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **459** | **125,522** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **459** | **125,548** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -325,7 +325,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/enqueue-develop-run.ts | flows | verbatim | 80 |
 | packages/flows/enqueue-flow-run.ts | flows | verbatim | 411 |
 | packages/flows/enqueue-plan-run.ts | flows | verbatim | 236 |
-| packages/agents/failure-classifier.ts | agents | verbatim | 542 |
+| packages/agents/failure-classifier.ts | agents | verbatim | 568 |
 | packages/flows/finalize-merged.ts | flows | verbatim | 519 |
 | packages/flows/fix-work-items.ts | flows | verbatim | 388 |
 | packages/flows/flow-artifacts.ts | flows | pruned | 440 |
