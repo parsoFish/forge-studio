@@ -1,0 +1,426 @@
+{
+  "title": "Add --no-merges flag: parse parentCount in git.ts and filter merge commits in the CLI",
+  "essence": "Prior to this initiative, gitpulse hard-coded `--no-merges` in `LOG_ARGS`, silently excluding every merge commit from all analytics. Now merge commits are included by default (each `Commit` carries a `parentCount` field parsed from `%P`), and callers opt in to filtering via the new `--no-merges` CLI flag, which removes commits with `parentCount > 1`, annotates the text header with `(N merge commits excluded)`, and adds `mergesExcluded` to JSON output.",
+  "project": "gitpulse",
+  "initiativeId": "INIT-2026-08-28-init-no-merges-flag",
+  "diffStat": "22 files changed, 646 insertions(+), 44 deletions(-)",
+  "summary": {
+    "bullets": [
+      "Removed `--no-merges` from `LOG_ARGS` in `src/git.ts`; merge commits are now included in all analytics by default.",
+      "Added `parentCount: number` field to the `Commit` type, parsed from the `%P` git log format specifier.",
+      "Exported `filterMergeCommits()` pure function from `src/cli.ts` that keeps commits with `parentCount <= 1`.",
+      "Wired `--no-merges` flag into the CLI: filter runs immediately after `readCommits()` and before `summarize()`.",
+      "Text header annotated with `(N merge commits excluded)` when N > 0; JSON output gains `mergesExcluded` field (omitted when absent or N=0).",
+      "Acceptance fixture extended with one real merge commit (two parents); both-mode and byte-identical assertions added.",
+      "README `--no-merges` option documented; CHANGELOG `## [Unreleased]` entry describes the new flag."
+    ],
+    "branch": "forge/INIT-2026-08-28-init-no-merges-flag",
+    "commitSha": "d92b94016accbe8b3871d78cc6f04cb379749cfe"
+  },
+  "checkpoints": [
+    {
+      "label": "parentCount field in Commit type",
+      "caption": "The `Commit` type now carries `parentCount: number` parsed from the `%P` format specifier. The unit suite exercises all three cases: initial commit (0), regular commit (1), and merge commit (2).",
+      "kind": "harness",
+      "beforeNote": "Prior: `LOG_ARGS` contained `--no-merges`; the `Commit` type had no `parentCount` field; merge commits were silently excluded from all analytics.",
+      "afterNote": "After: `LOG_FORMAT` appends `%P` (fourth tab-separated field); `parseLog()` counts space-separated parent SHAs to populate `parentCount`; `LOG_ARGS` no longer contains `--no-merges`. Verified by `test/no-merges.test.ts`: AC1 (type field present and typed `number`), AC2 (`LOG_ARGS` check), AC3 (parentCount === 2 for merge), AC4 (parentCount === 0 for initial), AC5 (parentCount === 1 for regular)."
+    },
+    {
+      "label": "filterMergeCommits pure function",
+      "caption": "A new exported `filterMergeCommits(commits)` pure function in `src/cli.ts` keeps only commits with `parentCount <= 1` and returns both the filtered array and the excluded count.",
+      "kind": "harness",
+      "beforeNote": "Prior: no such function; merge filtering was implicit and unconditional (via `--no-merges` in git log args).",
+      "afterNote": "After: `filterMergeCommits([init, regular, merge])` returns `{ filtered: [init, regular], excludedCount: 1 }`. Verified by `test/no-merges-cli.test.ts` AC1 tests: mixed input keeps parentCount ≤ 1 commits; excludedCount equals count of parentCount > 1 commits; merge-free input gives excludedCount 0."
+    },
+    {
+      "label": "CLI --no-merges text output and header annotation",
+      "caption": "Running `gitpulse <repo> --no-merges` against a repo with one merge commit produces a header annotated with `(1 merge commits excluded)` and per-author totals matching the non-merge baseline.",
+      "kind": "harness",
+      "command": "node dist/cli.js . --no-merges",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "[stderr] gitpulse: unknown option \"--no-merges\"\n\ngitpulse — git repository commit-stats analytics\n\nUsage:\n  gitpulse [repo-path]   print a commit-stats summary (default \".\")\n\nOptions:\n  -h, --help             show this help\n  --json                 output summary as JSON instead of a table\n  --csv                  output summary as RFC-4180 CSV instead of a table\n  --since <YYYY-MM-DD>   only include commits on or after this date\n  --until <YYYY-MM-DD>   only include commits on or before this date\n  --top <n>              cap each ranked list to the top n entries (n >= 1)\n  --compare <ref>        compare HEAD against a git ref (tag, branch, SHA)\n  --exclude <pattern>    exclude file paths matching a glob pattern (repeatable)\n  --sort <column>[:asc|:desc]  sort output by column (default direction: desc for numeric, asc for text)",
+      "afterOutput": "gitpulse — 134 commits (2026-06-21 → 2026-08-28) (22 merge commits excluded)\n\ncommits  author\n-------  ------\n     57  Parso\n     37  forge-orchestrator\n     22  forge\n     14  forge-ralph\n      4  forge-unifier\n\nchurn (lines)  author\n-------------  ------\n  +10474/-125  Parso\n  +2595/-1455  forge-orchestrator\n    +3863/-58  forge-ralph\n    +2253/-15  forge-unifier\n     +0/-1347  forge\n\nchurn (lines)  file\n-------------  ----\n    +1443/-39  test/acceptance/run.ts\n    +544/-544  .forge/unifier-items/UWI-1.md\n    +444/-444  .forge/pr-description.md\n     +846/-37  src/cli.ts\n    +404/-404  .forge/skills/demo-design/SKILL.md\n    +385/-385  .forge/demo/DEMO.html\n     +725/-17  src/format.ts\n      +656/-7  forge/history/INIT-2026-07-11-csv-output-flag/demo/DEMO.md\n    +313/-313  AGENT.md\n    +306/-306  .forge/last-gate-failure.md\n     +580/-10  package-lock.json\n      +576/-4  test/format-csv.test.ts\n     +556/-10  forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/DEMO.md\n    +282/-282  .forge/skills/git-log-analysis/SKILL.md\n      +525/-9  forge/history/INIT-2026-07-11-exclude-path-filter/demo/DEMO.md\n      +439/-7  forge/history/INIT-2026-07-11-cli-sort-flag/demo/DEMO.md\n      +362/-0  test/exclude.test.ts\n      +323/-8  src/git.ts\n      +311/-0  forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/demo.json\n      +300/-0  test/tags-cli.test.ts\n      +285/-8  CHANGELOG.md\n      +268/-0  test/cli-coupling.test.ts\n      +263/-0  test/json-output.test.ts\n      +240/-0  test/format-delta.test.ts\n      +228/-0  test/compare-cli.test.ts\n      +218/-7  test/tags-git.test.ts\n      +224/-0  test/ownership.test.ts\n      +222/-0  test/compare.test.ts\n      +220/-0  test/author-churn.test.ts\n      +217/-0  test/coupling.test.ts\n      +205/-0  forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/DEMO.md\n      +204/-0  test/cli-top.test.ts\n      +201/-0  test/sort.test.ts\n      +199/-0  test/tags.test.ts\n      +197/-0  test/format-coupling.test.ts\n      +196/-0  test/hotspot.test.ts\n      +196/-0  test/no-merges-cli.test.ts\n      +181/-4  test/unit.test.ts\n      +177/-7  forge/history/INIT-2026-07-11-csv-output-flag/demo/demo.json\n      +184/-0  test/churn.test.ts\n     +172/-10  forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/demo.json\n      +181/-0  test/format-new.test.ts\n      +179/-0  test/cli-sort.test.ts\n      +170/-8  README.md\n      +168/-5  forge/history/INIT-2026-07-11-cli-sort-flag/demo/demo.json\n      +167/-0  test/window.test.ts\n      +160/-6  forge/history/INIT-2026-07-11-exclude-path-filter/demo/demo.json\n      +160/-5  src/stats.ts\n      +165/-0  test/cli-csv.test.ts\n      +162/-0  forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/demo.json\n      +153/-0  src/ownership.ts\n      +149/-0  test/no-merges.test.ts\n      +146/-0  forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/pulse-capture.md\n      +146/-0  forge/history/INIT-2026-07-11-cli-sort-flag/demo/pulse-capture.md\n      +146/-0  forge/history/INIT-2026-07-11-csv-output-flag/demo/pulse-capture.md\n      +68/-68  fix_plan.md\n     +107/-21  .forge/project.json\n      +126/-0  forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/demo.json\n      +124/-0  src/compare.ts\n      +122/-0  forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/demo.json\n      +108/-0  forge/history/INIT-2026-06-21-json-output-flag/demo/pulse-capture.md\n      +106/-0  src/sort.ts\n      +100/-0  forge/history/INIT-2026-06-21-json-output-flag/demo/demo.json\n       +93/-0  forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/pulse-capture.md\n       +91/-0  forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/DEMO.md\n       +87/-0  .github/workflows/release.yml\n       +85/-0  src/tags.ts\n       +82/-0  src/hotspot.ts\n       +73/-5  roadmap.md\n       +78/-0  src/coupling.ts\n       +76/-0  forge/history/INIT-2026-06-21-json-output-flag/demo/DEMO.md\n       +74/-0  src/glob.ts\n       +69/-0  src/churn.ts\n       +67/-0  forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/DEMO.md\n       +63/-0  forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/pulse-capture.md\n       +56/-0  forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/DEMO.md\n       +47/-1  .gitignore\n       +44/-0  CLAUDE.md\n       +42/-0  test/glob.test.ts\n       +39/-0  .github/workflows/ci.yml\n       +30/-9  package.json\n       +29/-0  forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/pulse-capture.md\n      +10/-10  .forge/demo/demo.lock.json\n       +20/-0  tsconfig.json\n\nownership\nowner               bus-factor  file\n------------------  ----------  ----\nParso                        3  CHANGELOG.md\nforge-ralph                  3  src/cli.ts\nforge-ralph                  3  src/format.ts\nforge-ralph                  3  test/acceptance/run.ts\nParso                        2  README.md\nforge-orchestrator           2  forge/history/INIT-2026-07-11-cli-sort-flag/demo/DEMO.md\nforge-unifier                2  forge/history/INIT-2026-07-11-cli-sort-flag/demo/demo.json\nforge-orchestrator           2  forge/history/INIT-2026-07-11-csv-output-flag/demo/DEMO.md\nforge-unifier                2  forge/history/INIT-2026-07-11-csv-output-flag/demo/demo.json\nforge-orchestrator           2  forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/DEMO.md\nforge-unifier                2  forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/demo.json\nParso                        2  src/git.ts\nParso                        2  test/author-churn.test.ts\nParso                        2  test/churn.test.ts\nforge-unifier                2  test/cli-csv.test.ts\nParso                        2  test/cli-top.test.ts\nParso                        2  test/compare-cli.test.ts\nParso                        2  test/exclude.test.ts\nParso                        2  test/hotspot.test.ts\nParso                        2  test/json-output.test.ts\nParso                        2  test/ownership.test.ts\nParso                        2  test/unit.test.ts\nParso                        2  test/window.test.ts\nParso                        1  .forge/project.json\nParso                        1  .github/workflows/ci.yml\nParso                        1  .github/workflows/release.yml\nParso                        1  .gitignore\nParso                        1  CLAUDE.md\nParso                        1  forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/DEMO.md\nParso                        1  forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/demo.json\nParso                        1  forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/pulse-capture.md\nParso                        1  forge/history/INIT-2026-06-21-json-output-flag/demo/DEMO.md\nParso                        1  forge/history/INIT-2026-06-21-json-output-flag/demo/demo.json\nParso                        1  forge/history/INIT-2026-06-21-json-output-flag/demo/pulse-capture.md\nParso                        1  forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/DEMO.md\nParso                        1  forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/demo.json\nParso                        1  forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/pulse-capture.md\nParso                        1  forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/DEMO.md\nParso                        1  forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/demo.json\nParso                        1  forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/pulse-capture.md\nforge-unifier                1  forge/history/INIT-2026-07-11-cli-sort-flag/demo/pulse-capture.md\nforge-unifier                1  forge/history/INIT-2026-07-11-csv-output-flag/demo/pulse-capture.md\nParso                        1  forge/history/INIT-2026-07-11-exclude-path-filter/demo/DEMO.md\nParso                        1  forge/history/INIT-2026-07-11-exclude-path-filter/demo/demo.json\nforge-orchestrator           1  forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/DEMO.md\nforge-orchestrator           1  forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/demo.json\nforge-ralph                  1  forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/pulse-capture.md\nParso                        1  package-lock.json\nParso                        1  package.json\nParso                        1  roadmap.md\nParso                        1  src/churn.ts\nParso                        1  src/compare.ts\nforge-ralph                  1  src/coupling.ts\nParso                        1  src/glob.ts\nParso                        1  src/hotspot.ts\nParso                        1  src/ownership.ts\nforge-ralph                  1  src/sort.ts\nParso                        1  src/stats.ts\nforge-unifier                1  src/tags.ts\nforge-ralph                  1  test/cli-coupling.test.ts\nforge-ralph                  1  test/cli-sort.test.ts\nParso                        1  test/compare.test.ts\nforge-ralph                  1  test/coupling.test.ts\nforge-ralph                  1  test/format-coupling.test.ts\nforge-ralph                  1  test/format-csv.test.ts\nParso                        1  test/format-delta.test.ts\nParso                        1  test/format-new.test.ts\nParso                        1  test/glob.test.ts\nforge-ralph                  1  test/no-merges-cli.test.ts\nforge-ralph                  1  test/no-merges.test.ts\nforge-ralph                  1  test/sort.test.ts\nforge-unifier                1  test/tags-cli.test.ts\nforge-ralph                  1  test/tags-git.test.ts\nforge-unifier                1  test/tags.test.ts\nParso                        1  tsconfig.json\n\nhotspots\nscore  commits  last-date   file\n-----  -------  ----------  ----\n37.00       37  2026-08-28  CHANGELOG.md\n26.00       26  2026-08-28  .forge/last-gate-failure.md\n13.00       13  2026-08-28  src/cli.ts\n12.00       12  2026-08-28  test/acceptance/run.ts\n11.00       11  2026-08-28  package.json\n10.00       10  2026-08-28  src/format.ts\n 7.00        7  2026-08-28  package-lock.json\n 6.00        6  2026-08-28  README.md\n 5.00        5  2026-08-28  src/git.ts\n 3.00        3  2026-08-28  .forge/project.json\n 3.00        3  2026-08-28  test/unit.test.ts\n 2.00        2  2026-08-28  .forge/demo/DEMO.html\n 2.00        2  2026-08-28  .forge/demo/demo.lock.json\n 2.00        2  2026-08-28  .forge/skills/demo-design/SKILL.md\n 2.00        2  2026-08-28  .gitignore\n 2.00        2  2026-08-28  test/author-churn.test.ts\n 2.00        2  2026-08-28  test/churn.test.ts\n 2.00        2  2026-08-28  test/cli-coupling.test.ts\n 2.00        2  2026-08-28  test/cli-csv.test.ts\n 2.00        2  2026-08-28  test/cli-sort.test.ts\n 2.00        2  2026-08-28  test/cli-top.test.ts\n 2.00        2  2026-08-28  test/compare-cli.test.ts\n 2.00        2  2026-08-28  test/coupling.test.ts\n 2.00        2  2026-08-28  test/exclude.test.ts\n 2.00        2  2026-08-28  test/hotspot.test.ts\n 2.00        2  2026-08-28  test/json-output.test.ts\n 2.00        2  2026-08-28  test/ownership.test.ts\n 2.00        2  2026-08-28  test/tags-git.test.ts\n 2.00        2  2026-08-28  test/window.test.ts\n 1.00        1  2026-08-28  forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/DEMO.md\n 1.00        1  2026-08-28  forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/demo.json\n 1.00        1  2026-08-28  forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/pulse-capture.md\n 1.00        1  2026-08-28  src/coupling.ts\n 1.00        1  2026-08-28  test/format-coupling.test.ts\n 1.00        1  2026-08-28  test/no-merges-cli.test.ts\n 1.00        1  2026-08-28  test/no-merges.test.ts\n 0.67       32  2026-07-12  .forge/pr-description.md\n 0.67       32  2026-07-12  .forge/unifier-items/UWI-1.md\n 0.21       14  2026-06-22  AGENT.md\n 0.21       14  2026-06-22  fix_plan.md\n 0.17       12  2026-06-21  .forge/skills/git-log-analysis/SKILL.md\n 0.06        3  2026-07-11  roadmap.md\n 0.06        4  2026-06-21  src/stats.ts\n 0.04        2  2026-07-12  forge/history/INIT-2026-07-11-cli-sort-flag/demo/DEMO.md\n 0.04        2  2026-07-12  forge/history/INIT-2026-07-11-cli-sort-flag/demo/demo.json\n 0.04        2  2026-07-12  forge/history/INIT-2026-07-11-csv-output-flag/demo/DEMO.md\n 0.04        2  2026-07-12  forge/history/INIT-2026-07-11-csv-output-flag/demo/demo.json\n 0.04        2  2026-07-12  forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/DEMO.md\n 0.04        2  2026-07-12  forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/demo.json\n 0.04        2  2026-07-12  test/format-csv.test.ts\n 0.04        2  2026-07-11  forge/history/INIT-2026-07-11-exclude-path-filter/demo/DEMO.md\n 0.04        2  2026-07-11  forge/history/INIT-2026-07-11-exclude-path-filter/demo/demo.json\n 0.02        1  2026-07-12  forge/history/INIT-2026-07-11-cli-sort-flag/demo/pulse-capture.md\n 0.02        1  2026-07-12  forge/history/INIT-2026-07-11-csv-output-flag/demo/pulse-capture.md\n 0.02        1  2026-07-12  src/sort.ts\n 0.02        1  2026-07-12  src/tags.ts\n 0.02        1  2026-07-12  test/sort.test.ts\n 0.02        1  2026-07-12  test/tags-cli.test.ts\n 0.02        1  2026-07-12  test/tags.test.ts\n 0.02        1  2026-07-11  src/glob.ts\n 0.02        1  2026-07-11  test/glob.test.ts\n 0.01        1  2026-06-22  forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/DEMO.md\n 0.01        1  2026-06-22  forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/demo.json\n 0.01        1  2026-06-22  forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/pulse-capture.md\n 0.01        1  2026-06-22  src/compare.ts\n 0.01        1  2026-06-22  test/compare.test.ts\n 0.01        1  2026-06-22  test/format-delta.test.ts\n 0.01        1  2026-06-21  .github/workflows/ci.yml\n 0.01        1  2026-06-21  .github/workflows/release.yml\n 0.01        1  2026-06-21  CLAUDE.md\n 0.01        1  2026-06-21  forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/DEMO.md\n 0.01        1  2026-06-21  forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/demo.json\n 0.01        1  2026-06-21  forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/pulse-capture.md\n 0.01        1  2026-06-21  forge/history/INIT-2026-06-21-json-output-flag/demo/DEMO.md\n 0.01        1  2026-06-21  forge/history/INIT-2026-06-21-json-output-flag/demo/demo.json\n 0.01        1  2026-06-21  forge/history/INIT-2026-06-21-json-output-flag/demo/pulse-capture.md\n 0.01        1  2026-06-21  forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/DEMO.md\n 0.01        1  2026-06-21  forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/demo.json\n 0.01        1  2026-06-21  forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/pulse-capture.md\n 0.01        1  2026-06-21  src/churn.ts\n 0.01        1  2026-06-21  src/hotspot.ts\n 0.01        1  2026-06-21  src/ownership.ts\n 0.01        1  2026-06-21  test/format-new.test.ts\n 0.01        1  2026-06-21  tsconfig.json\n"
+    },
+    {
+      "label": "CLI --no-merges --json: mergesExcluded field",
+      "caption": "Running `gitpulse <repo> --no-merges --json` produces JSON with a top-level `mergesExcluded` field equal to the number of filtered merge commits. Without `--no-merges`, the field is absent.",
+      "kind": "harness",
+      "command": "node dist/cli.js . --no-merges --json",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "[stderr] gitpulse: unknown option \"--no-merges\"\n\ngitpulse — git repository commit-stats analytics\n\nUsage:\n  gitpulse [repo-path]   print a commit-stats summary (default \".\")\n\nOptions:\n  -h, --help             show this help\n  --json                 output summary as JSON instead of a table\n  --csv                  output summary as RFC-4180 CSV instead of a table\n  --since <YYYY-MM-DD>   only include commits on or after this date\n  --until <YYYY-MM-DD>   only include commits on or before this date\n  --top <n>              cap each ranked list to the top n entries (n >= 1)\n  --compare <ref>        compare HEAD against a git ref (tag, branch, SHA)\n  --exclude <pattern>    exclude file paths matching a glob pattern (repeatable)\n  --sort <column>[:asc|:desc]  sort output by column (default direction: desc for numeric, asc for text)",
+      "afterOutput": "{\n  \"totalCommits\": 134,\n  \"byAuthor\": [\n    {\n      \"author\": \"Parso\",\n      \"commits\": 57\n    },\n    {\n      \"author\": \"forge-orchestrator\",\n      \"commits\": 37\n    },\n    {\n      \"author\": \"forge\",\n      \"commits\": 22\n    },\n    {\n      \"author\": \"forge-ralph\",\n      \"commits\": 14\n    },\n    {\n      \"author\": \"forge-unifier\",\n      \"commits\": 4\n    }\n  ],\n  \"authorChurn\": [\n    {\n      \"author\": \"Parso\",\n      \"commits\": 57,\n      \"insertions\": 10474,\n      \"deletions\": 125\n    },\n    {\n      \"author\": \"forge-orchestrator\",\n      \"commits\": 37,\n      \"insertions\": 2595,\n      \"deletions\": 1455\n    },\n    {\n      \"author\": \"forge-ralph\",\n      \"commits\": 14,\n      \"insertions\": 3863,\n      \"deletions\": 58\n    },\n    {\n      \"author\": \"forge-unifier\",\n      \"commits\": 4,\n      \"insertions\": 2253,\n      \"deletions\": 15\n    },\n    {\n      \"author\": \"forge\",\n      \"commits\": 22,\n      \"insertions\": 0,\n      \"deletions\": 1347\n    }\n  ],\n  \"fileChurn\": [\n    {\n      \"file\": \"test/acceptance/run.ts\",\n      \"insertions\": 1443,\n      \"deletions\": 39,\n      \"commits\": 12\n    },\n    {\n      \"file\": \".forge/unifier-items/UWI-1.md\",\n      \"insertions\": 544,\n      \"deletions\": 544,\n      \"commits\": 32\n    },\n    {\n      \"file\": \".forge/pr-description.md\",\n      \"insertions\": 444,\n      \"deletions\": 444,\n      \"commits\": 32\n    },\n    {\n      \"file\": \"src/cli.ts\",\n      \"insertions\": 846,\n      \"deletions\": 37,\n      \"commits\": 13\n    },\n    {\n      \"file\": \".forge/skills/demo-design/SKILL.md\",\n      \"insertions\": 404,\n      \"deletions\": 404,\n      \"commits\": 2\n    },\n    {\n      \"file\": \".forge/demo/DEMO.html\",\n      \"insertions\": 385,\n      \"deletions\": 385,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"src/format.ts\",\n      \"insertions\": 725,\n      \"deletions\": 17,\n      \"commits\": 10\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-csv-output-flag/demo/DEMO.md\",\n      \"insertions\": 656,\n      \"deletions\": 7,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"AGENT.md\",\n      \"insertions\": 313,\n      \"deletions\": 313,\n      \"commits\": 14\n    },\n    {\n      \"file\": \".forge/last-gate-failure.md\",\n      \"insertions\": 306,\n      \"deletions\": 306,\n      \"commits\": 26\n    },\n    {\n      \"file\": \"package-lock.json\",\n      \"insertions\": 580,\n      \"deletions\": 10,\n      \"commits\": 7\n    },\n    {\n      \"file\": \"test/format-csv.test.ts\",\n      \"insertions\": 576,\n      \"deletions\": 4,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/DEMO.md\",\n      \"insertions\": 556,\n      \"deletions\": 10,\n      \"commits\": 2\n    },\n    {\n      \"file\": \".forge/skills/git-log-analysis/SKILL.md\",\n      \"insertions\": 282,\n      \"deletions\": 282,\n      \"commits\": 12\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-exclude-path-filter/demo/DEMO.md\",\n      \"insertions\": 525,\n      \"deletions\": 9,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-cli-sort-flag/demo/DEMO.md\",\n      \"insertions\": 439,\n      \"deletions\": 7,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"test/exclude.test.ts\",\n      \"insertions\": 362,\n      \"deletions\": 0,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"src/git.ts\",\n      \"insertions\": 323,\n      \"deletions\": 8,\n      \"commits\": 5\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/demo.json\",\n      \"insertions\": 311,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"test/tags-cli.test.ts\",\n      \"insertions\": 300,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"CHANGELOG.md\",\n      \"insertions\": 285,\n      \"deletions\": 8,\n      \"commits\": 37\n    },\n    {\n      \"file\": \"test/cli-coupling.test.ts\",\n      \"insertions\": 268,\n      \"deletions\": 0,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"test/json-output.test.ts\",\n      \"insertions\": 263,\n      \"deletions\": 0,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"test/format-delta.test.ts\",\n      \"insertions\": 240,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"test/compare-cli.test.ts\",\n      \"insertions\": 228,\n      \"deletions\": 0,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"test/tags-git.test.ts\",\n      \"insertions\": 218,\n      \"deletions\": 7,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"test/ownership.test.ts\",\n      \"insertions\": 224,\n      \"deletions\": 0,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"test/compare.test.ts\",\n      \"insertions\": 222,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"test/author-churn.test.ts\",\n      \"insertions\": 220,\n      \"deletions\": 0,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"test/coupling.test.ts\",\n      \"insertions\": 217,\n      \"deletions\": 0,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/DEMO.md\",\n      \"insertions\": 205,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"test/cli-top.test.ts\",\n      \"insertions\": 204,\n      \"deletions\": 0,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"test/sort.test.ts\",\n      \"insertions\": 201,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"test/tags.test.ts\",\n      \"insertions\": 199,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"test/format-coupling.test.ts\",\n      \"insertions\": 197,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"test/hotspot.test.ts\",\n      \"insertions\": 196,\n      \"deletions\": 0,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"test/no-merges-cli.test.ts\",\n      \"insertions\": 196,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"test/unit.test.ts\",\n      \"insertions\": 181,\n      \"deletions\": 4,\n      \"commits\": 3\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-csv-output-flag/demo/demo.json\",\n      \"insertions\": 177,\n      \"deletions\": 7,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"test/churn.test.ts\",\n      \"insertions\": 184,\n      \"deletions\": 0,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/demo.json\",\n      \"insertions\": 172,\n      \"deletions\": 10,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"test/format-new.test.ts\",\n      \"insertions\": 181,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"test/cli-sort.test.ts\",\n      \"insertions\": 179,\n      \"deletions\": 0,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"README.md\",\n      \"insertions\": 170,\n      \"deletions\": 8,\n      \"commits\": 6\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-cli-sort-flag/demo/demo.json\",\n      \"insertions\": 168,\n      \"deletions\": 5,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"test/window.test.ts\",\n      \"insertions\": 167,\n      \"deletions\": 0,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-exclude-path-filter/demo/demo.json\",\n      \"insertions\": 160,\n      \"deletions\": 6,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"src/stats.ts\",\n      \"insertions\": 160,\n      \"deletions\": 5,\n      \"commits\": 4\n    },\n    {\n      \"file\": \"test/cli-csv.test.ts\",\n      \"insertions\": 165,\n      \"deletions\": 0,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/demo.json\",\n      \"insertions\": 162,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"src/ownership.ts\",\n      \"insertions\": 153,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"test/no-merges.test.ts\",\n      \"insertions\": 149,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/pulse-capture.md\",\n      \"insertions\": 146,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-cli-sort-flag/demo/pulse-capture.md\",\n      \"insertions\": 146,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-csv-output-flag/demo/pulse-capture.md\",\n      \"insertions\": 146,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"fix_plan.md\",\n      \"insertions\": 68,\n      \"deletions\": 68,\n      \"commits\": 14\n    },\n    {\n      \"file\": \".forge/project.json\",\n      \"insertions\": 107,\n      \"deletions\": 21,\n      \"commits\": 3\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/demo.json\",\n      \"insertions\": 126,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"src/compare.ts\",\n      \"insertions\": 124,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/demo.json\",\n      \"insertions\": 122,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-json-output-flag/demo/pulse-capture.md\",\n      \"insertions\": 108,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"src/sort.ts\",\n      \"insertions\": 106,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-json-output-flag/demo/demo.json\",\n      \"insertions\": 100,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/pulse-capture.md\",\n      \"insertions\": 93,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/DEMO.md\",\n      \"insertions\": 91,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \".github/workflows/release.yml\",\n      \"insertions\": 87,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"src/tags.ts\",\n      \"insertions\": 85,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"src/hotspot.ts\",\n      \"insertions\": 82,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"roadmap.md\",\n      \"insertions\": 73,\n      \"deletions\": 5,\n      \"commits\": 3\n    },\n    {\n      \"file\": \"src/coupling.ts\",\n      \"insertions\": 78,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-json-output-flag/demo/DEMO.md\",\n      \"insertions\": 76,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"src/glob.ts\",\n      \"insertions\": 74,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"src/churn.ts\",\n      \"insertions\": 69,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/DEMO.md\",\n      \"insertions\": 67,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/pulse-capture.md\",\n      \"insertions\": 63,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/DEMO.md\",\n      \"insertions\": 56,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \".gitignore\",\n      \"insertions\": 47,\n      \"deletions\": 1,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"CLAUDE.md\",\n      \"insertions\": 44,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"test/glob.test.ts\",\n      \"insertions\": 42,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \".github/workflows/ci.yml\",\n      \"insertions\": 39,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \"package.json\",\n      \"insertions\": 30,\n      \"deletions\": 9,\n      \"commits\": 11\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/pulse-capture.md\",\n      \"insertions\": 29,\n      \"deletions\": 0,\n      \"commits\": 1\n    },\n    {\n      \"file\": \".forge/demo/demo.lock.json\",\n      \"insertions\": 10,\n      \"deletions\": 10,\n      \"commits\": 2\n    },\n    {\n      \"file\": \"tsconfig.json\",\n      \"insertions\": 20,\n      \"deletions\": 0,\n      \"commits\": 1\n    }\n  ],\n  \"firstDate\": \"2026-06-21\",\n  \"lastDate\": \"2026-08-28\",\n  \"ownershipEntries\": [\n    {\n      \"file\": \"CHANGELOG.md\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 168,\n      \"busFactor\": 3\n    },\n    {\n      \"file\": \"src/cli.ts\",\n      \"owner\": \"forge-ralph\",\n      \"ownerLines\": 325,\n      \"busFactor\": 3\n    },\n    {\n      \"file\": \"src/format.ts\",\n      \"owner\": \"forge-ralph\",\n      \"ownerLines\": 301,\n      \"busFactor\": 3\n    },\n    {\n      \"file\": \"test/acceptance/run.ts\",\n      \"owner\": \"forge-ralph\",\n      \"ownerLines\": 611,\n      \"busFactor\": 3\n    },\n    {\n      \"file\": \"README.md\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 161,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-cli-sort-flag/demo/DEMO.md\",\n      \"owner\": \"forge-orchestrator\",\n      \"ownerLines\": 377,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-cli-sort-flag/demo/demo.json\",\n      \"owner\": \"forge-unifier\",\n      \"ownerLines\": 142,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-csv-output-flag/demo/DEMO.md\",\n      \"owner\": \"forge-orchestrator\",\n      \"ownerLines\": 587,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-csv-output-flag/demo/demo.json\",\n      \"owner\": \"forge-unifier\",\n      \"ownerLines\": 139,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/DEMO.md\",\n      \"owner\": \"forge-orchestrator\",\n      \"ownerLines\": 481,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/demo.json\",\n      \"owner\": \"forge-unifier\",\n      \"ownerLines\": 120,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"src/git.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 214,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"test/author-churn.test.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 219,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"test/churn.test.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 183,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"test/cli-csv.test.ts\",\n      \"owner\": \"forge-unifier\",\n      \"ownerLines\": 164,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"test/cli-top.test.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 203,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"test/compare-cli.test.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 227,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"test/exclude.test.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 361,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"test/hotspot.test.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 195,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"test/json-output.test.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 262,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"test/ownership.test.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 223,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"test/unit.test.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 166,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \"test/window.test.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 166,\n      \"busFactor\": 2\n    },\n    {\n      \"file\": \".forge/project.json\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 86,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \".github/workflows/ci.yml\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 39,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \".github/workflows/release.yml\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 87,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \".gitignore\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 46,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"CLAUDE.md\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 44,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/DEMO.md\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 56,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/demo.json\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 122,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/pulse-capture.md\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 63,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-json-output-flag/demo/DEMO.md\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 76,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-json-output-flag/demo/demo.json\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 100,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-json-output-flag/demo/pulse-capture.md\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 108,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/DEMO.md\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 91,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/demo.json\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 162,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/pulse-capture.md\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 93,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/DEMO.md\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 67,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/demo.json\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 126,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/pulse-capture.md\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 146,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-cli-sort-flag/demo/pulse-capture.md\",\n      \"owner\": \"forge-unifier\",\n      \"ownerLines\": 146,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-csv-output-flag/demo/pulse-capture.md\",\n      \"owner\": \"forge-unifier\",\n      \"ownerLines\": 146,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-exclude-path-filter/demo/DEMO.md\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 516,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-exclude-path-filter/demo/demo.json\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 154,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/DEMO.md\",\n      \"owner\": \"forge-orchestrator\",\n      \"ownerLines\": 205,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/demo.json\",\n      \"owner\": \"forge-orchestrator\",\n      \"ownerLines\": 311,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/pulse-capture.md\",\n      \"owner\": \"forge-ralph\",\n      \"ownerLines\": 29,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"package-lock.json\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 570,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"package.json\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 21,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"roadmap.md\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 68,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"src/churn.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 69,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"src/compare.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 124,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"src/coupling.ts\",\n      \"owner\": \"forge-ralph\",\n      \"ownerLines\": 78,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"src/glob.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 74,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"src/hotspot.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 82,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"src/ownership.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 153,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"src/sort.ts\",\n      \"owner\": \"forge-ralph\",\n      \"ownerLines\": 106,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"src/stats.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 155,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"src/tags.ts\",\n      \"owner\": \"forge-unifier\",\n      \"ownerLines\": 85,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"test/cli-coupling.test.ts\",\n      \"owner\": \"forge-ralph\",\n      \"ownerLines\": 268,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"test/cli-sort.test.ts\",\n      \"owner\": \"forge-ralph\",\n      \"ownerLines\": 179,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"test/compare.test.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 222,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"test/coupling.test.ts\",\n      \"owner\": \"forge-ralph\",\n      \"ownerLines\": 217,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"test/format-coupling.test.ts\",\n      \"owner\": \"forge-ralph\",\n      \"ownerLines\": 197,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"test/format-csv.test.ts\",\n      \"owner\": \"forge-ralph\",\n      \"ownerLines\": 572,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"test/format-delta.test.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 240,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"test/format-new.test.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 181,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"test/glob.test.ts\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 42,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"test/no-merges-cli.test.ts\",\n      \"owner\": \"forge-ralph\",\n      \"ownerLines\": 196,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"test/no-merges.test.ts\",\n      \"owner\": \"forge-ralph\",\n      \"ownerLines\": 149,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"test/sort.test.ts\",\n      \"owner\": \"forge-ralph\",\n      \"ownerLines\": 201,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"test/tags-cli.test.ts\",\n      \"owner\": \"forge-unifier\",\n      \"ownerLines\": 300,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"test/tags-git.test.ts\",\n      \"owner\": \"forge-ralph\",\n      \"ownerLines\": 211,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"test/tags.test.ts\",\n      \"owner\": \"forge-unifier\",\n      \"ownerLines\": 199,\n      \"busFactor\": 1\n    },\n    {\n      \"file\": \"tsconfig.json\",\n      \"owner\": \"Parso\",\n      \"ownerLines\": 20,\n      \"busFactor\": 1\n    }\n  ],\n  \"hotspotEntries\": [\n    {\n      \"file\": \"CHANGELOG.md\",\n      \"score\": 37,\n      \"commits\": 37,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \".forge/last-gate-failure.md\",\n      \"score\": 26,\n      \"commits\": 26,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"src/cli.ts\",\n      \"score\": 13,\n      \"commits\": 13,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/acceptance/run.ts\",\n      \"score\": 12,\n      \"commits\": 12,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"package.json\",\n      \"score\": 11,\n      \"commits\": 11,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"src/format.ts\",\n      \"score\": 10,\n      \"commits\": 10,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"package-lock.json\",\n      \"score\": 7,\n      \"commits\": 7,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"README.md\",\n      \"score\": 6,\n      \"commits\": 6,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"src/git.ts\",\n      \"score\": 5,\n      \"commits\": 5,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \".forge/project.json\",\n      \"score\": 3,\n      \"commits\": 3,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/unit.test.ts\",\n      \"score\": 3,\n      \"commits\": 3,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \".forge/demo/DEMO.html\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \".forge/demo/demo.lock.json\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \".forge/skills/demo-design/SKILL.md\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \".gitignore\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/author-churn.test.ts\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/churn.test.ts\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/cli-coupling.test.ts\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/cli-csv.test.ts\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/cli-sort.test.ts\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/cli-top.test.ts\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/compare-cli.test.ts\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/coupling.test.ts\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/exclude.test.ts\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/hotspot.test.ts\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/json-output.test.ts\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/ownership.test.ts\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/tags-git.test.ts\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/window.test.ts\",\n      \"score\": 2,\n      \"commits\": 2,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/DEMO.md\",\n      \"score\": 1,\n      \"commits\": 1,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/demo.json\",\n      \"score\": 1,\n      \"commits\": 1,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-08-28-init-2026-08-28-coupling-command/demo/pulse-capture.md\",\n      \"score\": 1,\n      \"commits\": 1,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"src/coupling.ts\",\n      \"score\": 1,\n      \"commits\": 1,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/format-coupling.test.ts\",\n      \"score\": 1,\n      \"commits\": 1,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/no-merges-cli.test.ts\",\n      \"score\": 1,\n      \"commits\": 1,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \"test/no-merges.test.ts\",\n      \"score\": 1,\n      \"commits\": 1,\n      \"lastDate\": \"2026-08-28\"\n    },\n    {\n      \"file\": \".forge/pr-description.md\",\n      \"score\": 0.6666666666666666,\n      \"commits\": 32,\n      \"lastDate\": \"2026-07-12\"\n    },\n    {\n      \"file\": \".forge/unifier-items/UWI-1.md\",\n      \"score\": 0.6666666666666666,\n      \"commits\": 32,\n      \"lastDate\": \"2026-07-12\"\n    },\n    {\n      \"file\": \"AGENT.md\",\n      \"score\": 0.20588235294117646,\n      \"commits\": 14,\n      \"lastDate\": \"2026-06-22\"\n    },\n    {\n      \"file\": \"fix_plan.md\",\n      \"score\": 0.20588235294117646,\n      \"commits\": 14,\n      \"lastDate\": \"2026-06-22\"\n    },\n    {\n      \"file\": \".forge/skills/git-log-analysis/SKILL.md\",\n      \"score\": 0.17391304347826086,\n      \"commits\": 12,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \"roadmap.md\",\n      \"score\": 0.061224489795918366,\n      \"commits\": 3,\n      \"lastDate\": \"2026-07-11\"\n    },\n    {\n      \"file\": \"src/stats.ts\",\n      \"score\": 0.057971014492753624,\n      \"commits\": 4,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-cli-sort-flag/demo/DEMO.md\",\n      \"score\": 0.041666666666666664,\n      \"commits\": 2,\n      \"lastDate\": \"2026-07-12\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-cli-sort-flag/demo/demo.json\",\n      \"score\": 0.041666666666666664,\n      \"commits\": 2,\n      \"lastDate\": \"2026-07-12\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-csv-output-flag/demo/DEMO.md\",\n      \"score\": 0.041666666666666664,\n      \"commits\": 2,\n      \"lastDate\": \"2026-07-12\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-csv-output-flag/demo/demo.json\",\n      \"score\": 0.041666666666666664,\n      \"commits\": 2,\n      \"lastDate\": \"2026-07-12\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/DEMO.md\",\n      \"score\": 0.041666666666666664,\n      \"commits\": 2,\n      \"lastDate\": \"2026-07-12\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/demo.json\",\n      \"score\": 0.041666666666666664,\n      \"commits\": 2,\n      \"lastDate\": \"2026-07-12\"\n    },\n    {\n      \"file\": \"test/format-csv.test.ts\",\n      \"score\": 0.041666666666666664,\n      \"commits\": 2,\n      \"lastDate\": \"2026-07-12\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-exclude-path-filter/demo/DEMO.md\",\n      \"score\": 0.04081632653061224,\n      \"commits\": 2,\n      \"lastDate\": \"2026-07-11\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-exclude-path-filter/demo/demo.json\",\n      \"score\": 0.04081632653061224,\n      \"commits\": 2,\n      \"lastDate\": \"2026-07-11\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-cli-sort-flag/demo/pulse-capture.md\",\n      \"score\": 0.020833333333333332,\n      \"commits\": 1,\n      \"lastDate\": \"2026-07-12\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-07-11-csv-output-flag/demo/pulse-capture.md\",\n      \"score\": 0.020833333333333332,\n      \"commits\": 1,\n      \"lastDate\": \"2026-07-12\"\n    },\n    {\n      \"file\": \"src/sort.ts\",\n      \"score\": 0.020833333333333332,\n      \"commits\": 1,\n      \"lastDate\": \"2026-07-12\"\n    },\n    {\n      \"file\": \"src/tags.ts\",\n      \"score\": 0.020833333333333332,\n      \"commits\": 1,\n      \"lastDate\": \"2026-07-12\"\n    },\n    {\n      \"file\": \"test/sort.test.ts\",\n      \"score\": 0.020833333333333332,\n      \"commits\": 1,\n      \"lastDate\": \"2026-07-12\"\n    },\n    {\n      \"file\": \"test/tags-cli.test.ts\",\n      \"score\": 0.020833333333333332,\n      \"commits\": 1,\n      \"lastDate\": \"2026-07-12\"\n    },\n    {\n      \"file\": \"test/tags.test.ts\",\n      \"score\": 0.020833333333333332,\n      \"commits\": 1,\n      \"lastDate\": \"2026-07-12\"\n    },\n    {\n      \"file\": \"src/glob.ts\",\n      \"score\": 0.02040816326530612,\n      \"commits\": 1,\n      \"lastDate\": \"2026-07-11\"\n    },\n    {\n      \"file\": \"test/glob.test.ts\",\n      \"score\": 0.02040816326530612,\n      \"commits\": 1,\n      \"lastDate\": \"2026-07-11\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/DEMO.md\",\n      \"score\": 0.014705882352941176,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-22\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/demo.json\",\n      \"score\": 0.014705882352941176,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-22\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-22-compare-ref-analytics-delta/demo/pulse-capture.md\",\n      \"score\": 0.014705882352941176,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-22\"\n    },\n    {\n      \"file\": \"src/compare.ts\",\n      \"score\": 0.014705882352941176,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-22\"\n    },\n    {\n      \"file\": \"test/compare.test.ts\",\n      \"score\": 0.014705882352941176,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-22\"\n    },\n    {\n      \"file\": \"test/format-delta.test.ts\",\n      \"score\": 0.014705882352941176,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-22\"\n    },\n    {\n      \"file\": \".github/workflows/ci.yml\",\n      \"score\": 0.014492753623188406,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \".github/workflows/release.yml\",\n      \"score\": 0.014492753623188406,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \"CLAUDE.md\",\n      \"score\": 0.014492753623188406,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/DEMO.md\",\n      \"score\": 0.014492753623188406,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/demo.json\",\n      \"score\": 0.014492753623188406,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-gitpulse-code-churn/demo/pulse-capture.md\",\n      \"score\": 0.014492753623188406,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-json-output-flag/demo/DEMO.md\",\n      \"score\": 0.014492753623188406,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-json-output-flag/demo/demo.json\",\n      \"score\": 0.014492753623188406,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-json-output-flag/demo/pulse-capture.md\",\n      \"score\": 0.014492753623188406,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/DEMO.md\",\n      \"score\": 0.014492753623188406,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/demo.json\",\n      \"score\": 0.014492753623188406,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \"forge/history/INIT-2026-06-21-ownership-hotspots-top-flag/demo/pulse-capture.md\",\n      \"score\": 0.014492753623188406,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \"src/churn.ts\",\n      \"score\": 0.014492753623188406,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \"src/hotspot.ts\",\n      \"score\": 0.014492753623188406,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \"src/ownership.ts\",\n      \"score\": 0.014492753623188406,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \"test/format-new.test.ts\",\n      \"score\": 0.014492753623188406,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-21\"\n    },\n    {\n      \"file\": \"tsconfig.json\",\n      \"score\": 0.014492753623188406,\n      \"commits\": 1,\n      \"lastDate\": \"2026-06-21\"\n    }\n  ],\n  \"mergesExcluded\": 22\n}\n"
+    },
+    {
+      "label": "Acceptance fixture: 7-commit plain run vs 6-commit --no-merges run",
+      "caption": "The acceptance fixture now includes one real merge commit. Plain run yields 7 total commits (Ada=6); `--no-merges` yields 6 commits (Ada=5, Grace=1) and prints the exclusion annotation.",
+      "kind": "harness",
+      "beforeNote": "Pre-initiative baseline: fixture had 6 non-merge commits; plain run and `--no-merges` run were always identical (merge filtering happened silently at the git log layer).",
+      "afterNote": "Post-initiative: plain run shows `gitpulse — 7 commits (2021-03-01 → 2021-04-15)` with Ada=6; `--no-merges` shows `gitpulse — 6 commits … (1 merge commits excluded)` with Ada=5, Grace=1. Byte-identical assertion holds for a merge-free fixture. Verified by `test/acceptance/run.ts` WI-3 assertions."
+    },
+    {
+      "label": "--help output contains --no-merges",
+      "caption": "The USAGE string in `src/cli.ts` includes `--no-merges` with a one-line description; `--help` prints it to stderr.",
+      "kind": "harness",
+      "beforeNote": "Prior: `--help` output had no `--no-merges` entry.",
+      "afterNote": "After: USAGE contains `'  --no-merges            exclude merge commits (commits with >1 parent)'`. Verified by `test/no-merges-cli.test.ts` AC3 test: `runCli(['--help'], io)` combined stdout+stderr includes `'--no-merges'`."
+    },
+    {
+      "label": "Flag composition: --no-merges with --since, --exclude, --sort",
+      "caption": "`--no-merges` composes correctly with `--since`, `--exclude`, and `--sort` flags; all filters apply in order and the CLI exits 0.",
+      "kind": "harness",
+      "beforeNote": "Prior: no `--no-merges` flag; flag composition was not applicable.",
+      "afterNote": "After: `runCli(['--no-merges', '--since', '2021-03-01', '--exclude', 'dist/**', '--sort', 'commits:asc', '/repo'], io)` exits 0 with no stderr. Verified by `test/no-merges-cli.test.ts` AC6 tests."
+    },
+    {
+      "label": "Docs and changelog updated",
+      "caption": "README.md documents the `--no-merges` flag in its Options table; CHANGELOG.md carries a `## [Unreleased]` entry describing both the removal from `LOG_ARGS` and the new CLI flag.",
+      "kind": "harness",
+      "beforeNote": "Prior: no `--no-merges` documentation; `LOG_ARGS` change was undocumented.",
+      "afterNote": "After: README Options table has `--no-merges` row with full description including header annotation and JSON field behaviour. CHANGELOG `## [Unreleased]` has a `### Changed` entry (removed `--no-merges` from `LOG_ARGS`, added `parentCount` field) and an `### Added` entry (`--no-merges` flag, `filterMergeCommits` export)."
+    }
+  ],
+  "apiDiff": [
+    {
+      "name": "Commit type (src/git.ts)",
+      "change": "changed",
+      "before": "type Commit = { hash, author, date, filesChanged, insertions, deletions, files }",
+      "after": "type Commit = { hash, author, date, parentCount: number, filesChanged, insertions, deletions, files }"
+    },
+    {
+      "name": "LOG_ARGS (src/git.ts)",
+      "change": "changed",
+      "before": "['log', '--no-merges', '--numstat', '--date=short', '--format=%H%x09%an%x09%ad']",
+      "after": "['log', '--numstat', '--date=short', '--format=%H%x09%an%x09%ad%x09%P']"
+    },
+    {
+      "name": "filterMergeCommits (src/cli.ts — new export)",
+      "change": "added",
+      "before": null,
+      "after": "export function filterMergeCommits(commits: Commit[]): { filtered: Commit[]; excludedCount: number }"
+    },
+    {
+      "name": "gitpulse --no-merges (text output)",
+      "change": "added",
+      "before": null,
+      "after": "Header annotated: 'gitpulse — N commits (date → date) (M merge commits excluded)'"
+    },
+    {
+      "name": "gitpulse --no-merges --json (JSON output)",
+      "change": "added",
+      "before": null,
+      "after": "Top-level 'mergesExcluded: number' field present when --no-merges and N > 0; absent otherwise"
+    }
+  ],
+  "testEvidence": [
+    {
+      "name": "AC2: LOG_ARGS does not contain --no-merges",
+      "result": "pass",
+      "delta": "+1 new test (test/no-merges.test.ts)"
+    },
+    {
+      "name": "AC2: LOG_ARGS is an array (importable at runtime)",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "AC4: initial commit with empty %P field → parentCount 0",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "AC5: regular commit with one parent SHA → parentCount 1",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "AC3: merge commit with two parent SHAs → parentCount 2",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "AC1: Commit record carries parentCount as a number field",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "numstat fields still parse correctly with 4-field header (regression guard)",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "mixed sequence: initial + regular + merge commits parsed correctly",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "filterMergeCommits — mix of parentCount 0, 1, 2 → only 0 and 1 survive",
+      "result": "pass",
+      "delta": "+1 new test (test/no-merges-cli.test.ts)"
+    },
+    {
+      "name": "filterMergeCommits — excludedCount equals number with parentCount > 1",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "filterMergeCommits — merge-free input: excludedCount === 0, length unchanged",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "runCli --no-merges text output contains merge excluded annotation",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "filter runs before summarize — merge author excluded from stats",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "--help output contains --no-merges",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "--no-merges --json → JSON has mergesExcluded: 1",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "--json (no --no-merges) → JSON does NOT have mergesExcluded",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "--no-merges --json on merge-free repo → mergesExcluded absent (N=0)",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "byte-identical text output with/without --no-merges when no merges present",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "--no-merges composes with --since, --exclude, --sort → exit code 0",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "--no-merges --json --since --exclude compose correctly",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "acceptance: plain run shows 7 commits (Ada=6, including merge)",
+      "result": "pass",
+      "delta": "+1 acceptance assertion (test/acceptance/run.ts)"
+    },
+    {
+      "name": "acceptance: --no-merges shows 6 commits and '(1 merge commits excluded)'",
+      "result": "pass",
+      "delta": "+1 acceptance assertion"
+    },
+    {
+      "name": "acceptance: --no-merges --json mergesExcluded equals 1",
+      "result": "pass",
+      "delta": "+1 acceptance assertion"
+    },
+    {
+      "name": "acceptance: merge-free fixture byte-identical with and without --no-merges",
+      "result": "pass",
+      "delta": "+1 acceptance assertion"
+    },
+    {
+      "name": "All pre-existing unit tests (npm test)",
+      "result": "pass",
+      "delta": "full regression suite green"
+    }
+  ],
+  "filesChanged": [
+    {
+      "path": "src/git.ts",
+      "note": "Added parentCount to Commit type; updated LOG_FORMAT to include %P; removed --no-merges from LOG_ARGS; updated parseLog() to count parent SHAs"
+    },
+    {
+      "path": "src/cli.ts",
+      "note": "Added filterMergeCommits export; wired --no-merges flag; added USAGE entry; text header and JSON field for mergesExcluded"
+    },
+    {
+      "path": "test/no-merges.test.ts",
+      "note": "New: WI-1 unit suite — LOG_ARGS check, parentCount parsing for all three parentCount values"
+    },
+    {
+      "path": "test/no-merges-cli.test.ts",
+      "note": "New: WI-2 unit suite — filterMergeCommits, text annotation, --help, JSON field, byte-identical, flag composition"
+    },
+    {
+      "path": "test/acceptance/run.ts",
+      "note": "Extended: real merge commit in fixture; WI-3 assertions for plain run (7 commits), --no-merges (6 commits, annotation), --no-merges --json (mergesExcluded=1), merge-free byte-identical"
+    },
+    {
+      "path": "README.md",
+      "note": "Added --no-merges row to Options table"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "note": "## [Unreleased] entry: Changed (LOG_ARGS, parentCount) and Added (--no-merges flag, filterMergeCommits)"
+    },
+    {
+      "path": "test/unit.test.ts",
+      "note": "Updated for 4-field header format change"
+    },
+    {
+      "path": "test/churn.test.ts",
+      "note": "Regression guard updates for parentCount field"
+    },
+    {
+      "path": "test/author-churn.test.ts",
+      "note": "Regression guard updates"
+    },
+    {
+      "path": "test/cli-coupling.test.ts",
+      "note": "Regression guard updates"
+    },
+    {
+      "path": "test/cli-csv.test.ts",
+      "note": "Regression guard updates"
+    },
+    {
+      "path": "test/cli-sort.test.ts",
+      "note": "Regression guard updates"
+    },
+    {
+      "path": "test/cli-top.test.ts",
+      "note": "Regression guard updates"
+    },
+    {
+      "path": "test/compare-cli.test.ts",
+      "note": "Regression guard updates"
+    },
+    {
+      "path": "test/coupling.test.ts",
+      "note": "Regression guard updates"
+    },
+    {
+      "path": "test/exclude.test.ts",
+      "note": "Regression guard updates"
+    },
+    {
+      "path": "test/hotspot.test.ts",
+      "note": "Regression guard updates"
+    },
+    {
+      "path": "test/json-output.test.ts",
+      "note": "Regression guard updates"
+    },
+    {
+      "path": "test/ownership.test.ts",
+      "note": "Regression guard updates"
+    },
+    {
+      "path": "test/tags-git.test.ts",
+      "note": "Regression guard updates"
+    },
+    {
+      "path": "test/window.test.ts",
+      "note": "Regression guard updates"
+    }
+  ],
+  "usage_example": "# Exclude merge commits from all analytics\ngitpulse /path/to/repo --no-merges\n\n# With JSON output — gains top-level 'mergesExcluded' field\ngitpulse /path/to/repo --no-merges --json\n\n# Compose with other flags\ngitpulse /path/to/repo --no-merges --since 2024-01-01 --exclude 'dist/**' --sort commits:asc",
+  "impact": [
+    "Merge commits are now visible in analytics by default — operators get an accurate picture of all activity including integration commits.",
+    "The `--no-merges` flag gives full opt-in control: strip merge commits and see only substantive author contributions, with an explicit count of what was filtered.",
+    "`parentCount` on every `Commit` record enables downstream filtering and segmentation without re-querying git.",
+    "The JSON `mergesExcluded` field makes the filter auditable in automated pipelines."
+  ],
+  "acEvaluations": [
+    {
+      "criterion": "GIVEN the git log format string in src/git.ts WHEN a commit with two parents exists in the repo THEN git.ts parses a parentCount >= 2 on that commit record AND the Commit type carries a parentCount: number field",
+      "verdict": "met",
+      "evidence": "src/git.ts: `LOG_FORMAT` = `'%H%x09%an%x09%ad%x09%P'`; `parseLog()` splits the fourth field on spaces and counts non-empty tokens to set `parentCount`. `Commit` type declares `readonly parentCount: number`. Verified by `test/no-merges.test.ts` AC3 test: raw log with two parent SHAs produces `parentCount === 2`, and AC1 test confirms the field is present and typed `number`."
+    },
+    {
+      "criterion": "GIVEN LOG_ARGS in src/git.ts WHEN inspected at runtime THEN the array does NOT contain the string '--no-merges'",
+      "verdict": "met",
+      "evidence": "`src/git.ts` line 46: `export const LOG_ARGS = ['log', '--numstat', '--date=short', \\`--format=\\${LOG_FORMAT}\\`];` — no `'--no-merges'` element. Directly asserted by `test/no-merges.test.ts` AC2 test: `assert.ok(!LOG_ARGS.includes('--no-merges'))` passes."
+    },
+    {
+      "criterion": "GIVEN a raw git log string containing a header line with two parent SHAs in the fourth tab-separated field WHEN parseLog() processes it THEN the returned Commit record has parentCount === 2",
+      "verdict": "met",
+      "evidence": "`test/no-merges.test.ts` AC3 test: constructs raw = `'<sha>\\tCarol Sentinel\\t2024-01-03\\t<PARENT_1> <PARENT_2>\\n...'`; `parseLog(raw)[0].parentCount` equals `2`. Test passes in the npm test suite."
+    },
+    {
+      "criterion": "GIVEN a raw git log string containing a header line with no parents (initial commit, empty %P field) WHEN parseLog() processes it THEN the returned Commit record has parentCount === 0",
+      "verdict": "met",
+      "evidence": "`test/no-merges.test.ts` AC4 test: raw with empty fourth field (`'\\t'` at end); `parseLog(raw)[0].parentCount` equals `0`. Logic in `parseLog()`: `parts[3].trim().length === 0 ? 0 : ...`. Test passes."
+    },
+    {
+      "criterion": "GIVEN a raw git log string containing a header line with exactly one parent WHEN parseLog() processes it THEN the returned Commit record has parentCount === 1",
+      "verdict": "met",
+      "evidence": "`test/no-merges.test.ts` AC5 test: raw with single parent SHA in fourth field; `parseLog(raw)[0].parentCount` equals `1`. Test passes."
+    },
+    {
+      "criterion": "GIVEN a Commit[] with a mix of commits where parentCount is 0, 1, and 2 respectively WHEN the merge-filter function is applied (filterMergeCommits) THEN only commits with parentCount <= 1 survive AND the excluded count equals the number with parentCount > 1",
+      "verdict": "met",
+      "evidence": "`test/no-merges-cli.test.ts` AC1 tests: `filterMergeCommits([COMMIT_INIT, COMMIT_REG, COMMIT_MERGE])` returns `{ filtered: [COMMIT_INIT, COMMIT_REG], excludedCount: 1 }`. Additional test with two merge commits confirms `excludedCount === 2`. All pass."
+    },
+    {
+      "criterion": "GIVEN a gitpulse invocation with --no-merges on a repo containing merge commits WHEN readCommits() returns a Commit[] and the filter runs THEN the filter runs immediately after readCommits() and before summarize() and the text output contains '(N merge commits excluded)' when N > 0",
+      "verdict": "met",
+      "evidence": "`src/cli.ts` lines 745–751: `filterMergeCommits` is called on `commits` after `applyExclusions` and before `summarize()`. `test/no-merges-cli.test.ts` AC2 test: `runCli(['--no-merges', '/repo'], makeIo(MIXED))` produces stdout containing `'(1 merge commits excluded)'`. AC2 test also confirms Carol Sentinel (merge-only author) is excluded from stats, proving filter precedes summarize."
+    },
+    {
+      "criterion": "GIVEN the --help flag is passed WHEN the CLI prints usage THEN the output contains '--no-merges' with a one-line description",
+      "verdict": "met",
+      "evidence": "`src/cli.ts` USAGE array includes `'  --no-merges            exclude merge commits (commits with >1 parent)'`. `test/no-merges-cli.test.ts` AC3 test: `runCli(['--help'], io)` combined stdout+stderr includes `'--no-merges'`. Test passes."
+    },
+    {
+      "criterion": "GIVEN a gitpulse invocation with --no-merges --json on a repo with merge commits WHEN the JSON output is parsed THEN top-level 'mergesExcluded' equals the number of merge commits filtered AND when --no-merges is absent mergesExcluded is not present in the JSON",
+      "verdict": "met",
+      "evidence": "`test/no-merges-cli.test.ts` AC4 tests: `runCli(['--no-merges', '--json', '/repo'], makeIo(MIXED))` produces JSON with `mergesExcluded === 1`; `runCli(['--json', '/repo'], makeIo(MIXED))` produces JSON without `mergesExcluded` key. Both assertions pass. Also verified: `--no-merges --json` on merge-free input omits `mergesExcluded` (N=0 path in `src/cli.ts` line 771: `if (noMerges && mergesExcluded > 0)`)."
+    },
+    {
+      "criterion": "GIVEN a Commit[] with no merge commits (all parentCount <= 1) WHEN gitpulse is run with --no-merges and again without --no-merges THEN the text output is byte-identical in both invocations (no merge commits to exclude)",
+      "verdict": "met",
+      "evidence": "`test/no-merges-cli.test.ts` AC5 test: `runCli(['--no-merges', '/repo'], makeIo(NO_MERGES)).stdout === runCli(['/repo'], makeIo(NO_MERGES)).stdout`. Also verified by `test/acceptance/run.ts` WI-3 AC4 (merge-free fixture): `plainOnNoMerge === noMergesOnNoMerge`, passes."
+    },
+    {
+      "criterion": "GIVEN a gitpulse invocation with --no-merges combined with --since 2021-03-01 and --exclude 'dist/**' and --sort commits:asc WHEN the CLI processes all flags THEN all flags compose correctly — each filter applies in order and the output is valid",
+      "verdict": "met",
+      "evidence": "`test/no-merges-cli.test.ts` AC6 tests: `runCli(['--no-merges', '--since', '2021-03-01', '--exclude', 'dist/**', '--sort', 'commits:asc', '/repo'], makeIo(MIXED))` exits 0, stderr empty. Additional test with `--json` confirms valid JSON output. Both pass."
+    },
+    {
+      "criterion": "GIVEN the deterministic temp-repo fixture is extended with one real merge commit (two parents) WHEN the built CLI runs against the fixture without --no-merges THEN the total commit count in the header equals the pre-initiative baseline PLUS 1 (the merge commit is now included)",
+      "verdict": "met",
+      "evidence": "`test/acceptance/run.ts`: `EXPECTED_TOTAL_WITH_MERGE = 7`. Plain run asserts `actual` matches `^gitpulse — 7 commits \\(2021-03-01 → 2021-04-15\\)`. The merge commit is created via `git commit-tree -p <mainTip> -p <prevParent>` and `git reset --hard <mergeSha>`. Acceptance gate passes."
+    },
+    {
+      "criterion": "GIVEN the fixture repo containing at least one merge commit WHEN the built CLI runs with --no-merges THEN the text output contains '(1 merge commits excluded)' AND per-author totals match the original baseline (Ada 5, Grace 1)",
+      "verdict": "met",
+      "evidence": "`test/acceptance/run.ts` WI-3 AC1 block: `noMergesOut` matches `^gitpulse — 6 commits \\(2021-03-01 →` and `\\(1 merge commits excluded\\)`. First author row matches `^\\s*5\\s+Ada Lovelace$`. Acceptance gate passes."
+    },
+    {
+      "criterion": "GIVEN the fixture repo with --no-merges --json WHEN the JSON output is parsed THEN top-level mergesExcluded equals 1 (the single merge commit)",
+      "verdict": "met",
+      "evidence": "`test/acceptance/run.ts` WI-3 AC3 block: `noMergesParsed.mergesExcluded === 1` (EXPECTED_NO_MERGES_EXCLUDED = 1). Also `noMergesParsed.totalCommits === 6` (EXPECTED_TOTAL). Acceptance gate passes."
+    },
+    {
+      "criterion": "GIVEN a merge-free fixture repo WHEN the built CLI runs with --no-merges and again without --no-merges THEN the two outputs are byte-identical (no merge commits to exclude, no annotation printed)",
+      "verdict": "met",
+      "evidence": "`test/acceptance/run.ts` WI-3 AC4 block: builds a two-commit merge-free fixture, asserts `plainOnNoMerge === noMergesOnNoMerge` via `assert.strictEqual`. Process prints `acceptance: PASS — AC4 byte-identical`. Acceptance gate passes."
+    },
+    {
+      "criterion": "GIVEN README.md and CHANGELOG.md in the repo WHEN the initiative is complete THEN README.md documents the --no-merges flag in its Options section AND CHANGELOG.md contains a '## [Unreleased]' entry describing the new flag",
+      "verdict": "met",
+      "evidence": "README.md Options table contains row: `| \\`--no-merges\\` | Exclude merge commits … \\`(N merge commits excluded)\\` … \\`mergesExcluded\\` field. |`. CHANGELOG.md `## [Unreleased]` section has `### Changed` (parentCount field, removal of --no-merges from LOG_ARGS) and `### Added` (--no-merges flag, filterMergeCommits export) entries."
+    }
+  ],
+  "capture": {
+    "nonce": "f9c495d9a97dd6ce9c966b0f268a873f",
+    "capturedAt": "2026-08-28T12:07:28.043Z"
+  }
+}

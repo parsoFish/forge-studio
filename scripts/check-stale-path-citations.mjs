@@ -268,15 +268,27 @@ function gitLogDeletions(root) {
   }
 }
 
+/**
+ * A story fixture ground seed (`tests/stories/grounds/<name>/seed/**`) is the
+ * SOURCE project's own tree, copied byte-for-byte and frozen: its citations
+ * name the source project's paths (project: gitpulse's `docs/usage.md`), not this
+ * repo's, and rewriting them would be an unnamed PROVENANCE deviation that
+ * breaks the digest `provisionFixtureGround` pins. Same glob and reasoning as
+ * `check-file-size.mjs`'s `SEED_GROUND_RE` and `check-test-discovery.mjs`'s
+ * exception (forge-1rk5.1). The ground's own `PROVENANCE.md`, outside
+ * `seed/`, is still scanned.
+ */
+const SEED_GROUND_RE = /^tests\/stories\/grounds\/[^/]+\/seed\//;
+
 function isExcludedProse(relPath) {
-  if (EXCLUDED_PROSE_FILES.has(relPath)) return true;
+  if (EXCLUDED_PROSE_FILES.has(relPath) || SEED_GROUND_RE.test(relPath)) return true;
   return EXCLUDED_PROSE_TREES.some((t) => relPath === t || relPath.startsWith(`${t}/`));
 }
 
 function collectFiles(root) {
   const all = listFiles(root);
   const fullSet = new Set(all);
-  const code = all.filter((p) => CODE_EXTENSIONS.some((ext) => p.endsWith(ext)));
+  const code = all.filter((p) => CODE_EXTENSIONS.some((ext) => p.endsWith(ext)) && !SEED_GROUND_RE.test(p));
   const prose = all.filter((p) => PROSE_EXTENSIONS.some((ext) => p.endsWith(ext)) && !isExcludedProse(p));
   return { fullSet, code, prose };
 }

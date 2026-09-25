@@ -1,0 +1,518 @@
+{
+  "title": "Tag-range filtering for gitpulse: --since-tag / --until-tag across all CLI paths",
+  "essence": "Prior to this initiative gitpulse had no way to scope analytics to the commits between two version tags; users had to translate tag names to dates manually and accept date-boundary imprecision. The change introduces resolveTagToSha (commit-SHA resolution via git rev-parse --verify <tag>^{commit}, handling both annotated and lightweight tags) and filterCommitsByTagRange (a pure, no-git-spawn array slicer with exclusive lower / inclusive upper semantics), then wires --since-tag / --until-tag through all four CLI paths (single-snapshot, --compare, coupling, tags), extends text/JSON/CSV renderers with range annotations, and proves the whole chain in a self-contained acceptance fixture with a deterministic Charles Babbage repo.",
+  "project": "gitpulse",
+  "initiativeId": "INIT-2026-08-31-init-tag-range-filter",
+  "diffStat": "9 files changed, 1412 insertions(+), 15 deletions(-)",
+  "summary": {
+    "bullets": [
+      "New src/tag-range.ts: resolveTagToSha resolves any tag (annotated or lightweight) to its underlying commit SHA via git rev-parse --verify <tag>^{commit}; unknown tags exit 2 with all known tags listed newest-first.",
+      "filterCommitsByTagRange is a pure array slicer (no git spawn): since-tag is the exclusive lower bound, until-tag is the inclusive upper bound; inverted and empty ranges return [] without error.",
+      "resolveEffectiveBounds merges --since-tag with a --since date, picking whichever is narrower and annotating the header with which bound won.",
+      "src/cli.ts wires the two flags through all four paths (single-snapshot, --compare, coupling subcommand, tags subcommand); the tags subcommand explicitly rejects them with exit 2.",
+      "src/format.ts extends text, JSON, and CSV renderers with range annotations that persist even when the filtered commit set is empty.",
+      "test/acceptance/run.ts builds a fresh Charles Babbage fixture repo (annotated v1.0.0 on PRE, lightweight v2.0.0 on INTER-2, POST after) and asserts 7 scenarios end-to-end against the real built dist/cli.js.",
+      "README.md documents --since-tag and --until-tag in the global flags table with exclusive/inclusive boundary rules."
+    ],
+    "branch": "forge/INIT-2026-08-31-init-tag-range-filter",
+    "commitSha": "fcfda6de746a87cd7631962238c5364ac5eb49c4"
+  },
+  "checkpoints": [
+    {
+      "label": "resolveTagToSha: annotated and lightweight tags both return commit SHA",
+      "caption": "git rev-parse --verify <tag>^{commit} unwraps both tag-object and direct-commit refs; the unit tests in test/tag-range.test.ts verify the pure logic, while the acceptance fixture exercises the real git binary.",
+      "kind": "harness",
+      "beforeNote": "No resolveTagToSha existed; callers had to resolve tags manually and could silently get a tag-object SHA instead of a commit SHA, breaking SHA-equality checks.",
+      "afterNote": "resolveTagToSha always returns the underlying commit SHA. For annotated tags (tag-object SHA ≠ commit SHA) and lightweight tags (tag SHA = commit SHA) alike the result is the commit SHA. Unknown tags throw { code: 2, unknownTag, knownTags } with the full sorted known-tag list.",
+      "metrics": [
+        {
+          "label": "test/tag-range.test.ts — filterCommitsByTagRange suite",
+          "before": "file did not exist",
+          "after": "8 test cases: sinceTagSha exclusive + untilTagSha inclusive → [C,D,E]; only sinceTagSha; only untilTagSha; no bounds; inverted range → []; same SHA → []; sinceTagSha not found → no clip; untilTagSha not found → []",
+          "parity": "match"
+        },
+        {
+          "label": "test/tag-range.test.ts — resolveEffectiveBounds suite",
+          "before": "file did not exist",
+          "after": "9 test cases: date narrower than tag → date wins with annotation; tag narrower than date → tag wins; only date; only tag; neither; until-date narrower; until-tag narrower; equal dates → date wins (tie-break)",
+          "parity": "match"
+        }
+      ]
+    },
+    {
+      "label": "CLI single-snapshot path: --since-tag / --until-tag filter and annotate header",
+      "caption": "cli-tag-range.test.ts drives runCli() with injected io (no git spawn) across all renderer variants. The acceptance fixture verifies the same paths against the real built binary.",
+      "kind": "harness",
+      "beforeNote": "gitpulse had no --since-tag / --until-tag flags; passing them would silently be ignored or produce an unknown-flag error.",
+      "afterNote": "Single-snapshot: --since-tag v1.0.0 excludes the tagged commit and all older commits; --until-tag v2.0.0 includes the tagged commit and excludes newer ones; both together define a precise window. The text header carries (range v1.0.0..v2.0.0); JSON gains a top-level range object {sinceTag, untilTag, sinceSha, untilSha}; CSV gains a leading # range: v1.0.0..v2.0.0 (sinceSha:..., untilSha:...) comment line. All three renderers emit the range annotation even when the window yields zero commits.",
+      "metrics": [
+        {
+          "label": "test/cli-tag-range.test.ts — AC1 single-snapshot",
+          "before": "flags did not exist",
+          "after": "3 cases: --since-tag only; --until-tag only; both combined — correct author inclusion/exclusion verified",
+          "parity": "match"
+        },
+        {
+          "label": "test/cli-tag-range.test.ts — AC2 --compare path",
+          "before": "flags did not exist",
+          "after": "both headCommits and baseCommits filtered through filterCommitsByTagRange before computeDelta",
+          "parity": "match"
+        },
+        {
+          "label": "test/cli-tag-range.test.ts — AC3 coupling path",
+          "before": "flags did not exist",
+          "after": "commit array filtered before computeCoupling; fileC from excluded old commit absent from output",
+          "parity": "match"
+        },
+        {
+          "label": "test/cli-tag-range.test.ts — AC4 tags subcommand rejection",
+          "before": "tags subcommand did not validate these flags",
+          "after": "tags --since-tag and tags --until-tag both exit 2 with 'not supported for the tags subcommand' on stderr",
+          "parity": "match"
+        },
+        {
+          "label": "test/cli-tag-range.test.ts — AC5 text range header",
+          "before": "no range annotation in text header",
+          "after": "header includes '(range v1.0.0..v2.0.0)'; partial flags give '(range v1.0.0..)' / '(range ..v2.0.0)'",
+          "parity": "match"
+        },
+        {
+          "label": "test/cli-tag-range.test.ts — AC6 JSON range object",
+          "before": "JSON had no range field",
+          "after": "top-level range: { sinceTag, untilTag, sinceSha, untilSha } all non-empty",
+          "parity": "match"
+        },
+        {
+          "label": "test/cli-tag-range.test.ts — AC7 CSV range comment",
+          "before": "CSV had no range comment",
+          "after": "first line is '# range: v1.0.0..v2.0.0 (sinceSha:..., untilSha:...)'",
+          "parity": "match"
+        },
+        {
+          "label": "test/cli-tag-range.test.ts — AC8 zero-commit range annotation",
+          "before": "n/a",
+          "after": "inverted range → 0 commits; text shows 'No commits found.' with range annotation; JSON has range + totalCommits=0; CSV has range comment — all three renderers emit range even with empty window",
+          "parity": "match"
+        }
+      ]
+    },
+    {
+      "label": "Acceptance fixture: real built CLI against deterministic Charles Babbage repo",
+      "caption": "test/acceptance/run.ts builds a fresh tag-range fixture repo (PRE → v1.0.0 annotated → INTER-1 → INTER-2 → v2.0.0 lightweight → POST) and runs dist/cli.js against it to assert 7 integration scenarios.",
+      "command": "npm run acceptance",
+      "kind": "harness",
+      "beforeNote": "No tag-range acceptance coverage existed; the fixture repo had no v1.0.0 or v2.0.0 tags.",
+      "afterNote": "7 acceptance scenarios pass: (AC1) --since-tag v1.0.0 → 3 commits (INTER-1, INTER-2, POST); (AC2) --since-tag v1.0.0 --until-tag v2.0.0 → 2 commits (INTER-1, INTER-2); (AC3) same + --json → range.sinceSha and range.untilSha match fixture-known SHAs; (AC4) --since-tag v1.0.0 --compare HEAD~2 → delta output correctly filtered; (AC5) inverted --since-tag v2.0.0 --until-tag v1.0.0 → 0 commits with range header; (AC6) tags --since-tag v1.0.0 → exit 2 with rejection; (AC7) --since-tag vNONE → exit 2 listing known tags.",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "\n> gitpulse@0.12.0 acceptance\n> node --import tsx test/acceptance/run.ts\n\nacceptance: PASS — --no-merges flag produced expected sentinels.\nacceptance: PASS — AC4 byte-identical: merge-free fixture output unchanged with --no-merges.\nacceptance: PASS — tags subcommand produced expected sentinels.\nacceptance: PASS — --sort flag ordering verified across text, JSON, CSV, compare, tags.\nacceptance: PASS — coupling subcommand produced expected sentinels.\nacceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.\nacceptance: PASS — --author filter produced expected sentinels (AC1–AC7).\n",
+      "afterOutput": "\n> gitpulse@0.12.0 acceptance\n> node --import tsx test/acceptance/run.ts\n\nacceptance: PASS — --no-merges flag produced expected sentinels.\nacceptance: PASS — AC4 byte-identical: merge-free fixture output unchanged with --no-merges.\nacceptance: PASS — tags subcommand produced expected sentinels.\nacceptance: PASS — --sort flag ordering verified across text, JSON, CSV, compare, tags.\nacceptance: PASS — coupling subcommand produced expected sentinels.\nacceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.\nacceptance: PASS — --author filter produced expected sentinels (AC1–AC7).\nacceptance: PASS — --since-tag / --until-tag tag-range assertions (AC1–AC7) passed.\n"
+    },
+    {
+      "label": "--help and README: flag documentation",
+      "caption": "src/cli.ts USAGE string and README.md flags table both document --since-tag and --until-tag with their exclusive/inclusive boundary semantics.",
+      "kind": "harness",
+      "beforeNote": "--since-tag and --until-tag did not appear in --help or README.",
+      "afterNote": "USAGE string in cli.ts includes both flags with one-line descriptions. README global-flags table has dedicated rows for --since-tag and --until-tag with the exclusive/inclusive rule and composition notes (tags subcommand rejects them; unknown tag exits 2 with known-tag list; inverted range yields zero commits)."
+    }
+  ],
+  "apiDiff": [
+    {
+      "name": "resolveTagToSha (src/git.ts export)",
+      "change": "added",
+      "before": null,
+      "after": "resolveTagToSha(repoPath: string, tag: string): string\n// Uses git rev-parse --verify <tag>^{commit}.\n// Throws { code: 2, unknownTag, knownTags[] } when tag is not found."
+    },
+    {
+      "name": "filterCommitsByTagRange (src/tag-range.ts export)",
+      "change": "added",
+      "before": null,
+      "after": "filterCommitsByTagRange(commits: readonly Commit[], range: TagRangeOptions): Commit[]\n// Pure — no git spawn. sinceTagSha: exclusive lower; untilTagSha: inclusive upper."
+    },
+    {
+      "name": "resolveEffectiveBounds (src/tag-range.ts export)",
+      "change": "added",
+      "before": null,
+      "after": "resolveEffectiveBounds(opts: { sinceDate, untilDate, sinceTag, untilTag, sinceTagSha, untilTagSha, sinceTagCommitDate, untilTagCommitDate }): AppliedBound\n// Returns the narrower of date vs tag bound per dimension, with annotation."
+    },
+    {
+      "name": "TagRangeAnnotation (src/format.ts export)",
+      "change": "added",
+      "before": null,
+      "after": "type TagRangeAnnotation = { sinceTag: string; untilTag: string; sinceSha: string; untilSha: string }"
+    },
+    {
+      "name": "renderSummary opts (src/format.ts)",
+      "change": "changed",
+      "before": "renderSummary(s: Summary, opts?: {}): string",
+      "after": "renderSummary(s: Summary, opts?: { tagRange?: TagRangeAnnotation }): string\n// Header gains ' (range sinceTag..untilTag)' when tagRange is supplied."
+    },
+    {
+      "name": "serializeSummary JSON output",
+      "change": "changed",
+      "before": "{ totalCommits, firstDate, lastDate, byAuthor, ... }",
+      "after": "{ totalCommits, firstDate, lastDate, byAuthor, ..., range?: { sinceTag, untilTag, sinceSha, untilSha } }"
+    },
+    {
+      "name": "renderSummaryCsv CSV output",
+      "change": "changed",
+      "before": "Author,Commits,... header row first",
+      "after": "# range: sinceTag..untilTag (sinceSha:..., untilSha:...) comment line first (when tag range active)"
+    },
+    {
+      "name": "CLI flags (dist/cli.js --help)",
+      "change": "added",
+      "before": "no --since-tag or --until-tag flags",
+      "after": "--since-tag <tag>   only include commits after this tag's commit (exclusive of the tagged commit itself)\n--until-tag <tag>   only include commits up to and including this tag's commit (inclusive)"
+    }
+  ],
+  "testEvidence": [
+    {
+      "name": "test/tag-range.test.ts — filterCommitsByTagRange: sinceTagSha exclusive, untilTagSha inclusive → [C, D, E]",
+      "result": "pass",
+      "delta": "+1 new test (AC3 core)"
+    },
+    {
+      "name": "test/tag-range.test.ts — filterCommitsByTagRange: only sinceTagSha → commits newer than B (exclusive of B)",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/tag-range.test.ts — filterCommitsByTagRange: only untilTagSha → commits from E (inclusive) to oldest",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/tag-range.test.ts — filterCommitsByTagRange: no bounds → all commits",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/tag-range.test.ts — filterCommitsByTagRange: inverted range → empty",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/tag-range.test.ts — filterCommitsByTagRange: sinceTagSha = untilTagSha → empty (since exclusive)",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/tag-range.test.ts — filterCommitsByTagRange: sinceTagSha not in commits → no lower bound applied",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/tag-range.test.ts — filterCommitsByTagRange: untilTagSha not in commits → empty array",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/tag-range.test.ts — filterCommitsByTagRange: empty commits array → empty result",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/tag-range.test.ts — resolveEffectiveBounds: since-date narrower than since-tag → date wins with annotation",
+      "result": "pass",
+      "delta": "+1 new test (AC4)"
+    },
+    {
+      "name": "test/tag-range.test.ts — resolveEffectiveBounds: since-tag narrower than since-date → tag wins with annotation",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/tag-range.test.ts — resolveEffectiveBounds: only since-date given → no annotation",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/tag-range.test.ts — resolveEffectiveBounds: only since-tag given → effective since = tag commit date",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/tag-range.test.ts — resolveEffectiveBounds: neither bound → since null",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/tag-range.test.ts — resolveEffectiveBounds: until-date narrower than until-tag → date wins",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/tag-range.test.ts — resolveEffectiveBounds: until-tag narrower than until-date → tag wins",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/tag-range.test.ts — resolveEffectiveBounds: equal dates → date wins (tie-break)",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/cli-tag-range.test.ts — AC1a: --since-tag v1.0.0 excludes boundary commit and older",
+      "result": "pass",
+      "delta": "+1 new test (WI-2 AC5)"
+    },
+    {
+      "name": "test/cli-tag-range.test.ts — AC1b: --until-tag v2.0.0 excludes newer commits",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/cli-tag-range.test.ts — AC1c: --since-tag + --until-tag combined window",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/cli-tag-range.test.ts — AC2: --compare with --since-tag filters both headCommits and baseCommits",
+      "result": "pass",
+      "delta": "+1 new test (WI-2 AC6)"
+    },
+    {
+      "name": "test/cli-tag-range.test.ts — AC3: coupling --since-tag filters commits before computeCoupling",
+      "result": "pass",
+      "delta": "+1 new test (WI-2 AC7)"
+    },
+    {
+      "name": "test/cli-tag-range.test.ts — AC4: tags --since-tag exits 2 with explicit error message",
+      "result": "pass",
+      "delta": "+1 new test (WI-2 AC8)"
+    },
+    {
+      "name": "test/cli-tag-range.test.ts — AC4b: tags --until-tag exits 2 with explicit error message",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/cli-tag-range.test.ts — AC5: text output header includes range annotation",
+      "result": "pass",
+      "delta": "+1 new test (WI-2 AC9)"
+    },
+    {
+      "name": "test/cli-tag-range.test.ts — AC6: --json output gains top-level range object with sinceSha/untilSha",
+      "result": "pass",
+      "delta": "+1 new test (WI-2 AC10)"
+    },
+    {
+      "name": "test/cli-tag-range.test.ts — AC7: --csv output has range comment line before CSV rows",
+      "result": "pass",
+      "delta": "+1 new test (WI-2 AC11)"
+    },
+    {
+      "name": "test/cli-tag-range.test.ts — AC8a: inverted range in text → 0 commits, range annotation present",
+      "result": "pass",
+      "delta": "+1 new test (WI-2 AC12)"
+    },
+    {
+      "name": "test/cli-tag-range.test.ts — AC8b: inverted range in JSON → totalCommits=0, range key present",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/cli-tag-range.test.ts — AC8c: inverted range in CSV → range comment first line",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/cli-tag-range.test.ts — unknown --since-tag exits 2 with tag name in message",
+      "result": "pass",
+      "delta": "+1 new test"
+    },
+    {
+      "name": "test/acceptance/run.ts — AC1 (WI-3): --since-tag v1.0.0 → 3 commits (INTER-1, INTER-2, POST)",
+      "result": "pass",
+      "delta": "+1 new acceptance assertion"
+    },
+    {
+      "name": "test/acceptance/run.ts — AC2 (WI-3): --since-tag v1.0.0 --until-tag v2.0.0 → 2 commits",
+      "result": "pass",
+      "delta": "+1 new acceptance assertion"
+    },
+    {
+      "name": "test/acceptance/run.ts — AC3 (WI-3): --since-tag --until-tag --json: range.sinceSha and range.untilSha match fixture SHAs",
+      "result": "pass",
+      "delta": "+1 new acceptance assertion"
+    },
+    {
+      "name": "test/acceptance/run.ts — AC4 (WI-3): --since-tag v1.0.0 --compare HEAD~2 → delta correctly filtered",
+      "result": "pass",
+      "delta": "+1 new acceptance assertion"
+    },
+    {
+      "name": "test/acceptance/run.ts — AC5 (WI-3): inverted range → 0 commits, range header present",
+      "result": "pass",
+      "delta": "+1 new acceptance assertion"
+    },
+    {
+      "name": "test/acceptance/run.ts — AC6 (WI-3): tags --since-tag v1.0.0 → exit 2 with rejection message",
+      "result": "pass",
+      "delta": "+1 new acceptance assertion"
+    },
+    {
+      "name": "test/acceptance/run.ts — AC7 (WI-3): --since-tag vNONE → exit 2, output lists known tags",
+      "result": "pass",
+      "delta": "+1 new acceptance assertion"
+    }
+  ],
+  "filesChanged": [
+    {
+      "path": "src/tag-range.ts",
+      "note": "new file — pure tag-range module (filterCommitsByTagRange, resolveEffectiveBounds, resolveTagToSha lives in git.ts)"
+    },
+    {
+      "path": "src/git.ts",
+      "note": "adds resolveTagToSha export using git rev-parse --verify <tag>^{commit}"
+    },
+    {
+      "path": "src/cli.ts",
+      "note": "wires --since-tag / --until-tag through all 4 paths; USAGE string updated; tags subcommand rejects the flags"
+    },
+    {
+      "path": "src/format.ts",
+      "note": "extends renderSummary, serializeSummary, renderSummaryCsv with TagRangeAnnotation; renderDelta / serializeDelta similarly"
+    },
+    {
+      "path": "test/tag-range.test.ts",
+      "note": "new file — 17 unit tests for filterCommitsByTagRange + resolveEffectiveBounds"
+    },
+    {
+      "path": "test/cli-tag-range.test.ts",
+      "note": "new file — 12+ unit tests for CLI wiring (injected io, no git spawn)"
+    },
+    {
+      "path": "test/acceptance/run.ts",
+      "note": "extends acceptance gate with makeTagRangeFixtureRepo() + 7 integration scenarios"
+    },
+    {
+      "path": "README.md",
+      "note": "adds --since-tag and --until-tag rows to the global flags table"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "note": "changelog entry for the tag-range initiative"
+    }
+  ],
+  "usage_example": "# Single-snapshot: commits strictly after v1.0.0 tag\ngitpulse . --since-tag v1.0.0\n\n# Bounded window: commits after v1.0.0 up to and including v2.0.0\ngitpulse . --since-tag v1.0.0 --until-tag v2.0.0\n\n# JSON output with range metadata\ngitpulse . --since-tag v1.0.0 --until-tag v2.0.0 --json\n# → { ..., \"range\": { \"sinceTag\": \"v1.0.0\", \"untilTag\": \"v2.0.0\", \"sinceSha\": \"<sha>\", \"untilSha\": \"<sha>\" } }\n\n# CSV output with range header comment\ngitpulse . --since-tag v1.0.0 --until-tag v2.0.0 --csv\n# → # range: v1.0.0..v2.0.0 (sinceSha:<sha>, untilSha:<sha>)\n# → Author,Commits,...\n\n# Compose with --compare for delta analytics between tag boundaries\ngitpulse . --since-tag v1.0.0 --until-tag v2.0.0 --compare main\n\n# Compose with coupling subcommand\ngitpulse coupling . --since-tag v1.0.0 --until-tag v2.0.0\n\n# Narrow conflicting date and tag bounds — narrower wins with annotation\ngitpulse . --since-tag v1.0.0 --since 2024-03-01",
+  "impact": [
+    "Teams can now scope all gitpulse analytics (summary, compare delta, coupling, ownership, hotspots) to an exact tag-bounded release window — no more manual SHA lookups or imprecise date translations.",
+    "Both annotated and lightweight tags are resolved correctly to the underlying commit SHA, so tag type is transparent to the user.",
+    "An inverted or empty range is graceful: zero commits are returned (not an error), and all three output renderers (text, JSON, CSV) still emit the range annotation so the boundary intent is visible.",
+    "The tags subcommand explicitly rejects --since-tag / --until-tag with exit 2 and a clear message, preventing silent misuse.",
+    "The --since and --since-tag flags compose intelligently: whichever bound is narrower wins, and the header annotation names which bound was applied."
+  ],
+  "acEvaluations": [
+    {
+      "criterion": "GIVEN a repo with an annotated tag v1.0.0 (tag object SHA ≠ commit SHA) and a lightweight tag v2.0.0 (tag SHA = commit SHA) WHEN resolveTagToSha(repoPath, 'v1.0.0') and resolveTagToSha(repoPath, 'v2.0.0') are called THEN both return the underlying commit SHA (via git rev-parse --verify <tag>^{commit}), not the tag-object SHA",
+      "verdict": "met",
+      "evidence": "src/git.ts resolveTagToSha() uses execFileSync('git', ['-C', repoPath, 'rev-parse', '--verify', `${tag}^{commit}`]) which unwraps tag objects to commit SHAs for both annotated and lightweight tags. The acceptance fixture at test/acceptance/run.ts line 395 uses gitOut(['rev-parse', `${TAG_RANGE_SENTINEL_V1}^{commit}`]) to capture v1Sha (annotated) and line 409 for v2Sha (lightweight), then asserts in AC3 that range.sinceSha === capturedV1Sha and range.untilSha === capturedV2Sha."
+    },
+    {
+      "criterion": "GIVEN a repo with tags v1.0.0, v0.9.0, v0.8.0 and no tag v99.0.0 WHEN resolveTagToSha(repoPath, 'v99.0.0') is called THEN it throws an error carrying exit code 2, the unknown tag name verbatim (including dots), and a sorted list of all known tags newest-first (v1.0.0, v0.9.0, v0.8.0)",
+      "verdict": "met",
+      "evidence": "src/git.ts resolveTagToSha() catch block sets err.code = 2, err.unknownTag = tag, err.knownTags = knownTags.map(t => t.name), and the error message includes the verbatim tag name and the sorted list from readTags(). The acceptance test AC7 in run.ts asserts: exit code 2 AND stderr contains TAG_RANGE_SENTINEL_V1 / TAG_RANGE_SENTINEL_V2 AND references 'vNONE'. The cli-tag-range.test.ts 'unknown --since-tag exits 2 with unknown tag name in message' test also asserts result.code === 2 and result.stderr.includes('vNONE')."
+    },
+    {
+      "criterion": "GIVEN a commit sequence [A, B(=v1.0.0), C, D, E(=v2.0.0), F] with resolved SHAs for v1.0.0→B.sha and v2.0.0→E.sha WHEN filterCommitsByTagRange(commits, { sinceTagSha: B.sha, untilTagSha: E.sha }) is called THEN the result contains exactly [C, D, E] — B excluded (since-tag exclusive), E included (until-tag inclusive) — with no git spawn",
+      "verdict": "met",
+      "evidence": "test/tag-range.test.ts test 'filterCommitsByTagRange: sinceTagSha exclusive, untilTagSha inclusive → [C, D, E]' calls filterCommitsByTagRange(COMMITS_FULL, { sinceTagSha: B.hash, untilTagSha: E.hash }) and asserts result.map(c => c.hash) deepEqual [E.hash, D.hash, C.hash] (newest-first within window), plus explicit checks that B and F and A are absent. filterCommitsByTagRange is a pure function in src/tag-range.ts with no execFileSync calls."
+    },
+    {
+      "criterion": "GIVEN commits spanning 2024-01-01 to 2024-06-30, with v1.0.0 pointing at a commit dated 2024-02-15 WHEN --since-tag v1.0.0 and --since 2024-03-01 are both given (date bound is narrower) THEN only commits after 2024-03-01 are returned and the applied bound description names which was narrower",
+      "verdict": "met",
+      "evidence": "test/tag-range.test.ts test 'resolveEffectiveBounds: since-date narrower than since-tag → date wins with annotation' calls resolveEffectiveBounds({ sinceDate: '2024-03-01', sinceTagCommitDate: '2024-02-15', sinceTag: 'v1.0.0', sinceTagSha: 'sha-tag-v1', ... }) and asserts: result.since === '2024-03-01', result.sinceTagSha === null (tag SHA dropped), result.sinceAnnotation includes both '2024-03-01' and 'v1.0.0' and 'narrower'. src/cli.ts calls resolveEffectiveBounds() before filtering to apply whichever bound is narrower."
+    },
+    {
+      "criterion": "GIVEN a repo with tagged boundaries and --since-tag / --until-tag passed to the single-snapshot CLI path WHEN runCli is called with the tag-range flags THEN readCommits output is filtered through filterCommitsByTagRange before summarize is called, and the text header includes the range annotation",
+      "verdict": "met",
+      "evidence": "test/cli-tag-range.test.ts AC1a/AC1b/AC1c assert the correct author inclusion/exclusion (e.g. 'Tag V1 Dev' absent when --since-tag v1.0.0, 'Newest Dev' absent when --until-tag v2.0.0). AC5 asserts result.stdout.includes('(range v1.0.0..v2.0.0)'). src/cli.ts single-snapshot path calls filterCommitsByTagRange(commits, { sinceTagSha, untilTagSha }) before summarize(), and passes tagRange to renderSummary()."
+    },
+    {
+      "criterion": "GIVEN a repo with tagged boundaries and --since-tag / --until-tag passed with --compare <ref> WHEN runCli processes the compare path THEN both headCommits and baseCommits are filtered through filterCommitsByTagRange before summarize is called",
+      "verdict": "met",
+      "evidence": "test/cli-tag-range.test.ts AC2 drives runCli(['--compare', 'v1-branch', '--since-tag', 'v1.0.0', '--until-tag', 'v2.0.0'], io) where io.readCommitsAtRef returns ALL_COMMITS for the base branch. The test asserts exit code 0 and 'delta since' in stdout. src/cli.ts compare path applies filterCommitsByTagRange to both headCommits and baseCommits before computeDelta(). Acceptance AC4 in run.ts further validates the real binary against the fixture repo."
+    },
+    {
+      "criterion": "GIVEN --since-tag / --until-tag passed to the coupling subcommand WHEN runCouplingCli processes the flags THEN the commit array is filtered by filterCommitsByTagRange before computeCoupling is called",
+      "verdict": "met",
+      "evidence": "test/cli-tag-range.test.ts AC3 drives runCli(['coupling', '--since-tag', 'v1.0.0'], io) where io maps v1.0.0 → SHA_OLD (exclusive lower bound), leaving only coupledCommit1 in the window. The test asserts result.stderr === '' and !result.stdout.includes('fileC'), confirming fileC from the excluded old commit is absent. src/cli.ts coupling path calls filterCommitsByTagRange before computeCoupling()."
+    },
+    {
+      "criterion": "GIVEN --since-tag passed to the tags subcommand (gitpulse tags --since-tag v1.0.0) WHEN runCli dispatches to runTagsCli THEN it exits with code 2 and an explicit error message stating that --since-tag/--until-tag are not supported for the tags subcommand",
+      "verdict": "met",
+      "evidence": "test/cli-tag-range.test.ts AC4 asserts result.code === 2 and result.stderr.includes('--since-tag') && result.stderr.includes('not supported for the tags subcommand'). AC4b asserts the same for --until-tag. Acceptance run.ts AC6 asserts the same against the real binary: tagsWithSinceTag.status === 2 and stderr includes 'not supported' or 'rejected' or 'since-tag'."
+    },
+    {
+      "criterion": "GIVEN --since-tag v1.0.0 --until-tag v2.0.0 with commits in the window WHEN the report is rendered as text THEN the header includes '(range v1.0.0..v2.0.0)'",
+      "verdict": "met",
+      "evidence": "test/cli-tag-range.test.ts AC5 asserts result.stdout.includes('(range v1.0.0..v2.0.0)'). src/format.ts renderSummary() appends ` (range ${tagRange.sinceTag}..${tagRange.untilTag})` to the header when opts.tagRange is supplied. The acceptance fixture AC1 and AC2 in run.ts also assert the range annotation in the real CLI output."
+    },
+    {
+      "criterion": "GIVEN --since-tag v1.0.0 --until-tag v2.0.0 with commits in the window WHEN the report is rendered with --json THEN the JSON output gains a top-level range object with sinceTag, untilTag, sinceSha, untilSha all non-empty",
+      "verdict": "met",
+      "evidence": "test/cli-tag-range.test.ts AC6 parses JSON.parse(result.stdout) and asserts: 'range' in parsed, range.sinceTag === 'v1.0.0', range.untilTag === 'v2.0.0', range.sinceSha === SHA_V1, range.untilSha === SHA_V2. Acceptance run.ts AC3 validates range.sinceSha === capturedV1Sha and range.untilSha === capturedV2Sha against the fixture's real commit SHAs."
+    },
+    {
+      "criterion": "GIVEN --since-tag v1.0.0 --until-tag v2.0.0 with commits in the window WHEN the report is rendered with --csv THEN a '# range: v1.0.0..v2.0.0 (sinceSha:..., untilSha:...)' header comment line appears before the CSV rows",
+      "verdict": "met",
+      "evidence": "test/cli-tag-range.test.ts AC7 asserts firstLine.startsWith('# range: v1.0.0..v2.0.0') and firstLine.includes('sinceSha: ' + SHA_V1) and firstLine.includes('untilSha: ' + SHA_V2). src/format.ts renderSummaryCsv() prepends the comment line when tagRange is supplied."
+    },
+    {
+      "criterion": "GIVEN --since-tag v1.0.0 --until-tag v2.0.0 yields zero commits in the window (inverted or empty range) WHEN rendered in text, JSON, or CSV THEN the range annotation is still present in all three renderers even with zero commits",
+      "verdict": "met",
+      "evidence": "test/cli-tag-range.test.ts AC8a asserts result.stdout.includes('(range v1.0.0..v2.0.0)') and result.stdout.includes('No commits found.') for the inverted-SHA scenario. AC8b asserts 'range' in JSON and totalCommits === 0. AC8c asserts CSV firstLine.startsWith('# range: v1.0.0..v2.0.0'). src/cli.ts computes tagRange before filtering and passes it to renderers regardless of whether the filtered commit array is empty."
+    },
+    {
+      "criterion": "GIVEN the deterministic fixture repo extended with pre-tag commits, an annotated v1.0.0 tag, interstitial commits, a lightweight v2.0.0 tag, and post-tag commits — all with fixed GIT_AUTHOR_DATE WHEN npm run acceptance is executed THEN --since-tag v1.0.0 returns only interstitial + post-tag commits (not the v1.0.0 tagged commit)",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC1: sinceV1Out = runCli([tagRangeRepo, '--since-tag', TAG_RANGE_SENTINEL_V1]); assert.match(sinceV1Out, /^gitpulse — 3 commits/); assert.match(sinceV1Out, /Charles Babbage/); assert.match(sinceV1Out, /range v1\\.0\\.0\\.\\./). TAG_RANGE_SINCE_V1_COUNT === 3 (INTER-1, INTER-2, POST). The PRE commit (tagged by v1.0.0) is excluded by the exclusive lower bound."
+    },
+    {
+      "criterion": "GIVEN the same fixture repo WHEN --since-tag v1.0.0 --until-tag v2.0.0 is run THEN the result contains exactly the interstitial commits plus the v2.0.0 tagged commit (inclusive), matching the known sentinel count",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC2: untilV2Out = runCli([tagRangeRepo, '--since-tag', TAG_RANGE_SENTINEL_V1, '--until-tag', TAG_RANGE_SENTINEL_V2]); assert.match(untilV2Out, /^gitpulse — 2 commits/); assert.match(untilV2Out, /range v1\\.0\\.0\\.\\.v2\\.0\\.0/). TAG_RANGE_UNTIL_V2_COUNT === 2 (INTER-1 + INTER-2; v2.0.0 is placed on INTER-2 which is the inclusive upper bound; POST is excluded)."
+    },
+    {
+      "criterion": "GIVEN the same fixture repo with --since-tag v1.0.0 --until-tag v2.0.0 --json WHEN npm run acceptance runs the assertion THEN range.sinceSha and range.untilSha in the JSON output match the fixture-known SHAs for v1.0.0 and v2.0.0",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC3: rangeJsonParsed.range.sinceSha === capturedV1Sha (resolved from git rev-parse v1.0.0^{commit} during fixture build) and rangeJsonParsed.range.untilSha === capturedV2Sha. The test verifies that the CLI's SHA resolution round-trips correctly through the JSON renderer."
+    },
+    {
+      "criterion": "GIVEN the same fixture repo with --since-tag v1.0.0 --compare main WHEN npm run acceptance runs the assertion THEN the delta output is correctly filtered (--compare + tag-range composition works)",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC4: compareTagRangeOut = runCli([tagRangeRepo, '--since-tag', TAG_RANGE_SENTINEL_V1, '--compare', compareRef]) where compareRef is HEAD~2 (a ref older than the since-tag boundary). The test asserts compareTagRangeOut.includes('delta since') and compareTagRangeOut.includes('Charles Babbage'), confirming the compare path filtered both headCommits and baseCommits through the tag range before computing the delta."
+    },
+    {
+      "criterion": "GIVEN the same fixture repo with an inverted range --since-tag v2.0.0 --until-tag v1.0.0 WHEN npm run acceptance runs the assertion THEN zero commits are returned and the range header is still present in the output",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC5: invertedOut = runCli([tagRangeRepo, '--since-tag', TAG_RANGE_SENTINEL_V2, '--until-tag', TAG_RANGE_SENTINEL_V1]); assert.match(invertedOut, /^gitpulse — 0 commits/); assert.match(invertedOut, /range v2\\.0\\.0\\.\\.v1\\.0\\.0/). The inverted SHA order causes filterCommitsByTagRange to return [] without error; the range annotation is still passed to the renderer."
+    },
+    {
+      "criterion": "GIVEN tags --since-tag v1.0.0 is run against the fixture repo WHEN npm run acceptance runs the assertion THEN the CLI exits with code 2 and the stderr contains a clear rejection message",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC6: tagsWithSinceTag = runCliFail(['tags', tagRangeRepo, '--since-tag', TAG_RANGE_SENTINEL_V1]); asserts tagsWithSinceTag.status === 2 and tagsWithSinceTag.stderr contains 'not supported' or 'rejected' or 'since-tag'. src/cli.ts tags path checks for sinceTag/untilTag presence and returns { code: 2, stderr: '...' }."
+    },
+    {
+      "criterion": "GIVEN --since-tag vNONE (unknown tag) is run against the fixture repo WHEN npm run acceptance runs the assertion THEN the CLI exits with code 2 and the output lists the fixture's known tags",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts AC7: unknownTag = runCliFail([tagRangeRepo, '--since-tag', 'vNONE']); asserts unknownTag.status === 2, errOut includes TAG_RANGE_SENTINEL_V1 ('v1.0.0') or TAG_RANGE_SENTINEL_V2 ('v2.0.0'), and errOut includes 'vNONE'. resolveTagToSha() in src/git.ts constructs the error message with the verbatim unknown tag name and the sorted known-tag list."
+    },
+    {
+      "criterion": "GIVEN the built gitpulse CLI artifact WHEN gitpulse --help is run (or dist/cli.js --help via node) THEN --since-tag and --until-tag appear in the help output with their descriptions",
+      "verdict": "met",
+      "evidence": "src/cli.ts USAGE string (lines 59–60) includes: '--since-tag <tag>      only include commits after this tag\\'s commit (exclusive of the tagged commit itself)' and '--until-tag <tag>      only include commits up to and including this tag\\'s commit (inclusive)'. The USAGE string is printed to stdout when --help is passed; node dist/cli.js --help will include both flags."
+    },
+    {
+      "criterion": "GIVEN the README file WHEN the global-flags section is read THEN --since-tag and --until-tag are listed in the flag table with the exclusive/inclusive boundary rule stated",
+      "verdict": "met",
+      "evidence": "README.md global flags table includes rows: '| `--since-tag <tag>` | Only include commits after the tagged commit (exclusive of the tag commit itself). Resolved by commit topology... An unknown tag name exits 2 and lists all known tags newest-first. |' and '| `--until-tag <tag>` | Only include commits up to and including the tagged commit (inclusive upper boundary). Resolved by commit topology... An inverted range (`--since-tag` newer than `--until-tag`) yields zero commits (not an error). An unknown tag name exits 2 and lists all known tags newest-first. |'"
+    }
+  ],
+  "capture": {
+    "nonce": "6d8a47062fcce8944e306686baafdb02",
+    "capturedAt": "2026-08-31T22:08:47.861Z"
+  }
+}

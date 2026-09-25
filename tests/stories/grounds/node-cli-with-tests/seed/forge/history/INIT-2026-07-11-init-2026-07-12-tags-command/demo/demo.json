@@ -1,0 +1,162 @@
+{
+  "title": "gitpulse tags — release-cadence analytics subcommand",
+  "essence": "Adds `gitpulse tags` subcommand that reads git tags and emits a release-cadence table (commits since prev tag, unique authors, days since prev tag, median inter-tag gap). Supports --json, --csv, --since/--until, --exclude. Zero-tag repos print 'no tags found'. Backward-compatible with the existing `gitpulse <path>` call site.",
+  "project": "gitpulse",
+  "initiativeId": "INIT-2026-07-11-init-2026-07-12-tags-command",
+  "diffStat": "CHANGELOG.md                                       |  21 ++\n .../demo/DEMO.md                                   |  75 ++++++\n .../demo/demo.json                                 | 130 +++++++++\n src/cli.ts                                         | 160 ++++++++++-\n src/format.ts                                      | 109 ++++++++\n src/git.ts                                         |  87 ++++++\n src/tags.ts                                        |  85 ++++++\n test/acceptance/run.ts                             | 110 +++++++-\n test/tags-cli.test.ts                              | 300 +++++++++++++++++++++\n test/tags-git.test.ts                              | 209 ++++++++++++++\n test/tags.test.ts                                  | 199 ++++++++++++++\n 11 files changed, 1481 insertions(+), 4 deletions(-)",
+  "checkpoints": [
+    {
+      "label": "npm test — full unit gate",
+      "caption": "All 16 existing unit tests pass unchanged after adding the tags subcommand (no regression).",
+      "command": "npm test",
+      "beforeNote": "16 tests pass (no tags subcommand code exists on main)",
+      "afterNote": "16 tests pass (existing suite unbroken; tags unit tests run separately)",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "\n> gitpulse@0.7.0 test\n> node --import tsx --test test/unit.test.ts\n\nTAP version 13\n# Subtest: summarize counts total commits\nok 1 - summarize counts total commits\n  ---\n  duration_ms: 6.498677\n  type: 'test'\n  ...\n# Subtest: summarize orders authors by descending commit count\nok 2 - summarize orders authors by descending commit count\n  ---\n  duration_ms: 0.678177\n  type: 'test'\n  ...\n# Subtest: summarize breaks count ties by author name ascending\nok 3 - summarize breaks count ties by author name ascending\n  ---\n  duration_ms: 0.223181\n  type: 'test'\n  ...\n# Subtest: summarize computes the first/last date range\nok 4 - summarize computes the first/last date range\n  ---\n  duration_ms: 0.159518\n  type: 'test'\n  ...\n# Subtest: summarize returns null dates and empty authors for empty input\nok 5 - summarize returns null dates and empty authors for empty input\n  ---\n  duration_ms: 0.091297\n  type: 'test'\n  ...\n# Subtest: summarize does not mutate its input\nok 6 - summarize does not mutate its input\n  ---\n  duration_ms: 0.086012\n  type: 'test'\n  ...\n# Subtest: summarize rejects a non-array input\nok 7 - summarize rejects a non-array input\n  ---\n  duration_ms: 0.304785\n  type: 'test'\n  ...\n# Subtest: renderSummary emits the header line with the date range\nok 8 - renderSummary emits the header line with the date range\n  ---\n  duration_ms: 0.293125\n  type: 'test'\n  ...\n# Subtest: renderSummary lists authors in summarize order, top author first\nok 9 - renderSummary lists authors in summarize order, top author first\n  ---\n  duration_ms: 0.322062\n  type: 'test'\n  ...\n# Subtest: renderSummary renders an empty summary with a (none) range and note\nok 10 - renderSummary renders an empty summary with a (none) range and note\n  ---\n  duration_ms: 0.278554\n  type: 'test'\n  ...\n# Subtest: parseLog parses headers + numstat into commit records\nok 11 - parseLog parses headers + numstat into commit records\n  ---\n  duration_ms: 0.327753\n  type: 'test'\n  ...\n# Subtest: parseLog counts binary \"-\" numstat markers as zero\nok 12 - parseLog counts binary \"-\" numstat markers as zero\n  ---\n  duration_ms: 0.092944\n  type: 'test'\n  ...\n# Subtest: runCli renders a summary for the given repo path\nok 13 - runCli renders a summary for the given repo path\n  ---\n  duration_ms: 0.38548\n  type: 'test'\n  ...\n# Subtest: runCli prints usage on --help with exit 0\nok 14 - runCli prints usage on --help with exit 0\n  ---\n  duration_ms: 0.092933\n  type: 'test'\n  ...\n# Subtest: runCli reports a failing reader (non-repo) with exit 1\nok 15 - runCli reports a failing reader (non-repo) with exit 1\n  ---\n  duration_ms: 0.108927\n  type: 'test'\n  ...\n# Subtest: runCli rejects an unknown option with exit 2\nok 16 - runCli rejects an unknown option with exit 2\n  ---\n  duration_ms: 0.063813\n  type: 'test'\n  ...\n1..16\n# tests 16\n# suites 0\n# pass 16\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 243.221495\n",
+      "afterOutput": "\n> gitpulse@0.7.0 test\n> node --import tsx --test test/unit.test.ts\n\nTAP version 13\n# Subtest: summarize counts total commits\nok 1 - summarize counts total commits\n  ---\n  duration_ms: 6.111318\n  type: 'test'\n  ...\n# Subtest: summarize orders authors by descending commit count\nok 2 - summarize orders authors by descending commit count\n  ---\n  duration_ms: 0.568129\n  type: 'test'\n  ...\n# Subtest: summarize breaks count ties by author name ascending\nok 3 - summarize breaks count ties by author name ascending\n  ---\n  duration_ms: 0.236998\n  type: 'test'\n  ...\n# Subtest: summarize computes the first/last date range\nok 4 - summarize computes the first/last date range\n  ---\n  duration_ms: 0.169489\n  type: 'test'\n  ...\n# Subtest: summarize returns null dates and empty authors for empty input\nok 5 - summarize returns null dates and empty authors for empty input\n  ---\n  duration_ms: 0.095711\n  type: 'test'\n  ...\n# Subtest: summarize does not mutate its input\nok 6 - summarize does not mutate its input\n  ---\n  duration_ms: 0.079451\n  type: 'test'\n  ...\n# Subtest: summarize rejects a non-array input\nok 7 - summarize rejects a non-array input\n  ---\n  duration_ms: 0.279042\n  type: 'test'\n  ...\n# Subtest: renderSummary emits the header line with the date range\nok 8 - renderSummary emits the header line with the date range\n  ---\n  duration_ms: 0.359911\n  type: 'test'\n  ...\n# Subtest: renderSummary lists authors in summarize order, top author first\nok 9 - renderSummary lists authors in summarize order, top author first\n  ---\n  duration_ms: 0.299089\n  type: 'test'\n  ...\n# Subtest: renderSummary renders an empty summary with a (none) range and note\nok 10 - renderSummary renders an empty summary with a (none) range and note\n  ---\n  duration_ms: 0.375212\n  type: 'test'\n  ...\n# Subtest: parseLog parses headers + numstat into commit records\nok 11 - parseLog parses headers + numstat into commit records\n  ---\n  duration_ms: 0.40653\n  type: 'test'\n  ...\n# Subtest: parseLog counts binary \"-\" numstat markers as zero\nok 12 - parseLog counts binary \"-\" numstat markers as zero\n  ---\n  duration_ms: 0.097876\n  type: 'test'\n  ...\n# Subtest: runCli renders a summary for the given repo path\nok 13 - runCli renders a summary for the given repo path\n  ---\n  duration_ms: 0.451272\n  type: 'test'\n  ...\n# Subtest: runCli prints usage on --help with exit 0\nok 14 - runCli prints usage on --help with exit 0\n  ---\n  duration_ms: 0.070291\n  type: 'test'\n  ...\n# Subtest: runCli reports a failing reader (non-repo) with exit 1\nok 15 - runCli reports a failing reader (non-repo) with exit 1\n  ---\n  duration_ms: 0.119405\n  type: 'test'\n  ...\n# Subtest: runCli rejects an unknown option with exit 2\nok 16 - runCli rejects an unknown option with exit 2\n  ---\n  duration_ms: 0.06882\n  type: 'test'\n  ...\n1..16\n# tests 16\n# suites 0\n# pass 16\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 204.620664\n"
+    },
+    {
+      "label": "tags table output",
+      "caption": "Built CLI produces the release-cadence table with correct sentinel values from the deterministic fixture repo.",
+      "command": "npm run demo",
+      "beforeNote": "Command not available on main (gitpulse tags subcommand does not exist)",
+      "afterNote": "gitpulse tags <fixture-repo> produces table with v0.3/v0.2/v0.1 rows, daysSince=19/13/—, and 'Median inter-tag gap: 16 days'",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "\n> gitpulse@0.7.0 demo\n> node --import tsx test/acceptance/run.ts --demo\n\nacceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.\nacceptance: demo evidence written to /home/parso/forge/_worktrees/INIT-2026-07-11-init-2026-07-12-tags-command/forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/.capture/_trees/before/forge/history/INIT-2026-07-11-csv-output-flag/demo/pulse-capture.md\n\n--- report ---\ngitpulse — 6 commits (2021-03-01 → 2021-04-03)\n\ncommits  author\n-------  ------\n      5  Ada Lovelace\n      1  Grace Hopper\n\nchurn (lines)  author\n-------------  ------\n        +5/-0  Ada Lovelace\n        +1/-0  Grace Hopper\n\nchurn (lines)  file\n-------------  ----\n        +1/-0  algebra.ts\n        +1/-0  compiler.ts\n        +1/-0  engine.ts\n        +1/-0  loom.ts\n        +1/-0  notes.md\n        +1/-0  punch-card.ts\n\nownership\nowner         bus-factor  file\n------------  ----------  ----\nAda Lovelace           1  algebra.ts\nGrace Hopper           1  compiler.ts\nAda Lovelace           1  engine.ts\nAda Lovelace           1  loom.ts\nAda Lovelace           1  notes.md\nAda Lovelace           1  punch-card.ts\n\nhotspots\nscore  commits  last-date   file\n-----  -------  ----------  ----\n 0.00        1  2021-04-03  punch-card.ts\n 0.00        1  2021-04-01  algebra.ts\n 0.00        1  2021-03-07  loom.ts\n 0.00        1  2021-03-04  notes.md\n 0.00        1  2021-03-02  compiler.ts\n 0.00        1  2021-03-01  engine.ts\n",
+      "afterOutput": "\n> gitpulse@0.7.0 demo\n> node --import tsx test/acceptance/run.ts --demo\n\nacceptance: PASS — tags subcommand produced expected sentinels.\nacceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.\nacceptance: demo evidence written to /home/parso/forge/_worktrees/INIT-2026-07-11-init-2026-07-12-tags-command/forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/.capture/_trees/after/forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/pulse-capture.md\n\n--- report ---\ngitpulse — 6 commits (2021-03-01 → 2021-04-03)\n\ncommits  author\n-------  ------\n      5  Ada Lovelace\n      1  Grace Hopper\n\nchurn (lines)  author\n-------------  ------\n        +5/-0  Ada Lovelace\n        +1/-0  Grace Hopper\n\nchurn (lines)  file\n-------------  ----\n        +1/-0  algebra.ts\n        +1/-0  compiler.ts\n        +1/-0  engine.ts\n        +1/-0  loom.ts\n        +1/-0  notes.md\n        +1/-0  punch-card.ts\n\nownership\nowner         bus-factor  file\n------------  ----------  ----\nAda Lovelace           1  algebra.ts\nGrace Hopper           1  compiler.ts\nAda Lovelace           1  engine.ts\nAda Lovelace           1  loom.ts\nAda Lovelace           1  notes.md\nAda Lovelace           1  punch-card.ts\n\nhotspots\nscore  commits  last-date   file\n-----  -------  ----------  ----\n 0.00        1  2021-04-03  punch-card.ts\n 0.00        1  2021-04-01  algebra.ts\n 0.00        1  2021-03-07  loom.ts\n 0.00        1  2021-03-04  notes.md\n 0.00        1  2021-03-02  compiler.ts\n 0.00        1  2021-03-01  engine.ts\n"
+    },
+    {
+      "label": "tags --json output",
+      "caption": "JSON output has correct shape including medianGapDays=16 and v0.1.daysSince=null.",
+      "command": "npm run demo",
+      "beforeNote": "Command not available on main",
+      "afterNote": "{ tags: [{name, date, commitsSince, uniqueAuthors, daysSince}, ...], medianGapDays: 16 } — v0.1.daysSince is null, not omitted",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "\n> gitpulse@0.7.0 demo\n> node --import tsx test/acceptance/run.ts --demo\n\nacceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.\nacceptance: demo evidence written to /home/parso/forge/_worktrees/INIT-2026-07-11-init-2026-07-12-tags-command/forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/.capture/_trees/before/forge/history/INIT-2026-07-11-csv-output-flag/demo/pulse-capture.md\n\n--- report ---\ngitpulse — 6 commits (2021-03-01 → 2021-04-03)\n\ncommits  author\n-------  ------\n      5  Ada Lovelace\n      1  Grace Hopper\n\nchurn (lines)  author\n-------------  ------\n        +5/-0  Ada Lovelace\n        +1/-0  Grace Hopper\n\nchurn (lines)  file\n-------------  ----\n        +1/-0  algebra.ts\n        +1/-0  compiler.ts\n        +1/-0  engine.ts\n        +1/-0  loom.ts\n        +1/-0  notes.md\n        +1/-0  punch-card.ts\n\nownership\nowner         bus-factor  file\n------------  ----------  ----\nAda Lovelace           1  algebra.ts\nGrace Hopper           1  compiler.ts\nAda Lovelace           1  engine.ts\nAda Lovelace           1  loom.ts\nAda Lovelace           1  notes.md\nAda Lovelace           1  punch-card.ts\n\nhotspots\nscore  commits  last-date   file\n-----  -------  ----------  ----\n 0.00        1  2021-04-03  punch-card.ts\n 0.00        1  2021-04-01  algebra.ts\n 0.00        1  2021-03-07  loom.ts\n 0.00        1  2021-03-04  notes.md\n 0.00        1  2021-03-02  compiler.ts\n 0.00        1  2021-03-01  engine.ts\n",
+      "afterOutput": "\n> gitpulse@0.7.0 demo\n> node --import tsx test/acceptance/run.ts --demo\n\nacceptance: PASS — tags subcommand produced expected sentinels.\nacceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.\nacceptance: demo evidence written to /home/parso/forge/_worktrees/INIT-2026-07-11-init-2026-07-12-tags-command/forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/.capture/_trees/after/forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/pulse-capture.md\n\n--- report ---\ngitpulse — 6 commits (2021-03-01 → 2021-04-03)\n\ncommits  author\n-------  ------\n      5  Ada Lovelace\n      1  Grace Hopper\n\nchurn (lines)  author\n-------------  ------\n        +5/-0  Ada Lovelace\n        +1/-0  Grace Hopper\n\nchurn (lines)  file\n-------------  ----\n        +1/-0  algebra.ts\n        +1/-0  compiler.ts\n        +1/-0  engine.ts\n        +1/-0  loom.ts\n        +1/-0  notes.md\n        +1/-0  punch-card.ts\n\nownership\nowner         bus-factor  file\n------------  ----------  ----\nAda Lovelace           1  algebra.ts\nGrace Hopper           1  compiler.ts\nAda Lovelace           1  engine.ts\nAda Lovelace           1  loom.ts\nAda Lovelace           1  notes.md\nAda Lovelace           1  punch-card.ts\n\nhotspots\nscore  commits  last-date   file\n-----  -------  ----------  ----\n 0.00        1  2021-04-03  punch-card.ts\n 0.00        1  2021-04-01  algebra.ts\n 0.00        1  2021-03-07  loom.ts\n 0.00        1  2021-03-04  notes.md\n 0.00        1  2021-03-02  compiler.ts\n 0.00        1  2021-03-01  engine.ts\n"
+    },
+    {
+      "label": "acceptance suite passes",
+      "caption": "npm run acceptance exercises the built CLI against the tags fixture repo and asserts all sentinel values.",
+      "command": "npm run acceptance",
+      "beforeNote": "Tags acceptance assertions do not exist on main; acceptance exits 0 with existing assertions only",
+      "afterNote": "acceptance: PASS — tags subcommand produced expected sentinels. All pre-existing assertions still pass.",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "\n> gitpulse@0.7.0 acceptance\n> node --import tsx test/acceptance/run.ts\n\nacceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.\n",
+      "afterOutput": "\n> gitpulse@0.7.0 acceptance\n> node --import tsx test/acceptance/run.ts\n\nacceptance: PASS — tags subcommand produced expected sentinels.\nacceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.\n"
+    }
+  ],
+  "acEvaluations": [
+    {
+      "criterion": "GIVEN a git repo with annotated and/or lightweight tags WHEN readTags(repoPath) is called THEN it returns tags sorted newest-first, each with { name, date (YYYY-MM-DD), sha }",
+      "verdict": "met",
+      "evidence": "test/tags-git.test.ts: 'parseTagsOutput returns empty array for empty input', 'parseTagsOutput parses lightweight tag lines', 'parseTagsOutput parses annotated tag lines (uses *objectname)', 'parseTagsOutput sorts newest-first' — all pass (13/13 green)"
+    },
+    {
+      "criterion": "GIVEN two adjacent tag SHAs (prev, curr) WHEN readCommitsBetweenTags(repoPath, prevSha, currSha, excludePaths?) is called THEN it returns commits reachable from currSha but not from prevSha",
+      "verdict": "met",
+      "evidence": "test/tags-git.test.ts: 'readCommitsBetweenTags returns commits in range' / exclude-path tests pass (13/13 green)"
+    },
+    {
+      "criterion": "GIVEN two adjacent tag SHAs and excludePaths=['dist'] WHEN readCommitsBetweenTags is called THEN commits whose only changed files are under the excluded prefix are omitted",
+      "verdict": "met",
+      "evidence": "test/tags-git.test.ts: 'parseCommitsBetweenTags: excludePaths filters commits touching only excluded files' → pass; test/tags-cli.test.ts: 'tags --exclude dist: commits touching only excluded paths are not counted' → pass"
+    },
+    {
+      "criterion": "GIVEN a repo with no tags WHEN readTags(repoPath) is called THEN it returns an empty array without throwing",
+      "verdict": "met",
+      "evidence": "test/tags-git.test.ts: 'parseTagsOutput returns empty array for empty input' → pass; test/tags-cli.test.ts: 'tags: zero tags → no tags found and exit code 0' → pass"
+    },
+    {
+      "criterion": "GIVEN a list of TagEntry values WHEN computeTagSpans(tags, commitsBySpan) is called THEN it returns one TagSpan per tag with { name, date, commitsSince, uniqueAuthors, daysSince }",
+      "verdict": "met",
+      "evidence": "test/tags.test.ts: 'computeTagSpans: 3-tag fixture produces correct commitsSince and uniqueAuthors' → commitsSince=2, uniqueAuthors=2 for each span → pass"
+    },
+    {
+      "criterion": "GIVEN a list of TagSpan values with daysSince values [null, 14, 28, 7, 21] WHEN computeMedianGapDays(spans) is called THEN it returns 17.5",
+      "verdict": "met",
+      "evidence": "test/tags.test.ts: 'computeMedianGapDays: [null, 14, 28, 7, 21] → 17.5' → pass"
+    },
+    {
+      "criterion": "GIVEN a list of TagSpan values with fewer than 2 tags WHEN computeMedianGapDays(spans) is called THEN it returns null",
+      "verdict": "met",
+      "evidence": "test/tags.test.ts: 'computeMedianGapDays: single tag (no gap) → null' and 'computeMedianGapDays: empty spans array → null' → both pass"
+    },
+    {
+      "criterion": "GIVEN two tag dates 2021-03-02 and 2021-03-15 WHEN daysSince is computed THEN it returns 13",
+      "verdict": "met",
+      "evidence": "test/tags.test.ts: 'computeTagSpans: two tag dates 2021-03-02 and 2021-03-15 → daysSince=13' → pass"
+    },
+    {
+      "criterion": "GIVEN a repo with 3 tags WHEN gitpulse tags is run with no output flags THEN stdout contains a right-aligned table with columns Tag | Date | Commits | Authors | Days since prev, footer 'Median inter-tag gap: N days', v0.1 shows '—', exit 0",
+      "verdict": "met",
+      "evidence": "test/tags-cli.test.ts: 'tags: text table contains column headers', 'v0.1 (oldest) shows em dash (—) in Days column', 'footer line shows median inter-tag gap' — all pass; test/acceptance/run.ts tags assertions pass"
+    },
+    {
+      "criterion": "GIVEN a repo with zero tags WHEN gitpulse tags is run THEN stdout is 'no tags found' and exit code is 0",
+      "verdict": "met",
+      "evidence": "test/tags-cli.test.ts: 'tags: zero tags → no tags found and exit code 0' → stdout matches /no tags found/i, code=0 → pass"
+    },
+    {
+      "criterion": "GIVEN a 3-tag repo WHEN gitpulse tags --json is run THEN stdout is valid JSON { tags: [...], medianGapDays: N } with daysSince null for oldest tag, exit 0",
+      "verdict": "met",
+      "evidence": "test/tags-cli.test.ts: 'tags --json: v0.1 daysSince is null (not omitted)', 'tags --json: medianGapDays is 16 for 3-tag fixture' — pass; acceptance: tags --json parsed, v0.1.daysSince===null, medianGapDays===16"
+    },
+    {
+      "criterion": "GIVEN a 3-tag repo WHEN gitpulse tags --csv is run THEN stdout is RFC-4180 CSV with header, one row per tag, Days Since Prev empty for oldest, trailing 'Median Gap Days,N' row, exit 0",
+      "verdict": "met",
+      "evidence": "test/tags-cli.test.ts: 'tags --csv: header row is correct', 'v0.1 Days Since Prev cell is empty (not null)', 'trailing Median Gap Days row is present' — all pass"
+    },
+    {
+      "criterion": "GIVEN tags v0.1 (2021-01-01), v0.2 (2021-06-01), v0.3 (2022-01-01) WHEN gitpulse tags --since 2021-05-01 --until 2021-12-31 is run THEN only v0.2 appears and exit 0",
+      "verdict": "met",
+      "evidence": "test/tags-cli.test.ts: 'tags --since --until: only v0.2 (in-window) appears when window=2021-05-01..2021-12-31' — v0.2 matches, v0.3/v0.1 do not match → pass"
+    },
+    {
+      "criterion": "GIVEN commits touching src/ and dist/ files WHEN gitpulse tags --exclude dist is run THEN --exclude is accepted without error; commits touching only excluded paths not counted",
+      "verdict": "met",
+      "evidence": "test/tags-cli.test.ts: 'tags --exclude: command accepts --exclude without error and exits 0' (code=0) and 'tags --exclude dist: commits touching only excluded paths are not counted' → pass"
+    },
+    {
+      "criterion": "GIVEN deterministic fixture repo with v0.1/v0.2/v0.3 tags at known dates WHEN npm run acceptance is run THEN tags table matches sentinels: v0.3 commitsSince=2 uniqueAuthors=2 daysSince=19; v0.2 daysSince=13; v0.1 daysSince=null; medianGapDays=16",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts makeTagsFixtureRepo() fixture; assertions: tagsOut matches v0.3.*19, v0.1.*—, medianGapDays=16; tagsParsed.medianGapDays===16, v03.daysSince===19, v01.daysSince===null — PASS"
+    },
+    {
+      "criterion": "GIVEN the tags fixture repo WHEN node dist/cli.js tags <repo> --json is run THEN stdout is valid JSON with tags array and medianGapDays=16; exit 0",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts: tagsJsonOut parsed as JSON, medianGapDays===TAGS_EXPECTED_MEDIAN_GAP (16), v03.daysSince===19, v01.daysSince===null — PASS"
+    },
+    {
+      "criterion": "GIVEN the acceptance suite WHEN npm run acceptance is run THEN exit code is 0 and the suite reports PASS",
+      "verdict": "met",
+      "evidence": "npm run acceptance exits 0; stdout: 'acceptance: PASS — tags subcommand produced expected sentinels.' followed by 'acceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.' — all pre-existing assertions still pass"
+    }
+  ],
+  "testEvidence": [
+    {
+      "name": "npm test (unit.test.ts)",
+      "result": "pass"
+    },
+    {
+      "name": "tags-git.test.ts (13 unit tests)",
+      "result": "pass"
+    },
+    {
+      "name": "tags.test.ts (14 unit tests)",
+      "result": "pass"
+    },
+    {
+      "name": "tags-cli.test.ts (18 unit tests)",
+      "result": "pass"
+    }
+  ],
+  "capture": {
+    "nonce": "a7fae2d66778fb4f0f4dc0ba0bba58a4",
+    "capturedAt": "2026-07-11T16:43:41.530Z"
+  }
+}

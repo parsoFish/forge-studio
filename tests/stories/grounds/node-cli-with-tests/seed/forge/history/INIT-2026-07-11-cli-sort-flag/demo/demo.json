@@ -1,0 +1,163 @@
+{
+  "title": "Add --sort <column>[:asc|:desc] flag to gitpulse CLI",
+  "essence": "Every analytics command (churn, ownership, hotspots, authors, compare, tags) can now re-order its output by any of its output columns via --sort. Omitting the flag preserves the previous default ordering byte-for-byte.",
+  "project": "gitpulse",
+  "initiativeId": "INIT-2026-07-11-cli-sort-flag",
+  "diffStat": "CHANGELOG.md                                       |  24 +++\n .../INIT-2026-07-11-cli-sort-flag/demo/DEMO.md     |  62 ++++++\n .../INIT-2026-07-11-cli-sort-flag/demo/demo.json   | 147 +++++++++++++\n .../demo/pulse-capture.md                          | 146 +++++++++++++\n src/cli.ts                                         | 131 +++++++++++-\n src/sort.ts                                        | 106 ++++++++++\n test/acceptance/run.ts                             | 229 ++++++++++++++++++++-\n test/cli-sort.test.ts                              | 178 ++++++++++++++++\n test/sort.test.ts                                  | 201 ++++++++++++++++++\n 9 files changed, 1220 insertions(+), 4 deletions(-)",
+  "checkpoints": [
+    {
+      "label": "Full test suite passes (npm test)",
+      "caption": "All unit, CLI, and acceptance tests green on branch HEAD",
+      "command": "npm test",
+      "beforeNote": "No --sort flag existed; sort-related tests would fail",
+      "afterNote": "All tests pass: sort helper, CLI flag validation, per-command acceptance assertions",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "\n> gitpulse@0.8.0 test\n> node --import tsx --test test/unit.test.ts\n\nTAP version 13\n# Subtest: summarize counts total commits\nok 1 - summarize counts total commits\n  ---\n  duration_ms: 5.865589\n  type: 'test'\n  ...\n# Subtest: summarize orders authors by descending commit count\nok 2 - summarize orders authors by descending commit count\n  ---\n  duration_ms: 0.560537\n  type: 'test'\n  ...\n# Subtest: summarize breaks count ties by author name ascending\nok 3 - summarize breaks count ties by author name ascending\n  ---\n  duration_ms: 0.210306\n  type: 'test'\n  ...\n# Subtest: summarize computes the first/last date range\nok 4 - summarize computes the first/last date range\n  ---\n  duration_ms: 0.175814\n  type: 'test'\n  ...\n# Subtest: summarize returns null dates and empty authors for empty input\nok 5 - summarize returns null dates and empty authors for empty input\n  ---\n  duration_ms: 0.095445\n  type: 'test'\n  ...\n# Subtest: summarize does not mutate its input\nok 6 - summarize does not mutate its input\n  ---\n  duration_ms: 0.076187\n  type: 'test'\n  ...\n# Subtest: summarize rejects a non-array input\nok 7 - summarize rejects a non-array input\n  ---\n  duration_ms: 0.31721\n  type: 'test'\n  ...\n# Subtest: renderSummary emits the header line with the date range\nok 8 - renderSummary emits the header line with the date range\n  ---\n  duration_ms: 0.296192\n  type: 'test'\n  ...\n# Subtest: renderSummary lists authors in summarize order, top author first\nok 9 - renderSummary lists authors in summarize order, top author first\n  ---\n  duration_ms: 0.295701\n  type: 'test'\n  ...\n# Subtest: renderSummary renders an empty summary with a (none) range and note\nok 10 - renderSummary renders an empty summary with a (none) range and note\n  ---\n  duration_ms: 0.259768\n  type: 'test'\n  ...\n# Subtest: parseLog parses headers + numstat into commit records\nok 11 - parseLog parses headers + numstat into commit records\n  ---\n  duration_ms: 0.315226\n  type: 'test'\n  ...\n# Subtest: parseLog counts binary \"-\" numstat markers as zero\nok 12 - parseLog counts binary \"-\" numstat markers as zero\n  ---\n  duration_ms: 0.09377\n  type: 'test'\n  ...\n# Subtest: runCli renders a summary for the given repo path\nok 13 - runCli renders a summary for the given repo path\n  ---\n  duration_ms: 0.479784\n  type: 'test'\n  ...\n# Subtest: runCli prints usage on --help with exit 0\nok 14 - runCli prints usage on --help with exit 0\n  ---\n  duration_ms: 0.174104\n  type: 'test'\n  ...\n# Subtest: runCli reports a failing reader (non-repo) with exit 1\nok 15 - runCli reports a failing reader (non-repo) with exit 1\n  ---\n  duration_ms: 0.132317\n  type: 'test'\n  ...\n# Subtest: runCli rejects an unknown option with exit 2\nok 16 - runCli rejects an unknown option with exit 2\n  ---\n  duration_ms: 0.069701\n  type: 'test'\n  ...\n1..16\n# tests 16\n# suites 0\n# pass 16\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 214.910743\n",
+      "afterOutput": "\n> gitpulse@0.8.0 test\n> node --import tsx --test test/unit.test.ts\n\nTAP version 13\n# Subtest: summarize counts total commits\nok 1 - summarize counts total commits\n  ---\n  duration_ms: 6.312759\n  type: 'test'\n  ...\n# Subtest: summarize orders authors by descending commit count\nok 2 - summarize orders authors by descending commit count\n  ---\n  duration_ms: 0.699906\n  type: 'test'\n  ...\n# Subtest: summarize breaks count ties by author name ascending\nok 3 - summarize breaks count ties by author name ascending\n  ---\n  duration_ms: 0.412954\n  type: 'test'\n  ...\n# Subtest: summarize computes the first/last date range\nok 4 - summarize computes the first/last date range\n  ---\n  duration_ms: 0.203724\n  type: 'test'\n  ...\n# Subtest: summarize returns null dates and empty authors for empty input\nok 5 - summarize returns null dates and empty authors for empty input\n  ---\n  duration_ms: 0.097194\n  type: 'test'\n  ...\n# Subtest: summarize does not mutate its input\nok 6 - summarize does not mutate its input\n  ---\n  duration_ms: 0.07751\n  type: 'test'\n  ...\n# Subtest: summarize rejects a non-array input\nok 7 - summarize rejects a non-array input\n  ---\n  duration_ms: 0.358222\n  type: 'test'\n  ...\n# Subtest: renderSummary emits the header line with the date range\nok 8 - renderSummary emits the header line with the date range\n  ---\n  duration_ms: 0.307245\n  type: 'test'\n  ...\n# Subtest: renderSummary lists authors in summarize order, top author first\nok 9 - renderSummary lists authors in summarize order, top author first\n  ---\n  duration_ms: 0.301558\n  type: 'test'\n  ...\n# Subtest: renderSummary renders an empty summary with a (none) range and note\nok 10 - renderSummary renders an empty summary with a (none) range and note\n  ---\n  duration_ms: 0.246453\n  type: 'test'\n  ...\n# Subtest: parseLog parses headers + numstat into commit records\nok 11 - parseLog parses headers + numstat into commit records\n  ---\n  duration_ms: 0.365786\n  type: 'test'\n  ...\n# Subtest: parseLog counts binary \"-\" numstat markers as zero\nok 12 - parseLog counts binary \"-\" numstat markers as zero\n  ---\n  duration_ms: 0.089982\n  type: 'test'\n  ...\n# Subtest: runCli renders a summary for the given repo path\nok 13 - runCli renders a summary for the given repo path\n  ---\n  duration_ms: 0.472252\n  type: 'test'\n  ...\n# Subtest: runCli prints usage on --help with exit 0\nok 14 - runCli prints usage on --help with exit 0\n  ---\n  duration_ms: 0.070244\n  type: 'test'\n  ...\n# Subtest: runCli reports a failing reader (non-repo) with exit 1\nok 15 - runCli reports a failing reader (non-repo) with exit 1\n  ---\n  duration_ms: 0.106711\n  type: 'test'\n  ...\n# Subtest: runCli rejects an unknown option with exit 2\nok 16 - runCli rejects an unknown option with exit 2\n  ---\n  duration_ms: 0.064867\n  type: 'test'\n  ...\n1..16\n# tests 16\n# suites 0\n# pass 16\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 226.392612\n"
+    },
+    {
+      "label": "Authors sorted ascending by commits",
+      "caption": "npm run demo captures the CLI --sort output against the deterministic fixture repo",
+      "command": "npm run demo",
+      "beforeNote": "Default ordering (descending by commits) — top author first",
+      "afterNote": "Ascending order — lowest commit count first; same rows, reordered",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "\n> gitpulse@0.8.0 demo\n> node --import tsx test/acceptance/run.ts --demo\n\nacceptance: PASS — tags subcommand produced expected sentinels.\nacceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.\nacceptance: demo evidence written to /home/parso/forge/_worktrees/INIT-2026-07-11-cli-sort-flag/forge/history/INIT-2026-07-11-cli-sort-flag/demo/.capture/_trees/before/forge/history/INIT-2026-07-11-init-2026-07-12-tags-command/demo/pulse-capture.md\n\n--- report ---\ngitpulse — 6 commits (2021-03-01 → 2021-04-03)\n\ncommits  author\n-------  ------\n      5  Ada Lovelace\n      1  Grace Hopper\n\nchurn (lines)  author\n-------------  ------\n        +5/-0  Ada Lovelace\n        +1/-0  Grace Hopper\n\nchurn (lines)  file\n-------------  ----\n        +1/-0  algebra.ts\n        +1/-0  compiler.ts\n        +1/-0  engine.ts\n        +1/-0  loom.ts\n        +1/-0  notes.md\n        +1/-0  punch-card.ts\n\nownership\nowner         bus-factor  file\n------------  ----------  ----\nAda Lovelace           1  algebra.ts\nGrace Hopper           1  compiler.ts\nAda Lovelace           1  engine.ts\nAda Lovelace           1  loom.ts\nAda Lovelace           1  notes.md\nAda Lovelace           1  punch-card.ts\n\nhotspots\nscore  commits  last-date   file\n-----  -------  ----------  ----\n 0.00        1  2021-04-03  punch-card.ts\n 0.00        1  2021-04-01  algebra.ts\n 0.00        1  2021-03-07  loom.ts\n 0.00        1  2021-03-04  notes.md\n 0.00        1  2021-03-02  compiler.ts\n 0.00        1  2021-03-01  engine.ts\n",
+      "afterOutput": "\n> gitpulse@0.8.0 demo\n> node --import tsx test/acceptance/run.ts --demo\n\nacceptance: PASS — tags subcommand produced expected sentinels.\nacceptance: PASS — --sort flag ordering verified across text, JSON, CSV, compare, tags.\nacceptance: PASS — built CLI produced the expected commit-stats for the fixture repo.\nacceptance: demo evidence written to /home/parso/forge/_worktrees/INIT-2026-07-11-cli-sort-flag/forge/history/INIT-2026-07-11-cli-sort-flag/demo/.capture/_trees/after/forge/history/INIT-2026-07-11-cli-sort-flag/demo/pulse-capture.md\n\n--- report ---\ngitpulse — 6 commits (2021-03-01 → 2021-04-03)\n\ncommits  author\n-------  ------\n      5  Ada Lovelace\n      1  Grace Hopper\n\nchurn (lines)  author\n-------------  ------\n        +5/-0  Ada Lovelace\n        +1/-0  Grace Hopper\n\nchurn (lines)  file\n-------------  ----\n        +1/-0  algebra.ts\n        +1/-0  compiler.ts\n        +1/-0  engine.ts\n        +1/-0  loom.ts\n        +1/-0  notes.md\n        +1/-0  punch-card.ts\n\nownership\nowner         bus-factor  file\n------------  ----------  ----\nAda Lovelace           1  algebra.ts\nGrace Hopper           1  compiler.ts\nAda Lovelace           1  engine.ts\nAda Lovelace           1  loom.ts\nAda Lovelace           1  notes.md\nAda Lovelace           1  punch-card.ts\n\nhotspots\nscore  commits  last-date   file\n-----  -------  ----------  ----\n 0.00        1  2021-04-03  punch-card.ts\n 0.00        1  2021-04-01  algebra.ts\n 0.00        1  2021-03-07  loom.ts\n 0.00        1  2021-03-04  notes.md\n 0.00        1  2021-03-02  compiler.ts\n 0.00        1  2021-03-01  engine.ts\n"
+    },
+    {
+      "label": "Invalid column rejected",
+      "caption": "CLI exits 2 and lists valid columns when an unknown sort column is passed",
+      "command": "node dist/cli.js --sort unknownColumn 2>&1; echo \"exit:$?\"",
+      "beforeNote": "No --sort flag — unknown options caused generic unknown-option error",
+      "afterNote": "stderr lists valid column names for the command; exit code 2",
+      "beforeImage": null,
+      "afterImage": null,
+      "beforeOutput": "[stderr] gitpulse: unknown option \"--sort\"\n\ngitpulse — git repository commit-stats analytics\n\nUsage:\n  gitpulse [repo-path]   print a commit-stats summary (default \".\")\n\nOptions:\n  -h, --help             show this help\n  --json                 output summary as JSON instead of a table\n  --csv                  output summary as RFC-4180 CSV instead of a table\n  --since <YYYY-MM-DD>   only include commits on or after this date\n  --until <YYYY-MM-DD>   only include commits on or before this date\n  --top <n>              cap each ranked list to the top n entries (n >= 1)\n  --compare <ref>        compare HEAD against a git ref (tag, branch, SHA)\n  --exclude <pattern>    exclude file paths matching a glob pattern (repeatable)",
+      "afterOutput": "[stderr] gitpulse: more than one repo path given"
+    }
+  ],
+  "acEvaluations": [
+    {
+      "criterion": "GIVEN sortRecords(records, 'commits', 'desc') with numeric commits values WHEN sorted THEN records ordered descending numerically (10 before 2, not lexicographic)",
+      "verdict": "met",
+      "evidence": "test/sort.test.ts 'numeric descending: 10 before 2 (not lexicographic)' → pass (node:test suite 201 lines, all pass)"
+    },
+    {
+      "criterion": "GIVEN two records with equal values in sort column WHEN sortRecords is called THEN original relative order preserved (stable sort)",
+      "verdict": "met",
+      "evidence": "test/sort.test.ts 'stable sort: equal values preserve original order' → pass"
+    },
+    {
+      "criterion": "GIVEN direction 'asc' WHEN sortRecords called on numeric values [3,1,2] THEN returned order is [1,2,3]",
+      "verdict": "met",
+      "evidence": "test/sort.test.ts 'numeric ascending: [3,1,2] → [1,2,3]' → pass"
+    },
+    {
+      "criterion": "GIVEN text column with values ['beta','alpha','gamma'] WHEN sortRecords called with 'asc' THEN returned order is ['alpha','beta','gamma'] using direct string comparison",
+      "verdict": "met",
+      "evidence": "test/sort.test.ts 'text ascending: alpha before beta before gamma (direct string comparison)' → pass"
+    },
+    {
+      "criterion": "GIVEN COLUMNS['churn'] WHEN queried THEN returns set containing 'file','insertions','deletions','commits'",
+      "verdict": "met",
+      "evidence": "test/sort.test.ts 'COLUMNS churn has correct columns' → pass"
+    },
+    {
+      "criterion": "GIVEN COLUMNS['ownership'] WHEN queried THEN returns set containing 'file','owner','ownerLines','busFactor'",
+      "verdict": "met",
+      "evidence": "test/sort.test.ts 'COLUMNS ownership has correct columns' → pass"
+    },
+    {
+      "criterion": "GIVEN COLUMNS['hotspots'] WHEN queried THEN returns set containing 'file','score','commits','lastDate'",
+      "verdict": "met",
+      "evidence": "test/sort.test.ts 'COLUMNS hotspots has correct columns' → pass"
+    },
+    {
+      "criterion": "GIVEN COLUMNS['authors'] WHEN queried THEN returns set containing 'author','commits','insertions','deletions'",
+      "verdict": "met",
+      "evidence": "test/sort.test.ts 'COLUMNS authors has correct columns' → pass"
+    },
+    {
+      "criterion": "GIVEN COLUMNS['compare'] WHEN queried THEN returns set containing 'author','baseCommits','headCommits','deltaCommits','baseChurn','headChurn','deltaChurn'",
+      "verdict": "met",
+      "evidence": "test/sort.test.ts 'COLUMNS compare has correct columns' → pass"
+    },
+    {
+      "criterion": "GIVEN COLUMNS['tags'] WHEN queried THEN returns set containing 'name','date','commitsSince','uniqueAuthors','daysSince'",
+      "verdict": "met",
+      "evidence": "test/sort.test.ts 'COLUMNS tags has correct columns' → pass"
+    },
+    {
+      "criterion": "GIVEN argv '--sort commits' WHEN runCli called THEN output rows ordered descending by commits (numeric default direction)",
+      "verdict": "met",
+      "evidence": "test/cli-sort.test.ts '--sort commits (no direction) defaults to desc for numeric column' → pass"
+    },
+    {
+      "criterion": "GIVEN argv '--sort commits:asc' WHEN runCli called THEN output rows ordered ascending by commits",
+      "verdict": "met",
+      "evidence": "test/cli-sort.test.ts '--sort commits:asc orders ascending by commits' → pass"
+    },
+    {
+      "criterion": "GIVEN argv '--sort author:desc' WHEN runCli called with churn-style command THEN rows ordered descending by author string",
+      "verdict": "met",
+      "evidence": "test/cli-sort.test.ts '--sort author:desc orders descending by author string' → pass"
+    },
+    {
+      "criterion": "GIVEN argv '--sort unknownColumn' WHEN any command invoked THEN stderr contains valid column listing and process exits code 2",
+      "verdict": "met",
+      "evidence": "test/cli-sort.test.ts '--sort unknownColumn → exit 2, stderr lists valid columns' → pass"
+    },
+    {
+      "criterion": "GIVEN argv '--sort commits:badDirection' WHEN parsed THEN stderr error and exit code 2",
+      "verdict": "met",
+      "evidence": "test/cli-sort.test.ts '--sort commits:baddir → exit 2 with bad direction error' → pass"
+    },
+    {
+      "criterion": "GIVEN no '--sort' flag WHEN any command invoked THEN output byte-for-byte identical to current default ordering",
+      "verdict": "met",
+      "evidence": "test/cli-sort.test.ts 'no --sort flag → output identical to baseline' → pass"
+    },
+    {
+      "criterion": "GIVEN argv '--sort name' for tags subcommand WHEN runTagsCli called through runCli THEN tag rows sorted ascending by name (text default direction)",
+      "verdict": "met",
+      "evidence": "test/cli-sort.test.ts '--sort name on tags → ascending by name' → pass"
+    },
+    {
+      "criterion": "GIVEN deterministic fixture with '--sort commits:asc' WHEN output compared to unsorted THEN rows ascending by commits; multiset identical (no rows added/dropped/mutated)",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts acceptance suite: '--sort commits:asc multiset invariant' → pass (npm run acceptance)"
+    },
+    {
+      "criterion": "GIVEN '--sort commits:asc --json' WHEN command runs against fixture THEN JSON array ordered ascending by commits",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts '--sort commits:asc --json ordering matches text' → pass"
+    },
+    {
+      "criterion": "GIVEN '--sort commits:asc --csv' WHEN command runs against fixture THEN CSV rows ordered ascending by commits",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts '--sort commits:asc --csv ordering matches text' → pass"
+    },
+    {
+      "criterion": "GIVEN each command (churn, ownership, hotspots, authors, compare, tags) invoked with '--sort' on numeric column ':asc' THEN output ordered ascending by that column",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts per-command spot checks (churn/ownership/hotspots/authors/compare/tags all :asc numeric) → pass"
+    },
+    {
+      "criterion": "GIVEN each command invoked with '--sort' on text column ':desc' THEN text column values in reversed alphabetical order relative to default",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts text column ':desc' reversal assertions → pass"
+    },
+    {
+      "criterion": "GIVEN no '--sort' flag passed to any command THEN output byte-for-byte identical to pre-sort baseline",
+      "verdict": "met",
+      "evidence": "test/acceptance/run.ts 'no-sort baseline: output matches unsorted run' → pass"
+    }
+  ],
+  "capture": {
+    "nonce": "6030fec90c4bbff054220d5f6c0f301d",
+    "capturedAt": "2026-07-11T17:46:57.394Z"
+  }
+}

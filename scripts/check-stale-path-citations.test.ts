@@ -303,6 +303,32 @@ describe('path-shaped citations in markdown prose', () => {
     });
   }
 
+  test('a story fixture ground SEED is excluded, prose and code alike — its citations are the source project\'s, not this repo\'s (forge-1rk5.1)', () => {
+    const { root, cleanup } = fixture({
+      'tests/stories/grounds/node-cli-with-tests/seed/README.md': `See packages/ghost/dead-module.ts for details.\n`,
+      'tests/stories/grounds/node-cli-with-tests/seed/test/x.test.ts': `// see packages/ghost/dead-module.ts\nexport const x = 1;\n`,
+    });
+    try {
+      const { code, out } = run(root, noBaseline(root));
+      assert.equal(code, 0, `a vendored seed must not be scanned:\n${out}`);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('POSITIVE CONTROL — a grounds file OUTSIDE seed/ (its PROVENANCE.md) is still scanned', () => {
+    const { root, cleanup } = fixture({
+      'tests/stories/grounds/node-cli-with-tests/PROVENANCE.md': `See packages/ghost/dead-module.ts for details.\n`,
+    });
+    try {
+      const { code, out } = run(root, noBaseline(root));
+      assert.equal(code, 1, out);
+      assert.match(out, /PROVENANCE\.md: NEW/, out);
+    } finally {
+      cleanup();
+    }
+  });
+
   test('QUARRY.md (EXCLUDED_PROSE_FILES) is excluded from prose scanning — dated cap-table history', () => {
     // QUARRY.md's cap-table cells are an append-only log of dated "Raised
     // X -> Y (…)" notes every lane writes into, citing files as they stood
