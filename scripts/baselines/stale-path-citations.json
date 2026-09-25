@@ -6744,78 +6744,6 @@
     "count": 1
   },
   {
-    "file": "QUARRY.md",
-    "kind": "path",
-    "cited": "cli/bridge-studio-affordances.ts",
-    "count": 1
-  },
-  {
-    "file": "QUARRY.md",
-    "kind": "path",
-    "cited": "cli/dry-bridge.ts",
-    "count": 1
-  },
-  {
-    "file": "QUARRY.md",
-    "kind": "path",
-    "cited": "cli/studio-provenance.ts",
-    "count": 1
-  },
-  {
-    "file": "QUARRY.md",
-    "kind": "path",
-    "cited": "orchestrator/_pkg/contracts.ts",
-    "count": 1
-  },
-  {
-    "file": "QUARRY.md",
-    "kind": "path",
-    "cited": "orchestrator/cli.ts",
-    "count": 1
-  },
-  {
-    "file": "QUARRY.md",
-    "kind": "path",
-    "cited": "orchestrator/phases/demo-fanin-honesty.ts",
-    "count": 1
-  },
-  {
-    "file": "QUARRY.md",
-    "kind": "path",
-    "cited": "orchestrator/project-brain-builder-runner.ts",
-    "count": 1
-  },
-  {
-    "file": "QUARRY.md",
-    "kind": "path",
-    "cited": "orchestrator/studio/registry.ts",
-    "count": 1
-  },
-  {
-    "file": "QUARRY.md",
-    "kind": "path",
-    "cited": "orchestrator/studio/types.ts",
-    "count": 1
-  },
-  {
-    "file": "QUARRY.md",
-    "kind": "path",
-    "cited": "orchestrator/studio/validate.ts",
-    "count": 2
-  },
-  {
-    "file": "QUARRY.md",
-    "kind": "stem",
-    "cited": "demo-agent",
-    "count": 1
-  },
-  {
-    "file": "QUARRY.md",
-    "kind": "stem",
-    "cited": "demo-builder-runner",
-    "count": 1
-  },
-  {
     "file": "README.md",
     "kind": "path",
     "cited": "orchestrator/subsumption-proof.test.ts",
@@ -6909,12 +6837,6 @@
     "file": "scripts/check-request-path-sinks.mjs",
     "kind": "path",
     "cited": "scripts/check-docs-claims.mjs",
-    "count": 1
-  },
-  {
-    "file": "scripts/check-request-path-sinks.test.ts",
-    "kind": "path",
-    "cited": "orchestrator/new-caller.ts",
     "count": 1
   },
   {
