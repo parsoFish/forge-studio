@@ -44,7 +44,7 @@ import {
   GROUND_PIN_ENV,
 } from './preflight.mjs';
 import { ownGroundManifest } from './ground-hash.mjs';
-import { suiteLockVerdict } from './lock-guard.mjs';
+import { suiteLockVerdict, lockOrderVerdict, EXIT_LOCK_REFUSED } from './lock-guard.mjs';
 import { sweepStoryResidue } from './sweep.mjs';
 import { captureAndSweepAgentLogs } from './sweep-agent-logs.mjs';
 import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight } from './sweep-teardown.mjs';
@@ -253,6 +253,17 @@ async function main() {
   const overlap = suiteLockVerdict();
   console.log(`[stories] ${overlap.reason}`);
   if (!overlap.ok) return 1;
+
+  // 1d-ii. THE ORDER ITSELF — finding row 73 (2026-09-19). A launcher that
+  //     holds the run-lock (by ancestry) without ALSO holding the suite-lock is
+  //     exactly the shape that can be waiting for the suite-lock while holding
+  //     the run-lock — the reverse of `with-locks.sh`'s ratified order and the
+  //     deadlock this bead exists to close. Checked here, before any spawn or
+  //     port bind, with the runner's own lock-refusal exit code (75) so a
+  //     refusal is never read as a suite that ran and went red.
+  const order = lockOrderVerdict();
+  console.log(`[stories] ${order.reason}`);
+  if (!order.ok) return EXIT_LOCK_REFUSED;
 
   // 2. Memory — a starved host OOM-kills the browser and the crash reads as a
   //    code defect.
