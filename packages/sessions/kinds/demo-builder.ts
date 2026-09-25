@@ -64,7 +64,7 @@ import {
   readAnswersBody,
   type AffordanceRouteContext,
 } from '../bridge-studio-sessions-affordance-shell.ts';
-import { ensureStudioBranch, commitStudioChange } from '@forge/projects/project-repo-tx.ts';
+import { ensureStudioBranch, commitStudioChange } from '@forge/projects';
 import { modelForSpec } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { skillPathRelative, SLUG_RE } from '@forge/agents/skill-path.ts';

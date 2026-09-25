@@ -26,7 +26,7 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { runPreflight } from '@forge/projects/preflight.ts';
+import { runPreflight } from '@forge/projects';
 import { loadFlowDefinition } from './studio/flow-registry.ts';
 import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
 import { validateFlow } from './studio/validate-flow.ts';

@@ -32,7 +32,7 @@ import {
   stripComposedSeedsFooter,
 } from '@forge/library';
 import { listInstructionSeeds } from '@forge/library';
-import { loadProjectConfig } from '@forge/projects/project-config.ts';
+import { loadProjectConfig } from '@forge/projects';
 import type { InstructionSeed } from '@forge/contracts';
 
 export type ComposeAgentsMdResult = {

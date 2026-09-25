@@ -50,7 +50,7 @@ import { topologicalOrder, writeWorkItem, writeWorkItemStatus, type WorkItem } f
 import { run as runRalph, type AgentInvocation } from '@forge/agents/ralph/runner.ts';
 import { runConcurrentDispatch } from '@forge/flows/wi-dispatch-scheduler.ts';
 import { resolveDevWiConcurrency } from '@forge/kernel';
-import { SCRATCH_PATHS } from '@forge/projects/preflight.ts';
+import { SCRATCH_PATHS } from '@forge/projects';
 
 function sh(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, stdio: 'pipe', encoding: 'utf8' });

@@ -79,8 +79,11 @@ function type, never as `import type` of the real implementation's own type.
 `projectsRoutes(deps)` takes them as parameters; `apps/forge/routes.ts` — which
 sits above every package and may import all of them freely — is the one
 assembly point that supplies the real implementations, as an inline object
-literal (not by naming `ProjectsRouteDeps`, which is why that type stays off the
-public door: its only consumer today is this package's own contract test).
+literal (not by naming `ProjectsRouteDeps`). The type moved onto the public door
+in bead `forge-8vfn.5.31`: `apps/forge/dry-bridge.ts` — a route-classification
+probe distinct from `apps/forge/routes.ts`'s inline-literal assembly — names
+`ProjectsRouteDeps` directly, and its deep import repointing to `@forge/projects`
+is the reason the type is exported rather than kept deep.
 
 ## What this package deliberately does not own
 

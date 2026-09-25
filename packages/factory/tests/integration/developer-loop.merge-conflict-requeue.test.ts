@@ -49,7 +49,7 @@ import { run as runRalph, type AgentInvocation } from '@forge/agents/ralph/runne
 import { makeQualityGateFromCmd } from '@forge/agents/ralph/stop-conditions.ts';
 import { runConcurrentDispatch, type DispatchOutcome } from '@forge/flows/wi-dispatch-scheduler.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
-import { SCRATCH_PATHS } from '@forge/projects/preflight.ts';
+import { SCRATCH_PATHS } from '@forge/projects';
 
 const MAX_RETRIES = 1;
 

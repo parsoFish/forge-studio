@@ -127,7 +127,7 @@ import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { skillPathRelative } from '@forge/library';
 import { deriveSessionTranscript, deriveSessionArtifact, safeReadFileInSession, type ParseManifestPort } from './studio/session-transcript.ts';
 import { tryGetKbBackend } from '@forge/knowledge';
-import { deriveContractStages } from '@forge/projects/contract-stages.ts';
+import { deriveContractStages } from '@forge/projects';
 import { deriveSessionLifecycleFor } from './bridge-studio-lifecycle.ts';
 import {
   decodeSegment,

@@ -56,7 +56,7 @@ import { stageFlowRunRequest, drainFlowRunRequests, type FlowRunRequest } from '
 type Resolver = (forgeRoot: string, repo: string) => string | null;
 
 async function loadResolver(): Promise<Resolver | undefined> {
-  const mod = (await import('@forge/projects/project-config.ts')) as unknown as Record<string, unknown>;
+  const mod = (await import('@forge/projects')) as unknown as Record<string, unknown>;
   return mod['resolveProjectIdForRepo'] as Resolver | undefined;
 }
 

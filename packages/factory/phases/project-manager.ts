@@ -27,11 +27,11 @@ import {
   type CouplingPair,
   type WorkItem,
 } from '@forge/flows/work-item.ts';
-import { loadProjectConfig, type ProjectConfig } from '@forge/projects/project-config.ts';
+import { loadProjectConfig, type ProjectConfig } from '@forge/projects';
 import { releaseDraftAcs } from '../release-process.ts';
 import { recordBrainGateResult, type CycleInput } from '@forge/flows/cycle-context.ts';
 import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents/tool-event-emit.ts';
-import { deriveGateRecipe, renderGateRecipeBlock } from '@forge/projects/gate-recipes.ts';
+import { deriveGateRecipe, renderGateRecipeBlock } from '@forge/projects';
 import { runAgent } from '@forge/agents/run-agent.ts';
 import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
 import { skillPath } from '@forge/agents/skill-path.ts';

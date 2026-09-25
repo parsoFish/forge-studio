@@ -60,7 +60,7 @@ import { validateSessionKinds } from '@forge/sessions/studio/session-kinds-valid
 import { validateAgent } from '@forge/agents/studio/validate-agent.ts';
 import { validateArtifactRef, validateFlow } from '@forge/flows/studio/validate-flow.ts';
 import { validateKb } from '@forge/knowledge';
-import { validateDiscoveredProjects } from '@forge/projects/studio/validate-project.ts';
+import { validateDiscoveredProjects } from '@forge/projects';
 import { validateLibraryFlag } from '@forge/library';
 import type { Finding } from '@forge/kernel';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';

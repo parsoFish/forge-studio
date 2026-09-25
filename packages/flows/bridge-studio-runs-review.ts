@@ -21,7 +21,7 @@ import { loadConfig, resolveReviewLoopCaps, sendJson, allowedOrigin, type Studio
 import { notify } from './notify.ts';
 import { writeVerdictJson } from './flow-artifacts.ts';
 import { createLogger, type EventLogger } from '@forge/kernel';
-import { loadProjectConfig } from '@forge/projects/project-config.ts';
+import { loadProjectConfig } from '@forge/projects';
 import { isContainedWorktreePath, isContainedProjectRepoPath, isSafeCycleId } from './manifest-path-guard.ts';
 import { isDryBridge, emitDryBridgeSkip, type DryBridgeStubAction } from '@forge/kernel';
 

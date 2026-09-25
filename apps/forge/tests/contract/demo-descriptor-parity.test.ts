@@ -22,7 +22,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { checkDemo } from '@forge/projects/preflight.ts';
+import { checkDemo } from '@forge/projects/testing';
 import { demoTaskLines } from '@forge/sessions/kinds/demo-generate.ts';
 import type { DemoBuilderStatus } from '@forge/sessions/kinds/demo-session-store.ts';
 import { deriveDemoModel } from '@forge/factory/phases/derive-demo-model.ts';

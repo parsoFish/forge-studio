@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import type { EventLogger } from '@forge/kernel';
 import { parseManifest } from '@forge/flows/manifest.ts';
 import { FORGE_ROOT } from '@forge/agents/skill-path.ts';
-import { runPreflight } from '@forge/projects/preflight.ts';
+import { runPreflight } from '@forge/projects';
 import type { ProjectGate } from '@forge/kernel';
 import { type ClosureResult, type CycleInput, type ReviewerOutcome } from '@forge/flows/cycle-context.ts';
 import { WedgeDetector, WedgeKillError } from '@forge/flows/flow-budgets.ts';

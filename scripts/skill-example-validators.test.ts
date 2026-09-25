@@ -63,7 +63,7 @@ import { fileURLToPath } from 'node:url';
 import { parseWorkItem, validateWorkItem } from '@forge/flows/work-item.ts';
 import { validateReviewFindings } from '@forge/flows/flow-artifacts.ts';
 import { lintThemeFiles, type Finding } from '@forge/knowledge';
-import { parseSkills } from '@forge/projects/project-config-validate.ts';
+import { parseSkills } from '@forge/projects/testing';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 

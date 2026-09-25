@@ -39,7 +39,7 @@ import {
   selectorMatches,
   type ConstraintBlock,
   type ConstraintMatchContext,
-} from '@forge/projects/constraint-blocks.ts';
+} from '@forge/projects';
 import { isIgnoredPathFor } from './gitignored-creates.ts';
 import { ralphSpecLintWorkItems } from './ralph-spec-lint.ts';
 

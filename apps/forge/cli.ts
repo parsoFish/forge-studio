@@ -24,19 +24,19 @@ import { loadBrainIndex, regenerateBrainIndex } from '@forge/knowledge';
 import { cmdBrainLint } from './cli-brain-lint.ts';
 import { cmdGate } from './cli-gate.ts';
 import { runStudioLint } from './studio-lint.ts';
-import { runPreflight, formatPreflightReport, buildVerdictEvent } from '@forge/projects/preflight.ts';
-import { runContractComplianceLoop, formatComplianceReport } from '@forge/projects/contract-compliance-loop.ts';
+import { runPreflight, formatPreflightReport, buildVerdictEvent } from '@forge/projects';
+import { runContractComplianceLoop, formatComplianceReport } from '@forge/projects';
 import { composeAgentsMd } from '@forge/agents/agents-md-compose.ts';
-import { authorConstraintBlocks } from '@forge/projects/constraint-author.ts';
-import { scaffoldGreenfieldProject, listProjectStarters, type ScaffoldResult } from '@forge/projects/project-create.ts';
+import { authorConstraintBlocks } from '@forge/projects';
+import { scaffoldGreenfieldProject, listProjectStarters, type ScaffoldResult } from '@forge/projects';
 import { assertEnv, defaultConfigPath, forgeBinOnPath, loadConfig, resolveProjectsDir, runInit,
   ensureLayoutDirs, ensureDefaultConfig, resolveGuardedPath, writeProjectGroundFile, type InitReport } from '@forge/kernel';
 import { worktreeDemoDir } from '@forge/flows/demo-paths.ts';
 import { cmdAgent, cmdAgentRun } from '@forge/agents/agent-run.ts';
 import { AGENT_DISPATCH_DEPS } from './session-kind-deps.ts';
 
-import { cmdProjectMigrate } from '@forge/projects/project-migrate.ts';
-import { cmdProjectReset } from '@forge/projects/reset-cli.ts';
+import { cmdProjectMigrate } from '@forge/projects';
+import { cmdProjectReset } from '@forge/projects';
 import { cmdCommunity } from '@forge/library';
 
 const args = process.argv.slice(2);

@@ -17,7 +17,7 @@ import { discoverProjects } from '@forge/kernel';
 import { loadKbDescriptor } from '@forge/knowledge';
 import { loadCatalog } from '@forge/library';
 import { validateCatalog } from '@forge/library/testing';
-import { validateDiscoveredProjects } from '@forge/projects/studio/validate-project.ts';
+import { validateDiscoveredProjects } from '@forge/projects';
 import { validateKb } from '@forge/knowledge';
 import { validateAgent } from '@forge/agents/studio/validate-agent.ts';
 import { resolveProjectsDir } from '@forge/kernel';

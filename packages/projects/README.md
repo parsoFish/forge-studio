@@ -9,33 +9,45 @@ transactions, and the reset.
 ## The public door
 
 `import … from '@forge/projects'`. That is this package's API and the list below is
-all of it. Deep paths (`@forge/projects/project-config.ts`) still resolve —
-`package.json` maps `"./*": "./*"` — and every existing importer uses one, so they
-are the **legacy** door, kept working and not recommended for new code.
+all of it. `package.json` maps only `"."` and one documented test-only subpath
+(`@forge/projects/testing`, below) — a deep path like
+`@forge/projects/project-config.ts` no longer resolves. Bead `forge-8vfn.5.31`
+collapsed the legacy `"./*"` door; every importer now goes through
+`@forge/projects`.
 
 `contract.test.ts` asserts this list against what the index actually exports, in
 both directions, and is required to FAIL against an empty index.
 
-### Values (31)
+### Values (36)
 
 | area | exports |
 |---|---|
-| config | `loadProjectConfig` · `readAgentInstructionsFile` · `resolveProjectIdForRepo` |
-| preflight | `runPreflight` · `formatPreflightReport` · `buildVerdictEvent` · `SCRATCH_PATHS` · `TRACKED_CONFIG_PATHS` · `SCAFFOLD_BUILD_OUTPUT_IGNORES` · `runContractComplianceLoop` · `formatComplianceReport` |
+| config | `loadProjectConfig` · `readAgentInstructionsFile` · `resolveProjectIdForRepo` · `PROJECT_CONFIG_REL_PATH` |
+| preflight | `runPreflight` · `formatPreflightReport` · `buildVerdictEvent` · `SCRATCH_PATHS` · `TRACKED_CONFIG_PATHS` · `SCAFFOLD_BUILD_OUTPUT_IGNORES` · `runContractComplianceLoop` · `formatComplianceReport` · `clauseTarget` · `loadDeclaredSkills` |
 | contract stages | `deriveContractStages` · `resolveContainedProjectDir` |
 | create | `scaffoldGreenfieldProject` · `listProjectStarters` · `projectStartersDir` |
-| repo transactions | `ensureStudioBranch` · `commitStudioChange` · `withStudioWrite` |
+| repo transactions | `ensureStudioBranch` · `commitStudioChange` · `withStudioWrite` · `dirtyPaths` |
 | the reset | `cmdProjectReset` · `computeContractDrift` · `applyContractReset` · `AppTypeUnresolvedError` |
 | constraint blocks | `authorConstraintBlocks` · `loadProjectConstraintBlocks` · `selectorMatches` |
 | gate recipes | `deriveGateRecipe` · `renderGateRecipeBlock` |
 | onboarding & roster | `scaffoldContractArtifacts` · `demoProcessChanged` · `loadProjectsWithMeta` · `cmdProjectMigrate` |
+| studio validation | `validateDiscoveredProjects` |
 | HTTP routes | `projectsRoutes` |
 
-### Types (8)
+### Types (10)
 
 `ProjectConfig` · `AcceptanceGateConfig` · `ClauseId` · `ContractStageRow` ·
 `DeriveContractStagesResult` · `ScaffoldResult` · `ConstraintBlock` ·
-`ConstraintMatchContext`
+`ConstraintMatchContext` · `DeclaredSkill` · `ProjectsRouteDeps`
+
+### The one test-only subpath
+
+`@forge/projects/testing` exports `parseSkills` and `checkDemo` — each has no
+production consumer outside this package, only two `scripts`/`apps/forge` tests
+reach for them, so they stay off the main door (bead `forge-8vfn.5.31`: a symbol
+earns the door by having a production consumer in another package; a test-only
+deep import gets a named, documented subpath instead of widening `"./*"` back
+open).
 
 ## What is not exported
 
@@ -45,11 +57,13 @@ modules genuinely belong to this seam and export nothing here because their real
 external caller uses a *different* symbol from the same file —
 `project-config.ts`'s `validateProjectConfig` sits next to the
 evidenced `loadProjectConfig`; `project-repo-tx.ts`'s `isGitRepo`, `defaultBranch`,
-`saveProjectRepo`, `hasPendingStudioChanges` and `STUDIO_BRANCH` sit next to the
-three evidenced write-path functions. `routes.ts`'s `ProjectsRouteDeps` type is used
-only by this package's own contract test, not by its one real caller
-(`apps/forge/routes.ts` supplies the deps as an inline object literal). None of
-these are hidden — `design.md` names every one and why.
+`saveProjectRepo` and `hasPendingStudioChanges`/`STUDIO_BRANCH` sit next to the
+four evidenced write-path functions. `routes.ts`'s `ProjectsRouteDeps` type moved
+onto the door in the same bead that added `dirtyPaths`/`PROJECT_CONFIG_REL_PATH`:
+`apps/forge/dry-bridge.ts` (a route-classification probe distinct from
+`apps/forge/routes.ts`'s own inline-object-literal caller) needs the type once its
+deep import repoints. None of these are hidden — `design.md` names every one and
+why.
 
 ## Declared skills reach the agent, not just preflight
 

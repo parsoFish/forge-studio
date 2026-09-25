@@ -28,7 +28,7 @@ import { createWiWorktree, removeWiWorktree } from '@forge/flows/wi-worktree.ts'
 import { writeGateFeedback } from '../../phases/developer-loop.ts';
 import { makeQualityGateFromCmd, type GateRunInfo } from '@forge/agents/ralph/stop-conditions.ts';
 import { run as runRalph, type AgentInvocation } from '@forge/agents/ralph/runner.ts';
-import { SCRATCH_PATHS } from '@forge/projects/preflight.ts';
+import { SCRATCH_PATHS } from '@forge/projects';
 
 const DISTINCTIVE_FAILURE = 'DISTINCTIVE_GATE_FAIL_7f3ac2: fixed.marker missing — fix required';
 

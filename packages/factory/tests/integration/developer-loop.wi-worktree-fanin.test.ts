@@ -34,7 +34,7 @@ import { gitNetDelta, prerequisiteBlockage, settleWiOutcome, type WiOutcome } fr
 import { topologicalOrder, writeWorkItem, writeWorkItemStatus, type WorkItem } from '@forge/flows/work-item.ts';
 import { run as runRalph, type AgentInvocation } from '@forge/agents/ralph/runner.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
-import { SCRATCH_PATHS } from '@forge/projects/preflight.ts';
+import { SCRATCH_PATHS } from '@forge/projects';
 
 function sh(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, stdio: 'pipe', encoding: 'utf8' });

@@ -54,7 +54,7 @@ import { listStarterAgents } from '@forge/agents/studio/agent-registry.ts';
 import { loadStarterFlow, listFlowIds } from '@forge/flows/studio/flow-registry.ts';
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { spawnPreflightFix } from './bridge-studio-writes.ts';
-import { projectsRoutes } from '@forge/projects/routes.ts';
+import { projectsRoutes } from '@forge/projects';
 import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions/routes.ts';
 // M4 §4 step 2 (agents routes carve, assembly pass). `agentsRoutes`'s
 // `AgentsRouteDeps` declares its collaborators STRUCTURALLY for the same reason

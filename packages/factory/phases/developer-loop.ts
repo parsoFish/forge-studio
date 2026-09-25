@@ -53,7 +53,7 @@ import {
   type GitIdentity,
 } from '@forge/kernel';
 import { runConcurrentDispatch, type DispatchOutcome } from '@forge/flows/wi-dispatch-scheduler.ts';
-import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '@forge/projects/project-config.ts';
+import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '@forge/projects';
 import type { CycleInput } from '@forge/flows/cycle-context.ts';
 import { resolveWiCostBudgetUsd, makeCostCeilingCheck, isCostCeilingHalt } from './dev-cost-bound.ts';
 

@@ -27,7 +27,7 @@ import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 import { releaseFinalizeAgentSpec } from '../release-finalize-invocation.ts';
 
 import type { EventLogger } from '@forge/kernel';
-import { loadProjectConfig } from '@forge/projects/project-config.ts';
+import { loadProjectConfig } from '@forge/projects';
 import { releaseFinalizeSteps, hasReleaseProcess } from '../release-process.ts';
 import {
   RELEASE_FINALIZE_ALLOWED_TOOLS,

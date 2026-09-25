@@ -68,7 +68,7 @@ import type { DryBridgeAction } from '@forge/kernel';
 // read each row's `dryClassification` (see `classificationStubDeps` below).
 import { knowledgeRoutes, type KnowledgeRouteDeps } from '@forge/knowledge';
 import { libraryRoutes, type LibraryRouteDeps } from '@forge/library';
-import { projectsRoutes, type ProjectsRouteDeps } from '@forge/projects/routes.ts';
+import { projectsRoutes, type ProjectsRouteDeps } from '@forge/projects';
 import { agentsRoutes, type AgentsRouteDeps } from '@forge/agents/routes.ts';
 import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions/routes.ts';
 

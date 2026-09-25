@@ -68,7 +68,7 @@ dispatch. `_adapters/` is the SDK registry. `routes.ts` plus
 Design notes: `design.md`.
 
 `project-skills.ts`'s `composeProjectSkills` folds a project's declared
-`.forge/project.json` `skills[]` (`@forge/projects/preflight-skills.ts`'s
+`.forge/project.json` `skills[]` (`@forge/projects`'s
 `loadDeclaredSkills`) into an agent's system prompt (ADR 024 item 90); both
 spawn builders — `run-agent.ts`'s one-shot path and `ralph/claude-agent.ts`'s
 dev-loop path — call it, not just this package's own public door.

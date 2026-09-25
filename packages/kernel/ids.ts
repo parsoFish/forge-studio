@@ -39,7 +39,7 @@ export const SLUG_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 /**
  * W7-A4 — the ONE id rule for projects and knowledge bases: the id IS the
  * on-disk directory name, case-preserving, matched exactly (see
- * `@forge/projects/studio/validate-project.ts` and `@forge/knowledge`
+ * `@forge/projects` and `@forge/knowledge`
  * for the rules that apply it, and `RESERVED_OBJECT_IDS` below for the reserved-id helper). Defined in this leaf for the same cycle reason as
  * SLUG_RE; `PROJECT_ID_RE`/`KB_ID_RE` are named aliases of one predicate so
  * a project and the KB bound to it can never disagree about legality.

@@ -36,7 +36,7 @@ import { guardedReadDir, guardedWriteFile } from '@forge/kernel';
 import { readAnswersBody, type AffordanceRouteContext } from './bridge-studio-sessions-affordance-shell.ts';
 import { activeJobReason, deriveKbActiveJob } from '@forge/knowledge';
 import { computeAgentCleanupFindings, loadKbDescriptors, KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge';
-import { resolveContainedProjectDir } from '@forge/projects/contract-stages.ts';
+import { resolveContainedProjectDir } from '@forge/projects';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { skillPathRelative } from '@forge/library';
 

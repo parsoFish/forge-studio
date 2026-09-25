@@ -40,7 +40,7 @@ import {
   type TriggerPayload,
 } from './trigger-payload.ts';
 import { stageFlowRunRequest } from './flow-run-requests.ts';
-import { resolveProjectIdForRepo } from '@forge/projects/project-config.ts';
+import { resolveProjectIdForRepo } from '@forge/projects';
 
 export type HookRoutesContext = { forgeRoot: string; queueRoot: string; logsRoot: string };
 

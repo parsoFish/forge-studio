@@ -234,7 +234,7 @@ test('W8-C3 WI-4: localSkills is derived even when the project CONFIG is broken 
 // direction is the defect.
 // ---------------------------------------------------------------------------
 
-import { loadProjectConfig } from '@forge/projects/project-config.ts';
+import { loadProjectConfig } from '@forge/projects';
 
 /** Does the REAL orchestrator loader accept this project? */
 function orchestratorAccepts(projectId: string): boolean {

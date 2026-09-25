@@ -67,7 +67,7 @@ import { provenanceOfOrigin, type Provenance } from '@forge/kernel';
 // order` violation (the baseline is a shrink-only ratchet with no
 // `--write-baseline`). `loadProjectsWithMeta` DID move (no flows dependency)
 // and is imported back here for the one caller (attention) that stayed.
-import { loadProjectsWithMeta } from '@forge/projects/project-roster.ts';
+import { loadProjectsWithMeta } from '@forge/projects';
 
 // ---------------------------------------------------------------------------
 // Context surface needed by studio routes
@@ -747,7 +747,7 @@ export async function handleStudioRoutes(
   // {library,knowledge,projects}=2 < agents=3 < sessions=4 < flows=5), so
   // moving it into `packages/projects/` would be a new, unbaselinable
   // `package-layer-order` violation. `loadProjectsWithMeta` itself DID move
-  // (no flows dependency) — imported from `@forge/projects/project-roster.ts`
+  // (no flows dependency) — imported from `@forge/projects`
   // above, with the `projectKbBindings` dependency it needs supplied here,
   // the same injected-dependency shape `seedProjectBrain` uses for the
   // projects-onboard route.

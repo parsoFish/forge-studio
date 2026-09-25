@@ -40,7 +40,7 @@ import {
   resolveDemoCaptureTimeoutMs,
   runOrchestratorCommand,
 } from '@forge/flows/phases/orchestrated-capture.ts';
-import { loadProjectConfig } from '@forge/projects/project-config.ts';
+import { loadProjectConfig } from '@forge/projects';
 
 import { renderDemoBundle, stripScratchFromDiffStat } from '../demo-model.ts';
 import { profileFor } from '../class-profiles.ts';

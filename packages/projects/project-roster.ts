@@ -64,7 +64,7 @@ import {
   validateProjectConfig,
   readQualityGateSidecar,
   injectSidecarIntoTestProcess,
-} from '@forge/projects/project-config.ts';
+} from './project-config.ts';
 import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 
 /** forge-3oq: the ONE provenance vocabulary this roster stamps every project

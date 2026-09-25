@@ -45,10 +45,10 @@ import {
   type SessionKindVariant,
 } from './kind-turn.ts';
 import { guardedReadFile, guardedWriteFile, sendJson } from '@forge/kernel';
-import { withStudioWrite } from '@forge/projects/project-repo-tx.ts';
+import { withStudioWrite } from '@forge/projects';
 import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { readAgentInstructionsFile } from '@forge/projects/project-config.ts';
+import { readAgentInstructionsFile } from '@forge/projects';
 import { skillPathRelative, loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
 import { listInstructionSeeds } from '@forge/library';
 import type { InstructionSeed } from '@forge/contracts';
