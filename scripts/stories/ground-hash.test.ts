@@ -277,17 +277,24 @@ test('594: a path that merely PREFIXES a minted one is not covered by it', () =>
  * born directly in the ground between the same before/after manifests
  * `run-story.mjs` already reads is the same evidence, read from the ground's
  * own side — no second filesystem walk.
+ *
+ * Review finding 1 added a third, REQUIRED argument — the product's own
+ * registered session-kind ids — so every door below passes one. `'foo'` is
+ * included purely so the "already existed" doors (below) test THAT rule in
+ * isolation, never conflated with the registration check finding 1 added.
  */
+const KINDS_FOR_TESTS = new Set(['instructions', 'foo']);
+
 test('T1 1418: a NEW _<kind>/<id> born in the ground is minted, ground-side, with no _logs evidence at all', () => {
   const before = { files: new Map([['CLAUDE.md', 'h1']]) };
   const after = { files: new Map([['CLAUDE.md', 'h1'], ['_instructions/abc123/status.json', 'h2']]) };
-  assert.deepEqual(groundMintedSessionPaths(before, after), ['_instructions/abc123']);
+  assert.deepEqual(groundMintedSessionPaths(before, after, KINDS_FOR_TESTS), ['_instructions/abc123']);
 });
 
 test('T1 1418: a non-session file addition is never minted ground-side — the rule stays bounded to _<kind>/<id>', () => {
   const before = { files: new Map() };
   const after = { files: new Map([['src/x.ts', 'h1']]) };
-  assert.deepEqual(groundMintedSessionPaths(before, after), []);
+  assert.deepEqual(groundMintedSessionPaths(before, after, KINDS_FOR_TESTS), []);
 });
 
 test('T1 1418: a _<kind>/<id> dir that EXISTED before and grew a new file is NOT newly minted', () => {
@@ -296,7 +303,7 @@ test('T1 1418: a _<kind>/<id> dir that EXISTED before and grew a new file is NOT
   // `_foo/id1` PREFIX against the before manifest, not each added file alone.
   const before = { files: new Map([['_foo/id1/a.txt', 'h1']]) };
   const after = { files: new Map([['_foo/id1/a.txt', 'h1'], ['_foo/id1/b.txt', 'h2']]) };
-  assert.deepEqual(groundMintedSessionPaths(before, after), []);
+  assert.deepEqual(groundMintedSessionPaths(before, after, KINDS_FOR_TESTS), []);
 });
 
 test('T1 1418: unioned into classifyOwnGroundDrift — S7\'s own shape reads PRODUCED, not UNDECLARED', () => {
@@ -304,7 +311,7 @@ test('T1 1418: unioned into classifyOwnGroundDrift — S7\'s own shape reads PRO
   const after = { files: new Map([['CLAUDE.md', 'h1'], ['_instructions/abc123/status.json', 'h2']]) };
   // No `_logs` evidence at all — mintedSessionPaths would contribute nothing;
   // the ground-side rule is the ONLY source here, exactly S7's defect.
-  const minted = groundMintedSessionPaths(before, after);
+  const minted = groundMintedSessionPaths(before, after, KINDS_FOR_TESTS);
   const { produced, undeclared } = classifyOwnGroundDrift(groundChanges(before, after), minted, new Map(), groundIgnoreNoneForTests());
   assert.equal(undeclared.length, 0, undeclared.join(' | '));
   assert.equal(produced.length, 1);
@@ -316,7 +323,7 @@ test('T1 1418: unioned into classifyOwnGroundDrift — S7\'s own shape reads PRO
   assert.equal(plain.undeclared.length, 1);
   const grewBefore = { files: new Map([['_foo/id1/a.txt', 'h1']]) };
   const grewAfter = { files: new Map([['_foo/id1/a.txt', 'h1'], ['_foo/id1/b.txt', 'h2']]) };
-  const grewMinted = groundMintedSessionPaths(grewBefore, grewAfter);
+  const grewMinted = groundMintedSessionPaths(grewBefore, grewAfter, KINDS_FOR_TESTS);
   assert.deepEqual(grewMinted, []);
   const grew = classifyOwnGroundDrift(groundChanges(grewBefore, grewAfter), grewMinted, new Map(), groundIgnoreNoneForTests());
   assert.equal(grew.undeclared.length, 1, 'not auto-licensed just because it looks like a session dir');
