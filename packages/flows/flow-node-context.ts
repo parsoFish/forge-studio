@@ -9,7 +9,7 @@
 
 import type { EventLogger } from '@forge/kernel';
 import { type ClosureResult, type CycleInput, type CycleOutcome, type ReviewerOutcome } from './cycle-context.ts';
-import type { FlowNode, AgentBudgets, AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { FlowNode, AgentBudgets, AgentDefinition } from '@forge/contracts';
 import { WedgeDetector } from './flow-budgets.ts';
 import type { NodeKind } from './flow-node-kind.ts';
 import type { ProjectGate } from '@forge/kernel';

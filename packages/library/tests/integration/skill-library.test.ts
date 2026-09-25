@@ -1338,9 +1338,9 @@ describe('ledger integrity — duplicate/non-slug entry ids must fail loud', () 
 
 describe('assertSkillSlug — length cap', () => {
   it('AT-84: an over-long but charset-valid id → installSkillPackage throws an actionable (non-ENAMETOOLONG) message naming the length limit; nothing written; the cap is an exported named constant', async () => {
-    const idsModule = (await import('@forge/kernel/ids.ts')) as Record<string, unknown>;
+    const idsModule = (await import('@forge/kernel')) as Record<string, unknown>;
     const cap = idsModule['MAX_SKILL_ID_LENGTH'];
-    assert.equal(typeof cap, 'number', 'expected an exported named constant MAX_SKILL_ID_LENGTH in @forge/kernel/ids.ts for the id length cap');
+    assert.equal(typeof cap, 'number', 'expected an exported named constant MAX_SKILL_ID_LENGTH in @forge/kernel for the id length cap');
 
     const root = makeForgeRoot();
     mkdirSync(skillsDir(root), { recursive: true });

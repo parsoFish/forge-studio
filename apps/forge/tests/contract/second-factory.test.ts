@@ -25,20 +25,25 @@ import { join, relative } from 'node:path';
 import { FORGE_ROOT } from '@forge/kernel';
 import type { PhaseExecutor, EventLogger } from '@forge/kernel';
 import { createLogger } from '@forge/kernel';
-import { skillRoots } from '@forge/kernel/discovery-roots.ts';
-import { listFlowIds, loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
-import { flowPathForId, resolveNodeKind, runFlow } from '@forge/flows/flow-runner.ts';
-import { WedgeDetector } from '@forge/flows/flow-budgets.ts';
-import type { NodeExecContext, NodeRunState } from '@forge/flows/flow-node-context.ts';
-import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
-import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
-import type { StreamQueryFn } from '@forge/agents/pinned-sdk-query.ts';
-import { registeredBandIds, createPhaseExecutor } from '@forge/stations/phases/executor-table.ts';
-import { buildDevSystemPrompt } from '@forge/stations/phases/dev-binding.ts';
-import { runAdversarialReview as realRunAdversarialReview } from '@forge/stations/phases/adversarial-review.ts';
-import { testClassProfilePort } from '@forge/stations/tests/test-fixtures/class-profile-port-fixture.ts';
-import { makeFixture, stubQueryFn, validFindingsJson, type Fixture } from '@forge/stations/tests/test-fixtures/adversarial-review-fixture.ts';
+import { skillRoots } from '@forge/kernel';
+import { listFlowIds, loadFlowDefinition } from '@forge/flows';
+import { flowPathForId, resolveNodeKind, runFlow } from '@forge/flows';
+import { WedgeDetector } from '@forge/flows';
+import type { NodeExecContext, NodeRunState } from '@forge/flows';
+import { listAgentDefinitions } from '@forge/agents';
+import { resolveBandGuard } from '@forge/agents';
+import type { AgentDefinition } from '@forge/contracts';
+import type { StreamQueryFn } from '@forge/agents';
+import { registeredBandIds, createPhaseExecutor } from '@forge/stations';
+import {
+  buildDevSystemPrompt,
+  testClassProfilePort,
+  makeFixture,
+  stubQueryFn,
+  validFindingsJson,
+  type Fixture,
+} from '@forge/stations/testing';
+import { runAdversarialReview as realRunAdversarialReview } from '@forge/stations';
 import { CLASS_PROFILES } from '@forge/factory/class-profiles.ts';
 
 const SECOND = 'forge-docs';

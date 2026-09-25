@@ -33,7 +33,7 @@ import {
   type ClaimValidationResult,
 } from '../../claim-validator.ts';
 import { readOnDiskFlowVersion, checkFlowVersionSeam } from '../../flow-runner.ts';
-import { SCRATCH_PATHS } from '@forge/projects/preflight.ts';
+import { SCRATCH_PATHS } from '@forge/projects';
 
 // ---------------------------------------------------------------------------
 // Fixtures

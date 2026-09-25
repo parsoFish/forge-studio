@@ -6,7 +6,7 @@
  * not an optimisation." Three sites in this package (bridge-studio-
  * sessions.ts:309/532, kinds/brain-fix.ts:125 as measured at the bead's
  * filing commit — lines drift, the SITES are what matters) imported
- * `resolveKbBrainDir` straight from `@forge/knowledge/brain-paths.ts`,
+ * `resolveKbBrainDir` straight from `@forge/knowledge`,
  * reaching around the seam entirely. The cure repoints all three through
  * `tryGetKbBackend` (the package's public door, `@forge/knowledge`) — see
  * that function and `KbBackend.rootDir()`'s own doc for why a raw path is

@@ -23,12 +23,12 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { parseWorkItem, type WorkItem } from '@forge/flows/work-item.ts';
-import { MODEL_BY_TIER, type ModelTier } from '@forge/agents/phase-agent.ts';
-import { deriveAgentSpec, resolveModelTier } from '@forge/agents/studio/derive.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { skillPath, skillPathRelative } from '@forge/agents/skill-path.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { parseWorkItem, type WorkItem } from '@forge/flows';
+import { MODEL_BY_TIER, type ModelTier } from '@forge/agents';
+import { deriveAgentSpec, resolveModelTier } from '@forge/agents';
+import { loadAgentDefinition } from '@forge/agents';
+import { skillPath, skillPathRelative } from '@forge/agents';
+import type { AgentDefinition } from '@forge/contracts';
 import { loadAgentSkillText } from './agent-skill-text.ts';
 
 const SKILL_PATH = skillPath('developer-ralph');

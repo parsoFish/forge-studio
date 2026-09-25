@@ -40,7 +40,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { assertSkillSlug } from '@forge/kernel/ids.ts';
+import { assertSkillSlug } from '@forge/kernel';
 import { guardedSkillMdPath } from '../skill-path.ts';
 import { hooksDir } from './hook-library.ts';
 import { guardedFile } from '@forge/kernel';
@@ -48,7 +48,7 @@ import { listCatalogConnections } from './connection-library.ts';
 import { communitySkillsFromRegistry } from './community-registry.ts';
 import { vendoredPackageDir, readVendoredPackage, communityInstallState } from './community-index.ts';
 import { parseCommunityUpstream } from './community-source-url.ts';
-import type { CommunitySkill } from '@forge/contracts/studio/types.ts';
+import type { CommunitySkill } from '@forge/contracts';
 import type { CommunityKind } from './community-index.ts';
 import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from './skill-package.ts';
 

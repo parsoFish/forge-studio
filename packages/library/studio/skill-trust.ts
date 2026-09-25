@@ -57,7 +57,7 @@ import { guardedSkillMdPath, listSkillDirs } from '../skill-path.ts';
 import type { AgentFacts } from './agent-facts.ts';
 import { communitySkillsFromRegistry } from './community-registry.ts';
 import { readInstallLedger } from './skill-install-ledger.ts';
-import type { CommunitySkill } from '@forge/contracts/studio/types.ts';
+import type { CommunitySkill } from '@forge/contracts';
 import type { Finding } from '@forge/kernel';
 import { extractProvenance, readSkillPackage, hashSkillPackage, type SkillProvenance } from './skill-package.ts';
 
@@ -92,7 +92,7 @@ export interface SkillLibraryEntry {
   reference?: boolean;
 }
 
-/** Lint finding shape shared with `@forge/kernel/findings.ts` — reused,
+/** Lint finding shape shared with `@forge/kernel` — reused,
  *  not re-invented, so `forge studio lint` renders every finding uniformly. */
 export type LintFinding = Finding;
 

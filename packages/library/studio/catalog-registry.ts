@@ -5,14 +5,14 @@
  * MOVED VERBATIM — `parseCatalogSdks` / `parseCatalogModels` /
  * `parseCatalogGuards` / `loadCatalog` (registry.ts:719-791 on the pre-carve
  * head). `BAND_GUARD_IDS` is imported from `@forge/contracts` rather than
- * `@forge/agents/agent-bands.ts` — `agent-bands.ts` only re-exports it FROM
+ * `@forge/agents` — `agent-bands.ts` only re-exports it FROM
  * contracts (agents rank 3, library rank 2: library may not import agents),
  * mirroring the precedent M4-library PR 2 set for `skill-path.ts`.
  */
 
 import { BAND_GUARD_IDS } from '@forge/contracts';
-import { reqString, optString, optNumber, loadYaml } from '@forge/kernel/studio/yaml-fields.ts';
-import type { Catalog, CatalogGuardEntry, CatalogModel, CatalogSdk } from '@forge/contracts/studio/types.ts';
+import { reqString, optString, optNumber, loadYaml } from '@forge/kernel';
+import type { Catalog, CatalogGuardEntry, CatalogModel, CatalogSdk } from '@forge/contracts';
 import { parseConnectionEntries } from './connection-catalog.ts';
 
 // ---------------------------------------------------------------------------

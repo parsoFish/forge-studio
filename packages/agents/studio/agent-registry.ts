@@ -12,7 +12,7 @@
  * owns agents removes the hop rather than relocating it.
  *
  * WHAT IS GENERIC AND WHAT IS NOT. Reading a frontmatter document is generic
- * and lives in `@forge/kernel/studio-object.ts`; deciding what a valid one
+ * and lives in `@forge/kernel`; deciding what a valid one
  * MEANS is this kind's, so every field name below stays here —
  * `runtime`, `library`, `provenance`, `quarantined`, `brainAccess`,
  * `composition`, `budgets`, `fanout`, `materials`. Kernel names none of them,
@@ -24,8 +24,8 @@
  */
 import { join, dirname, basename, resolve } from 'node:path';
 
-import { readFrontmatter, loadStudioObject, type FrontmatterDoc } from '@forge/kernel/studio-object.ts';
-import { reqString, optString, optNumber, optBool, stringArray, reqObject, oneOf } from '@forge/kernel/studio/yaml-fields.ts';
+import { readFrontmatter, loadStudioObject, type FrontmatterDoc } from '@forge/kernel';
+import { reqString, optString, optNumber, optBool, stringArray, reqObject, oneOf } from '@forge/kernel';
 import { listSkillMdDirs } from '../skill-path.ts';
 import { parseMaterials } from './materials.ts';
 import type {
@@ -34,7 +34,7 @@ import type {
   AgentDefinition,
   AgentFanout,
   AgentRuntime,
-} from '@forge/contracts/studio/types.ts';
+} from '@forge/contracts';
 
 
 const BRAIN_ACCESS = ['mandatory', 'advisory', 'none'] as const;
@@ -252,7 +252,7 @@ function validateAgentDocument(doc: FrontmatterDoc): AgentDefinition {
 // 800-line cap — 2026-08-05, finding C/11). Re-exported here so existing
 // importers keep resolving `serializeAgentDefinition` from './registry.ts';
 // it remains the ONE canonical serializer (ADR-027).
-export { serializeAgentDefinition } from '@forge/agents/studio/skill-md-fidelity.ts';
+export { serializeAgentDefinition } from './skill-md-fidelity.ts';
 
 /** Loads every studio agent under `skillsDirs` (one dir, or several — SEAM
  *  F1's `skillRoots`). THROWS, naming both, on a slug real under two dirs —

@@ -39,9 +39,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from '../../ui-bridge.ts';
-import { mintTriggeredInitiative } from '@forge/flows/mint-triggered-initiative.ts';
+import { mintTriggeredInitiative } from '@forge/flows';
 import { buildCronFlowRunRequest } from '../../../../packages/flows/tests/test-fixtures/flow-run-request.ts';
-import type { FlowRunRequest } from '@forge/flows/flow-run-requests.ts';
+import type { FlowRunRequest } from '@forge/flows';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

@@ -2,7 +2,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
-import { serializeManifest, type InitiativeManifest } from '@forge/flows/manifest.ts';
+import { serializeManifest } from '@forge/flows';
+import type { InitiativeManifest } from '@forge/contracts';
 
 /**
  * Acceptance tests for packages/sessions/bridge-studio-sessions.ts (R2-10, PR1: the

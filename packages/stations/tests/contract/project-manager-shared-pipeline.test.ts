@@ -34,11 +34,12 @@ import { join, resolve } from 'node:path';
 
 import { runProjectManager, type PmQueryFn } from '../../phases/project-manager.ts';
 import { createLogger } from '@forge/kernel';
-import type { CycleInput } from '@forge/flows/cycle-context.ts';
-import { parseManifest, serializeManifest, type InitiativeManifest } from '@forge/flows/manifest.ts';
-import { promoteManifests } from '@forge/flows/promote-manifests.ts';
-import { enqueuePlanRun, PLAN_FLOW_ID } from '@forge/flows/enqueue-plan-run.ts';
-import { getPaths } from '@forge/flows/queue.ts';
+import type { CycleInput } from '@forge/flows';
+import { parseManifest, serializeManifest } from '@forge/flows';
+import type { InitiativeManifest } from '@forge/contracts';
+import { promoteManifests } from '@forge/flows';
+import { enqueuePlanRun, PLAN_FLOW_ID } from '@forge/flows';
+import { getPaths } from '@forge/flows';
 import { testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
 import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 

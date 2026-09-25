@@ -41,9 +41,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { AGENT_RUNNERS } from '../../agent-run.ts';
-import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
-import { writeSessionStatus, readSessionStatus } from '@forge/sessions/interactive-session.ts';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { loadSessionKinds } from '@forge/sessions';
+import { writeSessionStatus, readSessionStatus } from '@forge/sessions';
+import { FORGE_ROOT } from '@forge/kernel';
 import {
   run,
   withCwd,

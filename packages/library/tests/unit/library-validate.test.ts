@@ -8,7 +8,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { Catalog, InstructionSeed } from '@forge/contracts/studio/types.ts';
+import type { Catalog, InstructionSeed } from '@forge/contracts';
 import {
   validateArtifactTemplate,
   validateCatalog,

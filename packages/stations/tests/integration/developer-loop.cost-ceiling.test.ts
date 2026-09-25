@@ -14,7 +14,7 @@
  * building blocks (`runRalph`, `resolveWiCostBudgetUsd`,
  * `makeCostCeilingCheck`, `isCostCeilingHalt`, `settleWiOutcome`,
  * `prerequisiteBlockage`) at the same call shape `developer-loop.ts` uses,
- * against a REAL `CostTracker` (`@forge/flows/flow-budgets.ts`) — the exact
+ * against a REAL `CostTracker` (`@forge/flows`) — the exact
  * class `flow-runner.ts` wires into `CycleInput.remainingCostBudgetUsd` in
  * production — rather than a second copy of the cost rule.
  *
@@ -30,11 +30,11 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { CostTracker } from '@forge/flows/flow-budgets.ts';
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
-import type { CycleInput } from '@forge/flows/cycle-context.ts';
-import type { WorkItem } from '@forge/flows/work-item.ts';
-import { run as runRalph, type LoopResult } from '@forge/agents/ralph/runner.ts';
+import type { CycleInput } from '@forge/flows';
+import type { WorkItem } from '@forge/flows';
+import { CostTracker } from '@forge/flows/testing';
+import { runRalphLoop as runRalph, type LoopResult } from '@forge/agents';
 import {
   resolveWiCostBudgetUsd,
   makeCostCeilingCheck,

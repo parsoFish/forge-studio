@@ -18,7 +18,7 @@
  */
 import { readFileSync } from 'node:fs';
 
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 
 export function loadAgentSkillText(def: AgentDefinition): string {
   try {

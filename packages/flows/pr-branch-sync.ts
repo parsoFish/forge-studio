@@ -19,7 +19,7 @@ import { ghForWorktree } from './gh-pinned.ts';
 import { existsSync } from 'node:fs';
 
 import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
-import { TRACKED_CONFIG_PATHS } from '@forge/projects/preflight.ts';
+import { TRACKED_CONFIG_PATHS } from '@forge/projects';
 
 /**
  * Resolve the current branch name of a worktree. Returns null for a

@@ -60,7 +60,7 @@ import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from '../../ui-bridge.ts';
-import { runArchitectTurn } from '@forge/sessions/kinds/architect.ts';
+import { runArchitectTurn } from '@forge/sessions';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

@@ -23,7 +23,7 @@ import {
   type FetchLike,
 } from '../../studio/community-refresh-api.ts';
 import { serializeCommunityRegistry } from '../../studio/community-registry.ts';
-import type { CommunityRegistry } from '@forge/contracts/studio/types.ts';
+import type { CommunityRegistry } from '@forge/contracts';
 
 const NOW = new Date('2026-08-23T12:00:00.000Z');
 const TOKEN = 'ghp_TOTALLY_SECRET_VALUE_do_not_leak';

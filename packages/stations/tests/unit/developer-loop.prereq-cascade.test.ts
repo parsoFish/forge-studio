@@ -15,7 +15,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { prerequisiteBlockage } from '../../phases/developer-loop.ts';
-import type { WorkItem } from '@forge/flows/work-item.ts';
+import type { WorkItem } from '@forge/flows';
 
 function wi(id: string, dependsOn: string[]): WorkItem {
   return {

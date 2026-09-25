@@ -77,7 +77,7 @@ import { request as httpRequest } from 'node:http';
 import { URL } from 'node:url';
 
 import { startBridge } from '../../ui-bridge.ts';
-import { DEMO_HTML_REL_PATH, type DemoBuilderStatus } from '@forge/sessions/kinds/demo-session-store.ts';
+import { DEMO_HTML_REL_PATH, type DemoBuilderStatus } from '@forge/sessions';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

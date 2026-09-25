@@ -15,7 +15,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { checkDecomposeCompleteness } from '../../phases/decompose-completeness.ts';
-import type { WorkItem } from '@forge/flows/work-item.ts';
+import type { WorkItem } from '@forge/flows';
 
 /** Minimal, valid-shaped WorkItem fixture builder — only the fields the
  * completeness checker actually reads are varied per test. */

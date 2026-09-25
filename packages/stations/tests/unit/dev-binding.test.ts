@@ -16,7 +16,7 @@ import {
   buildDevSystemPrompt,
   renderDevUserPrompt,
 } from '../../phases/dev-binding.ts';
-import { modelForSpec } from '@forge/agents/phase-agent.ts';
+import { modelForSpec } from '@forge/agents';
 import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
 
 // ---------------------------------------------------------------------------

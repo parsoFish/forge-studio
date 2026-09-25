@@ -18,10 +18,9 @@
  */
 import { readdirSync } from 'node:fs';
 
-import { SAFE_ID_RE, KB_ID_RE, PROJECT_ID_RE, MAX_EXACT_ID_LENGTH, resolveGuardedPath } from '@forge/kernel';
+import { SAFE_ID_RE, KB_ID_RE, PROJECT_ID_RE, MAX_EXACT_ID_LENGTH, MAX_SKILL_ID_LENGTH, resolveGuardedPath } from '@forge/kernel';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';
-import { MAX_SKILL_ID_LENGTH } from '@forge/agents/skill-path.ts';
-import { KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge/bridge-studio-kbs.ts';
+import { KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge';
 import { LEGACY_SESSION_TERMINAL_PHASES, CANCELLED_PHASE } from './session-phases.ts';
 import { safeReadFileInSession } from './studio/session-transcript.ts';
 import { resolveLegacySession } from './session-readability.ts';
@@ -88,7 +87,7 @@ export const COMMUNITY_REFRESH_PROJECT_ANCHOR = '.community-registry';
 
 // W6-B9 reviewer fix — the general invariant this file's own KB-seeding
 // carve-out comment (below) and W6-CR-3's comment (above) both already
-// state: `discoverProjects` (@forge/kernel/project-layout.ts) filters EVERY
+// state: `discoverProjects` (@forge/kernel) filters EVERY
 // dot-prefixed directory out of the real project list, categorically — not
 // just `.kb-<id>` (KB_SEEDING_ANCHOR_PREFIX) or `.community-registry`
 // (COMMUNITY_REFRESH_PROJECT_ANCHOR, above). A project id starting with "."

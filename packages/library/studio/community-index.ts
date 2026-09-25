@@ -52,7 +52,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import matter from 'gray-matter';
 
-import { assertSkillSlug } from '@forge/kernel/ids.ts';
+import { assertSkillSlug } from '@forge/kernel';
 import { guardedSkillMdPath } from '../skill-path.ts';
 import { skillTrustState } from './skill-trust.ts';
 import type { SkillTrust } from './skill-trust.ts';
@@ -65,9 +65,9 @@ import type { CatalogConnection } from './connection-library.ts';
 import { probeConnection } from './connection-probe.ts';
 import type { ProbeState, ProbeResult } from './connection-probe.ts';
 import { communityRegistryPath, communitySkillsFromRegistry, loadCommunityRegistry } from './community-registry.ts';
-import { reqString, loadYaml } from '@forge/kernel/studio/yaml-fields.ts';
+import { reqString, loadYaml } from '@forge/kernel';
 import { guardedFile, guardedReadFile } from '@forge/kernel';
-import type { CommunitySkill } from '@forge/contracts/studio/types.ts';
+import type { CommunitySkill } from '@forge/contracts';
 import type { Finding } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------

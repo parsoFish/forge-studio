@@ -31,7 +31,7 @@ import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { StudioContext } from '@forge/kernel';
-import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 import {
   handleProjectsStarters,
   createStudioStartersHandler,

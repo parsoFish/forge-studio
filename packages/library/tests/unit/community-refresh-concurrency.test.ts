@@ -29,7 +29,7 @@ import {
   type FetchLike,
 } from '../../studio/community-refresh-api.ts';
 import { runCommunityRefresh } from '../../community-refresh-run.ts';
-import type { CommunityRegistry, CommunityRegistrySource } from '@forge/contracts/studio/types.ts';
+import type { CommunityRegistry, CommunityRegistrySource } from '@forge/contracts';
 
 const NOW = new Date('2026-09-19T12:00:00.000Z');
 const TOKEN = 'ghp_TEST_TOKEN_NOT_REAL';

@@ -34,8 +34,8 @@ import { join, resolve } from 'node:path';
 
 import { runProjectManager, type PmQueryFn } from '../../phases/project-manager.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
-import type { CycleInput } from '@forge/flows/cycle-context.ts';
-import { classifyCycleFailure } from '@forge/agents/failure-classifier.ts';
+import type { CycleInput } from '@forge/flows';
+import { classifyCycleFailure } from '@forge/agents';
 import {
   renderPmUserPrompt,
   parseDecompositionState,

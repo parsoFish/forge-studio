@@ -14,7 +14,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { sendJson, allowedOrigin } from '@forge/kernel';
 import { isDryBridge, refuseDryBridge } from '@forge/kernel';
-import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached, markStopping } from '@forge/flows/daemon.ts';
+import { daemonState, setPaused, readPid, isAlive, clearPidFile, daemonPaths, spawnServeDetached, markStopping } from '@forge/flows';
 
 /** The context the scheduler lifecycle routes need from the host. */
 export type SchedulerContext = {

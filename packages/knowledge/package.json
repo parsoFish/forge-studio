@@ -6,7 +6,7 @@
   "description": "KbBackend, brain paths, index, lint, fix, drain, consolidate, the theme frontmatter contract.",
   "exports": {
     ".": "./index.ts",
-    "./*": "./*"
+    "./testing": "./testing.ts"
   },
   "scripts": {
     "test": "node --test --experimental-strip-types \"**/*.test.ts\""

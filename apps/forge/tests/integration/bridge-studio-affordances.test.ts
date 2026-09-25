@@ -48,7 +48,7 @@ import matter from 'gray-matter';
 // package SOURCE, so it belongs beside the source, and it now covers all six
 // modules the carve spread that code across rather than the one file it used to.
 import { startBridge } from '../../ui-bridge.ts';
-import { KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge/bridge-studio-kbs.ts';
+import { KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };

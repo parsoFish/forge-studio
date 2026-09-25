@@ -12,7 +12,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { serializeManifest, type InitiativeManifest } from '@forge/flows/manifest.ts';
+import { serializeManifest } from '@forge/flows';
+import type { InitiativeManifest } from '@forge/contracts';
 import type { EventLogEntry } from '@forge/kernel';
 
 import { runIntegrateBand, PR_DESCRIPTION_REL } from '../../phases/integrate.ts';

@@ -14,7 +14,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
 
-import { deriveContractStages } from '@forge/projects/contract-stages.ts';
+import { deriveContractStages } from './contract-stages.ts';
 import {
   defaultConfigPath,
   loadConfig,

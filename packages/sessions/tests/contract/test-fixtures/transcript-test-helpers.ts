@@ -96,14 +96,14 @@
 
 import { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { deriveSessionTranscript } from '../../../studio/session-transcript.ts';
 import type { SessionKindDescriptor } from '../../../studio/session-kinds.ts';
-import type { InitiativeManifest } from '@forge/contracts/manifest-types.ts';
+import type { InitiativeManifest } from '@forge/contracts';
 
 /**
  * The injected manifest parser, as a REFUSING stub (M4 ruling 83 / 91).

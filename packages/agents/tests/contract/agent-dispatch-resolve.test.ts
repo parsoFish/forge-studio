@@ -25,7 +25,7 @@ import { resolveDispatchableAgent, BandGuardDispatchRefusedError } from '../../a
 import { listAgentDefinitions, loadAgentDefinition } from '../../studio/agent-registry.ts';
 import { agentCapabilityDescriptor, FORGE_ROOT } from '../../studio/derive.ts';
 import { resolveBandGuard } from '../../agent-bands.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 
 const ROOT = FORGE_ROOT;
 const SKILLS = join(ROOT, 'skills');

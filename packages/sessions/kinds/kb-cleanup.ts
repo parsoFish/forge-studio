@@ -4,7 +4,7 @@
 import type { ServerResponse } from 'node:http';
 
 import { sendJson } from '@forge/kernel';
-import { approveKbCleanup } from '@forge/knowledge/bridge-studio-kbs.ts';
+import { approveKbCleanup } from '@forge/knowledge';
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from '../session-status-io.ts';
 import type { AffordanceRouteContext } from '../bridge-studio-sessions-affordance-shell.ts';
 

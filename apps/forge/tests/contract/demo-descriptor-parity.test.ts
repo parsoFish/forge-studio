@@ -22,20 +22,20 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { checkDemo } from '@forge/projects/preflight.ts';
-import { demoTaskLines } from '@forge/sessions/kinds/demo-generate.ts';
-import type { DemoBuilderStatus } from '@forge/sessions/kinds/demo-session-store.ts';
-import { deriveDemoModel } from '@forge/stations/phases/derive-demo-model.ts';
-// `listDemoElements` moved to `@forge/library/studio/artifact-registry.ts` (M4
+import { checkDemo } from '@forge/projects/testing';
+import { demoTaskLines } from '@forge/sessions';
+import type { DemoBuilderStatus } from '@forge/sessions';
+import { deriveDemoModel } from '@forge/stations/testing';
+// `listDemoElements` moved to `@forge/library` (M4
 // library-by-kind carve, PR 3 / Part 2) and is re-exported from `registry.ts`
 // for this importer specifically: `projects` (rank 2) may not import
 // `library` (rank 2, a same-rank sibling) — repointing this line would trade
 // the file's existing `package-to-legacy` debt (already baselined against
 // `registry.ts`) for a NEW `package-layer-order` violation not covered by the
 // carve spec's ruling-36 exception (which names only `agents-md-compose.ts`).
-import { listDemoElements } from '@forge/library/studio/artifact-registry.ts';
-import type { DemoStep } from '@forge/contracts/studio/types.ts';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { listDemoElements } from '@forge/library';
+import type { DemoStep } from '@forge/contracts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 
 /** The ONE shared fixture: element-bearing capture/verify/present steps, deliberately

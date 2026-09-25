@@ -38,12 +38,11 @@ import { randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 
-import { seedProjectBrain, checkProjectBrainSeedContainment } from '@forge/knowledge/project-brain-seed.ts';
+import { seedProjectBrain, checkProjectBrainSeedContainment } from '@forge/knowledge';
 import { runPreflight, type ClauseResult } from './preflight.ts';
-import { isReservedId } from '@forge/agents/skill-path.ts';
 import {
   projectStartersDir, listProjectStarters, resolveGuardedPath, recordMintedRemote,
-  assertGhOwner, ghRunnerFor, loadConfig, defaultConfigPath,
+  assertGhOwner, ghRunnerFor, loadConfig, defaultConfigPath, isReservedId,
 } from '@forge/kernel';
 import { PROJECT_CONFIG_REL_PATH } from './project-config.ts';
 

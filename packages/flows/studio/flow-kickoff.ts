@@ -48,7 +48,7 @@ import type {
   FlowKickoff,
   FlowKickoffKind,
   FlowNode,
-} from '@forge/contracts/studio/types.ts';
+} from '@forge/contracts';
 
 import { resolveNodeKind } from '../flow-node-kind.ts';
 

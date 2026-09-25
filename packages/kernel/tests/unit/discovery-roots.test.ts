@@ -10,7 +10,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { flowRoots, skillRoots, resolveIdAcrossRoots, listIdsAcrossRoots } from '@forge/kernel/discovery-roots.ts';
+import { flowRoots, skillRoots, resolveIdAcrossRoots, listIdsAcrossRoots } from '../../discovery-roots.ts';
 
 function tmpRoot(): string {
   return mkdtempSync(join(tmpdir(), 'kernel-discovery-roots-'));

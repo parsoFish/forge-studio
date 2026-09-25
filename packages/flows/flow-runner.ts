@@ -38,19 +38,19 @@ import { resolve, basename } from 'node:path';
 import { readFileSync } from 'node:fs';
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
 import { type ClosureResult, type CycleInput, type CycleOutcome, type ReviewerOutcome } from './cycle-context.ts';
-import type { FlowDefinition, FlowNode, AgentBudgets, AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { FlowDefinition, FlowNode, AgentBudgets, AgentDefinition } from '@forge/contracts';
 import { CostTracker, WedgeDetector, RateLimitGate, type CeilingSource } from './flow-budgets.ts';
 // §15.43: all three were reached through `orchestrator/studio/registry.ts`,
 // which only re-exports them. Imported from their real owners instead — every
 // one is a strictly lower rank, so the carve-in costs no boundary row.
-import { listArtifactTemplates } from '@forge/library/studio/artifact-registry.ts';
-import { listAgentDefinitions } from '@forge/agents/studio/agent-registry.ts';
-import { normalizeProjectId } from '@forge/kernel/project-layout.ts';
-import { resolveBandGuard } from '@forge/agents/agent-bands.ts';
-// §15.6: FORGE_ROOT via `@forge/agents/skill-path.ts` is a re-export detour —
+import { listArtifactTemplates } from '@forge/library';
+import { listAgentDefinitions } from '@forge/agents';
+import { normalizeProjectId } from '@forge/kernel';
+import { resolveBandGuard } from '@forge/agents';
+// §15.6: FORGE_ROOT via `@forge/agents` is a re-export detour —
 // it type-checks and it is the wrong owner. Kernel is the owner.
 import { FORGE_ROOT } from '@forge/kernel';
-import { flowRoots, resolveIdAcrossRoots, skillRoots } from '@forge/kernel/discovery-roots.ts';
+import { flowRoots, resolveIdAcrossRoots, skillRoots } from '@forge/kernel';
 import { findFanOutViolations } from './flow-fanout.ts';
 import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';

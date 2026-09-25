@@ -54,6 +54,17 @@
 import { realpathSync } from 'node:fs';
 import { join, sep } from 'node:path';
 
+// KEPT DEEP (bead forge-8vfn.5.31): repointing these three specifiers to the
+// bare `@forge/sessions` door crashed `node --test packages/sessions/
+// contract.test.ts` with `ReferenceError: Cannot access 'SESSION_STAGES'
+// before initialization` — the door eagerly pulls in sessions' whole module
+// graph, and something reachable from it cycles back here before
+// `packages/sessions/studio/session-kinds.ts`'s module finishes initializing. This edge is
+// already a baselined `package-layer-order` violation (projects, rank 2,
+// reaching sessions, rank 4); going through the door does not fix that
+// violation, it only adds a live TDZ crash on top of it. Kept deep per the
+// brief's own guidance: a repoint that creates a cycle keeps its one deep
+// import, documented, rather than "fixing" the door at the cost of a crash.
 import { SESSION_STAGES } from '@forge/sessions/studio/session-kinds.ts';
 import {
   safeReadFileInSession,
@@ -62,8 +73,7 @@ import {
   type ContractStageStatus,
 } from '@forge/sessions/studio/session-transcript.ts';
 import { loadProjectConfig, AGENT_INSTRUCTION_FILES, type ProjectConfig } from './project-config.ts';
-import { PROJECT_ID_RE, MAX_EXACT_ID_LENGTH } from '@forge/agents/skill-path.ts';
-import { guardedFile } from '@forge/kernel';
+import { PROJECT_ID_RE, MAX_EXACT_ID_LENGTH, guardedFile } from '@forge/kernel';
 
 export type { ContractStageRow, ContractStageStatus } from '@forge/sessions/studio/session-transcript.ts';
 

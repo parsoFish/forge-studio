@@ -8,7 +8,7 @@
  * on this box at this beat — and `run.mjs` only orchestrates.
  */
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
-import { EMIT_FAILED_SIDECAR } from '@forge/sessions/turn-cost-rows.ts';
+import { EMIT_FAILED_SIDECAR } from '@forge/sessions';
 import { summariseRunSpend, spendCeilingVerdict, endedUnpricedTurns, ceilingHaltVerdict, classifyUnmeasuredDispatch } from './spend.mjs';
 import { join, basename } from 'node:path';
 

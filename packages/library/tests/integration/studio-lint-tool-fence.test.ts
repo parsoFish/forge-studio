@@ -19,7 +19,7 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 import { runStudioLint } from '../../../../apps/forge/studio-lint.ts';
 

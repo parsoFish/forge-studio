@@ -7,7 +7,7 @@
 
 import yaml from 'js-yaml';
 
-import { reqString, stringArray, optBool, optString, oneOf } from '@forge/kernel/studio/yaml-fields.ts';
+import { reqString, stringArray, optBool, optString, oneOf } from '@forge/kernel';
 import { type PackageFile } from './studio/skill-package.ts';
 import { scanHookFiles, type HookScanReport } from './studio/hook-scan.ts';
 import type { HookPackageFile } from './studio/hook-package.ts';

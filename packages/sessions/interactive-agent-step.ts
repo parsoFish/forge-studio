@@ -17,12 +17,12 @@
  */
 import { readFileSync, readdirSync, lstatSync, mkdirSync, rmSync } from 'node:fs';
 
-import { type EventLogger, type Phase, resolveGuardedPath, guardedWriteFile } from '@forge/kernel';
-import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
-import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
-import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { skillPath, skillPathRelative, SLUG_RE, loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
+import { type EventLogger, type Phase, resolveGuardedPath, guardedWriteFile, SLUG_RE } from '@forge/kernel';
+import { pinnedSdkQuery as sdkQuery } from '@forge/agents';
+import { resolveSessionModel, type ModelTier } from '@forge/agents';
+import { deriveAgentSpec } from '@forge/agents';
+import { loadAgentDefinition } from '@forge/agents';
+import { skillPath, skillPathRelative, loadSkillTurnPrompt } from '@forge/agents';
 import { resolveFinalizer, finalizerNeedsPackageId, type FinalizerContext, type QueuePorts, type ProjectRepoPathGuard } from './interactive-finalizers.ts';
 import { BASH_FENCE_MODES, bashFenceModeState, type SessionKindDescriptor, type TurnSpec, type TurnSpecPhase } from './studio/session-kinds.ts';
 import { runAgentTurn, runStructuredTurn, type QueryFn, type UnpricedTurnInfo } from './interactive-session.ts';

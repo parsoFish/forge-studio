@@ -20,8 +20,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { listFlowIds, loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
-import { fixtureFlowSource } from '@forge/library/tests/test-fixtures/flow-fixture.ts';
+import { listFlowIds, loadFlowDefinition } from '@forge/flows';
+import { fixtureFlowSource } from '@forge/library/testing';
 
 import { libraryFlowSource } from '../../library-flow-source.ts';
 

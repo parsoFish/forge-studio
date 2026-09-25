@@ -14,8 +14,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CHANGE_CLASSES, CLASS_PROFILES, isChangeClass, profileFor, readChangeClass, type ChangeClass, type GateProfile } from '../../class-profiles.ts';
-import { gateRequiredPaths, type RequiredPathsSource, type WorkItem } from '@forge/flows/work-item.ts';
-import { CHANGE_CLASSES as CHANGE_CLASSES_FROM_THE_VALIDATOR } from '@forge/flows/manifest.ts';
+import { gateRequiredPaths, type RequiredPathsSource, type WorkItem } from '@forge/flows';
+import { CHANGE_CLASSES as CHANGE_CLASSES_FROM_THE_VALIDATOR } from '@forge/flows';
 
 const FACTORY_DIR = join(import.meta.dirname, '..', '..');
 /**
@@ -83,7 +83,7 @@ const COLUMNS_AWAITING_A_CONSUMER: ReadonlyArray<keyof GateProfile> = [];
 // it ONCE per run and hands it to `gateRequiredPaths`, so the paths the
 // gate-tightening layer demands in the branch diff are the class's, not a
 // constant. Landing it CUT two of the column's drafted values — see the union
-// in `@forge/flows/work-item.ts` for why neither could be given an honest
+// in `@forge/flows` for why neither could be given an honest
 // consumer.
 //
 // `capture` came off with item 4, read by the integrate band

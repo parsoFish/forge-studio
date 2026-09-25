@@ -8,15 +8,15 @@
 
 import yaml from 'js-yaml';
 
-import { KB_BINDING_KINDS, KB_READ_SURFACES, KB_READER_ROLES } from '@forge/contracts/studio/types.ts';
+import { KB_BINDING_KINDS, KB_READ_SURFACES, KB_READER_ROLES } from '@forge/contracts';
 import type {
   KbBinding,
   KbDescriptor,
   KbProcessImpl,
   KbProcesses,
   KbUsagePolicy,
-} from '@forge/contracts/studio/types.ts';
-import { reqString, optString, oneOf, reqObject, loadYaml } from '@forge/kernel/studio/yaml-fields.ts';
+} from '@forge/contracts';
+import { reqString, optString, oneOf, reqObject, loadYaml } from '@forge/kernel';
 
 /**
  * Thrown when a `binding.band` key is declared where it carries no meaning

@@ -19,12 +19,10 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { runProjectManager, type PmQueryFn } from '@forge/stations/phases/project-manager.ts';
+import { runProjectManager, type PmQueryFn } from '@forge/stations/testing';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import type { CycleInput } from '../../cycle-context.ts';
-import { classifyCycleFailure } from '@forge/agents/failure-classifier.ts';
-import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
-import { skillPath } from '@forge/agents/skill-path.ts';
+import { classifyCycleFailure, loadAgentDefinition, skillPath } from '@forge/agents';
 
 // Seam F4: this file lives in packages/flows and may not reach into
 // packages/stations' own test-fixtures (package-layer-order) — loads the

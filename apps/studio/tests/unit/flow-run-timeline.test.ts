@@ -63,7 +63,7 @@
  *   "run-level data attributed to a node" defect.
  *
  * (f) NODE ORDER comes from the flow definition's `nodes` array.
- *   `@forge/flows/studio/flow-registry.ts` builds it with an order-preserving
+ *   `@forge/flows` builds it with an order-preserving
  *   `rawNodes.map(...)` over flow.yaml, and `studio/flows/forge-develop/
  *   flow.yaml` declares `dev → integrate → adversarial-review → review`. That is
  *   the authoritative order; a timeline in any other order is a defect.

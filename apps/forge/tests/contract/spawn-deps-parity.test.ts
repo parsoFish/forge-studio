@@ -24,7 +24,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 import { SPAWN_AGENT_SPECS } from '../../bridge-agent-dispatch.ts';
 
 const CLI_SRC = readFileSync(join(FORGE_ROOT, 'apps', 'forge', 'cli.ts'), 'utf8');

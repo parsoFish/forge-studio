@@ -16,11 +16,11 @@
  * render the structured operator handoff. Stdin/CLI transport is deferred.
  */
 
-import { loadBrainIndex } from '@forge/knowledge/brain-index.ts';
-import { modelForSpec } from '@forge/agents/phase-agent.ts';
-import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
-import { skillPathRelative } from '@forge/agents/skill-path.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import { loadBrainIndex } from '@forge/knowledge';
+import { modelForSpec } from '@forge/agents';
+import { deriveAgentSpec } from '@forge/agents';
+import { skillPathRelative } from '@forge/agents';
+import type { AgentDefinition } from '@forge/contracts';
 import { loadAgentSkillText } from './agent-skill-text.ts';
 
 export type ReflectorAllowedTool = 'Read' | 'Grep' | 'Glob' | 'Write' | 'Edit' | 'Bash';

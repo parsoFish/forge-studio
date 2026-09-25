@@ -9,7 +9,7 @@
  * `resolveProjectIdForRepo` is exported by this package but was, until now,
  * exercised ONLY indirectly through `apps/forge/tests/contract/project-event-resolve.test.ts`
  * — every one of that file's 6 cases drives it through
- * `stageFlowRunRequest`/`drainFlowRunRequests` (`@forge/flows/flow-run-requests.ts`).
+ * `stageFlowRunRequest`/`drainFlowRunRequests` (`@forge/flows`).
  * That file is leaving for `packages/flows` (a `packages/projects` (rank 2)
  * → `packages/flows` (rank 5) import is a boundary violation — flows is
  * allowed to import projects, not the reverse), so this package would

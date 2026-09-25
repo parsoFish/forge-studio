@@ -16,12 +16,12 @@ import {
   parseManifest,
   serializeManifest,
   mintAndPersistManifestCycleId,
-} from '@forge/flows/manifest.ts';
-import { promoteManifests } from '@forge/flows/promote-manifests.ts';
-import { isCanonicalInitiativeId } from '@forge/flows/initiative-id.ts';
-import { isContainedProjectRepoPath } from '@forge/flows/manifest-path-guard.ts';
-import type { ArchitectManifestPorts } from '@forge/sessions/kinds/architect-ports.ts';
-import type { ParseManifestPort } from '@forge/sessions/studio/session-transcript.ts';
+} from '@forge/flows';
+import { promoteManifests } from '@forge/flows';
+import { isCanonicalInitiativeId } from '@forge/flows';
+import { isContainedProjectRepoPath } from '@forge/flows';
+import type { ArchitectManifestPorts } from '@forge/sessions';
+import type { ParseManifestPort } from '@forge/sessions';
 
 /** Bound once; the same object is handed to every architect turn. bead
  *  8vfn.6.6 item 2 follow-up: `promoteManifests`/`mintAndPersistManifestCycleId`

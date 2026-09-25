@@ -25,7 +25,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { loadKbDescriptor, serializeKbDescriptor, deriveKbUsageDefaults } from '../../studio/kb-descriptor.ts';
-import type { KbDescriptor } from '@forge/contracts/studio/types.ts';
+import type { KbDescriptor } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

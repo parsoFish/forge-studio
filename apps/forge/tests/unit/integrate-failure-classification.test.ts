@@ -14,8 +14,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { integrateDeliveryFailure } from '@forge/stations/phases/executor-table.ts';
-import { classifyCycleFailure } from '@forge/agents/failure-classifier.ts';
+import { integrateDeliveryFailure } from '@forge/stations/testing';
+import { classifyCycleFailure } from '@forge/agents';
 import type { EventLogEntry } from '@forge/kernel';
 
 function orchestratorError(message: string): EventLogEntry {

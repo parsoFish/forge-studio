@@ -17,7 +17,8 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { assertSkillSlug, SLUG_RE, SLUG_RULE_TEXT } from '@forge/agents/skill-path.ts';
+import { assertSkillSlug } from '@forge/agents';
+import { SLUG_RE, SLUG_RULE_TEXT } from '@forge/kernel';
 import { sanitizeError } from '../../bridge-studio.ts';
 
 function messageFor(id: string, noun?: string): string {

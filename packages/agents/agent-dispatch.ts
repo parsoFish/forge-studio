@@ -27,16 +27,16 @@ import { resolveBandGuard } from './agent-bands.ts';
 import { normalizeProjectId } from '@forge/kernel';
 // The Flow kind stays in `orchestrator/studio/registry.ts` until wave 4 —
 // handed, listed in the share report, not closed here.
-import { listFlowIds, loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
-import { flowRoots, resolveIdAcrossRoots } from '@forge/kernel/discovery-roots.ts';
+import { listFlowIds, loadFlowDefinition } from '@forge/flows';
+import { flowRoots, resolveIdAcrossRoots } from '@forge/kernel';
 import { agentCapabilityDescriptor } from './studio/derive.ts';
 import { runAgent, isSafeRunId, type ProjectBinding, type RunAgentResult } from './run-agent.ts';
 import { materialKindForFilename } from './studio/materials.ts';
 import { createLogger } from '@forge/kernel';
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
-import { fireAgentCompleteTriggers } from '@forge/flows/flow-trigger.ts';
+import { FORGE_ROOT } from '@forge/kernel';
+import { fireAgentCompleteTriggers } from '@forge/flows';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
-import type { AgentDefinition, FlowDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
 
 /** One reference to an already-staged kickoff material — a relative path
  *  (e.g. `materials/photo.png`) plus its derived kind. NEVER carries bytes:

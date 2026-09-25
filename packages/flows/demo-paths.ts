@@ -25,7 +25,7 @@
 
 import { join, resolve } from 'node:path';
 
-import { readArtifactRoot } from '@forge/knowledge/brain-paths.ts';
+import { readArtifactRoot } from '@forge/knowledge';
 
 /** Canonical basename of the structured demo the unifier authors (ADR 021). */
 export const DEMO_JSON_BASENAME = 'demo.json';

@@ -5,8 +5,8 @@
  * onToolUse, never queryFn".
  */
 import type { EventLogger } from '@forge/kernel';
-import { deriveKbIdFromBrainPath } from '@forge/knowledge/brain-paths.ts';
-import type { ToolUseLiveDetail } from '@forge/agents/ralph/claude-agent.ts';
+import { deriveKbIdFromBrainPath } from '@forge/knowledge';
+import type { ToolUseLiveDetail } from '@forge/agents';
 import type { KindStepHandler, KindTurnInput, KindTurnPlumbing, KindTurnResult, KindTurnStatus } from './kind-turn.ts';
 
 /** Write tools never touch brain/, so these three are exhaustive. */

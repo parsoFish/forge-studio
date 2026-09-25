@@ -24,7 +24,7 @@ import {
   renderProjectContextBlock,
 } from '../../phases/pm-binding.ts';
 import { canonicalDef } from '../test-fixtures/canonical-def-fixture.ts';
-import { modelForSpec } from '@forge/agents/phase-agent.ts';
+import { modelForSpec } from '@forge/agents';
 
 // ---------------------------------------------------------------------------
 // 1. pmAgentSpec shape

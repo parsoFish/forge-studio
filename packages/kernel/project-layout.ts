@@ -20,7 +20,7 @@ import { join, resolve, relative, sep, isAbsolute, dirname } from 'node:path';
 
 import { PROJECT_ID_RE } from './ids.ts';
 import { resolveProjectsDir } from './config.ts';
-import type { ProjectRef } from '@forge/contracts/studio/types.ts';
+import type { ProjectRef } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // Project discovery (disk scan — replaces the studio/projects.yaml registry)

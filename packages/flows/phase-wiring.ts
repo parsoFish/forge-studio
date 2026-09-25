@@ -21,7 +21,7 @@ import type { EventLogger, PhaseExecutor, ProjectGate } from '@forge/kernel';
 
 import type { ClosureResult, CycleInput, ReviewerOutcome } from './cycle-context.ts';
 import type { NodeExecContext } from './flow-node-context.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 
 export type PhaseWiring = {
   /** Runs one flow node. `@forge/factory`'s `createPhaseExecutor()` builds the shipped one. */

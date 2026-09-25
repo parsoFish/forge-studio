@@ -6,30 +6,41 @@ paths that locate them, the lint that keeps them honest, and the KB surface Stud
 ## The public door
 
 `import … from '@forge/knowledge'`. That is this package's API and the list below is all
-of it. Deep paths (`@forge/knowledge/brain-paths.ts`) still resolve — `package.json` maps
-`"./*": "./*"` — and every existing importer uses one, so they are the **legacy** door,
-kept working and not recommended. Collapsing to one door is bead `forge-8vfn.5.31`.
+of it. `package.json` maps only `"."` and one documented test-only subpath
+(`@forge/knowledge/testing`, below) — a deep path like
+`@forge/knowledge/brain-paths.ts` no longer resolves. Bead `forge-8vfn.5.31` collapsed
+the legacy `"./*"` door; every importer now goes through `@forge/knowledge`.
 
 `contract.test.ts` asserts this list against what the index actually
 exports, in both directions, and is required to FAIL against an empty index.
 
-### Values (36)
+### Values (46)
 
 | area | exports |
 |---|---|
 | brain paths | `cycleArchivePath` · `cycleArchiveRelPath` · `cyclesRawDir` · `cyclesThemesDir` · `deriveKbIdFromBrainPath` · `projectBrainDir` · `projectThemesDir` · `readArtifactRoot` · `resolveKbBrainDir` |
 | brain index | `loadBrainIndex` · `regenerateBrainIndex` |
-| brain lint | `CHECK_NAMES` · `classify` · `classifyFinding` · `lintThemeFiles` · `runBrainLint` |
+| brain lint | `CHECK_NAMES` · `classify` · `classifyFinding` · `lintThemeFiles` · `runBrainLint` · `brainTruthRates` · `formatTruthfulnessLines` |
 | KB descriptors | `loadKbDescriptor` · `serializeKbDescriptor` · `projectKbBindings` · `unroutableKbReason` · `kbReadPolicyViolation` |
-| KB surface | `KB_SEEDING_ANCHOR_PREFIX` · `approveKbCleanup` · `computeAgentCleanupFindings` · `loadKbDescriptors` · `activeJobReason` · `deriveKbActiveJob` · `runPostReflectionKbHealth` · `guardAgentKbEdits` · `snapshotBrainTree` · `tryGetKbBackend` |
-| project brain seeding | `checkProjectBrainSeedContainment` · `seedProjectBrain` |
+| KB surface | `KB_SEEDING_ANCHOR_PREFIX` · `approveKbCleanup` · `computeAgentCleanupFindings` · `loadKbDescriptors` · `activeJobReason` · `deriveKbActiveJob` · `runPostReflectionKbHealth` · `guardAgentKbEdits` · `snapshotBrainTree` · `noKbEdits` · `tryGetKbBackend` |
+| project brain seeding | `checkProjectBrainSeedContainment` · `seedProjectBrain` · `PROJECT_BRAIN_KIND_DIR` · `buildAnalyzePlan` · `commitProjectBrain` · `listStagedThemes` |
+| brain write lease | `acquireBrainWriteLease` · `BrainWriteLeaseContentionError` |
+| KB validation | `validateKb` |
 | cycle retention | `assignRetention` · `collectCitedBy` · `patchArchiveFrontmatter` |
 | HTTP routes | `knowledgeRoutes` |
 
-### Types (8)
+### Types (9)
 
 `Finding` · `RunBrainLintResult` · `Scope` · `UnroutableKb` · `KbEditGateResult` ·
-`RetentionTag` · `ThemeMeta` · `KbBackend`
+`RetentionTag` · `ThemeMeta` · `KbBackend` · `SessionStatusIoPort`
+
+### The one test-only subpath
+
+`@forge/knowledge/testing` exports `resolveKbProcesses` — used only by two
+`apps/forge` tests, no production consumer outside this package, so it stays off the
+main door (bead `forge-8vfn.5.31`: a symbol earns the door by having a production
+consumer in another package; a test-only deep import gets a named, documented
+subpath instead of widening `"./*"` back open).
 
 ## What it owns
 

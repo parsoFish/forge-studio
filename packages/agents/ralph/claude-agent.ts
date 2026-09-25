@@ -21,7 +21,7 @@ import { gitIdentityEnvOverlay, type GitIdentity } from '@forge/kernel';
 import type { AgentInvocation, ToolUseDetail } from './runner.ts';
 import { extractPath, truncate } from '../tool-event-emit.ts';
 import { FORGE_ROOT } from '../studio/derive.ts';
-import { loadDeclaredSkills } from '@forge/projects/preflight-skills.ts';
+import { loadDeclaredSkills } from '@forge/projects';
 import { composeProjectSkills } from '../project-skills.ts';
 
 export type { GitIdentity };

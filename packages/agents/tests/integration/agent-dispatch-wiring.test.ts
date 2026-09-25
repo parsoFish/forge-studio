@@ -31,7 +31,7 @@ import { join } from 'node:path';
 import { dispatchAgentRun, buildStandaloneRunPrompt } from '../../agent-dispatch.ts';
 import { listAgentDefinitions } from '../../studio/agent-registry.ts';
 import { FORGE_ROOT } from '../../studio/derive.ts';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
+import type { AgentDefinition } from '@forge/contracts';
 import type { StreamQueryFn } from '../../pinned-sdk-query.ts';
 
 const ROOT = FORGE_ROOT;

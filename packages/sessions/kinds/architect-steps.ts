@@ -25,11 +25,14 @@ import {
   writePlanDoc, sessionPaths,
   type ArchitectSession, type ProposedInitiative, type CouncilTranscript, type InterviewRound,
 } from './architect-plan.ts';
-import { loadBrainIndex } from '@forge/knowledge/brain-index.ts';
+import { loadBrainIndex } from '@forge/knowledge';
 import { guardedFile, guardedReadFile, guardedWriteFile, type EventLogger } from '@forge/kernel';
 import { renderInterviewSummary, runCompletenessCriticStep, type CompletenessCriticFinding } from './architect-critic.ts';
 import { requirePorts } from './architect-ports.ts';
-import type { ToolUseLiveDetail } from '@forge/agents/ralph/claude-agent.ts';
+import type { ToolUseLiveDetail } from '@forge/agents';
+// Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
+// architect-session.ts's own module doc — this file is reached from
+// `kinds/registry.ts` via `architect.ts`).
 import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { skillPath, loadSkillTurnPrompt, splitSkillTurnSections } from '@forge/agents/skill-path.ts';
 import { hooksSpreadForAgent, type KindTurnPlumbing } from './kind-turn.ts';

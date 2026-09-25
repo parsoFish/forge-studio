@@ -23,7 +23,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
 
 import { allowedOrigin, sanitizeError, sendJson, SAFE_ID_RE, MAX_SKILL_ID_LENGTH } from '@forge/kernel';
-import { guardedFile, guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel/path-guard.ts';
+import { guardedFile, guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel';
 
 import { DEMO_HTML_REL_PATH, type DemoBuilderStatus } from './kinds/demo-session-store.ts';
 import { GENERATIONS_DIRNAME } from './kinds/demo-session-store.ts';

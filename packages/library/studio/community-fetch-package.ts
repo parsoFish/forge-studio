@@ -37,7 +37,7 @@ import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:f
 import { dirname, join, resolve, sep } from 'node:path';
 import { randomBytes } from 'node:crypto';
 
-import { assertSkillSlug } from '@forge/kernel/ids.ts';
+import { assertSkillSlug } from '@forge/kernel';
 
 import {
   CommunityRefreshError,

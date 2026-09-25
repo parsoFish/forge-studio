@@ -18,7 +18,7 @@
  * `tests/contract/routes-table.test.ts` pins which entry claims each colliding
  * URL rather than merely asserting both exist.
  */
-import type { AuthoringSessionPort } from '@forge/library/studio/authoring-session.ts';
+import type { AuthoringSessionPort } from '@forge/library';
 import type { IncomingMessage } from 'node:http';
 
 import type { RouteContext, RouteTable } from '@forge/kernel';
@@ -34,7 +34,7 @@ import { handleStudioSessionsRoutes } from './bridge-studio-sessions.ts';
 import { handleSessionCancelRoute } from './bridge-studio-session-cancel.ts';
 import { handleStudioAgentCapabilityRoute } from './bridge-studio-agent-capability.ts';
 import { handleStudioAffordanceRoutes } from './bridge-studio-sessions-affordances.ts';
-import type { approveKbCleanup } from '@forge/knowledge/bridge-studio-kbs.ts';
+import type { approveKbCleanup } from '@forge/knowledge';
 
 /**
  * The bridge-instance state these routes need, declared HERE (ruling 59 §2) so

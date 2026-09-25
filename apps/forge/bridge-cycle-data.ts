@@ -26,7 +26,7 @@ import { basename } from 'node:path';
 
 import { sendJson, allowedOrigin, resolveGuardedPath, guardedReadFile, isSafeSubPath } from '@forge/kernel';
 import type { EventLogEntry } from '@forge/kernel';
-import { parseWorkItem, DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows/work-item.ts';
+import { parseWorkItem, DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows';
 
 /** The context these read-only cycle-data routes need from the host. */
 export type CycleDataContext = {
@@ -206,7 +206,7 @@ export async function handleCycleDataRoutes(
       return true;
     }
     try {
-      const { summariseCycle } = await import('@forge/flows/metrics.ts');
+      const { summariseCycle } = await import('@forge/flows');
       const m = summariseCycle(cycleId, ctx.logsRoot);
       sendJson(res, 200, {
         cycleId,

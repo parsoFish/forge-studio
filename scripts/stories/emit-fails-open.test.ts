@@ -34,7 +34,7 @@ import { createLogger } from '@forge/kernel';
 import {
   emitTurnCostRow, emitTurnEndedUnpricedRow,
   EMIT_FAILED_SIDECAR, EMIT_FAILED_STDERR_MARKER,
-} from '@forge/sessions/turn-cost-rows.ts';
+} from '@forge/sessions';
 
 import { readEmitFailures } from './run-observe.mjs';
 import { ceilingHaltVerdict, summariseRunSpend } from './spend.mjs';

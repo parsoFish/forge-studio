@@ -10,7 +10,7 @@ import {
   WEBHOOK_FAMILY_KIND_IDS,
   type FlowTriggerEvent,
 } from '../../flow-trigger.ts';
-import type { FlowTrigger } from '@forge/contracts/studio/types.ts';
+import type { FlowTrigger } from '@forge/contracts';
 
 function flow(triggers: FlowTrigger[]): { id: string; triggers: FlowTrigger[] } {
   return { id: 'forge-develop', triggers };

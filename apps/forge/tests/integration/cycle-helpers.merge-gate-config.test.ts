@@ -21,12 +21,12 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runMergeBoundaryGate } from '@forge/flows/cycle-helpers.ts';
-import { flowPathForId } from '@forge/flows/flow-runner.ts';
+import { runMergeBoundaryGate } from '@forge/flows';
+import { flowPathForId } from '@forge/flows';
 import { runFlowT, type TestDeps, type FlowRunnerDeps } from '../test-fixtures/flow-runner-port.ts';
-import { loadFlowDefinition } from '@forge/flows/studio/flow-registry.ts';
-import { readWorkItemsFromDir } from '@forge/flows/work-item.ts';
-import type { CycleInput } from '@forge/flows/cycle-context.ts';
+import { loadFlowDefinition } from '@forge/flows';
+import { readWorkItemsFromDir } from '@forge/flows';
+import type { CycleInput } from '@forge/flows';
 import type { EventLogger } from '@forge/kernel';
 
 // ---------------------------------------------------------------------------
@@ -328,7 +328,7 @@ test('a config-red gate parks needs-operator and compiles NO gate-fix work item'
     // unresolved import instead of on its own `result.ok` assertion — a red
     // that proves nothing about the defect it claims to kill (immutable-gates).
     // A dynamic import scoped to this test keeps that failure local to test 2.
-    const { hasMergeGateConfigErrorMarker, mergeGateConfigErrorPath } = await import('@forge/flows/fix-work-items.ts');
+    const { hasMergeGateConfigErrorMarker, mergeGateConfigErrorPath } = await import('@forge/flows/testing');
 
     const tracker = makeCallTracker();
     const deps = makeMockDeps(tracker);

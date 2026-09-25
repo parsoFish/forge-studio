@@ -13,24 +13,24 @@
 import { basename, join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import type { EventLogger } from '@forge/kernel';
-import type { AgentDefinition } from '@forge/contracts/studio/types.ts';
-import { parseManifest } from '@forge/flows/manifest.ts';
-import { FORGE_ROOT } from '@forge/agents/skill-path.ts';
-import { runPreflight } from '@forge/projects/preflight.ts';
+import { parseManifest } from '@forge/flows';
+import { runPreflight } from '@forge/projects';
+import { FORGE_ROOT } from '@forge/kernel';
+import type { AgentDefinition } from '@forge/contracts';
 import type { ProjectGate } from '@forge/kernel';
-import { type ClosureResult, type CycleInput, type ReviewerOutcome } from '@forge/flows/cycle-context.ts';
-import { WedgeDetector, WedgeKillError } from '@forge/flows/flow-budgets.ts';
-import { runProjectManager as realRunProjectManager } from '@forge/stations/phases/project-manager.ts';
-import { runDeveloperLoop as realRunDeveloperLoop, emitDeliverySummary } from '@forge/stations/phases/developer-loop.ts';
-import { runIntegrateBand, type IntegrateResult } from '@forge/stations/phases/integrate.ts';
-import { runAdversarialReview as realRunAdversarialReview, type AdversarialReviewResult } from '@forge/stations/phases/adversarial-review.ts';
+import { type ClosureResult, type CycleInput, type ReviewerOutcome } from '@forge/flows';
+import { WedgeDetector, WedgeKillError } from '@forge/flows';
+import { runProjectManager as realRunProjectManager } from './project-manager.ts';
+import { runDeveloperLoop as realRunDeveloperLoop, emitDeliverySummary } from './developer-loop.ts';
+import { runIntegrateBand, type IntegrateResult } from './integrate.ts';
+import { runAdversarialReview as realRunAdversarialReview, type AdversarialReviewResult } from './adversarial-review.ts';
 import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
-import { changedMarkdownFiles, runClassMergeBoundary } from '@forge/stations/phases/merge-boundary.ts';
-import { runDocsGate } from '@forge/stations/gates/docs-gate.ts';
-import { runClosure, promoteMergedToDone } from '@forge/flows/phases/closure.ts';
-import { runReflector } from '@forge/stations/phases/reflector.ts';
-import { rebasePreservedBranchOntoMain } from '@forge/flows/pr.ts';
-import { openPrInline, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, runMergeBoundaryGate, preservingForgeScratch, type MergeGateEvidence, type MergeGateResult } from '@forge/flows/cycle-helpers.ts';
+import { changedMarkdownFiles, runClassMergeBoundary } from './merge-boundary.ts';
+import { runDocsGate } from '../gates/docs-gate.ts';
+import { runClosure, promoteMergedToDone } from '@forge/flows';
+import { runReflector } from './reflector.ts';
+import { rebasePreservedBranchOntoMain } from '@forge/flows';
+import { openPrInline, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, runMergeBoundaryGate, preservingForgeScratch, type MergeGateEvidence, type MergeGateResult } from '@forge/flows';
 
 
 /**

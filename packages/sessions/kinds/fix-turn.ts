@@ -32,6 +32,8 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+// Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
+// packages/sessions/kinds/architect-session.ts's own module doc).
 import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 import { hooksSpreadForAgent } from './kind-turn.ts';
 import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents/tool-event-emit.ts';

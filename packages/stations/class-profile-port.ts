@@ -12,8 +12,8 @@
  * one home — its columns, its values and its four functions are unchanged.
  */
 
-import type { InitiativeManifest } from '@forge/contracts/manifest-types.ts';
-import type { RequiredPathsSource } from '@forge/flows/work-item.ts';
+import type { InitiativeManifest } from '@forge/contracts';
+import type { RequiredPathsSource } from '@forge/flows';
 
 /** The manifest field's own union — not a second declaration of it. */
 export type ChangeClass = InitiativeManifest['class'];

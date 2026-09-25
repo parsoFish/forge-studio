@@ -28,7 +28,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, readFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { FORGE_ROOT } from '@forge/kernel/ids.ts';
+import { FORGE_ROOT } from '@forge/kernel';
 
 const CONTRACT = {
   name: 'victim',

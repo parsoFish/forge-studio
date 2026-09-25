@@ -16,7 +16,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 
 import { allowedOrigin, sendJson } from '@forge/kernel';
-import { guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel/path-guard.ts';
+import { guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel';
 
 import { guardedReadSessionStatus, guardedWriteSessionStatus } from './session-status-io.ts';
 import { LEGACY_SESSION_TERMINAL_PHASES } from './session-phases.ts';

@@ -10,7 +10,7 @@ import {
   DEMO_STEP_KINDS,
   RELEASE_STEP_KINDS,
   RELEASE_STEP_PHASES,
-} from '@forge/contracts/studio/types.ts';
+} from '@forge/contracts';
 import type {
   BuildProcess,
   DemoStep,
@@ -19,7 +19,7 @@ import type {
   ReleaseStep,
   ReleaseStepKind,
   ReleaseStepPhase,
-} from '@forge/contracts/studio/types.ts';
+} from '@forge/contracts';
 import type {
   LoggingConfig,
   TestProcess,

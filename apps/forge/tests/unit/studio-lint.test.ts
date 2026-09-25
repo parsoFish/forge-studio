@@ -17,9 +17,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runStudioLint } from '../../studio-lint.ts';
-import { loadKbDescriptor, resolveKbProcesses } from '@forge/knowledge/studio/kb-descriptor.ts';
-import { validateKb } from '@forge/knowledge/studio/validate-kb.ts';
-import type { KbBinding } from '@forge/contracts/studio/types.ts';
+import { loadKbDescriptor } from '@forge/knowledge';
+import { validateKb } from '@forge/knowledge';
+import { resolveKbProcesses } from '@forge/knowledge/testing';
+import type { KbBinding } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

@@ -17,7 +17,7 @@ import { join } from 'node:path';
 
 import yaml from 'js-yaml';
 
-import type { FlowDefinition } from '@forge/contracts/studio/types.ts';
+import type { FlowDefinition } from '@forge/contracts';
 import type { FlowSource } from '../../studio/template-library.ts';
 
 export const fixtureFlowSource: FlowSource = {

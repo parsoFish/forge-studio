@@ -20,7 +20,7 @@ import { type CommunityItem, type CommunityKind } from './studio/community-index
 import { listCatalogConnections, type CatalogConnection } from './studio/connection-library.ts';
 import { type ProbeState } from './studio/connection-probe.ts';
 import { parseCommunityUpstream } from './studio/community-source-url.ts';
-import type { CommunitySkill } from '@forge/contracts/studio/types.ts';
+import type { CommunitySkill } from '@forge/contracts';
 
 /** Every real committed vendored package (studio/community/{skills,hooks}/)
  *  is forge-authored and attributed to this repo's own seed hub — the same
