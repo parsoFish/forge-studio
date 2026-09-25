@@ -265,6 +265,11 @@ export const FLOW_KICKOFF_KINDS = ['idea', 'initiative-select', 'trigger-only'] 
 export type FlowKickoffKind = (typeof FLOW_KICKOFF_KINDS)[number];
 export type FlowKickoff = { kind: FlowKickoffKind };
 
+/** Seam F6 half 2 (operator ruling 97): narrows the change class's review
+ *  lenses for this flow. Optional; `lenses` non-empty when present — an
+ *  empty list is a FlowDef validation error, not "no lenses". */
+export type FlowReview = { lenses: string[] };
+
 export type FlowDefinition = {
   id: string;
   name: string;
@@ -276,6 +281,7 @@ export type FlowDefinition = {
   origin: string;
   /** Seam F6: manifest classes this flow accepts. Required, non-empty. */
   accepts: ManifestClass[];
+  review?: FlowReview;
   disposable?: boolean;
   nodes: FlowNode[];
   edges: FlowEdge[];

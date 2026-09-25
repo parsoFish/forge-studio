@@ -261,7 +261,34 @@ export function loadFlowDefinition(flowYamlPath: string): FlowDefinition {
     kickoff = { kind: reqString(k, 'kind', flowYamlPath) as FlowKickoffKind };
   }
 
-  return { id, name, version, goal, project, kb, costCeilingUsd, origin, accepts, disposable, nodes, edges, triggers, kickoff, path: flowYamlPath };
+  // Seam F6 half 2 (operator ruling 97): optional `review.lenses` — narrows
+  // the change class's review lenses for THIS flow. Membership in the
+  // class's own lenses cannot be checked here (the class table lives in
+  // packages/factory, which this package may never import — same reasoning
+  // as `accepts`); that check happens at runtime, where the profile is
+  // actually bound (adversarial-review.ts). An empty list IS checked here:
+  // "narrow to nothing" is never a legal declaration.
+  const rawReview = d['review'];
+  let review: FlowDefinition['review'];
+  if (rawReview !== undefined && rawReview !== null) {
+    if (typeof rawReview !== 'object' || Array.isArray(rawReview)) {
+      throw new Error(`${flowYamlPath}: "review" must be a mapping { lenses: [...] }`);
+    }
+    const r = rawReview as Record<string, unknown>;
+    const rawLenses = r['lenses'];
+    if (!Array.isArray(rawLenses) || rawLenses.length === 0) {
+      throw new Error(`${flowYamlPath}: flow "${id}" "review.lenses" must be a non-empty array of lens names`);
+    }
+    const lenses = rawLenses.map((v, i) => {
+      if (typeof v !== 'string' || v.length === 0) {
+        throw new Error(`${flowYamlPath}: flow "${id}" review.lenses[${i}] must be a non-empty string`);
+      }
+      return v;
+    });
+    review = { lenses };
+  }
+
+  return { id, name, version, goal, project, kb, costCeilingUsd, origin, accepts, review, disposable, nodes, edges, triggers, kickoff, path: flowYamlPath };
 }
 
 // consumed by the M2 bridge PUT routes (no production call site until then)
@@ -280,6 +307,7 @@ export function serializeFlowDefinition(def: FlowDefinition): string {
   out['costCeilingUsd'] = rest.costCeilingUsd;
   out['origin'] = rest.origin;
   out['accepts'] = rest.accepts;
+  if (rest.review !== undefined) out['review'] = { lenses: rest.review.lenses };
   if (rest.disposable !== undefined) out['disposable'] = rest.disposable;
   out['nodes'] = rest.nodes.map(({ id, agent, gate, fanOut, resumable, x, y }) => {
     const n: Record<string, unknown> = { id };

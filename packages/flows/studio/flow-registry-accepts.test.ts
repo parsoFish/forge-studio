@@ -90,3 +90,52 @@ test('serializeFlowDefinition: round-trips "accepts"', () => {
   assert.deepEqual(reloaded.accepts, ['config', 'infra']);
   rmSync(dir, { recursive: true, force: true });
 });
+
+// ---------------------------------------------------------------------------
+// Seam F6 half 2 (operator ruling 97): the optional `review.lenses` field.
+// ---------------------------------------------------------------------------
+
+test('loadFlowDefinition: no "review" key -> flow.review is absent (unchanged behaviour)', () => {
+  const path = tmpFlow(BASE.replace('origin: seed\n', 'origin: seed\naccepts: [code]\n'));
+  const flow = loadFlowDefinition(path);
+  assert.equal(flow.review, undefined);
+});
+
+test('loadFlowDefinition: "review: { lenses: [] }" (empty) is a validation error', () => {
+  const path = tmpFlow(
+    BASE.replace('origin: seed\n', 'origin: seed\naccepts: [code]\nreview:\n  lenses: []\n'),
+  );
+  assert.throws(
+    () => loadFlowDefinition(path),
+    (err: Error) => {
+      assert.match(err.message, /my-flow/);
+      assert.match(err.message, /review\.lenses/);
+      assert.match(err.message, /non-empty/);
+      return true;
+    },
+  );
+});
+
+test('loadFlowDefinition: "review: { lenses: [correctness] }" loads verbatim', () => {
+  const path = tmpFlow(
+    BASE.replace('origin: seed\n', 'origin: seed\naccepts: [code]\nreview:\n  lenses: [correctness]\n'),
+  );
+  const flow = loadFlowDefinition(path);
+  assert.deepEqual(flow.review, { lenses: ['correctness'] });
+});
+
+test('serializeFlowDefinition: round-trips "review.lenses"', () => {
+  const path = tmpFlow(
+    BASE.replace('origin: seed\n', 'origin: seed\naccepts: [code]\nreview:\n  lenses: [correctness, boundary]\n'),
+  );
+  const flow = loadFlowDefinition(path);
+  const yaml = serializeFlowDefinition(flow);
+  const dir = mkdtempSync(join(tmpdir(), 'flow-review-rt-'));
+  const flowDir = join(dir, 'studio', 'flows', 'my-flow');
+  mkdirSync(flowDir, { recursive: true });
+  const p2 = join(flowDir, 'flow.yaml');
+  writeFileSync(p2, yaml);
+  const reloaded = loadFlowDefinition(p2);
+  assert.deepEqual(reloaded.review, { lenses: ['correctness', 'boundary'] });
+  rmSync(dir, { recursive: true, force: true });
+});
