@@ -136,3 +136,19 @@ test('dry-bridge mode refuses the test-fire without spawning', async () => {
   }
   assert.equal(existsSync(markerPath), false, 'dry-bridge must never actually spawn the hook script');
 });
+
+test('a test-fire is surfaced on GET /api/studio/hooks/:id as testFireRuns', async () => {
+  writeHook('detail-test-fire-hook');
+  approveHook({ forgeRoot, id: 'detail-test-fire-hook' });
+  await postTestFire('detail-test-fire-hook');
+
+  const { res, body } = mockRes();
+  const ctx: LibraryRouteContext = { forgeRoot, logsRoot, readBody: async () => ({}) };
+  const handled = await dispatchRoute(routes, {} as IncomingMessage, res, ctx, '/api/studio/hooks/detail-test-fire-hook', 'GET');
+  assert.ok(handled);
+  const detail = body();
+  const runs = detail['testFireRuns'] as Array<Record<string, unknown>>;
+  assert.ok(Array.isArray(runs), `expected testFireRuns to be an array, got ${JSON.stringify(detail['testFireRuns'])}`);
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0]!.outcome, 'ran');
+});
