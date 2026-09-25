@@ -108,8 +108,8 @@ test('every package with a QUARRY cap is measured, and every measured package ha
   const names = Object.keys(pkgs).sort();
   assert.deepEqual(
     names,
-    ['agents', 'contracts', 'factory', 'flows', 'kernel', 'knowledge', 'library', 'projects', 'sessions', 'stations'],
-    'all ten packages accounted for',
+    ['agents', 'contracts', 'factory', 'flows', 'forge-docs', 'kernel', 'knowledge', 'library', 'projects', 'sessions', 'stations'],
+    'all eleven packages accounted for (forge-docs: the G3 second factory, data only)',
   );
   for (const [name, row] of Object.entries(pkgs)) {
     assert.equal(typeof row.lines, 'number', `${name} has a measured line count`);
@@ -214,13 +214,12 @@ test('the cap-table parser accepts a hyphenated package name', () => {
 });
 
 test('a hyphenated --cap-override package name is parsed, not rejected as malformed', () => {
-  // `forge-docs` has no cap row in the REAL QUARRY.md (nothing on main is a
-  // hyphenated package yet), so this must still fail — but on "no cap row",
-  // never on "malformed spec". The malformed-spec message is what a
+  // `no-such-pkg` names no package, so this must still fail, but on "no such
+  // package", never on "malformed spec". The malformed-spec message is what a
   // still-`[a-z]+` override parser would produce for a name with a hyphen.
-  const { code, out } = run(['--cap-override', 'forge-docs=999']);
+  const { code, out } = run(['--cap-override', 'no-such-pkg=999']);
   assert.equal(code, 1, out);
-  assert.match(out, /forge-docs/);
+  assert.match(out, /no-such-pkg/);
   assert.doesNotMatch(out, /--cap-override expects/, 'a well-formed hyphenated override must not be reported as malformed');
 });
 

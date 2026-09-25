@@ -1,0 +1,65 @@
+id: forge-docs
+name: Forge Docs
+version: 1
+goal: Take a docs-class initiative's work item to a reviewed, merged PR — build, integrate at the docs gate, one read-only review, verdict. No reflect.
+project: null
+kb: cycles
+costCeilingUsd: 12
+origin: seed
+# G3 (1.0.md §3): a SECOND factory built from data only — PACKAGED, not a
+# bare studio/flows/ entry. This directory (packages/forge-docs/) is the
+# whole factory: this file plus its own skills/ (docs-writer, docs-integrate,
+# docs-review), discovered with NO registration code through the platform's
+# package-owned discovery roots (packages/kernel/discovery-roots.ts:
+# `packages/<pkg>/flows/<id>/flow.yaml` and `packages/<pkg>/skills/<slug>/
+# SKILL.md`). Delete packages/forge-docs and this flow and its three agents
+# are gone; nothing else changes (proved by scripts/factory-deletable.mjs's
+# forge-docs section).
+#
+# Every station dispatches through the platform's existing band/ralph
+# executors (packages/stations) — there is no station of its own, and no
+# execution code anywhere names "forge-docs". What IS this package's own:
+# the topology, the bound, the triggers, and every agent identity on the
+# flow except `integrate` (see docs-integrate/SKILL.md's own header for why
+# it still gets its own def rather than borrowing the example's).
+#
+accepts: [docs]
+# Seam F6 half 2 (operator ruling 97): narrows the `docs` class's four
+# review lenses (packages/factory/class-profiles.ts: accuracy-against-source,
+# link-integrity, forbidden-tokens, structure) to exactly ONE —
+# accuracy-against-source. The other three are mechanical checks a
+# deterministic tool can run without a model's judgment (does a link
+# resolve, does a forbidden token appear, does the page match its section
+# shape); accuracy-against-source — does the page still say something true
+# against the source it describes — is the one lens in the table that
+# genuinely needs a reader, so it is the one judgment call this flow's tight
+# $4 review ceiling buys. See packages/forge-docs/skills/docs-review/SKILL.md.
+review: { lenses: [accuracy-against-source] }
+#
+# The plan stage is forge-architect's (architect interview, plan gate with the
+# `docs` class confirmed, pm). An operator hands the planned initiative here
+# through the generic per-flow door (`POST /api/flows/forge-docs/run`, the flow
+# monitor's Start Run), not /api/develop/start, which targets forge-develop.
+#
+# Differences from forge-develop, all of them data:
+#   - accepts: [docs] only — forge-develop accepts all four classes; this
+#     factory is docs-only, so a non-docs initiative is refused by name
+#     (flowClassRefusalMessage) rather than run under the wrong gate profile;
+#   - review.lenses narrows to the one lens above (forge-develop declares no
+#     `review` block at all — it runs every lens its broader class allows);
+#   - costCeilingUsd 12, the docs class's target (spec §5 item 9: ≈ $8–12, one WI);
+#   - no `on: merged` reflect trigger — a docs change merges and stops;
+#   - every station's `agent:` is this package's own SKILL.md, dispatched
+#     through the platform's existing band/ralph executors — never the
+#     example's `developer-ralph` / `adversarial-review` slugs.
+nodes:
+  - { id: build, agent: docs-writer }
+  - { id: integrate, agent: docs-integrate, resumable: true }
+  - { id: review, agent: docs-review }
+  - { id: verdict, gate: verdict }
+edges:
+  - { from: build, to: integrate, artifact: wi-branches }
+  - { from: integrate, to: review, artifact: pr }
+  - { from: review, to: verdict, artifact: review-findings }
+triggers: []
+kickoff: { kind: initiative-select }
