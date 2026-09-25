@@ -164,6 +164,22 @@ export function parseDispositionSummary(markdown) {
 }
 
 /**
+ * A package-table row name: a lowercase, kebab-case slug (same shape as
+ * `check-package-caps.mjs`'s `PACKAGE_NAME_RE`, kept as its own local
+ * literal for the same reason that file states — a dependency-light lint
+ * script, not a package consumer), optionally `/`-joined once for the
+ * `apps/*` rows this table also carries (`apps/forge`, `apps/studio`).
+ *
+ * Was `[a-z/]+` — no hyphen, no digit — so a hyphenated package's row
+ * (`forge-docs`, the G3 second factory) silently parsed as "not a package
+ * row" here: not flagged by the packageDrift check below, not corrected by
+ * `--write`, invisible to both. Exactly the gap `check-package-caps.mjs`'s
+ * own `PACKAGE_NAME_RE` comment already names for its sibling table parser —
+ * this was the second, unfixed copy of the same regex bug.
+ */
+const PACKAGE_TABLE_ROW_NAME_RE = /[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*)?/;
+
+/**
  * The "Per-package LOC caps" table's `files` and `quarried LOC` columns,
  * plus the **total** row — five-cell rows shaped
  * `| \`name\` | files | loc | cap | note |`. Strips `**`/`,` the same way
@@ -180,7 +196,7 @@ export function parsePackageTable(markdown) {
     const cells = t.slice(1, t.endsWith('|') ? -1 : undefined).split('|').map((c) => c.trim());
     if (cells.length !== 5) continue;
     const isTotal = cells[0] === '**total**';
-    const nameMatch = cells[0].match(/^`([a-z/]+)`$/);
+    const nameMatch = cells[0].match(new RegExp(`^\`(${PACKAGE_TABLE_ROW_NAME_RE.source})\`$`));
     if (!isTotal && !nameMatch) continue; // header, separator, or another table's row
     const clean = (s) => s.replace(/\*/g, '').replace(/,/g, '').trim();
     const filesStr = clean(cells[1]);
@@ -364,7 +380,7 @@ export function rewriteQuarry(root, markdown) {
 
     if (cells.length === 5) {
       const isTotal = cells[0] === '**total**';
-      const nameMatch = cells[0].match(/^`([a-z/]+)`$/);
+      const nameMatch = cells[0].match(new RegExp(`^\`(${PACKAGE_TABLE_ROW_NAME_RE.source})\`$`));
       if (isTotal || nameMatch) {
         const agg = isTotal ? { files: totalFiles, loc: totalLoc } : byOwner.get(nameMatch[1]);
         if (agg) {
