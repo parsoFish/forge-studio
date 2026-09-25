@@ -268,9 +268,15 @@ export function provisionFixtureGround(root, { storyId, project, fixture }) {
     runGit(['-C', dest, ...FIXTURE_GIT_CONFIG, 'init', '-q', '-b', 'main', '--template=', '--object-format=sha1'], 'git init');
     // EXACTLY the seed file list, NUL-separated and literal (no glob, no
     // pathspec magic), fed on stdin — never `add -A`/`.`, which would also add
-    // whatever this run's own beats later write into the ground.
+    // whatever this run's own beats later write into the ground. `-f`:
+    // the list is already the seed's own curated, explicit file set (never a
+    // glob), so forcing it past the seed's OWN `.gitignore` cannot add
+    // anything wider than what the seed already named — it only stops a seed
+    // whose tracked config a blanket ignore rule shadows (e.g. a real
+    // ground's `.forge/` pattern the source repo's own comment says is
+    // force-tracked with `git add -f`) from failing to provision at all.
     runGit(
-      ['-C', dest, '--literal-pathspecs', ...FIXTURE_GIT_CONFIG, 'add', '--pathspec-from-file=-', '--pathspec-file-nul'],
+      ['-C', dest, '--literal-pathspecs', ...FIXTURE_GIT_CONFIG, 'add', '-f', '--pathspec-from-file=-', '--pathspec-file-nul'],
       'git add',
       { input: `${files.join('\0')}\0` },
     );
