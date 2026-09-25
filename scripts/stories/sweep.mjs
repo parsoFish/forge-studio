@@ -345,8 +345,12 @@ function expandCollapsed(root, path) {
     const out = execFileSync('git', ['status', '--porcelain', '-z', '-uall', '--', path], { cwd: root, encoding: 'utf8' });
     const rows = parseGitPorcelain(out).map((r) => r.path);
     return rows.length > 0 ? rows : [path];
-  } catch {
-    return [path];
+  } catch (e) {
+    // ROW 101 / M7-D finding 1 — a spawn/parse failure here used to read as
+    // "nothing further to expand" and return `[path]`, the COLLAPSED ancestor
+    // itself; `fenceBreaches` would then push it straight to `remove`. RETHROW
+    // so the caller holds it as UNKNOWN instead (never a safe-looking default).
+    throw e instanceof Error ? e : new Error(String(e));
   }
 }
 
@@ -371,13 +375,24 @@ export function fenceBreaches(before, after, storyId, groundProject = null, deps
   const restore = [];
   const remove = [];
   const defer = [];
+  const unknown = [];
   for (const entry of after) {
     if (wasDirty.has(entry.path) || isArtifact(entry.path)) continue;
     if (groundBrain !== null && entry.xy === '??' && entry.path.endsWith('/') && groundBrain.startsWith(entry.path)) {
       // A COLLAPSED ancestor of the ground brain. Deferring it whole would hold
       // a foreign project's brain too — the very escape the fence exists to
       // catch — so it is expanded and classified file by file.
-      for (const p of (deps.expand ?? ((x) => expandCollapsed(deps.root ?? '.', x)))(entry.path)) {
+      let expanded;
+      try {
+        expanded = (deps.expand ?? ((x) => expandCollapsed(deps.root ?? '.', x)))(entry.path);
+      } catch (e) {
+        // ROW 101 / M7-D finding 1 — UNKNOWN, never a safe-looking default:
+        // the ancestor is HELD, not removed and not folded into the EXPECTED
+        // `defer` wording (that names a designed write; this names a failure).
+        unknown.push({ path: entry.path, error: `could not expand ${entry.path}: ${e instanceof Error ? e.message : String(e)}` });
+        continue;
+      }
+      for (const p of expanded) {
         (p.startsWith(groundBrain) ? defer : remove).push(p);
       }
       continue;
@@ -385,7 +400,7 @@ export function fenceBreaches(before, after, storyId, groundProject = null, deps
     if (groundBrain !== null && entry.path.startsWith(groundBrain)) { defer.push(entry.path); continue; }
     (entry.xy === '??' ? remove : restore).push(entry.path);
   }
-  return { restore, remove, defer };
+  return { restore, remove, defer, unknown };
 }
 
 /**
@@ -660,13 +675,17 @@ export function starterAgentSlugs(root) {
 export function describeFence(fence, expectedStarters = []) {
   const defer = fence.defer ?? [];
   const escapes = fence.escapes ?? [];
+  const unknown = fence.unknown ?? [];
   if (
     fence.restored.length === 0 && fence.removed.length === 0 && fence.failed.length === 0 &&
-    defer.length === 0 && escapes.length === 0
+    defer.length === 0 && escapes.length === 0 && unknown.length === 0
   ) {
     return ['[stories] fence: clean — the run wrote nothing outside its own artifacts'];
   }
   return [
+    // ROW 101 / M7-D finding 1 — HELD because expansion failed, never folded
+    // into "clean": fail closed states the fact by name rather than guessing.
+    ...unknown.map(({ path, error }) => `[stories] fence: HELD ${path} — UNKNOWN: ${error} — held, not removed`),
     // Ruling 308 — a sanctioned write is still a write, and is still stated. It
     // is NOT folded into "clean": a reader who learns that the fence's one line
     // sometimes hides a write stops reading the line an escape appears on.

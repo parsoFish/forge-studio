@@ -198,45 +198,9 @@ test('6.11.28: with no ground declared, a collapsed entry is not expanded at all
   assert.deepEqual(b.remove, ['brain/']);
 });
 
-// --- ROW 101 / M7-D finding 1: expansion failure must HOLD, never delete ---
-
-test('ROW 101 (RED): a git-status failure while expanding a collapsed ancestor HOLDS it, never removes it', () => {
-  // REPRODUCED shape: `expandCollapsed`'s real implementation used to catch a
-  // `git status` spawn/parse failure and return `[path]` — the COLLAPSED
-  // ancestor itself (e.g. `brain/`) — which then fails `startsWith(groundBrain)`
-  // for the same reason ruling 308's hold missed it in the first place, and
-  // `fenceBreaches` pushed the whole ancestor to `remove`. `applyFence` then
-  // `rmSync(recursive, force)`s it: every project's Brain 3 in one shot.
-  const b = fenceBreaches([], [{ xy: '??', path: 'brain/' }], 'S1', 'gitweave', {
-    expand: () => { throw new Error('spawn EMFILE'); },
-  });
-  assert.deepEqual(b.remove, [], 'an UNKNOWN expansion must never fall through to remove');
-  assert.deepEqual(b.defer, [], 'the EXPECTED-ground defer list is a different fact — this is unknown, not sanctioned');
-  assert.deepEqual(
-    (b.unknown ?? []).map((u) => u.path),
-    ['brain/'],
-    'the held-but-unknown path must be named, not silently dropped',
-  );
-  assert.match((b.unknown ?? [])[0]?.error ?? '', /spawn EMFILE/);
-
-  const lines = describeFence({ restored: [], removed: [], failed: [], ...b }).join('\n');
-  assert.match(lines, /HELD brain\/.*could not expand brain\/.*spawn EMFILE.*held, not removed/s);
-  assert.doesNotMatch(lines, /^\[stories\] fence: clean/, 'a held-unknown is never reported clean');
-});
-
-test('ROW 101 control: a genuine (non-throwing) expansion still classifies file by file, unaffected', () => {
-  // The control the mutation test reverts against: expansion that SUCCEEDS
-  // must still defer the ground's own files and remove a foreign one exactly
-  // as 6.11.28 already proved above.
-  const b = fenceBreaches([], [{ xy: '??', path: 'brain/' }], 'S1', 'gitweave', {
-    expand: (p) => (p === 'brain/'
-      ? ['brain/projects/gitweave/profile.md', 'brain/projects/someone-else/profile.md']
-      : [p]),
-  });
-  assert.deepEqual(b.remove, ['brain/projects/someone-else/profile.md']);
-  assert.deepEqual(b.defer, ['brain/projects/gitweave/profile.md']);
-  assert.deepEqual(b.unknown ?? [], []);
-});
+// ROW 101 / M7-D finding 1 (expansion failure must HOLD, never delete) is
+// doored in `sweep.test.ts` — kept out of this file to stay under the
+// 800-line cap.
 
 // --- 6.11.34 / ruling 340: growth in a tree someone else is working in ------
 //
