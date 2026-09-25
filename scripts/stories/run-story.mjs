@@ -74,7 +74,7 @@ import { driveBeat } from './beats-drive.mjs';
 import { resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
 import { writeStoryJson, regenerateGallery, storyRowFrom } from './gallery.mjs';
-import { collectAgentRuns, reapAgentRuns, describeReap } from './reap.mjs';
+import { collectAgentRuns, reapAgentRuns, describeReap, withPricedTerminationLabel } from './reap.mjs';
 import { reappeared } from './quiesce.mjs';
 import { reapCensusAndSweep } from './sweep-teardown.mjs';
 import { recordReapedCancellations, reapReasonFor } from './reap-cancel.mjs';
@@ -347,12 +347,13 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // before writing a terminal event is reported as UNMEASURED with the reason.
   // Never `$0.00`: a zero meaning "nothing was spent" and a zero meaning
   // "nobody looked" printing the same is what four H6 runs cost to learn.
-  const spend = summariseRunSpend({
+  // Findings row 62 — names THIS teardown's own SIGTERM, not the generic label.
+  const spend = withPricedTerminationLabel(reap, summariseRunSpend({
     realSpawn: story.ground?.realSpawn === true,
     // `dispatchedRuns` above is the REAP set and stays that way; the spend set
     // is a different question with a different answer (`forge-rzrs`).
     events: collectSpendDirs(ROOT, startedMs).map(readRunEvents),
-  });
+  }));
   console.log(`[stories] spend: ${spend.label}`);
   for (const n of spend.notes ?? []) console.log(`[stories] spend: ${n}`);
   // Bead `forge-8vfn.7.6.92` — a turn that ended after the LAST beat boundary
@@ -629,15 +630,12 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     );
   }
 
-  // Findings row 56 (second half) — `summariseRunSpend`'s reading (`spend`,
-  // computed above and already printed to the console) never reached the
-  // artifact `writeStoryJson` serialises, so `story.json`'s `spend` field
-  // always read absent and a reader downstream (PR #890's `spendFieldFor`,
-  // not in this tree) reported `{usd: null, unmeasured: 'not passed to the
-  // artifact writer'}` whatever the run actually spent. Narrowed to exactly
+  // Findings row 56 (second half) — `spend` (computed above, already printed)
+  // never reached the artifact `writeStoryJson` serialises, so `story.json`'s
+  // `spend` field always read absent to a reader downstream (PR #890's
+  // `spendFieldFor`, not in this tree). Narrowed to exactly
   // `{measured, usd, label}` — never the whole `spend` object, whose `priced`
-  // and `notes` are diagnostic detail for the console, not the artifact's
-  // stable contract.
+  // and `notes` are console diagnostics, not the artifact's stable contract.
   //
   // `realGrounds` rides into the artifact only for a fixture run, so a
   // non-fixture story's `story.json` is unchanged by this feature.
