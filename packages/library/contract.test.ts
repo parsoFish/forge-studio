@@ -35,9 +35,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
-import * as library from '../../index.ts';
+import * as library from './index.ts';
 
-const PKG_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const PKG_DIR = dirname(fileURLToPath(import.meta.url));
 
 /** The README's API table, as data: `| \`symbol\` | value|type | … |`. */
 function readmeApi(): { values: string[]; types: string[] } {

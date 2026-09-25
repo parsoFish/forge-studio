@@ -48,7 +48,7 @@ function render(clauses: PreflightClause[], boundKbId: string | null = null): st
 
 test('agent-tier instructions clause: the resolve button reads honestly, never "Resolve with agent"', () => {
   const html = render([clause({ id: 'C8', resolution: 'agent', route: 'instructions' })]);
-  expect(html).toContain('data-action="resolve-clause-agent"');
+  expect(html).toContain('data-action="resolve-clause-agent-C8"');
   expect(html).not.toMatch(/Resolve with agent/);
   expect(html).toMatch(/instructions builder/i);
 });
@@ -68,7 +68,7 @@ test('agent-tier brain-fix clause: the resolve button names Knowledge, not a fak
 test('brain-fix clause with NO bound KB: the resolve button renders disabled with an honest hint, never a silent guess', () => {
   const html = render([clause({ id: 'BRAIN', resolution: 'agent', route: 'brain-fix' })], null);
   expect(html).toContain('data-resolve-blocked="true"');
-  expect(html).toMatch(/<button[^>]*disabled[^>]*data-action="resolve-clause-agent"|<button[^>]*data-action="resolve-clause-agent"[^>]*disabled/);
+  expect(html).toMatch(/<button[^>]*disabled[^>]*data-action="resolve-clause-agent-BRAIN"|<button[^>]*data-action="resolve-clause-agent-BRAIN"[^>]*disabled/);
   expect(html).toContain('data-component="brain-fix-unbound-hint"');
   expect(html).toMatch(/no kb bound/i);
 });
@@ -90,7 +90,7 @@ test('instructions/demo-builder clauses are never blocked, even with no bound KB
 
 test('user-tier clause: the apply button honestly says "Apply with agent" (this tier genuinely dispatches + polls one)', () => {
   const html = render([clause({ id: 'C1', resolution: 'user', route: undefined })]);
-  expect(html).toContain('data-action="apply-clause-decision"');
+  expect(html).toContain('data-action="apply-clause-decision-C1"');
   expect(html).toMatch(/Apply with agent/);
   expect(html).not.toMatch(/>Apply decision</);
 });
@@ -113,4 +113,38 @@ test('W6-B14: fresh render of a user-tier clause -> NO data-poll-state attribute
 test('W6-B14: data-agent-run-state is empty on a fresh render (no run dispatched) — never a fabricated state', () => {
   const html = render([clause({ id: 'C1', resolution: 'user', route: undefined })]);
   expect(html).toContain('data-agent-run-state=""');
+});
+
+// ---------------------------------------------------------------------------
+// forge-8vfn.5.11 — M1-G's `select-stage-<stage>` shape, closed here for the
+// two clause-tier controls: `resolve-clause-agent` (agent tier) and
+// `apply-clause-decision` (user tier) used to repeat ONE action name across
+// every clause row, and `scripts/stories/beats.mjs` resolves
+// `[data-action=…]` and takes `.first()` — so with two failing clauses in the
+// same tier, nothing could press the SECOND one. The action now carries the
+// clause id; `data-resolve-clause-id`/`data-apply-clause-id` stay, they are
+// what the contract reads.
+// ---------------------------------------------------------------------------
+
+test('5.11: two agent-tier clauses render two DISTINCT resolve actions, each naming its own clause', () => {
+  const html = render([
+    clause({ id: 'C8', resolution: 'agent', route: 'instructions' }),
+    clause({ id: 'DEMO', resolution: 'agent', route: 'demo-builder' }),
+  ]);
+  expect(html).toContain('data-action="resolve-clause-agent-C8"');
+  expect(html).toContain('data-action="resolve-clause-agent-DEMO"');
+  // The qualifying attribute stays — it is what the DOM contract reads.
+  expect(html).toContain('data-resolve-clause-id="C8"');
+  expect(html).toContain('data-resolve-clause-id="DEMO"');
+});
+
+test('5.11: two user-tier clauses render two DISTINCT apply actions, each naming its own clause', () => {
+  const html = render([
+    clause({ id: 'C1', resolution: 'user', route: undefined }),
+    clause({ id: 'C1b', resolution: 'user', route: undefined }),
+  ]);
+  expect(html).toContain('data-action="apply-clause-decision-C1"');
+  expect(html).toContain('data-action="apply-clause-decision-C1b"');
+  expect(html).toContain('data-apply-clause-id="C1"');
+  expect(html).toContain('data-apply-clause-id="C1b"');
 });

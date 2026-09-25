@@ -352,10 +352,41 @@ export function overlapVerdict({ lockPath, envName, thisKind, otherKind, procRoo
   };
 }
 
-/** The story-run side: refuse while the full suite holds its lock. */
-export function suiteLockVerdict(env = process.env, procRoot = '/proc') {
+/**
+ * The story-run side: refuse while the full suite holds its lock.
+ *
+ * T1 ruling 1211(b). The launch recipe is `flock .suite-lock flock .run-lock
+ * … npm run stories`: the SUITE-lock is taken FIRST, by this run's own
+ * ancestor, before `npm run stories` (and this module) ever starts. So while
+ * that hold stands, every full suite queued behind it is correctly blocked —
+ * but the same hold, read blind, looks to THIS run like a full suite in its
+ * own way, and refuses a run that was never racing anything. The exemption
+ * checks the kernel holders before delegating so an unconfigured or
+ * unresolvable lock path still falls straight through to `overlapVerdict`
+ * and keeps its existing reasons unchanged; it names the ancestor pid, never
+ * a bare "ok", so the reason still says why waiters do not matter here.
+ */
+export function suiteLockVerdict(env = process.env, procRoot = '/proc', selfPid = process.pid) {
+  const lockPath = env[SUITE_LOCK_ENV];
+  if (lockPath) {
+    const holders = lockHolders(lockPath, procRoot);
+    if (holders !== null) {
+      const ancestors = ancestorPids(selfPid, { procRoot });
+      const mine = holders.find((h) => ancestors.has(h.pid));
+      if (mine) {
+        return Object.freeze({
+          ok: true,
+          reason:
+            `${lockPath} is held by pid ${mine.pid}, this story run's OWN ANCESTOR — the launch recipe ` +
+            "takes the suite-lock first in the run's own process tree, so anything else waiting on it " +
+            "is blocked by THIS run's hold, not the other way round; refusing here would refuse a run " +
+            'for a queue only its own ancestor is causing.',
+        });
+      }
+    }
+  }
   return overlapVerdict({
-    lockPath: env[SUITE_LOCK_ENV],
+    lockPath,
     envName: SUITE_LOCK_ENV,
     thisKind: 'a story run',
     otherKind: 'a full test suite',

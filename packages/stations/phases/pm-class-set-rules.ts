@@ -16,7 +16,7 @@
  * for `docs` and `config`.
  */
 
-import { profileFor } from '../class-profiles.ts';
+import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
 import type { InitiativeManifest } from '@forge/flows/manifest.ts';
 import type { WorkItem } from '@forge/flows/work-item.ts';
 
@@ -25,13 +25,18 @@ import type { WorkItem } from '@forge/flows/work-item.ts';
  *
  * An EMPTY set is not this rule's business — "the PM produced nothing" is
  * already its own failure, and a flag on top of it would bury the real one.
+ *
+ * `classProfiles` (operator ruling, items 81/83) is read only on the one path
+ * that needs a profile — an empty or multi-item set returns before it is
+ * touched, so a caller that never hits the single-item case needs no port.
  */
 export function underDecomposedFlag(
   manifest: InitiativeManifest,
   items: ReadonlyArray<WorkItem>,
+  classProfiles?: ClassProfilePort,
 ): string | null {
   if (items.length !== 1) return null;
-  if (profileFor(manifest.class).singleWiAllowed) return null;
+  if (requireClassProfiles(classProfiles, 'pm-class-set-rules').profileFor(manifest.class).singleWiAllowed) return null;
   return (
     `a ${manifest.class} initiative decomposed to ONE work item (${items[0]?.work_item_id}). The ` +
     `${manifest.class} gate profile does not accept a single-criterion initiative at the plan gate, so ` +

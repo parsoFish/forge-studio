@@ -15,9 +15,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { underDecomposedFlag } from '../../phases/pm-class-set-rules.ts';
-import { CLASS_PROFILES } from '../../class-profiles.ts';
+import { TEST_CLASS_PROFILES, testClassProfilePort } from '../test-fixtures/class-profile-port-fixture.ts';
 import type { InitiativeManifest } from '@forge/flows/manifest.ts';
 import type { WorkItem } from '@forge/flows/work-item.ts';
+
+const cp = testClassProfilePort();
 
 function manifest(cls: InitiativeManifest['class']): InitiativeManifest {
   return {
@@ -51,26 +53,26 @@ function wi(id: string): WorkItem {
 }
 
 test('ADR 051: a ONE-item code decomposition produces a flag naming the class and the work item', () => {
-  const flag = underDecomposedFlag(manifest('code'), [wi('WI-1')]);
+  const flag = underDecomposedFlag(manifest('code'), [wi('WI-1')], cp);
   assert.ok(flag, 'expected a flag');
   assert.match(flag, /code initiative decomposed to ONE work item \(WI-1\)/);
   assert.match(flag, /not enforced here/, 'the message says it is an observation, not a verdict');
 });
 
 test('ADR 051: the same one-item set is CLEAN for docs — kills "if (items.length === 1)"', () => {
-  assert.equal(underDecomposedFlag(manifest('docs'), [wi('WI-1')]), null);
-  assert.equal(underDecomposedFlag(manifest('config'), [wi('WI-1')]), null);
+  assert.equal(underDecomposedFlag(manifest('docs'), [wi('WI-1')], cp), null);
+  assert.equal(underDecomposedFlag(manifest('config'), [wi('WI-1')], cp), null);
 });
 
 test('ADR 051: two items are clean for every class — the rule is about ONE, not about "few"', () => {
   for (const cls of ['code', 'docs', 'config', 'infra'] as const) {
-    assert.equal(underDecomposedFlag(manifest(cls), [wi('WI-1'), wi('WI-2')]), null, cls);
+    assert.equal(underDecomposedFlag(manifest(cls), [wi('WI-1'), wi('WI-2')], cp), null, cls);
   }
 });
 
 test('ADR 051: an EMPTY set is not this rule\'s business — "the PM produced nothing" is its own failure', () => {
   for (const cls of ['code', 'docs', 'config', 'infra'] as const) {
-    assert.equal(underDecomposedFlag(manifest(cls), []), null, cls);
+    assert.equal(underDecomposedFlag(manifest(cls), [], cp), null, cls);
   }
 });
 
@@ -79,8 +81,8 @@ test('ADR 051: the verdict follows the TABLE, not a list in this file — change
   // from a class name here, this test would still pass — so it is paired with
   // the conformance test's no-branching check, which fails on exactly that.
   for (const cls of ['code', 'docs', 'config', 'infra'] as const) {
-    const expected = CLASS_PROFILES[cls].singleWiAllowed ? null : 'flagged';
-    const got = underDecomposedFlag(manifest(cls), [wi('WI-1')]) === null ? null : 'flagged';
+    const expected = TEST_CLASS_PROFILES[cls].singleWiAllowed ? null : 'flagged';
+    const got = underDecomposedFlag(manifest(cls), [wi('WI-1')], cp) === null ? null : 'flagged';
     assert.equal(got, expected, cls);
   }
 });

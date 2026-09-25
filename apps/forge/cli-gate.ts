@@ -2,7 +2,7 @@
  * `forge gate docs` — the docs class's merge-boundary gate as an ORCHESTRATOR
  * VERB (spec §5 item 6, ADR 036).
  *
- * The rules live in `@forge/factory/gates/docs-gate.ts`; this file is the shell
+ * The rules live in `@forge/stations/gates/docs-gate.ts`; this file is the shell
  * that turns argv into a spec and findings into an exit code. The split is the
  * point: the gate's verdict is computed by code the orchestrator owns and runs,
  * never by a command string an agent authored — the docs profile's
