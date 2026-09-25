@@ -122,7 +122,7 @@ function makeCallerFixture(): string {
   mkdirSync(join(root, 'orchestrator'), { recursive: true });
 
   // Entry: import edges only (re-export lines carry no `(` → never counted as
-  // callers themselves). The '../orchestrator/new-caller.ts' target is absent at
+  // callers themselves). historical: the '../orchestrator/new-caller.ts' target is absent at
   // baseline time; the walker skips missing targets, so it is NOT baselined.
   writeFileSync(
     join(root, 'cli/ui-bridge.ts'),
