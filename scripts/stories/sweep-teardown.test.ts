@@ -15,7 +15,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync
 import { tmpdir } from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight, stopSchedulerCensusAndRelease, reapCensusAndSweep, DAEMON_PID_FILE } from './sweep-teardown.mjs';
+import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight, stopSchedulerCensusAndRelease, reapCensusAndSweep, teardownExitCode, DAEMON_PID_FILE } from './sweep-teardown.mjs';
 import { sweepProductFixtures } from './sweep.mjs';
 import { quiesceWriters } from './quiesce.mjs';
 
@@ -740,4 +740,54 @@ test('finding row 75 (agent half): a non-empty census refuses the sweep entirely
     // pids as strings — the escalation must still reach it regardless.
     `the survivor must still have been escalated to SIGKILL: ${JSON.stringify(killed)}`,
   );
+});
+
+/**
+ * MUST 1 (D's review of #906) — `run.mjs`'s `finally` called
+ * `stopSchedulerCensusAndRelease`, printed its lines, and never read
+ * `stop.census`/`stop.release.reappeared` again: a surviving daemon
+ * grandchild printed "REFUSING to release…" or "RELEASE DID NOT HOLD…" and
+ * the process still exited 0 on an otherwise-green run. `teardownExitCode`
+ * is the SEAM the review asked for — a pure fold of a `stop` result into the
+ * run's exit code, injectable directly (no need to drive `main()` itself,
+ * which boots a real bridge and browser and cannot be unit-tested at all).
+ */
+test('teardownExitCode: a clean teardown leaves the exit code exactly as it was', () => {
+  const clean = { census: { empty: true, survivors: [], waitedMs: 0, reason: 'census-empty' }, release: { released: [], failed: [], reappeared: [] } };
+  assert.deepEqual(teardownExitCode(0, clean), { exitCode: 0, lines: [] });
+  assert.deepEqual(teardownExitCode(1, clean), { exitCode: 1, lines: [] }, 'a story\'s own red must survive a clean teardown unchanged');
+});
+
+test('teardownExitCode: census === null (no daemon, or it drained) is not a failure', () => {
+  assert.deepEqual(teardownExitCode(0, { census: null, release: null }), { exitCode: 0, lines: [] });
+});
+
+test('teardownExitCode: MUST 1 RED->GREEN — a census that never settled forces the exit code non-zero, named', () => {
+  const stuck = { census: { empty: false, survivors: ['4242'], waitedMs: 5000, reason: 'pid(s) 4242 still alive after 5000 ms' }, release: null };
+  const r = teardownExitCode(0, stuck);
+  assert.equal(r.exitCode, 1, 'an otherwise-green run must not exit 0 on a teardown that never confirmed empty');
+  assert.ok(r.lines.some((l) => /TEARDOWN FAILURE/.test(l) && /4242/.test(l)));
+});
+
+test('teardownExitCode: a reappeared release path forces the exit code non-zero, named', () => {
+  const reappeared = { census: { empty: true, survivors: [], waitedMs: 10, reason: 'census-empty' }, release: { released: ['INIT-x.md.heartbeat'], failed: [], reappeared: ['INIT-x.md.heartbeat'] } };
+  const r = teardownExitCode(0, reappeared);
+  assert.equal(r.exitCode, 1);
+  assert.ok(r.lines.some((l) => /TEARDOWN FAILURE/.test(l) && /INIT-x\.md\.heartbeat/.test(l)));
+});
+
+test('teardownExitCode: an already-red exit code is never reset or overridden by a teardown failure', () => {
+  const stuck = { census: { empty: false, survivors: ['1'], waitedMs: 5000, reason: 'stuck' }, release: null };
+  assert.equal(teardownExitCode(1, stuck).exitCode, 1);
+  assert.equal(teardownExitCode(2, stuck).exitCode, 2, 'a specific non-zero code is preserved, not flattened to 1');
+});
+
+test('teardownExitCode: both failures at once still produce ONE forced non-zero code, both named', () => {
+  const both = {
+    census: { empty: false, survivors: ['1'], waitedMs: 5000, reason: 'stuck' },
+    release: { released: ['x'], failed: [], reappeared: ['x'] },
+  };
+  const r = teardownExitCode(0, both);
+  assert.equal(r.exitCode, 1);
+  assert.equal(r.lines.length, 2);
 });
