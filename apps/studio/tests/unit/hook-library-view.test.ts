@@ -130,6 +130,7 @@ import {
   hookBadges,
   buildHookScanPanel,
   buildHookDetailView,
+  testFireDisabledReason,
 } from '../../lib/hook-library-view.ts';
 import type { HookLibraryEntry, HookLibraryEntryOk, HookDetail } from '../../lib/hook-client.ts';
 
@@ -377,6 +378,33 @@ test('buildHookDetailView: testFireRuns carries through verbatim', () => {
   const run = { at: '2026-09-25T12:00:00.000Z', event: 'SessionEnd' as const, outcome: 'ran' as const, exitCode: 0, durationMs: 12, stdoutTail: 'ok', stderrTail: '' };
   const view = buildHookDetailView(detailFixture({ testFireRuns: [run] }));
   expect(view.testFireRuns).toEqual([run]);
+});
+
+// ---------------------------------------------------------------------------
+// testFireDisabledReason (library-33) — approval is required; BINDING is
+// NOT. This is the one property the whole feature depends on: a fresh,
+// never-bound hook must still be test-fireable once approved.
+// ---------------------------------------------------------------------------
+
+test('testFireDisabledReason: needs-review, not blocked -> a reason naming approval', () => {
+  const view = buildHookDetailView(detailFixture({ trust: 'needs-review', scanVerdict: 'clean' }));
+  expect(testFireDisabledReason(view)).toMatch(/approve/i);
+});
+
+test('testFireDisabledReason: needs-review AND blocked -> a reason naming the block', () => {
+  const view = buildHookDetailView(detailFixture({ trust: 'needs-review', scanVerdict: 'blocked' }));
+  expect(testFireDisabledReason(view)).toMatch(/block/i);
+});
+
+test('testFireDisabledReason: approved -> null (allowed) regardless of binding', () => {
+  const view = buildHookDetailView(detailFixture({ trust: 'approved', scanVerdict: 'clean', carriedBy: [] }));
+  expect(view.carriedByCount).toBe(0);
+  expect(testFireDisabledReason(view)).toBeNull();
+});
+
+test('testFireDisabledReason: overridden (was blocked) -> null (allowed)', () => {
+  const view = buildHookDetailView(detailFixture({ trust: 'overridden', scanVerdict: 'blocked' }));
+  expect(testFireDisabledReason(view)).toBeNull();
 });
 
 // ---------------------------------------------------------------------------
