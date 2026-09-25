@@ -248,6 +248,10 @@ export function buildDefaultDeps(classProfiles?: ClassProfilePort): FlowRunnerDe
           projectName: basename(input.projectRepoPath),
           changeClass: requireClassProfiles(classProfiles, 'adversarial-review').readChangeClass(input.manifestPath),
           forgeRoot: FORGE_ROOT,
+          // Seam F6 half 2 (operator ruling 97): threaded from the running
+          // flow's OWN `review.lenses` (flow-runner.ts's `input`) — never
+          // re-read here.
+          flowReview: input.flowReview,
         },
         logger,
         { signal, classProfiles, agentDef: def },

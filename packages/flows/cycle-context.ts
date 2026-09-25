@@ -144,6 +144,15 @@ export type CycleInput = {
   /** M7-A: the SAME tracker's live remaining budget (`Infinity` while
    *  unenforced), read every Ralph iteration by `dev-cost-bound.ts`. */
   remainingCostBudgetUsd?: () => number;
+  /**
+   * Operator ruling 97 (seam F6 half 2): injected by `flow-runner.ts::runFlow`
+   * from the running flow's OWN id + `review.lenses` declaration — narrows
+   * the change class's review lenses for THIS flow. Absent ⇒ the class's
+   * lenses, unchanged. Threaded here (never re-read from the flow.yaml by
+   * the review band itself) so the band consults the exact flow that is
+   * actually running, not global state.
+   */
+  flowReview?: { flowId: string; lenses: readonly string[] };
 };
 
 export type ReflectionStatus = 'closed' | 'failed' | 'skipped';

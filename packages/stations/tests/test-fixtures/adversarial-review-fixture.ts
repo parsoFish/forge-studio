@@ -193,9 +193,21 @@ export async function run(
   fx: Fixture,
   queryFn: StreamQueryFn | undefined,
   logger: ReturnType<typeof createLogger>,
+  // Seam F6 half 2 (operator ruling 97): opt-in flow-review narrowing —
+  // every existing caller passes nothing and gets exactly the unnarrowed
+  // 'code'-class fixture it had.
+  opts: { flowReview?: { flowId: string; lenses: readonly string[] } } = {},
 ): Promise<AdversarialReviewResult> {
   return runAdversarialReview(
-    { initiativeId: INIT_ID, worktreePath: fx.worktree, cycleId: CYCLE_ID, logsRoot: fx.logsRoot, projectName: 'fix', changeClass: 'code' },
+    {
+      initiativeId: INIT_ID,
+      worktreePath: fx.worktree,
+      cycleId: CYCLE_ID,
+      logsRoot: fx.logsRoot,
+      projectName: 'fix',
+      changeClass: 'code',
+      flowReview: opts.flowReview,
+    },
     logger,
     { queryFn, classProfiles: testClassProfilePort(), agentDef: canonicalDef('adversarial-review') },
   );
