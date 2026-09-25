@@ -4,13 +4,15 @@
  * A refresh re-verifies rows that already exist and never discovers one, so
  * four of the nine declared hubs contribute nothing and stay that way. The
  * design record is `packages/library/design.md` §"A hub is asked what it
- * publishes, and only a hub forge can reach": why GitHub-shaped hubs only, why
- * this proposes rather than writes, and why the layout convention is the one
- * install-by-URL already reads.
+ * publishes, and only a hub forge can reach": why GitHub-shaped hubs only, and
+ * why the layout convention is the one install-by-URL already reads.
+ *
+ * Operator item 87 supersedes ruling 566: the refresh's critical section now
+ * APPENDS discovered skill rows. This module still only reads and returns.
  *
  * Three rules belong beside the code:
  *
- *   - **It proposes; it never writes.** Nothing here touches `registry.yaml`.
+ *   - **This reader never writes.** Its caller decides what to persist.
  *   - **A discovered row is installable by construction** — same convention as
  *     `community-fetch-package.ts`, pinned against it by test rather than by
  *     agreement.
@@ -38,6 +40,9 @@ export interface DiscoveredItem {
   /** What was matched, so a reviewer can see why the row was proposed: a
    *  `SKILL.md` path, or the registry's own server name. */
   path: string;
+  /** The kind the reader found — only it knows which shape it read. The
+   *  caller decides what to write (skills only, `community-refresh-run.ts`). */
+  kind: 'skill' | 'mcp';
 }
 
 export type HubIndexOutcome =
@@ -142,7 +147,7 @@ export async function indexMcpRegistryHub(
         const id = idForMcpServerName(name);
         if (id === null || seen.has(id) || knownIds.has(id)) continue;
         seen.add(id);
-        discovered.push({ id, sourceUrl: hub.url, path: name });
+        discovered.push({ id, sourceUrl: hub.url, path: name, kind: 'mcp' });
       }
       const metadata = body['metadata'];
       const nextCursor =
@@ -219,7 +224,7 @@ export async function indexGithubHub(
         continue;
       }
       seen.add(id);
-      discovered.push({ id, sourceUrl: hub.url, path: entry.path });
+      discovered.push({ id, sourceUrl: hub.url, path: entry.path, kind: 'skill' });
     }
     const sorted = discovered.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     // Only when the read SUCCEEDED and found nothing: a hub that contributed

@@ -139,6 +139,15 @@ export function validateStory(raw) {
       if (!GROUND_CHANGE_KINDS.includes(e.change)) {
         fail(`ground.expectedChanges[${i}].change`, `expected one of ${GROUND_CHANGE_KINDS.join(', ')}, got ${JSON.stringify(e.change)}`);
       }
+      // `forge-8vfn.7.6.140` — a declaration may narrow its own licence to ONE
+      // beat's window, 1-indexed to match how every other comment in this
+      // campaign counts beats ("beat 5 presses it"). ABSENT keeps today's
+      // whole-run meaning: the existing contract, not a fallback — the fence
+      // (`ground-hash.mjs`) licenses an undated declaration against the whole
+      // run exactly as it always has.
+      if (e.beat !== undefined && (!Number.isInteger(e.beat) || e.beat < 1)) {
+        fail(`ground.expectedChanges[${i}].beat`, `expected a positive integer beat number, got ${JSON.stringify(e.beat)}`);
+      }
     }
   }
 
@@ -151,6 +160,21 @@ export function validateStory(raw) {
 
   if (!Array.isArray(raw.beats) || raw.beats.length === 0) {
     fail('beats', 'expected a non-empty array');
+  }
+
+  // A `beat` number is only checkable for RANGE once the beats array itself is
+  // known to be valid — the type check above runs before this point because
+  // `g.expectedChanges` is validated ahead of `raw.beats`. Refused at load, the
+  // same reason every other closed-set field here is: a declaration naming a
+  // beat that does not exist would silently open a licence for a window that
+  // can never occur.
+  for (const [i, e] of (g.expectedChanges ?? []).entries()) {
+    if (e.beat !== undefined && e.beat > raw.beats.length) {
+      fail(
+        `ground.expectedChanges[${i}].beat`,
+        `beat ${e.beat} does not exist — this story has ${raw.beats.length} beat(s)`,
+      );
+    }
   }
 
   const beats = raw.beats.map((b, i) => {
@@ -308,15 +332,18 @@ export function validateStory(raw) {
     // declares is refused at LOAD, not discovered at run time. An unresolved
     // bind would press a half-built handle, match nothing, and red as "no such
     // control" — which reads as a product defect and is why the shape was
-    // parked rather than built.
+    // parked rather than built. `forge-8vfn.6.11.51` adds `pressWithin`'s
+    // `scope.bind` to the same duty: an unresolved scope would press against
+    // every element sharing the action, not the one instance-id names.
     const pressBindsIn = (steps) => (steps ?? []).flatMap((st) =>
-      Object.hasOwn(st, 'pressBound') ? [st.pressBound.bind]
-        : Object.hasOwn(st, 'repeat') ? pressBindsIn(st.repeat) : []);
-    for (const bind of pressBindsIn(b.do)) {
+      Object.hasOwn(st, 'pressBound') ? [{ form: 'pressBound', bind: st.pressBound.bind }]
+        : Object.hasOwn(st, 'pressWithin') ? [{ form: 'pressWithin', bind: st.pressWithin.scope.bind }]
+          : Object.hasOwn(st, 'repeat') ? pressBindsIn(st.repeat) : []);
+    for (const { form, bind } of pressBindsIn(b.do)) {
       if (!boundNames.has(bind)) {
         fail(
           `beats[${i}]`,
-          `pressBound names <${bind}>, which no EARLIER beat binds. The handle is built at run time from ` +
+          `${form} names <${bind}>, which no EARLIER beat binds. The handle is built at run time from ` +
             'that binding, so a beat cannot press one its own expectations would publish.',
         );
       }
@@ -360,7 +387,10 @@ export function validateStory(raw) {
       // production validated-and-discarded (7.6.82). The door below deep-equals
       // the whole ground so the next field cannot repeat it.
       ...(g.expectedChanges
-        ? { expectedChanges: Object.freeze(g.expectedChanges.map((e) => Object.freeze({ path: e.path, change: e.change }))) }
+        ? {
+            expectedChanges: Object.freeze(g.expectedChanges.map((e) =>
+              Object.freeze(e.beat === undefined ? { path: e.path, change: e.change } : { path: e.path, change: e.change, beat: e.beat }))),
+          }
         : {}),
     }),
     docs: Object.freeze({ kind: d.kind, title: d.title }),

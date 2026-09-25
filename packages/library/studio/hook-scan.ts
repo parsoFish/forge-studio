@@ -93,7 +93,7 @@ export { hashHookScript, hashHookPermissions, hashHookTrigger } from './hook-pac
 // Types
 // ---------------------------------------------------------------------------
 
-export type HookScanCategory = 'network-egress' | 'env-read' | 'file-read' | 'obfuscation';
+export type HookScanCategory = 'network-egress' | 'env-read' | 'file-read' | 'obfuscation' | 'unpinned-source';
 export type HookFindingSeverity = 'critical' | 'info';
 
 export interface HookScanFinding {
@@ -352,6 +352,49 @@ function scanFileReads(body: string, permissions: HookPermissionManifest): HookS
   ];
 }
 
+/**
+ * M7-C PKG follow-up (forge-8vfn.8.3.6): the whole-package private copy pins
+ * `$0`-rooted sibling sourcing, but `cwd` stays the REAL hook dir (a shipped
+ * hook needs a real repo cwd for bare `git` — design.md "Hook exec"), so a
+ * `source`/`.` argument resolving against cwd instead of `$0` still reads
+ * the mutable original, defeating the fingerprint. No runtime fix exists for
+ * this shape, so it is caught here, at approval time. Over-approximates like
+ * every scanner in this file: accepted ONLY when rooted at `$(dirname "$0")`
+ * / `${0%/*}` (a PREFIX check, one leading quote char stripped — enough for
+ * the nested `"$(dirname "$0")/lib.sh"` idiom) or absolute (never
+ * cwd-relative); anything else — bare, `./`-relative, or another variable —
+ * is flagged. Anchored at a command boundary so `resource.sh` never matches.
+ */
+const PINNED_ROOT_PREFIXES = ['$(dirname "$0")', "$(dirname '$0')", '${0%/*}'];
+// `.+$`, not `\S+`: the safe idiom itself contains a space (`dirname "$0"`),
+// so a whitespace-stopped capture truncates it mid-prefix and false-flags
+// the one thing this scanner must never flag.
+const SOURCE_COMMAND_RE = /(?:^|;|&&|\|\|)[ \t]*(?:source|\.)[ \t]+(.+)$/gm;
+
+function scanUnpinnedSource(body: string): HookScanFinding[] {
+  const hits: { line: number; arg: string }[] = [];
+  for (const m of body.matchAll(SOURCE_COMMAND_RE)) {
+    const rest = m[1]!.trim();
+    const arg = rest.replace(/^["']/, '');
+    if (arg.startsWith('/') || PINNED_ROOT_PREFIXES.some((p) => arg.startsWith(p))) continue;
+    let line = 1;
+    for (let i = 0; i < m.index; i++) if (body.charCodeAt(i) === 10) line++;
+    hits.push({ line, arg: rest });
+  }
+  if (hits.length === 0) return [];
+  const lines = hits.map((h) => h.line).join(', ');
+  const args = hits.map((h) => h.arg).join(', ');
+  return [
+    {
+      category: 'unpinned-source',
+      severity: 'critical',
+      declared: false,
+      match: args,
+      message: `Script sources a sibling by a path that resolves against the working directory, not $0 (line ${lines}: ${args}) — root it at $(dirname "$0") so the pinned private copy is used, never the live package directory`,
+    },
+  ];
+}
+
 function scanObfuscation(body: string): HookScanFinding[] {
   const matched = OBFUSCATION_PATTERNS.filter((p) => p.re.test(body)).map((p) => p.label);
   if (matched.length === 0) return [];
@@ -418,6 +461,7 @@ export function scanHookScript(input: { body: string; permissions: HookPermissio
     ...scanEnvReads(body, permissions),
     ...scanFileReads(body, permissions),
     ...scanObfuscation(body),
+    ...scanUnpinnedSource(body),
   ].map((f) => (path !== undefined ? { ...f, path } : f));
   return { verdict: computeVerdict(findings), findings };
 }

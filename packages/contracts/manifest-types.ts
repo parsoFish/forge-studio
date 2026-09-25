@@ -42,6 +42,8 @@ export type ManifestPhase = 'pending' | 'in-flight' | 'ready-for-review' | 'merg
  */
 /** `triggered` = born from an external trigger fire (cron/webhook — ADR-041). */
 export type InitiativeOrigin = 'architect' | 'human-directed' | 'triggered';
+/** ADR 051's four classes, shared by `FlowDefinition.accepts`/`FlowTrigger.class` (seam F6). */
+export type ManifestClass = 'code' | 'docs' | 'config' | 'infra';
 export type InitiativeManifest = {
   initiative_id: string;       // INIT-<YYYY-MM-DD>-<slug>
   /**
@@ -109,7 +111,7 @@ export type InitiativeManifest = {
   body: string;                // markdown initiative spec
   /** The change class (ADR 051): set by the architect, confirmed at the plan
    *  gate, inherited by every work item; it selects the gate profile. No default. */
-  class: 'code' | 'docs' | 'config' | 'infra';
+  class: ManifestClass;
   /** Typed acceptance criteria (ADR 051), shared by architect, PM, review and
    *  PLAN.html. An entry that does not parse is an error, not an absence. */
   acceptance_criteria: ReadonlyArray<{ given: string; when: string; then: string }>;

@@ -36,7 +36,7 @@ packages/agents/agent-dispatch-cmd.ts realpathSync 5
 packages/agents/agent-dispatch-cmd.ts statSync 2
 packages/agents/agent-dispatch.ts readdirSync 1
 packages/agents/agent-run.ts existsSync 2
-packages/agents/band-agent-run.ts existsSync 3
+packages/agents/band-agent-run.ts existsSync 1
 packages/agents/band-agent-run.ts readFileSync 1
 packages/agents/bridge-agents-history-rows.ts existsSync 5
 packages/agents/bridge-agents-history-rows.ts readdirSync 4
@@ -260,7 +260,6 @@ packages/kernel/config.ts existsSync 2
 packages/kernel/config.ts readdirSync 1
 packages/kernel/config.ts readFileSync 2
 packages/kernel/discovery-roots.ts readdirSync 1
-packages/kernel/gh-identity.ts exec 3
 packages/kernel/gh-identity.ts execFileSync 1
 packages/kernel/guarded-scan.ts openSync 1
 packages/kernel/guarded-scan.ts statSync 2
@@ -441,7 +440,7 @@ packages/library/studio/hook-library.ts realpathSync 2
 packages/library/studio/hook-package.ts readdirSync 1
 packages/library/studio/hook-package.ts readFileSync 1
 packages/library/studio/hook-package.ts statSync 1
-packages/library/studio/hook-runtime.ts readFileSync 1
+packages/library/studio/hook-runtime.ts mkdirSync 1
 packages/library/studio/hook-runtime.ts rmSync 2
 packages/library/studio/hook-runtime.ts spawn 1
 packages/library/studio/hook-runtime.ts spawnSync 1

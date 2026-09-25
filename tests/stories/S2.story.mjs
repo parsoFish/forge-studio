@@ -413,7 +413,10 @@ export default {
       // a property of THIS GROUND, not of the beat, and a beat must not depend
       // on it — S4 run 4 measured what that costs.
       do: [
-        { press: 'open-session' },
+        // Scoped to the session beat 10 bound (`forge-8vfn.6.11.51`): a bare
+        // `open-session` presses the FIRST card, which on a shared host can be
+        // another story's session.
+        { pressWithin: { scope: { attr: 'session-id', bind: 'architectSessionId' }, action: 'open-session' } },
         {
           repeat: [
             {

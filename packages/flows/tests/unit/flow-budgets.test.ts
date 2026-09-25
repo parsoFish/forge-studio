@@ -277,24 +277,61 @@ describe('RateLimitGate', () => {
     assert.ok(elapsed < 50, `expected no sleep, got ${elapsed}ms`);
   });
 
-  it('waits until resetsAt when resetsAt is in the future (small delta)', async () => {
-    // Use real Date.now() but set resetsAt 60ms in the future.
-    // This verifies the gate actually sleeps rather than resolving immediately.
-    // resetsAt stays on Date.now(): it feeds RateLimitGate's own injected
-    // clock, which defaults to Date.now() because a real rate-limit reset
-    // time is an externally-supplied absolute wall-clock deadline (from the
-    // SDK), not a locally-measured duration.
-    const gate = new RateLimitGate(); // no injected clock → real Date.now()
-    const resetsAt = Date.now() + 60;
+  it('waits until resetsAt when resetsAt is in the future, driven by a fake clock and fake timer (no real sleep)', async () => {
+    // forge-m7-c: this test used to run against REAL Date.now()/setTimeout
+    // and assert a real-elapsed-wall-time upper bound (`elapsed < 400`) via
+    // performance.now(). performance.now() is monotonic, so that part was
+    // right — but under host CPU starvation a real `setTimeout(tick, 10)`
+    // poll tick can fire ~2.9s late regardless (this host steps its wall
+    // clock by that much under load; see
+    // /home/parso/forge/_1.0/reports/m7-c-clockprobe-1.log), so the
+    // assertion was really measuring host scheduling jitter, not gate
+    // correctness. Flake seen 2026-09-25: "wait unexpectedly long:
+    // 2940.48ms". Fix: inject BOTH the clock and the timer scheduler, drive
+    // both fakes by hand, and assert the REQUESTED sleep cadence (10ms per
+    // poll tick, 6 ticks for a 60ms gap) instead of a measured real duration.
+    let current = 1_000_000;
+    const scheduled: Array<{ fn: () => void; delayMs: number }> = [];
+    const fakeSetTimeout = ((fn: () => void, delayMs: number) => {
+      scheduled.push({ fn, delayMs });
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout;
+
+    const gate = new RateLimitGate({ now: () => current, setTimeout: fakeSetTimeout });
+    const resetsAt = current + 60; // 60ms ahead, entirely on the fake clock
     gate.recordRateLimit(resetsAt);
 
-    const start = performance.now();
-    await gate.waitIfNeeded();
-    const elapsed = performance.now() - start;
+    const waitPromise = gate.waitIfNeeded();
 
-    // Should have waited ~60ms — give generous slack for CI jitter
-    assert.ok(elapsed >= 50, `expected ~60ms wait, got ${elapsed}ms`);
-    assert.ok(elapsed < 400, `wait unexpectedly long: ${elapsed}ms`);
+    // Drain the fake timer queue by hand: each iteration advances the fake
+    // clock by exactly the delay the gate requested, then fires that tick.
+    // This proves the gate's REQUESTED poll cadence, independent of any
+    // real wall-clock timing.
+    let ticks = 0;
+    while (scheduled.length > 0) {
+      const next = scheduled.shift()!;
+      assert.strictEqual(next.delayMs, 10, 'gate must poll in 10ms ticks');
+      current += next.delayMs;
+      next.fn();
+      ticks += 1;
+      assert.ok(ticks <= 20, 'gate kept scheduling polls after resetsAt had passed');
+    }
+
+    // Safety net only, not a timing assertion: once the fake queue drains,
+    // resolution is synchronous (a couple of microtask turns), so this
+    // should never come close to firing. It exists so a regression that
+    // silently falls back to the real global setTimeout fails fast with a
+    // legible reason instead of hanging the test run.
+    const guardMs = 500;
+    const guard = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(
+        `gate.waitIfNeeded() did not resolve within ${guardMs}ms of draining the fake timer queue — ` +
+          'is it still using the real global setTimeout instead of the injected one?',
+      )), guardMs);
+    });
+    await Promise.race([waitPromise, guard]);
+
+    assert.strictEqual(ticks, 6, 'expected exactly 6 polling ticks to cover a 60ms gap at 10ms/tick');
   });
 
   it('clears resetsAt after waiting so the next call returns immediately', async () => {

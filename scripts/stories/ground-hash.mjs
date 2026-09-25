@@ -555,7 +555,34 @@ export function groundIgnoreNoneForTests() {
   return { isIgnored: () => false, source: 'none (no ignore rules applied)' };
 }
 
-export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, groundIgnore, declaredChanges = []) {
+/**
+ * What changed inside EACH declared beat's own window — `forge-8vfn.7.6.140`.
+ *
+ * A window is `groundChanges(boundary, after)`: from the manifest captured at
+ * the moment that beat STARTED to the end-of-run manifest. Computed here,
+ * once per distinct beat number the caller asks for, so `classifyOwnGroundDrift`
+ * stays decoupled from raw manifests exactly as it already is for the
+ * whole-run `changes` it is handed — this is the same shape, scoped narrower.
+ *
+ * A beat whose boundary manifest is `undefined` (never captured — the run
+ * ended before that beat started) is simply absent from the returned map;
+ * `classifyOwnGroundDrift` treats an absent beat as "cannot be verified",
+ * never as "nothing changed".
+ *
+ * @param {Map<number, {files: Map<string,string>}|null>} beatBoundaryManifests beat number -> ground manifest at that beat's start
+ * @param {{files: Map<string,string>}|null} after the end-of-run manifest
+ * @returns {Map<number, {added: string[], removed: string[], modified: string[]}>}
+ */
+export function beatWindowChangesFrom(beatBoundaryManifests, after) {
+  const out = new Map();
+  for (const [beat, boundary] of beatBoundaryManifests) {
+    if (boundary === undefined) continue;
+    out.set(beat, groundChanges(boundary, after));
+  }
+  return out;
+}
+
+export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, groundIgnore, declaredChanges = [], beatWindowChanges = new Map()) {
   if (groundIgnore === undefined || typeof groundIgnore.isIgnored !== 'function') {
     throw new Error(
       'classifyOwnGroundDrift: a ground-ignore classifier is REQUIRED — pass ' +
@@ -620,7 +647,32 @@ export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, gr
       const declIdx = declaredChanges.findIndex((d) => d.path === p && d.change === kind);
       if (declIdx !== -1) {
         matchedDeclarations.add(declIdx);
-        declared.push(`${k} — declared by the story as an expected ${kind} change`);
+        const decl = declaredChanges[declIdx];
+        // `forge-8vfn.7.6.140` — WHOLE-RUN IS THE EXISTING CONTRACT, NOT A
+        // FALLBACK. A declaration with no `beat` licenses `p` changing at ANY
+        // point across the run, exactly as 7.6.136 always has; `matchedDeclarations`
+        // above and `declared` below are unconditional for this arm.
+        if (decl.beat === undefined) {
+          declared.push(`${k} — declared by the story as an expected ${kind} change`);
+          continue;
+        }
+        // A BEAT-SCOPED LICENCE OPENS AT THAT BEAT'S BOUNDARY, not before. The
+        // caller manifests the ground at the moment beat N starts and reduces
+        // that to `beatWindowChanges.get(N)` — the changes from THAT boundary to
+        // the end of the run. `p` is declared only if it moved INSIDE that
+        // window; the same overall `changes[kind]` membership that put it in
+        // this loop is not enough on its own, or a declaration naming beat 8
+        // would license a change the product actually made at beat 2.
+        const window = beatWindowChanges.get(decl.beat);
+        if (window !== undefined && window[kind].includes(p)) {
+          declared.push(`${k} — declared by the story as an expected ${kind} change from beat ${decl.beat} onward`);
+          continue;
+        }
+        undeclared.push(
+          window === undefined
+            ? `${k} — declared for beat ${decl.beat}, but no ground boundary was captured for that beat; the licence cannot be verified`
+            : `${k} — declared for beat ${decl.beat}, but this path had already changed before beat ${decl.beat} started; the licence only covers changes from that beat onward`,
+        );
         continue;
       }
       // Only the UNATTRIBUTED, UNDECLARED remainder reaches the ignore rules.

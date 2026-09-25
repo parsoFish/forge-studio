@@ -382,12 +382,16 @@ function CommunityBrowserInner() {
               <div style={{ marginTop: 4, whiteSpace: 'pre-wrap' }}>{refreshView.detail}</div>
             )}
 
-            {/* M6-D / rulings 478 + 616 — what the declared hubs publish that
-                this registry does not carry. PROPOSALS: each row links to the
-                add-row door with its id and upstream prefilled, and that door
-                stays the ONLY write path. forge does not crawl on its own
-                (`hubs.yaml`'s D10) and a discovery is a suggestion, never a
-                change — nothing here writes the registry.
+            {/* M6-D / rulings 478 + 616, WRITE side added by operator item 87
+                (T1 ledger 1216 — ruling 566's "proposes, never writes" is
+                superseded): what THIS pass discovered and, by the time this
+                renders, already appended to registry.yaml (re-deduped against
+                a curated row of the same id, which is never overwritten).
+                forge still does not crawl on its own (`hubs.yaml`'s D10) —
+                only operator-declared hubs are ever read. STALE COPY BELOW:
+                the "Add" link and its wording still describe the pre-87
+                propose-only flow (add a row that already exists) — a product
+                decision for whoever owns this panel next, not re-derived here.
                 The `sourceUrl` shown is the one the INSTALLER will fetch from,
                 not a decoration: a discovered row is installable by
                 construction (`community-hub-index.ts`). */}

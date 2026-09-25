@@ -9,6 +9,7 @@ import { useBridgeRecoveryWhenFailed } from '@/lib/use-bridge-status';
 import { FilePackage } from '@/components/studio/FilePackage';
 import { LibraryItemActions } from '@/components/studio/LibraryItemActions';
 import { TemplateEditor } from '@/components/studio/TemplateEditor';
+import { ProvenanceBadge } from '@/components/ProvenanceBadge';
 import {
   fetchTemplate,
   createTemplate,
@@ -288,6 +289,9 @@ function TemplateDetailBody({ detail }: { detail: TemplateDetail }) {
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'var(--text)', margin: 0 }}>
             {detail.name}
           </h1>
+          {/* forge-8vfn.8.3.7: server-attested — 'ootb' renders a badge,
+              'operator'/absent (a malformed definition) renders nothing. */}
+          <ProvenanceBadge provenance={detail.origin} />
           <span className="badge badge-dim">{CATEGORY_LABEL[detail.category]}</span>
           {badges.map((b) => (
             <span key={b} className="badge" style={BADGE_STYLE[b]}>{b}</span>

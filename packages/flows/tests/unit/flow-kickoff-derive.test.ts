@@ -73,7 +73,7 @@ const AGENTS: ReadonlyMap<string, AgentDefinition> = new Map([
 function flow(over: Partial<FlowDefinition>): FlowDefinition {
   return {
     id: 'f', name: 'F', version: 1, goal: 'g', project: null, kb: null,
-    costCeilingUsd: 5, origin: 'studio', nodes: [], edges: [], triggers: [],
+    costCeilingUsd: 5, origin: 'studio', accepts: ['code'], nodes: [], edges: [], triggers: [],
     path: '/studio/flows/f/flow.yaml',
     ...over,
   };

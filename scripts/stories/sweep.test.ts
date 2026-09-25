@@ -29,7 +29,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
-import { applyFence, sweepStoryRemotes, starterAgentSlugs, describeFence, fenceBreaches, fixturePathsFor, parseGitPorcelain, productFixturePathsFor, sweepStoryResidue, sweepProductFixtures } from './sweep.mjs';
+import { applyFence, sweepStoryRemotes, describeRemoteSweep, starterAgentSlugs, describeFence, fenceBreaches, fixturePathsFor, parseGitPorcelain, productFixturePathsFor, sweepStoryResidue, sweepProductFixtures } from './sweep.mjs';
 
 const scratch = () => mkdtempSync(join(tmpdir(), 'stories-sweep-'));
 const plant = (p) => {
@@ -454,6 +454,81 @@ test('AT-6.11.2-8 a manifest-listed repo WITHOUT the story prefix is refused, na
   assert.deepEqual(res.deleted, []);
   assert.deepEqual(calls, [], 'both conditions must hold — a manifest entry alone is not enough');
   assert.match(res.refusals.join(' '), /some-real-project/, JSON.stringify(res.refusals));
+});
+
+/**
+ * The trailing sweep's remote-delete reporting (bead `forge-8vfn.6.11.53`).
+ *
+ * Measured: "[stories] trailing sweep DELETED remote parsoFish/story-s2" then
+ * "[stories] could not delete remote [object Object]: Command failed: gh repo
+ * delete parsoFish/story-s2 --yes HTTP 404 … needs the "repo" scope" — the
+ * delete SUCCEEDED; a second attempt against the same name 404'd because the
+ * manifest carried the repo twice (a stale row from an earlier run, never
+ * cleared, plus this run's own). Three defects: the target list was not
+ * deduped, a 404 on delete was reported as a failure carrying a misleading
+ * scope hint instead of "already gone", and the failure line interpolated the
+ * whole failed-entry OBJECT rather than its name.
+ */
+test('AT-6.11.53-1 (RED) the same manifest-listed repo appears twice — gh is asked to delete it only ONCE', () => {
+  const calls: string[][] = [];
+  const res = sweepStoryRemotes({
+    storyId: 'S2',
+    created: [
+      { nameWithOwner: 'parsoFish/story-s2' },
+      { nameWithOwner: 'parsoFish/story-s2' }, // stale duplicate row
+    ],
+    readToken: () => 'ghp_fake',
+    runGh: (a: string[]) => { calls.push(a); return ''; },
+  });
+  assert.equal(calls.length, 1, `gh must be invoked once per distinct remote, not once per manifest row: ${JSON.stringify(calls)}`);
+  assert.deepEqual(res.deleted, ['parsoFish/story-s2']);
+});
+
+test('AT-6.11.53-2 (RED) a 404 on delete is reported as already-gone, not a failure, and carries no scope hint', () => {
+  const res = sweepStoryRemotes({
+    storyId: 'S2',
+    created: [{ nameWithOwner: 'parsoFish/story-s2' }],
+    readToken: () => 'ghp_fake',
+    runGh: () => {
+      throw new Error(
+        'Command failed: gh repo delete parsoFish/story-s2 --yes HTTP 404 … needs the "repo" scope',
+      );
+    },
+  });
+  assert.deepEqual(res.failed, [], 'a 404 is not a failure — the repo is simply already gone');
+  assert.deepEqual(res.deleted, [], 'not a fresh delete either — nothing was actually deleted THIS call');
+  assert.deepEqual(res.alreadyGone, ['parsoFish/story-s2']);
+  assert.ok(
+    !JSON.stringify(res).toLowerCase().includes('scope'),
+    `the misleading scope hint must not survive into the report: ${JSON.stringify(res)}`,
+  );
+});
+
+test('AT-6.11.53-3 (RED) a genuine (non-404) delete failure still lands in `failed`, named by field', () => {
+  const res = sweepStoryRemotes({
+    storyId: 'S2',
+    created: [{ nameWithOwner: 'parsoFish/story-s2' }],
+    readToken: () => 'ghp_fake',
+    runGh: () => { throw new Error('Command failed: gh repo delete parsoFish/story-s2 --yes HTTP 500 server error'); },
+  });
+  assert.deepEqual(res.alreadyGone, []);
+  assert.equal(res.failed.length, 1);
+  assert.equal(res.failed[0].nameWithOwner, 'parsoFish/story-s2', JSON.stringify(res.failed));
+  assert.match(res.failed[0].error, /500/);
+});
+
+test('AT-6.11.53-4 (RED) describeRemoteSweep never interpolates the failed-entry object', () => {
+  const report = describeRemoteSweep({
+    deleted: ['parsoFish/story-s2'],
+    alreadyGone: ['parsoFish/story-s4'],
+    refusals: ['[stories] REFUSING to delete parsoFish/forge-studio'],
+    failed: [{ nameWithOwner: 'parsoFish/story-s7', error: 'boom' }],
+  });
+  const all = [...report.lines, ...report.warnLines];
+  assert.ok(!all.some((l) => l.includes('[object Object]')), `object leaked into a report line: ${JSON.stringify(all)}`);
+  assert.ok(report.warnLines.some((l) => l.includes('parsoFish/story-s7') && l.includes('boom')), JSON.stringify(report.warnLines));
+  assert.ok(report.lines.some((l) => l.includes('DELETED remote parsoFish/story-s2')), JSON.stringify(report.lines));
+  assert.ok(report.lines.some((l) => l.includes('parsoFish/story-s4') && /already gone/i.test(l)), JSON.stringify(report.lines));
 });
 
 /**
