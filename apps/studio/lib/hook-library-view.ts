@@ -82,7 +82,7 @@ export function communityHooksToUnion<T extends { id: string; kind: string }>(
 // returns generically — fixed once, here, for both.
 // ---------------------------------------------------------------------------
 
-export type HookBadge = 'needs-review' | 'approved' | 'blocked' | 'overridden';
+export type HookBadge = 'needs-review' | 'approved' | 'blocked' | 'overridden' | 'unbound';
 
 export function hookBadges(entry: HookLibraryEntryOk): HookBadge[] {
   const badges: HookBadge[] = [];
@@ -90,6 +90,10 @@ export function hookBadges(entry: HookLibraryEntryOk): HookBadge[] {
   if (entry.trust === 'approved') badges.push('approved');
   if (entry.trust === 'overridden') badges.push('overridden');
   if (entry.scanVerdict === 'blocked') badges.push('blocked');
+  // forge-6gv.8.1 (library-10): dispatch (M7-C U2/B6) makes an unbound hook
+  // genuinely unable to fire — the index/card says so, not just the detail
+  // page's "Unbound" copy.
+  if (entry.carriedBy.length === 0) badges.push('unbound');
   return badges;
 }
 
@@ -147,6 +151,9 @@ export type HookDetailView = {
    *  never fabricated. */
   lastFireAt?: HookDetail['lastFireAt'];
   lastFireOutcome?: HookDetail['lastFireOutcome'];
+  /** forge-6gv.8.1 (library-33) — an operator's past test-fires, newest
+   *  first. Always an array; never dropped or re-ordered by this layer. */
+  testFireRuns: HookDetail['testFireRuns'];
 };
 
 export function buildHookDetailView(detail: HookDetail): HookDetailView {
@@ -169,5 +176,6 @@ export function buildHookDetailView(detail: HookDetail): HookDetailView {
     recentFireCount: detail.recentFireCount,
     ...(detail.lastFireAt !== undefined ? { lastFireAt: detail.lastFireAt } : {}),
     ...(detail.lastFireOutcome !== undefined ? { lastFireOutcome: detail.lastFireOutcome } : {}),
+    testFireRuns: detail.testFireRuns,
   };
 }
