@@ -77,9 +77,20 @@ function isGitWorkTree(checkoutRoot: string): boolean {
 
 /** Was `ref` ever committed to ANY ref (`--all`) in `checkoutRoot`'s history
  *  — only called for a ref already absent from the tree. Empty output (exit
- *  0) means never tracked; anything else is a real failure, never swallowed. */
+ *  0) means never tracked; anything else is a real failure, never swallowed.
+ *  `--literal-pathspecs` (a GLOBAL git option — must precede the `log`
+ *  subcommand) is load-bearing: `ref` is theme-authored, untrusted text, and
+ *  without it a wildcard or magic-word value (e.g. `src/*.ts`, or a
+ *  `:`-prefixed pathspec magic-word) gets pathspec MAGIC, not a literal
+ *  path — a ref that was never actually tracked can glob-match an unrelated
+ *  real commit and read back as "once tracked", inflating history-backed
+ *  staleness with a false positive. */
 function wasEverTracked(checkoutRoot: string, ref: string): boolean {
-  const r = spawnSync('git', ['-C', checkoutRoot, 'log', '--all', '--format=%H', '-1', '--', ref], { encoding: 'utf8' });
+  const r = spawnSync(
+    'git',
+    ['-C', checkoutRoot, '--literal-pathspecs', 'log', '--all', '--format=%H', '-1', '--', ref],
+    { encoding: 'utf8' },
+  );
   if (r.status !== 0) {
     throw new Error(`brain-lint-checks-truth: git log failed for "${ref}" in ${checkoutRoot}: ${r.stderr?.trim() || r.error?.message || `exit ${r.status}`}`);
   }
