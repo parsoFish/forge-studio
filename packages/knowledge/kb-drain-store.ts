@@ -207,6 +207,11 @@ export function listKbRuns(forgeRoot: string, kbId: string, sessionIsReadable: S
       // fall through to the dot anchor
     }
   }
+  // M7-C U8 (bead forge-u8y2): `sessionIsReadable` needs the logs root too —
+  // the consolidate-loop's own `logsRoot` local went with that loop when it
+  // moved into `consolidateRunIdsFor` (kb-job-state.ts), but this later
+  // check still needs it.
+  const logsRoot = join(forgeRoot, '_logs');
   const projectsRoot = resolveProjectsDir(forgeRoot, loadConfig(defaultConfigPath(forgeRoot)));
   const cleanupDir = join(projectsRoot, anchor, '_kb-cleanup');
   let sids: string[] = [];
