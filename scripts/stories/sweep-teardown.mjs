@@ -15,6 +15,8 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, relative } from 'node:path';
+import { readProcTable, descendantsOf } from './reap.mjs';
+import { waitForCensusEmpty, describeCensus } from './reap-census.mjs';
 
 /**
  * Put back the COMMITTED artifacts the leading sweep removed and the run never
@@ -290,4 +292,128 @@ export function releaseOwnInFlight(root) {
     }
   }
   return { released: released.sort(), failed };
+}
+
+/**
+ * `stopOwnScheduler` + `releaseOwnInFlight`, WITH THE GAP CLOSED — finding row
+ * 75 (T1 rulings 1258, 1332). The old sequence trusted "the recorded daemon
+ * pid is confirmed dead" to mean "nothing it started is still writing", and
+ * that measured wrong: `spawnAgentTurn` spawns every dispatch `detached: true`
+ * (`reap.mjs`'s own header), so a phase agent the daemon started is its OWN
+ * process group and OUTLIVES a daemon killed before it could drain.
+ * `stopOwnScheduler` signals only the ONE recorded pid — never `-pid`, never a
+ * child — so that agent was never touched, and `releaseOwnInFlight` ran right
+ * after regardless. Measured: a heartbeat written back 13s after a runner
+ * printed CLEARED, a loop still committing into the ground 2.7 minutes later.
+ *
+ * THE SNAPSHOT MUST COME FIRST, and this is `reap.mjs`'s own 5.45 lesson
+ * repeated at a second call site. Once the daemon actually exits, the kernel
+ * reparents its children as PART OF that exit — there is no later moment at
+ * which a ppid-chain walk can still find them under the daemon's pid. So the
+ * daemon's descendant tree is read (`readProcTable` + `descendantsOf`, the
+ * same snapshot-then-signal machinery `reapAgentRuns` uses) BEFORE
+ * `stopOwnScheduler` sends anything, and TERM is sent to each of them directly
+ * — not left to cascade from the daemon's own death, because for a `detached`
+ * child it never would.
+ *
+ * ONLY WHEN THE DAEMON DID NOT DRAIN. A daemon that drained cleanly awaited its
+ * own in-flight cycles before exiting (`scheduler.ts:298-301`), so nothing it
+ * dispatched is still running by construction — the snapshot, the extra kill
+ * and the census below are read-only work spent for nothing on that path, and
+ * are skipped exactly like the old `releaseOwnInFlight` call was.
+ *
+ * THE CENSUS GATES THE RELEASE; THE RE-READ CHECKS IT AFTERWARDS. Two
+ * different failures, and only one of them is visible to the census: a
+ * descendant that survives is a NOT-EMPTY census, refused before the release
+ * ever runs (door 1). A writer that shares no ancestry with the daemon at
+ * all — a sibling process the run never dispatched, writing the same path —
+ * is invisible to a tree-membership check by construction, and can only be
+ * caught by re-reading the exact paths just released (door 2, T1 1332's own
+ * distinction). Removing either check independently reds its own door; see
+ * `sweep-teardown.test.ts`'s mutation notes.
+ *
+ * @param {string} root the run's own worktree
+ * @param {{graceMs?: number, censusBoundMs?: number, censusPollMs?: number,
+ *          rereadDelayMs?: number, procRoot?: string,
+ *          sleep?: (ms: number) => Promise<void>,
+ *          release?: (root: string) => {released: string[], failed: object[]}}} [opts]
+ * @returns {Promise<{sched: object, census: object|null,
+ *   release: ({released: string[], failed: object[], reappeared: string[]})|null,
+ *   lines: string[]}>}
+ */
+export async function stopSchedulerCensusAndRelease(root, opts = {}) {
+  const graceMs = opts.graceMs ?? DRAIN_GRACE_MS;
+  const censusBoundMs = opts.censusBoundMs ?? 5000;
+  const censusPollMs = opts.censusPollMs ?? 100;
+  const rereadDelayMs = opts.rereadDelayMs ?? 250;
+  const procRoot = opts.procRoot ?? '/proc';
+  const sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+  const release = opts.release ?? releaseOwnInFlight;
+
+  let daemonPid = null;
+  try {
+    const n = Number(readFileSync(join(root, DAEMON_PID_FILE), 'utf8').trim());
+    if (Number.isInteger(n) && n > 0) daemonPid = n;
+  } catch { /* no pid file — no daemon was started, and stopOwnScheduler below says so */ }
+  // BEFORE ANY SIGNAL. `stopOwnScheduler` has not run yet, so the daemon (if
+  // it exists) is still alive and its children's ppid still points at it.
+  const descendants = daemonPid !== null ? descendantsOf(daemonPid, readProcTable()) : [];
+
+  const sched = stopOwnScheduler(root, graceMs);
+  const lines = [];
+  if (sched.stopped !== null) {
+    lines.push(
+      `[stories] stopped the scheduler this run started — pid ${sched.stopped} by ` +
+      `${sched.drained ? `${sched.how}, drained` : `${sched.how}, DID NOT DRAIN`}`,
+    );
+  }
+  if (sched.note !== null) lines.push(`[stories] scheduler: ${sched.note}`);
+
+  if (sched.stopped === null || sched.drained) {
+    return { sched, census: null, release: null, lines };
+  }
+
+  // The daemon did not drain, so a dispatch it started (detached, with its OWN
+  // process group) may have outlived it. TERM every pid the pre-signal
+  // snapshot found — the daemon's own kill never reached them.
+  for (const pid of descendants) {
+    try { process.kill(pid, 'SIGTERM'); } catch { /* already gone */ }
+  }
+  const censusOf = () => waitForCensusEmpty([sched.stopped, ...descendants], { boundMs: censusBoundMs, pollMs: censusPollMs, procRoot });
+  let census = await censusOf();
+  if (!census.empty && census.survivors !== null) {
+    for (const pid of census.survivors) {
+      try { process.kill(Number(pid), 'SIGKILL'); } catch { /* already gone */ }
+    }
+    census = await censusOf();
+  }
+  lines.push(...describeCensus(census));
+
+  if (!census.empty) {
+    lines.push(
+      `[stories] REFUSING to release _queue/in-flight/: ${census.reason} — clearing now would race a live ` +
+      'writer, which is the defect this census exists to close. The claim STAYS; the next run\'s residue ' +
+      'door will report it, at $0.',
+    );
+    return { sched, census, release: null, lines };
+  }
+
+  const rel = release(root);
+  for (const p of rel.released) {
+    lines.push(`[stories] released _queue/in-flight/${p} — this tree's claim, held by a daemon that could not drain`);
+  }
+  for (const f of rel.failed) lines.push(`[stories] could not release _queue/in-flight/${f.path}: ${f.error}`);
+
+  // RE-READ, because the census above cannot see a writer that shares no
+  // ancestry with the daemon at all (T1 1332).
+  await sleep(rereadDelayMs);
+  const reappeared = rel.released.filter((name) => existsSync(join(root, '_queue', 'in-flight', name)));
+  for (const p of reappeared) {
+    lines.push(
+      `[stories] RELEASE DID NOT HOLD: _queue/in-flight/${p} reappeared after the census reported empty — ` +
+      'a writer outside the census survived it. NOT claiming this release is clean.',
+    );
+  }
+
+  return { sched, census, release: { ...rel, reappeared }, lines };
 }
