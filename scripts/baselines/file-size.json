@@ -14,7 +14,6 @@
   "apps/forge/tests/unit/flow-runner.test.ts": 1523,
   "apps/forge/tests/unit/registry.test.ts": 2174,
   "apps/forge/tests/unit/studio-lint.test.ts": 1111,
-  "apps/forge/ui-bridge.ts": 2276,
   "apps/studio/app/agents/[id]/page.tsx": 929,
   "apps/studio/app/artifact/page.tsx": 1419,
   "apps/studio/app/flows/[id]/page.tsx": 992,

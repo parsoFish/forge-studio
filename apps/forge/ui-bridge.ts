@@ -24,19 +24,15 @@ import {
   closeSync,
   existsSync,
   openSync,
-  readFileSync,
   readSync,
-  readdirSync,
   statSync,
-  watch as fsWatch,
   type FSWatcher,
 } from 'node:fs';
 import { } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 
-import { getPaths, listInFlight } from '@forge/flows/queue.ts';
-import { parseManifest } from '@forge/flows/manifest.ts';
+import { getPaths } from '@forge/flows/queue.ts';
 import {
   handleStudioRoutes,
   handleStudioWriteRoutes,
@@ -75,6 +71,14 @@ import {
   newRunStamp,
 } from './bridge-agent-dispatch.ts';
 import { handleReflect, safeParseJson } from './bridge-reflect.ts';
+import {
+  type Cycle,
+  type LivenessReport,
+  scanCyclesFromDisk,
+  computeLivenessReport,
+  watchDirsFlat,
+  watchProjectSubdirs,
+} from './bridge-cycle-scan.ts';
 import { mergePullRequest } from '@forge/flows/pr.ts';
 import type { BridgeIdentity } from './forge-watch.ts';
 import { finalizeMergedReadyForReview } from '@forge/flows/finalize-merged.ts';
@@ -90,28 +94,6 @@ import {
 
 
 const TAIL_POLL_MS = 200;
-const RECENT_CYCLES_MAX = 20;
-// Feature #8 — daemon-stall liveness. Mirrors packages/flows/scheduler.ts's
-// staleHeartbeatMs default (5min); the UI flips to `daemon-stalled` only at a
-// GENEROUS multiple, because the surface means "wedged or dead", not "slow".
-const DEFAULT_STALE_HEARTBEAT_MS = 5 * 60_000;
-const STALL_MULTIPLE = 6;
-
-type Cycle = {
-  cycleId: string;
-  initiativeId: string;
-  project?: string;
-  // R4-11-F1: `merged` is the transient pass-through state a confirmed-merge
-  // manifest briefly occupies between closure's two terminal moves (→merged,
-  // then merged→done in the same sweep) — distinct from the unrelated
-  // `CycleOutcome`/`CycleResult.status` `'merged'` VALUE (an event outcome).
-  status: 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed' | 'pending';
-  startedAt?: string;
-  endedAt?: string;
-  /** Feature #10: cross-initiative dependency edges (manifest
-   *  `depends_on_initiatives`) — drives the UI's per-project roadmap spine. */
-  dependsOnInitiatives?: string[];
-};
 
 type WsOutbound =
   | { type: 'snapshot'; cycles: { live: Cycle[]; recent: Cycle[] } }
@@ -252,141 +234,16 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // R27 (forge-6gv.5.2): collapses watchQueue's 6-dir fan-out into one trailing broadcast — see broadcast-coalescer.ts.
   const queueChangeCoalescer = makeTrailingCoalescer(() => broadcast({ type: 'cycle-list-changed' }));
 
-  const scanCycles = opts.scanCycles ?? ((): { live: Cycle[]; recent: Cycle[] } => {
-    // The cycle ID is the _logs/<dir> name (timestamp + initiative ID); the
-    // queue dirs only carry status. This scan walks _logs/ first to build
-    // a list of cycles (most-recent per initiative), then cross-references
-    // queue dirs to label each with its current status.
-    const live: Cycle[] = [];
-    const recent: Cycle[] = [];
+  // forge-4zk: the default filesystem scan moved to
+  // `scanCyclesFromDisk` (`./bridge-cycle-scan.ts`), parameterised on
+  // logsRoot/queuePaths instead of closing over them (feature move, no
+  // behaviour change).
+  const scanCycles = opts.scanCycles ?? ((): { live: Cycle[]; recent: Cycle[] } => scanCyclesFromDisk(logsRoot, queuePaths));
 
-    type LogDirInfo = { cycleId: string; initiativeId: string; mtime: number };
-    const latestPerInit = new Map<string, LogDirInfo>();
-    if (existsSync(logsRoot)) {
-      for (const name of readdirSync(logsRoot)) {
-        const dir = join(logsRoot, name);
-        let mtime = 0;
-        try {
-          if (!statSync(dir).isDirectory()) continue;
-          mtime = statSync(dir).mtimeMs;
-        } catch { continue; }
-        // Cycle ID format: `<ISO-ish-timestamp>_<INIT-…>`.
-        const m = name.match(/_(INIT-.+)$/);
-        if (!m) continue;
-        const initId = m[1];
-        const cur = latestPerInit.get(initId);
-        if (!cur || cur.mtime < mtime) {
-          latestPerInit.set(initId, { cycleId: name, initiativeId: initId, mtime });
-        }
-      }
-    }
-
-    const queueStatusFor = (initId: string): { status: Cycle['status']; project?: string; dependsOnInitiatives?: string[] } | null => {
-      const fn = `${initId}.md`;
-      const lookups: Array<[string, Cycle['status']]> = [
-        [queuePaths.inFlight, 'in-flight'],
-        [queuePaths.readyForReview, 'ready-for-review'],
-        // R4-11-F1: `merged` — the brief pass-through window between a
-        // confirmed merge and its promotion to `done/` in the same sweep.
-        [queuePaths.merged, 'merged'],
-        [queuePaths.done, 'done'],
-        [queuePaths.failed, 'failed'],
-        [queuePaths.pending, 'pending'],
-      ];
-      for (const [dir, status] of lookups) {
-        const fp = join(dir, fn);
-        if (existsSync(fp)) {
-          let project: string | undefined;
-          let dependsOnInitiatives: string[] | undefined;
-          try {
-            const m = parseManifest(readFileSync(fp, 'utf8'));
-            project = m.project;
-            dependsOnInitiatives = m.depends_on_initiatives;
-          } catch { /* ignore */ }
-          return { status, project, dependsOnInitiatives };
-        }
-      }
-      return null;
-    };
-
-    const candidates: Array<{ cycle: Cycle; mtime: number }> = [];
-    for (const info of latestPerInit.values()) {
-      const q = queueStatusFor(info.initiativeId);
-      if (!q) continue; // log dir exists but the queue manifest is gone — orphan, skip
-      candidates.push({
-        cycle: {
-          cycleId: info.cycleId,
-          initiativeId: info.initiativeId,
-          project: q.project,
-          status: q.status,
-          dependsOnInitiatives: q.dependsOnInitiatives,
-        },
-        mtime: info.mtime,
-      });
-    }
-    // Also surface in-flight / ready-for-review manifests that don't yet
-    // have a log dir (just-claimed, pre-first-event).
-    const seenInits = new Set([...candidates.map((c) => c.cycle.initiativeId)]);
-    for (const name of listInFlight(queuePaths)) {
-      const id = name.replace(/\.md$/, '');
-      if (seenInits.has(id)) continue;
-      let project: string | undefined;
-      let dependsOnInitiatives: string[] | undefined;
-      try {
-        const m = parseManifest(readFileSync(join(queuePaths.inFlight, name), 'utf8'));
-        project = m.project;
-        dependsOnInitiatives = m.depends_on_initiatives;
-      } catch { /* */ }
-      candidates.push({
-        cycle: { cycleId: id, initiativeId: id, project, status: 'in-flight', dependsOnInitiatives },
-        mtime: Date.now(),
-      });
-    }
-
-    candidates.sort((a, b) => b.mtime - a.mtime);
-    for (const { cycle } of candidates) {
-      // R4-11-F1: `merged` deliberately classifies as RECENT, not live — it's
-      // the tail end of a finished cycle finalizing (merged → done, same
-      // finalize sweep), not an actively-running one. That sweep spans the
-      // post-merge CI watch plus the reflector run, so a manifest legitimately
-      // sits in `merged/` for minutes on every normal finalize, not
-      // instantaneously.
-      if (cycle.status === 'in-flight' || cycle.status === 'ready-for-review') {
-        live.push(cycle);
-      } else if (recent.length < RECENT_CYCLES_MAX) {
-        recent.push(cycle);
-      }
-    }
-    return { live, recent };
-  });
-
-  // Feature #8 — max heartbeat age across in-flight cycles, from the
-  // `.heartbeat` file (mtime = last beat) the scheduler writes alongside each
-  // in-flight manifest. Authoritative liveness signal; cheaper than scanning
-  // every cycle's events. Never throws — a stat error skips that cycle.
-  const computeLiveness = (): LivenessReport => {
-    const staleHeartbeatMs = DEFAULT_STALE_HEARTBEAT_MS;
-    const stallThresholdMs = staleHeartbeatMs * STALL_MULTIPLE;
-    let maxAge = 0;
-    let count = 0;
-    const now = Date.now();
-    for (const filename of listInFlight(queuePaths)) {
-      const hbPath = join(queuePaths.inFlight, filename + '.heartbeat');
-      if (!existsSync(hbPath)) continue;
-      try {
-        const age = now - statSync(hbPath).mtimeMs;
-        count += 1;
-        if (age > maxAge) maxAge = age;
-      } catch { /* skip unreadable heartbeat */ }
-    }
-    return {
-      inFlightCount: count,
-      maxHeartbeatAgeMs: count > 0 ? maxAge : 0,
-      staleHeartbeatMs,
-      stallThresholdMs,
-      stalled: count > 0 && maxAge > stallThresholdMs,
-    };
-  };
+  // Feature #8 — the derivation moved to `computeLivenessReport`
+  // (`./bridge-cycle-scan.ts`), parameterised on queuePaths instead of
+  // closing over it (feature move, no behaviour change).
+  const computeLiveness = (): LivenessReport => computeLivenessReport(queuePaths);
 
   const ensureTailFor = (cycleId: string): void => {
     if (tails.has(cycleId)) return;
@@ -468,104 +325,44 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     tails.clear();
   };
 
+  // forge-4zk: the dir-watch mechanics moved to `watchDirsFlat` /
+  // `watchProjectSubdirs` (`./bridge-cycle-scan.ts`) — `watchArchitect` /
+  // `watchInstructions` / `watchDemo` were three byte-identical bodies
+  // differing only in the sub-directory name and the broadcast payload;
+  // `watchProjectSubdirs` is that ONE body, parameterised (feature move +
+  // de-duplication, no behaviour change: same fs.watch calls, same
+  // recursive-then-fallback shape, same watcher arrays).
   const watchQueue = (): void => {
-    const dirs = [queuePaths.pending, queuePaths.inFlight, queuePaths.readyForReview, queuePaths.merged, queuePaths.done, queuePaths.failed];
-    for (const d of dirs) {
-      if (!existsSync(d)) continue;
-      try {
-        const w = fsWatch(d, { persistent: false }, () => {
-          queueChangeCoalescer.trigger();
-          // A new cycle may have appeared; pick up its log if so — uncoalesced,
-          // so a live tail arms promptly regardless of the broadcast cadence.
-          startTailsForLive();
-        });
-        queueWatchers.push(w);
-      } catch { /* fs.watch unavailable */ }
-    }
+    queueWatchers.push(...watchDirsFlat(
+      [queuePaths.pending, queuePaths.inFlight, queuePaths.readyForReview, queuePaths.merged, queuePaths.done, queuePaths.failed],
+      () => {
+        queueChangeCoalescer.trigger();
+        // A new cycle may have appeared; pick up its log if so — uncoalesced,
+        // so a live tail arms promptly regardless of the broadcast cadence.
+        startTailsForLive();
+      },
+    ));
   };
 
   // ADR 020 — watch each project's `_architect/` dir (recursively where the
   // platform supports it) so the runner's file-checkpoint writes (questions,
   // PLAN, status) push a re-fetch signal to the UI. Mirrors `watchQueue`.
   const watchArchitect = (): void => {
-    if (!existsSync(projectsRoot)) return;
-    let projects: string[];
-    try { projects = readdirSync(projectsRoot); } catch { return; }
-    for (const name of projects) {
-      const archDir = join(projectsRoot, name, '_architect');
-      if (!existsSync(archDir)) continue;
-      try {
-        const w = fsWatch(archDir, { persistent: false, recursive: true }, () => {
-          broadcast({ type: 'architect-list-changed' });
-        });
-        architectWatchers.push(w);
-      } catch {
-        // recursive watch unsupported — fall back to a non-recursive watch on
-        // the _architect dir (catches new sessions; the UI re-fetches anyway).
-        try {
-          const w = fsWatch(archDir, { persistent: false }, () => {
-            broadcast({ type: 'architect-list-changed' });
-          });
-          architectWatchers.push(w);
-        } catch { /* fs.watch unavailable */ }
-      }
-    }
+    architectWatchers.push(...watchProjectSubdirs(projectsRoot, '_architect', () => broadcast({ type: 'architect-list-changed' })));
   };
 
   // Stage A — watch each project's `_instructions/` dir so the runner's
   // file-checkpoint writes (questions, AGENTS.draft.md, status) push a re-fetch
   // signal to the UI. Mirrors `watchArchitect`.
   const watchInstructions = (): void => {
-    if (!existsSync(projectsRoot)) return;
-    let projects: string[];
-    try { projects = readdirSync(projectsRoot); } catch { return; }
-    for (const name of projects) {
-      const instrDir = join(projectsRoot, name, '_instructions');
-      if (!existsSync(instrDir)) continue;
-      try {
-        const w = fsWatch(instrDir, { persistent: false, recursive: true }, () => {
-          broadcast({ type: 'instructions-list-changed' });
-        });
-        instructionsWatchers.push(w);
-      } catch {
-        // recursive watch unsupported — fall back to a non-recursive watch on
-        // the _instructions dir (catches new sessions; the UI re-fetches anyway).
-        try {
-          const w = fsWatch(instrDir, { persistent: false }, () => {
-            broadcast({ type: 'instructions-list-changed' });
-          });
-          instructionsWatchers.push(w);
-        } catch { /* fs.watch unavailable */ }
-      }
-    }
+    instructionsWatchers.push(...watchProjectSubdirs(projectsRoot, '_instructions', () => broadcast({ type: 'instructions-list-changed' })));
   };
 
   // Stage B — watch each project's `_demo/` dir so the runner's file-checkpoint
   // writes (status, DEMO.html generation) push a re-fetch signal to the UI.
   // Mirrors `watchInstructions`.
   const watchDemo = (): void => {
-    if (!existsSync(projectsRoot)) return;
-    let projects: string[];
-    try { projects = readdirSync(projectsRoot); } catch { return; }
-    for (const name of projects) {
-      const demoDir = join(projectsRoot, name, '_demo');
-      if (!existsSync(demoDir)) continue;
-      try {
-        const w = fsWatch(demoDir, { persistent: false, recursive: true }, () => {
-          broadcast({ type: 'demo-list-changed' });
-        });
-        demoWatchers.push(w);
-      } catch {
-        // recursive watch unsupported — fall back to a non-recursive watch on
-        // the _demo dir (catches new sessions; the UI re-fetches anyway).
-        try {
-          const w = fsWatch(demoDir, { persistent: false }, () => {
-            broadcast({ type: 'demo-list-changed' });
-          });
-          demoWatchers.push(w);
-        } catch { /* fs.watch unavailable */ }
-      }
-    }
+    demoWatchers.push(...watchProjectSubdirs(projectsRoot, '_demo', () => broadcast({ type: 'demo-list-changed' })));
   };
 
   /** W7-C2 (A12) — the one place that knows which kinds have a `*-list-changed` WS event; a kind with none honestly no-ops. */
@@ -696,19 +493,6 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
 }
 
 // ---- HTTP handlers ---------------------------------------------------------
-
-type LivenessReport = {
-  /** in-flight cycles considered (those with a `.heartbeat` file). */
-  inFlightCount: number;
-  /** max heartbeat age across in-flight cycles, ms (0 when none in flight). */
-  maxHeartbeatAgeMs: number;
-  /** the project's stale threshold (default 5min). */
-  staleHeartbeatMs: number;
-  /** the generous stall threshold (6× stale) the UI flips state at. */
-  stallThresholdMs: number;
-  /** true when maxHeartbeatAgeMs > stallThresholdMs AND a cycle is in flight. */
-  stalled: boolean;
-};
 
 type HttpContext = {
   /** F1 — this bridge process's identity, served from GET /api/health. */
