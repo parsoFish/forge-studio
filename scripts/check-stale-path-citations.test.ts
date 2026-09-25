@@ -496,9 +496,24 @@ describe('the baseline ratchet — content-keyed (file, kind, cited) + an occurr
 // ---------------------------------------------------------------------------
 
 test('it inspects a real population against the real tree (population sanity, not a verdict)', () => {
-  const json = JSON.parse(
-    execFileSync('node', [CHECKER, '--json'], { cwd: ROOT, encoding: 'utf8' }),
-  ) as { scannedCode: number; scannedProse: number };
+  // Population sanity only — NOT a verdict. `execFileSync` throws on a
+  // non-zero exit, and the checker legitimately exits 1 whenever the real
+  // tree carries an un-baselined finding, which this test must not depend
+  // on either way. Measured for real: a CI run after `update-branch`
+  // caught a fresh violation main had just introduced, between this
+  // branch's last green local run and CI's own checkout, and this test
+  // threw instead of ever reading the JSON it exists to check. Catches the
+  // throw and reads `err.stdout` — identical bytes to a clean exit's
+  // stdout — so only a crash that emits no parseable JSON at all (not a
+  // FAIL verdict) fails this test.
+  let stdout: string;
+  try {
+    stdout = execFileSync('node', [CHECKER, '--json'], { cwd: ROOT, encoding: 'utf8' });
+  } catch (err) {
+    const e = err as { stdout?: string };
+    stdout = e.stdout ?? '';
+  }
+  const json = JSON.parse(stdout) as { scannedCode: number; scannedProse: number };
   assert.ok(json.scannedCode > 500, `expected the real code-file population, got ${json.scannedCode}`);
   assert.ok(json.scannedProse > 50, `expected the real prose-file population, got ${json.scannedProse}`);
 });
