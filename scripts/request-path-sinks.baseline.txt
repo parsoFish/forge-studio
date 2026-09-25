@@ -441,7 +441,7 @@ packages/library/studio/hook-library.ts realpathSync 2
 packages/library/studio/hook-package.ts readdirSync 1
 packages/library/studio/hook-package.ts readFileSync 1
 packages/library/studio/hook-package.ts statSync 1
-packages/library/studio/hook-runtime.ts readFileSync 1
+packages/library/studio/hook-runtime.ts mkdirSync 1
 packages/library/studio/hook-runtime.ts rmSync 2
 packages/library/studio/hook-runtime.ts spawn 1
 packages/library/studio/hook-runtime.ts spawnSync 1
