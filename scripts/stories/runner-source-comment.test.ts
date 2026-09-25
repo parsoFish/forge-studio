@@ -79,7 +79,12 @@ test('C\'s four measured probes against the real runner tree still behave', () =
   // pins so a regression that makes them SINGLE-hit does not silently change
   // meaning underneath this bead.
   assert.equal(
-    runnerSourceContaining('sweepProductFixtures(story.id').path.endsWith('run-story.mjs'),
+    // T1 1372/1384: the trailing sweep's call moved from `run-story.mjs`
+    // (`sweepProductFixtures(story.id, ...)` directly) into
+    // `sweep-teardown.mjs`'s `reapCensusAndSweep` (`sweep(storyId, root, {
+    // ... })`, `sweep` being the injected seam whose default IS
+    // `sweepProductFixtures` — a different call shape, same property.
+    runnerSourceContaining('sweep(storyId, root, {').path.endsWith('sweep-teardown.mjs'),
     true,
     'a single code hit still resolves',
   );

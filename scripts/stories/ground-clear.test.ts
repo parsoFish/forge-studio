@@ -476,11 +476,37 @@ test('7.6.123 WIRING: the runner actually calls the clear, with the classifier\'
   // which is the behaviour being fixed.
   const redAt = runner.source.indexOf(RED);
   assert.notEqual(redAt, -1, 'the survivor check must exist in the runner');
-  const redBlock = runner.source.slice(redAt, redAt + 900);
+  // BRACE-MATCHED, not a fixed char window and not "the next `return 1;`
+  // anywhere after this point": finding row 75 (T1 rulings 1258, 1332) added
+  // three more CONTAINMENT FAILURE checks between this one and
+  // `fence.groundEscapes` below, each legitimately its own
+  // `if (...) { ...; return 1; }`. A window sized for the old, shorter gap
+  // no longer reaches `groundEscapes` at all — and worse, "the next
+  // `return 1;` after RED" is satisfied by a LATER check's return even when
+  // THIS check's own return is deleted, which is exactly the fallthrough
+  // this door exists to catch (mutation-tested: proven blind to that exact
+  // defect before this rewrite). So: walk from the `if`'s own opening `{`
+  // to ITS matching `}` by brace depth, and require the CONTAINMENT
+  // FAILURE / `return 1;` pair AND the absence of the next check's marker
+  // to all be decided against that one block, not the surrounding text.
+  const braceOpenAt = runner.source.indexOf('{', runner.source.indexOf(')', redAt));
+  assert.notEqual(braceOpenAt, -1, 'the survivor check must be an if-block');
+  let depth = 0;
+  let braceCloseAt = -1;
+  for (let i = braceOpenAt; i < runner.source.length; i++) {
+    if (runner.source[i] === '{') depth++;
+    else if (runner.source[i] === '}') {
+      depth--;
+      if (depth === 0) { braceCloseAt = i; break; }
+    }
+  }
+  assert.notEqual(braceCloseAt, -1, 'the survivor check\'s block must close');
+  const redBlock = runner.source.slice(braceOpenAt, braceCloseAt);
   assert.match(redBlock, /CONTAINMENT FAILURE/, 'and be named as a containment failure like its siblings');
-  assert.match(redBlock, /return 1;/, 'and actually return non-zero');
-  assert.ok(
-    redBlock.indexOf('return 1;') < redBlock.indexOf('groundEscapes'),
+  assert.match(redBlock, /return 1;/, 'and actually return non-zero, from inside this exact check');
+  assert.doesNotMatch(
+    redBlock,
+    /groundEscapes/,
     'the return must belong to THIS check and not to the next one down',
   );
 });

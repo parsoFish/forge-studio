@@ -269,16 +269,27 @@ test('7.6.74: the trailing sweep call NAMES the window and the evidence dir', ()
   // one story's work, and this door went red without a behaviour changing. It
   // resolves the module from the anchor now — the property is that THE RUNNER
   // makes this call with these arguments, not that a particular file does.
-  // The anchor is the CALL, not the name: `sweepProductFixtures(` also matches
-  // its own definition in `sweep.mjs`, and the resolver refused the ambiguity
-  // rather than slicing from whichever file sorted first. That refusal firing
-  // on its first use is the reason it refuses in both directions.
-  const { source: src } = runnerSourceContaining('sweepProductFixtures(story.id');
-  const call = /sweepProductFixtures\(([^;]*?)\);/s.exec(src);
-  assert.notEqual(call, null, 'the runner must call sweepProductFixtures at all');
+  //
+  // T1 1372/1384: it moved AGAIN, into `sweep-teardown.mjs`'s
+  // `reapCensusAndSweep`, called through the injected `sweep` seam (whose
+  // default value IS `sweepProductFixtures`) rather than the name directly —
+  // `sweep(storyId, root, { sinceMs, groundProject, evidenceDir })`. The
+  // anchor is the CALL HEAD ONLY, up to the opening brace — never the whole
+  // `{ ... }` object literal or its closing `})`, because D1 adds
+  // `keepProjects` to that same object right after this lands, and a literal
+  // spanning the object would go stale the moment that key appears. Each key
+  // this door cares about is matched separately below, so a new key added
+  // beside them cannot break it either.
+  const CALL = 'sweep(storyId, root, {';
+  const { source: src } = runnerSourceContaining(CALL);
+  const callAt = src.indexOf(CALL);
+  const closeAt = src.indexOf(');', callAt);
+  assert.notEqual(closeAt, -1, 'the runner must call sweep at all');
 
-  const args = call![1];
-  assert.match(args, /\bsinceMs:/, 'without a window every INIT is either all ours or none');
-  assert.match(args, /\bevidenceDir:/, 'without somewhere to capture to, claiming would delete uncaptured bytes');
-  assert.match(args, /\bgroundProject:/, 'without the ground, only the time window can attribute');
+  const args = src.slice(callAt, closeAt);
+  // Shorthand properties (`{ sinceMs, ... }`), not `sinceMs: sinceMs` — the
+  // new call site carries no colon, so the key alone is the anchor.
+  assert.match(args, /\bsinceMs\b/, 'without a window every INIT is either all ours or none');
+  assert.match(args, /\bevidenceDir\b/, 'without somewhere to capture to, claiming would delete uncaptured bytes');
+  assert.match(args, /\bgroundProject\b/, 'without the ground, only the time window can attribute');
 });
