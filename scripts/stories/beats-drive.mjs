@@ -183,7 +183,14 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // look for a product verdict that does not exist. Every existing stop is
   // unmarked and keeps the wording it has.
   const named = (verdict) => {
-    if (verdict.status !== 'red') return verdict;
+    // Bead `forge-8vfn.8.1.4`. A STALLED WAIT MUST NEVER COMPOSE GREEN. Before
+    // this, only an ALREADY-red verdict got `stalled`'s reason appended — so a
+    // beat whose plain `expect.data` happened to already hold (set by the
+    // press, not by the thing being waited FOR) passed through unmarked, the
+    // stall silently discarded. `beatVerdict` below is re-derived from a FRESH
+    // read and knows nothing about why the wait it is judging ended; forcing
+    // red HERE is the one place both facts are in scope at once.
+    if (verdict.status !== 'red' && stalled === null) return verdict;
     const because = stalled?.stoppedBy === 'runner'
       ? 'the beat stopped there rather than sitting out its declared bound'
       : 'the product had already said so about this session, so the beat stopped there instead of sitting out ' +
@@ -194,7 +201,8 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
         : bound.label === null
           ? null
           : `gave up at the ${bound.label}`;
-    return why === null ? verdict : Object.freeze({ ...verdict, failures: Object.freeze([...verdict.failures, why]) });
+    if (why === null) return verdict;
+    return Object.freeze({ ...verdict, status: 'red', failures: Object.freeze([...verdict.failures, why]) });
   };
 
   if (index === 0) {

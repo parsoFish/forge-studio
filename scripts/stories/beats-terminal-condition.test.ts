@@ -22,11 +22,11 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { makeCycleTerminalDoor, makeCycleTerminalWatch } from './beats-agent-proc.mjs';
+import { makeCycleTerminalDoor, makeCycleTerminalWatch, newestChannelSince, STALL_CEILING_MS } from './beats-agent-proc.mjs';
 import { waitForConsequence } from './beats-page.mjs';
 
 const INIT = 'INIT-2026-09-19-exclude-author-flag';
@@ -147,4 +147,97 @@ test('D review (2): an UNREADABLE cycle log is named, never read as "not started
     assert.equal(door(null, anchor, 'ready-for-review'), null, 'UNKNOWN keeps waiting');
     assert.match(door.lastSeen, /could not read .*events\.jsonl: EACCES/, 'and the bound will say WHY, not claim the product never started');
   } finally { chmodSync(join(dir, 'events.jsonl'), 0o644); }
+});
+
+/**
+ * `forge-8vfn.8.1.4` — THE STALL DOOR MUST NOT SECOND-GUESS A `cycleOf` WATCH.
+ *
+ * MEASURED (S10-class shape, reconstructed from the stories runner's own
+ * doors). `waitForConsequence` consulted the GENERIC stall door
+ * (`makeAgentChannelDoor`) even on a beat that had already declared a
+ * `cycleOf`-scoped `cycleWatch`. That door's own channel search —
+ * `newestChannelSince`, born-after-the-anchor — knows nothing of `cycleOf`,
+ * and the develop station CONTINUES the architect's cycle dir, born BEFORE
+ * the press this wait anchors on (`cycleDirForInitiative`'s whole reason to
+ * exist, 7.6.143). So the generic door reported `no-channel` about a cycle
+ * that was genuinely open and streaming events, ending the wait early on a
+ * finding that was never about THIS cycle at all — and the beat's fresh
+ * re-read then answered green from its plain `expect.data`, which had held
+ * since the press and knows nothing about why the wait ended.
+ *
+ * A dispatch dir born a moment ago is proof enough of "predates the anchor":
+ * a fixture cannot fake BIRTH time (`beats-cycle-terminal.test.ts` learned
+ * this the hard way), so the anchor is set a few seconds into the FUTURE —
+ * 7.6.143's own trick for the identical relation, "the press happened after
+ * this dir already existed".
+ */
+function openContinuedCycle(initiative: string): { root: string; logs: string; dir: string } {
+  const root = mkdtempSync(join(tmpdir(), 'terminal-stall-door-'));
+  const logs = join(root, '_logs');
+  const dir = join(logs, `2026-09-19T00-00-00_${initiative}`);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'events.jsonl'), `${JSON.stringify({ event_type: 'start' })}\n`);
+  mkdirSync(join(root, '_queue', 'in-flight'), { recursive: true });
+  writeFileSync(join(root, '_queue', 'in-flight', `${initiative}.md`), '# in flight\n');
+  return { root, logs, dir };
+}
+
+test('8.1.4 (RED before the fix): the generic stall door is never consulted while a cycleWatch is watching', async () => {
+  const initiative = 'INIT-2026-09-19-continued-cycle';
+  const { root, logs, dir } = openContinuedCycle(initiative);
+  // The press anchors AFTER the dir's real birth — the develop station
+  // continuing a cycle the architect already started.
+  const anchor = Date.now() + 5_000;
+  // A `cycle.start` this wait's own run can credit — dated past the anchor so
+  // `cycleStartedSince` accepts it whenever this poll actually runs, however
+  // little real time has elapsed (§15.504 doors are read from disk, not a
+  // clock this test controls).
+  appendFileSync(join(dir, 'events.jsonl'), `${JSON.stringify({ event_type: 'start', message: 'cycle.start', started_at: new Date(anchor + 1_000).toISOString() })}\n`);
+
+  // GROUND TRUTH (7.6.143): the generic, non-`cycleOf` resolver the stall door
+  // itself uses really would find nothing for this press.
+  assert.equal(newestChannelSince(logs, anchor), null, 'the born-after-the-anchor form must not see a continued cycle');
+
+  let calls = 0;
+  // A stand-in for the generic door — the same idiom `beats-offsession-stall
+  // .test.ts` uses (`door(NONE)`): "its SHAPE is the contract under test".
+  // This is what `makeAgentChannelDoor` concludes for THIS press once its own
+  // ceiling elapses: nothing, proven above.
+  const stallDoor = () => {
+    calls += 1;
+    return { reason: 'no-channel', detail: 'modelling the real door\'s blind spot for a continued cycle (7.6.143).' };
+  };
+  const watch = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: initiative })!;
+
+  // The cycle finishes MID-WAIT, exactly as the real scheduler would — moved
+  // out of `in-flight` into the wanted state.
+  setTimeout(() => {
+    unlinkSync(join(root, '_queue', 'in-flight', `${initiative}.md`));
+    mkdirSync(join(root, '_queue', 'ready-for-review'), { recursive: true });
+    writeFileSync(join(root, '_queue', 'ready-for-review', `${initiative}.md`), '# done\n');
+  }, 200);
+
+  const verdict = await waitForConsequence(
+    answeringPage() as never, BEAT as never, 2 * STALL_CEILING_MS + 10_000, null, null, null,
+    stallDoor as never, anchor, null, watch,
+  );
+
+  assert.equal(
+    calls, 0,
+    'forge-8vfn.8.1.4: the generic stall door must NEVER be consulted while a declared terminal is being ' +
+    'watched — it resolves the WRONG channel for a continued cycle and a false `no-channel` must not end this wait',
+  );
+  assert.equal(verdict, null, 'the cycle is genuinely open and then finishes on its own terminal — nothing may end this wait on a stall-door finding');
+});
+
+test('8.1.4: a cycleOf initiative whose dispatch dir never appears is still red at the bound — no false comfort from the identity resolver either', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'terminal-stall-door-none-'));
+  const watch = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: 'INIT-never-dispatched' })!;
+  const verdict = await waitForConsequence(
+    answeringPage() as never, BEAT as never, 300, null, null, null, null, null, null, watch,
+  ) as { why: string; stoppedBy?: string } | null;
+
+  assert.notEqual(verdict, null, 'a cycleOf cycle that never appears must still end the wait red, at the declared bound');
+  assert.match(verdict!.why, /ready-for-review/);
+  assert.equal(verdict!.stoppedBy, 'runner');
 });
