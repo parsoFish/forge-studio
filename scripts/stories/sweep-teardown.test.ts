@@ -15,7 +15,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync
 import { tmpdir } from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight, stopSchedulerCensusAndRelease, DAEMON_PID_FILE } from './sweep-teardown.mjs';
+import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight, stopSchedulerCensusAndRelease, reapCensusAndSweep, DAEMON_PID_FILE } from './sweep-teardown.mjs';
+import { sweepProductFixtures } from './sweep.mjs';
 
 /**
  * The leading sweep's missing paired restore — T1 ruling 594, half 2.
@@ -459,4 +460,212 @@ test('finding row 75 DOOR (third): a TERM-respecting grandchild exits within the
   assert.ok(result.census!.waitedMs < 1500, `a TERM-respecting child must not consume the full bound: waited ${result.census!.waitedMs} ms`);
   assert.equal(existsSync(cleanExitMarker), true, 'the grandchild exited on its own SIGTERM handler, never SIGKILLed');
   assert.equal(existsSync(heartbeat), false);
+});
+
+/**
+ * Finding row 75's SECOND half (T1 rulings 1258, 1332) — the story's own
+ * trailing sweep (`run-story.mjs`: `reapAgentRuns` → `quiesceWriters` →
+ * `sweepProductFixtures`) had the identical shape: `quiesceWriters` only ever
+ * PRINTED whether the tree settled, and the clear ran regardless. This is the
+ * ralph-loop evidence row 75 actually came through — a develop cycle's phase
+ * agent, dispatched the way `spawnAgentTurn` dispatches everything (detached,
+ * its own process group), outliving `reapAgentRuns`'s own kill and rewriting
+ * `_queue/in-flight/<init>.md.heartbeat` after this runner had already printed
+ * CLEARED. `reapCensusAndSweep` gates `sweepProductFixtures` on a fresh census
+ * of every reaped pid's descendants, exactly like `stopSchedulerCensusAndRelease`
+ * gates the scheduler's release.
+ */
+
+/** An `INIT-<id>.md` manifest `claimQueueWrites` will attribute to THIS run by
+ *  `created_at`, plus its heartbeat — the artefact `captureAndClearMintedRun-
+ *  Artefacts` (reached through `sweepProductFixtures`) actually clears. */
+function plantInitManifest(root: string, sinceMs: number) {
+  const dir = join(root, '_queue', 'in-flight');
+  mkdirSync(dir, { recursive: true });
+  const createdAt = new Date(sinceMs + 1000).toISOString();
+  writeFileSync(join(dir, 'INIT-mine.md'), `---\ncreated_at: '${createdAt}'\n---\n`);
+  writeFileSync(join(dir, 'INIT-mine.md.heartbeat'), '2026-09-11T07:53:27.192Z');
+  return join(dir, 'INIT-mine.md.heartbeat');
+}
+
+/** A real process standing in for a pid `reapAgentRuns` already believes it
+ *  reaped — its own liveness does not matter to the door, only that a
+ *  detached grandchild running `grandchildScript` outlives it. Reuses
+ *  `plantDaemonWithGrandchild`'s shape without a daemon pid file: nothing
+ *  here reads `DAEMON_PID_FILE`, the caller passes `root.pid` as a reaped pid
+ *  directly, exactly as `reap.reaped.map(r => r.pid)` would. */
+function plantReapedRootWithGrandchild(root: string, grandchildScript: string, ralphPidFile: string) {
+  const parent = spawn(process.execPath, ['-e', `
+    const { spawn } = require('node:child_process');
+    const fs = require('node:fs');
+    const child = spawn(process.execPath, ['-e', ${JSON.stringify(grandchildScript)}], {
+      cwd: ${JSON.stringify(root)}, detached: true, stdio: 'ignore',
+    });
+    fs.writeFileSync(${JSON.stringify(ralphPidFile)}, String(child.pid));
+    setInterval(() => {}, 1000);
+  `], { cwd: root, stdio: 'ignore' });
+  return parent;
+}
+
+test('finding row 75 (agent half) RED: the OLD sequence (sweepProductFixtures alone) leaves a heartbeat a live grandchild keeps rewriting', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-agent-census-red-'));
+  const sinceMs = Date.now() - 60_000;
+  const ralphPidFile = join(root, 'ralph.pid');
+  const heartbeat = plantInitManifest(root, sinceMs);
+
+  const parent = plantReapedRootWithGrandchild(root, `
+    process.on('SIGTERM', () => {}); // ignored — this is the writer that must be force-killed
+    setInterval(() => { try { require('node:fs').writeFileSync(${JSON.stringify(heartbeat)}, String(Date.now())); } catch {} }, 25);
+    setInterval(() => {}, 1000);
+  `, ralphPidFile);
+  t.after(() => {
+    killIfAlive(parent.pid!);
+    try { killIfAlive(Number(readFileSync(ralphPidFile, 'utf8'))); } catch { /* never wrote */ }
+  });
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  await new Promise((r) => setTimeout(r, 150));
+
+  // The OLD sequence: `quiesceWriters` only prints, and the trailing sweep
+  // ran regardless of what it found. Standing in for that here with the sweep
+  // call alone, exactly as run-story.mjs made it before this fix.
+  const evidenceDir = join(root, 'queue-claim');
+  const sweep = sweepProductFixtures('S-red', root, { sinceMs, evidenceDir });
+  assert.ok(sweep.artefacts.cleared.includes('_queue/in-flight/INIT-mine.md.heartbeat'), `must have cleared it: ${JSON.stringify(sweep)}`);
+
+  await new Promise((r) => setTimeout(r, 100)); // the grandchild's next tick
+  assert.equal(
+    existsSync(heartbeat), true,
+    'RED: the grandchild outlived reapAgentRuns and rewrote the heartbeat the old sequence just cleared',
+  );
+});
+
+test('finding row 75 (agent half) DOOR: reapCensusAndSweep kills the grandchild, censuses empty, and the clear HOLDS', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-agent-census-green-'));
+  const sinceMs = Date.now() - 60_000;
+  const ralphPidFile = join(root, 'ralph.pid');
+  const heartbeat = plantInitManifest(root, sinceMs);
+
+  const parent = plantReapedRootWithGrandchild(root, `
+    process.on('SIGTERM', () => {});
+    setInterval(() => { try { require('node:fs').writeFileSync(${JSON.stringify(heartbeat)}, String(Date.now())); } catch {} }, 25);
+    setInterval(() => {}, 1000);
+  `, ralphPidFile);
+  t.after(() => {
+    killIfAlive(parent.pid!);
+    try { killIfAlive(Number(readFileSync(ralphPidFile, 'utf8'))); } catch { /* never wrote */ }
+  });
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  await new Promise((r) => setTimeout(r, 150));
+
+  const evidenceDir = join(root, 'queue-claim');
+  const result = await reapCensusAndSweep({
+    root, storyId: 'S-green', sinceMs, evidenceDir,
+    reapedPids: [parent.pid],
+    censusBoundMs: 3000, censusPollMs: 20, rereadDelayMs: 150,
+  });
+
+  assert.equal(result.census.empty, true, `census must settle: ${JSON.stringify(result.census)}`);
+  assert.ok(result.sweep, 'the sweep must have run — census was empty');
+  assert.ok(result.sweep.artefacts.cleared.includes('_queue/in-flight/INIT-mine.md.heartbeat'));
+  assert.deepEqual(result.reappearedArtefacts, [], `nothing may reappear: ${JSON.stringify(result.lines)}`);
+  assert.equal(existsSync(heartbeat), false, 'GREEN: the heartbeat stayed cleared — the writer was dead before the clear ran');
+
+  const ralphPid = Number(readFileSync(ralphPidFile, 'utf8'));
+  assert.throws(() => process.kill(ralphPid, 0), 'the grandchild must actually be dead');
+  assert.throws(() => process.kill(parent.pid!, 0), 'and the reaped root too');
+});
+
+test('finding row 75 (agent half) DOOR (second): a writer OUTSIDE this run\'s dispatch tree recreates a cleared artefact — caught only by the re-read', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-agent-census-sibling-'));
+  const sinceMs = Date.now() - 60_000;
+  const heartbeat = plantInitManifest(root, sinceMs);
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+
+  // No planted root at all — `reapedPids` is empty, so the census is
+  // vacuously empty immediately. The sibling below shares no ancestry with
+  // anything this run dispatched, exactly the shape the census cannot see.
+  const sibling = spawn(process.execPath, ['-e', `
+    setInterval(() => { try { require('node:fs').writeFileSync(${JSON.stringify(heartbeat)}, 'sibling'); } catch {} }, 20);
+    setInterval(() => {}, 1000);
+  `], { stdio: 'ignore' });
+  t.after(() => killIfAlive(sibling.pid!));
+  await new Promise((r) => setTimeout(r, 100));
+
+  const evidenceDir = join(root, 'queue-claim');
+  const result = await reapCensusAndSweep({
+    root, storyId: 'S-sibling', sinceMs, evidenceDir,
+    reapedPids: [],
+    censusBoundMs: 2000, censusPollMs: 20, rereadDelayMs: 150,
+  });
+
+  assert.equal(result.census.empty, true, 'legitimately empty — this run dispatched nothing');
+  assert.ok(result.sweep?.artefacts.cleared.includes('_queue/in-flight/INIT-mine.md.heartbeat'), 'the clear itself still ran');
+  assert.ok(
+    result.reappearedArtefacts.includes('_queue/in-flight/INIT-mine.md.heartbeat'),
+    `the re-read must catch what the census could not: ${JSON.stringify(result.lines)}`,
+  );
+  assert.ok(
+    result.lines.some((l: string) => /ARTEFACT CLEAR DID NOT HOLD/.test(l)),
+    'never a silent CLEARED for a path that came back',
+  );
+});
+
+test('finding row 75 (agent half) DOOR (third): a TERM-respecting grandchild exits within the bound — no escalation needed', async (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-agent-census-term-'));
+  const sinceMs = Date.now() - 60_000;
+  const ralphPidFile = join(root, 'ralph.pid');
+  const cleanExitMarker = join(root, 'clean-exit.marker');
+  const heartbeat = plantInitManifest(root, sinceMs);
+
+  const parent = plantReapedRootWithGrandchild(root, `
+    process.on('SIGTERM', () => {
+      require('node:fs').writeFileSync(${JSON.stringify(cleanExitMarker)}, 'clean');
+      process.exit(0);
+    });
+    setInterval(() => {}, 1000);
+  `, ralphPidFile);
+  t.after(() => {
+    killIfAlive(parent.pid!);
+    try { killIfAlive(Number(readFileSync(ralphPidFile, 'utf8'))); } catch { /* already exited, which is the point */ }
+  });
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  await new Promise((r) => setTimeout(r, 150));
+
+  const evidenceDir = join(root, 'queue-claim');
+  const result = await reapCensusAndSweep({
+    root, storyId: 'S-term', sinceMs, evidenceDir,
+    reapedPids: [parent.pid],
+    censusBoundMs: 3000, censusPollMs: 20, rereadDelayMs: 100,
+  });
+
+  assert.equal(result.census.empty, true);
+  assert.ok(result.census.waitedMs < 1500, `a TERM-respecting child must not consume the full bound: waited ${result.census.waitedMs} ms`);
+  assert.equal(existsSync(cleanExitMarker), true, 'the grandchild exited on its own SIGTERM handler, never SIGKILLed');
+  assert.equal(existsSync(heartbeat), false);
+});
+
+test('finding row 75 (agent half): a non-empty census refuses the sweep entirely — nothing is cleared, nothing is claimed', async () => {
+  // A pure unit check, fully injected: `procTable`/`kill`/`listPids` never
+  // touch the real /proc or a real process at all — pid 999 is fabricated and
+  // `listPids` reports it alive on every call, so the census can never settle.
+  // The spy must then never be called.
+  let sweepCalled = false;
+  const killed: Array<[number, string]> = [];
+  const result = await reapCensusAndSweep({
+    root: '/does-not-matter', storyId: 'S-refuse', sinceMs: Date.now(), evidenceDir: '/does-not-matter',
+    reapedPids: [999],
+    quiesce: async () => ({ pids: { gone: [], alive: [], waitedMs: 0, timedOut: false }, tree: { quiet: true, waitedMs: 0, timedOut: false, reads: 1 }, settled: true }),
+    sweep: () => { sweepCalled = true; return { removed: [], failed: [], claim: { claimed: [] }, artefacts: { cleared: [] }, lines: [] }; },
+    procTable: () => new Map([[999, { ppid: 1, pgrp: 999 }]]),
+    kill: (pid: number, sig: string) => { killed.push([pid, sig]); },
+    listPids: () => ['999'],
+    procRoot: '/nonexistent-proc-root-for-this-test',
+    censusBoundMs: 100, censusPollMs: 20,
+  });
+
+  assert.equal(result.census.empty, false);
+  assert.equal(result.sweep, null);
+  assert.equal(sweepCalled, false, 'the clear must never run when the census could not settle');
+  assert.ok(result.lines.some((l: string) => /REFUSING to run the trailing sweep/.test(l)));
+  assert.ok(killed.some(([pid, sig]) => pid === 999 && sig === 'SIGKILL'), 'the survivor must still have been escalated to SIGKILL');
 });
