@@ -61,7 +61,7 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,156 | **12,578** | ratified 12,578 — M7-C door re-exports OD (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 12,965 | **12,965** | ratified 12,965 — M7-C door re-exports OD round G (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 59 | 20,520 | **20,482** | ratified 20,482 — M7-C door re-exports OD, round-G circular-import fix (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `flows` | 83 | 23,501 | **23,173** | ratified 23,173 — row 86 post-merge worktree prune, id-segment guarded (forge-8vfn.8.1.3), lane-ratified under ruling 666; see git history for prior raises. |
+| `flows` | 83 | 23,501 | **23,301** | ratified 23,301 — row 93 stale remote branch fail-fast + cleanup (forge-8vfn.8.1.8), T1 ruling 1459 above lane authority (+128); see git history for prior raises. |
 | `factory` | 14 | 2,113 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 38 | 11,129 | **11,129** | ratified 11,129 — M7-C door re-exports OD round G (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
