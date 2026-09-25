@@ -139,26 +139,35 @@ export function pidsDescendedFrom(candidatePids, rootPid, { procRoot = '/proc' }
 }
 
 /**
- * `/proc/<pid>/stat` field 22 — start time in clock ticks since boot. Parsed
- * AFTER the last `)` of the comm field (`reap.mjs`'s own discipline: `comm`
- * can contain spaces and parens, so the fields before it are never split from
- * the left). Monotonic and unique to one process's lifetime for a given pid —
- * MUST 2's whole mechanism — `null` when the pid cannot currently be read.
+ * `/proc/<pid>/stat` field 22 — start time in clock ticks since boot, WHY a
+ * read failed kept apart — ROW 101 / M7-D finding 7, `readPpid`'s own MUST-3
+ * shape applied here. Parsed AFTER the last `)` of the comm field (`reap.mjs`'s
+ * own discipline). Monotonic and unique to one process's lifetime for a given
+ * pid — MUST 2's whole mechanism.
+ *
+ * @returns {{time: number|null, unknown?: true, error?: unknown}}
  */
-export function processStartTime(pid, { procRoot = '/proc' } = {}) {
+function processStartTimeResult(pid, { procRoot = '/proc' } = {}) {
   let raw;
   try {
     raw = readFileSync(`${procRoot}/${pid}/stat`, 'utf8');
-  } catch {
-    return null;
+  } catch (err) {
+    if (err?.code === 'ENOENT') return { time: null }; // genuinely gone — an ordinary, expected read
+    return { time: null, unknown: true, error: err }; // EACCES, EIO, etc. — NOT the same fact as gone
   }
   const close = raw.lastIndexOf(')');
-  if (close === -1) return null;
+  if (close === -1) return { time: null };
   // Fields after `comm)` start at field 3 (state); field 22 (starttime) is
   // therefore index 22 - 3 = 19 into that slice.
   const fields = raw.slice(close + 2).split(' ');
   const n = Number.parseInt(fields[19], 10);
-  return Number.isInteger(n) ? n : null;
+  return { time: Number.isInteger(n) ? n : null };
+}
+
+/** `null` when the pid cannot currently be read — unchanged public contract;
+ *  callers that need to tell "gone" apart from "unknown" use `identifyPid`. */
+export function processStartTime(pid, opts = {}) {
+  return processStartTimeResult(pid, opts).time;
 }
 
 /**
@@ -167,12 +176,19 @@ export function processStartTime(pid, { procRoot = '/proc' } = {}) {
  * (already gone, or unreadable) — returned rather than thrown, because "we
  * tried to record this and could not" is itself the fact a caller needs.
  *
+ * `unknown: true` (ROW 101 / M7-D finding 7) marks the read failing for a
+ * reason OTHER than the process being gone (EACCES, EIO, …) — `rootIsUsable`
+ * below must never treat this the same as a root that was simply absent when
+ * recorded: an absent root contributes nothing to a census by construction,
+ * an UNKNOWN one means the census cannot confirm anything and must refuse.
+ *
  * @param {number|string} pid
  * @param {{procRoot?: string}} [opts]
- * @returns {{pid: number|string, startTime: number|null}}
+ * @returns {{pid: number|string, startTime: number|null, unknown?: true}}
  */
 export function identifyPid(pid, opts = {}) {
-  return { pid, startTime: processStartTime(pid, opts) };
+  const r = processStartTimeResult(pid, opts);
+  return r.unknown ? { pid, startTime: null, unknown: true } : { pid, startTime: r.time };
 }
 
 /**
@@ -250,11 +266,18 @@ export function verifiedKill(recorded, sig, opts = {}) {
  * target, because that would misattribute a stranger's children to this run.
  * A `recorded.startTime` of `null` (this run never actually identified the
  * pid) can never be usable — there is nothing to defend using that number.
+ *
+ * @returns {boolean|'unknown'} `'unknown'` — ROW 101 / M7-D finding 7 — when
+ *   EITHER the snapshot-time identification or this live re-check failed for
+ *   a reason other than the process being gone; `censusSurvivors` must refuse
+ *   the whole census on this, never silently drop the one root.
  */
 function rootIsUsable(recorded, opts) {
+  if (recorded.unknown) return 'unknown';
   if (recorded.startTime === null) return false;
-  const now = processStartTime(recorded.pid, opts);
-  return now === null || now === recorded.startTime;
+  const now = processStartTimeResult(recorded.pid, opts);
+  if (now.unknown) return 'unknown';
+  return now.time === null || now.time === recorded.startTime;
 }
 
 /**
@@ -300,7 +323,19 @@ export function censusSurvivors(roots, { procRoot = '/proc', listPids } = {}) {
     return null;
   }
 
-  const usableRoots = candidates.filter((r) => rootIsUsable(r, { procRoot })).map((r) => String(r.pid));
+  // ROW 101 / M7-D finding 7 — an UNKNOWN root (snapshot-time or live-recheck
+  // identification failed for a reason other than "gone") must not silently
+  // fall out of `usableRoots` the way a merely-absent one does: MUST 3's own
+  // shape below (an unreadable ancestry link refuses the whole census) is the
+  // pattern reused here, rather than under-reporting around it.
+  let identificationUnknown = false;
+  const usableRoots = [];
+  for (const r of candidates) {
+    const usable = rootIsUsable(r, { procRoot });
+    if (usable === 'unknown') { identificationUnknown = true; continue; }
+    if (usable) usableRoots.push(String(r.pid));
+  }
+  if (identificationUnknown) return null;
   if (usableRoots.length === 0) return [];
 
   const survivors = [];
