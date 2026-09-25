@@ -305,6 +305,7 @@ test('a tracked file the RUN dirtied is restored, and an untracked file the run 
     remove: ['studio/hooks/block-protected-branch-push/', 'skills/plan/SKILL.md'],
     // Ruling 308 — a story that declares no ground defers nothing.
     defer: [],
+    unknown: [],
   });
 });
 
@@ -314,7 +315,7 @@ test('a file that was ALREADY dirty before the run is the operator\'s, and is ne
   // a gate they only meant to observe.
   const dirty = porcelainZ(' M packages/projects/reset.ts', '?? notes.md');
   const breaches = fenceBreaches(parseGitPorcelain(dirty), parseGitPorcelain(dirty), 'S8');
-  assert.deepEqual(breaches, { restore: [], remove: [], defer: [] });
+  assert.deepEqual(breaches, { restore: [], remove: [], defer: [], unknown: [] });
 });
 
 test('the run\'s OWN artifacts are never a breach, wherever the fence is called', () => {
@@ -324,7 +325,7 @@ test('the run\'s OWN artifacts are never a breach, wherever the fence is called'
   const after = parseGitPorcelain(
     porcelainZ('?? demos/stories/S8/', ' M demos/stories/index.html', ' M docs/how-to/S8.md', '?? docs/tutorials/S8.md'),
   );
-  assert.deepEqual(fenceBreaches([], after, 'S8'), { restore: [], remove: [], defer: [] });
+  assert.deepEqual(fenceBreaches([], after, 'S8'), { restore: [], remove: [], defer: [], unknown: [] });
 });
 
 test('another story\'s artifact IS a breach — the allowance is this run\'s id, not the gallery', () => {
@@ -333,7 +334,39 @@ test('another story\'s artifact IS a breach — the allowance is this run\'s id,
     restore: ['demos/stories/S2/story.json', 'docs/how-to/S2.md'],
     remove: [],
     defer: [],
+    unknown: [],
   });
+});
+
+// --- ROW 101 / M7-D finding 1: expansion failure must HOLD, never delete ---
+
+test('ROW 101 (RED): a git-status failure expanding a collapsed ancestor HOLDS it, never removes it', () => {
+  // `expandCollapsed` used to catch a `git status` spawn/parse failure and
+  // return `[path]` — the COLLAPSED ancestor (e.g. `brain/`) — which then
+  // fails `startsWith(groundBrain)` and falls through to `remove`; `applyFence`
+  // then `rmSync(recursive, force)`s it: every project's Brain 3 in one shot.
+  const b = fenceBreaches([], [{ xy: '??', path: 'brain/' }], 'S1', 'gitweave', {
+    expand: () => { throw new Error('spawn EMFILE'); },
+  });
+  assert.deepEqual(b.remove, [], 'an UNKNOWN expansion must never fall through to remove');
+  assert.deepEqual(b.defer, [], 'the EXPECTED-ground defer list is a different fact — this is unknown, not sanctioned');
+  assert.deepEqual((b.unknown ?? []).map((u) => u.path), ['brain/'], 'held-but-unknown must be named, not dropped');
+  assert.match((b.unknown ?? [])[0]?.error ?? '', /spawn EMFILE/);
+
+  const lines = describeFence({ restored: [], removed: [], failed: [], ...b }).join('\n');
+  assert.match(lines, /HELD brain\/.*could not expand brain\/.*spawn EMFILE.*held, not removed/s);
+  assert.doesNotMatch(lines, /^\[stories\] fence: clean/, 'a held-unknown is never reported clean');
+});
+
+test('ROW 101 control: a genuine (non-throwing) expansion still classifies file by file, unaffected', () => {
+  const b = fenceBreaches([], [{ xy: '??', path: 'brain/' }], 'S1', 'gitweave', {
+    expand: (p) => (p === 'brain/'
+      ? ['brain/projects/gitweave/profile.md', 'brain/projects/someone-else/profile.md']
+      : [p]),
+  });
+  assert.deepEqual(b.remove, ['brain/projects/someone-else/profile.md']);
+  assert.deepEqual(b.defer, ['brain/projects/gitweave/profile.md']);
+  assert.deepEqual(b.unknown ?? [], []);
 });
 
 test('the fence refuses an unsafe story id before it interpolates one into a path', () => {

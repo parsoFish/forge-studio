@@ -22,7 +22,7 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, relative } from 'node:path';
-import { readProcTable, descendantsOf } from './reap.mjs';
+import { readProcTable, descendantsOf, agentRunsReadable } from './reap.mjs';
 import { waitForCensusEmpty, describeCensus, identifyPid, verifiedKill } from './reap-census.mjs';
 import { quiesceWriters, describeQuiesce } from './quiesce.mjs';
 import { sweepProductFixtures } from './sweep.mjs';
@@ -150,61 +150,76 @@ export const DRAIN_DONE_LINE = '[serve] exited cleanly';
 export const DRAIN_GRACE_MS = 30_000;
 
 /**
- * Does `pid`'s own cmdline actually look like `forge serve` — review finding
- * 2. `spawnServeDetached` (`packages/flows/daemon.ts`) spawns the daemon with
- * the literal argv `[node, --experimental-strip-types, <forgeRoot>/apps/
- * forge/cli.ts, serve]`. `ownSchedulerPid`'s cwd check alone answers "does a
- * process with this pid run inside our tree", never "is it our daemon" — a
- * RECYCLED pid whose new owner happens to share cwd (any other process this
- * SAME run spawned with `cwd: root`) would pass a cwd-only test, and that pid
- * then seeds `reapCensusAndSweep`'s TERM/KILL census: a stranger's whole
- * descendant tree, censused and killed as if it were our own dispatch.
- * Binding on the two tokens `spawnServeDetached` writes into every daemon's
- * argv, and nothing else, is the identity the product actually has for "this
- * is the scheduler". FAILS CLOSED: an unreadable cmdline is never a match.
+ * Tri-state read behind `ownSchedulerPid` — ROW 101 / M7-D finding 2. A
+ * pidfile, `/proc/<pid>/cwd` or `/proc/<pid>/cmdline` read that fails for a
+ * reason OTHER than the pid/file being genuinely gone (ENOENT) must not read
+ * as "no daemon": `reapCensusAndSweep`'s census would then silently exclude a
+ * live scheduler's whole descendant tree and clear `_queue/`, `_worktrees/`
+ * or this run's ground while it is still writing.
+ *
+ * Binds on the two tokens `spawnServeDetached` (`packages/flows/daemon.ts`)
+ * writes into every daemon's own argv (`[…, <forgeRoot>/apps/forge/cli.ts,
+ * serve]`, review finding 2) — a `cwd` match alone answers "does a process
+ * run inside our tree", never "is it our daemon", and a RECYCLED pid whose
+ * new owner happens to share `cwd` (any other process this same run spawned)
+ * would pass a cwd-only test and seed the census with a stranger's tree.
+ *
+ * @param {string} root the run's own worktree
+ * @returns {{pid: number|null, unknown: boolean, error?: string}}
  */
-function looksLikeForgeServe(pid, root) {
+export function ownSchedulerPidState(root) {
   let raw;
   try {
-    raw = readFileSync(`/proc/${pid}/cmdline`, 'utf8');
-  } catch {
-    return false; // gone, or unreadable — never trusted as a match
+    raw = readFileSync(join(root, DAEMON_PID_FILE), 'utf8');
+  } catch (e) {
+    if (e.code === 'ENOENT') return { pid: null, unknown: false }; // no daemon was started
+    return { pid: null, unknown: true, error: `could not read ${DAEMON_PID_FILE}: ${e.message}` };
   }
-  const tokens = raw.split('\0').filter((t) => t !== '');
-  return tokens.includes(join(root, 'apps', 'forge', 'cli.ts')) && tokens.includes('serve');
+  const pid = Number(raw.trim());
+  if (!Number.isInteger(pid) || pid <= 0) return { pid: null, unknown: false }; // not a pid file — no daemon
+  let cwd;
+  try {
+    cwd = realpathSync(`/proc/${pid}/cwd`);
+  } catch (e) {
+    if (e.code === 'ENOENT') return { pid: null, unknown: false }; // already gone
+    return { pid: null, unknown: true, error: `could not read /proc/${pid}/cwd: ${e.message}` };
+  }
+  let ownRoot;
+  try {
+    ownRoot = realpathSync(root);
+  } catch (e) {
+    return { pid: null, unknown: true, error: `could not resolve ${root}: ${e.message}` };
+  }
+  if (cwd !== ownRoot) return { pid: null, unknown: false }; // runs elsewhere — not ours
+  let cmdlineRaw;
+  try {
+    cmdlineRaw = readFileSync(`/proc/${pid}/cmdline`, 'utf8');
+  } catch (e) {
+    if (e.code === 'ENOENT') return { pid: null, unknown: false }; // gone — never trusted as a match
+    return { pid: null, unknown: true, error: `could not read /proc/${pid}/cmdline: ${e.message}` };
+  }
+  const tokens = cmdlineRaw.split('\0').filter((t) => t !== '');
+  const match = tokens.includes(join(root, 'apps', 'forge', 'cli.ts')) && tokens.includes('serve');
+  return { pid: match ? pid : null, unknown: false };
 }
 
 /**
  * The scheduler daemon pid THIS RUN started, or `null` — T1 1418.
  *
  * The SAME ownership test `stopOwnScheduler` applies below (pid file, then a
- * `cwd` match against `root`), PLUS `looksLikeForgeServe` (review finding 2)
- * — factored out so a caller that only needs to KNOW whether this tree owns
- * a running scheduler — never to stop it — does not re-derive the check.
- * `reapCensusAndSweep`'s `schedulerPid` default uses this: a run that started
- * a scheduler for a beat like S10's `scheduler-start` has its dispatch
- * descendants rooted into the SAME census that already gates the trailing
- * sweep, without a bare pid a caller could point at a process this run does
- * not own — or a recycled one it merely shares a `cwd` with.
+ * `cwd` match against `root`), PLUS the argv check (review finding 2) —
+ * factored out so a caller that only needs to KNOW whether this tree owns a
+ * running scheduler — never to stop it — does not re-derive the check.
+ * `reapCensusAndSweep` reads `ownSchedulerPidState` directly rather than this
+ * bare-pid wrapper, so an UNKNOWN read can refuse instead of silently
+ * defaulting to null; this wrapper stays for any caller that only ever wanted
+ * a pid or null.
  *
  * @param {string} root the run's own worktree
  * @returns {number|null}
  */
 export function ownSchedulerPid(root) {
-  let pid;
-  try {
-    pid = Number(readFileSync(join(root, DAEMON_PID_FILE), 'utf8').trim());
-  } catch {
-    return null; // no daemon was started
-  }
-  if (!Number.isInteger(pid) || pid <= 0) return null;
-  let sameTree;
-  try {
-    sameTree = realpathSync(`/proc/${pid}/cwd`) === realpathSync(root);
-  } catch {
-    return null; // already gone, or its cwd is unreadable
-  }
-  return sameTree && looksLikeForgeServe(pid, root) ? pid : null;
+  return ownSchedulerPidState(root).pid;
 }
 
 export function stopOwnScheduler(root, graceMs = DRAIN_GRACE_MS) {
@@ -432,12 +447,42 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
   try {
     const n = Number(readFileSync(join(root, DAEMON_PID_FILE), 'utf8').trim());
     if (Number.isInteger(n) && n > 0) daemonPid = n;
-  } catch { /* no pid file — no daemon was started, and stopOwnScheduler below says so */ }
+  } catch (e) {
+    if (e.code !== 'ENOENT') {
+      // ROW 101 / M7-D finding 3 — an unreadable pidfile is NOT "no daemon":
+      // if one is later found alive by `stopOwnScheduler`'s own (separate)
+      // read below, its descendants were never snapshotted HERE, and a real
+      // kill could orphan a detached dispatch invisibly. Refuse the whole
+      // step rather than guess — never a signal, never a release.
+      const reason = `could not read ${DAEMON_PID_FILE}: ${e.message} — daemon state UNKNOWN`;
+      return {
+        sched: null,
+        census: { empty: false, survivors: null, waitedMs: 0, reason },
+        release: null,
+        lines: [`[stories] REFUSING teardown: ${reason}`],
+      };
+    }
+    // ENOENT — genuinely no pid file; `stopOwnScheduler` below reaches the
+    // same conclusion independently.
+  }
   // BEFORE ANY SIGNAL. `stopOwnScheduler` has not run yet, so the daemon (if
   // it exists) is still alive and its children's ppid still points at it.
   // MUST 2 — every identity is captured HERE, at the moment of discovery.
   const daemonIdentity = daemonPid !== null ? identifyPid(daemonPid, { procRoot }) : null;
-  const descendants = daemonPid !== null ? descendantsOf(daemonPid, procTable()) : [];
+  const preSignalTable = daemonPid !== null ? procTable() : new Map();
+  if (preSignalTable === null) {
+    // ROW 101 / M7-D finding 6, applied at this call site — a table build
+    // failure must never render as "no descendants" for a daemon that DOES
+    // exist; refuse the whole step exactly as an unreadable pidfile does.
+    const reason = 'the process table could not be read — this scheduler\'s descendants are UNKNOWN, so signalling it now could orphan them invisibly';
+    return {
+      sched: null,
+      census: { empty: false, survivors: null, waitedMs: 0, reason },
+      release: null,
+      lines: [`[stories] REFUSING teardown: ${reason}`],
+    };
+  }
+  const descendants = daemonPid !== null ? descendantsOf(daemonPid, preSignalTable) : [];
   const descendantIdentities = descendants.map((pid) => identifyPid(pid, { procRoot }));
 
   const sched = stopOwnScheduler(root, graceMs);
@@ -566,11 +611,16 @@ export async function reapCensusAndSweep({
   root, storyId, sinceMs, groundProject, evidenceDir, reapedPids,
   // T1 1418 — S10's agents are dispatched by the SCHEDULER this run started,
   // not by the runner, so `reapedPids` reads empty and the census below would
-  // trivially pass BEFORE that dispatch is dead. Defaults to THIS run's own
-  // scheduler, verified the same ownership test `stopOwnScheduler` applies —
-  // never a bare injected pid a caller could point at a process this run does
-  // not own. `null` (a test proving the OLD, scheduler-blind shape) opts out.
-  schedulerPid = ownSchedulerPid(root),
+  // trivially pass BEFORE that dispatch is dead. Resolved BELOW to THIS run's
+  // own scheduler (`ownSchedulerPidState`, the same ownership test
+  // `stopOwnScheduler` applies) — never a bare injected pid a caller could
+  // point at a process this run does not own. `null` (a test proving the OLD,
+  // scheduler-blind shape) opts out and skips resolution entirely; omitted
+  // (`undefined`) is the production default, resolved via `ownSchedulerPidState`
+  // so an UNKNOWN read (ROW 101 / M7-D finding 2) can refuse rather than
+  // silently default to null the way a direct `ownSchedulerPid(root)` default
+  // expression would.
+  schedulerPid,
   // M7-D — grounds the sweep must NOT remove yet (a fixture ground is judged
   // before its teardown); passed straight through to `sweepProductFixtures`.
   keepProjects,
@@ -588,6 +638,39 @@ export async function reapCensusAndSweep({
   const quiesceResult = await quiesce({ root, pids: reapedPids });
   const lines = [...describeQuiesce(quiesceResult)];
 
+  const refuse = (reason) => ({
+    quiesce: quiesceResult,
+    census: { empty: false, survivors: null, waitedMs: 0, reason },
+    sweep: null, reappearedArtefacts: [], lines, warnLines: [],
+  });
+
+  if (schedulerPid === undefined) {
+    const state = ownSchedulerPidState(root);
+    if (state.unknown) {
+      // ROW 101 / M7-D finding 2 — an UNKNOWN scheduler state is NOT "no
+      // scheduler": defaulting to null here would silently exclude a live
+      // dispatch's whole descendant tree from the census below.
+      const reason = `could not determine this run's own scheduler (${state.error}) — clearing now could race a live dispatch, which is the defect this census exists to close`;
+      lines.push(`[stories] REFUSING to run the trailing sweep — ${reason}. Nothing was cleared; the next run's residue door will report it, at $0.`);
+      return refuse(reason);
+    }
+    schedulerPid = state.pid;
+  }
+
+  // ROW 101 / M7-D residual — `reapedPids` (`run-story.mjs`'s
+  // `reap.reaped.map((r) => r.pid)`) never carries a PID_READ_UNKNOWN row: it
+  // lands in `reap.skipped`, so an unreadable `_logs/` or `turn.pid` from
+  // THIS run's own dispatch collection can pass through as an empty,
+  // CONFIRMED `reapedPids` set. Re-derive the same read independently rather
+  // than trust it — `run-story.mjs` sits at its own 800-line cap and cannot
+  // thread a flag through instead.
+  const agentRuns = agentRunsReadable(root, sinceMs);
+  if (!agentRuns.readable) {
+    const reason = `this run's own dispatched-agent collection could not be confirmed (${agentRuns.error}) — clearing now could race a live agent this run failed to enumerate`;
+    lines.push(`[stories] REFUSING to run the trailing sweep — ${reason}, which is the defect this census exists to close. Nothing was cleared; the next run's residue door will report it, at $0.`);
+    return refuse(reason);
+  }
+
   const bareRoots = (reapedPids ?? []).filter((p) => p !== null && p !== undefined);
   // BEFORE ANY SIGNAL OF THIS PASS — `reapAgentRuns`'s own snapshot is already
   // stale, so this is a fresh one, and it has to precede the TERM below for
@@ -596,6 +679,13 @@ export async function reapCensusAndSweep({
   // identities captured HERE, at the moment of discovery.
   const rootIdentities = bareRoots.map((pid) => identifyPid(pid, { procRoot }));
   const table = (bareRoots.length > 0 || schedulerPid !== null) ? procTable() : new Map();
+  if (table === null) {
+    // ROW 101 / M7-D finding 6 — a table build failure must never render as
+    // "no descendants": `censusSurvivors`'s own good pattern, applied here.
+    const reason = 'the process table could not be read, so a live descendant cannot be ruled out';
+    lines.push(`[stories] REFUSING to run the trailing sweep — ${reason}, which is the defect this census exists to close. Nothing was cleared; the next run's residue door will report it, at $0.`);
+    return refuse(reason);
+  }
   // T1 1418 — the scheduler's OWN dispatch descendants join the SAME census
   // and the SAME TERM/KILL escalation below, never the scheduler pid itself:
   // it stays alive for the next story in the batch (`run.mjs` stops it at

@@ -198,6 +198,10 @@ test('6.11.28: with no ground declared, a collapsed entry is not expanded at all
   assert.deepEqual(b.remove, ['brain/']);
 });
 
+// ROW 101 / M7-D finding 1 (expansion failure must HOLD, never delete) is
+// doored in `sweep.test.ts` — kept out of this file to stay under the
+// 800-line cap.
+
 // --- 6.11.34 / ruling 340: growth in a tree someone else is working in ------
 //
 // MEASURED INCIDENT, 2026-09-06 (M5-B session 9): a concurrent gate in

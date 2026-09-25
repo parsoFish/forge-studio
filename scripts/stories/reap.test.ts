@@ -112,15 +112,11 @@ test('a session dir with no turn.pid is skipped without throwing', () => {
   assert.deepEqual(runs, []);
 });
 
-test('an unreadable _logs/ yields no runs rather than aborting the run teardown', () => {
-  const runs = collectAgentRuns('/r', 0, {
-    listDirs: () => {
-      throw new Error('ENOENT');
-    },
-    readPid: () => 1,
-  });
-  assert.deepEqual(runs, []);
-});
+// ROW 101 / M7-D findings 4, 5 and 6 supersede the old, single "an unreadable
+// _logs/ yields no runs" door here: an unreadable (non-ENOENT) listing is now
+// a distinct, named PID_READ_UNKNOWN row, never folded in with a genuinely
+// absent `_logs/`. Both the ENOENT control and the non-ENOENT RED door live
+// in `reap-unknown.test.ts` — split out to stay under the 800-line cap.
 
 // -------------------------------------------------------------- reapAgentRuns
 
