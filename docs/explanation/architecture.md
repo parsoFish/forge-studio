@@ -50,7 +50,7 @@ scoped knowledge graphs — [ADR 018](../decisions/018-three-brain-model.md)),
 A package may import only a **strictly lower rank** in this chain:
 
 ```
-contracts ← kernel ← {library, knowledge, projects} ← agents ← sessions ← flows ← factory ← apps/{forge, studio}
+contracts ← kernel ← {library, knowledge, projects} ← agents ← sessions ← flows ← stations ← factory ← apps/{forge, studio}
 ```
 
 `library`, `knowledge` and `projects` sit at the same rank and may not import

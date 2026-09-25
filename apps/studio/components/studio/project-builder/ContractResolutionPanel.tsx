@@ -255,7 +255,7 @@ export function ContractResolutionPanel({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <ClauseRow c={c} status={runStatus[c.id]} />
                   <button
-                    data-action="resolve-clause-agent"
+                    data-action={`resolve-clause-agent-${c.id}`}
                     data-resolve-clause-id={c.id}
                     data-resolve-blocked={blocked ? 'true' : 'false'}
                     style={btn}
@@ -318,7 +318,7 @@ export function ContractResolutionPanel({
                 />
                 <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                   <button
-                    data-action="apply-clause-decision"
+                    data-action={`apply-clause-decision-${c.id}`}
                     data-apply-clause-id={c.id}
                     style={btn}
                     {...disabledAttrs(applyDisabledReason)}
