@@ -34,6 +34,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, isAbsolute, join, relative } from 'node:path';
+import { MINTED_ID_CHARS } from './ground-clear.mjs';
 
 /**
  * Method C, verbatim: the pipeline the launcher runs and the ledger quotes.
@@ -278,6 +279,76 @@ export function mintedSessionPaths(before, after, logsDir) {
  */
 export function mintedSessionDirNames(before, after, logsDir) {
   return mintedSessions(before, after, logsDir).map((e) => e.name);
+}
+
+/**
+ * THE SECOND MINTED PATH — T1 1418, S7's own fixture proof (2026-09-25).
+ *
+ * `mintedSessionPaths` above reads `_logs/`, but `POST /api/instructions/
+ * start` (`bridge-studio-instructions.ts:163-238`) deliberately writes ONLY
+ * the ground's own `_instructions/<id>/status.json` — the agent, and its
+ * `_logs/_<kind>-<id>` dir, spawn later, at `/brief`. For that window this
+ * run's own session has no `_logs` evidence at all, so `mintedSessionPaths`
+ * contributes nothing and the write reads as UNDECLARED — a containment
+ * failure for a session this run demonstrably started.
+ *
+ * A `_<kind>/<id>` dir born directly under the GROUND ROOT, between the same
+ * before/after manifests `run-story.mjs` already reads for the hash fence, is
+ * the same evidence read from the other side — no second filesystem walk.
+ *
+ * REVIEW FINDING 1: A BARE SHAPE MATCH IS NOT A LICENCE. The first cut
+ * licensed ANY new top-level `_<kind>/<id>` prefix — no check that `<kind>`
+ * was a kind the product declares — and `captureAndClearMintedSessions`
+ * DELETES whatever this licenses: a new `_snapshots/2026-09-26/report.md`
+ * with no `_logs` correlate read as PRODUCED and was cleared, for matching a regex.
+ *
+ * So a prefix counts as minted only when BOTH hold: (a) `kind` is in
+ * `registeredKindIds`, read from the product's own registry
+ * (`session-kind-registry.mjs`, never a hand-copied list) the way
+ * `bridge-studio-session-index.ts` iterates it (`_${descriptor.id}`); (b) the
+ * AFTER manifest holds `_<kind>/<id>/status.json` — every session kind
+ * writes that the instant it starts (`packages/sessions/interactive-
+ * session.ts`), so a dir with no status.json is not a session, however its
+ * name is shaped. `registeredKindIds` is REQUIRED — `groundIgnoreFromGit`'s
+ * own "an argument you cannot skip silently" rule (7.6.38). The id capture
+ * also reuses `MINTED_ID_CHARS` (`ground-clear.mjs`) — the SAME charset the
+ * clear's own guard requires before removing anything — not the looser
+ * `[^/]+` the first cut used.
+ *
+ * NEWLY MINTED still means the whole `<kind>/<id>` PREFIX is absent from
+ * `before`, not merely that some file under it is new — a dir that already
+ * existed and grew a sibling file is judged by the EXISTING rules instead.
+ *
+ * @param {{files: Map<string,string>}|null} before ground manifest before the run
+ * @param {{files: Map<string,string>}|null} after ground manifest after the run
+ * @param {Set<string>} registeredKindIds product session-kind ids (`loadRegisteredSessionKindIds`) — REQUIRED
+ * @returns {string[]} `_<kind>/<id>` paths, sorted
+ */
+const GROUND_MINTED_PREFIX_SHAPE = new RegExp(`^_([A-Za-z][A-Za-z0-9]*)/(${MINTED_ID_CHARS.source.slice(1, -1)})(?:/|$)`);
+
+export function groundMintedSessionPaths(before, after, registeredKindIds) {
+  if (before === null || after === null) return [];
+  if (!(registeredKindIds instanceof Set)) {
+    throw new Error('groundMintedSessionPaths: registeredKindIds (a Set from loadRegisteredSessionKindIds) is REQUIRED — never skippable');
+  }
+  const prefixOf = (p) => {
+    const m = GROUND_MINTED_PREFIX_SHAPE.exec(p);
+    return m === null ? null : { prefix: `_${m[1]}/${m[2]}`, kind: m[1] };
+  };
+  const beforePrefixes = new Set();
+  for (const p of before.files.keys()) {
+    const hit = prefixOf(p);
+    if (hit !== null) beforePrefixes.add(hit.prefix);
+  }
+  const out = new Set();
+  for (const p of after.files.keys()) {
+    const hit = prefixOf(p);
+    if (hit === null || beforePrefixes.has(hit.prefix)) continue;
+    if (!registeredKindIds.has(hit.kind)) continue; // finding 1(a) — unregistered kind, never a licence
+    if (!after.files.has(`${hit.prefix}/status.json`)) continue; // finding 1(b) — no session status file
+    out.add(hit.prefix);
+  }
+  return [...out].sort();
 }
 
 /**
