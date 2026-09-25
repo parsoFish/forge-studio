@@ -55,14 +55,20 @@
  *
  * THE FORK, and why it is declared rather than unrolled. §3's S2 is "a starter
  * → repo created", singular, but the operator ruled on 2026-08-30 that the
- * story must cover **every** project template type. §3.1's `beats[]` is a flat
- * list with no fork, so beat 3 declares `fork` — the branch point, the field
- * it varies and the three cases — and the runner, which keeps only the fields
- * it knows, silently drops it and runs the `cli` case alone. The
- * requirement therefore stands in the pinned artifact while the schema catches
- * up, exactly as S1 stood with `do` blocks it could not yet perform. Recorded
- * in `_1.0/stories/S2.md` as a `stories` gap: today S2 covers 1 of 3 declared
- * starters.
+ * story must cover **every** project template type, so beat 3 declares
+ * `fork` — the branch point, the field it varies and the three cases.
+ *
+ * T1 RULING 1350 (this fork brief). §3.1 and `beats-fork.mjs` now run every
+ * case ON ITS OWN GROUND: `over: 'create-app-type'` names a `fill` step in
+ * beat 3's own `do`, which makes this a FILL fork, and `ground.project =
+ * 'story-s2'` becomes `story-s2-<starter>` for each case — a real, distinct
+ * repo per starter, never the same directory three times. Beats 4-13 assert
+ * `project-id`/route as the LITERAL `'story-s2'` — pinned before the story
+ * runs, so they cannot be "made per-case" by leaving them alone — so the fork
+ * expands the WHOLE REMAINDER, beat 3 through the story's last beat, once per
+ * starter: three full passes through beats 3-13, each on its own ground,
+ * rather than three cases of beat 3 alone. S2 today proves 3 of 3 declared
+ * starters, each reaching the plan gate independently.
  */
 
 /** The project's own reason to exist — what the operator types into the create form. */
@@ -79,11 +85,10 @@ const CEILING = '25';
 /**
  * Every project template forge ships, read off the live create form's own
  * `<select data-field="create-app-type">` (`data-app-type-count="3"`). Beat 3
- * forks over all three (PR-B item 1, forge-8vfn.2.22: §3.1 and the runner now
- * carry the verb) — each case runs against the SAME `ground.project`, so a
- * funded re-run of this story is expected to red past the first case on the
- * product's own conflict until per-case ground reset exists; that gap is
- * reported, not invented, by the bead that landed the verb.
+ * forks over all three (PR-B item 1, forge-8vfn.2.22; per-case grounds and the
+ * whole-remainder expansion, T1 ruling 1350) — each case runs on its OWN
+ * ground, `story-s2-<starter>`, not the same directory three times. See THE
+ * FORK, above.
  */
 // RE-AMENDED 2026-09-06 (amendment 9, bead `forge-8vfn.6.11.4`, operator
 // ruling 301): the starters are named for a STYLE now, not for the language
@@ -142,12 +147,11 @@ export default {
       // In §3.1's schema and carried by `validateStory` as of PR-B item 1
       // (forge-8vfn.2.22) — see THE FORK above. Every starter forge ships
       // must reach the same green contract, and a story that proves one of
-      // three proves the flow, not the promise. NOT YET a proof of the
-      // promise itself: `over` names this step's field and `cases` runs every
-      // starter against the SAME `ground.project`, so cases after the first
-      // are expected to red on the product's own already-exists conflict
-      // until per-case ground reset exists — a gap this bead reports rather
-      // than invents a cleanup step for.
+      // three proves the flow, not the promise. T1 ruling 1350: `over` names
+      // THIS step's field, which makes it a FILL fork, so `create-name`'s own
+      // `with` (above) is ALSO substituted per case — `'story-S2'` becomes
+      // `'story-s2-api'`/`-cli`/`-webapp` — and beats 4-13 (which assert the
+      // project literally) run again for each case, on its own ground.
       fork: { over: 'create-app-type', cases: STARTERS },
       expect: {
         route: '/projects/story-s2',
