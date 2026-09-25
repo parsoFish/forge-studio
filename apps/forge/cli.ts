@@ -286,7 +286,7 @@ async function cmdBrainFix(rest: string[]): Promise<void> {
   // M4 port 5 (ruling 60): resolve the KIND through the spine's session-less
   // fix dispatch rather than naming a `run<X>Turn` import. The row owns the
   // console summary too, so the kind that produces the edit audit reports it.
-  const { FIX_KIND_RUNNERS } = await import('@forge/sessions/kinds/fix-registry.ts');
+  const { FIX_KIND_RUNNERS } = await import('@forge/sessions');
   const row = FIX_KIND_RUNNERS['brain-fix'];
   const runTurn = await row.loadRunTurn();
   const r = await runTurn({
@@ -851,7 +851,7 @@ async function cmdPreflightFix(rest: string[]): Promise<void> {
   const projectDir = resolvePreflightProjectDir(project);
   const runId = flag('run-id') ?? `manual-${clause}`;
   // M4 port 6 (ruling 60) — see `brain fix` above.
-  const { FIX_KIND_RUNNERS } = await import('@forge/sessions/kinds/fix-registry.ts');
+  const { FIX_KIND_RUNNERS } = await import('@forge/sessions');
   const runTurn = await FIX_KIND_RUNNERS['preflight-fix'].loadRunTurn();
   const r = await runTurn({
     runId,

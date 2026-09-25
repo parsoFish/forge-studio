@@ -56,7 +56,7 @@ import {
 import { lintTemplateLibrary } from '@forge/library';
 import { lintHookComposition, lintHookDefinitions } from '@forge/library';
 import { lintCommunityIndex } from '@forge/library';
-import { validateSessionKinds } from '@forge/sessions/studio/session-kinds-validate.ts';
+import { validateSessionKinds } from '@forge/sessions';
 import { validateAgent } from '@forge/agents';
 import { validateArtifactRef, validateFlow } from '@forge/flows/studio/validate-flow.ts';
 import { validateKb } from '@forge/knowledge';

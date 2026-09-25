@@ -13,9 +13,9 @@
  */
 import type { AuthoringSessionPort } from '@forge/library';
 
-import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/session-status-io.ts';
-import { InteractiveFinalizerError } from '@forge/sessions/interactive-finalizers.ts';
-import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
+import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions';
+import { InteractiveFinalizerError } from '@forge/sessions';
+import { loadSessionKinds } from '@forge/sessions';
 
 export const authoringSessionPort: AuthoringSessionPort = {
   readStatus: guardedReadSessionStatus,
@@ -23,7 +23,7 @@ export const authoringSessionPort: AuthoringSessionPort = {
   runAuthoringTurn: async (input) => {
     const descriptor = loadSessionKinds(input.forgeRoot).find((d) => d.id === 'authoring');
     if (!descriptor) return null;
-    const { runInteractiveTurn } = await import('@forge/sessions/interactive-runner.ts');
+    const { runInteractiveTurn } = await import('@forge/sessions');
     return runInteractiveTurn(descriptor, input);
   },
   isFinalizerError: (err) => err instanceof InteractiveFinalizerError,

@@ -13,7 +13,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, r
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { parseManifest, serializeManifest } from './manifest.ts';
-import type { ArchitectStatus } from '@forge/sessions/kinds/architect.ts';
+import type { ArchitectStatus } from '@forge/sessions';
 import { planGateClassRefusals } from './plan-gate-class-check.ts';
 import { getPaths } from './queue.ts';
 import { PROJECT_ID_RE } from '@forge/kernel';

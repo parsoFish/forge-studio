@@ -39,9 +39,9 @@ import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { AGENT_RUNNERS } from '../../agent-run.ts';
-import { SESSION_KIND_RUNNERS } from '@forge/sessions/kinds/registry.ts';
-import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
-import { readSessionStatus } from '@forge/sessions/interactive-session.ts';
+import { SESSION_KIND_RUNNERS } from '@forge/sessions';
+import { loadSessionKinds } from '@forge/sessions';
+import { readSessionStatus } from '@forge/sessions';
 import { FORGE_ROOT } from '@forge/kernel';
 import {
   run,
@@ -102,7 +102,7 @@ test('R4-22 WI-5, AT-1: a turnSpec-only agent-id (no AGENT_RUNNERS entry) drives
 // ---------------------------------------------------------------------------
 // AT-2 — bespoke road untouched, for all 4 bespoke dispatch ids.
 // ---------------------------------------------------------------------------
-// M4 ruling 60: a PORTED kind's row moves to `@forge/sessions/kinds/registry.ts`,
+// M4 ruling 60: a PORTED kind's row moves to `@forge/sessions`,
 // so the preconditions below ask the UNION `cmdAgentRun` consults, not one half.
 const BESPOKE_DISPATCH_IDS = [...Object.keys(AGENT_RUNNERS), ...Object.keys(SESSION_KIND_RUNNERS)];
 

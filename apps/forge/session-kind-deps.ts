@@ -19,8 +19,8 @@ import {
 } from '@forge/flows/manifest.ts';
 import { promoteManifests } from '@forge/flows/promote-manifests.ts';
 import { isCanonicalInitiativeId } from '@forge/flows/initiative-id.ts';
-import type { ArchitectManifestPorts } from '@forge/sessions/kinds/architect-ports.ts';
-import type { ParseManifestPort } from '@forge/sessions/studio/session-transcript.ts';
+import type { ArchitectManifestPorts } from '@forge/sessions';
+import type { ParseManifestPort } from '@forge/sessions';
 
 /** Bound once; the same object is handed to every architect turn. */
 export const architectManifestPorts: ArchitectManifestPorts = {

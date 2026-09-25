@@ -58,8 +58,8 @@ import { makeRouteTable, dispatchRoute, type AssembledRouteTable } from './route
 // here (skills, hooks, authoring, templates) are GONE: every arm is now a
 // per-route handler in `packages/library/routes.ts`, which the `routeTable`
 // imported on the line above already carries and `dispatchRoute` claims first.
-import { sessionIsReadable } from '@forge/sessions/session-resolution.ts';
-import type { SpawnTurnOutcome } from '@forge/sessions/bridge-studio-session-helpers.ts';
+import { sessionIsReadable } from '@forge/sessions';
+import type { SpawnTurnOutcome } from '@forge/sessions';
 import {
   sessionLogDirName,
   // W8-A2 (ON-7 defect 4) — reused for the standalone-run stalled
@@ -67,7 +67,7 @@ import {
   // below): the SAME stall ceiling, ownership-proof liveness check, and
   // crash-message extraction sessions already use — never a second,
   // independently-invented staleness rule.
-} from '@forge/sessions/bridge-studio-lifecycle.ts';
+} from '@forge/sessions';
 // M4 §4 step 2 — instructions, connections and community carved the same way.
 // This file's line COUNT is held constant across the carve on purpose: 18 audited
 // rows in `scripts/check-raw-fs-guarded.mjs` are keyed to `ui-bridge.ts:<line>`.

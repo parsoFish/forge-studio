@@ -6,7 +6,9 @@
   "description": "The ADR 043 interactive spine: session kinds, turnSpec, transcript, lifecycle, finalizers.",
   "exports": {
     ".": "./index.ts",
-    "./*": "./*"
+    "./testing": "./testing.ts",
+    "./studio/session-kinds.ts": "./studio/session-kinds.ts",
+    "./studio/session-transcript.ts": "./studio/session-transcript.ts"
   },
   "scripts": {
     "test": "node --test --experimental-strip-types \"**/*.test.ts\""

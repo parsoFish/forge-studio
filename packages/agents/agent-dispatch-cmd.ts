@@ -21,7 +21,7 @@
 import { existsSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { guardedReadFile, resolveGuardedPath } from '@forge/kernel';
-import { guardedWriteSessionStatus } from '@forge/sessions/session-status-io.ts';
+import { guardedWriteSessionStatus } from '@forge/sessions';
 import { dispatchAgentRun } from './agent-dispatch.ts';
 import { isSafeRunId } from './run-agent.ts';
 import { installDispatchSignalGuard, recordDispatchTerminal } from './dispatch-terminal.ts';

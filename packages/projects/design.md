@@ -127,7 +127,7 @@ compilation).
 ## Contract stages import a sessions type, and it is already baselined
 
 `contract-stages.ts` re-exports `ContractStageRow`/`ContractStageStatus` from
-`@forge/sessions/studio/session-transcript.ts` — a rank-4 import from a rank-2
+`@forge/sessions` — a rank-4 import from a rank-2
 package, forbidden by the same rule §2 above states. This is a pre-existing,
 baselined `package-layer-order` violation (`scripts/baselines/boundaries.json`),
 not introduced by this PR and not fixed by it: fixing it means moving the type

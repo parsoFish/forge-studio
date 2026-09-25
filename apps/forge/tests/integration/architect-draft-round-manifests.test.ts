@@ -56,8 +56,8 @@ import { join } from 'node:path';
 
 import { isCanonicalInitiativeId } from '@forge/flows/initiative-id.ts';
 
-import { runArchitectTurn, type ArchitectStatus } from '@forge/sessions/kinds/architect.ts';
-import { stubArchitectManifestPorts } from '@forge/sessions/tests/architect-ports-stub.ts';
+import { runArchitectTurn, type ArchitectStatus } from '@forge/sessions';
+import { stubArchitectManifestPorts } from '@forge/sessions/testing';
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
 
 /** Today's date part, derived the same way the mint derives it. The doubled id

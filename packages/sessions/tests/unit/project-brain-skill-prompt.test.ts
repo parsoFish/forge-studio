@@ -58,8 +58,8 @@ import {
   projectBrainSessionDir,
   type ProjectBrainStatus,
 } from '../../kinds/project-brain.ts';
-import { type QueryFn } from '@forge/sessions/interactive-session.ts';
-import { writeSessionStatus } from '@forge/sessions/interactive-session.ts';
+import { type QueryFn } from '../../interactive-session.ts';
+import { writeSessionStatus } from '../../interactive-session.ts';
 import { cyclesRawDir } from '@forge/knowledge';
 import { splitSkillTurnSections } from '@forge/agents';
 

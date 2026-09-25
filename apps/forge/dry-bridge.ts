@@ -70,7 +70,7 @@ import { knowledgeRoutes, type KnowledgeRouteDeps } from '@forge/knowledge';
 import { libraryRoutes, type LibraryRouteDeps } from '@forge/library';
 import { projectsRoutes, type ProjectsRouteDeps } from '@forge/projects';
 import { agentsRoutes, type AgentsRouteDeps } from '@forge/agents';
-import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions/routes.ts';
+import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions';
 
 
 export type DryBridgeClassification = 'refuse' | 'stub-actions' | 'exempt-local' | 'read-only';

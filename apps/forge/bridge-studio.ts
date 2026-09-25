@@ -126,7 +126,7 @@ export {
   LEGACY_SESSION_TERMINAL_PHASES,
   LEGACY_SESSION_AWAITS_PHASES,
   LEGACY_SESSION_WORKING_PHASES,
-} from '@forge/sessions/session-phases.ts';
+} from '@forge/sessions';
 
 
 /** W7-A2 (ADR-043 2026-08-19 amendment §1) — the ONE universal, reserved
@@ -146,7 +146,7 @@ export {
  *  (`packages/sessions/session-status-io.ts`), which enforces the sticky-cancel
  *  rule (`cancelledPhaseWins`) for every writer; re-exported here so the
  *  bridge modules keep their one import. */
-export { CANCELLED_PHASE } from '@forge/sessions/session-status-io.ts';
+export { CANCELLED_PHASE } from '@forge/sessions';
 
 
 

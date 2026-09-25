@@ -55,7 +55,7 @@ import { loadStarterFlow, listFlowIds } from '@forge/flows/studio/flow-registry.
 import { listFlowBandIds } from '@forge/flows/flow-band-vocab.ts';
 import { spawnPreflightFix } from './bridge-studio-writes.ts';
 import { projectsRoutes } from '@forge/projects';
-import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions/routes.ts';
+import { sessionsRoutes, type SessionsRouteDeps } from '@forge/sessions';
 // M4 §4 step 2 (agents routes carve, assembly pass). `agentsRoutes`'s
 // `AgentsRouteDeps` declares its collaborators STRUCTURALLY for the same reason
 // `projectsRoutes` does: `packages/agents` is rank 3, so it may not import
@@ -73,16 +73,16 @@ import { loadFlowDefinition, listFlowIds as listFlowIdsForAgents } from '@forge/
 import { flowPathForId as flowPathForIdForAgents } from '@forge/flows/flow-runner.ts';
 import {
   DEFAULT_STALL_CEILING_MS, isTurnAlive, extractErrorMessage, killTrackedRun,
-} from '@forge/sessions/bridge-studio-lifecycle.ts';
-import { parseGuardedEventsJsonl, parseGuardedFirstEvent } from '@forge/sessions/session-readability.ts';
-import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions/session-status-io.ts';
+} from '@forge/sessions';
+import { parseGuardedEventsJsonl, parseGuardedFirstEvent } from '@forge/sessions';
+import { guardedReadSessionStatus, guardedWriteSessionStatus } from '@forge/sessions';
 import type { SessionStatusIoPort } from '@forge/knowledge';
 // M7-C U8 (bead forge-u8y2, W8-F6 follow-up) — the real readability predicate
 // for `@forge/knowledge`'s own `sessionIsReadable` port (`kb-drain-model.ts`).
 // Bound DIRECTLY, no wrapper: that port's argument shape is declared to match
 // this function's exactly, for precisely this reason.
-import { sessionIsReadable } from '@forge/sessions/session-resolution.ts';
-import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
+import { sessionIsReadable } from '@forge/sessions';
+import { loadSessionKinds } from '@forge/sessions';
 
 /**
  * Re-exported so the host imports its whole routing surface from one module:

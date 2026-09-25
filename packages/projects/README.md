@@ -93,6 +93,15 @@ stay in `apps/forge/bridge-studio.ts` rather than mint an unbaselinable boundary
 calls into. See [`design.md`](./design.md) for both, and for why a rank-2 package
 cannot simply import its way to owning them.
 
+`contract-stages.ts` reaches `@forge/sessions/studio/session-kinds.ts` and
+`@forge/sessions/studio/session-transcript.ts` DEEP rather than through
+`@forge/sessions`'s door (bead `forge-8vfn.5.31`): going through the door pulls
+in sessions' whole module graph, and something reachable from it cycles back
+here before `session-kinds.ts` finishes initializing — a real
+`ReferenceError: Cannot access 'SESSION_STAGES' before initialization`, not a
+theoretical risk. `@forge/sessions/package.json` legalises exactly those two
+paths for this reason; see that package's README for the sessions-side note.
+
 ## Layout
 
 `tests/{unit,integration,contract,regression}/` — no test file sits at the package

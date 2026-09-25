@@ -33,7 +33,7 @@ import { tmpdir } from 'node:os';
 import { startBridge } from '../../ui-bridge.ts';
 import { discoverProjects, normalizeProjectId } from '@forge/kernel';
 import { PROJECT_ID_RE, KB_ID_RE, isReservedId } from '@forge/kernel';
-import { invalidProjectReason } from '@forge/sessions/session-resolution.ts';
+import { invalidProjectReason } from '@forge/sessions';
 import { deriveContractStages } from '@forge/projects';
 import { buildProjectSavePayload } from '../../../studio/lib/project-save-payload.ts';
 
