@@ -270,6 +270,32 @@ export function collectAgentRuns(root, sinceMs, deps = {}) {
 }
 
 /**
+ * Can `collectAgentRuns`'s own reads for `root` be trusted RIGHT NOW? ROW 101
+ * / M7-D residual finding — `reapedPids` (`run-story.mjs`'s
+ * `reap.reaped.map((r) => r.pid)`) never carries a PID_READ_UNKNOWN row: it
+ * lands in `reap.skipped`, so a `_logs/` or `turn.pid` read that failed for a
+ * non-ENOENT reason during THIS run's own dispatch collection can still pass
+ * through as an empty, confirmed `reapedPids` set. `reapCensusAndSweep`
+ * (`sweep-teardown.mjs`) cannot see that gap without re-deriving it — it
+ * calls this, independently, right before it would otherwise trust an empty
+ * set as "nothing to census".
+ *
+ * ENOENT stays an ordinary pass: `_logs/` never having existed is not a
+ * reason to refuse a trailing sweep that has nothing to clear anyway.
+ *
+ * @param {string} root
+ * @param {number} sinceMs
+ * @param {object} [deps] forwarded to {@link collectAgentRuns} unchanged
+ * @returns {{readable: boolean, error?: string}}
+ */
+export function agentRunsReadable(root, sinceMs, deps = {}) {
+  const unknownRow = collectAgentRuns(root, sinceMs, deps).find((r) => r.pid === PID_READ_UNKNOWN);
+  return unknownRow === undefined
+    ? { readable: true }
+    : { readable: false, error: `${unknownRow.dir}: turn.pid or _logs/ could not be read` };
+}
+
+/**
  * The process table as `{ ppid, pgrp }` per pid, read once from `/proc`.
  *
  * Read BEFORE any signal, and only once per dispatched run: a SIGTERM to the

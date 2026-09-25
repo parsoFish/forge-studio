@@ -22,7 +22,7 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, relative } from 'node:path';
-import { readProcTable, descendantsOf } from './reap.mjs';
+import { readProcTable, descendantsOf, agentRunsReadable } from './reap.mjs';
 import { waitForCensusEmpty, describeCensus, identifyPid, verifiedKill } from './reap-census.mjs';
 import { quiesceWriters, describeQuiesce } from './quiesce.mjs';
 import { sweepProductFixtures } from './sweep.mjs';
@@ -655,6 +655,20 @@ export async function reapCensusAndSweep({
       return refuse(reason);
     }
     schedulerPid = state.pid;
+  }
+
+  // ROW 101 / M7-D residual — `reapedPids` (`run-story.mjs`'s
+  // `reap.reaped.map((r) => r.pid)`) never carries a PID_READ_UNKNOWN row: it
+  // lands in `reap.skipped`, so an unreadable `_logs/` or `turn.pid` from
+  // THIS run's own dispatch collection can pass through as an empty,
+  // CONFIRMED `reapedPids` set. Re-derive the same read independently rather
+  // than trust it — `run-story.mjs` sits at its own 800-line cap and cannot
+  // thread a flag through instead.
+  const agentRuns = agentRunsReadable(root, sinceMs);
+  if (!agentRuns.readable) {
+    const reason = `this run's own dispatched-agent collection could not be confirmed (${agentRuns.error}) — clearing now could race a live agent this run failed to enumerate`;
+    lines.push(`[stories] REFUSING to run the trailing sweep — ${reason}, which is the defect this census exists to close. Nothing was cleared; the next run's residue door will report it, at $0.`);
+    return refuse(reason);
   }
 
   const bareRoots = (reapedPids ?? []).filter((p) => p !== null && p !== undefined);
