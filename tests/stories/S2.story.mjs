@@ -79,8 +79,11 @@ const CEILING = '25';
 /**
  * Every project template forge ships, read off the live create form's own
  * `<select data-field="create-app-type">` (`data-app-type-count="3"`). Beat 3
- * forks over all three; the runner performs `STARTERS[1]` until §3.1 gains the
- * verb.
+ * forks over all three (PR-B item 1, forge-8vfn.2.22: §3.1 and the runner now
+ * carry the verb) — each case runs against the SAME `ground.project`, so a
+ * funded re-run of this story is expected to red past the first case on the
+ * product's own conflict until per-case ground reset exists; that gap is
+ * reported, not invented, by the bead that landed the verb.
  */
 // RE-AMENDED 2026-09-06 (amendment 9, bead `forge-8vfn.6.11.4`, operator
 // ruling 301): the starters are named for a STYLE now, not for the language
@@ -136,10 +139,15 @@ export default {
         { fill: 'create-app-type', with: STARTERS[1] },
         { press: 'create-project' },
       ],
-      // Not in §3.1's schema yet, and dropped by `validateStory` — see THE
-      // FORK above. Every starter forge ships must reach the same green
-      // contract, and a story that proves one of three proves the flow, not
-      // the promise.
+      // In §3.1's schema and carried by `validateStory` as of PR-B item 1
+      // (forge-8vfn.2.22) — see THE FORK above. Every starter forge ships
+      // must reach the same green contract, and a story that proves one of
+      // three proves the flow, not the promise. NOT YET a proof of the
+      // promise itself: `over` names this step's field and `cases` runs every
+      // starter against the SAME `ground.project`, so cases after the first
+      // are expected to red on the product's own already-exists conflict
+      // until per-case ground reset exists — a gap this bead reports rather
+      // than invents a cleanup step for.
       fork: { over: 'create-app-type', cases: STARTERS },
       expect: {
         route: '/projects/story-s2',
