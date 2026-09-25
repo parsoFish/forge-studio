@@ -55,10 +55,15 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** The nine packages plus the two apps — `1.0.md` §0 and spec §3. */
+/**
+ * The packages plus the two apps — `1.0.md` §0 and spec §3. `stations` added
+ * F3 (operator ruling, items 81/83): the station executor and every band
+ * moved out of `factory` into its own package, between `flows` and `factory`
+ * in the allow-graph.
+ */
 export const OWNERS = Object.freeze([
   'contracts', 'kernel', 'library', 'knowledge', 'projects',
-  'agents', 'sessions', 'flows', 'factory', 'apps/forge', 'apps/studio',
+  'agents', 'sessions', 'flows', 'stations', 'factory', 'apps/forge', 'apps/studio',
 ]);
 
 /** `1.0.md` §4 M2 Lane A. */
