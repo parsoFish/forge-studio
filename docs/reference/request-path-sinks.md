@@ -2079,6 +2079,17 @@ through `guardedFile(dir, [`${initiativeId}.md`], 'read')`, so the invariant is
 held by the guard rather than by a regex three hundred lines up — is filed for
 its owner.
 
+→ bd `forge-8vfn.6.7`  **CLOSED — its own owner landed the structural fix.**
+`resolveInitiativeContext` (`band-agent-run.ts`) routes both call sites through
+`guardedFile(dir, [`${initiativeId}.md`], 'read')`; a guard refusal (a
+symlinked `<id>.md` escaping `dir`, or `dir` itself absent) reads as `null`,
+identical to the prior `existsSync`-false branch. The two accidentally-safe
+rows this section describes are deleted from the allowlist, not remapped —
+the containment invariant is now held by the same per-segment realpath
+identity walk every other guarded sink in this table uses, not by
+`SAFE_INITIATIVE_RE` alone. Pinned by a symlink-escape AT in
+`packages/agents/tests/integration/band-agent-run.test.ts`.
+
 **Scope conservation, asserted rather than assumed** (§15.85: a scanner's count
 falling after a pure move is the blinded-scanner tell): `check-raw-fs-guarded`
 goes 79 + 384 → 80 + 383. Exactly one module crossed from the tier-2 sweep into
