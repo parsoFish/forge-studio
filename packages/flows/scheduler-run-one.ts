@@ -193,7 +193,8 @@ export async function runOne(
   const heartbeat = setInterval(() => {
     writeHeartbeat(filename, paths);
   }, cfg.heartbeatIntervalMs);
-  const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'); // hoisted so the guard + its cleanup can reach it
+  // Hoisted so the stale-branch guard and its cleanup can reach it.
+  const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
   // Hold the handle outside the try so the finally block can clean it up
   // regardless of which path produced the result (success, failed, threw).
   let wtHandle: worktree.WorktreeHandle | null = null;
@@ -202,7 +203,12 @@ export async function runOne(
   // the only surviving copy of the work. Set inside the try after runCycle
   // returns; defaults to false (clean up like before for thrown errors).
   let preserveWorktree = false;
-  let staleBranchOwnedByThisAttempt: { branch: string; projectRepoPath: string; initiativeId: string } | null = null; // bead forge-8vfn.8.1.8: absent on origin before this attempt started
+  // bead forge-8vfn.8.1.8: set only when the branch was absent on origin before this attempt.
+  let staleBranchOwnedByThisAttempt: {
+    branch: string;
+    projectRepoPath: string;
+    initiativeId: string;
+  } | null = null;
   let cycleFailed = false; // a 'failed' result, or a thrown exception
   try {
     const manifest = parseManifest(manifestPath);
@@ -219,7 +225,10 @@ export async function runOne(
       manifest.flowId ? flowPathForId(manifest.flowId) : undefined,
     );
     if (!claimCheck.ok) {
-      emitOrchestratorEvent(forgeRoot, manifest.initiativeId, 'error', 'claim.refused', { reason: claimCheck.reason, terminal: claimCheck.terminal });
+      emitOrchestratorEvent(forgeRoot, manifest.initiativeId, 'error', 'claim.refused', {
+        reason: claimCheck.reason,
+        terminal: claimCheck.terminal,
+      });
       if (claimCheck.terminal) {
         // Terminal refusals (invalid/locked flow) → move to failed/ permanently.
         console.error(
@@ -286,14 +295,24 @@ export async function runOne(
       if (shouldRefuseFreshAttempt(probe)) {
         const sha = probe.remoteSha as string;
         const reason = `refs/heads/${branch} (${sha.slice(0, 8)}) already exists on origin from a prior, abandoned attempt and no PR is open for it. Delete or rename the remote branch, then re-dispatch — never auto-retried, never force-pushed.`;
-        emitOrchestratorEvent(forgeRoot, manifest.initiativeId, 'error', 'stale-remote-branch.refused', { branch, sha });
+        emitOrchestratorEvent(forgeRoot, manifest.initiativeId, 'error', 'stale-remote-branch.refused', {
+          branch,
+          sha,
+        });
         console.error(`[serve] ${manifest.initiativeId} — claim refused (terminal): ${reason}`);
         moveTo(filename, 'failed', paths);
-        await notify({ type: 'failed', title: `Stale remote branch blocks ${manifest.initiativeId}`, body: reason }, cfg.notify);
+        await notify(
+          { type: 'failed', title: `Stale remote branch blocks ${manifest.initiativeId}`, body: reason },
+          cfg.notify,
+        );
         return; // runOne done — no worktree, no cycle, zero agent spend
       }
       if (probe.remoteSha === null) {
-        staleBranchOwnedByThisAttempt = { branch, projectRepoPath: manifest.projectRepoPath, initiativeId: manifest.initiativeId };
+        staleBranchOwnedByThisAttempt = {
+          branch,
+          projectRepoPath: manifest.projectRepoPath,
+          initiativeId: manifest.initiativeId,
+        };
       }
       wtHandle = worktree.add({
         projectRepoPath: manifest.projectRepoPath,
@@ -408,8 +427,13 @@ export async function runOne(
         const probe = probeRemoteBranch(projectRepoPath, branch);
         if (probe.remoteSha !== null && !probe.openPrExists) {
           execFileSync('git', ['-C', projectRepoPath, 'push', 'origin', '--delete', branch], { stdio: 'pipe' });
-          emitOrchestratorEvent(forgeRoot, initiativeId, 'log', 'stale-remote-branch.cleaned-up', { branch, sha: probe.remoteSha });
-          if (tee) console.log(`[serve] ${initiativeId} — deleted remote branch ${branch} (pushed by this failed attempt, no open PR)`);
+          emitOrchestratorEvent(forgeRoot, initiativeId, 'log', 'stale-remote-branch.cleaned-up', {
+            branch,
+            sha: probe.remoteSha,
+          });
+          if (tee) {
+            console.log(`[serve] ${initiativeId} — deleted remote branch ${branch} (pushed by this failed attempt, no open PR)`);
+          }
         }
       } catch {
         /* best-effort — cleanup must never change the failure outcome */
@@ -491,7 +515,11 @@ export function annotateManifest(path: string, fields: Record<string, string>): 
  * either call site. Missing dir is created on the fly.
  */
 function emitOrchestratorEvent(
-  forgeRoot: string, initiativeId: string, eventType: 'error' | 'log', message: string, metadata: Record<string, unknown>,
+  forgeRoot: string,
+  initiativeId: string,
+  eventType: 'error' | 'log',
+  message: string,
+  metadata: Record<string, unknown>,
 ): void {
   try {
     const logDir = resolve(forgeRoot, '_logs', initiativeId);
