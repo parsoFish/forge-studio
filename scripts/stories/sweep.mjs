@@ -57,6 +57,37 @@ export function storyFixtureNames(storyId) {
 }
 
 /**
+ * `story-<id>-*` — the per-case grounds a FILL FORK mints (T1 ruling 1350's
+ * fork brief, ruling (1)'s last bullet): case `c` of a fork over
+ * `ground.project = story-<id>` runs against `story-<id>-<c>`, one real
+ * directory per case, none of them named `story-<id>` itself.
+ *
+ * Scanned from the filesystem rather than enumerated from `fork.cases` — the
+ * case names live in the STORY, not in this module, and a list the caller had
+ * to keep in sync is the shape that drifts. PREFIX-BOUNDED, with the trailing
+ * hyphen carried in the prefix itself so `story-s20` (a different story id
+ * that merely starts with the same characters) can never match `story-s2-*`:
+ * `'story-s20'.startsWith('story-s2-')` is false at the very character the
+ * hyphen occupies.
+ */
+function storyForkedGroundNames(storyId, root) {
+  const prefixes = storyFixtureNames(storyId).map((name) => `${name}-`);
+  const found = new Set();
+  for (const dir of [join(root, 'projects'), join(root, 'brain', 'projects')]) {
+    let entries;
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      continue; // absent root or absent dir: nothing to see, not a finding
+    }
+    for (const name of entries) {
+      if (prefixes.some((p) => name.startsWith(p))) found.add(name);
+    }
+  }
+  return [...found];
+}
+
+/**
  * The PRODUCT fixtures a story minted — everything it owns except the run's own
  * output. The leading sweep takes all of it; the TRAILING sweep takes only this
  * subset, because `demos/stories/<id>` is the artifact the run exists to
@@ -69,6 +100,7 @@ export function storyFixtureNames(storyId) {
 export function productFixturePathsFor(storyId, root) {
   assertSafeStoryId(storyId);
   const names = storyFixtureNames(storyId);
+  const forked = storyForkedGroundNames(storyId, root);
   return [
     join(root, '_queue', 'in-flight', `STORY-${storyId}.md`),
     join(root, '_queue', 'failed', `STORY-${storyId}.md`),
@@ -79,6 +111,9 @@ export function productFixturePathsFor(storyId, root) {
     // ground can never delete the repo it exists to prove things about.
     ...names.map((name) => join(root, 'projects', name)),
     ...names.map((name) => join(root, 'brain', 'projects', name)),
+    // A fill fork's own per-case grounds — `storyForkedGroundNames` above.
+    ...forked.map((name) => join(root, 'projects', name)),
+    ...forked.map((name) => join(root, 'brain', 'projects', name)),
     // A story that SAVES a flow owns that flow file. `/flows/new` saves with
     // `create: true`, so a leftover `studio/flows/story-<id>/` makes the second
     // run of the same story 409 on the name and reds every beat after the save

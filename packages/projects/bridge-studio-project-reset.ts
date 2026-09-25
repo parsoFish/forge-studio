@@ -115,8 +115,9 @@ function driftDto(drift: DriftReport): {
   rows: DriftReport['rows'];
   skillMoves: DriftReport['skillMoves'];
   gitignoreDrift: DriftReport['gitignoreDrift'];
+  commandAdvisories: DriftReport['commandAdvisories'];
 } {
-  return { projectId: drift.projectId, appType: drift.appType, rows: drift.rows, skillMoves: drift.skillMoves, gitignoreDrift: drift.gitignoreDrift };
+  return { projectId: drift.projectId, appType: drift.appType, rows: drift.rows, skillMoves: drift.skillMoves, gitignoreDrift: drift.gitignoreDrift, commandAdvisories: drift.commandAdvisories };
 }
 
 /** Read the optional `{ appType?: string }` body both routes accept. An

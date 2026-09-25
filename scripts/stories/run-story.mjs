@@ -71,6 +71,8 @@ import {
 import { captureBeatDom, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
 import { captureAndClearMintedSessions, describeGroundClear, captureAndClearMintedLogs, describeLogsClear } from './ground-clear.mjs';
 import { driveBeat } from './beats-drive.mjs';
+import { expandForkedBeats, describeDoorFork, frameLabelSuffix } from './beats-fork.mjs';
+import { snapshotForkGrounds, judgeForkGrounds } from './fork-grounds.mjs';
 import { resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
 import { writeStoryJson, regenerateGallery, storyRowFrom, artifactSpend } from './gallery.mjs';
@@ -122,6 +124,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // the agent COMMITTED its writes so the ground's own `git status` reported
   // nothing at all (§15.327). Hence a hash, never a status.
   const ownGroundBefore = ownGroundManifest(ROOT, story.ground?.project ?? null);
+  const forkGroundsBefore = snapshotForkGrounds(ROOT, story); // ruling 1350 — every fill-fork case ground, same moment
   // `forge-8vfn.7.6.140` — the beat numbers any declaration actually names, so
   // the loop below hashes the ground ONLY at a boundary some licence needs it
   // (a story with no `beat:` declarations pays nothing extra), and the
@@ -207,14 +210,15 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     // nothing — the caller had never passed it in any commit. 718(1)'s anchor
     // had not worked once since the commit that introduced it.
     const pressedAt = new Map();
-    for (const [i, beat] of story.beats.entries()) {
+    // `forge-8vfn.2.22`, T1 ruling 1350 — the EXPANDED sequence (`beats-fork.mjs`):
+    // a FILL fork runs once per case on its own ground; a DOOR fork stays ONE entry.
+    for (const [i, { beat, number, label: beatLabel, doorFork }] of expandForkedBeats(story.beats, story.ground?.project ?? null).entries()) {
       // `forge-8vfn.7.6.140` — THE BOUNDARY WHERE A BEAT-SCOPED LICENCE OPENS,
-      // captured at the moment this beat STARTS and before anything in it can
-      // run. `classifyOwnGroundDrift` reduces this (via `beatWindowChangesFrom`)
-      // to "what changed from here to the end of the run" — never taken twice
-      // for the same beat, and never taken for a beat no declaration named.
-      if (ownGroundBefore !== null && licensedBeatNumbers.has(i + 1)) {
-        groundBeatBoundaries.set(i + 1, ownGroundManifest(ROOT, story.ground.project));
+      // captured before anything in this beat can run — never taken twice for
+      // the same NUMBER, so a fork's later cases do not re-date a licence an
+      // earlier case already captured.
+      if (ownGroundBefore !== null && licensedBeatNumbers.has(number) && !groundBeatBoundaries.has(number)) {
+        groundBeatBoundaries.set(number, ownGroundManifest(ROOT, story.ground.project));
       }
       // Bead `forge-8vfn.6.11.22` / row 61 (`costlessGuardFor`, `costless-beat.mjs`) —
       // the agent-scale probe, and `costless: true`'s whole enforcement, built per beat.
@@ -223,7 +227,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       let verdict = await driveBeat(page, beat, i, uiUrl, bindings, undefined, probe, costlessGuard.active ? null : stallDoor, pressedAt, cycleWatchFor);
       verdict = costlessGuard.apply(verdict);
       bindings = { ...bindings, ...verdict.bindings };
-      const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}.png`;
+      const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}${frameLabelSuffix(beatLabel, slug)}.png`;
       await page.screenshot({ path: join(outDir, frame), fullPage: true });
       beats.push({ ...verdict, frame });
       // Bead `forge-8vfn.6.11.42` — what the OPERATOR could see at the red,
@@ -251,7 +255,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
           startedMs,
           realSpawn: story.ground?.realSpawn === true,
           ceilingUsd: ceiling?.usd,
-          label: `after beat ${i + 1}`,
+          label: `after beat ${beatLabel}`,
           unmeasuredSnapshots,
         });
         for (const l of lines) console.log(l);
@@ -262,36 +266,26 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
         }
       }
       // §15.439 (ruling 769) — HOST STATE AT EVERY BEAT BOUNDARY, printed
-      // whether or not anything looks wrong.
-      //
-      // Beat 4's nine measurements run 7m37s to 13m05s, and nobody can say why
-      // the tail happens because no run ever recorded what else was on the box.
-      // Three launchers checked ground hash, memory and ports and none checked
-      // load; this lane wrote "host quiet" from free locks and MemAvailable
-      // having never read /proc/loadavg once. A LOCK CENSUS ANSWERS "is a lane
-      // between its precheck and its merge", NOT "is the box busy" — a sibling's
-      // vitest holds neither campaign lock.
-      //
-      // Printed on every beat, not only slow ones: a number recorded only when
-      // it looks bad cannot establish a baseline, and the whole difficulty with
-      // the tail is that there is nothing to compare a slow beat against.
+      // whether or not anything looks wrong. Beat 4's nine measurements ran
+      // 7m37s to 13m05s and nobody could say why, because no run ever recorded
+      // what else was on the box: three launchers checked ground hash, memory
+      // and ports and none checked load, and a LOCK CENSUS answers "is a lane
+      // between its precheck and its merge", NOT "is the box busy" — a
+      // sibling's vitest holds neither campaign lock. Printed on every beat,
+      // not only slow ones: a number recorded only when it looks bad cannot
+      // establish a baseline to compare a slow beat against.
       const host = hostState();
-      console.log(`[stories] host after beat ${i + 1}: loadavg ${host.load}  MemAvailable ${host.memGiB}GiB`);
+      console.log(`[stories] host after beat ${beatLabel}: loadavg ${host.load}  MemAvailable ${host.memGiB}GiB`);
       const mark = verdict.status === 'green' ? '✓' : '✗';
-      // §15.415: MARK A BEAT THAT PERFORMS NOTHING. Under 504 a beat with no
-      // `do` navigates and then asserts — which is right for a navigation beat
-      // and a trap for a beat that MEANT to act. S7's beat 21 sat for a
-      // campaign asserting the post-condition of a click it never made, because
-      // a stale comment said the click was "NOT expressible"; run 3 read 21/22
-      // over a binding that never happened. The verdict line said `✗ 21.` and
-      // looked exactly like a beat that tried and failed.
-      //
-      // So the line now says which it is. A no-do beat is not wrong — most
-      // navigation beats have none — but a reader deciding whether to suspect
-      // the product or the story needs to know that nothing was pressed, and
-      // that is the one fact the transcript never carried.
+      // §15.415: MARK A BEAT THAT PERFORMS NOTHING. A no-`do` beat navigates
+      // and asserts — right for navigation, a trap for a beat that MEANT to
+      // act: S7's beat 21 sat a whole campaign asserting the post-condition of
+      // a click it never made (a stale "NOT expressible" comment), and its
+      // `✗ 21.` line looked exactly like a beat that tried and failed. So the
+      // line now says which it is — the one fact the transcript never carried,
+      // and the one a reader needs before suspecting the product over the story.
       const acted = Array.isArray(beat.do) && beat.do.length > 0;
-      console.log(`  ${mark} ${i + 1}. ${beat.act}${acted ? '' : '   [no-do: navigated and asserted; nothing was pressed]'}`);
+      console.log(`  ${mark} ${beatLabel}. ${beat.act}${acted ? '' : '   [no-do: navigated and asserted; nothing was pressed]'}${doorFork ? `   [${describeDoorFork(doorFork)}]` : ''}`);
       for (const f of verdict.failures) console.log(`      ${f}`);
     }
   } finally {
@@ -569,6 +563,10 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     }
   }
 
+  // T1 ruling 1350 — every ground a FILL fork minted, judged the same way.
+  const forkGrounds = judgeForkGrounds({ root: ROOT, story, before: forkGroundsBefore, logsBefore, logsDir, runStamp });
+  for (const line of forkGrounds.lines) console.log(line);
+
   // M7-D — THE REAL-GROUND FENCE. Its verdict is one pure function
   // (`realGroundFenceVerdict`) so the decision that reds a run is testable on
   // its own. It is computed here, after the own-ground block, because that
@@ -794,6 +792,8 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     );
     return 1;
   }
+  // T1 ruling 1350 — a fork case's own ground, judged like the base ground above.
+  if (forkGrounds.redReason !== null) { console.error(`[stories] ${story.id}: ${forkGrounds.redReason}`); return 1; }
 
   return (row.status === 'green' && spendHalt === null) ? 0 : 1;
 }
