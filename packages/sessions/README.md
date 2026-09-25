@@ -25,13 +25,13 @@ The test that holds this file honest is `contract.test.ts` beside it: it reads t
 | `routes.ts` | `sessionsRoutes` |
 | `session-phases.ts` | `LEGACY_SESSION_TERMINAL_PHASES` · `LEGACY_SESSION_AWAITS_PHASES` · `LEGACY_SESSION_WORKING_PHASES` |
 | `session-readability.ts` | `parseGuardedEventsJsonl` · `readSessionCostUsd` · `parseGuardedFirstEvent` |
-| `session-resolution.ts` | `invalidProjectReason` · `sessionIsReadable` |
+| `session-resolution.ts` | `invalidProjectReason` · `sessionIsReadable` · `findSessionProject` |
 | `session-status-io.ts` | `guardedReadSessionStatus` · `guardedWriteSessionStatus` · `CANCELLED_PHASE` |
 | `session-write-fence.ts` | `writeRootFenceOptions` |
 | `studio/session-kinds-validate.ts` | `validateSessionKinds` |
 | `studio/session-kinds.ts` | `SESSION_STAGES` · `loadSessionKinds` |
 | `studio/session-transcript.ts` | `deriveSessionArtifact` · `safeReadFileInSession` |
-| `turn-cost-rows.ts` | `EMIT_FAILED_SIDECAR` |
+| `turn-cost-rows.ts` | `EMIT_FAILED_SIDECAR` · `EMIT_FAILED_STDERR_MARKER` · `emitTurnCostRow` · `emitTurnEndedUnpricedRow` |
 
 ### Types
 
@@ -51,12 +51,16 @@ reachable from it cycles back into `contract-stages.ts` before
 this one deep import rather than "fixing" the door at the cost of a live TDZ
 crash; every other consumer of this package goes through the door.
 
-`@forge/sessions/testing` exports `stubArchitectManifestPorts`, three
+`@forge/sessions/testing` exports `stubArchitectManifestPorts` and three
 `kinds/architect-critic.ts` symbols (`COMPLETENESS_CRITIC_MODEL`,
-`completenessCriticAgentSpec`, `CRITIC_MAX_TOTAL_PROMPT_CHARS`) and three
-`turn-cost-rows.ts` symbols (`emitTurnCostRow`, `emitTurnEndedUnpricedRow`,
-`EMIT_FAILED_STDERR_MARKER`) — each has no production consumer outside this
-package, only test files reach for them.
+`completenessCriticAgentSpec`, `CRITIC_MAX_TOTAL_PROMPT_CHARS`) — each has no
+production consumer outside this package, only test files reach for them.
+`turn-cost-rows.ts`'s `emitTurnCostRow`/`emitTurnEndedUnpricedRow`/
+`EMIT_FAILED_STDERR_MARKER` moved OFF this subpath onto the main door instead
+(the "module | exports" table above): `scripts/stories/
+structured-unpriced-halts.test.ts` and its siblings import them from the bare
+`@forge/sessions` specifier, so the door is read as the spec here rather than
+the original "test-only" classification.
 
 ## Three status pairs, and why only two are exported
 

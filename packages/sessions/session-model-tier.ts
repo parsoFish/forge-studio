@@ -27,8 +27,10 @@
  * never to a thrown read route.
  */
 
-import { loadAgentDefinition } from '@forge/agents';
-import { agentCapabilityDescriptor } from '@forge/agents';
+// Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
+// packages/sessions/kinds/architect-session.ts's own module doc).
+import { loadAgentDefinition } from '@forge/agents/studio/agent-registry.ts';
+import { agentCapabilityDescriptor } from '@forge/agents/studio/derive.ts';
 import { guardedSkillMdPath } from '@forge/library';
 import type { SessionKindDescriptor } from './studio/session-kinds.ts';
 

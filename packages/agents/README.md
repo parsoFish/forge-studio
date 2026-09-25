@@ -10,7 +10,7 @@ Rank 3 in the allow-graph. It may import `contracts`, `kernel`, `library`,
 import. That is why the route table and the band surface take a deps object
 rather than importing what they need.
 
-## API (64 values)
+## API (67 values)
 
 | seam | exports |
 |---|---|
@@ -21,8 +21,8 @@ rather than importing what they need.
 | the reverse index | `agentUsageIndex` · `agentsUsing` |
 | adapters | `getAdapter` · `resolveSdkId` · `isSdkAvailable` |
 | the pinned SDK seam | `pinnedSdkQuery` · `pinnedStreamQuery` · `withRunMarker` · `withIdleDeadline` · `StreamDeadlineError` |
-| spawn containment | `processesCarryingMarker` |
-| skill packages | `skillPath` · `skillsDir` · `skillPathRelative` · `assertSkillSlug` · `listSkillMdDirs` · `listSkillDirs` · `loadSkillTurnPrompt` · `splitSkillTurnSections` |
+| spawn containment | `processesCarryingMarker` · `readRunMarkers` · `tokenBelongsToRunDir` |
+| skill packages | `skillPath` · `skillsDir` · `skillPathRelative` · `assertSkillSlug` · `listSkillMdDirs` · `listSkillDirs` · `loadSkillTurnPrompt` · `splitSkillTurnSections` · `SLUG_RE` (kernel's own object, re-exported — AT-89) |
 | declared-skill composition | `makeProjectSkillsLoadedSink` |
 | the agent-slug route helpers | `SAFE_AGENT_SLUG_RE` |
 | studio agent validation | `validateAgent` |
@@ -39,6 +39,25 @@ rather than importing what they need.
 `QueryFn` · `ClaudeAgentOptions` · `ToolUseLiveDetail` · `GateRunInfo` ·
 `PhaseAgentSpec` · `SdkHooksOption`
 
+### Eight literal production subpaths, forced by a cycle
+
+`package.json` also maps `"./phase-agent.ts"`, `"./studio/derive.ts"`,
+`"./skill-path.ts"`, `"./pinned-sdk-query.ts"`, `"./studio/hook-dispatch.ts"`,
+`"./tool-event-emit.ts"`, `"./stream-deadline.ts"` and
+`"./studio/agent-registry.ts"` — bead `forge-8vfn.5.31`'s repoint work
+surfaced a live cross-package cycle: `agent-run.ts`/`agent-dispatch-cmd.ts`
+import `@forge/sessions` (an already-baselined allow-graph violation), and a
+dozen-plus `packages/sessions/*.ts`/`kinds/*.ts` files call `deriveAgentSpec(
+skillPathRelative(...))` — or build a `kinds/registry.ts`-style object
+literal of sibling kind modules — at their OWN top level. A sessions file
+reached through THIS door would nest back into `@forge/sessions` while still
+mid-load, throwing a TDZ `ReferenceError`/`TypeError` that reproduces under
+plain `node --experimental-strip-types` (not a bundler-only quirk). Each of
+the eight files above reaches no higher than `@forge/kernel`/`@forge/library`/
+`@forge/contracts`, so a sessions `kinds/*.ts` file importing them directly
+never re-enters `@forge/sessions` — see `packages/sessions/kinds/
+architect-session.ts`'s own module doc for the full chain that was measured.
+
 ### The one test-only subpath
 
 `@forge/agents/testing` exports `studio/materials.ts`'s vocabulary
@@ -50,10 +69,16 @@ off the main door (bead `forge-8vfn.5.31`).
 
 ## Three things the door deliberately does not do
 
-**It does not re-export `@forge/kernel`'s id vocabulary.** `skill-path.ts`
+**It does not re-export most of `@forge/kernel`'s id vocabulary.** `skill-path.ts`
 re-exports `SLUG_RE`, `PROJECT_ID_RE`, `FORGE_ROOT`, `isReservedId` and the rest
 so its own callers need one import instead of two. Those are kernel's names.
-Take them from kernel.
+Take them from kernel — with one exception: `SLUG_RE` itself IS on this door
+(the "skill packages" row above), because a pinned regression guard
+(`apps/forge/tests/integration/skill-install-agent-identity.test.ts`'s AT-89,
+surviving two prior relocations) asserts this door's `SLUG_RE` is the SAME
+object kernel defines, not a second regex with a matching source. The test is
+read as the spec here; the door forwards kernel's live binding rather than
+redeclaring it.
 
 **`agentUsageIndex` is how library asks about agents.** Library is rank 2 and
 may not import this package, so the index is injected at

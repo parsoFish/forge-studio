@@ -33,14 +33,16 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { pinnedSdkQuery as sdkQuery } from '@forge/agents';
+// Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
+// packages/sessions/kinds/architect-session.ts's own module doc).
+import { pinnedSdkQuery as sdkQuery } from '@forge/agents/pinned-sdk-query.ts';
 import { runStructuredTurn, type QueryFn } from '../interactive-session.ts';
 import { emitTurnCostRow, emitTurnEndedUnpricedRow } from '../turn-cost-rows.ts';
 import type { EventLogger } from '@forge/kernel';
 import { hooksSpreadForAgent } from './kind-turn.ts';
-import { modelForSpec } from '@forge/agents';
-import { deriveAgentSpec } from '@forge/agents';
-import { skillPath, skillPathRelative } from '@forge/agents';
+import { modelForSpec } from '@forge/agents/phase-agent.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { skillPath, skillPathRelative } from '@forge/agents/skill-path.ts';
 import type { ToolUseLiveDetail } from '@forge/agents';
 import { requirePorts, type ArchitectManifestPorts } from './architect-ports.ts';
 import { readInterview, type ArchitectStatus, type CompletenessCriticStatus, type RunArchitectTurnInput } from './architect-session.ts';

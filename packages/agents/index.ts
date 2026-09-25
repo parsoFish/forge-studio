@@ -10,16 +10,42 @@
  * WHAT IS DELIBERATELY NOT HERE. `skill-path.ts` re-exports `@forge/kernel`'s
  * id vocabulary (`SLUG_RE`, `PROJECT_ID_RE`, `FORGE_ROOT`, `isReservedId`, …)
  * so its own callers need no second import. Those are KERNEL's names and this
- * door does not re-export them: a package's public API should not claim
- * ownership of another package's vocabulary, and an importer that wants the id
- * rules should take them from the package that defines them.
+ * door does not re-export most of them: a package's public API should not
+ * claim ownership of another package's vocabulary, and an importer that wants
+ * the id rules should take them from the package that defines them. The one
+ * exception is `SLUG_RE` itself (below, with `skillPathRelative` and its
+ * siblings): AT-89 (`apps/forge/tests/integration/skill-install-agent-
+ * identity.test.ts`) pins it as the SAME object kernel defines, surviving two
+ * prior relocations, and a pinned regression guard is read as the spec here —
+ * this door forwards kernel's live binding, it does not redeclare the regex.
+ *
+ * ORDERING IS LOAD-BEARING, AND STILL ONLY PART OF THE FIX. `agent-run.ts`
+ * and `agent-dispatch-cmd.ts` import `@forge/sessions` (a baselined
+ * allow-graph violation — `scripts/baselines/boundaries.json` — agents may
+ * not import sessions, but two files already do). Placing their exports LAST
+ * in this file means a fresh load of THIS door binds every other symbol
+ * before it can nest into sessions. That alone is not sufficient: several
+ * `packages/sessions/kinds/*.ts` files are ALSO reached directly (by a test,
+ * or by `sessions/index.ts`'s own eager re-exports) and call `deriveAgentSpec
+ * (skillPathRelative(...))` — or build a `kinds/registry.ts`-style object
+ * literal of sibling kind modules — at THEIR own top level. If the load that
+ * reaches `@forge/agents` originates on the SESSIONS side (not through this
+ * door), reordering this file cannot help: the cycle closes back into
+ * `packages/sessions/kinds/registry.ts` (or the originating kind file)
+ * while IT is still mid-load, which is a live cross-package cycle, not a bug
+ * in any one file. Those sessions files were repointed to the deep, leaf,
+ * non-cyclic paths below instead (`phase-agent.ts`, `studio/derive.ts`,
+ * `skill-path.ts`, `pinned-sdk-query.ts`, `studio/hook-dispatch.ts`,
+ * `tool-event-emit.ts`, `stream-deadline.ts`, `studio/agent-registry.ts` —
+ * each reaches no higher than `@forge/kernel`/`@forge/library`), which is
+ * why those eight files are legal literal `package.json#exports` subpaths
+ * despite this being a one-door package —
+ * see each sessions file's own module doc for its specific chain.
  */
 
 // ---- Run one agent -------------------------------------------------------
 export { runAgent, isSafeRunId } from './run-agent.ts';
 export { dispatchAgentRun } from './agent-dispatch.ts';
-export { cmdAgent, cmdAgentRun, AGENT_RUNNERS } from './agent-run.ts';
-export { cmdAgentDispatch, parseAgentDispatchArgs } from './agent-dispatch-cmd.ts';
 export { findSessionProject } from './find-session-project.ts';
 
 // ---- Bands: the develop flow's banded successors --------------------------
@@ -63,13 +89,15 @@ export { validateAgent } from './studio/validate-agent.ts';
 
 // ---- The pinned SDK seam, and spawn containment ---------------------------
 export { pinnedSdkQuery, pinnedStreamQuery, withRunMarker } from './pinned-sdk-query.ts';
-export { processesCarryingMarker } from './spawn-marker.ts';
+export { processesCarryingMarker, readRunMarkers, tokenBelongsToRunDir } from './spawn-marker.ts';
 export { withIdleDeadline, StreamDeadlineError } from './stream-deadline.ts';
 
-// ---- Skill packages ------------------------------------------------------
+// ---- Skill packages --------------------------------------------------------
+// SLUG_RE: see the module doc above — the one deliberate exception to "this
+// door does not re-export kernel's id vocabulary" (AT-89 pins it).
 export {
   skillPath, skillsDir, skillPathRelative, assertSkillSlug, listSkillMdDirs, listSkillDirs,
-  loadSkillTurnPrompt, splitSkillTurnSections,
+  loadSkillTurnPrompt, splitSkillTurnSections, SLUG_RE,
 } from './skill-path.ts';
 
 // ---- Model resolution ----------------------------------------------------
@@ -94,3 +122,8 @@ export type { AgentsRouteDeps } from './routes.ts';
 export type { SdkHooksOption } from './studio/hook-dispatch.ts';
 export type { AgentUsageIndex, AgentUsageKind } from './studio/agent-usage.ts';
 export type { LoopResult } from './ralph/runner.ts';
+
+// ---- Run one agent (cont'd) — these import @forge/sessions, so they MUST
+// stay last; see "ORDERING IS LOAD-BEARING" in the module doc above. ----------
+export { cmdAgent, cmdAgentRun, AGENT_RUNNERS } from './agent-run.ts';
+export { cmdAgentDispatch, parseAgentDispatchArgs } from './agent-dispatch-cmd.ts';

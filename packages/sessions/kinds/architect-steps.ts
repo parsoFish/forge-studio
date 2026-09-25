@@ -30,8 +30,11 @@ import { guardedFile, guardedReadFile, guardedWriteFile, type EventLogger } from
 import { renderInterviewSummary, runCompletenessCriticStep, type CompletenessCriticFinding } from './architect-critic.ts';
 import { requirePorts } from './architect-ports.ts';
 import type { ToolUseLiveDetail } from '@forge/agents';
-import { resolveSessionModel, type ModelTier } from '@forge/agents';
-import { skillPath, loadSkillTurnPrompt, splitSkillTurnSections } from '@forge/agents';
+// Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
+// architect-session.ts's own module doc — this file is reached from
+// `kinds/registry.ts` via `architect.ts`).
+import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
+import { skillPath, loadSkillTurnPrompt, splitSkillTurnSections } from '@forge/agents/skill-path.ts';
 import { hooksSpreadForAgent, type KindTurnPlumbing } from './kind-turn.ts';
 import { emitTurnCostRow, emitTurnEndedUnpricedRow } from '../turn-cost-rows.ts';
 import { type ArchitectQuestion, type ArchitectStatus, type DraftInitiative, type RunArchitectTurnInput, type RunArchitectTurnResult, architectAgentSpec, readInterview } from './architect-session.ts';

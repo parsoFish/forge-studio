@@ -123,7 +123,9 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel
 import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
 import { deriveSessionAffordances } from './studio/session-kinds-affordances.ts';
 import { readSessionCostUsd } from './session-readability.ts';
-import { deriveAgentSpec } from '@forge/agents';
+// Deep path, not the door (bead forge-8vfn.5.31, same cycle as
+// packages/sessions/kinds/architect-session.ts's own module doc).
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { skillPathRelative } from '@forge/library';
 import { deriveSessionTranscript, deriveSessionArtifact, safeReadFileInSession, type ParseManifestPort } from './studio/session-transcript.ts';
 import { tryGetKbBackend } from '@forge/knowledge';

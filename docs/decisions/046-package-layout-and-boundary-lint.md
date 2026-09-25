@@ -115,7 +115,15 @@ its own `test` script, and its own `tsconfig.json` extending the root.
 >   shape does not apply to it at all; item 83's split carried nine of its
 >   eleven production specifiers into `@forge/stations`, so the allowlist
 >   this amendment originally measured at fourteen is two
->   (`class-profiles.ts`, `demo.ts`) after the merge.
+>   (`class-profiles.ts`, `demo.ts`) after the merge. A fourth case surfaced
+>   in a later merge round: `@forge/flows`'s `"./work-item.ts"`, which
+>   `packages/agents/ralph/runner.ts` reaches deep because going through the
+>   door crashed `@forge/agents/_adapters/claude/index.ts`'s load with a TDZ
+>   `ReferenceError` (`claude-agent.ts` → this file → the flows door →
+>   `flow-runner.ts` → the agents door → `run-agent.ts` → `_adapters/
+>   registry.ts` → `claude/index.ts` again, still mid-evaluation) — the same
+>   shape as the sessions case, one file's door forced open by a cycle the
+>   repoint made reachable rather than one it created.
 >
 > **What changed and did not.** The allow-graph is unaffected exactly as the
 > M3-A amendment said the additive subpath left it unaffected: `"./*"` never

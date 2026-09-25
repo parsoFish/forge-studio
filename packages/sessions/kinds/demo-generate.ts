@@ -11,11 +11,13 @@ import { join } from 'node:path';
 import { resolveGuardedPath } from '@forge/kernel';
 import { runAgentTurn } from '../interactive-session.ts';
 import type { KindTurnInput, KindTurnPlumbing } from './kind-turn.ts';
-import { resolveSessionModel, type PhaseAgentSpec } from '@forge/agents';
+// Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
+// packages/sessions/kinds/architect-session.ts's own module doc).
+import { resolveSessionModel, type PhaseAgentSpec } from '@forge/agents/phase-agent.ts';
 import { loadProjectConfig } from '@forge/projects';
 import { listDemoElements } from '@forge/library';
 import type { DemoStep, DemoElementDefinition } from '@forge/contracts';
-import { loadSkillTurnPrompt } from '@forge/agents';
+import { loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
 import {
   DEMO_FRAGMENTS_REL_DIR,
   DEMO_KIND_DIR,

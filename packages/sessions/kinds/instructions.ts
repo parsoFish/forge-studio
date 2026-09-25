@@ -46,10 +46,20 @@ import {
 } from './kind-turn.ts';
 import { guardedReadFile, guardedWriteFile, sendJson } from '@forge/kernel';
 import { withStudioWrite } from '@forge/projects';
-import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents';
-import { deriveAgentSpec } from '@forge/agents';
+// Deep paths, not the door (bead forge-8vfn.5.31): this file is eagerly
+// re-exported by `sessions/index.ts`, and going through `@forge/agents`'s
+// door here can cycle back into `@forge/sessions` (agents' `agent-run.ts`
+// imports it) while THIS module is still mid-load — a live TDZ
+// (`TypeError: skillPathRelative is not a function` under a bundler that
+// resolves re-exports as ordered assignments; `ReferenceError: Cannot access
+// ... before initialization` under Node's own loader), not a bundler-only
+// quirk. `phase-agent.ts`/`studio/derive.ts`/`skill-path.ts` only reach
+// `@forge/contracts`/`@forge/kernel`/`@forge/library`, so these deep imports
+// break the cycle.
+import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
 import { readAgentInstructionsFile } from '@forge/projects';
-import { skillPathRelative, loadSkillTurnPrompt } from '@forge/agents';
+import { skillPathRelative, loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
 import { listInstructionSeeds } from '@forge/library';
 import type { InstructionSeed } from '@forge/contracts';
 import {

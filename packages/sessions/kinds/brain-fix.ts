@@ -11,9 +11,11 @@
  */
 import { relative } from 'node:path';
 
-import { deriveAgentSpec } from '@forge/agents';
-import { modelForSpec } from '@forge/agents';
-import { skillPathRelative } from '@forge/agents';
+// Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
+// packages/sessions/kinds/architect-session.ts's own module doc).
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { modelForSpec } from '@forge/agents/phase-agent.ts';
+import { skillPathRelative } from '@forge/agents/skill-path.ts';
 import { runBrainLint, lintThemeFiles, classify } from '@forge/knowledge';
 import { guardAgentKbEdits, snapshotBrainTree, noKbEdits, type KbEditGateResult } from '@forge/knowledge';
 import { tryGetKbBackend } from '@forge/knowledge';

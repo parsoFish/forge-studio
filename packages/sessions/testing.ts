@@ -13,4 +13,3 @@ export {
   completenessCriticAgentSpec,
   CRITIC_MAX_TOTAL_PROMPT_CHARS,
 } from './kinds/architect-critic.ts';
-export { emitTurnCostRow, emitTurnEndedUnpricedRow, EMIT_FAILED_STDERR_MARKER } from './turn-cost-rows.ts';

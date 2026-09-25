@@ -16,12 +16,12 @@ Five baselined violations of that rule survive in `cycle.ts`,
 `finalize-merged.ts` and two tests — owned by M5-A, listed in `design.md`. The
 rule is the target, not a description of today.
 
-## API (141 values)
+## API (142 values)
 
 | run one flow — the station engine | `checkFlowTriggers` · `findFanOutViolations` · `flowPathForId` · `listFlowBandIds` · `loadFlowDefinition` · `loadStarterFlow` · `resolveNodeKind` · `runFlow` |
 | the cycle the develop flow runs | `CAPTURE_NONCE_ENV` · `REFLECTION_LOST_EVENT` · `REFLECT_MODE_FILE` · `assertNonEmptyDelivery` · `buildDemoCaptureArgv` · `commitDevLoopBoundary` · `commitOrchestratedCaptureArtifacts` · `compileWorkItemSpecs` · `demoJsonWantsCapture` · `enforceDevLoopCloseInvariant` · `enforceFinalCiGate` · `generateCaptureNonce` · `openPrInline` · `preflightDemoCaptureCommands` · `preservingForgeScratch` · `promoteMergedToDone` · `recordBrainGateResult` · `resolveCostCeilingOverride` · `resolveDemoCaptureTimeoutMs` · `runClosure` · `runMergeBoundaryGate` · `runOrchestratorCommand` |
 | queue state machine, manifests and initiatives | `DERIVED_CEILING_MARGIN_SHARE` · `getPaths` · `initiativeTitle` · `isContainedProjectRepoPath` · `isSafeProjectName` · `isSafeCycleId` · `listInFlight` · `listPlannedInitiatives` · `manifestBlockedClauses` · `mintAndPersistManifestCycleId` · `mintTriggeredInitiative` · `parseManifest` · `persistManifestCostCeiling` · `persistManifestSpecs` · `promoteManifests` · `serializeManifest` · `CHANGE_CLASSES` · `isCanonicalInitiativeId` |
-| work items and their worktrees | `DEV_WORK_ITEM_ID_PATTERN` · `WORK_ITEM_FILE_PATTERN` · `createMergeQueue` · `createWiWorktree` · `enqueueGateFixWorkItems` · `gateRequiredPaths` · `mergeAndPublish` · `mergeWiIntoCycle` · `parseWorkItem` · `readWorkItemsFromDir` · `removeWiWorktree` · `reviewCapExhaustedPath` · `runConcurrentDispatch` · `serializeWorkItem` · `topologicalOrder` · `validateWorkItemSet` · `wiWorktreePath` · `writeMergeGateConfigErrorMarker` · `writeReviewCapExhaustedMarker` · `writeWorkItem` · `writeWorkItemStatus` |
+| work items and their worktrees | `DEV_WORK_ITEM_ID_PATTERN` · `WORK_ITEM_FILE_PATTERN` · `createMergeQueue` · `createWiWorktree` · `enqueueGateFixWorkItems` · `gateRequiredPaths` · `mergeAndPublish` · `mergeWiIntoCycle` · `parseWorkItem` · `readWorkItemsFromDir` · `removeWiWorktree` · `reviewCapExhaustedPath` · `runConcurrentDispatch` · `serializeWorkItem` · `topologicalOrder` · `validateWorkItem` · `validateWorkItemSet` · `wiWorktreePath` · `writeMergeGateConfigErrorMarker` · `writeReviewCapExhaustedMarker` · `writeWorkItem` · `writeWorkItemStatus` |
 | triggers and staged flow runs | `PLAN_FLOW_ID` · `REPO_RE` · `TRIGGER_KIND_IDS` · `drainFlowRunRequests` · `enqueueDevelopRun` · `enqueueFlowRun` · `enqueuePlanRun` · `fireAgentCompleteTriggers` · `listFlowRunRequests` · `stageFlowRunRequest` |
 | scheduler and daemon | `checkInitiativeDeps` · `clearPidFile` · `daemonPaths` · `daemonState` · `decideAutoRetry` · `isAlive` · `isPaused` · `markStopping` · `pausedFlagPath` · `readPid` · `serve` · `setPaused` · `spawnServeDetached` · `writePidFile` |
 | the run model the ui reads | `_resetRunListCacheForTest` · `buildAgentSlugToNodeId` · `buildNodeMapping` · `cachedListRuns` · `eventToNodeId` · `summariseCycle` |
@@ -37,14 +37,22 @@ rule is the target, not a description of today.
 
 ## Three things this door is not
 
-**It is not a wildcard door any more.** `package.json` maps only `"."` and
-`"./testing"` (bead `forge-8vfn.5.31`) — a deep path like
-`@forge/flows/manifest.ts` no longer resolves. Every one of the 47 module
-paths that used to be reachable under `@forge/flows/` was repointed to this
-door or, for the handful with no production consumer outside this package
-(`CostTracker`, `validateCompiledWorkItemSet`,
-`hasMergeGateConfigErrorMarker`, `mergeGateConfigErrorPath`), moved behind
-`@forge/flows/testing` instead.
+**It is not a wildcard door any more.** `package.json` maps `"."`,
+`"./testing"` and one literal production exception, `"./work-item.ts"` (bead
+`forge-8vfn.5.31`) — every other deep path like `@forge/flows/manifest.ts` no
+longer resolves. Every one of the 47 module paths that used to be reachable
+under `@forge/flows/` was repointed to this door or, for the handful with no
+production consumer outside this package (`CostTracker`,
+`validateCompiledWorkItemSet`, `hasMergeGateConfigErrorMarker`,
+`mergeGateConfigErrorPath`), moved behind `@forge/flows/testing` instead.
+`"./work-item.ts"` is the one forced exception: `packages/agents/ralph/
+runner.ts` needs `DEV_WORK_ITEM_ID_PATTERN`, but that file is also reached
+from `@forge/agents/_adapters/claude/index.ts` — going through this door
+there would load `flow-runner.ts`, which imports `@forge/agents` back,
+closing a live cross-package cycle (`ReferenceError: Cannot access
+'claudeAdapter' before initialization`, a real TDZ, not a bundler quirk).
+`work-item.ts` itself only reaches `@forge/contracts`, so the deep path
+breaks the cycle; same shape as `@forge/sessions`'s two forced literal paths.
 
 **It does not re-export other packages' vocabulary.** `InitiativeManifest` and
 its two unions live in `@forge/contracts` (ruling 81) and `manifest.ts`

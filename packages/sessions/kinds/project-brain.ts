@@ -24,9 +24,12 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents';
-import { deriveAgentSpec } from '@forge/agents';
-import { skillPathRelative, loadSkillTurnPrompt } from '@forge/agents';
+// Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
+// architect-session.ts's own module doc — `kinds/registry.ts` needs
+// `projectBrainKind` fully bound at its own top level).
+import { modelForSpec, resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { skillPathRelative, loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
 import {
   PROJECT_BRAIN_KIND_DIR,
   buildAnalyzePlan,

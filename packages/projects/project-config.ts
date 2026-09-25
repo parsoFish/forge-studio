@@ -40,7 +40,7 @@
 
 import { join, resolve } from 'node:path';
 import { guardedReadFile } from '@forge/kernel';
-import { REPO_RE } from '@forge/flows';
+import { REPO_RE } from '@forge/flows/trigger-payload.ts';
 import { defaultConfigPath, discoverProjects, loadConfig, resolveProjectsDir } from '@forge/kernel';
 
 export type { DemoStep, DemoStepKind } from '@forge/contracts';

@@ -31,8 +31,10 @@ import type { ModelTier } from '@forge/agents';
 import { MAX_EXACT_ID_LENGTH, PROJECT_ID_RE } from '@forge/kernel';
 import { discoverProjects } from '@forge/kernel';
 import { isSafeSegment, resolveGuardedPath } from '@forge/kernel';
-import { deriveAgentSpec } from '@forge/agents';
-import { resolveSessionModel } from '@forge/agents';
+// Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
+// packages/sessions/kinds/architect-session.ts's own module doc).
+import { deriveAgentSpec } from '@forge/agents/studio/derive.ts';
+import { resolveSessionModel } from '@forge/agents/phase-agent.ts';
 import { skillPathRelative } from '@forge/library';
 
 import { deriveSessionLifecycleFor, sessionHeartbeatMtimeMs } from './bridge-studio-lifecycle.ts';

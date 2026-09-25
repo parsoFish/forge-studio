@@ -14,7 +14,20 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows';
+// Deep path, not the door (bead forge-8vfn.5.31): `@forge/flows`'s door
+// eagerly loads `flow-runner.ts`, which imports `@forge/agents` — and this
+// file is reached from `@forge/agents/_adapters/claude/index.ts` via
+// `ralph/claude-agent.ts`. Going through the bare flows door here closes a
+// live cross-package cycle (claude/index.ts -> claude-agent.ts -> this file
+// -> @forge/flows -> flow-runner.ts -> @forge/agents -> run-agent.ts ->
+// _adapters/registry.ts -> claude/index.ts again, still mid-evaluation) that
+// throws `ReferenceError: Cannot access 'claudeAdapter' before
+// initialization` — a TDZ, not a bundler quirk (reproduces under plain
+// `node --experimental-strip-types`, no test runner involved). `work-item.ts`
+// itself only reaches `@forge/contracts`, so this one import breaks the
+// cycle without touching the (separately baselined, pre-existing)
+// agents-imports-flows rank violation this file's OTHER import is part of.
+import { DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows/work-item.ts';
 import {
   autoCommitWorktreeIfDirty,
   branchHasAllCreates,
