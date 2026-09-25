@@ -83,6 +83,25 @@ export class CorpusUnreadable extends Error {
 }
 
 /**
+ * M7-C last-flakes #1 (2026-09-25, CI run 36017066132; known-flakes.md
+ * `scripts/guard-stdout-flush.test.ts:78`). `productionFiles()`'s listing
+ * half is `git ls-files --cached --others --exclude-standard`, which names
+ * whatever is untracked at that instant — including a transient PROBE file a
+ * sibling `node --test` file plants and removes inside one assertion
+ * (historical: `check-boundaries.test.ts` used to write `packages/kernel/__assembly_probe__.ts`
+ * straight into the live tree; `forge-8vfn.5.64`'s `no-live-tree-plants.test.ts`
+ * door is the root fix that now stops every POLICED test file from doing
+ * that). This is the second, narrower layer the flake's register note also
+ * names: nothing shaped like `__..._probe__` is ever a real, committed
+ * production file, so the corpus can exclude the SHAPE outright — an
+ * unpoliced writer the 5.64 door does not reach still cannot race this gate
+ * through it, and a real file that vanishes mid-read (forge-8vfn.28's
+ * sibling-checkout race) still REFUSES exactly as before, because this
+ * pattern is narrower than "unreadable".
+ */
+const PROBE_NAME_RE = /(?:^|\/)__[a-z0-9]+_probe__\.[a-z0-9]+$/i;
+
+/**
  * Every `packages/<name>` production file's line count, summed by package.
  *
  * `forge-8vfn.28`. THE LISTING AND THE READ ARE TWO MOMENTS, and four lanes
@@ -115,6 +134,7 @@ export class CorpusUnreadable extends Error {
 export function measurePackages(root = FORGE_ROOT, lister = productionFiles) {
   const lines = new Map();
   for (const rel of lister(root)) {
+    if (PROBE_NAME_RE.test(rel)) continue; // see PROBE_NAME_RE — never a real production file
     const m = rel.match(/^packages\/([^/]+)\//);
     if (!m) continue;
     let text;
