@@ -45,6 +45,7 @@
  */
 
 import { readdirSync, readFileSync, readlinkSync, realpathSync, statSync, existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 
 /** Env name → the campaign's full-suite lock, excluded by a story run. */
 export const SUITE_LOCK_ENV = 'FORGE_SUITE_LOCK';
@@ -352,6 +353,16 @@ export function overlapVerdict({ lockPath, envName, thisKind, otherKind, procRoo
   };
 }
 
+/** Is `lockPath` held right now, by anyone? A non-blocking `flock` on a FRESH
+ *  descriptor: exit 1 = held, exit 0 = free (released at once), anything else
+ *  (flock missing, a signal) = null — cannot answer, never read as either. */
+export function probeLockHeld(lockPath) {
+  const r = spawnSync('flock', ['-n', lockPath, 'true'], { stdio: 'ignore' });
+  if (r.status === 1) return true;
+  if (r.status === 0) return false;
+  return null;
+}
+
 /**
  * The story-run side: refuse while the full suite holds its lock.
  *
@@ -366,7 +377,7 @@ export function overlapVerdict({ lockPath, envName, thisKind, otherKind, procRoo
  * and keeps its existing reasons unchanged; it names the ancestor pid, never
  * a bare "ok", so the reason still says why waiters do not matter here.
  */
-export function suiteLockVerdict(env = process.env, procRoot = '/proc', selfPid = process.pid) {
+export function suiteLockVerdict(env = process.env, procRoot = '/proc', selfPid = process.pid, { probeHeld = probeLockHeld } = {}) {
   const lockPath = env[SUITE_LOCK_ENV];
   if (lockPath) {
     const holders = lockHolders(lockPath, procRoot);
@@ -382,6 +393,28 @@ export function suiteLockVerdict(env = process.env, procRoot = '/proc', selfPid 
             "is blocked by THIS run's hold, not the other way round; refusing here would refuse a run " +
             'for a queue only its own ancestor is causing.',
         });
+      }
+      // M7 row 80 (T1 1352/1353): a hold whose locker has EXITED. `heavy-slot.sh`
+      // locks via `exec 8>lock; flock -n 8` — the flock binary locks the shared
+      // descriptor and exits. This WSL kernel then lists no row at all; a
+      // standard kernel (the CI runner) lists it under the exited pid. Either
+      // way no LIVE process is the holder, and the ancestor that owns the
+      // descriptor reads as an opener. Required together: no live holder, an
+      // ANCESTOR opener, and a fresh probe proving the lock IS held. A live
+      // holder, a free probe (only open) or an unanswerable one (null) keeps
+      // the refusal below.
+      const liveHolders = holders.filter((h) => existsSync(`${procRoot}/${h.pid}`));
+      if (liveHolders.length === 0) {
+        const opener = (lockOpeners(lockPath, procRoot) ?? []).find((o) => ancestors.has(o.pid));
+        if (opener && probeHeld(lockPath) === true) {
+          return Object.freeze({
+            ok: true,
+            reason:
+              `${lockPath} is held through a descriptor pid ${opener.pid}, this story run's OWN ANCESTOR, has open ` +
+              "— /proc/locks shows no row for a lock whose locking process has exited (heavy-slot's " +
+              '`flock -n <fd>`), and a fresh probe confirms the lock is held, so this is the run\'s own hold.',
+          });
+        }
       }
     }
   }
