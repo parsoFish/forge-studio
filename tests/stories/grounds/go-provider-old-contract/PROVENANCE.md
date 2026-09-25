@@ -4,8 +4,10 @@
 exercises, `azuredevops/internal/service/servicehook`, plus its full transitive Go dependency closure
 (module-local packages and the vendored third-party SDK fork the `replace` directive in `go.mod` points
 at). Built for plan D5 (M7-D, forge-1rk5.1, as amended by §12 / T1 1285, 1220 item 92, **T1 1494** and
-**T1 1497**) to move S3 off a live real ground onto a forge-owned fixture. **It still does not serve S3**
-— see "T1 1497" and the PROOF section below for why, and STOP below for the open decision this leaves.
+**T1 1497**) to move S3 off a live real ground onto a forge-owned fixture. `.forge/project.json` went
+through two restoration attempts before this seed served S3: a July tracked copy (`e04638bc^`) that
+THREW on the current config loader (kept below as evidence), then a byte-exact live-ground capture that
+PROVED clean — see "T1 1497 — the live capture" and the PROOF section below.
 
 **Source.** `parsoFish/terraform-provider-betterado` at **`3b2e2ca4aa53cdb24ffd6760c8476c305a62ef73`**
 (T1 1494's pin — `c1a8fbca`'s first parent, i.e. betterado's real state immediately before forge's
@@ -71,7 +73,11 @@ Net: `3b2e2ca4`, carried literally, replaces one blocker ("already fixed, nothin
 ("nothing was ever declared to have drifted") — smaller and differently-shaped than the nine removals
 S3's `expectedChanges` name, not equal to them.
 
-## T1 1497 (option a) — restoring `.forge/project.json`
+## T1 1497, first attempt (option a) — the July tracked copy from `e04638bc^` (SUPERSEDED)
+
+Kept in full below as recorded evidence for why the live capture (next section) was needed: the July
+tracked copy predates the product's `testProcess` schema migration and could not be validated by the
+current config loader, no matter how it was carried.
 
 T1 ruled option (a): keep the `3b2e2ca4` tracked-tree seed exactly as measured above, and add ONE file —
 `.forge/project.json`, copied VERBATIM from `e04638bc^` (`1ad7f7ae`, the last commit that carried it
@@ -107,17 +113,19 @@ project carried it when forge managed it under that schema; nothing about its sh
 updated to match the CURRENT (`R1-03`-migrated) config format. What that collision does to the PROOF step
 is measured below.
 
-**Files.** 125 files (124 + the restored `project.json`), method-C digest of `seed/`: **`5d59188fe5785cf1`**
-(pipeline: `find . -type f -not -path "*/node_modules/*" -not -path "*/.git/*" -print0 | sort -z | xargs -0
+**Files.** 125 files (124 + `project.json`), method-C digest of `seed/`: **`49416ee66caaf3d4`** — the
+FINAL value, after `project.json` was replaced a second time by the live capture ("T1 1497 — the live
+capture" below supersedes the first attempt's `5d59188fe5785cf1`, itself recorded there as history).
+Pipeline: `find . -type f -not -path "*/node_modules/*" -not -path "*/.git/*" -print0 | sort -z | xargs -0
 sha256sum`, then `sha256` over that text stream, first 16 hex chars — `scripts/stories/ground-hash.mjs`'s
-own `METHOD_C_CMD`, run verbatim). Superseding count/digest below; the file breakdown that follows is
-otherwise unchanged from the prior pass except for this one addition. NOT a whole-tree copy (the
+own `METHOD_C_CMD`, run verbatim. The file breakdown that follows is otherwise unchanged from the prior
+pass except for this one file's contents. NOT a whole-tree copy (the
 source repo has hundreds of Go files across the whole provider, plus docs/examples/history) — this seed
 carries:
 
 - `.forge/quality_gate_cmd` (from `3b2e2ca4` itself, byte-identical to `e04638bc^`'s copy) plus
-  `.forge/project.json` (restored from `e04638bc^` under T1 1497, above — absent from `3b2e2ca4`'s own
-  tracked tree) — 2 files.
+  `.forge/project.json` (restored — absent from `3b2e2ca4`'s own tracked tree; FINAL content is the live
+  capture, "T1 1497 — the live capture" below) — 2 files.
 - `forge/skills/<id>/SKILL.md` for the nine ids — the skills' REAL location at this pin (the SDKv2-era
   `artifactRoot: 'forge'` layout) — 9 files.
 - `AGENTS.md`, `README.md`, `go.mod`, `go.sum`, `main.go` at the repo root — 5 files. Byte-identical to
@@ -163,11 +171,12 @@ than copied from the old seed, for a clean chain of custody) was safe.
 - **`main.go` is carried but its own package is not buildable in this seed** — same reasoning as before
   (it imports the top-level `azuredevops` registration package, outside the GATE's closure); the declared
   GATE never touches `package main`.
-- **`.forge/project.json` restores the ignored-untracked contract file the live ground carried, from its
-  last tracked version (`e04638bc^`), because a tracked-files archive cannot carry an ignored file.** See
-  "T1 1497" above for the full evidence chain (the `.gitignore` line, the dropping merge, the un-ignoring
-  PR). The ONE named deviation this session adds; every other line in this list is carried unchanged from
-  the prior pass.
+- **`.forge/project.json` restores the ignored-untracked contract file the live ground carried, from a
+  byte-exact capture of the live ground's `.forge/` taken 2026-09-05 at `3b2e2ca4` when this story was
+  authored, because a tracked-files archive cannot carry an ignored file.** See "T1 1497 — the live
+  capture" below for the full evidence chain (the `.gitignore` line, the dropping merge, the un-ignoring
+  PR, the capture itself). The ONE named deviation this session adds; every other line in this list is
+  carried unchanged from the prior pass.
 - **Skills carried at `forge/skills/<id>/`, not `.forge/skills/<id>/`** — this pin's real, pre-rebuild
   location (`artifactRoot: 'forge'`, the layout the project was onboarded under before the `.forge/`
   convention existed). Confirmed against the real ground's tree at this exact commit
@@ -204,10 +213,10 @@ exit 0. `go vet -tags all` on the same target: clean, exit 0. The seed is a gree
 - Provisioned as its own git repository (the harness runs `git init` on the copy), the same rule every
   other fixture in this directory carries.
 
-## PROOF — `computeContractDrift` on the T1 1497 seed
+## PROOF, first attempt — `computeContractDrift` throws on the July copy (SUPERSEDED)
 
-Run exactly as the brief requires, against the finished seed (`.forge/project.json` restored,
-`.forge/quality_gate_cmd` unchanged):
+Run exactly as the brief requires, against the first-attempt seed (`.forge/project.json` restored from
+`e04638bc^`, `.forge/quality_gate_cmd` unchanged):
 
 ```
 node --experimental-strip-types measure-drift.mjs   # imports computeContractDrift from packages/projects/reset.ts
@@ -250,23 +259,109 @@ harder miss than either prior measurement (`c1a8fbca`'s `skillMoves: []` on an u
 bare-`3b2e2ca4` `skillMoves: []` on a null config) — the CALL ITSELF cannot complete on this seed. No
 `expectedChanges` widening is possible or attempted; there is no drift report to widen against.
 
-## STOP — S3 is NOT re-pointed
+Verdict on the July copy: not "exactly the nine skill moves" — not any report at all. Per the brief ("If
+it is not exactly those nine moves … STOP and report — do not re-point"), this was a harder miss than
+either prior measurement (`c1a8fbca`'s `skillMoves: []` on an unchanged config, or the bare-`3b2e2ca4`
+`skillMoves: []` on a null config) — the CALL ITSELF could not complete on that seed. The open question it
+left: a tracked historical `project.json`, however faithfully restored, predates the product's own schema
+migration and can never validate against the CURRENT loader — the fixture needed a copy of the contract
+file from the SAME MOMENT the product's schema was already current, which no commit in the source repo's
+git history carries tracked (the schema migrated after the ignore already hid the file — see "Why not
+`c1a8fbca`" above). That gap is what the live capture, below, closes.
 
-Three measurements now, three different failure shapes, none matching S3's nine removals:
-`c1a8fbca` → `skillMoves: []` (already fixed); bare `3b2e2ca4` → `skillMoves: []` (nothing declared,
-`config === null`); `3b2e2ca4` + T1 1497's restored `project.json` → `computeContractDrift` THROWS
-(old-schema config collides with the sidecar injection the CURRENT loader performs). `.forge/project.json`
-was restored exactly as ruled — verbatim, from `e04638bc^`, nothing else touched — and it still does not
-produce a runnable drift report, let alone the nine skill relocations. `tests/stories/S3.story.mjs` is
-UNCHANGED this session — still `ground: { project: 'terraform-provider-betterado', … }`, the real ground.
+## T1 1497 — the live capture (final)
 
-The open decision for the next planning pass is now sharper than before: restoring the historical
-`project.json` verbatim cannot serve S3 while the product's config loader has moved past that file's
-schema. Either (a) migrate the restored `project.json` to the current `testProcess` shape as ITS OWN
-disclosed deviation (no longer "verbatim" — a plan-level call, since the brief's wording for this ruling
-was explicitly VERBATIM), (b) adopt `1ad7f7ae` (real, pre-drop drift, but needs a fresh GATE-closure
-derivation against the rewritten servicehook package — see the "candidate earlier pin" trait above), or
-(c) reconsider whether a fixture seed frozen at a single historical SHA can ever satisfy a story whose
-premise depends on the CURRENT product's schema. This session does not choose among them.
+A tarball of betterado's `.forge/` was captured directly off the LIVE ground on 2026-09-05T01:22Z — the
+day this story was authored — at `HEAD 3b2e2ca4`, working tree clean (`git status --porcelain` empty).
+Because the source repo's own git history never carries a TRACKED `project.json` in the current schema at
+this SHA (the schema migration happened server-side, in the live ground's own untracked, gitignored copy,
+after `e04638bc` dropped the tracked one and before PR #72 re-tracked a fresh one), a byte-exact capture of
+the file as it stood on disk at that moment is the only way to get the REAL pre-rebuild contract in its
+CURRENT-schema form. `project.json`'s content was independently confirmed: `testProcess` typed (no flat
+`ci_gate`/`ci_fix_cmd`/`ci_gate_unset_env`/`acceptance_gate` keys — the schema this project actually ran
+under when S3 was authored), `artifactRoot: "forge"`, and the same nine skill ids S3 has always declared.
 
-**Stories served.** None yet.
+**Deviation.** Restores the ignored-untracked contract file the live ground carried, from a byte-exact
+capture of the live ground's `.forge/` taken 2026-09-05 at `3b2e2ca4` when this story was authored,
+because a tracked-files archive cannot carry an ignored file.
+
+**Evidence.**
+- `.gitignore` at `3b2e2ca4`, line 12: `.forge/` — the whole directory is ignored (see "T1 1497, first
+  attempt" above for the full comment); this is WHY `git archive`/`git show` can never produce this file at
+  this SHA and a live, out-of-band capture was the only route.
+- `e04638bc`'s merge dropped the tracked copy; `15a74d8a` (PR #72) narrowed the ignore so a fresh one could
+  land tracked again — the same two facts recorded against the first attempt, now the reason NEITHER git
+  history endpoint (`e04638bc^`'s stale schema, nor `3b2e2ca4`'s own tracked tree, which has none at all)
+  can serve as this fixture's source; only a live capture, taken between those two events, can.
+- File: 11395 bytes, sha256 `0b42c0188847bbf38f7605ec86779eccacd16df8e92696bcefa738a495cc93a4` (full digest;
+  the ruling's short form `0b42c0188847bbf3` is this digest's first 16 hex characters). Copied byte-for-byte
+  into `seed/.forge/project.json`; `sha256sum` of the seed file matches the capture exactly.
+- Secrets-scanned before copying (own check, not merely trusted): the file contains environment-variable
+  NAMES only (`AZDO_PERSONAL_ACCESS_TOKEN`, `TF_ACC`, `AZDO_ORG_SERVICE_URL`, inside `requiresEnv` arrays
+  and prose comments) and no values, tokens, or secrets of any kind. Nothing else from the capture's `.forge/`
+  (which also held live credentials under `.forge/demo/auth/`) was copied — `project.json` alone.
+- `.forge/quality_gate_cmd` is unaffected — already present at `3b2e2ca4` itself, unchanged by either
+  restoration attempt.
+
+**Files.** Count unchanged at 125 (one file's CONTENT replaced, not added). Method-C digest of `seed/`
+after this replacement: **`49416ee66caaf3d4`** (superseding the first attempt's `5d59188fe5785cf1`).
+
+## PROOF — `computeContractDrift` on the live-capture seed
+
+`computeContractDrift(seed, { appType: 'cli' })` returns a full report — no throw. `skillMoves` is EXACTLY
+the nine relocations `forge/skills/<id>` → `.forge/skills/<id>` S3's `expectedChanges` name: `ado-api-explorer`,
+`ado-browser-inspector`, `ado-demo`, `ado-release-explorer`, `breaking-change-detector`,
+`resource-scaffolder`, `schema-refactor`, `tf-acceptance-test-author`, `tfplugindocs-gen`. Every other row:
+`testProcess.local` → `preserve` (hand-authored), `testProcess.ci` → `preserve` (hand-authored),
+`testProcess.acceptance` → `unchanged`, `standing_work_item_acs` → `unchanged`, `demoProcess` → `preserve`
+(hand-authored), `releaseProcess` → `preserve` (starter-silent), `buildProcess` → `unchanged`, `skills` →
+`regenerate` (the row that carries `skillMoves`). `gitignoreDrift.action: unchanged`, `commandAdvisories: []`.
+Matches the brief's fence exactly — no widening, no STOP.
+
+**What `applyContractReset` actually writes, verified by running it (not assumed).** Applied against a
+provisioned copy of the seed: the nine skill directories move (`guardedRename`); `.forge/project.json` is
+UNCONDITIONALLY re-serialised (`JSON.stringify(merged, null, 2) + '\n'`) whenever any row is
+`'regenerate'`/`'add'` — here the `skills` row is `'regenerate'`, so the rewrite fires even though no
+config VALUE changes. Diffed the before/after file: the only content difference is JSON string-escaping
+normalisation (`—`→`—`, `→`→`→`, `⇒`→`⇒` — Node's `JSON.stringify` does not escape non-ASCII
+by default) — zero semantic change. `.gitignore` is untouched (`gitignoreFixed: false` — the seed carries
+none, so `gitignoreDrift.action` was already `unchanged`).
+
+**expectedChanges widened — two classes, both `reset.ts`-verified, neither guessed.** Simulated the exact
+fence function (`classifyOwnGroundDrift`, `scripts/stories/ground-hash.mjs`) against the seed's own
+`groundIgnoreFromGit` (the fixture carries no `.gitignore`, so nothing is ignored on this ground — unlike
+the real ground, where `.forge/`'s wholesale ignore at authoring time is why S3 only ever had to declare
+the nine REMOVALS). Against the CURRENT nine-removal-only `expectedChanges`, the fence calls TEN paths
+`UNDECLARED`: the nine ARRIVALS at `.forge/skills/<id>/SKILL.md` (`change: 'added'`) and the
+`.forge/project.json` re-serialisation (`change: 'modified'`) — both real, both `beat: 5`, both written by
+`applyContractReset` and nothing else. Added all ten to `expectedChanges`; re-ran the same simulation with
+the full 19-entry set: `undeclared: []`, `unmatchedDeclarations: []`. Never widened past what
+`applyContractReset` demonstrably writes.
+
+## S3 IS re-pointed
+
+`tests/stories/S3.story.mjs` now declares `ground: { project: 'story-s3', fixture:
+'go-provider-old-contract', realSpawn: true, budget_usd: 25, expectedChanges: […19 entries…] }`. Every
+real-ground token (routes, `card-id`/`project-id`, fills, narration) re-authored to `story-s3`; `NORTH_STAR`
+and `GATE` constants unchanged (verbatim from the restored contract, matching what the fixture's
+`.forge/project.json`/`quality_gate_cmd` actually carry); the `kb` field stays `terraform-provider-betterado`
+(untouched — it travelled with the byte-exact `project.json` capture), per S4's precedent for a field the
+fence does not require a fixture-side asset for.
+
+**Flagged, not fabricated: beat 10's live truth is UNVERIFIED on this fixture, and likely FALSE as
+constituted.** Ran `packages/projects/preflight.ts`'s `runPreflight` directly (not the DOM — file-scoped,
+same rigour as the drift proof) against a provisioned-and-reset copy of `story-s3`: `ok: false`, two HARD
+failures — **C2** (the seed carries no `.gitignore` at all, so forge's own scratch paths, e.g.
+`.forge/work-items/`, are not git-ignored) and **C4** (missing `roadmap.md` in the project root — present in
+the real repo at `3b2e2ca4` but never part of this seed's GATE-closure carry — AND missing
+`brain/projects/story-s3/profile.md`, forge's OWN central Brain 3, keyed by the project's directory name,
+which a never-onboarded fixture cannot have without fabricating one). Beat 10 asserts
+`preflight-status: 'ok'`/`flow-ready: 'true'` — this measurement says the fixture cannot honestly clear
+that bar as built. `.gitignore` and `roadmap.md` could be added (real, tracked files at `3b2e2ca4`, not
+fabricated) to clear C2 and half of C4; the Brain-3 half has no non-fabricated fix available to this
+session (copying the real Brain 3 under `story-s3`, or teaching C4 to key off `config.kb` instead of the
+directory name, are both product/plan-level calls). NOT fixed unilaterally here — named for the next
+planning pass, per the same standing rule every STOP in this file has followed.
+
+**Stories served.** S3 (`tests/stories/S3.story.mjs`), beats 1–9 and 11–12 re-pointed and file-scoped
+clean; beat 10's live-DOM truth carries the open caveat above.
