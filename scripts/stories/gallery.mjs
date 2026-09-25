@@ -122,6 +122,18 @@ export function storyRowFrom(result) {
   });
 }
 
+/**
+ * Findings row 56 (second half) — the `spend` field `story.json` carries.
+ * Narrowed to exactly `{measured, usd, label}`, the shape PR #890's
+ * `spendFieldFor` reads, NEVER the whole `summariseRunSpend` object: `priced`
+ * and `notes` are console diagnostics for the run's own transcript, not the
+ * artifact's stable contract, and a reader downstream must not start relying
+ * on a field that is free to change shape whenever the console wording does.
+ */
+export function artifactSpend(spend) {
+  return Object.freeze({ measured: spend.measured, usd: spend.usd, label: spend.label });
+}
+
 const esc = (s) =>
   String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
