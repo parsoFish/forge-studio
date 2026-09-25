@@ -3,7 +3,7 @@
 - **Status:** accepted (operator, 2026-08-31, at gate H5 — `docs/roadmaps/1.0.md` §5)
 - **Amended:** 2026-08-31, same sitting — §1's tsconfig project-reference clause, in favour of the blueprint spec's [§3](../superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md) "no build step" decision. The amendment and its evidence are in §1 below.
 - **Amended:** 2026-08-31 (operator ruling, M3-A) — §1's `exports` clause, to permit an **additive** `"./*": "./*"` subpath alongside the single root entry. The amendment and its evidence are in §1 below.
-- **Amended:** 2026-09-25 (M7-C OD, bead `forge-8vfn.5.31`, lane-ratified under ruling 666) — §1's `exports` clause again, RETIRING the M3-A `"./*"` subpath now that its stated purpose is discharged. The amendment and its evidence are in §1 below.
+- **Amended:** 2026-09-25 (M7-C OD, bead `forge-8vfn.5.31`) — §1's `exports` clause again, RETIRING the M3-A `"./*"` subpath now that its stated purpose is discharged. The amendment and its evidence are in §1 below.
 - **Supersedes:** [ADR 042](./042-surface-cap-scope-and-testability.md) — the `orchestrator/` surface cap and its three boundary rulings are replaced by per-package caps. ADR 042's *context* (why a cap exists) stands; its *object* does not, because `orchestrator/` ceases to exist as a unit at M3.
 - **Relates to:** [ADR 027](./027-studio-object-model.md) (definitions as data), [ADR 028](./028-flow-engine.md) (the flow engine that becomes `@forge/flows`), [ADR 043](./043-generic-interactive-surface.md) (the spine that becomes `@forge/sessions`), [ADR 045](./045-operator-workspace-and-promotion.md) (`_local/` resolution, which lands in `@forge/kernel`).
 - **Implements:** `docs/roadmaps/1.0.md` §0 (the allow-graph and the 800-line file cap) and §4 M2.
@@ -67,8 +67,7 @@ its own `test` script, and its own `tsconfig.json` extending the root.
 > `./index.ts` **and** that the subpath entry is present, which is the invariant
 > this amendment actually intends.
 
-> **Amendment, 2026-09-25 (M7-C OD, bead `forge-8vfn.5.31`, lane-ratified under
-> ruling 666).** The M3-A amendment named its own retirement condition without
+> **Amendment, 2026-09-25 (M7-C OD, bead `forge-8vfn.5.31`).** The M3-A amendment named its own retirement condition without
 > spelling out the word: `"./*"` was **additive**, there so 756 deep-specifier
 > imports the M3 move emitted would keep resolving **while nothing had been
 > repointed yet**. Bead `forge-8vfn.5.31` (filed 2026-09-02, the same wave)
