@@ -210,6 +210,16 @@ export function validateStory(raw) {
     requireNonEmptyString(b.act, `${at}.act`);
     requireNonEmptyString(b.say, `${at}.say`);
 
+    // Findings row 61 — `costless: true` is the beat's own assertion that it
+    // dispatches nothing at all, enforced at run time by comparing two
+    // measured spend readings (`costlessBeatVerdict`, `spend.mjs`). Boolean
+    // only, fail-closed like every other field here: a coerced truthy string
+    // would let a typo silently assert a beat is costless when the author
+    // meant something else, or nothing.
+    if (b.costless !== undefined && typeof b.costless !== 'boolean') {
+      fail(`${at}.costless`, `expected a boolean, got ${JSON.stringify(b.costless)}`);
+    }
+
     const e = b.expect;
     if (e === null || typeof e !== 'object') fail(`${at}.expect`, 'expected an object');
     if (typeof e.route !== 'string' || !e.route.startsWith('/')) {
@@ -297,6 +307,11 @@ export function validateStory(raw) {
       say: b.say,
       do: steps,
       ...(wait === undefined ? {} : { wait }),
+      // Named here too, for the 7.6.82 reason every other optional field in
+      // this rebuild is: validated above and not carried through would be
+      // validated-and-discarded, so a story that declared `costless: true`
+      // would silently run with no enforcement of it at all.
+      ...(b.costless === undefined ? {} : { costless: b.costless }),
       expect: Object.freeze({
         route: e.route,
         data: Object.freeze({ ...e.data }),
