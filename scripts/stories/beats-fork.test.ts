@@ -105,3 +105,32 @@ test('cases are expanded in DECLARED ORDER, not sorted or reordered', () => {
   const out = expandForkedBeats([reordered]);
   assert.deepEqual(out.map((e) => e.label), ['1[webapp]', '1[api]', '1[cli]']);
 });
+
+// ────────────────────────────────────────────────────────────────── door forks
+
+// T1 ruling 1350 — S7 beat 3's real shape: `over: 'authoring-door'` names no
+// `fill` step in this beat's own `do`. A door fork is DECLARED and INERT: the
+// runner performs the beat ONCE, unexpanded, never once per case.
+const doorForkedBeat = Object.freeze({
+  act: 'Describe the skill to the creation agent',
+  do: Object.freeze([
+    Object.freeze({ fill: 'authoring-launcher-project', with: 'mdtoc' }),
+    Object.freeze({ press: 'start-authoring' }),
+  ]),
+  expect: Object.freeze({ route: '/skills/new', data: Object.freeze({ 'minted-session-id': '<authoringSessionId>' }) }),
+  say: 's',
+  fork: Object.freeze({ over: 'authoring-door', cases: Object.freeze(['creation-agent', 'manual-form']) }),
+});
+
+test('a DOOR fork expands to exactly ONE entry — declared, not driven per case', () => {
+  const out = expandForkedBeats([plainBeat, doorForkedBeat, plainBeat]);
+  assert.equal(out.length, 3, 'the door fork contributes ONE entry, not one per case');
+  assert.deepEqual(out.map((e) => [e.number, e.label]), [[1, '1'], [2, '2'], [3, '3']]);
+});
+
+test('a DOOR fork\'s single entry carries the fork undisturbed, for the runner to report', () => {
+  const out = expandForkedBeats([doorForkedBeat]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].beat, doorForkedBeat, 'passed through UNCHANGED, exactly like an unforked beat');
+  assert.deepEqual(out[0].doorFork, { over: 'authoring-door', cases: ['creation-agent', 'manual-form'] });
+});
