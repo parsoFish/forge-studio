@@ -29,11 +29,10 @@ import { tmpdir } from 'node:os';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import yaml from 'js-yaml';
 
-import { dispatchRoute, DRY_BRIDGE_ENV } from '@forge/kernel';
+import { dispatchRoute, DRY_BRIDGE_ENV, readBoundedLog, boundedLogSegments } from '@forge/kernel';
 import { approveHook } from '@forge/library/studio/hook-approval-ledger.ts';
 import { libraryRoutes, type LibraryRouteContext } from '../../routes.ts';
-import { hookTestFireLogSegments } from '../../bridge-studio-hooks-test-fire.ts';
-import { readBoundedLog } from '@forge/kernel';
+import { HOOK_TEST_FIRE_LOG_DIR } from '../../bridge-studio-hooks-test-fire.ts';
 import { fixtureAgentFacts } from '../test-fixtures/agent-fixture.ts';
 import { fixtureFlowSource } from '../test-fixtures/flow-fixture.ts';
 import { inertAuthoringSession } from '../test-fixtures/authoring-session-fixture.ts';
@@ -98,7 +97,7 @@ test('an UNAPPROVED hook is refused: 409, a clear message, nothing recorded', as
   const { status, body } = await postTestFire('unapproved-test-fire-hook');
   assert.equal(status, 409);
   assert.match(String(body.error), /not approved/i);
-  const log = readBoundedLog(logsRoot, hookTestFireLogSegments('unapproved-test-fire-hook'));
+  const log = readBoundedLog(logsRoot, boundedLogSegments(HOOK_TEST_FIRE_LOG_DIR, 'unapproved-test-fire-hook'));
   assert.deepEqual(log, [], 'an unapproved test-fire attempt must not be recorded as a run');
 });
 
@@ -113,7 +112,7 @@ test('an approved, UNBOUND hook still test-fires (binding is not required)', asy
   assert.equal(body.exitCode, 0);
   assert.equal(body.event, 'SessionEnd');
 
-  const log = readBoundedLog<Record<string, unknown>>(logsRoot, hookTestFireLogSegments('approved-unbound-hook'));
+  const log = readBoundedLog<Record<string, unknown>>(logsRoot, boundedLogSegments(HOOK_TEST_FIRE_LOG_DIR, 'approved-unbound-hook'));
   assert.equal(log.length, 1);
   assert.equal(log[0]!.outcome, 'ran');
   assert.equal(log[0]!.exitCode, 0);

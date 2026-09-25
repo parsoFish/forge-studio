@@ -22,10 +22,10 @@ import { resolveGuardedPath } from '@forge/kernel';
 import yaml from 'js-yaml';
 
 import {
-  sendJson, allowedOrigin, sanitizeError, pathOnly, listCycles, readBoundedLog,
+  sendJson, allowedOrigin, sanitizeError, pathOnly, listCycles, readBoundedLog, boundedLogSegments,
   guardedMtime, guardedReadFileTail, type StudioContext, type RouteContext,
 } from '@forge/kernel';
-import { hookTestFireLogSegments, type HookTestFireLogEntry } from './bridge-studio-hooks-test-fire.ts';
+import { HOOK_TEST_FIRE_LOG_DIR, type HookTestFireLogEntry } from './bridge-studio-hooks-test-fire.ts';
 import { assertSkillSlug } from '@forge/kernel/ids.ts';
 import { scanHookFireSummary, HOOK_FIRE_SCAN_MAX_CYCLES } from './studio/hook-fire-summary.ts';
 import {
@@ -239,7 +239,7 @@ export async function handleHookDetail(req: IncomingMessage, res: ServerResponse
         recentFireCount: fireSummary?.fireCount ?? 0,
         ...(fireSummary ? { lastFireAt: fireSummary.lastFireAt, lastFireOutcome: fireSummary.lastFireOutcome } : {}),
         // forge-6gv.8.1 (library-33): operator test-fires, newest first, always an array (never absent).
-        testFireRuns: readBoundedLog<HookTestFireLogEntry>(ctx.logsRoot, hookTestFireLogSegments(id)),
+        testFireRuns: readBoundedLog<HookTestFireLogEntry>(ctx.logsRoot, boundedLogSegments(HOOK_TEST_FIRE_LOG_DIR, id)),
         // W7-B4 (library-09): the approval RECORD the resolved-state panel
         // renders — approvedAt + the distinct overridden act + its reason.
         // Present iff a live ledger entry exists; never fabricated.
