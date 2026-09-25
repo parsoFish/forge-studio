@@ -29,7 +29,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { sweepStoryRemotesFromManifest } from './sweep.mjs';
+import { sweepStoryRemotesFromManifest } from './sweep-remotes.mjs';
 
 /** A forge root carrying a minted-remotes manifest with `rows`. */
 function rootWithManifest(rows: unknown[] | string): string {

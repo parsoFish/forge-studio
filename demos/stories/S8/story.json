@@ -2,9 +2,10 @@
   "story": {
     "id": "S8",
     "ground": {
-      "project": "mdtoc",
+      "project": "story-s8",
       "realSpawn": false,
-      "budget_usd": 0
+      "budget_usd": 0,
+      "fixture": "node-library"
     },
     "docs": {
       "kind": "how-to",
@@ -688,7 +689,15 @@
         "[stories] queue claim: ready-for-review/ holds 0"
       ]
     },
+    "artefacts": {
+      "dest": null,
+      "captured": [],
+      "cleared": [],
+      "refused": [],
+      "unremoved": []
+    },
     "lines": [
+      "[stories] trailing sweep KEPT projects/story-s8 — a fixture ground is judged before it is torn down",
       "[stories] queue claim: done/ holds 0",
       "[stories] queue claim: failed/ holds 0",
       "[stories] queue claim: in-flight/ holds 0",
@@ -726,5 +735,8 @@
     "escapes": [],
     "groundEscapes": [],
     "reappeared": []
+  },
+  "realGrounds": {
+    "moved": []
   }
 }

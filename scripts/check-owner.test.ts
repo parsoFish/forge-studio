@@ -395,3 +395,53 @@ test('a row may be owned by any real package directory; an owner that names noth
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// The "Per-package LOC caps" table's row pattern must accept a hyphenated
+// package name. `forge-docs` (the G3 second factory) is real, but
+// `parsePackageTable`'s row regex was `` /^`([a-z/]+)`$/ `` — no hyphen, no
+// digit — so its aggregate row parsed as "not a package row" and both
+// `audit`'s packageDrift check and `--write`'s recompute silently skipped it:
+// not flagged, not corrected, not visible anywhere, exactly the "cap-table
+// parser accepts a hyphenated package name" gap check-package-caps.mjs's
+// `parseCaps` already had one fix for (see that file's own test of the same
+// name) — this is the sibling regex in the OTHER guard that reads this table.
+// ---------------------------------------------------------------------------
+
+test('it FAILS on a per-package "files" column that disagrees with the rows — a hyphenated package (forge-docs)', () => {
+  withQuarry(
+    (rows) => rows.map((l) => (l.trim().startsWith('| `forge-docs` |') ? l.replace(/^(\|\s*`forge-docs`\s*\|)\s*\d+\s*\|/, '$1 999999 |') : l)),
+    (q, b) => {
+      const { code, out } = run(['--quarry', q, '--baseline', b]);
+      assert.equal(code, 1, `a wrong forge-docs files column must fail — got exit 0:\n${out}`);
+      assert.ok(
+        out.includes('package table drift: `forge-docs` files — header says 999999'),
+        `the hyphenated package and the header number must be named — got:\n${out}`,
+      );
+    },
+  );
+});
+
+test('--write recomputes a hyphenated package (forge-docs) files/loc, not just the total', () => {
+  withQuarry(
+    (rows) => rows.map((l) => (
+      l.trim().startsWith('| `forge-docs` |')
+        ? l.replace(/^(\|\s*`forge-docs`\s*\|)\s*\d+\s*\|\s*\d+\s*\|/, '$1 999999 | 999999 |')
+        : l
+    )),
+    (q, b) => {
+      const before = run(['--quarry', q, '--baseline', b]);
+      assert.equal(before.code, 1, `the doctored forge-docs row must start red:\n${before.out}`);
+
+      const written = run(['--quarry', q, '--baseline', b, '--write']);
+      assert.equal(written.code, 0, `--write must exit 0 — got:\n${written.out}`);
+      assert.match(written.out, /check-owner: WROTE/);
+
+      const after = run(['--quarry', q, '--baseline', b]);
+      assert.equal(after.code, 0, `the checker must pass after --write — got:\n${after.out}`);
+
+      const rewrittenRow = readFileSync(q, 'utf8').split('\n').find((l) => l.trim().startsWith('| `forge-docs` |'));
+      assert.ok(rewrittenRow && !rewrittenRow.includes('999999'), `forge-docs's doctored files/loc must have been recomputed — got:\n${rewrittenRow}`);
+    },
+  );
+});

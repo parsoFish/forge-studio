@@ -28,6 +28,14 @@
  * that would exceed its cap parks for a cull, a split, or an operator-ratified
  * new cap — never a silent raise (QUARRY.md §"Per-package LOC caps").
  *
+ * THE NOTE CELL is checked too (T1 ruling 1275(i)): every raise since M2
+ * hand-APPENDED a dated entry to the same cell instead of replacing it, and
+ * QUARRY.md merge-conflicted on nearly every PR because every lane's raise
+ * touched the same line. `noteViolation()` fails a note that still carries
+ * more than one dated entry, or that has simply grown long — the note's job
+ * is naming the CURRENT cap's authority in one short sentence; the raise
+ * history stays recoverable from `git log -p -- QUARRY.md`.
+ *
  * USAGE
  *   node scripts/check-package-caps.mjs                 # the gate
  *   node scripts/check-package-caps.mjs --json          # machine-readable
@@ -148,12 +156,14 @@ export function measurePackages(root = FORGE_ROOT, lister = productionFiles) {
 }
 
 /**
- * The ratified caps from QUARRY.md's "Per-package LOC caps" table. Rows look
- * like `| \`flows\` | 62 | 21,327 | **22,500** | note |`; the total row and the
+ * Every capped row of QUARRY.md's "Per-package LOC caps" table, cap and note
+ * together — one parse, so the two can never drift apart the way a second
+ * hand-copied row pattern would. Rows look like
+ * `| \`flows\` | 62 | 21,327 | **22,500** | note |`; the total row and the
  * apps/* rows carry no package cap this gate governs.
  */
-export function parseCaps(markdown) {
-  const caps = new Map();
+export function parseCapRows(markdown) {
+  const rows = new Map();
   for (const line of markdown.split('\n')) {
     const t = line.trim();
     if (!t.startsWith('|')) continue;
@@ -163,9 +173,41 @@ export function parseCaps(markdown) {
     if (!name) continue; // a header, the **total** row, or `apps/forge`
     const cap = cells[3].replace(/\*/g, '').replace(/,/g, '').trim();
     if (!/^\d+$/.test(cap)) continue;
-    caps.set(name[1], Number.parseInt(cap, 10));
+    rows.set(name[1], { cap: Number.parseInt(cap, 10), note: cells[4] ?? '' });
   }
-  return caps;
+  return rows;
+}
+
+/** Just the cap numbers — the shape every caller before this gate's note check wanted. */
+export function parseCaps(markdown) {
+  return new Map([...parseCapRows(markdown)].map(([name, row]) => [name, row.cap]));
+}
+
+/**
+ * T1 ruling 1275(i). Every raise since M2 hand-APPENDED a dated
+ * "**Raised X → Y (…)**" (or Re-seeded/Pruned/DECREASE/NEW ROW) entry to the
+ * same note cell instead of replacing it, so the cell only ever grew — one
+ * row reached 40,000+ characters — and QUARRY.md merge-conflicted on nearly
+ * every PR because every lane's raise touched the same line. The full raise
+ * history is not lost: it stays recoverable from `git log -p -- QUARRY.md`.
+ * The note cell's job is narrower — name the CURRENT cap's authority in one
+ * short sentence — so this gate fails a note that still carries more than
+ * one dated entry (counted by its bold `**…**` markers, which is how every
+ * entry so far has been written) or that has simply grown long regardless of
+ * markup, and tells the author to replace it, not append to it.
+ */
+export const NOTE_MAX_LENGTH = 300;
+const BOLD_SPAN_RE = /\*\*[^*]+\*\*/g;
+
+export function noteViolation(note) {
+  const boldEntries = note.match(BOLD_SPAN_RE)?.length ?? 0;
+  if (boldEntries > 1) {
+    return `carries ${boldEntries} bold-marked history entries — replace the note with the current cap's authority in one short sentence (the prior raises stay in \`git log -p -- QUARRY.md\`); do not append another`;
+  }
+  if (note.length > NOTE_MAX_LENGTH) {
+    return `is ${note.length} characters, over the ${NOTE_MAX_LENGTH}-character short-note limit — replace the note with the current cap's authority in one short sentence (the prior raises stay in \`git log -p -- QUARRY.md\`); do not append another`;
+  }
+  return null;
 }
 
 function parseOverrides(argv) {
@@ -185,7 +227,8 @@ function parseOverrides(argv) {
 
 export function audit(root = FORGE_ROOT, overrides = new Map(), lister = productionFiles) {
   const measuredLines = measurePackages(root, lister);
-  const caps = parseCaps(readFileSync(join(root, 'QUARRY.md'), 'utf8'));
+  const capRows = parseCapRows(readFileSync(join(root, 'QUARRY.md'), 'utf8'));
+  const caps = new Map([...capRows].map(([name, row]) => [name, row.cap]));
   for (const name of overrides.keys()) {
     if (!caps.has(name)) throw new Error(`--cap-override names "${name}", which has no cap row in QUARRY.md`);
   }
@@ -203,7 +246,14 @@ export function audit(root = FORGE_ROOT, overrides = new Map(), lister = product
     if (lines > effective) breaches.push({ name, lines, cap: effective });
   }
   const uncapped = [...measuredLines.keys()].filter((n) => !caps.has(n)).sort();
-  return { packages, breaches, unmeasured, uncapped, formula: FORMULA };
+  // Checked against every capped row regardless of whether it was measured —
+  // a note's shape does not depend on the corpus being readable.
+  const noteViolations = [];
+  for (const [name, { note }] of [...capRows].sort()) {
+    const reason = noteViolation(note);
+    if (reason) noteViolations.push({ name, reason });
+  }
+  return { packages, breaches, unmeasured, uncapped, noteViolations, formula: FORMULA };
 }
 
 /**
@@ -242,7 +292,7 @@ export function main(argv, lister = productionFiles) {
   }
   if (argv.includes('--json')) {
     console.log(JSON.stringify(result, null, 2));
-    return result.breaches.length || result.unmeasured.length || result.uncapped.length ? 1 : 0;
+    return result.breaches.length || result.unmeasured.length || result.uncapped.length || result.noteViolations.length ? 1 : 0;
   }
 
   const rows = Object.entries(result.packages);
@@ -265,7 +315,10 @@ export function main(argv, lister = productionFiles) {
   for (const b of result.breaches) {
     console.error(`check-package-caps: packages/${b.name} is ${b.lines} production lines, over its ratified cap of ${b.cap} by ${b.lines - b.cap}`);
   }
-  const bad = result.breaches.length + result.unmeasured.length + result.uncapped.length;
+  for (const v of result.noteViolations) {
+    console.error(`check-package-caps: \`${v.name}\`'s QUARRY.md cap-table note ${v.reason}`);
+  }
+  const bad = result.breaches.length + result.unmeasured.length + result.uncapped.length + result.noteViolations.length;
   if (bad > 0) {
     console.error(
       'check-package-caps: FAIL — a package over its cap parks for a cull, a split, or an operator-ratified new cap (QUARRY.md). Never a silent raise.',

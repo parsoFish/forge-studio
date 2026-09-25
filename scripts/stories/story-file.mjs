@@ -14,6 +14,8 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { trackedProjectIds } from './tracked-projects.mjs';
+import { storyFixtureNames } from './sweep.mjs';
+import { FIXTURE_NAME } from './fixture-ground.mjs';
 import { fail, warn, requireNonEmptyString } from './story-schema-fail.mjs';
 import {
   MAX_DECLARED_WAIT_MS,
@@ -116,6 +118,31 @@ export function validateStory(raw) {
     }
   }
 
+  // M7-D — `ground.fixture` names a forge-owned FIXTURE ground provisioned
+  // from `tests/stories/grounds/<fixture>/seed/`, rather than a real project
+  // under `projects/`. Validated here on TWO counts, both namespace guards:
+  // the name itself must be a safe single path segment (`FIXTURE_NAME`, the
+  // same shape `fixture-ground.mjs` refuses on at provisioning time — this
+  // check exists so a bad name is caught at LOAD rather than after a costed
+  // run has booted a browser), and `ground.project` must be inside this
+  // story's own reserved sweep namespace (`storyFixtureNames`) — the guard
+  // that keeps a typo'd project from ever being provisioned over, or later
+  // swept as though it were this story's own fixture.
+  if (g.fixture !== undefined) {
+    requireNonEmptyString(g.fixture, 'ground.fixture');
+    if (!FIXTURE_NAME.test(g.fixture)) {
+      fail('ground.fixture', `expected a safe fixture name matching ${FIXTURE_NAME}, got ${JSON.stringify(g.fixture)}`);
+    }
+    const names = storyFixtureNames(raw.id);
+    if (!names.includes(g.project)) {
+      fail(
+        'ground.fixture',
+        `declares project ${JSON.stringify(g.project)}, which is not in this story's own fixture namespace ` +
+        `(${names.join(', ')}) — a fixture ground can only ever be provisioned into a project this story already owns`,
+      );
+    }
+  }
+
   // 7.6.136 — the ground changes this story's PRODUCT legitimately makes.
   // Declared in the PINNED story file so the licence cannot widen at runtime,
   // and validated like `seedIgnoredBorn` above, which is the established shape
@@ -182,6 +209,16 @@ export function validateStory(raw) {
     if (b === null || typeof b !== 'object') fail(at, 'expected an object');
     requireNonEmptyString(b.act, `${at}.act`);
     requireNonEmptyString(b.say, `${at}.say`);
+
+    // Findings row 61 — `costless: true` is the beat's own assertion that it
+    // dispatches nothing at all, enforced at run time by comparing two
+    // measured spend readings (`costlessBeatVerdict`, `spend.mjs`). Boolean
+    // only, fail-closed like every other field here: a coerced truthy string
+    // would let a typo silently assert a beat is costless when the author
+    // meant something else, or nothing.
+    if (b.costless !== undefined && typeof b.costless !== 'boolean') {
+      fail(`${at}.costless`, `expected a boolean, got ${JSON.stringify(b.costless)}`);
+    }
 
     const e = b.expect;
     if (e === null || typeof e !== 'object') fail(`${at}.expect`, 'expected an object');
@@ -270,6 +307,11 @@ export function validateStory(raw) {
       say: b.say,
       do: steps,
       ...(wait === undefined ? {} : { wait }),
+      // Named here too, for the 7.6.82 reason every other optional field in
+      // this rebuild is: validated above and not carried through would be
+      // validated-and-discarded, so a story that declared `costless: true`
+      // would silently run with no enforcement of it at all.
+      ...(b.costless === undefined ? {} : { costless: b.costless }),
       expect: Object.freeze({
         route: e.route,
         data: Object.freeze({ ...e.data }),
@@ -392,6 +434,11 @@ export function validateStory(raw) {
               Object.freeze(e.beat === undefined ? { path: e.path, change: e.change } : { path: e.path, change: e.change, beat: e.beat }))),
           }
         : {}),
+      // M7-D — named here too, for the same 7.6.82 reason: `fixture` is
+      // validated above and must ride in the frozen ground the runner reads,
+      // or the story would validate and then silently run against a real
+      // ground project with no fixture ever provisioned.
+      ...(g.fixture !== undefined ? { fixture: g.fixture } : {}),
     }),
     docs: Object.freeze({ kind: d.kind, title: d.title }),
     beats: Object.freeze(beats),
