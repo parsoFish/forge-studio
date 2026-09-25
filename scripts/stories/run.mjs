@@ -49,6 +49,7 @@ import { sweepStoryResidue } from './sweep.mjs';
 import { provisionFixtureGrounds, teardownFixtureGround } from './fixture-ground.mjs';
 import { captureAndSweepAgentLogs } from './sweep-agent-logs.mjs';
 import { restoreSweptCommitted, stopSchedulerCensusAndRelease, teardownExitCode } from './sweep-teardown.mjs';
+import { preexistingSchedulerVerdict } from './scheduler-preflight.mjs';
 import {
   decideStoryBridge,
   readProcCwd,
@@ -370,6 +371,23 @@ async function main() {
       .map((s) => effectiveCeiling(s.ground.budget_usd, args.ceilingUsd).usd)
       .filter((usd) => Number.isFinite(usd));
     const bridgeCeilingUsd = costedCeilings.length > 0 ? Math.min(...costedCeilings) : null;
+
+    // 4c. `forge-8vfn.8.1.6` follow-up — 4b's ceiling only ever reaches a
+    //     cycle THROUGH the bridge process this run boots: `spawnServeDetached`
+    //     (packages/flows/daemon.ts) starts nothing new while a scheduler pid
+    //     is already alive, so a LEFTOVER daemon from an earlier run (or an
+    //     operator's own) keeps its own, ceiling-less env — silently, since
+    //     the beat that presses Start still succeeds. Scoped to a run that
+    //     actually has a ceiling to lose: a costless batch never needed the
+    //     bridge's env to carry one.
+    if (bridgeCeilingUsd !== null) {
+      const sched = preexistingSchedulerVerdict(ROOT);
+      if (!sched.ok) {
+        console.error(`[stories] REFUSING: ${sched.reason}`);
+        return 1;
+      }
+      console.log(`[stories] scheduler ok — ${sched.reason}`);
+    }
 
     if (provisionResult.refused === null) {
       // 5. Bridge identity — never drive a bridge serving another tree.

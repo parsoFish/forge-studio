@@ -49,6 +49,9 @@ const GH_TOKEN_ENV = 'GH_TOKEN';
  * never touches and which the ceiling never needs to cross: the flow-runner
  * process that enforces it (the `forge serve` daemon this bridge starts)
  * reads it from its OWN env, never from a spawned agent's.
+ *
+ * (a) `resolveCostCeilingOverride` ignores a value `<= 0`, so `--ceiling 0` on a costed story does not halt at 0.
+ * (b) This env binds only a scheduler THIS bridge spawns — a pre-existing one keeps its own; see `scheduler-preflight.mjs`'s refusal.
  */
 const COST_CEILING_ENV = 'FORGE_COST_CEILING_USD';
 
