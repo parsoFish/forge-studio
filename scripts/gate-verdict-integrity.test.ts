@@ -6,7 +6,7 @@
 // gate-*.test.ts copies it, so this file owns the environment it asserts about.
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -97,6 +97,87 @@ jobs:
     assert.doesNotMatch(list.out, /GATE_SH_EXIT=/, `--list must stay a step list: ${list.out}`);
     const lock = gate('--lock-state', join(d, 'no-such-lock'));
     assert.doesNotMatch(lock.out, /GATE_SH_EXIT=/, `--lock-state must stay a one-word answer: ${JSON.stringify(lock.out)}`);
+  });
+
+  /**
+   * Row 83 (T1 1370, production incident): a gate SIGTERM'd while blocked in
+   * `wait_for_suite_lock` wrote `GATE_SH_EXIT=0` into its log — no PASS
+   * lines, a fresh log — while its `.exit` file (the CALLER's own observed
+   * status) correctly said 143. A wrapper trusted the log line over the
+   * file and opened a PR on an ungated tree.
+   *
+   * ROOT CAUSE, confirmed by isolated experiment: bash's EXIT trap DOES
+   * fire on an uncaught SIGTERM even while a foreground command
+   * (`flock -w`) is blocked — but `$?` inside that trap is NOT reliably
+   * 128+signal; measured `ec=0` while the shell's own OUTER caller (a
+   * supervising `wait`) correctly observed 143. An explicit `trap 'exit
+   * 143' TERM` makes both agree, because `exit N` sets `$?` deterministically
+   * before the EXIT trap ever reads it.
+   *
+   * Waits for the gate to actually reach the wait (not just for `spawn` to
+   * return) before sending SIGTERM — the same "measured flaky otherwise"
+   * discipline every sibling gate-*.test.ts fixture in this repo already
+   * uses for a lock hold.
+   */
+  function waitForOutput(child: ReturnType<typeof spawn>, pattern: RegExp, maxMs = 10000): Promise<string> {
+    return new Promise((resolve, reject) => {
+      let buf = '';
+      const cleanup = () => {
+        clearTimeout(timer);
+        child.stdout!.off('data', onData);
+        child.off('exit', onExit);
+      };
+      const timer = setTimeout(() => { cleanup(); reject(new Error(`timed out waiting for ${pattern}: ${buf}`)); }, maxMs);
+      const onData = (d: Buffer) => {
+        buf += d.toString();
+        if (pattern.test(buf)) { cleanup(); resolve(buf); }
+      };
+      const onExit = () => { cleanup(); reject(new Error(`gate exited before matching ${pattern}: ${buf}`)); };
+      child.stdout!.on('data', onData);
+      child.once('exit', onExit);
+    });
+  }
+
+  test('row 83: SIGTERM mid-wait never writes GATE_SH_EXIT=0 while the real exit status is 143', async () => {
+    const d = tree(CI);
+    installedInPlace(d);
+    const c = mkdtempSync(join(tmpdir(), 'gate-vi-camp-'));
+    const lock = join(c, '.suite-lock');
+    writeFileSync(lock, '');
+    // A STRANGER's hold (never this gate's ancestor), so it genuinely blocks
+    // in `wait_for_suite_lock` rather than proceeding past it.
+    const holder = spawn('flock', [lock, 'sleep', '30'], { stdio: 'ignore' });
+    const { FORGE_SUITE_LOCK: _s, FORGE_RUN_LOCK: _r, ...env } = process.env;
+    try {
+      await new Promise((r) => setTimeout(r, 400));
+      const child = spawn('bash', [GATE, d, c], { env: { ...env, FORGE_SUITE_LOCK_WAIT: '30' } });
+      let out = '';
+      child.stdout!.on('data', (b) => { out += b.toString(); });
+
+      await waitForOutput(child, /suite-lock: WAITING on stranger/);
+
+      const exitInfo = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+        child.once('exit', (code, signal) => resolve({ code, signal }));
+      });
+      child.kill('SIGTERM');
+      const { code } = await exitInfo;
+
+      const lines = out.trim().split('\n');
+      const last = lines[lines.length - 1];
+      if (/^GATE_SH_EXIT=/.test(last)) {
+        assert.equal(
+          last, 'GATE_SH_EXIT=143',
+          `the log's marker must match the real exit status, never a bare 0: ${JSON.stringify(lines.slice(-3))}`,
+        );
+      }
+      // OMITTING the line is the other allowed shape (the brief's "or write
+      // NO GATE_SH_EXIT line at all") — but the process's OWN exit status,
+      // which a `.exit` file capturing `$?` would hold, must always be the
+      // real one regardless of what the log says.
+      assert.equal(code, 143, `a SIGTERM'd gate's own exit status (128+15) must be 143: observed code=${code}`);
+    } finally {
+      holder.kill();
+    }
   });
 });
 
