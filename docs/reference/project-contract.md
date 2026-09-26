@@ -556,42 +556,56 @@ declaration**, not two competing fields:
   `verify` steps name the assertion that makes the evidence non-trivial (forge
   runs the step and encodes its concrete result), `present` steps say how it is
   surfaced. This is the primary declaration.
-**The demo skill derives the executed demo from `demoProcess`.** A
-`demoProcess` must include at least one `capture` step and one `verify` step —
-checked by preflight (advisory).
+
+The integrate band derives the executed demo from `demoProcess` directly (see
+below). A `demoProcess` must include at least one `capture` step and one
+`verify` step — checked by preflight (advisory).
 
 The demo is evidence, not a test log. "Tests pass" and "feature is demonstrable"
 are different guarantees. The review phase must show the actual resource (API GET
 response, rendered page screenshot, plan output) — not a table of test names.
 
-**Demo deliverable — an agent-built, per-initiative demo skill, not a fixed JSON
-schema (Stage B).** The Studio **demo-builder** authors the project's reusable
-**demo-generation skill** at `.forge/skills/demo-design/SKILL.md` (the same slug
-the DEMO-SKILL clause checks) — the machinery that, for each completed
-**initiative**, renders a rich, self-contained, Forge-styled HTML demo of *that
-initiative's changes* (before/after of its diff, with real captured output). It is
-NOT a generic current-state showcase: the unit of a demo is "what this initiative
-changed". The operator builds the skill interactively — look-and-feel prompt + the
-`demoProcess` above → the agent authors the skill and renders a real **sample**
-(`.forge/demo/DEMO.html`) from a representative recent change → review → feedback →
-lock for reproducibility. This replaces the rigid `demo.json` contract (whose fixed
-shape was a recurring wedge): demos are bespoke HTML the project's own skill emits,
-`demoProcess` is still the declaration of *what* to capture/verify, and the locked
-skill is what later cycles run per merged initiative.
+**`demoProcess` is the SOLE cycle-time demo input (bead forge-mfv5.2.2).** The
+integrate band derives every checkpoint straight from the declaration above —
+each `capture` step's inline-code span, read as a bare-argv command or a safe
+in-app route — and from the initiative's typed acceptance criteria (an AC's
+`WHEN` clause carrying the same shape becomes its own checkpoint, ahead of
+`demoProcess`'s own, forge-mfv5.1.7). Nothing generated ahead of time is
+required for that derivation to run.
+
+**Demo presentation — an agent-built, per-initiative demo skill, optional and
+presentation-only (Stage B).** The Studio **demo-builder** SESSION may author a
+project-local **demo-generation skill** at `.forge/skills/demo-design/SKILL.md`
+— the machinery that, for each completed **initiative**, renders a rich,
+self-contained, Forge-styled HTML demo of *that initiative's changes*
+(before/after of its diff, with real captured output) for the Studio demo
+page. It is NOT a generic current-state showcase: the unit of a demo is "what
+this initiative changed". The operator builds it interactively — look-and-feel
+prompt + the `demoProcess` above → the agent authors the skill and renders a
+real **sample** (`.forge/demo/DEMO.html`) from a representative recent change
+→ review → feedback → lock for reproducibility. **This composer is never read
+at cycle time** — it shapes only how already-captured evidence is presented in
+Studio (bead forge-mfv5.2.8 tracks folding the session's own output into the
+`demoProcess` declaration more directly); `demoProcess` alone is what a cycle
+captures against.
 
 ---
 
-### DEMO-SKILL — The generated demo-design machinery exists *(advisory)*
+### DEMO-SKILL — The demo declaration drives at least one checkpoint *(advisory)*
 
-`DEMO` checks the demoProcess *shape*; `DEMO-SKILL` checks the demoProcess was
-actually *realised*. DEC-4: a project that declares a `demoProcess` should carry a
-**generated demo-design skill at the fixed path `.forge/skills/demo-design/SKILL.md`**
-(produced by the `demo-design` skill from the project's `demoProcess` + code — it
-encodes the concrete capture commands the demo-agent runs each cycle). The fixed slug
-+ path make this verifiable: `forge preflight` WARNs (`DEMO-SKILL`) when a project
-declares a demoProcess but lacks the generated skill, and onboarding (Step 10)
-generates it. Not applicable (passes) until a `demoProcess` is declared — `DEMO`
-owns that case, so there is no double-warn.
+`DEMO` checks the demoProcess *shape* (≥1 `capture` + ≥1 `verify` step);
+`DEMO-SKILL` checks that shape is *drivable* (bead forge-mfv5.2.2): at least
+one `capture` step's inline-code span must be a bare-argv command — no shell
+metacharacters, since capture spawns it directly with no shell — the SAME
+rule (`extractDrivableCommand`, `@forge/contracts`) the integrate band applies
+when it derives `demo.json`. `forge preflight` WARNs (`DEMO-SKILL`) naming
+every capture step that yields no drivable command and why (no inline-code
+span, or which metacharacter), and onboarding (Step 10) confirms it before
+calling onboarding done. **This clause never checks for a generated file** —
+the demo-builder session's presentation composer (previous section) is not a
+cycle input, so its presence or absence plays no part. Not applicable
+(passes) until a `demoProcess` is declared at all — `DEMO` owns that case, so
+there is no double-warn.
 
 ---
 
@@ -793,7 +807,7 @@ gates structurally cannot see.
 | C10 | Release flow + `forge preflight` — advisory (active when `releaseProcess` declared) | Draft changelog (PM standing AC) + pre-merge finalisation (release-finalizer) + CI release workflow installed; **R1-04-F2: preflight now asserts each declared step's substrate exists (`changelogPath` / `versionFile` / `docsDir`)** |
 | BUILD | `forge preflight` — advisory (R1-04-F3) | `buildProcess` declared (`local` compile/package cmd + `remote` CI-workflow path); a declared `remote` must exist; an inferable-but-undeclared build nudges. Distinct from the test gate (C1) |
 | DEMO | `forge preflight` — advisory | `demoProcess` structural validation: ≥1 capture step + ≥1 verify step |
-| DEMO-SKILL | `forge preflight` — advisory | generated demo-design skill present (`.forge/skills/demo-design/SKILL.md`); routes to demo agent |
+| DEMO-SKILL | `forge preflight` — advisory | ≥1 `demoProcess` capture step drives a checkpoint (`extractDrivableCommand`); routes to demo agent |
 | DEMO-ALIGN | `forge preflight` — advisory | routes to demo agent |
 | ARTIFACTS | `forge preflight` — advisory | Language-specific build-output hints in `.gitignore` (build-**output** hygiene; grouped under the build process with BUILD, kept separate to preserve its `.gitignore`-append auto-fix) |
 | BRAIN | `forge preflight` — advisory | `brain/projects/<name>/themes/` (central forge repo) path-existence scan |
