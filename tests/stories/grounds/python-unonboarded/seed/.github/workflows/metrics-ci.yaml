@@ -1,0 +1,45 @@
+---
+name: DORA Metrics CI
+
+'on':
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  dora-metrics:
+    name: DORA Metrics Tests & Prometheus Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install metrics dependencies
+        run: pip install -r metrics/requirements.txt
+
+      - name: Run DORA metrics pytest suites
+        run: pytest metrics/tests/
+
+      - name: Install prometheus (provides promtool)
+        run: sudo apt-get update -q && sudo apt-get install -y prometheus
+
+      - name: Start metrics server
+        run: |
+          uvicorn metrics.src.main:app --host 0.0.0.0 --port 8000 &
+          sleep 3
+
+      - name: Validate Prometheus metrics format
+        run: curl -sf http://localhost:8000/metrics | promtool check metrics
+
+      - name: Stop metrics server
+        if: always()
+        run: pkill -f "uvicorn metrics.src.main:app" || true

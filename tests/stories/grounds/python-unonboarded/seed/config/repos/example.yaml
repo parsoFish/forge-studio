@@ -1,0 +1,22 @@
+# GitWeave Repository Overlay — smoke-test fixture
+#
+# This file is used by the CI dry-run smoke test job.
+# It exercises the full apply-overlays.py pipeline without touching any external repo.
+
+apiVersion: gitweave.io/v1
+kind: RepositoryOverlay
+
+metadata:
+  name: example-smoke-repo
+
+spec:
+  # Target repository in owner/repo format.
+  repository: my-org/example-smoke-repo
+
+  # Template modules to apply — must include example-template for the CI smoke gate.
+  modules:
+    - name: example-template
+      inputs:
+        project_name: example-smoke-repo
+        enable_ci: true
+        http_port: 8080

@@ -1,0 +1,72 @@
+# GitWeave Repository Overlay — example configuration
+#
+# This file demonstrates the full overlay format. Copy it and customise
+# for your own repository. All fields under spec (except repository) are optional.
+
+apiVersion: gitweave.io/v1
+kind: RepositoryOverlay
+
+metadata:
+  # Unique name for this overlay — used in GitWeave tooling output and logs.
+  name: example-platform-app
+
+spec:
+  # Target repository in owner/repo format.
+  repository: my-org/example-platform-app
+
+  # -------------------------------------------------------------------------
+  # modules — list of GitWeave Copier template modules to apply.
+  # Each entry requires a name; version and inputs are optional.
+  # -------------------------------------------------------------------------
+  modules:
+    - name: lang-node
+      inputs:
+        node_version: "20"
+
+    - name: ci-github-actions
+      version: v2.1.0
+
+    - name: docker-image
+
+  # -------------------------------------------------------------------------
+  # environments — per-environment overrides.
+  # Keys are arbitrary environment names; values support:
+  #   protection_rules — GitHub branch/environment protection settings
+  #   secrets          — list of secret names scoped to this environment
+  #   variables        — string-to-string environment variable map
+  # -------------------------------------------------------------------------
+  environments:
+    dev:
+      variables:
+        LOG_LEVEL: debug
+        NODE_ENV: development
+
+    staging:
+      secrets:
+        - STAGING_API_KEY
+      variables:
+        LOG_LEVEL: info
+        NODE_ENV: staging
+
+    prod:
+      protection_rules:
+        required_reviewers: 2
+        required_status_checks:
+          - ci/build
+          - ci/test
+      secrets:
+        - PROD_DEPLOY_KEY
+        - PROD_API_SECRET
+      variables:
+        LOG_LEVEL: error
+        NODE_ENV: production
+        REGION: us-east-1
+
+  # -------------------------------------------------------------------------
+  # variables — global variables shared across all environments.
+  # These are a flat string-to-string map and are available to all modules.
+  # -------------------------------------------------------------------------
+  variables:
+    team_name: platform
+    cost_centre: infra-001
+    service_tier: critical

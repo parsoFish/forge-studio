@@ -39,8 +39,8 @@ import {
 // `driveBeat` calls it and nothing there calls back — that one-way dependency is
 // why the split went this way round and not the other.
 import { performSteps } from './beats-steps.mjs';
-import { readProgress } from './beats-progress.mjs';
-import { STALL_CEILING_MS, doorWorthRunning } from './beats-agent-proc.mjs';
+import { readProgress, sessionEventLines } from './beats-progress.mjs';
+import { STALL_CEILING_MS, doorWorthRunning, sessionLogDir } from './beats-agent-proc.mjs';
 
 
 
@@ -102,7 +102,7 @@ function predicateFailure(target, err) {
   );
 }
 
-export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null, stallDoor = null, pressedAt = new Map(), cycleWatchFor = null, spendGuard = null) {
+export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null, stallDoor = null, pressedAt = new Map(), cycleWatchFor = null, spendGuard = null, forgeRoot = null) {
   // `pressedAt` DEFAULTS BECAUSE MOST CALLERS DRIVE ONE BEAT. The door suite has
   // ~90 single-beat calls for which a fresh map is exactly right. A MULTI-BEAT
   // caller must thread ONE map across the loop, or every beat gets its own and
@@ -247,6 +247,17 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
       return { value: undefined, source: 'unreadable', carriers: 0 };
     }
   };
+  // T1 ruling 1545 — the SESSION half of the progress bound, beside the KEY
+  // half above. Read off the LIVE page route, never the beat's declared one:
+  // a repeat runs where it PUT the page (`view-architect-session` navigates
+  // off `/artifact` to `/sessions/architect/<id>`, ten lines up), not where
+  // the beat ends. `forgeRoot === null` covers every door test in this repo —
+  // none of them pass one — so this is a pure addition: `readSessionEventsNow`
+  // stays `null` and the tracker falls back to key-only, unchanged.
+  const readSessionEventsNow = declaredProgress === null || forgeRoot === null ? null : () => {
+    const dir = sessionLogDir(forgeRoot, new URL(page.url(), 'http://forge.invalid').pathname);
+    return sessionEventLines(dir);
+  };
 
   const matchesData = async (spec) => {
     // `readObserved` runs `page.evaluate`, which THROWS when the page navigates
@@ -299,7 +310,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     if (typeof step?.press === 'string') pressedAt.set(step.press, pressStartedMs);
   }
   const steps_ = await performSteps(page, runSteps, bound.ms, sessionScope, agentProcProbe, matchesData, null, target, stallDoor,
-    declaredProgress, readProgressNow);
+    declaredProgress, readProgressNow, readSessionEventsNow);
   const stepError = steps_.error;
   // `forge-8vfn.8.1.16` / T1 ruling 1561 — the LAST `pressWithin` TEXT scope
   // this beat resolved, carried onto the beat's own record for `story.json`.

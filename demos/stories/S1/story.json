@@ -2,9 +2,10 @@
   "story": {
     "id": "S1",
     "ground": {
-      "project": "gitweave",
+      "project": "story-s1",
       "realSpawn": true,
-      "budget_usd": 25
+      "budget_usd": 25,
+      "fixture": "python-unonboarded"
     },
     "docs": {
       "kind": "tutorial",
@@ -13,14 +14,14 @@
     "beats": [
       {
         "act": "Open Studio on the Projects pillar",
-        "say": "The Projects pillar lists every project forge manages. GitWeave is already discovered from disk, but it needs attention: it has no contract yet, so no Flow can be pointed at it.",
+        "say": "The Projects pillar lists every project forge manages. story-s1 is already discovered from disk, but it needs attention: it has no contract yet, so no Flow can be pointed at it.",
         "do": [],
         "expect": {
           "route": "/projects",
           "data": {
             "page": "projects-index",
             "page-ready": "true",
-            "card-id": "gitweave",
+            "card-id": "story-s1",
             "health": "attention"
           }
         }
@@ -41,11 +42,11 @@
       },
       {
         "act": "Fill in the name, the quality gate and the north star — and under Advanced, the repo path — then press \"Onboard project →\"",
-        "say": "Registering the project lands the operator on its page, where forge immediately measures GitWeave against the project contract and reports the result honestly: a hard fail. Registration scaffolds the contract artifacts forge can write without asking anyone, so the checklist says contract — present, and preflight says hard fail, and both are true at once: a scaffolded contract is a stub, not an answer. The secrets, demo and roadmap stages have nothing at all; only the instructions carry real content, read from the repo's own CLAUDE.md. No Flow can be pointed at a project in this state.",
+        "say": "Registering the project lands the operator on its page, where forge immediately measures story-s1 against the project contract and reports the result honestly: a hard fail. Registration scaffolds the contract artifacts forge can write without asking anyone, so the checklist says contract — present, and preflight says hard fail, and both are true at once: a scaffolded contract is a stub, not an answer. The secrets, demo and roadmap stages have nothing at all; only the instructions carry real content, read from the repo's own CLAUDE.md. No Flow can be pointed at a project in this state.",
         "do": [
           {
             "fill": "project-name",
-            "with": "gitweave"
+            "with": "story-s1"
           },
           {
             "fill": "quality-gate",
@@ -60,17 +61,23 @@
           },
           {
             "fill": "repo-path",
-            "with": "projects/gitweave"
+            "with": "projects/story-s1"
           },
           {
             "press": "onboard-project"
           }
         ],
+        "wait": {
+          "for": "settle",
+          "upTo": 60000,
+          "key": "preflight-status",
+          "while": "pending"
+        },
         "expect": {
-          "route": "/projects/gitweave",
+          "route": "/projects/story-s1",
           "data": {
             "page": "projects",
-            "project-id": "gitweave",
+            "project-id": "story-s1",
             "page-ready": "true",
             "preflight-status": "hard-fail",
             "checklist-row": "contract",
@@ -102,7 +109,7 @@
           }
         ],
         "expect": {
-          "route": "/projects/gitweave",
+          "route": "/projects/story-s1",
           "data": {
             "section": "onboard-with-agent",
             "onboard-run-status": "running",
@@ -204,7 +211,7 @@
       },
       {
         "act": "Return to the project and close whatever the agent could not",
-        "say": "Preflight is MET. GitWeave now has a contract forge can hold it to, and the project is Flow-ready: the gates downstream have something real to judge against.",
+        "say": "Preflight is MET. story-s1 now has a contract forge can hold it to, and the project is Flow-ready: the gates downstream have something real to judge against.",
         "do": [
           {
             "press": "back-to-project"
@@ -230,10 +237,10 @@
           "upTo": 200000
         },
         "expect": {
-          "route": "/projects/gitweave",
+          "route": "/projects/story-s1",
           "data": {
             "page": "projects",
-            "project-id": "gitweave",
+            "project-id": "story-s1",
             "preflight-status": "ok",
             "flow-ready": "true"
           }
@@ -262,10 +269,10 @@
           }
         ],
         "expect": {
-          "route": "/projects/gitweave",
+          "route": "/projects/story-s1",
           "data": {
             "page": "projects",
-            "project-id": "gitweave",
+            "project-id": "story-s1",
             "section": "new-idea",
             "architect-session-id": "<architectSessionId>"
           }
@@ -290,7 +297,9 @@
             ],
             "until": {
               "session-phase": "awaiting-verdict"
-            }
+            },
+            "perTransition": 480000,
+            "progressKey": "session-phase"
           },
           {
             "press": "open-plan"
@@ -301,9 +310,7 @@
         ],
         "wait": {
           "for": "agent",
-          "upTo": 600000,
-          "perTransition": 480000,
-          "progressKey": "session-phase"
+          "upTo": 1200000
         },
         "expect": {
           "route": "/artifact",
@@ -320,7 +327,7 @@
   "beats": [
     {
       "act": "Open Studio on the Projects pillar",
-      "say": "The Projects pillar lists every project forge manages. GitWeave is already discovered from disk, but it needs attention: it has no contract yet, so no Flow can be pointed at it.",
+      "say": "The Projects pillar lists every project forge manages. story-s1 is already discovered from disk, but it needs attention: it has no contract yet, so no Flow can be pointed at it.",
       "status": "green",
       "failures": [],
       "bindings": {},
@@ -328,7 +335,13 @@
         "page": "projects-index",
         "page-ready": "true",
         "fetch-status": "ok",
-        "card-id": "gitweave",
+        "card-id": "story-s1",
+        "health": "attention"
+      },
+      "expect": {
+        "page": "projects-index",
+        "page-ready": "true",
+        "card-id": "story-s1",
         "health": "attention"
       },
       "frame": "frames/01-open-studio-on-the-projects-pillar.png"
@@ -344,24 +357,37 @@
         "project-id": "new",
         "page-ready": "true",
         "fetch-status": "ok",
-        "section": "project-onboard",
-        "load-error": "false"
+        "section": "project-onboard"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "new",
+        "page-ready": "true",
+        "section": "project-onboard"
       },
       "frame": "frames/02-click-onboard-a-project.png"
     },
     {
       "act": "Fill in the name, the quality gate and the north star — and under Advanced, the repo path — then press \"Onboard project →\"",
-      "say": "Registering the project lands the operator on its page, where forge immediately measures GitWeave against the project contract and reports the result honestly: a hard fail. Registration scaffolds the contract artifacts forge can write without asking anyone, so the checklist says contract — present, and preflight says hard fail, and both are true at once: a scaffolded contract is a stub, not an answer. The secrets, demo and roadmap stages have nothing at all; only the instructions carry real content, read from the repo's own CLAUDE.md. No Flow can be pointed at a project in this state.",
+      "say": "Registering the project lands the operator on its page, where forge immediately measures story-s1 against the project contract and reports the result honestly: a hard fail. Registration scaffolds the contract artifacts forge can write without asking anyone, so the checklist says contract — present, and preflight says hard fail, and both are true at once: a scaffolded contract is a stub, not an answer. The secrets, demo and roadmap stages have nothing at all; only the instructions carry real content, read from the repo's own CLAUDE.md. No Flow can be pointed at a project in this state.",
       "status": "green",
       "failures": [],
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "gitweave",
+        "project-id": "story-s1",
         "page-ready": "true",
         "checklist-row": "contract",
         "checklist-status": "present",
         "preflight-status": "hard-fail"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s1",
+        "page-ready": "true",
+        "preflight-status": "hard-fail",
+        "checklist-row": "contract",
+        "checklist-status": "present"
       },
       "frame": "frames/03-fill-in-the-name-the-quality-gate-and-th.png"
     },
@@ -371,14 +397,21 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "onboardRunId": "_agent-onboarding-agent-2026-09-12T16-38-59-047-si7k",
-        "sessionId": "2026-09-12T16-38-59-3367bbeb"
+        "onboardRunId": "_agent-onboarding-agent-2026-09-26T10-23-18-824-qygn",
+        "sessionId": "2026-09-26T10-23-18-7c74e608"
       },
       "data": {
         "section": "onboard-with-agent",
         "onboard-run-status": "running",
-        "onboard-run-id": "_agent-onboarding-agent-2026-09-12T16-38-59-047-si7k",
-        "onboard-session-id": "2026-09-12T16-38-59-3367bbeb",
+        "onboard-run-id": "_agent-onboarding-agent-2026-09-26T10-23-18-824-qygn",
+        "onboard-session-id": "2026-09-26T10-23-18-7c74e608",
+        "onboard-attaching": "false"
+      },
+      "expect": {
+        "section": "onboard-with-agent",
+        "onboard-run-status": "running",
+        "onboard-run-id": "<onboardRunId>",
+        "onboard-session-id": "<sessionId>",
         "onboard-attaching": "false"
       },
       "frame": "frames/04-open-brief-the-agent-give-it-the-north-s.png"
@@ -390,6 +423,14 @@
       "failures": [],
       "bindings": {},
       "data": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "onboarding",
+        "session-stage": "contract",
+        "buildout-mode": "checklist",
+        "buildout-row-count": "5"
+      },
+      "expect": {
         "page": "session",
         "page-ready": "true",
         "session-kind": "onboarding",
@@ -411,6 +452,12 @@
         "session-kind": "onboarding",
         "session-phase": "complete"
       },
+      "expect": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "onboarding",
+        "session-phase": "complete"
+      },
       "frame": "frames/06-watch-the-agent-work-through-the-contrac.png"
     },
     {
@@ -419,12 +466,17 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "demoSessionId": "2026-09-12T16-41-54-534f5110"
+        "demoSessionId": "2026-09-26T10-25-26-0d266157"
       },
       "data": {
         "action": "view-demo-session",
         "stage-detail-stage": "demo",
-        "demo-session-id": "2026-09-12T16-41-54-534f5110"
+        "demo-session-id": "2026-09-26T10-25-26-0d266157"
+      },
+      "expect": {
+        "stage-detail-stage": "demo",
+        "action": "view-demo-session",
+        "demo-session-id": "<demoSessionId>"
       },
       "frame": "frames/07-select-the-demo-stage-and-hand-it-to-the.png"
     },
@@ -440,17 +492,29 @@
         "session-kind": "demo",
         "session-phase": "locked"
       },
+      "expect": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "demo",
+        "session-phase": "locked"
+      },
       "frame": "frames/08-come-back-to-the-demo-builder-brief-it-a.png"
     },
     {
       "act": "Return to the project and close whatever the agent could not",
-      "say": "Preflight is MET. GitWeave now has a contract forge can hold it to, and the project is Flow-ready: the gates downstream have something real to judge against.",
+      "say": "Preflight is MET. story-s1 now has a contract forge can hold it to, and the project is Flow-ready: the gates downstream have something real to judge against.",
       "status": "green",
       "failures": [],
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "gitweave",
+        "project-id": "story-s1",
+        "preflight-status": "ok",
+        "flow-ready": "true"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s1",
         "preflight-status": "ok",
         "flow-ready": "true"
       },
@@ -462,13 +526,19 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "architectSessionId": "2026-09-12T16-45-13-7156ec87"
+        "architectSessionId": "2026-09-26T10-30-37-40aefd0d"
       },
       "data": {
         "page": "projects",
-        "project-id": "gitweave",
+        "project-id": "story-s1",
         "section": "new-idea",
-        "architect-session-id": "2026-09-12T16-45-13-7156ec87"
+        "architect-session-id": "2026-09-26T10-30-37-40aefd0d"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s1",
+        "section": "new-idea",
+        "architect-session-id": "<architectSessionId>"
       },
       "frame": "frames/10-press-plan-with-architect-and-describe-t.png"
     },
@@ -484,6 +554,12 @@
         "gate-armed": "false",
         "plan-mode": "view"
       },
+      "expect": {
+        "section": "architect-plan",
+        "architect-phase": "committed",
+        "gate-armed": "false",
+        "plan-mode": "view"
+      },
       "frame": "frames/11-open-the-session-read-the-plan-and-press.png"
     }
   ],
@@ -491,33 +567,35 @@
     "reaped": [],
     "skipped": [
       {
-        "pid": 1557046,
-        "dir": "/home/parso/forge-clean-m6a/_logs/_agent-onboarding-agent-2026-09-12T16-38-59-047-si7k",
-        "reason": "pid 1557046: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 18839,
+        "dir": "_logs/_agent-onboarding-agent-2026-09-26T10-23-18-824-qygn",
+        "reason": "pid 18839: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       },
       {
-        "pid": 1694766,
-        "dir": "/home/parso/forge-clean-m6a/_logs/_architect-2026-09-12T16-45-13-7156ec87",
-        "reason": "pid 1694766: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 144609,
+        "dir": "_logs/_architect-2026-09-26T10-30-37-40aefd0d",
+        "reason": "pid 144609: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       },
       {
-        "pid": 1646856,
-        "dir": "/home/parso/forge-clean-m6a/_logs/_demo-2026-09-12T16-41-54-534f5110",
-        "reason": "pid 1646856: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
+        "pid": 66711,
+        "dir": "_logs/_demo-2026-09-26T10-25-26-0d266157",
+        "reason": "pid 66711: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap"
       }
     ],
     "cancelled": []
   },
   "sweep": {
-    "removed": [],
+    "removed": [
+      "brain/projects/story-s1"
+    ],
     "failed": [],
     "claim": {
       "ok": true,
       "claimed": [
         {
-          "path": "/home/parso/forge-clean-m6a/_queue/pending/INIT-2026-09-12-overlay-team-grant-lint.md",
+          "path": "_queue/pending/INIT-2026-09-26-overlay-team-lint.md",
           "state": "pending",
-          "reason": "created_at 2026-09-12T16:53:51.875Z falls inside this run"
+          "reason": "created_at 2026-09-26T10:40:21.021Z falls inside this run"
         }
       ],
       "left": [],
@@ -528,18 +606,27 @@
         "[stories] queue claim: failed/ holds 0",
         "[stories] queue claim: in-flight/ holds 0",
         "[stories] queue claim: merged/ holds 0",
-        "[stories] queue claim: pending/ holds 1 — INIT-2026-09-12-overlay-team-grant-lint.md",
-        "[stories] queue claim: CLAIMED /home/parso/forge-clean-m6a/_queue/pending/INIT-2026-09-12-overlay-team-grant-lint.md — created_at 2026-09-12T16:53:51.875Z falls inside this run; captured to /home/parso/forge-clean-m6a/demos/stories/S1/queue-claim/pending before removal",
+        "[stories] queue claim: pending/ holds 1 — INIT-2026-09-26-overlay-team-lint.md",
+        "[stories] queue claim: CLAIMED _queue/pending/INIT-2026-09-26-overlay-team-lint.md — created_at 2026-09-26T10:40:21.021Z falls inside this run; captured to demos/stories/S1/queue-claim/pending before removal",
         "[stories] queue claim: ready-for-review/ holds 0"
       ]
     },
+    "artefacts": {
+      "dest": null,
+      "captured": [],
+      "cleared": [],
+      "refused": [],
+      "unremoved": []
+    },
     "lines": [
+      "[stories] trailing sweep removed brain/projects/story-s1",
+      "[stories] trailing sweep KEPT projects/story-s1 — a fixture ground is judged before it is torn down",
       "[stories] queue claim: done/ holds 0",
       "[stories] queue claim: failed/ holds 0",
       "[stories] queue claim: in-flight/ holds 0",
       "[stories] queue claim: merged/ holds 0",
-      "[stories] queue claim: pending/ holds 1 — INIT-2026-09-12-overlay-team-grant-lint.md",
-      "[stories] queue claim: CLAIMED /home/parso/forge-clean-m6a/_queue/pending/INIT-2026-09-12-overlay-team-grant-lint.md — created_at 2026-09-12T16:53:51.875Z falls inside this run; captured to /home/parso/forge-clean-m6a/demos/stories/S1/queue-claim/pending before removal",
+      "[stories] queue claim: pending/ holds 1 — INIT-2026-09-26-overlay-team-lint.md",
+      "[stories] queue claim: CLAIMED _queue/pending/INIT-2026-09-26-overlay-team-lint.md — created_at 2026-09-26T10:40:21.021Z falls inside this run; captured to demos/stories/S1/queue-claim/pending before removal",
       "[stories] queue claim: ready-for-review/ holds 0"
     ]
   },
@@ -551,5 +638,17 @@
     "escapes": [],
     "groundEscapes": [],
     "reappeared": []
-  }
+  },
+  "spend": {
+    "usd": 4.533761,
+    "unmeasured": false
+  },
+  "realGrounds": {
+    "moved": []
+  },
+  "git": {
+    "sha": "ef09d9d21a29680c33da29966bc1d2229f3aea16",
+    "dirty": false
+  },
+  "storyDigest": "1adbc83d1f3e6bc0"
 }
