@@ -96,19 +96,36 @@ function resolveEffectiveCommand(cmd: string, pkg: PackageJsonScripts): string {
   return body && body.trim() ? body : cmd;
 }
 
+/** `node` flags whose value is a module node resolves — from node_modules when it is a bare specifier. */
+const NODE_PRELOAD_FLAGS = new Set(['--import', '--require', '-r', '--loader', '--experimental-loader']);
+
+/** A bare specifier (`tsx`, `ts-node/register`) resolves through node_modules; a path (`./x`, `/x`, `../x`) does not. */
+function isBareSpecifier(spec: string): boolean {
+  return spec !== '' && !spec.startsWith('.') && !spec.startsWith('/') && !spec.startsWith('file:');
+}
+
 /**
- * True iff `cmd`'s leading token is resolved through `node_modules` to run.
- * `node <anything>` (native execution — this project's own
- * `--experimental-strip-types` idiom, needing zero installed packages) and a
- * literal script path (`./x`, `/x`, invoked directly by the shell) are the
- * only "needs nothing" shapes; everything else — a bare devDependency
- * binary or an `npx`/`bunx` run of one — is the safe default: needs
- * `node_modules`.
+ * True iff running `cmd` needs packages from `node_modules`. A literal script path (`./x`, `/x`) needs nothing.
+ * `node` needs nothing by itself (this project's own `--experimental-strip-types` idiom) — UNLESS it preloads a
+ * package: `node --import tsx …` resolves `tsx` from node_modules (forge-1rk5.3 row 131: gitpulse's own gate
+ * passed this clause unprovisioned and died later as dev-loop.baseline-red, the exact incident above). Every other
+ * leading token — a bare devDependency binary, `npx`/`bunx` — is the safe default: needs `node_modules`.
  */
-function leadingTokenNeedsNodeModules(cmd: string): boolean {
-  const first = cmd.trim().split(/\s+/)[0] ?? '';
+export function commandNeedsNodeModules(cmd: string): boolean {
+  const tokens = cmd.trim().split(/\s+/);
+  const first = tokens[0] ?? '';
   if (first === '') return false; // nothing to run — not this clause's problem
-  return first !== 'node' && !first.startsWith('./') && !first.startsWith('/');
+  if (first.startsWith('./') || first.startsWith('/')) return false;
+  if (first !== 'node') return true;
+  for (let i = 1; i < tokens.length; i++) {
+    const t = tokens[i];
+    const eq = t.indexOf('=');
+    const flag = eq > 0 ? t.slice(0, eq) : t;
+    if (!NODE_PRELOAD_FLAGS.has(flag)) continue;
+    const value = eq > 0 ? t.slice(eq + 1) : (tokens[i + 1] ?? '');
+    if (isBareSpecifier(value)) return true;
+  }
+  return false;
 }
 
 export function checkDeps(dir: string, cfg: ProjectConfig | null): ClauseResult {
@@ -137,7 +154,7 @@ export function checkDeps(dir: string, cfg: ProjectConfig | null): ClauseResult 
   }
 
   const effective = resolveEffectiveCommand(declared.cmd, pkg);
-  if (!leadingTokenNeedsNodeModules(effective)) {
+  if (!commandNeedsNodeModules(effective)) {
     return { ...base, pass: true, detail: `${declared.source} resolves to "${effective}" — needs nothing installed` };
   }
 
