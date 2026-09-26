@@ -70,6 +70,12 @@ export const LEGACY_SESSION_AWAITS_PHASES: Readonly<Record<string, Readonly<Reco
  *  "stalled", never "needs you". Same sourcing as
  *  `LEGACY_SESSION_AWAITS_PHASES` above. */
 export const LEGACY_SESSION_WORKING_PHASES: Readonly<Record<string, ReadonlySet<string>>> = {
-  architect: new Set(['interviewing', 'exploring', 'drafting', 'finalizing']),
+  // forge-8vfn.8.1.14 — `critiquing` (the completeness critic, ruling 380) and
+  // `revising` (a draft round the critic bounced back) are both the runner's
+  // to advance, exactly like `drafting`; omitting them here reads a session
+  // silent past the stall ceiling as "needs you" or worse, idle-forever,
+  // never "stalled" — the same declared-data-fails-open shape `failed-phase-
+  // terminal.test.ts` closed for the terminal side of this same table.
+  architect: new Set(['interviewing', 'exploring', 'drafting', 'critiquing', 'revising', 'finalizing']),
   'project-brain': new Set(['analyzing', 'committing']),
 };

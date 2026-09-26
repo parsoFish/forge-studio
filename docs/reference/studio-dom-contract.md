@@ -1472,7 +1472,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   resolved through `/api/architect/sessions` — never `/api/runs` or
   `/api/artifact` (zero 404s) — and renders `[data-section="architect-plan"]
   [data-architect-phase="not-found|awaiting-answers|working|awaiting-verdict|
-  finalizing|committed|rejected"][data-gate-armed]`: the gate is armed by the
+  finalizing|committed|rejected"][data-gate-armed]` (**forge-8vfn.8.1.14:** the
+  session's own `critiquing`/`revising` phases — the completeness critic,
+  ruling 380, and a draft round it bounced back — fold into `working` here,
+  same as `interviewing`/`exploring`/`drafting`; no new value on THIS coarse
+  attribute): the gate is armed by the
   session PHASE alone (`awaiting-verdict` → the PlanGate `[data-section=
   "plan-gate"]` with `[data-action="approve-plan"|"revise-plan"|"reject-plan"]`
   — the ONLY Approve on the page; the generic GateBar never mounts for an
@@ -3916,8 +3920,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   when none), and a `strip` SchedulerCard with `[data-action="scheduler-
   start"]` when the daemon is stopped. The activity drawer
   (`[data-component="activity-drawer"]`) renders in EVERY phase once events
-  exist (open while working, collapsed otherwise — sessions-kinds-13);
-  the project-brain side's
+  exist (open while working, collapsed otherwise — sessions-kinds-13).
+  **forge-8vfn.8.1.14:** the architect hex's `data-architect-phase` above (and
+  the generic session shell's own `data-session-phase` root attribute,
+  `app/sessions/[kind]/[sessionId]/page.tsx`) carry the session's RAW phase
+  verbatim — now `"interviewing"|"awaiting-answers"|"exploring"|"drafting"|
+  "critiquing"|"revising"|"awaiting-verdict"|"finalizing"|"committed"|
+  "rejected"`. `critiquing` (the completeness critic, ruling 380) and
+  `revising` (a draft round it bounced back) are new; both read
+  `data-architect-active="true"` and fold into `working` on the COARSE
+  `/artifact` union documented above — no new value on that one.
+  The project-brain side's
   `[data-section="brain-briefing"|"brain-analyzing"|"brain-review"|"brain-committing"|"brain-committed"|"brain-abandoned"]`
   (`brain-review` carries `data-theme-count`; **W7-C2, sessions-kinds-22:
   the panel's own per-theme `data-theme-name` accordion and its

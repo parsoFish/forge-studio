@@ -67,6 +67,11 @@ export type ArchitectPhase =
   | 'awaiting-answers'
   | 'exploring'
   | 'drafting'
+  /** forge-8vfn.8.1.14 — the completeness critic (ruling 380), before the ask. */
+  | 'critiquing'
+  /** forge-8vfn.8.1.14 — a draft round the critic bounced back; NOT the
+   *  operator's own bridge "send back" verdict (which resets to `interviewing`). */
+  | 'revising'
   | 'awaiting-verdict'
   | 'finalizing'
   | 'committed'
