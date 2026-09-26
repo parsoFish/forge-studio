@@ -6816,12 +6816,6 @@
     "count": 1
   },
   {
-    "file": "skills/demo-design/SKILL.md",
-    "kind": "path",
-    "cited": "projects/terraform-provider-betterado/forge/skills/ado-demo/SKILL.md",
-    "count": 1
-  },
-  {
     "file": "skills/developer-ralph/SKILL.md",
     "kind": "path",
     "cited": "loops/ralph/AGENT.md",
