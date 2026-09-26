@@ -269,15 +269,28 @@ const DESCENDANT_SAMPLE_INTERVAL_MS = 2000;
  *  leave no gap at all, and must never fail-close a run on their own. */
 const BLIND_GAP_FACTOR = 3;
 
+/**
+ * `d`, realpath'd, plus whether that failed for a reason OTHER than the tree
+ * being genuinely gone (ENOENT) — ROW 102b/10. A pruned tree still falls back
+ * to the syntactic `resolve(d)`, unchanged: it cannot own a process either
+ * way. Any OTHER failure (EACCES, ELOOP, EIO on a symlinked escape root) must
+ * not silently hand back an unresolved path that can fail to `===` the SAME
+ * tree's realpath reached a different way — `attributeEscapes` below reads
+ * `unknown` and refuses to call the comparison clean.
+ */
+function realpathOrResolveResult(d) {
+  try {
+    return { path: realpathSync(d), unknown: false };
+  } catch (e) {
+    return { path: resolve(d), unknown: e?.code !== 'ENOENT' };
+  }
+}
+
 /** `d`, realpath'd where possible — a tree that no longer exists cannot own a
  *  process either way, so `resolve` is the honest fallback (mirrors the `real`
  *  closures above, kept separate rather than refactoring working code). */
 function realpathOrResolve(d) {
-  try {
-    return realpathSync(d);
-  } catch {
-    return resolve(d);
-  }
+  return realpathOrResolveResult(d).path;
 }
 
 /**
@@ -520,12 +533,21 @@ function labelPathStatus(root, path) {
  * names `/home/parso/forge` only as an example). `null` outside a
  * worktree-bearing checkout.
  */
+/** `mainCheckoutRoot`'s explicit UNKNOWN — ROW 102b/11. A `git worktree list`
+ *  failure OTHER than "this is not a git repository" (rc 128, git's own
+ *  message) must not read the same as "no main tree to distinguish": that
+ *  disables ruling 1226's whole main-checkout drift rule for the run.
+ *  `attributeEscapes` fails the fence closed on it instead of null's silent
+ *  opt-out. */
+export const MAIN_CHECKOUT_ROOT_UNKNOWN = Symbol('main-checkout-root-unknown');
+
 export function mainCheckoutRoot(root) {
   let out;
   try {
     out = execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: root, encoding: 'utf8' });
-  } catch {
-    return null; // not a worktree-bearing checkout (or no git): no main tree to distinguish
+  } catch (e) {
+    const notARepo = e?.status === 128 && /not a git repository/i.test(String(e?.stderr ?? ''));
+    return notARepo ? null : MAIN_CHECKOUT_ROOT_UNKNOWN; // genuinely no repo vs. UNKNOWN
   }
   const first = out.split('\n').find((l) => l.startsWith('worktree '));
   return first ? realpathOrResolve(first.slice('worktree '.length).trim()) : null;
@@ -570,7 +592,9 @@ export function mainCheckoutRoot(root) {
 export function attributeEscapes(escapes, opts = {}) {
   const touchedRoots = opts.touchedRoots ?? new Map();
   const mainRoot = opts.mainRoot ?? null;
-  const mainResolved = mainRoot === null ? null : realpathOrResolve(mainRoot);
+  const mainRootUnknown = mainRoot === MAIN_CHECKOUT_ROOT_UNKNOWN;
+  const mainResult = mainRoot === null || mainRootUnknown ? { path: null, unknown: false } : realpathOrResolveResult(mainRoot);
+  const mainResolved = mainResult.path;
   const intervalMs = opts.intervalMs ?? DESCENDANT_SAMPLE_INTERVAL_MS;
   // An ABSENT coverage figure is blind, never the best possible one: a caller
   // that did not pass the sampler's result, or a sampler that never ran, has
@@ -579,7 +603,8 @@ export function attributeEscapes(escapes, opts = {}) {
   const longestGapMs = coverageKnown ? opts.longestGapMs : null;
   const blind = !coverageKnown || longestGapMs > BLIND_GAP_FACTOR * intervalMs;
   return (escapes ?? []).map((e) => {
-    const resolved = realpathOrResolve(e.root);
+    const escResult = realpathOrResolveResult(e.root);
+    const resolved = escResult.path;
     const seen = touchedRoots.get(resolved) ?? touchedRoots.get(e.root);
     if (seen !== undefined) {
       return {
@@ -587,6 +612,19 @@ export function attributeEscapes(escapes, opts = {}) {
         owner: 'this-run',
         reason: `sampled pid ${seen.pid} with its ${seen.via} inside ${e.root} (${seen.at}) — a descendant of this run's own root process`,
       };
+    }
+    // ROW 102b/10-11 — a realpath failure on either side of the comparison
+    // below, or `mainCheckoutRoot` itself returning UNKNOWN, means it cannot
+    // be trusted. Never let an unresolved path silently miss the
+    // main-checkout match and fall through toward unattributable — that is
+    // exactly how a real containment breach goes quiet.
+    if (mainRootUnknown || escResult.unknown || mainResult.unknown) {
+      const why = mainRootUnknown
+        ? 'the main checkout could not be determined (git worktree list failed for a reason other than "not a repository")'
+        : escResult.unknown
+          ? `${e.root} could not be resolved to compare against the main checkout`
+          : `the main checkout (${mainRoot}) could not be resolved`;
+      return { ...e, owner: 'this-run', reason: `${why} — ruling 1226's drift rule cannot be ruled out, so this growth stays THIS-RUN` };
     }
     if (mainResolved !== null && resolved === mainResolved) {
       const isIgnored = opts.isIgnored ?? ((p) => isMainCheckoutIgnored(mainRoot, p));
