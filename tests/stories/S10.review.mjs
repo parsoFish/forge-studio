@@ -158,9 +158,54 @@ export const REVIEW_LOOP = [
       // presses), which is why the picker's re-resolution stability is its
       // own pinned case (`beats-press-within-text.test.ts`).
       act: 'Anchor one blocking comment to the precedence criterion (the first criterion, said so in the log, when none names precedence) and send it back',
-      // 7.6.143: beat 16's agent wait lives HERE now, on the beat whose
-      // `send-back` press starts the work it waits for.
-      wait: { for: 'agent', upTo: 1_800_000 },
+      // 7.6.143: beat 16's agent wait lives HERE, on the beat whose
+      // `send-back` press starts the work it waits for. That much was already
+      // right; `forge-8vfn.8.1.23` (T1 rulings 1577/1579, S10 RUN 30) is what
+      // was still missing.
+      //
+      // RUN 30's TRAP. The wait above used to read plain `{ for: 'agent',
+      // upTo: 1_800_000 }` — no `cycleOf`, no `terminal` — so
+      // `waitForConsequence` built no `cycleWatch` at all and this beat waited
+      // on nothing but its OWN `expect` below. `form-state: 'submitted'` and
+      // `region-comment-count: '1'` are the send-back REQUEST's own local
+      // state, set the instant the POST resolves; they held ~1.5 s after the
+      // press, so the wait ended immediately — before the scheduler had even
+      // picked the continuation back up, let alone run it.
+      //
+      // THE FIX REUSES BEAT 10's DOOR, UNCHANGED. A send-back CONTINUES the
+      // develop cycle (DEC-2) rather than minting a new one, so `cycleOf:
+      // '<runId>'` + `terminal: 'ready-for-review'` resolve the SAME cycle
+      // beat 10 watched, through `makeCycleTerminalDoor`
+      // (`beats-agent-proc.mjs:298`). `anchor: 'send-back'` is what makes that
+      // safe here: `cycleStartedSince` (`:407`) only credits a terminal once
+      // the watched dir's OWN `cycle.start` lands AT OR AFTER the anchor, and
+      // the queue-terminal check (T1 1503, row 98, `:358-371`) applies the
+      // identical rule to a manifest's arrival mtime — so a terminal the
+      // FIRST cycle already left behind (`ready-for-review`, sitting there
+      // since before the press) cannot satisfy this wait. Only a terminal
+      // written by a run that started AFTER the send-back can.
+      //
+      // MEASURED ON RUN 30. Send-back landed ~11:32:30. The continuation's
+      // own fresh `cycle.start` is on disk at 11:34:00.108Z — after the
+      // anchor, so the door correctly refuses to credit round 1's terminal
+      // and waits for round 2's. The manifest sat in `_queue/in-flight/`
+      // (never `ready-for-review`) for the whole fix — confirmed by the
+      // run's own queue trace — until the second `cycle.end` at
+      // 11:50:40.212Z, and the queue read `ready-for-review` again at
+      // 11:51:08: 18m38s after the send-back (~18.6 min), comfortably under
+      // the 30 minutes declared below and under the 17-29 min range this
+      // file's own developer-loop measurements already cite. It is an
+      // INACTIVITY window (`beats-cycle-progress.mjs`), reset by every
+      // `events.jsonl` write and persisted review chunk the fix cycle makes
+      // — developer-ralph, demo-agent and four adversarial-review passes all
+      // land inside it — and backstopped by `CYCLE_WAIT_WALL_CEILING_MS`
+      // (90 min) for a cycle that stops writing without ever finishing.
+      wait: {
+        for: 'agent', anchor: 'send-back',
+        cycleOf: '<runId>',
+        terminal: 'ready-for-review',
+        upTo: 1_800_000,
+      },
       do: [
         {
           pressWithin: {
@@ -192,37 +237,49 @@ export const REVIEW_LOOP = [
       // SOURCE-DERIVED. The fix lands on the same branch and the run returns to
       // the review station; keys as beat 11.
       act: 'The fix lands on the same branch and comes back for re-review',
-      // 7.6.143 (T1 1147) — THE WAIT MOVED TO THE BEAT THAT PRESSES
-      // `send-back`, found by the same door as beat 10's: this beat presses
-      // nothing and expects a route the previous beat does not leave the page
-      // on, so `routeMatches` is false and NOTHING could ever consume its
-      // bound. `story-file.mjs` now refuses that shape at validation.
+      // 7.6.143 (T1 1147) — NO WAIT HERE. This beat presses nothing and
+      // expects a route the previous beat does not leave the page on, so
+      // `routeMatches` is false and NOTHING could ever consume a bound
+      // declared on it — `story-file.mjs` refuses that shape at validation.
+      // Beat 16's wait (now `cycleOf`/`terminal`/`anchor`-gated) is what sits
+      // through the fix; by the time the runner reaches here that wait has
+      // already resolved, so this beat only has to read what is on the page.
       //
-      // It moved WITHOUT gaining `cycleOf`/`terminal`, deliberately. Beat 10's
-      // wait watches a cycle whose terminal state S10 already asserts from the
-      // queue. I have no MEASURED terminal state for the re-review cycle — no
-      // run has ever reached this beat — and a guessed `terminal:` would end
-      // the wait on a state the product may never publish: a precise-looking
-      // wait that is wrong, which is worse than the vague one being fixed.
-      // Tightening it to the cycle is owed once a run reaches here and measures
-      // the state.
+      // `forge-8vfn.8.1.23` (T1 rulings 1577/1579, S10 RUN 30) — WHY
+      // `node-id: 'review', status: 'complete'` IS NOT ENOUGH ON ITS OWN.
+      // `review-loop` and `closure` both canonicalise onto the SAME `review`
+      // node (`run-model.ts`'s header comment), and a send-back continues the
+      // cycle rather than resetting it, so that row reads `complete` from
+      // ROUND 1's own closure onward and never goes back to anything else.
+      // Before beat 16 carried a real `cycleOf` wait, this beat reached here
+      // 0.7 s after the send-back press and went green on round 1's terminal
+      // state alone — the exact defect this citation is for.
+      //
+      // `review-round: '2'` is the key ONLY the re-review can satisfy.
+      // `findReviewRound` (`packages/flows/run-model-derive-lineage.ts`)
+      // counts COMPLETED `adversarial-review` passes — `end` events only,
+      // never `start` — so it reads 1 the instant the send-back is pressed
+      // (round 1 already finished before the operator could see the gate) and
+      // does not reach 2 until the SECOND pass genuinely finishes. Run 30: the
+      // second `adversarial-review` end landed at 11:50:33.914Z, sixteen
+      // seconds before that cycle's own `cycle.end` — so by the time this beat
+      // reads the page (after beat 16's wait has already sat through the
+      // whole fix), `review-round` and `status: 'complete'` are both true for
+      // the SAME round, not one stale and one fresh.
+      //
       // 30 MINUTES, AT THE CAP, WITH ONE MINUTE OF MARGIN — AND THAT IS
-      // DISCLOSED, NOT COMFORTABLE (T1 rulings 555 → 558).
+      // DISCLOSED, NOT COMFORTABLE (T1 rulings 555 → 558). This beat asserts
+      // no bound of its own; the figure below is beat 16's, which now governs
+      // the whole round-trip.
       //
       // The five real gitpulse cycles in `_1.0/traces/` ran their developer-loop
       // in 17, 20, 21, 24 and **29** minutes. This bound is 30. The audit asked
       // for 45; `story-file.mjs` refused it, because `MAX_DECLARED_WAIT_MS` is a
       // deliberate safety limit — "a declared wait is a licence to sit still; an
       // unbounded or absurd one turns a red run into a hung host" — and 558 kept
-      // the limit rather than widening it for two beats.
-      //
-      // So this beat is a coin flip against its own worst measurement, and it is
-      // written down here rather than discovered again: a red HERE, at the bound,
-      // with `agent.heartbeat` events still streaming, is not a slow product. It
-      // is this number. The fix is not a bigger bound — it is a bound that does
-      // not expire while the agent is demonstrably progressing (bead under 7.5,
-      // the mirror of ruling 518's early exit on a session the product has
-      // already given up on).
+      // the limit rather than widening it for two beats. Run 30's own re-review
+      // cycle finished in 18m38s (~18.6 min), well inside that margin, and is
+      // now the sixth measurement sitting beside the five gitpulse ones above.
       //
       // Those are SPAN figures, first to last event of the phase, so a cycle
       // that sat idle overstates. The five gitpulse cycles have no such gaps,
@@ -230,7 +287,11 @@ export const REVIEW_LOOP = [
       // `architect=828m` is not.
       expect: {
         route: '/flows/forge-develop/run/<cycleId>',
-        data: { page: 'flow-run', 'timeline-row': 'true', 'node-id': 'review', 'status': 'complete' /* §15.473: the row exists for an untouched node too */ },
+        data: {
+          // §15.473: the row exists for an untouched node too.
+          page: 'flow-run', 'timeline-row': 'true', 'node-id': 'review', 'status': 'complete',
+          'review-round': '2',
+        },
       },
       say: 'No restart, no second cycle, no lost work. The send-back became one more thing to satisfy on the branch that already exists, which is the difference between a review loop and a do-over.',
     },

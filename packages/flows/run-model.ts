@@ -43,6 +43,7 @@ import {
   findFailure,
   findPrUrl,
   findReflectionLoss,
+  findReviewRound,
   WEDGE_THRESHOLD_MS,
 } from './run-model-derive.ts';
 import { sumAuthoritativeCostUsd } from '@forge/kernel';
@@ -252,6 +253,8 @@ function buildRun(args: {
   // --- Artifacts ---
   const artifactsReady = deriveArtifacts(logDir, root, runStatus, manifest.initiative_id, hasReflectionEvents);
 
+  // --- Review round (forge-8vfn.8.1.23) — see findReviewRound's own doc. ---
+  const reviewRound = findReviewRound(events);
   // --- Cost rollup (authoritative rule — packages/kernel/event-cost.ts, item 1.8;
   // the naive all-events sum double/triple-counted iteration-loop phases) ---
   const costUsd = sumAuthoritativeCostUsd(events);
@@ -370,6 +373,7 @@ function buildRun(args: {
     ...(workItems.length > 0 ? { workItems } : {}),
     ...(trigger !== undefined ? { trigger } : {}),
     ...(prUrl !== undefined ? { prUrl } : {}),
+    ...(reviewRound > 0 ? { reviewRound } : {}),
   };
 }
 

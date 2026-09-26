@@ -2784,8 +2784,17 @@ is what this contract reads — but it cannot be the only distinguisher.
     load instead of requiring a manual browser reload;
   - resolved — `[data-page="flow-run"][data-run-id][data-flow-id]
     [data-run-found="true"][data-run-status]
-    [data-flow-resolution="registered"|"unregistered"]`. A `not-found`
-    resolution (the server's honest 404 for a runId that never existed)
+    [data-flow-resolution="registered"|"unregistered"][data-review-round]`.
+    **`data-review-round`** (`forge-8vfn.8.1.23`, T1 rulings 1577/1579, S10
+    run 30) is the number of `adversarial-review` passes THIS CYCLE has
+    COMPLETED, never the review NODE's own status: a send-back continues the
+    same cycle (DEC-2), so `[data-node-id="review"][data-status="complete"]`
+    on the timeline row below stays true from the first pass onward and
+    cannot say which round. `"0"` before any pass has finished, from
+    `findReviewRound` (`@forge/flows`'s `run-model-derive-lineage.ts`) —
+    counts `end` events only, so a pass in progress never counts as done.
+
+    A `not-found` resolution (the server's honest 404 for a runId that never existed)
     renders the shared not-found page instead (`main[data-page="not-found"]
     [data-not-found-kind="run"]`, W7-A4 — `FlowRunDetail`'s own
     `[data-component="run-not-found"]` body is a component-level guard no

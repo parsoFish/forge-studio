@@ -38,6 +38,7 @@ export {
   deriveArtifacts,
   findPrUrl,
   findGateNote,
+  findReviewRound,
 } from './run-model-derive-lineage.ts';
 
 export { eventToNodeId } from './run-model-derive-node-id.ts';

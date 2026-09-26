@@ -912,9 +912,9 @@ export function parseRun(raw: unknown): Run {
     // trigger/reflectionLost above — project is parsed and served, must not
     // be silently dropped here (GateBar depends on it reaching the client).
     ...(r.project !== undefined ? { project: r.project } : {}),
-    // W7-B7 (artifact-plan-17): same guard — the PR artifact page's link
-    // depends on prUrl reaching the client.
+    // W7-B7 / forge-8vfn.8.1.23: same guard — prUrl feeds the PR link, reviewRound data-review-round.
     ...(r.prUrl !== undefined ? { prUrl: r.prUrl } : {}),
+    ...(typeof r.reviewRound === 'number' ? { reviewRound: r.reviewRound } : {}),
     // W8-A3 (flows-23): same guard again — the run detail page's link back to
     // the architect session that produced the initiative. Carried, never
     // defaulted: an absent key must stay absent so nothing fabricates a
