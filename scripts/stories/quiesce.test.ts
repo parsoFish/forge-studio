@@ -32,7 +32,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { waitForPidsGone, waitForTreeQuiet, quiesceWriters, describeQuiesce, reappeared } from './quiesce.mjs';
+import { waitForPidsGone, waitForTreeQuiet, quiesceWriters, describeQuiesce, reappeared, pidAliveWithChildren } from './quiesce.mjs';
 
 /** A clock that never really sleeps, so the bounds are tested and not waited out. */
 function fakeClock() {
@@ -42,7 +42,7 @@ function fakeClock() {
 
 test('waitForPidsGone returns at once when nothing was signalled', async () => {
   const r = await waitForPidsGone([], { upToMs: 5_000, pollMs: 10, clock: fakeClock(), alive: () => true });
-  assert.deepEqual(r, { gone: [], alive: [], waitedMs: 0, timedOut: false });
+  assert.deepEqual(r, { gone: [], alive: [], unknown: [], waitedMs: 0, timedOut: false });
 });
 
 test('waitForPidsGone waits for a pid that is still alive, then reports it gone', async () => {
@@ -136,6 +136,75 @@ test('reappeared matches a removed DIRECTORY by prefix, and a file exactly', () 
 test('reappeared says nothing when the removal stuck — the ordinary case', () => {
   assert.deepEqual(reappeared(['brain/story-s6'], []), []);
   assert.deepEqual(reappeared([], ['?? whatever']), []);
+});
+
+// --- ROW 102b findings 22/23: a guard's catch must surface UNKNOWN, never a
+// safe-looking default -----------------------------------------------------
+
+test('RED — pidAliveWithChildren: a non-ENOENT listing failure is UNKNOWN, not "not alive" (row 102b/22)', () => {
+  const err = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+  const result = pidAliveWithChildren(4242, { listProcs: () => { throw err; } });
+  assert.equal(result, 'unknown', 'an EACCES on the /proc listing must not read as a confident false');
+});
+
+test('genuine control — pidAliveWithChildren: ENOENT (no /proc at all) still reads false, as before', () => {
+  const err = Object.assign(new Error('no such file or directory'), { code: 'ENOENT' });
+  const result = pidAliveWithChildren(4242, { listProcs: () => { throw err; } });
+  assert.equal(result, false, 'a genuinely absent /proc has nothing to observe — unchanged behaviour');
+});
+
+test('RED — pidAliveWithChildren: a non-ENOENT per-candidate stat failure taints the result UNKNOWN (row 102b/22)', () => {
+  const err = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+  const result = pidAliveWithChildren(4242, {
+    listProcs: () => ['1', '2'],
+    readStat: () => { throw err; },
+  });
+  assert.equal(result, 'unknown', 'an unreadable candidate must not be silently dropped as "not a child"');
+});
+
+test('genuine control — pidAliveWithChildren: a candidate that exited between listing and stat (ENOENT) is skipped as before', () => {
+  const err = Object.assign(new Error('no such file'), { code: 'ENOENT' });
+  const result = pidAliveWithChildren(4242, {
+    listProcs: () => ['1'],
+    readStat: () => { throw err; },
+  });
+  assert.equal(result, false, 'a raced exit is an ordinary skip, not UNKNOWN');
+});
+
+test('genuine control — pidAliveWithChildren still finds a real child by ppid', () => {
+  const result = pidAliveWithChildren(4242, {
+    listProcs: () => ['1', '99'],
+    readStat: (p) => (p === '99' ? '99 (node) S 4242 4242 0' : '1 (init) S 0 0 0'),
+  });
+  assert.equal(result, true);
+});
+
+test('waitForPidsGone keeps an UNKNOWN pid outstanding rather than treating it as gone (row 102b/22)', async () => {
+  const r = await waitForPidsGone([4242], { upToMs: 200, pollMs: 50, clock: fakeClock(), alive: () => 'unknown' });
+  assert.deepEqual(r.gone, [], 'an unknown liveness must never be counted as gone');
+  assert.deepEqual(r.alive, [4242]);
+  assert.deepEqual(r.unknown, [4242]);
+  assert.equal(r.timedOut, true);
+});
+
+test('describeQuiesce names an UNKNOWN pid distinctly from one confirmed alive (row 102b/22)', () => {
+  const report = {
+    settled: false,
+    pids: { gone: [], alive: [7, 9], unknown: [9], waitedMs: 500, timedOut: true },
+    tree: { quiet: true, waitedMs: 500, timedOut: false },
+  };
+  const lines = describeQuiesce(report);
+  assert.match(lines[0], /pid 7 still alive/);
+  assert.match(lines[0], /pid 9 — COULD NOT DETERMINE if still alive/);
+});
+
+test('RED — a persistently unreadable tree must never read as quiet (row 102b/23)', async () => {
+  const r = await waitForTreeQuiet({
+    root: '/definitely/does/not/exist-quiesce-row23-probe',
+    upToMs: 150, settleMs: 30, clock: fakeClock(),
+  });
+  assert.equal(r.quiet, false, 'two failed reads must never compare equal to each other');
+  assert.equal(r.timedOut, true);
 });
 
 test('POSITIVE CONTROL — a real late writer is caught end to end', async () => {
