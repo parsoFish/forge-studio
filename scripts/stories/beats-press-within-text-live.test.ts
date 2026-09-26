@@ -89,3 +89,59 @@ test('no match, no fallback: the beat REDS naming attr and text, and NOTHING was
   assert.deepEqual(page.clicks, [], 'a refused text scope must press nothing');
   assert.equal(Object.hasOwn(v, 'anchor'), false, 'no anchor is recorded when nothing was picked');
 });
+
+// D's review of `forge-8vfn.8.1.16` (1): the anchor is the FIRST pick. Press 1
+// falls back to ac-1 and "expands" it (a click to a page where ac-1's comment
+// control carries text naming the needle, as expanded evidence may); press 2
+// then matches ac-1 BY TEXT. The record must still say the story fell back.
+test('fallback on press 1, a text match on press 2 after expansion: the anchor records the fallback', async () => {
+  const collapsed = NONE_MATCH.map((r) =>
+    el('button', { 'data-demo-region': r.id, 'data-action': 'toggle-region' }, r.id === 'ac-1' ? '/expanded' : null, [], r.text));
+  const expanded = [
+    ...NONE_MATCH.map((r) => el('button', { 'data-demo-region': r.id, 'data-action': 'toggle-region' }, null, [], r.text)),
+    el('button', { 'data-demo-region': 'ac-1', 'data-action': 'comment-region' }, null, [], 'evidence: precedence stated'),
+  ];
+  const page = fakeStudio({
+    start: '/artifact',
+    commitMs: 50,
+    pages: {
+      '/artifact': { elements: [READY_MAIN('artifact'), ...collapsed], data: { page: 'artifact', 'page-ready': 'true' } },
+      '/expanded': { elements: [READY_MAIN('artifact'), ...expanded], data: { page: 'artifact', 'page-ready': 'true' } },
+    },
+  });
+  const scope = { attr: 'demo-region', text: 'precedence', fallback: 'first' as const };
+  const beat = {
+    act: 'Anchor to the precedence criterion',
+    do: [
+      { pressWithin: { scope, action: 'toggle-region' } },
+      { pressWithin: { scope, action: 'comment-region' } },
+    ],
+    expect: { route: '/expanded', data: { page: 'artifact', 'page-ready': 'true' } },
+    say: 'x',
+  };
+  const v = await driveBeat(page, beat, 1, 'http://localhost:4124');
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+  assert.deepEqual(page.clicks, [
+    '[data-demo-region="ac-1"] [data-action="toggle-region"]',
+    '[data-demo-region="ac-1"] [data-action="comment-region"]',
+  ]);
+  assert.deepEqual(v.anchor, { by: 'fallback', attr: 'demo-region', text: 'precedence', region: 'ac-1' });
+});
+
+// D's review of `forge-8vfn.8.1.16` (2): a page-sourced scope value is never
+// interpolated into a selector unless it fits SAFE_SCOPE_VALUE.
+test('a hostile page-sourced region id is refused by name, and NOTHING is pressed', async () => {
+  const hostile = 'x"] , [data-action="send-back';
+  const page = fakeStudio({
+    start: '/artifact',
+    commitMs: 50,
+    pages: regionsPage([{ id: hostile, text: 'AC 1: state the precedence.' }]),
+  });
+  const v = await driveBeat(page, toggleBeat('first'), 1, 'http://localhost:4124');
+  assert.equal(v.status, 'red');
+  assert.ok(
+    v.failures.some((f) => f.includes('not a safe scope value')),
+    `failure must name the refusal: ${v.failures.join(' | ')}`,
+  );
+  assert.deepEqual(page.clicks, [], 'a refused scope value must press nothing');
+});

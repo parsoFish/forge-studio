@@ -239,6 +239,14 @@ export function resolveBoundPresses(steps, bindings) {
 }
 
 /**
+ * The charset a page-sourced `pressWithin` scope value must fit before it is
+ * interpolated into a selector — D's review of `forge-8vfn.8.1.16`. A text
+ * scope's value comes off the live page (a region id like `ac-7`), so it gets
+ * the same discipline as story input: refuse by name, never quote-and-hope.
+ */
+export const SAFE_SCOPE_VALUE = /^[A-Za-z0-9._:-]{1,120}$/;
+
+/**
  * The CSS selector for a `pressWithin` step already resolved to a literal
  * `scope.value` (by `resolveBoundPresses` above) — the `data-action="<action>"`
  * control INSIDE the element carrying `data-<attr>="<value>"`, rather than the

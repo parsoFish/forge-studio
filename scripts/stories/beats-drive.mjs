@@ -303,15 +303,16 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   const stepError = steps_.error;
   // `forge-8vfn.8.1.16` / T1 ruling 1561 — the LAST `pressWithin` TEXT scope
   // this beat resolved, carried onto the beat's own record for `story.json`.
-  // "Last" rather than "all": S10 beat 15 presses the SAME scope twice
-  // (`toggle-region` then `comment-region`) and both must resolve to the same
-  // region by construction (re-resolution stability, pinned at the picker),
-  // so one field names the beat's whole anchoring rather than repeating it.
+  // The FIRST pick, not the last (D's review): S10 beat 16 presses the SAME
+  // scope twice, and both land on the same region, but not always the same
+  // WAY. A fallback on press 1 expands ac-1, whose evidence may then name the
+  // needle, so press 2 matches it BY TEXT. Recording the last pick would say
+  // `by: 'text'` and hide that the story fell back.
   // Carried on a RED verdict too — an earlier press's successful pick must
   // not vanish because a LATER step in the same beat failed for some other
   // reason.
   const withTextAnchor = (v) =>
-    steps_.textAnchors.length > 0 ? { ...v, anchor: steps_.textAnchors[steps_.textAnchors.length - 1] } : v;
+    steps_.textAnchors.length > 0 ? { ...v, anchor: steps_.textAnchors[0] } : v;
   // 7.6.143 (b2), T1 ruling 1147 — A HANDLE WAIT NEVER CREDITS A `terminal:`
   // DECLARATION. Run 20's beat 10 declared a 30-minute wait on the develop
   // cycle's terminal event, pressed a control, and its handle wait set this one

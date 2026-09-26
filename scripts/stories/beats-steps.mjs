@@ -18,10 +18,12 @@
  * import back would close a cycle.
  */
 import { routeMatches, waitForHandleOrStall } from './beats-page.mjs';
+import { SAFE_KEY } from './beats-page-read.mjs';
 import { handleFor, runRepeatStep } from './beats-repeat.mjs';
 import { watchControlState } from './beats-control-state.mjs';
 import {
   READY_TIMEOUT_MS, scopedPressHandle, unscopedPressWithinHandle, pickTextScope, formatTextScopePick,
+  SAFE_SCOPE_VALUE,
 } from './beats.mjs';
 
 /** How long a press may be wrong-looking before it is called wrong (ruling 531(3)).
@@ -353,8 +355,9 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
  * Read every `[data-<attr>]` node's own `data-<attr>` value and text, in
  * document order — the raw material `pickTextScope` (`beats.mjs`) picks from.
  * `attr` IS interpolated into the selector; it is validated against
- * `SAFE_KEY` at story-load time (`story-wait-schema.mjs`), so this never
- * carries an operator-authored string into a selector unguarded. The text to
+ * `SAFE_KEY` at story-load time (`story-wait-schema.mjs`) AND again by
+ * `resolveTextScopePress` before this runs, so this never carries an
+ * operator-authored string into a selector unguarded. The text to
  * match NEVER is — the comparison happens in Node, over the values this
  * reads, never inside the page (`pickTextScope` does it, pure).
  */
@@ -380,8 +383,29 @@ async function readTextScopeEntries(page, attr) {
  */
 async function resolveTextScopePress(page, pressWithin) {
   const { scope, action } = pressWithin;
+  // D's review of `forge-8vfn.8.1.16`: both strings that reach a selector are
+  // re-checked HERE, at press time — `attr` against `SAFE_KEY` (the schema
+  // checked it at load; this is the call that interpolates it), and the
+  // picked value against `SAFE_SCOPE_VALUE`, because it comes off the live
+  // page and is interpolated into the scoped handle below.
+  if (!SAFE_KEY.test(scope.attr)) {
+    return {
+      error: `pressWithin: attr "${scope.attr}" is not a safe data-* key — nothing was pressed.`,
+      anchor: null,
+      handle: null,
+    };
+  }
   const entries = await readTextScopeEntries(page, scope.attr);
   const picked = pickTextScope(entries, scope.text, scope.fallback);
+  if (picked !== null && !SAFE_SCOPE_VALUE.test(picked.value)) {
+    return {
+      error:
+        `pressWithin: the picked [data-${scope.attr}] value ${JSON.stringify(picked.value)} is not a safe ` +
+        'scope value — refusing to put a page-sourced string into a selector; nothing was pressed.',
+      anchor: null,
+      handle: null,
+    };
+  }
   if (picked === null) {
     return {
       error:
@@ -398,11 +422,8 @@ async function resolveTextScopePress(page, pressWithin) {
     anchor: Object.freeze({
       by: picked.fellBack ? 'fallback' : 'text', attr: scope.attr, text: scope.text, region: picked.value,
     }),
-    // EXACTLY today's scoped press (task's own instruction): the value came
-    // off the live page, not off a story author's keyboard, and is quoted the
-    // same way `scopedPressHandle` already quotes a `bind`-scope value —
-    // neither path escapes a quote inside it today, so this does not widen
-    // that gap; `buildRegions`' own ids (`ac-${i + 1}`) never carry one.
+    // Today's scoped press — safe to interpolate: `picked.value` passed
+    // `SAFE_SCOPE_VALUE` above.
     handle: scopedPressHandle({ scope: { attr: scope.attr, value: picked.value }, action }),
   };
 }
