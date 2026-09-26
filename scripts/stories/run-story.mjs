@@ -25,7 +25,9 @@
  * this is one expression evaluated twice, not a constant with two possible
  * values.
  */
-import { makeAgentProcProbe, makeAgentChannelDoor, makeCycleTerminalWatch } from './beats-agent-proc.mjs';
+import {
+  makeAgentProcProbe, makeAgentChannelDoor, makeCycleTerminalWatch, makeReflectionWatch, REFLECTION_TERMINAL_STATE,
+} from './beats-agent-proc.mjs';
 import { readdirSync, mkdirSync, writeFileSync, renameSync, rmSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { chromium } from 'playwright-core';
@@ -165,7 +167,12 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // watches — the develop station continues the architect's cycle, so there is
   // no new dispatch dir for the anchor form to find. Null for every beat that
   // does not declare it, which is every beat but S10's kickoff pair.
-  const cycleWatchFor = (wantState, cycleOf = null) => makeCycleTerminalWatch(ROOT, wantState, cycleOf === null ? null : { cycleOf });
+  // T1 1693 (`forge-8vfn.8.1.31`) — `REFLECTION_TERMINAL_STATE` routes to the
+  // reflector's OWN terminal (reflector.end/crashed/reflection-lost) instead
+  // of a `_queue/` state: `merged` precedes reflection, it does not end it.
+  const cycleWatchFor = (wantState, cycleOf = null) => (wantState === REFLECTION_TERMINAL_STATE
+    ? makeReflectionWatch(ROOT, cycleOf)
+    : makeCycleTerminalWatch(ROOT, wantState, cycleOf === null ? null : { cycleOf }));
   // What earlier beats bound, for the routes later beats build from it. Rebuilt
   // per beat rather than mutated — a beat's verdict states what IT learned.
   let bindings = {};
