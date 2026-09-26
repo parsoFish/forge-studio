@@ -20,7 +20,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -35,7 +35,7 @@ const SESSION_ID = '2026-09-05T13-24-51-bf610d7f';
 const CYCLE_ID = '2026-09-05T13-37-42_INIT-2026-09-05-init-gap-registry-consolidation';
 const INITIATIVE_ID = 'INIT-2026-09-05-init-gap-registry-consolidation';
 
-function seed(): { input: CycleInput; logsRoot: string } {
+function seed(): { input: CycleInput; logsRoot: string; root: string } {
   const root = mkdtempSync(join(tmpdir(), 'forge-synth-architect-'));
   const manifestPath = join(root, 'manifest.md');
   const m: InitiativeManifest = {
@@ -60,6 +60,7 @@ function seed(): { input: CycleInput; logsRoot: string } {
   return {
     input: { initiativeId: INITIATIVE_ID, manifestPath, worktreePath: join(root, 'repo'), projectRepoPath: join(root, 'repo') } as CycleInput,
     logsRoot,
+    root,
   };
 }
 
@@ -70,48 +71,60 @@ function architectEndRows(logFilePath: string) {
 }
 
 test('kills "every runCycle entry restates the architect": a second emission for the same cycle writes NOTHING new', () => {
-  const { input, logsRoot } = seed();
-  const logger = createLogger(CYCLE_ID, logsRoot);
+  const { input, logsRoot, root } = seed();
+  try {
+    const logger = createLogger(CYCLE_ID, logsRoot);
 
-  emitSyntheticArchitectEvents(input, logger, 'architect');
-  const afterFirst = architectEndRows(logger.logFilePath);
-  assert.equal(afterFirst.length, 1, 'precondition: the first emission writes the pair');
+    emitSyntheticArchitectEvents(input, logger, 'architect');
+    const afterFirst = architectEndRows(logger.logFilePath);
+    assert.equal(afterFirst.length, 1, 'precondition: the first emission writes the pair');
 
-  emitSyntheticArchitectEvents(input, logger, 'architect');
-  const afterSecond = architectEndRows(logger.logFilePath);
-  assert.equal(afterSecond.length, 1, 'the second entry must not restate the architect — this is the whole defect');
-  assert.equal(afterSecond[0]?.event_id, afterFirst[0]?.event_id, 'and it must be the SAME row, not a rewritten one');
+    emitSyntheticArchitectEvents(input, logger, 'architect');
+    const afterSecond = architectEndRows(logger.logFilePath);
+    assert.equal(afterSecond.length, 1, 'the second entry must not restate the architect — this is the whole defect');
+    assert.equal(afterSecond[0]?.event_id, afterFirst[0]?.event_id, 'and it must be the SAME row, not a rewritten one');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('kills "return [] on the second call": the second emission still HANDS BACK the architect\'s spend, or the ceiling goes blind', () => {
-  const { input, logsRoot } = seed();
-  const logger = createLogger(CYCLE_ID, logsRoot);
-  emitSyntheticArchitectEvents(input, logger, 'architect');
+  const { input, logsRoot, root } = seed();
+  try {
+    const logger = createLogger(CYCLE_ID, logsRoot);
+    emitSyntheticArchitectEvents(input, logger, 'architect');
 
-  const second = emitSyntheticArchitectEvents(input, logger, 'architect');
-  assert.ok(second.length > 0, 'runFlow seeds its CostTracker from this return value — an empty one loses the architect');
-  const end = second.find((e) => e.event_type === 'end');
-  assert.equal(end?.cost_usd, ARCHITECT_COST_USD, 'and the dollars handed back are the architect\'s real ones');
+    const second = emitSyntheticArchitectEvents(input, logger, 'architect');
+    assert.ok(second.length > 0, 'runFlow seeds its CostTracker from this return value — an empty one loses the architect');
+    const end = second.find((e) => e.event_type === 'end');
+    assert.equal(end?.cost_usd, ARCHITECT_COST_USD, 'and the dollars handed back are the architect\'s real ones');
 
-  // Proved through the real consumer, not by inspecting the array: a tracker
-  // seeded from the second call must know the architect's spend exactly once.
-  const emitted: unknown[] = [];
-  const tracker = new CostTracker({
-    ceilingUsd: 27,
-    ceilingSource: 'derived',
-    initiativeId: INITIATIVE_ID,
-    logger: { cycleId: 'x', emit: (p: unknown) => { emitted.push(p); return p; } } as never,
-  });
-  for (const e of second) tracker.noteEvent(e);
-  assert.equal(Number(tracker.totalSpentUsd.toFixed(7)), Number(ARCHITECT_COST_USD.toFixed(7)));
+    // Proved through the real consumer, not by inspecting the array: a tracker
+    // seeded from the second call must know the architect's spend exactly once.
+    const emitted: unknown[] = [];
+    const tracker = new CostTracker({
+      ceilingUsd: 27,
+      ceilingSource: 'derived',
+      initiativeId: INITIATIVE_ID,
+      logger: { cycleId: 'x', emit: (p: unknown) => { emitted.push(p); return p; } } as never,
+    });
+    for (const e of second) tracker.noteEvent(e);
+    assert.equal(Number(tracker.totalSpentUsd.toFixed(7)), Number(ARCHITECT_COST_USD.toFixed(7)));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('kills "idempotent means never emit again": a DIFFERENT cycle\'s log still gets its own pair', () => {
-  const { input, logsRoot } = seed();
-  const first = createLogger(CYCLE_ID, logsRoot);
-  emitSyntheticArchitectEvents(input, first, 'architect');
+  const { input, logsRoot, root } = seed();
+  try {
+    const first = createLogger(CYCLE_ID, logsRoot);
+    emitSyntheticArchitectEvents(input, first, 'architect');
 
-  const other = createLogger(`${CYCLE_ID}-rerun`, logsRoot);
-  emitSyntheticArchitectEvents(input, other, 'architect');
-  assert.equal(architectEndRows(other.logFilePath).length, 1, 'the guard is per cycle log, not a global latch');
+    const other = createLogger(`${CYCLE_ID}-rerun`, logsRoot);
+    emitSyntheticArchitectEvents(input, other, 'architect');
+    assert.equal(architectEndRows(other.logFilePath).length, 1, 'the guard is per cycle log, not a global latch');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

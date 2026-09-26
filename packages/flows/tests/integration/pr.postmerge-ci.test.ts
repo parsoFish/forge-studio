@@ -13,7 +13,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -138,8 +138,12 @@ process.exit(1);
   __resetGhRunnerCache(); // the runner cache is process-lifetime; a shim swap must not reuse the previous one
   const oldPath = process.env.PATH;
   process.env.PATH = `${dir}:${oldPath}`;
+  // forge-8vfn.8.1.25 / T1 1617: every caller already runs `restore()` in its
+  // own `finally` — folding the shim dir's cleanup in here removes it too,
+  // with no change to any test's own try/finally shape.
   return () => {
     process.env.PATH = oldPath;
+    rmSync(dir, { recursive: true, force: true });
   };
 }
 
