@@ -27,11 +27,17 @@
  *           PAID, and removing the row (rather than the checker rewriting
  *           it to nothing useful) is still a deliberate edit.
  *
- * SCOPE. Code files only (`.ts .tsx .mjs .js .cjs`), tracked or untracked-
+ * SCOPE. Code files only (`.ts .tsx .mjs .js .cjs .sh`), tracked or untracked-
  * but-not-ignored (`git ls-files --cached --others --exclude-standard`), so a
  * file cannot dodge the cap by not being committed yet. `package-lock.json`
  * and generated lockfiles are not code. Markdown is NOT in scope: the docs
  * cull is a separate duty with its own budget (spec §4 "Docs").
+ *
+ * `.sh` JOINED THE SCOPE at forge-8vfn.8.1.29: `merge-slot-doors.sh` grew to
+ * 847 lines with no guard ever having looked at it — `gate.sh` (801) and
+ * `lanes.sh` (1064) were already over the cap the day this landed too, with
+ * nothing having said so either. Same cap, same ratchet, same `--write`;
+ * the extension list below is the only change this class of file needed.
  *
  * RUN: node scripts/check-file-size.mjs [--json] [--baseline <path>] [--write]
  */
@@ -103,7 +109,7 @@ export class CorpusUnreadable extends Error {
  */
 export const HEADROOM_LINES = 20;
 
-const CODE_EXTENSIONS = ['.ts', '.tsx', '.mjs', '.js', '.cjs'];
+const CODE_EXTENSIONS = ['.ts', '.tsx', '.mjs', '.js', '.cjs', '.sh'];
 const NOT_CODE = new Set(['package-lock.json']);
 
 /**
