@@ -362,7 +362,10 @@ export async function runCompletenessCriticStep(args: {
     input_refs: [paths.planPath],
     output_refs: [],
     message: 'architect.completeness-critic.start',
-    metadata: { session_id: input.sessionId },
+    // forge-8vfn.8.1.14 — `round` alongside every other architect stage-start
+    // event, so a reader of the log never has to infer which draft round this
+    // critic pass belongs to from event ORDER alone.
+    metadata: { session_id: input.sessionId, round },
   });
 
   const interviewSummary = renderInterviewSummary(

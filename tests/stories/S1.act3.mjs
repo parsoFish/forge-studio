@@ -112,6 +112,7 @@ export const ACT_3 = [
           // `data-session-phase` does not exist at all.
           perTransition: 480_000,
           progressKey: 'session-phase',
+          // Row 108: `critiquing`/`revising` are further values of this key, so each stage change resets the per-transition clock.
         },
         { press: 'open-plan' },
         { press: 'approve-plan' },
