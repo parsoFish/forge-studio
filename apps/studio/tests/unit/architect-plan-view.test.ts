@@ -54,7 +54,10 @@ function run(over: Partial<Run>): Run {
 
 test('phase derivation: null → not-found; working phases collapse; the rest pass through', () => {
   expect(deriveArchitectPlanPhase(null)).toBe('not-found');
-  for (const p of ['interviewing', 'exploring', 'drafting'] as const) expect(deriveArchitectPlanPhase(session(p))).toBe('working');
+  // forge-8vfn.8.1.14 — critiquing/revising (ruling 380's critic + its
+  // bounced-back revision round) collapse into 'working' exactly like
+  // interviewing/exploring/drafting.
+  for (const p of ['interviewing', 'exploring', 'drafting', 'critiquing', 'revising'] as const) expect(deriveArchitectPlanPhase(session(p))).toBe('working');
   for (const p of ['awaiting-answers', 'awaiting-verdict', 'finalizing', 'committed', 'rejected'] as const) {
     expect(deriveArchitectPlanPhase(session(p))).toBe(p);
   }
@@ -62,7 +65,7 @@ test('phase derivation: null → not-found; working phases collapse; the rest pa
 
 test('the gate is armed ONLY at awaiting-verdict — never from a URL, never for a missing session', () => {
   expect(architectGateArmed(session('awaiting-verdict'))).toBe(true);
-  for (const p of ['interviewing', 'awaiting-answers', 'exploring', 'drafting', 'finalizing', 'committed', 'rejected'] as const) {
+  for (const p of ['interviewing', 'awaiting-answers', 'exploring', 'drafting', 'critiquing', 'revising', 'finalizing', 'committed', 'rejected'] as const) {
     expect(architectGateArmed(session(p))).toBe(false);
   }
   expect(architectGateArmed(null)).toBe(false);
@@ -73,6 +76,10 @@ test('per-phase status copy is honest (a rejected plan says rejected; committed 
   expect(architectPlanStatusCopy(session('interviewing'))).toBe('The architect is thinking… (round 2)');
   expect(architectPlanStatusCopy(session('exploring'))).toBe('The architect is exploring edge cases…');
   expect(architectPlanStatusCopy(session('drafting'))).toBe('The architect is drafting the plan…');
+  // forge-8vfn.8.1.14 — the two phases that used to be invisible, reading
+  // "drafting" the whole time (m7-d-proof-S1 evidence).
+  expect(architectPlanStatusCopy(session('critiquing'))).toBe('The architect is checking the plan for gaps…');
+  expect(architectPlanStatusCopy(session('revising'))).toBe('The architect is revising the plan…');
   expect(architectPlanStatusCopy(session('awaiting-verdict'))).toBe('Plan ready — review & approve.');
   expect(architectPlanStatusCopy(session('finalizing'))).toBe('Approved — the architect is finalizing and queueing the manifests…');
   expect(architectPlanStatusCopy(session('committed'))).toBe('Approved — manifests promoted to the queue.');
