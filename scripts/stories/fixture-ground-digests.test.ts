@@ -29,6 +29,7 @@ const PINNED: Record<string, { digest: string; files: number }> = {
   'node-library': { digest: 'bcb1c45a7fe99b04', files: 19 },
   'node-cli-with-tests': { digest: '0d0dff0bc55c0d07', files: 100 },
   'go-provider-old-contract': { digest: '94e16fb026da34b0', files: 127 },
+  'python-unonboarded': { digest: 'adebdb6399d7453d', files: 139 },
 };
 
 function groundsOnDisk(): string[] {
