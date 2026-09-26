@@ -471,3 +471,31 @@ test('1211(b) control: the SAME waiter still refuses a run when the hold belongs
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('--list stays usable while the suite lock is held — the door guards story EXECUTION, not enumeration (T1 1549)', () => {
+  // T1 and the lanes enumerate stories while a run holds the locks. `--list`
+  // loads story files and prints them; it spawns nothing, binds nothing and
+  // writes nothing, so refusing it would only get in the way.
+  const lock = heldLock();
+  try {
+    let stdout = '';
+    let code = 0;
+    try {
+      stdout = execFileSync(process.execPath, ['scripts/stories/run.mjs', '--list'], {
+        cwd: REPO,
+        env: { ...process.env, [SUITE_LOCK_ENV]: lock.path },
+        encoding: 'utf8',
+        timeout: 60_000,
+      });
+    } catch (e) {
+      const err = e as { status?: number; stdout?: string };
+      code = err.status ?? -1;
+      stdout = err.stdout ?? '';
+    }
+    assert.equal(code, 0, `--list must succeed while the suite lock is held. Got exit ${code}: ${stdout.slice(0, 400)}`);
+    assert.doesNotMatch(stdout, /refusing to start a story run/, '--list is not a story run');
+    assert.match(stdout, /S1/, 'and it actually lists the stories');
+  } finally {
+    lock.release();
+  }
+});
