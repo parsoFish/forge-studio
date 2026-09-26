@@ -42,10 +42,10 @@ import {
 } from '@forge/flows';
 import { loadProjectConfig } from '@forge/projects';
 
-import { renderDemoBundle, stripScratchFromDiffStat } from '../demo-model.ts';
+import { renderDemoBundle, stripScratchFromDiffStat, type DemoModel } from '../demo-model.ts';
 import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
 import { judgeCaptureNonce, readStampedNonce } from './capture-nonce.ts';
-import { deriveDemoModel, type DerivedDemoInput } from './derive-demo-model.ts';
+import { deriveDeltaSummary, deriveDemoModel, type DerivedDemoInput } from './derive-demo-model.ts';
 import { derivePrBody, PR_BODY_SECTIONS } from './derive-pr-body.ts';
 
 export const PR_DESCRIPTION_REL = '.forge/pr-description.md';
@@ -106,6 +106,42 @@ function readDelivered(
     }
   }
   return { workItems, acceptanceCriteria };
+}
+
+/**
+ * Delta honesty (forge-mfv5.1.7). `forge demo capture` tags every checkpoint
+ * with its real `delta` (`computeCheckpointDeltas`, demo-model.ts) and writes
+ * that back to demo.json BEFORE stamping the nonce this function is called
+ * after — so by the time capture has verified, demo.json on disk already
+ * carries the flags this re-reads. Rewriting the essence + PR body from them
+ * HERE, before `commitOrchestratedCaptureArtifacts` commits+pushes, is what
+ * keeps the pushed demo.json and the local PR body from both still reading as
+ * if capture had never run. Best-effort: demo.json was just written and
+ * validated by the capture run itself, so a read failure here is named and
+ * skipped rather than failing an otherwise-successful capture.
+ */
+function reviseAfterCapture(
+  demoJsonAbs: string,
+  demoDirAbs: string,
+  prDescriptionAbs: string,
+  worktreePath: string,
+  derivedInput: DerivedDemoInput,
+  emit: (message: string, metadata?: Record<string, unknown>, extra?: { event_type?: 'log' | 'error' }) => void,
+): void {
+  let model: DemoModel;
+  try {
+    model = JSON.parse(readFileSync(demoJsonAbs, 'utf8')) as DemoModel;
+  } catch (err) {
+    emit('demo.delta-revise-skipped', { detail: err instanceof Error ? err.message : String(err) }, { event_type: 'error' });
+    return;
+  }
+  const deltaSummary = deriveDeltaSummary(model.checkpoints);
+  if (!deltaSummary) return; // no checkpoint carries a delta — nothing captured to revise from
+  const revised: DemoModel = { ...model, essence: `${model.essence} ${deltaSummary}`.trim() };
+  writeFileSync(demoJsonAbs, `${JSON.stringify(revised, null, 2)}\n`);
+  renderDemoBundle(demoDirAbs, worktreePath); // re-render DEMO.md from the revised essence
+  writeFileSync(prDescriptionAbs, derivePrBody(revised, derivedInput));
+  emit('demo.delta-revised', { delta_summary: deltaSummary });
 }
 
 /** Run the integrate band. Synchronous by construction: nothing here waits on a model. */
@@ -286,6 +322,7 @@ export function runIntegrateBand(
     emit('demo.capture', { capture_ok: true, nonce_match: false, nonce_verdict: verdict.reason, capture_nonce: nonce }, { event_type: 'error' });
     return { status: 'failed', reason: verdict.reason, detail: verdict.detail };
   }
+  reviseAfterCapture(demoJsonAbs, demoDirAbs, prDescriptionAbs, input.worktreePath, derivedInput, emit);
   const committed = commitOrchestratedCaptureArtifacts(input.worktreePath, demoDirRel, input.initiativeId);
   emit('demo.capture', { capture_ok: true, nonce_match: true, capture_nonce: nonce, exit_code: 0, committed, duration_ms: cap.durationMs });
   emit('demo.complete', { acceptance_criteria: derivedInput.acceptanceCriteria.length, capture: profile.capture });

@@ -193,6 +193,36 @@ function testEvidenceRows(gateEvidence: readonly GateEvidenceRow[]): TestResultR
 }
 
 /**
+ * Delta honesty (forge-mfv5.1.7): the one-or-two-sentence summary of what the
+ * per-checkpoint `delta` flags actually found, shared by the re-derived essence
+ * and `derivePrBody`'s evidence section so the two can never disagree. `null`
+ * when no checkpoint carries a `delta` yet (capture has not run).
+ *
+ * FAILS CLOSED: an 'unknown' checkpoint is NAMED but never rolled into a "no
+ * change" claim — a claim of "no observable change" is only made when EVERY
+ * captured checkpoint that was actually compared came back unchanged AND none
+ * were unknown. A 'changed' checkpoint always produces the "<k> of <n>" count,
+ * whether or not other checkpoints are unknown.
+ */
+export function deriveDeltaSummary(checkpoints: readonly DemoModelCheckpoint[]): string | null {
+  const withDelta = checkpoints.filter((c) => c.delta !== undefined);
+  if (withDelta.length === 0) return null;
+  const n = withDelta.length;
+  const changed = withDelta.filter((c) => c.delta === 'changed');
+  const unknown = withDelta.filter((c) => c.delta === 'unknown');
+  const sentences: string[] = [];
+  if (changed.length > 0) {
+    sentences.push(`${changed.length} of ${n} captured checkpoints changed behaviour.`);
+  } else if (unknown.length === 0) {
+    sentences.push('No observable behaviour change was captured.');
+  }
+  if (unknown.length > 0) {
+    sentences.push(`${unknown.length} checkpoint(s) could not be compared: ${unknown.map((c) => c.label).join(', ')}`);
+  }
+  return sentences.join(' ');
+}
+
+/**
  * The one-line essence. Derived from counts the orchestrator measured, so it
  * states what happened rather than characterising it — the previous author's
  * prose essence is exactly the kind of claim nothing could check.

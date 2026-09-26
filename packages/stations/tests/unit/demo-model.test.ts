@@ -19,6 +19,7 @@ import {
   renderDemoBundle,
   mergeCapturedMedia,
   collectCapturedMedia,
+  computeCheckpointDeltas,
   MAX_CAPTURED_OUTPUT_BYTES,
   collectLiveEvidence,
   mergeLiveEvidence,
@@ -514,6 +515,76 @@ test('collectCapturedMedia: picks up before/<label>.out + after/<label>.out as c
   const churn = captured.find((c) => c.label === 'churn');
   assert.equal(churn?.beforeOutput, 'BEFORE stdout\n');
   assert.equal(churn?.afterOutput, 'AFTER stdout\n');
+});
+
+function deltaBundle(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'demo-delta-'));
+  mkdirSync(join(dir, 'before'), { recursive: true });
+  mkdirSync(join(dir, 'after'), { recursive: true });
+  return dir;
+}
+
+test('computeCheckpointDeltas: a command checkpoint whose before/after .out bytes are identical is "unchanged"', () => {
+  const dir = deltaBundle();
+  writeFileSync(join(dir, 'before', 'churn.out'), 'same output\n');
+  writeFileSync(join(dir, 'after', 'churn.out'), 'same output\n');
+  const model: DemoModel = {
+    title: 'T', essence: 'E', project: 'p', diffStat: 'd',
+    checkpoints: [{ label: 'churn', caption: 'c', command: 'gitpulse churn .' }],
+  };
+  const out = computeCheckpointDeltas(model, dir);
+  assert.equal(out.checkpoints[0]?.delta, 'unchanged');
+});
+
+test('computeCheckpointDeltas: a command checkpoint whose before/after .out bytes differ (even same length) is "changed"', () => {
+  const dir = deltaBundle();
+  writeFileSync(join(dir, 'before', 'churn.out'), 'aaaa');
+  writeFileSync(join(dir, 'after', 'churn.out'), 'bbbb');
+  const model: DemoModel = {
+    title: 'T', essence: 'E', project: 'p', diffStat: 'd',
+    checkpoints: [{ label: 'churn', caption: 'c', command: 'gitpulse churn .' }],
+  };
+  const out = computeCheckpointDeltas(model, dir);
+  assert.equal(out.checkpoints[0]?.delta, 'changed');
+});
+
+test('computeCheckpointDeltas: a missing before or after .out is "unknown" (fails closed, never counted as changed)', () => {
+  const dir = deltaBundle();
+  writeFileSync(join(dir, 'after', 'churn.out'), 'only after\n');
+  const model: DemoModel = {
+    title: 'T', essence: 'E', project: 'p', diffStat: 'd',
+    checkpoints: [{ label: 'churn', caption: 'c', command: 'gitpulse churn .' }],
+  };
+  const out = computeCheckpointDeltas(model, dir);
+  assert.equal(out.checkpoints[0]?.delta, 'unknown');
+});
+
+test('computeCheckpointDeltas: a browser checkpoint compares sha256 of the two sides\' .filmstrip.png', () => {
+  const dir = deltaBundle();
+  writeFileSync(join(dir, 'before', 'home.filmstrip.png'), Buffer.from([1, 2, 3]));
+  writeFileSync(join(dir, 'after', 'home.filmstrip.png'), Buffer.from([1, 2, 3]));
+  const model: DemoModel = {
+    title: 'T', essence: 'E', project: 'p', diffStat: 'd',
+    checkpoints: [{ label: 'home', caption: 'c', route: '/home' }],
+  };
+  const out = computeCheckpointDeltas(model, dir);
+  assert.equal(out.checkpoints[0]?.delta, 'unchanged');
+});
+
+test('computeCheckpointDeltas: a browser checkpoint with differing filmstrips is "changed"; missing both is "unknown"', () => {
+  const dir = deltaBundle();
+  writeFileSync(join(dir, 'before', 'home.filmstrip.png'), Buffer.from([1, 2, 3]));
+  writeFileSync(join(dir, 'after', 'home.filmstrip.png'), Buffer.from([9, 9, 9]));
+  const model: DemoModel = {
+    title: 'T', essence: 'E', project: 'p', diffStat: 'd',
+    checkpoints: [
+      { label: 'home', caption: 'c', route: '/home' },
+      { label: 'missing', caption: 'c', route: '/missing' },
+    ],
+  };
+  const out = computeCheckpointDeltas(model, dir);
+  assert.equal(out.checkpoints[0]?.delta, 'changed');
+  assert.equal(out.checkpoints[1]?.delta, 'unknown');
 });
 
 test('mergeCapturedMedia: back-fills captured outputs into a command checkpoint (kind unchanged)', () => {

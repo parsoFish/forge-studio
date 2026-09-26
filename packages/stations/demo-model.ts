@@ -18,6 +18,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
 import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME } from '@forge/flows';
@@ -478,6 +479,43 @@ export function mergeCapturedMedia(model: DemoModel, captured: CapturedMedia[]):
       afterVideoSrc: c.afterVideoSrc ?? null,
     }));
   return { ...model, checkpoints: [...checkpoints, ...appended] };
+}
+
+/**
+ * Delta honesty (forge-mfv5.1.7): compare a checkpoint's captured before vs
+ * after evidence and tag it `changed | unchanged | unknown`. A command
+ * checkpoint compares `before/<stem>.out` vs `after/<stem>.out` BYTE FOR
+ * BYTE (never just their lengths — a same-length, different-content pair
+ * must read as `changed`); a browser checkpoint (no `command`) compares the
+ * sha256 of the two sides' `.filmstrip.png`. Either side missing or
+ * unreadable ⇒ `unknown` — FAILS CLOSED: 'unknown' is never returned as
+ * `unchanged`, so it can never be misread as a claim that nothing changed.
+ * Called by `forge demo capture` right after `mergeCapturedMedia`, before the
+ * bundle is stamped and written. Pure given the same files on disk.
+ */
+function checkpointDelta(cp: DemoModelCheckpoint, bundleDir: string): NonNullable<DemoModelCheckpoint['delta']> {
+  const stem = checkpointArtifactStem(cp.label);
+  const [beforeFile, afterFile] = cp.command
+    ? [join(bundleDir, 'before', `${stem}.out`), join(bundleDir, 'after', `${stem}.out`)]
+    : [join(bundleDir, 'before', `${stem}.filmstrip.png`), join(bundleDir, 'after', `${stem}.filmstrip.png`)];
+  let before: Buffer;
+  let after: Buffer;
+  try {
+    before = readFileSync(beforeFile);
+    after = readFileSync(afterFile);
+  } catch {
+    return 'unknown';
+  }
+  if (cp.command) return before.equals(after) ? 'unchanged' : 'changed';
+  const beforeDigest = createHash('sha256').update(before).digest('hex');
+  const afterDigest = createHash('sha256').update(after).digest('hex');
+  return beforeDigest === afterDigest ? 'unchanged' : 'changed';
+}
+
+/** Annotate every checkpoint in `model` with its computed `delta`, reading
+ *  the capture bundle at `bundleDir` (`<demoDir>/.capture`). Pure + immutable. */
+export function computeCheckpointDeltas(model: DemoModel, bundleDir: string): DemoModel {
+  return { ...model, checkpoints: model.checkpoints.map((cp) => ({ ...cp, delta: checkpointDelta(cp, bundleDir) })) };
 }
 
 export type RenderDemoBundleResult = {

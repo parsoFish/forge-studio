@@ -13,8 +13,8 @@
  * is the kind of rule an author can break and a reader cannot check.
  */
 
-import type { DemoModel } from '../demo-model.ts';
-import { renderAcceptanceCriterion, type DerivedDemoInput } from './derive-demo-model.ts';
+import type { DemoModel, DemoModelCheckpoint } from '../demo-model.ts';
+import { deriveDeltaSummary, renderAcceptanceCriterion, type DerivedDemoInput } from './derive-demo-model.ts';
 
 /** The sections a PR body must carry. `openPrInline` needs a body; a reader needs these. */
 export const PR_BODY_SECTIONS = ['## Why', '## What', '## How'] as const;
@@ -23,14 +23,24 @@ function bullets(lines: readonly string[], empty: string): string[] {
   return lines.length > 0 ? lines.map((l) => `- ${l}`) : [`_${empty}_`];
 }
 
-/** The PR body for a derived demo model. Pure: same input, same bytes. */
+/** The delta flag in words, appended to a checkpoint's evidence row. */
+const DELTA_WORDS: Record<NonNullable<DemoModelCheckpoint['delta']>, string> = {
+  changed: 'changed',
+  unchanged: 'unchanged',
+  unknown: 'could not be compared',
+};
+
+/** The PR body for a derived demo model. Pure: same input, same bytes (flags,
+ *  when present, come in via `model.checkpoints[].delta` — never recomputed here). */
 export function derivePrBody(model: DemoModel, input: DerivedDemoInput): string {
   const gateRows = input.gateEvidence.map(
     (row) => `- \`${row.cmd.join(' ')}\` (${row.gate}) — ${row.ok ? 'pass' : 'fail'}`,
   );
-  const checkpointRows = model.checkpoints.map((c) =>
-    c.command ? `- \`${c.command}\` — ${c.caption}` : `- ${c.label} — ${c.caption}`,
-  );
+  const checkpointRows = model.checkpoints.map((c) => {
+    const base = c.command ? `\`${c.command}\` — ${c.caption}` : `${c.label} — ${c.caption}`;
+    return c.delta ? `- ${base} (${DELTA_WORDS[c.delta]})` : `- ${base}`;
+  });
+  const deltaSummary = deriveDeltaSummary(model.checkpoints);
 
   return [
     `# ${input.title}`,
@@ -66,6 +76,7 @@ export function derivePrBody(model: DemoModel, input: DerivedDemoInput): string 
     '',
     ...bullets(checkpointRows.map((r) => r.replace(/^- /, '')), 'no evidence was captured for this class'),
     '',
+    ...(deltaSummary ? [deltaSummary, ''] : []),
     `_Derived by forge from the acceptance criteria, the gate evidence and the diff — not authored by an agent._`,
     '',
   ].join('\n');

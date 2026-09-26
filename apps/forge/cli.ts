@@ -777,7 +777,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
     const changedRef = demoFlagValue(rest, '--changed') ?? 'HEAD';
     try {
       const { captureCheckpoints, model: demoModel } = await requireFactoryDemo('forge demo capture');
-      const { collectCapturedMedia, mergeCapturedMedia, renderDemoBundle, stampCaptureNonce } = demoModel;
+      const { collectCapturedMedia, mergeCapturedMedia, computeCheckpointDeltas, renderDemoBundle, stampCaptureNonce } = demoModel;
       const { CAPTURE_NONCE_ENV } = await import('@forge/flows');
       const bundleDir = join(demoDir, '.capture');
       const demoJson = JSON.parse(readFileSync(jsonPath, 'utf8'));
@@ -794,13 +794,17 @@ async function cmdDemo(rest: string[]): Promise<void> {
       await captureCheckpoints({ projectRepoPath, project: projectArg ?? '(local)', baseRef, changedRef, bundleDir, initiativeId, checkpointLabels: labels, checkpointCommands, build: true });
       const captured = collectCapturedMedia(bundleDir);
       const merged = mergeCapturedMedia(JSON.parse(readFileSync(jsonPath, 'utf8')), captured);
+      // Delta honesty (forge-mfv5.1.7): tag every checkpoint with what its real
+      // before/after evidence actually shows, before demo.json is stamped and
+      // written — `integrate` re-derives the essence and PR body from these flags.
+      const withDeltas = computeCheckpointDeltas(merged, bundleDir);
       // N2 (plan item 2.6): bind the artifacts to THIS orchestrated run. The
       // orchestrator injected a per-run nonce into our environment; stamping
       // it into demo.json AFTER a successful capture+merge is the proof the
       // composed unifier gate verifies. Reached only when capture succeeded —
       // the inner-failure path (catch below) must never stamp.
       const runNonce = process.env[CAPTURE_NONCE_ENV];
-      const stamped = runNonce ? stampCaptureNonce(merged, runNonce) : merged;
+      const stamped = runNonce ? stampCaptureNonce(withDeltas, runNonce) : withDeltas;
       writeFileSync(jsonPath, JSON.stringify(stamped, null, 2));
       const r = renderDemoBundle(demoDir, projectRepoPath);
       console.log(`forge demo capture: merged ${captured.length} captured checkpoint(s); ${r.ok ? 'rendered DEMO.md' : 'render failed: ' + r.errors.join('; ')}`);
