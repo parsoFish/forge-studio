@@ -57,7 +57,7 @@ operator-ratified new cap — never a silent raise.
 | `contracts` | 6 | 1,369 | **1,369** | ratified 1,369 — forge-mfv5.2.2 demo-declaration rules (command/route extraction, presentation-only skill ids) shared by stations, factory and projects, +106 on 1,263 (T1 1626); see git history for prior raises. |
 | `kernel` | 30 | 5,513 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `projects` | 46 | 10,889 | **9,098** | ratified 9,098 — forge-mfv5.2.2 DEMO-SKILL checks the declaration drives a checkpoint; declared-skill loader skips presentation-only skills, +37 on 9,061, lane-ratified under ruling 666; see git history for prior raises. |
+| `projects` | 46 | 10,906 | **9,115** | ratified 9,115 — forge-1rk5.3 row 131 DEPS: node preloading a package (--import/--require/-r/--loader) needs node_modules, +17 on 9,098, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,098 | **13,098** | ratified 13,098 — row 121 gh 'error connecting to' is a DNS failure (forge-8vfn.8.1.24), +7 lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 61 | 20,638 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
@@ -67,7 +67,7 @@ operator-ratified new cap — never a silent raise.
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,835 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **467** | **127,176** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **467** | **127,193** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -228,7 +228,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/preflight-release.ts | projects | verbatim | 71 |
 | packages/projects/preflight-repo.ts | projects | verbatim | 224 |
 | packages/projects/preflight-skills.ts | projects | verbatim | 202 |
-| packages/projects/preflight-deps.ts | projects | verbatim | 158 |
+| packages/projects/preflight-deps.ts | projects | verbatim | 175 |
 | packages/projects/project-migrate.ts | projects | verbatim | 197 |
 | packages/stations/reflect-reconcile.ts | stations | verbatim | 167 |
 | packages/stations/reflection-doc.ts | stations | verbatim | 354 |

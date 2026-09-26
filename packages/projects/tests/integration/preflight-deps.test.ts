@@ -214,3 +214,38 @@ test('wiring: requireRunnableGate OFF (the default) emits no DEPS clause — bir
     cleanup();
   }
 });
+
+// forge-1rk5.3 row 131: a leading `node` needs node_modules when it preloads a PACKAGE. gitpulse's own gate
+// (`node --import tsx --test …`) passed this clause while unprovisioned and died later as dev-loop.baseline-red.
+for (const [flag, body] of [
+  ['--import', 'node --import tsx --test test/unit.test.ts'],
+  ['--require', 'node --require ts-node/register test.js'],
+  ['-r', 'node -r esm test.js'],
+  ['--loader', 'node --loader ts-node/esm test.ts'],
+  ['--experimental-loader', 'node --experimental-loader tsx test.ts'],
+  ['--import=', 'node --import=tsx --test test/unit.test.ts'],
+] as const) {
+  test(`DEPS (HARD): node ${flag} <package> needs node_modules — FAILS when unprovisioned`, () => {
+    const dir = tmp();
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ scripts: { test: body } }));
+      const r = checkDeps(dir, withLocalCmd(dir, ['npm', 'test']));
+      assert.equal(r.pass, false, r.detail);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
+test('DEPS (HARD): node preloading a local PATH, or plain node flags, needs nothing installed — passes', () => {
+  for (const body of ['node --import ./register.mjs --test t.ts', 'node --experimental-strip-types --test t.ts', 'node -r /abs/hook.js t.js']) {
+    const dir = tmp();
+    try {
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ scripts: { test: body } }));
+      assert.equal(checkDeps(dir, withLocalCmd(dir, ['npm', 'test'])).pass, true, body);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+});
+
