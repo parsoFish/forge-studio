@@ -18,6 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { loadDeclaredSkills, resolveDeclaredSkillPath, MissingDeclaredSkillError } from '../../preflight-skills.ts';
+import { PRESENTATION_ONLY_SKILL_IDS } from '@forge/contracts';
 
 function tmp(): string {
   return mkdtempSync(join(tmpdir(), 'forge-declared-skills-'));
@@ -122,6 +123,45 @@ test('loadDeclaredSkills: preserves declaration order across multiple resolving 
     }
     const loaded = loadDeclaredSkills(dir, forgeRoot);
     assert.deepEqual(loaded.map((s) => s.id), ['a-skill', 'b-skill']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// ── PRESENTATION_ONLY_SKILL_IDS (bead forge-mfv5.2.2 / forge-mfv5.2.8): a
+// generated composer skill (`demo-design`) shapes the Studio demo page, never
+// a cycle input, so `loadDeclaredSkills` — the ONE loader both agent-prompt
+// builders read through — must never fold it in, whether or not it resolves.
+
+test('loadDeclaredSkills: PRESENTATION_ONLY_SKILL_IDS (demo-design) is filtered out even when its SKILL.md exists', () => {
+  const dir = tmp();
+  const forgeRoot = tmp();
+  try {
+    assert.deepEqual(PRESENTATION_ONLY_SKILL_IDS, ['demo-design']);
+    declareProject(dir, ['demo-design', 'x']);
+    mkdirSync(join(dir, '.forge', 'skills', 'demo-design'), { recursive: true });
+    writeFileSync(join(dir, '.forge', 'skills', 'demo-design', 'SKILL.md'), '# demo-design composer\n');
+    mkdirSync(join(dir, '.forge', 'skills', 'x'), { recursive: true });
+    writeFileSync(join(dir, '.forge', 'skills', 'x', 'SKILL.md'), '# x\n');
+
+    const loaded = loadDeclaredSkills(dir, forgeRoot);
+    assert.deepEqual(loaded.map((s) => s.id), ['x'], 'demo-design must never reach the agent prompt loader');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('loadDeclaredSkills: a presentation-only id that resolves NOWHERE is silently skipped, never throws', () => {
+  const dir = tmp();
+  const forgeRoot = tmp();
+  try {
+    // demo-design has no SKILL.md anywhere — SKILLS/checkSkills (a separate,
+    // hard clause) is what enforces resolution; the prompt loader just never
+    // looks at it.
+    declareProject(dir, ['demo-design']);
+    assert.deepEqual(loadDeclaredSkills(dir, forgeRoot), []);
   } finally {
     rmSync(dir, { recursive: true, force: true });
     rmSync(forgeRoot, { recursive: true, force: true });
