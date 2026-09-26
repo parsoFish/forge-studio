@@ -25,11 +25,12 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { provisionFixtureGround, teardownFixtureGround } from './fixture-ground.mjs';
+import { runPreflight } from '../../packages/projects/preflight.ts';
 
 const scratch = () => mkdtempSync(join(tmpdir(), 'fixture-ground-brain-'));
 
@@ -160,3 +161,20 @@ test('#951 review: a symlink inside the fixture brain/ is refused, naming it, be
   assert.equal(existsSync(join(root, 'projects', 'story-s8')), false, 'no ground written');
   assert.equal(existsSync(join(root, 'brain', 'projects', 'story-s8')), false, 'no brain profile written');
 });
+
+// forge-1rk5.3 / row 127: a develop cycle is claimed only for a contract-ready project. node-cli-with-tests
+// shipped roadmap.md but no Brain 3 profile, so every develop cycle on it was refused at claim on HARD C4.
+test('the REAL node-cli-with-tests fixture provisions a ground that passes every HARD preflight clause', () => {
+  const root = scratch();
+  try {
+    const fixture = 'node-cli-with-tests';
+    cpSync(join(import.meta.dirname, '..', '..', 'tests', 'stories', 'grounds', fixture), join(root, 'tests', 'stories', 'grounds', fixture), { recursive: true });
+    provisionFixtureGround(root, { storyId: 'c4probe', project: 'story-c4probe', fixture });
+    const report = runPreflight(join(root, 'projects', 'story-c4probe'), { forgeRoot: root });
+    const hardFails = report.clauses.filter((c) => c.hard && !c.pass).map((c) => `${c.clause}: ${c.detail}`);
+    assert.deepEqual(hardFails, [], 'a provisioned node-cli-with-tests ground must be contract-ready for a develop claim');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+

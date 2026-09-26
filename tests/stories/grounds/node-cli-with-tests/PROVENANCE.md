@@ -63,3 +63,19 @@ ground.
   forge worktree — a dirty ground read clean. A provisioned fixture answers for itself.
 
 **Stories served.** S4.
+
+## A real Brain 3 profile (`tests/stories/grounds/node-cli-with-tests/brain/profile.md`) — required for a develop claim
+
+A develop cycle is claimed only for a contract-ready project, and HARD clause **C4**
+(`packages/projects/preflight.ts` `checkC4`) needs `brain/projects/<project>/profile.md` in the forge
+repo as well as the seed's `roadmap.md`. This fixture shipped the roadmap but no profile, so every develop
+cycle on a provisioned ground was refused at claim ("not contract-ready (failing hard clause(s): C4)"),
+non-terminally, left in `pending`. S4 never met it: S4 stops at the plan gate.
+
+`tests/stories/grounds/node-cli-with-tests/brain/profile.md` (beside `seed/`) is the REAL gitpulse Brain 3 profile, byte-for-byte:
+`brain/projects/gitpulse/profile.md`, blob `df6ab676d3c98b2e2a90ab2cdc401a02678abaa8`, last changed in forge
+commit `cf8950bbe3d7a81b6e1759e3ebe4e07c28b1e567` — the same project this seed was archived from. Verify with
+`git hash-object tests/stories/grounds/node-cli-with-tests/brain/profile.md`. `provisionFixtureGround`
+copies it to `brain/projects/<project>/` and `teardownFixtureGround` removes it (the capability the
+`go-provider-old-contract` ground introduced). `scripts/stories/fixture-ground-brain.test.ts` provisions THIS
+fixture into a scratch root and asserts every HARD preflight clause passes (forge-1rk5.3).
