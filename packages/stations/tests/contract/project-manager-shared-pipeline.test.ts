@@ -202,6 +202,8 @@ test('F5: the SAME runProjectManager pass over each entry path\'s manifest produ
       manifestPath: manifestPathA,
       projectRepoPath: worktree,
       worktreePath: worktree,
+      // forge-8vfn.8.1.17: runProjectManager requires a real cycleId now.
+      cycleId: `2026-07-18T00-00-00_${INITIATIVE_ID}-a`,
     };
     await runProjectManager(inputA, createLogger('TEST-shared-pipeline-a', logsDir), {
       agentDef: canonicalDef('project-manager'),
@@ -228,6 +230,11 @@ test('F5: the SAME runProjectManager pass over each entry path\'s manifest produ
       manifestPath: manifestPathB,
       projectRepoPath: worktree,
       worktreePath: worktree,
+      // forge-8vfn.8.1.17: runProjectManager requires a real cycleId now.
+      // Deliberately a DIFFERENT cycleId from inputA's — the byte-identical
+      // claim under test is about the compiled work items, which never
+      // embed cycleId, so this also proves cycleId isn't a hidden input.
+      cycleId: `2026-07-18T00-00-00_${INITIATIVE_ID}-b`,
     };
     await runProjectManager(inputB, createLogger('TEST-shared-pipeline-b', logsDir), {
       agentDef: canonicalDef('project-manager'),

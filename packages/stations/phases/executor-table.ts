@@ -24,6 +24,7 @@ import { BAND_GUARD_IDS, type BandGuardId } from '@forge/contracts';
 import type { NodeExecContext } from '@forge/flows';
 import type { NodeKind } from '@forge/flows';
 import { type FlowRunnerDeps, buildDefaultDeps, raceWithWedge } from './executor-deps.ts';
+import { requireCycleId } from './cycle-id.ts';
 import type { ClassProfilePort } from '../class-profile-port.ts';
 
 /**
@@ -571,7 +572,7 @@ const execAgent: NodeExecutor = async (ctx) => {
   }
 
   await runAgent(def, {
-    runId: input.cycleId ?? input.initiativeId,
+    runId: requireCycleId(input, `execAgent(${ctx.nodeId})`),
     logger: nodeLogger,
     workdir: input.worktreePath,
     prompt,

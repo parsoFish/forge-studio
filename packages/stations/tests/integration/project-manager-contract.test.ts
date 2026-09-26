@@ -132,11 +132,15 @@ function setupHarness(
   const logsDir = join(dir, '_logs');
   mkdirSync(logsDir, { recursive: true });
   const logger = createLogger('TEST-pm-contract', logsDir);
+  const initiativeId = 'INIT-2026-06-06-pm-contract-test';
   const input: CycleInput = {
-    initiativeId: 'INIT-2026-06-06-pm-contract-test',
+    initiativeId,
     manifestPath,
     projectRepoPath: worktree,
     worktreePath: worktree,
+    // forge-8vfn.8.1.17: runProjectManager now requires a real cycleId (the
+    // `_logs/<cycleId>/` dir Studio reads) — runCycle always threads one.
+    cycleId: `2026-06-08T00-00-00_${initiativeId}`,
   };
   return { dir, worktree, logger, input };
 }

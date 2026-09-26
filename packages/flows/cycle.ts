@@ -269,6 +269,8 @@ export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<
   const effectiveQualityGateCmd = resolveQualityGateCmd(input);
   const inputWithGate: CycleInput = {
     ...input,
+    // forge-8vfn.8.1.17: the MINTED id, so no executor falls back to _logs/<initiativeId>/.
+    cycleId,
     qualityGateCmd: effectiveQualityGateCmd,
   };
 

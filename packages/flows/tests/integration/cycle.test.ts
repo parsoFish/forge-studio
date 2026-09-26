@@ -28,7 +28,12 @@ import {
   type CiCommandRunner,
 } from '../../ci-gate.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
-import { serializeManifest, DERIVED_CEILING_MARGIN_SHARE, type InitiativeManifest } from '../../manifest.ts';
+import {
+  serializeManifest,
+  readManifestCycleId,
+  DERIVED_CEILING_MARGIN_SHARE,
+  type InitiativeManifest,
+} from '../../manifest.ts';
 import { UNREACHED_PHASE_WIRING } from '../test-fixtures/phase-wiring.ts';
 
 function setupLogger(): { dir: string; logger: ReturnType<typeof createLogger>; cycleId: string } {
@@ -527,6 +532,57 @@ test('spec §5 item 7: the architect\'s cost is IN the cycle total, not just in 
     const warn = events.find((e) => e.message === 'flow.cost-warn');
     assert.ok(warn, 'the architect\'s $8 against the $10 ceiling is 80% — the runner\'s tracker must have counted it');
     assert.equal((warn!.metadata as Record<string, unknown>)?.spentUsd, 8);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// forge-8vfn.8.1.17 / T1 ruling 1562 / §6.15: a FRESH cycle (no input.cycleId,
+// no persisted manifest cycle id) must hand every node executor the SAME
+// cycleId it minted for the logger + `_logs/<cycleId>/` — never the bare
+// initiativeId. `inputWithGate` used to drop the minted id, so review
+// artefacts landed under `_logs/<initiativeId>/` while Studio read
+// `_logs/<cycleId>/` and never showed them.
+test('forge-8vfn.8.1.17: a fresh cycle threads its minted cycleId into every executor input', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'forge-cycleid-thread-'));
+  const logsRoot = join(root, '_logs'); // forge-8vfn.8.1.10: never the repo's own _logs
+  try {
+    const manifestPath = join(root, 'INIT-2026-06-08-p4test.md');
+    writeFileSync(manifestPath, serializeManifest(cycleManifestFixture({ flow_id: 'forge-develop' })));
+
+    const capturedCycleIds: (string | undefined)[] = [];
+    const wiring = {
+      ...UNREACHED_PHASE_WIRING,
+      executor: {
+        run: async (_nodeId: string, ctx: { input: { cycleId?: string } }) => {
+          capturedCycleIds.push(ctx.input.cycleId);
+          throw new Error('test-sentinel-abort-after-capture');
+        },
+      },
+    };
+
+    // No `cycleId` on the input and no persisted one on the manifest yet ⇒
+    // runCycle mints a fresh id. It persists that minted id onto the
+    // manifest BEFORE calling runFlow, so re-reading the manifest afterwards
+    // gives us the minted id independently of anything cycle.ts hands the
+    // executor — the value the test compares the captured input against.
+    await runCycle({
+      initiativeId: 'INIT-2026-06-08-p4test',
+      manifestPath,
+      projectRepoPath: root,
+      worktreePath: root,
+      logsRoot,
+      dryRun: false,
+    }, wiring).catch(() => { /* sentinel abort, once the input has been captured */ });
+
+    const mintedCycleId = readManifestCycleId(manifestPath);
+    assert.ok(mintedCycleId, 'runCycle must persist the minted cycleId onto the manifest');
+    assert.equal(capturedCycleIds.length, 1, 'the dev node executor must have run exactly once');
+    assert.equal(
+      capturedCycleIds[0],
+      mintedCycleId,
+      'the executor must receive the SAME cycleId the cycle minted, never undefined or the bare initiativeId',
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

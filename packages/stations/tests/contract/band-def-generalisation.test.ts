@@ -317,7 +317,12 @@ test('execAgent: a non-canonical def declaring wi-contract routes to the PM band
     const ctx = makeCtx({
       node: { id: 'pm', agent: 'docs-planner' },
       agents: new Map([['docs-planner', def]]),
-      input: { initiativeId, manifestPath, projectRepoPath: worktree, worktreePath: worktree },
+      // forge-8vfn.8.1.17: runProjectManager (reached via the PM band) now
+      // requires a real cycleId.
+      input: {
+        initiativeId, manifestPath, projectRepoPath: worktree, worktreePath: worktree,
+        cycleId: `2026-01-01T00-00-00_${initiativeId}`,
+      },
       nodeLogger: logger,
     });
 
