@@ -55,7 +55,12 @@ function readEvents(logger: ReturnType<typeof createLogger>): EventLogEntry[] {
 
 // ----- resolveCostCeilingOverride (per-run cost ceiling precedence) -----
 
-function writeManifestWithCeiling(ceiling: number | undefined): string {
+// forge-8vfn.8.1.25 / T1 ruling 1617: this used to mkdtempSync a fresh
+// `forge-ceiling-*` dir and hand back only the manifest path inside it —
+// callers had no handle to remove it, so every ceiling test leaked one dir
+// per run (~8,185 accumulated on one host). Returning `{ path, dir }`, same
+// shape as `setupLogger` above, lets each call site `rmSync` it in `finally`.
+function writeManifestWithCeiling(ceiling: number | undefined): { path: string; dir: string } {
   const dir = mkdtempSync(join(tmpdir(), 'forge-ceiling-'));
   const m: InitiativeManifest = {
     initiative_id: 'INIT-2026-06-19-ceiling',
@@ -73,11 +78,11 @@ function writeManifestWithCeiling(ceiling: number | undefined): string {
   };
   const path = join(dir, 'manifest.md');
   writeFileSync(path, serializeManifest(m));
-  return path;
+  return { path, dir };
 }
 
 test('resolveCostCeilingOverride: env wins over manifest', () => {
-  const path = writeManifestWithCeiling(120);
+  const { path, dir } = writeManifestWithCeiling(120);
   const prev = process.env.FORGE_COST_CEILING_USD;
   process.env.FORGE_COST_CEILING_USD = '200';
   try {
@@ -85,22 +90,24 @@ test('resolveCostCeilingOverride: env wins over manifest', () => {
   } finally {
     if (prev === undefined) delete process.env.FORGE_COST_CEILING_USD;
     else process.env.FORGE_COST_CEILING_USD = prev;
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 
 test('resolveCostCeilingOverride: falls back to manifest when env unset', () => {
-  const path = writeManifestWithCeiling(120);
+  const { path, dir } = writeManifestWithCeiling(120);
   const prev = process.env.FORGE_COST_CEILING_USD;
   delete process.env.FORGE_COST_CEILING_USD;
   try {
     assert.deepEqual(resolveCostCeilingOverride(path), { ceilingUsd: 120, source: 'manifest' });
   } finally {
     if (prev !== undefined) process.env.FORGE_COST_CEILING_USD = prev;
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 
 test('resolveCostCeilingOverride: derives cost_budget_usd x (1 + margin share) when ceiling unset; bad env ignored', () => {
-  const path = writeManifestWithCeiling(undefined); // fixture carries cost_budget_usd: 25
+  const { path, dir } = writeManifestWithCeiling(undefined); // fixture carries cost_budget_usd: 25
   const derived = 25 * (1 + DERIVED_CEILING_MARGIN_SHARE);
   const prev = process.env.FORGE_COST_CEILING_USD;
   delete process.env.FORGE_COST_CEILING_USD;
@@ -114,6 +121,7 @@ test('resolveCostCeilingOverride: derives cost_budget_usd x (1 + margin share) w
   } finally {
     if (prev === undefined) delete process.env.FORGE_COST_CEILING_USD;
     else process.env.FORGE_COST_CEILING_USD = prev;
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 
