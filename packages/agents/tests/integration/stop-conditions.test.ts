@@ -13,7 +13,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -599,3 +599,25 @@ test('resolveGateTimeoutMs: precedence env > declared testProcess timeout > defa
     else process.env.FORGE_GATE_TIMEOUT_MS = prior;
   }
 });
+
+// forge-1rk5.3 row 137: forge links node_modules into every worktree as a symlink; a project .gitignore of
+// `node_modules/` does not match a symlink, and a template-less repo has no info/exclude — the safety-net
+// commit must still never put it on the branch (the boundary commits already unstage it).
+test('autoCommitWorktreeIfDirty: never commits the node_modules symlink forge linked into the worktree', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'autocommit-nm-'));
+  const deps = mkdtempSync(join(tmpdir(), 'autocommit-nm-deps-'));
+  try {
+    execFileSync('git', ['init', '-q', '-b', 'main', '--template=', dir]);
+    execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'init']);
+    mkdirSync(join(deps, 'pkg'));
+    symlinkSync(deps, join(dir, 'node_modules'), 'dir');
+    writeFileSync(join(dir, 'work.ts'), 'export const x = 1;\n');
+    assert.equal(autoCommitWorktreeIfDirty(dir, 1, 'WI-1'), true);
+    const committed = execFileSync('git', ['-C', dir, 'show', '--name-only', '--format=', 'HEAD'], { encoding: 'utf8' }).trim().split('\n');
+    assert.deepEqual(committed, ['work.ts']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(deps, { recursive: true, force: true });
+  }
+});
+
