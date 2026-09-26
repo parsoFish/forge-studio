@@ -211,6 +211,31 @@ test('renderDemoMarkdown: includes essence, captions, ACs, diffstat', () => {
   assert.match(md, /1 file changed/);
 });
 
+test('renderDemoMarkdown: a recorded checkpoint links its committed filmstrip and webm relatively (forge-mfv5.2.5)', () => {
+  const m = validModel();
+  const cp = { ...m.checkpoints[0], kind: 'video' as const, afterVideoSrc: '.capture/after/toggle.webm' };
+  const md = renderDemoMarkdown({ ...m, checkpoints: [cp, ...m.checkpoints.slice(1)] });
+  assert.ok(md.includes('](.capture/after/toggle.filmstrip.png)'), 'the filmstrip renders inline from the committed path');
+  assert.ok(md.includes('](.capture/after/toggle.webm)'), 'the webm is linked from the committed path');
+});
+
+test('renderDemoMarkdown: a label carrying brackets cannot break out of the media link text', () => {
+  const m = validModel();
+  const cp = { ...m.checkpoints[0], label: 'x](https://evil.example/y) [z', kind: 'video' as const, afterVideoSrc: '.capture/after/x.webm' };
+  const md = renderDemoMarkdown({ ...m, checkpoints: [cp, ...m.checkpoints.slice(1)] });
+  assert.ok(!md.includes('](https://evil.example/y)'), 'no label-injected link target');
+});
+
+test('renderDemoMarkdown: a video src not in the recorder\'s own shape stays plain text, never a link', () => {
+  const m = validModel();
+  for (const src of ['../escape.webm', '.capture/after/a b.webm', '.capture/after/x).webm', '.capture/other/x.webm']) {
+    const cp = { ...m.checkpoints[0], kind: 'video' as const, afterVideoSrc: src };
+    const md = renderDemoMarkdown({ ...m, checkpoints: [cp, ...m.checkpoints.slice(1)] });
+    assert.ok(!md.includes(`](${src})`), `no link for ${JSON.stringify(src)}`);
+    assert.ok(!md.includes('.filmstrip.png)'), `no filmstrip image for ${JSON.stringify(src)}`);
+  }
+});
+
 test('renderDemoMarkdown: renders summary bullets + PR meta when present', () => {
   const md = renderDemoMarkdown(richModel());
   assert.match(md, /## Summary/);

@@ -61,13 +61,13 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,098 | **13,098** | ratified 13,098 — row 121 gh 'error connecting to' is a DNS failure (forge-8vfn.8.1.24), +7 lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 61 | 20,638 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
-| `flows` | 84 | 23,963 | **23,475** | ratified 23,475 — row 121 a PR-open failure carries its cause; environment failures park for resume (forge-8vfn.8.1.24), +72 lane-ratified under ruling 666; see git history for prior raises. |
+| `flows` | 84 | 23,972 | **23,475** | ratified 23,475 — row 121 a PR-open failure carries its cause; environment failures park for resume (forge-8vfn.8.1.24), +72 lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 15 | 2,723 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 40 | 11,494 | **11,482** | ratified 11,482 — forge-mfv5.2.2 moved the demo-declaration rules to contracts, −23 on 11,505 (the cap follows the lines down); see git history for prior raises. |
+| `stations` | 40 | 11,503 | **11,482** | ratified 11,482 — forge-mfv5.2.2 moved the demo-declaration rules to contracts, −23 on 11,505 (the cap follows the lines down); see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,835 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **466** | **127,147** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **466** | **127,165** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -192,7 +192,6 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/cycle-retention.ts | knowledge | verbatim | 204 |
 | packages/factory/demo-overlay.ts | factory | rewritten | 195 |
 | packages/factory/demo-capture.ts | factory | rewritten | 318 |
-| packages/stations/demo-model.ts | stations | verbatim | 791 |
 | packages/factory/demo-runtime.ts | factory | verbatim | 187 |
 | packages/stations/demo-types.ts | stations | verbatim | 115 |
 | packages/factory/demo.ts | factory | verbatim | 377 |
@@ -323,7 +322,6 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/demo-session-store.ts | sessions | rewritten | 177 |
 | packages/sessions/kinds/demo-generate.ts | sessions | rewritten | 348 **Split from `kinds/demo-builder.ts` (M6-A s3, row 5 / bead `forge-8vfn.6.11.49`)** — the generate step and its six private prompt helpers, taken out when the write-then-run fix put the parent at 802 against the 800-line cap. `rewritten` rather than `verbatim`: the step's signature gains `agentSpec`, because `demoBuilderAgentSpec` is the kind's ADR-024 identity and stays in the parent rather than being imported back as a cycle. |
 | packages/sessions/kinds/kb-cleanup.ts | sessions | rewritten | 77 |
-| packages/flows/demo-paths.ts | flows | verbatim | 71 |
 | packages/flows/drain-fix-loop.ts | flows | verbatim | 290 |
 | packages/flows/enqueue-develop-run.ts | flows | verbatim | 80 |
 | packages/flows/enqueue-flow-run.ts | flows | verbatim | 411 |
@@ -427,6 +425,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/release-process.ts | stations | verbatim | 66 |
 | packages/stations/testing.ts | stations | verbatim | 23 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `settleWiOutcome`/`assertOutcomesSettled`/`WiOutcome` (phases/developer-loop.ts), `runProjectManager`/`PmQueryFn` (phases/project-manager.ts), `NodeExecutor`/`integrateDeliveryFailure` (phases/executor-table.ts) and `deriveDemoModel` (phases/derive-demo-model.ts) have no production consumer outside this package, only `apps/forge`/`packages/flows` tests reach for them.** |
 | packages/stations/phases/integrate.ts | stations | verbatim | 372 |
+| packages/stations/demo-model.ts | stations | verbatim | 800 |
 | packages/flows/requeue-resume.ts | flows | verbatim | 193 |
 | packages/flows/review-comments.ts | flows | verbatim | 224 |
 | packages/agents/run-agent.ts | agents | verbatim | 800 |
@@ -547,9 +546,10 @@ operator-ratified new cap — never a silent raise.
 | packages/contracts/studio-types.ts | contracts | verbatim | 761 |
 | packages/contracts/demo-declaration.ts | contracts | rewritten | 105 |
 | packages/factory/index.ts | factory | verbatim | 8 |
-| packages/flows/pr.ts | flows | verbatim | 567 |
 | packages/flows/index.ts | flows | verbatim | 117 |
-| packages/flows/phases/orchestrated-capture.ts | flows | verbatim | 414 |
+| packages/flows/demo-paths.ts | flows | verbatim | 75 |
+| packages/flows/phases/orchestrated-capture.ts | flows | verbatim | 418 |
+| packages/flows/pr.ts | flows | verbatim | 568 |
 | packages/kernel/config.ts | kernel | verbatim | 600 |
 | packages/kernel/gh-identity.ts | kernel | verbatim | 107 |
 | packages/kernel/ids.ts | kernel | verbatim | 136 |
