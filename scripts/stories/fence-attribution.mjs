@@ -613,6 +613,16 @@ export function attributeEscapes(escapes, opts = {}) {
         reason: `sampled pid ${seen.pid} with its ${seen.via} inside ${e.root} (${seen.at}) — a descendant of this run's own root process`,
       };
     }
+    // ROW 102b/15 — `siblingWorktreeEscapes` (sweep.mjs) marks a sibling
+    // PRESENT-but-UNVERIFIED (its own status could not be read) this way,
+    // rather than omitting it. Ancestry evidence above still wins if it
+    // exists; short of that, an unverified tree must never fall through to
+    // the ordinary "no descendant seen" -> unattributable ending, because
+    // there is nothing behind that ending here — it was never actually
+    // checked.
+    if (e.unverified === true) {
+      return { ...e, owner: 'this-run', reason: `${e.root}'s current status could not be read — an unverified sibling is never read as clean` };
+    }
     // ROW 102b/10-11 — a realpath failure on either side of the comparison
     // below, or `mainCheckoutRoot` itself returning UNKNOWN, means it cannot
     // be trusted. Never let an unresolved path silently miss the
