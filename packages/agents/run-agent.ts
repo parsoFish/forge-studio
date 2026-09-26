@@ -48,7 +48,7 @@ import { dirname, isAbsolute, join, relative } from 'node:path';
 // can't drift out of sync.
 import { deriveAgentSpec, FORGE_ROOT } from './studio/derive.ts';
 import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
-import { createLogger, emitGroundFileChanges, type EventLogger } from '@forge/kernel';
+import { createLogger, emitGroundFileChanges, refuseBareInitiativeRunId, type EventLogger } from '@forge/kernel';
 import { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
 import { resolveRunQuery, type StreamQueryFn } from './pinned-sdk-query.ts';
 import { sdkHooksForAgent, withSessionEndHooks } from './studio/hook-dispatch.ts';
@@ -355,7 +355,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
   // branch because both spawn. Per run, never a constant: a constant would
   // let a later run's teardown sweep an earlier run's still-live process
   // (./spawn-marker.ts).
-  const runMarker = mintRunMarker(ctx.runId);
+  const runMarker = mintRunMarker(refuseBareInitiativeRunId(ctx.runId));
   const logsRoot = ctx.logsRoot ?? (ctx.logger ? dirname(dirname(ctx.logger.logFilePath)) : join(FORGE_ROOT, '_logs'));
 
   if (lifecycle === 'caller') {

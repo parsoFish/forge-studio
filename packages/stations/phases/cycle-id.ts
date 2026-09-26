@@ -6,7 +6,7 @@ import type { CycleInput } from '@forge/flows';
  * minted, so a missing one means something upstream dropped it: throw, never
  * fall back to the initiative id, whose dir Studio never reads.
  */
-export function requireCycleId(input: CycleInput, site: string): string {
+export function requireCycleId(input: Pick<CycleInput, 'initiativeId' | 'cycleId'>, site: string): string {
   if (input.cycleId) return input.cycleId;
   throw new Error(`${site}: input.cycleId is required (initiativeId="${input.initiativeId}")`);
 }

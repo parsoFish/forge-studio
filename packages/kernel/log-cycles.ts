@@ -51,3 +51,20 @@ export function composeSafeRunId(prefix: string, id: string): string | null {
   const composed = `${prefix}${id}`;
   return isSafeRunId(composed) ? composed : null;
 }
+
+/**
+ * forge-8vfn.8.1.22 / T1 ruling 1577, §6.15: every `runAgent` spawn passes its
+ * `runId` through here before any marker or log write. An initiative id is not
+ * a run id: its `_logs/<initiativeId>/` dir is never read (Studio reads
+ * `_logs/<cycleId>/`). A cycle id leads with an ISO stamp, so ANY `INIT-`
+ * prefix is refused, including legacy non-canonical ids like `INIT-1`.
+ */
+export function refuseBareInitiativeRunId(runId: string): string {
+  if (runId.startsWith('INIT-')) {
+    throw new Error(
+      `refuseBareInitiativeRunId: "${runId}" is an initiative id, not a run/cycle id — ` +
+        'its _logs dir is never read (§6.15)',
+    );
+  }
+  return runId;
+}
