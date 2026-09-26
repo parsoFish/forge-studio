@@ -20,6 +20,12 @@ import { join } from 'node:path';
 
 import { collectAgentRuns, reapAgentRuns, readProcTable, PID_READ_UNKNOWN } from './reap.mjs';
 
+function errno(code: string, message = code): NodeJS.ErrnoException {
+  const e: NodeJS.ErrnoException = new Error(message);
+  e.code = code;
+  return e;
+}
+
 // ------------------------------------------------- collectAgentRuns: _logs/
 
 test('control: a genuinely absent _logs/ (real ENOENT) yields no runs, exactly as today', () => {
@@ -131,4 +137,77 @@ test('reapAgentRuns (RED) / ROW 101 M7-D finding 6: a null process table refuses
     report.skipped.some((s: { reason: string }) => /process table|descendant|group/i.test(s.reason)),
     `expected a named UNKNOWN line about the table: ${JSON.stringify(report.skipped)}`,
   );
+});
+
+test('readProcTable (RED) / ROW 102b finding 20: a non-ENOENT per-pid stat failure refuses the WHOLE table, never a partial one', () => {
+  const table = readProcTable({
+    listPids: () => [7, 8],
+    readStat: (pid: number) => { if (pid === 8) throw errno('EACCES', 'permission denied'); return `${pid} (node) S 1 1 0`; },
+  });
+  assert.equal(table, null, 'a row that could not be verified must not silently drop out of a table reported as complete');
+});
+
+test('readProcTable control: a pid that exited between the listing and the read (real ENOENT) is an ordinary skip, table still built', () => {
+  const table = readProcTable({
+    listPids: () => [7, 8],
+    readStat: (pid: number) => { if (pid === 8) throw errno('ENOENT', 'no such process'); return `${pid} (node) S 1 1 0`; },
+  });
+  assert.notEqual(table, null);
+  assert.equal(table!.has(7), true);
+  assert.equal(table!.has(8), false, 'a raced exit is skipped, not fabricated');
+});
+
+// --------------------------------------------------------------- isAlive
+
+test('reapAgentRuns (RED) / ROW 102b finding 21: an EPERM on kill(pid,0) must read as ALIVE, not gone', async () => {
+  // No injected isAlive here — this exercises the REAL default directly via
+  // decideReap's `alive` gate: a recorded pid whose cwd is unreadable is only
+  // refused (not signalled) when it is judged alive; if EPERM were folded
+  // into "not alive" it would instead be admitted as `recorded`-provenance
+  // and signalled — exactly the false "gone" ROW 102b/21 closes.
+  const originalKill = process.kill;
+  (process as any).kill = (pid: number, sig: number | string) => {
+    if (sig === 0) throw errno('EPERM', 'operation not permitted');
+    return true;
+  };
+  try {
+    const report = await reapAgentRuns([{ dir: '/r/_logs/_agent-a', pid: 4242, markers: [] }], {
+      ownRoot: '/r',
+      cwdOf: () => undefined, // unreadable cwd
+      procTable: () => new Map(),
+      kill: () => { throw new Error('must never be called for a foreign, EPERM pid'); },
+      graceMs: 20,
+      pollMs: 5,
+      sleep: async () => {},
+    } as any);
+    assert.deepEqual(report.reaped, []);
+    assert.equal(report.skipped.length, 1);
+    assert.match(report.skipped[0].reason, /alive but its cwd is unreadable/, 'EPERM must be read as alive, not as gone');
+  } finally {
+    process.kill = originalKill;
+  }
+});
+
+test('reapAgentRuns control: an ESRCH on kill(pid,0) (genuinely gone) still reaps by record, as today', async () => {
+  const originalKill = process.kill;
+  let signalled: [number, number | string] | null = null;
+  (process as any).kill = (pid: number, sig: number | string) => {
+    if (sig === 0) throw errno('ESRCH', 'no such process');
+    signalled = [pid, sig];
+    return true;
+  };
+  try {
+    const report = await reapAgentRuns([{ dir: '/r/_logs/_agent-a', pid: 4242, markers: [] }], {
+      ownRoot: '/r',
+      cwdOf: () => undefined, // unreadable cwd — provenance falls back to "recorded"
+      procTable: () => new Map(),
+      kill: (pid: number | string, sig: number | string) => { signalled = [pid as number, sig]; },
+      graceMs: 20,
+      pollMs: 5,
+      sleep: async () => {},
+    } as any);
+    assert.equal(report.reaped.length, 1, 'a genuinely-gone (ESRCH) recorded pid is still reaped by record provenance');
+  } finally {
+    process.kill = originalKill;
+  }
 });

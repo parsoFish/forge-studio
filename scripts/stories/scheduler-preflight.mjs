@@ -35,7 +35,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DAEMON_PID_FILE, isRunning } from './sweep-teardown.mjs';
+import { DAEMON_PID_FILE, isRunning } from './sweep-teardown-scheduler.mjs';
 
 /**
  * Is there ALREADY a live scheduler recorded for this tree? Scoped by the

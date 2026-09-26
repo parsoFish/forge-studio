@@ -72,13 +72,29 @@ function readSweepDeleteToken() {
  * because "a manifest on disk becomes a delete" is the step that was missing.
  */
 export function sweepStoryRemotesFromManifest({ storyId, root, readToken = readSweepDeleteToken, runGh = null }) {
+  const manifestPath = join(root, '_logs', 'minted-remotes.json');
   let created = [];
+  let unconfirmed = null;
   try {
-    const raw = readFileSync(join(root, '_logs', 'minted-remotes.json'), 'utf8');
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(readFileSync(manifestPath, 'utf8'));
     if (Array.isArray(parsed)) created = parsed;
-  } catch { /* no manifest = nothing this run minted = nothing to delete */ }
-  return sweepStoryRemotes({ storyId, created, readToken, runGh });
+    else unconfirmed = `did not hold an array (got ${typeof parsed})`;
+  } catch (e) {
+    // ENOENT: no manifest = nothing this run minted = nothing to delete.
+    // Any OTHER read/parse failure (ROW 102b/17) means an EXISTING manifest
+    // could not be trusted, and must not silently become "nothing minted"
+    // the way every other refusal path in this file is instead named.
+    if (e.code !== 'ENOENT') unconfirmed = e.message;
+  }
+  const result = sweepStoryRemotes({ storyId, created, readToken, runGh });
+  if (unconfirmed === null) return result;
+  return {
+    ...result,
+    refusals: [
+      `REFUSING: ${manifestPath} could not be confirmed: ${unconfirmed} — a remote this run may have minted cannot be verified clear`,
+      ...result.refusals,
+    ],
+  };
 }
 
 /** A `gh repo delete` 404 means already-gone, not a failure. `gh` appends a

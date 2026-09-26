@@ -25,7 +25,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync, readdirSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
@@ -658,6 +658,40 @@ test('7.6.24: an unstamped capture is REFUSED rather than defaulted', async () =
       /runStamp is required/,
       'a call-time default is what mixed two runs into one directory before',
     );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ROW 102b (RED) finding 16: an unreadable (non-ENOENT) _logs/ must NOT read identically to "nothing yet"', async () => {
+  // The exact stale-dir incident (S5 run 3 beat 13) one step earlier: an
+  // EACCES on `_logs/` itself used to fold into `[]`, same as a genuine first
+  // run, so the leading sweep silently captured nothing and warned nothing.
+  const { previousAgentLogDirs, captureAndSweepAgentLogs } = await import('./sweep-agent-logs.mjs');
+  const root = mkdtempSync(join(tmpdir(), 'stories-sweep-agentlogs-unreadable-'));
+  const logs = join(root, '_logs');
+  mkdirSync(logs, { recursive: true });
+  chmodSync(logs, 0o000);
+  try {
+    assert.throws(() => previousAgentLogDirs('S5', root), /could not read/, 'must not silently read as "no residue"');
+    const r = captureAndSweepAgentLogs('S5', root, 'stamp-unreadable');
+    assert.deepEqual(r.captured, []);
+    assert.deepEqual(r.removed, []);
+    assert.equal(r.failed.length, 1, `expected the unreadable _logs/ to surface as a named failure: ${JSON.stringify(r)}`);
+    assert.match(r.failed[0].error, /could not read/i);
+  } finally {
+    chmodSync(logs, 0o755);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('control: previousAgentLogDirs with a genuinely absent _logs/ (real ENOENT) still returns [], exactly as before', async () => {
+  const { previousAgentLogDirs, captureAndSweepAgentLogs } = await import('./sweep-agent-logs.mjs');
+  const root = mkdtempSync(join(tmpdir(), 'stories-sweep-agentlogs-absent-'));
+  try {
+    assert.deepEqual(previousAgentLogDirs('S5', root), []);
+    const r = captureAndSweepAgentLogs('S5', root, 'stamp-absent');
+    assert.deepEqual(r, { captured: [], removed: [], failed: [] });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

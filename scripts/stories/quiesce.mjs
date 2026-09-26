@@ -47,56 +47,101 @@ const REAL_CLOCK = { now: () => Date.now(), sleep: (ms) => new Promise((r) => se
  * Is `pid` — or anything it fathered — still running? §15.206's whole-parentage
  * read: a bridge that has forked a child is not gone when its own entry goes,
  * and the child is the writer that put the directory back.
+ *
+ * THREE STATES, not two — ROW 102b finding 22. `/proc` genuinely absent
+ * (ENOENT: no such filesystem on this host) is the one case with nothing to
+ * observe, and `false` is correct for it, unchanged from before. Any OTHER
+ * listing failure (EACCES, EMFILE) — or a per-candidate `/proc/<p>/stat` read
+ * failing for a reason other than that candidate having exited (ENOENT) —
+ * means the child set could not be FULLY built, and reporting that the same
+ * way as "checked, and it is empty" is exactly the false-negative this row
+ * closes: a live writer would print as "gone".
+ *
+ * @param {number|string} pid
+ * @param {{listProcs?: () => string[], readStat?: (p: string) => string}} [deps] injection seam for the test
+ * @returns {boolean|'unknown'}
  */
-export function pidAliveWithChildren(pid) {
-  let entries = [];
+export function pidAliveWithChildren(pid, deps = {}) {
+  const listProcs =
+    deps.listProcs ??
+    (() => readdirSync('/proc', { withFileTypes: true }).filter((e) => /^[0-9]+$/.test(e.name)).map((e) => e.name));
+  const readStat = deps.readStat ?? ((p) => execFileSync('cat', [`/proc/${p}/stat`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
+
+  let entries;
   try {
-    entries = readdirSync('/proc', { withFileTypes: true }).filter((e) => /^[0-9]+$/.test(e.name)).map((e) => e.name);
-  } catch {
-    return false; // no /proc: nothing can be observed, so nothing is claimed alive
+    entries = listProcs();
+  } catch (err) {
+    return err?.code === 'ENOENT' ? false : 'unknown';
   }
   if (entries.includes(String(pid))) return true;
+  let sawUnknownChild = false;
   for (const p of entries) {
     let ppid = '';
     try {
-      const stat = execFileSync('cat', [`/proc/${p}/stat`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      const stat = readStat(p);
       ppid = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1] ?? '';
-    } catch {
+    } catch (err) {
+      if (err?.code !== 'ENOENT') sawUnknownChild = true; // couldn't verify this candidate — not the same as "not a child"
       continue;
     }
     if (ppid === String(pid)) return true;
   }
-  return false;
+  return sawUnknownChild ? 'unknown' : false;
 }
 
 /**
  * Wait until every pid in `pids` is gone, or the bound expires.
- * @returns {Promise<{gone:number[],alive:number[],waitedMs:number,timedOut:boolean}>}
+ *
+ * `unknown` (ROW 102b finding 22) names whichever still-outstanding pids'
+ * LAST check could not determine liveness — `alive` returned `'unknown'`
+ * rather than a boolean. Truthy either way, so the wait loop already keeps an
+ * unknown pid as outstanding rather than mistaking it for gone; `unknown` is
+ * carried through only so the report can say COULD NOT DETERMINE instead of
+ * printing it identically to a pid confirmed alive.
+ *
+ * @returns {Promise<{gone:number[],alive:number[],unknown:number[],waitedMs:number,timedOut:boolean}>}
  */
 export async function waitForPidsGone(pids, { upToMs, pollMs, clock = REAL_CLOCK, alive = pidAliveWithChildren } = {}) {
-  if (pids.length === 0) return { gone: [], alive: [], waitedMs: 0, timedOut: false };
+  if (pids.length === 0) return { gone: [], alive: [], unknown: [], waitedMs: 0, timedOut: false };
   const started = clock.now();
   let outstanding = [...pids];
   const gone = [];
+  let unknown = [];
   while (outstanding.length > 0 && clock.now() - started < upToMs) {
     const still = [];
+    const stillUnknown = [];
     for (const pid of outstanding) {
-      if (alive(pid)) still.push(pid);
+      const state = alive(pid);
+      if (state === 'unknown') { still.push(pid); stillUnknown.push(pid); }
+      else if (state) still.push(pid);
       else gone.push(pid);
     }
     outstanding = still;
+    unknown = stillUnknown;
     if (outstanding.length === 0) break;
     await clock.sleep(pollMs);
   }
-  return { gone, alive: outstanding, waitedMs: clock.now() - started, timedOut: outstanding.length > 0 };
+  return { gone, alive: outstanding, unknown, waitedMs: clock.now() - started, timedOut: outstanding.length > 0 };
 }
 
-/** The tree read the quiet check compares. Porcelain, ignored roots included by the fence's own rule. */
+/**
+ * The tree read the quiet check compares. Porcelain, ignored roots included by
+ * the fence's own rule.
+ *
+ * A FRESH value every failed call, never `''` — ROW 102b finding 23. Two
+ * consecutive failed reads must not compare EQUAL to each other: `'' === ''`
+ * let a persistently unreadable tree read as "quiet" almost at once, the
+ * opposite of "an unreadable tree is not a moving one". A `Symbol` can never
+ * `===` a previous read (even a previous failure), so the wait keeps polling
+ * and times out honestly instead of declaring victory on two reads it could
+ * not actually take; `reappeared()`'s independent re-check downstream is a
+ * backstop, not a substitute for this.
+ */
 function readPorcelain(root) {
   try {
     return execFileSync('git', ['status', '--porcelain', '-uall'], { cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
-  } catch {
-    return ''; // an unreadable tree is not a moving one; the fence reports separately
+  } catch (err) {
+    return Symbol(`git status unreadable in ${root}: ${err?.code ?? err?.message ?? 'unknown'}`);
   }
 }
 
@@ -138,7 +183,14 @@ export function describeQuiesce(report) {
     ];
   }
   const why = [];
-  if (report.pids.timedOut) why.push(`pid ${report.pids.alive.join(', ')} still alive`);
+  if (report.pids.timedOut) {
+    const unknownSet = new Set(report.pids.unknown ?? []);
+    const confirmedAlive = report.pids.alive.filter((p) => !unknownSet.has(p));
+    if (confirmedAlive.length > 0) why.push(`pid ${confirmedAlive.join(', ')} still alive`);
+    // ROW 102b finding 22 — named distinctly from "still alive": the last
+    // check on this pid could not tell, and that is not the same fact.
+    if (unknownSet.size > 0) why.push(`pid ${[...unknownSet].join(', ')} — COULD NOT DETERMINE if still alive`);
+  }
   if (!report.tree.quiet) why.push('the tree was still changing');
   return [
     `[stories] quiesce: NOT settled after ${waited} ms — ${why.join(' and ')}. ` +
