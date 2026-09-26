@@ -28,6 +28,7 @@ import { join } from 'node:path';
 
 import { requireClassProfiles, type ChangeClass, type ClassProfilePort } from '../class-profile-port.ts';
 import { reviewCeilingUsd, changedLinesFromNumstat } from './review-budget.ts';
+import { requireCycleId } from './cycle-id.ts';
 import { writeRootFenceOptions } from '@forge/sessions';
 import { projectBrainDir } from '@forge/knowledge';
 import {
@@ -44,8 +45,7 @@ import { createHash } from 'node:crypto';
 import { runAgent, takeScopeSnapshot, scopeViolations, type StreamQueryFn } from '@forge/agents';
 import type { AgentDefinition } from '@forge/contracts';
 import { chunkLabel, mergeChunkRecords, partitionChangedFiles, type ReviewChunk,
-  splitChunkPerFile,
-  mergeSplitRecords,
+  splitChunkPerFile, mergeSplitRecords,
 } from './review-chunks.ts';
 import {
   buildAdversarialReviewSystemPrompt,
@@ -464,7 +464,7 @@ export async function runAdversarialReview(
         const refusalTracker = trackSpawnRefusal();
         try {
           spawn = await runAgent(def, {
-            runId: input.initiativeId,
+            runId: requireCycleId(input, 'adversarialReview'),
             workdir: input.worktreePath,
             cwd: input.worktreePath,
             prompt,
