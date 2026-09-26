@@ -57,6 +57,7 @@
 
 import { guardedFile, guardedReadFile } from '@forge/kernel';
 import type { ClauseResult } from '@forge/kernel';
+import { PRESENTATION_ONLY_SKILL_IDS } from '@forge/contracts';
 import type { ProjectConfig } from './project-config.ts';
 import { loadProjectConfig } from './project-config.ts';
 import { isGitRepoDir, isTrackedByGit } from './preflight-repo.ts';
@@ -114,11 +115,19 @@ export class MissingDeclaredSkillError extends Error {
 
 export type DeclaredSkill = { id: string; path: string; text: string };
 
-/** Every skill the project declares, read for an agent's prompt (ADR 024, item 90).
- *  A declared id that resolves nowhere throws: a running agent has no later. */
+/** Every skill the project declares, read for an agent's prompt (ADR 024, item 90) —
+ *  the ONE loader `runOneShotSpawn` (via `loadAndComposeProjectSkills`) and
+ *  `createClaudeAgent` both call. A `PRESENTATION_ONLY_SKILL_IDS` id (e.g.
+ *  `demo-design` — Studio-presentation guidance, never a cycle input; bead
+ *  forge-mfv5.2.2) is filtered out BEFORE resolution: `checkSkills` is the
+ *  clause that enforces such an id resolves somewhere on disk, so a presentation-
+ *  only id that resolves nowhere is silently skipped here rather than thrown —
+ *  it was never going to reach the prompt either way. Every remaining declared
+ *  id that resolves nowhere still throws: a running agent has no later. */
 export function loadDeclaredSkills(projectDir: string, forgeRoot: string): DeclaredSkill[] {
   const cfg = loadProjectConfig(projectDir);
-  const declared = cfg?.skills ?? [];
+  const presentationOnly: readonly string[] = PRESENTATION_ONLY_SKILL_IDS;
+  const declared = (cfg?.skills ?? []).filter((id) => !presentationOnly.includes(id));
   return declared.map((id) => {
     for (const { root, segments } of skillCandidates(projectDir, forgeRoot, id, cfg?.artifactRoot)) {
       const text = guardedReadFile(root, segments);

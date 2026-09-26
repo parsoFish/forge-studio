@@ -440,9 +440,14 @@ const FROZEN_DEMO_BUILDER: FrozenEntry[] = [
     text: 'render a self-contained Forge-styled HTML demo that showcases the changes that initiative introduced — the new behaviour, the diff that matters, real captured output before vs after, the verification that makes it non-trivial',
   },
   {
-    label: 'deliverable #1 — forge preflight DEMO-SKILL significance',
+    // AMENDED by bead forge-mfv5.2.2: the DEMO-SKILL clause no longer checks
+    // this file's existence — it checks that the project's demo DECLARATION
+    // (`demoProcess`) drives a checkpoint, since the integrate band never
+    // reads this generated composer. The old sentence was corrected, not
+    // dropped; the corrected sentence is what this entry now pins.
+    label: 'deliverable #1 — forge preflight DEMO-SKILL significance (corrected, forge-mfv5.2.2)',
     source: 'c45e3892:skills/demo-builder/SKILL.md ("## The two deliverables", item 1)',
-    text: 'This is also the file `forge preflight` DEMO-SKILL checks.',
+    text: "DEMO-SKILL clause instead checks that the project's demo declaration",
   },
   {
     // KNOWN DROPPED — verified absent from both packages/sessions/kinds/demo-builder.ts
@@ -529,7 +534,8 @@ test('AT-8 (Round-2, Part B): the composer-skill quality bar reaches BOTH genera
 
   const QUALITY_BAR_CLAUSES = [
     'the new behaviour, the diff that matters, real captured output before vs after, the verification that makes it non-trivial',
-    'forge preflight` DEMO-SKILL checks',
+    // AMENDED by bead forge-mfv5.2.2 — see FROZEN_DEMO_BUILDER's matching entry.
+    "DEMO-SKILL clause instead checks that the project's demo declaration",
   ];
 
   for (const clause of QUALITY_BAR_CLAUSES) {

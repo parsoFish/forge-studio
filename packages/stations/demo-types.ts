@@ -109,15 +109,7 @@ export function checkpointArtifactName(label: string, ext: string): string {
   return `${checkpointArtifactStem(label)}.${ext}`;
 }
 
-/**
- * A safe demo checkpoint route: an absolute in-app path, no traversal. Shared
- * by the AC-derived checkpoint guard (derive-demo-model.ts's `acDerivedCheckpoints`)
- * and `validateDemoModel`'s `checkpoint.route` check — one rule spelled once, so
- * a browser checkpoint's route can never be accepted by one and rejected by the
- * other (forge-mfv5.1.7).
- */
-const SAFE_ROUTE_RE = /^\/[A-Za-z0-9/_\-.?=&%]*$/;
-
-export function isSafeDemoRoute(route: string): boolean {
-  return SAFE_ROUTE_RE.test(route) && !route.includes('..');
-}
+// `isSafeDemoRoute` (the safe-checkpoint-route rule) moved to
+// `@forge/contracts`'s `demo-declaration.ts` (bead forge-mfv5.2.2) — stations,
+// factory and projects all need it, and contracts is the one rank all three
+// may import. Import it from there; no re-export shim is kept here.
