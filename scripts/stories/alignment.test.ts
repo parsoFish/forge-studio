@@ -370,7 +370,10 @@ test('--intake: authoring targets from the README are reported, minus any a side
 });
 
 test('--intake against the real repo prints the tracked authoring targets, report-only (exit 0)', () => {
-  const { targets } = intakeReport(REAL_ROOT, 'HEAD~1');
+  // `HEAD`, not `HEAD~1`: CI's checkout is shallow (depth 1), where HEAD~1 does
+  // not exist (PR #966 CI run 36245858629). An empty range still reads the
+  // README's targets, which is what this test is for.
+  const { targets } = intakeReport(REAL_ROOT, 'HEAD');
   // Mechanism only: the six targets T1 1593 names are tracked in the README
   // and none is cited by a real sidecar yet, so all should still show up.
   const allPaths = targets.flatMap((t) => t.paths);
