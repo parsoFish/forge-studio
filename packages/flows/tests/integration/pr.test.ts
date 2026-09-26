@@ -475,6 +475,107 @@ test('embedDemoInPr (S4 signature): returns null when trackedDemoDir is missing'
 });
 
 // ---------------------------------------------------------------------------
+// embedDemoInPr — `.capture/{before,after}` media (forge-mfv5.2.5).
+// ---------------------------------------------------------------------------
+
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+const WEBM_MAGIC = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
+
+/** Seeds `demo/INIT-x/` with demo.json + DEMO.md + a `.capture` tree, commits
+ *  everything EXCEPT `label-two.webm` (which stands in for a file deliverable
+ *  1's size bound refused to stage — present on disk, absent from git), and
+ *  returns the committed sha + the demo dir. */
+function seedCaptureDemo(proj: string): { demoDir: string; sha: string } {
+  const demoDir = join(proj, 'demo', 'INIT-x');
+  mkdirSync(join(demoDir, '.capture', 'before'), { recursive: true });
+  mkdirSync(join(demoDir, '.capture', 'after'), { recursive: true });
+  writeFileSync(join(demoDir, 'demo.json'), '{"title":"t"}\n');
+  writeFileSync(join(demoDir, 'DEMO.md'), '# demo\n');
+  writeFileSync(join(demoDir, '.capture', 'before', 'label one.filmstrip.png'), PNG_MAGIC);
+  writeFileSync(join(demoDir, '.capture', 'after', 'label one.filmstrip.png'), PNG_MAGIC);
+  writeFileSync(join(demoDir, '.capture', 'after', 'label one.webm'), WEBM_MAGIC);
+  writeFileSync(join(demoDir, '.capture', 'after', 'label-two.filmstrip.png'), PNG_MAGIC);
+  writeFileSync(join(demoDir, '.capture', 'after', 'label-two.webm'), WEBM_MAGIC);
+  sh(proj, 'git', [
+    'add',
+    'demo/INIT-x/demo.json',
+    'demo/INIT-x/DEMO.md',
+    'demo/INIT-x/.capture/before/label one.filmstrip.png',
+    'demo/INIT-x/.capture/after/label one.filmstrip.png',
+    'demo/INIT-x/.capture/after/label one.webm',
+    'demo/INIT-x/.capture/after/label-two.filmstrip.png',
+    // label-two.webm deliberately NOT added.
+  ]);
+  sh(proj, 'git', ['commit', '-q', '-m', 'demo capture']);
+  const sha = sh(proj, 'git', ['rev-parse', 'HEAD']).trim();
+  return { demoDir, sha };
+}
+
+test('embedDemoInPr: public repo — commit-pinned, inlines committed filmstrips + webm links, encodes segments, reports the uncommitted webm', () => {
+  const { proj, cleanup } = makeRepoWithOrigin();
+  try {
+    pointOriginAtGitHub(proj);
+    const { demoDir, sha } = seedCaptureDemo(proj);
+
+    const body = embedDemoInPr(proj, 'INIT-x', sha, demoDir, false);
+    assert.ok(body, 'expected a demo body block');
+
+    // Commit-pinned: every link carries the resolved sha, never the branch name.
+    assert.ok(body!.includes(`/blob/${sha}/`), 'links must be pinned to the commit sha');
+    assert.ok(!body!.includes('/blob/initiative-x/'), 'must not use the branch name when a sha was given');
+
+    // Per-segment URL encoding: the space in the checkpoint label's filename
+    // becomes %20 without corrupting the surrounding path's `/` separators.
+    assert.ok(
+      body!.includes(`https://github.com/parsoFish/forge-test/blob/${sha}/demo/INIT-x/.capture/after/label%20one.filmstrip.png?raw=true`),
+      `expected a per-segment-encoded, sha-pinned image URL; got:\n${body}`,
+    );
+
+    // Both sides of "label one" are inlined (dot-dir media present).
+    assert.match(body!, /!\[label one — before\]\([^)]+label%20one\.filmstrip\.png\?raw=true\)/);
+    assert.match(body!, /!\[label one — after\]\([^)]+label%20one\.filmstrip\.png\?raw=true\)/);
+
+    // The webm gets a plain blob link, no `?raw=true`.
+    assert.match(body!, /\[▶ label one — after \(webm\)\]\([^)]+label%20one\.webm\)/);
+    assert.ok(!body!.includes('label%20one.webm?raw=true'));
+
+    // "label-two"'s filmstrip is committed and inlined...
+    assert.match(body!, /!\[label-two — after\]/);
+    // ...but its webm was never committed (the forge-mfv5.2.5 size-bound stand-in) — named
+    // as skipped, never linked as if it were there.
+    assert.ok(body!.includes('Skipped (not committed'));
+    assert.ok(body!.includes('label-two.webm'));
+    assert.ok(!/\[▶ label-two — after \(webm\)\]/.test(body!));
+
+    // Public repo: no private-session caveat line.
+    assert.ok(!body!.includes("needs the viewer's github.com session"));
+  } finally {
+    cleanup();
+  }
+});
+
+test('embedDemoInPr: private repo — capture media is inlined too, with the private-session caveat line', () => {
+  const { proj, cleanup } = makeRepoWithOrigin();
+  try {
+    pointOriginAtGitHub(proj);
+    const { demoDir, sha } = seedCaptureDemo(proj);
+
+    const body = embedDemoInPr(proj, 'INIT-x', sha, demoDir, true);
+    assert.ok(body, 'expected a demo body block');
+
+    // Private repos now ALSO get the capture media inlined (forge-mfv5.2.5
+    // amendment) — not the old public-only gate.
+    assert.match(body!, /!\[label one — after\]\([^)]+\?raw=true\)/);
+    assert.ok(body!.includes("needs the viewer's github.com session"));
+    assert.ok(body!.includes('**Files changed**'));
+    // Still reports the uncommitted webm.
+    assert.ok(body!.includes('Skipped (not committed'));
+  } finally {
+    cleanup();
+  }
+});
+
+// ---------------------------------------------------------------------------
 // The close path must not turn a FAILED PUSH into a story about divergence.
 //
 // G2 resume 6 (2026-09-08) died here and cost a diagnosis. `pushInitiativeBranch`
