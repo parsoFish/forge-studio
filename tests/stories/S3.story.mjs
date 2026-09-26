@@ -355,7 +355,7 @@ export default {
       // against a provisioned-and-reset copy of this fixture at `ok: false` —
       // C2 (no `.gitignore` carried, so forge's own scratch paths were not
       // git-ignored) and C4 (missing `roadmap.md` and
-      // `brain/projects/story-s3/profile.md`). Both are now fixed at the
+      // `brain/projects/<story project>/profile.md`). Both are now fixed at the
       // source, not papered over: `.gitignore` and `roadmap.md` carried
       // verbatim from `3b2e2ca4` (both tracked there), and the fixture ground
       // harness (`scripts/stories/fixture-ground.mjs`) grew the ability to

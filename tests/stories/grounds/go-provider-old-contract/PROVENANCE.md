@@ -350,7 +350,7 @@ further down for the corrected, FINAL 20-entry set.
 The first re-point measured `runPreflight` (`packages/projects/preflight.ts`) directly against a
 provisioned-and-reset copy of `story-s3`: `ok: false`, two HARD failures — **C2** (the seed carried no
 `.gitignore` at all, so forge's own scratch paths were not git-ignored) and **C4** (missing `roadmap.md`
-AND missing `brain/projects/story-s3/profile.md`). Both are now fixed AT THE SOURCE, not papered over.
+AND missing `brain/projects/<story project>/profile.md`). Both are now fixed AT THE SOURCE, not papered over.
 
 **`.gitignore` and `roadmap.md`, carried verbatim from `3b2e2ca4`** (both tracked there — confirmed with
 `git -C <real ground> show 3b2e2ca4:.gitignore` / `:roadmap.md`, piped straight to the seed, byte-for-byte;
@@ -375,13 +375,13 @@ not re-implemented — and neither `run-story.mjs` nor `ground-hash.mjs` referen
 addition sits entirely outside the own-ground digest fence (`ownGroundManifest` hashes only
 `projects/<project>`) and needs no `expectedChanges` entry of its own.
 
-This ground's own `brain/` source: `brain/profile.md`, copied VERBATIM from
+This ground's own `brain/` source: `tests/stories/grounds/go-provider-old-contract/brain/profile.md`, copied VERBATIM from
 **`brain/projects/terraform-provider-betterado/profile.md`** in THIS forge repo, `parsoFish/main`, commit
 `9c18747cabb929719213096a55562c85bb93b650` (confirmed byte-identical to the working-tree copy at the time
 of this carry — `git diff parsoFish/main -- brain/projects/terraform-provider-betterado/profile.md`: no
 output). 8544 bytes, sha256
 `48d337c449f3fbbbe0b562484a982727a25684703f9caaacd8c4783d4b3fe013`. Real, accumulated knowledge about this
-exact codebase, carried under the fixture's OWN directory name (`brain/projects/story-s3/profile.md` once
+exact codebase, carried under the fixture's OWN directory name (`brain/projects/<story project>/profile.md` once
 provisioned) rather than a fabricated stand-in — the same disclosed-reuse the `kb` field already stands on
 (below). `kb-select` is unaffected — there is no such beat in S3, and the `kb` field itself is untouched.
 
