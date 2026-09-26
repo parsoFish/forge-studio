@@ -23,10 +23,10 @@
  */
 
 import type { DemoStep } from '@forge/contracts';
+import { extractDrivableCommand, extractDemoRoute } from '@forge/contracts';
 import type { MergeGateEvidence } from '@forge/flows';
 
 import type { DemoModel, DemoModelCheckpoint, TestResultRow } from '../demo-model.ts';
-import { isSafeDemoRoute } from '../demo-types.ts';
 import type { GateProfile } from '../class-profile-port.ts';
 
 /**
@@ -75,20 +75,6 @@ export type DeriveDemoResult =
   | { ok: false; errors: string[] };
 
 /**
- * Shell metacharacters. A checkpoint command is spawned as a bare argv with no
- * shell (`orchestrated-capture.ts`), so a declared step containing any of these
- * would not run as written — that is a project-config error to say out loud,
- * never something to quietly strip and run anyway.
- */
-const SHELL_METACHARACTERS = /[|&;<>$`\\(){}[\]*?~\n]/;
-
-/** The first inline-code span in a step's text, or null. */
-function inlineCodeSpan(text: string): string | null {
-  const match = /`([^`]+)`/.exec(text);
-  return match ? match[1]!.trim() : null;
-}
-
-/**
  * The checkpoints a `capture: 'checkpoints'` class derives from the project's
  * declared demo process.
  *
@@ -98,27 +84,25 @@ function inlineCodeSpan(text: string): string | null {
  * command, or names one no bare-argv spawn can run, is reported as a config
  * error: the class asked for captured evidence and the contract cannot produce
  * any, which is precisely the state that must fail loud rather than ship a demo
- * with nothing in it.
+ * with nothing in it. `extractDrivableCommand` (`@forge/contracts`) is the same
+ * rule the `DEMO-SKILL` preflight clause applies (bead forge-mfv5.2.2) — a
+ * step judged drivable here is never judged undrivable there.
  */
 function captureCheckpoints(steps: readonly DemoStep[]): { checkpoints: DemoModelCheckpoint[]; errors: string[] } {
   const checkpoints: DemoModelCheckpoint[] = [];
   const errors: string[] = [];
   steps.forEach((step, i) => {
     if (step.kind !== 'capture') return;
-    const command = inlineCodeSpan(step.text);
-    if (command === null) {
+    const result = extractDrivableCommand(step.text);
+    if (!result.ok) {
       errors.push(
-        `demoProcess[${i}] (kind: capture) names no command: this class captures checkpoint evidence, and the step's text carries no inline-code span to run — "${step.text}"`,
+        result.reason === 'no-inline-code'
+          ? `demoProcess[${i}] (kind: capture) names no command: this class captures checkpoint evidence, and the step's text carries no inline-code span to run — "${step.text}"`
+          : `demoProcess[${i}] (kind: capture) declares \`${result.code}\`, which contains shell metacharacters — capture spawns a bare argv with no shell, so this command cannot run as written`,
       );
       return;
     }
-    if (SHELL_METACHARACTERS.test(command)) {
-      errors.push(
-        `demoProcess[${i}] (kind: capture) declares \`${command}\`, which contains shell metacharacters — capture spawns a bare argv with no shell, so this command cannot run as written`,
-      );
-      return;
-    }
-    checkpoints.push({ label: `Step ${i + 1}: capture`, caption: step.text, command });
+    checkpoints.push({ label: `Step ${i + 1}: capture`, caption: step.text, command: result.command });
   });
   if (checkpoints.length === 0 && errors.length === 0) {
     errors.push(
@@ -143,15 +127,15 @@ function captureCheckpoints(steps: readonly DemoStep[]): { checkpoints: DemoMode
 function acDerivedCheckpoints(criteria: readonly AcceptanceCriterionInput[]): DemoModelCheckpoint[] {
   const checkpoints: DemoModelCheckpoint[] = [];
   criteria.forEach((ac, i) => {
-    const code = inlineCodeSpan(ac.when);
-    if (code === null || code.length === 0) return;
     const label = `AC ${i + 1}: ${ac.workItemId}`;
     const caption = ac.then.trim();
-    if (code.startsWith('/')) {
-      if (isSafeDemoRoute(code)) checkpoints.push({ label, caption, route: code });
+    const routeExtraction = extractDemoRoute(ac.when);
+    if (routeExtraction.routeShaped) {
+      if (routeExtraction.route !== null) checkpoints.push({ label, caption, route: routeExtraction.route });
       return;
     }
-    if (!SHELL_METACHARACTERS.test(code)) checkpoints.push({ label, caption, command: code });
+    const result = extractDrivableCommand(ac.when);
+    if (result.ok) checkpoints.push({ label, caption, command: result.command });
   });
   return checkpoints;
 }
