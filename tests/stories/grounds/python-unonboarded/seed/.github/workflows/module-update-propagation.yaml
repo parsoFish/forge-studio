@@ -1,0 +1,170 @@
+---
+name: Module Update Propagation
+
+# Fires when a module version tag is pushed.
+# Tag format: modules/<name>@<version>
+'on':
+  push:
+    tags:
+      - "modules/*@*"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  propagate:
+    name: Propagate module update to consumers
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout control repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install copier pyyaml
+
+      - name: Parse module name and version from tag
+        id: parse-tag
+        run: |
+          # GITHUB_REF is refs/tags/modules/<name>@<version>
+          TAG="${GITHUB_REF#refs/tags/}"
+          # TAG is now: modules/<name>@<version>
+          MODULE_NAME="${TAG#modules/}"
+          MODULE_NAME="${MODULE_NAME%@*}"
+          MODULE_VERSION="${TAG##*@}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "module_name=${MODULE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "module_version=${MODULE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Parsed: tag=${TAG} module=${MODULE_NAME} v=${MODULE_VERSION}"
+
+      - name: Discover consumer repositories
+        id: discover-changes
+        run: |
+          MODULE_NAME="${{ steps.parse-tag.outputs.module_name }}"
+          # Read all config/repos/*.yaml and collect repos using this module
+          CONSUMERS=$(python3 - <<'PYEOF'
+          import glob, sys, yaml, os
+          module_name = os.environ["MODULE_NAME"]
+          consumers = []
+          for path in sorted(glob.glob("config/repos/*.yaml")):
+              with open(path) as f:
+                  doc = yaml.safe_load(f)
+              if not isinstance(doc, dict):
+                  continue
+              spec = doc.get("spec", {}) or {}
+              repo = spec.get("repository")
+              modules = spec.get("modules") or []
+              uses_module = any(
+                  m.get("name") == module_name
+                  for m in modules
+                  if isinstance(m, dict)
+              )
+              if repo and uses_module:
+                  consumers.append(repo)
+          print(",".join(consumers))
+          PYEOF
+          )
+          echo "consumers=${CONSUMERS}" >> "$GITHUB_OUTPUT"
+          echo "Consumer repositories: ${CONSUMERS}"
+        env:
+          MODULE_NAME: ${{ steps.parse-tag.outputs.module_name }}
+
+      - name: Process each consumer and open update PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MODULE_NAME: ${{ steps.parse-tag.outputs.module_name }}
+          MODULE_VERSION: ${{ steps.parse-tag.outputs.module_version }}
+          TAG_REF: ${{ steps.parse-tag.outputs.tag }}
+          CONTROL_REPO: ${{ github.repository }}
+          CONSUMERS: ${{ steps.discover-changes.outputs.consumers }}
+        run: |
+          if [ -z "${CONSUMERS}" ]; then
+            echo "No consumers found for module '${MODULE_NAME}'."
+            exit 0
+          fi
+
+          IFS=',' read -ra CONSUMER_LIST <<< "${CONSUMERS}"
+
+          for REPO_SLUG in "${CONSUMER_LIST[@]}"; do
+            echo "=== Processing consumer: ${REPO_SLUG} ==="
+
+            # Clone consumer repository
+            WORK_DIR=$(mktemp -d)
+            CLONE_URL="https://x-access-token:${GH_TOKEN}@github.com"
+            git clone --depth=1 "${CLONE_URL}/${REPO_SLUG}.git" "${WORK_DIR}"
+
+            # Run copier update and capture output
+            cd "${WORK_DIR}"
+            COPIER_OUTPUT=$(
+              copier update --defaults --skip-if-exists 2>&1 || true
+            )
+
+            # Check for changes using idempotency guard
+            DIFF_OUTPUT=$(git diff --stat 2>/dev/null || true)
+            STAGED_OUTPUT=$(git status --short 2>/dev/null || true)
+            COMBINED_CHANGES="${DIFF_OUTPUT}${STAGED_OUTPUT}"
+
+            if [ -z "$(echo "${COMBINED_CHANGES}" | tr -d '[:space:]')" ]; then
+              echo "No changes for ${REPO_SLUG} — skipping PR"
+              cd -
+              rm -rf "${WORK_DIR}"
+              continue
+            fi
+
+            # Resolve the consumer's actual default branch to avoid
+            # mis-targeting PRs on repos that use 'master' or custom branch
+            DEFAULT_BRANCH=$(
+              gh repo view "${REPO_SLUG}" \
+                --json defaultBranchRef \
+                --jq .defaultBranchRef.name
+            )
+
+            # Create update branch
+            BRANCH="chore/update-${MODULE_NAME}-${MODULE_VERSION}"
+            git checkout -b "${BRANCH}"
+            git add -A
+
+            PR_TITLE="chore: update ${MODULE_NAME} to ${MODULE_VERSION}"
+            git commit -m "${PR_TITLE}"
+            PUSH_URL="https://x-access-token:${GH_TOKEN}@github.com"
+            git push "${PUSH_URL}/${REPO_SLUG}.git" "${BRANCH}"
+
+            # Build PR body with diff and link to module tag
+            TAG_URL="https://github.com/${CONTROL_REPO}/releases/tag/${TAG_REF}"
+            PR_DIFF=$(
+              git diff HEAD~1 2>/dev/null \
+              || git show --stat HEAD 2>/dev/null \
+              || echo "${COPIER_OUTPUT}"
+            )
+            PR_BODY="## Module update: ${MODULE_NAME}
+
+          This PR applies [${TAG_REF}](${TAG_URL}) (${CONTROL_REPO}).
+
+          ### Changed files
+
+          \`\`\`diff
+          ${PR_DIFF}
+          \`\`\`
+          "
+
+            # Open PR — gh pr create errors if PR exists, which is acceptable
+            gh pr create \
+              --repo "${REPO_SLUG}" \
+              --title "${PR_TITLE}" \
+              --body "${PR_BODY}" \
+              --base "${DEFAULT_BRANCH}" \
+              --head "${BRANCH}" \
+            || echo "PR may already exist for ${REPO_SLUG} — skipping"
+
+            cd -
+            rm -rf "${WORK_DIR}"
+          done

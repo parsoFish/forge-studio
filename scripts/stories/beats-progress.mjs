@@ -34,6 +34,27 @@
  * emitting, and the old wording told the reader it was.
  */
 
+import { readRunEvents } from './run-observe.mjs';
+
+/**
+ * Line count of a session's OWN `events.jsonl` right now, or `null` when
+ * there is no session dir to read at all — the live route did not resolve to
+ * one (`beats-drive.mjs`'s `sessionLogDir` call already answers that), never
+ * conflated with a real `0`: a session dir that exists but has not written
+ * its first row yet is a real, comparable count — not "unknown" — and it is
+ * the CALLER (`progressTracker` below) that decides whether that is growth
+ * over what it saw last, never this function (§6.15 — unknown is named,
+ * never read as progress).
+ *
+ * Reuses `readRunEvents` (`run-observe.mjs`) rather than a second parse, so
+ * "this many lines" means what the run's own spend accounting already means
+ * by it (`readDispatchSnapshot`'s `eventLines`) — one definition, not two
+ * that can drift apart.
+ */
+export function sessionEventLines(dir) {
+  return dir === null ? null : readRunEvents(dir).length;
+}
+
 /** Read `key` from an observation, naming WHERE it was found. */
 export function readProgress(observed, key) {
   const root = observed?.data ?? {};
@@ -56,6 +77,25 @@ export function readProgress(observed, key) {
  * `observe` returns `null` to keep waiting, or the expiry TEXT when the budget
  * is spent. The caller decides what to do with it, because the two waits report
  * failure differently — one returns a stop object, the other an error string.
+ *
+ * A SECOND, INDEPENDENT PROGRESS SOURCE — T1 ruling 1545, S1 run 2. A repeat's
+ * `progressKey` is one page's idea of progress; the session it stands on has
+ * its own, truer one: a NEW LINE in that session's `events.jsonl`. Run 2 froze
+ * at `session-phase: drafting` for 481s while the architect demonstrably
+ * worked — a plan emitted, the completeness critic ran, a revision turn in
+ * flight — because the page never re-rendered a phase change, even though the
+ * session kept writing (gaps up to ~230s, never once past the declared 480s
+ * bound). `eventLines`, when the caller supplies one, resets the SAME clock
+ * `perTransition` already runs: growth is progress exactly as a key change is,
+ * and 480s remains the NO-PROGRESS bound either way — nothing here raises it.
+ *
+ * `eventLines` defaults to `null`: every caller that does not pass one
+ * (`waitForConsequence`'s consequence wait, and any repeat door that predates
+ * this) is UNCHANGED — the growth branch below never fires, because `null`
+ * can never be compared as a count. An absent/unreadable session log reads
+ * the same way: `sessionEventLines` returns `null` for it, not a bare `0`
+ * pretending to be fresh evidence, so it fails CLOSED to today's key-only
+ * behaviour (§6.15) rather than inventing a reset from nothing.
  */
 export function progressTracker(progress, wait, startedAt) {
   let lastValue;
@@ -64,14 +104,37 @@ export function progressTracker(progress, wait, startedAt) {
   let firstSeenAt = null;
   let transitions = 0;
   let lastChangeAt = startedAt;
+  // The FIRST reading is a baseline, never a transition: a session already 40
+  // lines into a turn when this tracker was built is not "40 lines of fresh
+  // progress" (the same rule `beats-cycle-progress.mjs` states for a write
+  // that predates the wait's own start). Only GROWTH past that baseline resets
+  // the clock.
+  let lastEventLines = null;
+  // WHAT LAST RESET THE CLOCK — kept apart from `transitions`, which counts
+  // only KEY changes. A stall whose key sat frozen while its session wrote
+  // forty lines and then stopped must say THAT, not "changed 0 time(s)" as
+  // though nothing at all had moved (ruling 1545's own readability demand).
+  let lastResetBy = { kind: 'never' };
   return {
-    observe(read, now = Date.now()) {
+    observe(read, eventLines = null, now = Date.now()) {
+      let progressed = false;
       if (read.value !== undefined && read.value !== lastValue) {
         if (firstSeenAt === null) firstSeenAt = now;
         else transitions += 1;
         lastValue = read.value;
         lastSeenSource = read.source;
         lastSeenCarriers = read.carriers;
+        lastResetBy = { kind: 'key' };
+        progressed = true;
+      }
+      if (eventLines !== null) {
+        if (lastEventLines !== null && eventLines > lastEventLines) {
+          lastResetBy = { kind: 'events', grew: eventLines - lastEventLines, total: eventLines };
+          progressed = true;
+        }
+        lastEventLines = eventLines;
+      }
+      if (progressed) {
         lastChangeAt = now;
         return null;
       }
@@ -80,7 +143,7 @@ export function progressTracker(progress, wait, startedAt) {
         key: progress.progressKey, perTransition: progress.perTransition, wait,
         source: read.source, carriers: read.carriers,
         firstSeenAt, transitions, lastValue, lastSeenSource, lastSeenCarriers,
-        startedAt, lastChangeAt, now,
+        startedAt, lastChangeAt, now, lastResetBy,
       });
     },
   };
@@ -89,6 +152,17 @@ export function progressTracker(progress, wait, startedAt) {
 /** Where the key was last seen, in words a verdict can carry. */
 const whereFrom = (source, carriers) =>
   source === 'root' ? 'the page root' : source === 'solo' ? 'one descendant element' : `${carriers} elements`;
+
+/**
+ * What last reset the clock, in words a stall message can carry — T1 ruling
+ * 1545. A red must say WHICH kind of progress it is naming, a key change or
+ * session-log growth, never blur the two into one "changed N time(s))" count
+ * that only ever meant the key.
+ */
+const describeLastReset = (r) =>
+  r.kind === 'events' ? `${r.grew} new events.jsonl line(s) (now ${r.total})`
+    : r.kind === 'key' ? 'a key change'
+      : 'nothing — the clock never reset';
 
 /**
  * WHY the per-transition bound expired — one sentence per CAUSE, never one
@@ -155,6 +229,7 @@ export function progressExpiry(s) {
     `this wait on ${whereFrom(s.source, s.carriers)} and changed ${s.transitions} time(s) after that; it has read ` +
     `${JSON.stringify(s.lastValue)} for the last ${still}s, past the declared ${s.perTransition} ms ` +
     'per-transition bound. The key renders and is still rendering, so this is the agent: it has stopped emitting ' +
-    'transitions, and the beat stopped here rather than sitting out its ceiling.'
+    'transitions, and the beat stopped here rather than sitting out its ceiling. ' +
+    `The clock's last reset was ${describeLastReset(s.lastResetBy ?? { kind: 'never' })}, ${still}s ago.`
   );
 }

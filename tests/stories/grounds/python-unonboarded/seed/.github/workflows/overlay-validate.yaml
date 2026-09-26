@@ -1,0 +1,70 @@
+---
+name: Overlay Validate
+
+'on':
+  pull_request:
+    paths:
+      - "config/**"
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  overlay-validate:
+    name: Overlay Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pyyaml jsonschema
+
+      - name: Detect changed overlay files
+        id: changed
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          BASE="origin/${{ github.base_ref }}"
+          CHANGED=$(git diff --name-only "${BASE}...HEAD" \
+            | grep '^config/repos/.*\.yaml$' || true)
+          echo "files=${CHANGED}" >> "$GITHUB_OUTPUT"
+
+      - name: Skip — no overlay files changed
+        if: >-
+          github.event_name == 'pull_request' &&
+          steps.changed.outputs.files == ''
+        run: echo "No overlay files changed — skipping validation"
+
+      - name: Validate changed overlay files (PR incremental)
+        if: >-
+          github.event_name == 'pull_request' &&
+          steps.changed.outputs.files != ''
+        run: |
+          set -euo pipefail
+          # Validates files against schemas/overlay.schema.json
+          echo "Running incremental overlay validation"
+          python scripts/validate_overlay_configs.py \
+            ${{ steps.changed.outputs.files }} || exit 1
+
+      - name: Validate all overlay files (push to main)
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          # Validates config/repos/*.yaml against schemas/overlay.schema.json
+          if [ ! -d config/repos ]; then
+            echo "config/repos does not exist — Validated 0 files"
+            exit 0
+          fi
+          python scripts/validate_overlay_configs.py config/repos/ || exit 1

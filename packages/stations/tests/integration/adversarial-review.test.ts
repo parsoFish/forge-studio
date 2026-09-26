@@ -18,7 +18,7 @@ import { reviewFindingsJsonPath, validateReviewFindings } from '@forge/flows';
 import { classifyCycleFailure, type StreamQueryFn } from '@forge/agents';
 
 import {
-  CODE_LENSES, CYCLE_ID, EXPECTED, collectLogger, makeFixture, run, stubQueryFn,
+  CODE_LENSES, CYCLE_ID, EXPECTED, INIT_ID, collectLogger, makeFixture, run, stubQueryFn,
   validFindingsJson, withoutSpawnSuppressionEnv,
 } from '../test-fixtures/adversarial-review-fixture.ts';
 import { assertAdversarialReviewDeclaration } from '../../phases/adversarial-review.ts';
@@ -66,6 +66,26 @@ test('happy path: findings harvested + persisted, worktree scrubbed, briefing ca
     assert.ok(authored);
     assert.equal((authored!.metadata as Record<string, unknown>).major, 2, 'one finding per chunk, merged');
     assert.equal((authored!.metadata as Record<string, unknown>).chunks, 2);
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('forge-8vfn.8.1.22: the reviewer chunk spawn never writes under _logs/<initiativeId>/', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger } = collectLogger(fx.logsRoot);
+    const qf = stubQueryFn([
+      (prompt) => writeFileSync(join(fx.worktree, '.forge', 'review-findings.json'), validFindingsJson(prompt)),
+    ]);
+    const res = await run(fx, qf, logger);
+    assert.equal(res.status, 'complete');
+    assert.ok(
+      !existsSync(join(fx.logsRoot, INIT_ID)),
+      'the reviewer chunk agent must never write under _logs/<initiativeId>/',
+    );
   } finally {
     fx.cleanup();
     restore();

@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GitWeave Repository Overlay",
+  "description": "Schema for GitWeave overlay configuration files (kind: RepositoryOverlay)",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "enum": ["gitweave.io/v1"],
+      "description": "API version — must be 'gitweave.io/v1'"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["RepositoryOverlay"],
+      "description": "Resource kind — must be 'RepositoryOverlay'"
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique name for this overlay configuration"
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": ["repository"],
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "type": "string",
+          "pattern": "^[^/\\s]+/[^/\\s]+$",
+          "description": "Target repository in owner/repo format (e.g. my-org/my-repo)"
+        },
+        "modules": {
+          "type": "array",
+          "description": "List of GitWeave modules to apply to the repository",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Module name (e.g. lang-node, ci-github-actions)"
+              },
+              "version": {
+                "type": "string",
+                "description": "Optional version pin — branch name, tag, or commit SHA"
+              },
+              "inputs": {
+                "type": "object",
+                "description": "Optional key-value inputs passed to the module template"
+              }
+            }
+          }
+        },
+        "environments": {
+          "type": "object",
+          "description": "Environment-specific configuration keyed by environment name",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "protection_rules": {
+                "type": "object",
+                "description": "Branch or environment protection rule overrides"
+              },
+              "secrets": {
+                "type": "array",
+                "description": "Names of secrets scoped to this environment",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "variables": {
+                "type": "object",
+                "description": "Environment variables as a string-to-string map",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "variables": {
+          "type": "object",
+          "description": "Global variables shared across all environments — flat string-to-string map",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
