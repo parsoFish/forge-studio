@@ -1570,10 +1570,13 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-section="demo-comparison"]` (DemoComparison — the criteria list at
   `[data-section="demo-acs"]`; their verdicts are on the review panel above) plus
   the per-region cards — each `[data-demo-region][data-region-comment-count]
-  [data-region-collapsed]` with a `[data-action="toggle-region"]` header
-  (regions collapse by default only on walls of > 12 regions, unless they
-  carry comments — `lib/demo-review-view.ts`, artifact-plan-31); every
-  authored comment row carries `[data-action="edit-comment"]` +
+  [data-region-collapsed]` with a `[data-action="toggle-region"][data-region]`
+  header, `data-region` matching the card's own `data-demo-region` (regions
+  collapse by default only on walls of > 12 regions, unless they carry
+  comments — `lib/demo-review-view.ts`, artifact-plan-31); a collapsed region
+  renders NO `[data-action="comment-region"]` — expand it with its scoped
+  `toggle-region` first, then its own `[data-action="comment-region"][data-region]`
+  appears; every authored comment row carries `[data-action="edit-comment"]` +
   `[data-action="delete-comment"]` (delete is how a NON-blocking comment is
   cleared — artifact-plan-15; editing renders `[data-comment-editing="true"]`
   with `[data-field="comment-edit-body"]` + `[data-action="save-comment-edit"]`),

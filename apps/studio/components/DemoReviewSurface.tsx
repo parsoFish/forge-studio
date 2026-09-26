@@ -381,6 +381,7 @@ function ReviewRegion({
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: expanded ? 10 : 0 }}>
         <button
           data-action="toggle-region"
+          data-region={region.id}
           onClick={() => setExpandedOverride(!expanded)}
           aria-expanded={expanded}
           style={{
