@@ -122,6 +122,11 @@ function cancelOneSession(dir, root, projectsRoot, reason) {
     if (start === null) {
       return miss(null, null, 'no start event names the session — nothing to terminate');
     }
+    if (start.unknown === true) {
+      // Row 33 — "could not confirm" is a different fact from "nothing to
+      // terminate", even though today neither one gates anything further.
+      return miss(null, null, `could not confirm — ${start.detail}`);
+    }
     if (start.kind === null) {
       // Two facts that disagree. Say which, and change nothing.
       return miss(
@@ -176,10 +181,17 @@ function cancelOneSession(dir, root, projectsRoot, reason) {
 }
 
 /**
- * `{kind, sessionId}` from the FIRST `start` row of `<dir>/events.jsonl`, or
- * `null` when the log is absent, unreadable, or carries no start row naming a
- * session. A malformed line is skipped, never fatal: a log truncated mid-write
- * by the very kill this function reports on is the expected input.
+ * `{kind, sessionId}` from the FIRST `start` row of `<dir>/events.jsonl`; or
+ * `null` when the log is genuinely absent (ENOENT) or carries no start row
+ * naming a session; or `{unknown: true, detail}` when a NON-ENOENT failure
+ * (EACCES/EIO) means the log could not be read at all — row 33 of the
+ * guard-catch-on-UNKNOWN audit (M7-COMMON §6.16). Cosmetic today
+ * (`cancelOneSession`'s only use of this never gates a kill/census/sweep, it
+ * only names its own status line), but "no start event names the session —
+ * nothing to terminate" was still the wrong sentence for a log this process
+ * could not even read. A malformed LINE is skipped, never fatal: a log
+ * truncated mid-write by the very kill this function reports on is the
+ * expected input.
  *
  * `session_kind` IS OPTIONAL, and that is measured rather than defensive (bead
  * `forge-8vfn.6.11.14`, S4 run 2). The generic `interactive-runner.ts` writes
@@ -201,11 +213,13 @@ function cancelOneSession(dir, root, projectsRoot, reason) {
  * none, not a replacement for the ones that do.
  */
 function readStartEvent(dir) {
+  const path = join(dir, 'events.jsonl');
   let text;
   try {
-    text = readFileSync(join(dir, 'events.jsonl'), 'utf8');
-  } catch {
-    return null;
+    text = readFileSync(path, 'utf8');
+  } catch (err) {
+    if (err?.code === 'ENOENT') return null;
+    return { unknown: true, detail: `could not read ${path}: ${err?.code ?? err?.message}` };
   }
   for (const line of text.split('\n')) {
     if (line.trim().length === 0) continue;

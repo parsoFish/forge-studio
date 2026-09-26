@@ -40,7 +40,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -150,6 +150,37 @@ test('a log with NO start event is an outcome, not a guess — nothing is writte
   assert.equal(readStatus(g).phase, 'interviewing');
   assert.equal(outcomes[0].written, false);
   assert.match(String(outcomes[0].reason), /no start event/i);
+});
+
+// Row 33 of the guard-catch-on-UNKNOWN audit (M7-COMMON §6.16) — an
+// unreadable `events.jsonl` is a different fact from "no start event was ever
+// written", even though today (cosmetic: `cancelOneSession` never gates a
+// kill/census/sweep on this, only its own status line) both read the session
+// as untouched either way.
+test('row 33: an UNREADABLE events.jsonl is "could not confirm", never the confident "no start event" — §6.16', {
+  skip: process.getuid?.() === 0 ? 'root reads mode-000 files' : false,
+}, (t) => {
+  const g = plantKilledTurn();
+  t.after(() => rmSync(g.root, { recursive: true, force: true }));
+  const events = join(g.logDir, 'events.jsonl');
+  chmodSync(events, 0o000);
+  try {
+    const outcomes = recordReapedCancellations(
+      { reaped: [{ pid: 7, dir: g.logDir, signal: 'SIGKILL', via: 'record' }], skipped: [] },
+      { projectsRoot: g.projectsRoot, reason: 'story runner: teardown' },
+    );
+    assert.equal(readStatus(g).phase, 'interviewing', 'a check that could not run must not write anything');
+    assert.equal(outcomes[0].written, false);
+    assert.match(String(outcomes[0].reason), /could not confirm/i);
+    assert.match(String(outcomes[0].reason), /EACCES/);
+    assert.doesNotMatch(
+      String(outcomes[0].reason),
+      /no start event/i,
+      'an unreadable log is not the same fact as one that was read and found empty',
+    );
+  } finally {
+    chmodSync(events, 0o644);
+  }
 });
 
 test('an ALREADY-cancelled session is not re-stamped, and says so', (t) => {

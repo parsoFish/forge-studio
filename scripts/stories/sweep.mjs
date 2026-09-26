@@ -461,6 +461,14 @@ function ignoredRootEntries(dir) {
   return out;
 }
 
+/** A sibling worktree `git worktree list` REGISTERS, present, whose OWN
+ *  status could not just be read — ROW 102b/15. Never omitted from `trees`
+ *  the way a genuinely pruned tree (ENOENT on the dir itself) correctly is: a
+ *  real escape inside it would otherwise go unreported and the fence would
+ *  print clean. `siblingWorktreeEscapes` reports it as UNVERIFIED rather than
+ *  computing a (silently wrong) empty diff against it. */
+export const SIBLING_STATUS_UNVERIFIED = Symbol('sibling-status-unverified');
+
 export function snapshotSiblingWorktrees(root) {
   const trees = new Map();
   let listing = '';
@@ -482,8 +490,10 @@ export function snapshotSiblingWorktrees(root) {
       rows = parseGitPorcelain(
         execFileSync('git', ['status', '--porcelain', '-z', '-uall'], { cwd: dir, encoding: 'utf8' }),
       );
-    } catch {
-      continue; // a pruned or unreadable tree is not this run's finding
+    } catch (e) {
+      if (e.code === 'ENOENT') continue; // the worktree dir itself is gone — genuinely pruned
+      trees.set(dir, SIBLING_STATUS_UNVERIFIED);
+      continue;
     }
     // Bead `forge-8vfn.6.11.32`: what git reports, PLUS what it is configured
     // not to report. A ground is created in an ignored root by design.
@@ -508,15 +518,34 @@ export function snapshotSiblingWorktrees(root) {
  */
 export function siblingWorktreeEscapes(root, baseline, opts = {}) {
   const grown = [];
+  const unverified = [];
   for (const [dir, paths] of snapshotSiblingWorktrees(root)) {
-    const was = baseline.get(dir) ?? new Set();
+    if (paths === SIBLING_STATUS_UNVERIFIED) {
+      // ROW 102b/15 — present, but its CURRENT status could not be read.
+      // Reported directly rather than diffed (there is nothing trustworthy
+      // to diff against) and never silently dropped from the return set —
+      // `attributeEscapes` (fence-attribution.mjs) reads `unverified` and
+      // refuses to call it clean.
+      unverified.push(dir);
+      continue;
+    }
+    const beforeRaw = baseline.get(dir);
+    // Baseline itself unverified (rarer: the BEFORE read failed) — treated as
+    // unknown-before rather than crashing on a Set method the sentinel lacks.
+    const was = beforeRaw instanceof Set ? beforeRaw : new Set();
     const added = [...paths].filter((p) => !was.has(p)).sort();
     // `baseline.has(dir)`, never `was.size > 0`: a tree that was PRESENT and
     // clean at run start is not the same thing as a tree that did not exist,
     // and only the second is judged by who owns its path (bead 7.5.1).
     if (added.length > 0) grown.push({ root: dir, paths: added, appeared: !baseline.has(dir) });
   }
-  if (grown.length === 0) return grown;
+  const unverifiedEscapes = unverified.map((dir) => ({
+    root: dir,
+    paths: ['<sibling status unverified — its current git status could not be read>'],
+    live: null,
+    unverified: true,
+  }));
+  if (grown.length === 0) return unverifiedEscapes;
   const present = grown.filter((g) => !g.appeared).map((g) => g.root);
   const appeared = grown.filter((g) => g.appeared).map((g) => g.root);
   const live = (opts.liveRoots ?? liveProcessRoots)(present);
@@ -524,7 +553,7 @@ export function siblingWorktreeEscapes(root, baseline, opts = {}) {
   return grown.map(({ appeared: a, ...g }) => ({
     ...g,
     live: (a ? owners.get(g.root) : live.get(g.root)) ?? null,
-  }));
+  })).concat(unverifiedEscapes);
 }
 
 /**

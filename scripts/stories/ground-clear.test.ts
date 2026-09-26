@@ -35,7 +35,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { groundManifest, classifyOwnGroundDrift, groundIgnoreNoneForTests, mintedSessionPaths, mintedSessionDirNames } from './ground-hash.mjs';
+import { groundManifest, classifyOwnGroundDrift, groundIgnoreNoneForTests } from './ground-hash.mjs';
+import { mintedSessionPaths, mintedSessionDirNames } from './ground-minted.mjs';
 import { runnerSourceContaining } from './runner-source.mjs';
 import {
   groundClearDir,

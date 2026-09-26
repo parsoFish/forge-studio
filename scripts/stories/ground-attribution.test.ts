@@ -28,7 +28,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { mintedSessionPaths, mintedSessionWrites, sessionWriteTargets, classifyOwnGroundDrift, groundIgnoreNoneForTests } from './ground-hash.mjs';
+import { classifyOwnGroundDrift, groundIgnoreNoneForTests } from './ground-hash.mjs';
+import { mintedSessionPaths, mintedSessionWrites, sessionWriteTargets } from './ground-minted.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(HERE, 'fixtures');

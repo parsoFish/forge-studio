@@ -34,13 +34,14 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendFileSync, mkdtempSync, mkdirSync, renameSync, writeFileSync, utimesSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdtempSync, mkdirSync, renameSync, writeFileSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import {
   makeCycleTerminalDoor, makeCycleTerminalWatch, STALL_CEILING_MS, TERMINAL_UI_GRACE_MS,
 } from './beats-agent-proc.mjs';
+import { channelTerminalState } from './beats-queue-terminal.mjs';
 import { resolveCycleOf } from './beats.mjs';
 import { FS_CLOCK_SLACK_MS } from './beats-queue-terminal.mjs';
 
@@ -565,4 +566,56 @@ test('T1 1503: a manifest MOVED into a terminal state after the anchor counts ev
   const stop = watch(null, anchor);
   assert.notEqual(stop, null, 'the move happened after the anchor — a stale mtime must not hide it');
   assert.equal(stop!.reason, 'cycle-ended');
+});
+
+/**
+ * T1 1507 (M7-COMMON §6.15, row 30) — A ONE-SIDED REAL ERROR IS UNKNOWN, NEVER
+ * "STILL OPEN". The old gate needed BOTH `_queue/` and `events.jsonl` unreadable
+ * to report `unknown`; a persistent EACCES on `events.jsonl` alone, with
+ * `_queue/` readable but not (yet) naming this initiative, fell through to
+ * `return null` — read by every caller as "the channel is genuinely open" —
+ * masking a real read failure as silence a beat could patiently wait out.
+ */
+test('T1 1507: a persistent EACCES on events.jsonl alone is UNKNOWN, not silently "open" — §6.15 row 30', { skip: process.getuid?.() === 0 ? 'root reads mode-000 files' : false }, () => {
+  const root = mkdtempSync(join(tmpdir(), 'terminal-eacces-'));
+  const initiative = 'INIT-1507-one-sided';
+  const dispatch = join(root, '_logs', `_dev-2026-09-26T00-00-00_${initiative}`);
+  mkdirSync(dispatch, { recursive: true });
+  const events = join(dispatch, 'events.jsonl');
+  writeFileSync(events, '{"event_type":"start"}\n');
+  // `_queue/` IS readable, and genuinely does not name this initiative yet —
+  // the "nothing found" half was never the bug; the events side failing for a
+  // REAL reason while this side stays silent is.
+  mkdirSync(join(root, '_queue', 'in-flight'), { recursive: true });
+  chmodSync(events, 0o000);
+  try {
+    const seen = channelTerminalState(root, dispatch);
+    assert.notEqual(seen, null, 'a one-sided EACCES must not read as a confirmed-open channel');
+    assert.equal(seen!.unknown, true);
+    assert.match(seen!.detail, /events\.jsonl.*EACCES|EACCES.*events\.jsonl/, seen!.detail);
+  } finally {
+    chmodSync(events, 0o644);
+  }
+});
+
+/** THE CONTROL, same shape, kept green by the reordering: a CONCLUSIVE queue
+ *  finding wins regardless of the events side's readability — real error or
+ *  not, a state the product actually wrote is not made less true by it. */
+test('T1 1507 (control): a conclusive queue state still wins over an unreadable events.jsonl', { skip: process.getuid?.() === 0 ? 'root reads mode-000 files' : false }, () => {
+  const root = mkdtempSync(join(tmpdir(), 'terminal-eacces-control-'));
+  const initiative = 'INIT-1507-conclusive';
+  const dispatch = join(root, '_logs', `_dev-2026-09-26T00-00-00_${initiative}`);
+  mkdirSync(dispatch, { recursive: true });
+  const events = join(dispatch, 'events.jsonl');
+  writeFileSync(events, '{"event_type":"start"}\n');
+  queueFile(root, 'failed', initiative);
+  chmodSync(events, 0o000);
+  try {
+    const seen = channelTerminalState(root, dispatch);
+    assert.notEqual(seen, null);
+    assert.equal(seen!.state, 'failed', `a conclusive queue answer must not be demoted to unknown: ${JSON.stringify(seen)}`);
+    assert.notEqual(seen!.unknown, true);
+  } finally {
+    chmodSync(events, 0o644);
+  }
 });

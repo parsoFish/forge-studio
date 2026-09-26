@@ -8,7 +8,9 @@
  * three things forge could never regenerate survive untouched: the north star,
  * the instructions, and the secrets. Preflight comes out MET and a drift
  * report says what moved. Authored 2026-08-30 against `parsoFish/main`
- * `da566d8b`, with the operator (H6). Green expected at M5.
+ * `da566d8b`, with the operator (H6). Green expected at M5. Re-pointed onto
+ * the forge-owned fixture ground `go-provider-old-contract` 2026-09-26 (plan
+ * D5, M7-D forge-1rk5.1, T1 1494/1497) — see the GROUND paragraph below.
  *
  * THE CAPABILITY THIS STORY ASSERTS DOES NOT EXIST YET, and that is the point.
  * `forge project reset` + Studio's "Rebuild contract" land in the projects
@@ -18,37 +20,53 @@
  * product is what §4 M1 Lane C forbids, and this story exists to hold M4 to
  * the flow, not to describe M1.
  *
- * WHY THIS GROUND. `terraform-provider-betterado` is the oldest project forge
- * manages and the only one that shows the drift with its own DOM. Its contract
- * BINDS NINE PROJECT SKILLS — ado-api-explorer, ado-browser-inspector,
+ * WHY THIS GROUND. `terraform-provider-betterado` was the oldest project forge
+ * managed and the only one that showed the drift with its own DOM. Its
+ * contract BINDS NINE PROJECT SKILLS — ado-api-explorer, ado-browser-inspector,
  * ado-demo, resource-scaffolder, schema-refactor, tfplugindocs-gen,
  * tf-acceptance-test-author, ado-release-explorer, breaking-change-detector —
- * and Studio resolves NONE of them: every chip reads
+ * and Studio resolved NONE of them: every chip read
  * `[data-resolved="missing"][data-skill-source="missing"]`, live, on this
- * lane's own bridge. They are on disk; they sit under the project's own
- * `forge/skills/`, the layout it was onboarded to. `projects/mdtoc`, onboarded
- * later, keeps its one skill at `.forge/skills/` and resolves
- * `[data-resolved="ok"][data-skill-source="project"]` — the value beat 6
- * expects, copied from mdtoc's live page rather than invented. Nine dead
- * bindings against one live one IS the drift, and it is the operator's reason
- * to reset.
+ * lane's own bridge, when this story was authored. They were on disk; they sat
+ * under the project's own `forge/skills/`, the layout it was onboarded to.
+ * `projects/mdtoc`, onboarded later, keeps its one skill at `.forge/skills/`
+ * and resolves `[data-resolved="ok"][data-skill-source="project"]` — the
+ * value beat 6 expects, copied from mdtoc's live page rather than invented.
+ * Nine dead bindings against one live one WAS the drift, and it was the
+ * operator's reason to reset. `computeContractDrift` against the fixture
+ * (below) reproduces the identical nine-relocation shape offline, so the
+ * DOM-observed premise and the frozen ground agree.
  *
- * H4 NOTE, re-derived rather than assumed. PR #71 on
- * `parsoFish/terraform-provider-betterado` is still OPEN on 2026-08-30, and
- * the brief says an unmerged #71 makes its branch the "before". It does not
- * matter here: #71 touches 26 files and every one is under `docs/` — zero
- * changes to `.forge/`. The contract this story resets is byte-identical on
- * `main` and on the branch, so the ground is the repo as it stands.
+ * GROUND. `story-s3`, provisioned for each run from the forge-owned fixture
+ * `tests/stories/grounds/go-provider-old-contract` — a GATE-closure subset of
+ * `terraform-provider-betterado` at `3b2e2ca4aa53cdb24ffd6760c8476c305a62ef73`
+ * (the commit immediately before forge's own "Rebuild contract" commits
+ * landed in PR #72), with `.forge/project.json` restored from a byte-exact
+ * capture of the live ground's `.forge/` taken 2026-09-05 — the day this story
+ * was authored, at this same SHA — because that file is `.gitignore`-hidden
+ * from every `git archive`/`git show` at this pin (provenance, digests and the
+ * full drift proof beside the seed: `tests/stories/grounds/go-provider-old-contract/PROVENANCE.md`).
+ * Torn down after the fence has judged it (M7-D, forge-1rk5.1, plan D5). A
+ * story now never drives real git/API operations against the operator's own
+ * long-lived betterado ground. This also retires the H4 NOTE that used to sit
+ * here: it addressed an open PR (#71) mutating the LIVE ground's "before" —
+ * moot once the ground is a frozen fixture with no PRs of its own.
  *
  * ON THE `data-*` KEYS. Every key and value below was copied from the live DOM
- * of a bridge booted from this lane's worktree — `/projects` and
+ * of a bridge booted from this lane's worktree against the REAL
+ * `terraform-provider-betterado` before the fixture existed — `/projects` and
  * `/projects/terraform-provider-betterado` observed directly, `resolved: 'ok'`
  * / `skill-source: 'project'` from `/projects/mdtoc`, and the onboarding
  * session pair (`onboard-run-status: 'running'`, `session-kind: 'onboarding'`)
  * transcribed from `docs/reference/studio-dom-contract.md` and S1's own worked
- * beats, because observing them live costs a real spawn. None is invented.
- * Where the page root does not carry a key, the keys it does not carry are
- * answered together by ONE element, per §3.1's nested-read rule.
+ * beats, because observing them live costs a real spawn. The `story-s3` token
+ * itself (route segments, `card-id`/`project-id`, the `AZDO_PERSONAL_ACCESS_TOKEN`
+ * secret NAME, `AGENTS.md`, the north star string) is not a fresh live
+ * observation — it is the fixture's own name standing in the same DOM
+ * position the real project's name held, licensed the same way every other
+ * fixture token in this suite is (S4's own rule). None is invented. Where the
+ * page root does not carry a key, the keys it does not carry are answered
+ * together by ONE element, per §3.1's nested-read rule.
  *
  * THE DRIFT REPORT HAS NO HANDLE, and the story does not invent one. §3 asks
  * for "a drift report of what changed"; nothing on the project page declares a
@@ -81,33 +99,69 @@ const GATE = 'go test -tags all -count=1 ./azuredevops/internal/service/serviceh
 /** This run's ceiling, in dollars — the same figure the ground declares. */
 const CEILING = 25;
 
+const SKILL_IDS = [
+  'ado-api-explorer', 'ado-browser-inspector', 'ado-demo',
+  'ado-release-explorer', 'breaking-change-detector', 'resource-scaffolder',
+  'schema-refactor', 'tf-acceptance-test-author', 'tfplugindocs-gen',
+];
+
 export default {
   id: 'S3',
   ground: {
-    project: 'terraform-provider-betterado',
+    project: 'story-s3',
+    fixture: 'go-provider-old-contract',
     realSpawn: true,
     budget_usd: CEILING,
     // 7.6.136 — THE GROUND CHANGES THIS STORY'S PRODUCT MAKES, declared here so
     // the fence can tell them from a containment breach. Beat 5 presses
     // "Rebuild contract", which MOVES this project's nine declared skills from
     // `forge/skills/<id>/` (where its `artifactRoot: "forge"` put them) to
-    // `.forge/skills/<id>/` (where the contract expects them). Run 3 went 12/12
-    // green and still exited 1, because those nine removals are inside no
-    // minted session, written by no agent, and not ignored — so the fence could
-    // only call them UNDECLARED.
+    // `.forge/skills/<id>/` (where the contract expects them), and rewrites
+    // `.forge/project.json` unconditionally whenever ANY row is
+    // `regenerate`/`add` — here the `skills` row always is, even though no
+    // config VALUE changes (verified by running `applyContractReset` against
+    // this fixture: the only diff is JSON string-escaping normalisation —
+    // Node's `JSON.stringify` renders a `—` escape as a literal `—`
+    // character — zero semantic change). Run 3 (on the real ground)
+    // went 12/12 green and still exited 1, because the nine skill-move
+    // removals were inside no minted session, written by no agent, and not
+    // ignored — so the fence could only call them UNDECLARED.
     //
-    // Declared as REMOVALS: the `.forge/skills/<id>/` arrivals are additions
-    // the fence already accounts for, and licensing only what actually needs a
-    // licence keeps the claim as small as the truth.
+    // RE-DERIVED FOR THE FIXTURE, TWICE (M7-D, forge-1rk5.1, plan D5). First
+    // pass: this fixture then carried NO `.gitignore` at all, so nothing was
+    // ignored — simulating `classifyOwnGroundDrift` against a
+    // provisioned-and-reset copy showed the nine `.forge/skills/<id>/SKILL.md`
+    // ARRIVALS and the `.forge/project.json` re-serialisation ALL fall to
+    // UNDECLARED unless named. Second pass, after the fixture was corrected to
+    // carry betterado's own tracked `.gitignore` (verbatim, `3b2e2ca4`) so C2
+    // could pass: re-ran the SAME simulation expecting the ignore to now
+    // absorb the arrivals the way it did on the real ground. It does NOT —
+    // `groundIgnoreFromGit` runs `git check-ignore` against the ground's git
+    // state as the RUN LEAVES it, and beat 5's own press REWRITES `.gitignore`
+    // (from the blanket `.forge/` this pin carries to the narrow scratch-only
+    // form — the exact fix PR #72's `15a74d8a` made on the real ground,
+    // `gitignoreFixed: true` when actually run). Checked against that FINAL,
+    // narrow `.gitignore`, none of `.forge/skills/*` is ignored, so all nine
+    // arrivals are STILL undeclared — and the rewrite adds an ELEVENTH new
+    // write, `.gitignore` itself (`modified`), that the real ground's story
+    // never had to declare (there, PR #72's fix predated S3 by three weeks and
+    // was never inside a run this fence judged). Declared as ADDITIONS (the
+    // nine arrivals), TWO MODIFICATIONS (`.forge/project.json`'s
+    // re-serialisation, `.gitignore`'s rewrite) — every path
+    // `applyContractReset` demonstrably writes on this ground, and nothing
+    // wider (`tests/stories/grounds/go-provider-old-contract/PROVENANCE.md`
+    // records both simulations: the first proved 19 exact, the second proved
+    // 19 insufficient and 20 exact — 20 declared, 0 undeclared, 0 unmatched).
     //
-    // `beat: 5` (7.6.140, T1 1275): each removal names the beat whose press
+    // `beat: 5` (7.6.140, T1 1275): each change names the beat whose press
     // causes it — beat 5's "Rebuild contract" — for the harness's per-beat
     // attribution of declared changes (7.6.140) to read.
     expectedChanges: [
-      'ado-api-explorer', 'ado-browser-inspector', 'ado-demo',
-      'ado-release-explorer', 'breaking-change-detector', 'resource-scaffolder',
-      'schema-refactor', 'tf-acceptance-test-author', 'tfplugindocs-gen',
-    ].map((id) => ({ path: `forge/skills/${id}/SKILL.md`, change: 'removed', beat: 5 })),
+      ...SKILL_IDS.map((id) => ({ path: `forge/skills/${id}/SKILL.md`, change: 'removed', beat: 5 })),
+      ...SKILL_IDS.map((id) => ({ path: `.forge/skills/${id}/SKILL.md`, change: 'added', beat: 5 })),
+      { path: '.forge/project.json', change: 'modified', beat: 5 },
+      { path: '.gitignore', change: 'modified', beat: 5 },
+    ],
   },
   docs: { kind: 'how-to', title: 'Reset a project contract' },
   beats: [
@@ -120,7 +174,7 @@ export default {
         data: {
           page: 'projects-index',
           'page-ready': 'true',
-          'card-id': 'terraform-provider-betterado',
+          'card-id': 'story-s3',
           health: 'healthy',
         },
       },
@@ -131,10 +185,10 @@ export default {
       // the page by ordinary navigation with no `do` step.
       act: 'Open the project',
       expect: {
-        route: '/projects/terraform-provider-betterado',
+        route: '/projects/story-s3',
         data: {
           page: 'projects',
-          'project-id': 'terraform-provider-betterado',
+          'project-id': 'story-s3',
           'page-ready': 'true',
         },
       },
@@ -144,10 +198,10 @@ export default {
       // Fully expressible; `accepts` and `count` are the same <div>.
       act: 'Count the skills this project binds',
       expect: {
-        route: '/projects/terraform-provider-betterado',
+        route: '/projects/story-s3',
         data: {
           page: 'projects',
-          'project-id': 'terraform-provider-betterado',
+          'project-id': 'story-s3',
           accepts: 'skill',
           count: '9',
         },
@@ -161,10 +215,10 @@ export default {
       // the drift is the story's premise, not its failure.
       act: 'Read the first of them',
       expect: {
-        route: '/projects/terraform-provider-betterado',
+        route: '/projects/story-s3',
         data: {
           page: 'projects',
-          'project-id': 'terraform-provider-betterado',
+          'project-id': 'story-s3',
           kind: 'skill',
           'skill-id': 'ado-api-explorer',
           resolved: 'missing',
@@ -217,10 +271,10 @@ export default {
         { press: 'apply-contract-reset' },
       ],
       expect: {
-        route: '/projects/terraform-provider-betterado',
+        route: '/projects/story-s3',
         data: {
           page: 'projects',
-          'project-id': 'terraform-provider-betterado',
+          'project-id': 'story-s3',
           section: 'contract-drift-applied',
           'preflight-ok': 'true',
         },
@@ -234,10 +288,10 @@ export default {
       // this checkout that resolves. Blocked behind beat 5 today.
       act: 'Check the nine skills resolve now',
       expect: {
-        route: '/projects/terraform-provider-betterado',
+        route: '/projects/story-s3',
         data: {
           page: 'projects',
-          'project-id': 'terraform-provider-betterado',
+          'project-id': 'story-s3',
           kind: 'skill',
           'skill-id': 'ado-api-explorer',
           resolved: 'ok',
@@ -252,10 +306,10 @@ export default {
       // is its own <li> under the secrets row, so it answers alone.
       act: 'Check the secrets the rebuild had no right to touch',
       expect: {
-        route: '/projects/terraform-provider-betterado',
+        route: '/projects/story-s3',
         data: {
           page: 'projects',
-          'project-id': 'terraform-provider-betterado',
+          'project-id': 'story-s3',
           'detail-line': 'AZDO_PERSONAL_ACCESS_TOKEN',
         },
       },
@@ -265,10 +319,10 @@ export default {
       // Fully expressible; the instructions source is its own <div>.
       act: 'Check the instructions still point at the project’s own file',
       expect: {
-        route: '/projects/terraform-provider-betterado',
+        route: '/projects/story-s3',
         data: {
           page: 'projects',
-          'project-id': 'terraform-provider-betterado',
+          'project-id': 'story-s3',
           'contract-conventions-source': 'AGENTS.md',
         },
       },
@@ -282,10 +336,10 @@ export default {
       // assertion available, and the narration says which north star it means.
       act: 'Check the north star survived',
       expect: {
-        route: '/projects/terraform-provider-betterado',
+        route: '/projects/story-s3',
         data: {
           page: 'projects',
-          'project-id': 'terraform-provider-betterado',
+          'project-id': 'story-s3',
           'contract-northstar-state': 'present',
         },
       },
@@ -295,12 +349,32 @@ export default {
       // Fully expressible. `preflight-status`, `flow-ready` and `ready-count`
       // are all the readiness panel's own <div>, so the three are answerable
       // together.
+      //
+      // CONFIRMED, not fabricated (M7-D, forge-1rk5.1, plan D5): a first pass
+      // measured `runPreflight` (`packages/projects/preflight.ts`) directly
+      // against a provisioned-and-reset copy of this fixture at `ok: false` —
+      // C2 (no `.gitignore` carried, so forge's own scratch paths were not
+      // git-ignored) and C4 (missing `roadmap.md` and
+      // `brain/projects/<story project>/profile.md`). Both are now fixed at the
+      // source, not papered over: `.gitignore` and `roadmap.md` carried
+      // verbatim from `3b2e2ca4` (both tracked there), and the fixture ground
+      // harness (`scripts/stories/fixture-ground.mjs`) grew the ability to
+      // provision a fixture's own `brain/` directory to
+      // `brain/projects/<project>/` — this fixture carries the REAL
+      // `brain/projects/terraform-provider-betterado/profile.md` (this forge
+      // repo, `parsoFish/main`) verbatim, named + hashed in PROVENANCE.md.
+      // Re-measured against the corrected fixture: `ok: true` — every HARD
+      // clause (C1, C1b, C2, C4, SKILLS) passes; the readiness panel's own
+      // five UI checks (north star, instructions, demo, skills, kb) all pass
+      // too, so `ready-count: 5` and `flow-ready: true` hold for real, not
+      // merely as declared. Full report in
+      // `tests/stories/grounds/go-provider-old-contract/PROVENANCE.md`.
       act: 'Confirm preflight is MET and the project is still ready for a Flow',
       expect: {
-        route: '/projects/terraform-provider-betterado',
+        route: '/projects/story-s3',
         data: {
           page: 'projects',
-          'project-id': 'terraform-provider-betterado',
+          'project-id': 'story-s3',
           'preflight-status': 'ok',
           'flow-ready': 'true',
           'ready-count': '5',
@@ -323,10 +397,10 @@ export default {
         { press: 'run-onboarding-agent' },
       ],
       expect: {
-        route: '/projects/terraform-provider-betterado',
+        route: '/projects/story-s3',
         data: {
           page: 'projects',
-          'project-id': 'terraform-provider-betterado',
+          'project-id': 'story-s3',
           section: 'onboard-with-agent',
           'onboard-run-status': 'running',
           'onboard-session-id': '<onboardSessionId>',
@@ -337,7 +411,7 @@ export default {
     },
     {
       // Fully expressible. The press navigates to
-      // `/sessions/onboarding/<sid>?project=terraform-provider-betterado`; the
+      // `/sessions/onboarding/<sid>?project=story-s3`; the
       // runner matches on pathname, and `<onboardSessionId>` is bound by beat
       // 11. `session-kind: 'onboarding'` is S1's own worked value.
       act: 'Follow "View onboarding session" and watch it work',

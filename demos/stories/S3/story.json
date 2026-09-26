@@ -2,47 +2,112 @@
   "story": {
     "id": "S3",
     "ground": {
-      "project": "terraform-provider-betterado",
+      "project": "story-s3",
       "realSpawn": true,
       "budget_usd": 25,
       "expectedChanges": [
         {
           "path": "forge/skills/ado-api-explorer/SKILL.md",
-          "change": "removed"
+          "change": "removed",
+          "beat": 5
         },
         {
           "path": "forge/skills/ado-browser-inspector/SKILL.md",
-          "change": "removed"
+          "change": "removed",
+          "beat": 5
         },
         {
           "path": "forge/skills/ado-demo/SKILL.md",
-          "change": "removed"
+          "change": "removed",
+          "beat": 5
         },
         {
           "path": "forge/skills/ado-release-explorer/SKILL.md",
-          "change": "removed"
+          "change": "removed",
+          "beat": 5
         },
         {
           "path": "forge/skills/breaking-change-detector/SKILL.md",
-          "change": "removed"
+          "change": "removed",
+          "beat": 5
         },
         {
           "path": "forge/skills/resource-scaffolder/SKILL.md",
-          "change": "removed"
+          "change": "removed",
+          "beat": 5
         },
         {
           "path": "forge/skills/schema-refactor/SKILL.md",
-          "change": "removed"
+          "change": "removed",
+          "beat": 5
         },
         {
           "path": "forge/skills/tf-acceptance-test-author/SKILL.md",
-          "change": "removed"
+          "change": "removed",
+          "beat": 5
         },
         {
           "path": "forge/skills/tfplugindocs-gen/SKILL.md",
-          "change": "removed"
+          "change": "removed",
+          "beat": 5
+        },
+        {
+          "path": ".forge/skills/ado-api-explorer/SKILL.md",
+          "change": "added",
+          "beat": 5
+        },
+        {
+          "path": ".forge/skills/ado-browser-inspector/SKILL.md",
+          "change": "added",
+          "beat": 5
+        },
+        {
+          "path": ".forge/skills/ado-demo/SKILL.md",
+          "change": "added",
+          "beat": 5
+        },
+        {
+          "path": ".forge/skills/ado-release-explorer/SKILL.md",
+          "change": "added",
+          "beat": 5
+        },
+        {
+          "path": ".forge/skills/breaking-change-detector/SKILL.md",
+          "change": "added",
+          "beat": 5
+        },
+        {
+          "path": ".forge/skills/resource-scaffolder/SKILL.md",
+          "change": "added",
+          "beat": 5
+        },
+        {
+          "path": ".forge/skills/schema-refactor/SKILL.md",
+          "change": "added",
+          "beat": 5
+        },
+        {
+          "path": ".forge/skills/tf-acceptance-test-author/SKILL.md",
+          "change": "added",
+          "beat": 5
+        },
+        {
+          "path": ".forge/skills/tfplugindocs-gen/SKILL.md",
+          "change": "added",
+          "beat": 5
+        },
+        {
+          "path": ".forge/project.json",
+          "change": "modified",
+          "beat": 5
+        },
+        {
+          "path": ".gitignore",
+          "change": "modified",
+          "beat": 5
         }
-      ]
+      ],
+      "fixture": "go-provider-old-contract"
     },
     "docs": {
       "kind": "how-to",
@@ -58,7 +123,7 @@
           "data": {
             "page": "projects-index",
             "page-ready": "true",
-            "card-id": "terraform-provider-betterado",
+            "card-id": "story-s3",
             "health": "healthy"
           }
         }
@@ -68,10 +133,10 @@
         "say": "The project page is where the contract lives: what forge tests with, what it demos with, what it releases with, and which skills its agents may reach for.",
         "do": [],
         "expect": {
-          "route": "/projects/terraform-provider-betterado",
+          "route": "/projects/story-s3",
           "data": {
             "page": "projects",
-            "project-id": "terraform-provider-betterado",
+            "project-id": "story-s3",
             "page-ready": "true"
           }
         }
@@ -81,10 +146,10 @@
         "say": "Nine skills — an API explorer, a resource scaffolder, a docs generator, an acceptance-test author. They are the reason this project can be built unattended at all: they are the moves that are specific to an Azure DevOps provider and to nothing else forge manages.",
         "do": [],
         "expect": {
-          "route": "/projects/terraform-provider-betterado",
+          "route": "/projects/story-s3",
           "data": {
             "page": "projects",
-            "project-id": "terraform-provider-betterado",
+            "project-id": "story-s3",
             "accepts": "skill",
             "count": "9"
           }
@@ -95,10 +160,10 @@
         "say": "It does not resolve. Nor do the other eight. The skills are on disk — they sit where this project was told to put them when it was onboarded, and the contract every project written since puts them somewhere else. Nothing is broken enough to fail a gate, which is exactly why it has gone unnoticed: the project is drifting away from forge, one convention at a time.",
         "do": [],
         "expect": {
-          "route": "/projects/terraform-provider-betterado",
+          "route": "/projects/story-s3",
           "data": {
             "page": "projects",
-            "project-id": "terraform-provider-betterado",
+            "project-id": "story-s3",
             "kind": "skill",
             "skill-id": "ado-api-explorer",
             "resolved": "missing",
@@ -125,10 +190,10 @@
           }
         ],
         "expect": {
-          "route": "/projects/terraform-provider-betterado",
+          "route": "/projects/story-s3",
           "data": {
             "page": "projects",
-            "project-id": "terraform-provider-betterado",
+            "project-id": "story-s3",
             "section": "contract-drift-applied",
             "preflight-ok": "true"
           }
@@ -139,10 +204,10 @@
         "say": "The rebuild moved the skills to where the current contract expects them and rewrote the wiring that points at them. The bindings the project has carried all along now resolve, and the agents that run against this project can reach the moves that are specific to it.",
         "do": [],
         "expect": {
-          "route": "/projects/terraform-provider-betterado",
+          "route": "/projects/story-s3",
           "data": {
             "page": "projects",
-            "project-id": "terraform-provider-betterado",
+            "project-id": "story-s3",
             "kind": "skill",
             "skill-id": "ado-api-explorer",
             "resolved": "ok",
@@ -155,10 +220,10 @@
         "say": "This is the first of the three things a rebuild must never regenerate. The contract names the environment variables the live acceptance tier needs — never a value — and a template cannot know that this project talks to Azure DevOps with a personal access token. The element still names it, so the acceptance gate still knows what it needs.",
         "do": [],
         "expect": {
-          "route": "/projects/terraform-provider-betterado",
+          "route": "/projects/story-s3",
           "data": {
             "page": "projects",
-            "project-id": "terraform-provider-betterado",
+            "project-id": "story-s3",
             "detail-line": "AZDO_PERSONAL_ACCESS_TOKEN"
           }
         }
@@ -168,10 +233,10 @@
         "say": "The second. This project keeps its conventions in AGENTS.md and forge binds to that file read-only; a rebuild that swapped it for the template’s own choice would silently retarget every agent that reads it. The source is unchanged, so the instructions the operator has been curating for months are still the ones in force.",
         "do": [],
         "expect": {
-          "route": "/projects/terraform-provider-betterado",
+          "route": "/projects/story-s3",
           "data": {
             "page": "projects",
-            "project-id": "terraform-provider-betterado",
+            "project-id": "story-s3",
             "contract-conventions-source": "AGENTS.md"
           }
         }
@@ -181,10 +246,10 @@
         "say": "The third. \"Feature complete ADO provider that has data and resources defined for all resources available in the ADO API\" is the sentence every planner reads before it decides what to build next. It is the one thing in the contract that is a judgement rather than a mechanism, and a rebuild that regenerated it would quietly change what forge is building.",
         "do": [],
         "expect": {
-          "route": "/projects/terraform-provider-betterado",
+          "route": "/projects/story-s3",
           "data": {
             "page": "projects",
-            "project-id": "terraform-provider-betterado",
+            "project-id": "story-s3",
             "contract-northstar-state": "present"
           }
         }
@@ -194,10 +259,10 @@
         "say": "This is the check that says the reset was worth doing rather than merely survivable. Five readiness elements met, preflight MET, and the project still ready to have a Flow pointed at it — the same bar a project created today has to clear, now cleared by one that predates it.",
         "do": [],
         "expect": {
-          "route": "/projects/terraform-provider-betterado",
+          "route": "/projects/story-s3",
           "data": {
             "page": "projects",
-            "project-id": "terraform-provider-betterado",
+            "project-id": "story-s3",
             "preflight-status": "ok",
             "flow-ready": "true",
             "ready-count": "5"
@@ -224,10 +289,10 @@
           }
         ],
         "expect": {
-          "route": "/projects/terraform-provider-betterado",
+          "route": "/projects/story-s3",
           "data": {
             "page": "projects",
-            "project-id": "terraform-provider-betterado",
+            "project-id": "story-s3",
             "section": "onboard-with-agent",
             "onboard-run-status": "running",
             "onboard-session-id": "<onboardSessionId>",
@@ -266,7 +331,13 @@
         "page": "projects-index",
         "page-ready": "true",
         "fetch-status": "ok",
-        "card-id": "terraform-provider-betterado",
+        "card-id": "story-s3",
+        "health": "healthy"
+      },
+      "expect": {
+        "page": "projects-index",
+        "page-ready": "true",
+        "card-id": "story-s3",
         "health": "healthy"
       },
       "frame": "frames/01-open-studio-on-the-projects-pillar.png"
@@ -279,7 +350,12 @@
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "terraform-provider-betterado",
+        "project-id": "story-s3",
+        "page-ready": "true"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s3",
         "page-ready": "true"
       },
       "frame": "frames/02-open-the-project.png"
@@ -292,7 +368,13 @@
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "terraform-provider-betterado",
+        "project-id": "story-s3",
+        "accepts": "skill",
+        "count": "9"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s3",
         "accepts": "skill",
         "count": "9"
       },
@@ -306,7 +388,15 @@
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "terraform-provider-betterado",
+        "project-id": "story-s3",
+        "kind": "skill",
+        "skill-id": "ado-api-explorer",
+        "resolved": "missing",
+        "skill-source": "missing"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s3",
         "kind": "skill",
         "skill-id": "ado-api-explorer",
         "resolved": "missing",
@@ -322,7 +412,13 @@
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "terraform-provider-betterado",
+        "project-id": "story-s3",
+        "section": "contract-drift-applied",
+        "preflight-ok": "true"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s3",
         "section": "contract-drift-applied",
         "preflight-ok": "true"
       },
@@ -336,7 +432,15 @@
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "terraform-provider-betterado",
+        "project-id": "story-s3",
+        "kind": "skill",
+        "skill-id": "ado-api-explorer",
+        "resolved": "ok",
+        "skill-source": "project"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s3",
         "kind": "skill",
         "skill-id": "ado-api-explorer",
         "resolved": "ok",
@@ -352,7 +456,12 @@
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "terraform-provider-betterado",
+        "project-id": "story-s3",
+        "detail-line": "AZDO_PERSONAL_ACCESS_TOKEN"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s3",
         "detail-line": "AZDO_PERSONAL_ACCESS_TOKEN"
       },
       "frame": "frames/07-check-the-secrets-the-rebuild-had-no-rig.png"
@@ -365,7 +474,12 @@
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "terraform-provider-betterado",
+        "project-id": "story-s3",
+        "contract-conventions-source": "AGENTS.md"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s3",
         "contract-conventions-source": "AGENTS.md"
       },
       "frame": "frames/08-check-the-instructions-still-point-at-th.png"
@@ -378,7 +492,12 @@
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "terraform-provider-betterado",
+        "project-id": "story-s3",
+        "contract-northstar-state": "present"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s3",
         "contract-northstar-state": "present"
       },
       "frame": "frames/09-check-the-north-star-survived.png"
@@ -391,7 +510,14 @@
       "bindings": {},
       "data": {
         "page": "projects",
-        "project-id": "terraform-provider-betterado",
+        "project-id": "story-s3",
+        "preflight-status": "ok",
+        "flow-ready": "true",
+        "ready-count": "5"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s3",
         "preflight-status": "ok",
         "flow-ready": "true",
         "ready-count": "5"
@@ -404,14 +530,22 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "onboardSessionId": "2026-09-18T11-29-33-c67a6278"
+        "onboardSessionId": "2026-09-26T06-59-44-f777e97a"
       },
       "data": {
         "page": "projects",
-        "project-id": "terraform-provider-betterado",
+        "project-id": "story-s3",
         "section": "onboard-with-agent",
         "onboard-run-status": "running",
-        "onboard-session-id": "2026-09-18T11-29-33-c67a6278",
+        "onboard-session-id": "2026-09-26T06-59-44-f777e97a",
+        "onboard-attaching": "false"
+      },
+      "expect": {
+        "page": "projects",
+        "project-id": "story-s3",
+        "section": "onboard-with-agent",
+        "onboard-run-status": "running",
+        "onboard-session-id": "<onboardSessionId>",
         "onboard-attaching": "false"
       },
       "frame": "frames/11-run-the-onboarding-agent-to-re-derive-th.png"
@@ -428,34 +562,41 @@
         "session-kind": "onboarding",
         "buildout-row-count": "5"
       },
+      "expect": {
+        "page": "session",
+        "page-ready": "true",
+        "session-kind": "onboarding",
+        "buildout-row-count": "5"
+      },
       "frame": "frames/12-follow-view-onboarding-session-and-watch.png"
     }
   ],
   "reap": {
     "reaped": [
       {
-        "pid": 1419637,
-        "dir": "_logs/_agent-onboarding-agent-2026-09-18T11-29-33-584-7w5e",
+        "pid": 3258201,
+        "dir": "_logs/_agent-onboarding-agent-2026-09-26T06-59-44-458-b4cf",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 1419631,
-        "dir": "_logs/_agent-onboarding-agent-2026-09-18T11-29-33-584-7w5e",
+        "pid": 3258197,
+        "dir": "_logs/_agent-onboarding-agent-2026-09-26T06-59-44-458-b4cf",
         "signal": "SIGTERM",
         "via": "marker"
       },
       {
-        "pid": 1419623,
-        "dir": "_logs/_agent-onboarding-agent-2026-09-18T11-29-33-584-7w5e",
+        "pid": 3258046,
+        "dir": "_logs/_agent-onboarding-agent-2026-09-26T06-59-44-458-b4cf",
         "signal": "SIGTERM",
-        "via": "cwd"
+        "via": "cwd",
+        "terminatedBeforeFirstPricedEvent": 30000
       }
     ],
     "skipped": [],
     "cancelled": [
       {
-        "dir": "_logs/_agent-onboarding-agent-2026-09-18T11-29-33-584-7w5e",
+        "dir": "_logs/_agent-onboarding-agent-2026-09-26T06-59-44-458-b4cf",
         "kind": null,
         "sessionId": null,
         "project": null,
@@ -466,7 +607,9 @@
     ]
   },
   "sweep": {
-    "removed": [],
+    "removed": [
+      "brain/projects/story-s3"
+    ],
     "failed": [],
     "claim": {
       "ok": true,
@@ -483,7 +626,16 @@
         "[stories] queue claim: ready-for-review/ holds 0"
       ]
     },
+    "artefacts": {
+      "dest": null,
+      "captured": [],
+      "cleared": [],
+      "refused": [],
+      "unremoved": []
+    },
     "lines": [
+      "[stories] trailing sweep removed brain/projects/story-s3",
+      "[stories] trailing sweep KEPT projects/story-s3 — a fixture ground is judged before it is torn down",
       "[stories] queue claim: done/ holds 0",
       "[stories] queue claim: failed/ holds 0",
       "[stories] queue claim: in-flight/ holds 0",
@@ -497,8 +649,31 @@
     "removed": [],
     "removedContents": [],
     "failed": [],
-    "escapes": [],
+    "escapes": [
+      {
+        "root": "forge-m7-a-rl",
+        "paths": [
+          "packages/agents/failure-classifier.ts"
+        ],
+        "live": null,
+        "owner": "unattributable",
+        "reason": "no descendant of this run was seen in forge-m7-a-rl",
+        "rootKind": "sibling-basename"
+      }
+    ],
     "groundEscapes": [],
     "reappeared": []
-  }
+  },
+  "spend": {
+    "usd": null,
+    "unmeasured": "UNMEASURED — terminated before first priced event (30000 ms)"
+  },
+  "realGrounds": {
+    "moved": []
+  },
+  "git": {
+    "sha": "ad9dcd8fba531cc4b2cab3fb1d4e373a78fec32b",
+    "dirty": false
+  },
+  "storyDigest": "619e4981e56fa94d"
 }

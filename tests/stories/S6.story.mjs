@@ -493,7 +493,8 @@ export default {
       // correction, not a new decision). The unsplit beat asserted `working`,
       // which is a `data-lifecycle-state` token and NOT a phase of any kind:
       // architect's vocabulary is `interviewing`/`exploring`/`drafting`/
-      // `finalizing` + `awaiting-answers`/`awaiting-verdict` +
+      // `critiquing`/`revising` (row 108)/`finalizing` +
+      // `awaiting-answers`/`awaiting-verdict` +
       // `committed`/`rejected` (`packages/sessions/session-phases.ts`). The
       // route never resolved, so this assertion had never once been judged —
       // it was the next red behind the one that was fixed.

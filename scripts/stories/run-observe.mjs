@@ -78,8 +78,16 @@ const DEFAULT_SNAPSHOT_SEAMS = {
     try {
       process.kill(pid, 0);
       return true;
-    } catch {
-      return false;
+    } catch (err) {
+      // Row 32 of the guard-catch-on-UNKNOWN audit (M7-COMMON §6.16) —
+      // COSMETIC (this only ever feeds `classifyUnmeasuredDispatch`'s
+      // PRINTED diagnostic below, never `stop.halt`), but still a wrong
+      // sentence: EPERM means the kernel found a process at this pid and
+      // refused the signal — that is proof of life, not proof of death, the
+      // same STUCK-BUT-ALIVE shape `reap-census.mjs`'s `verifiedKill` already
+      // splits from ESRCH. Before this fix a permission-denied, definitely
+      // alive process printed "REAPED/DIED — pid is gone".
+      return err?.code === 'EPERM';
     }
   },
   readStderrTail(dir) {

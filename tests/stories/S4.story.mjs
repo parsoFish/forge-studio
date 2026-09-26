@@ -474,6 +474,7 @@ export default {
           // went green while S1 beat 11 and S2 beat 12 burned their bounds on
           // the same borrowed condition. Named explicitly so that stops being
           // luck (T1 ruling 320).
+          // Row 108: the architect now also passes through `critiquing`/`revising` before `awaiting-verdict`; `until` is unchanged.
           until: { 'session-phase': 'awaiting-verdict' },
         },
       ],

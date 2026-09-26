@@ -26,7 +26,8 @@ import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, unlinkSync, utimesSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { makeCycleTerminalDoor, makeCycleTerminalWatch, newestChannelSince, STALL_CEILING_MS } from './beats-agent-proc.mjs';
+import { makeCycleTerminalDoor, makeCycleTerminalWatch, STALL_CEILING_MS } from './beats-agent-proc.mjs';
+import { newestChannelSince, cycleDirForInitiative } from './beats-channel-scan.mjs';
 import { waitForConsequence } from './beats-page.mjs';
 import { FS_CLOCK_SLACK_MS } from './beats-queue-terminal.mjs';
 
@@ -258,4 +259,44 @@ test('8.1.4: a cycleOf initiative whose dispatch dir never appears is still red 
   assert.notEqual(verdict, null, 'a cycleOf cycle that never appears must still end the wait red, at the declared bound');
   assert.match(verdict!.why, /ready-for-review/);
   assert.equal(verdict!.stoppedBy, 'runner');
+});
+
+// Row 31 of the guard-catch-on-UNKNOWN audit (M7-COMMON §6.16) —
+// `cycleDirForInitiative` must not read a persistently unreadable `_logs/` as
+// "hasn't started yet": that is indistinguishable from a genuinely absent one
+// and would burn a wait's full declared bound toward a false red on a cycle
+// that actually finished.
+test('row 31: a persistently unreadable _logs/ is UNKNOWN, never "hasn\'t started yet" — §6.16', { skip: process.getuid?.() === 0 ? 'root reads mode-000 dirs' : false }, () => {
+  const root = mkdtempSync(join(tmpdir(), 'terminal-cycledir-eacces-'));
+  const logs = join(root, '_logs');
+  mkdirSync(logs, { recursive: true });
+  chmodSync(logs, 0o000);
+  try {
+    const found = cycleDirForInitiative(logs, 'INIT-row-31');
+    assert.notEqual(found, null, 'an unreadable _logs/ must not read as "no matching dir" — the exact false-red shape row 31 exists to catch');
+    assert.equal((found as { unknown?: true }).unknown, true);
+    assert.match((found as { detail: string }).detail, /EACCES/);
+  } finally {
+    chmodSync(logs, 0o755);
+  }
+});
+
+test('row 31 (control): a genuinely absent _logs/ (ENOENT) still reads as null, not unknown', () => {
+  const missing = join(mkdtempSync(join(tmpdir(), 'terminal-cycledir-missing-')), '_logs');
+  assert.equal(cycleDirForInitiative(missing, 'INIT-row-31'), null);
+});
+
+test('row 31 (door integration): makeCycleTerminalDoor never crashes or fabricates a verdict on an unreadable _logs/, and records why', { skip: process.getuid?.() === 0 ? 'root reads mode-000 dirs' : false }, () => {
+  const root = mkdtempSync(join(tmpdir(), 'terminal-cycledir-door-eacces-'));
+  const logs = join(root, '_logs');
+  mkdirSync(logs, { recursive: true });
+  chmodSync(logs, 0o000);
+  try {
+    const door = makeCycleTerminalDoor(root, { cycleOf: 'INIT-row-31-door' })!;
+    const verdict = door(null, Date.now(), 'ready-for-review');
+    assert.equal(verdict, null, 'an unreadable check is never `done` (§15.504) — it must keep waiting, not fabricate a verdict');
+    assert.match(door.lastSeen, /EACCES/, `the door must SAY it could not read the scan, not stay silent: ${door.lastSeen}`);
+  } finally {
+    chmodSync(logs, 0o755);
+  }
 });

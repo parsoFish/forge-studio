@@ -316,6 +316,18 @@ describe('path-shaped citations in markdown prose', () => {
     }
   });
 
+  test('a story fixture ground BRAIN profile is excluded — a verbatim copy of a real project\'s Brain 3, citing that project\'s paths (forge-1rk5.1)', () => {
+    const { root, cleanup } = fixture({
+      'tests/stories/grounds/go-provider-old-contract/brain/profile.md': `See docs/official-provider-codemap.md for details.\n`,
+    });
+    try {
+      const { code, out } = run(root, noBaseline(root));
+      assert.equal(code, 0, `a vendored fixture brain profile must not be scanned:\n${out}`);
+    } finally {
+      cleanup();
+    }
+  });
+
   test('POSITIVE CONTROL — a grounds file OUTSIDE seed/ (its PROVENANCE.md) is still scanned', () => {
     const { root, cleanup } = fixture({
       'tests/stories/grounds/node-cli-with-tests/PROVENANCE.md': `See packages/ghost/dead-module.ts for details.\n`,
