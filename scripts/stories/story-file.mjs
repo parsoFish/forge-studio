@@ -44,6 +44,11 @@ const GROUND_CHANGE_KINDS = ['added', 'removed', 'modified'];
 
 const DOC_KINDS = ['tutorial', 'how-to'];
 
+/** `aligns[].digest` — the first 16 hex chars of the cited file's sha256
+ *  (`scripts/stories/alignment.mjs`'s `digest16`). Fixed length and case so a
+ *  pinned digest is unambiguous to compare, never coerced. */
+const ALIGN_DIGEST_RE = /^[0-9a-f]{16}$/;
+
 /**
  * `expect.among` is `{ <data-key>: <rule> }` and nothing else. Pure: the shape
  * is checked here, the set is resolved by `loadStory` (`forge-8vfn.26`).
@@ -114,6 +119,64 @@ function validateFork(raw, steps, at) {
 }
 
 /**
+ * `aligns` — forge-1rk5.2 (plan D7), MECHANISM ONLY: no story authors a real
+ * entry yet. An optional top-level declaration binding this story to the
+ * ADR(s) or brain theme(s) it embodies, pinned by a content digest so drift
+ * is caught rather than assumed away.
+ *
+ * PURE, like the rest of this file: `alignment.mjs`'s `checkAlignment` does
+ * the IO (reads the cited file, compares digests); this checks only the
+ * SHAPE, at load, with no filesystem access. Refusals mirror
+ * `ground.expectedChanges`'s own style just above — `path`/`digest`/`why` are
+ * three separate fields for the same 7.6.120/7.6.127 reason a change
+ * declaration keeps `path` and `change` apart: one field carrying two frames
+ * cannot be validated or reported precisely.
+ *
+ * `_1.0/` is refused outright — CLAUDE.md: "a permanent artifact … never
+ * cites a path inside it" — and this file is exactly such a permanent
+ * artifact.
+ */
+function validateAligns(raw, storyId) {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    fail('aligns', `story "${storyId}": expected a non-empty array of {path, digest, why}, got ${JSON.stringify(raw)}`);
+  }
+  return Object.freeze(raw.map((entry, i) => {
+    const at = `aligns[${i}]`;
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      fail(at, `story "${storyId}": expected an object {path, digest, why}, got ${JSON.stringify(entry)}`);
+    }
+    requireNonEmptyString(entry.path, `${at}.path`);
+    if (entry.path.startsWith('/') || entry.path.split('/').includes('..')) {
+      fail(`${at}.path`, `story "${storyId}": expected a repo-relative path with no traversal, got ${JSON.stringify(entry.path)}`);
+    }
+    if (entry.path.split('/')[0] === '_1.0') {
+      fail(
+        `${at}.path`,
+        `story "${storyId}": refuses a path under _1.0/ (the gitignored campaign dir) — a permanent artifact ` +
+        `must never cite a path inside it, got ${JSON.stringify(entry.path)}`,
+      );
+    }
+    requireNonEmptyString(entry.digest, `${at}.digest`);
+    if (!ALIGN_DIGEST_RE.test(entry.digest)) {
+      fail(
+        `${at}.digest`,
+        `story "${storyId}": expected exactly 16 lowercase hex characters (the first 16 of the cited file's ` +
+        `sha256), got ${JSON.stringify(entry.digest)}`,
+      );
+    }
+    requireNonEmptyString(entry.why, `${at}.why`);
+    if (entry.why.includes('\n')) {
+      fail(`${at}.why`, `story "${storyId}": expected a single line, got a value containing a newline`);
+    }
+    if (entry.why.length > 200) {
+      fail(`${at}.why`, `story "${storyId}": expected at most 200 characters, got ${entry.why.length}`);
+    }
+    return Object.freeze({ path: entry.path, digest: entry.digest, why: entry.why });
+  }));
+}
+
+/**
  * Validate a raw story object and return a deep-frozen structural copy.
  * Never returns, and never mutates, the input.
  */
@@ -128,6 +191,8 @@ export function validateStory(raw) {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(raw.id) || raw.id.includes('..')) {
     fail('id', `expected a single path segment of [A-Za-z0-9._-], got ${JSON.stringify(raw.id)}`);
   }
+
+  const aligns = validateAligns(raw.aligns, raw.id);
 
   const g = raw.ground;
   if (g === null || typeof g !== 'object') fail('ground', 'expected an object');
@@ -499,6 +564,11 @@ export function validateStory(raw) {
     }),
     docs: Object.freeze({ kind: d.kind, title: d.title }),
     beats: Object.freeze(beats),
+    // forge-1rk5.2 — named here too, for the same 7.6.82 reason every other
+    // optional field in this rebuild is: validated above and not carried
+    // through would be validated-and-discarded, so a story that declared
+    // `aligns` would silently run with no alignment check ever performed.
+    ...(aligns === undefined ? {} : { aligns }),
   });
 }
 

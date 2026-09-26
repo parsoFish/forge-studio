@@ -90,6 +90,10 @@ twice in this repo, both times by someone reasoning from the common case.
    in the story file — read them before running anything, never a list of ids
    kept elsewhere. A story with a non-zero budget needs an explicit funding
    ruling; `--costless-only` is the safe default when you just want the shape.
+9. **Milestone exit:** at every milestone exit run
+   `node scripts/stories/alignment.mjs --intake <milestone-start-sha>` — it
+   names any ADR or brain theme added since the milestone started that no
+   story yet cites in `aligns` (report-only; it does not gate the exit).
 
 ## Checklist for a UI change
 
