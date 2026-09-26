@@ -1,5 +1,5 @@
 /**
- * Door test (mfv5.2.3) for demo-record.ts + demo-overlay.ts (D8), plus the
+ * Door test (mfv5.2.3) for demo-capture.ts + demo-overlay.ts (forge-mfv5.2.1, 2.4), plus the
  * demo-model.ts binding (`collectCapturedMedia`/`mergeCapturedMedia`) they
  * feed. Real chromium via `playwright-core` throughout — no mocking the
  * thing under test.
@@ -21,9 +21,8 @@ import {
   terminalPageHtml,
   terminalFooterText,
   DemoRecordError,
-} from './demo-record.ts';
+} from './demo-capture.ts';
 import { installForgeOverlay } from './demo-overlay.ts';
-import { screenshotUrl } from './demo-capture.ts';
 import { collectCapturedMedia, mergeCapturedMedia, type DemoModel } from '@forge/stations/demo-model.ts';
 
 const EBML_MAGIC = [0x1a, 0x45, 0xdf, 0xa3];
@@ -37,7 +36,7 @@ function magic(buf: Buffer, n: number): number[] {
  *  home inside a project worktree. Returns the leaf to pass as `bundleDir`
  *  and the root to clean up. */
 function worktreeShapedTmp(): { dir: string; root: string } {
-  const root = mkdtempSync(join(tmpdir(), 'forge-demo-record-'));
+  const root = mkdtempSync(join(tmpdir(), 'forge-demo-capture-'));
   const id = `wt-${Math.random().toString(36).slice(2, 8)}`;
   const dir = join(root, '_worktrees', id);
   mkdirSync(dir, { recursive: true });
@@ -70,7 +69,7 @@ test('installForgeOverlay: cursor dot follows mousemove, a ring spawns on moused
     const context = await browser.newContext({ viewport: { width: 400, height: 300 } });
     await context.addInitScript(installForgeOverlay);
     const page = await context.newPage();
-    // A `data:` navigation, not `page.setContent()` — see demo-record.ts's
+    // A `data:` navigation, not `page.setContent()` — see demo-capture.ts's
     // `recordTerminal` comment: `setContent`'s document.open/write/close
     // reload drops the addInitScript-installed window listeners this test
     // exercises, even though `window.__forgeOverlay` itself survives it.
@@ -159,27 +158,6 @@ test('assertPathSegment: accepts a safe label; refuses .., stringified nullish, 
       `expected a DemoRecordError refusal for ${JSON.stringify(bad)}`,
     );
   }
-});
-
-// ── screenshotUrl (item 3: no more hidden `npx playwright` shell-out) ──────
-
-test('screenshotUrl: writes a real PNG for a served page with no subprocess', async () => {
-  const server = await serveTinyPage('<html><body><h1>hello</h1></body></html>');
-  const dir = mkdtempSync(join(tmpdir(), 'forge-screenshot-'));
-  try {
-    const outPath = join(dir, 'nested', 'shot.png');
-    const ok = await screenshotUrl(server.url, outPath);
-    assert.equal(ok, true);
-    assert.deepEqual(magic(readFileSync(outPath), 8), PNG_SIGNATURE);
-  } finally {
-    await server.close();
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('screenshotUrl: returns false (never throws) for an unreachable URL', async () => {
-  const ok = await screenshotUrl('http://127.0.0.1:1/unreachable', join(tmpdir(), 'forge-screenshot-never.png'));
-  assert.equal(ok, false);
 });
 
 // ── recordBrowser (door test, mfv5.2.3) ─────────────────────────────────────

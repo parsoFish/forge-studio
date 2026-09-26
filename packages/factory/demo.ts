@@ -6,11 +6,11 @@
  * REV-2 cull. What remains is the thin capture path:
  *   1. Materialise two git worktrees (baseline + changed).
  *   2. buildTree + startServer each (from demo-runtime.ts).
- *   3. Take ONE screenshot per checkpoint label → before/<label>.png + after/<label>.png.
+ *   3. Record each checkpoint label → before|after/<label>.webm + <label>.filmstrip.png (demo-capture.ts).
  *   4. demo-model.ts collectCapturedMedia/mergeCapturedMedia back-fills demo.json.
  *
- * D8: after each command checkpoint's `.out` is written, `recordTerminal`
- * (demo-record.ts) additionally renders a `.webm` + `.filmstrip.png` of it;
+ * forge-mfv5.2.1: after each command checkpoint's `.out` is written, `recordTerminal`
+ * (demo-capture.ts) additionally renders a `.webm` + `.filmstrip.png` of it;
  * the browser-checkpoint loop calls `recordBrowser` instead of a plain
  * screenshot, which produces the checkpoint's still AND its recording. Both
  * are best-effort per ADR 021 — a recording failure logs and the capture
@@ -178,7 +178,7 @@ export async function captureCheckpoints(
   input: CaptureCheckpointsInput,
 ): Promise<CaptureCheckpointsResult> {
   const { buildTree, startServer } = await import('./demo-runtime.ts');
-  const { recordTerminal, recordBrowser } = await import('./demo-record.ts');
+  const { recordTerminal, recordBrowser } = await import('./demo-capture.ts');
 
   const bundleDir = resolve(input.bundleDir);
   const beforeDir = join(bundleDir, 'before');
@@ -215,7 +215,7 @@ export async function captureCheckpoints(
         const out = captureCommandOutput(wt.path, command);
         writeFileSync(join(capDir, checkpointArtifactName(label, 'out')), out);
         captured.push(label);
-        // D8: best-effort per ADR 021 — a recording failure never fails the
+        // Best-effort per ADR 021 — a recording failure never fails the
         // capture (the `.out` evidence above already landed regardless).
         try {
           await recordTerminal({
@@ -240,8 +240,8 @@ export async function captureCheckpoints(
         if (!server) continue;
         try {
           for (const label of input.checkpointLabels) {
-            // recordBrowser's final still becomes the checkpoint's screenshot,
-            // so there is no separate screenshotUrl call to make on success.
+            // recordBrowser's filmstrip (its last frame is the final outlined
+            // still) binds as the checkpoint's image; there is no separate PNG.
             try {
               await recordBrowser({
                 side,

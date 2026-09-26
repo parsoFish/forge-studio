@@ -1,5 +1,5 @@
 /**
- * demo-overlay.ts — the forge-owned recording overlay (D8 deliverable 1).
+ * demo-overlay.ts — the forge-owned recording overlay (forge-mfv5.2.4).
  *
  * `installForgeOverlay` is handed DIRECTLY to `context.addInitScript()` /
  * `page.addInitScript()` — Playwright stringifies the function and
@@ -19,7 +19,7 @@
  */
 
 /** A region the recorder can outline/zoom: a CSS selector, or an explicit
- *  viewport-relative box. Shared with demo-record.ts's declared steps. */
+ *  viewport-relative box. Shared with demo-capture.ts's declared steps. */
 export type OverlayRegion = string | { x: number; y: number; w: number; h: number };
 
 /** The page-side handle the recorder drives via `page.evaluate`. */

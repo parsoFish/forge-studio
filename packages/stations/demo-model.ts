@@ -325,7 +325,7 @@ export type CapturedMedia = {
   afterImage?: string | null;
   beforeOutput?: string | null;
   afterOutput?: string | null;
-  /** D8: a recorded checkpoint's video (see `collectCapturedMedia`'s `.webm` branch). */
+  /** forge-mfv5.2.1: a recorded checkpoint's video (see `collectCapturedMedia`'s `.webm` branch). */
   beforeVideoSrc?: string | null;
   afterVideoSrc?: string | null;
 };
@@ -348,7 +348,7 @@ function pngToDataUri(file: string): string | null {
  */
 export function collectCapturedMedia(bundleDir: string): CapturedMedia[] {
   const byLabel = new Map<string, CapturedMedia>();
-  // D8: a `.filmstrip.png` always wins over a plain `.png` of the same label
+  // A `.filmstrip.png` always wins over a plain `.png` of the same label
   // (it composes the whole take, not one frame), regardless of directory
   // read order — tracked so a plain `.png` seen AFTER the filmstrip cannot
   // clobber it back.

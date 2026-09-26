@@ -5,7 +5,7 @@
  * findExampleSpec, firstExisting, harvestVideos) were removed in the REV-2
  * cull. What remains is the "make the app runnable" pair: buildTree +
  * startServer. The thin capture path in demo.ts calls these to get a live
- * server URL, then screenshots each checkpoint label via demo-capture.ts.
+ * server URL, then records each checkpoint label via demo-capture.ts.
  */
 
 import { execFileSync, spawn } from 'node:child_process';
