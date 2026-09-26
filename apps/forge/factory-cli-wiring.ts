@@ -22,7 +22,7 @@ import { NO_EXAMPLE_INSTALLED, isFactoryNotInstalled, requireInstalledFactory } 
 export { requireInstalledFactory };
 
 export type FactoryDemo = {
-  readonly captureCheckpoints: typeof import('@forge/factory/demo.ts')['captureCheckpoints'];
+  readonly captureDemoBundle: typeof import('@forge/factory/demo.ts')['captureDemoBundle'];
   readonly model: typeof import('@forge/stations/demo-model.ts');
 };
 
@@ -33,7 +33,7 @@ export async function resolveFactoryDemo(): Promise<FactoryDemo | null> {
       import('@forge/factory/demo.ts'),
       import('@forge/stations/demo-model.ts'),
     ]);
-    return { captureCheckpoints: demo.captureCheckpoints, model };
+    return { captureDemoBundle: demo.captureDemoBundle, model };
   } catch (err) {
     if (!isFactoryNotInstalled(err)) throw err;
     return null;

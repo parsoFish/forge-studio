@@ -35,8 +35,44 @@ import {
   MAX_INLINE_IMAGE_BYTES,
   checkpointArtifactName,
   checkpointArtifactStem,
+  isSafeDemoRoute,
 } from '@forge/stations/demo-types.ts';
-import { MAX_CAPTURED_OUTPUT_BYTES } from '@forge/stations/demo-model.ts';
+import {
+  MAX_CAPTURED_OUTPUT_BYTES,
+  collectCapturedMedia,
+  computeCheckpointDeltas,
+  mergeCapturedMedia,
+  type DemoModel,
+} from '@forge/stations/demo-model.ts';
+
+export type CheckpointUrlResolution = { ok: true; url: string } | { ok: false; reason: string };
+
+/**
+ * Point-of-use guard for a browser checkpoint's `route` (forge-mfv5.1.7).
+ * `demo.json` is read raw by the capture path, never re-validated, so a route
+ * can be anything. `isSafeDemoRoute`'s character class rejects most attacks
+ * but not a protocol-relative route (`//evil.example/x`) — it matches the
+ * charset yet resolves to a FOREIGN origin once actually navigated, so this
+ * independently resolves via `new URL(route, serverUrl)` and compares
+ * origins. Fails closed: any refusal means the checkpoint is skipped, never
+ * navigated. Pure — the caller decides what "skipped" looks like.
+ */
+export function resolveCheckpointUrl(serverUrl: string, route?: string): CheckpointUrlResolution {
+  if (route === undefined) return { ok: true, url: serverUrl };
+  if (!isSafeDemoRoute(route)) return { ok: false, reason: `unsafe route ${JSON.stringify(route)}` };
+  let base: URL;
+  let resolved: URL;
+  try {
+    base = new URL(serverUrl);
+    resolved = new URL(route, base);
+  } catch (err) {
+    return { ok: false, reason: `route ${JSON.stringify(route)} did not resolve against ${serverUrl}: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  if (resolved.origin !== base.origin) {
+    return { ok: false, reason: `route ${JSON.stringify(route)} resolved to a foreign origin ${resolved.origin} (expected ${base.origin})` };
+  }
+  return { ok: true, url: resolved.toString() };
+}
 
 export type WorktreeAtRef = { path: string; repo: string };
 
@@ -123,8 +159,12 @@ export type CaptureCheckpointsInput = {
   /** Directory where before/<label>.png + after/<label>.png are written. */
   bundleDir: string;
   initiativeId?: string;
-  /** Labels to screenshot — each yields before/<label>.png + after/<label>.png. */
-  checkpointLabels: string[];
+  /**
+   * Checkpoints to screenshot — each yields before/<label>.png + after/<label>.png.
+   * An AC-derived browser checkpoint (forge-mfv5.1.7) carries `route`: the
+   * in-app path navigated to (`server.url + route`) instead of the server root.
+   */
+  checkpointLabels: Array<{ label: string; route?: string }>;
   /** CLI/output checkpoints — each runs `command` in the before+after worktree and
    *  captures stdout to before/<label>.out + after/<label>.out (the real terminal
    *  output the demo shows side-by-side, instead of a hand-written prose note). */
@@ -239,14 +279,22 @@ export async function captureCheckpoints(
         const server = await startServer(wt.path);
         if (!server) continue;
         try {
-          for (const label of input.checkpointLabels) {
+          for (const { label, route } of input.checkpointLabels) {
+            // Point-of-use guard (forge-mfv5.1.7): demo.json's `route` is never
+            // re-validated before it reaches here, so it is resolved and origin-
+            // checked NOW — a refused route is skipped, never navigated.
+            const resolution = resolveCheckpointUrl(server.url, route);
+            if (!resolution.ok) {
+              process.stderr.write(`[demo] refusing checkpoint ${side}/${label}: ${resolution.reason}\n`);
+              continue;
+            }
             // recordBrowser's filmstrip (its last frame is the final outlined
             // still) binds as the checkpoint's image; there is no separate PNG.
             try {
               await recordBrowser({
                 side,
                 label: checkpointArtifactStem(label),
-                url: server.url,
+                url: resolution.url,
                 bundleDir,
               });
               captured.push(label);
@@ -269,6 +317,60 @@ export async function captureCheckpoints(
   }
 
   return { capturedBefore, capturedAfter };
+}
+
+export type CaptureDemoBundleInput = {
+  /** The unifier-authored demo.json this run captures evidence for. */
+  jsonPath: string;
+  /** Where before/after checkpoint artifacts land. */
+  bundleDir: string;
+  projectRepoPath: string;
+  project: string;
+  baseRef: string;
+  changedRef: string;
+  initiativeId?: string;
+};
+
+export type CaptureDemoBundleResult = {
+  model: DemoModel;
+  /** How many labels `collectCapturedMedia` actually found evidence for. */
+  capturedCount: number;
+};
+
+/**
+ * The whole `forge demo capture` orchestration in one call (forge-mfv5.1.7):
+ * read demo.json, split its checkpoints into CLI/output commands vs browser
+ * labels (a browser checkpoint's `route` is validated at the point of use,
+ * inside `captureCheckpoints`), run the capture, back-fill the captured
+ * media, and tag every checkpoint's real before/after `delta`. Nonce
+ * stamping, rendering and the file writes are the caller's (`cli.ts`) — this
+ * only produces the merged model.
+ */
+export async function captureDemoBundle(input: CaptureDemoBundleInput): Promise<CaptureDemoBundleResult> {
+  const demoJson = JSON.parse(readFileSync(input.jsonPath, 'utf8'));
+  const cps = (demoJson?.checkpoints ?? []) as Array<{ label?: string; command?: string; route?: string }>;
+  // A checkpoint with a `command` captures real CLI stdout (before/after); one
+  // without is a browser screenshot checkpoint (an AC-derived one may carry `route`).
+  const checkpointCommands = cps
+    .filter((c) => c.label && typeof c.command === 'string' && c.command.trim())
+    .map((c) => ({ label: c.label as string, command: c.command as string }));
+  const checkpointLabels = cps
+    .filter((c) => c.label && !c.command)
+    .map((c) => ({ label: c.label as string, route: typeof c.route === 'string' ? c.route : undefined }));
+  await captureCheckpoints({
+    projectRepoPath: input.projectRepoPath,
+    project: input.project,
+    baseRef: input.baseRef,
+    changedRef: input.changedRef,
+    bundleDir: input.bundleDir,
+    initiativeId: input.initiativeId,
+    checkpointLabels,
+    checkpointCommands,
+    build: true,
+  });
+  const captured = collectCapturedMedia(input.bundleDir);
+  const merged = mergeCapturedMedia(JSON.parse(readFileSync(input.jsonPath, 'utf8')), captured);
+  return { model: computeCheckpointDeltas(merged, input.bundleDir), capturedCount: captured.length };
 }
 
 // Re-export the shared demo types so callers depend on one module surface.

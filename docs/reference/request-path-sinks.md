@@ -2937,3 +2937,20 @@ proof the copy width, not the re-verify gate, is what the decisive-window
 pin is actually testing. `scripts/request-path-sinks.baseline.txt` accepts
 the moved/new counts via `--write` in the same commit that adds this
 section, per this document's own rule.
+
+### Delta honesty (forge-mfv5.1.7) — two files grow an EXISTING sink by re-reading/re-writing their own already-accepted paths
+
+`computeCheckpointDeltas` (`demo-model.ts`) and `reviseAfterCapture`
+(`integrate.ts`) add call sites, not new untrusted input: each reads or
+writes a path variable the SAME file already read or wrote, unconditionally,
+at an already-baselined call site.
+
+| site | sink | request-derived input | class | guard |
+|---|---|---|---|---|
+| `packages/stations/demo-model.ts` (`checkpointDelta`) | `readFileSync` (+2) | `bundleDir` (`before`/`after` `.out` or `.filmstrip.png`) | guarded `[read]` | `bundleDir` is the same `<demoDir>/.capture` tree `collectCapturedMedia` already reads unconditionally in this file (its pre-existing, already-baselined `readFileSync` rows); `checkpointDelta` adds one more read of that tree, through the same `checkpointArtifactStem`-derived filename |
+| `packages/stations/phases/integrate.ts` (`reviseAfterCapture`) | `readFileSync` (+1) | `demoJsonAbs` | guarded `[read]` | `demoJsonAbs` is `worktreeDemoDir(input.worktreePath, input.initiativeId)` — the cycle's own worktree, the same shape the merge-boundary row above already accepts — and is the exact path `runIntegrateBand` already wrote earlier in this same function; `reviseAfterCapture` runs only after a successful, nonce-verified orchestrated capture |
+| `packages/stations/phases/integrate.ts` (`reviseAfterCapture`) | `writeFileSync` (+2) | `demoJsonAbs`, `prDescriptionAbs` | guarded `[read]` | both are re-writes of paths this function already wrote once earlier in the same call (`demoJsonAbs` at the top of `runIntegrateBand`, `prDescriptionAbs` right after) — no new path is constructed |
+
+`scripts/request-path-sinks.baseline.txt` accepts the grown counts via
+`--write` in the same commit that adds this section, per this document's own
+rule.

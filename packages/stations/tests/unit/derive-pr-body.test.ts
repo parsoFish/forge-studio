@@ -22,7 +22,7 @@ function input(overrides: Partial<DerivedDemoInput> = {}): DerivedDemoInput {
     headSha: 'abc1234',
     changedFiles: ['src/report.ts'],
     workItems: [{ id: 'WI-1', title: 'Build the report', status: 'complete' }],
-    acceptanceCriteria: ['(WI-1) GIVEN a fixture repo WHEN the CLI runs THEN a report prints'],
+    acceptanceCriteria: [{ workItemId: 'WI-1', given: 'a fixture repo', when: 'the CLI runs', then: 'a report prints' }],
     gateEvidence: [
       { gate: 'local', cmd: ['npm', 'test'], ok: true, outputTail: '120 passing' },
       { gate: 'ci', cmd: ['npm', 'run', 'ci'], ok: false, outputTail: 'red' },
@@ -45,10 +45,14 @@ describe('derivePrBody', () => {
     for (const section of PR_BODY_SECTIONS) assert.ok(body.includes(section), `missing ${section}`);
   });
 
-  it('kills "the body claims a criterion that is not in the manifest": every AC appears VERBATIM', () => {
-    const acs = ['(WI-1) GIVEN a THEN b', '(WI-2) GIVEN c THEN d'];
+  it('kills "the body claims a criterion that is not in the manifest": every AC appears VERBATIM, rendered from its typed fields', () => {
+    const acs = [
+      { workItemId: 'WI-1', given: 'a', when: 'w1', then: 'b' },
+      { workItemId: 'WI-2', given: 'c', when: 'w2', then: 'd' },
+    ];
+    const rendered = ['(WI-1) GIVEN a WHEN w1 THEN b', '(WI-2) GIVEN c WHEN w2 THEN d'];
     const body = bodyOf({ acceptanceCriteria: acs });
-    for (const ac of acs) assert.ok(body.includes(ac), `missing ${ac}`);
+    for (const line of rendered) assert.ok(body.includes(line), `missing ${line}`);
   });
 
   it('kills "the body names a file the diff does not contain": the file list IS the diff\'s', () => {
@@ -75,5 +79,62 @@ describe('derivePrBody', () => {
     const body = bodyOf({ workItems: [], acceptanceCriteria: [], gateEvidence: [] });
     for (const section of PR_BODY_SECTIONS) assert.ok(body.includes(section), `missing ${section}`);
     assert.ok(body.trim().length > 0);
+  });
+});
+
+describe('derivePrBody — delta honesty (forge-mfv5.1.7, CONTROL RED)', () => {
+  it('kills "a behaviour-preserving change goes unremarked": every captured checkpoint unchanged must say so in words', () => {
+    const derived = deriveDemoModel(input());
+    assert.equal(derived.ok, true);
+    if (!derived.ok) return;
+    // Simulate a successful capture whose before/after evidence was BYTE-IDENTICAL
+    // for every checkpoint — the fact the delta-honesty computation (item 3) would
+    // tag `delta: 'unchanged'` after a real capture.
+    const model = {
+      ...derived.model,
+      checkpoints: derived.model.checkpoints.map((c) => ({ ...c, delta: 'unchanged' as const })),
+    };
+    const body = derivePrBody(model, input());
+    assert.ok(
+      body.includes('No observable behaviour change was captured.'),
+      'a byte-identical before/after capture must say so in the PR body, not leave the reader to assume something changed',
+    );
+  });
+
+  it('kills "the flag never reaches the reader": each evidence row names its own checkpoint\'s delta in words', () => {
+    const derived = deriveDemoModel(input());
+    assert.equal(derived.ok, true);
+    if (!derived.ok) return;
+    const model = { ...derived.model, checkpoints: derived.model.checkpoints.map((c) => ({ ...c, delta: 'changed' as const })) };
+    const body = derivePrBody(model, input());
+    assert.match(body, /npm run demo.*\(changed\)/);
+  });
+
+  it('kills "some changed reads as no change": a mix reports "<k> of <n> captured checkpoints changed behaviour."', () => {
+    const derived = deriveDemoModel(
+      input({ demoProcess: [{ kind: 'capture', text: 'Run `npm run demo` and capture it.' }, { kind: 'capture', text: 'Run `npm run demo2` and capture it.' }] }),
+    );
+    assert.equal(derived.ok, true);
+    if (!derived.ok) return;
+    const model = {
+      ...derived.model,
+      checkpoints: derived.model.checkpoints.map((c, i) => ({ ...c, delta: i === 0 ? ('changed' as const) : ('unchanged' as const) })),
+    };
+    const body = derivePrBody(model, input());
+    assert.ok(body.includes('1 of 2 captured checkpoints changed behaviour.'), body);
+  });
+
+  it('kills "unknown counts as a claim of change": an unknown checkpoint is NAMED, and no "no change" claim is made', () => {
+    const derived = deriveDemoModel(input());
+    assert.equal(derived.ok, true);
+    if (!derived.ok) return;
+    const model = {
+      ...derived.model,
+      checkpoints: derived.model.checkpoints.map((c) => ({ ...c, delta: 'unknown' as const })),
+    };
+    const body = derivePrBody(model, input());
+    assert.ok(body.includes(`checkpoint(s) could not be compared: ${model.checkpoints[0]?.label}`), body);
+    assert.doesNotMatch(body, /No observable behaviour change was captured\./, 'unknown must never be read as "no change"');
+    assert.doesNotMatch(body, /captured checkpoints changed behaviour/, 'unknown must never be counted as a "changed" checkpoint');
   });
 });

@@ -18,6 +18,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
 import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME } from '@forge/flows';
@@ -28,7 +29,7 @@ import type {
   DemoApiDiffEntry,
   TestResultRow,
 } from './demo-types.ts';
-import { MAX_INLINE_IMAGE_BYTES, checkpointArtifactStem } from './demo-types.ts';
+import { MAX_INLINE_IMAGE_BYTES, checkpointArtifactStem, isSafeDemoRoute } from './demo-types.ts';
 
 /** Cap on a checkpoint's captured stdout (before/after). Terminal output is small;
  *  a runaway command (a server log, an infinite loop) is truncated to this at capture. */
@@ -54,6 +55,12 @@ export type DemoModelCheckpoint = {
   /** Captured stdout of `command` on the before/after worktree (filled by capture). */
   beforeOutput?: string | null;
   afterOutput?: string | null;
+  /** AC-derived browser checkpoint (forge-mfv5.1.7): the in-app route to navigate
+   *  to (`server.url + route`) instead of the server root. Validated by `isSafeDemoRoute`. */
+  route?: string;
+  /** Delta honesty (forge-mfv5.1.7): whether this checkpoint's before/after evidence
+   *  differs. Computed post-capture from the real bytes; fails closed to 'unknown'. */
+  delta?: 'changed' | 'unchanged' | 'unknown';
   /** Harness metric rows (paired before/after). Optional. */
   metrics?: HarnessMetricRow[];
   /** Optional captured media — `data:image/...` ONLY (validator rejects schemes). */
@@ -194,6 +201,13 @@ export function validateDemoModel(raw: unknown): string[] {
       // and the captured before/after outputs (filled by `forge demo capture`).
       if (cp.command !== undefined && (typeof cp.command !== 'string' || cp.command.trim() === '')) {
         errors.push(`${at}.command must be a non-empty string when set (a bare argv command, no shell)`);
+      }
+      if (cp.route !== undefined && (typeof cp.route !== 'string' || !isSafeDemoRoute(cp.route))) {
+        errors.push(`${at}.route must be an absolute in-app path with no traversal when set (got ${JSON.stringify(cp.route)})`);
+      }
+      const validDeltas = new Set(['changed', 'unchanged', 'unknown']);
+      if (cp.delta !== undefined && !validDeltas.has(cp.delta as string)) {
+        errors.push(`${at}.delta must be one of changed|unchanged|unknown when set (got ${JSON.stringify(cp.delta)})`);
       }
       for (const f of ['beforeOutput', 'afterOutput'] as const) {
         const v = cp[f];
@@ -457,6 +471,37 @@ export function mergeCapturedMedia(model: DemoModel, captured: CapturedMedia[]):
       afterVideoSrc: c.afterVideoSrc ?? null,
     }));
   return { ...model, checkpoints: [...checkpoints, ...appended] };
+}
+
+/**
+ * Delta honesty (forge-mfv5.1.7): a command checkpoint compares its `.out`
+ * files BYTE FOR BYTE (never just their lengths); a browser checkpoint (no
+ * `command`) compares the sha256 of the `.filmstrip.png`s. Either side
+ * missing/unreadable ⇒ `unknown` — FAILS CLOSED, never read as `unchanged`.
+ */
+function checkpointDelta(cp: DemoModelCheckpoint, bundleDir: string): NonNullable<DemoModelCheckpoint['delta']> {
+  const stem = checkpointArtifactStem(cp.label);
+  const [beforeFile, afterFile] = cp.command
+    ? [join(bundleDir, 'before', `${stem}.out`), join(bundleDir, 'after', `${stem}.out`)]
+    : [join(bundleDir, 'before', `${stem}.filmstrip.png`), join(bundleDir, 'after', `${stem}.filmstrip.png`)];
+  let before: Buffer;
+  let after: Buffer;
+  try {
+    before = readFileSync(beforeFile);
+    after = readFileSync(afterFile);
+  } catch {
+    return 'unknown';
+  }
+  if (cp.command) return before.equals(after) ? 'unchanged' : 'changed';
+  const beforeDigest = createHash('sha256').update(before).digest('hex');
+  const afterDigest = createHash('sha256').update(after).digest('hex');
+  return beforeDigest === afterDigest ? 'unchanged' : 'changed';
+}
+
+/** Annotate every checkpoint in `model` with its computed `delta`, reading
+ *  the capture bundle at `bundleDir` (`<demoDir>/.capture`). Pure + immutable. */
+export function computeCheckpointDeltas(model: DemoModel, bundleDir: string): DemoModel {
+  return { ...model, checkpoints: model.checkpoints.map((cp) => ({ ...cp, delta: checkpointDelta(cp, bundleDir) })) };
 }
 
 export type RenderDemoBundleResult = {

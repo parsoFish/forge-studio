@@ -630,7 +630,7 @@ packages/stations/cycle-recap.ts statSync 1
 packages/stations/cycle-recap.ts writeFileSync 1
 packages/stations/demo-model.ts existsSync 1
 packages/stations/demo-model.ts readdirSync 2
-packages/stations/demo-model.ts readFileSync 4
+packages/stations/demo-model.ts readFileSync 6
 packages/stations/demo-model.ts writeFileSync 2
 packages/stations/gates/docs-gate.ts existsSync 2
 packages/stations/gates/docs-gate.ts readFileSync 1
@@ -659,9 +659,9 @@ packages/stations/phases/executor-table.ts readFileSync 3
 packages/stations/phases/integrate.ts execFileSync 1
 packages/stations/phases/integrate.ts existsSync 2
 packages/stations/phases/integrate.ts mkdirSync 2
-packages/stations/phases/integrate.ts readFileSync 1
+packages/stations/phases/integrate.ts readFileSync 2
 packages/stations/phases/integrate.ts unlinkSync 1
-packages/stations/phases/integrate.ts writeFileSync 2
+packages/stations/phases/integrate.ts writeFileSync 4
 packages/stations/phases/merge-boundary.ts execFileSync 1
 packages/stations/phases/pm-decomposition-doc.ts writeFileSync 1
 packages/stations/phases/pm-prompt-context.ts existsSync 2
