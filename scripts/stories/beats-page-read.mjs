@@ -278,6 +278,27 @@ export const CONSEQUENCE_POLL_MS = 100;
  * reading it from its own element cannot pick the wrong one. Every key two or
  * more elements carry — `card-id`, `health`, `checklist-row` — is precisely
  * the ambiguity the together-rule exists for, and stays under it.
+ *
+ * ROW 113b (T1 1562): the together-rule was too WIDE. It judged every shared
+ * key against ONE best record, which is right for keys naming the SAME
+ * entity (`card-id`+`health` must come from the same project card) but wrong
+ * for a beat that mixes keys from two entities that never share a carrying
+ * element — e.g. timeline-row identity keys (`timeline-row`/`node-id`/
+ * `status`, carried by many rows) alongside an unrelated `section` key
+ * (carried by several sibling panels, including `ReviewFindingsPanel`, which
+ * renders `data-section="review-findings"` even in its absent state). No
+ * timeline row carries `section`, so the single best-covering record was
+ * always a row, and `section` was silently dropped — reported "absent from
+ * the page" though the page rendered it.
+ *
+ * The fix: partition `shared` into CO-OCCURRENCE GROUPS — two keys share a
+ * group iff some record carries both, transitively (union-find over
+ * records) — and apply the together-rule to EACH group independently, then
+ * merge the per-group winners with `solo` and `root` (root still wins). Keys
+ * that never share a carrying element can never name a competing entity for
+ * each other, so separating them cannot reopen the gitweave/mdtoc false
+ * green the together-rule exists to close; keys that DO co-occur stay
+ * together exactly as before.
  */
 export function resolveExpectations(expected, observed) {
   const root = observed.data;
@@ -297,17 +318,63 @@ export function resolveExpectations(expected, observed) {
   }
   if (shared.length === 0) return { ...solo, ...root };
 
-  // What is left is ambiguous by construction and stays under the together-rule.
-  const score = (r) => shared.reduce((n, k) => n + (covers(r, k) ? (answers(r[k], expected[k]) ? 2 : 1) : 0), 0);
-
-  let best = null;
-  let bestScore = 0;
+  // Union-find over `shared`: two keys join the same group the moment some
+  // record carries both. Transitive by construction — A+B on one record and
+  // B+C on another puts A, B and C in one group.
+  const parent = new Map(shared.map((k) => [k, k]));
+  const find = (k) => {
+    let root_ = k;
+    while (parent.get(root_) !== root_) root_ = parent.get(root_);
+    return root_;
+  };
+  const union = (a, b) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  };
   for (const r of records) {
-    if (shared.every((k) => covers(r, k) && answers(r[k], expected[k]))) return { ...r, ...solo, ...root };
-    const sc = score(r);
-    if (sc > bestScore) [best, bestScore] = [r, sc];
+    const carried = shared.filter((k) => covers(r, k));
+    for (let i = 1; i < carried.length; i += 1) union(carried[0], carried[i]);
   }
-  return best === null ? { ...solo, ...root } : { ...best, ...solo, ...root };
+  const groups = new Map();
+  for (const k of shared) {
+    const g = find(k);
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(k);
+  }
+
+  // The together-rule, applied to ONE group's keys: an exact match (in
+  // record order) wins outright; otherwise the best-covering record for
+  // THIS group's keys alone, or null if nothing covers any of them.
+  const resolveGroup = (keys) => {
+    const score = (r) => keys.reduce((n, k) => n + (covers(r, k) ? (answers(r[k], expected[k]) ? 2 : 1) : 0), 0);
+    let best = null;
+    let bestScore = 0;
+    for (const r of records) {
+      if (keys.every((k) => covers(r, k) && answers(r[k], expected[k]))) return r;
+      const sc = score(r);
+      if (sc > bestScore) [best, bestScore] = [r, sc];
+    }
+    return best;
+  };
+
+  // Each group contributes ONLY its own keys, never a winning record's other
+  // attributes — two groups' winners can never share a key (co-occurrence is
+  // exactly what put shared keys in the same group), but projecting keeps it
+  // true by construction rather than by the records this run happened to see,
+  // and it is what stops a wrongly-split group from reassembling one entity's
+  // key from a record that answers it while another group supplies a second
+  // key from a DIFFERENT record — the exact per-key mixing the together-rule
+  // exists to refuse.
+  let merged = {};
+  for (const keys of groups.values()) {
+    const winner = resolveGroup(keys);
+    const contribution = winner === null
+      ? {}
+      : Object.fromEntries(keys.filter((k) => covers(winner, k)).map((k) => [k, winner[k]]));
+    merged = { ...merged, ...contribution };
+  }
+  return { ...merged, ...solo, ...root };
 }
 
 /** A `data-*` key safe to interpolate into a selector — story files are external input.

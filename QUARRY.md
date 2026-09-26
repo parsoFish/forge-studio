@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 361 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 97 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 98 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -63,11 +63,11 @@ operator-ratified new cap — never a silent raise.
 | `sessions` | 61 | 20,638 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 83 | 23,587 | **23,387** | ratified 23,387 — row 112 a fresh cycle threads its minted cycleId (forge-8vfn.8.1.17), +2 lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 14 | 2,113 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 39 | 11,147 | **11,147** | ratified 11,147 — row 112 requireCycleId, no initiative-id log dir (forge-8vfn.8.1.17), +15 lane-ratified under ruling 666; see git history for prior raises. |
+| `stations` | 40 | 11,231 | **11,231** | ratified 11,231 — row 112 requireCycleId, no initiative-id log dir (forge-8vfn.8.1.17), +15 on row 105's 11,216, lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,837 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **462** | **125,671** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **463** | **125,755** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -360,6 +360,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/phase-agent.ts | agents | verbatim | 101 |
 | packages/stations/phases/adversarial-review-binding.ts | stations | verbatim | 164 |
 | packages/stations/phases/adversarial-review.ts | stations | verbatim | 800 |
+| packages/stations/phases/review-refusal.ts | stations | rewritten | 84 |
 | packages/agents/phases/agent-scope-guard.ts | agents | verbatim | 111 |
 | packages/flows/phases/closure.ts | flows | verbatim | 431 |
 | packages/stations/phases/executor-deps.ts | stations | verbatim | 344 |
