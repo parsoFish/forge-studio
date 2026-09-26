@@ -2979,3 +2979,12 @@ in this codebase for exactly this class of input, not a bespoke check.
 `scripts/request-path-sinks.baseline.txt` accepts the new/grown counts via
 `--write` in the same commit that adds this section, per this document's own
 rule.
+
+### forge-1rk5.3 row 137 — the node_modules symlink never reaches a branch
+
+| file (function) | sink (delta) | input | classification | why |
+|---|---|---|---|---|
+| `packages/flows/scheduler-run-one.ts` (`linkProjectDeps`) | `mkdirSync` (1 → 2) | the dirname of git's own `rev-parse --git-path info/exclude` answer for a forge-created worktree | not request-derived `[exec]` | creates `.git/info/` in a repo initialised without templates before writing `node_modules` to its exclude; the path is git's, never caller input. A failure is returned as a problem and emitted (`deps.link-problem`), never swallowed. |
+| `packages/agents/ralph/stop-conditions.ts` (`autoCommitWorktreeIfDirty`) | `execFileSync` (9 → 11) | none | not request-derived `[exec]` | fixed literal argv `git reset -q -- node_modules` and `git diff --cached --name-only`, `cwd: worktreePath` only — the boundary commits' own unstage guard, applied to the safety-net commit. |
+
+`scripts/request-path-sinks.baseline.txt` accepts these counts via `--write` in the same commit, per this document's own rule.

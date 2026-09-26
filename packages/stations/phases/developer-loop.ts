@@ -40,6 +40,7 @@ import { makeProjectSkillsLoadedSink } from '@forge/agents';
 import { runRalphLoop as runRalph, type LoopResult } from '@forge/agents';
 import { matchesRateLimitSignature } from '@forge/agents';
 import { createWiWorktree, removeWiWorktree } from '@forge/flows';
+import { emitDepsLinkProblems, emitUncommittedWorkSwept } from './dev-loop-events.ts';
 import { createMergeQueue, mergeAndPublish, type MergeConflictDetail } from '@forge/flows';
 import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '@forge/agents';
 import { assertLocalRemoteSynced, checkLocalRemoteSynced, type PushResult } from '@forge/flows';
@@ -508,6 +509,7 @@ export async function runDeveloperLoop(
       startPointRef: wiBaseSha,
       cycleWorktreePath: input.worktreePath,
     });
+    emitDepsLinkProblems(logger, { initiativeId: input.initiativeId, parentEventId: wiStart.event_id, skill: agentDef.slug, workItemId: wi.work_item_id }, wiWorktree);
 
     // Conflict-context injection: this dispatch is a requeued attempt iff a
     // PRIOR attempt for this same WI id already conflicted (the map is only
@@ -1894,49 +1896,4 @@ export function assertGreenBaseline(
       `(pre-existing test failure, missing deps, or a flaky/env-dependent test) before re-running. ` +
       `Forge cannot distinguish a change-induced break from a pre-broken baseline once WI work starts.`,
   );
-}
-
-
-
-
-
-
-
-
-
-/**
- * G1 rescope (plan item 2.6): one autocommit-sweep observation. The safety
- * net (`autoCommitWorktreeIfDirty`) STAYS — it closes the
- * uncommitted-work-dead-ends-the-gate failure mode — but when it fires, the
- * AGENT failed its commit discipline, and that must be a distinct greppable
- * event for reflectors instead of being silently absorbed.
- */
-function emitUncommittedWorkSwept(
-  logger: EventLogger,
-  ctx: {
-    initiativeId: string;
-    parentEventId: string;
-    workItemId: string;
-    worktreePath: string;
-    phase: 'developer-loop' | 'unifier';
-    skill: string; // seam F4: the executing def's own slug, not a fixed literal.
-  },
-  iteration: number,
-): void {
-  logger.emit({
-    initiative_id: ctx.initiativeId,
-    parent_event_id: ctx.parentEventId,
-    phase: ctx.phase,
-    skill: ctx.skill,
-    event_type: 'log',
-    input_refs: [ctx.worktreePath],
-    output_refs: [],
-    message: 'ralph.uncommitted-work-swept',
-    metadata: {
-      work_item_id: ctx.workItemId,
-      iteration,
-      detail:
-        'agent exited the iteration with uncommitted work; the forge-autocommit safety net swept it (commit-discipline gap — the agent must commit its own work, git add -f for gitignored declared deliverables)',
-    },
-  });
 }
