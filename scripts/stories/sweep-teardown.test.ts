@@ -22,7 +22,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync
 import { tmpdir } from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight, stopSchedulerCensusAndRelease, reapCensusAndSweep, teardownExitCode, isRunning, DAEMON_PID_FILE } from './sweep-teardown.mjs';
+import { restoreSweptCommitted, releaseOwnInFlight, stopSchedulerCensusAndRelease, reapCensusAndSweep, teardownExitCode } from './sweep-teardown.mjs';
+import { stopOwnScheduler, isRunning, DAEMON_PID_FILE } from './sweep-teardown-scheduler.mjs';
 import { sweepProductFixtures } from './sweep.mjs';
 import {
   killIfAlive, plantDaemonWithGrandchild, plantReapedRootWithGrandchild,
@@ -163,8 +164,9 @@ test('657(ii): no pid file is silence, not an error', () => {
   const root = mkdtempSync(join(tmpdir(), 'forge-daemon-'));
   // `drained` joined the shape in 689(iii): every caller now has to distinguish
   // "the daemon released its claim" from "the daemon is gone", and a run that
-  // started none did neither.
-  assert.deepEqual(stopOwnScheduler(root), { stopped: null, how: null, drained: false, note: null });
+  // started none did neither. `unknown` joined it at ROW 102b/18: a genuine
+  // ENOENT (no pid file at all) is `unknown: false`, unlike an unreadable one.
+  assert.deepEqual(stopOwnScheduler(root), { stopped: null, how: null, drained: false, unknown: false, note: null });
 });
 
 test('657(ii): a pid file holding nonsense says so instead of signalling', () => {

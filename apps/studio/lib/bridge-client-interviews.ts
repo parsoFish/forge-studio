@@ -19,6 +19,13 @@ export type ArchitectPhase =
   | 'awaiting-answers'
   | 'exploring'
   | 'drafting'
+  /** forge-8vfn.8.1.14 — the completeness critic (ruling 380) running before
+   *  the operator is ever asked; mirrors `ArchitectPhase` in
+   *  packages/sessions/kinds/architect-session.ts. */
+  | 'critiquing'
+  /** forge-8vfn.8.1.14 — a draft round the critic bounced back, distinct from
+   *  the session's first `drafting` pass. */
+  | 'revising'
   | 'awaiting-verdict'
   | 'finalizing'
   | 'committed'

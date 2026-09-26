@@ -22,7 +22,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { preexistingSchedulerVerdict } from './scheduler-preflight.mjs';
-import { DAEMON_PID_FILE } from './sweep-teardown.mjs';
+import { DAEMON_PID_FILE } from './sweep-teardown-scheduler.mjs';
 import { runnerSourceContaining } from './runner-source.mjs';
 
 function fixtureRoot() {

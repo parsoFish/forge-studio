@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 361 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 95 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 97 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -60,14 +60,14 @@ operator-ratified new cap — never a silent raise.
 | `projects` | 46 | 10,951 | **9,061** | ratified 9,061 — M7-A reset-resolvable (+94, growth): Rebuild adds a template npm command only when package.json has the script; lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,156 | **12,578** | ratified 12,578 — M7-C door re-exports OD (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,091 | **13,091** | ratified 13,091 — row 99 DNS failure classified environment/transient (forge-8vfn.8.1.11), +26 lane-ratified under ruling 666; see git history for prior raises. |
-| `sessions` | 59 | 20,542 | **20,504** | ratified 20,504 — row 94 heartbeat + deadline count only progress (forge-8vfn.8.1.9), lane-ratified under ruling 666; see git history for prior raises. |
+| `sessions` | 61 | 20,638 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 83 | 23,587 | **23,387** | ratified 23,387 — row 112 a fresh cycle threads its minted cycleId (forge-8vfn.8.1.17), +2 lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 14 | 2,113 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 39 | 11,147 | **11,147** | ratified 11,147 — row 112 requireCycleId, no initiative-id log dir (forge-8vfn.8.1.17), +15 lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,837 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **460** | **125,575** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **462** | **125,671** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -244,7 +244,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/bridge-studio-architect.ts | sessions | verbatim | 435 |
 | packages/sessions/bridge-studio-session-helpers.ts | sessions | verbatim | 532 |
 | packages/sessions/routes.ts | sessions | verbatim | 481 |
-| packages/sessions/session-phases.ts | sessions | verbatim | 75 |
+| packages/sessions/session-phases.ts | sessions | verbatim | 81 |
 | packages/sessions/session-readability.ts | sessions | verbatim | 259 |
 | packages/library/skill-path.ts | library | verbatim | 146 |
 | packages/library/skill-staging.ts | library | verbatim | 197 |
@@ -292,9 +292,11 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/find-session-project.ts | agents | verbatim | 52 |
 | packages/agents/agents-md-compose.ts | agents | verbatim | 116 |
 | apps/forge/band-agent-deps.ts | apps/forge | verbatim | 63 |
-| packages/sessions/kinds/architect.ts | sessions | verbatim | 343 |
-| packages/sessions/kinds/architect-session.ts | sessions | rewritten | 399 |
-| packages/sessions/kinds/architect-steps.ts | sessions | rewritten | 796 |
+| packages/sessions/kinds/architect.ts | sessions | verbatim | 354 |
+| packages/sessions/kinds/architect-session.ts | sessions | rewritten | 404 |
+| packages/sessions/kinds/architect-steps.ts | sessions | rewritten | 730 |
+| packages/sessions/kinds/architect-stage-events.ts | sessions | rewritten | 40 The architect's per-stage `architect.<stage>.start` event, emitted before each stage's model turn (forge-8vfn.8.1.14). |
+| packages/sessions/kinds/architect-structured-turn.ts | sessions | rewritten | 97 `runStructured` moved out of `architect-steps.ts` verbatim (forge-8vfn.8.1.14) to give that file headroom for the critiquing/revising phase writes. |
 | packages/sessions/kinds/architect-manifest.ts | sessions | rewritten | 141 |
 | packages/sessions/kinds/architect-brain-read.ts | sessions | rewritten | 93 **New file, M7-C ABR (forge-8vfn.8.3.5, ruling 666):** the architect's own `brain.read` tally + emission, wrapping each phase's `KindStepHandler` from outside `architect-steps.ts` (near the file cap) and `kind-turn.ts` (ruling 78's hook budget). Priced into `sessions`'s cap-table raise 20,000 → 20,093. |
 | packages/sessions/bash-fence.ts | sessions | verbatim | 508 |
@@ -305,7 +307,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/claim-validator.ts | flows | verbatim | 264 |
 | apps/forge/cli.ts | apps/forge | pruned | 948 **Ceiling re-keyed +1 (M4-sessions s3 3b, T1 ruling 83):** the ruled manifest seam (ruling 81) threads an injected port through this file — three `package-layer-order` rows closed for it. Paid down as far as the file allows before the re-key: the ports contract was extracted to `kinds/architect-ports.ts` (which returned `kinds/architect.ts` to exactly 1,584, no raise), every added comment tightened, and stale runner paths corrected. Not a licence — the next edit measures against the new number. |
 | apps/forge/routes.ts | apps/forge | verbatim | 236 |
-| packages/sessions/kinds/architect-critic.ts | sessions | verbatim | 427 |
+| packages/sessions/kinds/architect-critic.ts | sessions | verbatim | 430 |
 | packages/projects/constraint-author.ts | projects | verbatim | 99 |
 | packages/projects/constraint-blocks.ts | projects | verbatim | 257 |
 | packages/flows/cron-triggers.ts | flows | verbatim | 250 |

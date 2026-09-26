@@ -179,6 +179,7 @@ export default {
             },
             { press: 'submit-answers' },
           ],
+          // Row 108: the architect now also passes through `critiquing`/`revising` before `awaiting-verdict`; `until` is unchanged.
           until: { 'session-phase': 'awaiting-verdict' },
         },
       ],

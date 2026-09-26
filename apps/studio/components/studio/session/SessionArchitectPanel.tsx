@@ -101,13 +101,17 @@ export function SessionArchitectPanel({
           )
         )}
 
-        {(session.phase === 'interviewing' || session.phase === 'exploring' || session.phase === 'drafting' || session.phase === 'finalizing') && (
+        {isArchitectWorking(session.phase) && (
           <Status
             label={
               session.phase === 'exploring'
                 ? 'The architect is exploring edge cases…'
                 : session.phase === 'drafting'
                 ? 'The architect is drafting the plan…'
+                : session.phase === 'critiquing'
+                ? 'The architect is checking the plan for gaps…'
+                : session.phase === 'revising'
+                ? 'The architect is revising the plan…'
                 : session.phase === 'finalizing'
                 ? 'The architect is finalizing the plan…'
                 : `The architect is thinking… (round ${session.round})`

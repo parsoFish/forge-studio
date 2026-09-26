@@ -16,6 +16,8 @@ const ALL_PHASES: ArchitectPhase[] = [
   'awaiting-answers',
   'exploring',
   'drafting',
+  'critiquing',
+  'revising',
   'awaiting-verdict',
   'finalizing',
   'committed',
@@ -86,10 +88,15 @@ describe('architectHexMetaForLifecycle (ON-7 defect 3)', () => {
 });
 
 describe('isArchitectWorking', () => {
-  it('is true only for interviewing/drafting/finalizing', () => {
+  it('is true only for interviewing/exploring/drafting/critiquing/revising/finalizing', () => {
     expect(isArchitectWorking('interviewing')).toBe(true);
     expect(isArchitectWorking('drafting')).toBe(true);
     expect(isArchitectWorking('exploring')).toBe(true);
+    // forge-8vfn.8.1.14 — the completeness critic (ruling 380) and a draft
+    // round it bounced back are both the runner's own work, exactly like
+    // drafting/exploring.
+    expect(isArchitectWorking('critiquing')).toBe(true);
+    expect(isArchitectWorking('revising')).toBe(true);
     expect(isArchitectWorking('finalizing')).toBe(true);
   });
 

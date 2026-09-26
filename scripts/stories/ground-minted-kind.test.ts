@@ -20,7 +20,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { groundMintedSessionPaths, classifyOwnGroundDrift, groundChanges, groundIgnoreNoneForTests } from './ground-hash.mjs';
+import { classifyOwnGroundDrift, groundChanges, groundIgnoreNoneForTests } from './ground-hash.mjs';
+import { groundMintedSessionPaths } from './ground-minted.mjs';
 
 const REGISTERED = new Set(['instructions', 'architect']);
 

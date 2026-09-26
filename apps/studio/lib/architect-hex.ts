@@ -18,6 +18,12 @@ export const ARCHITECT_HEX_META: Record<ArchitectPhase, HexMeta> = {
   'awaiting-answers': { glow: STATUS_COLOR.attention, frac: 0.3, label: 'needs your answers' },
   exploring: { glow: STATUS_COLOR.active, frac: 0.45, label: 'exploring edge cases' },
   drafting: { glow: STATUS_COLOR.active, frac: 0.55, label: 'drafting the plan' },
+  // forge-8vfn.8.1.14 — the completeness critic (ruling 380) and a draft round
+  // it bounced back each get their own hex meta, between "drafting" and the
+  // operator gate, instead of the hex reading "drafting the plan…" through
+  // both (m7-d-proof-S1 evidence).
+  critiquing: { glow: STATUS_COLOR.active, frac: 0.65, label: 'checking the plan for gaps' },
+  revising: { glow: STATUS_COLOR.active, frac: 0.58, label: 'revising the plan' },
   'awaiting-verdict': { glow: STATUS_COLOR.attention, frac: 0.8, label: 'plan ready — your call' },
   finalizing: { glow: STATUS_COLOR.active, frac: 0.92, label: 'finalizing manifests' },
   committed: { glow: STATUS_COLOR.complete, frac: 1, label: 'queued' },
@@ -29,6 +35,8 @@ export const ARCHITECT_WORKING_PHASES = new Set<ArchitectPhase>([
   'exploring',
   'interviewing',
   'drafting',
+  'critiquing',
+  'revising',
   'finalizing',
 ]);
 

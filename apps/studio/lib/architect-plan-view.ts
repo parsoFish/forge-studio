@@ -40,6 +40,8 @@ export function deriveArchitectPlanPhase(session: ArchitectSessionSummary | null
     case 'interviewing':
     case 'exploring':
     case 'drafting':
+    case 'critiquing':
+    case 'revising':
       return 'working';
     case 'awaiting-answers':
     case 'awaiting-verdict':
@@ -63,6 +65,8 @@ export function architectPlanStatusCopy(session: ArchitectSessionSummary): strin
     case 'interviewing': return `The architect is thinking… (round ${session.round})`;
     case 'exploring': return 'The architect is exploring edge cases…';
     case 'drafting': return 'The architect is drafting the plan…';
+    case 'critiquing': return 'The architect is checking the plan for gaps…';
+    case 'revising': return 'The architect is revising the plan…';
     case 'awaiting-verdict': return 'Plan ready — review & approve.';
     case 'finalizing': return 'Approved — the architect is finalizing and queueing the manifests…';
     case 'committed': return 'Approved — manifests promoted to the queue.';

@@ -54,8 +54,13 @@ export function previousAgentLogDirs(storyId, root) {
   let entries;
   try {
     entries = readdirSync(logs, { withFileTypes: true });
-  } catch {
-    return []; // no `_logs` yet is a real answer: a first run has no residue
+  } catch (e) {
+    if (e.code === 'ENOENT') return []; // no `_logs` yet is a real answer: a first run has no residue
+    // ROW 102b/16 — any OTHER failure must not read identically to "nothing
+    // yet": that is the exact stale-dir incident (S5 run 3 beat 13) this
+    // module exists to close, one step earlier. Thrown so the caller cannot
+    // silently treat it as an empty capture.
+    throw new Error(`previousAgentLogDirs: could not read ${logs}: ${e.message}`);
   }
   return entries
     .filter((e) => e.isDirectory() && prefixes.some((p) => e.name.startsWith(p)))
@@ -126,7 +131,18 @@ export function captureAndSweepAgentLogs(storyId, root, runStamp) {
   const dest = join(root, '_logs', '_story-swept', storyId, runStamp);
   const captured = [];
   const failed = [];
-  const dirs = previousAgentLogDirs(storyId, root);
+  let dirs;
+  try {
+    dirs = previousAgentLogDirs(storyId, root);
+  } catch (err) {
+    // ROW 102b/16 — surfaced through the SAME `failed` channel `run.mjs`
+    // already warns on, rather than an exception escaping the leading sweep
+    // or an empty list that reads as "nothing to capture".
+    return {
+      captured: [], removed: [],
+      failed: [{ path: join(root, '_logs'), error: err instanceof Error ? err.message : String(err) }],
+    };
+  }
   for (const d of dirs) {
     try {
       mkdirSync(dest, { recursive: true });
