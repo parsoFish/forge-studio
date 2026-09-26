@@ -135,21 +135,28 @@ async function main() {
   //    overlapped by construction. Refused first, before anything else in
   //    this run touches disk, and it never sleeps — the lane's own Monitor is
   //    what waits (§15.335).
-  const overlap = suiteLockVerdict();
-  console.log(`[stories] ${overlap.reason}`);
-  if (!overlap.ok) return 1;
+  //    `--list` is exempt (T1 1549): the door guards story EXECUTION, not
+  //    enumeration. It loads story files and prints them — no spawn, no port,
+  //    no write — and T1 and the lanes enumerate while a run holds the locks.
+  //    Every path that executes a story, costless included, is still checked
+  //    here first.
+  if (!args.list) {
+    const overlap = suiteLockVerdict();
+    console.log(`[stories] ${overlap.reason}`);
+    if (!overlap.ok) return 1;
 
-  // 0b. THE ORDER ITSELF — finding row 73 (2026-09-19). A launcher that holds
-  //     the run-lock (by ancestry) without ALSO holding the suite-lock is
-  //     exactly the shape that can be waiting for the suite-lock while
-  //     holding the run-lock — the reverse of `with-locks.sh`'s ratified order
-  //     and the deadlock this bead exists to close. Checked here, before any
-  //     spawn, port bind, or story resolution, with the runner's own
-  //     lock-refusal exit code (75) so a refusal is never read as a suite
-  //     that ran and went red.
-  const order = lockOrderVerdict();
-  console.log(`[stories] ${order.reason}`);
-  if (!order.ok) return EXIT_LOCK_REFUSED;
+    // 0b. THE ORDER ITSELF — finding row 73 (2026-09-19). A launcher that holds
+    //     the run-lock (by ancestry) without ALSO holding the suite-lock is
+    //     exactly the shape that can be waiting for the suite-lock while
+    //     holding the run-lock — the reverse of `with-locks.sh`'s ratified order
+    //     and the deadlock this bead exists to close. Checked here, before any
+    //     spawn, port bind, or story resolution, with the runner's own
+    //     lock-refusal exit code (75) so a refusal is never read as a suite
+    //     that ran and went red.
+    const order = lockOrderVerdict();
+    console.log(`[stories] ${order.reason}`);
+    if (!order.ok) return EXIT_LOCK_REFUSED;
+  }
 
   let stories = [];
   for (const file of storyFiles()) {
