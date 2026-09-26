@@ -1597,7 +1597,10 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-action="delete-comment"]` (delete is how a NON-blocking comment is
   cleared — artifact-plan-15; editing renders `[data-comment-editing="true"]`
   with `[data-field="comment-edit-body"]` + `[data-action="save-comment-edit"]`),
-  resolve stays blocking-only — plus the verdict form (position:sticky so the
+  every comment row also carries `[data-comment-id][data-comment-blocking]
+  [data-comment-resolved]` — resolve stays blocking-only:
+  `[data-action="resolve-comment"]` renders only while `blocking && !resolved`
+  (forge-8vfn.8.1.28) — plus the verdict form (position:sticky so the
   control never sits 14,000px down) —
   `[data-component="verdict-form"][data-form-state][data-form-kind][data-initiative-id][data-ac-count]`
   (`data-form-state` is `editing | submitting | submitted`, `data-form-kind`
