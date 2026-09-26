@@ -308,6 +308,10 @@
             "press": "view-onboarding-session"
           }
         ],
+        "wait": {
+          "for": "priced",
+          "upTo": 180000
+        },
         "expect": {
           "route": "/sessions/onboarding/<onboardSessionId>",
           "data": {
@@ -530,14 +534,14 @@
       "status": "green",
       "failures": [],
       "bindings": {
-        "onboardSessionId": "2026-09-26T06-59-44-f777e97a"
+        "onboardSessionId": "2026-09-26T12-46-58-6c697a65"
       },
       "data": {
         "page": "projects",
         "project-id": "story-s3",
         "section": "onboard-with-agent",
         "onboard-run-status": "running",
-        "onboard-session-id": "2026-09-26T06-59-44-f777e97a",
+        "onboard-session-id": "2026-09-26T12-46-58-6c697a65",
         "onboard-attaching": "false"
       },
       "expect": {
@@ -568,35 +572,51 @@
         "session-kind": "onboarding",
         "buildout-row-count": "5"
       },
+      "priced": {
+        "by": "event",
+        "afterMs": 125382,
+        "dir": "_logs/_agent-onboarding-agent-2026-09-26T12-46-58-500-t7m0"
+      },
       "frame": "frames/12-follow-view-onboarding-session-and-watch.png"
     }
   ],
   "reap": {
     "reaped": [
       {
-        "pid": 3258201,
-        "dir": "_logs/_agent-onboarding-agent-2026-09-26T06-59-44-458-b4cf",
+        "pid": 2212517,
+        "dir": "_logs/_agent-onboarding-agent-2026-09-26T12-46-58-500-t7m0",
         "signal": "SIGTERM",
         "via": "descendant"
       },
       {
-        "pid": 3258197,
-        "dir": "_logs/_agent-onboarding-agent-2026-09-26T06-59-44-458-b4cf",
+        "pid": 2212516,
+        "dir": "_logs/_agent-onboarding-agent-2026-09-26T12-46-58-500-t7m0",
         "signal": "SIGTERM",
-        "via": "marker"
+        "via": "descendant"
       },
       {
-        "pid": 3258046,
-        "dir": "_logs/_agent-onboarding-agent-2026-09-26T06-59-44-458-b4cf",
+        "pid": 2212207,
+        "dir": "_logs/_agent-onboarding-agent-2026-09-26T12-46-58-500-t7m0",
         "signal": "SIGTERM",
-        "via": "cwd",
-        "terminatedBeforeFirstPricedEvent": 30000
+        "via": "descendant"
+      },
+      {
+        "pid": 2212040,
+        "dir": "_logs/_agent-onboarding-agent-2026-09-26T12-46-58-500-t7m0",
+        "signal": "SIGTERM",
+        "via": "descendant"
+      },
+      {
+        "pid": 2211999,
+        "dir": "_logs/_agent-onboarding-agent-2026-09-26T12-46-58-500-t7m0",
+        "signal": "SIGTERM",
+        "via": "cwd"
       }
     ],
     "skipped": [],
     "cancelled": [
       {
-        "dir": "_logs/_agent-onboarding-agent-2026-09-26T06-59-44-458-b4cf",
+        "dir": "_logs/_agent-onboarding-agent-2026-09-26T12-46-58-500-t7m0",
         "kind": null,
         "sessionId": null,
         "project": null,
@@ -649,31 +669,20 @@
     "removed": [],
     "removedContents": [],
     "failed": [],
-    "escapes": [
-      {
-        "root": "forge-m7-a-rl",
-        "paths": [
-          "packages/agents/failure-classifier.ts"
-        ],
-        "live": null,
-        "owner": "unattributable",
-        "reason": "no descendant of this run was seen in forge-m7-a-rl",
-        "rootKind": "sibling-basename"
-      }
-    ],
+    "escapes": [],
     "groundEscapes": [],
     "reappeared": []
   },
   "spend": {
-    "usd": null,
-    "unmeasured": "UNMEASURED — terminated before first priced event (30000 ms)"
+    "usd": 0.6168161,
+    "unmeasured": false
   },
   "realGrounds": {
     "moved": []
   },
   "git": {
-    "sha": "ad9dcd8fba531cc4b2cab3fb1d4e373a78fec32b",
+    "sha": "88568b5cc782ca83556d5f459213ea79e88384f5",
     "dirty": false
   },
-  "storyDigest": "619e4981e56fa94d"
+  "storyDigest": "309a3b19a43ecdd8"
 }

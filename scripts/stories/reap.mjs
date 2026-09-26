@@ -142,8 +142,11 @@ const DEFAULT_POLL_MS = 100;
 export const FIRST_PRICED_EVENT_GRACE_MS = 30_000;
 
 /** Has ANY row in this dispatch's own event log been priced? Same reading
- *  `summariseRunSpend` (`spend.mjs`) uses — a genuine, non-negative number. */
-function hasPricedEvent(rows) {
+ *  `summariseRunSpend` (`spend.mjs`) uses — a genuine, non-negative number.
+ *  EXPORTED for row 109's story-level `priced` wait (`beats-agent-proc.mjs`),
+ *  which reuses this predicate rather than growing a second notion of
+ *  "priced" beside the one `waitForFirstPricedEvent` already polls with. */
+export function hasPricedEvent(rows) {
   return (rows ?? []).some((r) => typeof r?.cost_usd === 'number' && Number.isFinite(r.cost_usd) && r.cost_usd >= 0);
 }
 

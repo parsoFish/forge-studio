@@ -215,7 +215,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       // the agent-scale probe, and `costless: true`'s whole enforcement, built per beat.
       const costlessGuard = costlessGuardFor(beat, ROOT, startedMs, story.ground?.realSpawn === true);
       const probe = costlessGuard.active ? null : makeAgentProcProbe(ROOT, resolveBeatRoute(beat, bindings).route);
-      let verdict = await driveBeat(page, beat, i, uiUrl, bindings, undefined, probe, costlessGuard.active ? null : stallDoor, pressedAt, cycleWatchFor, waitSpendGuard, costlessGuard.active ? null : ROOT);
+      let verdict = await driveBeat(page, beat, i, uiUrl, bindings, undefined, probe, costlessGuard.active ? null : stallDoor, pressedAt, cycleWatchFor, waitSpendGuard, costlessGuard.active ? null : ROOT, startedMs);
       verdict = costlessGuard.apply(verdict);
       bindings = { ...bindings, ...verdict.bindings };
       const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}${frameLabelSuffix(beatLabel, slug)}.png`;

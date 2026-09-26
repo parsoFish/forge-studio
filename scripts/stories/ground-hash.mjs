@@ -482,6 +482,17 @@ export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, gr
   const ignored = [];
   const declared = [];
   const matchedDeclarations = new Set();
+  // A declared change a minted/traced session ALSO wrote still HAPPENED, so it
+  // satisfies its declaration (T1 1587, S3 run 4): the path stays credited to
+  // its writer, and the declaration is matched under the same beat-window rule
+  // the declared branch below applies.
+  const noteDeclaredToo = (kind, p) => {
+    const i = declaredChanges.findIndex((d) => d.path === p && d.change === kind);
+    if (i === -1) return;
+    const decl = declaredChanges[i];
+    const window = decl.beat === undefined ? null : beatWindowChanges.get(decl.beat);
+    if (decl.beat === undefined || (window !== undefined && window[kind].includes(p))) matchedDeclarations.add(i);
+  };
   for (const kind of ['added', 'removed', 'modified']) {
     for (const p of changes[kind]) {
       const k = `${kind[0].toUpperCase()} ${p}`;
@@ -495,12 +506,14 @@ export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, gr
       if (home !== null) {
         produced.push(`${k} — inside ${home}, a session this run minted`);
         producedPaths.push({ kind, path: p, home, writers: [] });
+        noteDeclaredToo(kind, p);
         continue;
       }
       const writers = writersOf(p);
       if (writers.length > 0) {
         produced.push(`${k} — written by ${writers.join(', ')}`);
         producedPaths.push({ kind, path: p, home: null, writers });
+        noteDeclaredToo(kind, p);
         continue;
       }
       // DECLARED BY THE STORY — `forge-8vfn.7.6.136`. A story whose product

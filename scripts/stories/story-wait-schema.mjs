@@ -259,9 +259,10 @@ function validateDoSteps(raw, at) {
   );
 }
 
-/** Wait kinds a beat may declare. `agent` is the only one so far, and adding
- *  a second is a deliberate edit here — the friction is the point. */
-const WAIT_KINDS = ['agent', 'settle'];
+/** Wait kinds a beat may declare. `agent` was the only one for a long time;
+ *  `settle` and now `priced` were each bought by a measured incident, and
+ *  adding one is still a deliberate edit here — the friction is the point. */
+const WAIT_KINDS = ['agent', 'settle', 'priced'];
 
 /**
  * The shape a `progressKey` may take — IDENTICAL to `beats-page.mjs`'s
@@ -346,6 +347,25 @@ function validateWait(raw, at) {
       `${at}.wait.upTo`,
       `expected an integer 1..${MAX_DECLARED_WAIT_MS} ms, got ${JSON.stringify(raw.upTo)}`,
     );
+  }
+  // ROW 109 (T1 1549) — `wait: { for: 'priced', upTo }`. EVIDENCE, never a
+  // verdict input (`beats-agent-proc.mjs`'s `waitForPricedEvent` carries the
+  // rest of the story): the beat's own `expect.data` still decides pass/fail,
+  // and this wait only buys the session standing on the page more real time to
+  // write a priced event before the run's own teardown reaps it. Nothing else
+  // is accepted — refused HERE, by name, rather than silently dropped by the
+  // generic rebuild at the bottom of this function, which is what every other
+  // stray-field refusal in this file already does.
+  if (raw.for === 'priced') {
+    const allowed = new Set(['for', 'upTo']);
+    const stray = Object.keys(raw).find((k) => !allowed.has(k));
+    if (stray !== undefined) {
+      fail(
+        `${at}.wait.${stray}`,
+        `a priced wait takes only { for, upTo }, got ${JSON.stringify(stray)} too — it would be dropped silently`,
+      );
+    }
+    return Object.freeze({ for: raw.for, upTo: raw.upTo });
   }
   // 7.6.118 / T1 1089(c). The queue state this wait ends on — the product's own
   // terminal word for the cycle the beat is watching. OPT-IN: a beat that names
