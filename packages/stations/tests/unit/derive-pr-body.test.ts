@@ -22,7 +22,7 @@ function input(overrides: Partial<DerivedDemoInput> = {}): DerivedDemoInput {
     headSha: 'abc1234',
     changedFiles: ['src/report.ts'],
     workItems: [{ id: 'WI-1', title: 'Build the report', status: 'complete' }],
-    acceptanceCriteria: ['(WI-1) GIVEN a fixture repo WHEN the CLI runs THEN a report prints'],
+    acceptanceCriteria: [{ workItemId: 'WI-1', given: 'a fixture repo', when: 'the CLI runs', then: 'a report prints' }],
     gateEvidence: [
       { gate: 'local', cmd: ['npm', 'test'], ok: true, outputTail: '120 passing' },
       { gate: 'ci', cmd: ['npm', 'run', 'ci'], ok: false, outputTail: 'red' },
@@ -45,10 +45,14 @@ describe('derivePrBody', () => {
     for (const section of PR_BODY_SECTIONS) assert.ok(body.includes(section), `missing ${section}`);
   });
 
-  it('kills "the body claims a criterion that is not in the manifest": every AC appears VERBATIM', () => {
-    const acs = ['(WI-1) GIVEN a THEN b', '(WI-2) GIVEN c THEN d'];
+  it('kills "the body claims a criterion that is not in the manifest": every AC appears VERBATIM, rendered from its typed fields', () => {
+    const acs = [
+      { workItemId: 'WI-1', given: 'a', when: 'w1', then: 'b' },
+      { workItemId: 'WI-2', given: 'c', when: 'w2', then: 'd' },
+    ];
+    const rendered = ['(WI-1) GIVEN a WHEN w1 THEN b', '(WI-2) GIVEN c WHEN w2 THEN d'];
     const body = bodyOf({ acceptanceCriteria: acs });
-    for (const ac of acs) assert.ok(body.includes(ac), `missing ${ac}`);
+    for (const line of rendered) assert.ok(body.includes(line), `missing ${line}`);
   });
 
   it('kills "the body names a file the diff does not contain": the file list IS the diff\'s', () => {

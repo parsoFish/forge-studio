@@ -35,6 +35,16 @@ import type { GateProfile } from '../class-profile-port.ts';
  */
 export type GateEvidenceRow = MergeGateEvidence;
 
+/** One work item's typed acceptance criterion (ADR 051), carried through
+ *  intact rather than pre-flattened — the derivation renders it, so the same
+ *  line can never drift between the demo model and the PR body. */
+export type AcceptanceCriterionInput = {
+  workItemId: string;
+  given: string;
+  when: string;
+  then: string;
+};
+
 export type DerivedDemoInput = {
   initiativeId: string;
   title: string;
@@ -44,13 +54,20 @@ export type DerivedDemoInput = {
   headSha: string;
   changedFiles: readonly string[];
   workItems: readonly { id: string; title: string; status: string }[];
-  /** The typed acceptance criteria, already rendered one line per criterion. */
-  acceptanceCriteria: readonly string[];
+  /** The typed acceptance criteria (ADR 051) — untouched by the reader; this
+   *  module renders each to its one demo.json / PR-body line. */
+  acceptanceCriteria: readonly AcceptanceCriterionInput[];
   gateEvidence: readonly GateEvidenceRow[];
   demoProcess: readonly DemoStep[];
   /** The class's `capture` column — what evidence this initiative's class captures. */
   capture: GateProfile['capture'];
 };
+
+/** The one place `(WI) GIVEN … WHEN … THEN …` is spelled — shared by the
+ *  demo model's `acceptanceCriteria: string[]` and the PR body's "## Why". */
+export function renderAcceptanceCriterion(ac: AcceptanceCriterionInput): string {
+  return `(${ac.workItemId}) GIVEN ${ac.given.trim()} WHEN ${ac.when.trim()} THEN ${ac.then.trim()}`;
+}
 
 export type DeriveDemoResult =
   | { ok: true; model: DemoModel }
@@ -182,7 +199,7 @@ export function deriveDemoModel(input: DerivedDemoInput): DeriveDemoResult {
     changedRef: input.headSha,
     checkpoints,
     diffStat: input.diffStat,
-    acceptanceCriteria: [...input.acceptanceCriteria],
+    acceptanceCriteria: input.acceptanceCriteria.map(renderAcceptanceCriterion),
     summary: {
       bullets: input.workItems.map((wi) => `${wi.id} [${wi.status}] ${wi.title}`),
       commitSha: input.headSha,

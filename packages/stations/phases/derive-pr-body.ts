@@ -14,7 +14,7 @@
  */
 
 import type { DemoModel } from '../demo-model.ts';
-import type { DerivedDemoInput } from './derive-demo-model.ts';
+import { renderAcceptanceCriterion, type DerivedDemoInput } from './derive-demo-model.ts';
 
 /** The sections a PR body must carry. `openPrInline` needs a body; a reader needs these. */
 export const PR_BODY_SECTIONS = ['## Why', '## What', '## How'] as const;
@@ -41,7 +41,7 @@ export function derivePrBody(model: DemoModel, input: DerivedDemoInput): string 
     '',
     'The acceptance criteria this initiative was decomposed against:',
     '',
-    ...bullets(input.acceptanceCriteria, 'this initiative declared no acceptance criteria'),
+    ...bullets(input.acceptanceCriteria.map(renderAcceptanceCriterion), 'this initiative declared no acceptance criteria'),
     '',
     '## What',
     '',

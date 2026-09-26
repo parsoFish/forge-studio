@@ -34,7 +34,7 @@ function baseInput(overrides: Partial<DerivedDemoInput> = {}): DerivedDemoInput 
       { id: 'WI-1', title: 'Build the report', status: 'complete' },
       { id: 'WI-2', title: 'Prove the report', status: 'complete' },
     ],
-    acceptanceCriteria: ['(WI-1) GIVEN a fixture repo WHEN the CLI runs THEN a report prints'],
+    acceptanceCriteria: [{ workItemId: 'WI-1', given: 'a fixture repo', when: 'the CLI runs', then: 'a report prints' }],
     gateEvidence: [
       { gate: 'local', cmd: ['npm', 'test'], ok: true, outputTail: '120 passing' },
       { gate: 'ci', cmd: ['npm', 'run', 'ci'], ok: true, outputTail: 'ci green' },
@@ -117,11 +117,11 @@ describe('deriveDemoModel — what it refuses to invent', () => {
     }
   });
 
-  it('kills "the diffstat drifted": diffStat and the AC list are carried VERBATIM', () => {
+  it('kills "the diffstat drifted": diffStat is carried VERBATIM and the typed AC renders the same line the flattener used to produce', () => {
     const input = baseInput();
     const model = modelOf(input);
     assert.equal(model.diffStat, input.diffStat);
-    assert.deepEqual(model.acceptanceCriteria, [...input.acceptanceCriteria]);
+    assert.deepEqual(model.acceptanceCriteria, ['(WI-1) GIVEN a fixture repo WHEN the CLI runs THEN a report prints']);
   });
 
   it('kills "the gate evidence was summarised away": one testEvidence row per gate, with its real result', () => {

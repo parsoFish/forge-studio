@@ -86,7 +86,7 @@ function readDelivered(
 ): Pick<DerivedDemoInput, 'workItems' | 'acceptanceCriteria'> {
   const wiDir = join(worktreePath, '.forge', 'work-items');
   const workItems: DerivedDemoInput['workItems'] = [];
-  const acceptanceCriteria: string[] = [];
+  const acceptanceCriteria: DerivedDemoInput['acceptanceCriteria'] = [];
   if (!existsSync(wiDir)) return { workItems, acceptanceCriteria };
   const { items, parseErrors } = readWorkItemsFromDir(wiDir);
   if (Object.keys(parseErrors).length > 0) {
@@ -95,10 +95,14 @@ function readDelivered(
     emit('demo.wi-parse-errors', { errors: parseErrors }, { event_type: 'error' });
   }
   const mutableItems = workItems as { id: string; title: string; status: string }[];
+  const mutableAcs = acceptanceCriteria as { workItemId: string; given: string; when: string; then: string }[];
   for (const wi of items) {
     mutableItems.push({ id: wi.work_item_id, title: wi.body.split('\n')[0] ?? wi.work_item_id, status: wi.status });
     for (const ac of wi.acceptance_criteria) {
-      acceptanceCriteria.push(`(${wi.work_item_id}) GIVEN ${ac.given.trim()} WHEN ${ac.when.trim()} THEN ${ac.then.trim()}`);
+      // Carried TYPED — rendering to the `(WI) GIVEN … WHEN … THEN …` line
+      // moved into derive-demo-model.ts (renderAcceptanceCriterion), so the demo
+      // model and the PR body render the same line from the same function.
+      mutableAcs.push({ workItemId: wi.work_item_id, given: ac.given, when: ac.when, then: ac.then });
     }
   }
   return { workItems, acceptanceCriteria };
