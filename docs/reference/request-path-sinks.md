@@ -2954,3 +2954,28 @@ at an already-baselined call site.
 `scripts/request-path-sinks.baseline.txt` accepts the grown counts via
 `--write` in the same commit that adds this section, per this document's own
 rule.
+
+### forge-mfv5.2.5 — the committed demo media reaches the PR: one new sink, one grown file
+
+`commitOrchestratedCaptureArtifacts` (orchestrated-capture.ts) now stages
+`.capture/{before,after}/` checkpoint media (previously never committed —
+ADR 021's evidence contract covered only `demo.json`/`DEMO.md`), and
+`embedDemoInPr` (pr.ts) now links/inlines that media, commit-pinned to the
+capture commit's own sha rather than the moving branch name. Neither adds a
+new UNTRUSTED input: the one path-shaped value that is not purely
+self-derived (a filename under `.capture/<side>/`, which a demo `command`
+checkpoint's own arbitrary project code could in principle influence) is
+routed through `@forge/kernel`'s `resolveGuardedPath` before the new sink
+touches it — the same per-segment realpath identity walk (symlink,
+dangling-symlink and hardlinked-leaf refusal) already used everywhere else
+in this codebase for exactly this class of input, not a bespoke check.
+
+| site | sink | request-derived input | class | guard |
+|---|---|---|---|---|
+| `packages/flows/phases/orchestrated-capture.ts` (`collectCommittableCaptureMedia`) | `statSync` (0 → 1) | a filename under `.capture/<side>/` (command-checkpoint-influenced) | guarded `[read]` | `resolveGuardedPath(demoDirAbs, ['.capture', side, name])` already identity-verified the leaf (refuses a symlink, a dangling symlink, and a hardlinked leaf via `nlink!==1`) before `statSync(guard.realPath)` reads its size to apply the size bound; `demoDirAbs` is the worktree's own demo dir, resolved through the `demo-paths.ts` SSOT. |
+| `packages/flows/pr.ts` (`openPullRequest`) | `execFileSync` (+1, `git rev-parse HEAD`) | none | not request-derived `[exec]` | fixed literal argv (`['rev-parse','HEAD']`); `cwd: worktreePath` only, never interpolated into argv. Resolves the commit-pinned `ref` now threaded into `embedDemoInPr`, falling back to the branch name on any git error. |
+| `packages/flows/pr.ts` (`trackedCaptureFiles`) | `execFileSync` (+1, `git ls-tree -r --name-only <ref> -- <relDir>/.capture`) | `ref` (this same file's own `git rev-parse` result, see row above), `relDir` (`worktreeDemoRelDir`) | not request-derived `[exec]` | `ref` is self-produced, never caller input; `relDir` comes from the `demo-paths.ts` SSOT, whose `artifactRoot` segment is already cleaned by `readArtifactRoot`'s own path-escape guard. The result is used only to build a `Set` of already-committed paths so the PR body can decide what to link — never to read or write through it. |
+
+`scripts/request-path-sinks.baseline.txt` accepts the new/grown counts via
+`--write` in the same commit that adds this section, per this document's own
+rule.

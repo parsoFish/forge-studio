@@ -187,6 +187,7 @@ packages/flows/phases/gitignored-creates.ts spawnSync 1
 packages/flows/phases/orchestrated-capture.ts execFileSync 2
 packages/flows/phases/orchestrated-capture.ts existsSync 2
 packages/flows/phases/orchestrated-capture.ts readFileSync 3
+packages/flows/phases/orchestrated-capture.ts statSync 1
 packages/flows/phases/ralph-spec-lint.ts readdirSync 1
 packages/flows/phases/ralph-spec-lint.ts readFileSync 1
 packages/flows/phases/ralph-spec-lint.ts statSync 2
@@ -194,7 +195,7 @@ packages/flows/phases/wi-spec-compile.ts writeFileSync 2
 packages/flows/planned-initiatives.ts readFileSync 1
 packages/flows/pr-branch-sync.ts execFileSync 21
 packages/flows/pr-branch-sync.ts existsSync 2
-packages/flows/pr.ts execFileSync 2
+packages/flows/pr.ts execFileSync 4
 packages/flows/pr.ts existsSync 4
 packages/flows/pr.ts mkdirSync 1
 packages/flows/pr.ts readdirSync 1
