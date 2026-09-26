@@ -390,3 +390,92 @@ describe('7.6.108: "could not measure" has its own exit code', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// forge-8vfn.8.1.29 — the cap also covers `.sh` files, same mechanism.
+//
+// `merge-slot-doors.sh` reached 847 lines with no guard ever looking at it —
+// `check-file-size.mjs` only scanned `.ts .tsx .mjs .js .cjs`. `gate.sh` (801)
+// and `lanes.sh` (1064) were already over the 800-line cap the day this
+// landed too, baselined at their CURRENT size as ceilings (never licences,
+// same ratchet as every other row): `scripts/baselines/file-size.json` now
+// carries `.claude/skills/tiered-orchestration/scripts/gate.sh` and
+// `.../lanes.sh`. `merge-slot-doors.sh` itself is gone (split by concern,
+// same bead) and was never baselined, so it must not appear in the baseline
+// either.
+// ---------------------------------------------------------------------------
+
+/**
+ * Like capFixture, but with an explicit baseline (rather than the empty one
+ * capFixture always writes) — so a GREW / at-ceiling `.sh` row can be
+ * exercised directly, the same way the real baseline's GREW/slack doors
+ * above exercise it, without needing a live oversized `.sh` file that
+ * happens to sit at exactly the right boundary today.
+ */
+function shFixtureWithBaseline(
+  rel: string,
+  lines: number,
+  baseline: Record<string, number>,
+): { args: string[]; cleanup: () => void } {
+  const root = mkdtempSync(join(tmpdir(), 'cap-sh-probe-'));
+  execFileSync('git', ['init', '-q'], { cwd: root });
+  const victim = join(root, rel);
+  mkdirSync(dirname(victim), { recursive: true });
+  writeFileSync(victim, `${Array.from({ length: lines }, (_, i) => `# line ${i}`).join('\n')}\n`);
+  const baselinePath = join(root, 'sh-baseline.json');
+  writeFileSync(baselinePath, `${JSON.stringify(baseline, null, 2)}\n`);
+  return {
+    args: ['--root', root, '--baseline', baselinePath],
+    cleanup: () => rmSync(root, { recursive: true, force: true }),
+  };
+}
+
+describe('forge-8vfn.8.1.29: the 800-line cap also scans .sh files', () => {
+  test('it FAILS on a NEW .sh file over the cap, same as a new .mjs would', () => {
+    const rel = 'scripts/__cap_probe__.sh';
+    const { args, cleanup } = capFixture(rel, 900);
+    try {
+      const { code, out } = run(args);
+      assert.equal(code, 1, `a new 900-line .sh file must fail the cap — got exit 0:\n${out}`);
+      assert.match(out, /scripts\/__cap_probe__\.sh/);
+      assert.match(out, /over the 800-line cap and not baselined/);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('it FAILS when a baselined .sh file GREW past its ceiling', () => {
+    const rel = 'scripts/__grown_probe__.sh';
+    const { args, cleanup } = shFixtureWithBaseline(rel, 900, { [rel]: 850 });
+    try {
+      const { code, out } = run(args);
+      assert.equal(code, 1, `a .sh file above its baseline ceiling must fail — got exit 0:\n${out}`);
+      assert.match(out, /grew/);
+      assert.ok(out.includes(rel), `the offender is named: ${out}`);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('a .sh file exactly AT its baselined ceiling passes — the ceiling is a licence up to itself, never below (that is slack)', () => {
+    const rel = 'scripts/__ceiling_probe__.sh';
+    const { args, cleanup } = shFixtureWithBaseline(rel, 850, { [rel]: 850 });
+    try {
+      const { code, out } = run(args);
+      assert.equal(code, 0, `a .sh file at its ceiling must pass — got:\n${out}`);
+      assert.match(out, /check-file-size: PASS/);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('the real baseline names the two real oversized .sh files, and never the deleted merge-slot-doors.sh', () => {
+    const real = JSON.parse(readFileSync(BASELINE, 'utf8')) as Record<string, number>;
+    assert.equal(real['.claude/skills/tiered-orchestration/scripts/gate.sh'], 801);
+    assert.equal(real['.claude/skills/tiered-orchestration/scripts/lanes.sh'], 1064);
+    assert.ok(
+      !('.claude/skills/tiered-orchestration/tests/merge-slot-doors.sh' in real),
+      'the split-away file must never be baselined — it does not exist any more',
+    );
+  });
+});
