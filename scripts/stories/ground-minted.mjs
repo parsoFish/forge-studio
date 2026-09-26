@@ -197,7 +197,7 @@ const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
  * `events.jsonl` already names them.
  *
  * READS ARE NOT WRITES, and the fixture for this makes the point with real
- * bytes: S1 run 5's architect `Read` both `roadmap.md` and `brain/profile.md`,
+ * bytes: S1 run 5's architect `Read` both (project:) `roadmap.md` and `brain/profile.md`,
  * and a rule that matched on the path appearing in the log at all would have
  * licensed two files that session never touched. Only `file_change` and a
  * WRITE tool's `output_refs` count; `input_summary` is deliberately not read.
