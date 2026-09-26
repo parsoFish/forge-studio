@@ -61,9 +61,9 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,098 | **13,098** | ratified 13,098 — row 121 gh 'error connecting to' is a DNS failure (forge-8vfn.8.1.24), +7 lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 61 | 20,638 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
-| `flows` | 85 | 23,981 | **23,475** | ratified 23,475 — row 121 a PR-open failure carries its cause; environment failures park for resume (forge-8vfn.8.1.24), +72 lane-ratified under ruling 666; see git history for prior raises. |
+| `flows` | 85 | 23,981 | **23,781** | ratified 23,781 — forge-mfv5.2.5 recorded demo media committed within size bounds and rendered commit-pinned in the PR body (pr-media.ts), +306 on 23,475 (T1 1640/1641); see git history for prior raises. |
 | `factory` | 15 | 2,723 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 40 | 11,503 | **11,482** | ratified 11,482 — forge-mfv5.2.2 moved the demo-declaration rules to contracts, −23 on 11,505 (the cap follows the lines down); see git history for prior raises. |
+| `stations` | 40 | 11,503 | **11,503** | ratified 11,503 — forge-mfv5.2.5 DEMO.md links a recording's committed filmstrip/webm; integrate reads the capture-commit result, +21 on 11,482, lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,835 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
