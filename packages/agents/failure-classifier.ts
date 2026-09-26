@@ -79,7 +79,7 @@ const DNS_FAILURE_SIGNATURES = [
 /** Environment/API-pressure signatures — a fresh spawn under better conditions can succeed. */
 const TRANSIENT_CRASH_SIGNATURES = [
   'rate_limit', 'rate-limit', '429', '529',
-  'usage limit', 'hit your limit', 'overloaded',
+  'usage limit', 'hit your limit', 'weekly limit', 'overloaded',
   'stream-deadline',
   'sigkill', 'signal 9',
   'econnreset', 'etimedout', 'econnrefused', 'epipe',
@@ -149,7 +149,7 @@ const GATE_MODULE_NOT_FOUND_RE = /\berror:?\s*cannot find module\b|\bmodule not 
  * won't emit (broad forms like `429` / `rate-limit` stay error-events-only).
  */
 const RATE_LIMIT_TEXT_SIGNATURES = [
-  'hit your limit', // Claude Code CLI: "You've hit your limit · resets …"
+  'hit your limit', 'weekly limit', // "You've hit your limit …" / S10 run 28's "…hit your weekly limit · resets Oct 1, 11pm…"
   'usage limit reached', // "Claude AI usage limit reached|resets …"
   'rate_limit_error', // Anthropic API error type
   'overloaded_error', // Anthropic API error type (529)
