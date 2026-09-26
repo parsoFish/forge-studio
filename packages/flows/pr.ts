@@ -37,6 +37,7 @@ import { ghForWorktree, githubOwnerRepoForWorktree } from './gh-pinned.ts';
 // only local caller — it is still exported from `pr-branch-sync.ts` for the
 // callers that use it directly.)
 import { currentBranch, stripForgeScratchFromBranch } from './pr-branch-sync.ts';
+import { buildCaptureMediaBlock, encodeRelPath } from './pr-media.ts';
 
 import {
   existsSync,
@@ -93,8 +94,15 @@ export function stripDemoSection(body: string): string {
  * this function only reads it to produce the `## Demo` markdown body block.
  *
  * Signature change from the prior (combined writer+composer) version:
- *   embedDemoInPr(worktree, initiativeId, branch, trackedDemoDir, isPrivate)
+ *   embedDemoInPr(worktree, initiativeId, ref, trackedDemoDir, isPrivate)
  *     → bodyBlock | null
+ *
+ * `ref` (forge-mfv5.2.5; was `branch`) is COMMIT-PINNED, not
+ * branch-moving — every link/image below resolves against this exact commit.
+ * The caller (`openPullRequest`) resolves it via `git rev-parse HEAD` in the
+ * worktree right after the capture commit lands, falling back to the branch
+ * name on any resolution failure; this function does not care which shape it
+ * received, only that it names a real ref at call time.
  *
  * Returns `null` on any failure (no demo, not a GitHub remote, etc.) so PR
  * creation never breaks because of demo composition — but the caller
@@ -105,7 +113,7 @@ export function stripDemoSection(body: string): string {
 export function embedDemoInPr(
   worktreePath: string,
   initiativeId: string,
-  branch: string,
+  ref: string,
   trackedDemoDir: string,
   isPrivate: boolean,
 ): string | null {
@@ -134,8 +142,8 @@ export function embedDemoInPr(
 
     const demoMdPath = join(trackedDemoDir, DEMO_MD_BASENAME);
 
-    const rawBase = `https://github.com/${ownerRepo}/raw/${branch}/${relDir}`;
-    const blobBase = `https://github.com/${ownerRepo}/blob/${branch}/${relDir}`;
+    const rawBase = `https://github.com/${ownerRepo}/raw/${ref}/${encodeRelPath(relDir)}`;
+    const blobBase = `https://github.com/${ownerRepo}/blob/${ref}/${encodeRelPath(relDir)}`;
     const lines: string[] = ['', '---', '', '## Demo', ''];
 
     // Always: the reliable, visibility-agnostic surface.
@@ -164,6 +172,7 @@ export function embedDemoInPr(
       for (const f of others) lines.push(`- [\`${f}\`](${blobBase}/${encodeURIComponent(f)})`);
       lines.push('');
     }
+    lines.push(...buildCaptureMediaBlock(worktreePath, ref, relDir, trackedDemoDir, ownerRepo, isPrivate));
     return lines.join('\n');
   } catch (err) {
     const e = err as { stderr?: Buffer | string; message?: string };
@@ -250,10 +259,28 @@ export function openPullRequest(
     const trackedDemoDir = assertTrackedDemoExists(worktreePath, initiativeId);
     const isPrivate = resolveRepoIsPrivate(worktreePath);
 
+    // Commit-pinned ref for the demo block (forge-mfv5.2.5): the
+    // capture commit (if any) has already landed on this branch by the time
+    // PR-open runs, so resolving HEAD here pins every link/image to real,
+    // already-committed content rather than a branch name that can move
+    // under a reader later. Fails soft to the branch name — a git error here
+    // is not a reason to block PR-open, only to lose the pinning.
+    let demoRef = branch;
+    try {
+      const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' }).trim();
+      if (sha) demoRef = sha;
+    } catch (err) {
+      const e = err as { stderr?: Buffer | string; message?: string };
+      const reason = (typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString()) || e.message || 'unknown error';
+      process.stderr.write(
+        `[openPullRequest] could not resolve HEAD sha for commit-pinned demo links, falling back to branch "${branch}": ${reason}\n`,
+      );
+    }
+
     // Compose the demo block from the (already-tracked) bundle.
     let bodyFile = prDescriptionPath;
     try {
-      const demoMd = embedDemoInPr(worktreePath, initiativeId, branch, trackedDemoDir, isPrivate);
+      const demoMd = embedDemoInPr(worktreePath, initiativeId, demoRef, trackedDemoDir, isPrivate);
       if (demoMd) {
         let base = existsSync(prDescriptionPath)
           ? readFileSync(prDescriptionPath, 'utf8')
