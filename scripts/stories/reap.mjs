@@ -329,8 +329,11 @@ export function readProcTable(deps = {}) {
     let raw;
     try {
       raw = readStat(pid);
-    } catch {
-      continue; // exited between the listing and the read — not an error
+    } catch (err) {
+      if (err?.code === 'ENOENT') continue; // exited between the listing and the read — not an error
+      // ROW 102b/20 — any OTHER failure must not silently drop just this row;
+      // refuse the WHOLE table, the same null sentinel finding 6 uses above.
+      return null;
     }
     const close = raw.lastIndexOf(')');
     if (close === -1) continue;
@@ -487,8 +490,10 @@ export async function reapAgentRuns(runs, opts = {}) {
       try {
         process.kill(pid, 0);
         return true;
-      } catch {
-        return false;
+      } catch (err) {
+        // ROW 102b/21 — mirror reap-census.mjs's verifiedKill ESRCH/EPERM
+        // split: ESRCH is genuinely gone; EPERM (or anything else) is alive.
+        return err?.code !== 'ESRCH';
       }
     });
   // 5.50: injected so the marker rung is testable without planting processes;
