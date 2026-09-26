@@ -17,7 +17,7 @@
  * toggle-region button is scoped to its own card via `data-region`, and
  * pressing ONE scoped toggle reveals exactly one scoped comment-region button.
  *
- * RUN: npx vitest run tests/regression/DemoReviewSurface-collapsed-regions.test.ts   (from apps/studio/)
+ * RUN: npx vitest run apps/studio/tests/regression/DemoReviewSurface-collapsed-regions.test.ts   (from apps/studio/)
  */
 import { test, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as React from 'react';
