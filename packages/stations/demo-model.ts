@@ -55,19 +55,11 @@ export type DemoModelCheckpoint = {
   /** Captured stdout of `command` on the before/after worktree (filled by capture). */
   beforeOutput?: string | null;
   afterOutput?: string | null;
-  /**
-   * For a browser/screenshot checkpoint DERIVED from an acceptance criterion
-   * (forge-mfv5.1.7): the in-app route `forge demo capture` navigates to
-   * (`server.url + route`), rather than the server root. An absolute path,
-   * no traversal (`isSafeDemoRoute`, `@forge/stations/demo-types.ts`).
-   */
+  /** AC-derived browser checkpoint (forge-mfv5.1.7): the in-app route to navigate
+   *  to (`server.url + route`) instead of the server root. Validated by `isSafeDemoRoute`. */
   route?: string;
-  /**
-   * Delta honesty (forge-mfv5.1.7): whether THIS checkpoint's captured before
-   * vs after evidence actually differs. Computed post-capture from the real
-   * bytes — never authored — and fails closed: 'unknown' (a missing/unreadable
-   * side) is never treated as a claim of change.
-   */
+  /** Delta honesty (forge-mfv5.1.7): whether this checkpoint's before/after evidence
+   *  differs. Computed post-capture from the real bytes; fails closed to 'unknown'. */
   delta?: 'changed' | 'unchanged' | 'unknown';
   /** Harness metric rows (paired before/after). Optional. */
   metrics?: HarnessMetricRow[];
@@ -482,16 +474,10 @@ export function mergeCapturedMedia(model: DemoModel, captured: CapturedMedia[]):
 }
 
 /**
- * Delta honesty (forge-mfv5.1.7): compare a checkpoint's captured before vs
- * after evidence and tag it `changed | unchanged | unknown`. A command
- * checkpoint compares `before/<stem>.out` vs `after/<stem>.out` BYTE FOR
- * BYTE (never just their lengths — a same-length, different-content pair
- * must read as `changed`); a browser checkpoint (no `command`) compares the
- * sha256 of the two sides' `.filmstrip.png`. Either side missing or
- * unreadable ⇒ `unknown` — FAILS CLOSED: 'unknown' is never returned as
- * `unchanged`, so it can never be misread as a claim that nothing changed.
- * Called by `forge demo capture` right after `mergeCapturedMedia`, before the
- * bundle is stamped and written. Pure given the same files on disk.
+ * Delta honesty (forge-mfv5.1.7): a command checkpoint compares its `.out`
+ * files BYTE FOR BYTE (never just their lengths); a browser checkpoint (no
+ * `command`) compares the sha256 of the `.filmstrip.png`s. Either side
+ * missing/unreadable ⇒ `unknown` — FAILS CLOSED, never read as `unchanged`.
  */
 function checkpointDelta(cp: DemoModelCheckpoint, bundleDir: string): NonNullable<DemoModelCheckpoint['delta']> {
   const stem = checkpointArtifactStem(cp.label);

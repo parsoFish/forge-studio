@@ -783,28 +783,21 @@ async function cmdDemo(rest: string[]): Promise<void> {
       const demoJson = JSON.parse(readFileSync(jsonPath, 'utf8'));
       const cps = (demoJson?.checkpoints ?? []) as Array<{ label?: string; command?: string; route?: string }>;
       // A checkpoint with a `command` captures real CLI stdout (before/after); one
-      // without is a browser screenshot checkpoint — an AC-derived one (forge-mfv5.1.7)
-      // may carry `route`, the in-app path to navigate to instead of the server root.
+      // without is a browser screenshot checkpoint (an AC-derived one may carry `route`).
       const checkpointCommands = cps
         .filter((c) => c.label && typeof c.command === 'string' && c.command.trim())
         .map((c) => ({ label: c.label as string, command: c.command as string }));
-      const labels = cps
-        .filter((c) => c.label && !c.command)
-        .map((c) => ({ label: c.label as string, route: typeof c.route === 'string' ? c.route : undefined }));
+      const labels = cps.filter((c) => c.label && !c.command).map((c) => ({ label: c.label as string, route: typeof c.route === 'string' ? c.route : undefined }));
       await captureCheckpoints({ projectRepoPath, project: projectArg ?? '(local)', baseRef, changedRef, bundleDir, initiativeId, checkpointLabels: labels, checkpointCommands, build: true });
       const captured = collectCapturedMedia(bundleDir);
-      const merged = mergeCapturedMedia(JSON.parse(readFileSync(jsonPath, 'utf8')), captured);
-      // Delta honesty (forge-mfv5.1.7): tag every checkpoint with what its real
-      // before/after evidence actually shows, before demo.json is stamped and
-      // written — `integrate` re-derives the essence and PR body from these flags.
-      const withDeltas = computeCheckpointDeltas(merged, bundleDir);
+      const merged = computeCheckpointDeltas(mergeCapturedMedia(JSON.parse(readFileSync(jsonPath, 'utf8')), captured), bundleDir); // delta honesty (forge-mfv5.1.7): integrate re-derives the essence + PR body from these flags
       // N2 (plan item 2.6): bind the artifacts to THIS orchestrated run. The
       // orchestrator injected a per-run nonce into our environment; stamping
       // it into demo.json AFTER a successful capture+merge is the proof the
       // composed unifier gate verifies. Reached only when capture succeeded —
       // the inner-failure path (catch below) must never stamp.
       const runNonce = process.env[CAPTURE_NONCE_ENV];
-      const stamped = runNonce ? stampCaptureNonce(withDeltas, runNonce) : withDeltas;
+      const stamped = runNonce ? stampCaptureNonce(merged, runNonce) : merged;
       writeFileSync(jsonPath, JSON.stringify(stamped, null, 2));
       const r = renderDemoBundle(demoDir, projectRepoPath);
       console.log(`forge demo capture: merged ${captured.length} captured checkpoint(s); ${r.ok ? 'rendered DEMO.md' : 'render failed: ' + r.errors.join('; ')}`);
