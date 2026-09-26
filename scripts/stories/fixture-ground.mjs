@@ -250,7 +250,10 @@ export function provisionFixtureGround(root, { storyId, project, fixture }) {
   const brainSeedDir = fixtureBrainSeedDir(root, fixture);
   const hasBrain = existsSync(brainSeedDir);
   const brainDest = projectBrainDestDir(root, project);
-  if (hasBrain && existsSync(brainDest)) {
+  // Refused whether or not THIS fixture carries a brain/: a stale profile left
+  // by an earlier run makes preflight's C4 read healthier than this ground
+  // earns either way (#951 review).
+  if (existsSync(brainDest)) {
     throw new Error(
       `provisionFixtureGround: ${brainDest} already exists — refusing to provision the fixture's Brain 3 ` +
       'profile over it',
