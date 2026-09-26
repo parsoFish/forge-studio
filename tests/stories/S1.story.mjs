@@ -157,6 +157,13 @@ export default {
         { fill: 'repo-path', with: 'projects/story-s1' },
         { press: 'onboard-project' },
       ],
+      // T1 1569 — preflight's OWN `pending` is the in-flight signal, so this
+      // waits while the product says it is still measuring, then asserts the
+      // same `hard-fail` as before. Measured press→verdict on the
+      // python-unonboarded fixture: 16.3 s, 16.3 s, 17.4 s (S1 runs 1–3; run 3
+      // red at loadavg 10.6 on the 15 s READY_TIMEOUT_MS default this beat
+      // used to run on). A progress-aware wait, not a constant raise.
+      wait: { for: 'settle', key: 'preflight-status', while: 'pending', upTo: 60_000 },
       expect: {
         route: '/projects/story-s1',
         data: {
