@@ -28,12 +28,13 @@ import { queueManifestTerminal, FS_CLOCK_SLACK_MS, channelTerminalState } from '
 // Split out at the 800-line cap (T1 ruling 492: SPLIT, NEVER BASELINE) —
 // see beats-channel-scan.mjs's own header for what moved and why.
 import { isDispatchDir, newestChannelSince, scanSummary, cycleDirForInitiative } from './beats-channel-scan.mjs';
-// ROW 109 (T1 1549) — the `priced` wait's own two borrowed pieces: the SAME
-// event reader `reap.mjs`'s teardown polls with, and the SAME "was any row
-// priced" predicate, so "priced" means one thing across the whole runner
-// rather than growing a second notion of it here.
+// ROW 109 (T1 1549) — the `priced` wait's own borrowed pieces: the SAME event
+// reader and "was any row priced" predicate `reap.mjs`'s teardown polls with,
+// so "priced" means one thing across the whole runner. T1 1583 adds a THIRD
+// borrowed piece — `collectAgentRuns`, the same record teardown reaps by, and
+// its `PID_READ_UNKNOWN` sentinel — rather than a second discovery rule here.
 import { readRunEvents } from './run-observe.mjs';
-import { hasPricedEvent } from './reap.mjs';
+import { hasPricedEvent, collectAgentRuns, PID_READ_UNKNOWN } from './reap.mjs';
 import { CONSEQUENCE_POLL_MS } from './beats-page-read.mjs';
 // T1 ruling 1471 — re-exported so `beats-page.mjs` names the wall ceiling
 // beside `STALL_CEILING_MS`/`TERMINAL_UI_GRACE_MS`, its two siblings that
@@ -678,25 +679,47 @@ export function makeAgentChannelDoor(forgeRoot) {
  * event row (a `start`, a phase change, anything with no genuine
  * `cost_usd`) can never be mistaken for the thing this wait exists to see.
  *
+ * T1 1583 — THE SESSION DIR IS NOT WHERE THE MONEY LANDS. Measured live, S3
+ * funded run 3: the session dir never carried a `cost_usd` row across the
+ * WHOLE 180 s bound, while the agent this beat dispatched wrote exactly one
+ * in ITS OWN dispatch dir (`_agent-onboarding-agent-<ts>-<rand>`) — a sibling
+ * directory `sessionLogDir` never looks at. The wait never ended, so the
+ * still-working agent went on writing and committing in the ground: a
+ * containment red caused by watching the wrong directory.
+ *
+ * SO THIS ALSO WATCHES EVERY AGENT RUN THIS STORY DISPATCHED, discovered THE
+ * SAME WAY TEARDOWN DISCOVERS THEM — `collectAgentRuns` (`reap.mjs`), never a
+ * second discovery rule invented here. A run counts only when born AT OR
+ * AFTER this wait's own anchor (`opts.sinceMs`, else this call's own start): a
+ * dir born earlier belongs to a PREVIOUS dispatch, exactly as a stale
+ * `_logs/` entry is not `collectAgentRuns`'s to reap. The session dir is
+ * always a candidate too (the common case), and whichever candidate prices
+ * FIRST ends the wait, named on the result (`dir`) so a reader never has to
+ * guess which log actually carried the spend.
+ *
  * FAIL-CLOSED ON A ROUTE THIS RUNNER CANNOT RESOLVE (§6.15) — `by:
- * 'unresolved'`, immediately, no poll at all. A route that does not match
- * `/sessions/<kind>/<id>`, or a missing `forgeRoot`, is not "not yet priced":
- * reading it that way would burn the whole declared bound in a loop that
- * could never succeed, and report it exactly like a session that is simply
- * taking its time. NEVER THROWS: a read that fails mid-poll (an injected
- * fake, a torn file) is read as "not yet" and the poll continues, because the
- * one thing worse than sitting out the bound is aborting the whole beat over
- * a wait that was only ever evidence.
+ * 'unresolved'`, immediately, no poll at all; reading it as "not yet priced"
+ * would burn the whole bound on a loop that could never succeed. THE SAME
+ * RULE COVERS A `_logs/` SCAN THAT COULD NOT BE TRUSTED: `collectAgentRuns`
+ * reports that as its `PID_READ_UNKNOWN` sentinel rather than throwing, and
+ * this reads it as `by: 'unresolved'` too, immediately — never "nothing
+ * found", which would silently narrow to the session dir alone and call that
+ * patience rather than the blind spot it is. NEVER THROWS OTHERWISE: a read
+ * that fails mid-poll (an injected fake, a torn file, a `collectRuns` call
+ * that itself throws) is read as "not yet" and the poll continues — aborting
+ * the whole beat over a wait that was only ever evidence is worse.
  *
  * @param {string|null} forgeRoot
  * @param {string|null} route the LIVE route the page is standing on
  * @param {number} upTo the beat's own declared bound, in ms
- * @param {{readEvents?: (dir: string) => object[], pollMs?: number, sleep?: (ms: number) => Promise<void>, now?: () => number, log?: (line: string) => void}} [opts]
- * @returns {Promise<{by: 'event'|'timeout'|'unresolved', afterMs: number}>}
+ * @param {{readEvents?: (dir: string) => object[], collectRuns?: (root: string, sinceMs: number) => {dir: string, pid: number|string, markers?: string[]}[], sinceMs?: number, pollMs?: number, sleep?: (ms: number) => Promise<void>, now?: () => number, log?: (line: string) => void}} [opts]
+ * @returns {Promise<{by: 'event'|'timeout'|'unresolved', afterMs: number, dir: string|null}>}
  */
 export async function waitForPricedEvent(forgeRoot, route, upTo, opts = {}) {
   const {
     readEvents: readEventsIn = readRunEvents,
+    collectRuns = collectAgentRuns,
+    sinceMs,
     pollMs = CONSEQUENCE_POLL_MS,
     sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     now = () => Date.now(),
@@ -706,25 +729,65 @@ export async function waitForPricedEvent(forgeRoot, route, upTo, opts = {}) {
   const named = (by) => {
     const where = dir ?? `an unresolved session for route ${JSON.stringify(route ?? null)}`;
     log(`priced wait: no priced event from ${where} within ${upTo} ms — the spend line will say why`);
-    return Object.freeze({ by, afterMs: by === 'unresolved' ? 0 : upTo });
+    return Object.freeze({ by, afterMs: by === 'unresolved' ? 0 : upTo, dir: null });
   };
   if (dir === null) return named('unresolved');
-  const priced = () => {
-    try {
-      return hasPricedEvent(readEventsIn(dir));
-    } catch {
-      // A read that could not happen is not evidence of "not priced" either
-      // way — the loop below simply polls again, the same shape every other
-      // never-throws reader in this file already follows.
-      return false;
-    }
-  };
   const startedAt = now();
-  if (priced()) return Object.freeze({ by: 'event', afterMs: 0 });
+  const anchorMs = typeof sinceMs === 'number' ? sinceMs : startedAt;
+
+  // Every dir worth asking THIS poll: the session dir first (the common
+  // case), then every agent run `collectAgentRuns` admits since the anchor —
+  // deduped, since an onboarding session's own dir carries a `turn.pid` too
+  // (the exact shape `collectAgentRuns`'s own header names) and would
+  // otherwise be read twice. `null` return means the scan itself could not be
+  // trusted (`PID_READ_UNKNOWN`), carried as a named detail rather than a dir
+  // list.
+  const candidates = () => {
+    let runs;
+    try {
+      runs = collectRuns(forgeRoot, anchorMs);
+    } catch {
+      return { dirs: [dir], scanFailed: null }; // a scan that could not even run is not evidence either way
+    }
+    const list = Array.isArray(runs) ? runs : [];
+    const unreadable = list.find((r) => r?.pid === PID_READ_UNKNOWN);
+    if (unreadable !== undefined) {
+      return {
+        dirs: [],
+        scanFailed: `could not scan _logs/ for the agent run(s) this beat dispatched — ${unreadable.dir} could not be read`,
+      };
+    }
+    const dirs = [dir];
+    for (const run of list) if (typeof run?.dir === 'string' && !dirs.includes(run.dir)) dirs.push(run.dir);
+    return { dirs, scanFailed: null };
+  };
+  const check = () => {
+    const { dirs, scanFailed } = candidates();
+    if (scanFailed !== null) return { unresolved: scanFailed };
+    for (const candidate of dirs) {
+      try {
+        if (hasPricedEvent(readEventsIn(candidate))) return { dir: candidate };
+      } catch {
+        // A read that could not happen is not evidence of "not priced" either
+        // way — try the remaining candidates, or the next poll.
+      }
+    }
+    return null;
+  };
+  const unresolvedScan = (detail) => {
+    log(`priced wait: ${detail} — the spend line will say why`);
+    return Object.freeze({ by: 'unresolved', afterMs: 0, dir: null });
+  };
+
+  const first = check();
+  if (first?.unresolved) return unresolvedScan(first.unresolved);
+  if (first?.dir) return Object.freeze({ by: 'event', afterMs: 0, dir: first.dir });
   for (;;) {
     const elapsed = now() - startedAt;
     if (elapsed >= upTo) return named('timeout');
     await sleep(Math.min(pollMs, upTo - elapsed));
-    if (priced()) return Object.freeze({ by: 'event', afterMs: now() - startedAt });
+    const found = check();
+    if (found?.unresolved) return unresolvedScan(found.unresolved);
+    if (found?.dir) return Object.freeze({ by: 'event', afterMs: now() - startedAt, dir: found.dir });
   }
 }
