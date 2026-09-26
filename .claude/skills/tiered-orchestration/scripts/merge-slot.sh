@@ -56,6 +56,8 @@ EXIT_STARVED=15          # STARVED
 EXIT_UPDATE_CONFLICT=17  # UPDATE-BRANCH-CONFLICT — main cannot be merged into the PR; CI on the stale head is never waited on
 EXIT_MERGE_UNVERIFIED=16 # gh pr merge said rc=0 but the closing re-derivation is not
                          # STATE=MERGED
+EXIT_MERGE_STATE_DIRTY=18   # MERGE-STATE-DIRTY — rationale in merge-state-precheck.sh (forge-8vfn.8.1.26)
+EXIT_MERGE_STATE_UNKNOWN=19 # MERGE-STATE-UNKNOWN — rationale in merge-state-precheck.sh (forge-8vfn.8.1.26)
 # T1 693/695. THE PIN PRECONDITION LIVES HERE, not in each lane's own gate.
 #
 # `gate.sh` exits on its STEP LIST only; its pin block prints beside the rc and
@@ -167,12 +169,14 @@ SLOT="${MERGE_SLOT_LOCK:-$CAMPAIGN_DIR/.merge-slot}"
 # each checkout (§15.148). Declared here so `set -u` cannot meet it unset.
 REPO_FOR_CAPS="${MERGE_SLOT_REPO_FOR_CAPS:?MERGE_SLOT_REPO_FOR_CAPS must name the repo the cap check clones from}"
 # SIBLINGS, resolved from THIS file's own directory — never from the campaign,
-# never from $PWD. `ci-terminal.sh` and `pin-precheck.sh` ship in the same
-# skill scripts dir this file does, so `$HERE` (gate.sh's / lanes.sh's own
-# idiom: `"$HERE/gate-rerun-alone.sh"`, `"$HERE/../lane-protocol.md"`) is what
-# finds them, whatever campaign or worktree invokes this script.
+# never from $PWD. `ci-terminal.sh`, `pin-precheck.sh` and `merge-state-
+# precheck.sh` ship in the same skill scripts dir this file does, so `$HERE`
+# (gate.sh's / lanes.sh's own idiom: `"$HERE/gate-rerun-alone.sh"`,
+# `"$HERE/../lane-protocol.md"`) is what finds them, whatever campaign or
+# worktree invokes this script.
 CI_TERMINAL="${MERGE_SLOT_CI_TERMINAL:-$HERE/ci-terminal.sh}"
 PIN_PRECHECK_SH="${MERGE_SLOT_PIN_PRECHECK:-$HERE/pin-precheck.sh}"
+MERGE_STATE_PRECHECK_SH="${MERGE_SLOT_MERGE_STATE_PRECHECK:-$HERE/merge-state-precheck.sh}"
 # forge-8vfn.7.6.130: where the live pin manifests are, so the
 # PINNED-PATH-GAINED-SINCE-GATE check below can be exercised by doors against a
 # fixture directory instead of the production one — same seam shape as SLOT /
@@ -469,6 +473,20 @@ else
   say "MARKER=done RESULT=NO-PIN-PRECONDITION — PIN_GATE_LOG is unset, so nothing checked whether this PR changes a pinned file without declaring it (§15.390). Pass the gate log, or pass PIN_GATE_LOG=none to state on the record that this merge needs no pin precondition (§15.434)."
   exit "$EXIT_PIN"
 fi
+
+# ---- MERGE-STATE PRECHECK (forge-8vfn.8.1.26, T1 ruling 1633) ----
+# FIRST — before update-branch, before any CI wait. Rationale, the bounded
+# retry and the state classification all live in the sibling; this is only
+# the rc-to-marker mapping (same shape as the CI_TERMINAL/PIN_PRECHECK_SH
+# calls below).
+MERGE_STATE_OUT="$("$MERGE_STATE_PRECHECK_SH" "$PR")"; ms_rc=$?
+case "$ms_rc" in
+  0) say "$MERGE_STATE_OUT" ;;
+  18) say "MARKER=done RESULT=$MERGE_STATE_OUT"; exit "$EXIT_MERGE_STATE_DIRTY" ;;
+  19) say "MARKER=done RESULT=$MERGE_STATE_OUT"; exit "$EXIT_MERGE_STATE_UNKNOWN" ;;
+  *) say "MARKER=done RESULT=MERGE-STATE-UNKNOWN — $MERGE_STATE_PRECHECK_SH exited $ms_rc, an unrecognised rc; unknown is never a safe default (§6.15)."
+     exit "$EXIT_MERGE_STATE_UNKNOWN" ;;
+esac
 
 read_head() {
   local h
