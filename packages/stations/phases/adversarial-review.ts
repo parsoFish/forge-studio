@@ -33,17 +33,16 @@ import { projectBrainDir } from '@forge/knowledge';
 import {
   validateReviewFindings,
   writeReviewFindingsJson,
+  readWorkItemsFromDir,
   type ReviewFinding,
   type ReviewFindingsExpectation,
   type ReviewFindingsRecord,
+  type WorkItem,
 } from '@forge/flows';
-import type { EventLogger } from '@forge/kernel';
-import { guardedReadFile, guardedWriteFile, FORGE_ROOT } from '@forge/kernel';
+import { guardedReadFile, guardedWriteFile, FORGE_ROOT, type EventLogger } from '@forge/kernel';
 import { createHash } from 'node:crypto';
-import type { StreamQueryFn } from '@forge/agents';
-import { runAgent } from '@forge/agents';
+import { runAgent, takeScopeSnapshot, scopeViolations, type StreamQueryFn } from '@forge/agents';
 import type { AgentDefinition } from '@forge/contracts';
-import { readWorkItemsFromDir, type WorkItem } from '@forge/flows';
 import { chunkLabel, mergeChunkRecords, partitionChangedFiles, type ReviewChunk,
   splitChunkPerFile,
   mergeSplitRecords,
@@ -54,7 +53,7 @@ import {
   REVIEW_FINDINGS_FILENAME,
   REVIEW_INPUT_REL_DIR,
 } from './adversarial-review-binding.ts';
-import { takeScopeSnapshot, scopeViolations } from '@forge/agents';
+import { trackSpawnRefusal, spawnRefusalFailure } from './review-refusal.ts';
 
 const BASE_REF = 'main';
 const MAX_AUTHOR_ATTEMPTS = 2;
@@ -85,7 +84,7 @@ export type AdversarialReviewResult =
       status: 'failed';
       reason:
         | 'derive-failed' | 'author-invalid' | 'scope-violation' | 'budget-exhausted'
-        | 'spawn-suppressed' | 'spawn-failed' | 'lens-narrowing-invalid';
+        | 'spawn-suppressed' | 'spawn-failed' | 'lens-narrowing-invalid' | 'rate-limited';
       detail: string;
     };
 
@@ -459,11 +458,10 @@ export async function runAdversarialReview(
             : `${basePrompt}\n\n## Previous attempt rejected (fix EXACTLY these, change nothing else)\n\n${lastErrors.map((e) => `- ${e}`).join('\n')}`;
 
         // Band 3 — the one-shot spawn (caller lifecycle: this pipeline owns events).
-        //
-        // `ceilingUsd` is the INITIATIVE's, derived once above and identical for
-        // every chunk (ruling 526) — `runAgent` documents `kickoffCeilingUsd` as
-        // winning over the agent's own declared budget.
+        // `ceilingUsd` is the INITIATIVE's, derived once above and identical for every
+        // chunk (ruling 526) — `kickoffCeilingUsd` wins over the agent's own budget.
         let spawn;
+        const refusalTracker = trackSpawnRefusal();
         try {
           spawn = await runAgent(def, {
             runId: input.initiativeId,
@@ -477,6 +475,7 @@ export async function runAdversarialReview(
             bindings: { initiative: { id: input.initiativeId, costBudgetUsd: input.costBudgetUsd } },
             ...(ceilingUsd !== undefined ? { kickoffCeilingUsd: ceilingUsd } : {}),
             queryFn: opts.queryFn,
+            onMessage: refusalTracker.onMessage,
             ...writeFence,
           });
         } catch (err) {
@@ -525,11 +524,12 @@ export async function runAdversarialReview(
             },
           };
         }
+        const refused = spawnRefusalFailure(refusalTracker.signal(), { attempt, chunk: label }, emit);
+        if (refused) return { ok: false, failure: refused }; // never retried, never author-invalid
 
-        // Mechanical scope guard: the reviewer's only legal write is the
-        // findings file (review-input was pipeline-written pre-snapshot; the
-        // snapshot layers cover untracked-dir collapse + gitignored .forge —
-        // agent-scope-guard.ts).
+        // Mechanical scope guard: the reviewer's only legal write is the findings
+        // file (review-input was pipeline-written pre-snapshot; the snapshot layers
+        // cover untracked-dir collapse + gitignored .forge — agent-scope-guard.ts).
         const postSnap = takeScopeSnapshot(input.worktreePath);
         if (!postSnap.ok) {
           emit('review.scope-guard-degraded', { when: 'post-spawn', chunk: label, error: postSnap.error }, { event_type: 'error' });

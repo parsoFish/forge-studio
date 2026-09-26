@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { reviewFindingsJsonPath, validateReviewFindings } from '@forge/flows';
-import type { StreamQueryFn } from '@forge/agents';
+import { classifyCycleFailure, type StreamQueryFn } from '@forge/agents';
 
 import {
   CODE_LENSES, CYCLE_ID, EXPECTED, collectLogger, makeFixture, run, stubQueryFn,
@@ -319,6 +319,83 @@ test('error_during_execution: spawn-failed, never budget-exhausted misdiagnosis'
     assert.equal(res.status, 'failed');
     assert.equal((res as { reason: string }).reason, 'spawn-failed');
     assert.ok(!/raise the declared budgets/.test((res as { detail: string }).detail));
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('S10 run 28 (forge-8vfn.8.1.13): a spawn refused by the account\'s weekly usage limit reports result_subtype "success" — rate-limited, never author-invalid, never retried, and the cycle classifies transient/environment', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger, events } = collectLogger(fx.logsRoot);
+    let calls = 0;
+    const qf = ((_p: { prompt: string }) => {
+      calls += 1;
+      async function* gen(): AsyncGenerator<unknown> {
+        // The exact shape from the run-28 evidence transcripts
+        // (f9a86e9d…/63dae31d…): the assistant frame carries the SDK's own
+        // typed refusal (`error: 'rate_limit'`) and text ("You've hit your
+        // weekly limit · resets Oct 1, 11pm (Australia/Brisbane)"), while the
+        // result STILL reports `subtype: 'success'` — flagged only by its own
+        // `is_error` + `api_error_status`, exactly the "error-shaped success"
+        // campaign rule 6.15 names.
+        yield {
+          type: 'assistant',
+          message: { content: [{ type: 'text', text: "You've hit your weekly limit · resets Oct 1, 11pm (Australia/Brisbane)" }] },
+          error: 'rate_limit',
+        };
+        yield {
+          type: 'result',
+          subtype: 'success',
+          is_error: true,
+          api_error_status: 429,
+          total_cost_usd: 0.2304,
+          usage: { input_tokens: 5, output_tokens: 7 },
+        };
+      }
+      return gen();
+    }) as unknown as StreamQueryFn;
+    const res = await run(fx, qf, logger);
+    assert.equal(res.status, 'failed');
+    assert.equal((res as { reason: string }).reason, 'rate-limited');
+    assert.equal(calls, 1, 'a refusal must not burn the bounded retry loop\'s second attempt');
+    assert.equal(
+      events.filter((e) => e.message === 'review.author.invalid').length,
+      0,
+      'a refused turn must never read as the reviewer\'s own authoring failure',
+    );
+    const rl = events.find((e) => e.message === 'review.rate-limited');
+    assert.ok(rl, 'expected a review.rate-limited error event');
+    assert.equal((rl!.metadata as Record<string, unknown>).rate_limited, true);
+    const classification = classifyCycleFailure(events);
+    assert.equal(classification.kind, 'transient');
+    assert.equal(classification.environment, true);
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('genuine author-invalid (no refusal signal, no file authored) still exhausts both attempts and fails author-invalid — never misread as rate-limited (forge-8vfn.8.1.13 control)', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger, events } = collectLogger(fx.logsRoot);
+    let calls = 0;
+    const qf = ((_p: { prompt: string }) => {
+      calls += 1;
+      async function* gen(): AsyncGenerator<unknown> {
+        yield { type: 'result', subtype: 'success', total_cost_usd: 0.1, usage: { input_tokens: 5, output_tokens: 7 } };
+      }
+      return gen();
+    }) as unknown as StreamQueryFn;
+    const res = await run(fx, qf, logger);
+    assert.equal(res.status, 'failed');
+    assert.equal((res as { reason: string }).reason, 'author-invalid');
+    assert.equal(calls, 2, 'a genuine author-invalid still gets its full bounded retry — the fix must not cost the honest case its second attempt');
+    assert.equal(events.filter((e) => e.message === 'review.rate-limited').length, 0);
   } finally {
     fx.cleanup();
     restore();
