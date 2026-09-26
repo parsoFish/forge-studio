@@ -61,7 +61,7 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,156 | **12,578** | ratified 12,578 — M7-C door re-exports OD (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,091 | **13,091** | ratified 13,091 — row 99 DNS failure classified environment/transient (forge-8vfn.8.1.11), +26 lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 59 | 20,542 | **20,504** | ratified 20,504 — row 94 heartbeat + deadline count only progress (forge-8vfn.8.1.9), lane-ratified under ruling 666; see git history for prior raises. |
-| `flows` | 83 | 23,585 | **23,375** | ratified 23,375 — row 93 fail-closed tri-state stale-branch probe (forge-8vfn.8.1.8), +61 lane-ratified under ruling 666; see git history for prior raises. |
+| `flows` | 83 | 23,585 | **23,385** | ratified 23,385 — row 104 gh 'no pull requests found' is NONE (forge-8vfn.8.1.12), +10 lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 14 | 2,113 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 38 | 11,132 | **11,132** | ratified 11,132 — row 97 phase pipelines pass their logger to runAgent (forge-8vfn.8.1.10), lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
