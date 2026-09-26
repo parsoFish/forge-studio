@@ -381,7 +381,7 @@ export const REVIEW_LOOP = [
       // `approve-and-merge` — same shape, a fraction of the bound: this POST
       // flips two booleans server-side and does nothing resembling the ~72 s
       // release-finalize approve-and-merge blocks on.
-      act: 'Read the fix against the criterion, and resolve the blocking comment it answers',
+      act: 'Read the fix against the criterion, and resolve the blocking comment it answers (the first criterion\'s, said so in the log, when none names precedence)',
       do: [
         {
           pressWithin: {
