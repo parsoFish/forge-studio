@@ -84,7 +84,7 @@ test('6.11.29: a repo NOT carrying the story prefix is refused, even though it i
   }
 });
 
-test('6.11.29: NO manifest means nothing is deleted — the state every run had until now', () => {
+test('control: NO manifest (real ENOENT) means nothing is deleted and no refusal is named — the state every run had until now', () => {
   const root = mkdtempSync(join(tmpdir(), 'sweep-door-'));
   const calls: string[][] = [];
   try {
@@ -93,14 +93,20 @@ test('6.11.29: NO manifest means nothing is deleted — the state every run had 
     });
     assert.deepEqual(res.deleted, []);
     assert.deepEqual(calls, []);
+    // ROW 102b/17 control: a genuinely ABSENT manifest is not the same fact
+    // as one that exists and could not be trusted — unlike the two tests
+    // above, this must stay silent, exactly as before.
+    assert.deepEqual(res.refusals, []);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('6.11.29: an UNPARSEABLE manifest deletes nothing rather than throwing', () => {
+test('ROW 102b (RED) finding 17: an UNPARSEABLE manifest deletes nothing, and NAMES the refusal rather than silently reading as "nothing minted"', () => {
   // A corrupt manifest must not take the trailing sweep down with it, and must
-  // certainly not be read as "delete everything". Fails closed.
+  // certainly not be read as "delete everything". Fails closed — but unlike
+  // every other refusal path in this file, this one used to say NOTHING: a
+  // minted remote genuinely on this run's manifest would leak unflagged.
   const root = rootWithManifest('{ this is not json');
   const calls: string[][] = [];
   try {
@@ -109,17 +115,21 @@ test('6.11.29: an UNPARSEABLE manifest deletes nothing rather than throwing', ()
     });
     assert.deepEqual(res.deleted, []);
     assert.deepEqual(calls, []);
+    assert.equal(res.refusals.length, 1, `expected a named refusal for the unparseable manifest: ${JSON.stringify(res)}`);
+    assert.match(res.refusals[0], /minted-remotes\.json/);
+    assert.match(res.refusals[0], /REFUSING/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('6.11.29: a manifest that PARSES but is not an array deletes nothing, and does not throw', () => {
+test('ROW 102b (RED) finding 17: a manifest that PARSES but is not an array deletes nothing, does not throw, and NAMES the refusal', () => {
   // Found by mutation, not by design: disabling the `Array.isArray` check left
   // every other test in this file green. Without it, `created` becomes a
   // non-iterable object, `created.length === 0` is `undefined === 0` (false),
   // and the `for…of` below THROWS — inside the trailing sweep, at the very end
-  // of a run that has otherwise finished. A corrupt manifest must cost nothing.
+  // of a run that has otherwise finished. A corrupt manifest must cost nothing
+  // — and, per ROW 102b/17, must say so rather than reading as clean.
   const root = rootWithManifest('{"nameWithOwner":"parsoFish/story-s2"}');
   const calls: string[][] = [];
   try {
@@ -128,6 +138,8 @@ test('6.11.29: a manifest that PARSES but is not an array deletes nothing, and d
     });
     assert.deepEqual(res.deleted, []);
     assert.deepEqual(calls, [], 'a malformed manifest is never read as consent to delete');
+    assert.equal(res.refusals.length, 1, `expected a named refusal for the non-array manifest: ${JSON.stringify(res)}`);
+    assert.match(res.refusals[0], /minted-remotes\.json/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
