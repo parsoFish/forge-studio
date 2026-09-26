@@ -46,7 +46,6 @@ import { dirname, join, resolve } from 'node:path';
 
 import {
   SUPPORTED_KINDS,
-  FORGE_ROOT,
   planRun,
   renderPlanOnly,
   judgeRun,
@@ -63,12 +62,11 @@ import { writeWorkItem } from '../../packages/flows/work-item.ts';
 import { getPaths, worktreeDemoJsonPath } from '@forge/flows';
 import { ghRunnerFor, assertGhOwner, recordMintedRemote } from '@forge/kernel';
 
-const BRIDGE_URL = 'http://127.0.0.1:4123';
 const STUDIO_TIMEOUT_MS = 150_000;
 /** One `forge serve --once` pass runs a whole develop cycle (dev-loop → demo
  *  → adversarial-review → verdict) to `ready-for-review`, synchronously, per
  *  `scripts/verify-cycle.mjs`'s own header. This is the per-pass child-process
- *  budget, not the outcome-wait budget (`DEVELOP_WAIT_DEADLINE_MS`, below). */
+ *  budget, not the overall outcome-wait budget (`MAX_SERVE_PASSES`, below). */
 const SERVE_ONCE_TIMEOUT_MS = 45 * 60_000;
 /** How many `serve --once` passes this driver will spend trying to reach
  *  `ready-for-review`/`failed` before giving up and reporting a timeout — a
@@ -439,7 +437,7 @@ async function main(argv) {
     return;
   }
 
-  const state = { groundProvisioned: false, remoteMinted: false, worktreeCreated: false, studio: null };
+  const state = { groundProvisioned: false, remoteMinted: false, studio: null };
   let exitCode = 0;
   try {
     provisionGround(plan);
@@ -449,7 +447,6 @@ async function main(argv) {
     state.remoteMinted = true;
 
     createInitiativeWorktree(plan);
-    state.worktreeCreated = true;
 
     state.studio = await bootStudioStep(plan);
 
