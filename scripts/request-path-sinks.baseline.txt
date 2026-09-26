@@ -326,6 +326,10 @@ packages/knowledge/brain-lint.ts readFileSync 1
 packages/knowledge/brain-paths.ts existsSync 2
 packages/knowledge/brain-paths.ts readFileSync 1
 packages/knowledge/brain-paths.ts realpathSync 1
+packages/knowledge/brain-write-lease.ts readFileSync 1
+packages/knowledge/brain-write-lease.ts statSync 1
+packages/knowledge/brain-write-lease.ts unlinkSync 1
+packages/knowledge/brain-write-lease.ts writeFileSync 1
 packages/knowledge/bridge-studio-kb-consolidate.ts appendFileSync 2
 packages/knowledge/bridge-studio-kb-consolidate.ts mkdirSync 2
 packages/knowledge/bridge-studio-kb-consolidate.ts readFileSync 1
