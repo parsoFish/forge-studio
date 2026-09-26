@@ -107,6 +107,50 @@ async function main() {
   // created, so a previous run's residue is never signalled (reap.mjs header).
   const startedMs = Date.now();
 
+  // 0. THE TWO CHECKOUT-OVERLAP LOCKS — moved ahead of even loading a story
+  //    file (M7-COMMON §6.16, `lock-guard.test.ts`'s "DOOR: a story run
+  //    refuses BEFORE booting a bridge"). These used to sit beside the other
+  //    preflight refusals below, after `--story` had already been resolved
+  //    against the real story files on disk. That let a DOOR test asserting
+  //    "refuses before a bridge boots" only be driven with a REAL, resolvable
+  //    story id — S8's real ground — so a broken guard did not stop at the
+  //    lock check, it fell through everything below (spend gate, sweep,
+  //    fixture-ground provisioning, a REAL bridge boot with a real registry
+  //    refresh against GitHub) before anything else had a chance to refuse.
+  //    Measured: exactly that happened once, live.
+  //
+  //    Moved here, both locks are checked before this process has read a
+  //    single story file, so a test that probes with an id that can never
+  //    resolve (`__guard_probe__`) is hermetic REGARDLESS of whether the
+  //    guard is working: a working guard refuses right here with its own
+  //    named line; a broken one falls through to the ordinary
+  //    `--story "__guard_probe__" matched nothing` throw a few lines down —
+  //    still before any spend gate, sweep, or bridge — and the two are
+  //    distinguishable by which message actually printed, so the DOOR test
+  //    still reds when the guard itself does not refuse.
+  //
+  //    Bead `forge-8vfn.7.6.13` (ruling 634): a full test suite writes into
+  //    `projects/`, the directory a story run hashes before and after to
+  //    prove its ground did not drift; the two took different locks and so
+  //    overlapped by construction. Refused first, before anything else in
+  //    this run touches disk, and it never sleeps — the lane's own Monitor is
+  //    what waits (§15.335).
+  const overlap = suiteLockVerdict();
+  console.log(`[stories] ${overlap.reason}`);
+  if (!overlap.ok) return 1;
+
+  // 0b. THE ORDER ITSELF — finding row 73 (2026-09-19). A launcher that holds
+  //     the run-lock (by ancestry) without ALSO holding the suite-lock is
+  //     exactly the shape that can be waiting for the suite-lock while
+  //     holding the run-lock — the reverse of `with-locks.sh`'s ratified order
+  //     and the deadlock this bead exists to close. Checked here, before any
+  //     spawn, port bind, or story resolution, with the runner's own
+  //     lock-refusal exit code (75) so a refusal is never read as a suite
+  //     that ran and went red.
+  const order = lockOrderVerdict();
+  console.log(`[stories] ${order.reason}`);
+  if (!order.ok) return EXIT_LOCK_REFUSED;
+
   let stories = [];
   for (const file of storyFiles()) {
     stories.push(await loadStory(pathToFileURL(file).href));
@@ -243,29 +287,6 @@ async function main() {
     return 1;
   }
   console.log(`[stories] remote switch ok — ${remote.reason}`);
-
-  // 1d. The OTHER kind of work in this checkout — bead `forge-8vfn.7.6.13`
-  //     (ruling 634). A full test suite writes into `projects/`
-  //     (`agent-run-dispatch.test.ts`'s fixture), which is the directory the
-  //     ground hash below measures before and after to prove this run's ground
-  //     did not drift. The two took different locks and so overlapped by
-  //     construction; lane A's fence caught one as an UNATTRIBUTABLE write.
-  //     Refused HERE, beside the other refusals and before the bridge, and it
-  //     never sleeps — the lane's own Monitor is what waits (§15.335).
-  const overlap = suiteLockVerdict();
-  console.log(`[stories] ${overlap.reason}`);
-  if (!overlap.ok) return 1;
-
-  // 1d-ii. THE ORDER ITSELF — finding row 73 (2026-09-19). A launcher that
-  //     holds the run-lock (by ancestry) without ALSO holding the suite-lock is
-  //     exactly the shape that can be waiting for the suite-lock while holding
-  //     the run-lock — the reverse of `with-locks.sh`'s ratified order and the
-  //     deadlock this bead exists to close. Checked here, before any spawn or
-  //     port bind, with the runner's own lock-refusal exit code (75) so a
-  //     refusal is never read as a suite that ran and went red.
-  const order = lockOrderVerdict();
-  console.log(`[stories] ${order.reason}`);
-  if (!order.ok) return EXIT_LOCK_REFUSED;
 
   // 2. Memory — a starved host OOM-kills the browser and the crash reads as a
   //    code defect.

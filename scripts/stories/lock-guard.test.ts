@@ -143,13 +143,36 @@ test('NOT CONFIGURED says so out loud — a silent guard is indistinguishable fr
   assert.match(v.reason, new RegExp(SUITE_LOCK_ENV), 'and must name the variable that would configure it');
 });
 
-test('DOOR: a story run refuses BEFORE booting a bridge', () => {
+// AMENDED for M7-COMMON §6.16. This used to spawn `--story S8`, a REAL,
+// resolvable story with real ground — so a broken guard did not stop here at
+// all: it fell through the spend gate, the leading sweep, fixture-ground
+// provisioning and all the way to a REAL bridge boot with a real registry
+// refresh against GitHub, writing tracked files in this checkout. Measured
+// live, once: an S8 run booted, refreshed `studio/community/registry.yaml`
+// against GitHub, and was killed mid-run leaving `projects/story-s8` behind.
+//
+// `__guard_probe__` cannot resolve to any real story — `storyFiles()` never
+// produces that id — so this spawn is hermetic REGARDLESS of whether the
+// guard actually refuses: `run.mjs` now checks the suite lock and the lock
+// order BEFORE it reads a single story file (see its own `main()`, step 0),
+// so a WORKING guard refuses right here, before `--story` is even resolved,
+// with the same "refusing to start a story run" line this test has always
+// asserted. A BROKEN guard falls through to the ordinary
+// `--story "__guard_probe__" matched nothing` throw a few lines later in
+// `main()` — still strictly before the spend gate, the sweep, or the bridge
+// probe, so nothing is ever written and no bridge ever boots either way — but
+// that throw's message does NOT match `/refusing to start a story run/`, so
+// this assertion still REDs exactly when the guard fails to refuse. Proven by
+// mutation: see this initiative's report for the transcript (guard forced to
+// {ok:true}, this test REDs, `git status --short` stays empty, no
+// `_logs/_bridge-*` is created).
+test('DOOR: a story run refuses BEFORE booting a bridge (and before it can even resolve a real story)', () => {
   const lock = heldLock();
   try {
     let stdout = '';
     let code = 0;
     try {
-      stdout = execFileSync(process.execPath, ['scripts/stories/run.mjs', '--story', 'S8', '--approve-spend'], {
+      stdout = execFileSync(process.execPath, ['scripts/stories/run.mjs', '--story', '__guard_probe__', '--approve-spend'], {
         cwd: REPO,
         env: { ...process.env, [SUITE_LOCK_ENV]: lock.path },
         encoding: 'utf8',
@@ -162,7 +185,12 @@ test('DOOR: a story run refuses BEFORE booting a bridge', () => {
     }
 
     assert.notEqual(code, 0, 'a refused run must exit non-zero — a zero exit is a run nobody knows did not happen');
-    assert.match(stdout, /refusing to start a story run/, 'and say why in one line');
+    assert.match(
+      stdout,
+      /refusing to start a story run/,
+      'the guard itself must refuse — a fall-through to "--story \\"__guard_probe__\\" matched nothing" means ' +
+        'the guard did not fire, which is the exact defect this door exists to catch',
+    );
     assert.equal(
       stdout.includes('booting our own bridge'),
       false,
