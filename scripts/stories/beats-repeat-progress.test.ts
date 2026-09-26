@@ -384,4 +384,159 @@ describe('7.6.77 repeat half — S1 beat 11\'s own repeat meets the progress bou
     assert.match(r.error!, /declared bound \(600 ms\) ran out/,
       `unchanged for every story that declares no progress bound: ${r.error}`);
   });
+
+  // T1 ruling 1545 — S1 run 2 went red at 481s while the architect stayed in
+  // `drafting` (plan emitted 06:42:55→06:47:31, completeness critic ran to
+  // 06:48:35, a revision turn was in flight 140s when cut): `session-phase`
+  // never changed, but its session's `events.jsonl` kept growing, with gaps up
+  // to ~230s. The per-transition clock must be PROGRESS-AWARE: it resets on a
+  // NEW LINE appended to the session it is standing on, not only on a key
+  // change. 480s stays the no-progress bound — nothing here raises it.
+  describe('1545 — the clock also resets on the session\'s OWN events.jsonl growing', () => {
+    test('a frozen key does not stall while the session log keeps gaining lines', async () => {
+      const { beat, step } = realBeat11();
+      const startedAt = Date.now();
+      // A line every 100 ms — well inside the 400 ms bound `realBeat11()`
+      // declares — while the key it would otherwise watch never moves at all.
+      // Read off the REAL CLOCK, never a `setInterval` callback: `run` below
+      // has no per-round delay in the other doors in this block, and a poll
+      // loop with nothing to await but already-resolved promises can chain
+      // entirely on microtasks and starve a timer of ever firing before the
+      // per-transition bound expires (measured while writing this door — see
+      // the events-reset door further down for the same fix).
+      const readSessionEventsNow = async () => Math.floor((Date.now() - startedAt) / 100);
+
+      const r = await runRepeatStep({
+        page: gatePresent as never,
+        step: step as never,
+        left: () => Math.max(0, 4_000 - (Date.now() - startedAt)),
+        // Ends on real elapsed time alone — never on the frozen key or on the
+        // session count — so the door proves the SESSION reset kept the clock
+        // alive for the whole stretch, not that the loop happened to finish
+        // first.
+        matches: async () => Date.now() - startedAt >= 900,
+        timeoutMs: 4_000,
+        run: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 30));
+          return { waitedForHandle: false, error: null };
+        },
+        progress: beat.wait as never,
+        readProgressNow: async () => ({ value: 'drafting', source: 'root', carriers: 1 }), // FROZEN throughout
+        readSessionEventsNow,
+      });
+      const took = Date.now() - startedAt;
+
+      assert.equal(r.error, null,
+        `growing events.jsonl must count as progress even though the key never moves: ${r.error}`);
+      assert.ok(took >= 900, `and it really ran the whole stretch rather than short-circuiting: ${took} ms`);
+    });
+
+    test('no key change and no new lines: stalls at perTransition exactly as today', async () => {
+      const { beat, step } = realBeat11();
+      const startedAt = Date.now();
+
+      const r = await runRepeatStep({
+        page: gatePresent as never,
+        step: step as never,
+        left: () => Math.max(0, 4_000 - (Date.now() - startedAt)),
+        matches: async () => false,
+        timeoutMs: 4_000,
+        run: async () => ({ waitedForHandle: false, error: null }),
+        progress: beat.wait as never,
+        readProgressNow: async () => ({ value: 'drafting', source: 'root', carriers: 1 }),
+        readSessionEventsNow: async () => 5, // constant — no growth, ever
+      });
+      const took = Date.now() - startedAt;
+
+      assert.match(r.error!, /^stalled-no-transition \(repeat\):/,
+        `a flat key AND a flat session log must still stall, in substance exactly as before: ${r.error}`);
+      assert.match(r.error!, /changed 0 time\(s\)/, `the key-change count is unchanged: ${r.error}`);
+      assert.ok(took < 2_000, `at the progress bound, not the 4s ceiling — took ${took} ms`);
+    });
+
+    test('an absent/unreadable session log is not progress: fails closed to key-only, unchanged', async () => {
+      const { beat, step } = realBeat11();
+      const startedAt = Date.now();
+
+      const withNullReader = await runRepeatStep({
+        page: gatePresent as never,
+        step: step as never,
+        left: () => Math.max(0, 4_000 - (Date.now() - startedAt)),
+        matches: async () => false,
+        timeoutMs: 4_000,
+        run: async () => ({ waitedForHandle: false, error: null }),
+        progress: beat.wait as never,
+        readProgressNow: async () => ({ value: 'drafting', source: 'root', carriers: 1 }),
+        // The route did not resolve to a session at all — §6.15: unknown is
+        // named, never read as progress.
+        readSessionEventsNow: async () => null,
+      });
+
+      const startedAt2 = Date.now();
+      const withNoReaderAtAll = await runRepeatStep({
+        page: gatePresent as never,
+        step: step as never,
+        left: () => Math.max(0, 4_000 - (Date.now() - startedAt2)),
+        matches: async () => false,
+        timeoutMs: 4_000,
+        run: async () => ({ waitedForHandle: false, error: null }),
+        progress: beat.wait as never,
+        readProgressNow: async () => ({ value: 'drafting', source: 'root', carriers: 1 }),
+        // readSessionEventsNow omitted entirely — today's behaviour.
+      });
+
+      assert.match(withNullReader.error!, /^stalled-no-transition \(repeat\):/, `${withNullReader.error}`);
+      assert.match(withNoReaderAtAll.error!, /^stalled-no-transition \(repeat\):/, `${withNoReaderAtAll.error}`);
+      // Same substance either way: an absent session reading changes nothing.
+      assert.match(withNullReader.error!, /changed 0 time\(s\)/);
+      assert.match(withNoReaderAtAll.error!, /changed 0 time\(s\)/);
+    });
+
+    test('the stall message names its last reset — a key change', async () => {
+      const { beat, step } = realBeat11();
+      const startedAt = Date.now();
+      const r = await runRepeatStep({
+        page: gatePresent as never,
+        step: step as never,
+        left: () => Math.max(0, 4_000 - (Date.now() - startedAt)),
+        matches: async () => false,
+        timeoutMs: 4_000,
+        run: async () => ({ waitedForHandle: false, error: null }),
+        progress: beat.wait as never,
+        readProgressNow: async () => ({ value: 'drafting', source: 'root', carriers: 1 }), // sighted once, then frozen
+        readSessionEventsNow: async () => 3, // constant — never the source of the last reset
+      });
+      assert.match(r.error!, /last reset was a key change/,
+        `the key's own first sighting is the only reset that ever happened: ${r.error}`);
+    });
+
+    test('the stall message names its last reset — N new events.jsonl line(s), when that came after the key', async () => {
+      const { beat, step } = realBeat11();
+      const startedAt = Date.now();
+      // One growth burst shortly after the key's own first sighting (t=0),
+      // then nothing — the LAST reset is the session, not the key's stale
+      // first read. Read off the real clock, never a `setTimeout` callback: a
+      // busy poll loop with no per-round delay can spin entirely on
+      // microtasks and starve a timer of ever firing before the clock expires
+      // (measured while writing this door).
+      const readSessionEventsNow = async () => (Date.now() - startedAt >= 60 ? 9 : 1);
+
+      const r = await runRepeatStep({
+        page: gatePresent as never,
+        step: step as never,
+        left: () => Math.max(0, 4_000 - (Date.now() - startedAt)),
+        matches: async () => false,
+        timeoutMs: 4_000,
+        run: async () => ({ waitedForHandle: false, error: null }),
+        progress: beat.wait as never,
+        readProgressNow: async () => ({ value: 'drafting', source: 'root', carriers: 1 }),
+        readSessionEventsNow,
+      });
+
+      assert.match(r.error!, /8 new events\.jsonl line\(s\)/,
+        `the message must name the LATER reset, the events growth, not the stale key change: ${r.error}`);
+      assert.doesNotMatch(r.error!, /last reset was a key change/,
+        'the key change is stale by the time this stalls');
+    });
+  });
 });
