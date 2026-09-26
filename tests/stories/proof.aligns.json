@@ -1,0 +1,4 @@
+{
+  "aligns": "none",
+  "reason": "Harness proof story (M1-F, forge-8vfn.2.17) proving beat mechanics (press+fill, nested data-*, route binding) — a runner concern, not a product decision tied to an ADR or theme."
+}

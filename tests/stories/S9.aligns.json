@@ -1,0 +1,29 @@
+{
+  "aligns": [
+    {
+      "path": "docs/decisions/025-live-observability.md",
+      "digest": "87e4f6d186aeff8a",
+      "why": "Beats 8/13/14: live cost/tokens shown per-session and on the cross-run ledger"
+    },
+    {
+      "path": "brain/forge-dev/themes/derived-never-stored-run-model.md",
+      "digest": "9aa220f2d1e9017c",
+      "why": "Beat14: ledger-cost-usd \"omitted, not zeroed\" — honest-absent stated explicitly"
+    },
+    {
+      "path": "brain/forge-dev/themes/cost-event-phase-aware-aggregation-rule.md",
+      "digest": "cb015d63d3d48783",
+      "why": "Beats 13-14: /monitor's ledger joins flow runs, standalone dispatches AND sessions — \"a beat asserting a bare total against three independent sources is wrong again the moment any one changes\""
+    },
+    {
+      "path": "docs/decisions/043-generic-interactive-surface.md",
+      "digest": "d0e89ce5f09d55fd",
+      "why": "Beat12: \"the ONLY place in the nine stories where the BARE generic interview is exercised\" (session-answer/SessionInteractivePanel)"
+    },
+    {
+      "path": "docs/decisions/003-skills-not-self-baked-agents.md",
+      "digest": "970e680036e20164",
+      "why": "Beat11: fixed vs range model-tier picker — \"the tier comes from the agent's own SKILL-declared envelope... never a UI decision\""
+    }
+  ]
+}

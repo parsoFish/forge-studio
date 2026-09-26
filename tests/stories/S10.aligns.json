@@ -1,0 +1,44 @@
+{
+  "aligns": [
+    {
+      "path": "docs/decisions/040-review-send-back-develop-loop.md",
+      "digest": "89c1391531aa406f",
+      "why": "The review-loop beats (S10.review.mjs): one anchored blocking comment -> fix-WI -> same-branch re-dispatch -> re-review — \"the send-back the whole story is built around\""
+    },
+    {
+      "path": "docs/decisions/011-unattended-scheduler.md",
+      "digest": "116d3c980ffcb8f4",
+      "why": "Beats 7-9: scheduler claim mechanics, _queue/pending|in-flight|ready-for-review state machine, scheduler-start handle"
+    },
+    {
+      "path": "docs/decisions/019-cycle-resume-from-unifier.md",
+      "digest": "deb709a1a21f64db",
+      "why": "Act2 (S10.act2.mjs): abandon/requeue/resume preserves finished work items and branch commits — \"the second attempt starts from what the first one finished\""
+    },
+    {
+      "path": "docs/decisions/028-flow-engine.md",
+      "digest": "d6070562f8b90422",
+      "why": "forge-develop flow run: node ids dev/integrate/adversarial-review/review, timeline rows and per-node status/cost"
+    },
+    {
+      "path": "docs/decisions/036-orchestrator-owned-gate-execution.md",
+      "digest": "1809484b13f19b68",
+      "why": "The integrate station assembles evidence for review before any human or agent judges it; gates are orchestrator verbs (plan gate, review gate, merge)"
+    },
+    {
+      "path": "docs/decisions/037-compiled-wi-contracts.md",
+      "digest": "8bdbba0605d9775f",
+      "why": "S10.constants.mjs CYCLE_BOUND comment explicitly names \"the ADR 037 quarantine\" as one of beat8's three distinct blockers"
+    },
+    {
+      "path": "brain/forge-dev/themes/cost-restatement-rule.md",
+      "digest": "e0c2accd772c03aa",
+      "why": "Exit-row cost check: sumAuthoritativeCostFromLines, \"never the naive sum, which double-counts by more than 2x\""
+    },
+    {
+      "path": "brain/forge-dev/themes/forge-ui-data-attribute-contract-discipline.md",
+      "digest": "fb31acefbdbdb088",
+      "why": "§15.473 quoted twice (\"row presence is a property of the flow definition, not of the run\"); §15.358 root-vs-page-section attribute location findings"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "aligns": [
+    {
+      "path": "brain/forge-dev/themes/brain-read-policy.md",
+      "digest": "99859c38a0b74b2f",
+      "why": "Beat3: review-band is exactly the band \"CLAUDE.md already grants the reviewer an advisory read of\" — matches the policy's reviewer-advisory-Brain-3 clause"
+    },
+    {
+      "path": "docs/decisions/018-three-brain-model.md",
+      "digest": "f5075ef46f760658",
+      "why": "Beat3: flow-bound KB with band scoping (integrate-band/review-band) is the KB-scope structure this ADR defines"
+    },
+    {
+      "path": "docs/decisions/010-brain-first.md",
+      "digest": "15778d15c1fe06f8",
+      "why": "Beat12's whole premise: the compounding claim = a planner reading what the reflector wrote (per-agent brainAccess)"
+    },
+    {
+      "path": "docs/decisions/043-generic-interactive-surface.md",
+      "digest": "d0e89ce5f09d55fd",
+      "why": "Beat5: project-brain \"declares neither a turnSpec nor a panel... session-answer/submit-answers/verdict-approve never appear on an S6 page\" — same boundary-drawing as S2 beat10"
+    },
+    {
+      "path": "brain/forge-dev/themes/forge-ui-data-attribute-contract-discipline.md",
+      "digest": "fb31acefbdbdb088",
+      "why": "The §15.240 session-phase-vocabulary class swept across S6/S7/S9 explicitly cited (beat11); ingest-naming ban (check-kb-ingest-affordance.mjs) as contract-guard discipline"
+    }
+  ]
+}

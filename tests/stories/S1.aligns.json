@@ -1,0 +1,39 @@
+{
+  "aligns": [
+    {
+      "path": "brain/forge-dev/themes/forge-ui-data-attribute-contract-discipline.md",
+      "digest": "fb31acefbdbdb088",
+      "why": "Beat1/header repoints the DOM-contract citation (bead 7.4.1, ruling 444) and quotes its root-then-descendants rule; beats 7-8 hinge on the same root-shadowing fix (session-id on the session-shell…"
+    },
+    {
+      "path": "brain/forge-dev/themes/forge-project-onboarding-contract.md",
+      "digest": "13521c8c07f0e9fa",
+      "why": "Beat3 names C6 (\"satisfiable merge model is advisory... checkC6 is never hard\") by clause id; beat9 walks C1b/C2/C4/C8/DEMO-SKILL/DEMO-ALIGN tiers by name"
+    },
+    {
+      "path": "brain/forge-dev/themes/background-work-server-owned-client-observes.md",
+      "digest": "7130426b3ee79b5c",
+      "why": "Beat4: onboard-run-id published only \"from the moment the run actually begins... which is the declared-data-fails-open shape\" — the theme's own vocabulary reused near-verbatim"
+    },
+    {
+      "path": "docs/decisions/043-generic-interactive-surface.md",
+      "digest": "d0e89ce5f09d55fd",
+      "why": "Beat4: the onboarding brief form becomes \"a CLIENT of the affordance, which is ADR 043's own direction\" (explicit ADR citation)"
+    },
+    {
+      "path": "docs/decisions/020-architect-in-ui.md",
+      "digest": "a223ff6e8f292498",
+      "why": "Act3 (beats 10-11, S1.act3.mjs): interview -> draft -> critique -> plan-gate -> approve loop, session-checkpointed"
+    },
+    {
+      "path": "docs/decisions/021-local-review-and-unified-demo.md",
+      "digest": "2169f0726f07bfd9",
+      "why": "Beat8: demo-builder session (briefing->generating->awaiting-review->locking->locked), verdict-approve finalising a locked demo"
+    },
+    {
+      "path": "docs/decisions/034-studio-aligned-contract.md",
+      "digest": "59f71bf30a3eb184",
+      "why": "Beats 3 and 9: preflight-status/flow-ready/checklist keys are the unified project-readiness contract"
+    }
+  ]
+}

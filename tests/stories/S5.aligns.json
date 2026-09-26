@@ -1,0 +1,29 @@
+{
+  "aligns": [
+    {
+      "path": "brain/forge-dev/themes/derived-never-stored-run-model.md",
+      "digest": "9aa220f2d1e9017c",
+      "why": "Beat13: ledger-cost-usd \"OMITTED rather than zeroed... 'absent' and '0.00' are different facts\" — the theme's own honest-absent principle"
+    },
+    {
+      "path": "docs/decisions/003-skills-not-self-baked-agents.md",
+      "digest": "970e680036e20164",
+      "why": "Beat5 narration: \"an agent is not written, it is assembled out of skills the library already holds\""
+    },
+    {
+      "path": "docs/decisions/025-live-observability.md",
+      "digest": "87e4f6d186aeff8a",
+      "why": "Beat13: a real recorded cost figure on the agent's own ledger row, live off a completed dispatch"
+    },
+    {
+      "path": "docs/decisions/027-studio-object-model.md",
+      "digest": "533bfadb091c283f",
+      "why": "Beats 5-8: agent-as-data — composed skills/tools/MCP fence, readiness checks over the definition"
+    },
+    {
+      "path": "brain/forge-dev/themes/background-work-server-owned-client-observes.md",
+      "digest": "7130426b3ee79b5c",
+      "why": "Beat11: run-id/run-status: 'running' published dispatch-time before navigation"
+    }
+  ]
+}

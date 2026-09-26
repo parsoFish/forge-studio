@@ -1,0 +1,34 @@
+{
+  "aligns": [
+    {
+      "path": "docs/decisions/028-flow-engine.md",
+      "digest": "d6070562f8b90422",
+      "why": "The whole builder: FlowDef stations/edges, validateFlow's agent-ref check, save/lint (beats 4-7)"
+    },
+    {
+      "path": "docs/decisions/030-canvas-tech.md",
+      "digest": "ad3892f8f2cf27c2",
+      "why": "Beat4: drag-and-drop canvas, place-station-<ref>/connect-from-<ref>/connect-into-<ref> handles"
+    },
+    {
+      "path": "docs/decisions/007-markdown-artifact-flow.md",
+      "digest": "bb1ae2d036d9658e",
+      "why": "Beat4: \"an edge has always had to say which artifact crosses it\" — the edge/artifact contract this ADR defines, held via ArtifactPicker"
+    },
+    {
+      "path": "docs/decisions/027-studio-object-model.md",
+      "digest": "533bfadb091c283f",
+      "why": "Beat6: flow saved as FlowDef data; roster seeding (seed-starter-agents) materialises agents-as-data"
+    },
+    {
+      "path": "docs/decisions/020-architect-in-ui.md",
+      "digest": "a223ff6e8f292498",
+      "why": "Beats 11-12: architect interview loop (round-increment, no ceiling) — same runner as S1/S2"
+    },
+    {
+      "path": "brain/forge-dev/themes/background-work-server-owned-client-observes.md",
+      "digest": "7130426b3ee79b5c",
+      "why": "Beat9: architect-session-id published dispatch-time before nav"
+    }
+  ]
+}

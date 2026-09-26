@@ -1,0 +1,29 @@
+{
+  "aligns": [
+    {
+      "path": "brain/forge-dev/themes/forge-project-onboarding-contract.md",
+      "digest": "13521c8c07f0e9fa",
+      "why": "Beat9: \"every HARD clause (C1, C1b, C2, C4, SKILLS) passes\"; earlier comment names the C2/.gitignore and C4/roadmap.md+Brain-3-profile failures the fixture had to fix"
+    },
+    {
+      "path": "docs/decisions/034-studio-aligned-contract.md",
+      "digest": "59f71bf30a3eb184",
+      "why": "S3's mechanism IS artifactRoot: skills move forge/skills/<id>/ (old artifactRoot:\"forge\") -> .forge/skills/<id>/ (current contract) — the ADR's own subject; beat9 reads…"
+    },
+    {
+      "path": "docs/decisions/017-forge-project-contract.md",
+      "digest": "92aedd324f8484ca",
+      "why": "Beat9 walks runPreflight/checkC1b/checkC2/checkC4 (packages/projects/preflight.ts) directly"
+    },
+    {
+      "path": "brain/forge-dev/themes/forge-ui-data-attribute-contract-discipline.md",
+      "digest": "fb31acefbdbdb088",
+      "why": "Header: onboarding running/idle and skill resolved/skill-source values explicitly \"transcribed from docs/reference/studio-dom-contract.md\""
+    },
+    {
+      "path": "brain/forge-dev/themes/background-work-server-owned-client-observes.md",
+      "digest": "7130426b3ee79b5c",
+      "why": "Beat11: onboard-session-id \"published there BEFORE the navigation that consumes it\"; onboard-attaching: 'false'"
+    }
+  ]
+}

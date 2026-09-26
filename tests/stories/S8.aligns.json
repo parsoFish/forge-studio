@@ -1,0 +1,34 @@
+{
+  "aligns": [
+    {
+      "path": "brain/forge-dev/themes/env-leak-must-be-fixed-at-spawn-seam-not-launcher.md",
+      "digest": "faa2bc6f7b59285c",
+      "why": "Beat4: GH_TOKEN deliberately excluded from AGENT_ENV_ALLOWLIST; the refusal is correct env-boundary behaviour, same mechanism this theme's fix established"
+    },
+    {
+      "path": "brain/forge-dev/themes/derived-never-stored-run-model.md",
+      "digest": "9aa220f2d1e9017c",
+      "why": "Freshness badge honest-absent (\"seed — never verified\" never fabricated a date); hub counts \"derived per request, never claimed\""
+    },
+    {
+      "path": "docs/decisions/027-studio-object-model.md",
+      "digest": "533bfadb091c283f",
+      "why": "Community registry rows / hub declarations / install-state as data (registry.yaml)"
+    },
+    {
+      "path": "docs/decisions/003-skills-not-self-baked-agents.md",
+      "digest": "970e680036e20164",
+      "why": "Beat18: the installed hook must appear \"in the bin an agent is built out of\" — same composable-parts model as S5/S7"
+    },
+    {
+      "path": "brain/forge-dev/themes/forge-ui-data-attribute-contract-discipline.md",
+      "digest": "fb31acefbdbdb088",
+      "why": "Beat16: post-install state explicitly transcribed from docs/reference/studio-dom-contract.md's data-install-state vocabulary; ruling-705 together-rule discussion"
+    },
+    {
+      "path": "brain/forge-dev/themes/merge-gate-fail-open.md",
+      "digest": "576bd923cba93d6d",
+      "why": "Header (line 90) names \"the declared-data-fails-open shape these stories exist to catch\" verbatim; beat's hub-count assertion (line 340) is \"exactly the fail-open\" this theme's…"
+    }
+  ]
+}

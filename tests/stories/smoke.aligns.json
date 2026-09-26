@@ -1,0 +1,4 @@
+{
+  "aligns": "none",
+  "reason": "Harness self-check story (1.0.md §3 row S0), not a gate — proves the runner's triple output on a link-only flow and encodes no product decision."
+}
