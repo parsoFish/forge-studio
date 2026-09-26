@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright-core';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import http from 'node:http';
@@ -201,6 +201,12 @@ test('recordBrowser: refuses an unsafe label/side before touching the filesystem
       () => recordBrowser({ side: 'before', label: '../escape', url: server.url, bundleDir: dir }),
       (err: unknown) => err instanceof DemoRecordError,
     );
+    // A well-formed segment that is not a side must not open a third directory under the bundle.
+    await assert.rejects(
+      () => recordBrowser({ side: 'etc' as 'before', label: 'ok', url: server.url, bundleDir: dir }),
+      (err: unknown) => err instanceof DemoRecordError,
+    );
+    assert.equal(existsSync(join(dir, 'etc')), false);
   } finally {
     await server.close();
     rmSync(root, { recursive: true, force: true });

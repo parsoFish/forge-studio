@@ -72,6 +72,14 @@ export function assertPathSegment(value: string, who: string): string {
 
 export type RecordSide = 'before' | 'after';
 
+/** The side is a closed set, not merely a safe segment: any other value would open a third directory under the bundle. */
+function assertSide(value: string, who: string): RecordSide {
+  if (value !== 'before' && value !== 'after') {
+    throw new DemoRecordError(`${who}: side must be "before" or "after", got ${JSON.stringify(value)}`);
+  }
+  return value;
+}
+
 export type RecordResult = {
   webm: string;
   filmstrip: string;
@@ -220,7 +228,7 @@ export function terminalPageHtml(side: RecordSide, label: string): string {
  *  the output and finalise the webm + filmstrip. The evidence stays the
  *  `.out` bytes — this only renders them. */
 export async function recordTerminal(input: RecordTerminalInput): Promise<RecordResult> {
-  const side = assertPathSegment(input.side, 'recordTerminal: side') as RecordSide;
+  const side = assertSide(input.side, 'recordTerminal');
   const label = assertPathSegment(input.label, 'recordTerminal: label');
   const { browser, context, page, videoDir } = await launchRecording();
   let contextClosed = false;
@@ -267,7 +275,7 @@ export async function recordTerminal(input: RecordTerminalInput): Promise<Record
 /** Navigate, run declared steps, settle, outline regions, then finalise the
  *  webm + filmstrip. The last still doubles as the checkpoint's screenshot. */
 export async function recordBrowser(input: RecordBrowserInput): Promise<RecordResult> {
-  const side = assertPathSegment(input.side, 'recordBrowser: side') as RecordSide;
+  const side = assertSide(input.side, 'recordBrowser');
   const label = assertPathSegment(input.label, 'recordBrowser: label');
   const { browser, context, page, videoDir } = await launchRecording();
   let contextClosed = false;
