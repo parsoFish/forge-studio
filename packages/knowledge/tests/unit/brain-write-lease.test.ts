@@ -11,7 +11,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, mkdirSync, utimesSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, utimesSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -19,6 +19,7 @@ import {
   acquireBrainWriteLease,
   BrainWriteLeaseContentionError,
   BRAIN_WRITE_LEASE_STALE_MS,
+  BRAIN_WRITE_LEASE_PID_TRUST_MS,
 } from '../../brain-write-lease.ts';
 import { brainRootDir } from '../../kb-drain-edit-soundness.ts';
 
@@ -126,6 +127,106 @@ test('forge-ler4: a lock directory left behind by a killed process (mtime older 
     // contention — the crashed holder must never wedge brain/ forever.
     const release = await acquireBrainWriteLease(forgeRoot);
     await release();
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// forge-8vfn.8.1.21 — under full-suite CPU load a LIVE holder's mtime refresh lagged past
+// BRAIN_WRITE_LEASE_STALE_MS, a contender reclaimed the lease on mtime staleness alone, and the
+// holder's own release() then threw ENOTACQUIRED. Backdating the real lock directory reproduces
+// that on-disk state deterministically.
+test('forge-ler4: a live holder lease is never reclaimed on mtime staleness alone', async () => {
+  const forgeRoot = buildForgeRoot();
+  try {
+    const release = await acquireBrainWriteLease(forgeRoot);
+    let caught: unknown;
+    try {
+      // Reproduce a holder whose periodic mtime refresh lagged past the
+      // stale bound under a starved event loop, without waiting out a real
+      // stall: back-date the REAL lock directory this `release` owns. The
+      // holder (this same process) never crashed and never released.
+      const lockDir = `${brainRootDir(forgeRoot)}.lock`;
+      const longAgo = new Date(Date.now() - BRAIN_WRITE_LEASE_STALE_MS - 5_000);
+      utimesSync(lockDir, longAgo, longAgo);
+
+      try {
+        await acquireBrainWriteLease(forgeRoot);
+      } catch (err) {
+        caught = err;
+      }
+    } finally {
+      // The invariant: the ORIGINAL holder must still own its lease and
+      // release cleanly — this is the exact call that threw ENOTACQUIRED
+      // under the real failure once a contender had wrongly taken over.
+      await release();
+    }
+    assert.ok(
+      caught instanceof BrainWriteLeaseContentionError,
+      `a live holder's lease must be refused, not stolen on mtime staleness — got ${String(caught)}`,
+    );
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// forge-8vfn.8.1.21 (§6.15) — a hand-built lock whose holder record says something about a LIVE
+// process: the lease is refused while the record is inside its trust window, whatever mtime says.
+function heldLock(forgeRoot: string, pidFile: string | null, ageMs: number): void {
+  const lockDir = `${brainRootDir(forgeRoot)}.lock`;
+  mkdirSync(lockDir);
+  if (pidFile !== null) writeFileSync(`${lockDir}.holder-pid`, pidFile);
+  const when = new Date(Date.now() - ageMs);
+  utimesSync(lockDir, when, when);
+}
+
+async function acquireOutcome(forgeRoot: string): Promise<'acquired' | 'refused'> {
+  try {
+    const release = await acquireBrainWriteLease(forgeRoot);
+    await release();
+    return 'acquired';
+  } catch (err) {
+    if (err instanceof BrainWriteLeaseContentionError) return 'refused';
+    throw err;
+  }
+}
+
+test('forge-8vfn.8.1.21: an unreadable holder record is UNKNOWN, and UNKNOWN refuses', async () => {
+  const forgeRoot = buildForgeRoot();
+  try {
+    heldLock(forgeRoot, null, BRAIN_WRITE_LEASE_STALE_MS + 5_000);
+    mkdirSync(`${brainRootDir(forgeRoot)}.lock.holder-pid`);
+    assert.equal(await acquireOutcome(forgeRoot), 'refused');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('forge-8vfn.8.1.21: a malformed holder record refuses — never reclaims', async () => {
+  const forgeRoot = buildForgeRoot();
+  try {
+    heldLock(forgeRoot, 'not-a-pid', BRAIN_WRITE_LEASE_STALE_MS + 5_000);
+    assert.equal(await acquireOutcome(forgeRoot), 'refused');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('forge-8vfn.8.1.21: a live PID past the trust window is not trusted (PID reuse)', async () => {
+  const forgeRoot = buildForgeRoot();
+  try {
+    heldLock(forgeRoot, String(process.pid), BRAIN_WRITE_LEASE_PID_TRUST_MS + 5_000);
+    assert.equal(await acquireOutcome(forgeRoot), 'acquired');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('forge-8vfn.8.1.21: a live PID inside the trust window refuses though mtime is stale', async () => {
+  const forgeRoot = buildForgeRoot();
+  try {
+    heldLock(forgeRoot, String(process.pid), BRAIN_WRITE_LEASE_STALE_MS + 5_000);
+    assert.equal(await acquireOutcome(forgeRoot), 'refused');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }
