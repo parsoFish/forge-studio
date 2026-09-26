@@ -110,6 +110,23 @@ export const ACT_3 = [
           // on the beat's `wait` (7.6.77's form) it also reached the
           // consequence wait, which stands on `/artifact` where
           // `data-session-phase` does not exist at all.
+          //
+          // T1 RULING 1545 — THE STALL CLOCK IS PROGRESS-AWARE, ON TWO SIGNALS,
+          // NOT ONE. S1 run 2 reded here at 481 s while the architect was
+          // demonstrably working: the plan was emitted 06:42:55→06:47:31, the
+          // completeness critic ran to 06:48:35, and a revision turn was still
+          // in flight — 140 s into it — when the beat cut the run at 481 s.
+          // `session-phase` never left `drafting` across any of that, so the
+          // KEY alone reported silence throughout; the session's own
+          // `events.jsonl` did not — it kept growing, with gaps up to ~230 s,
+          // never once past the 480 000 ms declared here. `perTransition` now
+          // resets on EITHER: a `progressKey` change, or a new line appended to
+          // the session this repeat is standing on. 480 000 ms remains the
+          // NO-PROGRESS bound unchanged — this is a second way to prove
+          // progress, not a longer wait. (Row 108 adds `critiquing`/`revising`
+          // phases the key can transition through, which is the more direct
+          // fix for the phase side of this same run; the two are
+          // complementary, not alternatives.)
           perTransition: 480_000,
           progressKey: 'session-phase',
           // Row 108: `critiquing`/`revising` are further values of this key, so each stage change resets the per-transition clock.

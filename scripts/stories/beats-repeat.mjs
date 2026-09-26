@@ -102,10 +102,13 @@ const PAGE_MOVED_RE = /detach|no element carries that handle/i;
  * @param {number} input.timeoutMs         that bound, for the failure text
  * @param {{perTransition: number, progressKey: string}|null} input.progress  the beat's progress bound, if it declared one
  * @param {(() => Promise<{value: string|undefined, source: string, carriers: number}>)|null} input.readProgressNow  reads `progressKey` from the live page, by SOURCE
+ * @param {(() => Promise<number|null>)|null} input.readSessionEventsNow  T1 1545 — line count of the session this repeat is standing on RIGHT NOW, or `null` when the live route is not a session; growth resets the same clock `readProgressNow` does
  * @param {(steps: object[], ms: number) => Promise<{waitedForHandle: boolean, error: string|null}>} input.run
  * @returns {Promise<{waitedForHandle: boolean, error: string|null}>}
  */
-export async function runRepeatStep({ page, step, left, matches, timeoutMs, run, progress = null, readProgressNow = null }) {
+export async function runRepeatStep({
+  page, step, left, matches, timeoutMs, run, progress = null, readProgressNow = null, readSessionEventsNow = null,
+}) {
   let waitedForHandle = false;
   // 7.6.77's REPEAT HALF, and the half that matters for S1 beat 11.
   //
@@ -154,7 +157,12 @@ export async function runRepeatStep({ page, step, left, matches, timeoutMs, run,
     // The `until` above still wins — a repeat that has met its condition is not
     // stalled however long the key sat still.
     if (tracker !== null) {
-      const why = tracker.observe(await readProgressNow());
+      // T1 1545 — the session's OWN growth resets the same clock, alongside
+      // `progressKey`. `null` when there is no reader, or the live route is
+      // not a session: `progressTracker` treats that as no evidence, never as
+      // a reset (§6.15).
+      const eventLines = readSessionEventsNow === null ? null : await readSessionEventsNow();
+      const why = tracker.observe(await readProgressNow(), eventLines);
       if (why !== null) return { waitedForHandle, error: why };
     }
 
