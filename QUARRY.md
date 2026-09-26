@@ -63,11 +63,11 @@ operator-ratified new cap — never a silent raise.
 | `sessions` | 61 | 20,638 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 83 | 23,603 | **23,403** | ratified 23,403 — row 119 reviewRound derived from completed adversarial-review passes (forge-8vfn.8.1.23), +16 lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 15 | 2,723 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 40 | 11,475 | **11,268** | ratified 11,268 — D8 (mfv5.2.1) collectCapturedMedia binds `.webm` → before/afterVideoSrc and `.filmstrip.png` → the side's image, +37 on row 112's 11,231, lane-ratified under ruling 666; see git history for prior raises. |
+| `stations` | 40 | 11,505 | **11,268** | ratified 11,268 — D8 (mfv5.2.1) collectCapturedMedia binds `.webm` → before/afterVideoSrc and `.filmstrip.png` → the side's image, +37 on row 112's 11,231, lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,835 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **464** | **126,714** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **464** | **126,744** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -182,7 +182,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/gates/docs-gate.ts | stations | verbatim | 114 |
 | packages/stations/phases/pm-prompt-context.ts | stations | verbatim | 139 |
 | packages/stations/phases/pm-class-set-rules.ts | stations | verbatim | 46 |
-| packages/stations/phases/integrate.ts | stations | verbatim | 330 |
+| packages/stations/phases/integrate.ts | stations | verbatim | 360 |
 | packages/stations/phases/derive-demo-model.ts | stations | verbatim | 291 |
 | packages/stations/phases/derive-pr-body.ts | stations | verbatim | 83 |
 | packages/stations/phases/review-budget.ts | stations | verbatim | 136 |

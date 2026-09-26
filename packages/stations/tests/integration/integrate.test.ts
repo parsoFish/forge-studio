@@ -234,6 +234,39 @@ describe('integrate band — delta honesty (forge-mfv5.1.7): a successful captur
     const prBody = readFileSync(join(root, PR_DESCRIPTION_REL), 'utf8');
     assert.match(prBody, /1 of 1 captured checkpoints changed behaviour\./);
   });
+
+  it('kills "a corrupt demo.json after capture reads as success": the band FAILS CLOSED instead of leaving a stale pre-capture PR body', () => {
+    writeProjectConfig([{ kind: 'capture', text: 'Run `true` to demo it.' }]);
+    writeWorkItem('WI-1');
+    // A fake capture that stamps a VALID nonce (so nonce verification passes)
+    // but leaves demo.json with no checkpoints array at all — the structurally
+    // broken shape reviseAfterCapture must catch AFTER the nonce already verified.
+    const scriptPath = join(root, 'fake-capture-corrupt.mjs');
+    writeFileSync(
+      scriptPath,
+      [
+        "import { writeFileSync } from 'node:fs';",
+        "import { join } from 'node:path';",
+        'const initiativeId = process.argv[2];',
+        "const demoJsonPath = join(process.cwd(), 'demo', initiativeId, 'demo.json');",
+        "writeFileSync(demoJsonPath, JSON.stringify({ capture: { nonce: process.env.FORGE_CAPTURE_NONCE } }));",
+      ].join('\n'),
+    );
+    const result = runIntegrateBand(
+      {
+        initiativeId: INITIATIVE_ID,
+        worktreePath: root,
+        manifestPath: writeManifest(),
+        projectRepoPath: root,
+        orchestratedCapture: { argv: [process.execPath, scriptPath, INITIATIVE_ID] },
+      },
+      logger,
+      GATES,
+      testClassProfilePort(),
+    );
+    assert.equal(result.status, 'failed');
+    assert.equal(result.status === 'failed' ? result.reason : '', 'delta-revise-failed');
+  });
 });
 
 describe('integrate band — the class decides, and a class it cannot serve fails LOUD', () => {
