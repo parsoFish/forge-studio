@@ -14,7 +14,7 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, mkdirSync, chmodSync, symlinkSync, renameSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, readdirSync, existsSync, mkdirSync, chmodSync, symlinkSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -319,6 +319,56 @@ describe('lanes.sh preflight — row 71, T1 SOCKET', () => {
 });
 
 /**
+ * The pids of every live lane-heartbeat-daemon.sh whose argv names `path`, read from the REAL /proc
+ * (a test's LANES_PROC_ROOT is a planted tree the daemon never appears in). Matched on argv read per
+ * pid — never `pgrep -f`, whose pattern would sit in this process's own command line (§6.18).
+ */
+function daemonsReferencing(path: string): number[] {
+  const out: number[] = [];
+  for (const e of readdirSync('/proc')) {
+    if (!/^\d+$/.test(e) || Number(e) === process.pid) continue;
+    let argv: string;
+    try {
+      argv = readFileSync(`/proc/${e}/cmdline`, 'utf8');
+    } catch {
+      continue; // exited between readdir and read — not alive, so not a survivor
+    }
+    const args = argv.split('\0');
+    if (args.some((a) => a.endsWith('/lane-heartbeat-daemon.sh')) && args.some((a) => a.startsWith(path))) out.push(Number(e));
+  }
+  return out;
+}
+
+/**
+ * Retire the daemon `launch` started for `lane`, by the pid it recorded in
+ * <camp>/heartbeat/<lane>.hb-daemon.pid (§6.13 — never a pattern). It runs under `setsid`, so its
+ * pid is its process group: signalling the group also ends the `sleep` child it is waiting in.
+ * The daemon writes the pidfile once up, so wait for it (bounded). Returns the pid, or null when
+ * none was ever recorded.
+ */
+function retireRecordedDaemon(camp: string, lane: string): number | null {
+  const pidFile = join(camp, 'heartbeat', `${lane}.hb-daemon.pid`);
+  const deadline = performance.now() + 5000;
+  while (!existsSync(pidFile) && performance.now() < deadline) spawnSync('sleep', ['0.1']);
+  if (!existsSync(pidFile)) return null;
+  const pid = Number(readFileSync(pidFile, 'utf8').trim());
+  if (!Number.isInteger(pid) || pid <= 1) throw new Error(`unusable daemon pid ${JSON.stringify(pid)} in ${pidFile}`);
+  const signal = (sig: NodeJS.Signals) => {
+    try {
+      process.kill(-pid, sig);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ESRCH') throw e;
+    }
+  };
+  const gone = () => !existsSync(`/proc/${pid}`);
+  signal('SIGTERM');
+  const termDeadline = performance.now() + 5000;
+  while (!gone() && performance.now() < termDeadline) spawnSync('sleep', ['0.1']);
+  if (!gone()) signal('SIGKILL');
+  return pid;
+}
+
+/**
  * The one rule that binds all five: none of them may turn a launch that used to succeed into one
  * that doesn't. A full `launch` with every one of the five WARNs planted at once still has to
  * reach the roster-confirm step and print `launched`.
@@ -339,6 +389,9 @@ describe('lanes.sh launch — all five advisory WARNs planted at once still reac
     mkdirSync(join(camp, 'heartbeat'), { recursive: true });
   });
   after(() => {
+    // Fallback only — the assertion lives in the last test below, because a failing describe-level
+    // after() hook does not fail the run (node 22: `hookFailed`, `# fail 0`, exit 0).
+    if (camp) retireRecordedDaemon(camp, 'allwarn');
     if (launchDir) rmSync(launchDir, { recursive: true, force: true });
   });
 
@@ -400,6 +453,7 @@ sleep 120
         LANES_CLAUDE_BIN: bin,
         LANES_PROC_ROOT: root,
         LANES_DNS_CMD: 'false', // row 19b: DNS broken
+        LANES_WORKTREE_ROOT: launchDir, // the daemon's --worktree-glob must not scan this host's real $HOME
         LANES_CLAUDE_JSON: claudeJson,
         LANES_MEMINFO: (() => {
           const p = join(launchDir, 'meminfo');
@@ -418,5 +472,13 @@ sleep 120
     assert.match(r.stdout, /^preflight WARN: DNS:/m, 'row 19b fired');
     assert.match(r.stdout, /^preflight WARN: CLI VERSION:/m, 'row 40 fired');
     assert.match(r.stdout, /^preflight WARN: T1 unreachable by SendMessage/m, 'row 71 fired');
+  });
+
+  // Row 120: that launch started a real lane-heartbeat-daemon.sh (setsid, reparented to init).
+  // Removing the camp dir never stopped it, so every run of this file left one alive for good.
+  test('the heartbeat daemon that launch started is retired by the pid it recorded, and nothing outlives the camp', () => {
+    const pid = retireRecordedDaemon(camp, 'allwarn');
+    assert.ok(pid !== null, `launch recorded its daemon pid under ${camp}/heartbeat`);
+    assert.deepEqual(daemonsReferencing(camp), [], `no lane-heartbeat-daemon may outlive this test's camp ${camp}`);
   });
 });

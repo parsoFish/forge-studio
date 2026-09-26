@@ -325,8 +325,10 @@ export type CapturedMedia = {
   afterImage?: string | null;
   beforeOutput?: string | null;
   afterOutput?: string | null;
+  /** forge-mfv5.2.1: a recorded checkpoint's video (see `collectCapturedMedia`'s `.webm` branch). */
+  beforeVideoSrc?: string | null;
+  afterVideoSrc?: string | null;
 };
-
 
 function pngToDataUri(file: string): string | null {
   try {
@@ -346,19 +348,40 @@ function pngToDataUri(file: string): string | null {
  */
 export function collectCapturedMedia(bundleDir: string): CapturedMedia[] {
   const byLabel = new Map<string, CapturedMedia>();
+  // A `.filmstrip.png` always wins over a plain `.png` of the same label
+  // (it composes the whole take, not one frame), regardless of directory
+  // read order — tracked so a plain `.png` seen AFTER the filmstrip cannot
+  // clobber it back.
+  const filmstripWon = new Set<string>();
   const scan = (side: 'before' | 'after'): void => {
     const dir = join(bundleDir, side);
     let names: string[] = [];
     try { names = readdirSync(dir); } catch { return; }
     for (const name of names) {
       const lower = name.toLowerCase();
-      if (lower.endsWith('.png')) {
-        const label = name.replace(/\.png$/i, '');
+      if (lower.endsWith('.filmstrip.png') || lower.endsWith('.png')) {
+        const isFilmstrip = lower.endsWith('.filmstrip.png');
+        const label = name.replace(isFilmstrip ? /\.filmstrip\.png$/i : /\.png$/i, '');
+        const key = `${side}:${label}`;
+        if (!isFilmstrip && filmstripWon.has(key)) continue;
         const uri = pngToDataUri(join(dir, name));
         if (!uri) continue;
         const entry = byLabel.get(label) ?? { label };
         if (side === 'before') entry.beforeImage = uri;
         else entry.afterImage = uri;
+        byLabel.set(label, entry);
+        if (isFilmstrip) filmstripWon.add(key);
+      } else if (lower.endsWith('.webm')) {
+        // `bundleDir` is always `<demoDir>/.capture` (the only caller,
+        // `forge demo capture`, hardcodes that join), mirrored WHOLESALE into
+        // `_logs/<cycleId>/artifacts/` (snapshotCycleArtefacts, cycle.ts) —
+        // so `.capture/<side>/<name>` is exactly the relative sibling path
+        // `/api/artifact/<cycleId>/<file>` serves.
+        const label = name.replace(/\.webm$/i, '');
+        const entry = byLabel.get(label) ?? { label };
+        const rel = `.capture/${side}/${name}`;
+        if (side === 'before') entry.beforeVideoSrc = rel;
+        else entry.afterVideoSrc = rel;
         byLabel.set(label, entry);
       } else if (lower.endsWith('.out')) {
         // Captured CLI stdout (the real before/after terminal output).
@@ -397,27 +420,41 @@ export function mergeCapturedMedia(model: DemoModel, captured: CapturedMedia[]):
     matchedLabels.add(cp.label);
     matchedLabels.add(cap.label);
     const hasImage = cap.beforeImage || cap.afterImage;
+    const hasVideo = cap.beforeVideoSrc || cap.afterVideoSrc;
     return {
       ...cp,
-      // A captured image promotes the checkpoint to screenshot; a captured CLI
-      // output leaves the kind alone (the render picks output over note).
-      kind: cp.kind === 'harness' ? cp.kind : hasImage ? 'screenshot' : cp.kind,
+      // A captured video outranks a captured image, which outranks a captured
+      // CLI output (the render already picks output over note); `harness`
+      // is never overridden — its evidence is the metrics table, not media.
+      kind: cp.kind === 'harness' ? cp.kind : hasVideo ? 'video' : hasImage ? 'screenshot' : cp.kind,
       beforeImage: cap.beforeImage ?? cp.beforeImage ?? null,
       afterImage: cap.afterImage ?? cp.afterImage ?? null,
       beforeOutput: cap.beforeOutput ?? cp.beforeOutput ?? null,
       afterOutput: cap.afterOutput ?? cp.afterOutput ?? null,
+      beforeVideoSrc: cap.beforeVideoSrc ?? cp.beforeVideoSrc ?? null,
+      afterVideoSrc: cap.afterVideoSrc ?? cp.afterVideoSrc ?? null,
     } satisfies DemoModelCheckpoint;
   });
   const appended = captured
-    .filter((c) => !matchedLabels.has(c.label) && (c.beforeImage || c.afterImage || c.beforeOutput || c.afterOutput))
+    .filter(
+      (c) =>
+        !matchedLabels.has(c.label) &&
+        (c.beforeImage || c.afterImage || c.beforeOutput || c.afterOutput || c.beforeVideoSrc || c.afterVideoSrc),
+    )
     .map<DemoModelCheckpoint>((c) => ({
       label: c.label,
-      ...(c.beforeImage || c.afterImage ? { kind: 'screenshot' as const } : {}),
+      ...(c.beforeVideoSrc || c.afterVideoSrc
+        ? { kind: 'video' as const }
+        : c.beforeImage || c.afterImage
+          ? { kind: 'screenshot' as const }
+          : {}),
       caption: c.label,
       beforeImage: c.beforeImage ?? null,
       afterImage: c.afterImage ?? null,
       beforeOutput: c.beforeOutput ?? null,
       afterOutput: c.afterOutput ?? null,
+      beforeVideoSrc: c.beforeVideoSrc ?? null,
+      afterVideoSrc: c.afterVideoSrc ?? null,
     }));
   return { ...model, checkpoints: [...checkpoints, ...appended] };
 }
