@@ -55,8 +55,8 @@ test('the session shell root renders data-session-phase="critiquing" / "revising
             'data-session-id': 'sess-1',
             'data-session-phase': phase,
           },
+          children: null,
         },
-        null,
       ),
     );
     expect(html).toContain(`data-session-phase="${phase}"`);
