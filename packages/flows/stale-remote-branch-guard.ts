@@ -57,11 +57,19 @@ const defaultRemoteBranchShaLookup: RemoteBranchShaLookup = (projectRepoPath, br
   return sha ? { status: 'present', sha } : { status: 'absent' };
 };
 
+/** gh's own wording for "there is simply no PR" (bead forge-8vfn.8.1.12) —
+ *  verbatim, case-insensitive: `gh pr view <branch>` exits 1 with stderr
+ *  `no pull requests found for branch "<branch>"`. That is a DETERMINATE
+ *  NONE, not an exec failure — every other failure (auth, network, rate
+ *  limit, unknown) still falls through to UNKNOWN below. */
+const NO_PR_FOUND_RE = /no pull requests found/i;
+
 /** Reuses the `gh-pinned.ts` seam every outward `gh` call goes through.
  *  `githubOwnerRepoForWorktree` is a LOCAL, no-network read — the branch
  *  lookup above already proved origin reachable, so `null` here is a
  *  genuine "not a GitHub remote", never "we couldn't tell". Only the
- *  actual `gh` call below can fail as UNKNOWN. */
+ *  actual `gh` call below can fail as UNKNOWN — except gh's own "no pull
+ *  requests found" shape, which is a real answer wearing a nonzero exit code. */
 const defaultOpenPrLookup: OpenPrLookup = (projectRepoPath, branch) => {
   const gh = githubOwnerRepoForWorktree(projectRepoPath);
   if (!gh) return { status: 'none' };
@@ -72,7 +80,9 @@ const defaultOpenPrLookup: OpenPrLookup = (projectRepoPath, branch) => {
     ).trim();
     return { status: out.toUpperCase() === 'OPEN' ? 'open' : 'none' };
   } catch (err) {
-    return { status: 'unknown', reason: err instanceof Error ? err.message : String(err) };
+    const reason = err instanceof Error ? err.message : String(err);
+    if (NO_PR_FOUND_RE.test(reason)) return { status: 'none' };
+    return { status: 'unknown', reason };
   }
 };
 
