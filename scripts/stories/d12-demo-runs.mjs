@@ -58,8 +58,8 @@ import { createStageTwo } from '../verify-cycle-stage2.mjs';
 import { classifyServeStageOutcome } from '../verify-cycle-stage-outcome.mjs';
 
 import { add as addWorktree, decideWorktreeStrategy } from '../../packages/flows/worktree.ts';
-import { writeManifest } from '../../packages/flows/manifest.ts';
-import { writeWorkItem } from '../../packages/flows/work-item.ts';
+import { parseManifest, writeManifest } from '../../packages/flows/manifest.ts';
+import { readWorkItemsFromDir, writeWorkItem } from '../../packages/flows/work-item.ts';
 import { getPaths, worktreeDemoJsonPath } from '@forge/flows';
 import { ghRunnerFor, assertGhOwner, recordMintedRemote } from '@forge/kernel';
 
@@ -335,6 +335,37 @@ function readArtifacts(plan) {
   return { demoJsonPath, demoJson, prBody, webmSizes };
 }
 
+/** What a dry run actually proves, each read back from what it wrote — never assumed from having written it. */
+function verifyDryRun(plan, written) {
+  const check = (fn) => {
+    try {
+      const detail = fn();
+      return { ok: true, detail };
+    } catch (err) {
+      return { ok: false, detail: err?.message ?? String(err) };
+    }
+  };
+  return {
+    manifestParses: check(() => {
+      const m = parseManifest(readFileSync(written.manifestPath, 'utf8'));
+      if (m?.initiative_id !== plan.initiativeId) throw new Error(`parsed initiative_id ${m?.initiative_id} ≠ ${plan.initiativeId}`);
+      return written.manifestPath;
+    }),
+    workItemParses: check(() => {
+      const { items, parseErrors } = readWorkItemsFromDir(join(plan.worktreePath, '.forge', 'work-items'));
+      if (Object.keys(parseErrors).length > 0) throw new Error(JSON.stringify(parseErrors));
+      if (items.length !== 1) throw new Error(`${items.length} work items parsed, expected 1`);
+      return written.wiPath;
+    }),
+    remotePrivate: check(() => {
+      const out = ghRunnerFor(plan.account)(['repo', 'view', plan.remoteName, '--json', 'visibility'], plan.projectRepoPath);
+      const visibility = JSON.parse(String(out)).visibility;
+      if (visibility !== 'PRIVATE') throw new Error(`${plan.remoteName} visibility ${visibility}`);
+      return `${plan.remoteName} PRIVATE`;
+    }),
+  };
+}
+
 function writeEvidenceReport(reportPath, data) {
   mkdirSync(resolve(reportPath, '..'), { recursive: true });
   writeFileSync(reportPath, `${JSON.stringify(data, null, 2)}\n`);
@@ -401,7 +432,7 @@ async function runTeardown(plan, state, { keepRemote }) {
 
   for (const l of lines) {
     if (l.ok) log(`teardown: ${l.step}${l.skipped ? ` — ${l.skipped}` : ' — ok'}`);
-    else log(`teardown: ${l.step} FAILED — ${l.error} (next-run's leading sweep should catch this)`);
+    else process.stderr.write(`[d12-demo-runs] teardown: ${l.step} FAILED — ${l.error} (remove it by hand; nothing else sweeps this run)\n`);
   }
   return lines;
 }
@@ -474,6 +505,8 @@ async function main(argv) {
 
   const state = { groundProvisioned: false, remoteMinted: false, worktreeCreated: false, studio: null, cycleId: null };
   let exitCode = 0;
+  // One report, written in `finally` AFTER teardown, so it always exists and always carries teardown's own result.
+  let report = { kind: plan.kind, mode: opts.dryRun ? 'dry-run' : 'live', initiativeId: plan.initiativeId, remoteName: plan.remoteName };
   try {
     provisionGround(plan);
     state.groundProvisioned = true;
@@ -483,7 +516,7 @@ async function main(argv) {
 
     const handle = createInitiativeWorktree(plan);
     state.worktreeCreated = true; // the worktree dir exists now — teardown must own it even if the next line throws
-    writeHandoffArtifacts(plan, handle);
+    const written = writeHandoffArtifacts(plan, handle);
 
     state.studio = await bootStudioStep(plan);
 
@@ -493,18 +526,10 @@ async function main(argv) {
         worktreePresent: existsSync(plan.worktreePath),
         handoffWorkItemsPresent: existsSync(join(plan.worktreePath, '.forge', 'work-items', 'WI-1.md')),
       });
-      writeEvidenceReport(opts.reportPath, {
-        kind: plan.kind,
-        mode: 'dry-run',
-        initiativeId: plan.initiativeId,
-        remoteName: plan.remoteName,
-        verified: {
-          worktreeStrategy: strategy,
-          manifestParses: true,
-          workItemParses: true,
-          remoteExists: state.remoteMinted,
-        },
-      });
+      const verified = { worktreeStrategy: strategy, ...verifyDryRun(plan, written) };
+      report = { ...report, verified };
+      const failedChecks = Object.entries(verified).filter(([k, v]) => (k === 'worktreeStrategy' ? v !== 'reuse' : v?.ok !== true));
+      if (failedChecks.length > 0) exitCode = 1;
       return;
     }
 
@@ -522,11 +547,8 @@ async function main(argv) {
     log(`verdict: ${verdict.pass ? 'PASS' : 'FAIL'}`);
     for (const r of verdict.reasons) log(`  ${r.pass ? 'PASS' : 'FAIL'} — ${r.name}: ${r.detail}`);
 
-    writeEvidenceReport(opts.reportPath, {
-      kind: plan.kind,
-      mode: 'live',
-      initiativeId: plan.initiativeId,
-      remoteName: plan.remoteName,
+    report = {
+      ...report,
       developOutcome: outcome.state,
       servePasses: outcome.passes,
       demoJsonPath: artifacts.demoJsonPath,
@@ -534,13 +556,16 @@ async function main(argv) {
       logsPath: state.cycleId ? join(plan.forgeRoot, '_logs', state.cycleId) : null,
       prBody: artifacts.prBody,
       verdict,
-    });
+    };
     if (outcome.state !== 'ready-for-review' || !verdict.pass) exitCode = 1;
   } catch (err) {
-    log(`REFUSING/FAILED: ${err?.stack ?? err?.message ?? err}`);
+    process.stderr.write(`[d12-demo-runs] REFUSING/FAILED: ${err?.stack ?? err?.message ?? err}\n`);
+    report = { ...report, error: err?.message ?? String(err) };
     exitCode = 1;
   } finally {
-    await runTeardown(plan, state, { keepRemote: opts.keepRemote });
+    const teardown = await runTeardown(plan, state, { keepRemote: opts.keepRemote });
+    if (teardown.some((l) => !l.ok)) exitCode = 1;
+    writeEvidenceReport(opts.reportPath, { ...report, teardown });
   }
   process.exitCode = exitCode;
 }
