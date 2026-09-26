@@ -47,7 +47,7 @@ import {
 } from 'node:fs';
 import { extname, join } from 'node:path';
 import { guardedReadDir } from '@forge/kernel';
-import { DEMO_MD_BASENAME, worktreeDemoDir, worktreeDemoJsonPath, worktreeDemoRelDir } from './demo-paths.ts';
+import { DEMO_MD_BASENAME, SAFE_CAPTURE_NAME_RE, worktreeDemoDir, worktreeDemoJsonPath, worktreeDemoRelDir } from './demo-paths.ts';
 
 /**
  * Best-effort PR creation via `gh pr create`. Returns `{ url }` on success,
@@ -106,6 +106,7 @@ function scanCaptureSide(trackedDemoDir: string, side: 'before' | 'after'): Map<
   const names = guardedReadDir(trackedDemoDir, ['.capture', side]);
   if (!names) return byLabel;
   for (const name of names.sort()) {
+    if (!SAFE_CAPTURE_NAME_RE.test(name)) continue; // never linked: see SAFE_CAPTURE_NAME_RE
     const lower = name.toLowerCase();
     if (lower.endsWith('.filmstrip.png')) {
       const label = name.slice(0, name.length - '.filmstrip.png'.length);

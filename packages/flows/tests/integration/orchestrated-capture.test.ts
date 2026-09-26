@@ -348,6 +348,21 @@ test('commitOrchestratedCaptureArtifacts: a symlink under .capture is refused, n
   }
 });
 
+test('commitOrchestratedCaptureArtifacts: a capture file named outside the recorder charset is never staged', () => {
+  const { wt, demoRel, cleanup } = makeCaptureRepo();
+  try {
+    const sideDir = join(wt, demoRel, '.capture', 'after');
+    mkdirSync(sideDir, { recursive: true });
+    writeFileSync(join(sideDir, 'x](evil).filmstrip.png'), WEBM_MAGIC);
+    const result = commitOrchestratedCaptureArtifacts(wt, demoRel, 'INIT-media');
+    assert.equal(result.committed, false);
+    assert.match(result.skippedMedia[0]?.reason ?? '', /charset/);
+    assert.ok(!trackedFiles(wt).some((f) => f.includes('evil')), 'an unsafe name is never tracked');
+  } finally {
+    cleanup();
+  }
+});
+
 // ---------------------------------------------------------------------------
 // argv + timeout resolution
 // ---------------------------------------------------------------------------

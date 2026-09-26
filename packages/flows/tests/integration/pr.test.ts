@@ -491,19 +491,21 @@ function seedCaptureDemo(proj: string): { demoDir: string; sha: string } {
   mkdirSync(join(demoDir, '.capture', 'after'), { recursive: true });
   writeFileSync(join(demoDir, 'demo.json'), '{"title":"t"}\n');
   writeFileSync(join(demoDir, 'DEMO.md'), '# demo\n');
-  writeFileSync(join(demoDir, '.capture', 'before', 'label one.filmstrip.png'), PNG_MAGIC);
-  writeFileSync(join(demoDir, '.capture', 'after', 'label one.filmstrip.png'), PNG_MAGIC);
-  writeFileSync(join(demoDir, '.capture', 'after', 'label one.webm'), WEBM_MAGIC);
+  writeFileSync(join(demoDir, '.capture', 'before', 'label_one.filmstrip.png'), PNG_MAGIC);
+  writeFileSync(join(demoDir, '.capture', 'after', 'label_one.filmstrip.png'), PNG_MAGIC);
+  writeFileSync(join(demoDir, '.capture', 'after', 'label_one.webm'), WEBM_MAGIC);
   writeFileSync(join(demoDir, '.capture', 'after', 'label-two.filmstrip.png'), PNG_MAGIC);
   writeFileSync(join(demoDir, '.capture', 'after', 'label-two.webm'), WEBM_MAGIC);
+  writeFileSync(join(demoDir, '.capture', 'after', 'x](https:%2F%2Fevil.example).filmstrip.png'), PNG_MAGIC);
   sh(proj, 'git', [
     'add',
     'demo/INIT-x/demo.json',
     'demo/INIT-x/DEMO.md',
-    'demo/INIT-x/.capture/before/label one.filmstrip.png',
-    'demo/INIT-x/.capture/after/label one.filmstrip.png',
-    'demo/INIT-x/.capture/after/label one.webm',
+    'demo/INIT-x/.capture/before/label_one.filmstrip.png',
+    'demo/INIT-x/.capture/after/label_one.filmstrip.png',
+    'demo/INIT-x/.capture/after/label_one.webm',
     'demo/INIT-x/.capture/after/label-two.filmstrip.png',
+    'demo/INIT-x/.capture/after/x](https:%2F%2Fevil.example).filmstrip.png',
     // label-two.webm deliberately NOT added.
   ]);
   sh(proj, 'git', ['commit', '-q', '-m', 'demo capture']);
@@ -524,20 +526,21 @@ test('embedDemoInPr: public repo — commit-pinned, inlines committed filmstrips
     assert.ok(body!.includes(`/blob/${sha}/`), 'links must be pinned to the commit sha');
     assert.ok(!body!.includes('/blob/initiative-x/'), 'must not use the branch name when a sha was given');
 
-    // Per-segment URL encoding: the space in the checkpoint label's filename
-    // becomes %20 without corrupting the surrounding path's `/` separators.
+    // A committed file whose name is outside the recorder's own charset is never linked,
+    // so a planted name cannot close the markdown link and point it elsewhere.
+    assert.ok(!body!.includes('evil.example'), 'an unsafe capture filename is never rendered into the body');
     assert.ok(
-      body!.includes(`https://github.com/parsoFish/forge-test/blob/${sha}/demo/INIT-x/.capture/after/label%20one.filmstrip.png?raw=true`),
+      body!.includes(`https://github.com/parsoFish/forge-test/blob/${sha}/demo/INIT-x/.capture/after/label_one.filmstrip.png?raw=true`),
       `expected a per-segment-encoded, sha-pinned image URL; got:\n${body}`,
     );
 
-    // Both sides of "label one" are inlined (dot-dir media present).
-    assert.match(body!, /!\[label one — before\]\([^)]+label%20one\.filmstrip\.png\?raw=true\)/);
-    assert.match(body!, /!\[label one — after\]\([^)]+label%20one\.filmstrip\.png\?raw=true\)/);
+    // Both sides of "label_one" are inlined (dot-dir media present).
+    assert.match(body!, /!\[label_one — before\]\([^)]+label_one\.filmstrip\.png\?raw=true\)/);
+    assert.match(body!, /!\[label_one — after\]\([^)]+label_one\.filmstrip\.png\?raw=true\)/);
 
     // The webm gets a plain blob link, no `?raw=true`.
-    assert.match(body!, /\[▶ label one — after \(webm\)\]\([^)]+label%20one\.webm\)/);
-    assert.ok(!body!.includes('label%20one.webm?raw=true'));
+    assert.match(body!, /\[▶ label_one — after \(webm\)\]\([^)]+label_one\.webm\)/);
+    assert.ok(!body!.includes('label_one.webm?raw=true'));
 
     // "label-two"'s filmstrip is committed and inlined...
     assert.match(body!, /!\[label-two — after\]/);
@@ -565,7 +568,7 @@ test('embedDemoInPr: private repo — capture media is inlined too, with the pri
 
     // Private repos now ALSO get the capture media inlined (forge-mfv5.2.5
     // amendment) — not the old public-only gate.
-    assert.match(body!, /!\[label one — after\]\([^)]+\?raw=true\)/);
+    assert.match(body!, /!\[label_one — after\]\([^)]+\?raw=true\)/);
     assert.ok(body!.includes("needs the viewer's github.com session"));
     assert.ok(body!.includes('**Files changed**'));
     // Still reports the uncommitted webm.

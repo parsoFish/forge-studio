@@ -24,7 +24,7 @@ import { randomBytes } from 'node:crypto';
 import { accessSync, constants, existsSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME } from '../demo-paths.ts';
+import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME, SAFE_CAPTURE_NAME_RE } from '../demo-paths.ts';
 import { gitIdentityConfigArgs, guardedReadDir, ORCHESTRATOR_GIT_IDENTITY, resolveGuardedPath } from '@forge/kernel';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..');
@@ -312,6 +312,10 @@ function collectCommittableCaptureMedia(worktreePath: string, demoDirRel: string
       const segments = ['.capture', side, name];
       const relFromDemoDir = segments.join('/');
       const relPath = join(demoDirRel, relFromDemoDir);
+      if (!SAFE_CAPTURE_NAME_RE.test(name)) {
+        skipped.push({ relPath, reason: 'name outside the capture charset' });
+        continue;
+      }
       const guard = resolveGuardedPath(demoDirAbs, segments);
       if (!guard.ok || !guard.exists) {
         skipped.push({ relPath, reason: guard.ok ? 'disappeared mid-scan' : `refused: ${guard.reason}` });
