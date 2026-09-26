@@ -35,8 +35,38 @@ import {
   MAX_INLINE_IMAGE_BYTES,
   checkpointArtifactName,
   checkpointArtifactStem,
+  isSafeDemoRoute,
 } from '@forge/stations/demo-types.ts';
 import { MAX_CAPTURED_OUTPUT_BYTES } from '@forge/stations/demo-model.ts';
+
+export type CheckpointUrlResolution = { ok: true; url: string } | { ok: false; reason: string };
+
+/**
+ * Point-of-use guard for a browser checkpoint's `route` (forge-mfv5.1.7).
+ * `demo.json` is read raw by the capture path, never re-validated, so a route
+ * can be anything. `isSafeDemoRoute`'s character class rejects most attacks
+ * but not a protocol-relative route (`//evil.example/x`) — it matches the
+ * charset yet resolves to a FOREIGN origin once actually navigated, so this
+ * independently resolves via `new URL(route, serverUrl)` and compares
+ * origins. Fails closed: any refusal means the checkpoint is skipped, never
+ * navigated. Pure — the caller decides what "skipped" looks like.
+ */
+export function resolveCheckpointUrl(serverUrl: string, route?: string): CheckpointUrlResolution {
+  if (route === undefined) return { ok: true, url: serverUrl };
+  if (!isSafeDemoRoute(route)) return { ok: false, reason: `unsafe route ${JSON.stringify(route)}` };
+  let base: URL;
+  let resolved: URL;
+  try {
+    base = new URL(serverUrl);
+    resolved = new URL(route, base);
+  } catch (err) {
+    return { ok: false, reason: `route ${JSON.stringify(route)} did not resolve against ${serverUrl}: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  if (resolved.origin !== base.origin) {
+    return { ok: false, reason: `route ${JSON.stringify(route)} resolved to a foreign origin ${resolved.origin} (expected ${base.origin})` };
+  }
+  return { ok: true, url: resolved.toString() };
+}
 
 export type WorktreeAtRef = { path: string; repo: string };
 
@@ -244,13 +274,21 @@ export async function captureCheckpoints(
         if (!server) continue;
         try {
           for (const { label, route } of input.checkpointLabels) {
+            // Point-of-use guard (forge-mfv5.1.7): demo.json's `route` is never
+            // re-validated before it reaches here, so it is resolved and origin-
+            // checked NOW — a refused route is skipped, never navigated.
+            const resolution = resolveCheckpointUrl(server.url, route);
+            if (!resolution.ok) {
+              process.stderr.write(`[demo] refusing checkpoint ${side}/${label}: ${resolution.reason}\n`);
+              continue;
+            }
             // recordBrowser's filmstrip (its last frame is the final outlined
             // still) binds as the checkpoint's image; there is no separate PNG.
             try {
               await recordBrowser({
                 side,
                 label: checkpointArtifactStem(label),
-                url: route ? `${server.url}${route}` : server.url,
+                url: resolution.url,
                 bundleDir,
               });
               captured.push(label);
