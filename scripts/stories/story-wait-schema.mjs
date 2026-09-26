@@ -349,7 +349,7 @@ function validateWait(raw, at) {
     );
   }
   // ROW 109 (T1 1549) — `wait: { for: 'priced', upTo }`. EVIDENCE, never a
-  // verdict input (`beats-agent-proc.mjs`'s `waitForPricedEvent` carries the
+  // verdict input (`beats-priced-wait.mjs`'s `waitForPricedEvent` carries the
   // rest of the story): the beat's own `expect.data` still decides pass/fail,
   // and this wait only buys the session standing on the page more real time to
   // write a priced event before the run's own teardown reaps it. Nothing else
