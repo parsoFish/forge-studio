@@ -69,3 +69,7 @@ export function worktreeDemoJsonRelPath(worktreePath: string, initiativeId: stri
 export function worktreeDemoMdPath(worktreePath: string, initiativeId: string): string {
   return join(worktreeDemoDir(worktreePath, initiativeId), DEMO_MD_BASENAME);
 }
+
+/** The recorder's own capture-file charset (checkpointArtifactStem's safe set). A name outside it
+ *  is never staged or linked: it cannot have come from forge, and it could close a markdown link. */
+export const SAFE_CAPTURE_NAME_RE = /^[A-Za-z0-9._-]+$/;

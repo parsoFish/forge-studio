@@ -9,7 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -19,6 +19,8 @@ import {
   commitOrchestratedCaptureArtifacts,
   demoJsonWantsCapture,
   generateCaptureNonce,
+  MAX_COMMITTED_DEMO_MEDIA_BYTES,
+  MAX_COMMITTED_DEMO_WEBM_BYTES,
   preflightDemoCaptureCommands,
   resolveDemoCaptureTimeoutMs,
   runOrchestratorCommand,
@@ -171,12 +173,14 @@ test('commitOrchestratedCaptureArtifacts: commits + pushes changed demo artifact
     git(wt, 'push', 'origin', 'main');
 
     // Nothing changed yet → no commit.
-    assert.equal(commitOrchestratedCaptureArtifacts(wt, demoRel, 'INIT-x'), false);
+    assert.deepEqual(commitOrchestratedCaptureArtifacts(wt, demoRel, 'INIT-x'), { committed: false, skippedMedia: [] });
 
     // The capture back-filled demo.json + derived DEMO.md → commit + push.
     writeFileSync(join(wt, demoRel, 'demo.json'), '{"a":2}');
     writeFileSync(join(wt, demoRel, 'DEMO.md'), '# demo');
-    assert.equal(commitOrchestratedCaptureArtifacts(wt, demoRel, 'INIT-x'), true);
+    const result = commitOrchestratedCaptureArtifacts(wt, demoRel, 'INIT-x');
+    assert.equal(result.committed, true);
+    assert.deepEqual(result.skippedMedia, []);
     const head = git(wt, 'log', '--oneline', '-1');
     assert.match(head, /orchestrated demo capture \(INIT-x\)/);
     // Pushed: origin HEAD matches local HEAD.
@@ -191,6 +195,171 @@ test('commitOrchestratedCaptureArtifacts: commits + pushes changed demo artifact
     assert.equal(git(wt, 'log', '-1', '--pretty=%ae').trim(), 'forge-orchestrator@forge.local');
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// commitOrchestratedCaptureArtifacts — `.capture/{before,after}` media
+// (forge-mfv5.2.5): the WebM "magic" 4 bytes (EBML header) stand in for
+// a real recording so the fixture reads as media, not an arbitrary blob.
+// ---------------------------------------------------------------------------
+
+const WEBM_MAGIC = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
+
+/** A bare (no bare-origin push needed) git repo with a demo dir seeded with
+ *  `demo.json`, ready for `.capture/<side>/` fixtures to be added by the
+ *  caller before invoking `commitOrchestratedCaptureArtifacts`. */
+function makeCaptureRepo(): { root: string; wt: string; demoRel: string; cleanup: () => void } {
+  const root = mkdtempSync(join(tmpdir(), 'forge-oc-media-'));
+  const origin = join(root, 'origin.git');
+  const wt = join(root, 'wt');
+  const git = (...args: string[]): string => execFileSync('git', args, { cwd: wt, stdio: 'pipe', encoding: 'utf8' });
+  execFileSync('git', ['init', '--bare', origin], { stdio: 'pipe' });
+  execFileSync('git', ['init', '-b', 'main', wt], { stdio: 'pipe' });
+  git('config', 'user.email', 't@t');
+  git('config', 'user.name', 't');
+  git('remote', 'add', 'origin', origin);
+  const demoRel = join('demo', 'INIT-media');
+  mkdirSync(join(wt, demoRel), { recursive: true });
+  writeFileSync(join(wt, demoRel, 'demo.json'), '{"a":1}');
+  git('add', '-A');
+  git('commit', '-m', 'seed');
+  git('push', 'origin', 'main');
+  return { root, wt, demoRel, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+function trackedFiles(wt: string): string[] {
+  return execFileSync('git', ['ls-tree', '-r', '--name-only', 'HEAD'], { cwd: wt, encoding: 'utf8' })
+    .split('\n')
+    .filter(Boolean);
+}
+
+test('commitOrchestratedCaptureArtifacts: a small webm under the bound is committed', () => {
+  const { wt, demoRel, cleanup } = makeCaptureRepo();
+  try {
+    const sideDir = join(wt, demoRel, '.capture', 'after');
+    mkdirSync(sideDir, { recursive: true });
+    writeFileSync(join(sideDir, 'checkpoint-1.webm'), WEBM_MAGIC);
+    const result = commitOrchestratedCaptureArtifacts(wt, demoRel, 'INIT-media');
+    assert.equal(result.committed, true);
+    assert.deepEqual(result.skippedMedia, []);
+    assert.ok(
+      trackedFiles(wt).includes(join(demoRel, '.capture', 'after', 'checkpoint-1.webm')),
+      'small webm should be tracked',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('commitOrchestratedCaptureArtifacts: an oversize webm is NOT committed, and is reported', () => {
+  const { wt, demoRel, cleanup } = makeCaptureRepo();
+  try {
+    const sideDir = join(wt, demoRel, '.capture', 'after');
+    mkdirSync(sideDir, { recursive: true });
+    const oversize = Buffer.concat([WEBM_MAGIC, Buffer.alloc(MAX_COMMITTED_DEMO_WEBM_BYTES + 1)]);
+    writeFileSync(join(sideDir, 'checkpoint-1.webm'), oversize);
+    const result = commitOrchestratedCaptureArtifacts(wt, demoRel, 'INIT-media');
+    // demo.json is unchanged from the seed commit and the oversize webm is
+    // refused, so nothing new is staged — committed stays false.
+    assert.equal(result.committed, false);
+    assert.equal(result.skippedMedia.length, 1);
+    assert.equal(result.skippedMedia[0]!.relPath, join(demoRel, '.capture', 'after', 'checkpoint-1.webm'));
+    assert.match(result.skippedMedia[0]!.reason, /byte bound/);
+    assert.ok(
+      !trackedFiles(wt).includes(join(demoRel, '.capture', 'after', 'checkpoint-1.webm')),
+      'oversize webm must not be tracked',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('commitOrchestratedCaptureArtifacts: an oversize filmstrip.png IS committed (no bound, orchestrator ruling)', () => {
+  const { wt, demoRel, cleanup } = makeCaptureRepo();
+  try {
+    const sideDir = join(wt, demoRel, '.capture', 'after');
+    mkdirSync(sideDir, { recursive: true });
+    // Larger than the webm bound AND the regular-media bound — still committed.
+    const oversize = Buffer.alloc(MAX_COMMITTED_DEMO_MEDIA_BYTES + 1, 0xff);
+    writeFileSync(join(sideDir, 'checkpoint-1.filmstrip.png'), oversize);
+    const result = commitOrchestratedCaptureArtifacts(wt, demoRel, 'INIT-media');
+    assert.equal(result.committed, true);
+    assert.deepEqual(result.skippedMedia, []);
+    assert.ok(
+      trackedFiles(wt).includes(join(demoRel, '.capture', 'after', 'checkpoint-1.filmstrip.png')),
+      'oversize filmstrip must still be tracked',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('commitOrchestratedCaptureArtifacts: an oversize plain .png (non-filmstrip) is skipped', () => {
+  const { wt, demoRel, cleanup } = makeCaptureRepo();
+  try {
+    const sideDir = join(wt, demoRel, '.capture', 'before');
+    mkdirSync(sideDir, { recursive: true });
+    writeFileSync(join(sideDir, 'checkpoint-1.png'), Buffer.alloc(MAX_COMMITTED_DEMO_MEDIA_BYTES + 1));
+    const result = commitOrchestratedCaptureArtifacts(wt, demoRel, 'INIT-media');
+    assert.equal(result.committed, false);
+    assert.equal(result.skippedMedia.length, 1);
+    assert.match(result.skippedMedia[0]!.reason, /byte bound/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('commitOrchestratedCaptureArtifacts: an oversize .out is skipped', () => {
+  const { wt, demoRel, cleanup } = makeCaptureRepo();
+  try {
+    const sideDir = join(wt, demoRel, '.capture', 'after');
+    mkdirSync(sideDir, { recursive: true });
+    writeFileSync(join(sideDir, 'checkpoint-1.out'), Buffer.alloc(MAX_COMMITTED_DEMO_MEDIA_BYTES + 1));
+    const result = commitOrchestratedCaptureArtifacts(wt, demoRel, 'INIT-media');
+    assert.equal(result.committed, false);
+    assert.equal(result.skippedMedia.length, 1);
+    assert.match(result.skippedMedia[0]!.reason, /byte bound/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('commitOrchestratedCaptureArtifacts: a symlink under .capture is refused, not staged', () => {
+  const { root, wt, demoRel, cleanup } = makeCaptureRepo();
+  try {
+    const sideDir = join(wt, demoRel, '.capture', 'after');
+    mkdirSync(sideDir, { recursive: true });
+    // Points OUTSIDE the demo dir entirely — the escape shape the guard exists for.
+    const outside = join(root, 'outside-secret.webm');
+    writeFileSync(outside, WEBM_MAGIC);
+    symlinkSync(outside, join(sideDir, 'checkpoint-1.webm'));
+    const result = commitOrchestratedCaptureArtifacts(wt, demoRel, 'INIT-media');
+    assert.equal(result.committed, false);
+    assert.equal(result.skippedMedia.length, 1);
+    assert.equal(result.skippedMedia[0]!.relPath, join(demoRel, '.capture', 'after', 'checkpoint-1.webm'));
+    assert.match(result.skippedMedia[0]!.reason, /refused/);
+    assert.ok(
+      !trackedFiles(wt).includes(join(demoRel, '.capture', 'after', 'checkpoint-1.webm')),
+      'symlinked media must never be tracked',
+    );
+  } finally {
+    cleanup();
+  }
+});
+
+test('commitOrchestratedCaptureArtifacts: a capture file named outside the recorder charset is never staged', () => {
+  const { wt, demoRel, cleanup } = makeCaptureRepo();
+  try {
+    const sideDir = join(wt, demoRel, '.capture', 'after');
+    mkdirSync(sideDir, { recursive: true });
+    writeFileSync(join(sideDir, 'x](evil).filmstrip.png'), WEBM_MAGIC);
+    const result = commitOrchestratedCaptureArtifacts(wt, demoRel, 'INIT-media');
+    assert.equal(result.committed, false);
+    assert.match(result.skippedMedia[0]?.reason ?? '', /charset/);
+    assert.ok(!trackedFiles(wt).some((f) => f.includes('evil')), 'an unsafe name is never tracked');
+  } finally {
+    cleanup();
   }
 });
 

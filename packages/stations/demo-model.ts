@@ -638,6 +638,9 @@ function checkpointsSectionHeadingMd(checkpoints: DemoModelCheckpoint[]): string
 
 /** Render a derived DEMO.md (the PR-self-contained convenience). Markdown only;
  *  media is referenced as relative links rather than embedded. */
+/** The path shape collectCapturedMedia binds for a recorded side; nothing else is linked from DEMO.md. */
+const RECORDED_WEBM_RE = /^\.capture\/(before|after)\/[A-Za-z0-9._-]+\.webm$/;
+
 export function renderDemoMarkdown(model: DemoModel): string {
   const lines: string[] = [];
   lines.push(`# ${model.title}`);
@@ -687,8 +690,14 @@ export function renderDemoMarkdown(model: DemoModel): string {
         lines.push('```');
       }
     }
-    if (c.beforeImage || c.beforeVideoSrc) lines.push(`- Before media: \`${c.label}\` (before)`);
-    if (c.afterImage || c.afterVideoSrc) lines.push(`- After media: \`${c.label}\` (after)`);
+    for (const [side, image, video] of [['before', c.beforeImage, c.beforeVideoSrc], ['after', c.afterImage, c.afterVideoSrc]] as const) {
+      // A recorded side links its committed files relatively, so DEMO.md shows them on GitHub
+      // (private repos too); only the recorder's own path shape is ever linked (forge-mfv5.2.5).
+      const src = typeof video === 'string' && RECORDED_WEBM_RE.test(video) && video.startsWith(`.capture/${side}/`) ? video : null;
+      const text = c.label.replace(/[[\]()]/g, ''); // link text only; brackets would let a label close the link
+      if (src) lines.push(`![${text} — ${side}](${src.replace(/\.webm$/, '.filmstrip.png')})`, `[▶ ${text} — ${side} (webm)](${src})`);
+      else if (image || video) lines.push(`- ${side === 'before' ? 'Before' : 'After'} media: \`${c.label}\` (${side})`);
+    }
     if (c.metrics && c.metrics.length > 0) {
       lines.push('');
       lines.push('| metric | before | after | Δ | parity |');

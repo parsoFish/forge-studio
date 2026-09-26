@@ -21,11 +21,11 @@
 
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
+import { accessSync, constants, existsSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME } from '../demo-paths.ts';
-import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
+import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME, SAFE_CAPTURE_NAME_RE } from '../demo-paths.ts';
+import { gitIdentityConfigArgs, guardedReadDir, ORCHESTRATOR_GIT_IDENTITY, resolveGuardedPath } from '@forge/kernel';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 
@@ -258,28 +258,147 @@ export function runOrchestratorCommand(
 }
 
 /**
+ * Regular capture media (`.out`, plain `.png`) committed only up to this size —
+ * an interim default (forge-mfv5.2.5); a later run measured against real
+ * project captures re-sizes this. `.filmstrip.png` is exempt (see
+ * `MAX_COMMITTED_DEMO_WEBM_BYTES`'s neighbour note below); this bound applies
+ * to everything else `collectCommittableCaptureMedia` recognises.
+ */
+export const MAX_COMMITTED_DEMO_MEDIA_BYTES = 10 * 1024 * 1024;
+
+/**
+ * `.webm` recordings committed only up to this size — 2 MB interim default
+ * (orchestrator ruling, forge-mfv5.2.5 amendment); a later run measured
+ * against real project captures re-sizes this. Unlike `.filmstrip.png` (a
+ * fixed-size grid of stills, always committed regardless of size — it IS the
+ * primary PR-visible evidence), a `.webm`'s length is unbounded, so it keeps
+ * its own, separate, tighter bound rather than sharing
+ * `MAX_COMMITTED_DEMO_MEDIA_BYTES`.
+ */
+export const MAX_COMMITTED_DEMO_WEBM_BYTES = 2_000_000;
+
+/** One capture-media file `collectCommittableCaptureMedia` decided NOT to
+ *  stage, and why — surfaced to the caller (event log) and, via
+ *  `embedDemoInPr`'s own re-derivation from git, into the PR body. */
+export type SkippedCaptureMedia = { relPath: string; reason: string };
+
+type CollectedCaptureMedia = { toStage: string[]; skipped: SkippedCaptureMedia[] };
+
+/**
+ * Walk `<demoDirRel>/.capture/{before,after}/` in the worktree and decide
+ * which regular files to stage, applying the interim size bounds above.
+ * Containment + symlink refusal go through `@forge/kernel`'s
+ * `resolveGuardedPath` (the same per-segment realpath identity walk the rest
+ * of the codebase already uses for every other request/agent-influenced path
+ * — a demo `command` checkpoint runs arbitrary project code with cwd = the
+ * worktree, so a file appearing under `.capture/<side>/` is not fully
+ * trusted input either) rather than a bespoke lstat check: it refuses a
+ * symlinked entry, a dangling symlink, a hardlinked leaf, and any escape of
+ * the `.capture/<side>` directory in one already-audited call.
+ *
+ * Only `.out`, `.png` (including `.filmstrip.png`), and `.webm` are
+ * recognised; anything else under `.capture/<side>/` is left alone (not
+ * staged, not reported — outside this function's contract, same as before
+ * this change when `.capture/` was never staged at all).
+ */
+function collectCommittableCaptureMedia(worktreePath: string, demoDirRel: string): CollectedCaptureMedia {
+  const toStage: string[] = [];
+  const skipped: SkippedCaptureMedia[] = [];
+  // The worktree is the trusted root; every demo-dir part is its own guarded segment
+  // (path-guard.ts CONTRACT: nothing caller-derived is ever folded into `root`).
+  const demoSegments = demoDirRel.split(/[\\/]/).filter((p) => p !== '');
+  for (const side of ['before', 'after'] as const) {
+    const names = guardedReadDir(worktreePath, [...demoSegments, '.capture', side]);
+    if (!names) continue; // no `.capture/<side>` dir — nothing to stage for this side
+    for (const name of names.sort()) {
+      const segments = ['.capture', side, name];
+      const relFromDemoDir = segments.join('/');
+      const relPath = join(demoDirRel, relFromDemoDir);
+      if (!SAFE_CAPTURE_NAME_RE.test(name)) {
+        skipped.push({ relPath, reason: 'name outside the capture charset' });
+        continue;
+      }
+      const guard = resolveGuardedPath(worktreePath, [...demoSegments, ...segments]);
+      if (!guard.ok || !guard.exists) {
+        skipped.push({ relPath, reason: guard.ok ? 'disappeared mid-scan' : `refused: ${guard.reason}` });
+        continue;
+      }
+      const lower = name.toLowerCase();
+      const isFilmstrip = lower.endsWith('.filmstrip.png');
+      const isPlainPng = !isFilmstrip && lower.endsWith('.png');
+      const isOut = lower.endsWith('.out');
+      const isWebm = lower.endsWith('.webm');
+      if (!isFilmstrip && !isPlainPng && !isOut && !isWebm) continue; // unrecognised extension — leave alone
+      if (isFilmstrip) {
+        toStage.push(relPath); // always committed, no size bound (orchestrator ruling)
+        continue;
+      }
+      let size: number;
+      try {
+        size = statSync(guard.realPath).size;
+      } catch {
+        skipped.push({ relPath, reason: 'stat failed after containment check' });
+        continue;
+      }
+      const bound = isWebm ? MAX_COMMITTED_DEMO_WEBM_BYTES : MAX_COMMITTED_DEMO_MEDIA_BYTES;
+      if (size > bound) {
+        skipped.push({ relPath, reason: `${size} bytes > ${bound} byte bound` });
+        continue;
+      }
+      toStage.push(relPath);
+    }
+  }
+  return { toStage, skipped };
+}
+
+export type CommitOrchestratedCaptureArtifactsResult = {
+  /** A commit (and push) actually happened. */
+  committed: boolean;
+  /** Capture media found under `.capture/{before,after}/` but NOT staged
+   *  (oversize `.out`/`.webm`/plain `.png`, or refused by the containment
+   *  guard — e.g. a symlink). Empty when nothing was skipped. */
+  skippedMedia: SkippedCaptureMedia[];
+};
+
+/**
  * Commit (and push) the artifacts an orchestrated capture produced —
- * `demo.json` + `DEMO.md` under the demo dir — so the real evidence lands ON
- * the branch and the branches_in_sync gate still holds. No-op when the
- * capture changed nothing. Best-effort: git failures return false and the
- * composed gate's own checks surface any resulting inconsistency.
+ * `demo.json` + `DEMO.md`, plus (forge-mfv5.2.5) the checkpoint media under
+ * `.capture/{before,after}/` up to the size bounds above — so the real
+ * evidence lands ON the branch and the branches_in_sync gate still holds.
+ * No-op when nothing changed. Best-effort: git failures return
+ * `{ committed: false, ... }` and the composed gate's own checks surface any
+ * resulting inconsistency.
+ *
+ * Media is force-added (`git add -f`). Measured 2026-09-27: two of forge's
+ * own project templates (`projects/mdtoc/.gitignore`,
+ * `tests/stories/grounds/node-library/seed/.gitignore`) still carry an
+ * unanchored `demo/` line that blanket-ignores the WHOLE tracked demo dir —
+ * `.capture/` included — a stale pattern `node-cli-with-tests/seed/.gitignore`
+ * already dropped for exactly this reason (its own comment: it silently
+ * dropped every initiative's demo evidence). Those two templates are fixed
+ * in the same change, but `git add -f` stays regardless: a project already
+ * onboarded from the OLD template, or any external project with its own
+ * legacy `demo/` ignore rule, still needs its evidence committed and forge
+ * has no way to fix a rule it does not own.
  */
 export function commitOrchestratedCaptureArtifacts(
   worktreePath: string,
   demoDirRel: string,
   initiativeId: string,
   message?: string,
-): boolean {
+): CommitOrchestratedCaptureArtifactsResult {
   const git = (args: string[]): string =>
     execFileSync('git', args, { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8' });
+  const media = collectCommittableCaptureMedia(worktreePath, demoDirRel);
   try {
     const paths = [join(demoDirRel, DEMO_JSON_BASENAME), join(demoDirRel, DEMO_MD_BASENAME)].filter((p) =>
       existsSync(join(worktreePath, p)),
     );
-    if (paths.length === 0) return false;
-    git(['add', '--', ...paths]);
+    if (paths.length === 0 && media.toStage.length === 0) return { committed: false, skippedMedia: media.skipped };
+    if (paths.length > 0) git(['add', '--', ...paths]);
+    if (media.toStage.length > 0) git(['add', '-f', '--', ...media.toStage]);
     const staged = git(['diff', '--cached', '--name-only']).trim();
-    if (staged.length === 0) return false;
+    if (staged.length === 0) return { committed: false, skippedMedia: media.skipped };
     git([
       ...gitIdentityConfigArgs(ORCHESTRATOR_GIT_IDENTITY),
       'commit',
@@ -289,9 +408,9 @@ export function commitOrchestratedCaptureArtifacts(
     ]);
     // Push so the sync gate (local HEAD == origin HEAD) keeps holding.
     git(['push', 'origin', 'HEAD']);
-    return true;
+    return { committed: true, skippedMedia: media.skipped };
   } catch {
-    return false;
+    return { committed: false, skippedMedia: media.skipped };
   }
 }
 
