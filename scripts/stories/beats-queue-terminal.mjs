@@ -47,7 +47,48 @@
  * started-gate — an unreadable queue must never MANUFACTURE a false terminal,
  * so it only ever forfeits the early exit this adds, never fabricates one.
  *
- * @returns {null | {unknown: true, detail: string} | {state: string, detail: string, mtimeMs: number}}
+ * AMENDED BY T1 RULING 1637 (amending 1636; bead `forge-8vfn.8.1.27`), S10
+ * PROOF RUN 32 — mtime is NOT safe for `ready-for-review`. Closure moved a
+ * manifest there at 16:57:07.823Z, before the NEXT press's own anchor; that
+ * press's `send-back` REWROTE the same manifest file IN PLACE at ~16:57:11.2 —
+ * no rename, no new file — and the rewrite alone pushed mtime to
+ * 16:57:11.299Z, AFTER the anchor. The rule above read that as this press's
+ * own terminal and ended the wait 0.8s later; the real fix cycle's
+ * `cycle.start` did not land until 16:58:17.134Z. An mtime any unrelated
+ * write can bump is not the product's word.
+ *
+ * So `ready-for-review` alone — the one state a rewrite-in-place can reach —
+ * is keyed on the product's OWN transition event instead:
+ * `closure.manifest-moved-to-ready-for-review`, logged by `terminalMove`
+ * beside the SAME move (`packages/flows/phases/closure.ts:109`), read from the
+ * cycle's own `events.jsonl` (the same `dir` the caller already resolved by
+ * identity). That event's `started_at` is `createLogger`'s own
+ * `new Date().toISOString()` taken at emit time
+ * (`packages/kernel/logging.ts:162`) — a fine timestamp, not the coarse fs
+ * clock `FS_CLOCK_SLACK_MS` exists for — so no slack applies to it.
+ *
+ * `cycleStartedSince` is NEVER ANDed onto this branch: T1 1636 tried exactly
+ * that and T1 1637 reverted it on evidence — row 98 below is a case where
+ * `cycle.start` predates the anchor and ONLY the terminal proves the round
+ * happened, so ANDing `cycleStartedSince` in reintroduces the very hang row 98
+ * exists to prevent (proved in this file's own tests, "T1 1637 (row 98,
+ * ready-for-review)", `beats-cycle-terminal.test.ts`).
+ *
+ * A MISSING OR UNREADABLE EVENT IS `unknown: true`, NEVER A SILENT FALL-BACK
+ * TO MTIME (§15.504): an absent event may mean "not this round yet" and a read
+ * failure may hide a real one, so neither is evidence of arrival — the caller
+ * folds it into "nothing resolved this poll" exactly like any other unknown.
+ *
+ * EVERY OTHER TERMINAL STATE (`failed`, `merged`, `done`, …) keeps reading
+ * mtime exactly as T1 1503 ruled: none has a rename-in-place hazard the way a
+ * resent `ready-for-review` manifest does, and `failed` in particular has no
+ * mapped `closure.manifest-moved-to-*` event at all (`scheduler-run-one.ts`/
+ * `scheduler-dispatch.ts` move it with no matching log line) — widening the
+ * event requirement there would turn "no defect" into "permanently unknown".
+ * Widen past `ready-for-review` only once a state grows both its own
+ * rename-in-place hazard AND its own mapped event.
+ *
+ * @returns {null | {unknown: true, detail: string} | {state: string, detail: string, atMs: number, slackMs: number}}
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -63,7 +104,7 @@ import { join } from 'node:path';
  */
 export const FS_CLOCK_SLACK_MS = 250;
 
-export function queueManifestTerminal(forgeRoot, initiativeId) {
+export function queueManifestTerminal(forgeRoot, initiativeId, cycleDir = null) {
   const queue = join(forgeRoot, '_queue');
   let states;
   try {
@@ -86,6 +127,9 @@ export function queueManifestTerminal(forgeRoot, initiativeId) {
     }
     const match = names.find((n) => n.includes(initiativeId));
     if (match === undefined) continue;
+    // T1 1637 — `ready-for-review` is the one state a send-back's in-place
+    // rewrite can reach, so it never reads mtime; see the file header.
+    if (state === 'ready-for-review') return readyForReviewArrival(initiativeId, cycleDir);
     const filePath = join(stateDir, match);
     // WHEN IT ARRIVED, not when it was last written: `moveTo`
     // (packages/flows/queue.ts) is a bare `renameSync`, which leaves mtime
@@ -99,9 +143,54 @@ export function queueManifestTerminal(forgeRoot, initiativeId) {
     } catch (err) {
       return { unknown: true, detail: `could not stat ${filePath}: ${err?.code ?? err?.message}` };
     }
-    return { state, mtimeMs, detail: `the product moved ${initiativeId} into _queue/${state}/` };
+    const detail = `the product moved ${initiativeId} into _queue/${state}/`;
+    return { state, atMs: mtimeMs, slackMs: FS_CLOCK_SLACK_MS, detail };
   }
   return null;
+}
+
+/**
+ * T1 1637 — the `ready-for-review` arrival, keyed on the product's own
+ * `closure.manifest-moved-to-ready-for-review` event rather than the
+ * manifest's fs mtime (file header has the S10 run 32 measurement). Reads the
+ * CYCLE's own `events.jsonl` — the same `cycleDir` the caller already resolved
+ * by identity — for the LAST such event, so a second round logged into the
+ * same directory is not shadowed by an earlier one. Absent or unreadable is
+ * `unknown: true`, never a silent fall-back to mtime (§15.504).
+ */
+function readyForReviewArrival(initiativeId, cycleDir) {
+  const state = 'ready-for-review';
+  const wantMessage = `closure.manifest-moved-to-${state}`;
+  if (typeof cycleDir !== 'string' || cycleDir === '') {
+    return { unknown: true, detail: `no cycle directory to read ${wantMessage} from for ${initiativeId}` };
+  }
+  const path = join(cycleDir, 'events.jsonl');
+  let raw;
+  try {
+    raw = readFileSync(path, 'utf8');
+  } catch (err) {
+    if (err?.code !== 'ENOENT') {
+      return { unknown: true, detail: `could not read ${path}: ${err?.code ?? err?.message}` };
+    }
+    raw = ''; // no events logged yet — not a real error, and not an arrival either
+  }
+  let atMs = null;
+  for (const line of raw.split('\n')) {
+    if (line.trim() === '') continue;
+    let ev;
+    try { ev = JSON.parse(line); } catch { continue; }
+    if (ev?.message !== wantMessage) continue;
+    const parsed = Date.parse(ev.started_at);
+    // the LAST match wins — the most recent round in this same cycle dir
+    if (!Number.isNaN(parsed)) atMs = parsed;
+  }
+  if (atMs === null) {
+    const detail = `no ${wantMessage} event found in ${path} for ${initiativeId} — ` +
+      `an mtime alone is never trusted here (T1 1637)`;
+    return { unknown: true, detail };
+  }
+  const detail = `the product's ${wantMessage} event fired for ${initiativeId}`;
+  return { state, atMs, slackMs: 0, detail };
 }
 
 /**

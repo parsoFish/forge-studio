@@ -41,9 +41,8 @@ import { tmpdir } from 'node:os';
 import {
   makeCycleTerminalDoor, makeCycleTerminalWatch, STALL_CEILING_MS, TERMINAL_UI_GRACE_MS,
 } from './beats-agent-proc.mjs';
-import { channelTerminalState } from './beats-queue-terminal.mjs';
+import { channelTerminalState, queueManifestTerminal, FS_CLOCK_SLACK_MS } from './beats-queue-terminal.mjs';
 import { resolveCycleOf } from './beats.mjs';
-import { FS_CLOCK_SLACK_MS } from './beats-queue-terminal.mjs';
 
 function realDoor(): { root: string; logs: string; door: (runId: string | null, sinceMs: number, want: string) => { done: boolean; state: string; detail: string } | null } {
   const root = mkdtempSync(join(tmpdir(), 'story-cycle-terminal-'));
@@ -61,6 +60,12 @@ function liveDispatch(logs: string, name: string): string {
 function queueFile(root: string, state: string, initiative: string): void {
   mkdirSync(join(root, '_queue', state), { recursive: true });
   writeFileSync(join(root, '_queue', state, `${initiative}.md`), '# an initiative\n');
+}
+/** The product's own transition word — `terminalMove`
+ *  (packages/flows/phases/closure.ts:109) logs this beside its move. */
+function closureMovedEvent(dir: string, state: string, whenIso: string): void {
+  appendFileSync(join(dir, 'events.jsonl'),
+    `${JSON.stringify({ event_type: 'log', message: `closure.manifest-moved-to-${state}`, started_at: whenIso })}\n`);
 }
 
 test('7.6.118: run 17\'s exact shape — a cycle that reaches the wanted state while STILL WRITING ends the wait', () => {
@@ -527,19 +532,27 @@ test('T1 1503: a queue terminal OLDER than the anchor is ignored — the wait co
 
 /** THE WANTED STATE, mid-wait, still REACHES — the `terminalAt`/grace state
  *  `makeCycleTerminalWatch` keeps must be set from this same fast path, not
- *  only from the started-gate's own read. */
-test('T1 1503: a queue terminal in the WANTED state, mid-wait, reaches — even with cycle.start predating the anchor', () => {
+ *  only from the started-gate's own read.
+ *
+ *  AMENDED BY T1 1637: `ready-for-review` arrival no longer reads mtime (see
+ *  beats-queue-terminal.mjs's header), so the fixture now also logs the
+ *  product's own `closure.manifest-moved-to-ready-for-review` event mid-wait,
+ *  the way `terminalMove` (packages/flows/phases/closure.ts:109) does beside
+ *  its move — `queueFile` (an mtime-only write) can no longer reach this on
+ *  its own. */
+test('T1 1503/1637: a queue terminal in the WANTED state, mid-wait, reaches — even with cycle.start predating the anchor', () => {
   const { root, logs } = realDoor();
   const initiative = 'INIT-1503-reached';
   const anchor = Date.now() - 5_000;
-  liveDispatch(logs, `2026-09-25T20-36-45_${initiative}`);
-  appendFileSync(join(logs, `2026-09-25T20-36-45_${initiative}`, 'events.jsonl'),
+  const dir = liveDispatch(logs, `2026-09-25T20-36-45_${initiative}`);
+  appendFileSync(join(dir, 'events.jsonl'),
     `${JSON.stringify({ event_type: 'start', message: 'cycle.start', started_at: new Date(anchor - 1_000).toISOString() })}\n`);
   const watch = makeCycleTerminalWatch(root, 'ready-for-review', { cycleOf: initiative })!;
   assert.equal(watch(null, anchor), null);
   assert.equal(watch.reached, false, 'not reached yet');
 
   queueFile(root, 'ready-for-review', initiative); // the WANTED state, mid-wait
+  closureMovedEvent(dir, 'ready-for-review', new Date(anchor + 1_000).toISOString());
 
   assert.equal(watch(null, anchor), null, 'a first sighting starts the page grace, by design — it does not end the wait yet');
   assert.equal(watch.reached, true, 'but it IS reached — the terminal was read despite cycle.start predating the anchor');
@@ -566,6 +579,114 @@ test('T1 1503: a manifest MOVED into a terminal state after the anchor counts ev
   const stop = watch(null, anchor);
   assert.notEqual(stop, null, 'the move happened after the anchor — a stale mtime must not hide it');
   assert.equal(stop!.reason, 'cycle-ended');
+});
+
+/**
+ * T1 RULING 1637 (amending 1636), bead `forge-8vfn.8.1.27` — S10 PROOF RUN 32.
+ *
+ * MEASURED. The first develop cycle's closure moved the manifest into
+ * `_queue/ready-for-review/` at 16:57:07.823Z (`closure.manifest-moved-to-
+ * ready-for-review`, packages/flows/phases/closure.ts:109). The story pressed
+ * `send-back` at ~16:57:11.2 — the anchor for the NEXT wait — and the
+ * send-back handler REWRITES that same manifest file IN PLACE: no rename, no
+ * new file, no new event. The rewrite alone pushed the file's mtime to
+ * 16:57:11.299Z, AFTER the anchor, and `queueManifestTerminal`'s old mtime
+ * rule read that as the press's own terminal — beat 16 ended 0.8s after the
+ * press. The fix cycle's real `cycle.start` did not land until 16:58:17.134Z.
+ *
+ * T1 1636 first ruled arrival must ALSO require `cycleStartedSince(dir,
+ * sinceMs)` on the queue branch. T1 1637 reverted that AND on evidence: row 98
+ * (S10 run 27, above) is a case where `cycle.start` predates the anchor and
+ * ONLY the terminal proves the round happened — ANDing `cycleStartedSince` in
+ * would leave THAT case hanging forever again, one layer down. The ruling
+ * instead keys `ready-for-review` arrival on the product's OWN
+ * `closure.manifest-moved-to-ready-for-review` event timestamp alone, never
+ * fs mtime, with an absent or unreadable event reported as `unknown` rather
+ * than silently falling back to mtime.
+ */
+test('T1 1637 (run 32): an in-place rewrite after the anchor is not the product\'s word — the wait keeps going', () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-1637-run32';
+  const dir = liveDispatch(logs, `2026-09-26T16-56-00_${initiative}`);
+  // The FIRST cycle's own cycle.start and closure, both BEFORE the anchor.
+  appendFileSync(join(dir, 'events.jsonl'),
+    `${JSON.stringify({ event_type: 'start', message: 'cycle.start', started_at: '2026-09-26T16:56:05.000Z' })}\n`);
+  queueFile(root, 'ready-for-review', initiative);
+  closureMovedEvent(dir, 'ready-for-review', '2026-09-26T16:57:07.823Z');
+
+  const anchor = Date.parse('2026-09-26T16:57:11.200Z'); // the send-back press
+  // The send-back handler rewrites the SAME manifest file in place — mtime
+  // moves to "now" (well after the fixed anchor above); no new event, no new
+  // cycle.start.
+  writeFileSync(join(root, '_queue', 'ready-for-review', `${initiative}.md`), '# resent by send-back\n');
+
+  const door = makeCycleTerminalDoor(root, { cycleOf: initiative })!;
+  const seen = door(null, anchor, 'ready-for-review');
+  assert.equal(seen, null, 'no NEW closure event and no NEW cycle.start since the anchor — this is not the press\'s verdict');
+  assert.ok(door.lastSeen.length > 0, `the door must NAME why it is still waiting: ${door.lastSeen}`);
+});
+
+test('T1 1637 (row 98, ready-for-review): the moved event alone ends the wait, even though cycle.start predates the anchor', () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-1637-row98-rfr';
+  const dir = liveDispatch(logs, `2026-09-26T16-56-00_${initiative}`);
+  const anchor = Date.parse('2026-09-26T16:57:11.200Z');
+  // row 98's own hazard, reproduced here: cycle.start predates the anchor, so
+  // `cycleStartedSince` can never fire for this poll — proving an AND with it
+  // would leave this case hanging exactly as row 98 did.
+  appendFileSync(join(dir, 'events.jsonl'),
+    `${JSON.stringify({ event_type: 'start', message: 'cycle.start', started_at: '2026-09-26T16:57:10.000Z' })}\n`);
+  queueFile(root, 'ready-for-review', initiative);
+  closureMovedEvent(dir, 'ready-for-review', '2026-09-26T16:58:17.500Z'); // AFTER the anchor
+
+  const door = makeCycleTerminalDoor(root, { cycleOf: initiative })!;
+  const seen = door(null, anchor, 'ready-for-review');
+  assert.notEqual(seen, null, 'the moved event alone must end the wait — cycleStartedSince is never ANDed in (T1 1637)');
+  assert.equal(seen!.done, true, seen?.detail);
+});
+
+test('T1 1637: the fix cycle completes cleanly — a fresh cycle.start after the anchor, then its own moved event', () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-1637-fix-cycle';
+  const anchor = Date.now() - 5_000;
+  const dir = liveDispatch(logs, `2026-09-26T16-58-17_${initiative}`);
+  appendFileSync(join(dir, 'events.jsonl'),
+    `${JSON.stringify({ event_type: 'start', message: 'cycle.start', started_at: new Date(anchor + 1_000).toISOString() })}\n`);
+  queueFile(root, 'ready-for-review', initiative);
+  closureMovedEvent(dir, 'ready-for-review', new Date(anchor + 2_000).toISOString());
+
+  const door = makeCycleTerminalDoor(root, { cycleOf: initiative })!;
+  const seen = door(null, anchor, 'ready-for-review');
+  assert.notEqual(seen, null);
+  assert.equal(seen!.done, true, seen?.detail);
+});
+
+test('T1 1637: an ABSENT moved event is UNKNOWN, never a silent mtime early exit', () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-1637-absent-event';
+  const dir = liveDispatch(logs, `2026-09-26T16-56-00_${initiative}`);
+  queueFile(root, 'ready-for-review', initiative); // mtime is "now" — no event logged at all
+
+  const seen = queueManifestTerminal(root, initiative, dir);
+  assert.equal(seen?.unknown, true, `an mtime alone must never stand in for the product's own word: ${JSON.stringify(seen)}`);
+  assert.match(seen!.detail, /closure\.manifest-moved-to-ready-for-review/, seen!.detail);
+});
+
+test('T1 1637: an UNREADABLE cycle log is UNKNOWN, never a silent mtime early exit', {
+  skip: process.getuid?.() === 0 ? 'root reads mode-000 files' : false,
+}, () => {
+  const { root, logs } = realDoor();
+  const initiative = 'INIT-1637-unreadable-event';
+  const dir = liveDispatch(logs, `2026-09-26T16-56-00_${initiative}`);
+  queueFile(root, 'ready-for-review', initiative);
+  chmodSync(join(dir, 'events.jsonl'), 0o000);
+  try {
+    const seen = queueManifestTerminal(root, initiative, dir);
+    assert.equal(seen?.unknown, true);
+    assert.match(seen!.detail, /could not read .*events\.jsonl.*EACCES/, seen!.detail);
+  } finally {
+    chmodSync(join(dir, 'events.jsonl'), 0o644);
+  }
 });
 
 /**

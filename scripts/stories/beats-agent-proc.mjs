@@ -361,19 +361,23 @@ export function makeCycleTerminalDoor(forgeRoot, opts = null) {
     // T1 1503 (row 98) — TERMINAL WINS, BEFORE ANY WINDOW ARITHMETIC.
     // `queueManifestTerminal`'s own doc has the measurement: `cycleStartedSince`
     // below can never fire when `cycle.start` lands before this beat's anchor,
-    // so the queue's mtime (the same kind of product-word evidence) is read
-    // FIRST, unconditionally, never gated on the started-proof below.
+    // so the queue's own word (mtime for most states; T1 1637 keys
+    // `ready-for-review` on its own `closure.manifest-moved-to-*` event
+    // instead — see that function's header) is read FIRST, unconditionally,
+    // never gated on the started-proof below. NEVER ANDed with it either: T1
+    // 1636 tried that and T1 1637 reverted it — it reintroduces row 98's own
+    // hang (proof: "T1 1637 (row 98, ready-for-review)" below).
     if (cycleOf !== null) {
-      const q = queueManifestTerminal(forgeRoot, cycleOf);
+      const q = queueManifestTerminal(forgeRoot, cycleOf, dir);
       if (q !== null) {
         if (q.unknown === true) {
           // Named, never silent (§15.504): forfeits this early exit only.
           door.lastSeen = q.detail;
-        } else if (q.mtimeMs >= sinceMs - FS_CLOCK_SLACK_MS) {
+        } else if (q.atMs >= sinceMs - (q.slackMs ?? 0)) {
           door.lastSeen = q.detail;
           return Object.freeze({ done: q.state === wantState, state: q.state, detail: q.detail });
         }
-        // `mtimeMs < sinceMs` — S10 run 22's hazard, a PREVIOUS run's terminal.
+        // `atMs < sinceMs` — S10 run 22's hazard, a PREVIOUS run's terminal.
         // Fall through as if the queue had said nothing.
       }
     }
