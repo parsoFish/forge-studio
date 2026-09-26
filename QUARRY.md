@@ -547,9 +547,9 @@ operator-ratified new cap — never a silent raise.
 | packages/contracts/studio-types.ts | contracts | verbatim | 761 |
 | packages/contracts/demo-declaration.ts | contracts | rewritten | 105 |
 | packages/factory/index.ts | factory | verbatim | 8 |
-| packages/flows/phases/orchestrated-capture.ts | flows | verbatim | 414 |
 | packages/flows/pr.ts | flows | verbatim | 567 |
 | packages/flows/index.ts | flows | verbatim | 117 |
+| packages/flows/phases/orchestrated-capture.ts | flows | verbatim | 414 |
 | packages/kernel/config.ts | kernel | verbatim | 600 |
 | packages/kernel/gh-identity.ts | kernel | verbatim | 107 |
 | packages/kernel/ids.ts | kernel | verbatim | 136 |
