@@ -11,12 +11,12 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
 
-import { startDescendantSampler, attributeEscapes, describeAttribution, mainCheckoutRoot } from './fence-attribution.mjs';
+import { startDescendantSampler, attributeEscapes, describeAttribution, mainCheckoutRoot, MAIN_CHECKOUT_ROOT_UNKNOWN } from './fence-attribution.mjs';
 
 // ------------------------------------------------------------- fixtures
 
@@ -322,7 +322,12 @@ test('startDescendantSampler (real /proc, real rootPid): a listing that throws o
       return realListPids();
     },
   });
-  await new Promise((r) => setTimeout(r, 80)); // several real ticks on the real kernel
+  // Wait for the sampler's OWN progress, never a fixed sleep: under a loaded
+  // gate each real /proc listing is slow, and 80 ms fitted fewer than 4 ticks
+  // (PR #954 gate, 2026-09-26). 5 calls = 4 successful samples + the injected
+  // failure; the deadline only bounds a hang.
+  const deadline = Date.now() + 10_000;
+  while (calls < 5 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 10));
   const result = sampler.stop();
   assert.ok(result.samples >= 4);
   assert.ok(result.erroredSamples <= 1, 'a single transient failure, retried, costs at most one errored sample');
@@ -394,13 +399,51 @@ test('mainCheckoutRoot: the FIRST worktree `git worktree list` names, realpath\'
   }
 });
 
-test('mainCheckoutRoot: not a worktree-bearing checkout -> null, never throws', () => {
+test('control: mainCheckoutRoot — a genuine "not a git repository" (rc 128) is still null, never throws (row 102b/11)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'fence-attr-notgit-'));
   try {
     assert.equal(mainCheckoutRoot(dir), null);
   } finally {
     rm(dir);
   }
+});
+
+test('ROW 102b (RED) finding 11: an exec failure OTHER than "not a git repository" is UNKNOWN, never read as "no main tree"', () => {
+  // A nonexistent cwd fails at the spawn level (ENOENT on the cwd itself),
+  // never reaching git at all — a different fact from git's own "not a repo".
+  const gone = join(tmpdir(), 'fence-attr-does-not-exist-' + Date.now());
+  assert.equal(existsSync(gone), false);
+  const got = mainCheckoutRoot(gone);
+  assert.equal(got, MAIN_CHECKOUT_ROOT_UNKNOWN, `expected the UNKNOWN sentinel, not null: ${String(got)}`);
+});
+
+test('ROW 102b (RED) finding 11: attributeEscapes fails the fence CLOSED (THIS-RUN) when mainCheckoutRoot is UNKNOWN, never unattributable', () => {
+  const escapes = [{ root: '/sib/tree', paths: ['a.txt'] }];
+  const [got] = attributeEscapes(escapes, { touchedRoots: new Map(), longestGapMs: 0, mainRoot: MAIN_CHECKOUT_ROOT_UNKNOWN });
+  assert.equal(got.owner, 'this-run', `an UNKNOWN main checkout must never fall through to unattributable: ${JSON.stringify(got)}`);
+  assert.match(got.reason, /main checkout could not be determined/);
+});
+
+test('ROW 102b (RED) finding 10: a non-ENOENT realpath failure on the escape root defaults to THIS-RUN, never unattributable', () => {
+  // A self-referential symlink: realpathSync throws ELOOP, never ENOENT.
+  const dir = mkdtempSync(join(tmpdir(), 'fence-attr-eloop-'));
+  const loop = join(dir, 'loop');
+  symlinkSync(loop, loop);
+  try {
+    const [got] = attributeEscapes([{ root: loop, paths: ['a.txt'] }], { touchedRoots: new Map(), longestGapMs: 0 });
+    assert.equal(got.owner, 'this-run', `an unresolvable escape root must never read as unattributable: ${JSON.stringify(got)}`);
+    assert.match(got.reason, /could not be resolved/);
+  } finally {
+    rm(dir);
+  }
+});
+
+test('control: attributeEscapes — a genuinely absent escape root (ENOENT) still falls back to resolve() and is judged normally', () => {
+  const escapes = [{ root: '/definitely/does/not/exist/fence-attr-row10-ctrl', paths: ['a.txt'] }];
+  const [got] = attributeEscapes(escapes, { touchedRoots: new Map(), longestGapMs: 0 });
+  // ENOENT is not UNKNOWN — it must reach the ordinary unattributable path,
+  // exactly as an absent tree always has.
+  assert.equal(got.owner, 'unattributable');
 });
 
 // ============================================== real-process end to end ===
