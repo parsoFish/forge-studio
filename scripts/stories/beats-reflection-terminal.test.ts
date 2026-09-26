@@ -48,6 +48,9 @@ function cycleRoot(): { root: string; logs: string } {
   return { root, logs };
 }
 
+/** The beat's anchor in these fixtures: after the develop cycle merged, before the reflector ran. */
+const ANCHOR = Date.parse('2026-09-25T23:00:00.000Z');
+
 /** A develop cycle's own dir, `<ISO-ts>_<initiative>` — the SAME dir
  *  `cycleDirForInitiative` resolves by identity, and the SAME dir the
  *  reflector appends its own events to (`finalize-merged.ts`'s
@@ -101,7 +104,7 @@ test("T1 1693 (a): run 35's shape — merged, reflector.start after it, quiet pa
   utimesSync(join(dir, 'events.jsonl'), oldMs / 1000, oldMs / 1000);
 
   const door = makeReflectionDoor(root, INIT)!;
-  const seen = door(null, Date.now() - 400_000, REFLECTION_TERMINAL_STATE);
+  const seen = door(null, ANCHOR, REFLECTION_TERMINAL_STATE);
   assert.equal(seen, null, 'no reflector.end/crashed/reflection-lost yet — the wait must not end, quiet or not');
   assert.equal(door.sawCycle, true, 'the cycle dir IS resolved — this is "found, still open", never "nothing found"');
   assert.match(door.lastSeen, /reflector\.end/);
@@ -117,7 +120,7 @@ test("T1 1693 (b): a reflector.end after merged is the reflection's own terminal
   appendEvent(dir, 'reflector.end', '2026-09-25T23:04:40.000Z');
 
   const door = makeReflectionDoor(root, INIT)!;
-  const seen = door(null, Date.now() - 400_000, REFLECTION_TERMINAL_STATE)!;
+  const seen = door(null, ANCHOR, REFLECTION_TERMINAL_STATE)!;
   assert.equal(seen.done, true, seen.detail);
   assert.equal(seen.state, REFLECTION_TERMINAL_STATE);
   assert.match(seen.detail, /reflector\.end/);
@@ -131,7 +134,7 @@ test('T1 1693 (c): reflector.crashed is the reflection\'s own terminal too — N
   appendEvent(dir, 'reflector.crashed', '2026-09-25T23:02:05.000Z');
 
   const door = makeReflectionDoor(root, INIT)!;
-  const seen = door(null, Date.now() - 400_000, REFLECTION_TERMINAL_STATE)!;
+  const seen = door(null, ANCHOR, REFLECTION_TERMINAL_STATE)!;
   assert.equal(seen.done, false, 'crashed is a terminal, but it is not `reflected`');
   assert.equal(seen.state, 'crashed');
   assert.match(seen.detail, /reflector\.crashed/);
@@ -140,7 +143,7 @@ test('T1 1693 (c): reflector.crashed is the reflection\'s own terminal too — N
   // exactly the shape `beats-drive.mjs`'s `named()` appends to a red beat's
   // failures, so the crash is what a reader sees, not "gave up at 900000 ms".
   const watch = makeReflectionWatch(root, INIT)!;
-  const stop = watch(null, Date.now() - 400_000)!;
+  const stop = watch(null, ANCHOR)!;
   assert.equal(stop.reason, 'cycle-ended');
   assert.match(stop.detail, /crashed/, 'the crash is named, not swallowed into a generic timeout');
 });
@@ -152,7 +155,7 @@ test('T1 1693: cycle.reflection-lost is read the same way as a crash', () => {
   appendEvent(dir, 'cycle.reflection-lost', '2026-09-25T23:05:00.000Z');
 
   const door = makeReflectionDoor(root, INIT)!;
-  const seen = door(null, Date.now() - 400_000, REFLECTION_TERMINAL_STATE)!;
+  const seen = door(null, ANCHOR, REFLECTION_TERMINAL_STATE)!;
   assert.equal(seen.done, false);
   assert.equal(seen.state, 'lost');
   assert.match(seen.detail, /reflection-lost/);
@@ -166,7 +169,7 @@ test('T1 1693: a rerun RECOVERS from an earlier crash — the LAST event in log 
   appendEvent(dir, 'reflector.end', '2026-09-26T00:03:00.000Z');
 
   const door = makeReflectionDoor(root, INIT)!;
-  const seen = door(null, Date.now() - 400_000, REFLECTION_TERMINAL_STATE)!;
+  const seen = door(null, ANCHOR, REFLECTION_TERMINAL_STATE)!;
   assert.equal(seen.done, true, 'the LATER reflector.end recovers the earlier crash — a stale crash must not win');
 });
 
@@ -176,9 +179,9 @@ test('T1 1693 (d): no reflector run ever appears — the door names what it saw,
   queueFile(root, 'merged', INIT);
 
   const door = makeReflectionDoor(root, INIT)!;
-  assert.equal(door(null, Date.now() - 900_000, REFLECTION_TERMINAL_STATE), null);
+  assert.equal(door(null, ANCHOR, REFLECTION_TERMINAL_STATE), null);
   assert.match(door.lastSeen, /no reflector\.end/);
-  assert.match(door.lastSeen, /event yet/);
+  assert.match(door.lastSeen, /event since the anchor/);
 
   // No cycle dir at all — an initiative that never even started developing.
   const bare = makeReflectionDoor(root, 'INIT-nothing-here')!;
@@ -207,4 +210,28 @@ test('makeReflectionDoor/-Watch guard their inputs the same way every other opt-
   assert.equal(makeReflectionDoor('', 'INIT-x'), null, 'no forgeRoot');
   assert.equal(makeReflectionDoor('/root', ''), null, 'no cycleOf');
   assert.equal(makeReflectionWatch('/root', null), null, 'an unresolved cycleOf leaves the watch inert, never a new way for a beat to fail');
+});
+
+test("D's review (row 125's class): a reflector.end BEFORE the anchor is an earlier round's", () => {
+  const { root, logs } = cycleRoot();
+  const dir = cycleDir(logs, INIT, '2026-09-25T22:58:00.000Z');
+  appendEvent(dir, 'reflector.end', '2026-09-25T22:59:30.000Z');
+
+  const door = makeReflectionDoor(root, INIT)!;
+  const early = door(null, ANCHOR, REFLECTION_TERMINAL_STATE);
+  assert.equal(early, null, 'a pre-anchor terminal must not end this wait');
+  assert.match(door.lastSeen, /since the anchor/);
+
+  appendEvent(dir, 'reflector.end', '2026-09-25T23:04:40.000Z');
+  const seen = door(null, ANCHOR, REFLECTION_TERMINAL_STATE)!;
+  assert.equal(seen.done, true, 'the post-anchor reflector.end is this reflection\'s terminal');
+});
+
+test("D's review: an unparseable started_at is skipped, never counted", () => {
+  const { root, logs } = cycleRoot();
+  const dir = cycleDir(logs, INIT, '2026-09-25T22:58:00.000Z');
+  appendEvent(dir, 'reflector.end', 'not-a-timestamp');
+
+  const door = makeReflectionDoor(root, INIT)!;
+  assert.equal(door(null, ANCHOR, REFLECTION_TERMINAL_STATE), null);
 });

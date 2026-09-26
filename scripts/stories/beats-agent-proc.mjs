@@ -614,7 +614,14 @@ export function makeReflectionDoor(forgeRoot, cycleOf) {
   if (typeof forgeRoot !== 'string' || forgeRoot === '') return null;
   if (typeof cycleOf !== 'string' || cycleOf === '') return null;
   const logsDir = join(forgeRoot, '_logs');
-  const door = (_runId, _sinceMs, wantState) => {
+  const door = (_runId, sinceMs, wantState) => {
+    // D's review (row 125's hazard class): DEC-2 keeps one cycle dir across rounds, so only a
+    // terminal logged at or after THIS beat's anchor is this reflection's. No anchor → keep waiting.
+    if (!Number.isFinite(sinceMs)) {
+      door.lastSeen = `no anchor for this reflect wait (${String(sinceMs)}) — `
+        + "cannot tell this reflection's terminal";
+      return null;
+    }
     const resolved = cycleDirForInitiative(logsDir, cycleOf);
     if (resolved !== null && typeof resolved !== 'string') {
       door.lastSeen = `could not resolve the cycle dir for ${cycleOf}: ${resolved.detail}`;
@@ -632,6 +639,8 @@ export function makeReflectionDoor(forgeRoot, cycleOf) {
     }
     let found = null;
     for (const ev of rows) {
+      const at = Date.parse(ev?.started_at ?? '');
+      if (!Number.isFinite(at) || at < sinceMs) continue;
       if (ev?.message === REFLECTOR_END_EVENT) {
         found = { state: REFLECTION_TERMINAL_STATE, detail: `the reflector's own ${REFLECTOR_END_EVENT} event fired for ${cycleOf}` };
       } else if (ev?.message === REFLECTOR_CRASHED_EVENT) {
@@ -648,8 +657,8 @@ export function makeReflectionDoor(forgeRoot, cycleOf) {
     }
     if (found === null) {
       door.lastSeen =
-        `no ${REFLECTOR_END_EVENT}/${REFLECTOR_CRASHED_EVENT}/${REFLECTION_LOST_EVENT} event yet in ` +
-        `${join(resolved, 'events.jsonl')} for ${cycleOf}`;
+        `no ${REFLECTOR_END_EVENT}/${REFLECTOR_CRASHED_EVENT}/${REFLECTION_LOST_EVENT} event since the anchor ` +
+        `(${new Date(sinceMs).toISOString()}) in ${join(resolved, 'events.jsonl')} for ${cycleOf}`;
       return null;
     }
     door.lastSeen = found.detail;
