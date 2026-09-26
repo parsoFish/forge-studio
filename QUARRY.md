@@ -54,7 +54,7 @@ operator-ratified new cap — never a silent raise.
 
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
-| `contracts` | 6 | 1,369 | **1,263** | ratified 1,263 — M7-A seam F6 (ADR 051 decisions 2 and 4, operator item 97), lane-ratified under ruling 666; see git history for prior raises. |
+| `contracts` | 6 | 1,369 | **1,369** | ratified 1,369 — forge-mfv5.2.2 demo-declaration rules (command/route extraction, presentation-only skill ids) shared by stations, factory and projects, +106 on 1,263 (T1 1626); see git history for prior raises. |
 | `kernel` | 30 | 5,513 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `projects` | 46 | 10,889 | **9,098** | ratified 9,098 — forge-mfv5.2.2 DEMO-SKILL checks the declaration drives a checkpoint; declared-skill loader skips presentation-only skills, +37 on 9,061, lane-ratified under ruling 666; see git history for prior raises. |
