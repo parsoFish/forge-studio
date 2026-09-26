@@ -1573,7 +1573,11 @@ is what this contract reads — but it cannot be the only distinguisher.
   [data-region-collapsed]` with a `[data-action="toggle-region"][data-region]`
   header, `data-region` matching the card's own `data-demo-region` (regions
   collapse by default only on walls of > 12 regions, unless they carry
-  comments — `lib/demo-review-view.ts`, artifact-plan-31); a collapsed region
+  comments — `lib/demo-review-view.ts`, artifact-plan-31); an AC region's
+  header also carries its criterion text, in normal case beside the `AC N`
+  label and single-line with CSS ellipsis (`title` repeats it in full), so a
+  COLLAPSED region is still findable by a text match against the header's own
+  DOM text (forge-8vfn.8.1.16 / T1 ruling 1561); a collapsed region
   renders NO `[data-action="comment-region"]` — expand it with its scoped
   `toggle-region` first, then its own `[data-action="comment-region"][data-region]`
   appears; every authored comment row carries `[data-action="edit-comment"]` +

@@ -134,3 +134,18 @@ test('(RED) pressing the scoped toggle-region for ac-3 reveals exactly one scope
   expect(commentButtons.length).toBe(1);
   expect(commentButtons[0].getAttribute('data-region')).toBe('ac-3');
 });
+
+// forge-8vfn.8.1.16 / T1 ruling 1561 — a collapsed AC header read only "AC 1" …
+// "AC 25", useless to an operator scanning a >12-region wall for the criterion
+// a story's `pressWithin` text scope has to find. The header's DOM text must
+// carry the full criterion, collapsed or not, so a text match against a
+// COLLAPSED region still finds it.
+test('a COLLAPSED AC header carries its full criterion text in the DOM', async () => {
+  await render();
+
+  const model = buildModel();
+  const card = container.querySelector('[data-demo-region="ac-3"]');
+  expect(card, 'the ac-3 card must render').not.toBeNull();
+  expect(card!.getAttribute('data-region-collapsed')).toBe('true');
+  expect(card!.textContent).toContain(model.acceptanceCriteria![2]);
+});

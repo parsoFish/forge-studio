@@ -36,6 +36,14 @@ import { BeforeAfterSlider, JsonDiffView } from './review/evidence';
 type Region = {
   id: string;
   title: string;
+  /** forge-8vfn.8.1.16 / T1 ruling 1561 — the AC region's own criterion text,
+   *  carried separately from `title` so the header can render it in normal
+   *  case (not the header's uppercase styling) and so a collapsed wall still
+   *  puts it in the DOM: `pressWithin`'s text scope (scripts/stories) has to
+   *  find the criterion a story names without ever expanding the region
+   *  first, and the criterion index is minted at run time, so no id can be
+   *  hardcoded. Checkpoint/apidiff regions carry none. */
+  detail?: string;
   render: () => JSX.Element;
 };
 
@@ -289,6 +297,7 @@ function buildRegions(model: DemoModel, _cycleId: string): Region[] {
     regions.push({
       id: `ac-${i + 1}`,
       title: `AC ${i + 1}`,
+      detail: criterion,
       render: () => <AcEvidence criterion={criterion} />,
     });
   });
@@ -390,8 +399,24 @@ function ReviewRegion({
             display: 'flex', alignItems: 'center', gap: 8,
           }}
         >
-          <span style={{ fontSize: 10, width: 10 }}>{expanded ? '▾' : '▸'}</span>
-          {region.title}
+          <span style={{ fontSize: 10, width: 10, flexShrink: 0 }}>{expanded ? '▾' : '▸'}</span>
+          <span style={{ flexShrink: 0 }}>{region.title}</span>
+          {/* forge-8vfn.8.1.16 / T1 ruling 1561 — the criterion itself, normal
+              case (the header's own uppercase must not apply to it) and
+              single-line with CSS ellipsis; the full text still sits in the
+              DOM (only its PAINT is clipped), and `title` repeats it for a
+              hover. This is what makes a COLLAPSED region findable by text. */}
+          {region.detail !== undefined && (
+            <span
+              title={region.detail}
+              style={{
+                textTransform: 'none', fontWeight: 400, color: '#c9d1d9', fontSize: 12,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1,
+              }}
+            >
+              {region.detail}
+            </span>
+          )}
         </button>
         {comments.length > 0 && (
           <span style={{ fontSize: 11, color: comments.some((c) => c.blocking && !c.resolved) ? '#d29922' : '#8b949e' }}>

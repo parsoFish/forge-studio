@@ -301,6 +301,17 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   const steps_ = await performSteps(page, runSteps, bound.ms, sessionScope, agentProcProbe, matchesData, null, target, stallDoor,
     declaredProgress, readProgressNow);
   const stepError = steps_.error;
+  // `forge-8vfn.8.1.16` / T1 ruling 1561 — the LAST `pressWithin` TEXT scope
+  // this beat resolved, carried onto the beat's own record for `story.json`.
+  // "Last" rather than "all": S10 beat 15 presses the SAME scope twice
+  // (`toggle-region` then `comment-region`) and both must resolve to the same
+  // region by construction (re-resolution stability, pinned at the picker),
+  // so one field names the beat's whole anchoring rather than repeating it.
+  // Carried on a RED verdict too — an earlier press's successful pick must
+  // not vanish because a LATER step in the same beat failed for some other
+  // reason.
+  const withTextAnchor = (v) =>
+    steps_.textAnchors.length > 0 ? { ...v, anchor: steps_.textAnchors[steps_.textAnchors.length - 1] } : v;
   // 7.6.143 (b2), T1 ruling 1147 — A HANDLE WAIT NEVER CREDITS A `terminal:`
   // DECLARATION. Run 20's beat 10 declared a 30-minute wait on the develop
   // cycle's terminal event, pressed a control, and its handle wait set this one
@@ -311,7 +322,8 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // declaration-type along. A declaration is consumed by the waiter it named.
   if (steps_.waitedForHandle && !declaresTerminal) agentWaitConsumed = true;
   if (stepError !== null) {
-    return withAgentProc(stuckVerdict(beat, await readObserved(page, beat), stepError), agentProcProbe);
+    const observed = await readObserved(page, beat);
+    return withTextAnchor(withAgentProc(stuckVerdict(beat, observed, stepError), agentProcProbe));
   }
 
   // A press that saves asynchronously mints its route a moment later, so a beat
@@ -576,6 +588,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
 
   let verdict = named(beatVerdict(beat, await readObserved(page, beat), { boundMs: bound.ms, bound: bindings }));
   verdict = withAgentProc(verdict, agentProcProbe);
+  verdict = withTextAnchor(verdict);
   // 664(i): a door that did not run says so, rather than leaving the reader to
   // wonder whether it passed or was skipped.
   verdict = withDoorSkipped(

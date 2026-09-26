@@ -20,7 +20,9 @@
 import { routeMatches, waitForHandleOrStall } from './beats-page.mjs';
 import { handleFor, runRepeatStep } from './beats-repeat.mjs';
 import { watchControlState } from './beats-control-state.mjs';
-import { READY_TIMEOUT_MS, scopedPressHandle } from './beats.mjs';
+import {
+  READY_TIMEOUT_MS, scopedPressHandle, unscopedPressWithinHandle, pickTextScope, formatTextScopePick,
+} from './beats.mjs';
 
 /** How long a press may be wrong-looking before it is called wrong (ruling 531(3)).
  *  Long enough to outlast an asynchronous route commit, short enough that it is
@@ -52,6 +54,16 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
   // the beat's declared bound to a waiter that watches the PAGE for a handle
   // the agent has to produce, rather than to a URL change.
   let waitedForHandle = false;
+  // `forge-8vfn.8.1.16` / T1 ruling 1561 — every `pressWithin` TEXT scope this
+  // call resolved, in press order. Carried on EVERY return (including a red
+  // one: a later step's failure must not erase what an earlier text-scope
+  // press already resolved) so `driveBeat` can put it on the beat's own
+  // record — the artifact-visibility half of `8.1.16`: a fallback that shows
+  // up only as "which region got pressed" is a fallback nobody notices
+  // happened.
+  const textAnchors = [];
+  const finish = (error) =>
+    Object.freeze({ waitedForHandle, error, textAnchors: Object.freeze([...textAnchors]) });
   // Where this `do` STARTED — the page the previous BEAT left us on. The
   // wrong-page check below applies only while we are still standing there
   // (ruling 569, the multi-surface half). Once one of our own steps has
@@ -103,7 +115,7 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
         run: (inner, ms, actMs = null) => performSteps(page, inner, ms, sessionScope, probe, matches, actMs, null, stallDoor),
       });
       if (r.waitedForHandle) waitedForHandle = true;
-      if (r.error !== null) return { waitedForHandle, error: r.error };
+      if (r.error !== null) return finish(r.error);
       continue;
     }
 
@@ -113,13 +125,24 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
     // the count is model-determined.
     const fillsAll = Object.hasOwn(step, 'fillAll');
     const fills = fillsAll || Object.hasOwn(step, 'fill');
-    // `pressWithin` — bead `forge-8vfn.6.11.51`, resolved by `resolveBoundPresses`
-    // (`beats.mjs`) into a literal `scope.value` before this ever runs. Scoped
-    // to the element carrying `data-<attr>="<value>"` rather than `handleFor`'s
-    // unscoped `[data-action="<action>"]`, which matches one element PER CARD —
-    // Home's session strip renders `open-session` once per `data-session-id`,
-    // so an unscoped press clicks whichever card `.first()` sorts to.
-    const handle = Object.hasOwn(step, 'pressWithin') ? scopedPressHandle(step.pressWithin) : handleFor(step);
+    // `pressWithin` — bead `forge-8vfn.6.11.51`. A `bind` scope is resolved by
+    // `resolveBoundPresses` (`beats.mjs`) into a literal `scope.value` before
+    // this ever runs, and turns straight into the SCOPED handle: the element
+    // carrying `data-<attr>="<value>"`, rather than `handleFor`'s unscoped
+    // `[data-action="<action>"]`, which matches one element PER CARD — Home's
+    // session strip renders `open-session` once per `data-session-id`, so an
+    // unscoped press clicks whichever card `.first()` sorts to.
+    //
+    // A `text` scope (`forge-8vfn.8.1.16`, T1 ruling 1561) cannot resolve that
+    // early — there is no earlier binding, only the live page at press time —
+    // so `handle` starts as the UNSCOPED form here (every `[data-<attr>]`
+    // carrying the action) and is narrowed to the scoped one below, once
+    // `resolveTextScopePress` has picked which instance the text names.
+    const pw = Object.hasOwn(step, 'pressWithin') ? step.pressWithin : null;
+    const isTextScope = pw !== null && pw.scope.text !== undefined;
+    let handle = pw !== null
+      ? (isTextScope ? unscopedPressWithinHandle(pw) : scopedPressHandle(pw))
+      : handleFor(step);
 
     // T1 ruling 531(3) — STANDING ON THE WRONG PAGE, answered at t+0.
     //
@@ -186,19 +209,25 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
       }
       if (stillWrong) {
         const here = new URL(page.url(), 'http://forge.invalid');
-        return {
-          waitedForHandle,
-          error:
-            `standing on the wrong page: "${here.pathname}${here.search}" is not "${declaredRoute}", and ` +
+        return finish(
+          `standing on the wrong page: "${here.pathname}${here.search}" is not "${declaredRoute}", and ` +
             `${handle} is on no element of it. The beat was not waiting for an agent — this page does not ` +
             'carry that control at all, so the bound would have been spent to learn nothing. Reach the page ' +
             'that renders it first (a navigation beat, or a press that goes there).',
-        };
+        );
       }
     }
 
-    if (i > 0) {
-      if (!Object.hasOwn(steps[i - 1], 'fill')) {
+    // `i > 0` waits for the PREVIOUS step's handle to have committed before
+    // this one acts. A `pressWithin` TEXT scope needs that SAME wait even at
+    // `i === 0` — bead `forge-8vfn.8.1.16` — because it is the only thing that
+    // stands between "the region wall has not rendered yet" and reading zero
+    // entries and refusing as if the story named a criterion that does not
+    // exist. Reusing `waitForHandleOrStall` here, on the UNSCOPED handle, is
+    // the SAME bound/stall logic every other step already gets: this adds a
+    // wait where one was structurally absent, never a new kind of one.
+    if (i > 0 || (isTextScope && i === 0)) {
+      if (i > 0 && !Object.hasOwn(steps[i - 1], 'fill')) {
         // The step before this one may have navigated. Wait for the ARRIVAL
         // page's ready signal — bounded, and swallowed on timeout, because a
         // step that never navigated (a toggle, a same-route press) leaves
@@ -214,30 +243,41 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
       const stall = await waitForHandleOrStall(page, handle, actLeft(), sessionScope, probe, stallDoor);
       waitedForHandle = true;
       if (stall !== null) {
-        return {
-          waitedForHandle,
-          error:
-            `${stall.why} ${Math.round(stall.afterMs / 1000)}s into the ` +
+        return finish(
+          `${stall.why} ${Math.round(stall.afterMs / 1000)}s into the ` +
             `agent wait, while this step waited for ${handle}. The product had already said so about this session, ` +
             'so the beat stopped there rather than spending its declared bound twice over — once here and again in ' +
             'the act that follows.',
-        };
+        );
       }
+    }
+
+    // `forge-8vfn.8.1.16` / T1 ruling 1561 — the TEXT scope itself picks,
+    // logs and narrows `handle` to the one instance it means, RE-RESOLVED on
+    // every `pressWithin` step that names one (never cached from an earlier
+    // step in the same beat: S10 beat 15's `toggle-region` and
+    // `comment-region` are two independent presses of the same scope, and the
+    // second reads a page the first one just changed). Runs AFTER the wait
+    // above confirms the unscoped handle exists, so the read below never
+    // races an empty wall.
+    if (isTextScope) {
+      const resolved = await resolveTextScopePress(page, pw);
+      if (resolved.error !== null) return finish(resolved.error);
+      textAnchors.push(resolved.anchor);
+      handle = resolved.handle;
     }
 
     // The bound is spent. Say so in the beat's own terms rather than letting the
     // act report `Timeout 0ms exceeded`, which names a bound nobody declared and
     // reads like a bug in the runner instead of a wait that ran out.
     if (left() === 0) {
-      return {
-        waitedForHandle,
+      return finish(
         // The SAME prefix the act's own catch uses, so what a beat says when its
         // bound runs out and what it says when the act throws stay one shape.
-        error:
-          `could not ${fills ? `fill ${handle} with "${step.with}"` : `press ${handle}`}: ` +
+        `could not ${fills ? `fill ${handle} with "${step.with}"` : `press ${handle}`}: ` +
           `waited this beat's whole declared bound (${timeoutMs} ms) for it and it never appeared, ` +
           'so the act was not attempted — one declared bound is one spend.',
-      };
+      );
     }
 
     // Bead `forge-8vfn.6.11.30` (ruling 330) — say what the control IS while the
@@ -254,10 +294,9 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
         // question form, which is exactly the gap S2 run 3 spent $25 finding.
         const n = await page.locator(handle).count();
         if (n === 0) {
-          return {
-            waitedForHandle,
-            error: `could not fill every ${handle} with "${step.with}": no element carries that handle.`,
-          };
+          return finish(
+            `could not fill every ${handle} with "${step.with}": no element carries that handle.`,
+          );
         }
         for (let k = 0; k < n; k += 1) {
           // RE-READ THE COUNT BEFORE ADDRESSING THE INDEX — bead
@@ -297,19 +336,75 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
         continue;
       }
       const refusal = await setControl(page, handle, step.with, actLeft());
-      if (refusal !== null) return { waitedForHandle, error: refusal };
+      if (refusal !== null) return finish(refusal);
     } catch (e) {
-      return {
-        waitedForHandle,
-        error:
-          `could not ${fills ? `fill ${handle} with "${step.with}"` : `press ${handle}`}: ` +
+      return finish(
+        `could not ${fills ? `fill ${handle} with "${step.with}"` : `press ${handle}`}: ` +
           `${e?.message ?? e}. ${await describeControl(page, handle, timeoutMs)}`,
-      };
+      );
     } finally {
       stopWatch();
     }
   }
-  return { waitedForHandle, error: null };
+  return finish(null);
+}
+
+/**
+ * Read every `[data-<attr>]` node's own `data-<attr>` value and text, in
+ * document order — the raw material `pickTextScope` (`beats.mjs`) picks from.
+ * `attr` IS interpolated into the selector; it is validated against
+ * `SAFE_KEY` at story-load time (`story-wait-schema.mjs`), so this never
+ * carries an operator-authored string into a selector unguarded. The text to
+ * match NEVER is — the comparison happens in Node, over the values this
+ * reads, never inside the page (`pickTextScope` does it, pure).
+ */
+async function readTextScopeEntries(page, attr) {
+  const dataAttr = `data-${attr}`;
+  return page.locator(`[${dataAttr}]`).evaluateAll(
+    (els, name) =>
+      els.map((el) => ({ value: el.getAttribute(name) ?? '', text: (el.textContent ?? '').trim() })),
+    dataAttr,
+  );
+}
+
+/**
+ * The page-reading half of a `pressWithin` TEXT scope — `readTextScopeEntries`
+ * plus `pickTextScope` (pure, `beats.mjs`), then EXACTLY today's scoped press:
+ * `scopedPressHandle({ scope: { attr, value: <picked> }, action })`. Logs the
+ * one line `formatTextScopePick` builds, so the fallback is visible in the
+ * run's own transcript, not only in the beat's `anchor` record.
+ *
+ * Returns `{ error, anchor, handle }`: `error` names attr and text and
+ * carries no `anchor`/`handle` when nothing matched and no fallback was
+ * declared — the caller presses NOTHING in that case.
+ */
+async function resolveTextScopePress(page, pressWithin) {
+  const { scope, action } = pressWithin;
+  const entries = await readTextScopeEntries(page, scope.attr);
+  const picked = pickTextScope(entries, scope.text, scope.fallback);
+  if (picked === null) {
+    return {
+      error:
+        `pressWithin: no [data-${scope.attr}] element's text contains "${scope.text}" ` +
+        `(attr: "${scope.attr}", text: "${scope.text}"), and no fallback was declared — ` +
+        'nothing was pressed.',
+      anchor: null,
+      handle: null,
+    };
+  }
+  console.log(formatTextScopePick(scope.attr, scope.text, picked));
+  return {
+    error: null,
+    anchor: Object.freeze({
+      by: picked.fellBack ? 'fallback' : 'text', attr: scope.attr, text: scope.text, region: picked.value,
+    }),
+    // EXACTLY today's scoped press (task's own instruction): the value came
+    // off the live page, not off a story author's keyboard, and is quoted the
+    // same way `scopedPressHandle` already quotes a `bind`-scope value —
+    // neither path escapes a quote inside it today, so this does not widen
+    // that gap; `buildRegions`' own ids (`ac-${i + 1}`) never carry one.
+    handle: scopedPressHandle({ scope: { attr: scope.attr, value: picked.value }, action }),
+  };
 }
 
 /**
