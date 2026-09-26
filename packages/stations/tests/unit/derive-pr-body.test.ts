@@ -135,5 +135,6 @@ describe('derivePrBody — delta honesty (forge-mfv5.1.7, CONTROL RED)', () => {
     const body = derivePrBody(model, input());
     assert.ok(body.includes(`checkpoint(s) could not be compared: ${model.checkpoints[0]?.label}`), body);
     assert.doesNotMatch(body, /No observable behaviour change was captured\./, 'unknown must never be read as "no change"');
+    assert.doesNotMatch(body, /captured checkpoints changed behaviour/, 'unknown must never be counted as a "changed" checkpoint');
   });
 });
