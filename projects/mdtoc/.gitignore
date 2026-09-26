@@ -18,14 +18,8 @@ PROMPT.md
 fix_plan.md
 
 # Runtime / session scratch that forge writes into the worktree.
-# An unanchored `demo/` used to sit here too. It blanket-ignored the WHOLE
-# tracked demo bundle (`demo/<initiative-id>/demo.json`, `DEMO.md`, and the
-# `.capture/` evidence under it) that the unifier commits onto the branch —
-# confirmed live: `git ls-files projects/mdtoc/demo` returned nothing despite
-# demo bundles having been produced here. Same class of defect
-# `node-cli-with-tests/seed/.gitignore` already fixed for the same reason.
-# Removed; nothing legitimately scratch lives under `demo/`.
 _architect/
+demo/
 
 # Local credentials (this project needs none, but guard against any).
 secrets.env
