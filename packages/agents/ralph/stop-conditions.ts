@@ -572,6 +572,10 @@ export function autoCommitWorktreeIfDirty(
     const status = execFileSync('git', ['status', '--porcelain'], { cwd: worktreePath, stdio: 'pipe' }).toString('utf8');
     if (status.trim().length === 0) return false;
     execFileSync('git', ['add', '-A'], { cwd: worktreePath, stdio: 'pipe' });
+    // Never the node_modules symlink forge linked in (the boundary commits' own guard, cycle-helpers.ts):
+    // a `node_modules/` rule does not match a symlink, and a template-less repo has no info/exclude.
+    execFileSync('git', ['reset', '-q', '--', 'node_modules'], { cwd: worktreePath, stdio: 'pipe' });
+    if (execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: worktreePath, stdio: 'pipe' }).toString('utf8').trim() === '') return false;
     const wiTag = workItemId ? ` ${workItemId}` : '';
     const msg = `forge-autocommit:${wiTag} iter ${iteration} WIP (safety-net for missed agent commit)`;
     execFileSync(

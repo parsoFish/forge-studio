@@ -33,7 +33,11 @@ import type { SchedulerConfig } from './scheduler.ts'; // type-only: erased, no 
  * Currently links Node's `node_modules`. Generalise here when forge picks up
  * Python (`.venv`) or Rust (`target`) projects that need similar.
  */
-export function linkProjectDeps(projectRepoPath: string, worktreePath: string): void {
+/** What linking a worktree's deps could not do — empty when everything it attempted held. */
+export type DepsLinkResult = { problems: string[] };
+
+export function linkProjectDeps(projectRepoPath: string, worktreePath: string): DepsLinkResult {
+  const problems: string[] = [];
   for (const dir of ['node_modules']) {
     const src = resolve(projectRepoPath, dir);
     const dst = resolve(worktreePath, dir);
@@ -51,8 +55,8 @@ export function linkProjectDeps(projectRepoPath: string, worktreePath: string): 
     if (alreadyExists) continue;
     try {
       symlinkSync(src, dst, 'dir');
-    } catch {
-      /* best-effort — a project that doesn't need deps shouldn't break the cycle */
+    } catch (err) {
+      problems.push(`could not link ${dst} → ${src}: ${(err as NodeJS.ErrnoException).code ?? (err as Error).message}`);
     }
   }
   // 2026-05-18 fix: forge itself creates the `node_modules` symlink above.
@@ -70,6 +74,8 @@ export function linkProjectDeps(projectRepoPath: string, worktreePath: string): 
       { encoding: 'utf8', stdio: 'pipe' },
     ).trim();
     const abs = resolve(worktreePath, excludePath);
+    // A repo initialised without templates has no .git/info/ (forge-1rk5.3 row 137).
+    mkdirSync(dirname(abs), { recursive: true });
     const existing = existsSync(abs) ? readFileSync(abs, 'utf8') : '';
     if (!existing.split('\n').some((l) => l.trim() === 'node_modules')) {
       writeFileSync(
@@ -77,9 +83,11 @@ export function linkProjectDeps(projectRepoPath: string, worktreePath: string): 
         existing + (existing && !existing.endsWith('\n') ? '\n' : '') + 'node_modules\n',
       );
     }
-  } catch {
-    /* best-effort — the boundary-commit reset below is the second guard */
+  } catch (err) {
+    // Never swallowed: without this exclude a `git add -A` in the worktree stages the symlink.
+    problems.push(`could not write node_modules into the worktree's git exclude: ${(err as NodeJS.ErrnoException).code ?? (err as Error).message}`);
   }
+  return { problems };
 }
 
 /**
@@ -351,7 +359,10 @@ export async function runOne(
     // is gitignored — without this, `npm test` fails at module resolution
     // before any test runs, and the dev-loop wedges trying to "fix" what
     // looks like a broken codebase. Idempotent — missing source is a no-op.
-    linkProjectDeps(manifest.projectRepoPath, wtHandle.path);
+    const depsLink = linkProjectDeps(manifest.projectRepoPath, wtHandle.path);
+    if (depsLink.problems.length > 0) {
+      emitOrchestratorEvent(logsRoot, manifest.initiativeId, 'error', 'deps.link-problem', { problems: depsLink.problems, worktree: wtHandle.path });
+    }
     annotateManifest(manifestPath, { worktree_path: wtHandle.path });
 
     // Phase 4 step 9 (plan risk R7): before this attempt dispatches any of
