@@ -275,10 +275,11 @@ function gitLogDeletions(root) {
  * repo's, and rewriting them would be an unnamed PROVENANCE deviation that
  * breaks the digest `provisionFixtureGround` pins. Same glob and reasoning as
  * `check-file-size.mjs`'s `SEED_GROUND_RE` and `check-test-discovery.mjs`'s
- * exception (forge-1rk5.1). The ground's own `PROVENANCE.md`, outside
- * `seed/`, is still scanned.
+ * exception (forge-1rk5.1). A ground's `brain/` (a verbatim copy of the source
+ * project's real Brain 3 profile) is excluded for the same reason. The ground's
+ * own `PROVENANCE.md`, outside both, is still scanned.
  */
-const SEED_GROUND_RE = /^tests\/stories\/grounds\/[^/]+\/seed\//;
+const SEED_GROUND_RE = /^tests\/stories\/grounds\/[^/]+\/(?:seed|brain)\//;
 
 function isExcludedProse(relPath) {
   if (EXCLUDED_PROSE_FILES.has(relPath) || SEED_GROUND_RE.test(relPath)) return true;

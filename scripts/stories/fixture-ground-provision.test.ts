@@ -283,3 +283,28 @@ test('every seed file is committed as itself — a name that is pathspec magic o
   assert.deepEqual(committed, [...result.files], 'the commit must hold EXACTLY the seed file list');
   assert.equal(committed.length, 3);
 });
+
+// ── the seed's own .gitignore never hides a seed file from itself ──────────
+
+test('a seed file its own .gitignore would ignore is still committed — a curated, explicit file list is not filtered a second time by the seed\'s own ignore rules', () => {
+  // A real ground carried verbatim at an old pin (`go-provider-old-contract`,
+  // M7-D forge-1rk5.1) has a `.gitignore` that blanket-ignores `.forge/`
+  // while `.forge/project.json` is one of its own tracked, force-added
+  // config files (the source repo's own `.gitignore` comment says as much:
+  // "force-tracked via `git add -f` so they survive this ignore"). Without
+  // `-f`, `git add --pathspec-from-file` on an explicitly-named ignored path
+  // exits 1 ("The following paths are ignored... hint: Use -f") and
+  // provisioning throws outright — never reaching a commit at all.
+  const root = scratch();
+  seedFixture(root, {
+    '.gitignore': 'tracked/\n',
+    'tracked/config.json': '{"kept": true}\n',
+  });
+
+  const result = provisionFixtureGround(root, { storyId: 'S8', project: 'story-s8', fixture: 'demo-seed' });
+  const listed = spawnSync('git', ['-C', result.dir, 'ls-files', '-z'], { encoding: 'utf8' });
+  assert.equal(listed.status, 0, listed.stderr);
+  const committed = listed.stdout.split('\0').filter((p) => p !== '').sort();
+  assert.deepEqual(committed, [...result.files], 'the commit must hold EXACTLY the seed file list, ignore or not');
+  assert.ok(committed.includes('tracked/config.json'), 'a seed-listed file must reach the commit even when the seed\'s own .gitignore would hide it');
+});
