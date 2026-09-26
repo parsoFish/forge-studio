@@ -320,6 +320,84 @@ export const REVIEW_LOOP = [
       say: 'The fix came back. The operator reads the verdict again before deciding.',
     },
     {
+      // BEAD `forge-8vfn.8.1.28` (T1 ruling 1673), S10 PROOF RUN 34 — beats
+      // 1-18 green, then beat 19 (`{ press: 'approve-and-merge' }`) reded:
+      // the control was absent for 180 s. CORRECT PRODUCT BEHAVIOUR, not a
+      // defect to patch there. `DemoReviewSurface`'s verdict kind IS the
+      // bridge's `derivedVerdict` (`DemoReviewSurface.tsx:62,71,145`), and
+      // ANY unresolved blocking comment derives `send-back`
+      // (`lib/demo-review-view.ts:35`'s filter, `c.blocking && !c.resolved`,
+      // mirrored server-side where the bridge answers `fetchReviewComments`).
+      // The round-1 comment the previous beat anchored to the precedence
+      // criterion and sent back on was never touched again — still
+      // `blocking: true, resolved: false` — so the re-reviewed gate kept
+      // deriving `send-back` and `approve-and-merge` never rendered at all.
+      // T1 1673 + the story owner: fix it HERE, in the story — the product
+      // already offers the control this beat was missing,
+      // `[data-action="resolve-comment"]` (`DemoReviewSurface.tsx:575`,
+      // rendered only while `c.blocking && !c.resolved`, `:568,571`) — and
+      // no beat had ever pressed it.
+      //
+      // THE SAME COMMENT, NEVER THE FIRST ONE FOUND. This review anchors
+      // exactly one comment in its whole life (the send-back beat above), so
+      // resolving it needs the SAME scope that beat already declared:
+      // `{ attr: 'demo-region', text: 'precedence', fallback: 'first' }`,
+      // re-resolved live against whichever AC header's own text carries
+      // "precedence" — never a remembered id, because there is no
+      // `data-comment-id` a beat could carry forward from one press to the
+      // next (`pressWithin`'s text scope is exactly this: `beats-press-
+      // within-text.test.ts` pins that re-resolving it twice in one story
+      // is stable).
+      //
+      // NO `toggle-region` FIRST, unlike that beat. `regionDefaultOpen`
+      // (`lib/demo-review-view.ts:20-23`) opens a region by default either
+      // because the whole review is small (`regionCount <=
+      // REGION_COLLAPSE_THRESHOLD`, 12 — every region open regardless) or,
+      // in a wall, because THAT region carries a comment
+      // (`regionCommentCount > 0`). The precedence region still carries the
+      // round-1 comment — nothing between there and here deletes it — so a
+      // fresh page load (`ReviewRegion` remounts with `expandedOverride:
+      // null` and falls back to its `defaultOpen` prop, `:378-379`) opens it
+      // under EITHER branch of that rule. True by construction, not by this
+      // run's own AC count.
+      //
+      // KEYS ARE PRODUCT DOM WORDS, nothing keyed on class or copy.
+      // `data-comment-resolved` (`CommentRow`, `:523` editing / `:561`
+      // resting) and `data-form-kind` (the sticky `verdict-form` div,
+      // `:235`, already documented in `docs/reference/studio-dom-
+      // contract.md`). This review authors exactly one comment for its
+      // whole run, so `comment-resolved` is carried by exactly ONE `<li>` on
+      // the page today — solo under `resolveExpectations`
+      // (`beats-page-read.mjs:282-311`), nothing shared to split; `verdict-
+      // form` is a single div, one carrier, same as every other beat that
+      // already keys on `form-kind`.
+      //
+      // SETTLE, NOT AGENT. `onResolve` (`:92-96`) is a synchronous POST —
+      // `resolveReviewComment` then `refresh(r)` sets the new `derived` in
+      // the SAME tick the fetch resolves — not a dispatched session, so
+      // there is no channel or cycle dir to watch. The only real race is the
+      // fetch round-trip between the press and the re-render, exactly what
+      // the very next beat's own `gate-state` settle wait guards against for
+      // `approve-and-merge` — same shape, a fraction of the bound: this POST
+      // flips two booleans server-side and does nothing resembling the ~72 s
+      // release-finalize approve-and-merge blocks on.
+      act: 'Read the fix against the criterion, and resolve the blocking comment it answers (the first criterion\'s, said so in the log, when none names precedence)',
+      do: [
+        {
+          pressWithin: {
+            scope: { attr: 'demo-region', text: 'precedence', fallback: 'first' },
+            action: 'resolve-comment',
+          },
+        },
+      ],
+      wait: { for: 'settle', upTo: 15_000, key: 'form-kind', while: 'send-back' },
+      expect: {
+        route: '/artifact',
+        data: { page: 'artifact', 'comment-resolved': 'true', 'form-kind': 'approve' },
+      },
+      say: 'The operator does not take the reviewer\'s word that the fix landed — they read it against the exact criterion the send-back named, on the same comment they anchored there, and resolve it. With no blocking comments left, the gate itself has nothing left to derive but approve.',
+    },
+    {
       // SOURCE-DERIVED, and the merge handle is weaker than one would like.
       // `data-gate-state="approved"` (`app/artifact/page.tsx:924-930`, set at
       // `:1148,1169`) plus the product's own copy "Approved — merged." (`:1190`,

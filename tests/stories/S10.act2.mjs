@@ -10,8 +10,9 @@
  * The cut follows the story's OWN labelled boundary, not the line count. ACT 1
  * is the develop cycle end to end; ACT 2 is the interruption and the recovery,
  * and the file already named it that way in two beat titles before this split
- * existed. Beat 21 travels with it because it is ACT 2's setup: the Monitor row
- * is how the operator reaches the running initiative they are about to stop.
+ * existed. Beat 24 (21 when written; later inserts moved it) travels with it
+ * because it is ACT 2's setup: the Monitor row is how the operator reaches the
+ * running initiative they are about to stop.
  *
  * These beats are spread into `beats` at the point they already occupied, so
  * the story's order and numbering are unchanged — a beat's number is how every
@@ -84,8 +85,10 @@ export const ACT_2 = [
       act: 'ACT 2 — resume it, and see the finished work items survived',
       do: [{ press: 'project-tab-roadmap' }, { press: 'recovery-requeue' }],
       // 15 minutes, UNCHANGED and UNMEASURED (T1 ruling 558). A RESUMED
-      // developer-loop has never been measured in this campaign — beats 5–22
-      // have never run to completion — so there is no figure to raise this to.
+      // developer-loop has never been measured in this campaign — beats 5–23
+      // (renumbered by `forge-8vfn.8.1.28`'s resolve-comment beat; ACT 1 now
+      // ends at 23, not 22) have never run to completion — so there is no
+      // figure to raise this to.
       // Left alone deliberately rather than guessed at, and said here so that a
       // red on this beat reads as FIRST MEASUREMENT and not as a bound too
       // small.
