@@ -55,6 +55,7 @@ import { runPreflight } from '../../packages/projects/preflight.ts';
 import { provisionFixtureGround, teardownFixtureGround } from './fixture-ground.mjs';
 import { sweepStoryRemotesFromManifest } from './sweep-remotes.mjs';
 import { removeInitiativeWorktree, deleteLocalBranch, removeQueueManifest, manifestQueueState } from './d12-demo-runs-teardown.mjs';
+import { installGroundDeps, runDeclaredGateAtHead } from './d12-demo-runs-ground.mjs';
 import { spawnStudioReady } from '../lib/boot-studio.mjs';
 import { createStageTwo } from '../verify-cycle-stage2.mjs';
 import { classifyServeStageOutcome } from '../verify-cycle-stage-outcome.mjs';
@@ -398,6 +399,11 @@ function verifyDryRun(plan, written) {
     }
   };
   return {
+    baselineGreen: check(() => {
+      const r = runDeclaredGateAtHead(plan.projectRepoPath, plan.worktreePath);
+      if (!r.ok) throw new Error(r.detail);
+      return r.detail;
+    }),
     hardClauses: check(() => {
       const failing = hardClauseFailures(runPreflight(plan.projectRepoPath, { forgeRoot: plan.forgeRoot }));
       if (failing.length > 0) throw new Error(`HARD preflight clause(s) fail — the develop claim would be refused: ${failing.join('; ')}`);
@@ -568,6 +574,7 @@ async function main(argv) {
   try {
     provisionGround(plan);
     state.groundProvisioned = true;
+    log(`ground deps: ${installGroundDeps(plan.projectRepoPath)}`); // the operator's install step (row 132)
 
     mintPrivateRemote(plan);
     state.remoteMinted = true;
@@ -594,6 +601,10 @@ async function main(argv) {
     // Never hand off a ground the scheduler would refuse to claim — name the clauses instead (row 128).
     const failing = hardClauseFailures(runPreflight(plan.projectRepoPath, { forgeRoot: plan.forgeRoot }));
     if (failing.length > 0) throw new Error(`HARD preflight clause(s) fail, so the develop claim would be refused: ${failing.join('; ')}`);
+    // …and never hand off a red baseline the develop loop would refuse (row 132).
+    const baseline = runDeclaredGateAtHead(plan.projectRepoPath, plan.worktreePath);
+    if (!baseline.ok) throw new Error(`the declared quality gate is red at HEAD, so the develop loop would refuse it: ${baseline.detail}`);
+    log(`baseline: ${baseline.detail}`);
     const handoff = await handoffToDevelop(plan, state.studio.bridgeUrl);
     state.cycleId = handoff?.cycleId ?? null;
     evidence.mark('after develop/start');
