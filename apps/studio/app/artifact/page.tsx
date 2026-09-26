@@ -66,6 +66,7 @@ import { resolveArtifactMode, isRunNotFound, deriveArtifactEmptyReason, type Art
 import { planArtifactRequests, type ArtifactRequestPlan } from '@/lib/artifact-request-plan';
 import { prDocWithRunLink } from '@/lib/artifact-pr-view';
 import { effectiveInitiativeId } from '@/lib/initiative-id';
+import { RunCrumb } from '@/components/RunCrumb';
 import { shouldFetchReviewFindings } from '@/lib/flow-run-detail-client';
 import { fetchDemoMarkdown } from '@/lib/review-comments-client';
 import { renderDemoMarkdownDoc } from '@/lib/render-markdown';
@@ -976,8 +977,7 @@ function ArtifactPageInner() {
                   flows
                 </Link>
               )}
-              <span style={{ color: 'var(--line-2)' }}>/</span>
-              <span>{runId || '—'}</span>
+              <RunCrumb run={run} runId={runId} />
             </>
           )}
           <span style={{ color: 'var(--line-2)' }}>/</span>
