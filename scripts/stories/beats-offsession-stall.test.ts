@@ -31,15 +31,15 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, readFileSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { DEFAULT_STALL_CEILING_MS } from '../../packages/sessions/bridge-studio-lifecycle.ts';
 import {
-  STALL_CEILING_MS, runLogDir, runLogIdleMs, newestChannelSince, makeAgentChannelDoor,
-  doorWorthRunning, scanSummary,
+  STALL_CEILING_MS, runLogDir, runLogIdleMs, makeAgentChannelDoor, doorWorthRunning,
 } from './beats-agent-proc.mjs';
+import { newestChannelSince, scanSummary } from './beats-channel-scan.mjs';
 import { waitForHandleOrStall, waitForConsequence } from './beats-page.mjs';
 
 test('580: the runner uses the PRODUCT\'s ceiling — one number, bound by this test', () => {
@@ -88,6 +88,40 @@ test('580: idle is read from the NEWEST of .heartbeat and events.jsonl, and no c
   // A fresher heartbeat wins: a run writing EITHER channel is not silent.
   stamp('.heartbeat', 5_000);
   assert.equal(runLogIdleMs(dir, NOW), 5_000);
+});
+
+// Row 28 of the guard-catch-on-UNKNOWN audit (M7-COMMON §6.16) — a persistent
+// EACCES/EIO must not read as "no channel": every caller of `runLogIdleMs`
+// treats `null` as "not stalled" and disables its own early exit, so an
+// unreadable channel used to run a wait to its full declared/funded bound
+// instead of ending early on a check that could not be run.
+//
+// The directory, not the files, carries the permission bit here on purpose:
+// `statSync` needs no read permission on the FILE itself, only execute
+// (traverse) permission on its parent — chmod-000 on `.heartbeat`/
+// `events.jsonl` directly does not make `statSync` fail at all, only
+// `readFileSync` would notice that. Denying the directory is the one real
+// EACCES `runLogIdleMs`'s `statSync` calls can actually hit.
+test('row 28: a persistent EACCES on the run-log dir is UNKNOWN, not silently "no channel" — §6.16', { skip: process.getuid?.() === 0 ? 'root reads mode-000 dirs' : false }, () => {
+  const parent = mkdtempSync(join(tmpdir(), 'forge-runlog-eacces-'));
+  const dir = join(parent, 'locked');
+  mkdirSync(dir);
+  writeFileSync(join(dir, '.heartbeat'), 'x');
+  writeFileSync(join(dir, 'events.jsonl'), 'x');
+  chmodSync(dir, 0o000);
+  try {
+    const idle = runLogIdleMs(dir);
+    assert.notEqual(idle, null, 'a real read failure must not read as "no channel"');
+    assert.equal((idle as { unknown?: true }).unknown, true);
+    assert.match((idle as { detail: string }).detail, /EACCES/);
+  } finally {
+    chmodSync(dir, 0o755);
+  }
+});
+
+test('row 28 (control): both files genuinely absent (ENOENT) is still null, unchanged', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-runlog-enoent-'));
+  assert.equal(runLogIdleMs(dir), null);
 });
 
 test('580: the door resolves a page-supplied run id to its idle time', () => {
@@ -286,6 +320,28 @@ test('626: the fallback takes a dispatch born SINCE the press, never a bystander
   // reach, which is how a fixture starts dictating the behaviour instead of
   // checking it. The `no-channel` path is covered by the test above, on a tree
   // with no bystander in it.
+});
+
+// Row 29 of the guard-catch-on-UNKNOWN audit (M7-COMMON §6.16) — the literal
+// inverse of the S10-run-7 incident this scanner exists to catch: a
+// persistently unreadable `_logs/` must never read as the confident, specific
+// claim "nothing was created".
+test('row 29: a persistently unreadable _logs/ is UNKNOWN, never the confident "nothing was created" — §6.16', { skip: process.getuid?.() === 0 ? 'root reads mode-000 dirs' : false }, () => {
+  const { logs } = realDoor();
+  chmodSync(logs, 0o000);
+  try {
+    const found = newestChannelSince(logs, Date.now());
+    assert.notEqual(found, null, 'an unreadable _logs/ must not read as "nothing was created"');
+    assert.equal((found as { unknown?: true }).unknown, true);
+    assert.match((found as { detail: string }).detail, /EACCES/);
+  } finally {
+    chmodSync(logs, 0o755);
+  }
+});
+
+test('row 29 (control): a genuinely absent _logs/ (ENOENT) still reads as null, not unknown', () => {
+  const missing = join(mkdtempSync(join(tmpdir(), 'forge-channel-missing-')), '_logs');
+  assert.equal(newestChannelSince(missing, Date.now()), null);
 });
 
 /**

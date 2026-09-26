@@ -21,10 +21,13 @@
  * a silent no-op — diagnosis must never be able to fail a beat that would
  * otherwise pass.
  */
-import { readFileSync, statSync, readdirSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { cycleProgressIdleMs } from './beats-cycle-progress.mjs';
 import { queueManifestTerminal, FS_CLOCK_SLACK_MS, channelTerminalState } from './beats-queue-terminal.mjs';
+// Split out at the 800-line cap (T1 ruling 492: SPLIT, NEVER BASELINE) —
+// see beats-channel-scan.mjs's own header for what moved and why.
+import { isDispatchDir, newestChannelSince, scanSummary, cycleDirForInitiative } from './beats-channel-scan.mjs';
 // T1 ruling 1471 — re-exported so `beats-page.mjs` names the wall ceiling
 // beside `STALL_CEILING_MS`/`TERMINAL_UI_GRACE_MS`, its two siblings that
 // already live in THIS file rather than in the schema that only validates what
@@ -126,23 +129,40 @@ export function makeAgentProcProbe(forgeRoot, route) {
 export const STALL_CEILING_MS = 180_000;
 
 /**
- * Idle time of a FLOW RUN's log, in ms, or null when that run has no channel.
+ * Idle time of a FLOW RUN's log, in ms; `null` when that run has no channel
+ * (both files genuinely absent — ENOENT); or `{unknown: true, detail}` when a
+ * NON-ENOENT failure (EACCES/EIO) means the channel exists but could not be
+ * read — row 28 of the guard-catch-on-UNKNOWN audit (M7-COMMON §6.16). Before
+ * this fix a persistent read failure was indistinguishable from "no channel",
+ * which every caller reads as "not stalled" and disables their early exit —
+ * the wait then runs to its full declared/funded bound instead of ending
+ * early on a check that could not be run.
  *
  * The two files are the product's own definition of a channel:
  * `bridge-studio-lifecycle.ts` calls a session stalled when its `.heartbeat` or
  * `events.jsonl` has been quiet past the ceiling (`:161`, `:199`). This asks the
  * same question of a flow run, so a beat off a session page can be answered by
  * the same verdict rather than by a second notion invented here.
+ *
+ * A CONCLUSIVE mtime from the OTHER file still wins over a real error on one
+ * side — the same "one side answers, the answer stands" rule
+ * `channelTerminalState` applies just below.
  */
 export function runLogIdleMs(dir, now = Date.now()) {
   let newest = null;
+  const realErrors = [];
   for (const name of ['.heartbeat', 'events.jsonl']) {
     try {
       const t = statSync(join(dir, name)).mtimeMs;
       if (newest === null || t > newest) newest = t;
-    } catch {
-      // A channel that does not exist is not a silent one — it is no channel.
+    } catch (err) {
+      // ENOENT — a channel that does not exist is not a silent one, it is no
+      // channel. Any other code is a real, named failure to read it.
+      if (err?.code !== 'ENOENT') realErrors.push(`could not stat ${join(dir, name)}: ${err?.code ?? err?.message}`);
     }
+  }
+  if (newest === null && realErrors.length > 0) {
+    return { unknown: true, detail: realErrors.join('; ') };
   }
   return newest === null ? null : now - newest;
 }
@@ -182,43 +202,6 @@ export function makeOffSessionStallDoor(forgeRoot) {
 }
 
 /**
- * The newest `_logs/_*` directory created at or after `sinceMs`, or null.
- *
- * The THIRD channel, and the one that catches the case the other two miss: a
- * beat that presses something which dispatches an agent from a page that names
- * no run. S10 run 7's beat 7 pressed Plan on `/projects/gitpulse` — not a
- * session route, so `stopReasonFor` had nothing to scope to, and the page
- * publishes no `data-run`, so 580's door had nothing to read either. It sat its
- * full twenty minutes.
- *
- * Matched on `_`-prefixed entries only, which is what every dispatch dir is
- * (`_architect-…`, `_demo-…`, `_agent-…`), and by BIRTH time rather than mtime:
- * a pre-existing dir that happens to be written during the wait is somebody
- * else's run, not evidence that this press started one.
- */
-/**
- * Is this `_logs/` entry a dispatch dir? T1 ruling 751 (§15.430).
- *
- * TWO SHAPES, and the door knew one. Sessions are `_`-prefixed
- * (`_architect-<ts>-<id>`, `_bridge-<ts>-<id>`); CYCLE dirs are
- * `<ISO-ts>_INIT-<slug>` and carry NO leading underscore. `startsWith('_')`
- * therefore skipped every cycle dir, so a press that started a real cycle could
- * be doored `no-channel` — measured on run 12, where the daemon claimed within a
- * second of beat 7's green, ran to ready-for-review, and the door reported the
- * newest dispatch as an unrelated architect session 857 s older than the press.
- *
- * Both readers use this, deliberately. The scan line exists (664(ii)) so a
- * reader can CHECK the door; a scan with the door's own blind spot confirms the
- * door instead of testing it.
- */
-export function isDispatchDir(name) {
-  if (typeof name !== 'string' || name === '') return false;
-  if (name.startsWith('_')) return true;
-  // `2026-09-11T15-19-39_INIT-exclude-author-flag` — timestamp, `_`, then the id.
-  return /^\d{4}-\d{2}-\d{2}T[\d-]+_/.test(name);
-}
-
-/**
  * Is the agent-channel door worth running for a beat with this bound?
  * T1 ruling 751 (§15.431).
  *
@@ -234,29 +217,6 @@ export function isDispatchDir(name) {
  */
 export function doorWorthRunning(boundMs, ceilingMs) {
   return Number.isFinite(boundMs) && Number.isFinite(ceilingMs) && boundMs >= 2 * ceilingMs;
-}
-
-export function newestChannelSince(logsDir, sinceMs) {
-  let best = null;
-  let bestAt = -1;
-  let entries;
-  try {
-    entries = readdirSync(logsDir, { withFileTypes: true });
-  } catch {
-    return null;
-  }
-  for (const e of entries) {
-    if (!e.isDirectory() || !isDispatchDir(e.name)) continue;
-    let born;
-    try {
-      born = statSync(join(logsDir, e.name)).birthtimeMs || statSync(join(logsDir, e.name)).ctimeMs;
-    } catch {
-      continue;
-    }
-    if (born < sinceMs) continue;
-    if (born > bestAt) { bestAt = born; best = join(logsDir, e.name); }
-  }
-  return best;
 }
 
 /**
@@ -287,40 +247,6 @@ export function newestChannelSince(logsDir, sinceMs) {
  * @param {string} forgeRoot
  * @returns {null | ((runId: string|null, sinceMs: number) => {reason: string, detail: string}|null)}
  */
-/**
- * What the door looked at, in one line — T1 ruling 664(ii).
- *
- * Lane A's S1 run 5 beat 9 reded `no-channel` and nobody could decide whether
- * the door was right, because an off-session beat has no `/proc` probe beside
- * it: `makeAgentProcProbe` returns null for every route `sessionLogDir` cannot
- * parse. Beat 6's false red was PROVABLE only because its session path printed
- * 1768 samples; beat 9's was a maybe.
- *
- * So the door states its own evidence: the directory it scanned, how many
- * `_`-prefixed entries it saw, and the newest birth time against the press it
- * is judging. A reader can then tell "nothing was ever dispatched" from "the
- * dispatch is older than this press" without another run.
- */
-export function scanSummary(logsDir, sinceMs) {
-  let entries = [];
-  try {
-    entries = readdirSync(logsDir, { withFileTypes: true }).filter((e) => e.isDirectory() && isDispatchDir(e.name));
-  } catch {
-    return `${logsDir} (unreadable)`;
-  }
-  let newest = -1;
-  let newestName = null;
-  for (const e of entries) {
-    try {
-      const st = statSync(join(logsDir, e.name));
-      const born = st.birthtimeMs || st.ctimeMs;
-      if (born > newest) { newest = born; newestName = e.name; }
-    } catch { /* a dir that vanished mid-scan is not evidence */ }
-  }
-  const age = newest < 0 ? 'none' : `${newestName} born ${Math.round((sinceMs - newest) / 1000)}s BEFORE this press`;
-  return `${logsDir}: ${entries.length} dispatch dir(s), newest ${age}`;
-}
-
 /**
  * THE CYCLE-TERMINAL DOOR — `forge-8vfn.7.6.118`, T1 ruling 1086, §15.559.
  *
@@ -369,48 +295,6 @@ export function scanSummary(logsDir, sinceMs) {
  *
  * @returns {null | {done: boolean, state: string, detail: string}}
  */
-/**
- * The newest dispatch dir belonging to an INITIATIVE, whatever its birth time.
- *
- * `forge-8vfn.7.6.143`, T1 ruling 1147. `newestChannelSince` answers "which
- * channel was born since the anchor", which is the right question when a press
- * MINTS a cycle. It is the wrong question for the develop station, which
- * CONTINUES the cycle the architect minted — DEC-2 threads the same `cycle_id`
- * through the kickoff on purpose. Measured on S10 run 20: the cycle dir was
- * born at 20:21:58.902 and the press anchored at 20:26:22.301, so nothing was
- * born since the anchor, the lookup returned null, and a declared 30-minute
- * terminal wait completed in 231 ms while the beat reported green.
- *
- * So the harness follows the product's own identity for a run rather than
- * inventing one from directory birth. Dispatch dirs are `<timestamp>_<id>`
- * (`isDispatchDir`), so the initiative is an exact suffix match — never a
- * substring, which would let `INIT-foo` claim `INIT-foo-bar`.
- */
-export function cycleDirForInitiative(logsDir, initiativeId) {
-  if (typeof initiativeId !== 'string' || initiativeId === '') return null;
-  let entries;
-  try {
-    entries = readdirSync(logsDir, { withFileTypes: true });
-  } catch {
-    return null;
-  }
-  let best = null;
-  let bestAt = -1;
-  const suffix = `_${initiativeId}`;
-  for (const e of entries) {
-    if (!e.isDirectory() || !isDispatchDir(e.name)) continue;
-    if (!e.name.endsWith(suffix)) continue;
-    let born;
-    try {
-      born = statSync(join(logsDir, e.name)).birthtimeMs || statSync(join(logsDir, e.name)).ctimeMs;
-    } catch {
-      continue;
-    }
-    if (born > bestAt) { bestAt = born; best = join(logsDir, e.name); }
-  }
-  return best;
-}
-
 export function makeCycleTerminalDoor(forgeRoot, opts = null) {
   if (typeof forgeRoot !== 'string' || forgeRoot === '') return null;
   const logsDir = join(forgeRoot, '_logs');
@@ -429,9 +313,35 @@ export function makeCycleTerminalDoor(forgeRoot, opts = null) {
     // the anchor question for everyone would be a behaviour change wearing a
     // new name.
     const named = runLogDir(forgeRoot, runId);
-    const dir = cycleOf !== null
-      ? cycleDirForInitiative(logsDir, cycleOf)
-      : (named !== null && runLogIdleMs(named) !== null ? named : newestChannelSince(logsDir, sinceMs));
+    // Row 31/29 of the guard-catch-on-UNKNOWN audit (M7-COMMON §6.15/§6.16).
+    // `cycleDirForInitiative`/`newestChannelSince` now return an
+    // `{unknown, detail}` object, distinct from both a path and null, when a
+    // persistent (non-ENOENT) read failure means the scan itself could not be
+    // trusted — never silently "nothing found yet", the false-red class this
+    // audit exists to catch. THIS door's own contract (§15.504, below) is
+    // that an unreadable check is NEVER `done` and never ends a wait EARLY
+    // either, so an unknown scan is recorded (664(ii): say what was scanned)
+    // and treated exactly like "nothing resolved this poll" — the declared
+    // bound keeps governing either way. `makeAgentChannelDoor` below, whose
+    // whole job IS to end a wait early, treats the same shape as a finding.
+    let dir;
+    if (cycleOf !== null) {
+      const resolved = cycleDirForInitiative(logsDir, cycleOf);
+      if (resolved !== null && typeof resolved !== 'string') {
+        door.lastSeen = resolved.detail;
+        return null;
+      }
+      dir = resolved;
+    } else if (named !== null && runLogIdleMs(named) !== null) {
+      dir = named;
+    } else {
+      const scanned = newestChannelSince(logsDir, sinceMs);
+      if (scanned !== null && typeof scanned !== 'string') {
+        door.lastSeen = scanned.detail;
+        return null;
+      }
+      dir = scanned;
+    }
     if (dir === null) return null;
     // WHETHER A CYCLE WAS EVER RESOLVED, recorded for the consumption check
     // (7.6.143 b2). Run 20's beat 10 called this door on every poll and it
@@ -635,10 +545,42 @@ export function makeAgentChannelDoor(forgeRoot) {
   const logsDir = join(forgeRoot, '_logs');
   return (runId, sinceMs) => {
     const named = runLogDir(forgeRoot, runId);
-    const dir = named !== null && runLogIdleMs(named) !== null ? named : newestChannelSince(logsDir, sinceMs);
+    // Rows 28/29 of the guard-catch-on-UNKNOWN audit. Unlike
+    // `makeCycleTerminalDoor` above — whose contract is that an unreadable
+    // check never ends a wait at all — THIS door's whole job is ending a wait
+    // EARLY, so an unknown scan or an unknown idle-read is itself a finding
+    // worth stopping on: silently waiting the full bound out unable to tell
+    // is the exact "false red disguised as patience" this audit ranks by
+    // blast radius.
+    let dir;
+    let scanUnknown = null;
+    if (named !== null && runLogIdleMs(named) !== null) {
+      dir = named;
+    } else {
+      const scanned = newestChannelSince(logsDir, sinceMs);
+      if (scanned !== null && typeof scanned !== 'string') {
+        scanUnknown = scanned;
+        dir = null;
+      } else {
+        dir = scanned;
+      }
+    }
     if (dir === null) {
       const waited = Date.now() - sinceMs;
       if (waited <= STALL_CEILING_MS) return null;
+      if (scanUnknown !== null) {
+        // Row 29 — a persistently unreadable `_logs/` (or dispatch dir) must
+        // never read as the confident, specific claim "nothing was created":
+        // the exact inverse of the S10-run-7 incident `no-channel` exists to
+        // catch, below.
+        return {
+          reason: 'channel-scan-unreadable',
+          detail:
+            `could not scan _logs/ for a channel this press started, for ${Math.round(waited / 1000)}s — ` +
+            `${scanUnknown.detail}. An unreadable scan is not "nothing was created"; the declared bound would ` +
+            `otherwise be spent unable to tell.`,
+        };
+      }
       // 664(ii): SAY WHAT WAS SCANNED. Lane A's S1 beat 9 reded `no-channel`
       // with no probe beside it and nobody could tell whether the door was
       // right — `makeAgentProcProbe` returns null for every non-session route,
@@ -655,6 +597,18 @@ export function makeAgentChannelDoor(forgeRoot) {
       };
     }
     const idle = runLogIdleMs(dir);
+    if (idle !== null && typeof idle !== 'number') {
+      // Row 28 — same principle: an unreadable channel is not "not stalled".
+      const waited = Date.now() - sinceMs;
+      if (waited <= STALL_CEILING_MS) return null;
+      const chan = dir.slice(dir.lastIndexOf('/') + 1);
+      return {
+        reason: 'channel-unreadable',
+        detail:
+          `the agent channel ${chan} could not be read for ${Math.round(waited / 1000)}s — ${idle.detail}. An ` +
+          `unreadable channel is not "not stalled"; the declared bound would otherwise be spent unable to tell.`,
+      };
+    }
     if (idle === null || idle <= STALL_CEILING_MS) return null;
 
     // TERMINAL STATE FIRST (`forge-flvq`). Silence past the ceiling is the same
