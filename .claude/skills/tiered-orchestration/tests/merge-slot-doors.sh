@@ -39,6 +39,13 @@ set -u
 # skip forever, which is a gate that never runs, not a green one.
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MS="${MS:-$HERE/../scripts/merge-slot.sh}"
+# forge-8vfn.8.1.26: merge-slot.sh's own SIBLING (`$HERE`-resolved by
+# merge-slot.sh, same idiom as `ci-terminal.sh`/`pin-precheck.sh`) that
+# answers the mergeStateStatus question — split out so merge-slot.sh could
+# stay under the 800-line cap. Pinned separately from `MS` below, not folded
+# into one combined digest: the two files change independently, and a single
+# hash would refuse (or worse, stay silent) on the wrong file's edit.
+MSP="${MSP:-$HERE/../scripts/merge-state-precheck.sh}"
 
 # THE DOORS AND THEIR SUBJECT MOVE TOGETHER, OR NOTHING RUNS (C, on the save).
 #
@@ -66,13 +73,35 @@ MS="${MS:-$HERE/../scripts/merge-slot.sh}"
 # `fd4c288b36663f05` the pre-move `_1.0/merge-slot.sh` carried; the move itself
 # is a legitimate change (six hardcoded paths became arguments/env vars, §15.148,
 # plus the sleep intervals below), so this pin moved with it in the same edit.
-SUBJECT_SHA="${SUBJECT_SHA:-df8b875ddb789b77}"
+# `f7bc97b01b1aa7e5` is forge-8vfn.8.1.26 / T1 1633's mergeStateStatus
+# precheck AFTER the rc-mapping call was split out to `merge-state-
+# precheck.sh` (below) to bring this file back under the 800-line cap; it
+# calls the sibling and maps its rc 0/18/19 to MARKER=done RESULT=… — moved
+# here in the same edit that added doors 8.1.26.1-6 below.
+SUBJECT_SHA="${SUBJECT_SHA:-f7bc97b01b1aa7e5}"
 subject_now="$(sha256sum "$MS" 2>/dev/null | cut -c1-16)"
 if [ "$subject_now" != "$SUBJECT_SHA" ]; then
   printf 'merge-slot-doors: REFUSING — %s is %s, these doors were proven against %s.\n' \
     "$MS" "${subject_now:-UNREADABLE}" "$SUBJECT_SHA"
   printf '  Not a pass (they did not run) and not a failure (nothing is known broken): UNKNOWN.\n'
   printf '  Either the subject moved and this file owes the same edit, or a paired save landed half.\n'
+  exit 2
+fi
+
+# THE SIBLING IS PINNED TOO (forge-8vfn.8.1.26) — the same reasoning as MS
+# above, applied to the file that now HOLDS the mergeStateStatus rationale,
+# the bounded retry and the DIRTY/UNKNOWN classification. A doors file that
+# proved merge-slot.sh's rc-mapping but never re-pinned the sibling would let
+# the sibling's own logic drift untested — exactly the gap this bead exists
+# to close, one file over. `MSP_SHA` is `merge-state-precheck.sh` as landed in
+# the same edit that split it out and updated `SUBJECT_SHA` above.
+MSP_SHA="${MSP_SHA:-f278e4547dc29904}"
+msp_now="$(sha256sum "$MSP" 2>/dev/null | cut -c1-16)"
+if [ "$msp_now" != "$MSP_SHA" ]; then
+  printf 'merge-slot-doors: REFUSING — %s is %s, these doors were proven against %s.\n' \
+    "$MSP" "${msp_now:-UNREADABLE}" "$MSP_SHA"
+  printf '  Not a pass (they did not run) and not a failure (nothing is known broken): UNKNOWN.\n'
+  printf '  Either the sibling moved and this file owes the same edit, or a paired save landed half.\n'
   exit 2
 fi
 
@@ -88,6 +117,7 @@ export MERGE_SLOT_POST_UPDATE_SLEEP_SECS=0
 export MERGE_SLOT_MAIN_MOVED_RETRY_SLEEP_SECS=0
 export MERGE_SLOT_MERGE_RETRY_SLEEP_SECS=0
 export MERGE_SLOT_FINAL_SETTLE_SLEEP_SECS=0
+export MERGE_SLOT_MERGEABLE_RETRY_SLEEP_SECS=0
 
 pass=0; fail=0
 ok()  { pass=$((pass+1)); printf '  ok   %s\n' "$1"; }
@@ -172,6 +202,21 @@ case "$*" in
       n main; exit 0 ;;
   "api repos/parsoFish/forge-studio/commits/"*" --jq .parents[1].sha // .parents[0].sha")
       n parents; exit 0 ;;
+  "pr view "*" --json mergeStateStatus --jq .mergeStateStatus")
+      # forge-8vfn.8.1.26: a sequence, like main_seq above, so a world can prove
+      # UNKNOWN-then-settled without a second stub. `merge_state_fail` answers
+      # the "gh itself failed" door with a genuine non-zero exit and no stdout —
+      # never a fabricated string. UNSET DEFAULTS TO CLEAN, so every door that
+      # predates this bead and never mentions merge state sees exactly what it
+      # saw before.
+      if [ -f "$FIX/merge_state_fail" ]; then exit 12; fi
+      if [ -s "$FIX/merge_state_seq" ]; then
+        line="$(head -1 "$FIX/merge_state_seq")"
+        [ -n "$line" ] || { echo "gh-stub: merge_state_seq exhausted" >&2; exit 96; }
+        sed -i 1d "$FIX/merge_state_seq"; printf '%s' "$line"; exit 0
+      fi
+      if [ -s "$FIX/merge_state" ]; then n merge_state; else printf 'CLEAN'; fi
+      exit 0 ;;
   "pr update-branch "*) if [ -f "$FIX/ub_conflict" ]; then echo "X Cannot update PR branch due to conflicts"; exit 1; fi; echo "✓ PR branch updated"; exit 0 ;;
   "pr view "*" --json state,mergedAt,mergeCommit"*)
       # `force_open_after_merge` is a doors-only override (forge-8vfn.7.6.145):
@@ -707,6 +752,94 @@ if [ "$rc" = 15 ] && grep -q 'RESULT=STARVED' "$T/log" && [ "$(attempts "$T/log"
   ok "a merge refused under the HELD third attempt is STARVED, rc 15 (was unreachable, fell through unnamed)"
 else
   bad "STARVED (held merge refused)" "rc=$rc attempts=$(attempts "$T/log") merged=$([ -s "$T/fix/merges" ] && echo y || echo n)"
+fi
+rm -rf "$T"
+
+echo "forge-8vfn.8.1.26 (T1 1633) — mergeStateStatus is read FIRST, before any check wait"
+
+# 1. DIRTY refuses immediately with its own rc and reason; no CI wait, no
+#    update-branch at all — GitHub runs no checks on a DIRTY head (D's #971,
+#    a QUARRY.md conflict), so nothing after this read may run.
+T="$(world deadbeefdeadbeef cafe1111cafe1111)"
+printf 'DIRTY' > "$T/fix/merge_state"
+cat > "$T/bin/ci-terminal" <<'STUB'
+#!/usr/bin/env bash
+echo waited >> "${MERGE_SLOT_FIXTURE:?}/ci-waits"; echo "TERMINAL_SUCCESS 4/4 ${3:0:8}"
+STUB
+chmod +x "$T/bin/ci-terminal"
+run "$T" > "$T/log"; rc=$RC
+if [ "$rc" = 18 ] && grep -q 'RESULT=MERGE-STATE-DIRTY' "$T/log" \
+   && [ ! -s "$T/fix/ci-waits" ] \
+   && ! grep -q 'update-branch' "$T/fix/gh-calls" \
+   && [ ! -s "$T/fix/merges" ]; then
+  ok "DIRTY refuses rc 18, MERGE-STATE-DIRTY, before update-branch or any CI wait"
+else
+  bad "DIRTY" "rc=$rc ci-waits=$([ -s "$T/fix/ci-waits" ] && echo y || echo n) $(grep -m1 'MARKER=done' "$T/log")"
+fi
+rm -rf "$T"
+
+# 2. UNKNOWN settling to CLEAN on a later read is not itself a refusal — the
+#    bounded retry proceeds once GitHub finishes computing it.
+T="$(world deadbeefdeadbeef cafe1111cafe1111)"
+printf 'UNKNOWN\nCLEAN\n' > "$T/fix/merge_state_seq"
+run "$T" > "$T/log"; rc=$RC
+if [ "$rc" = 0 ] && grep -q 'mergeStateStatus=CLEAN' "$T/log" && [ -s "$T/fix/merges" ]; then
+  ok "UNKNOWN settling to CLEAN on a later read proceeds and merges"
+else
+  bad "UNKNOWN-then-CLEAN" "rc=$rc $(grep -m1 'MARKER=done' "$T/log")"
+fi
+rm -rf "$T"
+
+# 3. UNKNOWN on every read exhausts the bounded retry and refuses with its own
+#    word — never DIRTY's, and never a silent proceed (§6.15: unknown is never
+#    a safe default).
+T="$(world deadbeefdeadbeef cafe1111cafe1111)"
+printf 'UNKNOWN\nUNKNOWN\nUNKNOWN\nUNKNOWN\n' > "$T/fix/merge_state_seq"
+run "$T" > "$T/log"; rc=$RC
+if [ "$rc" = 19 ] && grep -q 'RESULT=MERGE-STATE-UNKNOWN' "$T/log" \
+   && ! grep -q 'update-branch' "$T/fix/gh-calls" && [ ! -s "$T/fix/merges" ]; then
+  ok "persistent UNKNOWN refuses rc 19, MERGE-STATE-UNKNOWN, after the bounded retry, nothing merged"
+else
+  bad "persistent UNKNOWN" "rc=$rc $(grep -m1 'MARKER=done' "$T/log")"
+fi
+rm -rf "$T"
+
+# 4. gh itself fails on every read (mergeStateStatus never comes back at all):
+#    an unreadable field is UNKNOWN, never CLEAN — same bounded retry, same
+#    refusal, never a proceed.
+T="$(world deadbeefdeadbeef cafe1111cafe1111)"
+: > "$T/fix/merge_state_fail"
+run "$T" > "$T/log"; rc=$RC
+if [ "$rc" = 19 ] && grep -q 'RESULT=MERGE-STATE-UNKNOWN' "$T/log" \
+   && ! grep -q 'update-branch' "$T/fix/gh-calls" && [ ! -s "$T/fix/merges" ]; then
+  ok "gh failing to read mergeStateStatus refuses rc 19, MERGE-STATE-UNKNOWN — never proceeds on it"
+else
+  bad "gh read failure" "rc=$rc $(grep -m1 'MARKER=done' "$T/log")"
+fi
+rm -rf "$T"
+
+# 5. CLEAN reaches the existing flow unchanged, stated explicitly (every door
+#    above this bead already relies on this being the unset default).
+T="$(world deadbeefdeadbeef cafe1111cafe1111)"
+printf 'CLEAN' > "$T/fix/merge_state"
+run "$T" > "$T/log"; rc=$RC
+if [ "$rc" = 0 ] && grep -q 'mergeStateStatus=CLEAN' "$T/log" && [ -s "$T/fix/merges" ]; then
+  ok "CLEAN proceeds to the existing flow and merges"
+else
+  bad "CLEAN" "rc=$rc $(grep -m1 'MARKER=done' "$T/log")"
+fi
+rm -rf "$T"
+
+# 6. BLOCKED ("checks or reviews pending" — the normal pre-merge state) also
+#    reaches the existing flow: update-branch runs, the CI wait runs, it merges.
+T="$(world deadbeefdeadbeef cafe1111cafe1111)"
+printf 'BLOCKED' > "$T/fix/merge_state"
+run "$T" > "$T/log"; rc=$RC
+if [ "$rc" = 0 ] && grep -q 'mergeStateStatus=BLOCKED' "$T/log" \
+   && grep -q 'update-branch' "$T/fix/gh-calls" && [ -s "$T/fix/merges" ]; then
+  ok "BLOCKED (checks/reviews pending) proceeds to the existing flow and merges"
+else
+  bad "BLOCKED" "rc=$rc $(grep -m1 'MARKER=done' "$T/log")"
 fi
 rm -rf "$T"
 
