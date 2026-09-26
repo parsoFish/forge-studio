@@ -322,7 +322,12 @@ test('startDescendantSampler (real /proc, real rootPid): a listing that throws o
       return realListPids();
     },
   });
-  await new Promise((r) => setTimeout(r, 80)); // several real ticks on the real kernel
+  // Wait for the sampler's OWN progress, never a fixed sleep: under a loaded
+  // gate each real /proc listing is slow, and 80 ms fitted fewer than 4 ticks
+  // (PR #954 gate, 2026-09-26). 5 calls = 4 successful samples + the injected
+  // failure; the deadline only bounds a hang.
+  const deadline = Date.now() + 10_000;
+  while (calls < 5 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 10));
   const result = sampler.stop();
   assert.ok(result.samples >= 4);
   assert.ok(result.erroredSamples <= 1, 'a single transient failure, retried, costs at most one errored sample');
