@@ -10,6 +10,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -26,6 +28,9 @@ import {
 import { parseManifest } from '../../packages/flows/manifest.ts';
 import { parseWorkItem, readWorkItemsFromDir, writeWorkItem } from '../../packages/flows/work-item.ts';
 import { extractDrivableCommand } from '../../packages/contracts/demo-declaration.ts';
+import { deriveDeltaSummary, deriveDemoModel } from '../../packages/stations/phases/derive-demo-model.ts';
+import { derivePrBody } from '../../packages/stations/phases/derive-pr-body.ts';
+import { embedDemoInPr, stripDemoSection } from '../../packages/flows/pr.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DRIVER = join(HERE, 'd12-demo-runs.mjs');
@@ -150,9 +155,7 @@ describe('renderManifest / renderWorkItem round-trip', () => {
     assert.equal(positive.behavior_preserving, undefined);
   });
 
-  test('a rendered WI-1.md, written to a real dir, round-trips through readWorkItemsFromDir', async () => {
-    const { mkdtempSync, rmSync } = await import('node:fs');
-    const { tmpdir } = await import('node:os');
+  test('a rendered WI-1.md, written to a real dir, round-trips through readWorkItemsFromDir', () => {
     const dir = mkdtempSync(join(tmpdir(), 'd12-wi-'));
     try {
       const p = plan('positive');
@@ -196,164 +199,232 @@ describe('acceptance-criteria commands are drivable checkpoints', () => {
 });
 
 // ---------------------------------------------------------------------------
-// judgeRun — PASS/FAIL per kind
+// judgeRun — PASS/FAIL per kind, against the REAL derivePrBody +
+// embedDemoInPr output (packages/stations/phases/derive-pr-body.ts,
+// packages/flows/pr.ts) — never a hand-typed sentence or a synthetic body.
 // ---------------------------------------------------------------------------
 
-/** A PR body carrying every positive-only marker `judgeRun` looks for. */
-const POSITIVE_PASS_BODY = [
-  '# forge: INIT-2026-09-27-d12-positive',
-  '',
-  '## How',
-  '',
-  '- `node dist/cli.js --help` — usage text documents --exclude-author (changed)',
-  '- `npm run demo` — exclude-author report omits Grace Hopper (changed)',
-  '',
-  '2 of 2 captured checkpoints changed behaviour.',
-  '',
-  '![after](https://github.com/parsoFish/story-d12-positive/blob/abc1234567/.capture/after/ac-2-demo.filmstrip.png?raw=true)',
-  '',
-  '[after capture](https://github.com/parsoFish/story-d12-positive/blob/abc1234567/.capture/after/ac-2-demo.webm?raw=true)',
-  '',
-  '_This repository is private — embedded images and video links may not render for reviewers without repo access._',
-  '',
-].join('\n');
+function sh(cwd, args) {
+  return execFileSync('git', args, { cwd, stdio: 'pipe', encoding: 'utf8' });
+}
 
-const CONTROL_PASS_BODY = [
-  '# forge: INIT-2026-09-27-d12-control',
-  '',
-  '## How',
-  '',
-  '- `npm test` — every test stays green (unchanged)',
-  '- `npm run demo` — printed report is byte-identical (unchanged)',
-  '',
-  'No observable behaviour change was captured.',
-  '',
-  '![before](https://github.com/parsoFish/story-d12-control/blob/def7654321/.capture/before/ac-2-demo.filmstrip.png?raw=true)',
-  '![after](https://github.com/parsoFish/story-d12-control/blob/def7654321/.capture/after/ac-2-demo.filmstrip.png?raw=true)',
-  '',
-].join('\n');
+/** A real git repo, on `main`, one base commit, `origin` pointed at a GitHub
+ *  URL — never pushed; `embedDemoInPr`'s `githubOwnerRepoForWorktree` only
+ *  reads `git remote get-url origin` locally. Same technique
+ *  `packages/flows/tests/integration/pr.test.ts`'s `makeRepoWithOrigin` +
+ *  `pointOriginAtGitHub` use. */
+function makeGithubRepo(remoteName) {
+  const root = mkdtempSync(join(tmpdir(), 'd12-judge-repo-'));
+  sh(root, ['init', '-q', '-b', 'main']);
+  sh(root, ['config', 'user.email', 't@forge']);
+  sh(root, ['config', 'user.name', 'forge-test']);
+  sh(root, ['remote', 'add', 'origin', `https://github.com/${remoteName}.git`]);
+  writeFileSync(join(root, 'README.md'), 'base\n');
+  sh(root, ['add', '.']);
+  sh(root, ['commit', '-q', '-m', 'base']);
+  return root;
+}
 
-describe('judgeRun — control', () => {
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+const WEBM_MAGIC = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
+
+/** Seed + commit `<repo>/demo/<initiativeId>/` (no `.forge/project.json` in
+ *  this tmp repo, so `artifactRoot` defaults to `.` — same convention
+ *  `pr.test.ts`'s own `seedCaptureDemo` fixture uses). Unless
+ *  `includeMedia` is false, one committed before+after filmstrip and one
+ *  committed after-side webm are added too. Returns the demo dir + the real
+ *  commit sha `embedDemoInPr` pins its links to. */
+function seedDemoBundle(repo, initiativeId, { includeMedia }) {
+  const relDir = `demo/${initiativeId}`;
+  const demoDir = join(repo, relDir);
+  mkdirSync(demoDir, { recursive: true });
+  writeFileSync(join(demoDir, 'demo.json'), '{"title":"t"}\n');
+  writeFileSync(join(demoDir, 'DEMO.md'), '# demo\n');
+  const add = [`${relDir}/demo.json`, `${relDir}/DEMO.md`];
+  if (includeMedia) {
+    mkdirSync(join(demoDir, '.capture', 'before'), { recursive: true });
+    mkdirSync(join(demoDir, '.capture', 'after'), { recursive: true });
+    writeFileSync(join(demoDir, '.capture', 'before', 'checkpoint.filmstrip.png'), PNG_MAGIC);
+    writeFileSync(join(demoDir, '.capture', 'after', 'checkpoint.filmstrip.png'), PNG_MAGIC);
+    writeFileSync(join(demoDir, '.capture', 'after', 'checkpoint.webm'), WEBM_MAGIC);
+    add.push(
+      `${relDir}/.capture/before/checkpoint.filmstrip.png`,
+      `${relDir}/.capture/after/checkpoint.filmstrip.png`,
+      `${relDir}/.capture/after/checkpoint.webm`,
+    );
+  }
+  sh(repo, ['add', ...add]);
+  sh(repo, ['commit', '-q', '-m', 'demo capture']);
+  const sha = sh(repo, ['rev-parse', 'HEAD']).trim();
+  return { demoDir, sha };
+}
+
+/** The fixture ground's own declared demoProcess
+ *  (tests/stories/grounds/node-cli-with-tests/seed/.forge/project.json) — one
+ *  `capture` step naming `npm run demo`, the exact command every plan's AC2
+ *  also names (so `deriveDemoModel` dedupes it against the AC-derived
+ *  checkpoint rather than doubling it — see `acDerivedCheckpoints`). */
+const FIXTURE_DEMO_PROCESS = Object.freeze([
+  Object.freeze({
+    kind: 'capture',
+    text: 'Run `npm run demo` to build a deterministic fixture git repo, execute the built gitpulse CLI against it, and capture the real generated analytics report.',
+  }),
+]);
+
+/**
+ * The REAL demo model + REAL PR body for one run. Calls, in order:
+ *   1. `deriveDemoModel` (the AC-derived checkpoints, deduped against
+ *      `FIXTURE_DEMO_PROCESS`) — never hand-built.
+ *   2. Stamps `delta` on each checkpoint (`deltas`, positional) — the one
+ *      thing a real capture pass would have computed from before/after
+ *      evidence; nothing here re-derives THAT comparison, only feeds its
+ *      result forward, same as `judgeRun` itself takes it as input.
+ *   3. `deriveDeltaSummary` + `reviseAfterCapture`'s own essence formula
+ *      (`${baseEssence} ${deltaSummary}`.trim()) for `demoJson.essence`.
+ *   4. `derivePrBody` for the base body, `embedDemoInPr` for the `## Demo`
+ *      block, combined EXACTLY as `openPullRequest` combines them
+ *      (`stripDemoSection(base) + '\n' + demoBlock`).
+ * Nothing in this function, or in `judgeRun`, types the sentences being
+ * checked for — every one of them is the real function's own output.
+ */
+function buildRealArtifacts(p, { deltas, includeMedia, isPrivate }) {
+  const repo = makeGithubRepo(p.remoteName);
+  try {
+    const input = {
+      initiativeId: p.initiativeId,
+      title: p.manifest.title,
+      project: p.project,
+      diffStat: ' 1 file changed, 1 insertion(+)',
+      headSha: 'pending',
+      changedFiles: p.workItem.files_in_scope,
+      workItems: [{ id: 'WI-1', title: p.manifest.title, status: 'complete' }],
+      acceptanceCriteria: p.workItem.acceptance_criteria.map((ac) => ({ workItemId: 'WI-1', ...ac })),
+      gateEvidence: [],
+      demoProcess: FIXTURE_DEMO_PROCESS,
+      capture: 'checkpoints',
+    };
+    const derived = deriveDemoModel(input);
+    assert.ok(derived.ok, `deriveDemoModel failed: ${JSON.stringify(derived.errors ?? derived)}`);
+    assert.equal(
+      derived.model.checkpoints.length,
+      2,
+      'expected exactly the 2 AC-derived checkpoints (the demoProcess one dedupes against AC2)',
+    );
+
+    const checkpoints = derived.model.checkpoints.map((c, i) => ({ ...c, delta: deltas[i] }));
+    const deltaSummary = deriveDeltaSummary(checkpoints);
+    const essence = deltaSummary ? `${derived.model.essence} ${deltaSummary}`.trim() : derived.model.essence;
+    const model = { ...derived.model, essence, checkpoints };
+
+    const { demoDir, sha } = seedDemoBundle(repo, p.initiativeId, { includeMedia });
+    const prInput = { ...input, headSha: sha };
+    const prBase = derivePrBody(model, prInput);
+    const demoBlock = embedDemoInPr(repo, p.initiativeId, sha, demoDir, isPrivate);
+    const prBody = demoBlock ? `${stripDemoSection(prBase)}\n${demoBlock}\n` : prBase;
+
+    return { demoJson: { essence, checkpoints }, prBody, deltaSummary };
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+}
+
+describe('judgeRun — control (real derivePrBody + embedDemoInPr output)', () => {
   const p = plan('control');
 
-  test('PASSes when every checkpoint is unchanged and the body carries the honest sentences', () => {
-    const demoJson = {
-      essence: `${p.workItem.body.split('\n')[0]} No observable behaviour change was captured.`,
-      checkpoints: [
-        { label: 'AC 1: WI-1', delta: 'unchanged' },
-        { label: 'AC 2: WI-1', delta: 'unchanged' },
-      ],
-    };
-    const verdict = judgeRun(p, { demoJson, prBody: CONTROL_PASS_BODY });
+  test('PASSes on a real, fully-unchanged private-repo run', () => {
+    const { demoJson, prBody, deltaSummary } = buildRealArtifacts(p, {
+      deltas: ['unchanged', 'unchanged'],
+      includeMedia: true,
+      isPrivate: true,
+    });
+    assert.equal(deltaSummary, 'No observable behaviour change was captured.');
+    assert.ok(prBody.includes(deltaSummary), 'sanity: the real PR body really carries the real sentence');
+    const verdict = judgeRun(p, { demoJson, prBody });
     assert.equal(verdict.pass, true, JSON.stringify(verdict.reasons, null, 2));
     assert.equal(verdict.reasons.length, 5);
-    assert.ok(verdict.reasons.every((r) => r.pass));
   });
 
   test('FAILs when one checkpoint reads changed', () => {
-    const demoJson = {
-      essence: 'x 1 of 2 captured checkpoints changed behaviour.',
-      checkpoints: [
-        { label: 'AC 1: WI-1', delta: 'changed' },
-        { label: 'AC 2: WI-1', delta: 'unchanged' },
-      ],
-    };
-    const verdict = judgeRun(p, { demoJson, prBody: CONTROL_PASS_BODY });
+    const { demoJson, prBody } = buildRealArtifacts(p, {
+      deltas: ['changed', 'unchanged'],
+      includeMedia: true,
+      isPrivate: true,
+    });
+    const verdict = judgeRun(p, { demoJson, prBody });
     assert.equal(verdict.pass, false);
-    const row = verdict.reasons.find((r) => r.name.includes("delta is 'unchanged'"));
-    assert.equal(row.pass, false);
+    assert.equal(verdict.reasons.find((r) => r.name.includes("delta is 'unchanged'")).pass, false);
   });
 
-  test('FAILs when the PR body makes a "changed behaviour" claim', () => {
-    const demoJson = {
-      essence: 'No observable behaviour change was captured.',
-      checkpoints: [
-        { label: 'AC 1: WI-1', delta: 'unchanged' },
-        { label: 'AC 2: WI-1', delta: 'unchanged' },
-      ],
-    };
-    const body = `${CONTROL_PASS_BODY}\n1 of 2 captured checkpoints changed behaviour.\n`;
-    const verdict = judgeRun(p, { demoJson, prBody: body });
+  test('FAILs when no capture media was committed at all', () => {
+    const { demoJson, prBody } = buildRealArtifacts(p, {
+      deltas: ['unchanged', 'unchanged'],
+      includeMedia: false,
+      isPrivate: true,
+    });
+    assert.ok(!/\.filmstrip\.png/.test(prBody), 'sanity: the real body really has no filmstrip reference');
+    const verdict = judgeRun(p, { demoJson, prBody });
     assert.equal(verdict.pass, false);
-    const row = verdict.reasons.find((r) => r.name.includes('no "changed behaviour" claim'));
-    assert.equal(row.pass, false);
-  });
-
-  test('FAILs when the PR body has no filmstrip image line', () => {
-    const demoJson = {
-      essence: 'No observable behaviour change was captured.',
-      checkpoints: [
-        { label: 'AC 1: WI-1', delta: 'unchanged' },
-        { label: 'AC 2: WI-1', delta: 'unchanged' },
-      ],
-    };
-    const body = 'No observable behaviour change was captured.\n(no images here)\n';
-    const verdict = judgeRun(p, { demoJson, prBody: body });
-    assert.equal(verdict.pass, false);
-    const row = verdict.reasons.find((r) => r.name.includes('filmstrip image evidence'));
-    assert.equal(row.pass, false);
+    assert.equal(verdict.reasons.find((r) => r.name.includes('filmstrip image evidence')).pass, false);
   });
 });
 
-describe('judgeRun — positive', () => {
+describe('judgeRun — positive (real derivePrBody + embedDemoInPr output)', () => {
   const p = plan('positive');
 
-  test('PASSes when both checkpoints are changed and the body carries every marker', () => {
-    const demoJson = {
-      essence: 'x 2 of 2 captured checkpoints changed behaviour.',
-      checkpoints: [
-        { label: 'AC 1: WI-1', delta: 'changed' },
-        { label: 'AC 2: WI-1', delta: 'changed' },
-      ],
-    };
-    const verdict = judgeRun(p, { demoJson, prBody: POSITIVE_PASS_BODY });
+  test('PASSes on a real, fully-changed private-repo run', () => {
+    const { demoJson, prBody, deltaSummary } = buildRealArtifacts(p, {
+      deltas: ['changed', 'changed'],
+      includeMedia: true,
+      isPrivate: true,
+    });
+    assert.equal(deltaSummary, '2 of 2 captured checkpoints changed behaviour.');
+    assert.match(
+      prBody,
+      /!\[[^\]]* — after\]\(https:\/\/github\.com\/parsoFish\/story-d12-positive\/blob\/[0-9a-f]{40}\/demo\/[^)]*\.capture\/after\/[^)]*\.filmstrip\.png\?raw=true\)/,
+    );
+    assert.match(prBody, /\[▶ [^\]]* — after \(webm\)\]\([^)]*\.webm\)/);
+    assert.ok(prBody.includes("needs the viewer's github.com session"), 'sanity: the real caveat text is really there');
+    const verdict = judgeRun(p, { demoJson, prBody });
     assert.equal(verdict.pass, true, JSON.stringify(verdict.reasons, null, 2));
     assert.equal(verdict.reasons.length, 6);
-    assert.ok(verdict.reasons.every((r) => r.pass));
+  });
+
+  test('FAILs on a PUBLIC repo run — no private-session caveat is ever emitted', () => {
+    const { demoJson, prBody } = buildRealArtifacts(p, {
+      deltas: ['changed', 'changed'],
+      includeMedia: true,
+      isPrivate: false,
+    });
+    assert.ok(!prBody.includes("needs the viewer's github.com session"));
+    const verdict = judgeRun(p, { demoJson, prBody });
+    assert.equal(verdict.pass, false);
+    assert.equal(verdict.reasons.find((r) => r.name.includes('private-repository rendering caveat')).pass, false);
   });
 
   test('FAILs when only one checkpoint changed', () => {
-    const demoJson = {
-      essence: 'x 1 of 2 captured checkpoints changed behaviour.',
-      checkpoints: [
-        { label: 'AC 1: WI-1', delta: 'unchanged' },
-        { label: 'AC 2: WI-1', delta: 'changed' },
-      ],
-    };
-    const verdict = judgeRun(p, { demoJson, prBody: POSITIVE_PASS_BODY });
+    const { demoJson, prBody } = buildRealArtifacts(p, {
+      deltas: ['unchanged', 'changed'],
+      includeMedia: true,
+      isPrivate: true,
+    });
+    const verdict = judgeRun(p, { demoJson, prBody });
     assert.equal(verdict.pass, false);
-    const row = verdict.reasons.find((r) => r.name.includes("delta is 'changed'"));
-    assert.equal(row.pass, false);
+    assert.equal(verdict.reasons.find((r) => r.name.includes("delta is 'changed'")).pass, false);
   });
 
-  test('FAILs when the PR body has no commit-pinned after-side filmstrip image', () => {
-    const demoJson = {
-      essence: '2 of 2 captured checkpoints changed behaviour.',
-      checkpoints: [
-        { label: 'AC 1: WI-1', delta: 'changed' },
-        { label: 'AC 2: WI-1', delta: 'changed' },
-      ],
-    };
-    const body = POSITIVE_PASS_BODY.replace(/!\[after\]\([^)]*\)\n\n/, '');
-    const verdict = judgeRun(p, { demoJson, prBody: body });
+  test('FAILs when the media block is absent entirely', () => {
+    const { demoJson, prBody } = buildRealArtifacts(p, {
+      deltas: ['changed', 'changed'],
+      includeMedia: false,
+      isPrivate: true,
+    });
+    const verdict = judgeRun(p, { demoJson, prBody });
     assert.equal(verdict.pass, false);
-    const row = verdict.reasons.find((r) => r.name.includes('commit-pinned after-side filmstrip'));
-    assert.equal(row.pass, false);
-  });
-
-  test('FAILs when the PR body has no private-repo caveat', () => {
-    const demoJson = {
-      essence: '2 of 2 captured checkpoints changed behaviour.',
-      checkpoints: [
-        { label: 'AC 1: WI-1', delta: 'changed' },
-        { label: 'AC 2: WI-1', delta: 'changed' },
-      ],
-    };
-    const body = POSITIVE_PASS_BODY.replace(/_This repository is private[^\n]*\n/, '');
-    const verdict = judgeRun(p, { demoJson, prBody: body });
-    assert.equal(verdict.pass, false);
-    const row = verdict.reasons.find((r) => r.name.includes('private-repository rendering caveat'));
-    assert.equal(row.pass, false);
+    assert.equal(verdict.reasons.find((r) => r.name.includes('commit-pinned after-side filmstrip')).pass, false);
+    assert.equal(verdict.reasons.find((r) => r.name.includes('links a .webm')).pass, false);
+    // isPrivate is still true, but buildCaptureMediaBlock only adds the caveat
+    // when it actually inlined something — with no media committed, it inlined nothing.
+    assert.equal(verdict.reasons.find((r) => r.name.includes('private-repository rendering caveat')).pass, false);
   });
 
   test('reports webmSizes verbatim when given, and [] when omitted', () => {

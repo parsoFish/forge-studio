@@ -52,6 +52,7 @@ import {
 } from './d12-demo-runs-core.mjs';
 import { provisionFixtureGround, teardownFixtureGround } from './fixture-ground.mjs';
 import { sweepStoryRemotesFromManifest } from './sweep-remotes.mjs';
+import { removeInitiativeWorktree, deleteLocalBranch, removeQueueManifest } from './d12-demo-runs-teardown.mjs';
 import { spawnStudioReady } from '../lib/boot-studio.mjs';
 import { createStageTwo } from '../verify-cycle-stage2.mjs';
 import { classifyServeStageOutcome } from '../verify-cycle-stage-outcome.mjs';
@@ -347,6 +348,29 @@ async function runTeardown(plan, state, { keepRemote }) {
   if (state.studio) {
     await step('stop studio', () => state.studio.stop());
   }
+  // ORDER MATTERS from here: the worktree must go before the branch (git
+  // refuses to delete a branch checked out in a worktree) and before
+  // `teardownFixtureGround` (which removes `projects/<project>` — the very
+  // repo `git worktree remove`/`git branch -D` need to still exist to run
+  // against). `_logs/<cycleId>` is deliberately never touched — it is this
+  // run's evidence, named in the JSON report instead.
+  if (state.worktreeCreated) {
+    await step('remove initiative worktree', () => {
+      removeInitiativeWorktree(plan.projectRepoPath, plan.worktreePath);
+    });
+    await step('delete local branch', () => {
+      deleteLocalBranch(plan.projectRepoPath, plan.branch);
+    });
+    await step('remove queue manifest', () => {
+      const r = removeQueueManifest(plan.forgeRoot, plan.initiativeId);
+      if (!r.removed && r.reason !== 'already absent') {
+        // Genuinely unexpected (never "not found" — this run wrote exactly
+        // one, and nothing else should have raced it away) — report it by
+        // name rather than reading a silent no-op as success.
+        throw new Error(r.reason ?? 'removeQueueManifest: not removed');
+      }
+    });
+  }
   if (state.groundProvisioned) {
     await step('teardown fixture ground', () => {
       const r = teardownFixtureGround(plan.forgeRoot, { storyId: plan.storyId, project: plan.project });
@@ -437,7 +461,7 @@ async function main(argv) {
     return;
   }
 
-  const state = { groundProvisioned: false, remoteMinted: false, studio: null };
+  const state = { groundProvisioned: false, remoteMinted: false, worktreeCreated: false, studio: null, cycleId: null };
   let exitCode = 0;
   try {
     provisionGround(plan);
@@ -447,6 +471,7 @@ async function main(argv) {
     state.remoteMinted = true;
 
     createInitiativeWorktree(plan);
+    state.worktreeCreated = true;
 
     state.studio = await bootStudioStep(plan);
 
@@ -471,7 +496,8 @@ async function main(argv) {
       return;
     }
 
-    await handoffToDevelop(plan, state.studio.bridgeUrl);
+    const handoff = await handoffToDevelop(plan, state.studio.bridgeUrl);
+    state.cycleId = handoff?.cycleId ?? null;
     const outcome = await waitForDevelopOutcome(plan);
     log(`develop outcome: ${outcome.state} (${outcome.passes} pass(es))`);
 
@@ -492,6 +518,8 @@ async function main(argv) {
       developOutcome: outcome.state,
       servePasses: outcome.passes,
       demoJsonPath: artifacts.demoJsonPath,
+      // Evidence teardown never touches — named here, not swept.
+      logsPath: state.cycleId ? join(plan.forgeRoot, '_logs', state.cycleId) : null,
       prBody: artifacts.prBody,
       verdict,
     });

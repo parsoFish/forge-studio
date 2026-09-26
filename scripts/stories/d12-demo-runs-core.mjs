@@ -26,6 +26,14 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { serializeManifest, serializeWorkItem } from '@forge/flows';
+// Not re-exported through `@forge/stations`'s package.json `exports` map
+// (an internal band implementation detail, `packages/stations/phases/`) — a
+// relative import bypasses that map (it only governs the bare `@forge/stations`
+// specifier), the same precedent `writeManifest`'s import in
+// `d12-demo-runs.mjs` already sets. Importing the REAL function, rather than
+// typing the sentence it produces, is the point: `judgeRun` below can never
+// drift from what the orchestrator's own derivation actually says.
+import { deriveDeltaSummary } from '../../packages/stations/phases/derive-demo-model.ts';
 
 /** Two levels up from `scripts/stories/` — the same convention
  *  `scripts/lib/boot-studio.mjs`'s `FORGE_ROOT` uses. Overridable via
@@ -46,44 +54,37 @@ export const DEFAULT_REMOTE_ACCOUNT = 'parsoFish';
  *  command is deduped against it, never doubled). */
 export const FIXTURE_NAME = 'node-cli-with-tests';
 
-const NO_CHANGE_SENTENCE = 'No observable behaviour change was captured.';
 const CHANGED_BEHAVIOUR_SUBSTRING = 'changed behaviour';
-const CHANGED_2_OF_2_SENTENCE = '2 of 2 captured checkpoints changed behaviour.';
 
 /** A markdown image line naming a `.filmstrip.png` (either side, either query
- *  string or none) — control's PASS bar: SOME visual evidence was captured. */
+ *  string or none) — control's PASS bar: SOME visual evidence was captured.
+ *  Matches `packages/flows/pr-media.ts`'s `buildCaptureMediaBlock` output:
+ *  `![<label> — <side>](<blobUrl>?raw=true)`. */
 const FILMSTRIP_IMAGE_RE = /!\[[^\]]*\]\([^)]*\.filmstrip\.png(?:\?[^)]*)?\)/;
 
 /**
  * Positive's stronger bar: an `after`-side filmstrip, COMMIT-PINNED (a GitHub
  * `blob/<sha>/…` path — never a branch name, which would go stale the moment
  * the branch moves) and carrying GitHub's `?raw=true` so the image renders
- * inline rather than linking to the HTML blob viewer.
- *
- * NOTE (disclosed, not silently assumed): as of this writing
- * `packages/stations/phases/derive-pr-body.ts`'s `derivePrBody` renders each
- * checkpoint as a text row only — it does not yet inline a commit-pinned
- * image, a `.webm` link or a private-repo caveat. This regex (and the two
- * below) state this driver's own PASS bar for a real run's PR body; if a
- * live `positive` run's PR body does not yet satisfy them, `judgeRun` reports
- * that by name (a real product gap this driver was not asked to close), not a
- * bug in the check itself.
+ * inline rather than linking to the HTML blob viewer. Exactly
+ * `packages/flows/pr-media.ts`'s `buildCaptureMediaBlock`:
+ *   `captureUrl = https://github.com/<ownerRepo>/blob/<ref>/<relDir>/.capture/<side>/<file>`
+ *   image line = `![<label> — after](<captureUrl>?raw=true)`
  */
 const AFTER_FILMSTRIP_RAW_RE =
   /!\[[^\]]*\]\([^)]*\/blob\/[0-9a-f]{7,40}\/[^)]*\.capture\/after\/[^)]*\.filmstrip\.png\?raw=true\)/;
 
-/** A markdown link (not necessarily an image) naming a `.webm`. */
+/** A markdown link (not necessarily an image) naming a `.webm` — `pr-media.ts`'s
+ *  `[▶ <label> — <side> (webm)](<captureUrl>)` (no `?raw=true` on the webm link). */
 const WEBM_LINK_RE = /\[[^\]]*\]\([^)]*\.webm(?:\?[^)]*)?\)/;
 
 /**
- * A private-repository rendering caveat. No literal wording is specified
- * anywhere this driver was briefed from, so this is this driver's OWN
- * interpretive detection: "private" near a refusal-shaped verb ("may not" /
- * "might not" / "won't" / "cannot" / "can't") near "render", within one
- * sentence's width. Documented so a future reader can tell this is a
- * heuristic, not a quoted product string.
+ * The private-repository rendering caveat, quoted VERBATIM from
+ * `packages/flows/pr-media.ts`'s `buildCaptureMediaBlock` (bead
+ * `forge-mfv5.2.5`) — not a heuristic: this exact clause is what it emits
+ * whenever `isPrivate && anyInlined`.
  */
-const PRIVATE_CAVEAT_RE = /private[^\n.]{0,120}(?:may not|might not|won't|cannot|can't)[^\n.]{0,60}render/i;
+const PRIVATE_CAVEAT_TEXT = "needs the viewer's github.com session";
 
 /** ISO date (YYYY-MM-DD) from a Date, with no timezone surprises for the
  *  initiative-id slug (`INIT-YYYY-MM-DD-…`, `packages/flows/work-item.ts`'s
@@ -317,16 +318,16 @@ export function planRun(kind, opts = {}) {
     kind === 'control'
       ? [
           "every captured checkpoint's delta is 'unchanged'",
-          `essence and PR body both contain "${NO_CHANGE_SENTENCE}"`,
+          "essence and PR body both carry deriveDeltaSummary's real sentence for those checkpoints",
           'the PR body makes no "changed behaviour" claim',
           'the PR body shows filmstrip image evidence',
         ]
       : [
           "both AC checkpoints' delta is 'changed'",
-          `essence and PR body both contain "${CHANGED_2_OF_2_SENTENCE}"`,
+          "essence and PR body both carry deriveDeltaSummary's real sentence for those checkpoints",
           'the PR body inlines a commit-pinned after-side filmstrip image (?raw=true)',
           'the PR body links a .webm capture',
-          'the PR body carries a private-repository rendering caveat',
+          'the PR body carries the private-repository rendering caveat (pr-media.ts)',
         ];
 
   return deepFreeze({
@@ -402,13 +403,43 @@ function reason(name, pass, detail) {
   return Object.freeze({ name, pass, detail });
 }
 
+/**
+ * The essence/PR-body delta-SUMMARY check, shared by both kinds: rather than
+ * matching a hand-typed sentence, this calls `deriveDeltaSummary` on the SAME
+ * checkpoints the run captured and requires the essence/PR body to carry
+ * exactly what that real function says about THEM — so a demo.json/PR body
+ * that drifted from its own checkpoints (stale essence, wrong count) fails
+ * here even if it happens to contain some OTHER honest-sounding sentence.
+ * `null` (no checkpoint carries a delta yet) is its own named failure, never
+ * silently coerced into a string compare.
+ */
+function summaryReasons(checkpoints, essence, prBody) {
+  const expected = deriveDeltaSummary(checkpoints);
+  if (expected === null) {
+    const detail = 'deriveDeltaSummary(checkpoints) returned null — no checkpoint carries a delta yet';
+    return [reason('essence and PR body carry the real delta-summary sentence', false, detail)];
+  }
+  const inEssence = essence.includes(expected);
+  const inBody = prBody.includes(expected);
+  return [
+    reason(
+      'essence contains deriveDeltaSummary\'s real sentence for these checkpoints',
+      inEssence,
+      inEssence ? `present: "${expected}"` : `expected "${expected}", essence: ${JSON.stringify(essence)}`,
+    ),
+    reason(
+      'PR body contains deriveDeltaSummary\'s real sentence for these checkpoints',
+      inBody,
+      inBody ? `present: "${expected}"` : `expected "${expected}", not found in the PR body`,
+    ),
+  ];
+}
+
 function judgeControl(checkpoints, essence, prBody) {
   const allUnchanged = checkpoints.length > 0 && checkpoints.every((c) => c?.delta === 'unchanged');
   const offenders = checkpoints
     .filter((c) => c?.delta !== 'unchanged')
     .map((c) => `${c?.label ?? '(no label)'}: delta=${JSON.stringify(c?.delta)}`);
-  const hasNoChangeInEssence = essence.includes(NO_CHANGE_SENTENCE);
-  const hasNoChangeInBody = prBody.includes(NO_CHANGE_SENTENCE);
   const claimsChanged = prBody.toLowerCase().includes(CHANGED_BEHAVIOUR_SUBSTRING);
   const hasFilmstrip = FILMSTRIP_IMAGE_RE.test(prBody);
 
@@ -422,16 +453,7 @@ function judgeControl(checkpoints, essence, prBody) {
           ? 'no checkpoints were captured'
           : `not unchanged: ${offenders.join('; ')}`,
     ),
-    reason(
-      `essence contains "${NO_CHANGE_SENTENCE}"`,
-      hasNoChangeInEssence,
-      hasNoChangeInEssence ? 'present' : `essence: ${JSON.stringify(essence)}`,
-    ),
-    reason(
-      `PR body contains "${NO_CHANGE_SENTENCE}"`,
-      hasNoChangeInBody,
-      hasNoChangeInBody ? 'present' : 'sentence not found in the PR body',
-    ),
+    ...summaryReasons(checkpoints, essence, prBody),
     reason(
       'PR body makes no "changed behaviour" claim',
       !claimsChanged,
@@ -450,11 +472,9 @@ function judgePositive(checkpoints, essence, prBody) {
   const offenders = checkpoints
     .filter((c) => c?.delta !== 'changed')
     .map((c) => `${c?.label ?? '(no label)'}: delta=${JSON.stringify(c?.delta)}`);
-  const hasSummaryInEssence = essence.includes(CHANGED_2_OF_2_SENTENCE);
-  const hasSummaryInBody = prBody.includes(CHANGED_2_OF_2_SENTENCE);
   const hasAfterFilmstrip = AFTER_FILMSTRIP_RAW_RE.test(prBody);
   const hasWebmLink = WEBM_LINK_RE.test(prBody);
-  const hasCaveat = PRIVATE_CAVEAT_RE.test(prBody);
+  const hasCaveat = prBody.includes(PRIVATE_CAVEAT_TEXT);
 
   return [
     reason(
@@ -465,16 +485,7 @@ function judgePositive(checkpoints, essence, prBody) {
         : `expected exactly 2 checkpoints, all changed — got ${checkpoints.length}` +
           (offenders.length > 0 ? `; not changed: ${offenders.join('; ')}` : ''),
     ),
-    reason(
-      `essence contains "${CHANGED_2_OF_2_SENTENCE}"`,
-      hasSummaryInEssence,
-      hasSummaryInEssence ? 'present' : `essence: ${JSON.stringify(essence)}`,
-    ),
-    reason(
-      `PR body contains "${CHANGED_2_OF_2_SENTENCE}"`,
-      hasSummaryInBody,
-      hasSummaryInBody ? 'present' : 'sentence not found in the PR body',
-    ),
+    ...summaryReasons(checkpoints, essence, prBody),
     reason(
       'PR body inlines a commit-pinned after-side filmstrip image (?raw=true)',
       hasAfterFilmstrip,
@@ -486,9 +497,9 @@ function judgePositive(checkpoints, essence, prBody) {
       hasWebmLink ? 'present' : 'no markdown link naming a .webm file found',
     ),
     reason(
-      'PR body carries a private-repository rendering caveat',
+      'PR body carries the private-repository rendering caveat',
       hasCaveat,
-      hasCaveat ? 'present' : 'no private/rendering caveat sentence found (this driver\'s own heuristic — see PRIVATE_CAVEAT_RE)',
+      hasCaveat ? 'present' : `expected the substring ${JSON.stringify(PRIVATE_CAVEAT_TEXT)} (pr-media.ts) — not found`,
     ),
   ];
 }
