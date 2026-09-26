@@ -91,8 +91,8 @@ export function guardedGenerationWritePath(projectRoot: string, segs: readonly s
 // about where a demo session's bytes live, which both step modules stand on.
 // ---------------------------------------------------------------------------
 export const DEMO_REL_DIR = '.forge/demo';
-/** The reusable per-initiative-change demo generator the agent authors. Same slug
- *  + path the existing demo-design machinery / preflight DEMO-SKILL clause use. */
+/** The presentation composer the agent authors for the Studio demo page. Not a cycle
+ *  input: capture derives from demoProcess alone (forge-mfv5.2.2, forge-mfv5.2.8). */
 export const DEMO_SKILL_REL_PATH = '.forge/skills/demo-design/SKILL.md';
 
 
