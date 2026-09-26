@@ -200,27 +200,33 @@ describe('forge-8vfn.27: the runner threads ONE pressedAt across the beat loop',
     assert.ok(call, `no driveBeat call found in ${path}`);
     const args = call[1]!.split(',').map((a) => a.trim());
     // EXACT, not `>=`. 7.6.118 moved it from 9 to 10, T1 1471 moved it from 10
-    // to 11, and T1 1545 moved it from 11 to 12 (the same `forgeRoot` row 109's priced wait also resolves sessions against) — each move is the door
-    // working rather than the door being wrong: a new trailing argument with a
-    // default is exactly how an earlier one could be dropped silently, so each
-    // one costs a deliberate edit here. Every position is named — an arity
-    // that matches with the arguments transposed would be the same defect
-    // wearing the right number.
+    // to 11, T1 1545 moved it from 11 to 12 (the same `forgeRoot` row 109's
+    // priced wait also resolves sessions against), and T1 1583 moved it from
+    // 12 to 13 — each move is the door working rather than the door being
+    // wrong: a new trailing argument with a default is exactly how an earlier
+    // one could be dropped silently, so each one costs a deliberate edit here.
+    // Every position is named — an arity that matches with the arguments
+    // transposed would be the same defect wearing the right number.
     assert.equal(
       args.length,
-      12,
-      `driveBeat takes twelve parameters and the runner passed ${args.length} — the ninth defaults to a ` +
+      13,
+      `driveBeat takes thirteen parameters and the runner passed ${args.length} — the ninth defaults to a ` +
         `fresh Map, so omitting it gives every beat its own and wait.anchor can never resolve (run 16); ` +
         `the tenth builds the per-beat cycle watch (7.6.118); the eleventh is the run's own $ guard for an ` +
         `agent wait's poll loop (T1 1471); the twelfth is \`forgeRoot\`, which lets a repeat's per-transition ` +
         `bound reset on its own session's \`events.jsonl\` growth (T1 1545) and resolves the priced wait's ` +
-        `session log dir (row 109). Got: ${call[1]}`,
+        `session log dir (row 109); the thirteenth is \`startedMs\`, the run's own start, which lets the ` +
+        `priced wait admit an agent run dispatched by an EARLIER beat's press rather than only ones born ` +
+        `after this beat's own (T1 1583). Got: ${call[1]}`,
     );
     assert.equal(args[8], 'pressedAt', `the ninth argument must be the shared map, got ${args[8]}`);
     assert.equal(args[9], 'cycleWatchFor', `the tenth must be the per-beat watch factory, got ${args[9]}`);
     assert.equal(args[10], 'waitSpendGuard', `the eleventh must be the wait's own $ guard, got ${args[10]}`);
     assert.equal(args[11], 'costlessGuard.active ? null : ROOT',
       `the twelfth must be forgeRoot, withheld exactly like the stall door for a costless beat, got ${args[11]}`);
+    assert.equal(args[12], 'startedMs',
+      `the thirteenth must be the run's own start, the same anchor \`collectAgentRuns\` is reaped with at ` +
+      `teardown, got ${args[12]}`);
   });
 
   test('that map is declared OUTSIDE the loop — one per run, not one per beat', async () => {
