@@ -163,8 +163,9 @@ test('657(ii): no pid file is silence, not an error', () => {
   const root = mkdtempSync(join(tmpdir(), 'forge-daemon-'));
   // `drained` joined the shape in 689(iii): every caller now has to distinguish
   // "the daemon released its claim" from "the daemon is gone", and a run that
-  // started none did neither.
-  assert.deepEqual(stopOwnScheduler(root), { stopped: null, how: null, drained: false, note: null });
+  // started none did neither. `unknown` joined it at ROW 102b/18: a genuine
+  // ENOENT (no pid file at all) is `unknown: false`, unlike an unreadable one.
+  assert.deepEqual(stopOwnScheduler(root), { stopped: null, how: null, drained: false, unknown: false, note: null });
 });
 
 test('657(ii): a pid file holding nonsense says so instead of signalling', () => {

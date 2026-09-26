@@ -27,7 +27,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 /** A pid that is certainly GONE: a child this test spawned and already reaped.
  *  A literal like 7 is a live process on some hosts (the GitHub runner: PR #949
@@ -39,7 +39,7 @@ function deadPid(): number {
 }
 
 import {
-  reapCensusAndSweep, stopSchedulerCensusAndRelease, ownSchedulerPid, ownSchedulerPidState, DAEMON_PID_FILE,
+  reapCensusAndSweep, stopSchedulerCensusAndRelease, ownSchedulerPid, ownSchedulerPidState, stopOwnScheduler, DAEMON_PID_FILE,
 } from './sweep-teardown.mjs';
 
 function rootWithPidFile(): string {
@@ -249,6 +249,81 @@ test('control: reapCensusAndSweep with a genuinely absent _logs/ (real ENOENT) p
     assert.equal(result.census.reason, 'census-empty — no run root was recorded, so there is nothing to confirm');
     assert.ok(result.sweep, 'a genuinely absent _logs/ must not be refused — there is nothing to confirm');
   } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// -------------------------------------------- stopOwnScheduler itself (18/19)
+//
+// `ownSchedulerPidState` above (M7-D finding 2) is a SEPARATE read from
+// `stopOwnScheduler`'s own pidfile/cwd/kill reads — ROW 102b findings 18/19.
+// The old shape folded every one of those into "no daemon"/"already gone"/
+// "exited before the signal landed", leaving a live scheduler this run
+// started completely unmanaged with nothing flagged.
+
+test('ROW 102b (RED) finding 18: stopOwnScheduler treats an unreadable (non-ENOENT) pidfile as UNKNOWN, never "no daemon"', () => {
+  const root = rootWithPidFile();
+  chmodSync(join(root, DAEMON_PID_FILE), 0o000);
+  try {
+    const r = stopOwnScheduler(root);
+    assert.equal(r.stopped, null);
+    assert.equal(r.unknown, true, `an EACCES pidfile read must be UNKNOWN, not folded into "no daemon": ${JSON.stringify(r)}`);
+    assert.match(r.note ?? '', /EACCES|permission|could not read/i);
+  } finally {
+    chmodSync(join(root, DAEMON_PID_FILE), 0o644);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('control: stopOwnScheduler with genuinely no pidfile (real ENOENT) is silence, unknown:false, exactly as before', () => {
+  const root = mkdtempSync(join(tmpdir(), 'sweep-teardown-unknown-stopown-ctrl-'));
+  try {
+    assert.deepEqual(stopOwnScheduler(root), { stopped: null, how: null, drained: false, unknown: false, note: null });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('ROW 102b (RED) finding 19: an EPERM on the SIGTERM kill is UNKNOWN, never "exited before the signal landed"', () => {
+  const root = mkdtempSync(join(tmpdir(), 'sweep-teardown-unknown-kill-'));
+  mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { cwd: root, stdio: 'ignore' });
+  writeFileSync(join(root, DAEMON_PID_FILE), String(child.pid));
+  const originalKill = process.kill;
+  (process as unknown as { kill: typeof process.kill }).kill = ((pid: number, sig?: string | number) => {
+    if (pid === child.pid && sig === 'SIGTERM') throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+    return originalKill(pid, sig as string | number);
+  }) as typeof process.kill;
+  try {
+    const r = stopOwnScheduler(root, 200);
+    assert.equal(r.stopped, null, 'a signal failure must never be reported as stopped');
+    assert.equal(r.unknown, true, `EPERM on SIGTERM must be UNKNOWN, never read as exited: ${JSON.stringify(r)}`);
+    assert.match(r.note ?? '', /SIGTERM failed/);
+  } finally {
+    process.kill = originalKill;
+    try { process.kill(child.pid!, 'SIGKILL'); } catch { /* best-effort cleanup */ }
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('control: an ESRCH on the SIGTERM kill (genuinely gone at the exact instant) still reads as "exited before the signal landed"', () => {
+  const root = mkdtempSync(join(tmpdir(), 'sweep-teardown-unknown-kill-ctrl-'));
+  mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { cwd: root, stdio: 'ignore' });
+  writeFileSync(join(root, DAEMON_PID_FILE), String(child.pid));
+  const originalKill = process.kill;
+  (process as unknown as { kill: typeof process.kill }).kill = ((pid: number, sig?: string | number) => {
+    if (pid === child.pid && sig === 'SIGTERM') throw Object.assign(new Error('no such process'), { code: 'ESRCH' });
+    return originalKill(pid, sig as string | number);
+  }) as typeof process.kill;
+  try {
+    const r = stopOwnScheduler(root, 200);
+    assert.equal(r.stopped, child.pid);
+    assert.equal(r.unknown, false);
+    assert.match(r.note ?? '', /exited before the signal landed/);
+  } finally {
+    process.kill = originalKill;
+    try { process.kill(child.pid!, 'SIGKILL'); } catch { /* best-effort cleanup */ }
     rmSync(root, { recursive: true, force: true });
   }
 });
