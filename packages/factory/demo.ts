@@ -9,6 +9,13 @@
  *   3. Take ONE screenshot per checkpoint label → before/<label>.png + after/<label>.png.
  *   4. demo-model.ts collectCapturedMedia/mergeCapturedMedia back-fills demo.json.
  *
+ * D8: after each command checkpoint's `.out` is written, `recordTerminal`
+ * (demo-record.ts) additionally renders a `.webm` + `.filmstrip.png` of it;
+ * the browser-checkpoint loop calls `recordBrowser` instead of a plain
+ * screenshot, which produces the checkpoint's still AND its recording. Both
+ * are best-effort per ADR 021 — a recording failure logs and the capture
+ * continues, it never fails the run (the `.out`/`.png` evidence still lands).
+ *
  * Testable helpers (materialiseWorktree / cleanupWorktreeAt / imageToDataUri)
  * are exported and unit-tested. The heavy capture path (captureCheckpoints) is
  * side-effecting and validated via the live trafficGame run.
@@ -24,7 +31,11 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { MAX_INLINE_IMAGE_BYTES, checkpointArtifactName } from '@forge/stations/demo-types.ts';
+import {
+  MAX_INLINE_IMAGE_BYTES,
+  checkpointArtifactName,
+  checkpointArtifactStem,
+} from '@forge/stations/demo-types.ts';
 import { MAX_CAPTURED_OUTPUT_BYTES } from '@forge/stations/demo-model.ts';
 
 export type WorktreeAtRef = { path: string; repo: string };
@@ -167,7 +178,7 @@ export async function captureCheckpoints(
   input: CaptureCheckpointsInput,
 ): Promise<CaptureCheckpointsResult> {
   const { buildTree, startServer } = await import('./demo-runtime.ts');
-  const { screenshotUrl } = await import('./demo-capture.ts');
+  const { recordTerminal, recordBrowser } = await import('./demo-record.ts');
 
   const bundleDir = resolve(input.bundleDir);
   const beforeDir = join(bundleDir, 'before');
@@ -204,6 +215,23 @@ export async function captureCheckpoints(
         const out = captureCommandOutput(wt.path, command);
         writeFileSync(join(capDir, checkpointArtifactName(label, 'out')), out);
         captured.push(label);
+        // D8: best-effort per ADR 021 — a recording failure never fails the
+        // capture (the `.out` evidence above already landed regardless).
+        try {
+          await recordTerminal({
+            side,
+            label: checkpointArtifactStem(label),
+            argv: command.trim().split(/\s+/),
+            outText: out,
+            bundleDir,
+          });
+        } catch (err) {
+          process.stderr.write(
+            `[demo] recordTerminal(${side}/${label}) failed — continuing without a video: ${
+              err instanceof Error ? err.message : String(err)
+            }\n`,
+          );
+        }
       }
 
       // Screenshot checkpoints (browser) DO need a working build + a live server.
@@ -212,8 +240,23 @@ export async function captureCheckpoints(
         if (!server) continue;
         try {
           for (const label of input.checkpointLabels) {
-            const outPath = join(capDir, checkpointArtifactName(label, 'png'));
-            if (await screenshotUrl(server.url, outPath)) captured.push(label);
+            // recordBrowser's final still becomes the checkpoint's screenshot,
+            // so there is no separate screenshotUrl call to make on success.
+            try {
+              await recordBrowser({
+                side,
+                label: checkpointArtifactStem(label),
+                url: server.url,
+                bundleDir,
+              });
+              captured.push(label);
+            } catch (err) {
+              process.stderr.write(
+                `[demo] recordBrowser(${side}/${label}) failed — no screenshot or video for this checkpoint: ${
+                  err instanceof Error ? err.message : String(err)
+                }\n`,
+              );
+            }
           }
         } finally {
           await server.stop();
