@@ -304,9 +304,11 @@ type CollectedCaptureMedia = { toStage: string[]; skipped: SkippedCaptureMedia[]
 function collectCommittableCaptureMedia(worktreePath: string, demoDirRel: string): CollectedCaptureMedia {
   const toStage: string[] = [];
   const skipped: SkippedCaptureMedia[] = [];
-  const demoDirAbs = resolve(worktreePath, demoDirRel);
+  // The worktree is the trusted root; every demo-dir part is its own guarded segment
+  // (path-guard.ts CONTRACT: nothing caller-derived is ever folded into `root`).
+  const demoSegments = demoDirRel.split(/[\\/]/).filter((p) => p !== '');
   for (const side of ['before', 'after'] as const) {
-    const names = guardedReadDir(demoDirAbs, ['.capture', side]);
+    const names = guardedReadDir(worktreePath, [...demoSegments, '.capture', side]);
     if (!names) continue; // no `.capture/<side>` dir — nothing to stage for this side
     for (const name of names.sort()) {
       const segments = ['.capture', side, name];
@@ -316,7 +318,7 @@ function collectCommittableCaptureMedia(worktreePath: string, demoDirRel: string
         skipped.push({ relPath, reason: 'name outside the capture charset' });
         continue;
       }
-      const guard = resolveGuardedPath(demoDirAbs, segments);
+      const guard = resolveGuardedPath(worktreePath, [...demoSegments, ...segments]);
       if (!guard.ok || !guard.exists) {
         skipped.push({ relPath, reason: guard.ok ? 'disappeared mid-scan' : `refused: ${guard.reason}` });
         continue;
