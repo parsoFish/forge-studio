@@ -867,11 +867,11 @@ test('parseRun: FIELD-PARITY PIN — every field declared on the client Run type
     ],
     flowLineage: ['forge-develop'],
     trigger: { kind: 'schedule', source: 'cron', scope: null },
-    // W7-B7 (artifact-plan-17): the PR artifact page's link source.
+    // W7-B7 / forge-8vfn.8.1.23: the PR link source, and the re-review round (data-review-round).
     prUrl: 'https://github.com/parsoFish/gitpulse/pull/12',
-    // W6-SW-3 (sweep C8#1): declared on Run and carried by parseRun, so
-    // `Required<Run>` demands it here — the pin is only a FIELD-PARITY pin
-    // if it enumerates every field (GateBar depends on this one).
+    reviewRound: 2,
+    // W6-SW-3 (sweep C8#1): declared on Run and carried by parseRun, so `Required<Run>` demands it
+    // here — the pin is only a FIELD-PARITY pin if it enumerates every field (GateBar needs this one).
     project: 'gitpulse',
     // W8-A2 (ON-7, bead forge-6gv.3.4): the derived budget-stop outcome.
     // `Required<Run>` demands it the moment the field is declared, which is

@@ -191,6 +191,27 @@ test('an ARCHIVED (completed) run reports its real status, not a live-looking on
   expect(render()).toContain('data-run-status="complete"');
 });
 
+test('a run with no completed review pass reports round 0, never absent', () => {
+  // `forge-8vfn.8.1.23` — `archivedRun()` names no `reviewRound`, mirroring a
+  // real `Run` before its first adversarial-review pass has finished
+  // (`findReviewRound` returns 0 and `run-model.ts` omits the field). The DOM
+  // must still carry the counter's honest starting value, never omit the
+  // attribute — a beat reading it before it exists must see "0", not undefined.
+  expect(render()).toContain('data-review-round="0"');
+});
+
+test('a run whose fix has come back for re-review carries the round the send-back cannot', () => {
+  // KILLS the exact defect S10 run 30 measured: a beat asserting only
+  // `[data-node-id="review"][data-status="complete"]` went green on ROUND
+  // 1's own terminal state, 0.7 s after the send-back press — because
+  // nothing on the page said which round it was looking at.
+  // `reviewRound: 2` is round 30's re-review shape (`findReviewRound`'s own
+  // doc): 1 after the first adversarial-review pass ends, 2 after the
+  // second — never merely after a send-back is requested.
+  const html = render({ run: archivedRun({ reviewRound: 2 }) });
+  expect(html).toContain('data-review-round="2"');
+});
+
 // ---------------------------------------------------------------------------
 // THE NEVER-EXISTED RUN — R6-04's contract, applied to flow runs
 // ---------------------------------------------------------------------------

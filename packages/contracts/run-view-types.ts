@@ -77,6 +77,7 @@ export type Run = {
   /** `costUsd` optional per work item — the wire-parse carries this array through unvalidated. */
   workItems?: { id: string; status: RunPhaseStatus; costUsd?: number; task?: string; dependsOn?: string[]; delivered?: { files: number; insertions: number; commits: number } }[];
   prUrl?: string;                    // this run's PR URL, from its own reviewer.pr-opened event
+  reviewRound?: number;               // completed adversarial-review passes this cycle (forge-8vfn.8.1.23)
   flowLineage: string[];             // the seed flows this run traversed
   /**
    * What started this run — derived, never stored/authored. `kind` is a bare

@@ -54,20 +54,20 @@ operator-ratified new cap — never a silent raise.
 
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
-| `contracts` | 5 | 1,259 | **1,263** | ratified 1,263 — M7-A seam F6 (ADR 051 decisions 2 and 4, operator item 97), lane-ratified under ruling 666; see git history for prior raises. |
+| `contracts` | 5 | 1,260 | **1,263** | ratified 1,263 — M7-A seam F6 (ADR 051 decisions 2 and 4, operator item 97), lane-ratified under ruling 666; see git history for prior raises. |
 | `kernel` | 30 | 5,513 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `projects` | 46 | 10,951 | **9,061** | ratified 9,061 — M7-A reset-resolvable (+94, growth): Rebuild adds a template npm command only when package.json has the script; lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,091 | **13,091** | ratified 13,091 — row 99 DNS failure classified environment/transient (forge-8vfn.8.1.11), +26 lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 61 | 20,638 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
-| `flows` | 83 | 23,587 | **23,387** | ratified 23,387 — row 112 a fresh cycle threads its minted cycleId (forge-8vfn.8.1.17), +2 lane-ratified under ruling 666; see git history for prior raises. |
+| `flows` | 83 | 23,603 | **23,403** | ratified 23,403 — row 119 reviewRound derived from completed adversarial-review passes (forge-8vfn.8.1.23), +16 lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 14 | 2,113 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 40 | 11,231 | **11,231** | ratified 11,231 — row 112 requireCycleId, no initiative-id log dir (forge-8vfn.8.1.17), +15 on row 105's 11,216, lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,837 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **463** | **125,845** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **463** | **125,862** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -431,12 +431,12 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/review-comments.ts | flows | verbatim | 224 |
 | packages/agents/run-agent.ts | agents | verbatim | 800 |
 | packages/agents/spawn-marker.ts | agents | verbatim | 276 |
-| packages/flows/run-model-derive.ts | flows | verbatim | 43 |
+| packages/flows/run-model-derive.ts | flows | verbatim | 44 |
 | packages/flows/run-model-derive-status.ts | flows | verbatim | 460 |
 | packages/flows/run-model-derive-cost.ts | flows | verbatim | 373 |
-| packages/flows/run-model-derive-lineage.ts | flows | verbatim | 123 |
+| packages/flows/run-model-derive-lineage.ts | flows | verbatim | 134 |
 | packages/flows/run-model-derive-node-id.ts | flows | verbatim | 35 |
-| packages/flows/run-model.ts | flows | verbatim | 596 |
+| packages/flows/run-model.ts | flows | verbatim | 600 |
 | packages/flows/run-model-flow-graph.ts | flows | verbatim | 248 |
 | packages/flows/scheduler-dispatch.ts | flows | verbatim | 252 |
 | packages/flows/scheduler.ts | flows | verbatim | 398 |
@@ -542,7 +542,7 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/index.ts | apps/forge | verbatim | 8 |
 | packages/agents/index.ts | agents | verbatim | 131 |
 | packages/contracts/index.ts | contracts | verbatim | 143 |
-| packages/contracts/run-view-types.ts | contracts | rewritten | 93 |
+| packages/contracts/run-view-types.ts | contracts | rewritten | 94 |
 | packages/contracts/runnable-source.ts | contracts | rewritten | 33 |
 | packages/contracts/studio-types.ts | contracts | verbatim | 761 |
 | packages/factory/index.ts | factory | verbatim | 8 |

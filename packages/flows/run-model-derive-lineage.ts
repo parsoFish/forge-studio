@@ -106,6 +106,17 @@ export function findPrUrl(events: readonly EventLogEntry[]): string | undefined 
   return url;
 }
 
+/** COMPLETED `adversarial-review` passes THIS CYCLE (`forge-8vfn.8.1.23`, S10
+ *  run 30) — `end` events only: a send-back continues the cycle, so the
+ *  `review` node's own status alone cannot say WHICH round finished. */
+export function findReviewRound(events: readonly EventLogEntry[]): number {
+  let count = 0;
+  for (const e of events) {
+    if (e.phase === 'orchestrator' && e.skill === 'adversarial-review' && e.event_type === 'end') count += 1;
+  }
+  return count;
+}
+
 // ---------------------------------------------------------------------------
 // Gate note
 // ---------------------------------------------------------------------------

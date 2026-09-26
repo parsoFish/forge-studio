@@ -10,6 +10,8 @@
  * DOM-as-metrics contract — REUSING vocabulary that already exists, no
  * parallel vocabulary invented:
  *   [data-page="flow-run"][data-run-id][data-run-found][data-run-status][data-flow-id]
+ *   [data-review-round]                                   (`forge-8vfn.8.1.23`) —
+ *     completed adversarial-review passes THIS cycle, "0" absent any
  *   [data-component="run-not-found"]                     the honest 404 body
  *   [data-section="run-timeline"]                         the timeline container
  *   [data-timeline-row="true"][data-node-id][data-status][data-phase-cost-usd]
@@ -129,6 +131,12 @@ export function FlowRunDetail({
       data-run-status={run?.status ?? ''}
       data-flow-id={flowId}
       data-flow-resolution={flow ? 'registered' : 'unregistered'}
+      // `forge-8vfn.8.1.23` — the number of adversarial-review passes THIS
+      // CYCLE has COMPLETED, never the review NODE's own status (which stays
+      // `complete` from the first pass onward and cannot say which round).
+      // `?? 0` mirrors the counter's own honest starting value; see
+      // `findReviewRound` (`@forge/flows`) for the derivation.
+      data-review-round={String(run?.reviewRound ?? 0)}
       data-page-ready={ready ? 'true' : 'false'}
       style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 20 }}
     >
