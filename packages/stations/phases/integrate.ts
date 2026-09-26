@@ -304,13 +304,17 @@ export function runIntegrateBand(
   // ── capture, where the class says so ─────────────────────────────────────
   const wantsCapture = profile.capture === 'checkpoints' && demoJsonWantsCapture(demoJsonAbs);
   if (!wantsCapture) {
-    const committed = commitOrchestratedCaptureArtifacts(
+    const commitResult = commitOrchestratedCaptureArtifacts(
       input.worktreePath,
       demoDirRel,
       input.initiativeId,
       `chore(demo): demo artifacts (${input.initiativeId})`,
     );
-    emit('demo.artifacts.committed', { committed, capture: profile.capture });
+    emit('demo.artifacts.committed', {
+      committed: commitResult.committed,
+      capture: profile.capture,
+      skipped_media: commitResult.skippedMedia,
+    });
     emit('demo.complete', { acceptance_criteria: derivedInput.acceptanceCriteria.length, capture: profile.capture });
     return { status: 'complete', demoJsonPath: join(demoDirRel, DEMO_JSON_BASENAME) };
   }
@@ -353,8 +357,16 @@ export function runIntegrateBand(
   if (!revised.ok) {
     return { status: 'failed', reason: revised.reason, detail: revised.detail };
   }
-  const committed = commitOrchestratedCaptureArtifacts(input.worktreePath, demoDirRel, input.initiativeId);
-  emit('demo.capture', { capture_ok: true, nonce_match: true, capture_nonce: nonce, exit_code: 0, committed, duration_ms: cap.durationMs });
+  const commitResult = commitOrchestratedCaptureArtifacts(input.worktreePath, demoDirRel, input.initiativeId);
+  emit('demo.capture', {
+    capture_ok: true,
+    nonce_match: true,
+    capture_nonce: nonce,
+    exit_code: 0,
+    committed: commitResult.committed,
+    skipped_media: commitResult.skippedMedia,
+    duration_ms: cap.durationMs,
+  });
   emit('demo.complete', { acceptance_criteria: derivedInput.acceptanceCriteria.length, capture: profile.capture });
   return { status: 'complete', demoJsonPath: join(demoDirRel, DEMO_JSON_BASENAME) };
 }
