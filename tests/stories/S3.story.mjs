@@ -416,6 +416,13 @@ export default {
       // 11. `session-kind: 'onboarding'` is S1's own worked value.
       act: 'Follow "View onboarding session" and watch it work',
       do: [{ press: 'view-onboarding-session' }],
+      // Row 109 (T1 1549): this is the LAST beat, so once `expect.data` below
+      // holds, the run ends and teardown reaps the onboarding agent it just
+      // launched — run 2 measured "terminated before first priced event
+      // (30000 ms)" against reap.mjs's own 30s grace. `priced` is evidence
+      // only (never gates this beat's pass/fail); it just gives the session a
+      // real, bounded chance to price itself before the run tears down.
+      wait: { for: 'priced', upTo: 180_000 },
       expect: {
         route: '/sessions/onboarding/<onboardSessionId>',
         data: {

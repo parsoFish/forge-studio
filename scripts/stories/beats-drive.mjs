@@ -40,7 +40,7 @@ import {
 // why the split went this way round and not the other.
 import { performSteps } from './beats-steps.mjs';
 import { readProgress, sessionEventLines } from './beats-progress.mjs';
-import { STALL_CEILING_MS, doorWorthRunning, sessionLogDir } from './beats-agent-proc.mjs';
+import { STALL_CEILING_MS, doorWorthRunning, sessionLogDir, waitForPricedEvent } from './beats-agent-proc.mjs';
 
 
 
@@ -102,7 +102,7 @@ function predicateFailure(target, err) {
   );
 }
 
-export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null, stallDoor = null, pressedAt = new Map(), cycleWatchFor = null, spendGuard = null, forgeRoot = null) {
+export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, timeoutMs = READY_TIMEOUT_MS, agentProcProbe = null, stallDoor = null, pressedAt = new Map(), cycleWatchFor = null, spendGuard = null, forgeRoot = null, startedMs = null) {
   // `pressedAt` DEFAULTS BECAUSE MOST CALLERS DRIVE ONE BEAT. The door suite has
   // ~90 single-beat calls for which a fresh map is exactly right. A MULTI-BEAT
   // caller must thread ONE map across the loop, or every beat gets its own and
@@ -609,6 +609,27 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     bound.ms,
     STALL_CEILING_MS,
   );
+  // ROW 109 (T1 1549) — `wait: { for: 'priced', upTo }`. Run AFTER the verdict
+  // above is otherwise final, and attached to it either way: this is EVIDENCE
+  // for `story.json`, never a verdict input, so it never touches `status` or
+  // `failures` — the beat's own `expect.data` has already decided those.
+  // `target` (resolved at the top of this call) is the LIVE route the page is
+  // standing on, which `waitForPricedEvent` turns into a log dir the same way
+  // every other agent-evidence reader in `beats-agent-proc.mjs` already does.
+  //
+  // T1 1583 — `sinceMs: startedMs` (the RUN'S OWN start, this call's thirteenth
+  // argument), never `pressStartedMs`. S3's terminal beat only FOLLOWS the
+  // onboarding session; the agent it watches was dispatched by an EARLIER
+  // beat's press ("Run the onboarding agent"), so a per-beat anchor would
+  // already be too late to admit that run's dir. `startedMs` is the exact
+  // anchor `collectAgentRuns` is reaped with at teardown (`run-story.mjs`), so
+  // this wait and that teardown agree on which dirs are "this run's".
+  if (rawBeat.wait?.for === 'priced') {
+    verdict = Object.freeze({
+      ...verdict,
+      priced: await waitForPricedEvent(forgeRoot, target, rawBeat.wait.upTo, { sinceMs: startedMs }),
+    });
+  }
   // Bead `forge-8vfn.6.11.19` (T1 ruling 254) — the class, closed rather than
   // patched a fourth time. Fires WHATEVER the verdict would have been: a beat
   // that passes without its declared wait ever running passed by luck, and a
