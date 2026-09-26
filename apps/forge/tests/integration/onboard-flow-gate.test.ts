@@ -67,6 +67,8 @@ function makeLogger(): EventLogger & { events: Array<Record<string, unknown>> } 
 function makeInput(overrides: Partial<CycleInput> = {}): CycleInput {
   return {
     initiativeId: 'test-onboard-init',
+    // forge-8vfn.8.1.17: runCycle always threads a cycleId; executors now require it.
+    cycleId: '2026-06-08T00-00-00_test-onboard-init',
     manifestPath: '/tmp/test/onboard-flow-gate/manifest.md',
     projectRepoPath: '/tmp/test/onboard-flow-gate/project',
     worktreePath: '/tmp/test/onboard-flow-gate/worktree',

@@ -31,6 +31,7 @@ import {
 import { loadProjectConfig, type ProjectConfig } from '@forge/projects';
 import { releaseDraftAcs } from '../release-process.ts';
 import { recordBrainGateResult, type CycleInput } from '@forge/flows';
+import { requireCycleId } from './cycle-id.ts';
 import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents';
 import { deriveGateRecipe, renderGateRecipeBlock } from '@forge/projects';
 import { runAgent } from '@forge/agents';
@@ -295,7 +296,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   let pmToolSeq = 0;
 
   const spawn = await runAgent(def, {
-    runId: input.initiativeId,
+    runId: requireCycleId(input, 'runProjectManager'),
     workdir: input.worktreePath,
     cwd: input.worktreePath,
     prompt,

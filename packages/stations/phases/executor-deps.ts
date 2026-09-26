@@ -21,6 +21,7 @@ import type { ProjectGate } from '@forge/kernel';
 import { type ClosureResult, type CycleInput, type ReviewerOutcome } from '@forge/flows';
 import { WedgeDetector, WedgeKillError } from '@forge/flows';
 import { runProjectManager as realRunProjectManager } from './project-manager.ts';
+import { requireCycleId } from './cycle-id.ts';
 import { runDeveloperLoop as realRunDeveloperLoop, emitDeliverySummary } from './developer-loop.ts';
 import { runIntegrateBand, type IntegrateResult } from './integrate.ts';
 import { runAdversarialReview as realRunAdversarialReview, type AdversarialReviewResult } from './adversarial-review.ts';
@@ -242,7 +243,7 @@ export function buildDefaultDeps(classProfiles?: ClassProfilePort): FlowRunnerDe
         {
           initiativeId: input.initiativeId,
           worktreePath: input.worktreePath,
-          cycleId: input.cycleId ?? input.initiativeId,
+          cycleId: requireCycleId(input, 'runAdversarialReview'),
           logsRoot: DEFAULT_LOGS_ROOT,
           costBudgetUsd: readCostBudgetUsd(input),
           projectName: basename(input.projectRepoPath),
