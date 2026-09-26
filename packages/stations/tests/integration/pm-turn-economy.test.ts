@@ -270,6 +270,8 @@ function setupHarness(): Harness {
     manifestPath,
     projectRepoPath: worktree,
     worktreePath: worktree,
+    // forge-8vfn.8.1.17: runProjectManager requires a real cycleId now.
+    cycleId: `2026-07-10T00-00-00_${INITIATIVE_ID}`,
   };
   return { dir, worktree, logger, input };
 }

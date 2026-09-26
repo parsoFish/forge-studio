@@ -33,13 +33,13 @@ import type { AgentBudgets, AgentDefinition } from '@forge/contracts';
 function makeInput(overrides: Partial<CycleInput> = {}): CycleInput {
   return {
     initiativeId: 'test-initiative',
+    cycleId: '2026-06-08T00-00-00_test-initiative',
     manifestPath: '/tmp/test/manifest.md',
     projectRepoPath: '/tmp/test/project',
     worktreePath: '/tmp/test/worktree',
-    // These tests mock the node executors and use synthetic paths — no real
-    // artifacts land on disk, so they run as dry runs (which skips the ADR-027
-    // inbound-artifact guard). Artifact enforcement is covered in
-    // flow-artifacts.test.ts against real on-disk layouts.
+    // These tests mock the node executors and use synthetic paths — no real artifacts land on
+    // disk, so they run as dry runs (which skips the ADR-027 inbound-artifact guard). Artifact
+    // enforcement is covered in flow-artifacts.test.ts against real on-disk layouts.
     dryRun: true,
     ...overrides,
   };

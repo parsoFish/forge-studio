@@ -172,10 +172,11 @@ type Harness = {
  * OTHER TEST IN THIS FILE HAS EVER USED — the `_logs` residue test below —
  * can ask for one. All four tests otherwise share one process, and
  * `runProjectManager` derives `runAgent`'s `runId` (and therefore any
- * spawn-marker dir name) from `initiativeId`; reusing the same literal id
- * across tests would let an EARLIER test's residue already be present in a
- * LATER test's own before-snapshot, silently defeating the very check it
- * exists to make.
+ * spawn-marker dir name) from `cycleId` (forge-8vfn.8.1.17), which this
+ * harness mints as `<ts>_<initiativeId>`; reusing the same literal
+ * initiativeId across tests would still let an EARLIER test's residue
+ * already be present in a LATER test's own before-snapshot, silently
+ * defeating the very check it exists to make.
  */
 function setupHarness(initiativeId: string = DEFAULT_INITIATIVE_ID): Harness {
   const dir = mkdtempSync(join(tmpdir(), 'forge-pm-decomp-'));
@@ -196,6 +197,10 @@ function setupHarness(initiativeId: string = DEFAULT_INITIATIVE_ID): Harness {
     manifestPath,
     projectRepoPath: worktree,
     worktreePath: worktree,
+    // forge-8vfn.8.1.17: runProjectManager requires a real cycleId now — it
+    // embeds `initiativeId`, so the uniqueness this file's setupHarness doc
+    // relies on (see above) still holds for the runId-derived marker dir.
+    cycleId: `2026-05-20T00-00-00_${initiativeId}`,
   };
   return { dir, worktree, manifestPath, logger, input };
 }

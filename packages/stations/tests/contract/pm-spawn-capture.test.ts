@@ -94,6 +94,10 @@ test('runProjectManager: pins the exact {prompt, options} spawn call (characteri
       manifestPath,
       projectRepoPath: worktree,
       worktreePath: worktree,
+      // forge-8vfn.8.1.17: runProjectManager requires a real cycleId now.
+      // Not captured in the pinned snapshot — the runAgent `runId` never
+      // reaches the queryFn's `{prompt, options}` shape this test pins.
+      cycleId: `2026-01-01T00-00-00_${INITIATIVE_ID}`,
     };
 
     let captured: { prompt: string; options?: Record<string, unknown> } | null = null;

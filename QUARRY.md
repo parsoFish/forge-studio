@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 361 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 97 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 98 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -61,13 +61,13 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,156 | **12,578** | ratified 12,578 — M7-C door re-exports OD (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,091 | **13,091** | ratified 13,091 — row 99 DNS failure classified environment/transient (forge-8vfn.8.1.11), +26 lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 61 | 20,638 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
-| `flows` | 83 | 23,585 | **23,385** | ratified 23,385 — row 104 gh 'no pull requests found' is NONE (forge-8vfn.8.1.12), +10 lane-ratified under ruling 666; see git history for prior raises. |
+| `flows` | 83 | 23,587 | **23,387** | ratified 23,387 — row 112 a fresh cycle threads its minted cycleId (forge-8vfn.8.1.17), +2 lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 14 | 2,113 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 39 | 11,216 | **11,216** | ratified 11,216 — row 105 limit-refused review turn is a transient rate limit (forge-8vfn.8.1.13), +84 lane-ratified under ruling 666; see git history for prior raises. |
+| `stations` | 40 | 11,231 | **11,231** | ratified 11,231 — row 112 requireCycleId, no initiative-id log dir (forge-8vfn.8.1.17), +15 on row 105's 11,216, lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,837 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **462** | **125,738** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **463** | **125,755** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -315,7 +315,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/cycle-context.ts | flows | verbatim | 363 |
 | packages/flows/cycle-helpers.ts | flows | verbatim | 772 |
 | packages/flows/cycle-report.ts | flows | verbatim | 31 |
-| packages/flows/cycle.ts | flows | verbatim | 544 |
+| packages/flows/cycle.ts | flows | verbatim | 546 |
 | packages/flows/daemon.ts | flows | verbatim | 245 |
 | packages/sessions/kinds/demo-builder.ts | sessions | verbatim | 515 |
 | packages/sessions/kinds/authoring.ts | sessions | rewritten | 141 |
@@ -363,11 +363,12 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/review-refusal.ts | stations | rewritten | 84 |
 | packages/agents/phases/agent-scope-guard.ts | agents | verbatim | 111 |
 | packages/flows/phases/closure.ts | flows | verbatim | 431 |
-| packages/stations/phases/executor-deps.ts | stations | verbatim | 343 |
+| packages/stations/phases/executor-deps.ts | stations | verbatim | 344 |
 | packages/stations/phases/pm-rejected-set.ts | stations | verbatim | 139 |
 | packages/sessions/session-write-fence.ts | sessions | verbatim | 300 |
 | packages/sessions/testing.ts | sessions | verbatim | 15 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `tests/architect-ports-stub.ts`'s `stubArchitectManifestPorts`, three `kinds/architect-critic.ts` symbols, and three `turn-cost-rows.ts` symbols have no production consumer outside this package, only `apps/forge`/`scripts/stories` tests reach for them.** |
-| packages/stations/phases/executor-table.ts | stations | verbatim | 662 |
+| packages/stations/phases/cycle-id.ts | stations | rewritten | 12 |
+| packages/stations/phases/executor-table.ts | stations | verbatim | 663 |
 | packages/stations/phases/agent-skill-text.ts | stations | rewritten | 30 |
 | packages/forge-docs/skills/docs-integrate/SKILL.md | forge-docs | rewritten | 70 |
 | packages/forge-docs/skills/docs-review/SKILL.md | forge-docs | rewritten | 173 |
@@ -384,7 +385,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/phases/gitignored-creates.ts | flows | rewritten | 79 |
 | packages/flows/plan-gate-class-check.ts | flows | rewritten | 59 |
 | packages/stations/phases/pm-binding.ts | stations | verbatim | 384 |
-| packages/stations/phases/project-manager.ts | stations | verbatim | 760 |
+| packages/stations/phases/project-manager.ts | stations | verbatim | 761 |
 | packages/flows/phases/ralph-spec-lint.ts | flows | verbatim | 469 |
 | packages/stations/phases/reflector-binding.ts | stations | verbatim | 253 |
 | packages/stations/phases/reflector.ts | stations | verbatim | 705 |
