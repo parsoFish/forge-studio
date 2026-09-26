@@ -1496,6 +1496,15 @@ is what this contract reads — but it cannot be the only distinguisher.
   `a[data-action="back-to-flows"]` linking `/flows` (the index), both on the
   breadcrumb's flow crumb (never a dead unlinked "flow" span, artifact-plan-44)
   and the trailing "← back to …" action link, labelled to match.
+  **`forge-8vfn.8.1.18`:** the breadcrumb's RUN segment additionally links to
+  the run's own detail page — `a[data-action="open-run"]` → `/flows/<flowId>/
+  run/<runId>`, `lib/run-detail-href.ts` (the same id + path shape `RunRail.
+  tsx:394` already links from the flow monitor) — whenever a run record
+  resolved AND its flow id is known; an orphan run, an architect plan (no
+  `run` record), or one whose flow id came back empty renders the plain
+  `<runId>` text with no link, never a guessed path. `back-to-monitor` still
+  goes to the flow MONITOR — this is the separate path back to the run's OWN
+  timeline that a gated operator had no way to reach before.
   `?type=` for an architect id accepts only `plan` or absent — any other value
   renders the shared NotFound naming that a planning session has only a PLAN
   (artifact-plan-42; it used to silently coerce to the plan for ANY value).

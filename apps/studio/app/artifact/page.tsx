@@ -66,6 +66,7 @@ import { resolveArtifactMode, isRunNotFound, deriveArtifactEmptyReason, type Art
 import { planArtifactRequests, type ArtifactRequestPlan } from '@/lib/artifact-request-plan';
 import { prDocWithRunLink } from '@/lib/artifact-pr-view';
 import { effectiveInitiativeId } from '@/lib/initiative-id';
+import { runDetailHref } from '@/lib/run-detail-href';
 import { shouldFetchReviewFindings } from '@/lib/flow-run-detail-client';
 import { fetchDemoMarkdown } from '@/lib/review-comments-client';
 import { renderDemoMarkdownDoc } from '@/lib/render-markdown';
@@ -843,6 +844,12 @@ function ArtifactPageInner() {
   // "no run" and "a retired flow id" the same way.
   const monitorHref = isArchitect ? sessionBackHref : flowIsLive ? `/flows/${encodeURIComponent(flowId)}` : '/flows';
 
+  // forge-8vfn.8.1.18: the run's OWN detail page, distinct from `monitorHref`
+  // (the flow MONITOR) — an operator sitting at a gate had no path back to
+  // the run's own timeline. `null` for an architect plan (no `run` record)
+  // and for an orphan/unresolved run, never a guessed path (lib/run-detail-href.ts).
+  const runHref = runDetailHref(run);
+
   // Status pill
   const statusPill = run?.status ?? null;
   const pillColor = {
@@ -977,7 +984,20 @@ function ArtifactPageInner() {
                 </Link>
               )}
               <span style={{ color: 'var(--line-2)' }}>/</span>
-              <span>{runId || '—'}</span>
+              {/* forge-8vfn.8.1.18: the run segment links to the run's own
+                  detail page whenever one resolved — an orphan/unresolved
+                  run (runHref === null) keeps the plain, unlinked id. */}
+              {runHref ? (
+                <Link
+                  href={runHref}
+                  data-action="open-run"
+                  style={{ color: 'var(--dim)', textDecoration: 'none' }}
+                >
+                  {runId || '—'}
+                </Link>
+              ) : (
+                <span>{runId || '—'}</span>
+              )}
             </>
           )}
           <span style={{ color: 'var(--line-2)' }}>/</span>
