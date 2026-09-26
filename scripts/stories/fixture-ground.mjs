@@ -82,6 +82,30 @@ export function fixtureSeedDir(root, fixture) {
   return join(root, FIXTURE_ROOT, fixture, 'seed');
 }
 
+/**
+ * A fixture ground's OPTIONAL Brain 3 profile source —
+ * `tests/stories/grounds/<fixture>/brain/`, a sibling of `seed/`, never
+ * inside it. `packages/projects/preflight.ts`'s C4 clause reads
+ * `brain/projects/<project>/profile.md` from the FORGE repo, keyed by the
+ * project's own DIRECTORY NAME — Brain 3 lives outside `projects/` entirely,
+ * so a plain `projects/<project>` seed copy has no way to carry it. Most
+ * fixtures declare none; `existsSync` on the result decides whether this
+ * ground has one.
+ */
+export function fixtureBrainSeedDir(root, fixture) {
+  return join(root, FIXTURE_ROOT, fixture, 'brain');
+}
+
+/** Where a fixture's Brain 3 profile lands once provisioned —
+ *  `brain/projects/<project>`, the exact path `packages/projects/preflight.ts`'s
+ *  C4 clause reads and `sweep.mjs`'s `productFixturePathsFor` already treats
+ *  as this story's own residue (`join(root, 'brain', 'projects', name)` for
+ *  every `storyFixtureNames(storyId)`). Provision/teardown share this so
+ *  neither can drift from where the sweep expects to find it. */
+export function projectBrainDestDir(root, project) {
+  return join(root, 'brain', 'projects', project);
+}
+
 /** What a non-regular directory entry is, in words for a refusal. */
 function entryKind(d) {
   if (d.isSymbolicLink()) return 'a symbolic link';
@@ -219,15 +243,43 @@ export function provisionFixtureGround(root, { storyId, project, fixture }) {
     throw new Error(`provisionFixtureGround: ${dest} already exists — refusing to provision over it`);
   }
 
+  // Brain 3 is OPTIONAL and lives OUTSIDE `projects/` entirely (C4, above the
+  // export). Same residue door as `dest`: refused BEFORE any write, because a
+  // leftover profile from a prior run would silently make preflight look
+  // healthier (or unhealthier) than THIS run's own ground earns.
+  const brainSeedDir = fixtureBrainSeedDir(root, fixture);
+  const hasBrain = existsSync(brainSeedDir);
+  const brainDest = projectBrainDestDir(root, project);
+  // Refused whether or not THIS fixture carries a brain/: a stale profile left
+  // by an earlier run makes preflight's C4 read healthier than this ground
+  // earns either way (#951 review).
+  if (existsSync(brainDest)) {
+    throw new Error(
+      `provisionFixtureGround: ${brainDest} already exists — refusing to provision the fixture's Brain 3 ` +
+      'profile over it',
+    );
+  }
+
   const files = listFiles(seedDir);
+  // Validated with the SAME walk as the seed (no `.git`, no symlink/FIFO/
+  // socket/device) before any write — a brain/ source gets no weaker a check
+  // than the seed it sits beside.
+  if (hasBrain) listFiles(brainSeedDir);
   try {
     cpSync(seedDir, dest, { recursive: true });
+    if (hasBrain) cpSync(brainSeedDir, brainDest, { recursive: true });
     runGit(['-C', dest, ...FIXTURE_GIT_CONFIG, 'init', '-q', '-b', 'main', '--template=', '--object-format=sha1'], 'git init');
     // EXACTLY the seed file list, NUL-separated and literal (no glob, no
     // pathspec magic), fed on stdin — never `add -A`/`.`, which would also add
-    // whatever this run's own beats later write into the ground.
+    // whatever this run's own beats later write into the ground. `-f`:
+    // the list is already the seed's own curated, explicit file set (never a
+    // glob), so forcing it past the seed's OWN `.gitignore` cannot add
+    // anything wider than what the seed already named — it only stops a seed
+    // whose tracked config a blanket ignore rule shadows (e.g. a real
+    // ground's `.forge/` pattern the source repo's own comment says is
+    // force-tracked with `git add -f`) from failing to provision at all.
     runGit(
-      ['-C', dest, '--literal-pathspecs', ...FIXTURE_GIT_CONFIG, 'add', '--pathspec-from-file=-', '--pathspec-file-nul'],
+      ['-C', dest, '--literal-pathspecs', ...FIXTURE_GIT_CONFIG, 'add', '-f', '--pathspec-from-file=-', '--pathspec-file-nul'],
       'git add',
       { input: `${files.join('\0')}\0` },
     );
@@ -242,13 +294,20 @@ export function provisionFixtureGround(root, { storyId, project, fixture }) {
         `expected ${seedDigest ?? '(unreadable)'}, got ${destManifest?.digest ?? '(unreadable)'}`,
       );
     }
-    return Object.freeze({ dir: dest, digest: destManifest.digest, commit, files: Object.freeze(files) });
+    return Object.freeze({
+      dir: dest,
+      digest: destManifest.digest,
+      commit,
+      files: Object.freeze(files),
+      brainDir: hasBrain ? brainDest : null,
+    });
   } catch (e) {
     // A half-provisioned ground would look like a good pin to whatever runs
     // next, so any failure past this point removes everything it wrote.
     const original = e instanceof Error ? e : new Error(String(e));
     try {
       rmSync(dest, { recursive: true, force: true });
+      if (hasBrain) rmSync(brainDest, { recursive: true, force: true });
     } catch (cleanupError) {
       throw new AggregateError(
         [original, cleanupError],
@@ -260,16 +319,23 @@ export function provisionFixtureGround(root, { storyId, project, fixture }) {
   }
 }
 
-/** Remove a provisioned fixture ground. THROWS on a project outside this
- *  story's own namespace, same guard as provisioning; never throws on the
- *  removal itself — the caller is a run's own teardown, and a teardown that
- *  raises would lose the verdict the run just produced. */
+/** Remove a provisioned fixture ground AND its Brain 3 profile, if either
+ *  exists. THROWS on a project outside this story's own namespace, same
+ *  guard as provisioning; never throws on the removal itself — the caller is
+ *  a run's own teardown, and a teardown that raises would lose the verdict
+ *  the run just produced. Brain 3 is removed even when the ground directory
+ *  is already gone — an orphaned profile is still this story's own residue
+ *  (`sweep.mjs`'s `productFixturePathsFor` already lists it as such). */
 export function teardownFixtureGround(root, { storyId, project }) {
   assertOwnNamespace('teardownFixtureGround', storyId, project);
   const dest = join(root, 'projects', project);
-  if (!existsSync(dest)) return Object.freeze({ removed: false });
+  const brainDest = projectBrainDestDir(root, project);
+  const destExists = existsSync(dest);
+  const brainExists = existsSync(brainDest);
+  if (!destExists && !brainExists) return Object.freeze({ removed: false });
   try {
-    rmSync(dest, { recursive: true, force: true });
+    if (destExists) rmSync(dest, { recursive: true, force: true });
+    if (brainExists) rmSync(brainDest, { recursive: true, force: true });
     return Object.freeze({ removed: true });
   } catch (e) {
     return Object.freeze({ removed: false, error: e?.message ?? String(e) });
