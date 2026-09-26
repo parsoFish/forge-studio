@@ -123,11 +123,15 @@ test('a NON-ancestor holder — verified by ITS OWN fd + fdinfo — is refused, 
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
 
-test('an ancestor\'s fdinfo is UNREADABLE — refuses the exemption rather than trusting a census that could not vouch for it', () => {
+test('an ancestor\'s fdinfo is UNREADABLE — refuses the exemption AND refuses the run (m7-d-guard-unknown-audit.md row 12)', () => {
   const f = invisibleHoldFixture({ ancestor: 'unreadable' });
   try {
     const v = suiteLockVerdict(env(f.lock), f.proc, '333');
-    assert.equal(v.ok, true, v.reason); // CANNOT CHECK fails open, same as an unconfigured guard
+    // CANNOT CHECK now REFUSES: a census that could not vouch for a fd that IS
+    // the lock's own descriptor must never be read as "safe to proceed",
+    // which is the same fact whether or not the unreadable fd belongs to this
+    // run's own ancestor.
+    assert.equal(v.ok, false, v.reason);
     assert.doesNotMatch(v.reason, /OWN ANCESTOR/, 'a census that could not read the fd must never be read as proof of the run\'s own hold');
     assert.match(v.reason, /CANNOT CHECK/, v.reason);
   } finally { rmSync(f.dir, { recursive: true, force: true }); }

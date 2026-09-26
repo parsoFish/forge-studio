@@ -120,13 +120,13 @@ test('FIXTURE e: UNREADABLE fdinfo on a fd that IS the lock\'s own descriptor �
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
 
-test('overlapVerdict CANNOT CHECK must not claim the path "does not exist" when it plainly does', () => {
+test('m7-d-guard-unknown-audit.md row 12: overlapVerdict CANNOT CHECK REFUSES, and must not claim the path "does not exist" when it plainly does', () => {
   const f = buildFixture([{ pid: '90506', kind: 'unreadable' }]);
   try {
     const v = overlapVerdict({
       lockPath: f.lock, envName: 'FORGE_SUITE_LOCK', thisKind: 'a story run', otherKind: 'a full test suite', procRoot: f.proc,
     });
-    assert.equal(v.ok, true, 'an unreadable fd must not block work — the guard says it cannot enforce, and proceeds');
+    assert.equal(v.ok, false, 'an unreadable fd means the guard cannot vouch that nothing overlaps — REFUSE, never proceed on UNKNOWN');
     assert.match(v.reason, /CANNOT CHECK/);
     assert.doesNotMatch(v.reason, /does not exist/, 'the path is right there — that sentence would be a lie the Refusal rule forbids');
   } finally { rmSync(f.dir, { recursive: true, force: true }); }

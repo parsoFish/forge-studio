@@ -201,10 +201,11 @@ export function classifyFdLock(line, ino) {
  * pid is which class (948's error was two classifiers for one walk).
  *
  * @returns {{holders,waiters,openers}: {pid,cwd}[]} | null — null when the
- *   lock path cannot be resolved, `/proc` cannot be listed, or a fd already
- *   confirmed to be the lock's own descriptor has UNREADABLE fdinfo: that fd
- *   might be the holder, so the whole census refuses rather than reporting
- *   the rest as though it were complete.
+ *   lock path cannot be resolved, `/proc` cannot be listed, a fd already
+ *   confirmed to be the lock's own descriptor has UNREADABLE fdinfo, or (row
+ *   13) `/proc/locks` NAMES a pid on this exact inode that could not be
+ *   introspected at all — any of these might be the holder, so the whole
+ *   census refuses rather than reporting the rest as though it were complete.
  */
 function fdOccupants(lockPath, procRoot = '/proc') {
   let ino;
@@ -228,12 +229,25 @@ function fdOccupants(lockPath, procRoot = '/proc') {
   const holders = [];
   const waiters = [];
   const openers = [];
+  // m7-d-guard-unknown-audit.md row 13. MEASURED, not theorised, TWICE on this
+  // box: 90+ pids this uid cannot introspect at all — not only foreign-uid
+  // daemons (`/proc/1/fd` alone is EACCES for every non-root caller, always),
+  // but ALSO same-uid agents that deliberately opt out of ptrace for their own
+  // security (`ssh-agent`, `(sd-pam)` — PR_SET_DUMPABLE(0), ubiquitous on any
+  // real interactive box). Refusing the whole census on any one of them reds
+  // every real invocation without closing any gap: neither class can be told
+  // apart from "a genuine, unverifiable holder" by uid or any other /proc
+  // metadata short of the very read that is failing. `unchecked` collects them
+  // instead of deciding on the spot.
+  const unchecked = [];
   for (const pid of pids) {
     let fds;
     try {
       fds = readdirSync(`${procRoot}/${pid}/fd`);
-    } catch {
-      continue; // not ours to read, or it exited between readdir and here
+    } catch (err) {
+      if (err && (err.code === 'ENOENT' || err.code === 'ESRCH')) continue; // vanished between readdir and here — honestly gone
+      unchecked.push(pid);
+      continue;
     }
     for (const fd of fds) {
       let resolved;
@@ -257,6 +271,20 @@ function fdOccupants(lockPath, procRoot = '/proc') {
       }
       break; // one matching fd is enough to classify this pid
     }
+  }
+  if (unchecked.length > 0) {
+    // Row 13's refusal fires ONLY when there is a REASON to suspect one of the
+    // unintrospectable pids specifically — corroborated against `/proc/locks`
+    // for THIS inode (row 80b's "corroboration only" role, used here for
+    // exactly the fact it can still supply: a NAME on this exact inode). A
+    // live holder's row survives on both kernels measured (row 80b's blind
+    // spot is specifically the EXITED-holder-via-shared-descriptor shape);
+    // `/proc/locks` itself unreadable is the same UNKNOWN as any other
+    // read failure here.
+    const rows = kernelLockRows(lockPath, procRoot);
+    if (rows === null) return null;
+    const named = new Set([...rows.holders, ...rows.waiters].map((r) => r.pid));
+    if (unchecked.some((pid) => named.has(pid))) return null; // named on THIS lock and unverifiable — refuse
   }
   return { holders, waiters, openers };
 }
@@ -359,26 +387,31 @@ export function overlapVerdict({ lockPath, envName, thisKind, otherKind, procRoo
   }
   const holders = lockHolders(lockPath, procRoot);
   if (holders === null) {
-    // NAMED, never silent. The guard is configured and cannot do its job.
-    // Two distinct causes now share this branch (row 80b widened it): the
-    // path it was told to watch does not exist — a stale campaign dir, a
-    // typo, a resolve site that changed — or the path DOES exist but a fd
-    // already confirmed to be its own descriptor has unreadable fdinfo, so
-    // the census cannot vouch for the rest either. Saying "does not exist"
-    // for the second cause would be a claim this branch is not entitled to
-    // make, which is exactly the shape the Refusal rule exists to close.
-    // Either way work proceeds (an unconfigured checkout must still be able
-    // to run) but the verdict says exactly what is NOT being enforced.
+    // m7-d-guard-unknown-audit.md row 12 — NAMED, never silent, AND REFUSED,
+    // never folded into `ok: true`. This used to let work proceed exactly
+    // when the guard admits it cannot verify no overlapping work is running —
+    // "CANNOT CHECK" collapsing into "ok" is the same shape as every other
+    // guard in this campaign that read UNKNOWN as safe. Two distinct causes
+    // still share this branch (row 80b widened it): the path it was told to
+    // watch does not exist — a stale campaign dir, a typo, a resolve site
+    // that changed — or the path DOES exist but a fd already confirmed to be
+    // its own descriptor has unreadable fdinfo, so the census cannot vouch
+    // for the rest either. Saying "does not exist" for the second cause would
+    // be a claim this branch is not entitled to make, which is exactly the
+    // shape the Refusal rule exists to close. EITHER WAY THE GUARD IS
+    // CONFIGURED AND ADMITS IT CANNOT DO ITS JOB, and an explicitly configured
+    // guard that cannot check is not the same fact as an unconfigured one —
+    // only the unconfigured guard (above) is entitled to proceed.
     const missing = !existsSync(lockPath);
     return {
-      ok: true,
+      ok: false,
       reason: missing
         ? `overlap guard CANNOT CHECK: ${envName} names ${lockPath}, which does not exist, so ` +
-          `${thisKind} is NOT excluded from ${otherKind}. A campaign lock is created by its first ` +
-          'holder and persists, so a missing one means the path is wrong rather than idle.'
+          `${thisKind} REFUSES rather than assuming it is safe. A campaign lock is created by its ` +
+          'first holder and persists, so a missing one means the path is wrong rather than idle.'
         : `overlap guard CANNOT CHECK: ${envName} names ${lockPath}, which exists but a descriptor ` +
-          `on it could not be classified (unreadable /proc), so ${thisKind} is NOT excluded from ` +
-          `${otherKind}.`,
+          `on it could not be classified (unreadable /proc), so ${thisKind} REFUSES rather than ` +
+          'assuming it is safe.',
     };
   }
   // All THREE classes refuse. A waiter means someone is queued for the same
@@ -497,9 +530,18 @@ export function runLockVerdict(env = process.env, procRoot = '/proc') {
  * the suite-lock is fine too — suite-then-run is the point, not a mandate
  * that every run go through the wrapper.
  *
+ * m7-d-guard-unknown-audit.md row 14 widens this to TWO more UNKNOWNs that
+ * must refuse rather than fold into "not held by me": `lockHolders` itself
+ * returning `null` (row 12's sibling fact, restated for THIS check — a census
+ * that cannot classify a fd that IS the lock's own descriptor must never read
+ * as "no", the exact deadlock shape row 73 found), and `selfPids.truncated`
+ * — this process's own ancestor chain not reaching init, so the ancestor that
+ * would prove "mine" or "a stranger's" may sit one hop past wherever the walk
+ * stopped (`ancestorPids`).
+ *
  * @param {NodeJS.ProcessEnv} env
  * @param {string} procRoot
- * @param {Set<string>} selfPids  this process's own ancestor chain (`ancestorPids`)
+ * @param {Set<string> & {truncated?: true}} selfPids  this process's own ancestor chain (`ancestorPids`)
  * @returns {{ok: boolean, reason: string}}
  */
 export function lockOrderVerdict(env = process.env, procRoot = '/proc', selfPids = ancestorPids(process.pid, { procRoot })) {
@@ -507,9 +549,31 @@ export function lockOrderVerdict(env = process.env, procRoot = '/proc', selfPids
   if (!runLockPath) {
     return { ok: true, reason: `lock order ok — ${RUN_LOCK_ENV} names no lock, so this launch holds none` };
   }
-  const runHolders = lockHolders(runLockPath, procRoot) ?? [];
+  const runHolders = lockHolders(runLockPath, procRoot);
+  if (runHolders === null) {
+    return {
+      ok: false,
+      reason:
+        `refusing to start: ${RUN_LOCK_ENV} (${runLockPath}) CANNOT CHECK who holds it (row 14) — a census ` +
+        'that cannot classify a fd that IS the lock\'s own descriptor must never read as "not held by me".',
+    };
+  }
   const runHeldBySelf = runHolders.some((h) => selfPids.has(String(h.pid)));
   if (!runHeldBySelf) {
+    if (runHolders.length > 0 && selfPids.truncated === true) {
+      // A REAL holder exists (an EMPTY `runHolders` cannot hide anything,
+      // truncated ancestry or not) and this launch's own ancestry did not
+      // reach init — the walk that decides "mine" never reached init, a
+      // match may sit one hop past wherever it stopped. "not found in a
+      // partial chain" must not read as "not mine" — the exact deadlock
+      // shape row 73 found.
+      return {
+        ok: false,
+        reason:
+          `refusing to start: this launch's own ancestor chain could not be fully walked to init (row 14) ` +
+          `— whether it holds ${RUN_LOCK_ENV} (${runLockPath}) is UNKNOWN, not "no".`,
+      };
+    }
     // Not held by THIS launch's own ancestry — a stranger's hold, or nobody's,
     // is runLockVerdict's fact to report, not this check's to reinterpret.
     return {
@@ -518,12 +582,34 @@ export function lockOrderVerdict(env = process.env, procRoot = '/proc', selfPids
     };
   }
   const suiteLockPath = env[SUITE_LOCK_ENV];
-  const suiteHolders = suiteLockPath ? (lockHolders(suiteLockPath, procRoot) ?? []) : [];
-  const suiteHeldBySelf = suiteHolders.some((h) => selfPids.has(String(h.pid)));
+  const suiteHolders = suiteLockPath ? lockHolders(suiteLockPath, procRoot) : [];
+  if (suiteLockPath && suiteHolders === null) {
+    return {
+      ok: false,
+      reason:
+        `refusing to start: this launch holds ${RUN_LOCK_ENV} (${runLockPath}) but ${SUITE_LOCK_ENV} ` +
+        `(${suiteLockPath}) CANNOT CHECK who holds it (row 14) — a census that cannot classify a fd that ` +
+        'IS the lock\'s own descriptor must never read as "not held", which would send this launch down ' +
+        'the unordered branch.',
+    };
+  }
+  const suiteHeldBySelf = (suiteHolders ?? []).some((h) => selfPids.has(String(h.pid)));
   if (suiteHeldBySelf) {
     return {
       ok: true,
       reason: `lock order ok — this launch holds both ${SUITE_LOCK_ENV} (${suiteLockPath}) and ${RUN_LOCK_ENV} (${runLockPath})`,
+    };
+  }
+  if (suiteLockPath && (suiteHolders?.length ?? 0) > 0 && selfPids.truncated === true) {
+    // Same rule as the run-lock branch above: a real suite-lock holder exists
+    // and this launch's own ancestry did not reach init, so "not found" here
+    // is UNKNOWN, not "no". An unconfigured or genuinely-empty suite lock
+    // needs no ancestry at all and falls through to the ordinary message.
+    return {
+      ok: false,
+      reason:
+        `refusing to start: this launch holds ${RUN_LOCK_ENV} (${runLockPath}) but its own ancestor chain ` +
+        `could not be fully walked to init (row 14) — whether it ALSO holds ${SUITE_LOCK_ENV} is UNKNOWN, not "no".`,
     };
   }
   return {
@@ -574,22 +660,41 @@ export function lockOrderVerdict(env = process.env, procRoot = '/proc', selfPids
  * literal `S` when this lane first wrote it. The 64-hop bound is not decoration:
  * a walk that trusts the chain to terminate wedges on a cycle it should never
  * see.
+ *
+ * m7-d-guard-unknown-audit.md row 14 (mirrors `reap-census.mjs`'s `readPpid`,
+ * its own MUST 3 fix for the SAME collapse in a sibling ppid walk). ENOENT on
+ * `p`'s own `status` read is `p` genuinely having exited mid-walk — a normal
+ * chain end this function has always accepted, and stays exactly that.
+ * Anything else (EACCES, EIO...) is a DIFFERENT fact: the walk did NOT reach
+ * init, so an ancestor further out — the one that would prove "this is mine"
+ * or "a stranger's" — may sit one hop past a pid this could simply not read.
+ * `lockOrderVerdict` must never treat that the same as "not found", so it is
+ * named on the returned Set itself (`.truncated`), never a second return
+ * shape: `suiteLockVerdict` and `whoRuns`, the other two callers, keep working
+ * unchanged off `.has()` alone.
+ *
+ * @returns {Set<string> & {truncated?: true}}
  */
 export function ancestorPids(startPid = process.pid, { procRoot = '/proc' } = {}) {
   const out = new Set();
   let p = String(startPid);
   for (let guard = 0; guard < 64; guard += 1) {
-    if (p === '' || p === '0') break;
+    if (p === '' || p === '0') return out; // the historical terminal condition — complete, not truncated
     out.add(p);
-    if (p === '1') break;
+    if (p === '1') return out; // reached init — the walk is COMPLETE
     let next = null;
     try {
       const m = /^PPid:\s+(\d+)/m.exec(readFileSync(`${procRoot}/${p}/status`, 'utf8'));
       next = m === null ? null : m[1];
-    } catch { /* vanished mid-walk: the chain ends here, honestly */ }
-    if (next === null) break;
+    } catch (err) {
+      if (err && err.code === 'ENOENT') return out; // genuinely gone — an honest, expected chain end
+      out.truncated = true;
+      return out;
+    }
+    if (next === null) return out; // status read but no PPid line — not this function's failure to explain
     p = next;
   }
+  out.truncated = true; // the 64-hop guard fired before reaching init
   return out;
 }
 
