@@ -25,7 +25,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -126,4 +126,37 @@ test('teardown removes a leftover brain profile even if the ground directory is 
   const result = teardownFixtureGround(root, { storyId: 'S8', project: 'story-s8' });
   assert.equal(result.removed, true);
   assert.equal(existsSync(brainDest), false, 'an orphaned brain profile is still this story\'s own residue to clear');
+});
+
+test('#951 review: a brain/projects/<project> residue refuses provisioning EVEN WHEN the fixture carries no brain/', () => {
+  // A stale profile left by an earlier run makes preflight's C4 read healthier
+  // than THIS ground earns, whether or not this fixture would have written one.
+  const root = scratch();
+  seedFixture(root); // no brain/
+  const brainDest = join(root, 'brain', 'projects', 'story-s8');
+  mkdirSync(brainDest, { recursive: true });
+  writeFileSync(join(brainDest, 'profile.md'), '# stale leftover from a prior run\n');
+
+  assert.throws(
+    () => provisionFixtureGround(root, { storyId: 'S8', project: 'story-s8', fixture: 'demo-seed' }),
+    (err: unknown) => String((err as Error)?.message ?? err).includes(brainDest),
+  );
+  assert.equal(existsSync(join(root, 'projects', 'story-s8')), false, 'a refused provision writes nothing');
+});
+
+test('#951 review: a symlink inside the fixture brain/ is refused, naming it, before anything is written', () => {
+  const root = scratch();
+  seedFixture(root, { brain: { 'profile.md': '# profile\n' } });
+  // Hermetic target: fully readable, controlled by this test (see the seed's
+  // twin test in fixture-ground.test.ts for why not /etc).
+  const target = mkdtempSync(join(tmpdir(), 'fixture-ground-brain-target-'));
+  writeFileSync(join(target, 'secret.md'), 'not part of any fixture\n');
+  symlinkSync(target, join(root, 'tests', 'stories', 'grounds', 'demo-seed', 'brain', 'evil'));
+
+  assert.throws(
+    () => provisionFixtureGround(root, { storyId: 'S8', project: 'story-s8', fixture: 'demo-seed' }),
+    /evil/,
+  );
+  assert.equal(existsSync(join(root, 'projects', 'story-s8')), false, 'no ground written');
+  assert.equal(existsSync(join(root, 'brain', 'projects', 'story-s8')), false, 'no brain profile written');
 });
