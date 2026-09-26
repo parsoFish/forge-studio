@@ -42,10 +42,10 @@ import {
 } from '@forge/flows';
 import { loadProjectConfig } from '@forge/projects';
 
-import { renderDemoBundle, stripScratchFromDiffStat } from '../demo-model.ts';
+import { renderDemoBundle, stripScratchFromDiffStat, type DemoModel } from '../demo-model.ts';
 import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
 import { judgeCaptureNonce, readStampedNonce } from './capture-nonce.ts';
-import { deriveDemoModel, type DerivedDemoInput } from './derive-demo-model.ts';
+import { deriveDeltaSummary, deriveDemoModel, type DerivedDemoInput } from './derive-demo-model.ts';
 import { derivePrBody, PR_BODY_SECTIONS } from './derive-pr-body.ts';
 
 export const PR_DESCRIPTION_REL = '.forge/pr-description.md';
@@ -65,7 +65,15 @@ export type IntegrateResult =
   | { status: 'complete'; demoJsonPath: string }
   | {
       status: 'failed';
-      reason: 'derive-failed' | 'config-error' | 'render-failed' | 'tooling-unavailable' | 'capture-failed' | 'capture-not-stamped' | 'nonce-mismatch';
+      reason:
+        | 'derive-failed'
+        | 'config-error'
+        | 'render-failed'
+        | 'tooling-unavailable'
+        | 'capture-failed'
+        | 'capture-not-stamped'
+        | 'nonce-mismatch'
+        | 'delta-revise-failed';
       detail: string;
     };
 
@@ -86,7 +94,7 @@ function readDelivered(
 ): Pick<DerivedDemoInput, 'workItems' | 'acceptanceCriteria'> {
   const wiDir = join(worktreePath, '.forge', 'work-items');
   const workItems: DerivedDemoInput['workItems'] = [];
-  const acceptanceCriteria: string[] = [];
+  const acceptanceCriteria: DerivedDemoInput['acceptanceCriteria'] = [];
   if (!existsSync(wiDir)) return { workItems, acceptanceCriteria };
   const { items, parseErrors } = readWorkItemsFromDir(wiDir);
   if (Object.keys(parseErrors).length > 0) {
@@ -95,13 +103,72 @@ function readDelivered(
     emit('demo.wi-parse-errors', { errors: parseErrors }, { event_type: 'error' });
   }
   const mutableItems = workItems as { id: string; title: string; status: string }[];
+  const mutableAcs = acceptanceCriteria as { workItemId: string; given: string; when: string; then: string }[];
   for (const wi of items) {
     mutableItems.push({ id: wi.work_item_id, title: wi.body.split('\n')[0] ?? wi.work_item_id, status: wi.status });
     for (const ac of wi.acceptance_criteria) {
-      acceptanceCriteria.push(`(${wi.work_item_id}) GIVEN ${ac.given.trim()} WHEN ${ac.when.trim()} THEN ${ac.then.trim()}`);
+      // Carried TYPED — rendering to the `(WI) GIVEN … WHEN … THEN …` line
+      // moved into derive-demo-model.ts (renderAcceptanceCriterion), so the demo
+      // model and the PR body render the same line from the same function.
+      mutableAcs.push({ workItemId: wi.work_item_id, given: ac.given, when: ac.when, then: ac.then });
     }
   }
   return { workItems, acceptanceCriteria };
+}
+
+export type ReviseAfterCaptureResult = { ok: true } | { ok: false; reason: 'delta-revise-failed'; detail: string };
+
+/**
+ * Delta honesty (forge-mfv5.1.7). `forge demo capture` tags every checkpoint
+ * with its real `delta` (`computeCheckpointDeltas`, demo-model.ts) and writes
+ * that back to demo.json BEFORE stamping the nonce this function is called
+ * after — so by the time capture has verified, demo.json on disk already
+ * carries the flags this re-reads. Rewriting the essence + PR body from them
+ * HERE, before `commitOrchestratedCaptureArtifacts` commits+pushes, is what
+ * keeps the pushed demo.json and the local PR body from both still reading as
+ * if capture had never run.
+ *
+ * FAILS CLOSED: an unreadable or structurally broken demo.json AFTER a
+ * successful, nonce-verified capture is a real failure — the capture claimed
+ * to succeed but left something this module cannot trust, which is not a
+ * fact to skip past and leave the stale pre-capture PR body standing. The
+ * caller surfaces it the same way every other integrate failure is surfaced.
+ *
+ * IDEMPOTENT: the essence is always re-derived from `baseEssence` — the
+ * essence `deriveDemoModel` computed BEFORE capture ran, passed in rather
+ * than re-read from disk — never appended to whatever essence is already on
+ * demo.json. Calling this twice over the same file cannot duplicate the
+ * delta sentence.
+ */
+export function reviseAfterCapture(
+  demoJsonAbs: string,
+  demoDirAbs: string,
+  prDescriptionAbs: string,
+  worktreePath: string,
+  derivedInput: DerivedDemoInput,
+  baseEssence: string,
+  emit: (message: string, metadata?: Record<string, unknown>, extra?: { event_type?: 'log' | 'error' }) => void,
+): ReviseAfterCaptureResult {
+  let model: DemoModel;
+  try {
+    const raw: unknown = JSON.parse(readFileSync(demoJsonAbs, 'utf8'));
+    if (!raw || typeof raw !== 'object' || !Array.isArray((raw as DemoModel).checkpoints)) {
+      throw new Error('demo.json has no checkpoints array');
+    }
+    model = raw as DemoModel;
+  } catch (err) {
+    const detail = `demo.json is unreadable after a successful capture: ${err instanceof Error ? err.message : String(err)}`;
+    emit('demo.delta-revise-failed', { detail }, { event_type: 'error' });
+    return { ok: false, reason: 'delta-revise-failed', detail };
+  }
+  const deltaSummary = deriveDeltaSummary(model.checkpoints);
+  const essence = deltaSummary ? `${baseEssence} ${deltaSummary}`.trim() : baseEssence;
+  const revised: DemoModel = { ...model, essence };
+  writeFileSync(demoJsonAbs, `${JSON.stringify(revised, null, 2)}\n`);
+  renderDemoBundle(demoDirAbs, worktreePath); // re-render DEMO.md from the revised essence
+  writeFileSync(prDescriptionAbs, derivePrBody(revised, derivedInput));
+  emit('demo.delta-revised', { delta_summary: deltaSummary });
+  return { ok: true };
 }
 
 /** Run the integrate band. Synchronous by construction: nothing here waits on a model. */
@@ -281,6 +348,10 @@ export function runIntegrateBand(
   if (!verdict.ok) {
     emit('demo.capture', { capture_ok: true, nonce_match: false, nonce_verdict: verdict.reason, capture_nonce: nonce }, { event_type: 'error' });
     return { status: 'failed', reason: verdict.reason, detail: verdict.detail };
+  }
+  const revised = reviseAfterCapture(demoJsonAbs, demoDirAbs, prDescriptionAbs, input.worktreePath, derivedInput, derived.model.essence, emit);
+  if (!revised.ok) {
+    return { status: 'failed', reason: revised.reason, detail: revised.detail };
   }
   const committed = commitOrchestratedCaptureArtifacts(input.worktreePath, demoDirRel, input.initiativeId);
   emit('demo.capture', { capture_ok: true, nonce_match: true, capture_nonce: nonce, exit_code: 0, committed, duration_ms: cap.durationMs });

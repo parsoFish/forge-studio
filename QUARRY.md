@@ -62,12 +62,12 @@ operator-ratified new cap — never a silent raise.
 | `agents` | 46 | 13,091 | **13,091** | ratified 13,091 — row 99 DNS failure classified environment/transient (forge-8vfn.8.1.11), +26 lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 61 | 20,638 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 83 | 23,603 | **23,403** | ratified 23,403 — row 119 reviewRound derived from completed adversarial-review passes (forge-8vfn.8.1.23), +16 lane-ratified under ruling 666; see git history for prior raises. |
-| `factory` | 15 | 2,621 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 40 | 11,268 | **11,268** | ratified 11,268 — D8 (mfv5.2.1) collectCapturedMedia binds `.webm` → before/afterVideoSrc and `.filmstrip.png` → the side's image, +37 on row 112's 11,231, lane-ratified under ruling 666; see git history for prior raises. |
+| `factory` | 15 | 2,723 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
+| `stations` | 40 | 11,505 | **11,505** | ratified 11,505 — forge-mfv5.1.7 typed-AC checkpoints + per-checkpoint delta honesty incl. fail-closed post-capture revise, +237 on 11,268 (T1 1613/1618, ADR 051 untouched); see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
-| `apps/forge` | 28 | 6,837 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
+| `apps/forge` | 28 | 6,835 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **464** | **126,407** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **464** | **126,744** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -182,9 +182,9 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/gates/docs-gate.ts | stations | verbatim | 114 |
 | packages/stations/phases/pm-prompt-context.ts | stations | verbatim | 139 |
 | packages/stations/phases/pm-class-set-rules.ts | stations | verbatim | 46 |
-| packages/stations/phases/integrate.ts | stations | verbatim | 289 |
-| packages/stations/phases/derive-demo-model.ts | stations | verbatim | 194 |
-| packages/stations/phases/derive-pr-body.ts | stations | verbatim | 72 |
+| packages/stations/phases/integrate.ts | stations | verbatim | 360 |
+| packages/stations/phases/derive-demo-model.ts | stations | verbatim | 291 |
+| packages/stations/phases/derive-pr-body.ts | stations | verbatim | 83 |
 | packages/stations/phases/review-budget.ts | stations | verbatim | 136 |
 | packages/stations/phases/capture-nonce.ts | stations | verbatim | 58 |
 | packages/stations/phases/pm-decomposition-doc.ts | stations | verbatim | 68 |
@@ -193,10 +193,10 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/cycle-retention.ts | knowledge | verbatim | 204 |
 | packages/factory/demo-overlay.ts | factory | rewritten | 195 |
 | packages/factory/demo-capture.ts | factory | rewritten | 318 |
-| packages/stations/demo-model.ts | stations | verbatim | 745 |
+| packages/stations/demo-model.ts | stations | verbatim | 790 |
 | packages/factory/demo-runtime.ts | factory | verbatim | 187 |
-| packages/stations/demo-types.ts | stations | verbatim | 110 |
-| packages/factory/demo.ts | factory | verbatim | 275 |
+| packages/stations/demo-types.ts | stations | verbatim | 123 |
+| packages/factory/demo.ts | factory | verbatim | 377 |
 | apps/forge/library-flow-source.ts | apps/forge | rewritten | 15 |
 | apps/forge/library-authoring-session.ts | apps/forge | rewritten | 30 |
 | apps/forge/library-agent-facts.ts | apps/forge | rewritten | 62 |
@@ -306,7 +306,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/fix-registry.ts | sessions | rewritten | 76 |
 | packages/knowledge/brain-paths.ts | knowledge | pruned | 198 |
 | packages/flows/claim-validator.ts | flows | verbatim | 264 |
-| apps/forge/cli.ts | apps/forge | pruned | 948 **Ceiling re-keyed +1 (M4-sessions s3 3b, T1 ruling 83):** the ruled manifest seam (ruling 81) threads an injected port through this file — three `package-layer-order` rows closed for it. Paid down as far as the file allows before the re-key: the ports contract was extracted to `kinds/architect-ports.ts` (which returned `kinds/architect.ts` to exactly 1,584, no raise), every added comment tightened, and stale runner paths corrected. Not a licence — the next edit measures against the new number. |
+| apps/forge/cli.ts | apps/forge | pruned | 946 **Ceiling re-keyed +1 (M4-sessions s3 3b, T1 ruling 83):** the ruled manifest seam (ruling 81) threads an injected port through this file — three `package-layer-order` rows closed for it. Paid down as far as the file allows before the re-key: the ports contract was extracted to `kinds/architect-ports.ts` (which returned `kinds/architect.ts` to exactly 1,584, no raise), every added comment tightened, and stale runner paths corrected. Not a licence — the next edit measures against the new number. |
 | apps/forge/routes.ts | apps/forge | verbatim | 236 |
 | packages/sessions/kinds/architect-critic.ts | sessions | verbatim | 430 |
 | packages/projects/constraint-author.ts | projects | verbatim | 99 |

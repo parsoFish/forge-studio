@@ -98,7 +98,7 @@ test('consumers (b)+(c): builder composition and the derived demo bundle read th
     headSha: 'abc',
     changedFiles: ['src.ts'],
     workItems: [],
-    acceptanceCriteria: ['AC-1'],
+    acceptanceCriteria: [{ workItemId: 'WI-1', given: 'a fixture', when: 'nothing drivable is named', then: 'AC-1 holds' }],
     gateEvidence: [],
     demoProcess: FIXTURE_STEPS,
     capture: 'checkpoints',
