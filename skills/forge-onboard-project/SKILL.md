@@ -122,23 +122,30 @@ part of the work so it lands in the PR and is committed.
 This is a project-side convention (forge does not hard-code it) — state it in the
 instruction file and back it with a `present` `demoProcess` step.
 
-### Step 10 — Demo-ability (the demo-design skill)
+### Step 10 — Demo-ability (the demo declaration drives capture)
 The review phase must *show* the operator the one behavioural delta. Declare
 `demoProcess` in `.forge/project.json` with ≥1 `capture` step and ≥1 `verify`
 step describing what evidence to record and what assertion makes it non-trivial.
-Then **run the `demo-design` skill** — it reads `demoProcess` + the project's
-actual code, assesses the right evidence form (portal/browser screenshot
-opportunistically when a renderable surface exists, harness metrics when a
-measurement command exists, live external API round-trip when the code calls a
-live system, JSON-diff/notes-only by default), and **generates** the per-project
-demo machinery committed into the project repo. **Write it to the FIXED path
-`.forge/skills/demo-design/SKILL.md`** (slug pinned to `demo-design`, not a
-descriptive name) so the scorecard can verify it deterministically — `forge
-preflight` has a `DEMO-SKILL` clause that WARNs until this file exists. Ensure a
-valid prior state (baseline doesn't error). The generated skill encodes the
-exhaustive discipline for live-external projects (every option exercised,
-round-trip proof, idempotency gate, clean destroy). **Confirm `forge preflight
-<project>` reports `DEMO-SKILL` ✓ before considering onboarding done.**
+`demoProcess` is the SOLE cycle-time demo input: **each `capture` step's
+inline-code span (`` `like this` ``) IS the command the integrate band runs**
+before/after, so it must name a real, bare-argv command — no shell
+metacharacters (pipes, redirects, `&&`, backticks, globs, …), since capture
+spawns it directly with no shell. `forge preflight`'s `DEMO-SKILL` clause
+checks exactly this: that at least one `capture` step yields such a command —
+never that any generated file exists. **Confirm `forge preflight <project>`
+reports `DEMO-SKILL` ✓ — i.e. at least one capture step names a drivable
+command — before considering onboarding done.**
+
+Optionally, run the `demo-builder` session afterwards to author a presentation
+composer (`.forge/skills/demo-design/SKILL.md`) that renders a rich,
+Forge-styled HTML view of each initiative's captured evidence for the Studio
+demo page — it assesses the right presentation form (portal/browser
+screenshot opportunistically when a renderable surface exists, harness
+metrics when a measurement command exists, live external API round-trip when
+the code calls a live system, JSON-diff/notes-only by default). That composer
+is presentation guidance ONLY, never a cycle input — bead forge-mfv5.2.8
+tracks folding the session's own output into the `demoProcess` declaration
+more directly.
 
 ### Step 11 — External-resource model (C7, only if needed)
 If behaviour can only be verified live: a creds-free in-loop gate (mocks/in-process)
