@@ -44,7 +44,7 @@ import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { quiesceWriters } from './quiesce.mjs';
-import { DAEMON_PID_FILE } from './sweep-teardown.mjs';
+import { DAEMON_PID_FILE } from './sweep-teardown-scheduler.mjs';
 
 const DEFAULT_TIMEOUT_MS = 5000;
 const DEFAULT_POLL_MS = 10;

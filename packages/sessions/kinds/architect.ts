@@ -39,6 +39,7 @@
 
 import { readResolvedDecisions, writeQuestions } from './architect-session.ts';
 import { runDraftRounds, runDraftStep, runExploreThenDraft, runInterviewStep, withPaths } from './architect-steps.ts';
+import { emitArchitectStageStart } from './architect-stage-events.ts';
 import type { ArchitectStepArgs } from './architect-steps.ts';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -246,6 +247,16 @@ export async function runArchitectTurn(
 async function runFinalizeStep(args: ArchitectStepArgs): Promise<RunArchitectTurnResult> {
   const { input, status, plumbing, writeStatus, paths } = args;
   const { logger } = plumbing;
+  // forge-8vfn.8.1.14 — finalize's own stage-start event, at the top, before
+  // any of its work (including the deterministic-finalize fallback draft
+  // below, on the rare path with no manifests on disk yet).
+  emitArchitectStageStart({
+    logger,
+    initiativeId: plumbing.initiativeId,
+    sessionId: input.sessionId,
+    stage: 'finalize',
+    round: status.round,
+  });
   // Refuses here, before any work, if the ports were never injected.
   const ports = requirePorts(input);
   const resolved = readResolvedDecisions(input.projectRoot, input.sessionId);

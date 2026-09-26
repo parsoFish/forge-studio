@@ -441,6 +441,7 @@ export default {
           // interview's end — T1 ruling 320 asks every repeat to name its
           // condition, so no future step appended after it can silently make
           // the loop unstoppable, which is what S1 beat 11 discovered.
+          // Row 108: the architect now also passes through `critiquing`/`revising` before `awaiting-verdict`; `until` is unchanged.
           until: { 'session-phase': 'awaiting-verdict' },
         },
       ],

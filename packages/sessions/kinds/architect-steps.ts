@@ -20,25 +20,23 @@
 
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { runStructuredTurn, type QueryFn } from '../interactive-session.ts';
 import {
   writePlanDoc, sessionPaths,
   type ArchitectSession, type ProposedInitiative, type CouncilTranscript, type InterviewRound,
 } from './architect-plan.ts';
 import { loadBrainIndex } from '@forge/knowledge';
-import { guardedFile, guardedReadFile, guardedWriteFile, type EventLogger } from '@forge/kernel';
+import { guardedFile, guardedReadFile, guardedWriteFile } from '@forge/kernel';
 import { renderInterviewSummary, runCompletenessCriticStep, type CompletenessCriticFinding } from './architect-critic.ts';
 import { requirePorts } from './architect-ports.ts';
-import type { ToolUseLiveDetail } from '@forge/agents';
 // Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
 // architect-session.ts's own module doc — this file is reached from
 // `kinds/registry.ts` via `architect.ts`).
-import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
 import { skillPath, loadSkillTurnPrompt, splitSkillTurnSections } from '@forge/agents/skill-path.ts';
-import { hooksSpreadForAgent, type KindTurnPlumbing } from './kind-turn.ts';
-import { emitTurnCostRow, emitTurnEndedUnpricedRow } from '../turn-cost-rows.ts';
-import { type ArchitectQuestion, type ArchitectStatus, type DraftInitiative, type RunArchitectTurnInput, type RunArchitectTurnResult, architectAgentSpec, readInterview } from './architect-session.ts';
+import type { KindTurnPlumbing } from './kind-turn.ts';
+import { type ArchitectQuestion, type ArchitectStatus, type DraftInitiative, type RunArchitectTurnInput, type RunArchitectTurnResult, readInterview } from './architect-session.ts';
 import { buildManifest, slugify } from './architect-manifest.ts';
+import { emitArchitectStageStart } from './architect-stage-events.ts';
+import { runStructured } from './architect-structured-turn.ts';
 
 
 /** ARCH-1: the brain navigation index, loaded per turn by the steps that
@@ -48,6 +46,7 @@ import { buildManifest, slugify } from './architect-manifest.ts';
 function architectBrainIndex(input: RunArchitectTurnInput, status: ArchitectStatus): ReturnType<typeof loadBrainIndex> {
   return loadBrainIndex({ cwd: input.brainCwd ?? resolve('.'), scope: status.project });
 }
+
 export type ArchitectStepArgs = {
   input: RunArchitectTurnInput;
   status: ArchitectStatus;
@@ -94,6 +93,10 @@ export async function runExploreThenDraft(args: ArchitectStepArgs): Promise<RunA
       /* best-effort — a stale file that survives is overwritten on success */
     }
   }
+
+  // forge-8vfn.8.1.14 (architect-stage-events.ts) — the explore stage's own
+  // start event, before its structured turn; `round` is the operator round.
+  emitArchitectStageStart({ logger, initiativeId, sessionId: input.sessionId, stage: 'explore', round: status.round });
 
   let findings: ExploreFindings | null = null;
   let exploreCrash: string | null = null;
@@ -642,16 +645,32 @@ const CANONICAL_ID_PREFIX_LEN = 'INIT-YYYY-MM-DD-'.length;
  * `awaiting-verdict` is written EXACTLY ONCE, at the end: the bridge polls
  * `status.json`, so a transient `awaiting-verdict` between rounds would arm the
  * gate on the very draft this loop exists to withhold.
+ *
+ * forge-8vfn.8.1.14 — `critiquing`/`revising` (`architect-stage-events.ts`'s
+ * module doc) move through here instead of `drafting` sitting unchanged
+ * through the critic's own call and a re-draft (m7-d-proof-S1 evidence).
  */
 export async function runDraftRounds(
   args: ArchitectStepArgs & { resolvedDecisions: string | null },
 ): Promise<RunArchitectTurnResult> {
   const { input, status, plumbing, writeStatus, paths } = args;
+  const { logger, initiativeId } = plumbing;
   let criticFindings: CompletenessCriticFinding[] | null = null;
   for (let round = 1; ; round++) {
+    // Round 1 = this turn's first draft (caller already wrote `drafting`);
+    // round 2+ = a REVISION of a plan the critic faulted (`revising`, written
+    // below when the previous round's findings sent the loop back here).
+    emitArchitectStageStart({
+      logger, initiativeId, sessionId: input.sessionId,
+      stage: round === 1 ? 'draft' : 'revise', round,
+    });
     const drafted = await runDraftStep({ ...args, criticFindings });
+
+    // The critic is its own stage too — written BEFORE its call; it emits its
+    // own `architect.completeness-critic.start` around that call.
+    writeStatus({ ...status, phase: 'critiquing' });
     const record = await runCompletenessCriticStep({
-      input, paths, status, logger: plumbing.logger, queryFn: plumbing.queryFn, round,
+      input, paths, status, logger, queryFn: plumbing.queryFn, round,
     });
     // Durable BEFORE the next round: the flag records that THIS round was
     // checked (never "the session was checked once"), so a re-drafted plan can
@@ -660,95 +679,10 @@ export async function runDraftRounds(
       writeStatus({ ...status, completenessCritic: record, phase: 'awaiting-verdict' });
       return { ...drafted, phase: 'awaiting-verdict' };
     }
-    writeStatus({ ...status, completenessCritic: record, phase: 'drafting' });
+    // These findings send the NEXT round back as a revision, not a fresh draft.
+    writeStatus({ ...status, completenessCritic: record, phase: 'revising' });
     criticFindings = record.findings;
   }
-}
-
-// ---------------------------------------------------------------------------
-// Structured-output query (mirrors council's parse path)
-// ---------------------------------------------------------------------------
-
-type StructuredResult<T> = {
-  output: T | null;
-  /** Brain paths Read by the agent during this turn (for brain_context). */
-  brainReads: string[];
-};
-
-/**
- * Architect-local thin wrapper over the shared `runStructuredTurn` (ADR 020 spine
- * extracted to interactive-session.ts). It binds the architect's model + tool
- * allow-list (derived from skills/architect/SKILL.md, ADR-024) and narrows the
- * generic `reads` down to the `brain/` paths the PLAN's brain-context section
- * needs (ARCH-1). Callsites keep their `{ output, brainReads }` shape.
- */
-async function runStructured<T>(args: {
-  queryFn: QueryFn;
-  prompt: string;
-  schema: unknown;
-  /** W8-B6 — the run's logger + initiative id, so the architect's own bound
-   *  library hooks can fire and record. Required, not optional: an optional
-   *  field here would let a call site silently spawn hook-blind. */
-  logger: EventLogger;
-  initiativeId: string;
-  /** Bead forge-8vfn.6.10.19 — the PROJECT GROUND this turn runs on, passed to
-   *  the SDK as `cwd`. REQUIRED, like `logger` above and for the same reason: an
-   *  optional field here would let a call site silently spawn ground-blind, and
-   *  a ground-blind architect session inherits the BRIDGE's cwd — the forge repo
-   *  root — so a relative write by it lands in forge's own tree.
-   *
-   *  It comes from `ArchitectStatus.project_repo_path`, which the start route
-   *  already validated through `rejectStartProjectRepoPath` before the session
-   *  record existed; this is the same value being USED rather than a fresh
-   *  request-derived path entering here. */
-  cwd: string;
-  /** ADR-043 §3 amendment (wave-6): the session's requested kickoff tier
-   *  (`status.modelTier`), resolved against `architectAgentSpec` — absent
-   *  resolves to the unchanged `ARCHITECT_MODEL` default. */
-  modelTier?: ModelTier;
-  onToolUse?: (d: ToolUseLiveDetail) => void;
-  onHeartbeat?: () => void;
-  onText?: (text: string) => void;
-  onThinking?: (text: string) => void;
-}): Promise<StructuredResult<T>> {
-  const { output, reads, costUsd } = await runStructuredTurn<T>({
-    queryFn: args.queryFn,
-    prompt: args.prompt,
-    schema: args.schema,
-    model: resolveSessionModel(architectAgentSpec, args.modelTier),
-    cwd: args.cwd,
-    allowedTools: architectAgentSpec.allowedTools,
-    disallowedTools: architectAgentSpec.disallowedTools,
-    ...hooksSpreadForAgent({ skill: architectAgentSpec.skill, logger: args.logger, initiativeId: args.initiativeId }),
-    onToolUse: args.onToolUse,
-    onHeartbeat: args.onHeartbeat,
-    onText: args.onText,
-    onThinking: args.onThinking,
-    label: 'architect-structured',
-    // `forge-8vfn.7.6.73` — a turn that ends without a price leaves THIS row
-    // instead of the cost row below. Before it, an unpriced architect turn
-    // emitted `cost_usd: 0`, which `endedUnpricedTurns` skips as priced: the
-    // ceiling under-counted rather than halting.
-    onTurnEndedUnpriced: (info) => emitTurnEndedUnpricedRow(args.logger, {
-      initiativeId: args.initiativeId, phase: 'architect', skill: 'architect',
-      message: 'architect.turn-ended-unpriced',
-    }, info),
-  });
-  // bead forge-8vfn.18 — emit the turn's spend so the ceiling can bound stage 1.
-  // Authoritative because this phase emits no `iteration` events (trap pinned in
-  // architect-turn-cost-event.test.ts). Best-effort: never fail a completed turn.
-  //
-  // GUARDED ON NON-NULL (7.6.73): the priced row and the unpriced row above are
-  // mutually exclusive by the primitive's own construction, so this branch is
-  // what keeps a turn from leaving two terminal rows or, worse, a $0 row that
-  // reads as a measurement.
-  if (costUsd !== null) {
-    emitTurnCostRow(args.logger, {
-      initiativeId: args.initiativeId, phase: 'architect', skill: 'architect',
-      message: 'architect.turn-cost',
-    }, costUsd);
-  }
-  return { output, brainReads: reads.filter((p) => p.includes('brain/')) };
 }
 
 // ---------------------------------------------------------------------------

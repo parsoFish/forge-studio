@@ -42,7 +42,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { reapCensusAndSweep, ownSchedulerPid } from './sweep-teardown.mjs';
+import { reapCensusAndSweep } from './sweep-teardown.mjs';
+import { ownSchedulerPid } from './sweep-teardown-scheduler.mjs';
 import { plantDaemonWithGrandchild, plantInitManifest, fastQuiesce, waitForFileToExist } from './sweep-teardown-plant.mjs';
 
 test('T1 1418 RED: with no scheduler root, the clear runs while the scheduler\'s own dispatched grandchild keeps rewriting the heartbeat', async (t) => {
