@@ -23,11 +23,21 @@ import { SEND_BACK } from './S10.constants.mjs';
 
 export const REVIEW_LOOP = [
     {
+      // ROW 113 (bead `forge-8vfn.8.1.19`), SPLIT FROM ONE BEAT. This beat and
+      // the one after it used to be ONE beat asserting BOTH the timeline row
+      // (`timeline-row`/`node-id`/`status`) AND `section: 'review-findings'`
+      // together. `resolveExpectations` (`beats-page-read.mjs:282-311`) picks
+      // ONE best-matching record for every key a beat's `expect.data` shares,
+      // and this route renders the two on DIFFERENT elements — the timeline
+      // row (`FlowRunDetail.tsx:282-284`) and the findings panel are not the
+      // same node — so asked for together the resolver kept the row and
+      // silently dropped `section`: a beat that never filed a finding at all
+      // would have looked identical to one that had. Split on the same route,
+      // like beat 9/13's own precedent, no `do` on either half.
+      //
       // SOURCE-DERIVED. Node id from the same fixture list; the review station
-      // is `adversarial-review` (`flow-run-detail-render.test.ts:104-109`), and
-      // `data-section="review-findings"` is corroborated at
-      // `flow-run-detail-render.test.ts:413`.
-      act: 'The review station files its findings',
+      // is `adversarial-review` (`flow-run-detail-render.test.ts:104-109`).
+      act: 'The review station finishes its pass',
       // Same as beat 9: the review station ran inside the cycle beat 8 waited
       // through, so this reads the findings it left rather than waiting 20
       // minutes for them.
@@ -39,10 +49,22 @@ export const REVIEW_LOOP = [
           'node-id': 'adversarial-review',
           // §15.473, as on the dev beat: the row is declared, the status is run.
           'status': 'complete',
-          section: 'review-findings',
         },
       },
-      say: 'A machine reviewer goes first, against the acceptance criteria and the change class the plan gate confirmed. Its findings are the reviewer\'s starting point, not its verdict — the human decides.',
+      say: 'A machine reviewer goes first, against the acceptance criteria and the change class the plan gate confirmed. Its pass runs inside the same cycle the operator has already been watching, and finishes without asking anything of them.',
+    },
+    {
+      // ROW 113 (bead `forge-8vfn.8.1.19`) — the SECOND half of the split
+      // above: the same press-free read of the same route, one beat later, so
+      // `section` gets its OWN best-matching record instead of losing a tie to
+      // the timeline row. `data-section="review-findings"` is corroborated at
+      // `flow-run-detail-render.test.ts:413`.
+      act: 'The review findings are on the run page',
+      expect: {
+        route: '/flows/forge-develop/run/<cycleId>',
+        data: { page: 'flow-run', section: 'review-findings' },
+      },
+      say: 'Its findings are the reviewer\'s starting point, not its verdict — the human decides.',
     },
     {
       // NAVIGATION-ONLY (T1 ruling 533, the 504 class: `route` plus
@@ -109,15 +131,49 @@ export const REVIEW_LOOP = [
       // is no separate "fix work item" handle, and this comment records that
       // rather than inventing one.
       //
-      // NO RENDER TEST EXISTS for `DemoReviewSurface` (its own header says the
-      // e2e harness asserted it). Every key here is source-only and must be
-      // confirmed at the sitting.
-      act: 'Anchor one blocking comment to the precedence criterion and send it back',
+      // RENDER TEST NOW EXISTS: `apps/studio/tests/regression/
+      // DemoReviewSurface-collapsed-regions.test.ts` pins the region wall
+      // (collapse-by-default over 12 regions, `toggle-region`/`comment-region`
+      // scoping, and — `forge-8vfn.8.1.16` — that a COLLAPSED AC header still
+      // carries its full criterion text). Every OTHER key here remains
+      // source-only and must be confirmed at the sitting.
+      //
+      // COLLAPSE + TEXT SCOPE + FALLBACK (`forge-8vfn.8.1.16`, T1 ruling
+      // 1561). S10 has 25 acceptance criteria (`S10.constants.mjs`'s `IDEA`
+      // decomposes into more than `REGION_COLLAPSE_THRESHOLD` = 12), so every
+      // AC region starts COLLAPSED (`lib/demo-review-view.ts`) — there is no
+      // `comment-region` button anywhere until its own region is toggled open
+      // first. Which criterion NAMES the precedence rule is decided by the
+      // LLM that decomposed the initiative, at run time, so no beat can
+      // hardcode "AC 7" — a `bind` scope has nothing earlier to bind from
+      // either. `pressWithin`'s TEXT scope resolves this live, against
+      // whichever AC header's own DOM text (PART 1's fix — the criterion sits
+      // in the header even collapsed) contains "precedence": the FIRST such
+      // region in document order, case-insensitive. `fallback: 'first'`
+      // covers the case where the LLM's own wording never says "precedence"
+      // verbatim — the run still anchors somewhere and the runner's log names
+      // that it fell back, rather than stalling a funded run over phrasing.
+      // Both `toggle-region` and `comment-region` below name the SAME scope
+      // and re-resolve it independently (never cached between the two
+      // presses), which is why the picker's re-resolution stability is its
+      // own pinned case (`beats-press-within-text.test.ts`).
+      act: 'Anchor one blocking comment to the precedence criterion (the first criterion, said so in the log, when none names precedence) and send it back',
       // 7.6.143: beat 16's agent wait lives HERE now, on the beat whose
       // `send-back` press starts the work it waits for.
       wait: { for: 'agent', upTo: 1_800_000 },
       do: [
-        { press: 'comment-region' },
+        {
+          pressWithin: {
+            scope: { attr: 'demo-region', text: 'precedence', fallback: 'first' },
+            action: 'toggle-region',
+          },
+        },
+        {
+          pressWithin: {
+            scope: { attr: 'demo-region', text: 'precedence', fallback: 'first' },
+            action: 'comment-region',
+          },
+        },
         { fill: 'comment-body', with: SEND_BACK },
         { fill: 'comment-blocking', with: 'true' },
         { press: 'add-comment' },
@@ -125,7 +181,10 @@ export const REVIEW_LOOP = [
       ],
       expect: {
         route: '/artifact',
-        data: { page: 'artifact', 'form-kind': 'send-back', 'form-state': 'submitted' },
+        data: {
+          page: 'artifact', 'form-kind': 'send-back', 'form-state': 'submitted',
+          'region-comment-count': '1',
+        },
       },
       say: 'This is the send-back the whole story is built around. The operator does not restart anything and does not write a work item — they anchor one blocking comment to the criterion it fails, and that comment becomes the acceptance criterion the fix has to meet.',
     },
@@ -185,7 +244,11 @@ export const REVIEW_LOOP = [
       // Same gate chip, same declared query: the re-review lands back on the
       // run page, and the verdict is read at the gate again.
       act: 'Open the re-reviewed verdict at its gate',
-      // AMEND-9, as on beat 13: reachable only once 7.6.62 puts `open-gate` on
+      // AMEND-9, as on beat 15 (renumbered by ROW 113's split — this cross-
+      // reference already read "beat 13" before that split, one off from the
+      // AMEND-9 beat's own then-number of 14; corrected here rather than
+      // carried forward wrong under a new number): reachable only once
+      // 7.6.62 puts `open-gate` on
       // the run page. The re-review parks the run at its gate again, so the
       // link renders again (`run.status === 'gated'`), and the declared query
       // is again what distinguishes this destination from the plan artifact.
@@ -203,8 +266,19 @@ export const REVIEW_LOOP = [
       // machine-readable merged boolean, no PR-state key, anywhere in the DOM.
       // Recorded as an open item — the exit row re-derives the merge with
       // `gh pr view --repo parsoFish/gitpulse`, not from this page.
+      //
+      // ROW 115 (bead `forge-8vfn.8.1.20`). With no `wait` this beat took the
+      // 15 s DOM default while `approve-and-merge`'s POST blocks through
+      // release-finalize and the merge itself — measured at ~72 s on run 29.
+      // `gateState` (`app/artifact/page.tsx:585`) starts `'idle'` and
+      // `DemoReviewSurface`'s `onSubmitted` (`:1148-1169`) does not flip it to
+      // `'approved'` until `onSubmit`'s `await submitVerdict(...)` RETURNS, so
+      // `idle` IS the blocking POST in flight — a `settle` wait that sits
+      // through exactly that value, same shape as S6 beat 9's drain
+      // (`S6.story.mjs:560`) and S8 beat 4's refresh (`S8.story.mjs:248`).
       act: 'Approve — which is the merge',
       do: [{ press: 'approve-and-merge' }],
+      wait: { for: 'settle', upTo: 180_000, key: 'gate-state', while: 'idle' },
       expect: {
         route: '/artifact',
         data: { page: 'artifact', 'gate-state': 'approved' },

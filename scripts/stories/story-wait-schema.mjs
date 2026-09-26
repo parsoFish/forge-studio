@@ -28,6 +28,7 @@
  */
 
 import { fail, requireNonEmptyString } from './story-schema-fail.mjs';
+import { SAFE_KEY } from './beats-page-read.mjs';
 
 /**
  * Validate a beat's `do` — the ordered list of what the operator DOES on the
@@ -45,6 +46,10 @@ import { fail, requireNonEmptyString } from './story-schema-fail.mjs';
  * Absent means an empty list, not undefined — every story authored before this
  * existed omits it, and downstream must not have to test for undefined.
  */
+/** A sanity bound on `pressWithin`'s `scope.text` — what an author types to
+ *  name a criterion, not a product limit. `forge-8vfn.8.1.16`. */
+const PRESS_WITHIN_TEXT_MAX_LENGTH = 200;
+
 function validateDoSteps(raw, at) {
   if (raw === undefined) return Object.freeze([]);
   if (!Array.isArray(raw)) fail(`${at}.do`, `expected an array of steps, got ${JSON.stringify(raw)}`);
@@ -161,19 +166,78 @@ function validateDoSteps(raw, at) {
       // `pressBound` above, validated exactly the same way — `scope.bind`
       // names a binding resolved at run time, so it is checked for presence
       // here and for being an EARLIER beat's binding in `story-file.mjs`.
+      //
+      // `forge-8vfn.8.1.16` / T1 ruling 1561 adds `scope.text` as the OTHER
+      // form: exactly one of `bind`/`text`, because a scope resolved from an
+      // earlier binding and one resolved from live page text are two
+      // different run-time sources and a step naming both would resolve
+      // however this validator's field order happened to favour one.
       if (Object.hasOwn(step, 'pressWithin')) {
         const pw = step.pressWithin;
         if (pw === null || typeof pw !== 'object') fail(`${where}.pressWithin`, 'expected an object { scope, action }');
         requireNonEmptyString(pw.action, `${where}.pressWithin.action`);
         const scope = pw.scope;
         if (scope === null || typeof scope !== 'object') {
-          fail(`${where}.pressWithin.scope`, 'expected an object { attr, bind }');
+          fail(`${where}.pressWithin.scope`, 'expected an object { attr, bind } or { attr, text }');
         }
         requireNonEmptyString(scope.attr, `${where}.pressWithin.scope.attr`);
-        requireNonEmptyString(scope.bind, `${where}.pressWithin.scope.bind`);
+        // SAME allowlist `progressKey` is bound to (`PROGRESS_KEY_SHAPE`
+        // above, identical by a door — `beats-per-transition.test.ts`):
+        // `attr` is interpolated into a CSS selector (`scopedPressHandle`,
+        // `unscopedPressWithinHandle`, `beats.mjs`), so it is refused here,
+        // at the boundary, rather than half-honoured at run time.
+        if (!SAFE_KEY.test(scope.attr)) {
+          fail(
+            `${where}.pressWithin.scope.attr`,
+            'expected a plain data-* key (letter, then letters/digits/hyphens), got ' +
+              JSON.stringify(scope.attr),
+          );
+        }
+        const hasBind = Object.hasOwn(scope, 'bind');
+        const hasText = Object.hasOwn(scope, 'text');
+        if (hasBind === hasText) {
+          fail(
+            `${where}.pressWithin.scope`,
+            `expected exactly one of { bind } or { text }, got ${JSON.stringify(scope)}`,
+          );
+        }
+        if (hasBind) {
+          if (scope.fallback !== undefined) {
+            fail(
+              `${where}.pressWithin.scope.fallback`,
+              '`fallback` is only valid alongside `text`, not `bind`',
+            );
+          }
+          requireNonEmptyString(scope.bind, `${where}.pressWithin.scope.bind`);
+          return Object.freeze({
+            pressWithin: Object.freeze({
+              scope: Object.freeze({ attr: scope.attr, bind: scope.bind }),
+              action: pw.action,
+            }),
+          });
+        }
+        // The TEXT form. `≤ 200` chars is a sanity bound on what a story
+        // author types, not a product limit — `requireNonEmptyString` already
+        // refuses the empty and whitespace-only cases (`.trim() === ''`).
+        requireNonEmptyString(scope.text, `${where}.pressWithin.scope.text`);
+        if (scope.text.length > PRESS_WITHIN_TEXT_MAX_LENGTH) {
+          fail(
+            `${where}.pressWithin.scope.text`,
+            `expected at most ${PRESS_WITHIN_TEXT_MAX_LENGTH} characters, got ${scope.text.length}`,
+          );
+        }
+        if (scope.fallback !== undefined && scope.fallback !== 'first') {
+          fail(
+            `${where}.pressWithin.scope.fallback`,
+            `expected 'first' or undefined, got ${JSON.stringify(scope.fallback)}`,
+          );
+        }
         return Object.freeze({
           pressWithin: Object.freeze({
-            scope: Object.freeze({ attr: scope.attr, bind: scope.bind }),
+            scope: Object.freeze({
+              attr: scope.attr, text: scope.text,
+              ...(scope.fallback !== undefined ? { fallback: scope.fallback } : {}),
+            }),
             action: pw.action,
           }),
         });

@@ -115,12 +115,16 @@ test('the schema accepts a well-formed pressWithin step', () => {
   });
 });
 
-test('the schema refuses pressWithin missing scope.bind', () => {
+test('the schema refuses pressWithin missing scope.bind (and no text scope either)', () => {
+  // `forge-8vfn.8.1.16` gave `scope` a second shape (`text`, in
+  // `beats-press-within-text.test.ts`): a scope naming NEITHER is refused by
+  // the shared "exactly one of" check rather than by `bind` specifically, so
+  // the message now names `pressWithin.scope`, one level up from before.
   assert.throws(
     () => validateStory(story([
       beat({ do: [{ pressWithin: { scope: { attr: 'session-id' }, action: 'open-session' } }] }),
     ])),
-    /pressWithin\.scope\.bind/,
+    /pressWithin\.scope/,
   );
 });
 

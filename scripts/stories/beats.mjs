@@ -220,6 +220,12 @@ export function resolveBoundPresses(steps, bindings) {
     }
     if (step?.pressWithin !== undefined) {
       const { scope, action } = step.pressWithin;
+      // `forge-8vfn.8.1.16` / T1 ruling 1561 — a TEXT scope resolves at PRESS
+      // time against the live page (`beats-steps.mjs`'s `resolveTextScopePress`),
+      // never here: the criterion index is minted at run time by the LLM that
+      // decomposed the initiative, so there is no earlier binding to
+      // substitute. Left byte-identical for the caller to act on unchanged.
+      if (scope.text !== undefined) return step;
       if (!Object.hasOwn(bindings ?? {}, scope.bind)) {
         unbound ??= scope.bind;
         return step;
@@ -233,6 +239,14 @@ export function resolveBoundPresses(steps, bindings) {
 }
 
 /**
+ * The charset a page-sourced `pressWithin` scope value must fit before it is
+ * interpolated into a selector — D's review of `forge-8vfn.8.1.16`. A text
+ * scope's value comes off the live page (a region id like `ac-7`), so it gets
+ * the same discipline as story input: refuse by name, never quote-and-hope.
+ */
+export const SAFE_SCOPE_VALUE = /^[A-Za-z0-9._:-]{1,120}$/;
+
+/**
  * The CSS selector for a `pressWithin` step already resolved to a literal
  * `scope.value` (by `resolveBoundPresses` above) — the `data-action="<action>"`
  * control INSIDE the element carrying `data-<attr>="<value>"`, rather than the
@@ -244,6 +258,75 @@ export function resolveBoundPresses(steps, bindings) {
  */
 export function scopedPressHandle({ scope, action }) {
   return `[data-${scope.attr}="${scope.value}"] [data-action="${action}"]`;
+}
+
+/**
+ * The UNSCOPED handle a `pressWithin` TEXT scope waits on before it can pick
+ * anything — every `[data-<attr>]` carrying the target `data-action`, not the
+ * one scoped instance `scopedPressHandle` builds once a value is known.
+ * `forge-8vfn.8.1.16`. Waited on through the SAME `waitForHandleOrStall` a
+ * `bind` scope's resolved press already uses (`beats-steps.mjs`), so a text
+ * scope's bound/stall logic is unchanged from a bound one's.
+ *
+ * @param {{scope: {attr: string}, action: string}} pressWithin
+ * @returns {string}
+ */
+export function unscopedPressWithinHandle({ scope, action }) {
+  return `[data-${scope.attr}] [data-action="${action}"]`;
+}
+
+/**
+ * Pick which `[data-<attr>]` instance a `pressWithin` TEXT scope means —
+ * PURE, over entries the caller already read off the live page
+ * (`beats-steps.mjs`'s `readTextScopeEntries`). `forge-8vfn.8.1.16` / T1
+ * ruling 1561: a `bind` scope resolves once from an EARLIER beat's binding
+ * (`resolveBoundPresses` above); a `text` scope cannot, because the criterion
+ * index a story like S10 anchors to is minted at run time by the LLM that
+ * decomposed the initiative — there is no id to bind. So it is resolved HERE,
+ * at press time, against whatever the live page renders right then, and
+ * re-resolved independently on every `pressWithin` step that names it (never
+ * cached from an earlier step in the same beat).
+ *
+ * Case-insensitive `includes`, first match in DOCUMENT ORDER. `fallback:
+ * 'first'` is a declared escape hatch for when the story's own wording does
+ * not appear verbatim in whatever the LLM minted: rather than stall a funded
+ * run over a wording mismatch, it picks the first region and SAYS SO
+ * (`formatTextScopePick` below) — the visibility half of `8.1.16`.
+ *
+ * @param {ReadonlyArray<{value: string, text: string}>} entries document order
+ * @param {string} text the substring to match, case-insensitively
+ * @param {'first'|undefined} fallback
+ * @returns {Readonly<{value: string, fellBack: boolean}>|null} `null` when
+ *   nothing matched and no fallback was declared — the caller presses
+ *   NOTHING in that case.
+ */
+export function pickTextScope(entries, text, fallback) {
+  const needle = text.toLowerCase();
+  const hit = entries.find((e) => e.text.toLowerCase().includes(needle));
+  if (hit !== undefined) return Object.freeze({ value: hit.value, fellBack: false });
+  if (fallback === 'first' && entries.length > 0) {
+    return Object.freeze({ value: entries[0].value, fellBack: true });
+  }
+  return null;
+}
+
+/**
+ * The one log line a resolved `pressWithin` text scope prints, in the
+ * runner's own `[stories]` style — PURE, so the exact wording is unit-tested
+ * without a page. `forge-8vfn.8.1.16`'s artifact-visibility half: a fallback
+ * that shows up only as "which region got pressed" is a fallback nobody
+ * notices happened.
+ *
+ * @param {string} attr
+ * @param {string} text
+ * @param {{value: string, fellBack: boolean}} picked
+ * @returns {string}
+ */
+export function formatTextScopePick(attr, text, picked) {
+  return picked.fellBack
+    ? `[stories] pressWithin: no [data-${attr}] text contains "${text}" — fell back to the first ` +
+      `(${picked.value})`
+    : `[stories] pressWithin: [data-${attr}] text contains "${text}" → ${picked.value}`;
 }
 
 /**

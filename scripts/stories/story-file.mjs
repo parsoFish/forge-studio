@@ -427,9 +427,16 @@ export function validateStory(raw) {
     // parked rather than built. `forge-8vfn.6.11.51` adds `pressWithin`'s
     // `scope.bind` to the same duty: an unresolved scope would press against
     // every element sharing the action, not the one instance-id names.
+    //
+    // EXEMPT: a `pressWithin` TEXT scope (`forge-8vfn.8.1.16`, T1 ruling
+    // 1561) — `scope.bind` is simply absent on that shape, by construction
+    // (`story-wait-schema.mjs` refuses `bind` and `text` together). It
+    // resolves against the live page at press time, never against an earlier
+    // beat's binding, so this duty has nothing to check for it.
     const pressBindsIn = (steps) => (steps ?? []).flatMap((st) =>
       Object.hasOwn(st, 'pressBound') ? [{ form: 'pressBound', bind: st.pressBound.bind }]
-        : Object.hasOwn(st, 'pressWithin') ? [{ form: 'pressWithin', bind: st.pressWithin.scope.bind }]
+        : Object.hasOwn(st, 'pressWithin') && st.pressWithin.scope.bind !== undefined
+          ? [{ form: 'pressWithin', bind: st.pressWithin.scope.bind }]
           : Object.hasOwn(st, 'repeat') ? pressBindsIn(st.repeat) : []);
     for (const { form, bind } of pressBindsIn(b.do)) {
       if (!boundNames.has(bind)) {
