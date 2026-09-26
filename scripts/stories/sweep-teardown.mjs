@@ -26,19 +26,10 @@ import { readProcTable, descendantsOf, agentRunsReadable } from './reap.mjs';
 import { waitForCensusEmpty, describeCensus, identifyPid, verifiedKill } from './reap-census.mjs';
 import { quiesceWriters, describeQuiesce } from './quiesce.mjs';
 import { sweepProductFixtures } from './sweep.mjs';
-// Split out at the 800-line cap (SPLIT, NEVER BASELINE — T1 ruling 492): the
-// daemon-ownership test and stop sequence live in the sibling module and are
-// RE-EXPORTED below, unchanged, for `scheduler-preflight.mjs` and
-// `sweep-teardown-plant.mjs`'s existing imports from this file.
-import {
-  DAEMON_PID_FILE, DAEMON_LOG_FILE, DRAIN_DONE_LINE, DRAIN_GRACE_MS,
-  ownSchedulerPidState, ownSchedulerPid, stopOwnScheduler, isRunning,
-} from './sweep-teardown-scheduler.mjs';
+// Split out at the 800-line cap (SPLIT, NEVER BASELINE — T1 ruling 492); importers use
+// the sibling module directly — no re-export (CLAUDE.md: no backwards-compat paths).
+import { DAEMON_PID_FILE, DRAIN_GRACE_MS, ownSchedulerPidState, ownSchedulerPid, stopOwnScheduler } from './sweep-teardown-scheduler.mjs';
 
-export {
-  DAEMON_PID_FILE, DAEMON_LOG_FILE, DRAIN_DONE_LINE, DRAIN_GRACE_MS,
-  ownSchedulerPidState, ownSchedulerPid, stopOwnScheduler, isRunning,
-};
 
 /**
  * Put back the COMMITTED artifacts the leading sweep removed and the run never

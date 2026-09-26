@@ -16,7 +16,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { groundManifest, groundChanges, siblingGroundEscapes, GROUND_MANIFEST_UNKNOWN } from './ground-hash.mjs';
+import { groundManifest, groundChanges, siblingGroundEscapes } from './ground-hash.mjs';
+import { GROUND_MANIFEST_UNKNOWN } from './ground-minted.mjs';
 
 /** A path that EXISTS but is not a directory — `cwd` pointed at it fails
  *  `sh`'s spawn with `ENOTDIR`, a real, reproducible non-ENOENT failure

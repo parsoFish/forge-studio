@@ -34,19 +34,10 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
-// Split out at the 800-line cap (SPLIT, NEVER BASELINE — T1 ruling 492): the
-// minted-session derivation lives in the sibling module and is RE-EXPORTED
-// below, unchanged, for run-story.mjs's and the ground-*.test.ts files'
-// existing imports from this file.
-import {
-  GROUND_MANIFEST_UNKNOWN, mintedSessionPaths, mintedSessionDirNames,
-  groundMintedSessionPaths, sessionWriteTargets, mintedSessionWrites,
-} from './ground-minted.mjs';
+// Split out at the 800-line cap (SPLIT, NEVER BASELINE — T1 ruling 492); importers use
+// the sibling module directly — no re-export (CLAUDE.md: no backwards-compat paths).
+import { GROUND_MANIFEST_UNKNOWN, mintedSessionPaths, mintedSessionWrites } from './ground-minted.mjs';
 
-export {
-  GROUND_MANIFEST_UNKNOWN, mintedSessionPaths, mintedSessionDirNames,
-  groundMintedSessionPaths, sessionWriteTargets, mintedSessionWrites,
-};
 
 /**
  * Method C, verbatim: the pipeline the launcher runs and the ledger quotes.

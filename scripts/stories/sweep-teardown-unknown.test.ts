@@ -38,9 +38,8 @@ function deadPid(): number {
   return r.pid;
 }
 
-import {
-  reapCensusAndSweep, stopSchedulerCensusAndRelease, ownSchedulerPid, ownSchedulerPidState, stopOwnScheduler, DAEMON_PID_FILE,
-} from './sweep-teardown.mjs';
+import { reapCensusAndSweep, stopSchedulerCensusAndRelease } from './sweep-teardown.mjs';
+import { ownSchedulerPid, ownSchedulerPidState, stopOwnScheduler, DAEMON_PID_FILE } from './sweep-teardown-scheduler.mjs';
 
 function rootWithPidFile(): string {
   const root = mkdtempSync(join(tmpdir(), 'sweep-teardown-unknown-'));

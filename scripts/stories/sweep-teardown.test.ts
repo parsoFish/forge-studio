@@ -22,7 +22,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync
 import { tmpdir } from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { restoreSweptCommitted, stopOwnScheduler, releaseOwnInFlight, stopSchedulerCensusAndRelease, reapCensusAndSweep, teardownExitCode, isRunning, DAEMON_PID_FILE } from './sweep-teardown.mjs';
+import { restoreSweptCommitted, releaseOwnInFlight, stopSchedulerCensusAndRelease, reapCensusAndSweep, teardownExitCode } from './sweep-teardown.mjs';
+import { stopOwnScheduler, isRunning, DAEMON_PID_FILE } from './sweep-teardown-scheduler.mjs';
 import { sweepProductFixtures } from './sweep.mjs';
 import {
   killIfAlive, plantDaemonWithGrandchild, plantReapedRootWithGrandchild,
