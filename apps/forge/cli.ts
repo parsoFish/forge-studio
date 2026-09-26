@@ -16,7 +16,7 @@
  *   forge community refresh [--dry-run]     deterministic community-registry refresh (needs GH_TOKEN)
  */
 
-import { existsSync, readdirSync, statSync, mkdirSync, appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, statSync, mkdirSync, appendFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { serve } from '@forge/flows';
 import { requireFactoryDemo, requireInstalledFactory } from './factory-cli-wiring.ts';
@@ -776,21 +776,19 @@ async function cmdDemo(rest: string[]): Promise<void> {
     const baseRef = demoFlagValue(rest, '--base') ?? 'main';
     const changedRef = demoFlagValue(rest, '--changed') ?? 'HEAD';
     try {
-      const { captureCheckpoints, model: demoModel } = await requireFactoryDemo('forge demo capture');
-      const { collectCapturedMedia, mergeCapturedMedia, computeCheckpointDeltas, renderDemoBundle, stampCaptureNonce } = demoModel;
+      const { captureDemoBundle, model: demoModel } = await requireFactoryDemo('forge demo capture');
+      const { renderDemoBundle, stampCaptureNonce } = demoModel;
       const { CAPTURE_NONCE_ENV } = await import('@forge/flows');
       const bundleDir = join(demoDir, '.capture');
-      const demoJson = JSON.parse(readFileSync(jsonPath, 'utf8'));
-      const cps = (demoJson?.checkpoints ?? []) as Array<{ label?: string; command?: string; route?: string }>;
-      // A checkpoint with a `command` captures real CLI stdout (before/after); one
-      // without is a browser screenshot checkpoint (an AC-derived one may carry `route`).
-      const checkpointCommands = cps
-        .filter((c) => c.label && typeof c.command === 'string' && c.command.trim())
-        .map((c) => ({ label: c.label as string, command: c.command as string }));
-      const labels = cps.filter((c) => c.label && !c.command).map((c) => ({ label: c.label as string, route: typeof c.route === 'string' ? c.route : undefined }));
-      await captureCheckpoints({ projectRepoPath, project: projectArg ?? '(local)', baseRef, changedRef, bundleDir, initiativeId, checkpointLabels: labels, checkpointCommands, build: true });
-      const captured = collectCapturedMedia(bundleDir);
-      const merged = computeCheckpointDeltas(mergeCapturedMedia(JSON.parse(readFileSync(jsonPath, 'utf8')), captured), bundleDir); // delta honesty (forge-mfv5.1.7): integrate re-derives the essence + PR body from these flags
+      const { model: merged, capturedCount } = await captureDemoBundle({
+        jsonPath,
+        bundleDir,
+        projectRepoPath,
+        project: projectArg ?? '(local)',
+        baseRef,
+        changedRef,
+        initiativeId,
+      });
       // N2 (plan item 2.6): bind the artifacts to THIS orchestrated run. The
       // orchestrator injected a per-run nonce into our environment; stamping
       // it into demo.json AFTER a successful capture+merge is the proof the
@@ -800,7 +798,7 @@ async function cmdDemo(rest: string[]): Promise<void> {
       const stamped = runNonce ? stampCaptureNonce(merged, runNonce) : merged;
       writeFileSync(jsonPath, JSON.stringify(stamped, null, 2));
       const r = renderDemoBundle(demoDir, projectRepoPath);
-      console.log(`forge demo capture: merged ${captured.length} captured checkpoint(s); ${r.ok ? 'rendered DEMO.md' : 'render failed: ' + r.errors.join('; ')}`);
+      console.log(`forge demo capture: merged ${capturedCount} captured checkpoint(s); ${r.ok ? 'rendered DEMO.md' : 'render failed: ' + r.errors.join('; ')}`);
     } catch (err) {
       // bead forge-8vfn.17 — see apps/forge/tests/regression/demo-capture-fails-loud.test.ts.
       console.error(`forge demo capture: FAILED — ${err instanceof Error ? err.message : String(err)}; demo.json is NOT stamped, so this run produced no evidence.`);

@@ -37,7 +37,13 @@ import {
   checkpointArtifactStem,
   isSafeDemoRoute,
 } from '@forge/stations/demo-types.ts';
-import { MAX_CAPTURED_OUTPUT_BYTES } from '@forge/stations/demo-model.ts';
+import {
+  MAX_CAPTURED_OUTPUT_BYTES,
+  collectCapturedMedia,
+  computeCheckpointDeltas,
+  mergeCapturedMedia,
+  type DemoModel,
+} from '@forge/stations/demo-model.ts';
 
 export type CheckpointUrlResolution = { ok: true; url: string } | { ok: false; reason: string };
 
@@ -311,6 +317,60 @@ export async function captureCheckpoints(
   }
 
   return { capturedBefore, capturedAfter };
+}
+
+export type CaptureDemoBundleInput = {
+  /** The unifier-authored demo.json this run captures evidence for. */
+  jsonPath: string;
+  /** Where before/after checkpoint artifacts land. */
+  bundleDir: string;
+  projectRepoPath: string;
+  project: string;
+  baseRef: string;
+  changedRef: string;
+  initiativeId?: string;
+};
+
+export type CaptureDemoBundleResult = {
+  model: DemoModel;
+  /** How many labels `collectCapturedMedia` actually found evidence for. */
+  capturedCount: number;
+};
+
+/**
+ * The whole `forge demo capture` orchestration in one call (forge-mfv5.1.7):
+ * read demo.json, split its checkpoints into CLI/output commands vs browser
+ * labels (a browser checkpoint's `route` is validated at the point of use,
+ * inside `captureCheckpoints`), run the capture, back-fill the captured
+ * media, and tag every checkpoint's real before/after `delta`. Nonce
+ * stamping, rendering and the file writes are the caller's (`cli.ts`) — this
+ * only produces the merged model.
+ */
+export async function captureDemoBundle(input: CaptureDemoBundleInput): Promise<CaptureDemoBundleResult> {
+  const demoJson = JSON.parse(readFileSync(input.jsonPath, 'utf8'));
+  const cps = (demoJson?.checkpoints ?? []) as Array<{ label?: string; command?: string; route?: string }>;
+  // A checkpoint with a `command` captures real CLI stdout (before/after); one
+  // without is a browser screenshot checkpoint (an AC-derived one may carry `route`).
+  const checkpointCommands = cps
+    .filter((c) => c.label && typeof c.command === 'string' && c.command.trim())
+    .map((c) => ({ label: c.label as string, command: c.command as string }));
+  const checkpointLabels = cps
+    .filter((c) => c.label && !c.command)
+    .map((c) => ({ label: c.label as string, route: typeof c.route === 'string' ? c.route : undefined }));
+  await captureCheckpoints({
+    projectRepoPath: input.projectRepoPath,
+    project: input.project,
+    baseRef: input.baseRef,
+    changedRef: input.changedRef,
+    bundleDir: input.bundleDir,
+    initiativeId: input.initiativeId,
+    checkpointLabels,
+    checkpointCommands,
+    build: true,
+  });
+  const captured = collectCapturedMedia(input.bundleDir);
+  const merged = mergeCapturedMedia(JSON.parse(readFileSync(input.jsonPath, 'utf8')), captured);
+  return { model: computeCheckpointDeltas(merged, input.bundleDir), capturedCount: captured.length };
 }
 
 // Re-export the shared demo types so callers depend on one module surface.
