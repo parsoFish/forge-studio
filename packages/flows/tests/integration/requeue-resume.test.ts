@@ -18,7 +18,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -174,24 +174,40 @@ test('decideRequeueResume: no readable work-item specs → no resume (dev node n
 
 test('branchHasCommittedWork: branch with a commit beyond main → true', () => {
   const repo = initRepo();
-  addBranch(repo, `forge/${INIT}`, true);
-  assert.equal(branchHasCommittedWork(repo, `forge/${INIT}`), true);
+  try {
+    addBranch(repo, `forge/${INIT}`, true);
+    assert.equal(branchHasCommittedWork(repo, `forge/${INIT}`), true);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
 });
 
 test('branchHasCommittedWork: branch at main (no WI commits) → false', () => {
   const repo = initRepo();
-  addBranch(repo, `forge/${INIT}`, false);
-  assert.equal(branchHasCommittedWork(repo, `forge/${INIT}`), false);
+  try {
+    addBranch(repo, `forge/${INIT}`, false);
+    assert.equal(branchHasCommittedWork(repo, `forge/${INIT}`), false);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
 });
 
 test('branchHasCommittedWork: missing branch → false', () => {
   const repo = initRepo();
-  assert.equal(branchHasCommittedWork(repo, `forge/${INIT}`), false);
+  try {
+    assert.equal(branchHasCommittedWork(repo, `forge/${INIT}`), false);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
 });
 
 test('branchHasCommittedWork: not a git repo → false', () => {
   const dir = mkdtempSync(join(tmpdir(), 'n7-notrepo-'));
-  assert.equal(branchHasCommittedWork(dir, `forge/${INIT}`), false);
+  try {
+    assert.equal(branchHasCommittedWork(dir, `forge/${INIT}`), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -200,12 +216,20 @@ test('branchHasCommittedWork: not a git repo → false', () => {
 
 test('summarizeWorkItemStatuses: counts complete vs total from .forge/work-items', () => {
   const wt = makeWorktree([wi('WI-1', 'complete'), wi('WI-2', 'pending'), wi('WI-3', 'complete')]);
-  assert.deepEqual(summarizeWorkItemStatuses(wt), { total: 3, complete: 2 });
+  try {
+    assert.deepEqual(summarizeWorkItemStatuses(wt), { total: 3, complete: 2 });
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
 });
 
 test('summarizeWorkItemStatuses: missing work-items dir → null', () => {
   const wt = mkdtempSync(join(tmpdir(), 'n7-emptywt-'));
-  assert.equal(summarizeWorkItemStatuses(wt), null);
+  try {
+    assert.equal(summarizeWorkItemStatuses(wt), null);
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -214,19 +238,31 @@ test('summarizeWorkItemStatuses: missing work-items dir → null', () => {
 
 test('readPriorFailureEnvironment: environment:true classification in the cycle log → true', () => {
   const root = makeForgeRoot('cyc-1', { failure_mode: 'transient', recoverable: true, environment: true, reason: 'rate-limited (environment failure)' });
-  assert.equal(readPriorFailureEnvironment(root, 'cyc-1'), true);
+  try {
+    assert.equal(readPriorFailureEnvironment(root, 'cyc-1'), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('readPriorFailureEnvironment: terminal / non-environment classification → false', () => {
   const root = makeForgeRoot('cyc-2', { failure_mode: 'terminal', recoverable: false, reason: 'unifier did not pass' });
-  assert.equal(readPriorFailureEnvironment(root, 'cyc-2'), false);
+  try {
+    assert.equal(readPriorFailureEnvironment(root, 'cyc-2'), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('readPriorFailureEnvironment: no classification event / missing log → false', () => {
   const root = makeForgeRoot('cyc-3', null);
-  assert.equal(readPriorFailureEnvironment(root, 'cyc-3'), false);
-  assert.equal(readPriorFailureEnvironment(root, 'no-such-cycle'), false);
-  assert.equal(readPriorFailureEnvironment(root, undefined), false);
+  try {
+    assert.equal(readPriorFailureEnvironment(root, 'cyc-3'), false);
+    assert.equal(readPriorFailureEnvironment(root, 'no-such-cycle'), false);
+    assert.equal(readPriorFailureEnvironment(root, undefined), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -235,50 +271,68 @@ test('readPriorFailureEnvironment: no classification event / missing log → fal
 
 test('inferRequeueResume: environment death mid-WI with preserved worktree+branch → resume, no marker', () => {
   const repo = initRepo();
-  addBranch(repo, `forge/${INIT}`, true);
   const wt = makeWorktree([wi('WI-1', 'complete'), wi('WI-2', 'pending')]);
   const root = makeForgeRoot('cyc-env', { failure_mode: 'transient', recoverable: true, environment: true, reason: 'rate-limited' });
+  try {
+    addBranch(repo, `forge/${INIT}`, true);
 
-  const d = inferRequeueResume({
-    forgeRoot: root,
-    cycleId: 'cyc-env',
-    initiativeId: INIT,
-    worktreePath: wt,
-    projectRepoPath: repo,
-  });
-  assert.equal(d.resume, true);
-  if (d.resume) assert.equal(d.resume_from, null);
+    const d = inferRequeueResume({
+      forgeRoot: root,
+      cycleId: 'cyc-env',
+      initiativeId: INIT,
+      worktreePath: wt,
+      projectRepoPath: repo,
+    });
+    assert.equal(d.resume, true);
+    if (d.resume) assert.equal(d.resume_from, null);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(wt, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('inferRequeueResume: environment death after all WIs complete → resume from demo', () => {
   const repo = initRepo();
-  addBranch(repo, `forge/${INIT}`, true);
   const wt = makeWorktree([wi('WI-1', 'complete'), wi('WI-2', 'complete')]);
   const root = makeForgeRoot('cyc-env2', { failure_mode: 'transient', recoverable: true, environment: true, reason: 'gate timed out' });
+  try {
+    addBranch(repo, `forge/${INIT}`, true);
 
-  const d = inferRequeueResume({
-    forgeRoot: root,
-    cycleId: 'cyc-env2',
-    initiativeId: INIT,
-    worktreePath: wt,
-    projectRepoPath: repo,
-  });
-  assert.equal(d.resume, true);
-  if (d.resume) assert.equal(d.resume_from, 'integrate');
+    const d = inferRequeueResume({
+      forgeRoot: root,
+      cycleId: 'cyc-env2',
+      initiativeId: INIT,
+      worktreePath: wt,
+      projectRepoPath: repo,
+    });
+    assert.equal(d.resume, true);
+    if (d.resume) assert.equal(d.resume_from, 'integrate');
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(wt, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('inferRequeueResume: terminal failure → no resume even with preserved state', () => {
   const repo = initRepo();
-  addBranch(repo, `forge/${INIT}`, true);
   const wt = makeWorktree([wi('WI-1', 'complete')]);
   const root = makeForgeRoot('cyc-term', { failure_mode: 'terminal', recoverable: false, reason: 'unifier did not pass' });
+  try {
+    addBranch(repo, `forge/${INIT}`, true);
 
-  const d = inferRequeueResume({
-    forgeRoot: root,
-    cycleId: 'cyc-term',
-    initiativeId: INIT,
-    worktreePath: wt,
-    projectRepoPath: repo,
-  });
-  assert.equal(d.resume, false);
+    const d = inferRequeueResume({
+      forgeRoot: root,
+      cycleId: 'cyc-term',
+      initiativeId: INIT,
+      worktreePath: wt,
+      projectRepoPath: repo,
+    });
+    assert.equal(d.resume, false);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+    rmSync(wt, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  }
 });

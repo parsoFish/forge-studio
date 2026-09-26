@@ -14,13 +14,17 @@ import { join } from 'node:path';
 
 import { loadFlowDefinition, serializeFlowDefinition } from './flow-registry.ts';
 
-function tmpFlow(yaml: string): string {
+// forge-8vfn.8.1.25 / T1 1617: `{ path, dir }`, not just `path` — found mid-row
+// while verifying the fix elsewhere in this leak class; same shape as
+// cycle.test.ts's `writeManifestWithCeiling` and the same reason (a caller
+// with only the nested path has no handle to `rmSync` the dir it lives in).
+function tmpFlow(yaml: string): { path: string; dir: string } {
   const dir = mkdtempSync(join(tmpdir(), 'flow-accepts-'));
   const flowDir = join(dir, 'studio', 'flows', 'my-flow');
   mkdirSync(flowDir, { recursive: true });
   const path = join(flowDir, 'flow.yaml');
   writeFileSync(path, yaml);
-  return path;
+  return { path, dir };
 }
 
 const BASE = [
@@ -40,55 +44,75 @@ const BASE = [
 ].join('\n');
 
 test('loadFlowDefinition: a flow.yaml with no "accepts" field fails to load, naming the flow', () => {
-  const path = tmpFlow(BASE); // no accepts: line at all
-  assert.throws(
-    () => loadFlowDefinition(path),
-    (err: Error) => {
-      assert.match(err.message, /my-flow/, 'names the flow');
-      assert.match(err.message, /accepts/, 'names the missing field');
-      return true;
-    },
-  );
+  const { path, dir } = tmpFlow(BASE); // no accepts: line at all
+  try {
+    assert.throws(
+      () => loadFlowDefinition(path),
+      (err: Error) => {
+        assert.match(err.message, /my-flow/, 'names the flow');
+        assert.match(err.message, /accepts/, 'names the missing field');
+        return true;
+      },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('loadFlowDefinition: "accepts: []" (present but empty) also fails to load', () => {
-  const path = tmpFlow(BASE.replace('origin: seed\n', 'origin: seed\naccepts: []\n'));
-  assert.throws(() => loadFlowDefinition(path), /non-empty/);
+  const { path, dir } = tmpFlow(BASE.replace('origin: seed\n', 'origin: seed\naccepts: []\n'));
+  try {
+    assert.throws(() => loadFlowDefinition(path), /non-empty/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('loadFlowDefinition: an unknown class inside "accepts" fails to load, naming the flow and the bad value', () => {
-  const path = tmpFlow(BASE.replace('origin: seed\n', "origin: seed\naccepts: [code, sausages]\n"));
-  assert.throws(
-    () => loadFlowDefinition(path),
-    (err: Error) => {
-      assert.match(err.message, /my-flow/, 'names the flow');
-      assert.match(err.message, /"sausages"/, 'names the offending value');
-      assert.match(err.message, /code \| docs \| config \| infra/, 'names the valid set');
-      return true;
-    },
-  );
+  const { path, dir } = tmpFlow(BASE.replace('origin: seed\n', "origin: seed\naccepts: [code, sausages]\n"));
+  try {
+    assert.throws(
+      () => loadFlowDefinition(path),
+      (err: Error) => {
+        assert.match(err.message, /my-flow/, 'names the flow');
+        assert.match(err.message, /"sausages"/, 'names the offending value');
+        assert.match(err.message, /code \| docs \| config \| infra/, 'names the valid set');
+        return true;
+      },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('loadFlowDefinition: a valid "accepts" list loads verbatim, in declared order', () => {
-  const path = tmpFlow(BASE.replace('origin: seed\n', 'origin: seed\naccepts: [docs, code]\n'));
-  const flow = loadFlowDefinition(path);
-  assert.deepEqual(flow.accepts, ['docs', 'code']);
+  const { path, dir } = tmpFlow(BASE.replace('origin: seed\n', 'origin: seed\naccepts: [docs, code]\n'));
+  try {
+    const flow = loadFlowDefinition(path);
+    assert.deepEqual(flow.accepts, ['docs', 'code']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('serializeFlowDefinition: round-trips "accepts"', () => {
-  const path = tmpFlow(BASE.replace('origin: seed\n', 'origin: seed\naccepts: [config, infra]\n'));
-  const flow = loadFlowDefinition(path);
-  const yaml = serializeFlowDefinition(flow);
-  assert.match(yaml, /accepts:\s*\n?\s*-?\s*(config)/, 'the serialized yaml carries accepts');
-  // Round-trip through the loader again to prove it is not merely present but re-loadable.
-  const dir = mkdtempSync(join(tmpdir(), 'flow-accepts-rt-'));
-  const flowDir = join(dir, 'studio', 'flows', 'my-flow');
-  mkdirSync(flowDir, { recursive: true });
-  const p2 = join(flowDir, 'flow.yaml');
-  writeFileSync(p2, yaml);
-  const reloaded = loadFlowDefinition(p2);
-  assert.deepEqual(reloaded.accepts, ['config', 'infra']);
-  rmSync(dir, { recursive: true, force: true });
+  const { path, dir } = tmpFlow(BASE.replace('origin: seed\n', 'origin: seed\naccepts: [config, infra]\n'));
+  const rtDir = mkdtempSync(join(tmpdir(), 'flow-accepts-rt-'));
+  try {
+    const flow = loadFlowDefinition(path);
+    const yaml = serializeFlowDefinition(flow);
+    assert.match(yaml, /accepts:\s*\n?\s*-?\s*(config)/, 'the serialized yaml carries accepts');
+    // Round-trip through the loader again to prove it is not merely present but re-loadable.
+    const flowDir = join(rtDir, 'studio', 'flows', 'my-flow');
+    mkdirSync(flowDir, { recursive: true });
+    const p2 = join(flowDir, 'flow.yaml');
+    writeFileSync(p2, yaml);
+    const reloaded = loadFlowDefinition(p2);
+    assert.deepEqual(reloaded.accepts, ['config', 'infra']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(rtDir, { recursive: true, force: true });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -96,46 +120,62 @@ test('serializeFlowDefinition: round-trips "accepts"', () => {
 // ---------------------------------------------------------------------------
 
 test('loadFlowDefinition: no "review" key -> flow.review is absent (unchanged behaviour)', () => {
-  const path = tmpFlow(BASE.replace('origin: seed\n', 'origin: seed\naccepts: [code]\n'));
-  const flow = loadFlowDefinition(path);
-  assert.equal(flow.review, undefined);
+  const { path, dir } = tmpFlow(BASE.replace('origin: seed\n', 'origin: seed\naccepts: [code]\n'));
+  try {
+    const flow = loadFlowDefinition(path);
+    assert.equal(flow.review, undefined);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('loadFlowDefinition: "review: { lenses: [] }" (empty) is a validation error', () => {
-  const path = tmpFlow(
+  const { path, dir } = tmpFlow(
     BASE.replace('origin: seed\n', 'origin: seed\naccepts: [code]\nreview:\n  lenses: []\n'),
   );
-  assert.throws(
-    () => loadFlowDefinition(path),
-    (err: Error) => {
-      assert.match(err.message, /my-flow/);
-      assert.match(err.message, /review\.lenses/);
-      assert.match(err.message, /non-empty/);
-      return true;
-    },
-  );
+  try {
+    assert.throws(
+      () => loadFlowDefinition(path),
+      (err: Error) => {
+        assert.match(err.message, /my-flow/);
+        assert.match(err.message, /review\.lenses/);
+        assert.match(err.message, /non-empty/);
+        return true;
+      },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('loadFlowDefinition: "review: { lenses: [correctness] }" loads verbatim', () => {
-  const path = tmpFlow(
+  const { path, dir } = tmpFlow(
     BASE.replace('origin: seed\n', 'origin: seed\naccepts: [code]\nreview:\n  lenses: [correctness]\n'),
   );
-  const flow = loadFlowDefinition(path);
-  assert.deepEqual(flow.review, { lenses: ['correctness'] });
+  try {
+    const flow = loadFlowDefinition(path);
+    assert.deepEqual(flow.review, { lenses: ['correctness'] });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('serializeFlowDefinition: round-trips "review.lenses"', () => {
-  const path = tmpFlow(
+  const { path, dir } = tmpFlow(
     BASE.replace('origin: seed\n', 'origin: seed\naccepts: [code]\nreview:\n  lenses: [correctness, boundary]\n'),
   );
-  const flow = loadFlowDefinition(path);
-  const yaml = serializeFlowDefinition(flow);
-  const dir = mkdtempSync(join(tmpdir(), 'flow-review-rt-'));
-  const flowDir = join(dir, 'studio', 'flows', 'my-flow');
-  mkdirSync(flowDir, { recursive: true });
-  const p2 = join(flowDir, 'flow.yaml');
-  writeFileSync(p2, yaml);
-  const reloaded = loadFlowDefinition(p2);
-  assert.deepEqual(reloaded.review, { lenses: ['correctness', 'boundary'] });
-  rmSync(dir, { recursive: true, force: true });
+  const rtDir = mkdtempSync(join(tmpdir(), 'flow-review-rt-'));
+  try {
+    const flow = loadFlowDefinition(path);
+    const yaml = serializeFlowDefinition(flow);
+    const flowDir = join(rtDir, 'studio', 'flows', 'my-flow');
+    mkdirSync(flowDir, { recursive: true });
+    const p2 = join(flowDir, 'flow.yaml');
+    writeFileSync(p2, yaml);
+    const reloaded = loadFlowDefinition(p2);
+    assert.deepEqual(reloaded.review, { lenses: ['correctness', 'boundary'] });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(rtDir, { recursive: true, force: true });
+  }
 });

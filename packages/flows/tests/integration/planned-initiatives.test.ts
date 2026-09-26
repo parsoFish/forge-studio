@@ -111,7 +111,7 @@ test('7.6.132: a ready-for-review architect manifest IS listed for the develop s
     const planned = listPlannedInitiatives(q, DEVELOP_FLOW_ID);
     assert.equal(planned.length, 1, 'the hand-off must be offered — the server would claim it');
     assert.equal(planned[0].initiativeId, 'INIT-handoff');
-  } finally { rmSync(q, { recursive: true, force: true }); }
+  } finally { rmSync(join(q, '..'), { recursive: true, force: true }); }
 });
 
 test('7.6.132: a ready-for-review manifest of the TARGET flow is NOT listed', () => {
@@ -126,7 +126,7 @@ test('7.6.132: a ready-for-review manifest of the TARGET flow is NOT listed', ()
       manifest('INIT-parked').replace('origin: architect', 'origin: architect\nflow_id: forge-develop'),
     );
     assert.deepEqual(listPlannedInitiatives(q, DEVELOP_FLOW_ID), []);
-  } finally { rmSync(q, { recursive: true, force: true }); }
+  } finally { rmSync(join(q, '..'), { recursive: true, force: true }); }
 });
 
 test('7.6.132: a ready-for-review manifest with NO flow id is not listed', () => {
@@ -138,5 +138,5 @@ test('7.6.132: a ready-for-review manifest with NO flow id is not listed', () =>
     mkdirSync(join(q, 'ready-for-review'), { recursive: true });
     writeFileSync(join(q, 'ready-for-review', 'INIT-noflow.md'), manifest('INIT-noflow'));
     assert.deepEqual(listPlannedInitiatives(q, DEVELOP_FLOW_ID), []);
-  } finally { rmSync(q, { recursive: true, force: true }); }
+  } finally { rmSync(join(q, '..'), { recursive: true, force: true }); }
 });
