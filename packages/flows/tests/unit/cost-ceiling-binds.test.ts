@@ -31,7 +31,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -47,7 +47,10 @@ import { CostTracker, PER_WORK_ITEM_CEILING_SHARE } from '../../flow-budgets.ts'
 /** G2's real manifest shape: a docs initiative with a $18 budget and no explicit ceiling. */
 const G2_BUDGET_USD = 18;
 
-function writeManifest(fields: Partial<InitiativeManifest>): string {
+// forge-8vfn.8.1.25 / T1 1617: `{ path, dir }`, not just `path` — same fix as
+// cycle.test.ts's sibling `writeManifestWithCeiling`, for the same reason
+// (callers need the dir back to `rmSync` it, or it leaks one per call).
+function writeManifest(fields: Partial<InitiativeManifest>): { path: string; dir: string } {
   const dir = mkdtempSync(join(tmpdir(), 'forge-ceiling-binds-'));
   const m: InitiativeManifest = {
     initiative_id: 'INIT-2026-09-05-init-gap-registry-consolidation',
@@ -65,7 +68,7 @@ function writeManifest(fields: Partial<InitiativeManifest>): string {
   };
   const path = join(dir, 'manifest.md');
   writeFileSync(path, serializeManifest(m));
-  return path;
+  return { path, dir };
 }
 
 function withoutCeilingEnv<T>(fn: () => T): T {
@@ -104,28 +107,39 @@ function costEvent(fields: Record<string, unknown>) {
 // ---------------------------------------------------------------------------
 
 test('readManifestCostCeiling derives a SHARE of the budget — G2\'s $18 docs budget bounds the run at $27, never the old flat-$40 $58', () => {
-  const path = writeManifest({});
-  const derived = readManifestCostCeiling(path);
-  assert.equal(
-    derived?.ceilingUsd,
-    G2_BUDGET_USD * (1 + DERIVED_CEILING_MARGIN_SHARE),
-    'the derived ceiling must be the budget scaled by the margin SHARE',
-  );
-  assert.equal(derived?.ceilingUsd, 27, 'G2\'s $18 budget derives a $27 ceiling');
-  assert.notEqual(derived?.ceilingUsd, 58, 'the retired flat $40 margin turned an $18 budget into a $58 run');
-  assert.equal(derived?.source, 'derived', 'a budget-derived ceiling must say it was derived, not claim the operator set it');
-  assert.ok(
-    (derived?.ceilingUsd ?? 0) >= 23.9721,
-    `the derived ceiling must cover G2's measured deduplicated spend ($23.9721) — got ${derived?.ceilingUsd}`,
-  );
+  const { path, dir } = writeManifest({});
+  try {
+    const derived = readManifestCostCeiling(path);
+    assert.equal(
+      derived?.ceilingUsd,
+      G2_BUDGET_USD * (1 + DERIVED_CEILING_MARGIN_SHARE),
+      'the derived ceiling must be the budget scaled by the margin SHARE',
+    );
+    assert.equal(derived?.ceilingUsd, 27, 'G2\'s $18 budget derives a $27 ceiling');
+    assert.notEqual(derived?.ceilingUsd, 58, 'the retired flat $40 margin turned an $18 budget into a $58 run');
+    assert.equal(derived?.source, 'derived', 'a budget-derived ceiling must say it was derived, not claim the operator set it');
+    assert.ok(
+      (derived?.ceilingUsd ?? 0) >= 23.9721,
+      `the derived ceiling must cover G2's measured deduplicated spend ($23.9721) — got ${derived?.ceilingUsd}`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('the margin share scales: it can never triple a budget the way the flat $40 tripled $18', () => {
-  const small = readManifestCostCeiling(writeManifest({ cost_budget_usd: 4 }));
-  const large = readManifestCostCeiling(writeManifest({ cost_budget_usd: 100 }));
-  assert.equal(small?.ceilingUsd, 4 * (1 + DERIVED_CEILING_MARGIN_SHARE));
-  assert.equal(large?.ceilingUsd, 100 * (1 + DERIVED_CEILING_MARGIN_SHARE));
-  assert.ok(DERIVED_CEILING_MARGIN_SHARE < 1, 'a margin share of 1 or more doubles every budget');
+  const smallManifest = writeManifest({ cost_budget_usd: 4 });
+  const largeManifest = writeManifest({ cost_budget_usd: 100 });
+  try {
+    const small = readManifestCostCeiling(smallManifest.path);
+    const large = readManifestCostCeiling(largeManifest.path);
+    assert.equal(small?.ceilingUsd, 4 * (1 + DERIVED_CEILING_MARGIN_SHARE));
+    assert.equal(large?.ceilingUsd, 100 * (1 + DERIVED_CEILING_MARGIN_SHARE));
+    assert.ok(DERIVED_CEILING_MARGIN_SHARE < 1, 'a margin share of 1 or more doubles every budget');
+  } finally {
+    rmSync(smallManifest.dir, { recursive: true, force: true });
+    rmSync(largeManifest.dir, { recursive: true, force: true });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -133,35 +147,42 @@ test('the margin share scales: it can never triple a budget the way the flat $40
 // ---------------------------------------------------------------------------
 
 test('resolveCostCeilingOverride names its SOURCE: env (the harness flag) > manifest ceiling > derived', () => {
-  const derivedPath = writeManifest({});
-  const explicitPath = writeManifest({ cost_ceiling_usd: 120 });
+  const derivedManifest = writeManifest({});
+  const explicitManifest = writeManifest({ cost_ceiling_usd: 120 });
+  const derivedPath = derivedManifest.path;
+  const explicitPath = explicitManifest.path;
 
-  withoutCeilingEnv(() => {
-    assert.deepEqual(resolveCostCeilingOverride(derivedPath), {
-      ceilingUsd: 27,
-      source: 'derived',
-    });
-    assert.deepEqual(resolveCostCeilingOverride(explicitPath), {
-      ceilingUsd: 120,
-      source: 'manifest',
-    });
-    assert.deepEqual(resolveCostCeilingOverride('/nonexistent/manifest.md'), {
-      ceilingUsd: undefined,
-      source: 'none',
-    });
-  });
-
-  const prev = process.env.FORGE_COST_CEILING_USD;
-  process.env.FORGE_COST_CEILING_USD = '20';
   try {
-    assert.deepEqual(
-      resolveCostCeilingOverride(explicitPath),
-      { ceilingUsd: 20, source: 'env' },
-      'the operator\'s $20 must win over the manifest and say so',
-    );
+    withoutCeilingEnv(() => {
+      assert.deepEqual(resolveCostCeilingOverride(derivedPath), {
+        ceilingUsd: 27,
+        source: 'derived',
+      });
+      assert.deepEqual(resolveCostCeilingOverride(explicitPath), {
+        ceilingUsd: 120,
+        source: 'manifest',
+      });
+      assert.deepEqual(resolveCostCeilingOverride('/nonexistent/manifest.md'), {
+        ceilingUsd: undefined,
+        source: 'none',
+      });
+    });
+
+    const prev = process.env.FORGE_COST_CEILING_USD;
+    process.env.FORGE_COST_CEILING_USD = '20';
+    try {
+      assert.deepEqual(
+        resolveCostCeilingOverride(explicitPath),
+        { ceilingUsd: 20, source: 'env' },
+        'the operator\'s $20 must win over the manifest and say so',
+      );
+    } finally {
+      if (prev === undefined) delete process.env.FORGE_COST_CEILING_USD;
+      else process.env.FORGE_COST_CEILING_USD = prev;
+    }
   } finally {
-    if (prev === undefined) delete process.env.FORGE_COST_CEILING_USD;
-    else process.env.FORGE_COST_CEILING_USD = prev;
+    rmSync(derivedManifest.dir, { recursive: true, force: true });
+    rmSync(explicitManifest.dir, { recursive: true, force: true });
   }
 });
 

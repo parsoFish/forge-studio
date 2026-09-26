@@ -62,7 +62,7 @@ function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void }
         ci: { cmd: ['vitest', 'run'] },
       },
       demoProcess: [
-        { kind: 'capture', text: 'Capture before state.' },
+        { kind: 'capture', text: 'Capture before state: `npm run build`.' },
         { kind: 'verify', text: 'Run vitest to verify the change.' },
       ],
     }),
@@ -181,27 +181,87 @@ test('DEMO (ADVISORY): demoProcess with capture + verify passes', () => {
   }
 });
 
-test('DEMO-SKILL (ADVISORY): demoProcess declared but no .forge/skills/demo-design/SKILL.md warns, ok stays true', () => {
+// DEMO-SKILL's meaning (forge-mfv5.2.2): the demo DECLARATION drives at least
+// one checkpoint — never whether any generated file exists. `existsSync` of
+// the composer at `.forge/skills/demo-design/SKILL.md` plays no part any
+// more, which the next two tests each pin from a different side.
+
+test('DEMO-SKILL (ADVISORY): a declaration with only prose capture steps FAILS even when the composer file exists', () => {
   const p = happyProject();
   try {
-    // happyProject ships the skill — remove it to simulate a project that was
-    // never run through the demo-design generator.
-    rmSync(join(p.dir, '.forge', 'skills', 'demo-design'), { recursive: true, force: true });
+    // happyProject ships the composer file untouched — only demoProcess changes,
+    // to a capture step whose text carries no inline-code span.
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({
+        testProcess: { local: { cmd: ['vitest', 'run'] } },
+        demoProcess: [
+          { kind: 'capture', text: 'Somehow show the thing working.' },
+          { kind: 'verify', text: 'Run vitest to verify the change.' },
+        ],
+      }),
+    );
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     const c = clause(r, 'DEMO-SKILL');
     assert.equal(c.pass, false);
     assert.equal(c.hard, false);
     assert.equal(r.ok, true, 'advisory DEMO-SKILL must not flip ok');
-    assert.match(c.detail, /demo-design/);
-    assert.match(c.detail, /run the demo-design generator/);
+    assert.match(c.detail, /no inline-code/);
   } finally {
     p.cleanup();
   }
 });
 
-test('DEMO-SKILL (ADVISORY): present skill passes', () => {
+test('DEMO-SKILL (ADVISORY): one drivable capture step PASSES even with no composer file on disk', () => {
   const p = happyProject();
   try {
+    // happyProject's default demoProcess already carries a drivable capture
+    // step (`npm run build`) — remove the composer file to prove it plays no part.
+    rmSync(join(p.dir, '.forge', 'skills', 'demo-design'), { recursive: true, force: true });
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c = clause(r, 'DEMO-SKILL');
+    assert.equal(c.pass, true);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('DEMO-SKILL (ADVISORY): a capture step whose inline code has shell metacharacters FAILS, naming the reason', () => {
+  const p = happyProject();
+  try {
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({
+        testProcess: { local: { cmd: ['vitest', 'run'] } },
+        demoProcess: [
+          { kind: 'capture', text: 'Run `npm run demo | tee out.txt` to see it.' },
+          { kind: 'verify', text: 'Run vitest to verify the change.' },
+        ],
+      }),
+    );
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c = clause(r, 'DEMO-SKILL');
+    assert.equal(c.pass, false);
+    assert.match(c.detail, /shell metacharacters/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('DEMO-SKILL (ADVISORY): at least one drivable capture step is enough — other undrivable steps do not fail it', () => {
+  const p = happyProject();
+  try {
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({
+        testProcess: { local: { cmd: ['vitest', 'run'] } },
+        demoProcess: [
+          { kind: 'capture', text: 'Prose only, no code.' },
+          { kind: 'capture', text: 'Also captures: `npm run demo`.' },
+          { kind: 'verify', text: 'Run vitest to verify the change.' },
+        ],
+      }),
+    );
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(clause(r, 'DEMO-SKILL').pass, true);
   } finally {

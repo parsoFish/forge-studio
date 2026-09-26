@@ -311,7 +311,11 @@ test('enforceDevLoopCloseInvariant: a failed push is reported as the CAUSE, not 
     sh(wt, ['commit', '-q', '-m', 'chore(developer-loop): pre-review boundary snapshot']);
     sh(wt, ['remote', 'set-url', 'origin', join(dir, 'gone.git')]);
 
-    const logsDir = mkdtempSync(join(tmpdir(), 'forge-close-push-fail-logs-'));
+    // Nested under `dir` (not a sibling mkdtempSync) so the one `rmSync(dir,
+    // ...)` below in `finally` covers it too — forge-8vfn.8.1.25 / T1 1617:
+    // a sibling tmp dir here used to survive that cleanup and leak every run.
+    const logsDir = join(dir, 'logs');
+    mkdirSync(logsDir, { recursive: true });
     const logger = createLogger('TEST-close-push', logsDir);
 
     let message = '';

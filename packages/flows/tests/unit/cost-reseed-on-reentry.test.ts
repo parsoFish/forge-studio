@@ -20,7 +20,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -97,96 +97,104 @@ test('mutation: a seed restricted to architect-only reproduces the ORIGINAL bug\
 
 test('readPriorCycleCostEvents(logFilePath) reads exactly what a re-entered runFlow would seed with', () => {
   const root = mkdtempSync(join(tmpdir(), 'forge-cost-reseed-'));
-  const logsRoot = join(root, '_logs');
-  mkdirSync(logsRoot, { recursive: true });
-  const logger = createLogger('CYCLE-X', logsRoot);
-  for (const e of fixtureRows) {
-    // Re-emit every row through a real logger so the on-disk file is built
-    // exactly like production would (event_id/cycle_id get reassigned; that's
-    // fine — nothing here depends on the ORIGINAL ids).
-    logger.emit(e as unknown as Parameters<typeof logger.emit>[0]);
-    if (e === fixtureRows[SEED_CUTOFF - 1]) break; // stop after entry 2's cycle.start
+  try {
+    const logsRoot = join(root, '_logs');
+    mkdirSync(logsRoot, { recursive: true });
+    const logger = createLogger('CYCLE-X', logsRoot);
+    for (const e of fixtureRows) {
+      // Re-emit every row through a real logger so the on-disk file is built
+      // exactly like production would (event_id/cycle_id get reassigned; that's
+      // fine — nothing here depends on the ORIGINAL ids).
+      logger.emit(e as unknown as Parameters<typeof logger.emit>[0]);
+      if (e === fixtureRows[SEED_CUTOFF - 1]) break; // stop after entry 2's cycle.start
+    }
+    const seeded = readPriorCycleCostEvents(logger.logFilePath);
+    const t = new CostTracker({ ceilingUsd: 100, initiativeId: 'i', logger: stubLogger() as never });
+    for (const e of seeded) t.noteEvent(e);
+    assert.equal(Number(t.totalSpentUsd.toFixed(7)), Number(BEFORE_WI1_USD.toFixed(7)));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
-  const seeded = readPriorCycleCostEvents(logger.logFilePath);
-  const t = new CostTracker({ ceilingUsd: 100, initiativeId: 'i', logger: stubLogger() as never });
-  for (const e of seeded) t.noteEvent(e);
-  assert.equal(Number(t.totalSpentUsd.toFixed(7)), Number(BEFORE_WI1_USD.toFixed(7)));
 });
 
 test('a third re-entry still counts the architect exactly once (bead forge-8vfn.6.10.22 must still hold)', () => {
   const root = mkdtempSync(join(tmpdir(), 'forge-cost-reseed-triple-'));
-  const manifestPath = join(root, 'manifest.md');
-  const initiativeId = 'INIT-triple-reentry';
-  const m: InitiativeManifest = {
-    initiative_id: initiativeId,
-    class: 'docs',
-    acceptance_criteria: [],
-    project: 'demo',
-    project_repo_path: join(root, 'repo'),
-    created_at: '2026-09-25T00:00:00Z',
-    iteration_budget: 50,
-    cost_budget_usd: 18,
-    phase: 'pending',
-    origin: 'architect',
-    architect_cost_usd: ARCHITECT_USD,
-    architect_duration_ms: 100,
-    architect_session_id: 'sess-triple',
-    body: '# body',
-  };
-  writeFileSync(manifestPath, serializeManifest(m));
-  const logsRoot = join(root, '_logs');
-  mkdirSync(logsRoot, { recursive: true });
-  const logger = createLogger('CYCLE-TRIPLE', logsRoot);
-  const input = {
-    initiativeId,
-    manifestPath,
-    worktreePath: join(root, 'repo'),
-    projectRepoPath: join(root, 'repo'),
-  } as CycleInput;
+  try {
+    const manifestPath = join(root, 'manifest.md');
+    const initiativeId = 'INIT-triple-reentry';
+    const m: InitiativeManifest = {
+      initiative_id: initiativeId,
+      class: 'docs',
+      acceptance_criteria: [],
+      project: 'demo',
+      project_repo_path: join(root, 'repo'),
+      created_at: '2026-09-25T00:00:00Z',
+      iteration_budget: 50,
+      cost_budget_usd: 18,
+      phase: 'pending',
+      origin: 'architect',
+      architect_cost_usd: ARCHITECT_USD,
+      architect_duration_ms: 100,
+      architect_session_id: 'sess-triple',
+      body: '# body',
+    };
+    writeFileSync(manifestPath, serializeManifest(m));
+    const logsRoot = join(root, '_logs');
+    mkdirSync(logsRoot, { recursive: true });
+    const logger = createLogger('CYCLE-TRIPLE', logsRoot);
+    const input = {
+      initiativeId,
+      manifestPath,
+      worktreePath: join(root, 'repo'),
+      projectRepoPath: join(root, 'repo'),
+    } as CycleInput;
 
-  // Entry 1: architect (fresh emit) + project-manager finishing before the gate.
-  emitSyntheticArchitectEvents(input, logger, 'architect');
-  logger.emit({
-    initiative_id: initiativeId,
-    phase: 'project-manager',
-    skill: 'project-manager',
-    event_type: 'end',
-    input_refs: [],
-    output_refs: [],
-    cost_usd: PM_USD,
-    message: 'pm.end',
-  });
+    // Entry 1: architect (fresh emit) + project-manager finishing before the gate.
+    emitSyntheticArchitectEvents(input, logger, 'architect');
+    logger.emit({
+      initiative_id: initiativeId,
+      phase: 'project-manager',
+      skill: 'project-manager',
+      event_type: 'end',
+      input_refs: [],
+      output_refs: [],
+      cost_usd: PM_USD,
+      message: 'pm.end',
+    });
 
-  // Entry 2: re-entry — architect REPLAYS (writes nothing new) — dev-loop runs.
-  emitSyntheticArchitectEvents(input, logger, 'architect');
-  logger.emit({
-    initiative_id: initiativeId,
-    phase: 'developer-loop',
-    skill: 'developer-ralph',
-    event_type: 'iteration',
-    input_refs: [],
-    output_refs: [],
-    cost_usd: DEV_USD,
-    message: 'iteration',
-    metadata: { work_item_id: 'WI-1' },
-  });
+    // Entry 2: re-entry — architect REPLAYS (writes nothing new) — dev-loop runs.
+    emitSyntheticArchitectEvents(input, logger, 'architect');
+    logger.emit({
+      initiative_id: initiativeId,
+      phase: 'developer-loop',
+      skill: 'developer-ralph',
+      event_type: 'iteration',
+      input_refs: [],
+      output_refs: [],
+      cost_usd: DEV_USD,
+      message: 'iteration',
+      metadata: { work_item_id: 'WI-1' },
+    });
 
-  // Entry 3: a further re-entry (e.g. resumed after a crash) — architect
-  // REPLAYS again.
-  const thirdArchitectEvents = emitSyntheticArchitectEvents(input, logger, 'architect');
-  assert.equal(thirdArchitectEvents.length, 2, 'the replay still hands back the architect pair');
+    // Entry 3: a further re-entry (e.g. resumed after a crash) — architect
+    // REPLAYS again.
+    const thirdArchitectEvents = emitSyntheticArchitectEvents(input, logger, 'architect');
+    assert.equal(thirdArchitectEvents.length, 2, 'the replay still hands back the architect pair');
 
-  const seeded = readPriorCycleCostEvents(logger.logFilePath);
-  const architectEndRows = seeded.filter((e) => e.phase === 'architect' && e.event_type === 'end');
-  assert.equal(architectEndRows.length, 1, 'the architect must appear on the log exactly once no matter how many re-entries');
+    const seeded = readPriorCycleCostEvents(logger.logFilePath);
+    const architectEndRows = seeded.filter((e) => e.phase === 'architect' && e.event_type === 'end');
+    assert.equal(architectEndRows.length, 1, 'the architect must appear on the log exactly once no matter how many re-entries');
 
-  const t = new CostTracker({ ceilingUsd: 100, initiativeId, logger: stubLogger() as never });
-  for (const e of seeded) t.noteEvent(e);
-  assert.equal(
-    Number(t.totalSpentUsd.toFixed(7)),
-    Number((ARCHITECT_USD + PM_USD + DEV_USD).toFixed(7)),
-    'architect + project-manager + dev, each counted exactly once',
-  );
+    const t = new CostTracker({ ceilingUsd: 100, initiativeId, logger: stubLogger() as never });
+    for (const e of seeded) t.noteEvent(e);
+    assert.equal(
+      Number(t.totalSpentUsd.toFixed(7)),
+      Number((ARCHITECT_USD + PM_USD + DEV_USD).toFixed(7)),
+      'architect + project-manager + dev, each counted exactly once',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('the iteration latch survives the seed/live boundary: a phase latched by the SEED is not double counted by a live restated end', () => {

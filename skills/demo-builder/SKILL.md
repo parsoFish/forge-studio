@@ -69,7 +69,11 @@ future agent how to, given an initiative's before/after (a base SHA / worktree v
 the merged result), render a self-contained Forge-styled HTML demo that showcases
 the changes that initiative introduced — the new behaviour, the diff that matters,
 real captured output before vs after, the verification that makes it non-trivial.
-This is also the file `forge preflight` DEMO-SKILL checks.
+This composer is presentation guidance for the Studio demo page, not a cycle
+input: `forge preflight`'s DEMO-SKILL clause instead checks that the project's
+demo declaration (`demoProcess`) itself drives at least one checkpoint (bead
+forge-mfv5.2.8 tracks folding this session's own output into that declaration
+more directly).
 
 ## Honor the inputs
 

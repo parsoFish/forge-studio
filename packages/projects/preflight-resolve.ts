@@ -38,9 +38,11 @@ const TABLE: Record<ClauseId, ClauseClassification> = {
   // AGENT — route to the matching agentic runner.
   C8: { resolution: 'agent', route: 'instructions', fixHint: 'Author or edit AGENTS.md with the instructions agent (operator-confirmed) — absent ⇒ create it, present-but-missing-the-gate ⇒ edit it.' },
   DEMO: { resolution: 'agent', route: 'demo-builder', fixHint: 'Build the demo with the demo agent (declares demoProcess + machinery).' },
-  // DEMO-SKILL is the per-project demo machinery — authored by the demo agent
-  // (there is no deterministic generator), so it routes to demo-builder too.
-  'DEMO-SKILL': { resolution: 'agent', route: 'demo-builder', fixHint: 'Generate the demo-design skill with the demo agent.' },
+  // DEMO-SKILL (bead forge-mfv5.2.2): the demo declaration itself must drive a
+  // checkpoint — ≥1 capture step naming a bare-argv command in inline code.
+  // Still routes to demo-builder: authoring the declaration and its Studio
+  // presentation is one operator-facing session.
+  'DEMO-SKILL': { resolution: 'agent', route: 'demo-builder', fixHint: 'Add ≥1 capture step whose inline code is a bare-argv command (no shell metacharacters) with the demo agent — the demo declaration itself must drive a checkpoint.' },
   BRAIN: { resolution: 'agent', route: 'brain-fix', fixHint: 'Repair the stale brain citation with the brain-fix agent.' },
   // R1-03-F3: alignment divergence is a demo-content judgment — the demo agent owns it.
   'DEMO-ALIGN': { resolution: 'agent', route: 'demo-builder', fixHint: 'Align capture steps with the declared test process (or keep the divergence deliberately — advisory).' },

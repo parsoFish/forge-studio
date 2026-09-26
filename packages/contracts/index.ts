@@ -28,6 +28,10 @@ export * from './runnable-source.ts';
 
 /** The run view's shape (ADR 028 §3) — moved from `packages/flows`, forge-8vfn.5.17. */
 export * from './run-view-types.ts';
+/** The demo declaration's pure extraction rules — shared by stations, factory
+ *  and projects (bead forge-mfv5.2.2), plus the presentation-only skill-id
+ *  vocabulary (bead forge-mfv5.2.8). */
+export * from './demo-declaration.ts';
 
 // ── Work items ──
 

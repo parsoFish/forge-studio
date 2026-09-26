@@ -130,6 +130,60 @@ test('runAgent: no project binding — systemPrompt is byte-identical to before,
   }
 });
 
+// PRESENTATION_ONLY_SKILL_IDS (bead forge-mfv5.2.2 / forge-mfv5.2.8):
+// `demo-design` is Studio-presentation guidance, never a cycle input, so it
+// must never reach an agent's systemPrompt even when declared and present.
+// `runOneShotSpawn` reaches the SAME `loadDeclaredSkills` loader as
+// `createClaudeAgent` (via `loadAndComposeProjectSkills`) — this is the other
+// call path's version of `claude-agent.project-skills.test.ts`'s equivalent case.
+test('runAgent: a project binding declaring ["demo-design", "x"] folds ONLY x into systemPrompt', async () => {
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-project-skills-presentation-only-'));
+  try {
+    const projectDir = mkdtempSync(join(scratchRoot, 'proj-'));
+    mkdirSync(join(projectDir, '.forge'), { recursive: true });
+    writeFileSync(
+      join(projectDir, '.forge', 'project.json'),
+      JSON.stringify({ testProcess: { local: { cmd: ['true'] } }, skills: ['demo-design', 'x'] }),
+    );
+    mkdirSync(join(projectDir, '.forge', 'skills', 'demo-design'), { recursive: true });
+    writeFileSync(join(projectDir, '.forge', 'skills', 'demo-design', 'SKILL.md'), '# demo-design\n\nCompose the presentation.');
+    mkdirSync(join(projectDir, '.forge', 'skills', 'x'), { recursive: true });
+    writeFileSync(join(projectDir, '.forge', 'skills', 'x', 'SKILL.md'), '# x\n\nDo the x thing.');
+
+    const defs = listAgentDefinitions(join(FORGE_ROOT, 'skills'));
+    const base = defs.find((d) => d.slug === 'project-scoped-review');
+    assert.ok(base);
+    const def = oneShotClone(base!);
+
+    const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
+    const calls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
+    const logger = fakeLogger();
+
+    await runAgent(def, {
+      runId: '',
+      workdir,
+      prompt: 'p',
+      systemPrompt: 'BASE SYSTEM PROMPT',
+      lifecycle: 'caller',
+      logger: logger as never,
+      bindings: { project: { name: 'proj', repoPath: projectDir } },
+      queryFn: capturingQueryFn(calls),
+    });
+
+    const sentPrompt = calls[0]!.options.systemPrompt as string;
+    assert.match(sentPrompt, /### x/);
+    assert.match(sentPrompt, /Do the x thing\./);
+    assert.doesNotMatch(sentPrompt, /### demo-design/);
+    assert.doesNotMatch(sentPrompt, /Compose the presentation\./);
+
+    const skillsEvent = logger.entries.find((e) => e.message === 'project_skills_loaded');
+    assert.ok(skillsEvent, 'expected a project_skills_loaded event');
+    assert.deepEqual(skillsEvent!.metadata?.ids, ['x'], 'the loaded-ids event must also exclude the presentation-only id');
+  } finally {
+    rmSync(scratchRoot, { recursive: true, force: true });
+  }
+});
+
 test('runAgent: a project binding with NO declared skills leaves systemPrompt untouched', async () => {
   const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-project-skills-empty-'));
   try {
