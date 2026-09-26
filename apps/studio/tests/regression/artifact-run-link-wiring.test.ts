@@ -1,50 +1,43 @@
 /**
- * `forge-8vfn.8.1.18` — the gate/artifact viewer's breadcrumb
- * (`app/artifact/page.tsx`) linked ONLY to the flow monitor (`monitorHref`,
- * `a[data-action="back-to-monitor"|"back-to-flows"]`); there was no path
- * back to the run's OWN detail page (`/flows/<flowId>/run/<runId>`), so an
- * operator sitting at a gate had no way back to the run's timeline, and the
- * stories runner's real-nav (`scripts/stories/beats-drive.mjs`'s
- * `[data-nav][href], a[href]`) found no anchor to it at all.
+ * `forge-8vfn.8.1.18` — the artifact / gate page's breadcrumb linked ONLY to the
+ * flow monitor, so an operator at a gate had no path back to the run's own page
+ * (`/flows/<flowId>/run/<runId>`), and the stories runner's real-nav
+ * (`scripts/stories/beats-drive.mjs`: `[data-nav][href], a[href]`) found none.
  *
- * `app/artifact/page.tsx` is a `use client` page driven by `useSearchParams`
- * and effect-driven bridge fetches — it cannot be render-tested via
- * `renderToStaticMarkup` (the standing reason recorded at
- * `detail-pages-fail-closed-wiring.test.ts`'s header, which pins this SAME
- * file's other wiring the identical way). So, like that file, this pins the
- * SOURCE TEXT rather than a render.
- *
- * The derivation itself — known run -> href, no run record -> null, no
- * flow id -> null — is a pure function, unit-tested in full at
- * `apps/studio/tests/unit/run-detail-href.test.ts`. This file only proves
- * the page actually wires that function in, rather than re-deriving (or
- * guessing) the path inline.
- *
- * RUN: npx vitest run apps/studio/tests/regression/artifact-run-link-wiring.test.ts   (from apps/studio/)
+ * `app/artifact/page.tsx` cannot be render-tested (the standing reason at
+ * `detail-pages-fail-closed-wiring.test.ts`'s header), so its WIRING is pinned
+ * by source text, and the segment itself — `components/RunCrumb.tsx` — is
+ * rendered for real. The href derivation is unit-tested at
+ * `apps/studio/tests/unit/run-detail-href.test.ts`.
  */
 
 import { test, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+
+import { RunCrumb } from '../../components/RunCrumb';
+import type { Run } from '../../lib/studio-client';
 
 const ARTIFACT = readFileSync(resolve(__dirname, '..', '..', 'app/artifact/page.tsx'), 'utf8');
 
-test('imports the pure run-detail-href derivation rather than inlining a guess', () => {
-  expect(ARTIFACT).toMatch(/import \{ runDetailHref \} from '@\/lib\/run-detail-href'/);
+const CYCLE_ID = '2026-09-26T07-16-37_INIT-2026-09-26-exclude-author-flag';
+const run = { id: CYCLE_ID, flowId: 'forge-develop' } as unknown as Run;
+
+test('the page renders the run segment through RunCrumb, fed the resolved run', () => {
+  expect(ARTIFACT).toMatch(/import \{ RunCrumb \} from '@\/components\/RunCrumb'/);
+  expect(ARTIFACT).toMatch(/<RunCrumb run=\{run\} runId=\{runId\} \/>/);
 });
 
-test('the derived href is computed from the resolved run, not the raw query param', () => {
-  expect(ARTIFACT).toMatch(/const runHref = runDetailHref\(run\)/);
+test('a resolved run renders a[data-action="open-run"] to the run\'s own page', () => {
+  const html = renderToStaticMarkup(createElement(RunCrumb, { run, runId: CYCLE_ID }));
+  expect(html).toContain('data-action="open-run"');
+  expect(html).toContain(`href="/flows/forge-develop/run/${CYCLE_ID}"`);
 });
 
-test('the breadcrumb renders a link to the run\'s own detail page when the href resolved', () => {
-  expect(ARTIFACT).toMatch(
-    /\{runHref \? \(\s*<Link\s+href=\{runHref\}\s+data-action="open-run"/,
-  );
-});
-
-test('no run record falls through to the plain run-id text, never a guessed link', () => {
-  expect(ARTIFACT).toMatch(
-    /\{runHref \? \([\s\S]{0,400}\) : \(\s*<span>\{runId \|\| '—'\}<\/span>\s*\)\}/,
-  );
+test('no run record renders the plain id, never a guessed link', () => {
+  const html = renderToStaticMarkup(createElement(RunCrumb, { run: null, runId: CYCLE_ID }));
+  expect(html).not.toContain('<a');
+  expect(html).toContain(`<span>${CYCLE_ID}</span>`);
 });
