@@ -162,20 +162,31 @@ function mintPrivateRemote(plan) {
 }
 
 /**
- * Create the initiative's git worktree, then write the manifest (to
- * `_queue/pending/`) and `WI-1.md` (into the worktree's own
- * `.forge/work-items/`) — the exact hand-off shape `decideWorktreeStrategy`
- * reads as `reuse` (a preserved worktree + preserved hand-off work items).
+ * Just the `git worktree add` — split from `writeHandoffArtifacts` (below) so
+ * `main()` can mark `state.worktreeCreated = true` the instant the worktree
+ * DIRECTORY exists, before either the manifest or `WI-1.md` write is
+ * attempted. Neither of those is atomic the way `provisionFixtureGround` is
+ * (a write failure there leaves nothing behind); here, a worktree that exists
+ * with no manifest/WI yet is still real residue teardown must find and
+ * remove, not a state this driver can only reach after everything succeeds.
  */
 function createInitiativeWorktree(plan) {
   log(`creating worktree ${plan.worktreePath} on branch ${plan.branch}…`);
-  const handle = addWorktree({
+  return addWorktree({
     projectRepoPath: plan.projectRepoPath,
     branch: plan.branch,
     worktreesRoot: join(plan.forgeRoot, '_worktrees'),
     initiativeId: plan.initiativeId,
   });
+}
 
+/**
+ * Write the manifest (to `_queue/pending/`) and `WI-1.md` (into the
+ * worktree's own `.forge/work-items/`) — the exact hand-off shape
+ * `decideWorktreeStrategy` reads as `reuse` (a preserved worktree + preserved
+ * hand-off work items).
+ */
+function writeHandoffArtifacts(plan, handle) {
   const manifestPath = writeManifest(plan.manifest, { queueRoot: join(plan.forgeRoot, '_queue') });
   const wiPath = writeWorkItem(plan.workItem, plan.worktreePath);
   log(`manifest written: ${manifestPath}`);
@@ -187,10 +198,10 @@ function createInitiativeWorktree(plan) {
     handoffWorkItemsPresent: existsSync(wiPath),
   });
   if (strategy !== 'reuse') {
-    throw new Error(`createInitiativeWorktree: decideWorktreeStrategy says "${strategy}", expected "reuse" — the develop run would discard WI-1.md`);
+    throw new Error(`writeHandoffArtifacts: decideWorktreeStrategy says "${strategy}", expected "reuse" — the develop run would discard WI-1.md`);
   }
   log('decideWorktreeStrategy: reuse (confirmed)');
-  return { handle, manifestPath, wiPath, strategy };
+  return { manifestPath, wiPath, strategy };
 }
 
 /** Boot a fresh `forge studio` (never reuses a live one — see the module
@@ -470,8 +481,9 @@ async function main(argv) {
     mintPrivateRemote(plan);
     state.remoteMinted = true;
 
-    createInitiativeWorktree(plan);
-    state.worktreeCreated = true;
+    const handle = createInitiativeWorktree(plan);
+    state.worktreeCreated = true; // the worktree dir exists now — teardown must own it even if the next line throws
+    writeHandoffArtifacts(plan, handle);
 
     state.studio = await bootStudioStep(plan);
 
