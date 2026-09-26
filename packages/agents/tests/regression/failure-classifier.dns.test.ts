@@ -121,6 +121,48 @@ test('forge-8vfn.8.1.11: negative control — an ordinary non-DNS push rejection
 });
 
 // ---------------------------------------------------------------------------
+// forge-8vfn.8.1.24 / T1 ruling 1609 — PR-open's "error connecting to
+// api.github.com" text (gh's own connect-failure shape, distinct from the
+// resolver-error shapes forge-8vfn.8.1.11 covers above) must ALSO classify
+// environment/transient, and must beat the unifierNoDemo terminal rule that
+// also matches on `reviewer.pr-open-failed`.
+// ---------------------------------------------------------------------------
+
+test('forge-8vfn.8.1.24: "reviewer.pr-open-failed: error connecting to api.github.com" classifies environment + transient, NOT unifierNoDemo terminal', () => {
+  const events: EventLogEntry[] = [
+    ev({
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: 'error',
+      message: 'reviewer.pr-open-failed: error connecting to api.github.com',
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.environment, true, `expected environment:true, got ${JSON.stringify(c)}`);
+  assert.equal(c.kind, 'transient');
+  assert.equal(c.recoverable, true);
+  assert.doesNotMatch(c.reason, /unifier did not author the PR/);
+});
+
+test('forge-8vfn.8.1.24: negative control — a genuine missing-DEMO.md pr-open failure stays terminal unifierNoDemo', () => {
+  const events: EventLogEntry[] = [
+    ev({
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: 'error',
+      message:
+        'reviewer.pr-open-failed: unifier did not author a PR — missing prerequisites: demo/INIT-x/DEMO.md. ' +
+        'Dev-loop work items must produce their declared `creates:` paths before the unifier can build a demo bundle.',
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.environment, false, `expected environment:false, got ${JSON.stringify(c)}`);
+  assert.equal(c.kind, 'terminal');
+  assert.equal(c.recoverable, false);
+  assert.match(c.reason, /unifier did not author the PR/);
+});
+
+// ---------------------------------------------------------------------------
 // classifyCrash — each REQUIRED signature form, isolated
 // ---------------------------------------------------------------------------
 

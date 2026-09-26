@@ -20,107 +20,10 @@ import { join, resolve } from 'node:path';
 import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
 import type { EventLogger } from '@forge/kernel';
 import type { CycleInput } from './cycle-context.ts';
-import { DEMO_MD_BASENAME, worktreeDemoMdPath, worktreeDemoRelDir } from './demo-paths.ts';
-import { assertLocalRemoteSynced, checkLocalRemoteSynced, openPullRequest, pushInitiativeBranch } from './pr.ts';
+import { assertLocalRemoteSynced, checkLocalRemoteSynced, pushInitiativeBranch } from './pr.ts';
 import { loadProjectConfig } from '@forge/projects';
 import { decideFinalCiGate, execCommandVector } from './ci-gate.ts';
 import { resolveGateTimeoutMs } from '@forge/agents';
-
-// ---------------------------------------------------------------------------
-// openPrInline
-// ---------------------------------------------------------------------------
-
-/**
- * REV-6: inline PR-opening (previously `runReviewer`). Opens the PR from the
- * unifier-authored `.forge/pr-description.md`, emitting every event the old
- * `runReviewer` emitted (verbatim phase/skill/message values) so the forge-ui
- * phase hexes and e2e harness remain unaffected.
- *
- * Returns `ReviewerOutcome` — always `'pr-open'` on success, or throws with a
- * structured `unifier.prerequisite-missing` event on failure (matching the
- * former reviewer.ts behaviour exactly).
- */
-export async function openPrInline(
-  input: CycleInput,
-  logger: EventLogger,
-): Promise<import('./cycle-context.ts').ReviewerOutcome> {
-  const start = logger.emit({
-    initiative_id: input.initiativeId,
-    phase: 'review-loop',
-    skill: 'review-router',
-    event_type: 'start',
-    input_refs: [input.worktreePath, input.manifestPath],
-    output_refs: [],
-  });
-
-  const prDescriptionPath = resolve(input.worktreePath, '.forge', 'pr-description.md');
-  const prTitle = `forge: ${input.initiativeId}`;
-  const prUrl = openPullRequest(input.worktreePath, prDescriptionPath, prTitle);
-
-  logger.emit({
-    initiative_id: input.initiativeId,
-    parent_event_id: start.event_id,
-    phase: 'review-loop',
-    skill: 'review-router',
-    event_type: prUrl ? 'log' : 'error',
-    input_refs: [prDescriptionPath],
-    output_refs: prUrl ? [prUrl] : [],
-    message: prUrl ? 'reviewer.pr-opened' : 'reviewer.pr-open-failed',
-    metadata: { url: prUrl, pr_created: prUrl !== null },
-  });
-
-  if (!prUrl) {
-    // Resolved through the demo-path SSOT (plan 2.5 / N3): the diagnostic must
-    // name the path the unifier actually authors (artifactRoot-resolved), or a
-    // clean delivery on an artifactRoot project reads as "demo missing" at a
-    // location nothing writes to (the 2026-07-05 false-negative theme).
-    const demoMdPath = worktreeDemoMdPath(input.worktreePath, input.initiativeId);
-    const demoMdRel = `${worktreeDemoRelDir(input.worktreePath, input.initiativeId)}/${DEMO_MD_BASENAME}`;
-    const prDescPath = resolve(input.worktreePath, '.forge', 'pr-description.md');
-    const missing: string[] = [];
-    if (!existsSync(demoMdPath)) missing.push(demoMdRel);
-    if (!existsSync(prDescPath)) missing.push('.forge/pr-description.md');
-    logger.emit({
-      initiative_id: input.initiativeId,
-      parent_event_id: start.event_id,
-      phase: 'review-loop',
-      skill: 'review-router',
-      event_type: 'error',
-      input_refs: [input.worktreePath],
-      output_refs: [],
-      message: 'unifier.prerequisite-missing',
-      metadata: { missing, demo_md_path: demoMdPath, pr_description_path: prDescPath },
-    });
-    logger.emit({
-      initiative_id: input.initiativeId,
-      parent_event_id: start.event_id,
-      phase: 'review-loop',
-      skill: 'review-router',
-      event_type: 'end',
-      input_refs: [input.worktreePath],
-      output_refs: [input.worktreePath],
-      metadata: { outcome: 'failed', pr_url: null, missing_prerequisites: missing },
-    });
-    throw new Error(
-      `reviewer.pr-open-failed: unifier did not author a PR — missing prerequisites: ${missing.join(', ')}. ` +
-        `Dev-loop work items must produce their declared \`creates:\` paths before the unifier can build a demo bundle.`,
-    );
-  }
-
-  const outcome: import('./cycle-context.ts').ReviewerOutcome = 'pr-open';
-  logger.emit({
-    initiative_id: input.initiativeId,
-    parent_event_id: start.event_id,
-    phase: 'review-loop',
-    skill: 'review-router',
-    event_type: 'end',
-    input_refs: [input.worktreePath],
-    output_refs: [prUrl],
-    metadata: { outcome, pr_url: prUrl },
-  });
-
-  return outcome;
-}
 
 // ---------------------------------------------------------------------------
 // preservingForgeScratch

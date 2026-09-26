@@ -49,9 +49,13 @@ import { extname, join } from 'node:path';
 import { DEMO_MD_BASENAME, worktreeDemoDir, worktreeDemoJsonPath, worktreeDemoRelDir } from './demo-paths.ts';
 
 /**
- * Best-effort PR creation via `gh pr create`. Returns the PR URL on success,
- * or null on failure. The reviewer's PR-description draft lives at
- * `<worktree>/.forge/pr-description.md` and is passed via `--body-file`.
+ * Best-effort PR creation via `gh pr create`. Returns `{ url }` on success,
+ * `{ error }` on failure — bead `forge-8vfn.8.1.24` / T1 ruling 1609: this
+ * NEVER returns a bare null. A caller that only logged to stderr and returned
+ * null had no way to tell a DNS outage from a genuinely missing demo bundle,
+ * so the cause never reached the event log or the failure classifier. The
+ * reviewer's PR-description draft lives at `<worktree>/.forge/pr-description.md`
+ * and is passed via `--body-file`.
  *
  * Pushes the local branch to the remote first; `gh pr create` requires the
  * branch to exist on origin. W4 trial caught this — pre-fix, openPullRequest
@@ -214,11 +218,15 @@ export function resolveRepoIsPrivate(worktreePath: string): boolean {
   }
 }
 
+/** Bead `forge-8vfn.8.1.24` / T1 ruling 1609: `openPullRequest`'s discriminated
+ *  result — `{ url }` on success, `{ error }` naming the cause on failure. */
+export type OpenPullRequestResult = { url: string } | { error: string };
+
 export function openPullRequest(
   worktreePath: string,
   prDescriptionPath: string,
   title: string,
-): string | null {
+): OpenPullRequestResult {
   try {
     // Determine the current branch in the worktree.
     const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
@@ -226,7 +234,9 @@ export function openPullRequest(
       stdio: 'pipe',
       encoding: 'utf8',
     }).trim();
-    if (!branch || branch === 'HEAD') return null;
+    if (!branch || branch === 'HEAD') {
+      return { error: 'no branch: HEAD is unborn or detached in this worktree' };
+    }
 
     const initiativeId = basenameInitiativeId(branch);
 
@@ -289,20 +299,23 @@ export function openPullRequest(
       } catch {
         /* body refresh is best-effort — the new commits are already on the PR */
       }
-      return existing.url;
+      return { url: existing.url };
     }
 
     const out = ghForWorktree(worktreePath)(['pr', 'create', '--body-file', bodyFile, '--title', title], worktreePath);
     const match = out.match(/https:\S+/);
-    return match ? match[0] : out.trim() || null;
+    const url = match ? match[0] : out.trim();
+    if (!url) return { error: 'gh pr create produced no PR URL in its output' };
+    return { url };
   } catch (err) {
-    // Surface the failure on stderr so the operator sees what went wrong;
-    // openPullRequest's nullable return is otherwise opaque.
+    // Surface the failure on stderr so the operator sees what went wrong,
+    // AND return it — bead forge-8vfn.8.1.24: a caller that only got null
+    // could never tell an environment outage from a genuine defect.
     const e = err as { stderr?: Buffer | string; message?: string };
     const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() ?? '';
-    if (stderr) process.stderr.write(`[openPullRequest] ${stderr}\n`);
-    else if (e.message) process.stderr.write(`[openPullRequest] ${e.message}\n`);
-    return null;
+    const text = stderr || e.message || 'openPullRequest failed with no diagnostic message';
+    process.stderr.write(`[openPullRequest] ${text}\n`);
+    return { error: text };
   }
 }
 

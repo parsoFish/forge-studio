@@ -56,8 +56,8 @@ import { resolveQualityGateCmd } from './cycle-context.ts';
 // dependency (flow-runner.ts imports them; cycle.ts imports runFlow from
 // flow-runner.ts). Re-exported here so callers that import from './cycle.ts'
 // are unaffected.
+export { openPrInline } from './cycle-pr-open.ts';
 export {
-  openPrInline,
   preservingForgeScratch,
   assertNonEmptyDelivery,
   commitDevLoopBoundary,
