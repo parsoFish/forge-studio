@@ -26,6 +26,7 @@ import type { DemoStep } from '@forge/contracts';
 import type { MergeGateEvidence } from '@forge/flows';
 
 import type { DemoModel, DemoModelCheckpoint, TestResultRow } from '../demo-model.ts';
+import { isSafeDemoRoute } from '../demo-types.ts';
 import type { GateProfile } from '../class-profile-port.ts';
 
 /**
@@ -127,6 +128,34 @@ function captureCheckpoints(steps: readonly DemoStep[]): { checkpoints: DemoMode
   return { checkpoints, errors };
 }
 
+/**
+ * Checkpoints derived DIRECTLY from the initiative's own acceptance criteria
+ * (forge-mfv5.1.7), ahead of the project's general `demoProcess` checkpoints:
+ * the strongest evidence link a demo can carry is one that ties a checkpoint
+ * to the exact criterion it proves, rather than to the project's generic demo
+ * declaration. An AC whose WHEN clause names, in an inline-code span, a bare
+ * command becomes a CLI checkpoint; one that names an in-app route (starting
+ * `/`, no traversal — `isSafeDemoRoute`) becomes a browser checkpoint. An AC
+ * that names neither contributes nothing here — that is not an error, it just
+ * means the project's demoProcess is this AC's only evidence source. Order
+ * follows the AC list's own order (WI order).
+ */
+function acDerivedCheckpoints(criteria: readonly AcceptanceCriterionInput[]): DemoModelCheckpoint[] {
+  const checkpoints: DemoModelCheckpoint[] = [];
+  criteria.forEach((ac, i) => {
+    const code = inlineCodeSpan(ac.when);
+    if (code === null || code.length === 0) return;
+    const label = `AC ${i + 1}: ${ac.workItemId}`;
+    const caption = ac.then.trim();
+    if (code.startsWith('/')) {
+      if (isSafeDemoRoute(code)) checkpoints.push({ label, caption, route: code });
+      return;
+    }
+    if (!SHELL_METACHARACTERS.test(code)) checkpoints.push({ label, caption, command: code });
+  });
+  return checkpoints;
+}
+
 /** The one checkpoint a class that captures no commands still needs to be a valid demo. */
 function diffCheckpoint(input: DerivedDemoInput): DemoModelCheckpoint {
   const files = input.changedFiles.length;
@@ -167,24 +196,45 @@ function testEvidenceRows(gateEvidence: readonly GateEvidenceRow[]): TestResultR
  * The one-line essence. Derived from counts the orchestrator measured, so it
  * states what happened rather than characterising it — the previous author's
  * prose essence is exactly the kind of claim nothing could check.
+ *
+ * `acDrivenCheckpoints` (only meaningful for `capture: 'checkpoints'`) names
+ * the fallback out loud when zero ACs named anything drivable — silently
+ * falling back to the project's declaration is exactly the kind of gap a
+ * reviewer needs told, not left to infer from an AC table with no evidence
+ * link.
  */
-function essenceOf(input: DerivedDemoInput): string {
+function essenceOf(input: DerivedDemoInput, acDrivenCheckpoints = 0): string {
   const wis = input.workItems.length;
   const acs = input.acceptanceCriteria.length;
   const gates = input.gateEvidence.length;
-  return (
+  const base =
     `${input.title} — ${wis} work item${wis === 1 ? '' : 's'} delivered against ` +
-    `${acs} acceptance ${acs === 1 ? 'criterion' : 'criteria'}, ${gates} merge-boundary gate${gates === 1 ? '' : 's'} run.`
-  );
+    `${acs} acceptance ${acs === 1 ? 'criterion' : 'criteria'}, ${gates} merge-boundary gate${gates === 1 ? '' : 's'} run.`;
+  if (input.capture === 'checkpoints' && acDrivenCheckpoints === 0) {
+    return (
+      `${base} no acceptance criterion names a drivable command or route — ` +
+      `checkpoints come from the project's demo declaration.`
+    );
+  }
+  return base;
 }
 
 /** Derive the demo model, or report every config error that stopped it. */
 export function deriveDemoModel(input: DerivedDemoInput): DeriveDemoResult {
   let checkpoints: DemoModelCheckpoint[];
+  let acDrivenCheckpoints = 0;
   if (input.capture === 'checkpoints') {
+    const acCheckpoints = acDerivedCheckpoints(input.acceptanceCriteria);
     const derived = captureCheckpoints(input.demoProcess);
     if (derived.errors.length > 0) return { ok: false, errors: derived.errors };
-    checkpoints = derived.checkpoints;
+    const acCommands = new Set(
+      acCheckpoints.map((c) => c.command).filter((c): c is string => c !== undefined),
+    );
+    const dedupedProcessCheckpoints = derived.checkpoints.filter(
+      (c) => c.command === undefined || !acCommands.has(c.command),
+    );
+    checkpoints = [...acCheckpoints, ...dedupedProcessCheckpoints];
+    acDrivenCheckpoints = acCheckpoints.length;
   } else if (input.capture === 'plan-output') {
     checkpoints = [planOutputCheckpoint(input)];
   } else {
@@ -193,7 +243,7 @@ export function deriveDemoModel(input: DerivedDemoInput): DeriveDemoResult {
 
   const model: DemoModel = {
     title: input.title,
-    essence: essenceOf(input),
+    essence: essenceOf(input, acDrivenCheckpoints),
     project: input.project,
     initiativeId: input.initiativeId,
     changedRef: input.headSha,

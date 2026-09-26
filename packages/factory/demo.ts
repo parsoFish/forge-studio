@@ -123,8 +123,12 @@ export type CaptureCheckpointsInput = {
   /** Directory where before/<label>.png + after/<label>.png are written. */
   bundleDir: string;
   initiativeId?: string;
-  /** Labels to screenshot — each yields before/<label>.png + after/<label>.png. */
-  checkpointLabels: string[];
+  /**
+   * Checkpoints to screenshot — each yields before/<label>.png + after/<label>.png.
+   * An AC-derived browser checkpoint (forge-mfv5.1.7) carries `route`: the
+   * in-app path navigated to (`server.url + route`) instead of the server root.
+   */
+  checkpointLabels: Array<{ label: string; route?: string }>;
   /** CLI/output checkpoints — each runs `command` in the before+after worktree and
    *  captures stdout to before/<label>.out + after/<label>.out (the real terminal
    *  output the demo shows side-by-side, instead of a hand-written prose note). */
@@ -239,14 +243,14 @@ export async function captureCheckpoints(
         const server = await startServer(wt.path);
         if (!server) continue;
         try {
-          for (const label of input.checkpointLabels) {
+          for (const { label, route } of input.checkpointLabels) {
             // recordBrowser's filmstrip (its last frame is the final outlined
             // still) binds as the checkpoint's image; there is no separate PNG.
             try {
               await recordBrowser({
                 side,
                 label: checkpointArtifactStem(label),
-                url: server.url,
+                url: route ? `${server.url}${route}` : server.url,
                 bundleDir,
               });
               captured.push(label);

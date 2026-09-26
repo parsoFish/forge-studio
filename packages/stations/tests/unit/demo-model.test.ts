@@ -487,6 +487,23 @@ test('validateDemoModel: rejects a blank command + oversize captured output', ()
   assert.ok(errs.some((e) => e.includes('beforeOutput exceeds')), `oversize error, got ${errs}`);
 });
 
+test('validateDemoModel: accepts a valid checkpoint route and rejects an unsafe one', () => {
+  const base = { title: 'T', essence: 'E', project: 'p', diffStat: 'd' };
+  const ok = validateDemoModel({ ...base, checkpoints: [{ label: 'c', caption: 'c', route: '/reports/latest' }] });
+  assert.deepEqual(ok, []);
+  const bad = validateDemoModel({ ...base, checkpoints: [{ label: 'c', caption: 'c', route: '/reports/../secret' }] });
+  assert.ok(bad.some((e) => e.includes('route must be an absolute in-app path')), `expected a route error, got ${bad}`);
+});
+
+test('validateDemoModel: accepts valid checkpoint delta values and rejects an invalid one', () => {
+  const base = { title: 'T', essence: 'E', project: 'p', diffStat: 'd' };
+  for (const delta of ['changed', 'unchanged', 'unknown']) {
+    assert.deepEqual(validateDemoModel({ ...base, checkpoints: [{ label: 'c', caption: 'c', delta }] }), []);
+  }
+  const bad = validateDemoModel({ ...base, checkpoints: [{ label: 'c', caption: 'c', delta: 'maybe' }] });
+  assert.ok(bad.some((e) => e.includes('delta must be one of')), `expected a delta error, got ${bad}`);
+});
+
 test('collectCapturedMedia: picks up before/<label>.out + after/<label>.out as captured stdout', () => {
   const dir = mkdtempSync(join(tmpdir(), 'demo-cap-out-'));
   mkdirSync(join(dir, 'before'), { recursive: true });

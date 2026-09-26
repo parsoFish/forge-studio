@@ -105,6 +105,80 @@ describe('deriveDemoModel — the class decides what evidence is captured', () =
   });
 });
 
+describe('deriveDemoModel — AC-derived checkpoints come first (forge-mfv5.1.7)', () => {
+  it('kills "the strongest evidence link is dropped": a command named in an AC\'s WHEN clause becomes a checkpoint ahead of the demoProcess checkpoints', () => {
+    const model = modelOf(
+      baseInput({
+        acceptanceCriteria: [
+          { workItemId: 'WI-1', given: 'a fixture repo', when: 'run `npm run report` to view it', then: 'a report prints' },
+        ],
+      }),
+    );
+    assert.equal(model.checkpoints.length, 2);
+    assert.deepEqual(
+      { label: model.checkpoints[0]?.label, caption: model.checkpoints[0]?.caption, command: model.checkpoints[0]?.command },
+      { label: 'AC 1: WI-1', caption: 'a report prints', command: 'npm run report' },
+    );
+    assert.equal(model.checkpoints[1]?.command, 'npm run demo', 'the demoProcess checkpoint still follows');
+  });
+
+  it('kills "a route AC becomes a fake command": a route named in an AC\'s WHEN clause becomes a browser checkpoint (route set, no command)', () => {
+    const model = modelOf(
+      baseInput({
+        acceptanceCriteria: [
+          { workItemId: 'WI-2', given: 'a fixture repo', when: 'visit `/reports/latest` to see it', then: 'the report renders' },
+        ],
+      }),
+    );
+    const acCp = model.checkpoints.find((c) => c.label === 'AC 1: WI-2');
+    assert.equal(acCp?.route, '/reports/latest');
+    assert.equal(acCp?.command, undefined);
+  });
+
+  it('kills "the same command runs twice": a demoProcess capture step whose command duplicates an AC-derived one is deduplicated', () => {
+    const model = modelOf(
+      baseInput({
+        acceptanceCriteria: [
+          { workItemId: 'WI-1', given: 'a fixture repo', when: 'run `npm run demo` to see it', then: 'a report prints' },
+        ],
+        demoProcess: [CAPTURE_STEP],
+      }),
+    );
+    assert.equal(model.checkpoints.length, 1, 'the demoProcess checkpoint for the same command must not duplicate the AC one');
+    assert.equal(model.checkpoints[0]?.label, 'AC 1: WI-1');
+  });
+
+  it('kills "a route with `..` is treated as safe": an AC route containing `..` contributes no checkpoint', () => {
+    const model = modelOf(
+      baseInput({
+        acceptanceCriteria: [
+          { workItemId: 'WI-1', given: 'a fixture repo', when: 'visit `/reports/../secret` to see it', then: 'nothing leaks' },
+        ],
+      }),
+    );
+    assert.equal(model.checkpoints.some((c) => c.label.startsWith('AC ')), false, 'an unsafe route must not become a checkpoint');
+  });
+
+  it('kills "nothing drivable, silently": the essence names the fallback when no AC names a drivable command or route', () => {
+    const model = modelOf(baseInput());
+    assert.match(
+      model.essence,
+      /no acceptance criterion names a drivable command or route — checkpoints come from the project's demo declaration/,
+    );
+  });
+
+  it('kills "the fallback sentence sticks around": the essence carries no fallback sentence once an AC IS drivable', () => {
+    const model = modelOf(
+      baseInput({
+        acceptanceCriteria: [
+          { workItemId: 'WI-1', given: 'a fixture repo', when: 'run `npm run report` to view it', then: 'a report prints' },
+        ],
+      }),
+    );
+    assert.doesNotMatch(model.essence, /no acceptance criterion names a drivable command or route/);
+  });
+});
+
 describe('deriveDemoModel — what it refuses to invent', () => {
   it('kills self-grading: the derived model carries NO per-criterion verdict, whatever the input', () => {
     // `DemoModel` no longer DECLARES a verdict field — the reviewer owns it

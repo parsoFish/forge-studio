@@ -28,7 +28,7 @@ import type {
   DemoApiDiffEntry,
   TestResultRow,
 } from './demo-types.ts';
-import { MAX_INLINE_IMAGE_BYTES, checkpointArtifactStem } from './demo-types.ts';
+import { MAX_INLINE_IMAGE_BYTES, checkpointArtifactStem, isSafeDemoRoute } from './demo-types.ts';
 
 /** Cap on a checkpoint's captured stdout (before/after). Terminal output is small;
  *  a runaway command (a server log, an infinite loop) is truncated to this at capture. */
@@ -54,6 +54,20 @@ export type DemoModelCheckpoint = {
   /** Captured stdout of `command` on the before/after worktree (filled by capture). */
   beforeOutput?: string | null;
   afterOutput?: string | null;
+  /**
+   * For a browser/screenshot checkpoint DERIVED from an acceptance criterion
+   * (forge-mfv5.1.7): the in-app route `forge demo capture` navigates to
+   * (`server.url + route`), rather than the server root. An absolute path,
+   * no traversal (`isSafeDemoRoute`, `@forge/stations/demo-types.ts`).
+   */
+  route?: string;
+  /**
+   * Delta honesty (forge-mfv5.1.7): whether THIS checkpoint's captured before
+   * vs after evidence actually differs. Computed post-capture from the real
+   * bytes — never authored — and fails closed: 'unknown' (a missing/unreadable
+   * side) is never treated as a claim of change.
+   */
+  delta?: 'changed' | 'unchanged' | 'unknown';
   /** Harness metric rows (paired before/after). Optional. */
   metrics?: HarnessMetricRow[];
   /** Optional captured media — `data:image/...` ONLY (validator rejects schemes). */
@@ -194,6 +208,13 @@ export function validateDemoModel(raw: unknown): string[] {
       // and the captured before/after outputs (filled by `forge demo capture`).
       if (cp.command !== undefined && (typeof cp.command !== 'string' || cp.command.trim() === '')) {
         errors.push(`${at}.command must be a non-empty string when set (a bare argv command, no shell)`);
+      }
+      if (cp.route !== undefined && (typeof cp.route !== 'string' || !isSafeDemoRoute(cp.route))) {
+        errors.push(`${at}.route must be an absolute in-app path with no traversal when set (got ${JSON.stringify(cp.route)})`);
+      }
+      const validDeltas = new Set(['changed', 'unchanged', 'unknown']);
+      if (cp.delta !== undefined && !validDeltas.has(cp.delta as string)) {
+        errors.push(`${at}.delta must be one of changed|unchanged|unknown when set (got ${JSON.stringify(cp.delta)})`);
       }
       for (const f of ['beforeOutput', 'afterOutput'] as const) {
         const v = cp[f];

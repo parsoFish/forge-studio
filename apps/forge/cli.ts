@@ -781,13 +781,16 @@ async function cmdDemo(rest: string[]): Promise<void> {
       const { CAPTURE_NONCE_ENV } = await import('@forge/flows');
       const bundleDir = join(demoDir, '.capture');
       const demoJson = JSON.parse(readFileSync(jsonPath, 'utf8'));
-      const cps = (demoJson?.checkpoints ?? []) as Array<{ label?: string; command?: string }>;
+      const cps = (demoJson?.checkpoints ?? []) as Array<{ label?: string; command?: string; route?: string }>;
       // A checkpoint with a `command` captures real CLI stdout (before/after); one
-      // without is a browser screenshot checkpoint.
+      // without is a browser screenshot checkpoint — an AC-derived one (forge-mfv5.1.7)
+      // may carry `route`, the in-app path to navigate to instead of the server root.
       const checkpointCommands = cps
         .filter((c) => c.label && typeof c.command === 'string' && c.command.trim())
         .map((c) => ({ label: c.label as string, command: c.command as string }));
-      const labels = cps.filter((c) => c.label && !c.command).map((c) => c.label as string);
+      const labels = cps
+        .filter((c) => c.label && !c.command)
+        .map((c) => ({ label: c.label as string, route: typeof c.route === 'string' ? c.route : undefined }));
       await captureCheckpoints({ projectRepoPath, project: projectArg ?? '(local)', baseRef, changedRef, bundleDir, initiativeId, checkpointLabels: labels, checkpointCommands, build: true });
       const captured = collectCapturedMedia(bundleDir);
       const merged = mergeCapturedMedia(JSON.parse(readFileSync(jsonPath, 'utf8')), captured);
