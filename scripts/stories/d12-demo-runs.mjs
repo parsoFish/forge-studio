@@ -52,7 +52,7 @@ import {
 } from './d12-demo-runs-core.mjs';
 import { provisionFixtureGround, teardownFixtureGround } from './fixture-ground.mjs';
 import { sweepStoryRemotesFromManifest } from './sweep-remotes.mjs';
-import { removeInitiativeWorktree, deleteLocalBranch, removeQueueManifest } from './d12-demo-runs-teardown.mjs';
+import { removeInitiativeWorktree, deleteLocalBranch, removeQueueManifest, manifestQueueState } from './d12-demo-runs-teardown.mjs';
 import { spawnStudioReady } from '../lib/boot-studio.mjs';
 import { createStageTwo } from '../verify-cycle-stage2.mjs';
 import { classifyServeStageOutcome } from '../verify-cycle-stage-outcome.mjs';
@@ -263,20 +263,25 @@ function developOutcomeState(plan) {
  * so a pass that printed a phase failure or no outcome at all is named, not
  * silently retried into a false "it worked eventually".
  */
-async function waitForDevelopOutcome(plan) {
+async function waitForDevelopOutcome(plan, evidence) {
   for (let pass = 1; pass <= MAX_SERVE_PASSES; pass++) {
+    evidence.mark(`before serve pass ${pass}`);
     log(`spawning forge serve --once (pass ${pass}/${MAX_SERVE_PASSES})…`);
     const proc = spawnServeOnce(plan);
     const captured = [];
+    const raw = { stdout: '', stderr: '' };
     const cap = (d) => { for (const l of String(d).split('\n')) if (l.trim()) captured.push(l); };
-    proc.stdout.on('data', cap);
-    proc.stderr.on('data', cap);
+    proc.stdout.on('data', (d) => { raw.stdout += String(d); cap(d); });
+    proc.stderr.on('data', (d) => { raw.stderr += String(d); cap(d); });
     const exit = await new Promise((res) => {
       const timer = setTimeout(() => { try { proc.kill('SIGKILL'); } catch { /* gone */ } }, SERVE_ONCE_TIMEOUT_MS);
       proc.on('exit', (code) => { clearTimeout(timer); res(code); });
     });
     const outcome = classifyServeStageOutcome(captured);
     log(`serve --once (pass ${pass}) exited ${exit} — ${outcome.ok ? 'ok' : `FAILED: ${outcome.errors.join('; ')}`}`);
+    evidence.save(`serve-pass-${pass}.stdout.log`, raw.stdout);
+    evidence.save(`serve-pass-${pass}.stderr.log`, raw.stderr);
+    evidence.mark(`after serve pass ${pass} (exit ${exit})`);
 
     const state = developOutcomeState(plan);
     if (state !== null) return { state, passes: pass, lastOutcome: outcome };
@@ -333,6 +338,51 @@ function readArtifacts(plan) {
 
   const webmSizes = collectWebmSizes(dirname(demoJsonPath));
   return { demoJsonPath, demoJson, prBody, webmSizes };
+}
+
+/**
+ * The run's evidence beside its report: each serve pass's raw output, the manifest's `_queue` state at every step
+ * (which process moved it is read from these marks against the serve logs), and the bridge daemon's own serve.log
+ * tail — Studio's bridge can run a scheduler daemon in this same tree that would claim the manifest first.
+ */
+function makeEvidence(plan, reportPath) {
+  const dir = `${reportPath.replace(/\.json$/, '')}-evidence`;
+  mkdirSync(dir, { recursive: true });
+  const trail = [];
+  const save = (name, text) => {
+    try {
+      writeFileSync(join(dir, name), text);
+    } catch (err) {
+      process.stderr.write(`[d12-demo-runs] could not save evidence ${name}: ${err?.message ?? err}\n`);
+    }
+  };
+  return {
+    dir,
+    trail,
+    save,
+    mark(at) {
+      const state = manifestQueueState(plan.forgeRoot, plan.initiativeId);
+      trail.push({ at, state, t: new Date().toISOString() });
+      log(`queue: ${plan.initiativeId} is ${state} (${at})`);
+    },
+    bridgeDaemon() {
+      const daemonDir = join(plan.forgeRoot, '_logs', 'daemon');
+      let tail = '(no _logs/daemon/serve.log)';
+      try {
+        tail = readFileSync(join(daemonDir, 'serve.log'), 'utf8').split('\n').slice(-200).join('\n');
+      } catch (err) {
+        if (err?.code !== 'ENOENT') tail = `(unreadable: ${err?.code ?? err?.message})`;
+      }
+      let pid = '(no forge.pid)';
+      try {
+        const p = Number(readFileSync(join(daemonDir, 'forge.pid'), 'utf8').trim());
+        pid = `${p} ${existsSync(`/proc/${p}`) ? 'alive' : 'gone'}`;
+      } catch (err) {
+        if (err?.code !== 'ENOENT') pid = `(unreadable: ${err?.code ?? err?.message})`;
+      }
+      save('bridge-serve.log.tail', `daemon pid: ${pid}\n${tail}\n`);
+    },
+  };
 }
 
 /** What a dry run actually proves, each read back from what it wrote — never assumed from having written it. */
@@ -506,6 +556,7 @@ async function main(argv) {
   const state = { groundProvisioned: false, remoteMinted: false, worktreeCreated: false, studio: null, cycleId: null };
   let exitCode = 0;
   // One report, written in `finally` AFTER teardown, so it always exists and always carries teardown's own result.
+  const evidence = makeEvidence(plan, opts.reportPath);
   let report = { kind: plan.kind, mode: opts.dryRun ? 'dry-run' : 'live', initiativeId: plan.initiativeId, remoteName: plan.remoteName };
   try {
     provisionGround(plan);
@@ -535,7 +586,8 @@ async function main(argv) {
 
     const handoff = await handoffToDevelop(plan, state.studio.bridgeUrl);
     state.cycleId = handoff?.cycleId ?? null;
-    const outcome = await waitForDevelopOutcome(plan);
+    evidence.mark('after develop/start');
+    const outcome = await waitForDevelopOutcome(plan, evidence);
     log(`develop outcome: ${outcome.state} (${outcome.passes} pass(es))`);
 
     const artifacts = readArtifacts(plan);
@@ -563,9 +615,11 @@ async function main(argv) {
     report = { ...report, error: err?.message ?? String(err) };
     exitCode = 1;
   } finally {
+    evidence.mark('before teardown');
+    evidence.bridgeDaemon();
     const teardown = await runTeardown(plan, state, { keepRemote: opts.keepRemote });
     if (teardown.some((l) => !l.ok)) exitCode = 1;
-    writeEvidenceReport(opts.reportPath, { ...report, teardown });
+    writeEvidenceReport(opts.reportPath, { ...report, evidenceDir: evidence.dir, queueTrail: evidence.trail, teardown });
   }
   process.exitCode = exitCode;
 }

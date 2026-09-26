@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { removeInitiativeWorktree, deleteLocalBranch, removeQueueManifest } from './d12-demo-runs-teardown.mjs';
+import { removeInitiativeWorktree, deleteLocalBranch, removeQueueManifest, manifestQueueState } from './d12-demo-runs-teardown.mjs';
 
 function sh(cwd, args) {
   return execFileSync('git', args, { cwd, stdio: 'pipe', encoding: 'utf8' });
@@ -174,7 +174,21 @@ describe('removeQueueManifest', () => {
     const forgeRoot = makeQueueRoot();
     try {
       const r = removeQueueManifest(forgeRoot, 'INIT-2026-09-27-d12-nowhere');
-      assert.deepEqual(r, { removed: false, reason: 'not found in any _queue/ state dir' });
+      assert.deepEqual(r, { removed: false, reason: 'already absent' }); // the reason runTeardown treats as absent, not as a failure
+    } finally {
+      rmSync(forgeRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('manifestQueueState', () => {
+  test('names the one _queue state dir holding the manifest, and absent when none does', () => {
+    const forgeRoot = mkdtempSync(join(tmpdir(), 'd12-qstate-'));
+    try {
+      mkdirSync(join(forgeRoot, '_queue', 'in-flight'), { recursive: true });
+      writeFileSync(join(forgeRoot, '_queue', 'in-flight', 'INIT-x.md'), '---\n');
+      assert.equal(manifestQueueState(forgeRoot, 'INIT-x'), 'inFlight');
+      assert.equal(manifestQueueState(forgeRoot, 'INIT-y'), 'absent');
     } finally {
       rmSync(forgeRoot, { recursive: true, force: true });
     }

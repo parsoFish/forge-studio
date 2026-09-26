@@ -89,10 +89,19 @@ export function deleteLocalBranch(projectRepoPath, branch) {
  * @param {string} initiativeId
  * @returns {{removed: boolean, state?: string, path?: string, reason?: string}}
  */
+const QUEUE_STATES = /** @type {const} */ (['pending', 'inFlight', 'readyForReview', 'merged', 'done', 'failed']);
+
+/** Which `_queue/<state>/` holds this run's manifest right now (the getPaths key), or `absent`. Evidence only: it moves nothing. */
+export function manifestQueueState(forgeRoot, initiativeId) {
+  const paths = getPaths(join(forgeRoot, '_queue'));
+  const found = QUEUE_STATES.find((state) => existsSync(join(paths[state], `${initiativeId}.md`)));
+  return found ?? 'absent';
+}
+
 export function removeQueueManifest(forgeRoot, initiativeId) {
   const paths = getPaths(join(forgeRoot, '_queue'));
   const filename = `${initiativeId}.md`;
-  const states = /** @type {const} */ (['pending', 'inFlight', 'readyForReview', 'merged', 'done', 'failed']);
+  const states = QUEUE_STATES;
   for (const state of states) {
     const full = join(paths[state], filename);
     if (existsSync(full)) {
@@ -100,5 +109,5 @@ export function removeQueueManifest(forgeRoot, initiativeId) {
       return { removed: true, state, path: full };
     }
   }
-  return { removed: false, reason: 'not found in any _queue/ state dir' };
+  return { removed: false, reason: 'already absent' };
 }
