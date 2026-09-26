@@ -23,6 +23,7 @@ import {
   renderWorkItem,
   renderPlanOnly,
   judgeRun,
+  hardClauseFailures,
 } from './d12-demo-runs-core.mjs';
 
 import { parseManifest } from '../../packages/flows/manifest.ts';
@@ -471,3 +472,15 @@ describe('--plan-only', () => {
     }, /Command failed/);
   });
 });
+
+test('hardClauseFailures names every failing HARD clause with its detail, and ignores advisory ones (row 128)', () => {
+  const report = { ok: false, clauses: [
+    { clause: 'C1', hard: true, pass: true, detail: 'ok' },
+    { clause: 'C4', hard: true, pass: false, detail: 'missing brain/projects/x/profile.md' },
+    { clause: 'DEMO-SKILL', hard: false, pass: false, detail: 'advisory' },
+  ] };
+  assert.deepEqual(hardClauseFailures(report), ['C4: missing brain/projects/x/profile.md']);
+  assert.deepEqual(hardClauseFailures({ ok: true, clauses: [{ clause: 'C4', hard: true, pass: true, detail: '' }] }), []);
+  assert.deepEqual(hardClauseFailures(undefined), ['preflight report unavailable'], 'an absent report is never "no failures"');
+});
+

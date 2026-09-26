@@ -49,7 +49,9 @@ import {
   planRun,
   renderPlanOnly,
   judgeRun,
+  hardClauseFailures,
 } from './d12-demo-runs-core.mjs';
+import { runPreflight } from '../../packages/projects/preflight.ts';
 import { provisionFixtureGround, teardownFixtureGround } from './fixture-ground.mjs';
 import { sweepStoryRemotesFromManifest } from './sweep-remotes.mjs';
 import { removeInitiativeWorktree, deleteLocalBranch, removeQueueManifest, manifestQueueState } from './d12-demo-runs-teardown.mjs';
@@ -396,6 +398,11 @@ function verifyDryRun(plan, written) {
     }
   };
   return {
+    hardClauses: check(() => {
+      const failing = hardClauseFailures(runPreflight(plan.projectRepoPath, { forgeRoot: plan.forgeRoot }));
+      if (failing.length > 0) throw new Error(`HARD preflight clause(s) fail — the develop claim would be refused: ${failing.join('; ')}`);
+      return 'every HARD clause passes';
+    }),
     manifestParses: check(() => {
       const m = parseManifest(readFileSync(written.manifestPath, 'utf8'));
       if (m?.initiative_id !== plan.initiativeId) throw new Error(`parsed initiative_id ${m?.initiative_id} ≠ ${plan.initiativeId}`);
@@ -584,6 +591,9 @@ async function main(argv) {
       return;
     }
 
+    // Never hand off a ground the scheduler would refuse to claim — name the clauses instead (row 128).
+    const failing = hardClauseFailures(runPreflight(plan.projectRepoPath, { forgeRoot: plan.forgeRoot }));
+    if (failing.length > 0) throw new Error(`HARD preflight clause(s) fail, so the develop claim would be refused: ${failing.join('; ')}`);
     const handoff = await handoffToDevelop(plan, state.studio.bridgeUrl);
     state.cycleId = handoff?.cycleId ?? null;
     evidence.mark('after develop/start');

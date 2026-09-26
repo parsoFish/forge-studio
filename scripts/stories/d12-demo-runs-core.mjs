@@ -219,6 +219,15 @@ const RUN_SPECS = Object.freeze({
 });
 
 /**
+ * Every HARD preflight clause that fails, as `<clause>: <detail>` — the scheduler refuses a develop claim on any of
+ * them (forge-1rk5.3 / row 128). An absent or malformed report is itself a failure: it is never "nothing failed".
+ */
+export function hardClauseFailures(report) {
+  if (!report || !Array.isArray(report.clauses)) return ['preflight report unavailable'];
+  return report.clauses.filter((c) => c.hard && !c.pass).map((c) => `${c.clause}: ${c.detail}`);
+}
+
+/**
  * Validate `kind` and `opts`, then freeze a plan: everything the effectful
  * shell and the tests need, and nothing they have to re-derive.
  *
