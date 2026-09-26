@@ -5,15 +5,42 @@
  * operator brings it under forge and gets to a first approved architect plan.
  * Authored interactively with the operator (H6) on 2026-08-29 against
  * `parsoFish/main` a592b1f3. Green expected at M5.
+ * Re-pointed onto the forge-owned fixture ground `python-unonboarded` 2026-09-26
+ * (plan D4, M7-D forge-1rk5.1) — see the GROUND paragraph below.
  *
- * GROUND. `projects/gitweave` is a clone of `parsoFish/GitWeave` (Python tests
- * over a Terraform control repo) with **no `.forge/` directory**. That absence
- * is the starting state, not a fault: Studio already discovers the repo and
- * reports it as `health="attention"` / "no .forge/project.json — onboarding is
- * unfinished". The story never creates `.forge/` by hand — the point is that
- * forge creates it. The flow ends at an approved architect plan, which is a
- * real Agent spawn, so `realSpawn` is true and `budget_usd` is declared: the
- * runner refuses to start without `--approve-spend` (H2).
+ * GROUND. `story-s1`, provisioned for each run from the forge-owned fixture
+ * `tests/stories/grounds/python-unonboarded` (a byte copy of `parsoFish/GitWeave`
+ * at `5737e38`, provenance beside it) and torn down after the fence has judged
+ * it (M7-D, forge-1rk5.1, plan D4). It used to be the real `projects/gitweave`;
+ * a story now never drives real onboarding writes against a ground the operator
+ * owns, and S1's own beat-1 flake (bead `forge-8vfn.16`, attributed to ground
+ * contamination) loses its ground-side cause: nothing about this ground can
+ * carry residue from a previous run into the next one.
+ *
+ * The fixture carries **no `.forge/` directory** — the same absence the live
+ * ground had — over a real Python project (Terraform control repo, `pytest`
+ * suite) rather than an invented stub. That absence is the starting state, not
+ * a fault: Studio discovers the repo fresh every run and reports it as
+ * `health="attention"` / "no .forge/project.json — onboarding is unfinished".
+ * The story never creates `.forge/` by hand — the point is that forge creates
+ * it. Freezing the ground also closes §15.205 for S1's own premise the way it
+ * did for S4's idea: a story pinned to a live, evolving repo can age out from
+ * under itself, and this ground cannot move again.
+ *
+ * `python-unonboarded`'s own `PROVENANCE.md` records what onboarding this
+ * ground actually measures against: the seed's `pytest tests/` is RED at HEAD
+ * (323 failed / 774 passed / 72 skipped), same as the live ground's own
+ * standing finding, so beat 6's onboarding agent has real, unfixed failures to
+ * report rather than a green suite dressed up as a hard case. C6 (satisfiable
+ * merge model) is advisory and forge-side-satisfied regardless of whether a
+ * GitHub remote exists (`packages/projects/preflight-repo.ts`'s `checkC6` is
+ * never hard), and no skill on the onboarding path ever adds a remote or
+ * pushes, so this fixture's remote-less `git init` blocks nothing this story
+ * asserts.
+ *
+ * The flow ends at an approved architect plan, which is a real Agent spawn, so
+ * `realSpawn` is true and `budget_usd` is declared: the runner refuses to
+ * start without `--approve-spend` (H2).
  *
  * ON THE `data-*` KEYS. Every key and value below was copied from the live DOM
  * of a bridge booted from a lane worktree — none is invented. Some of them sit
@@ -75,7 +102,7 @@ import { GATE, NORTH_STAR, UNTOUCHABLE_PATHS, C1B_DECISION, ANSWER } from './S1.
 import { ACT_3 } from './S1.act3.mjs';
 export default {
   id: 'S1',
-  ground: { project: 'gitweave', realSpawn: true, budget_usd: 25 },
+  ground: { project: 'story-s1', fixture: 'python-unonboarded', realSpawn: true, budget_usd: 25 },
   docs: { kind: 'tutorial', title: 'Onboard an existing project' },
   beats: [
     {
@@ -85,11 +112,11 @@ export default {
         data: {
           page: 'projects-index',
           'page-ready': 'true',
-          'card-id': 'gitweave',
+          'card-id': 'story-s1',
           health: 'attention',
         },
       },
-      say: 'The Projects pillar lists every project forge manages. GitWeave is already discovered from disk, but it needs attention: it has no contract yet, so no Flow can be pointed at it.',
+      say: 'The Projects pillar lists every project forge manages. story-s1 is already discovered from disk, but it needs attention: it has no contract yet, so no Flow can be pointed at it.',
     },
     {
       act: 'Click "Onboard a project"',
@@ -123,25 +150,32 @@ export default {
       // the sibling-key absence was the runner's and PR #411 fixed it.)
       act: 'Fill in the name, the quality gate and the north star — and under Advanced, the repo path — then press "Onboard project →"',
       do: [
-        { fill: 'project-name', with: 'gitweave' },
+        { fill: 'project-name', with: 'story-s1' },
         { fill: 'quality-gate', with: GATE },
         { fill: 'north-star', with: NORTH_STAR },
         { press: 'toggle-onboard-advanced' },
-        { fill: 'repo-path', with: 'projects/gitweave' },
+        { fill: 'repo-path', with: 'projects/story-s1' },
         { press: 'onboard-project' },
       ],
+      // T1 1569 — preflight's OWN `pending` is the in-flight signal, so this
+      // waits while the product says it is still measuring, then asserts the
+      // same `hard-fail` as before. Measured press→verdict on the
+      // python-unonboarded fixture: 16.3 s, 16.3 s, 17.4 s (S1 runs 1–3; run 3
+      // red at loadavg 10.6 on the 15 s READY_TIMEOUT_MS default this beat
+      // used to run on). A progress-aware wait, not a constant raise.
+      wait: { for: 'settle', key: 'preflight-status', while: 'pending', upTo: 60_000 },
       expect: {
-        route: '/projects/gitweave',
+        route: '/projects/story-s1',
         data: {
           page: 'projects',
-          'project-id': 'gitweave',
+          'project-id': 'story-s1',
           'page-ready': 'true',
           'preflight-status': 'hard-fail',
           'checklist-row': 'contract',
           'checklist-status': 'present',
         },
       },
-      say: 'Registering the project lands the operator on its page, where forge immediately measures GitWeave against the project contract and reports the result honestly: a hard fail. Registration scaffolds the contract artifacts forge can write without asking anyone, so the checklist says contract — present, and preflight says hard fail, and both are true at once: a scaffolded contract is a stub, not an answer. The secrets, demo and roadmap stages have nothing at all; only the instructions carry real content, read from the repo\'s own CLAUDE.md. No Flow can be pointed at a project in this state.',
+      say: 'Registering the project lands the operator on its page, where forge immediately measures story-s1 against the project contract and reports the result honestly: a hard fail. Registration scaffolds the contract artifacts forge can write without asking anyone, so the checklist says contract — present, and preflight says hard fail, and both are true at once: a scaffolded contract is a stub, not an answer. The secrets, demo and roadmap stages have nothing at all; only the instructions carry real content, read from the repo\'s own CLAUDE.md. No Flow can be pointed at a project in this state.',
     },
     {
       // FULLY expressible since the `<summary>` gained a handle, and AMENDED
@@ -188,7 +222,7 @@ export default {
         { press: 'run-onboarding-agent' },
       ],
       expect: {
-        route: '/projects/gitweave',
+        route: '/projects/story-s1',
         data: {
           section: 'onboard-with-agent',
           'onboard-run-status': 'running',
@@ -201,7 +235,7 @@ export default {
     },
     {
       // Fully expressible. The press navigates to
-      // `/sessions/onboarding/<sid>?project=gitweave`; the runner matches on
+      // `/sessions/onboarding/<sid>?project=story-s1`; the runner matches on
       // pathname, and `<sessionId>` is bound by beat 4's
       // `data-onboard-session-id` — the one place in Studio where a minted
       // session id is rendered before the navigation that consumes it.
@@ -634,15 +668,15 @@ export default {
       wait: { for: 'agent', upTo: 200_000 },
       // `clause-id`/`clause-resolution` REMOVED: both asserted the path.
       expect: {
-        route: '/projects/gitweave',
+        route: '/projects/story-s1',
         data: {
           page: 'projects',
-          'project-id': 'gitweave',
+          'project-id': 'story-s1',
           'preflight-status': 'ok',
           'flow-ready': 'true',
         },
       },
-      say: 'Preflight is MET. GitWeave now has a contract forge can hold it to, and the project is Flow-ready: the gates downstream have something real to judge against.',
+      say: 'Preflight is MET. story-s1 now has a contract forge can hold it to, and the project is Flow-ready: the gates downstream have something real to judge against.',
     },
     ...ACT_3,
   ],

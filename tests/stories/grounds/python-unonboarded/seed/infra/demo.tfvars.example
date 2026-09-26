@@ -1,0 +1,14 @@
+# demo.tfvars.example — placeholder values for local dry-runs
+#
+# Copy this file to demo.tfvars (gitignored) and replace the placeholder
+# values before running 'terraform plan' against a real GitHub organisation.
+#
+# Authentication: the GitHub provider reads GITHUB_TOKEN from the environment
+# automatically. Set it before running make tf-plan-demo:
+#
+#   export GITHUB_TOKEN=<your-token>
+#   make tf-plan-demo
+#
+# Never hardcode a real token in this file — it is committed to source control.
+
+github_org = "demo-org-example"

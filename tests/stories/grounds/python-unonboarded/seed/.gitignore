@@ -1,0 +1,25 @@
+node_modules/
+.DS_Store
+.env
+.vscode/
+dist/
+coverage/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Python
+__pycache__/
+*.py[cod]
+*.class
+.venv/
+venv/
+
+# GitWeave
+.specify/memory/current_task.md
+LOCAL_SETUP.md
+.envrc
+.direnv/

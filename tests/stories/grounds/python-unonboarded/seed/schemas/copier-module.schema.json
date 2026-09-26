@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GitWeave Copier Module",
+  "description": "Metadata schema for copier.yaml files in GitWeave template modules",
+  "type": "object",
+  "required": ["_metadata"],
+  "properties": {
+    "_metadata": {
+      "type": "object",
+      "description": "Module metadata required in every GitWeave template module",
+      "required": ["name", "version", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique snake_case identifier for the module (must start with a lowercase letter)",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "version": {
+          "type": "string",
+          "description": "CalVer version string in YYYYMMDD.Patch format (e.g. 20240101.0)",
+          "pattern": "^\\d{8}\\.\\d+$"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the module's purpose",
+          "minLength": 1
+        },
+        "min_copier_version": {
+          "type": "string",
+          "description": "Minimum copier version required to use this module (e.g. 8.0.0)"
+        },
+        "parent": {
+          "type": "string",
+          "description": "Name of the parent module for composition (snake_case)"
+        }
+      }
+    }
+  },
+  "additionalProperties": {
+    "if": {
+      "type": "object",
+      "required": ["type"]
+    },
+    "then": {
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["str", "bool", "int", "json", "yaml"]
+        }
+      }
+    }
+  }
+}

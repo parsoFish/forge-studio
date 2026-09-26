@@ -1,0 +1,31 @@
+# config/teams.yaml — GitHub Teams configuration
+#
+# Schema:
+#   teams:                  # required: list of team definitions
+#     - name:               # required: GitHub team slug (lowercase, hyphen-separated)
+#       description:        # required: human-readable description (shown in GitHub UI)
+#       privacy:            # required: 'closed' (org-visible) or 'secret' (hidden)
+#       parent_team:        # optional: slug of parent team for nesting sub-teams
+#       members:            # optional: list of team membership entries
+#         - username:       # required: GitHub username of the member
+#           role:           # required: 'maintainer' (admin) or 'member' (standard)
+
+teams:
+  - name: engineering
+    description: Core engineering team with access to all repositories
+    privacy: closed
+    members:
+      - username: alice
+        role: maintainer
+      - username: bob
+        role: member
+
+  - name: platform
+    description: Platform and infrastructure sub-team responsible for CI/CD and tooling
+    privacy: closed
+    parent_team: engineering
+    members:
+      - username: charlie
+        role: maintainer
+      - username: dave
+        role: member

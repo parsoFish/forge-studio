@@ -25,7 +25,7 @@ export const ACT_3 = [
       // `startedSessionId` and publishes it on its own section
       // (`NewIdeaBox.tsx:111`), then renders `SessionMinted` beside it
       // (`:187`). `ProjectArchitectEntry.tsx:84` opens that box INLINE on the
-      // project page, so every step of this act happens on `/projects/gitweave`
+      // project page, so every step of this act happens on `/projects/story-s1`
       // and the id is bound where it is minted. The beat that stood here
       // asserted the architect session's own phase and could never reach it —
       // no earlier beat could supply the segment, so nothing was ever pressed
@@ -50,10 +50,10 @@ export const ACT_3 = [
         { press: 'start-architect' },
       ],
       expect: {
-        route: '/projects/gitweave',
+        route: '/projects/story-s1',
         data: {
           page: 'projects',
-          'project-id': 'gitweave',
+          'project-id': 'story-s1',
           section: 'new-idea',
           'architect-session-id': '<architectSessionId>',
         },
@@ -70,7 +70,7 @@ export const ACT_3 = [
       // AMENDED 2026-09-05 (H6, operator present) — one press added at the
       // front. The beat above now binds `<architectSessionId>` on the project
       // page rather than being swept into the session, so this beat starts on
-      // `/projects/gitweave` and `open-plan` is not there — it is on the
+      // `/projects/story-s1` and `open-plan` is not there — it is on the
       // architect session's panel. `SessionMinted.tsx:26` renders
       // `[data-action="view-architect-session"]` beside the id the beat above
       // bound, so the walk in is a declared step like the other two. Three
@@ -110,6 +110,23 @@ export const ACT_3 = [
           // on the beat's `wait` (7.6.77's form) it also reached the
           // consequence wait, which stands on `/artifact` where
           // `data-session-phase` does not exist at all.
+          //
+          // T1 RULING 1545 — THE STALL CLOCK IS PROGRESS-AWARE, ON TWO SIGNALS,
+          // NOT ONE. S1 run 2 reded here at 481 s while the architect was
+          // demonstrably working: the plan was emitted 06:42:55→06:47:31, the
+          // completeness critic ran to 06:48:35, and a revision turn was still
+          // in flight — 140 s into it — when the beat cut the run at 481 s.
+          // `session-phase` never left `drafting` across any of that, so the
+          // KEY alone reported silence throughout; the session's own
+          // `events.jsonl` did not — it kept growing, with gaps up to ~230 s,
+          // never once past the 480 000 ms declared here. `perTransition` now
+          // resets on EITHER: a `progressKey` change, or a new line appended to
+          // the session this repeat is standing on. 480 000 ms remains the
+          // NO-PROGRESS bound unchanged — this is a second way to prove
+          // progress, not a longer wait. (Row 108 adds `critiquing`/`revising`
+          // phases the key can transition through, which is the more direct
+          // fix for the phase side of this same run; the two are
+          // complementary, not alternatives.)
           perTransition: 480_000,
           progressKey: 'session-phase',
           // Row 108: `critiquing`/`revising` are further values of this key, so each stage change resets the per-transition clock.

@@ -1,0 +1,109 @@
+---
+name: Module CalVer
+
+'on':
+  pull_request: {}
+  push:
+    branches:
+      - main
+
+jobs:
+  validate-version:
+    name: Validate Module Version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Validate CalVer in copier.yaml for changed modules
+        run: |
+          set -euo pipefail
+          PR_SHA="${{ github.event.pull_request.base.sha }}"
+          BEFORE="${{ github.event.before }}"
+          BASE="${PR_SHA:-$BEFORE}"
+          CHANGED_MODULES=$(git diff --name-only "${BASE}...HEAD" \
+            | grep '^modules/' \
+            | cut -d/ -f2 \
+            | sort -u || true)
+          if [ -z "$CHANGED_MODULES" ]; then
+            echo "No module changes detected — skipping version validation"
+            exit 0
+          fi
+          FAILED=0
+          for MODULE in $CHANGED_MODULES; do
+            COPIER_FILE="modules/${MODULE}/copier.yaml"
+            if [ ! -f "$COPIER_FILE" ]; then
+              echo "SKIP: $COPIER_FILE not found"
+              continue
+            fi
+            EXPECTED=$(python3 scripts/bump-module-version.py "$MODULE")
+            ACTUAL=$(python3 -c \
+              "import yaml; \
+               doc=yaml.safe_load(open('${COPIER_FILE}')); \
+               print(doc.get('_metadata',{}).get('version',''))")
+            if [ "$ACTUAL" != "$EXPECTED" ]; then
+              VERR="'$ACTUAL' != expected '$EXPECTED'"
+              echo "ERROR: $MODULE copier.yaml version $VERR"
+              FAILED=1
+            else
+              echo "OK: $MODULE version '$ACTUAL'"
+            fi
+          done
+          exit $FAILED
+
+  tag-version:
+    name: Tag Module Version
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and push CalVer tags for changed modules
+        run: |
+          set -euo pipefail
+          CHANGED_MODULES=$(git diff --name-only HEAD~1...HEAD \
+            | grep '^modules/' \
+            | cut -d/ -f2 \
+            | sort -u || true)
+          if [ -z "$CHANGED_MODULES" ]; then
+            echo "No module changes detected — skipping tag creation"
+            exit 0
+          fi
+          for MODULE in $CHANGED_MODULES; do
+            if [ ! -f "modules/${MODULE}/copier.yaml" ]; then
+              echo "SKIP: modules/${MODULE}/copier.yaml not found"
+              continue
+            fi
+            VERSION=$(python3 scripts/bump-module-version.py "$MODULE")
+            git tag "modules/${MODULE}@${VERSION}"
+            git push origin "modules/${MODULE}@${VERSION}"
+          done

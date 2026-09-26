@@ -58,7 +58,7 @@ operator-ratified new cap — never a silent raise.
 | `kernel` | 30 | 5,513 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `projects` | 46 | 10,951 | **9,061** | ratified 9,061 — M7-A reset-resolvable (+94, growth): Rebuild adds a template npm command only when package.json has the script; lane-ratified under ruling 666; see git history for prior raises. |
-| `knowledge` | 44 | 13,156 | **12,578** | ratified 12,578 — M7-C door re-exports OD (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
+| `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,091 | **13,091** | ratified 13,091 — row 99 DNS failure classified environment/transient (forge-8vfn.8.1.11), +26 lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 61 | 20,638 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 83 | 23,587 | **23,387** | ratified 23,387 — row 112 a fresh cycle threads its minted cycleId (forge-8vfn.8.1.17), +2 lane-ratified under ruling 666; see git history for prior raises. |
@@ -67,7 +67,7 @@ operator-ratified new cap — never a silent raise.
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,837 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **463** | **125,772** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **463** | **125,845** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -205,7 +205,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/forge-requeue.ts | flows | verbatim | 274 |
 | apps/forge/forge-watch.ts | apps/forge | verbatim | 739 |
 | packages/knowledge/kb-drain-edit-soundness.ts | knowledge | verbatim | 742 |
-| packages/knowledge/brain-write-lease.ts | knowledge | verbatim | 64 |
+| packages/knowledge/brain-write-lease.ts | knowledge | verbatim | 137 |
 | packages/knowledge/kb-drain-structural.ts | knowledge | verbatim | 230 |
 | packages/knowledge/kb-job-state.ts | knowledge | verbatim | 224 |
 | packages/knowledge/kb-drain-routes.ts | knowledge | verbatim | 417 |
