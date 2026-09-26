@@ -22,6 +22,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
 import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME } from '@forge/flows';
+import { isSafeDemoRoute } from '@forge/contracts';
 
 import type {
   HarnessMetricRow,
@@ -29,7 +30,7 @@ import type {
   DemoApiDiffEntry,
   TestResultRow,
 } from './demo-types.ts';
-import { MAX_INLINE_IMAGE_BYTES, checkpointArtifactStem, isSafeDemoRoute } from './demo-types.ts';
+import { MAX_INLINE_IMAGE_BYTES, checkpointArtifactStem } from './demo-types.ts';
 
 /** Cap on a checkpoint's captured stdout (before/after). Terminal output is small;
  *  a runaway command (a server log, an infinite loop) is truncated to this at capture. */

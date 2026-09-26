@@ -72,7 +72,7 @@ function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void }
         ci: { cmd: ['vitest', 'run'] },
       },
       demoProcess: [
-        { kind: 'capture', text: 'Capture before state.' },
+        { kind: 'capture', text: 'Capture before state: `npm run build`.' },
         { kind: 'verify', text: 'Run vitest to verify the change.' },
       ],
     }),

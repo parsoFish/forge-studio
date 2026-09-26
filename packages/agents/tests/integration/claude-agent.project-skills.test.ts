@@ -119,3 +119,47 @@ test('createClaudeAgent: a declared skill that does not resolve THROWS — fail 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// PRESENTATION_ONLY_SKILL_IDS (bead forge-mfv5.2.2 / forge-mfv5.2.8):
+// `demo-design` is Studio-presentation guidance, never a cycle input, so it
+// must never reach an agent's systemPrompt even when declared and present.
+test('createClaudeAgent: a project declaring ["demo-design", "x"] folds ONLY x into systemPrompt', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-claude-agent-project-skills-presentation-only-'));
+  try {
+    writeFileSync(join(dir, 'PROMPT.md'), 'test prompt');
+    mkdirSync(join(dir, '.forge'), { recursive: true });
+    writeFileSync(
+      join(dir, '.forge', 'project.json'),
+      JSON.stringify({ testProcess: { local: { cmd: ['true'] } }, skills: ['demo-design', 'x'] }),
+    );
+    mkdirSync(join(dir, '.forge', 'skills', 'demo-design'), { recursive: true });
+    writeFileSync(join(dir, '.forge', 'skills', 'demo-design', 'SKILL.md'), '# demo-design\n\nCompose the presentation.');
+    mkdirSync(join(dir, '.forge', 'skills', 'x'), { recursive: true });
+    writeFileSync(join(dir, '.forge', 'skills', 'x', 'SKILL.md'), '# x\n\nDo the x thing.');
+
+    const captured: { options: Record<string, unknown> | null } = { options: null };
+    const loadedIds: string[][] = [];
+    const agent = createClaudeAgent({
+      systemPrompt: 'DEV BASE PROMPT',
+      queryFn: fakeQuery(captured),
+      onProjectSkillsLoaded: (ids) => { loadedIds.push(ids); },
+    });
+
+    await agent({
+      promptPath: join(dir, 'PROMPT.md'),
+      agentMdPath: join(dir, 'AGENT.md'),
+      fixPlanPath: join(dir, 'fix_plan.md'),
+      worktreePath: dir,
+      iteration: 1,
+    });
+
+    const systemPrompt = captured.options!.systemPrompt as string;
+    assert.match(systemPrompt, /### x/);
+    assert.match(systemPrompt, /Do the x thing\./);
+    assert.doesNotMatch(systemPrompt, /### demo-design/);
+    assert.doesNotMatch(systemPrompt, /Compose the presentation\./);
+    assert.deepEqual(loadedIds, [['x']], 'the loaded-ids event must also exclude the presentation-only id');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

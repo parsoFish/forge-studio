@@ -35,8 +35,8 @@ import {
   MAX_INLINE_IMAGE_BYTES,
   checkpointArtifactName,
   checkpointArtifactStem,
-  isSafeDemoRoute,
 } from '@forge/stations/demo-types.ts';
+import { isSafeDemoRoute } from '@forge/contracts';
 import {
   MAX_CAPTURED_OUTPUT_BYTES,
   collectCapturedMedia,
