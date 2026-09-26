@@ -543,6 +543,15 @@ export function persistManifestSpecs(manifestPath: string, specs: string[]): voi
  * skip PM + dev-loop, re-enter at the `integrate` node) instead of re-running a full
  * cycle. Idempotent + best-effort. `forge requeue` (full re-run) clears it.
  * (Was `persistManifestResumeFromDemo` pre-rename (8vfn.6.10.18); `persistManifestResumeFromUnifier` pre-cutover.)
+ *
+ * Bead `forge-8vfn.8.1.24` / T1 ruling 1609: also the call `openPrInline`
+ * (`cycle-helpers.ts`) makes on an ENVIRONMENT PR-open failure — dev,
+ * integrate and adversarial-review already succeeded by the time the review
+ * node's PR-open call fails, so the precondition this function requires
+ * (every WI complete, post-develop band unfinished) is trivially satisfied.
+ * That call site does not wait for a crash: the exception path stamps the
+ * marker directly, so F-27's ordinary pending-requeue (scheduler-dispatch.ts)
+ * resumes at `integrate` instead of wiping `.forge/work-items/` and rebuilding.
  */
 export function persistManifestResumeFromIntegrate(manifestPath: string): void {
   try {

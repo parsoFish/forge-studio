@@ -27,7 +27,7 @@ rather than importing what they need.
 | the agent-slug route helpers | `SAFE_AGENT_SLUG_RE` |
 | studio agent validation | `validateAgent` |
 | model resolution | `modelForSpec` · `resolveSessionModel` · `MODEL_BY_TIER` · `resolveModelTier` |
-| events and classification | `makeToolEventSink` · `extractLiveToolDetails` · `classifyCycleFailure` · `classifyCrash` · `matchesRateLimitSignature` |
+| events and classification | `makeToolEventSink` · `extractLiveToolDetails` · `classifyCycleFailure` · `classifyCrash` · `matchesRateLimitSignature` · `matchesDnsFailureSignature` |
 | scope and hooks | `takeScopeSnapshot` · `scopeViolations` · `sdkHooksForAgent` |
 | AGENTS.md and HTTP | `composeAgentsMd` · `agentsRoutes` |
 | the legacy dispatch table | `AGENT_RUNNERS` |

@@ -15,7 +15,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { commitDevLoopBoundary, enforceDevLoopCloseInvariant, openPrInline } from '../../cycle-helpers.ts';
+import { commitDevLoopBoundary, enforceDevLoopCloseInvariant } from '../../cycle-helpers.ts';
+import { openPrInline } from '../../cycle-pr-open.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import type { CycleInput } from '../../cycle-context.ts';
 

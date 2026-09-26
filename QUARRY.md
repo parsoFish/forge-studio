@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 361 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 98 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 99 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -59,15 +59,15 @@ operator-ratified new cap — never a silent raise.
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `projects` | 46 | 10,951 | **9,061** | ratified 9,061 — M7-A reset-resolvable (+94, growth): Rebuild adds a template npm command only when package.json has the script; lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
-| `agents` | 46 | 13,091 | **13,091** | ratified 13,091 — row 99 DNS failure classified environment/transient (forge-8vfn.8.1.11), +26 lane-ratified under ruling 666; see git history for prior raises. |
+| `agents` | 46 | 13,098 | **13,098** | ratified 13,098 — row 121 gh 'error connecting to' is a DNS failure (forge-8vfn.8.1.24), +7 lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 61 | 20,638 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
-| `flows` | 83 | 23,603 | **23,403** | ratified 23,403 — row 119 reviewRound derived from completed adversarial-review passes (forge-8vfn.8.1.23), +16 lane-ratified under ruling 666; see git history for prior raises. |
+| `flows` | 84 | 23,675 | **23,475** | ratified 23,475 — row 121 a PR-open failure carries its cause; environment failures park for resume (forge-8vfn.8.1.24), +72 lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 14 | 2,113 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 40 | 11,231 | **11,231** | ratified 11,231 — row 112 requireCycleId, no initiative-id log dir (forge-8vfn.8.1.17), +15 on row 105's 11,216, lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,837 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **463** | **125,862** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **464** | **125,941** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -313,7 +313,8 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/cron-triggers.ts | flows | verbatim | 250 |
 | packages/flows/ci-gate.ts | flows | verbatim | 147 |
 | packages/flows/cycle-context.ts | flows | verbatim | 363 |
-| packages/flows/cycle-helpers.ts | flows | verbatim | 772 |
+| packages/flows/cycle-helpers.ts | flows | verbatim | 675 |
+| packages/flows/cycle-pr-open.ts | flows | rewritten | 146 |
 | packages/flows/cycle-report.ts | flows | verbatim | 31 |
 | packages/flows/cycle.ts | flows | verbatim | 546 |
 | packages/flows/daemon.ts | flows | verbatim | 245 |
@@ -327,7 +328,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/enqueue-develop-run.ts | flows | verbatim | 80 |
 | packages/flows/enqueue-flow-run.ts | flows | verbatim | 411 |
 | packages/flows/enqueue-plan-run.ts | flows | verbatim | 236 |
-| packages/agents/failure-classifier.ts | agents | verbatim | 568 |
+| packages/agents/failure-classifier.ts | agents | verbatim | 570 |
 | packages/flows/finalize-merged.ts | flows | verbatim | 519 |
 | packages/flows/fix-work-items.ts | flows | verbatim | 388 |
 | packages/flows/flow-artifacts.ts | flows | pruned | 440 |
@@ -353,7 +354,7 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/kb-backend.ts | knowledge | verbatim | 280 |
 | packages/knowledge/kb-graph.ts | knowledge | verbatim | 662 |
 | packages/knowledge/kb-health.ts | knowledge | verbatim | 263 |
-| packages/flows/manifest.ts | flows | verbatim | 636 |
+| packages/flows/manifest.ts | flows | verbatim | 645 |
 | packages/flows/mint-triggered-initiative.ts | flows | verbatim | 284 |
 | packages/agents/model-range.ts | agents | verbatim | 79 |
 | packages/flows/notify.ts | flows | verbatim | 73 |
@@ -394,7 +395,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/phases/wi-spec-compile.ts | flows | verbatim | 532 |
 | packages/agents/pinned-sdk-query.ts | agents | verbatim | 163 |
 | packages/flows/planned-initiatives.ts | flows | verbatim | 96 |
-| packages/flows/pr.ts | flows | verbatim | 380 |
+| packages/flows/pr.ts | flows | verbatim | 393 |
 | packages/flows/gh-pinned.ts | flows | rewritten | 205 |
 | packages/flows/pr-branch-sync.ts | flows | verbatim | 583 |
 | packages/flows/pr-ci-watch.ts | flows | verbatim | 187 |
@@ -540,13 +541,13 @@ operator-ratified new cap — never a silent raise.
 | skills/reflector/SKILL.md | factory | verbatim | 179 |
 | skills/release-finalizer/SKILL.md | flows | verbatim | 92 |
 | apps/forge/index.ts | apps/forge | verbatim | 8 |
-| packages/agents/index.ts | agents | verbatim | 131 |
+| packages/agents/index.ts | agents | verbatim | 136 |
 | packages/contracts/index.ts | contracts | verbatim | 143 |
 | packages/contracts/run-view-types.ts | contracts | rewritten | 94 |
 | packages/contracts/runnable-source.ts | contracts | rewritten | 33 |
 | packages/contracts/studio-types.ts | contracts | verbatim | 761 |
 | packages/factory/index.ts | factory | verbatim | 8 |
-| packages/flows/index.ts | flows | verbatim | 115 |
+| packages/flows/index.ts | flows | verbatim | 116 |
 | packages/kernel/config.ts | kernel | verbatim | 600 |
 | packages/kernel/gh-identity.ts | kernel | verbatim | 107 |
 | packages/kernel/ids.ts | kernel | verbatim | 136 |

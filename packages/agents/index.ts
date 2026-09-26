@@ -107,7 +107,12 @@ export { modelForSpec, resolveSessionModel, MODEL_BY_TIER } from './phase-agent.
 
 // ---- Events, failure classification, scope ---------------------------------
 export { makeToolEventSink, extractLiveToolDetails } from './tool-event-emit.ts';
-export { classifyCycleFailure, classifyCrash, matchesRateLimitSignature } from './failure-classifier.ts';
+export {
+  classifyCycleFailure,
+  classifyCrash,
+  matchesRateLimitSignature,
+  matchesDnsFailureSignature,
+} from './failure-classifier.ts';
 export { takeScopeSnapshot, scopeViolations } from './phases/agent-scope-guard.ts';
 export { sdkHooksForAgent } from './studio/hook-dispatch.ts';
 

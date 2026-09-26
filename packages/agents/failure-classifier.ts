@@ -67,13 +67,15 @@ export type CrashClassification = {
   reason: string;
 };
 
-/** Resolver failures (forge-8vfn.8.1.11) — the host could not resolve the remote. Shared by
- *  `classifyCrash` (via TRANSIENT_CRASH_SIGNATURES) and `classifyCycleFailure`. */
+/** Resolver + connect failures (forge-8vfn.8.1.11, forge-8vfn.8.1.24) — the host
+ *  could not resolve OR reach the remote. Shared by `classifyCrash` (via
+ *  TRANSIENT_CRASH_SIGNATURES) and `classifyCycleFailure`. */
 const DNS_FAILURE_SIGNATURES = [
   'could not resolve host', // git stderr: "fatal: unable to access '…': Could not resolve host: …"
   'enotfound', // Node/npm/gh DNS error code
   'eai_again', // libc resolver transient-failure code ("temporary failure in name resolution")
   'getaddrinfo', // the POSIX resolver call Node/gh name in their own error text
+  'error connecting to', // gh's own connect-failure text, e.g. "error connecting to api.github.com"
 ] as const;
 
 /** Environment/API-pressure signatures — a fresh spawn under better conditions can succeed. */
