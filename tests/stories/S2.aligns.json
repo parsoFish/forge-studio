@@ -1,0 +1,34 @@
+{
+  "aligns": [
+    {
+      "path": "brain/forge-dev/themes/forge-project-onboarding-contract.md",
+      "digest": "13521c8c07f0e9fa",
+      "why": "Beat5 names clauses directly: \"C6 resolved at creation (ruling 168)\", \"C1b declared by the starter (ruling 164, PR D)\", DEMO-SKILL/DEMO-ALIGN as the two resolution: 'agent' clauses"
+    },
+    {
+      "path": "docs/decisions/034-studio-aligned-contract.md",
+      "digest": "59f71bf30a3eb184",
+      "why": "Beat4: preflight-status: 'ok'/flow-ready: 'true' as the unified readiness bar a starter-created project must clear"
+    },
+    {
+      "path": "brain/forge-dev/themes/forge-ui-data-attribute-contract-discipline.md",
+      "digest": "fb31acefbdbdb088",
+      "why": "Header: beat8's session-card attributes explicitly \"transcribed from docs/reference/studio-dom-contract.md\"; nested-read rule invoked repeatedly"
+    },
+    {
+      "path": "docs/decisions/020-architect-in-ui.md",
+      "digest": "a223ff6e8f292498",
+      "why": "Beats 9-12: architect session minted, multi-round interview (round-increment, no ceiling), plan gate at /artifact"
+    },
+    {
+      "path": "docs/decisions/043-generic-interactive-surface.md",
+      "digest": "d0e89ce5f09d55fd",
+      "why": "Beat10 quotes source directly: architect kind excluded from the generic SessionInteractivePanel \"BY DESIGN... never architect (no writable affordance)\""
+    },
+    {
+      "path": "brain/forge-dev/themes/background-work-server-owned-client-observes.md",
+      "digest": "7130426b3ee79b5c",
+      "why": "Beat9: \"Pressing Start mints a session and shows its id... before anything navigates anywhere\" — server-owned dispatch-time publish"
+    }
+  ]
+}

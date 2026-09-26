@@ -31,3 +31,23 @@ move to fixtures one PR at a time (bead `forge-1rk5.1`).
   the traits the fixture carries and the learning each one encodes, and the stories it serves.
 - A fixture is frozen on purpose. A story's premise checked against its seed stays true, because nothing moves
   the seed except a reviewed change to this directory.
+
+## Out of story scope
+
+ADRs and brain themes named here were reviewed and judged not to need a story's `aligns` entry — named with a
+one-line reason so `node scripts/stories/alignment.mjs --intake <since-sha>` stops reporting them as unaligned.
+
+(none yet)
+
+## Alignment authoring targets
+
+ADRs and brain themes a story SHOULD cite in its `<id>.aligns.json` sidecar but does not yet — tracked here so
+`node scripts/stories/alignment.mjs --intake <since-sha>` keeps naming them (report-only) until a sidecar picks
+them up, at which point this list drops them.
+
+- `docs/decisions/033-studio-first-flow-ux.md` — S1/S2's install-to-first-flow subject, uncited.
+- `docs/decisions/031-studio-consolidation.md` — Studio as the sole operator surface, every story's premise.
+- `docs/decisions/051-change-class-and-typed-acceptance-criteria.md` and `brain/forge-dev/themes/class-blind-gates.md` — S1–S3's readiness clauses assert no change-class gate.
+- `docs/decisions/012-crash-recovery.md` — S10 beat 7's claim race is adjacent; no crash path is exercised.
+- `brain/forge-dev/themes/agent-authored-gates-are-self-grading.md` — S7/S8's scan-then-trust shape.
+- `docs/decisions/029-runtime-adapters.md` — S9 beat 5's per-session SDK/effort control.
