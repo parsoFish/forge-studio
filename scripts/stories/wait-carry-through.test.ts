@@ -200,7 +200,7 @@ describe('forge-8vfn.27: the runner threads ONE pressedAt across the beat loop',
     assert.ok(call, `no driveBeat call found in ${path}`);
     const args = call[1]!.split(',').map((a) => a.trim());
     // EXACT, not `>=`. 7.6.118 moved it from 9 to 10, T1 1471 moved it from 10
-    // to 11, and T1 1545 moved it from 11 to 12 — each move is the door
+    // to 11, and T1 1545 moved it from 11 to 12 (the same `forgeRoot` row 109's priced wait also resolves sessions against) — each move is the door
     // working rather than the door being wrong: a new trailing argument with a
     // default is exactly how an earlier one could be dropped silently, so each
     // one costs a deliberate edit here. Every position is named — an arity
@@ -213,8 +213,8 @@ describe('forge-8vfn.27: the runner threads ONE pressedAt across the beat loop',
         `fresh Map, so omitting it gives every beat its own and wait.anchor can never resolve (run 16); ` +
         `the tenth builds the per-beat cycle watch (7.6.118); the eleventh is the run's own $ guard for an ` +
         `agent wait's poll loop (T1 1471); the twelfth is \`forgeRoot\`, which lets a repeat's per-transition ` +
-        `bound reset on its own session's \`events.jsonl\` growth, not only on its progress key (T1 1545). ` +
-        `Got: ${call[1]}`,
+        `bound reset on its own session's \`events.jsonl\` growth (T1 1545) and resolves the priced wait's ` +
+        `session log dir (row 109). Got: ${call[1]}`,
     );
     assert.equal(args[8], 'pressedAt', `the ninth argument must be the shared map, got ${args[8]}`);
     assert.equal(args[9], 'cycleWatchFor', `the tenth must be the per-beat watch factory, got ${args[9]}`);

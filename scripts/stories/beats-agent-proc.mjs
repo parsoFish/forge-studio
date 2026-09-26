@@ -28,6 +28,13 @@ import { queueManifestTerminal, FS_CLOCK_SLACK_MS, channelTerminalState } from '
 // Split out at the 800-line cap (T1 ruling 492: SPLIT, NEVER BASELINE) —
 // see beats-channel-scan.mjs's own header for what moved and why.
 import { isDispatchDir, newestChannelSince, scanSummary, cycleDirForInitiative } from './beats-channel-scan.mjs';
+// ROW 109 (T1 1549) — the `priced` wait's own two borrowed pieces: the SAME
+// event reader `reap.mjs`'s teardown polls with, and the SAME "was any row
+// priced" predicate, so "priced" means one thing across the whole runner
+// rather than growing a second notion of it here.
+import { readRunEvents } from './run-observe.mjs';
+import { hasPricedEvent } from './reap.mjs';
+import { CONSEQUENCE_POLL_MS } from './beats-page-read.mjs';
 // T1 ruling 1471 — re-exported so `beats-page.mjs` names the wall ceiling
 // beside `STALL_CEILING_MS`/`TERMINAL_UI_GRACE_MS`, its two siblings that
 // already live in THIS file rather than in the schema that only validates what
@@ -638,4 +645,86 @@ export function makeAgentChannelDoor(forgeRoot) {
           : `. ${terminal.detail}, so "stalled" is this door's best reading and not a verdict the product published.`),
     };
   };
+}
+
+/**
+ * ROW 109 (T1 1549). S3's terminal beat follows the onboarding session it just
+ * launched — "Follow View onboarding session and watch it work" — and its own
+ * `expect.data` is satisfied the moment the session page renders, long before
+ * that session's first turn prices itself. The run then ends and
+ * `reap.mjs`'s own `FIRST_PRICED_EVENT_GRACE_MS` (<= 30 s) teardown grace is
+ * not enough: run 2 measured "terminated before first priced event (30000
+ * ms)". So spend read UNMEASURED by construction — not because nothing was
+ * spent, but because nothing was given the chance to say so, one layer up
+ * from the exact gap `FIRST_PRICED_EVENT_GRACE_MS` was minted for.
+ *
+ * `wait: { for: 'priced', upTo }` gives the beat itself a bounded, REAL
+ * wall-clock chance to see a priced event before `driveBeat` returns and the
+ * run moves on toward teardown — buying the session more total time to price
+ * itself than the reap grace alone ever could.
+ *
+ * NEVER A VERDICT INPUT. This is evidence, full stop: it runs AFTER the
+ * beat's own `expect.data` has already decided pass/fail (`beats-drive.mjs`
+ * attaches its outcome onto an already-finished verdict) and never touches
+ * `status` or `failures` either way — a beat that would have gone green does
+ * not turn red because nothing priced within `upTo`, and one that would have
+ * gone red is not rescued by a priced event landing.
+ *
+ * THE RESOLVER IS BORROWED, NOT DUPLICATED: `sessionLogDir` (above, this
+ * file) turns the LIVE route the page is standing on into the same log dir
+ * every other agent-evidence reader in this file already resolves. THE
+ * PREDICATE IS BORROWED TOO: `hasPricedEvent` (`reap.mjs`) is the exact
+ * reading `waitForFirstPricedEvent` polls teardown with, so a non-priced
+ * event row (a `start`, a phase change, anything with no genuine
+ * `cost_usd`) can never be mistaken for the thing this wait exists to see.
+ *
+ * FAIL-CLOSED ON A ROUTE THIS RUNNER CANNOT RESOLVE (§6.15) — `by:
+ * 'unresolved'`, immediately, no poll at all. A route that does not match
+ * `/sessions/<kind>/<id>`, or a missing `forgeRoot`, is not "not yet priced":
+ * reading it that way would burn the whole declared bound in a loop that
+ * could never succeed, and report it exactly like a session that is simply
+ * taking its time. NEVER THROWS: a read that fails mid-poll (an injected
+ * fake, a torn file) is read as "not yet" and the poll continues, because the
+ * one thing worse than sitting out the bound is aborting the whole beat over
+ * a wait that was only ever evidence.
+ *
+ * @param {string|null} forgeRoot
+ * @param {string|null} route the LIVE route the page is standing on
+ * @param {number} upTo the beat's own declared bound, in ms
+ * @param {{readEvents?: (dir: string) => object[], pollMs?: number, sleep?: (ms: number) => Promise<void>, now?: () => number, log?: (line: string) => void}} [opts]
+ * @returns {Promise<{by: 'event'|'timeout'|'unresolved', afterMs: number}>}
+ */
+export async function waitForPricedEvent(forgeRoot, route, upTo, opts = {}) {
+  const {
+    readEvents: readEventsIn = readRunEvents,
+    pollMs = CONSEQUENCE_POLL_MS,
+    sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    now = () => Date.now(),
+    log = (line) => console.error(line),
+  } = opts;
+  const dir = typeof forgeRoot === 'string' && forgeRoot !== '' ? sessionLogDir(forgeRoot, route) : null;
+  const named = (by) => {
+    const where = dir ?? `an unresolved session for route ${JSON.stringify(route ?? null)}`;
+    log(`priced wait: no priced event from ${where} within ${upTo} ms — the spend line will say why`);
+    return Object.freeze({ by, afterMs: by === 'unresolved' ? 0 : upTo });
+  };
+  if (dir === null) return named('unresolved');
+  const priced = () => {
+    try {
+      return hasPricedEvent(readEventsIn(dir));
+    } catch {
+      // A read that could not happen is not evidence of "not priced" either
+      // way — the loop below simply polls again, the same shape every other
+      // never-throws reader in this file already follows.
+      return false;
+    }
+  };
+  const startedAt = now();
+  if (priced()) return Object.freeze({ by: 'event', afterMs: 0 });
+  for (;;) {
+    const elapsed = now() - startedAt;
+    if (elapsed >= upTo) return named('timeout');
+    await sleep(Math.min(pollMs, upTo - elapsed));
+    if (priced()) return Object.freeze({ by: 'event', afterMs: now() - startedAt });
+  }
 }

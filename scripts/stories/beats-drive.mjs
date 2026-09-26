@@ -40,7 +40,7 @@ import {
 // why the split went this way round and not the other.
 import { performSteps } from './beats-steps.mjs';
 import { readProgress, sessionEventLines } from './beats-progress.mjs';
-import { STALL_CEILING_MS, doorWorthRunning, sessionLogDir } from './beats-agent-proc.mjs';
+import { STALL_CEILING_MS, doorWorthRunning, sessionLogDir, waitForPricedEvent } from './beats-agent-proc.mjs';
 
 
 
@@ -609,6 +609,16 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     bound.ms,
     STALL_CEILING_MS,
   );
+  // ROW 109 (T1 1549) — `wait: { for: 'priced', upTo }`. Run AFTER the verdict
+  // above is otherwise final, and attached to it either way: this is EVIDENCE
+  // for `story.json`, never a verdict input, so it never touches `status` or
+  // `failures` — the beat's own `expect.data` has already decided those.
+  // `target` (resolved at the top of this call) is the LIVE route the page is
+  // standing on, which `waitForPricedEvent` turns into a log dir the same way
+  // every other agent-evidence reader in `beats-agent-proc.mjs` already does.
+  if (rawBeat.wait?.for === 'priced') {
+    verdict = Object.freeze({ ...verdict, priced: await waitForPricedEvent(forgeRoot, target, rawBeat.wait.upTo) });
+  }
   // Bead `forge-8vfn.6.11.19` (T1 ruling 254) — the class, closed rather than
   // patched a fourth time. Fires WHATEVER the verdict would have been: a beat
   // that passes without its declared wait ever running passed by luck, and a
