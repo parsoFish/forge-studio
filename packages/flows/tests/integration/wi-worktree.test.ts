@@ -19,6 +19,7 @@ import {
   wiWorktreePath,
 } from '../../wi-worktree.ts';
 import { list } from '../../worktree.ts';
+import { linkProjectDeps } from '../../scheduler-run-one.ts';
 
 function initRepo(): { dir: string; repo: string } {
   const dir = mkdtempSync(join(tmpdir(), 'forge-wi-worktree-'));
@@ -491,3 +492,36 @@ test('pruneStaleWiWorktrees: an ACTIVE (non-leftover) per-WI worktree from the S
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// forge-1rk5.3 row 137: a repo initialised without templates has no .git/info/; the exclude that keeps the
+// node_modules symlink off every branch must still be written, and a failure to write it is reported, not swallowed.
+test('linkProjectDeps: a template-less repo still gets node_modules excluded, and an unwritable exclude is reported', () => {
+  const root = mkdtempSync(join(tmpdir(), 'link-deps-'));
+  try {
+    const repo = join(root, 'repo');
+    execFileSync('git', ['init', '-q', '-b', 'main', '--template=', repo]);
+    mkdirSync(join(repo, 'node_modules', 'pkg'), { recursive: true });
+    const wt = join(root, 'wt');
+    mkdirSync(wt);
+    execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'init']);
+    execFileSync('git', ['-C', repo, 'worktree', 'add', '-q', '-b', 'w', join(root, 'wt2')]);
+    const r = linkProjectDeps(repo, join(root, 'wt2'));
+    assert.deepEqual(r.problems, []);
+    const ignored = execFileSync('git', ['-C', join(root, 'wt2'), 'check-ignore', 'node_modules'], { encoding: 'utf8' }).trim();
+    assert.equal(ignored, 'node_modules');
+
+    // info/ exists as a FILE: the exclude cannot be written — named in problems, never swallowed.
+    const repo2 = join(root, 'repo2');
+    execFileSync('git', ['init', '-q', '-b', 'main', '--template=', repo2]);
+    mkdirSync(join(repo2, 'node_modules'));
+    writeFileSync(join(repo2, '.git', 'info'), 'not a dir');
+    execFileSync('git', ['-C', repo2, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'init']);
+    execFileSync('git', ['-C', repo2, 'worktree', 'add', '-q', '-b', 'w', join(root, 'wt3')]);
+    const r2 = linkProjectDeps(repo2, join(root, 'wt3'));
+    assert.equal(r2.problems.length, 1);
+    assert.match(r2.problems[0], /exclude/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
