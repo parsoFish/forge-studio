@@ -433,6 +433,19 @@ Live-tier discipline: each live test creates uniquely named resources
 `secrets.env`; read-back assertion (separate GET/describe after
 create/update); non-default fixture values for every field under test (see C9).
 
+**Per-initiative resource namespace (forge-mfv5.3.7, operator ruling
+2026-09-12).** Initiatives run in parallel where the DAG allows, so two live
+tests for two different initiatives can be creating resources in the same
+external system at once. Forge hands every live-acceptance/gate command an
+env var, `FORGE_RESOURCE_PREFIX` — a stable, distinct, cloud-safe prefix
+derived from the initiative id — so:
+- a project's live-acceptance tests MUST create their resources' names under
+  this prefix (in place of, or in addition to, the UUID above);
+- a project's sweep MUST delete only resources carrying its OWN
+  `FORGE_RESOURCE_PREFIX`, never a bare-pattern sweep that could reach a
+  sibling initiative's live resources;
+- forge supplies the value; the project never invents or derives its own.
+
 ---
 
 ### C8 — Human-authored agent-instruction file *(advisory)*

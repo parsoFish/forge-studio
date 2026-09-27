@@ -9,7 +9,18 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { delimiter } from 'node:path';
-import { AGENT_ENV_ALLOWLIST, MAX_ENV_OVERRIDE_KEYS, HOOK_ENV_BASE_ALLOWLIST, HOOK_ENV_CREDENTIAL_EXCLUSIONS, buildChildEnv, forgeBinOnPath } from '../../spawn-env.ts';
+import {
+  AGENT_ENV_ALLOWLIST,
+  MAX_ENV_OVERRIDE_KEYS,
+  HOOK_ENV_BASE_ALLOWLIST,
+  HOOK_ENV_CREDENTIAL_EXCLUSIONS,
+  buildChildEnv,
+  forgeBinOnPath,
+  RESOURCE_PREFIX_ENV,
+  RESOURCE_PREFIX_MAX_LENGTH,
+  RESOURCE_PREFIX_RE,
+  deriveResourcePrefix,
+} from '../../spawn-env.ts';
 
 test('AGENT_ENV_ALLOWLIST: does not include ANTHROPIC_BASE_URL or any HEADROOM_* var (the recurring G8 leak)', () => {
   assert.ok(!AGENT_ENV_ALLOWLIST.includes('ANTHROPIC_BASE_URL'), 'ANTHROPIC_BASE_URL must never be inheritable');
@@ -278,4 +289,57 @@ test('forgeBinOnPath: an absent or empty PATH yields the bin alone, never a stra
   assert.equal(forgeBinOnPath('/trees/alpha', undefined), '/trees/alpha/bin');
   assert.equal(forgeBinOnPath('/trees/alpha', ''), '/trees/alpha/bin');
   assert.equal(forgeBinOnPath('/trees/alpha', '/usr/bin::/bin'), ['/trees/alpha/bin', '/usr/bin', '/bin'].join(delimiter));
+});
+
+// ---------------------------------------------------------------------------
+// deriveResourcePrefix / RESOURCE_PREFIX_ENV — forge-mfv5.3.7 (operator ruling
+// 2026-09-12): the one env var forge hands a live-acceptance/gate child so
+// concurrent initiatives can namespace, and only sweep, their OWN live cloud
+// resources. See packages/agents/ralph/stop-conditions.ts for the seam that
+// injects it into the gate child process.
+// ---------------------------------------------------------------------------
+
+test('RESOURCE_PREFIX_ENV: follows the existing FORGE_* naming for forge-provided, non-secret env', () => {
+  assert.equal(RESOURCE_PREFIX_ENV, 'FORGE_RESOURCE_PREFIX');
+});
+
+test('deriveResourcePrefix: same initiative id always derives the same prefix (stable across WIs and retries)', () => {
+  const a1 = deriveResourcePrefix('initiative-alpha');
+  const a2 = deriveResourcePrefix('initiative-alpha');
+  assert.equal(a1, a2);
+});
+
+test('deriveResourcePrefix: two different initiative ids derive two different prefixes', () => {
+  const alpha = deriveResourcePrefix('initiative-alpha');
+  const beta = deriveResourcePrefix('initiative-beta');
+  assert.notEqual(alpha, beta);
+});
+
+test('deriveResourcePrefix: distinct even when two ids share the same leading slug characters (the hash is over the FULL id, not the truncated slug)', () => {
+  const one = deriveResourcePrefix('initiative-alpha-one');
+  const two = deriveResourcePrefix('initiative-alpha-two');
+  assert.notEqual(one, two, 'a slug collision on the first characters must not collapse two distinct initiatives to one prefix');
+});
+
+test('deriveResourcePrefix: always matches the cloud-safe charset + length bound, for a normal id', () => {
+  const prefix = deriveResourcePrefix('initiative-alpha');
+  assert.match(prefix, RESOURCE_PREFIX_RE);
+  assert.ok(prefix.length <= RESOURCE_PREFIX_MAX_LENGTH, `prefix "${prefix}" exceeds the ${RESOURCE_PREFIX_MAX_LENGTH}-char bound`);
+});
+
+test('deriveResourcePrefix: never throws and always stays charset/length-safe, even for a hostile or degenerate id', () => {
+  const hostileIds = [
+    '',
+    '___',
+    '../../etc/passwd',
+    'UPPER CASE with spaces!!',
+    '123-starts-with-digit',
+    'a'.repeat(500),
+    '💥emoji💥initiative💥',
+  ];
+  for (const id of hostileIds) {
+    const prefix = deriveResourcePrefix(id);
+    assert.match(prefix, RESOURCE_PREFIX_RE, `derived prefix for ${JSON.stringify(id)} must match the safe charset`);
+    assert.ok(prefix.length <= RESOURCE_PREFIX_MAX_LENGTH, `derived prefix for ${JSON.stringify(id)} must respect the length bound`);
+  }
 });
