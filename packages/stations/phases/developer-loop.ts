@@ -31,7 +31,7 @@ import {
   type WorkItem,
 } from '@forge/flows';
 import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
-import { buildWiQualityGate } from './wi-quality-gate.ts';
+import { buildWiQualityGate, deriveWiGateCmd } from './wi-quality-gate.ts';
 import { type QueryFn, type ClaudeAgentOptions } from '@forge/agents';
 import { getAdapter, resolveSdkId } from '@forge/agents';
 import type { AgentInvocation } from '@forge/agents';
@@ -40,7 +40,7 @@ import { makeProjectSkillsLoadedSink } from '@forge/agents';
 import { runRalphLoop as runRalph, type LoopResult } from '@forge/agents';
 import { matchesRateLimitSignature } from '@forge/agents';
 import { createWiWorktree, removeWiWorktree } from '@forge/flows';
-import { emitDepsLinkProblems, emitGateEvent, emitUncommittedWorkSwept } from './dev-loop-events.ts';
+import { emitDepsLinkProblems, emitGateEvent, emitUncommittedWorkSwept, emitWiGateTemplateSkipped } from './dev-loop-events.ts';
 import { createMergeQueue, mergeAndPublish, type MergeConflictDetail } from '@forge/flows';
 import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '@forge/agents';
 import { assertLocalRemoteSynced, checkLocalRemoteSynced, type PushResult } from '@forge/flows';
@@ -353,12 +353,12 @@ export async function runDeveloperLoop(
   // silently run the live-acceptance suite on a docs-only cycle.
   let accGate: AcceptanceGateConfig | undefined;
   let ciGateUnsetEnv: string[] | undefined;
-  let localGateTimeoutMs: number | undefined;
+  let localTestProcess: ProjectConfig['testProcess']['local'] | undefined;
   try {
     const projectCfg = loadProjectConfig(input.worktreePath);
     accGate = projectCfg?.acceptance_gate;
     ciGateUnsetEnv = projectCfg?.ci_gate_unset_env;
-    localGateTimeoutMs = projectCfg?.testProcess.local.timeoutMs;
+    localTestProcess = projectCfg?.testProcess.local;
   } catch {
     /* best-effort — a malformed config is fail-closed by the baseline gate */
   }
@@ -683,17 +683,17 @@ export async function runDeveloperLoop(
           initiativeId: input.initiativeId,
           // F-04 + 2026-05-25 (claude-harness audit): prefer the WI's
           // per-WI quality_gate_cmd (set by PM to a sharp, AC-exercising
-          // command) over the cycle-level default. The cycle-level
-          // default (`npm test --silent`) is only the fallback when the
-          // WI doesn't set its own — but post-2026-05-24 the WI MUST set
-          // its own, so this is effectively always the WI's cmd in
-          // production. Without this, the iter-0 gate-too-loose check
+          // command) over the cycle-level default. forge-mfv5.3.6: an
+          // omitted one is next filled from the project's
+          // testProcess.local.perWorkItem template with the WI's package
+          // (deriveWiGateCmd); the cycle-level default is the last
+          // fallback. Without the sharp gate, the iter-0 gate-too-loose check
           // false-fires (the WI's sharp gate would have failed cleanly,
           // but cycle-level `npm test` passes on the baseline).
           qualityGate: ((): undefined | (() => boolean) => {
-            const wiCmd = wi.quality_gate_cmd && wi.quality_gate_cmd.length > 0 ? wi.quality_gate_cmd : null;
-            const fallback = input.qualityGateCmd && input.qualityGateCmd.length > 0 ? input.qualityGateCmd : null;
-            const effective = wiCmd ?? fallback;
+            const derived = deriveWiGateCmd({ wi, template: localTestProcess?.perWorkItem, fallback: input.qualityGateCmd });
+            if (derived.templateSkipped) emitWiGateTemplateSkipped(logger, { initiativeId: input.initiativeId, parentEventId: wiStart.event_id, workItemId: wi.work_item_id, skill: agentDef.slug, skipped: derived.templateSkipped });
+            const effective = derived.cmd;
             if (!effective) return undefined;
             return buildWiQualityGate({
               worktreePath: wiWorktree.path,
@@ -702,7 +702,7 @@ export async function runDeveloperLoop(
               wi,
               requiredPathsSource,
               ciGateUnsetEnv,
-              localGateTimeoutMs,
+              localGateTimeoutMs: localTestProcess?.timeoutMs,
               initiativeId: input.initiativeId,
               // N10: a TIMED-OUT gate also stops the loop early (iterating
               // doesn't fix machine load and burns agent spend) — but its

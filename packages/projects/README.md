@@ -18,11 +18,11 @@ collapsed the legacy `"./*"` door; every importer now goes through
 `contract.test.ts` asserts this list against what the index actually exports, in
 both directions, and is required to FAIL against an empty index.
 
-### Values (36)
+### Values (37)
 
 | area | exports |
 |---|---|
-| config | `loadProjectConfig` · `readAgentInstructionsFile` · `resolveProjectIdForRepo` · `PROJECT_CONFIG_REL_PATH` · `writeProjectConfigPatch` · `validateDemoDeclaration` |
+| config | `loadProjectConfig` · `readAgentInstructionsFile` · `resolveProjectIdForRepo` · `PROJECT_CONFIG_REL_PATH` · `writeProjectConfigPatch` · `validateDemoDeclaration` · `WI_GATE_PACKAGE_PLACEHOLDER` |
 | preflight | `runPreflight` · `formatPreflightReport` · `buildVerdictEvent` · `SCRATCH_PATHS` · `TRACKED_CONFIG_PATHS` · `SCAFFOLD_BUILD_OUTPUT_IGNORES` · `runContractComplianceLoop` · `formatComplianceReport` · `clauseTarget` · `loadDeclaredSkills` |
 | contract stages | `deriveContractStages` · `resolveContainedProjectDir` |
 | create | `scaffoldGreenfieldProject` · `listProjectStarters` · `projectStartersDir` |
