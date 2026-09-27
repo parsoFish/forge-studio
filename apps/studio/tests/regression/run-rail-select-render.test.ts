@@ -52,7 +52,9 @@ vi.mock('next/navigation', () => ({
 
 import { RunRail } from '../../components/studio/RunRail.tsx';
 import { RunControls } from '../../components/studio/RunControls.tsx';
-import { readStickyRunSelection, resolveInitialRun, writeStickyRunSelection } from '../../lib/run-selection.ts';
+import {
+  readStickyRunSelection, resolveInitialRun, writeStickyRunSelection,
+} from '../../lib/run-selection.ts';
 import type { Run, RunStatus } from '../../lib/studio-client.ts';
 
 const FLOW_ID = 'forge-develop';
@@ -140,7 +142,9 @@ test(
   },
 );
 
-test('156: the select-run press wires to the SAME handler the card was already clicking — no second mechanism', async () => {
+test(
+  '156: the select-run press wires to the SAME handler the card was already clicking — no second mechanism',
+  async () => {
   await mount([RUN_A, RUN_B]);
   // The whole card is the control (data-action sits on the same element as
   // the pre-existing onClick), not a nested button — pressing anywhere on
@@ -149,7 +153,8 @@ test('156: the select-run press wires to the SAME handler the card was already c
   expect(card!.hasAttribute('data-run-status')).toBe(true);
   await act(async () => { card!.click(); });
   expect(container.querySelector('[data-section="run-controls"]')?.getAttribute('data-run-id')).toBe('run-b');
-});
+  },
+);
 
 test('156: the selection is STICKY — a fresh mount (remount) still shows the pressed run', async () => {
   await mount([RUN_A, RUN_B]);
