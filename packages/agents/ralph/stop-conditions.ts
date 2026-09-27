@@ -540,6 +540,54 @@ function runGateCapturing(
 }
 
 /**
+ * The safety net's commit boundary (forge-1rk5.3 row 145, orchestrator ruling
+ * 1742): what it is allowed to sweep INTO the commit.
+ *
+ *  - `agentPaths` — paths the agent's own Edit/Write/etc. tool calls touched
+ *    THIS iteration (the runner already observes these as `result.filesChanged`).
+ *  - `scopedPaths` — the work item's own declared boundary, `files_in_scope`
+ *    union `creates`, worktree-relative. An entry ending in `/` is a directory
+ *    prefix; an entry containing `*` is a wildcard — see `pathInScope` below
+ *    for why those two conventions (not a third, new one) are what's matched.
+ */
+export type AutoCommitScope = {
+  agentPaths: readonly string[];
+  scopedPaths: readonly string[];
+};
+
+/** One sweep's outcome: what actually got committed, restored or left alone. */
+export type AutoCommitSweepResult = {
+  committed: string[];
+  restored: string[];
+  left: string[];
+};
+
+/**
+ * True iff `changedPath` is covered by one of `scope`'s entries — exact
+ * match, a directory prefix (entry ends with `/`, matching `isTrackedConfig`
+ * in `packages/flows/pr-branch-sync.ts` and `trackedConfigProbe`/
+ * `giTextCovers` in `packages/projects/preflight-repo.ts`), or a `*`-only
+ * glob (matching `globToRegExp` in `packages/projects/constraint-blocks.ts`).
+ * Both conventions are mirrored here rather than imported: `agents` (rank 3
+ * in `scripts/check-boundaries.mjs`'s PACKAGE_RANK) could reach `projects`
+ * (rank 2), but neither helper is in that package's public `exports` map,
+ * and adding one is a `packages/projects` change this WI's scope (agents/
+ * stations/flows) does not cover — so the algorithm is reused, not a new one
+ * invented, even though the two lines of code are not literally shared.
+ */
+function pathInScope(changedPath: string, scope: readonly string[]): boolean {
+  return scope.some((entry) => {
+    if (entry === changedPath) return true;
+    if (entry.endsWith('/')) return changedPath.startsWith(entry);
+    if (entry.includes('*')) {
+      const escaped = entry.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+      return new RegExp(`^${escaped}$`).test(changedPath);
+    }
+    return false;
+  });
+}
+
+/**
  * Auto-commit any uncommitted (staged or unstaged) changes in the worktree
  * with a clearly-marked `forge-autocommit` message. Surfaced as a safety
  * net after each agent iteration so the gate's `git diff --name-only
@@ -553,29 +601,77 @@ function runGateCapturing(
  * commit diff. Auto-committing here keeps the loop from dead-ending on
  * what is otherwise a complete WI.
  *
+ * forge-1rk5.3 row 145 (orchestrator ruling 1742): a funded run once
+ * committed only its in-scope file, then ran `npm run demo` to verify —
+ * which rewrote a TRACKED evidence file outside the WI's scope. The old
+ * blanket `git add -A` swept that rewrite onto the WI's branch too. The net
+ * now stages ONLY `scope.agentPaths ∪ scope.scopedPaths`: a tracked file
+ * changed outside that boundary is RESTORED to HEAD content (`git checkout
+ * -- <path>`) before anything is staged, so it can never leak into this or
+ * the next WI's commit in the shared worktree; an untracked file outside the
+ * boundary is left on disk, untouched. `node_modules` (a symlink, always
+ * untracked — see the dedicated test below) is never in scope, so it is
+ * always `left`, exactly as it was always excluded before.
+ *
  * `forge-autocommit:` prefix lets reflectors trivially distinguish these
  * from agent-authored commits in cycle-recap. G8 wave 2 (2026-07-12): this
  * is an orchestrator-issued commit (no agent in the loop) so it carries
  * `ORCHESTRATOR_GIT_IDENTITY` via explicit `-c` flags rather than relying on
  * whatever git identity happens to be configured in the worktree.
  *
- * Returns true if a commit was created; false if there was nothing to
- * commit OR git failed. Failures are non-fatal — the gate's normal check
- * runs whether we committed or not.
+ * Returns the sweep's committed/restored/left paths if a commit was
+ * created; false if there was nothing IN SCOPE to commit OR git failed.
+ * Failures are non-fatal — the gate's normal check runs whether we
+ * committed or not.
  */
 export function autoCommitWorktreeIfDirty(
   worktreePath: string,
   iteration: number,
-  workItemId?: string,
-): boolean {
+  workItemId: string | undefined,
+  scope: AutoCommitScope,
+): false | AutoCommitSweepResult {
   try {
-    const status = execFileSync('git', ['status', '--porcelain'], { cwd: worktreePath, stdio: 'pipe' }).toString('utf8');
+    // --untracked-files=all: an untracked DIRECTORY otherwise collapses to one
+    // `?? dir/` line (its contents never individually named), which would
+    // hide a new in-scope file (e.g. `src/sort.ts`) inside an untracked `src/`
+    // from the per-path scope check below.
+    const status = execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: worktreePath, stdio: 'pipe' }).toString('utf8');
     if (status.trim().length === 0) return false;
-    execFileSync('git', ['add', '-A'], { cwd: worktreePath, stdio: 'pipe' });
-    // Never the node_modules symlink forge linked in (the boundary commits' own guard, cycle-helpers.ts):
-    // a `node_modules/` rule does not match a symlink, and a template-less repo has no info/exclude.
-    execFileSync('git', ['reset', '-q', '--', 'node_modules'], { cwd: worktreePath, stdio: 'pipe' });
-    if (execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: worktreePath, stdio: 'pipe' }).toString('utf8').trim() === '') return false;
+
+    const allowed = [...scope.agentPaths, ...scope.scopedPaths];
+    const restored: string[] = [];
+    const left: string[] = [];
+    const toStage: string[] = [];
+    for (const line of status.split('\n')) {
+      if (line.length === 0) continue;
+      const code = line.slice(0, 2);
+      const rawPath = line.slice(3);
+      // A rename/copy line ("R  old -> new") names the DESTINATION path —
+      // the one scope membership is judged against.
+      const path = rawPath.includes(' -> ') ? rawPath.split(' -> ')[1]! : rawPath;
+      if (pathInScope(path, allowed)) {
+        toStage.push(path);
+        continue;
+      }
+      if (code === '??') {
+        left.push(path);
+      } else {
+        // Tracked but out of scope: restore to HEAD content BEFORE anything
+        // is staged, so the index (still == HEAD for this path) is what
+        // `checkout --` restores from.
+        execFileSync('git', ['checkout', '--', path], { cwd: worktreePath, stdio: 'pipe' });
+        restored.push(path);
+      }
+    }
+    if (toStage.length === 0) return false;
+
+    execFileSync('git', ['add', '--', ...toStage], { cwd: worktreePath, stdio: 'pipe' });
+    const committed = execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: worktreePath, stdio: 'pipe' })
+      .toString('utf8')
+      .split('\n')
+      .filter((p) => p.length > 0);
+    if (committed.length === 0) return false;
+
     const wiTag = workItemId ? ` ${workItemId}` : '';
     const msg = `forge-autocommit:${wiTag} iter ${iteration} WIP (safety-net for missed agent commit)`;
     execFileSync(
@@ -583,7 +679,7 @@ export function autoCommitWorktreeIfDirty(
       [...gitIdentityConfigArgs(ORCHESTRATOR_GIT_IDENTITY), 'commit', '-m', msg, '--no-verify'],
       { cwd: worktreePath, stdio: 'pipe' },
     );
-    return true;
+    return { committed, restored, left };
   } catch {
     return false;
   }
