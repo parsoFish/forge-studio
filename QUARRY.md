@@ -61,13 +61,13 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,103 | **13,103** | ratified 13,103 — row 135 HeartbeatTimers type shared by the caller-lifecycle spawns (forge-8vfn.8.1.30), +1 on 13,102, lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 61 | 20,638 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
-| `flows` | 85 | 23,996 | **23,796** | ratified 23,796 — forge-1rk5.3 row 137 linkProjectDeps creates .git/info in a template-less repo and returns its problems (emitted, never swallowed), +13 on 23,783, lane-ratified under ruling 666; see git history for prior raises. |
+| `flows` | 85 | 24,012 | **23,812** | ratified 23,812 — row 136 closure.local-aligned-to-remote records target_sha/base_sha (forge-8vfn.8.1.32), +16 on 23,796, lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 15 | 2,759 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 42 | 11,720 | **11,720** | ratified 11,720 — forge-1rk5.3 row 138 honest delta: normalised command-output compare, named rule list, changed-delta excerpt (demo-delta.ts split at 800), +142 (T1 1711) on row 135's 11,578; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,835 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **469** | **127,464** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **469** | **127,480** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -358,7 +358,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/adversarial-review.ts | stations | verbatim | 779 |
 | packages/stations/phases/review-refusal.ts | stations | rewritten | 135 |
 | packages/agents/phases/agent-scope-guard.ts | agents | verbatim | 111 |
-| packages/flows/phases/closure.ts | flows | verbatim | 431 |
+| packages/flows/phases/closure.ts | flows | verbatim | 435 |
 | packages/stations/phases/executor-deps.ts | stations | verbatim | 344 |
 | packages/stations/phases/pm-rejected-set.ts | stations | verbatim | 139 |
 | packages/sessions/session-write-fence.ts | sessions | verbatim | 300 |
@@ -390,7 +390,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/pinned-sdk-query.ts | agents | verbatim | 163 |
 | packages/flows/planned-initiatives.ts | flows | verbatim | 96 |
 | packages/flows/gh-pinned.ts | flows | rewritten | 205 |
-| packages/flows/pr-branch-sync.ts | flows | verbatim | 583 |
+| packages/flows/pr-branch-sync.ts | flows | verbatim | 595 |
 | packages/flows/pr-ci-watch.ts | flows | verbatim | 187 |
 | packages/sessions/kinds/preflight-fix.ts | sessions | rewritten | 171 |
 | packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 431 |

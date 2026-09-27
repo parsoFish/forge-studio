@@ -54,12 +54,35 @@ test('judgeForkGrounds\'s lines are printed', () => {
 });
 
 test('a non-null redReason ends the run red, regardless of the beats', () => {
-  const runner = runnerSourceContaining(CALL);
-  const callAt = runner.source.indexOf(CALL);
-  // The gate sits near the END of the run (after every other containment
-  // check), so the window is "from the call to EOF" rather than a fixed size.
-  const after = runner.source.slice(callAt);
-  const gateAt = after.indexOf('redReason !== null');
+  // Bead `forge-8vfn.8.1.32` (T1 1694, a PURE MOVE) put the gate in
+  // `run-story-verdict.mjs`, a different module than CALL's `run-story.mjs`
+  // — resolved separately, same reason `runnerSourceContaining`'s own header
+  // gives for existing at all.
+  const GATE = 'redReason !== null';
+  const verdict = runnerSourceContaining(GATE);
+  const gateAt = verdict.source.indexOf(GATE);
   assert.notEqual(gateAt, -1, 'the gate must actually read redReason');
-  assert.match(after.slice(gateAt, gateAt + 200), /return 1;/, 'and end the run non-zero');
+  assert.match(verdict.source.slice(gateAt, gateAt + 200), /return 1;/, 'and end the run non-zero');
+});
+
+// D's review of `forge-8vfn.8.1.32`: since the guard moved behind `containmentVerdict`, "binding here
+// + guard there" no longer proves they connect. The call must hand over the SAME binding, and the
+// verdict must declare it. Row 75's `trailing` test is the pattern.
+function assertVerdictHandoff(binding: string): void {
+  const call = runnerSourceContaining('return containmentVerdict({');
+  const at = call.source.indexOf('return containmentVerdict({');
+  const handoff = call.source.slice(at, call.source.indexOf('});', at));
+  assert.match(
+    handoff, new RegExp(`(?<![.\\w])${binding}(?![.\\w:])`),
+    `the SAME \`${binding}\` must be handed to containmentVerdict`,
+  );
+  const verdict = runnerSourceContaining('function containmentVerdict(');
+  assert.match(
+    verdict.source, new RegExp(`function containmentVerdict\\(\\{[^}]*\\b${binding}\\b`, 's'),
+    `containmentVerdict must declare a \`${binding}\` parameter`,
+  );
+}
+
+test('forge-8vfn.8.1.32: run-story hands `forkGrounds` to containmentVerdict, which declares it', () => {
+  assertVerdictHandoff('forkGrounds');
 });

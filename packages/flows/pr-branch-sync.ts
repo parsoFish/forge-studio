@@ -435,6 +435,18 @@ export function confirmPrMerged(worktreePath: string): boolean {
 export type AlignResult = {
   aligned: boolean;
   detail: string;
+  /**
+   * `refs/remotes/origin/main`'s resolved sha AFTER the fetch above — what
+   * local `main` was (or should have been) aligned to. `null` when it could
+   * never be resolved (the fetch failed and no cached `origin/main` exists
+   * either) — an honest "unknown", never guessed from `localMain` or any
+   * other stand-in (bead `forge-8vfn.8.1.32`, T1 ruling 1694: a caller that
+   * verifies a ground against this value must be able to tell "aligned to X"
+   * from "we don't actually know").
+   */
+  targetSha: string | null;
+  /** `refs/heads/main`'s sha BEFORE this call moved it — the pre-align pin. */
+  baseSha: string | null;
 };
 
 /**
@@ -579,5 +591,5 @@ export function alignLocalToRemote(
   } catch {
     steps.push(`origin ${initiativeBranch} already gone or undeletable`);
   }
-  return { aligned: true, detail: steps.join('; ') };
+  return { aligned: true, detail: steps.join('; '), targetSha: originMain, baseSha: localMain };
 }

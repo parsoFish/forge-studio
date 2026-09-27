@@ -43,6 +43,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runnerSourceContaining } from './runner-source.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -227,6 +228,15 @@ function stripComments(source: string): string {
 const readSource = (file: string) => readFileSync(join(HERE, file), 'utf8');
 const readStripped = (file: string) => stripComments(readSource(file));
 const indexOfCall = (source: string, name: string) => source.indexOf(`${name}(`);
+
+// Bead `forge-8vfn.8.1.32` — `run-story.mjs`'s containment verdict moved into
+// `run-story-verdict.mjs` (a PURE MOVE, T1 1694). `realFence`'s binding stays
+// in `run-story.mjs`; its `if (!realFence.ok) { … }` guard now lives in the
+// other file. Concatenated, in that order, so the two doors below still see
+// ONE contiguous unit — the same resilience `runnerSourceContaining` already
+// gives a single-anchor door, extended here because these doors need TWO.
+const readStrippedVerdictSplit = () =>
+  `${readStripped('run-story.mjs')}\n${readStripped('run-story-verdict.mjs')}`;
 
 // ── Unit tests for the stripper itself ──────────────────────────────────────
 
@@ -639,7 +649,7 @@ function fenceDoorVerdictForFile(path: string) {
 }
 
 test('run-story.mjs: if (!N.ok) { … return 1 … } — the fence\'s red must sit INSIDE its own guard, not a nearby unrelated return', () => {
-  const v = fenceDoorVerdictForFile(join(HERE, 'run-story.mjs'));
+  const v = fenceDoorVerdict(readStrippedVerdictSplit());
   assert.equal(
     v.ok,
     true,
@@ -693,7 +703,7 @@ test('the fence door\'s own instrument: GREEN on a correctly-shaped guard, RED w
  * All three mutants must be RED; the real, unmutated file must be GREEN.
  */
 test('the fence door is a mutation-proof gate: RED on (a) deleted, (b) neutered and (c) stubbed guards, GREEN on the real file', () => {
-  const real = readStripped('run-story.mjs');
+  const real = readStrippedVerdictSplit();
 
   const realVerdict = fenceDoorVerdict(real);
   assert.equal(realVerdict.ok, true, `the real, unmutated file must be GREEN: ${realVerdict.reason}`);
@@ -748,4 +758,30 @@ test('the fixture-ground teardown is gated on the trailing census being empty', 
   assert.ok(call > 0, 'teardownFixtureGround is called');
   const guard = src.lastIndexOf('trailing.census.empty', call);
   assert.ok(guard > 0 && call - guard < 400, 'the teardown call sits inside a trailing.census.empty guard');
+});
+
+// D's review of `forge-8vfn.8.1.32`: since the guard moved behind `containmentVerdict`, "binding here
+// + guard there" no longer proves they connect. The call must hand over the SAME binding, and the
+// verdict must declare it. Row 75's `trailing` test is the pattern.
+function assertVerdictHandoff(binding: string): void {
+  const call = runnerSourceContaining('return containmentVerdict({');
+  const at = call.source.indexOf('return containmentVerdict({');
+  const handoff = call.source.slice(at, call.source.indexOf('});', at));
+  assert.match(
+    handoff, new RegExp(`(?<![.\\w])${binding}(?![.\\w:])`),
+    `the SAME \`${binding}\` must be handed to containmentVerdict`,
+  );
+  const verdict = runnerSourceContaining('function containmentVerdict(');
+  assert.match(
+    verdict.source, new RegExp(`function containmentVerdict\\(\\{[^}]*\\b${binding}\\b`, 's'),
+    `containmentVerdict must declare a \`${binding}\` parameter`,
+  );
+}
+
+test('forge-8vfn.8.1.32: run-story hands `realFence` to containmentVerdict, which declares it', () => {
+  assertVerdictHandoff('realFence');
+});
+
+test('forge-8vfn.8.1.32: run-story hands `fence` to containmentVerdict, which declares it', () => {
+  assertVerdictHandoff('fence');
 });

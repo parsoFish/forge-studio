@@ -254,7 +254,11 @@ test('7.6.51: the runner enforces the ceiling at a beat boundary and exits non-z
   // `spendHalt`. Neither rename changed a behaviour. The property is that the
   // exit code is non-zero whenever the money verdict ended the run, whatever
   // the variable holding it is called.
-  assert.match(src, /row\.status === 'green' && \w+ === null\) \? 0 : 1/,
+  // Bead `forge-8vfn.8.1.32` (T1 1694, a PURE MOVE): the final return moved
+  // into `run-story-verdict.mjs`, a different module than `src` above —
+  // resolved separately, the same reason `runnerSourceContaining` exists.
+  const { source: verdictSrc } = runnerSourceContaining('=== null) ? 0 : 1');
+  assert.match(verdictSrc, /row\.status === 'green' && \w+ === null\) \? 0 : 1/,
     'a halt must make the exit code non-zero whatever the beats did');
 });
 
@@ -503,4 +507,30 @@ describe('summariseRunSpend — one phase counts once, at the higher of its two 
 
     assert.equal(s.usd, 2, 'two unphased dispatches are two spends; collapsing them would UNDER-report');
   });
+});
+
+// D's review of `forge-8vfn.8.1.32`: since the guard moved behind `containmentVerdict`, "binding here
+// + guard there" no longer proves they connect. The call must hand over the SAME binding, and the
+// verdict must declare it. Row 75's `trailing` test is the pattern.
+function assertVerdictHandoff(binding: string): void {
+  const call = runnerSourceContaining('return containmentVerdict({');
+  const at = call.source.indexOf('return containmentVerdict({');
+  const handoff = call.source.slice(at, call.source.indexOf('});', at));
+  assert.match(
+    handoff, new RegExp(`(?<![.\\w])${binding}(?![.\\w:])`),
+    `the SAME \`${binding}\` must be handed to containmentVerdict`,
+  );
+  const verdict = runnerSourceContaining('function containmentVerdict(');
+  assert.match(
+    verdict.source, new RegExp(`function containmentVerdict\\(\\{[^}]*\\b${binding}\\b`, 's'),
+    `containmentVerdict must declare a \`${binding}\` parameter`,
+  );
+}
+
+test('forge-8vfn.8.1.32: run-story hands `spendHalt` to containmentVerdict, which declares it', () => {
+  assertVerdictHandoff('spendHalt');
+});
+
+test('forge-8vfn.8.1.32: run-story hands `row` to containmentVerdict, which declares it', () => {
+  assertVerdictHandoff('row');
 });

@@ -182,6 +182,15 @@ test('runClosure: pr-open + CONFIRMED merge → outcome merged, manifest moved t
     const msgs = h.events().map((e) => e.message);
     assert.ok(msgs.includes('closure.local-aligned-to-remote'));
     assert.ok(msgs.includes('closure.manifest-moved-to-merged'));
+    // bead `forge-8vfn.8.1.32`, T1 ruling 1694 — the S10 story fence's
+    // own-ground merge check reads `target_sha` off this event to confirm
+    // what the ground was aligned to; it must name the real post-fetch
+    // origin/main, not just a human `detail` string.
+    const align = h.events().find((e) => e.message === 'closure.local-aligned-to-remote');
+    const originMain = execFileSync(
+      'git', ['rev-parse', 'refs/remotes/origin/main'], { cwd: h.proj, encoding: 'utf8' },
+    ).trim();
+    assert.equal(align?.metadata?.target_sha, originMain);
   } finally {
     h.cleanup();
   }
