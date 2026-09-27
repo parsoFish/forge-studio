@@ -136,20 +136,49 @@ export const CLOSE = [
       say: 'The theme the reflector wrote is now a node the next planner will read. That is the loop closing: this cycle made the project\'s brain bigger, and nobody typed it in.',
     },
     {
-      // SOURCE-DERIVED, and the comparison is the hard part. `data-run-cost-usd`
-      // is `.toFixed(4)` on the monitor strip (`MonitorSummary.tsx:53,101`)
-      // while `data-phase-cost-usd` is `.toFixed(2)` per node
-      // (`FlowRunDetail.tsx:285`) — DELIBERATELY different attribute names and
-      // precisions (`lib/history-ledger-render.test.ts:228-233` documents the
-      // non-collision). NO `event`/`event-log` data key exists anywhere, so the
-      // page cannot be compared against the log from inside a beat; the exit
-      // row does that comparison outside, with
-      // `sumAuthoritativeCostFromLines` over the run's events.jsonl — never the
-      // naive sum, which double-counts by more than 2× (M3's measurement).
+      // Row 148 (bead `forge-8vfn.8.1.38`, ruling 1771) — NAVIGATION-ONLY, the
+      // same shape ruling 533 established (`S10.act2.mjs`'s header, row 143's
+      // `beats-kb-select-nav.test.ts`): `route` plus `page`/`page-ready`,
+      // nothing else. The next beat reads the run's cost off the DEVELOP
+      // flow's own monitor (`/flows/forge-develop`), and `StudioNav.tsx`'s own
+      // comment says why this hop cannot be skipped: the Flows pillar points
+      // only at the flows index — "a specific flow's own monitor ... is
+      // reached via a card on that index, not a nav deep-link". The Flows
+      // pillar (`data-nav="flows"`, exact href `/flows`) is what the runner's
+      // real-nav fallback clicks from `/knowledge`, unchanged from before this
+      // fix.
+      act: 'Open the flows index',
+      expect: {
+        route: '/flows',
+        data: { page: 'flows-index', 'page-ready': 'true' },
+      },
+      say: 'Before checking what the run cost, the operator opens the flows this factory runs.',
+    },
+    {
+      // Row 148 (bead `forge-8vfn.8.1.38`, ruling 1771). SOURCE-DERIVED, and
+      // the comparison is the hard part. `data-run-cost-usd` is `.toFixed(4)`
+      // on the monitor strip (`MonitorSummary.tsx:53,104`), present whenever
+      // `run.costUsd !== null` — mounted ONLY at the per-flow monitor
+      // (`app/flows/[id]/page.tsx:566,569`, `data-page="flow-monitor"`),
+      // reached from the previous beat's flows index via the FlowCard's own
+      // link (`LibraryCard.tsx`'s `FlowCard`, `href="/flows/${flow.id}"`).
+      // The global `/monitor` carries `data-ledger-cost-usd` instead, at a
+      // DELIBERATELY different precision (`.toFixed(2)`) and attribute name
+      // (`docs/reference/studio-dom-contract.md` ~1275-1284;
+      // `lib/history-ledger-render.test.ts:228-233` documents the
+      // non-collision) — never this beat's evidence.
+      //
+      // `data-phase-cost-usd` is `.toFixed(2)` per node
+      // (`FlowRunDetail.tsx:285`) — a third, deliberately different precision
+      // again. NO `event`/`event-log` data key exists anywhere, so the page
+      // cannot be compared against the log from inside a beat; the exit row
+      // does that comparison outside, with `sumAuthoritativeCostFromLines`
+      // over the run's events.jsonl — never the naive sum, which
+      // double-counts by more than 2× (M3's measurement).
       act: 'Check what the run cost',
       expect: {
-        route: '/monitor',
-        data: { page: 'monitor', 'page-ready': 'true', 'run-cost-usd': '<runCostUsd>' },
+        route: '/flows/forge-develop',
+        data: { page: 'flow-monitor', 'page-ready': 'true', 'run-cost-usd': '<runCostUsd>' },
       },
       say: 'One figure, and it is the same figure the event log holds. A run that cannot say honestly what it spent cannot be trusted with a ceiling, so this is checked against the log rather than taken from the screen.',
     },
