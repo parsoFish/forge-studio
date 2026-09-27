@@ -5,6 +5,8 @@
 import type { EventLogger } from '@forge/kernel';
 import type { GateRunInfo } from '@forge/agents';
 
+import type { WiGateTemplateSkipped } from './wi-quality-gate.ts';
+
 /**
  * G1 rescope (plan item 2.6): one autocommit-sweep observation. The safety
  * net (`autoCommitWorktreeIfDirty`) STAYS — it closes the
@@ -138,5 +140,28 @@ export function emitGateEvent(
       ...(info.iteration !== undefined ? { iteration: info.iteration } : {}),
       ...(isExpectedIter0Fail ? { expected_fail: true } : {}),
     },
+  });
+}
+
+/**
+ * forge-mfv5.3.6: the project declares a `testProcess.local.perWorkItem`
+ * template, this WI omitted its own `quality_gate_cmd`, and its paths share no
+ * directory below the repo root — so the project-wide gate runs instead of a
+ * template widened to the root. Named, never silent.
+ */
+export function emitWiGateTemplateSkipped(
+  logger: EventLogger,
+  ctx: { initiativeId: string; parentEventId: string; workItemId: string; skill: string; skipped: WiGateTemplateSkipped },
+): void {
+  logger.emit({
+    initiative_id: ctx.initiativeId,
+    parent_event_id: ctx.parentEventId,
+    phase: 'developer-loop',
+    skill: ctx.skill,
+    event_type: 'log',
+    input_refs: [],
+    output_refs: [],
+    message: 'gate.template-skipped',
+    metadata: { work_item_id: ctx.workItemId, reason: ctx.skipped.reason, paths: [...ctx.skipped.paths], gate_source: 'project' },
   });
 }

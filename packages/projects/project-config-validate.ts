@@ -10,6 +10,7 @@ import {
   DEMO_STEP_KINDS,
   RELEASE_STEP_KINDS,
   RELEASE_STEP_PHASES,
+  SHELL_METACHARACTERS,
 } from '@forge/contracts';
 import type {
   BuildProcess,
@@ -35,6 +36,38 @@ function parseTimeoutMs(value: unknown, label: string): number | undefined {
     throw new Error(`project-config: ${label} must be a positive integer of milliseconds`);
   }
   return value;
+}
+
+/** The one token a `testProcess.local.perWorkItem` template carries, filled
+ *  with the directory the work item changes (forge-mfv5.3.6). */
+export const WI_GATE_PACKAGE_PLACEHOLDER = '{package}';
+
+/**
+ * forge-mfv5.3.6 — `testProcess.local.perWorkItem`: an argv with exactly one
+ * `{package}` placeholder and, the placeholder aside, no
+ * `SHELL_METACHARACTERS` (the gate child is a bare argv, never a shell — the
+ * same rule the demo capture commands are held to).
+ */
+function parsePerWorkItemTemplate(value: unknown): string[] | undefined {
+  const label = 'testProcess.local.perWorkItem';
+  const argv = optionalArgv(value, label);
+  if (argv === undefined) return undefined;
+  const found = argv.reduce((n, tok) => n + tok.split(WI_GATE_PACKAGE_PLACEHOLDER).length - 1, 0);
+  if (found !== 1) {
+    throw new Error(`project-config: ${label} must carry exactly one ${WI_GATE_PACKAGE_PLACEHOLDER} placeholder (found ${found})`);
+  }
+  // The filled value comes from a WI's paths; a token that STARTS with the
+  // placeholder would hand that value the first character of an argv token,
+  // where a `-` makes it a flag. A fixed literal (e.g. `./`) must precede it.
+  const leading = argv.find((tok) => tok.startsWith(WI_GATE_PACKAGE_PLACEHOLDER));
+  if (leading !== undefined) {
+    throw new Error(`project-config: ${label} token ${JSON.stringify(leading)}: ${WI_GATE_PACKAGE_PLACEHOLDER} must not start its token — put a fixed prefix such as ./ before it`);
+  }
+  const bad = argv.find((tok) => SHELL_METACHARACTERS.test(tok.split(WI_GATE_PACKAGE_PLACEHOLDER).join('')));
+  if (bad !== undefined) {
+    throw new Error(`project-config: ${label} token ${JSON.stringify(bad)} carries a shell metacharacter — the template runs as a bare argv, never through a shell`);
+  }
+  return argv;
 }
 
 /**
@@ -65,11 +98,13 @@ export function parseTestProcess(value: unknown): TestProcess {
   if (!localCmd) {
     throw new Error('project-config: missing required `testProcess.local.cmd` (argv)');
   }
+  const perWorkItem = parsePerWorkItemTemplate(localObj.perWorkItem);
   const local: TestProcessLocal = {
     cmd: localCmd,
     ...(parseTimeoutMs(localObj.timeoutMs, 'testProcess.local.timeoutMs') !== undefined
       ? { timeoutMs: parseTimeoutMs(localObj.timeoutMs, 'testProcess.local.timeoutMs') }
       : {}),
+    ...(perWorkItem !== undefined ? { perWorkItem } : {}),
   };
 
   let ci: TestProcessCi | undefined;
