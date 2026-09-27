@@ -22,7 +22,7 @@ both directions, and is required to FAIL against an empty index.
 
 | area | exports |
 |---|---|
-| config | `loadProjectConfig` · `readAgentInstructionsFile` · `resolveProjectIdForRepo` · `PROJECT_CONFIG_REL_PATH` |
+| config | `loadProjectConfig` · `readAgentInstructionsFile` · `resolveProjectIdForRepo` · `PROJECT_CONFIG_REL_PATH` · `writeProjectConfigPatch` · `validateDemoDeclaration` |
 | preflight | `runPreflight` · `formatPreflightReport` · `buildVerdictEvent` · `SCRATCH_PATHS` · `TRACKED_CONFIG_PATHS` · `SCAFFOLD_BUILD_OUTPUT_IGNORES` · `runContractComplianceLoop` · `formatComplianceReport` · `clauseTarget` · `loadDeclaredSkills` |
 | contract stages | `deriveContractStages` · `resolveContainedProjectDir` |
 | create | `scaffoldGreenfieldProject` · `listProjectStarters` · `projectStartersDir` |

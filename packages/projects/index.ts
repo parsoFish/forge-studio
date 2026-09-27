@@ -50,7 +50,7 @@
 // --- config: `.forge/project.json`, the agent-instruction file ------------
 export { loadProjectConfig, readAgentInstructionsFile, resolveProjectIdForRepo, PROJECT_CONFIG_REL_PATH } from './project-config.ts';
 export type { ProjectConfig, AcceptanceGateConfig } from './project-config.ts';
-export { writeProjectConfigPatch, ProjectConfigWriteError } from './project-config-write.ts';
+export { writeProjectConfigPatch } from './project-config-write.ts';
 export { validateDemoDeclaration } from './preflight-demo.ts';
 
 // --- preflight: the C-clause verdict + the bounded auto-fix loop ----------
