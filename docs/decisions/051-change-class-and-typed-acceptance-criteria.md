@@ -3,6 +3,7 @@
 **Status:** Accepted (operator decision 2026-09-05, as drafted, including the disclosed `packages/sessions` repoint).
 **Date:** 2026-09-05
 **Amended:** 2026-09-25 (operator item 97, M7) — decision 2: a flow may narrow its class's review lenses. See the amendment under decision 2. Decision 4's accepted classes are now implemented as `accepts:` on the FlowDef.
+**Amended:** 2026-09-27 (bead forge-mfv5.3.5, operator ruling 2026-09-12) — decision 2: the table gains an `acceptance` column, `required | advisory`, which replaces the project-wide `testProcess.acceptance.required` flag. See the second amendment under decision 2.
 **References:** spec §5 items 1, 2, 3, 8, 9; [`docs/roadmaps/1.0.md`](../roadmaps/1.0.md) §4 M5 Lane A, §5 H7; [ADR 037](./037-compiled-wi-contracts.md) (compiled work-item contracts); [ADR 024](./024-phases-as-subagents-invoking-skills.md) (phases as subagents invoking skills); [ADR 036](./036-orchestrator-owned-gate-execution.md) (orchestrator-owned gate execution); [ADR 048](./048-deletable-example-factory.md) (deletable example factory).
 **The table this ADR governs is data, not prose:** `packages/factory/class-profiles.ts`, held to its shape by `packages/factory/tests/contract/class-profiles.contract.test.ts`.
 
@@ -42,6 +43,25 @@ failure, because a re-derived profile is a profile that can drift from the table
    nothing of its own, so the "re-derived profile" this decision forbids still cannot arise. This is what lets a second
    factory (the forge-docs example of G3) review a `docs` initiative under one lens without a second table. An absent
    field means the class's full lens set, as before.
+
+   **Amended 2026-09-27 (bead forge-mfv5.3.5, operator ruling 2026-09-12).** The table gains an `acceptance` column,
+   `required | advisory`. It says whether an initiative of the class must prove itself on the project's live-acceptance
+   tier (`testProcess.acceptance`), and it replaces the project-wide `testProcess.acceptance.required` boolean in
+   `.forge/project.json`. That boolean is retired: a project config that still carries it is refused by name at load,
+   never read and never silently ignored. `required` means the project manager must compile at least one work item whose
+   gate runs the live-acceptance suite, and the dev-loop refuses to run that gate without the project's `requiresEnv`.
+   `advisory` means neither is forced: the tier still runs when a work item's gate targets it, but no work item is
+   demanded and the env guard is not imposed. Both apply only when the project declares `testProcess.acceptance`; a
+   project with no live tier has nothing to require. The rest of `testProcess.acceptance` (the `match` token, the
+   `requiresEnv` secret names, the timeout) stays project data.
+
+   The values: `code` = `required`, because every code initiative on a live-API project must prove itself against the
+   real API; `docs` = `advisory`, because a docs initiative has no live behaviour to prove and must never be forced to
+   fabricate a live-acceptance work item. Those two are the operator's 2026-09-12 ruling. `config` = `required` and
+   `infra` = `required` are the orchestrator's extension of that ruling, and the operator can veto either with a one-line
+   table change. The rationale: a config or infra change alters live behaviour just as code does, and "advisory" was
+   specific to docs, which have no live behaviour to prove. There is no third value. A "defer to project" value would
+   re-create the retired project-wide flag.
 
 **3. `acceptance_criteria` is typed frontmatter,** an array of `{given, when, then}`, shared by the architect (writes it),
 the project manager (compiles it into work items), the review agent (returns a verdict per entry) and PLAN.html (renders
