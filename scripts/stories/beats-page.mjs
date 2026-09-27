@@ -28,6 +28,15 @@
 import { STALL_CEILING_MS, doorWorthRunning, CYCLE_WAIT_WALL_CEILING_MS } from './beats-agent-proc.mjs';
 import { cycleWaitDeadline } from './beats-cycle-progress.mjs';
 import { readProgress, progressTracker } from './beats-progress.mjs';
+// Bead `forge-8vfn.8.1.34` / ruling 1736 — the SAME "first poll + on change"
+// reporter `performSteps` already wraps around the ACT (bead `6.11.30`), now
+// also wrapped around the PRE-act wait below. S10 proof run 36's beat 21
+// spent its whole 504 s bound in `waitOffSession` with the control absent the
+// entire time, and printed NOTHING — the runner reached `describeControl`
+// only at failure, once, in the final verdict text. Reusing `watchControlState`
+// closes the SAME timing gap `6.11.30` closed for the click phase, never a
+// second reporter with its own cadence or wording.
+import { watchControlState } from './beats-control-state.mjs';
 
 /** A `<name>` expectation: bind whatever the page rendered, for a later beat's route. */
 // ── THE READ HALF LIVES IN `beats-page-read.mjs` (forge-8vfn.7.6.121) ────────
@@ -157,16 +166,24 @@ export async function waitForHandleOrStall(page, handle, timeoutMs, sessionScope
   if (sessionScope === null) return waitOffSession(page, handle, timeoutMs, stallDoor);
   const startedAt = Date.now();
   const deadline = startedAt + timeoutMs;
-  for (;;) {
-    if ((await page.locator(handle).count()) > 0) return null;
-    // Bead `forge-8vfn.6.11.22`: sample the agent's own process WHILE waiting.
-    // Diagnosis must never fail a beat that would otherwise pass, so it throws
-    // nothing and the beat's outcome does not depend on it.
-    if (probe !== null) { try { probe(); } catch { /* a probe is never load-bearing */ } }
-    const why = await stopNow(page, sessionScope);
-    if (why !== null) return Object.freeze({ afterMs: Date.now() - startedAt, why });
-    if (Date.now() >= deadline) return null;
-    await new Promise((resolve) => setTimeout(resolve, CONSEQUENCE_POLL_MS));
+  // `forge-8vfn.8.1.34` — see the import comment: reports the control's own
+  // state at the first poll and on every change, for exactly as long as this
+  // wait runs, whatever ends it.
+  const stopWatch = watchControlState(page, handle, (line) => console.log(line));
+  try {
+    for (;;) {
+      if ((await page.locator(handle).count()) > 0) return null;
+      // Bead `forge-8vfn.6.11.22`: sample the agent's own process WHILE waiting.
+      // Diagnosis must never fail a beat that would otherwise pass, so it throws
+      // nothing and the beat's outcome does not depend on it.
+      if (probe !== null) { try { probe(); } catch { /* a probe is never load-bearing */ } }
+      const why = await stopNow(page, sessionScope);
+      if (why !== null) return Object.freeze({ afterMs: Date.now() - startedAt, why });
+      if (Date.now() >= deadline) return null;
+      await new Promise((resolve) => setTimeout(resolve, CONSEQUENCE_POLL_MS));
+    }
+  } finally {
+    stopWatch();
   }
 }
 
@@ -199,24 +216,32 @@ async function waitOffSession(page, handle, timeoutMs, stallDoor) {
   // would be consumed rather than cut short, so the door does not run at all.
   const doored = stallDoor !== null && doorWorthRunning(timeoutMs, STALL_CEILING_MS);
   const runId = doored ? await readRunId(page) : null;
-  for (;;) {
-    if ((await page.locator(handle).count()) > 0) return null;
-    if (doored) {
-      // Bead `forge-8vfn.7.5.8`. 580 read only the run the PAGE names; run 7's
-      // beat 7 pressed Plan from a page that names none, so nothing observed it
-      // and it sat all twenty minutes. The door now falls back to the newest
-      // dispatch created since this wait began, and reports WHICH of the two
-      // findings it is.
-      const stop = stallDoor(runId, startedAt);
-      if (stop !== null) {
-        return Object.freeze({
-          afterMs: Date.now() - startedAt,
-          why: `${stop.reason}: ${stop.detail} ${handle} never appeared.`,
-        });
+  // `forge-8vfn.8.1.34` — see the import comment. This is the wait S10 proof run
+  // 36's beat 21 spent its whole 504 s bound inside, silently: the
+  // control was absent throughout and nothing said so until the final verdict.
+  const stopWatch = watchControlState(page, handle, (line) => console.log(line));
+  try {
+    for (;;) {
+      if ((await page.locator(handle).count()) > 0) return null;
+      if (doored) {
+        // Bead `forge-8vfn.7.5.8`. 580 read only the run the PAGE names; run 7's
+        // beat 7 pressed Plan from a page that names none, so nothing observed it
+        // and it sat all twenty minutes. The door now falls back to the newest
+        // dispatch created since this wait began, and reports WHICH of the two
+        // findings it is.
+        const stop = stallDoor(runId, startedAt);
+        if (stop !== null) {
+          return Object.freeze({
+            afterMs: Date.now() - startedAt,
+            why: `${stop.reason}: ${stop.detail} ${handle} never appeared.`,
+          });
+        }
       }
+      if (Date.now() >= deadline) return null;
+      await new Promise((resolve) => setTimeout(resolve, CONSEQUENCE_POLL_MS));
     }
-    if (Date.now() >= deadline) return null;
-    await new Promise((resolve) => setTimeout(resolve, CONSEQUENCE_POLL_MS));
+  } finally {
+    stopWatch();
   }
 }
 

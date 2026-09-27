@@ -748,11 +748,52 @@ export default {
       // whole cycle's word and stopped 180s into a reflection that had barely
       // started. `terminal: 'reflected'` + `cycleOf` route this wait to the
       // reflector's OWN terminal (`makeReflectionWatch`) instead.
+      //
+      // Ruling 1736 (bead `forge-8vfn.8.1.34`, S10 proof run 36, beat 21).
+      // `submit-reflection` is rendered DISABLED, with a title naming why
+      // (`ReflectionGate.tsx:296-299`), until every `[data-question-index]`
+      // fieldset has a recorded choice (`reflectionAllAnswered`,
+      // `lib/reflection-form.ts:12-17`). The prior `do` pressed it unanswered,
+      // which spent the whole 900 000 ms bound on a control that was never
+      // going to enable — and because the pre-act wait only checks PRESENCE,
+      // not enabled-ness, the runner had no visibility into that at all
+      // (closed alongside this fix — `beats-page.mjs`'s `waitForHandleOrStall`/
+      // `waitOffSession` now wrap the same "while waiting" reporter the ACT
+      // phase already had, bead `6.11.30`).
+      //
+      // The reflector's seed set is UP TO 4 questions, MODEL-DETERMINED
+      // (`skills/reflector/SKILL.md`): most carry a bullet option list
+      // rendered as RADIOS (`data-option-label` per option, `type="radio"
+      // name="rq-${i}"`, `ReflectionGate.tsx:236,249-253`), the general-notes
+      // question never does (`data-question-freeform`, `:276` — no
+      // `data-field` at all, by the skill's own "NO bullet list" instruction).
+      // `pressFirstEach`/`fillAllMatching` answer whichever shape THIS cycle's
+      // reflector actually wrote, exactly the reason `fillAll` answers the
+      // architect's variable-count interview a few beats up — and, because the
+      // options are a RADIO GROUP per question, `pressFirstEach` presses only
+      // the FIRST option inside each `data-question-index` fieldset, never
+      // every option (which would just leave the LAST one checked).
       act: 'Reflect on the cycle',
-      do: [{ press: 'open-reflect' }, { press: 'submit-reflection' }],
+      do: [
+        { press: 'open-reflect' },
+        { pressFirstEach: 'option-label', within: 'question-index' },
+        { fillAllMatching: 'question-freeform', with: 'Nothing further on this question.' },
+        { fill: 'freeform', with: 'No additional notes this cycle.' },
+        { press: 'submit-reflection' },
+      ],
+      // Anchored on this beat's own start (T1 718(1)): the reflector this waits
+      // for is the RERUN `fireReflectorRerun` fires from the answer POST above
+      // (`bridge-reflect.ts`), not the interactive session's first
+      // `reflector.end`, which already fired before this beat pressed
+      // anything. `terminal: 'reflected'` + `cycleOf` still route to the
+      // reflector's OWN terminal (`makeReflectionWatch`) — unchanged from
+      // before this fix — so it is the RERUN's end this resolves on.
       wait: { for: 'agent', terminal: 'reflected', cycleOf: '<runId>', upTo: 900_000 },
       expect: { route: '/artifact', data: { section: 'reflect-done' } },
-      say: 'The cycle ends by writing down what it learned. This is the step that makes the next cycle cheaper, and it is one shot — the operator confirms what the reflector inferred rather than filling in a form.',
+      say:
+        'The cycle ends by writing down what it learned. The operator answers every question the ' +
+        'reflector asked — a pick where it offered options, a note where it did not — and that hands ' +
+        'the reflector one more pass to fold the answers into the brain.',
     },
     {
       // SOURCE-DERIVED for the reflected theme. `data-theme-node` /

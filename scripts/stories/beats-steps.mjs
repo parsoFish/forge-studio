@@ -128,7 +128,19 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
     // because a round of architect questions renders one box per question and
     // the count is model-determined.
     const fillsAll = Object.hasOwn(step, 'fillAll');
-    const fills = fillsAll || Object.hasOwn(step, 'fill');
+    // `fillAllMatching` — bead `forge-8vfn.8.1.34` (ruling 1736). `fillAll`'s
+    // reason, over a plain `data-*` attribute instead of the `data-field`
+    // vocabulary: `ReflectionGate`'s per-question freeform textarea carries a
+    // bare `data-question-freeform` (no `data-field` at all — the DOM contract
+    // in that file's own header names it separately from `data-field="freeform"`,
+    // the ONE global box), so `fillAll` cannot reach it. The same reason
+    // `pressFirstEach` exists below: the reflector decides how many
+    // freeform-only questions there are.
+    const fillAllMatchingAttr = Object.hasOwn(step, 'fillAllMatching') ? step.fillAllMatching : null;
+    // Either bulk-fill shape acts on N matches the same way — see the shared
+    // loop below, guarded on this one boolean rather than two copies of it.
+    const bulkFill = fillsAll || fillAllMatchingAttr !== null;
+    const fills = bulkFill || Object.hasOwn(step, 'fill');
     // `pressWithin` — bead `forge-8vfn.6.11.51`. A `bind` scope is resolved by
     // `resolveBoundPresses` (`beats.mjs`) into a literal `scope.value` before
     // this ever runs, and turns straight into the SCOPED handle: the element
@@ -144,9 +156,29 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
     // `resolveTextScopePress` has picked which instance the text names.
     const pw = Object.hasOwn(step, 'pressWithin') ? step.pressWithin : null;
     const isTextScope = pw !== null && pw.scope.text !== undefined;
+    // `pressFirstEach` — bead `forge-8vfn.8.1.34` (ruling 1736). `ReflectionGate`
+    // renders one `data-option-label` RADIO per option (`type="radio"
+    // name="rq-${i}"`, `ReflectionGate.tsx:249-253`), grouped under one
+    // `data-question-index` fieldset PER QUESTION, and a model-determined
+    // number of questions carry options at all. Clicking EVERY option (a
+    // `pressAll`-shaped bulk press) would leave the LAST option checked in
+    // each radio group, not the first — this presses the FIRST
+    // `[data-<pressFirstEach>]` found inside EACH `[data-<within>]` container,
+    // in document order, and nothing else in it. Both names are plain `data-*`
+    // attributes, `SAFE_KEY`-checked at story-load time
+    // (`story-wait-schema.mjs`) and trusted here, exactly as
+    // `pressWithin.scope.attr` already is.
+    const pressFirstEach = Object.hasOwn(step, 'pressFirstEach')
+      ? { target: step.pressFirstEach, within: step.within }
+      : null;
+    // `step.fillAllMatching` was checked against `SAFE_KEY` at story-load time
+    // the same way `pressFirstEach`'s attrs were, immediately above — trusted
+    // here too.
     let handle = pw !== null
       ? (isTextScope ? unscopedPressWithinHandle(pw) : scopedPressHandle(pw))
-      : handleFor(step);
+      : pressFirstEach !== null ? `[data-${pressFirstEach.within}]`
+        : fillAllMatchingAttr !== null ? `[data-${fillAllMatchingAttr}]`
+          : handleFor(step);
 
     // T1 ruling 531(3) — STANDING ON THE WRONG PAGE, answered at t+0.
     //
@@ -292,7 +324,7 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
     // the timing was.
     const stopWatch = watchControlState(page, handle, (line) => console.log(line));
     try {
-      if (fillsAll) {
+      if (bulkFill) {
         // Every match, or a red naming the field. ZERO is never a silent pass:
         // a round with nothing to answer means the product did not publish the
         // question form, which is exactly the gap S2 run 3 spent $25 finding.
@@ -326,6 +358,35 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
         }
         continue;
       }
+      if (pressFirstEach !== null) {
+        // `handle` is the CONTAINER selector (`[data-<within>]`) here — ZERO
+        // containers is the same "the form did not render" red every bulk verb
+        // gives, the same re-read-count-before-index defence `fillsAll` uses
+        // above. A container with NO matching descendant (a freeform question,
+        // answered by `fillAllMatching` instead) is skipped, never a red: only
+        // the whole form's absence is a defect worth naming.
+        const targetSel = `[data-${pressFirstEach.target}]`;
+        const n = await page.locator(handle).count();
+        if (n === 0) {
+          return finish(
+            `could not press the first ${targetSel} within each ${handle}: no element carries that handle.`,
+          );
+        }
+        for (let k = 0; k < n; k += 1) {
+          if (k >= (await page.locator(handle).count())) break;
+          const container = page.locator(handle).nth(k);
+          const target = container.locator(targetSel).first();
+          if ((await target.count()) === 0) continue;
+          const boxHandle = `${handle} >> nth=${k} >> ${targetSel}`;
+          const stopBox = watchControlState(page, boxHandle, (line) => console.log(line));
+          try {
+            await target.click({ timeout: actLeft() });
+          } finally {
+            stopBox();
+          }
+        }
+        continue;
+      }
       if (!fills) {
         // Bounded by the RUNNER's timeout, not by `context.setDefaultTimeout`.
         // Playwright's click already retries until the control is visible,
@@ -342,9 +403,13 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
       const refusal = await setControl(page, handle, step.with, actLeft());
       if (refusal !== null) return finish(refusal);
     } catch (e) {
+      const verb = fills
+        ? `fill ${handle} with "${step.with}"`
+        : pressFirstEach !== null
+          ? `press the first [data-${pressFirstEach.target}] within each ${handle}`
+          : `press ${handle}`;
       return finish(
-        `could not ${fills ? `fill ${handle} with "${step.with}"` : `press ${handle}`}: ` +
-          `${e?.message ?? e}. ${await describeControl(page, handle, timeoutMs)}`,
+        `could not ${verb}: ${e?.message ?? e}. ${await describeControl(page, handle, timeoutMs)}`,
       );
     } finally {
       stopWatch();
