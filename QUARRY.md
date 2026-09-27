@@ -30,7 +30,7 @@ file reaches its package at M3:
 
 | disposition | meaning | count |
 |---|---|---|
-| `verbatim` | moves unchanged | 364 |
+| `verbatim` | moves unchanged | 365 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
 | `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 104 |
 | `deleted` | not carried forward | 0 |
@@ -63,11 +63,11 @@ operator-ratified new cap — never a silent raise.
 | `sessions` | 61 | 20,402 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 85 | 24,012 | **23,812** | ratified 23,812 — row 136 closure.local-aligned-to-remote records target_sha/base_sha (forge-8vfn.8.1.32), +16 on 23,796, lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 15 | 2,763 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 43 | 11,788 | **11,782** | ratified 11,782 — forge-mfv5.3.5 the PM reads the class table's acceptance column; the live-acceptance env guard (live-acceptance-env.ts) never reads the class, +32 on 11,750, lane-ratified under ruling 666; see git history for prior raises. |
+| `stations` | 44 | 11,842 | **11,782** | ratified 11,782 — forge-mfv5.3.5 the PM reads the class table's acceptance column; the live-acceptance env guard (live-acceptance-env.ts) never reads the class, +32 on 11,750, lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,922 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **472** | **127,779** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **473** | **127,833** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -376,8 +376,9 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/decompose-completeness.ts | stations | verbatim | 197 |
 | packages/stations/phases/dev-binding.ts | stations | verbatim | 317 |
 | packages/stations/phases/dev-cost-bound.ts | stations | verbatim | 88 |
-| packages/stations/phases/developer-loop.ts | stations | verbatim | 1838 |
+| packages/stations/phases/developer-loop.ts | stations | verbatim | 1819 |
 | packages/stations/phases/live-acceptance-env.ts | stations | verbatim | 22 |
+| packages/stations/phases/wi-quality-gate.ts | stations | verbatim | 73 |
 | packages/flows/phases/gitignored-creates.ts | flows | rewritten | 79 |
 | packages/flows/plan-gate-class-check.ts | flows | rewritten | 59 |
 | packages/stations/phases/pm-binding.ts | stations | verbatim | 384 |
