@@ -37,6 +37,8 @@ import { type ArchitectQuestion, type ArchitectStatus, type DraftInitiative, typ
 import { buildManifest, slugify } from './architect-manifest.ts';
 import { emitArchitectStageStart } from './architect-stage-events.ts';
 import { runStructured } from './architect-structured-turn.ts';
+import { repairDraftManifest } from './architect-draft-repair.ts';
+import type { InitiativeManifest } from '@forge/contracts';
 
 
 /** ARCH-1: the brain navigation index, loaded per turn by the steps that
@@ -539,10 +541,11 @@ export async function runDraftStep(
   // predicate is the queue's own, injected.
   const isCanonicalId = requirePorts(input).isCanonicalInitiativeId;
   const unwrapId = (s: string): string => (isCanonicalId(s) ? s.slice(CANONICAL_ID_PREFIX_LEN) : s);
-  draftInitiatives = draftInitiatives.map((d) => ({
+  const unwrapInitiatives = (list: DraftInitiative[]): DraftInitiative[] => list.map((d) => ({
     ...d, ...(d.slug ? { slug: unwrapId(d.slug) } : {}),
     ...(d.depends_on ? { depends_on: d.depends_on.map(unwrapId) } : {}),
   }));
+  draftInitiatives = unwrapInitiatives(draftInitiatives);
 
   const created_at = new Date().toISOString();
   const datePart = created_at.slice(0, 10);
@@ -551,10 +554,29 @@ export async function runDraftStep(
   // W7-C3 deref guard: a draft row with NEITHER slug nor title (structured
   // output is LLM-produced) must not crash the whole run inside slugify's
   // .toLowerCase() — it falls to slugify's own 'initiative' fallback.
-  const knownSlugs = new Set(draftInitiatives.map((d) => slugify(d.slug || d.title || '')));
-  const manifests = draftInitiatives.map((d) =>
-    buildManifest(d, status, datePart, created_at, knownSlugs),
-  );
+  const buildAll = (list: DraftInitiative[]): InitiativeManifest[] => {
+    const knownSlugs = new Set(list.map((d) => slugify(d.slug || d.title || '')));
+    return list.map((d) => buildManifest(d, status, datePart, created_at, knownSlugs));
+  };
+  // Row 159 (bead forge-8vfn.8.1.47, ruling 1891) — S10 run 41: buildManifest
+  // rejecting a draft (ADR 051's typed-criteria / class validation) used to
+  // throw straight out of this turn with no repair chance (see the module doc
+  // on `architect-draft-repair.ts`). ONE bounded extra structured call, same
+  // shape as the forced-emit retry above, before the session gives up.
+  let manifests: InitiativeManifest[];
+  try {
+    manifests = buildAll(draftInitiatives);
+  } catch (err) {
+    if (!(err instanceof Error)) throw err;
+    const repaired = await repairDraftManifest({
+      logger, initiativeId, sessionId: input.sessionId, cwd: status.project_repo_path, queryFn,
+      modelTier: status.modelTier, onToolUse, onHeartbeat, onText, onThinking,
+      draftPrompt: prompt, schema: DRAFT_SCHEMA, validationError: err, unwrap: unwrapInitiatives, buildAll,
+    });
+    manifests = repaired.manifests;
+    draftInitiatives = repaired.draftInitiatives;
+    brainReads.push(...repaired.brainReads);
+  }
 
   const councilTranscript: CouncilTranscript = { flags: [], escalations: [], perCritic: [], totalCostUsd: 0 };
 
