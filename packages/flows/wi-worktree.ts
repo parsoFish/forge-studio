@@ -54,6 +54,8 @@ import { createLogger } from '@forge/kernel';
 export type WiWorktreeHandle = {
   path: string;
   branch: string;
+  /** What linking this worktree's deps could not do (linkProjectDeps); the caller emits it — never swallowed. */
+  depsProblems: string[];
 };
 
 /**
@@ -151,7 +153,7 @@ export function createWiWorktree(opts: {
     initiativeId: join('wi', opts.initiativeId, opts.workItemId),
   });
 
-  linkProjectDeps(opts.projectRepoPath, handle.path);
+  const depsLink = linkProjectDeps(opts.projectRepoPath, handle.path);
 
   // `git worktree add` only checks out TRACKED files. `.forge/work-items/`
   // is gitignored (the PM's per-cycle scratch, written to the cycle
@@ -166,7 +168,7 @@ export function createWiWorktree(opts: {
     cpSync(wiSrc, wiDst, { recursive: true, force: true });
   }
 
-  return { path: handle.path, branch: handle.branch };
+  return { path: handle.path, branch: handle.branch, depsProblems: depsLink.problems };
 }
 
 /**

@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 360 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 103 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 104 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -59,15 +59,15 @@ operator-ratified new cap — never a silent raise.
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `projects` | 46 | 10,906 | **9,115** | ratified 9,115 — forge-1rk5.3 row 131 DEPS: node preloading a package (--import/--require/-r/--loader) needs node_modules, +17 on 9,098, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
-| `agents` | 46 | 13,099 | **13,099** | ratified 13,099 — row 135 HeartbeatTimers type shared by the caller-lifecycle spawns (forge-8vfn.8.1.30), +1 lane-ratified under ruling 666; see git history for prior raises. |
+| `agents` | 46 | 13,103 | **13,103** | ratified 13,103 — row 135 HeartbeatTimers type shared by the caller-lifecycle spawns (forge-8vfn.8.1.30), +1 on 13,102, lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 61 | 20,638 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
-| `flows` | 85 | 23,983 | **23,783** | ratified 23,783 — forge-mfv5.2.5 recorded demo media committed within size bounds (guard root = worktree) and rendered commit-pinned in the PR body (pr-media.ts), +308 on 23,475 (T1 1640/1641/1646); see git history for prior raises. |
+| `flows` | 85 | 23,996 | **23,796** | ratified 23,796 — forge-1rk5.3 row 137 linkProjectDeps creates .git/info in a template-less repo and returns its problems (emitted, never swallowed), +13 on 23,783, lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 15 | 2,723 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 40 | 11,556 | **11,556** | ratified 11,556 — row 135 reflector/PM/adversarial-review turns emit agent_heartbeat (forge-8vfn.8.1.30), row 110 move (forge-8vfn.8.1.33), +53 lane-ratified under ruling 666; see git history for prior raises. |
+| `stations` | 41 | 11,578 | **11,578** | ratified 11,578 — row 135 reflector/PM/adversarial-review turns emit agent_heartbeat (forge-8vfn.8.1.30), row 110 move (forge-8vfn.8.1.33), +53 on 11,525, lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,835 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **467** | **127,247** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **468** | **127,286** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -276,7 +276,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/_adapters/types.ts | agents | verbatim | 56 |
 | packages/agents/ralph/claude-agent.ts | agents | verbatim | 577 |
 | packages/agents/ralph/runner.ts | agents | verbatim | 463 |
-| packages/agents/ralph/stop-conditions.ts | agents | verbatim | 685 |
+| packages/agents/ralph/stop-conditions.ts | agents | verbatim | 689 |
 | packages/agents/agent-bands.ts | agents | verbatim | 76 |
 | packages/agents/agent-dispatch.ts | agents | verbatim | 420 |
 | packages/agents/dispatch-terminal.ts | agents | verbatim | 194 |
@@ -379,7 +379,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/decompose-completeness.ts | stations | verbatim | 197 |
 | packages/stations/phases/dev-binding.ts | stations | verbatim | 317 |
 | packages/stations/phases/dev-cost-bound.ts | stations | verbatim | 88 |
-| packages/stations/phases/developer-loop.ts | stations | verbatim | 1942 |
+| packages/stations/phases/developer-loop.ts | stations | verbatim | 1899 |
 | packages/flows/phases/gitignored-creates.ts | flows | rewritten | 79 |
 | packages/flows/plan-gate-class-check.ts | flows | rewritten | 59 |
 | packages/stations/phases/pm-binding.ts | stations | verbatim | 384 |
@@ -425,6 +425,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/release-process.ts | stations | verbatim | 66 |
 | packages/stations/testing.ts | stations | verbatim | 23 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `settleWiOutcome`/`assertOutcomesSettled`/`WiOutcome` (phases/developer-loop.ts), `runProjectManager`/`PmQueryFn` (phases/project-manager.ts), `NodeExecutor`/`integrateDeliveryFailure` (phases/executor-table.ts) and `deriveDemoModel` (phases/derive-demo-model.ts) have no production consumer outside this package, only `apps/forge`/`packages/flows` tests reach for them.** |
 | packages/stations/phases/integrate.ts | stations | verbatim | 372 |
+| packages/stations/phases/dev-loop-events.ts | stations | rewritten | 65 |
 | packages/stations/demo-model.ts | stations | verbatim | 800 |
 | packages/flows/requeue-resume.ts | flows | verbatim | 193 |
 | packages/flows/review-comments.ts | flows | verbatim | 224 |
@@ -440,7 +441,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/scheduler-dispatch.ts | flows | verbatim | 252 |
 | packages/flows/scheduler.ts | flows | verbatim | 398 |
 | packages/flows/scheduler-sweeps.ts | flows | verbatim | 177 |
-| packages/flows/scheduler-run-one.ts | flows | verbatim | 582 |
+| packages/flows/scheduler-run-one.ts | flows | verbatim | 593 |
 | packages/flows/stale-remote-branch-guard.ts | flows | verbatim | 116 |
 | packages/agents/skill-path.ts | agents | verbatim | 239 |
 | packages/agents/stream-deadline.ts | agents | verbatim | 126 |
@@ -505,7 +506,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/webhook-verify.ts | flows | verbatim | 114 |
 | packages/flows/wi-dispatch-scheduler.ts | flows | verbatim | 151 |
 | packages/flows/wi-merge-back.ts | flows | verbatim | 464 |
-| packages/flows/wi-worktree.ts | flows | verbatim | 328 |
+| packages/flows/wi-worktree.ts | flows | verbatim | 330 |
 | packages/flows/work-item.ts | flows | verbatim | 740 |
 | packages/flows/worktree.ts | flows | verbatim | 201 |
 | packages/flows/testing.ts | flows | verbatim | 13 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `hasMergeGateConfigErrorMarker`/`mergeGateConfigErrorPath` (fix-work-items.ts), `CostTracker` (flow-budgets.ts) and `validateCompiledWorkItemSet` (phases/wi-spec-compile.ts) have no production consumer outside this package, only `apps/forge`/`packages/factory` tests reach for them.** |

@@ -69,7 +69,7 @@ packages/agents/ralph/claude-agent.ts readFileSync 1
 packages/agents/ralph/runner.ts existsSync 3
 packages/agents/ralph/runner.ts readFileSync 3
 packages/agents/ralph/runner.ts writeFileSync 3
-packages/agents/ralph/stop-conditions.ts execFileSync 9
+packages/agents/ralph/stop-conditions.ts execFileSync 11
 packages/agents/ralph/stop-conditions.ts readFileSync 2
 packages/agents/run-agent.ts existsSync 1
 packages/agents/run-agent.ts mkdirSync 1
@@ -238,7 +238,7 @@ packages/flows/scheduler-run-one.ts appendFileSync 1
 packages/flows/scheduler-run-one.ts execFileSync 2
 packages/flows/scheduler-run-one.ts existsSync 5
 packages/flows/scheduler-run-one.ts lstatSync 1
-packages/flows/scheduler-run-one.ts mkdirSync 1
+packages/flows/scheduler-run-one.ts mkdirSync 2
 packages/flows/scheduler-run-one.ts readdirSync 1
 packages/flows/scheduler-run-one.ts readFileSync 3
 packages/flows/scheduler-run-one.ts symlinkSync 1
