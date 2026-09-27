@@ -30,7 +30,7 @@ file reaches its package at M3:
 
 | disposition | meaning | count |
 |---|---|---|
-| `verbatim` | moves unchanged | 360 |
+| `verbatim` | moves unchanged | 361 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
 | `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 104 |
 | `deleted` | not carried forward | 0 |
@@ -62,12 +62,12 @@ operator-ratified new cap — never a silent raise.
 | `agents` | 46 | 13,103 | **13,103** | ratified 13,103 — row 135 HeartbeatTimers type shared by the caller-lifecycle spawns (forge-8vfn.8.1.30), +1 on 13,102, lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 61 | 20,638 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 85 | 23,996 | **23,796** | ratified 23,796 — forge-1rk5.3 row 137 linkProjectDeps creates .git/info in a template-less repo and returns its problems (emitted, never swallowed), +13 on 23,783, lane-ratified under ruling 666; see git history for prior raises. |
-| `factory` | 15 | 2,723 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 41 | 11,578 | **11,578** | ratified 11,578 — row 135 reflector/PM/adversarial-review turns emit agent_heartbeat (forge-8vfn.8.1.30), row 110 move (forge-8vfn.8.1.33), +53 on 11,525, lane-ratified under ruling 666; see git history for prior raises. |
+| `factory` | 15 | 2,759 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
+| `stations` | 42 | 11,720 | **11,720** | ratified 11,720 — forge-1rk5.3 row 138 honest delta: normalised command-output compare, named rule list, changed-delta excerpt (demo-delta.ts split at 800), +142 (T1 1711) on row 135's 11,578; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,835 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **468** | **127,286** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **469** | **127,464** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -182,8 +182,6 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/gates/docs-gate.ts | stations | verbatim | 114 |
 | packages/stations/phases/pm-prompt-context.ts | stations | verbatim | 139 |
 | packages/stations/phases/pm-class-set-rules.ts | stations | verbatim | 46 |
-| packages/stations/phases/derive-demo-model.ts | stations | verbatim | 275 |
-| packages/stations/phases/derive-pr-body.ts | stations | verbatim | 83 |
 | packages/stations/phases/review-budget.ts | stations | verbatim | 136 |
 | packages/stations/phases/capture-nonce.ts | stations | verbatim | 58 |
 | packages/stations/phases/pm-decomposition-doc.ts | stations | verbatim | 68 |
@@ -194,7 +192,6 @@ operator-ratified new cap — never a silent raise.
 | packages/factory/demo-capture.ts | factory | rewritten | 318 |
 | packages/factory/demo-runtime.ts | factory | verbatim | 187 |
 | packages/stations/demo-types.ts | stations | verbatim | 115 |
-| packages/factory/demo.ts | factory | verbatim | 377 |
 | apps/forge/library-flow-source.ts | apps/forge | rewritten | 15 |
 | apps/forge/library-authoring-session.ts | apps/forge | rewritten | 30 |
 | apps/forge/library-agent-facts.ts | apps/forge | rewritten | 62 |
@@ -426,7 +423,10 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/testing.ts | stations | verbatim | 23 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `settleWiOutcome`/`assertOutcomesSettled`/`WiOutcome` (phases/developer-loop.ts), `runProjectManager`/`PmQueryFn` (phases/project-manager.ts), `NodeExecutor`/`integrateDeliveryFailure` (phases/executor-table.ts) and `deriveDemoModel` (phases/derive-demo-model.ts) have no production consumer outside this package, only `apps/forge`/`packages/flows` tests reach for them.** |
 | packages/stations/phases/integrate.ts | stations | verbatim | 372 |
 | packages/stations/phases/dev-loop-events.ts | stations | rewritten | 65 |
-| packages/stations/demo-model.ts | stations | verbatim | 800 |
+| packages/stations/phases/derive-pr-body.ts | stations | verbatim | 97 |
+| packages/stations/demo-delta.ts | stations | verbatim | 136 |
+| packages/stations/phases/derive-demo-model.ts | stations | verbatim | 283 |
+| packages/stations/demo-model.ts | stations | verbatim | 784 |
 | packages/flows/requeue-resume.ts | flows | verbatim | 193 |
 | packages/flows/review-comments.ts | flows | verbatim | 224 |
 | packages/agents/run-agent.ts | agents | verbatim | 800 |
@@ -547,6 +547,7 @@ operator-ratified new cap — never a silent raise.
 | packages/contracts/studio-types.ts | contracts | verbatim | 761 |
 | packages/contracts/demo-declaration.ts | contracts | rewritten | 105 |
 | packages/factory/index.ts | factory | verbatim | 8 |
+| packages/factory/demo.ts | factory | verbatim | 413 |
 | packages/flows/index.ts | flows | verbatim | 117 |
 | packages/flows/demo-paths.ts | flows | verbatim | 75 |
 | packages/flows/phases/orchestrated-capture.ts | flows | verbatim | 420 |
