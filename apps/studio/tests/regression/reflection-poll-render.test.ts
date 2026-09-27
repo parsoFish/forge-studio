@@ -21,7 +21,7 @@
  * default, see those files' headers) for the exact reason this test needs it:
  * only a real mounted tree runs effects, so only it can prove a poll fires.
  *
- * RUN: cd apps/studio && npx vitest run tests/regression/reflection-poll-render.test.ts
+ * RUN: npx vitest run apps/studio/tests/regression/reflection-poll-render.test.ts   (from apps/studio/)
  */
 import { test, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as React from 'react';

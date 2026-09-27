@@ -3,7 +3,7 @@
  * forge-8vfn.8.1.42, ruling 1849. Effect-free, mirrors
  * `use-studio-home-data.test.ts`'s technique of proving the DECISION by
  * execution before the render-level wiring test
- * (`tests/regression/reflection-poll-render.test.ts`) proves the hook fires it.
+ * (`apps/studio/tests/regression/reflection-poll-render.test.ts`) proves the hook fires it.
  *
  * `needsReflectionPoll` is the single place that decides "keep polling":
  *   - `null` (a 404 — the reflector hasn't filed anything yet) → keep polling.
