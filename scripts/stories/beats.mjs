@@ -17,6 +17,46 @@ import { PLACEHOLDER, resolveExpectations, ERROR_SENTINELS, routeMatches } from 
 
 
 /**
+ * A placeholder's "kind" — its own name with a trailing digit run stripped —
+ * bead `forge-8vfn.8.1.46`, ruling 1873. `<runId>` and `<runId2>` (or
+ * `<cycleId>`/`<cycleId2>`, `<architectSessionId>`/`<architectSessionId2>`)
+ * share a kind; `<cycleId>` and `<initiativeId>` do not. This is the whole
+ * naming convention S10's ACT 2 uses to keep its own ids apart from ACT 1's,
+ * so it is the one signal available at bind time that needs no page
+ * semantics at all.
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+export function placeholderKind(name) {
+  return name.replace(/[0-9]+$/, '');
+}
+
+/**
+ * Is `value` already bound to a DIFFERENT placeholder of the same kind as
+ * `name`? Returns that placeholder's own name, or `null` when nothing
+ * collides — bead `forge-8vfn.8.1.46`, ruling 1873.
+ *
+ * PURE and separate from `beatVerdict` for the same reason every predicate in
+ * this module is: a beat that binds `<runId2>` must never silently mint ACT
+ * 1's own `<runId>` value under a new name — see `beatVerdict`'s own comment
+ * at the call site for the run 40 trace this closes.
+ *
+ * @param {string} name the placeholder about to bind (e.g. `runId2`)
+ * @param {string} value the candidate value the page just supplied
+ * @param {Record<string,string>} allBound every placeholder bound so far,
+ *   earlier beats' `bound` merged with this beat's own `bindings`
+ * @returns {string|null}
+ */
+export function siblingReusingValue(name, value, allBound) {
+  const kind = placeholderKind(name);
+  const hit = Object.entries(allBound ?? {}).find(
+    ([other, boundValue]) => other !== name && placeholderKind(other) === kind && boundValue === value,
+  );
+  return hit === undefined ? null : hit[0];
+}
+
+/**
  * Judge one beat against what was observed on the page.
  *
  * @param {{act: string, say: string, expect: {route: string, data: Record<string,string>}}} beat
@@ -54,6 +94,10 @@ export function beatVerdict(beat, observed, { boundMs = null, bound = {} } = {})
     const got = seen[attr];
     const placeholder = PLACEHOLDER.exec(want);
     if (placeholder !== null) {
+      // Computed unconditionally, once, so both the branch below and its
+      // failure message read the SAME lookup rather than two independent
+      // ones that could (in principle) disagree.
+      const sibling = siblingReusingValue(placeholder[1], got, { ...bound, ...bindings });
       // A value the product mints at runtime. Any value binds; the empty
       // string is a product that minted nothing, and binding it would put an
       // empty segment in a later beat's route.
@@ -81,6 +125,44 @@ export function beatVerdict(beat, observed, { boundMs = null, bound = {} } = {})
       else if (Object.hasOwn(bound, placeholder[1]) && bound[placeholder[1]] !== got) {
         failures.push(
           `data-${attr}: expected "${bound[placeholder[1]]}" (bound as ${want} by an earlier beat), got "${got}"`,
+        );
+      }
+      // REFUSE A SELF-BIND THAT REUSES ANOTHER PLACEHOLDER'S OWN VALUE —
+      // bead `forge-8vfn.8.1.46`, ruling 1873. This is the FIRST sight of
+      // `placeholder[1]` (the branch above only fires once it is already
+      // bound), so nothing yet compares `got` against a SIBLING placeholder of
+      // the same kind — `<cycleId2>` against `<cycleId>`, `<runId2>` against
+      // `<runId>` — and the co-occurrence groups `resolveExpectations` builds
+      // (`beats-page-read.mjs`) have no notion of "which run this beat is
+      // about": when nothing on the page matches a beat's OTHER declared
+      // values (the state it waited for already moved past), the together
+      // rule's fallback best-covering record is chosen by score and document
+      // order alone, and can silently be a DIFFERENT entity's record — S10 run
+      // 40 (`_1.0/reports/m7-a-S10-run40.log`, beat 34): ACT 2's second
+      // initiative failed at the PM phase, never reaching `ready-for-review`,
+      // so no roadmap card matched that beat's declared status; the
+      // best-covering fallback tied between ACT 1's and ACT 2's own cards and
+      // picked ACT 1's (document order), minting `<runId2>` from ACT 1's own
+      // `initiative-id` — the SAME value already bound as `<runId>`. Every
+      // beat downstream that pressed `open-initiative-<runId2>` then opened
+      // ACT 1's own drawer, and `<cycleId2>` inherited ACT 1's own cycle id
+      // from it in exactly the same way, until beat 38 waited on ACT 1's OWN
+      // run forever.
+      //
+      // The one general fact available at bind time, with no page semantics
+      // required: a value ACT 2's own placeholder just minted can never be
+      // one an EARLIER placeholder OF THE SAME KIND already bound — the two
+      // acts start genuinely separate initiatives, runs and sessions, so
+      // `<runId>` and `<runId2>` (or `<cycleId>`/`<cycleId2>`,
+      // `<architectSessionId>`/`<architectSessionId2>`) can never legitimately
+      // agree. "Same kind" is `placeholderKind` above, so this refuses the
+      // whole family, not one hardcoded pair, and never touches a beat whose
+      // placeholder has no such sibling at all.
+      else if (sibling !== null) {
+        failures.push(
+          `data-${attr}: expected a value to bind as ${want}, but "${got}" is already bound as ` +
+            `<${sibling}> — <${placeholder[1]}> would bind the same value as <${sibling}>, refusing ` +
+            'to reuse another run\'s id',
         );
       }
       else bindings[placeholder[1]] = got;
@@ -124,7 +206,11 @@ export function beatVerdict(beat, observed, { boundMs = null, bound = {} } = {})
     // nothing until there is a red to attribute.
     ...(failures.length > 0 ? { redKind: 'product' } : {}),
     failures: Object.freeze(failures),
-    bindings: Object.freeze(bindings),
+    // Row 158 (forge-8vfn.8.1.46, ruling 1873): a RED beat binds nothing. When
+    // the other declared keys did not hold, the record a placeholder was read
+    // from is not the entity the beat is about (S10 run 40 beat 34 minted
+    // <runId2> from ACT 1's card), and a later beat would act on it.
+    bindings: Object.freeze(failures.length === 0 ? bindings : {}),
     // What the beat was JUDGED against, root and nested alike. The how-to
     // fragment renders this as its "what you should see" list, so reporting
     // only the page root would let a beat assert `data-card-id="gitweave"`
