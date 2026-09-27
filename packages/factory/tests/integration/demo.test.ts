@@ -152,3 +152,46 @@ test('captureCommandOutput: oversize output is truncated', () => {
     assert.ok(out.includes('…[truncated]'), 'oversize output truncated');
   } finally { _rm(dir, { recursive: true, force: true }); }
 });
+
+// ── forge-1rk5.3: tokeniseWorktreePath — the worktree's absolute path is not
+// honest before/after evidence (it differs every run by construction), so it
+// is tokenised at capture rather than compared byte-for-byte. ─────────────
+import { tokeniseWorktreePath } from '../../demo.ts';
+import { symlinkSync, realpathSync } from 'node:fs';
+
+test('tokeniseWorktreePath: replaces every occurrence of the worktree path with <worktree>', () => {
+  const dir = _mkdtemp(_join(_tmpdir(), 'demo-tok-'));
+  try {
+    const text = `demo evidence written to ${dir}/history/run.json\nsee also ${dir}/out.txt\n`;
+    const out = tokeniseWorktreePath(text, dir);
+    assert.ok(!out.includes(dir), `raw worktree path leaked: ${out}`);
+    assert.equal(
+      out,
+      `demo evidence written to <worktree>/history/run.json\nsee also <worktree>/out.txt\n`,
+    );
+  } finally { _rm(dir, { recursive: true, force: true }); }
+});
+
+test('tokeniseWorktreePath: also replaces the realpathSync form when it differs from the literal path', () => {
+  const realDir = _mkdtemp(_join(_tmpdir(), 'demo-tok-real-'));
+  const symlinkDir = _join(_tmpdir(), `demo-tok-link-${process.pid}-${Date.now()}`);
+  try {
+    symlinkSync(realDir, symlinkDir);
+    const real = realpathSync(symlinkDir);
+    assert.notEqual(real, symlinkDir, 'test fixture requires a symlink whose realpath differs');
+    const text = `literal: ${symlinkDir}/a.out\nresolved: ${real}/b.out\n`;
+    const out = tokeniseWorktreePath(text, symlinkDir);
+    assert.equal(out, 'literal: <worktree>/a.out\nresolved: <worktree>/b.out\n');
+  } finally {
+    _rm(symlinkDir, { force: true });
+    _rm(realDir, { recursive: true, force: true });
+  }
+});
+
+test('tokeniseWorktreePath: text without the worktree path is unchanged', () => {
+  const dir = _mkdtemp(_join(_tmpdir(), 'demo-tok-'));
+  try {
+    const text = 'no path here, just output\n';
+    assert.equal(tokeniseWorktreePath(text, dir), text);
+  } finally { _rm(dir, { recursive: true, force: true }); }
+});

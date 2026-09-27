@@ -26,6 +26,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   writeFileSync,
   rmSync,
 } from 'node:fs';
@@ -192,6 +193,36 @@ export type CaptureCheckpointsResult = {
  * "before" run of a new flag legitimately errors — that IS the before evidence).
  * Truncated to MAX_CAPTURED_OUTPUT_BYTES.
  */
+/**
+ * Delta honesty (forge-1rk5.3): a captured command checkpoint's stdout is
+ * NOT honest before/after evidence when it embeds the worktree's own absolute
+ * path — `forge demo capture` materialises a fresh worktree per run
+ * (`materialiseWorktree`), so the SAME command prints a DIFFERENT path on
+ * every single invocation even when its actual behaviour is unchanged. This
+ * replaces every literal occurrence of `worktreePath`, AND its
+ * `realpathSync` form when that differs (e.g. `/tmp` symlinked to
+ * `/private/tmp`), with the literal token `<worktree>`. Pure — no filesystem
+ * writes; `realpathSync` only READS the path to resolve it, and a worktree
+ * that no longer exists (already cleaned up) still gets its literal form
+ * tokenised.
+ */
+export function tokeniseWorktreePath(text: string, worktreePath: string): string {
+  const forms = [worktreePath];
+  try {
+    const real = realpathSync(worktreePath);
+    if (real !== worktreePath) forms.push(real);
+  } catch {
+    // Worktree already cleaned up or otherwise unresolvable — still
+    // tokenise the literal path passed in.
+  }
+  // Longest form first: a real path can be a prefix or suffix of the literal
+  // one (or vice versa) and replacing the shorter form first would leave a
+  // mangled remainder of the longer one behind.
+  return [...forms]
+    .sort((a, b) => b.length - a.length)
+    .reduce((acc, form) => (form ? acc.split(form).join('<worktree>') : acc), text);
+}
+
 export function captureCommandOutput(worktreePath: string, command: string): string {
   const argv = command.trim().split(/\s+/);
   let out: string;
@@ -252,7 +283,12 @@ export async function captureCheckpoints(
       // fails. Skipping all capture on an imperfect build was silently producing
       // prose-only demos with no visual verification.
       for (const { label, command } of input.checkpointCommands ?? []) {
-        const out = captureCommandOutput(wt.path, command);
+        // Tokenise the worktree's own absolute path OUT of the captured output
+        // before it is written or compared (forge-1rk5.3) — it is a capture
+        // artefact of running in a fresh worktree per run, never real
+        // before/after behaviour, so leaving it in would read every run as
+        // "changed" regardless of the command's actual output.
+        const out = tokeniseWorktreePath(captureCommandOutput(wt.path, command), wt.path);
         writeFileSync(join(capDir, checkpointArtifactName(label, 'out')), out);
         captured.push(label);
         // Best-effort per ADR 021 — a recording failure never fails the
