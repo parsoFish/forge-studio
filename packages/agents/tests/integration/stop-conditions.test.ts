@@ -13,7 +13,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -556,8 +556,8 @@ test('autoCommitWorktreeIfDirty: dirty tree → commits with forge-orchestrator 
   try {
     writeFileSync(join(dir, 'uncommitted.txt'), 'missed agent commit\n');
 
-    const committed = autoCommitWorktreeIfDirty(dir, 3, 'WI-9');
-    assert.equal(committed, true);
+    const result = autoCommitWorktreeIfDirty(dir, 3, 'WI-9', { agentPaths: ['uncommitted.txt'], scopedPaths: [] });
+    assert.notEqual(result, false);
 
     const run = (...args: string[]) => execFileSync('git', args, { cwd: dir, stdio: 'pipe', encoding: 'utf8' }).trim();
     assert.match(run('log', '-1', '--pretty=%s'), /^forge-autocommit: WI-9 iter 3 WIP/);
@@ -575,7 +575,7 @@ test('autoCommitWorktreeIfDirty: clean tree → returns false, no commit created
   const dir = setupTinyRepo();
   try {
     const before = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
-    const committed = autoCommitWorktreeIfDirty(dir, 1);
+    const committed = autoCommitWorktreeIfDirty(dir, 1, undefined, { agentPaths: [], scopedPaths: [] });
     assert.equal(committed, false);
     const after = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim();
     assert.equal(after, before, 'no new commit on a clean tree');
@@ -584,6 +584,96 @@ test('autoCommitWorktreeIfDirty: clean tree → returns false, no commit created
   }
 });
 
+// ---------------------------------------------------------------------------
+// forge-1rk5.3 row 145 (orchestrator ruling 1742): the safety net's scope is
+// the WI's own boundary — the agent's own file_change paths this iteration,
+// unioned with the WI's declared files_in_scope/creates. A TRACKED file
+// changed outside that set (e.g. `npm run demo` rewriting a committed
+// evidence file as a side effect of the quality gate) must be RESTORED to
+// HEAD so it can never leak into this or the next WI's commit in the shared
+// worktree; an UNTRACKED out-of-scope file is left alone.
+// ---------------------------------------------------------------------------
+
+test('autoCommitWorktreeIfDirty: a tracked file rewritten outside the WI scope (e.g. by `npm run demo`) is restored, not committed', () => {
+  const dir = setupTinyRepo();
+  try {
+    // A pre-existing TRACKED evidence file, like `forge/history/x/demo/pulse-capture.md`.
+    mkdirSync(join(dir, 'forge', 'history', 'x', 'demo'), { recursive: true });
+    const evidencePath = join(dir, 'forge/history/x/demo/pulse-capture.md');
+    writeFileSync(evidencePath, 'before\n');
+    execFileSync('git', ['add', 'forge/history/x/demo/pulse-capture.md'], { cwd: dir, stdio: 'pipe' });
+    execFileSync('git', ['commit', '-m', 'seed evidence file'], { cwd: dir, stdio: 'pipe' });
+
+    // This iteration: the agent wrote src/sort.ts (in scope)...
+    mkdirSync(join(dir, 'src'), { recursive: true });
+    writeFileSync(join(dir, 'src/sort.ts'), 'export const sort = () => [];\n');
+    // ...then `npm run demo` (a bash command, not an Edit/Write tool call) rewrote the evidence file.
+    writeFileSync(evidencePath, 'after\n');
+
+    const result = autoCommitWorktreeIfDirty(dir, 1, 'WI-9', {
+      agentPaths: ['src/sort.ts'],
+      scopedPaths: ['src/sort.ts'],
+    });
+
+    assert.notEqual(result, false, 'the in-scope file must still be swept');
+    const sweep = result as { committed: string[]; restored: string[]; left: string[] };
+    assert.deepEqual(sweep.committed, ['src/sort.ts']);
+    assert.deepEqual(sweep.restored, ['forge/history/x/demo/pulse-capture.md']);
+    assert.deepEqual(sweep.left, []);
+
+    assert.equal(readFileSync(evidencePath, 'utf8'), 'before\n', 'evidence file restored to HEAD content');
+    const committedFiles = execFileSync('git', ['show', '--name-only', '--format=', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim().split('\n');
+    assert.deepEqual(committedFiles, ['src/sort.ts'], 'only the in-scope file lands in the commit');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('autoCommitWorktreeIfDirty: an in-scope file edited via bash (no file_change event) is still committed', () => {
+  const dir = setupTinyRepo();
+  try {
+    // foo.go is tracked at HEAD (setupTinyRepo); a bash command edits it directly —
+    // no Edit/Write tool call, so it never appears in the agent's own filesChanged.
+    writeFileSync(join(dir, 'foo.go'), 'package x\n\nfunc main() {}\n');
+
+    const result = autoCommitWorktreeIfDirty(dir, 1, 'WI-9', {
+      agentPaths: [],
+      scopedPaths: ['foo.go'], // declared in the WI's files_in_scope
+    });
+
+    assert.notEqual(result, false);
+    const sweep = result as { committed: string[]; restored: string[]; left: string[] };
+    assert.deepEqual(sweep.committed, ['foo.go']);
+    assert.deepEqual(sweep.restored, []);
+    assert.deepEqual(sweep.left, []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('autoCommitWorktreeIfDirty: an untracked out-of-scope file is left in place, not committed', () => {
+  const dir = setupTinyRepo();
+  try {
+    writeFileSync(join(dir, 'scratch-notes.txt'), 'not part of this WI\n');
+    writeFileSync(join(dir, 'src_output.go'), 'package x\n');
+
+    const result = autoCommitWorktreeIfDirty(dir, 1, 'WI-9', {
+      agentPaths: ['src_output.go'],
+      scopedPaths: ['src_output.go'],
+    });
+
+    assert.notEqual(result, false);
+    const sweep = result as { committed: string[]; restored: string[]; left: string[] };
+    assert.deepEqual(sweep.committed, ['src_output.go']);
+    assert.deepEqual(sweep.left, ['scratch-notes.txt']);
+
+    assert.ok(existsSync(join(dir, 'scratch-notes.txt')), 'left file remains on disk');
+    const status = execFileSync('git', ['status', '--porcelain', '--', 'scratch-notes.txt'], { cwd: dir, encoding: 'utf8' }).trim();
+    assert.equal(status, '?? scratch-notes.txt', 'left file stays untracked, never staged');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test('resolveGateTimeoutMs: precedence env > declared testProcess timeout > default (R1-03-F1)', () => {
   const prior = process.env.FORGE_GATE_TIMEOUT_MS;
@@ -612,7 +702,7 @@ test('autoCommitWorktreeIfDirty: never commits the node_modules symlink forge li
     mkdirSync(join(deps, 'pkg'));
     symlinkSync(deps, join(dir, 'node_modules'), 'dir');
     writeFileSync(join(dir, 'work.ts'), 'export const x = 1;\n');
-    assert.equal(autoCommitWorktreeIfDirty(dir, 1, 'WI-1'), true);
+    assert.notEqual(autoCommitWorktreeIfDirty(dir, 1, 'WI-1', { agentPaths: ['work.ts'], scopedPaths: [] }), false);
     const committed = execFileSync('git', ['-C', dir, 'show', '--name-only', '--format=', 'HEAD'], { encoding: 'utf8' }).trim().split('\n');
     assert.deepEqual(committed, ['work.ts']);
   } finally {

@@ -400,7 +400,7 @@ function renderTrajectory(events: EventLogEntry[], metrics: CycleMetrics): strin
       e.event_type === 'start' ||
       e.event_type === 'end' ||
       e.event_type === 'error' ||
-      (e.event_type === 'log' && /verdict|merged|skipped/.test(e.message ?? '')),
+      (e.event_type === 'log' && /verdict|merged|skipped|swept/.test(e.message ?? '')),
   );
   if (keyEvents.length > 0) {
     lines.push('### Key events');

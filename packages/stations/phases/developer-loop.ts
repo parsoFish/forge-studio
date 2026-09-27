@@ -40,7 +40,7 @@ import { makeProjectSkillsLoadedSink } from '@forge/agents';
 import { runRalphLoop as runRalph, type LoopResult } from '@forge/agents';
 import { matchesRateLimitSignature } from '@forge/agents';
 import { createWiWorktree, removeWiWorktree } from '@forge/flows';
-import { emitDepsLinkProblems, emitUncommittedWorkSwept } from './dev-loop-events.ts';
+import { emitDepsLinkProblems, emitGateEvent, emitUncommittedWorkSwept } from './dev-loop-events.ts';
 import { createMergeQueue, mergeAndPublish, type MergeConflictDetail } from '@forge/flows';
 import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '@forge/agents';
 import { assertLocalRemoteSynced, checkLocalRemoteSynced, type PushResult } from '@forge/flows';
@@ -733,6 +733,10 @@ export async function runDeveloperLoop(
           // when ALL of THIS WI's declared outputs are on the branch (a sibling
           // genuinely delivered them) — not on a bare "branch has a commit".
           requiredPaths: wi.creates ?? [],
+          // forge-1rk5.3 row 145: the autocommit safety net's own scope —
+          // unioned with requiredPaths (creates) and the agent's per-iteration
+          // filesChanged inside runRalph itself.
+          filesInScope: wi.files_in_scope,
           failOnHollowIter0Gate: cp.hollowGateGuardFor(classProfile.iter0FailFirst, wi.behavior_preserving),
           // re-review #1: stop early if the gate command can't RUN (broken
           // gate) rather than iterating against it and burning the budget.
@@ -743,7 +747,7 @@ export async function runDeveloperLoop(
           // when it fires the agent's commit-discipline failure becomes a
           // distinct, greppable event instead of being silently absorbed —
           // reflectors see the gap and the skill clause can be tightened.
-          onAutoCommit: (iteration) =>
+          onAutoCommit: (iteration, sweep) =>
             emitUncommittedWorkSwept(logger, {
               initiativeId: input.initiativeId,
               parentEventId: wiStart.event_id,
@@ -751,7 +755,7 @@ export async function runDeveloperLoop(
               worktreePath: wiWorktree.path,
               phase: 'developer-loop',
               skill: agentDef.slug,
-            }, iteration),
+            }, iteration, sweep),
           // F-14: emit per-iteration events so metrics (cycle.ts:metrics.ts)
           // can aggregate iteration counts. F-23 enriches the metadata so
           // post-mortems can see what the agent actually did per iteration
@@ -1529,72 +1533,6 @@ export function assertOutcomesSettled(
     `developer-loop: internal error — incomplete outcome snapshot before summary ` +
       `(${outcomes.size}/${wisRun.length} settled)${missing.length > 0 ? `; missing: ${missing.join(', ')}` : ''}`,
   );
-}
-
-/**
- * F-23: emit a `gate` event with the captured stdout/stderr/exit details from
- * a quality-gate run. The dev-loop's prior visibility into the gate was a
- * single boolean per iteration, swallowing the actual reason for failure;
- * this surfaces the truncated output so post-mortems can answer "why did the
- * gate fail" without re-running the worktree.
- */
-function emitGateEvent(
-  logger: EventLogger,
-  initiativeId: string,
-  parentEventId: string,
-  workItemId: string,
-  info: GateRunInfo,
-  // ADR 026: a code-fix UWI runs in the unifier phase wearing the dev role —
-  // attribute its gate events to `unifier` so post-mortems don't mis-file them
-  // under developer-loop. Defaults to the dev-loop's own phase/skill.
-  attr: { phase: 'developer-loop' | 'unifier'; skill: string } = { phase: 'developer-loop', skill: 'developer-ralph' },
-): void {
-  // 2026-05-25: iter-0 gate fails are EXPECTED (the L2 sharp-gate
-  // check proves the gate isn't hollow before the agent has done any
-  // work). Emit as `log` with `expected_fail: true` so the UI doesn't
-  // flip the dev-loop phase to red on a normal-path event. Real
-  // failures (iter >= 1 with the gate still failing) stay as `error`.
-  // A gate that ERRORED (could not run — missing binary / signal) is NEVER
-  // "expected", even at iter-0: it's a broken gate, not a test outcome. Always
-  // surface it as an error with a distinct `gate.errored` message so the
-  // classifier says "fix the gate" instead of mis-reading it as a code failure.
-  // N10: a gate KILLED by its timeout is an ENVIRONMENT failure — never
-  // "expected" and never a work failure. Distinct `gate.timeout` message +
-  // `gate_timed_out` / `failure_kind: 'environment'` metadata so the failure
-  // classifier routes it as transient instead of "the code was wrong".
-  const isExpectedIter0Fail = !info.passed && !info.errored && !info.timedOut && info.iteration === 0;
-  logger.emit({
-    initiative_id: initiativeId,
-    parent_event_id: parentEventId,
-    phase: attr.phase,
-    skill: attr.skill,
-    event_type: info.passed || isExpectedIter0Fail ? 'log' : 'error',
-    input_refs: [],
-    output_refs: [],
-    duration_ms: info.durationMs,
-    message: info.timedOut
-      ? 'gate.timeout'
-      : info.errored
-        ? 'gate.errored'
-        : info.passed
-          ? 'gate.pass'
-          : isExpectedIter0Fail
-            ? 'gate.expected-fail'
-            : 'gate.fail',
-    metadata: {
-      work_item_id: workItemId,
-      gate_passed: info.passed,
-      gate_exit_code: info.exitCode,
-      gate_command: info.command,
-      gate_stdout_tail: info.stdoutTail,
-      gate_stderr_tail: info.stderrTail,
-      ...(info.errored ? { gate_errored: true } : {}),
-      ...(info.timedOut ? { gate_timed_out: true, failure_kind: 'environment' } : {}),
-      ...(info.rejectReason ? { reject_reason: info.rejectReason } : {}),
-      ...(info.iteration !== undefined ? { iteration: info.iteration } : {}),
-      ...(isExpectedIter0Fail ? { expected_fail: true } : {}),
-    },
-  });
 }
 
 /**
