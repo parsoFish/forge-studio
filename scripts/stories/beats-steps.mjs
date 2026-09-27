@@ -139,6 +139,8 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
     const fillAllMatchingAttr = Object.hasOwn(step, 'fillAllMatching') ? step.fillAllMatching : null;
     // Either bulk-fill shape acts on N matches the same way — see the shared
     // loop below, guarded on this one boolean rather than two copies of it.
+    // ZERO matches is NOT the same for both (SHOULD-FIX 1, forge-8vfn.8.1.34):
+    // see the `n === 0` branch inside that loop.
     const bulkFill = fillsAll || fillAllMatchingAttr !== null;
     const fills = bulkFill || Object.hasOwn(step, 'fill');
     // `pressWithin` — bead `forge-8vfn.6.11.51`. A `bind` scope is resolved by
@@ -325,14 +327,23 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
     const stopWatch = watchControlState(page, handle, (line) => console.log(line));
     try {
       if (bulkFill) {
-        // Every match, or a red naming the field. ZERO is never a silent pass:
-        // a round with nothing to answer means the product did not publish the
-        // question form, which is exactly the gap S2 run 3 spent $25 finding.
+        // Every match, or — for `fillAll` — a red naming the field. ZERO is
+        // never a silent pass THERE: a round with nothing to answer means the
+        // product did not publish the question form, exactly the gap S2 run 3
+        // spent $25 finding. `fillAllMatching` differs (SHOULD-FIX 1,
+        // forge-8vfn.8.1.34): a reflection round where EVERY question carries
+        // options is a legitimate product state, not a missing form —
+        // `pressFirstEach` already reds on zero `[data-question-index]`
+        // containers, so the form's presence is proven there, not here.
         const n = await page.locator(handle).count();
         if (n === 0) {
-          return finish(
-            `could not fill every ${handle} with "${step.with}": no element carries that handle.`,
-          );
+          if (fillAllMatchingAttr === null) {
+            return finish(
+              `could not fill every ${handle} with "${step.with}": no element carries that handle.`,
+            );
+          }
+          console.log(`[stories] ${handle}: no match to fill — a legitimate all-options round`);
+          continue;
         }
         for (let k = 0; k < n; k += 1) {
           // RE-READ THE COUNT BEFORE ADDRESSING THE INDEX — bead

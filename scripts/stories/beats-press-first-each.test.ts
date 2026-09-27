@@ -178,14 +178,31 @@ test('8.1.34: fillAllMatching fills EVERY match on a bare data-* attribute, not 
   ]);
 });
 
-test('8.1.34: fillAllMatching on a page with NO matches reds naming the attribute', () => {
+// SHOULD-FIX 1 (forge-8vfn.8.1.34): unlike `fillAll`, `fillAllMatching` must
+// NOT red on zero matches — a reflection round where EVERY question carries
+// options is a legitimate product state, not a missing form. `pressFirstEach`
+// already reds on zero `[data-question-index]` containers (see the tests
+// above), so the form's presence is proven there, never by this verb finding
+// nothing to fill.
+test('8.1.34: fillAllMatching on a page with NO matches logs it and CONTINUES — not a red', async () => {
   const page = multiFreeformPage(0);
-  return performStepsForTest(
-    page as never, [{ fillAllMatching: 'question-freeform', with: 'x' }], 5000, async () => false,
-  ).then((r) => {
-    assert.notEqual(r.error, null);
-    assert.match(r.error!, /could not fill every \[data-question-freeform\]/);
-  });
+  const lines: string[] = [];
+  const originalLog = console.log;
+  console.log = (line: string) => { lines.push(line); };
+  let r;
+  try {
+    r = await performStepsForTest(
+      page as never, [{ fillAllMatching: 'question-freeform', with: 'x' }], 5000, async () => false,
+    );
+  } finally {
+    console.log = originalLog;
+  }
+  assert.equal(r.error, null, 'an all-options round is a legitimate state, never a red');
+  assert.deepEqual(page.filled, [], 'nothing to fill, and nothing was');
+  assert.ok(
+    lines.some((l) => l.includes('[data-question-freeform]') && l.includes('no match to fill')),
+    `expected the zero-match state to be logged, got: ${JSON.stringify(lines)}`,
+  );
 });
 
 // ── schema: story-wait-schema.mjs / story-file.mjs ──────────────────────────
