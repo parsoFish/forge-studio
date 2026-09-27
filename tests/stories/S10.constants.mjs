@@ -34,8 +34,13 @@ export const IDEA =
  * described twice, and until 7.6.118 they were two literals that happened to
  * agree. A story whose typed ceiling and funded ground disagree would run to
  * one number and be judged against the other, and nothing would say so.
+ *
+ * The runner enforces the LOWER of the funded ceiling (`--ceiling`) and this
+ * declared one, so a launch recipe that raises its ceiling must raise this too
+ * (T1 1832, S10 run 38: funded $44, declared $35, would have halted inside ACT 2).
+ * 44 covers ACT 1 (run 37: $23.91), both reflector passes, and ACT 2's second run.
  */
-export const GROUND = Object.freeze({ project: 'gitpulse', realSpawn: true, budget_usd: 35 });
+export const GROUND = Object.freeze({ project: 'gitpulse', realSpawn: true, budget_usd: 44 });
 
 /** The ceiling the operator types into the idea box, in dollars. DERIVED. */
 export const CEILING = String(GROUND.budget_usd);
