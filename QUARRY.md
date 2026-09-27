@@ -57,17 +57,17 @@ operator-ratified new cap — never a silent raise.
 | `contracts` | 6 | 1,404 | **1,404** | ratified 1,404 — forge-mfv5.2.8 the whole-declaration drive rule lives once in contracts and DEMO-SKILL applies it (the demo-builder lock validates with it), +35 on 1,369, lane-ratified under ruling 666; see git history for prior raises. |
 | `kernel` | 30 | 5,575 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `projects` | 48 | 11,057 | **9,284** | ratified 9,284 — forge-mfv5.3.5 retired acceptance.required: refused at load by name, deleted and reported by forge project migrate, +35 on 9,249 (T1-ratified); see git history for prior raises. |
+| `projects` | 48 | 11,096 | **9,284** | ratified 9,284 — forge-mfv5.3.5 retired acceptance.required: refused at load by name, deleted and reported by forge project migrate, +35 on 9,249 (T1-ratified); see git history for prior raises. |
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,235 | **13,235** | ratified 13,235 — forge-mfv5.3.7 the gate child env carries FORGE_RESOURCE_PREFIX derived from the initiative id (secrets.env only for a gate that declared requiredEnv/unsetEnv), +22 on 13,213, lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 61 | 20,402 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 85 | 24,012 | **23,812** | ratified 23,812 — row 136 closure.local-aligned-to-remote records target_sha/base_sha (forge-8vfn.8.1.32), +16 on 23,796, lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 15 | 2,763 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 44 | 11,842 | **11,842** | ratified 11,842 — forge-mfv5.3.7 the per-WI gate is built by one exported function (wi-quality-gate.ts) that passes the initiative id, +60 on 11,782, lane-ratified under ruling 666; see git history for prior raises. |
+| `stations` | 44 | 11,925 | **11,842** | ratified 11,842 — forge-mfv5.3.7 the per-WI gate is built by one exported function (wi-quality-gate.ts) that passes the initiative id, +60 on 11,782, lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,922 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **473** | **127,837** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **473** | **127,959** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -378,7 +378,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/dev-cost-bound.ts | stations | verbatim | 88 |
 | packages/stations/phases/developer-loop.ts | stations | verbatim | 1819 |
 | packages/stations/phases/live-acceptance-env.ts | stations | verbatim | 22 |
-| packages/stations/phases/wi-quality-gate.ts | stations | verbatim | 73 |
+| packages/stations/phases/wi-quality-gate.ts | stations | verbatim | 131 |
 | packages/flows/phases/gitignored-creates.ts | flows | rewritten | 79 |
 | packages/flows/plan-gate-class-check.ts | flows | rewritten | 59 |
 | packages/stations/phases/pm-binding.ts | stations | verbatim | 384 |
@@ -410,8 +410,8 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/project-config.ts | projects | verbatim | 323 |
 | packages/projects/project-config-write.ts | projects | verbatim | 74 |
 | packages/projects/project-config-sidecar.ts | projects | verbatim | 73 |
-| packages/projects/project-config-types.ts | projects | verbatim | 197 |
-| packages/projects/project-config-validate.ts | projects | verbatim | 429 |
+| packages/projects/project-config-types.ts | projects | verbatim | 205 |
+| packages/projects/project-config-validate.ts | projects | verbatim | 457 |
 | packages/projects/project-create.ts | projects | verbatim | 534 |
 | packages/projects/project-repo-tx.ts | projects | verbatim | 237 |
 | packages/projects/reset.ts | projects | verbatim | 712 |
@@ -426,7 +426,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/release-process.ts | stations | verbatim | 66 |
 | packages/stations/testing.ts | stations | verbatim | 23 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `settleWiOutcome`/`assertOutcomesSettled`/`WiOutcome` (phases/developer-loop.ts), `runProjectManager`/`PmQueryFn` (phases/project-manager.ts), `NodeExecutor`/`integrateDeliveryFailure` (phases/executor-table.ts) and `deriveDemoModel` (phases/derive-demo-model.ts) have no production consumer outside this package, only `apps/forge`/`packages/flows` tests reach for them.** |
 | packages/stations/phases/integrate.ts | stations | verbatim | 372 |
-| packages/stations/phases/dev-loop-events.ts | stations | rewritten | 142 |
+| packages/stations/phases/dev-loop-events.ts | stations | rewritten | 167 |
 | packages/stations/phases/derive-pr-body.ts | stations | verbatim | 97 |
 | packages/stations/demo-delta.ts | stations | verbatim | 136 |
 | packages/stations/phases/derive-demo-model.ts | stations | verbatim | 283 |
@@ -532,7 +532,7 @@ operator-ratified new cap — never a silent raise.
 | skills/demo/SKILL.md | factory | verbatim | 306 |
 | skills/developer-ralph/SKILL.md | factory | verbatim | 108 |
 | skills/doc-updater/SKILL.md | flows | verbatim | 52 |
-| skills/forge-onboard-project/SKILL.md | projects | verbatim | 200 |
+| skills/forge-onboard-project/SKILL.md | projects | verbatim | 202 |
 | skills/handoff/SKILL.md | sessions | verbatim | 38 |
 | skills/instructions-creator/SKILL.md | projects | verbatim | 124 |
 | skills/onboarding-agent/SKILL.md | projects | verbatim | 126 |
@@ -580,7 +580,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/process-liveness.ts | kernel | rewritten | 63 **Written for bead `forge-8vfn.8.1.6` (T1 review follow-up) — the ONE `/proc/<pid>/stat`-based pid-liveness read (`isProcessRunning`; ENOENT=gone, Z/X=gone, any other read failure=not concluded gone), so `packages/flows/daemon.ts`'s `isAlive` and the story runner's scheduler preflight (`scripts/stories/scheduler-preflight.mjs`, via `scripts/stories/sweep-teardown.mjs`'s `isRunning`) cannot disagree about a zombie pid. `isAlive` delegates to it; `isRunning` delegates to it through a relative `.ts` import (proven to load under the plain `node` the story runner is launched with).** |
 | packages/knowledge/index.ts | knowledge | verbatim | 108 |
 | packages/library/index.ts | library | verbatim | 115 |
-| packages/projects/index.ts | projects | verbatim | 105 |
+| packages/projects/index.ts | projects | verbatim | 106 |
 | packages/projects/project-roster.ts | projects | verbatim | 468 |
 | packages/projects/project-preflight-read.ts | projects | verbatim | 192 |
 | packages/projects/project-roadmap.ts | projects | verbatim | 89 |
