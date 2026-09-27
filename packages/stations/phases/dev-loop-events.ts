@@ -3,8 +3,9 @@
  * cap; its baseline is a ceiling). Pure emitters: each takes the logger and names what it saw.
  */
 import type { EventLogger } from '@forge/kernel';
+import type { GateRunInfo } from '@forge/agents';
 
-export /**
+/**
  * G1 rescope (plan item 2.6): one autocommit-sweep observation. The safety
  * net (`autoCommitWorktreeIfDirty`) STAYS — it closes the
  * uncommitted-work-dead-ends-the-gate failure mode — but when it fires, the
@@ -17,7 +18,7 @@ export /**
  * or LEAVE an untracked one in place. `sweep` carries all three lists so a
  * reflector can see exactly what happened, not just that something did.
  */
-function emitUncommittedWorkSwept(
+export function emitUncommittedWorkSwept(
   logger: EventLogger,
   ctx: {
     initiativeId: string;
@@ -71,5 +72,71 @@ export function emitDepsLinkProblems(
     output_refs: [],
     message: 'deps.link-problem',
     metadata: { work_item_id: ctx.workItemId, problems: wiWorktree.depsProblems },
+  });
+}
+
+/**
+ * F-23: emit a `gate` event with the captured stdout/stderr/exit details from
+ * a quality-gate run. The dev-loop's prior visibility into the gate was a
+ * single boolean per iteration, swallowing the actual reason for failure;
+ * this surfaces the truncated output so post-mortems can answer "why did the
+ * gate fail" without re-running the worktree.
+ */
+export function emitGateEvent(
+  logger: EventLogger,
+  initiativeId: string,
+  parentEventId: string,
+  workItemId: string,
+  info: GateRunInfo,
+  // ADR 026: a code-fix UWI runs in the unifier phase wearing the dev role —
+  // attribute its gate events to `unifier` so post-mortems don't mis-file them
+  // under developer-loop. Defaults to the dev-loop's own phase/skill.
+  attr: { phase: 'developer-loop' | 'unifier'; skill: string } = { phase: 'developer-loop', skill: 'developer-ralph' },
+): void {
+  // 2026-05-25: iter-0 gate fails are EXPECTED (the L2 sharp-gate
+  // check proves the gate isn't hollow before the agent has done any
+  // work). Emit as `log` with `expected_fail: true` so the UI doesn't
+  // flip the dev-loop phase to red on a normal-path event. Real
+  // failures (iter >= 1 with the gate still failing) stay as `error`.
+  // A gate that ERRORED (could not run — missing binary / signal) is NEVER
+  // "expected", even at iter-0: it's a broken gate, not a test outcome. Always
+  // surface it as an error with a distinct `gate.errored` message so the
+  // classifier says "fix the gate" instead of mis-reading it as a code failure.
+  // N10: a gate KILLED by its timeout is an ENVIRONMENT failure — never
+  // "expected" and never a work failure. Distinct `gate.timeout` message +
+  // `gate_timed_out` / `failure_kind: 'environment'` metadata so the failure
+  // classifier routes it as transient instead of "the code was wrong".
+  const isExpectedIter0Fail = !info.passed && !info.errored && !info.timedOut && info.iteration === 0;
+  logger.emit({
+    initiative_id: initiativeId,
+    parent_event_id: parentEventId,
+    phase: attr.phase,
+    skill: attr.skill,
+    event_type: info.passed || isExpectedIter0Fail ? 'log' : 'error',
+    input_refs: [],
+    output_refs: [],
+    duration_ms: info.durationMs,
+    message: info.timedOut
+      ? 'gate.timeout'
+      : info.errored
+        ? 'gate.errored'
+        : info.passed
+          ? 'gate.pass'
+          : isExpectedIter0Fail
+            ? 'gate.expected-fail'
+            : 'gate.fail',
+    metadata: {
+      work_item_id: workItemId,
+      gate_passed: info.passed,
+      gate_exit_code: info.exitCode,
+      gate_command: info.command,
+      gate_stdout_tail: info.stdoutTail,
+      gate_stderr_tail: info.stderrTail,
+      ...(info.errored ? { gate_errored: true } : {}),
+      ...(info.timedOut ? { gate_timed_out: true, failure_kind: 'environment' } : {}),
+      ...(info.rejectReason ? { reject_reason: info.rejectReason } : {}),
+      ...(info.iteration !== undefined ? { iteration: info.iteration } : {}),
+      ...(isExpectedIter0Fail ? { expected_fail: true } : {}),
+    },
   });
 }
