@@ -81,13 +81,54 @@ export const CLOSE = [
         'the reflector one more pass to fold the answers into the brain.',
     },
     {
-      // SOURCE-DERIVED for the reflected theme. `data-theme-node` /
-      // `data-theme-active` (`ThemeList.tsx:34-35`) are the SHAPE S6 b7 already
-      // asserts VERIFIED — but S6's theme comes from a project-brain SEEDING
-      // session, and no pinned story has ever asserted a REFLECTOR-produced
-      // theme. `data-ingest-fresh-themes` (`app/knowledge/page.tsx:824-826`) is
-      // the reflector-side evidence and is source-only.
+      // Row 143 (bead `forge-8vfn.8.1.36`, ruling 1737) — NAVIGATION-ONLY, the
+      // same shape `S10.act2.mjs` uses for the identical reason (T1 ruling
+      // 533, the 504 class: `route` plus `page`/`page-ready`, nothing else).
+      // `performSteps` runs BEFORE the route wait and before real-nav
+      // (`beats-drive.mjs`), so a `do` naming `kb-select` on THIS beat would
+      // run on `/artifact` — the previous beat's page, which carries no such
+      // control at all — and spend its whole bound learning nothing.
+      //
+      // The global `Knowledge` pillar is the only door: `StudioNav.tsx:94`
+      // renders it `data-nav="knowledge"`, never `data-action`, so no `press`
+      // step can reach it (`handleFor`, `beats.mjs`, only ever builds
+      // `[data-action="…"]`). The runner's real-nav fallback
+      // (`beats-drive.mjs`'s `[data-nav][href]` branch) is what actually
+      // clicks it — unchanged from before this fix.
+      act: 'Open the knowledge graph',
+      expect: {
+        route: '/knowledge',
+        data: { page: 'knowledge', 'page-ready': 'true' },
+      },
+      say: 'The cycle is done. Before reading what it learned, the operator opens the knowledge graph.',
+    },
+    {
+      // Row 143 (bead `forge-8vfn.8.1.36`, ruling 1737). The Knowledge pillar
+      // (previous beat) lands on the operator's own LAST-VIEWED base, or the
+      // roster's first entry when none was viewed (`app/knowledge/page.tsx
+      // :328-337`, `lib/kb-last-viewed.ts`'s `initialKbId`, pinned by
+      // `kb-last-viewed.test.ts`) — the product's own intended default, never
+      // a defect, and never this cycle's ground. A real run reds: `data-kb-id:
+      // expected "gitpulse", got "cycles"`. Selecting it explicitly is the
+      // only honest way to find THIS cycle's theme.
+      //
+      // `data-field="kb-select"` on the `<select>` (`KbSelector.tsx:46`, one
+      // `<option value="<kbId>">` per KB), documented in
+      // `docs/reference/studio-dom-contract.md` under "KB selector
+      // zero-state". `fill` on a SELECT handle resolves to `selectOption`
+      // (`beats-steps.mjs`'s `setControl`); the change handler itself
+      // navigates to `?id=<kbId>` (`KbSelector.tsx:39`), which is what moves
+      // `data-kb-id`.
+      //
+      // SOURCE-DERIVED for the reflected theme, unchanged by this fix.
+      // `data-theme-node` / `data-theme-active` (`ThemeList.tsx:34-35`) are the
+      // SHAPE S6 b7 already asserts VERIFIED — but S6's theme comes from a
+      // project-brain SEEDING session, and no pinned story has ever asserted a
+      // REFLECTOR-produced theme. `data-ingest-fresh-themes`
+      // (`app/knowledge/page.tsx:824-826`) is the reflector-side evidence and is
+      // source-only.
       act: 'Find what the cycle learned on the knowledge graph',
+      do: [{ fill: 'kb-select', with: 'gitpulse' }],
       expect: {
         route: '/knowledge',
         data: { page: 'knowledge', 'page-ready': 'true', 'kb-id': 'gitpulse' },
