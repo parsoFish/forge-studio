@@ -71,7 +71,7 @@ import {
 } from './preflight.ts';
 import { resolveCommandRow, type CommandAdvisory } from './reset-command-resolve.ts';
 export type { CommandAdvisory } from './reset-command-resolve.ts';
-import { resolveAppTypeForReset } from './reset-report.ts';
+import { resolveAppTypeForReset, attachReportMetadata } from './reset-report.ts';
 export { AppTypeUnresolvedError } from './reset-report.ts';
 
 // ---------------------------------------------------------------------------
@@ -109,7 +109,11 @@ export type ContractSection =
  */
 export type DriftAction = 'regenerate' | 'preserve' | 'add' | 'unchanged';
 
-export type DriftRow = {
+/** The shape `driftRow`/`computeSkillsDrift` compute directly, before
+ *  `reset-report.ts`'s `attachReportMetadata` adds `purpose`/`verdict` in one
+ *  final pass (bead forge-mfv5.3.1) — kept distinct so `resolveCommandRow`'s
+ *  row-reconstruction need not carry fields it has no opinion on. */
+export type RawDriftRow = {
   section: ContractSection;
   /** What's on disk today (via the already-validated `ProjectConfig`); `undefined` ⇒ absent. */
   before: unknown;
@@ -121,6 +125,17 @@ export type DriftRow = {
    *  fix b). `'hand-authored'`: the value matches NO starter forge ships, so
    *  it was never template-derived (bead `forge-8vfn.6.4`). */
   reason?: 'starter-silent' | 'hand-authored';
+};
+
+/** The report-ready row (bead forge-mfv5.3.1): `RawDriftRow` plus what the
+ *  element is FOR, and — for exactly 'skills'/'demoProcess' — whether it
+ *  actually works. See `reset-report.ts`'s header for the `purpose` table and
+ *  the two verdict rules, both reused, never re-implemented. */
+export type DriftRow = RawDriftRow & {
+  /** One sentence from `reset-report.ts`'s single `SECTION_PURPOSE` table. */
+  purpose: string;
+  /** Present only for 'skills' (skills-resolve) and 'demoProcess' (demo-capture). */
+  verdict?: { pass: boolean; detail: string };
 };
 
 export type SkillMove = {
@@ -259,7 +274,7 @@ function driftRow(
   starterValue: unknown,
   mode: RegenMode,
   everyStarterValue: readonly unknown[] = [],
-): DriftRow {
+): RawDriftRow {
   const proposed = mode === 'protected' ? current : mode === 'unconditional' ? starterValue : (starterValue !== undefined ? starterValue : current);
 
   // BEAD forge-8vfn.6.4 — SECTION-LEVEL preservation. Ruling 38 fix (b) below
@@ -346,7 +361,7 @@ function computeSkillsDrift(
   projectDir: string,
   skills: string[] | undefined,
   artifactRoot: string | undefined,
-): { row: DriftRow; skillMoves: SkillMove[] } {
+): { row: RawDriftRow; skillMoves: SkillMove[] } {
   const ids = skills ?? [];
   const artifactSegs = artifactRootSegments(artifactRoot);
   const moves: SkillMove[] = [];
@@ -474,7 +489,7 @@ export function computeContractDrift(
   const across = (pick: (s: ProjectConfig) => unknown): unknown[] =>
     everyStarter.map(pick).filter((value) => value !== undefined);
 
-  const rows: DriftRow[] = [
+  const rows: RawDriftRow[] = [
     driftRow('testProcess.local', config?.testProcess.local, starter?.testProcess.local, mode('unconditional'), across((s) => s.testProcess.local)),
     driftRow('testProcess.ci', config?.testProcess.ci, starter?.testProcess.ci, mode('fillOnly'), across((s) => s.testProcess.ci)),
     // Secret NAMES carve-out (Q3): the starter value is hardcoded `undefined`,
@@ -492,7 +507,7 @@ export function computeContractDrift(
 
   // An 'add' row never writes a command this project cannot run.
   const commandAdvisories: CommandAdvisory[] = [];
-  const resolvedRows: DriftRow[] = rows.map((row) => {
+  const resolvedRows: RawDriftRow[] = rows.map((row) => {
     const resolved = resolveCommandRow(row, dir);
     if (resolved.advisory) commandAdvisories.push(resolved.advisory);
     return resolved.row;
@@ -502,7 +517,11 @@ export function computeContractDrift(
 
   const gitignoreDrift = computeGitignoreDrift(dir);
 
-  return { projectDir: dir, projectId, appType, appTypeNote, forgeRoot, rows: resolvedRows, skillMoves, gitignoreDrift, commandAdvisories };
+  // bead forge-mfv5.3.1: purpose (every row) + verdict (skills/demoProcess) —
+  // attached in one final pass, see `reset-report.ts`.
+  const reportRows = attachReportMetadata(resolvedRows, dir, forgeRoot, config);
+
+  return { projectDir: dir, projectId, appType, appTypeNote, forgeRoot, rows: reportRows, skillMoves, gitignoreDrift, commandAdvisories };
 }
 
 // ---------------------------------------------------------------------------

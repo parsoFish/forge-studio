@@ -57,7 +57,7 @@ operator-ratified new cap — never a silent raise.
 | `contracts` | 6 | 1,404 | **1,404** | ratified 1,404 — forge-mfv5.2.8 the whole-declaration drive rule lives once in contracts and DEMO-SKILL applies it (the demo-builder lock validates with it), +35 on 1,369, lane-ratified under ruling 666; see git history for prior raises. |
 | `kernel` | 30 | 5,513 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `projects` | 47 | 10,799 | **9,149** | ratified 9,149 — forge-mfv5.2.8 the demo-builder lock writes demoProcess through the one project.json merge-writer, validated by the shared drive rule, +34 on 9,115, lane-ratified under ruling 666; see git history for prior raises. |
+| `projects` | 47 | 10,823 | **9,149** | ratified 9,149 — forge-mfv5.2.8 the demo-builder lock writes demoProcess through the one project.json merge-writer, validated by the shared drive rule, +34 on 9,115, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,213 | **13,213** | ratified 13,213 — forge-1rk5.3 row 145 the safety-net commit is bounded by the WI's scope (restore tracked out-of-scope, leave untracked, report both), +110 on 13,103 (T1 1748); see git history for prior raises. |
 | `sessions` | 61 | 20,402 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
@@ -67,7 +67,7 @@ operator-ratified new cap — never a silent raise.
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,922 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **470** | **127,384** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **470** | **127,408** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -412,9 +412,9 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/project-config-validate.ts | projects | verbatim | 425 |
 | packages/projects/project-create.ts | projects | verbatim | 534 |
 | packages/projects/project-repo-tx.ts | projects | verbatim | 237 |
-| packages/projects/reset.ts | projects | verbatim | 694 |
-| packages/projects/reset-cli.ts | projects | verbatim | 158 |
-| packages/projects/reset-command-resolve.ts | projects | verbatim | 71 |
+| packages/projects/reset.ts | projects | verbatim | 713 |
+| packages/projects/reset-cli.ts | projects | verbatim | 160 |
+| packages/projects/reset-command-resolve.ts | projects | verbatim | 74 |
 | packages/projects/testing.ts | projects | verbatim | 12 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `parseSkills` and `checkDemo` have no production consumer outside this package, only `scripts/skill-example-validators.test.ts` and `apps/forge/tests/contract/demo-descriptor-parity.test.ts` reach for them.** |
 | packages/flows/promote-manifests.ts | flows | verbatim | 76 |
 | packages/flows/queue.ts | flows | verbatim | 246 |

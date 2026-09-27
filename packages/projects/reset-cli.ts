@@ -39,6 +39,8 @@ function printDriftReport(drift: DriftReport): void {
   console.log('drift report:');
   for (const row of drift.rows) {
     console.log(`  [${row.action}] ${row.section}${row.reason === undefined ? '' : ` — ${row.reason === 'hand-authored' ? 'matches no starter; this is yours' : 'the matched starter declares nothing here'}`}`);
+    console.log(`      purpose: ${row.purpose}`);
+    if (row.verdict) console.log(`      verdict: ${row.verdict.pass ? 'PASS' : 'FAIL'} — ${row.verdict.detail}`);
     if (row.action !== 'unchanged') {
       console.log(`      before: ${JSON.stringify(row.before)}`);
       console.log(`      after:  ${JSON.stringify(row.after)}`);
