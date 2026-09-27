@@ -42,11 +42,13 @@ export type RequeueResumeDecision =
   | {
       resume: true;
       /**
-       * `'integrate'` → stamp `resume_from: integrate` (ADR 019). `null` →
-       * preserve the worktree with NO marker; the scheduler's preserved
-       * work-items reuse path re-runs the dev-loop in place.
+       * `'integrate'` → stamp `resume_from: integrate` (ADR 019). `'plan'` →
+       * stamp `resume_from: plan` (row 157, ruling 1873) — the PM node
+       * RE-RUNS (it is the phase that failed), unlike the other two markers.
+       * `null` → preserve the worktree with NO marker; the scheduler's
+       * preserved work-items reuse path re-runs the dev-loop in place.
        */
-      resume_from: 'integrate' | null;
+      resume_from: 'integrate' | 'plan' | null;
       reason: string;
     };
 
@@ -68,6 +70,10 @@ export type WorkItemStatusSummary = { total: number; complete: number };
 export type PriorFailureSignal = {
   environment: boolean;
   cleanBoundaryHalt: boolean;
+  /** Row 157 (ruling 1873): `'plan'` when the classifier's own `resumeFrom`
+   *  named the plan node — read structured, off `failure_classification`'s
+   *  `resume_from` metadata, never by re-sniffing `reason` prose. */
+  resumeFrom?: 'plan';
 };
 
 const NO_PRIOR_FAILURE_SIGNAL: PriorFailureSignal = { environment: false, cleanBoundaryHalt: false };
@@ -100,6 +106,7 @@ export function readPriorFailureSignal(
         return {
           environment: e.metadata?.environment === true,
           cleanBoundaryHalt: e.metadata?.cleanBoundaryHalt === true,
+          ...(e.metadata?.resume_from === 'plan' ? { resumeFrom: 'plan' as const } : {}),
         };
       }
     }
@@ -174,10 +181,23 @@ export function decideRequeueResume(args: {
    * when it is omitted.
    */
   cleanBoundaryHalt?: boolean;
+  /**
+   * Row 157 (ruling 1873): the classifier's own `resumeFrom:'plan'` — a
+   * PM-phase acceptance-gate failure. Independent of the WI-salvage
+   * reasoning below: the PM failed before any per-WI work ran, so there is
+   * nothing to check worktree/branch state for — the plan node just re-runs.
+   */
+  resumeFromPlan?: boolean;
   worktreePresent: boolean;
   branchHasWork: boolean;
   workItems: WorkItemStatusSummary | null;
 }): RequeueResumeDecision {
+  if (args.resumeFromPlan) {
+    const reason =
+      'prior failure was a PM-phase acceptance-gate violation, deterministic after its one ' +
+      'bounded revise turn — resume at the plan node to re-decompose';
+    return { resume: true, resume_from: 'plan', reason };
+  }
   const resumable = args.environmentFailure || args.cleanBoundaryHalt === true;
   if (!resumable) {
     return {
@@ -224,6 +244,7 @@ export function inferRequeueResume(args: {
   return decideRequeueResume({
     environmentFailure: priorFailure.environment,
     cleanBoundaryHalt: priorFailure.cleanBoundaryHalt,
+    resumeFromPlan: priorFailure.resumeFrom === 'plan',
     worktreePresent: existsSync(args.worktreePath),
     branchHasWork:
       existsSync(args.projectRepoPath) &&

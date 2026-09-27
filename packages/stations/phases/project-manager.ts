@@ -5,7 +5,7 @@
  * items, and emits decomposition telemetry.
  */
 
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pinnedStreamQuery, type StreamQueryFn, type HeartbeatTimers } from '@forge/agents';
 
@@ -21,21 +21,21 @@ import {
   tallyToolUse,
   type PmToolUseSummary,
 } from './pm-binding.ts';
-import {
-  readWorkItemsFromDir,
-  serializeWorkItem,
-  validateWorkItemSet,
-  type CouplingPair,
-  type WorkItem,
-} from '@forge/flows';
+import { readWorkItemsFromDir, validateWorkItemSet } from '@forge/flows';
 import { loadProjectConfig, type ProjectConfig } from '@forge/projects';
+import { PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX } from '@forge/contracts';
+import {
+  acceptanceGateViolation,
+  describeAcceptanceRequirement,
+  runCompileStage,
+  runPmAcceptanceRevise,
+} from './pm-acceptance-gate.ts';
 import { releaseDraftAcs } from '../release-process.ts';
 import { recordBrainGateResult, type CycleInput } from '@forge/flows';
 import { requireCycleId } from './cycle-id.ts';
 import { makeToolEventSink, extractLiveToolDetails } from '@forge/agents';
 import { deriveGateRecipe, renderGateRecipeBlock } from '@forge/projects';
 import { runAgent } from '@forge/agents';
-import { compileWorkItemSpecs } from '@forge/flows';
 import { checkDecomposeCompleteness } from './decompose-completeness.ts';
 import { rejectWorkItemSet } from './pm-rejected-set.ts';
 import { writeDecompositionDoc } from './pm-decomposition-doc.ts';
@@ -191,6 +191,18 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // isolated here so a config-read failure doesn't abort the PM pass.
   let projectConfigForPrompt: ProjectConfig | null = null;
   try { projectConfigForPrompt = loadProjectConfig(input.worktreePath); } catch { /* best-effort */ }
+  // Row 157 (ruling 1873), part (a) BRIEF: state the class profile's
+  // acceptance-gate requirement UP FRONT, from the SAME classProfiles port +
+  // project config the post-hoc gate below reads — best-effort (never throws
+  // pre-spawn): a missing table here just omits the brief, and the post-hoc
+  // gate still refuses by name once real items exist (unchanged).
+  const acceptanceRequirement =
+    projectConfigForPrompt?.acceptance_gate && p.classProfiles
+      ? describeAcceptanceRequirement(
+          p.classProfiles.profileFor(manifest.class).acceptance,
+          projectConfigForPrompt.acceptance_gate,
+        )
+      : null;
   // Plan 2.11 (G8 rescoped — env-pin at the SDK seam): inline everything the
   // orchestrator already knows so the PM spends turns DECIDING, not
   // re-discovering. Evidence (2026-07-10-pm-error-max-turns-new-api-
@@ -209,6 +221,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     gateRecipe,
     instructions: projectConfigForPrompt?.instructions,
     northStar: projectConfigForPrompt?.northStar,
+    acceptanceRequirement: acceptanceRequirement ?? undefined,
   });
   logger.emit({
     initiative_id: input.initiativeId,
@@ -349,8 +362,11 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     },
     queryFn,
   });
-  const costUsd = spawn.costUsd;
-  const durationMs = spawn.durationMs ?? 0;
+  // Row 157: `let` — a bounded acceptance-gate revise pass (below) folds its
+  // own spend/duration into the pass's own accounting (its `lifecycle:
+  // 'caller'` spawn emits no event of its own; this pass's end event must).
+  let costUsd = spawn.costUsd;
+  let durationMs = spawn.durationMs ?? 0;
   const resultSubtype = spawn.resultSubtype;
   // PM is single-pass (not iterative); flush the coalesced remainder once.
   pmToolSink.flushIteration(0);
@@ -403,7 +419,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   const workItemsDir = resolve(input.worktreePath, '.forge', 'work-items');
   const read = readWorkItemsFromDir(workItemsDir);
   let items = read.items;
-  const parseErrors = read.parseErrors;
+  let parseErrors = read.parseErrors;
 
   for (const item of items) {
     logger.emit({
@@ -454,52 +470,30 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     ...(projectConfig?.standing_work_item_acs ?? []),
     ...releaseDraftAcs(projectConfig?.releaseProcess),
   ];
-  if (standingAcs.length > 0) {
-    items = appendStandingAcs(workItemsDir, items, standingAcs);
-  }
 
-  // ADR 037 (wi-spec-compiler, deterministic core): parse profile.md + the
-  // project's Brain-3 themes for `forge:constraint` blocks, inject every
-  // matching clause verbatim into the WI(s) it applies to, compile any
-  // resolvable hidden-coupling overlap into an explicit `depends_on` edge
-  // (F-05 upgraded reject → compile), and enforce the `creates:`
-  // mandatory-with-escape + sizing invariants. Sequenced right after
-  // appendStandingAcs and before validateWorkItemSet, the same seam
-  // appendStandingAcs already occupies. A compiler THROW (malformed
-  // constraint source, unreadable file) is a loud-but-controlled failure:
-  // it funnels into compileErrors → setErrors → the same failure outcome +
-  // final error event every other validation failure uses — runOnePmPass's
-  // no-throw contract holds.
-  let compileErrors: string[] = [];
-  let couplingViolations: CouplingPair[] = [];
-  if (items.length > 0) {
-    try {
-      const compiled = compileWorkItemSpecs({
-        forgeRoot: p.constraintSourcesRoot ?? forgeRoot,
-        projectName: manifest.project,
-        manifest,
-        workItemsDir,
-        // ralph-spec-lint (ADR 037 / REFINEMENT-PLAN §7) searches the PROJECT
-        // tree for existing/created test files — that's the worktree, not
-        // forgeRoot (which has no project source at all).
-        projectRoot: input.worktreePath,
-        items,
-        logger,
-        initiativeId: input.initiativeId,
-        parentEventId,
-      });
-      items = compiled.items;
-      couplingViolations = compiled.unresolvedCoupling;
-      compileErrors = compiled.compileErrors;
-    } catch (err) {
-      compileErrors = [`wi-spec-compile: ${(err as Error).message}`];
-    }
-  }
+  // ADR 037 (wi-spec-compiler) + A2b's standing-ACs, composed into ONE step
+  // in `runCompileStage` (pm-acceptance-gate.ts — see its own doc comment for
+  // why it is safe to run TWICE: once here, and again over the revised set a
+  // row-157 acceptance-gate turn (below) produces). `compileOpts` carries
+  // every field BOTH calls share; only `items` differs between them.
+  const compileOpts = {
+    workItemsDir,
+    standingAcs,
+    constraintSourcesRoot: p.constraintSourcesRoot ?? forgeRoot,
+    manifest,
+    projectRoot: input.worktreePath,
+    logger,
+    initiativeId: input.initiativeId,
+    parentEventId,
+  };
+  const firstStage = runCompileStage({ ...compileOpts, items });
+  items = firstStage.items;
+  let couplingViolations = firstStage.couplingViolations;
 
-  const { perItem, setErrors: validationSetErrors } = validateWorkItemSet(items, {
+  let { perItem, setErrors: validationSetErrors } = validateWorkItemSet(items, {
     expectedInitiativeId: manifest.initiative_id,
   });
-  const setErrors = [...validationSetErrors, ...compileErrors];
+  let setErrors = [...validationSetErrors, ...firstStage.compileErrors];
   // ADR 051 / ruling 229 half A — a FLAG, never a failure. The gate for this
   // column runs at the plan gate, on the declared criteria, before any spend.
   const underDecomposed = underDecomposedFlag(manifest, items, p.classProfiles);
@@ -511,7 +505,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
       metadata: { change_class: manifest.class, work_item_count: items.length, detail: underDecomposed },
     });
   }
-  const itemErrorCount = Object.values(perItem).reduce((acc, errs) => acc + errs.length, 0);
+  let itemErrorCount = Object.values(perItem).reduce((acc, errs) => acc + errs.length, 0);
 
   // A2a (2026-06-06): live-acceptance-WI requirement (contract C7), decided
   // by class (ADR 051 decision 2 as amended, bead forge-mfv5.3.5 — a phase
@@ -520,7 +514,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   // `requiresEnv`); the class profile's `acceptance` column says whether this
   // initiative must prove itself on it. `advisory` (docs — no live behaviour
   // to prove) skips the rule and logs the skip, never silently. `required`
-  // with NO acceptance WI is a hard PM failure.
+  // with NO acceptance WI earns one bounded revise turn (row 157) below.
   let accGateViolation: string | null = null;
   const accGate = projectConfig?.acceptance_gate;
   if (accGate && items.length > 0) {
@@ -533,24 +527,53 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
         metadata: { change_class: manifest.class, reason: "the class profile's acceptance is advisory" },
       });
     } else {
-      const hasLiveAccWi = items.some((it) =>
-        (it.quality_gate_cmd ?? []).some((tok) => tok.includes(accGate.match)),
-      );
-      if (!hasLiveAccWi) {
-        // Derive the wording from the project's own gate config: a gate that
-        // requires env vars proves the change against a real external system (so
-        // call it the "live acceptance suite"); a creds-free gate is just "the
-        // acceptance suite". No project-flavoured language is hardcoded here.
-        const requiresEnv = (accGate.requires_env ?? []).length > 0;
-        const suiteName = requiresEnv
-          ? `the live acceptance suite (proving the change against the real external system; ` +
-            `requires ${accGate.requires_env!.join(', ')})`
-          : 'the acceptance suite';
-        accGateViolation =
-          `no acceptance work item: this project requires ≥1 WI whose quality_gate_cmd targets ` +
-          `"${accGate.match}" — ${suiteName}. Add an acceptance WI whose gate runs that suite.`;
-      }
+      accGateViolation = acceptanceGateViolation(items, acceptance, accGate);
     }
+  }
+
+  // Row 157/1873 part (b) ONE REVISE TURN — fires only when the acceptance
+  // gate is the set's SOLE problem (no parse/set/per-item/coupling error
+  // already present): the PM gets the gate's own message and one more
+  // bounded pass before quarantine. The revised set is re-read from disk and
+  // put back through the SAME compile stage as the first pass (below), so a
+  // revise-added acceptance WI is never a second-class work item.
+  if (
+    accGateViolation !== null &&
+    Object.keys(parseErrors).length === 0 &&
+    setErrors.length === 0 &&
+    itemErrorCount === 0 &&
+    couplingViolations.length === 0
+  ) {
+    const revised = await runPmAcceptanceRevise({
+      input,
+      logger,
+      parentEventId,
+      def,
+      queryFn,
+      systemPrompt,
+      violation: accGateViolation,
+      costBudgetUsd: manifest.cost_budget_usd,
+      signal,
+    });
+    costUsd += revised.costUsd;
+    durationMs += revised.durationMs;
+    const reread = readWorkItemsFromDir(workItemsDir);
+    items = reread.items;
+    parseErrors = reread.parseErrors;
+    // Re-run the SAME compile stage over the REVISED set — the revise-added
+    // WI earns its standing ACs, its constraint clauses and its
+    // hidden-coupling / creates-mandatory enforcement here, not "at the next
+    // pass". Safe on the unchanged old items too: see runCompileStage's own
+    // doc comment on why each step no-ops rather than duplicates.
+    const secondStage = runCompileStage({ ...compileOpts, items });
+    items = secondStage.items;
+    couplingViolations = secondStage.couplingViolations;
+    const revalidated = validateWorkItemSet(items, { expectedInitiativeId: manifest.initiative_id });
+    perItem = revalidated.perItem;
+    setErrors = [...revalidated.setErrors, ...secondStage.compileErrors];
+    itemErrorCount = Object.values(perItem).reduce((acc, errs) => acc + errs.length, 0);
+    const profile = requireClassProfiles(p.classProfiles, 'project-manager').profileFor(manifest.class);
+    accGateViolation = acceptanceGateViolation(items, profile.acceptance, accGate!);
   }
 
   // Operator sanity-check surface: a greppable WI list so a human can eyeball
@@ -723,7 +746,8 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     checkpointIncomplete
       ? `decomposition capped mid-flight (${resultSubtype}): checkpoint plans ${plannedCount} WI(s) but only ${items.length} emitted`
       : null,
-    accGateViolation,
+    // Row 157: prefixed so failure-classifier.ts recognises a resumable PM failure.
+    accGateViolation ? `${PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX} ${accGateViolation}` : null,
   ]
     .filter((s): s is string => s !== null)
     .join('; ');
@@ -732,37 +756,5 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   return rejectWorkItemSet(workItemsDir, summary, { logger, initiativeId: input.initiativeId, parentEventId, skill: def.slug });
 }
 
-/** Heading for the project-contract standing-AC section injected per WI. */
-const STANDING_ACS_HEADER = '## Standing acceptance criteria (project contract)';
-
-/**
- * A2b (2026-06-06) — append the project's `standing_work_item_acs` to every WI
- * body as a fixed contract section, then re-serialise the file. Body-only
- * (frontmatter byte-stable via `serializeWorkItem`), idempotent (a WI already
- * carrying the header is left untouched — safe on resume). Best-effort per
- * file: a write error leaves that WI unchanged rather than failing the PM pass.
- * Returns the items with their in-memory bodies updated to match disk.
- */
-function appendStandingAcs(
-  workItemsDir: string,
-  items: ReadonlyArray<WorkItem>,
-  standingAcs: ReadonlyArray<string>,
-): WorkItem[] {
-  const section = [
-    STANDING_ACS_HEADER,
-    '',
-    'These project-wide testing invariants apply to **every** work item in this initiative, in addition to the work-specific acceptance criteria above. The dev-loop must satisfy them and the reviewer must confirm them:',
-    '',
-    ...standingAcs.map((ac) => `- ${ac}`),
-  ].join('\n');
-  return items.map((item) => {
-    if (item.body.includes(STANDING_ACS_HEADER)) return item; // idempotent
-    const updated: WorkItem = { ...item, body: `${item.body.replace(/\s+$/, '')}\n\n${section}\n` };
-    try {
-      writeFileSync(join(workItemsDir, `${item.work_item_id}.md`), serializeWorkItem(updated));
-      return updated;
-    } catch {
-      return item; // best-effort — never fail the PM pass on a write error
-    }
-  });
-}
+// `appendStandingAcs` moved to pm-acceptance-gate.ts (row 157, PURE MOVE) —
+// it is now internal to that module's `runCompileStage`, this file's only caller.

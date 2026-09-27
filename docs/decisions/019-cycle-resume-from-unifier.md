@@ -116,3 +116,47 @@ The explicit `--resume-from=unifier` flag remains as the operator override.
 retired with ADR 026; review feedback flows through typed unifier work items,
 and N7's "incomplete WIs" path deliberately re-runs the dev node via worktree
 state rather than resurrecting the marker.)
+
+## Amendment (M7 row 157, 2026-09-28): `plan` resumes by re-running the PM on the rebased worktree, the only phase-rerunning resume point, because the PM is the phase whose output the gate rejected
+
+Bead forge-8vfn.8.1.45, rulings 1873/1884. A third resume value, distinct in
+KIND from the two above: when the acceptance-by-class gate (ADR 051 decision
+2 — the class profile's `acceptance` column) still rejects the
+project-manager's work-item set after its one bounded revise turn (row 157
+part (b), `packages/stations/phases/project-manager.ts`), `classifyCycleFailure`
+(`packages/agents/failure-classifier.ts`) classifies the failure `terminal`
+with `resumeFrom: 'plan'` — deterministic (a fresh PM pass reasons from the
+same manifest and the same class profile, so auto-retry is never granted) but
+named and resumable, never falling through to "failure could not be
+classified".
+
+`runRequeue`'s inference (`packages/flows/requeue-resume.ts`) stamps
+`resume_from: plan` on the manifest when the prior failure's
+`failure_classification` event carried `resumeFrom: 'plan'`. **This is the
+one resume point that does NOT skip a phase.** Every value before it —
+`unifier`/`demo`/`integrate` and `develop` — exists to skip past a phase that
+already succeeded, against work already committed to the preserved branch.
+`plan` does the opposite: the scheduler rebases the preserved worktree onto
+current main (the same `rebasePreservedBranchOntoMain` step every resume
+already uses) and then RUNS the project-manager again, because the PM is the
+phase whose own output the gate rejected, and re-decomposition — not
+skipping past it — is the only way forward. No per-WI work exists yet at
+this failure point (the PM fails before the developer loop ever starts), so
+there is nothing to check worktree/branch salvage state for.
+
+The enumerated resume points, updated to their current, complete set:
+
+- `'integrate'` (was `'unifier'`, then `'demo'` — see the amendments above):
+  SKIPS the architect, the PM and the per-WI dev-loop; re-enters at the
+  post-develop `integrate` node against already-completed WI commits.
+- `'develop'` (ADR 040 review send-back, `resume_from: developer` above
+  retired by ADR 026): SKIPS the PM (no re-decomposition); RUNS the per-WI
+  dev loop against the existing WI specs.
+- `'plan'` (this amendment): does not skip anything — RUNS the PM again, on
+  the rebased worktree, to produce a set that satisfies the acceptance gate.
+
+The explicit CLI override pattern is unchanged: an operator can still force
+`--resume-from=integrate`; `plan` is inference-only for now (stamped by
+`runRequeue`'s reading of the classifier's structured output), mirroring how
+N7's environment-failure inference above was implemented before it grew an
+explicit flag.

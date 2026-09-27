@@ -520,8 +520,9 @@ type ParsedManifest = {
    * against the preserved worktree — 'integrate' skips PM + the per-WI dev-loop and
    * re-enters at the post-develop `integrate` node (WI commits already present);
    * 'develop' (ADR 040 send-back re-entry) rebase-skips PM and RUNS the dev loop.
+   * 'plan' (row 157) rebases and STILL RUNS PM — it is the phase that failed.
    */
-  resumeFrom?: 'integrate' | 'develop';
+  resumeFrom?: 'integrate' | 'develop' | 'plan';
 };
 
 function parseManifest(path: string): ParsedManifest {

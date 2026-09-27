@@ -245,3 +245,27 @@ test('renderPmUserPrompt: does NOT include north-star header when northStar abse
   const prompt = renderPmUserPrompt(BASE_INPUT);
   assert.ok(!prompt.includes('## Project north star (injected by forge)'), 'should not include north-star header when absent');
 });
+
+// ---------------------------------------------------------------------------
+// Row 157 (forge-8vfn.8.1.45, ruling 1873), part (a) BRIEF
+// ---------------------------------------------------------------------------
+
+test('renderPmUserPrompt: includes the acceptance-gate requirement when provided', () => {
+  const prompt = renderPmUserPrompt({
+    ...BASE_INPUT,
+    acceptanceRequirement:
+      'this class requires ≥ 1 work item whose quality_gate_cmd targets ' +
+      '"acceptancetests" — the acceptance suite.',
+  });
+  const header = '## Acceptance-gate requirement (injected by forge)';
+  assert.ok(prompt.includes(header), 'should include the requirement header');
+  assert.ok(prompt.includes('acceptancetests'), 'should include the requirement text verbatim');
+});
+
+test('renderPmUserPrompt: does NOT include the acceptance-gate header when the requirement is absent', () => {
+  const prompt = renderPmUserPrompt(BASE_INPUT);
+  assert.ok(
+    !prompt.includes('## Acceptance-gate requirement (injected by forge)'),
+    'an advisory class / no declared tier must not inject the header',
+  );
+});

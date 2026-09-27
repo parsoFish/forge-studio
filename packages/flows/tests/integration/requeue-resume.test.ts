@@ -168,6 +168,22 @@ test('decideRequeueResume: no readable work-item specs → no resume (dev node n
   assert.equal(d.resume, false);
 });
 
+test(
+  'decideRequeueResume: row 157 resumeFromPlan → resume from plan regardless of ' +
+    'worktree/branch state',
+  () => {
+    const d = decideRequeueResume({
+      environmentFailure: false,
+      resumeFromPlan: true,
+      worktreePresent: false,
+      branchHasWork: false,
+      workItems: null,
+    });
+    assert.equal(d.resume, true);
+    if (d.resume) assert.equal(d.resume_from, 'plan');
+  },
+);
+
 // ---------------------------------------------------------------------------
 // branchHasCommittedWork — fixture git repos
 // ---------------------------------------------------------------------------
@@ -249,6 +265,18 @@ test('readPriorFailureSignal: terminal / non-environment classification → envi
   const root = makeForgeRoot('cyc-2', { failure_mode: 'terminal', recoverable: false, reason: 'unifier did not pass' });
   try {
     assert.equal(readPriorFailureSignal(root, 'cyc-2').environment, false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('readPriorFailureSignal: row 157 resume_from:"plan" in the classification → resumeFrom "plan"', () => {
+  const root = makeForgeRoot('cyc-plan', {
+    failure_mode: 'terminal', recoverable: false, environment: false, cleanBoundaryHalt: false,
+    resume_from: 'plan', reason: 'PM did not compile an acceptance work item …',
+  });
+  try {
+    assert.equal(readPriorFailureSignal(root, 'cyc-plan').resumeFrom, 'plan');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

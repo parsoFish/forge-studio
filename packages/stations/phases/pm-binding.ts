@@ -214,6 +214,14 @@ export type PmUserPromptInput = {
    * project's purpose without the PM re-reading project.json.
    */
   northStar?: string;
+  /**
+   * Row 157 (ruling 1873): the class profile's acceptance-gate requirement,
+   * stated up front from the SAME data the post-hoc gate reads (ADR 051
+   * decision 2 — one source, not a second copy of the rule). Absent when the
+   * class's acceptance column is advisory, or the project declares no
+   * live-acceptance tier.
+   */
+  acceptanceRequirement?: string;
 };
 
 /** Header for the injected project-instructions block — exported for tests. */
@@ -253,6 +261,9 @@ export function renderPmUserPrompt(input: PmUserPromptInput): string {
     'Follow the project-manager skill contract in your system prompt. You are non-interactive; decompose THIS initiative\'s body and write the work items + _graph.md.',
     ...(input.northStar ? ['', NORTH_STAR_SECTION_HEADER, '', input.northStar.trim()] : []),
     ...(projectContextBlock ? ['', projectContextBlock] : []),
+    ...(input.acceptanceRequirement
+      ? ['', '## Acceptance-gate requirement (injected by forge)', '', input.acceptanceRequirement]
+      : []),
     ...(input.gateRecipe ? ['', input.gateRecipe] : []),
     ...(input.instructions ? ['', INSTRUCTIONS_SECTION_HEADER, '', input.instructions.trim(), ''] : []),
     '',

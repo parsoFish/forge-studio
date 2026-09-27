@@ -160,3 +160,12 @@ export type CycleOutcome = 'merged' | 'pr-open' | 'ready-for-review';
  */
 export const COST_CEILING_MESSAGE_PREFIX = 'cost-ceiling:' as const;
 export const OPERATOR_STOP_MESSAGE_PREFIX = 'operator-stop:' as const;
+/**
+ * Row 157 (bead forge-8vfn.8.1.45, ruling 1873): the project-manager phase
+ * (`packages/stations/phases/project-manager.ts`) prefixes its rejection
+ * summary with this literal when an acceptance-gate violation (ADR 051
+ * decision 2) survives the ONE bounded revise turn — `failure-classifier.ts`
+ * scans for it to classify the failure as PM-phase, deterministic and
+ * resumable from the plan node, instead of "could not be classified".
+ */
+export const PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX = 'pm-acceptance-gate-unresolved:' as const;

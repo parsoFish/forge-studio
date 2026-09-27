@@ -534,6 +534,9 @@ function emitFailureClassification(
         // M7 row 150 round 3 (ruling 1794): structured clean-boundary-halt
         // marker — requeue-resume keys on this, not on reason-text sniffing.
         cleanBoundaryHalt: cls.cleanBoundaryHalt,
+        // Row 157 (ruling 1873): honest-absent — requeue-resume.ts reads this
+        // to stamp `resume_from:'plan'` on the requeued manifest.
+        ...(cls.resumeFrom ? { resume_from: cls.resumeFrom } : {}),
         reason: cls.reason,
         evidence_event_ids: cls.evidence_event_ids,
       },
