@@ -26,6 +26,9 @@ const PHASE_FAILED = /·\s*(PM|DEV|REVIEW|DEMO|REFLECT) FAILED\b/;
 /** `· cycle done` / `· cycle <status>` — evidence the pass reached an outcome. */
 const CYCLE_OUTCOME = /·\s*cycle (done|complete|started|[a-z-]+)\b/;
 
+/** The scheduler's claim-refusal line: `[serve] <id> — claim refused (<terminal | non-terminal, …>): <reason>`. */
+const CLAIM_REFUSED = /\[serve\] \S+ — claim refused \(([^)]*)\): (.*)$/;
+
 /**
  * @param {readonly string[]} lines stdout+stderr of one `forge serve --once` pass
  * @returns {{ ok: boolean, errors: string[] }} `errors` carries each reason verbatim
@@ -35,6 +38,9 @@ export function classifyServeStageOutcome(lines) {
   let sawOutcome = false;
 
   for (const line of lines) {
+    // A refused claim is an outcome with a reason (scheduler-run-one.ts) — never "no outcome at all" (row 128).
+    const refused = CLAIM_REFUSED.exec(line);
+    if (refused) { errors.push(`claim refused (${refused[1]}): ${refused[2].trim()}`); sawOutcome = true; continue; }
     const m = CYCLE_ERROR.exec(line);
     if (m) { errors.push(m[1].trim()); sawOutcome = true; continue; }
     if (PHASE_FAILED.test(line)) { errors.push(line.trim()); sawOutcome = true; continue; }

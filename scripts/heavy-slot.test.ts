@@ -35,7 +35,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
+import { watch, mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -238,12 +238,35 @@ describe('heavy-slot.sh — signals', () => {
     const child = spawn('bash', [SCRIPT, d, 'suite', '--', 'true'], { env: { ...process.env, ...env }, stdio: 'ignore' });
     const exited = new Promise<number | null>((resolve) => child.on('exit', (code) => resolve(code)));
     try {
-      await waitFor(() => ticketFiles(d).length === 1, 5000);
+      assert.ok(await waitFor(() => ticketFiles(d).length === 1, 30000), 'the ticket never appeared');
       child.kill('SIGTERM');
       const code = await exited;
       assert.equal(code, 143);
       assert.equal(ticketFiles(d).length, 0);
     } finally { rmSync(d, { recursive: true, force: true }); }
+  });
+
+  // The window between the ticket (or its temp file) landing in the queue and
+  // the TERM trap being installed: a SIGTERM there must still exit 143 and
+  // leave the queue empty. Signalled from an fs.watch callback on the queue's
+  // FIRST entry, so the kill lands as early as the host can deliver it.
+  test('SIGTERM the moment the first queue entry appears still exits 143 and leaves no ticket', async () => {
+    for (let i = 0; i < 10; i++) {
+      const d = camp();
+      const mem = meminfo(d, 1000);
+      const queue = join(d, 'queue');
+      mkdirSync(queue, { recursive: true });
+      const child = spawn('bash', [SCRIPT, d, 'suite', '--', 'true'], { env: { ...process.env, HEAVY_SLOT_MEMINFO: mem }, stdio: 'ignore' });
+      const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) =>
+        child.on('exit', (code, signal) => resolve({ code, signal })));
+      const watcher = watch(queue, () => { watcher.close(); child.kill('SIGTERM'); });
+      try {
+        const { code, signal } = await exited;
+        assert.equal(code, 143, `iteration ${i}: exit code ${code}, signal ${signal}`);
+        const left = readdirSync(queue).filter((n) => !n.startsWith('.seq'));
+        assert.deepEqual(left, [], `iteration ${i}: no ticket or temp file may remain`);
+      } finally { watcher.close(); rmSync(d, { recursive: true, force: true }); }
+    }
   });
 
   test('SIGINT while running kills the child by pid (never pkill) and removes the ticket', async () => {
