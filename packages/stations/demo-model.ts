@@ -18,7 +18,6 @@
  */
 
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
 import { DEMO_JSON_BASENAME, DEMO_MD_BASENAME } from '@forge/flows';
@@ -31,6 +30,7 @@ import type {
   TestResultRow,
 } from './demo-types.ts';
 import { MAX_INLINE_IMAGE_BYTES, checkpointArtifactStem } from './demo-types.ts';
+import { MAX_DELTA_EXCERPT_CHARS } from './demo-delta.ts';
 
 /** Cap on a checkpoint's captured stdout (before/after). Terminal output is small;
  *  a runaway command (a server log, an infinite loop) is truncated to this at capture. */
@@ -62,6 +62,14 @@ export type DemoModelCheckpoint = {
   /** Delta honesty (forge-mfv5.1.7): whether this checkpoint's before/after evidence
    *  differs. Computed post-capture from the real bytes; fails closed to 'unknown'. */
   delta?: 'changed' | 'unchanged' | 'unknown';
+  /**
+   * Delta honesty (forge-1rk5.3): a bounded excerpt (≤ `MAX_DELTA_EXCERPT_CHARS`
+   * chars) of the first normalised lines that actually differ, `- before` /
+   * `+ after` style — set ONLY when a command checkpoint's `delta` is
+   * `'changed'`, so the PR reader sees exactly what the normaliser did NOT
+   * hide, never a claim it has to trust blind.
+   */
+  deltaExcerpt?: string;
   /** Harness metric rows (paired before/after). Optional. */
   metrics?: HarnessMetricRow[];
   /** Optional captured media — `data:image/...` ONLY (validator rejects schemes). */
@@ -209,6 +217,13 @@ export function validateDemoModel(raw: unknown): string[] {
       const validDeltas = new Set(['changed', 'unchanged', 'unknown']);
       if (cp.delta !== undefined && !validDeltas.has(cp.delta as string)) {
         errors.push(`${at}.delta must be one of changed|unchanged|unknown when set (got ${JSON.stringify(cp.delta)})`);
+      }
+      if (cp.deltaExcerpt !== undefined) {
+        if (typeof cp.deltaExcerpt !== 'string') {
+          errors.push(`${at}.deltaExcerpt must be a string when set`);
+        } else if (cp.deltaExcerpt.length > MAX_DELTA_EXCERPT_CHARS) {
+          errors.push(`${at}.deltaExcerpt exceeds ${MAX_DELTA_EXCERPT_CHARS} chars — bound it before recording`);
+        }
       }
       for (const f of ['beforeOutput', 'afterOutput'] as const) {
         const v = cp[f];
@@ -474,36 +489,16 @@ export function mergeCapturedMedia(model: DemoModel, captured: CapturedMedia[]):
   return { ...model, checkpoints: [...checkpoints, ...appended] };
 }
 
-/**
- * Delta honesty (forge-mfv5.1.7): a command checkpoint compares its `.out`
- * files BYTE FOR BYTE (never just their lengths); a browser checkpoint (no
- * `command`) compares the sha256 of the `.filmstrip.png`s. Either side
- * missing/unreadable ⇒ `unknown` — FAILS CLOSED, never read as `unchanged`.
- */
-function checkpointDelta(cp: DemoModelCheckpoint, bundleDir: string): NonNullable<DemoModelCheckpoint['delta']> {
-  const stem = checkpointArtifactStem(cp.label);
-  const [beforeFile, afterFile] = cp.command
-    ? [join(bundleDir, 'before', `${stem}.out`), join(bundleDir, 'after', `${stem}.out`)]
-    : [join(bundleDir, 'before', `${stem}.filmstrip.png`), join(bundleDir, 'after', `${stem}.filmstrip.png`)];
-  let before: Buffer;
-  let after: Buffer;
-  try {
-    before = readFileSync(beforeFile);
-    after = readFileSync(afterFile);
-  } catch {
-    return 'unknown';
-  }
-  if (cp.command) return before.equals(after) ? 'unchanged' : 'changed';
-  const beforeDigest = createHash('sha256').update(before).digest('hex');
-  const afterDigest = createHash('sha256').update(after).digest('hex');
-  return beforeDigest === afterDigest ? 'unchanged' : 'changed';
-}
-
-/** Annotate every checkpoint in `model` with its computed `delta`, reading
- *  the capture bundle at `bundleDir` (`<demoDir>/.capture`). Pure + immutable. */
-export function computeCheckpointDeltas(model: DemoModel, bundleDir: string): DemoModel {
-  return { ...model, checkpoints: model.checkpoints.map((cp) => ({ ...cp, delta: checkpointDelta(cp, bundleDir) })) };
-}
+// Delta honesty (forge-mfv5.1.7 / forge-1rk5.3): normalisation rules,
+// `normaliseCapturedOutput` and `computeCheckpointDeltas` live in
+// demo-delta.ts (split out to respect the 800-line file cap) and are
+// re-exported here so this stays the single import surface.
+export {
+  MAX_DELTA_EXCERPT_CHARS,
+  CAPTURE_NORMALISATION_RULES,
+  normaliseCapturedOutput,
+  computeCheckpointDeltas,
+} from './demo-delta.ts';
 
 export type RenderDemoBundleResult = {
   ok: boolean;
