@@ -30,7 +30,7 @@ file reaches its package at M3:
 
 | disposition | meaning | count |
 |---|---|---|
-| `verbatim` | moves unchanged | 363 |
+| `verbatim` | moves unchanged | 364 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
 | `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 104 |
 | `deleted` | not carried forward | 0 |
@@ -57,17 +57,17 @@ operator-ratified new cap — never a silent raise.
 | `contracts` | 6 | 1,404 | **1,404** | ratified 1,404 — forge-mfv5.2.8 the whole-declaration drive rule lives once in contracts and DEMO-SKILL applies it (the demo-builder lock validates with it), +35 on 1,369, lane-ratified under ruling 666; see git history for prior raises. |
 | `kernel` | 30 | 5,513 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `projects` | 48 | 11,053 | **9,249** | ratified 9,249 — forge-mfv5.3.2/3.1 reset without an app type on a hand-authored ground; drift rows carry purpose + verdict, +100 on 9,149 (T1 1768 ratifies 9,249 combined with forge-mfv5.2.8); see git history for prior raises. |
+| `projects` | 48 | 11,053 | **9,284** | ratified 9,284 — forge-mfv5.3.5 retired acceptance.required: refused at load by name, deleted and reported by forge project migrate, +35 on 9,249 (T1-ratified); see git history for prior raises. |
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,213 | **13,213** | ratified 13,213 — forge-1rk5.3 row 145 the safety-net commit is bounded by the WI's scope (restore tracked out-of-scope, leave untracked, report both), +110 on 13,103 (T1 1748); see git history for prior raises. |
 | `sessions` | 61 | 20,402 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 85 | 24,012 | **23,812** | ratified 23,812 — row 136 closure.local-aligned-to-remote records target_sha/base_sha (forge-8vfn.8.1.32), +16 on 23,796, lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 15 | 2,763 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 42 | 11,760 | **11,750** | ratified 11,750 — forge-8vfn.8.1.37 row 147: REF-1 derivation also fires on the lost path so a written user-questions.md is never orphaned, +15 on 11,735, lane-ratified under ruling 1770; see git history for prior raises. |
+| `stations` | 43 | 11,782 | **11,782** | ratified 11,782 — forge-mfv5.3.5 the PM reads the class table's acceptance column; the live-acceptance env guard (live-acceptance-env.ts) never reads the class, +32 on 11,750, lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,922 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **471** | **127,667** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **472** | **127,689** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -377,6 +377,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/dev-binding.ts | stations | verbatim | 317 |
 | packages/stations/phases/dev-cost-bound.ts | stations | verbatim | 88 |
 | packages/stations/phases/developer-loop.ts | stations | verbatim | 1832 |
+| packages/stations/phases/live-acceptance-env.ts | stations | verbatim | 22 |
 | packages/flows/phases/gitignored-creates.ts | flows | rewritten | 79 |
 | packages/flows/plan-gate-class-check.ts | flows | rewritten | 59 |
 | packages/stations/phases/pm-binding.ts | stations | verbatim | 384 |
