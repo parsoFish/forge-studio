@@ -180,8 +180,32 @@ export default {
             },
             { press: 'submit-answers' },
           ],
-          // Row 108: the architect now also passes through `critiquing`/`revising` before `awaiting-verdict`; `until` is unchanged.
-          until: { 'session-phase': 'awaiting-verdict' },
+          // ROW 160 (forge-8vfn.8.1.48, ruling 1891) — `until` NAMES THE
+          // INTERVIEW'S OWN END, NOT THE WHOLE TURN'S. It used to be
+          // `{ 'session-phase': 'awaiting-verdict' }`, which run 41 broke:
+          // the architect asked NO questions, went straight from
+          // `interviewing` to `exploring`, and `question-freetext` never
+          // rendered — the loop had no way to tell "0 rounds, already
+          // concluded" from "standing on the wrong page", and spun this
+          // repeat's whole share of the beat's bound polling for a control
+          // that was never coming, then reded on a misleading diagnosis.
+          //
+          // `data-interview-state="asking"|"concluded"` (architect-hex,
+          // `[data-component="architect-hex"]`) is the POSITIVE signal:
+          // `asking` for `interviewing`/`awaiting-answers` (another question
+          // could still arrive), `concluded` for every phase past that pair
+          // — whether reaching it took zero rounds or several. `isSatisfied`
+          // is checked BEFORE the gate is ever polled (`beats-repeat.mjs`),
+          // so a session that concludes immediately never needs the gate to
+          // exist: questions rendered -> this repeat answers them exactly as
+          // before; concluded with zero -> it passes without waiting on
+          // anything the product was never going to render.
+          //
+          // The beat's OWN `expect.data` below still asserts
+          // `session-phase: 'awaiting-verdict'` — that is the whole turn's
+          // end (explore -> draft -> critique -> revise), unchanged, and now
+          // decoupled from whether the interview itself asked anything.
+          until: { 'interview-state': 'concluded' },
         },
       ],
       // 30 MINUTES, MEASURED (T1 rulings 551 / 558). This declared 600 000 ms

@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import {
   architectHexMeta,
   architectHexMetaForLifecycle,
+  architectInterviewState,
   isArchitectWorking,
   isSessionStale,
   ARCHITECT_HEX_META,
@@ -105,6 +106,37 @@ describe('isArchitectWorking', () => {
     expect(isArchitectWorking('awaiting-verdict')).toBe(false);
     expect(isArchitectWorking('committed')).toBe(false);
     expect(isArchitectWorking('rejected')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// forge-8vfn.8.1.48 (ruling 1891, row 160) — architectInterviewState(phase):
+// the POSITIVE "interview concluded" signal, so a story branches on this
+// instead of on the ABSENCE of the question-freetext control. Run 41's
+// architect asked no questions at all and went straight from `interviewing`
+// to `exploring` — the two phases below are the only ones where another
+// question can still arrive.
+// ---------------------------------------------------------------------------
+describe('architectInterviewState (forge-8vfn.8.1.48, ruling 1891)', () => {
+  it('reads asking while the architect could still ask another question', () => {
+    expect(architectInterviewState('interviewing')).toBe('asking');
+    expect(architectInterviewState('awaiting-answers')).toBe('asking');
+  });
+
+  it('reads concluded for every phase past the interview, including a 0-question run 41 shape', () => {
+    const phasesPastTheInterview = [
+      'exploring',
+      'drafting',
+      'critiquing',
+      'revising',
+      'awaiting-verdict',
+      'finalizing',
+      'committed',
+      'rejected',
+    ] as const;
+    for (const phase of phasesPastTheInterview) {
+      expect(architectInterviewState(phase)).toBe('concluded');
+    }
   });
 });
 

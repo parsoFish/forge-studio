@@ -217,6 +217,12 @@ export const ACT_2 = [
       // guessing a smaller one — a wider bound costs wall-clock patience
       // only, never money, and this idea has no precedent run to tighten
       // against.
+      //
+      // ROW 160 (forge-8vfn.8.1.48, ruling 1891) — `until` moved onto the
+      // POSITIVE `interview-state: concluded` signal for the same reason as
+      // beat 4's own comment: a second idea whose interview also asks zero
+      // questions must not spin this repeat's share of the bound polling for
+      // a `question-freetext` control that was never coming.
       act: 'ACT 2 — open the session and answer the second interview',
       do: [
         { press: 'view-architect-session' },
@@ -232,7 +238,7 @@ export const ACT_2 = [
             },
             { press: 'submit-answers' },
           ],
-          until: { 'session-phase': 'awaiting-verdict' },
+          until: { 'interview-state': 'concluded' },
         },
       ],
       wait: { for: 'agent', upTo: 1_080_000 },
