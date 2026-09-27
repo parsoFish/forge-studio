@@ -15,7 +15,9 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { beatVerdict, resolveBeatRoute, stuckVerdict } from './beats.mjs';
+import {
+  beatVerdict, resolveBeatRoute, stuckVerdict, placeholderKind, siblingReusingValue,
+} from './beats.mjs';
 
 const beat = {
   act: 'Click through to the Projects pillar',
@@ -366,6 +368,86 @@ test('a <name> NOTHING has bound yet still binds — comparing did not replace b
   assert.equal(v.bindings.sessionId, 'onb-first');
 });
 
+// ROW 158 (bead `forge-8vfn.8.1.46`, ruling 1873). S10 run 40
+// (`_1.0/reports/m7-a-S10-run40.log`, beat 34): ACT 2's second initiative
+// failed at the PM phase, so no roadmap card matched the beat's declared
+// `ready-for-review` status — the together-rule's best-covering fallback
+// (`resolveExpectations`, `beats-page-read.mjs`) tied between ACT 1's and ACT
+// 2's own cards and picked ACT 1's, minting `<runId2>` from ACT 1's own
+// `initiative-id`, the SAME value already bound as `<runId>`. This beat
+// reproduces run 40's shape directly on `beatVerdict`: a page carrying only
+// ACT 1's own id when `<runId2>` is first seen.
+const runId2Beat = {
+  act: 'ACT 2 — watch the factory plan and build the second initiative',
+  expect: {
+    route: '/projects/gitpulse',
+    data: { page: 'projects', 'initiative-id': '<runId2>' },
+  },
+  say: 'The second initiative is planned and built the same unattended way the first one was.',
+};
+
+test('placeholderKind strips a trailing digit run, and only that', () => {
+  assert.equal(placeholderKind('runId2'), 'runId');
+  assert.equal(placeholderKind('cycleId2'), 'cycleId');
+  assert.equal(placeholderKind('architectSessionId2'), 'architectSessionId');
+  assert.equal(placeholderKind('runId'), 'runId');
+  assert.equal(placeholderKind('cycleId'), 'cycleId'); // no digit to strip — unaffected
+});
+
+test('siblingReusingValue finds a same-kind placeholder already bound to the same value', () => {
+  assert.equal(siblingReusingValue('runId2', 'INIT-act1', { runId: 'INIT-act1' }), 'runId');
+  // Different kind, same value — not a collision (e.g. an unrelated id family).
+  assert.equal(siblingReusingValue('cycleId2', 'INIT-act1', { runId: 'INIT-act1' }), null);
+  // Same kind, different value — the ordinary, non-colliding case.
+  assert.equal(siblingReusingValue('runId2', 'INIT-act2', { runId: 'INIT-act1' }), null);
+  // Nothing bound yet at all.
+  assert.equal(siblingReusingValue('runId2', 'INIT-act2', {}), null);
+});
+
+test(
+  'RED-FIRST (row 158): <runId2> would bind ACT 1\'s own already-bound <runId> value — refused, not bound',
+  () => {
+    // Before the fix this bound silently: `bindings[placeholder[1]] = got` had
+    // no notion of a sibling placeholder at all.
+    const v = beatVerdict(
+      runId2Beat,
+      { route: '/projects/gitpulse', data: { page: 'projects' }, nested: [{ 'initiative-id': 'INIT-act1' }] },
+      { bound: { runId: 'INIT-act1' } },
+    );
+    assert.equal(v.status, 'red');
+    assert.deepEqual(v.bindings, {}, 'the corrupted value must never reach a later beat as <runId2>');
+    assert.ok(
+      v.failures.some((f) => /runId2/.test(f) && /runId/.test(f) && /INIT-act1/.test(f)),
+      `the failure must name both placeholders and the reused value — got: ${v.failures.join(' | ')}`,
+    );
+  },
+);
+
+test('row 158: <runId2> binding ACT 2\'s OWN distinct id is unaffected — still green, still binds', () => {
+  const v = beatVerdict(
+    runId2Beat,
+    { route: '/projects/gitpulse', data: { page: 'projects' }, nested: [{ 'initiative-id': 'INIT-act2' }] },
+    { bound: { runId: 'INIT-act1' } },
+  );
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+  assert.equal(v.bindings.runId2, 'INIT-act2');
+});
+
+test('row 158: ACT 1\'s own FIRST bind of <runId> is unaffected — nothing else is bound yet', () => {
+  const runIdBeat = {
+    act: 'watch the factory plan and build the initiative',
+    expect: { route: '/projects/gitpulse', data: { page: 'projects', 'initiative-id': '<runId>' } },
+    say: 'The initiative is planned and built unattended.',
+  };
+  const v = beatVerdict(
+    runIdBeat,
+    { route: '/projects/gitpulse', data: { page: 'projects' }, nested: [{ 'initiative-id': 'INIT-act1' }] },
+    { bound: {} },
+  );
+  assert.equal(v.status, 'green', v.failures.join(' | '));
+  assert.equal(v.bindings.runId, 'INIT-act1');
+});
+
 test('resolveBeatRoute substitutes a segment an earlier beat bound', () => {
   const beat5 = { ...bindBeat, expect: { route: '/sessions/onboarding/<sessionId>', data: { page: 'session' } } };
   const r = resolveBeatRoute(beat5, { sessionId: 'onb-7f3c1a' });
@@ -447,4 +529,32 @@ test('the verdict carries the NESTED values it judged, so the generated doc docu
   assert.equal(v.data['card-id'], 'gitweave');
   assert.equal(v.data.health, 'attention');
   assert.equal(v.data.page, 'projects-index');
+});
+
+test('RED-FIRST (row 158): a RED beat binds nothing, even a value no sibling holds', () => {
+  // S10 run 40 beat 34: the second initiative had failed, so `initiative-status`
+  // never held, yet the red beat still exported `<runId2>` from the card it read.
+  const beat = {
+    act: 'ACT 2 — watch the factory plan and build the second initiative',
+    expect: {
+      route: '/projects/gitpulse',
+      data: {
+        page: 'projects',
+        'initiative-id': '<runId2>',
+        'initiative-status': 'ready-for-review',
+      },
+    },
+    say: 'The second initiative is planned and built the same unattended way the first one was.',
+  };
+  const v = beatVerdict(
+    beat,
+    {
+      route: '/projects/gitpulse',
+      data: { page: 'projects', 'initiative-id': 'INIT-act2', 'initiative-status': 'done' },
+      nested: [],
+    },
+    { bound: {} },
+  );
+  assert.equal(v.status, 'red');
+  assert.deepEqual(v.bindings, {}, 'a beat that did not hold must not mint ids for later beats');
 });
