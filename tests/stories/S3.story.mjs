@@ -31,7 +31,7 @@
  * under the project's own `forge/skills/`, the layout it was onboarded to.
  * `projects/mdtoc`, onboarded later, keeps its one skill at `.forge/skills/`
  * and resolves `[data-resolved="ok"][data-skill-source="project"]` — the
- * value beat 6 expects, copied from mdtoc's live page rather than invented.
+ * value beat 7 expects, copied from mdtoc's live page rather than invented.
  * Nine dead bindings against one live one WAS the drift, and it was the
  * operator's reason to reset. `computeContractDrift` against the fixture
  * (below) reproduces the identical nine-relocation shape offline, so the
@@ -68,18 +68,19 @@
  * page root does not carry a key, the keys it does not carry are answered
  * together by ONE element, per §3.1's nested-read rule.
  *
- * THE DRIFT REPORT HAS NO HANDLE, and the story does not invent one. §3 asks
- * for "a drift report of what changed"; nothing on the project page declares a
- * `data-*` for it, and the handbook forbids inventing an attribute a page does
- * not carry. So the drift report is the second half of beat 5's act and is
- * named in its narration, and `_1.0/stories/S3.md` records it as a surface M4
- * must build. The beat still fails on a real key: after a rebuild from the
+ * THE DRIFT REPORT HAS NO HANDLE, and the story does not invent one — it is
+ * `RebuildContractPanel.tsx`'s own build (M4) that gave it one:
+ * `[data-section="contract-drift"]`, one `[data-drift-row]` per section, and
+ * (forge-mfv5.3.1/forge-mfv5.3.2) `[data-drift-purpose]`/`[data-drift-verdict]`/
+ * `[data-app-type-note]`. Reading it, whole, is now beat 5's own act, named in
+ * its narration; `_1.0/stories/S3.md` records it as a surface M4 must build.
+ * The page still fails on a real key elsewhere: after a rebuild from the
  * current template nothing is left unresolved, and today
  * `[data-section="contract-resolution"]` reads
  * `[data-resolution-failing-count="1"][data-resolution-agent-count="1"]`.
  *
  * WHY THIS STORY COSTS MONEY. §3 names S3's owning packages as **projects AND
- * sessions**, and the sessions half is beats 11-12: a template can regenerate
+ * sessions**, and the sessions half is beats 12-13: a template can regenerate
  * the mechanisms forge owns, but it cannot write `ado-api-explorer` for an
  * Azure DevOps provider. The re-derivation is an Agent's job, so `realSpawn`
  * is true and `budget_usd` is declared, and the runner refuses to start
@@ -113,8 +114,10 @@ export default {
     realSpawn: true,
     budget_usd: CEILING,
     // 7.6.136 — THE GROUND CHANGES THIS STORY'S PRODUCT MAKES, declared here so
-    // the fence can tell them from a containment breach. Beat 5 presses
-    // "Rebuild contract", which MOVES this project's nine declared skills from
+    // the fence can tell them from a containment breach. Beat 6 presses
+    // "Apply rebuild" (bead forge-mfv5.3.2 split beat 5's single four-press
+    // act into a preview beat and this apply beat — see beat 5/6's own
+    // comments), which MOVES this project's nine declared skills from
     // `forge/skills/<id>/` (where its `artifactRoot: "forge"` put them) to
     // `.forge/skills/<id>/` (where the contract expects them), and rewrites
     // `.forge/project.json` unconditionally whenever ANY row is
@@ -137,7 +140,7 @@ export default {
     // could pass: re-ran the SAME simulation expecting the ignore to now
     // absorb the arrivals the way it did on the real ground. It does NOT —
     // `groundIgnoreFromGit` runs `git check-ignore` against the ground's git
-    // state as the RUN LEAVES it, and beat 5's own press REWRITES `.gitignore`
+    // state as the RUN LEAVES it, and beat 6's own press REWRITES `.gitignore`
     // (from the blanket `.forge/` this pin carries to the narrow scratch-only
     // form — the exact fix PR #72's `15a74d8a` made on the real ground,
     // `gitignoreFixed: true` when actually run). Checked against that FINAL,
@@ -153,14 +156,15 @@ export default {
     // records both simulations: the first proved 19 exact, the second proved
     // 19 insufficient and 20 exact — 20 declared, 0 undeclared, 0 unmatched).
     //
-    // `beat: 5` (7.6.140, T1 1275): each change names the beat whose press
-    // causes it — beat 5's "Rebuild contract" — for the harness's per-beat
+    // `beat: 6` (7.6.140, T1 1275): each change names the beat whose press
+    // causes it — beat 6's "Apply rebuild" (beat 5 only previews now, bead
+    // forge-mfv5.3.2 — see its own comment) — for the harness's per-beat
     // attribution of declared changes (7.6.140) to read.
     expectedChanges: [
-      ...SKILL_IDS.map((id) => ({ path: `forge/skills/${id}/SKILL.md`, change: 'removed', beat: 5 })),
-      ...SKILL_IDS.map((id) => ({ path: `.forge/skills/${id}/SKILL.md`, change: 'added', beat: 5 })),
-      { path: '.forge/project.json', change: 'modified', beat: 5 },
-      { path: '.gitignore', change: 'modified', beat: 5 },
+      ...SKILL_IDS.map((id) => ({ path: `forge/skills/${id}/SKILL.md`, change: 'removed', beat: 6 })),
+      ...SKILL_IDS.map((id) => ({ path: `.forge/skills/${id}/SKILL.md`, change: 'added', beat: 6 })),
+      { path: '.forge/project.json', change: 'modified', beat: 6 },
+      { path: '.gitignore', change: 'modified', beat: 6 },
     ],
   },
   docs: { kind: 'how-to', title: 'Reset a project contract' },
@@ -231,45 +235,78 @@ export default {
       // FULLY expressible, and AMENDED 2026-09-05 (H6, ruling 170, operator
       // present) — this is the beat S3 was written to prove, and the
       // capability it waited for has shipped. `RebuildContractPanel.tsx`
-      // declares the whole act: `rebuild-contract` computes the drift,
-      // `contract-drift` carries the report the act says the operator reads,
-      // and `apply-contract-reset` applies it.
+      // declares the act: `rebuild-contract` computes the drift and
+      // `contract-drift` carries the report the act says the operator reads.
       //
-      // The `do` is four presses because this ground has no persisted app
-      // type: the panel answers `needs-app-type` and will not compute a drift
-      // until a template is named, so `rebuild-app-type` + the preview press
-      // stand between the first press and the report.
+      // RE-AMENDED 2026-09-27 (bead forge-mfv5.3.2, operator-authorised —
+      // this file is owned by the lane, not this worker; the edit is here
+      // because the fact it describes changed server-side). The `do` used
+      // to be four presses — `rebuild-contract`, a `rebuild-app-type` fill
+      // (`cli`), `preview-contract-reset`, `apply-contract-reset` — because
+      // this ground had no persisted app type and the panel answered
+      // `needs-app-type`, blocking the report behind an operator choice.
+      // `cli` was ALWAYS a placeholder in substance (RE-AMENDED 2026-09-06,
+      // amendment 9, bead `forge-8vfn.6.11.4`, ruling 301): a TypeScript
+      // style named for a Go/Terraform provider, safe only because bead
+      // `6.4` (PR #414) already made the reset PRESERVE a value matching no
+      // starter — `testProcess.local` and the hand-authored 3-step Go/ADO
+      // `demoProcess` were byte-identical regardless of which starter got
+      // picked. `computeContractDrift` now asks the question bead 6.4's own
+      // finding was already answering: an app type is required ONLY when
+      // some section would actually regenerate FROM one, and NOTHING on this
+      // ground does — every section is `preserve`/`unchanged` (the `skills`
+      // row is `regenerate`, but that mechanism never consults a starter at
+      // all). So the FIRST press now returns a real report on its own; the
+      // fill and the second press are gone, and the `cli` placeholder this
+      // paragraph spent two amendments explaining away is retired with them
+      // — never actually consulted once bead 6.4 shipped, and now never even
+      // named.
       //
-      // RE-AMENDED 2026-09-06 (amendment 9, bead `forge-8vfn.6.11.4`, operator
-      // ruling 301): `typescript-cli` → **`cli`** — the one-word re-amendment
-      // the paragraph that stood here predicted, made by the rename it named.
-      // **It is STILL a placeholder in substance**: `cli` is a style, this
-      // ground is a Go provider over Terraform, and every starter forge ships
-      // is a TypeScript scaffold. Only a starter with a non-TypeScript variant
-      // would make this value honest — option (C) fully built, which ruling
-      // 301 did not choose. It is safe to name today only because bead `6.4` (PR
-      // #414) made the reset PRESERVE what a template has no right to
-      // regenerate — proven on this exact ground, `testProcess.local` and the
-      // hand-authored 3-step Go/ADO `demoProcess` byte-identical, ground hash
-      // `665dcf49a3982d6b` unchanged. Before #414 this `do` would have bought
-      // a false green by rewriting the contract it was measuring.
-      //
-      // The `expect` moves to what the ACT describes. The pinned
-      // `resolution-failing-count: '0'` beside `section:
-      // 'contract-resolution'` was UNSATISFIABLE BY CONSTRUCTION —
-      // `ContractResolutionPanel.tsx:179` is `if (failing.length === 0) return
-      // null`, so a count of zero unmounts the section the same beat names.
-      // (The identical defect sat in S2 beat 5; both are corrected in this
-      // sitting.) `contract-drift-applied` and its `preflight-ok` are one
-      // element and say the stronger thing anyway: the rebuild ran, and
-      // preflight is MET afterwards.
+      // SPLIT INTO TWO BEATS (same ruling): the preview and the apply used
+      // to be one beat's four-press `do`, so nothing on the page between
+      // "computed" and "applied" was ever a beat's own `expect` — the drift
+      // report existed for exactly as long as the SAME `do` array's next
+      // step took to unmount it. `[data-app-type-note]`
+      // (bead forge-mfv5.3.2) and each row's `[data-drift-purpose]`/
+      // `[data-drift-verdict]` (bead forge-mfv5.3.1) are new, real, and
+      // otherwise unobservable by any beat — a preview an operator can no
+      // longer actually pause on is not a preview a story can honestly claim
+      // to show. This beat now stops at the read; the next beat applies.
       act: 'Press "Rebuild contract", and read the drift report it produces before applying it',
-      do: [
-        { press: 'rebuild-contract' },
-        { fill: 'rebuild-app-type', with: 'cli' },
-        { press: 'preview-contract-reset' },
-        { press: 'apply-contract-reset' },
-      ],
+      do: [{ press: 'rebuild-contract' }],
+      expect: {
+        route: '/projects/story-s3',
+        data: {
+          page: 'projects',
+          'project-id': 'story-s3',
+          section: 'contract-drift',
+          'app-type-note': 'no app type needed: every section is hand-authored',
+          'drift-row': 'skills',
+          'drift-verdict': 'pass',
+        },
+      },
+      say: 'One press, and the report is already real — this ground needs no template named at all. Every value here is the operator\'s own: `testProcess.local`, `testProcess.ci`, the hand-authored 3-step Go/ADO demo — each matches no starter forge ships, so the reset would preserve every one of them regardless of which template got picked, and the report says so in plain language rather than asking a question with no honest answer. Each row now also says what it is FOR, not just what would change — and two of them say whether the thing they describe actually works: the nine skills already resolve, by the resolver\'s own broader rule, at the drifted location they still sit at today.',
+    },
+    {
+      // FULLY expressible (bead forge-mfv5.3.2 split, see the previous
+      // beat's own comment for the full history). This is the second half of
+      // what used to be one beat: `apply-contract-reset` writes what the
+      // previous beat's report named, server-side fresh (never the
+      // previewed report round-tripped back), and moves the nine skills,
+      // rewrites `.forge/project.json` and `.gitignore` (see
+      // `expectedChanges`, `beat: 6`, above).
+      //
+      // The pinned `resolution-failing-count: '0'` beside `section:
+      // 'contract-resolution'` this beat's `expect` does NOT carry was
+      // UNSATISFIABLE BY CONSTRUCTION — `ContractResolutionPanel.tsx:179` is
+      // `if (failing.length === 0) return null`, so a count of zero unmounts
+      // the section the same beat would have named. (The identical defect
+      // sat in S2 beat 5; both were corrected in the same sitting this
+      // paragraph originally described.) `contract-drift-applied` and its
+      // `preflight-ok` are one element and say the stronger thing anyway:
+      // the rebuild ran, and preflight is MET afterwards.
+      act: 'Apply the rebuild',
+      do: [{ press: 'apply-contract-reset' }],
       expect: {
         route: '/projects/story-s3',
         data: {
@@ -279,13 +316,21 @@ export default {
           'preflight-ok': 'true',
         },
       },
-      say: 'Rebuilding is not repairing. Forge regenerates the mechanisms it owns — the project config, the test, demo and release processes, the skill wiring — from the template every project created today is built from, and it shows the operator a drift report first: what it will change, what it will leave alone, and what it cannot decide. Only then does it rewrite anything. Applying it leaves preflight MET on a project whose north star, instructions and secrets forge never had the right to touch — which is what the next four beats go and check, one at a time.',
+      say: 'Rebuilding is not repairing. Forge regenerates the mechanisms it owns — the project config, the test, demo and release processes, the skill wiring — from the template every project created today is built from. Only after the operator has read the report does it rewrite anything. Applying it leaves preflight MET on a project whose north star, instructions and secrets forge never had the right to touch — which is what the next four beats go and check, one at a time.',
     },
     {
       // Fully expressible. The same <span> as beat 4, now expected to resolve:
       // `resolved: 'ok'` and `skill-source: 'project'` are copied from
       // `/projects/mdtoc`'s live chip, which is the only bound project skill in
-      // this checkout that resolves. Blocked behind beat 5 today.
+      // this checkout that resolves. Blocked behind beat 6 (the apply) today
+      // — NOT beat 5's `data-drift-verdict="pass"` (bead forge-mfv5.3.1),
+      // which is a different, broader resolver (`resolveDeclaredSkillPath`,
+      // checks `artifactRoot` too) answering a different question ("does a
+      // SKILL.md exist anywhere the resolver looks") than this chip's
+      // narrower one ("does it exist at the ONE hardcoded path an agent's
+      // prompt is actually assembled from", `deriveProjectLocalSkills`). Both
+      // are honest at beat 5: the files genuinely resolve broadly and
+      // genuinely have not moved yet. This beat is what makes them agree.
       act: 'Check the nine skills resolve now',
       expect: {
         route: '/projects/story-s3',
@@ -386,7 +431,7 @@ export default {
       // Fully expressible; `section`, `onboard-run-status`, `onboard-session-id`
       // and `onboard-attaching` are all the same <section>, and the minted id
       // is published there BEFORE the navigation that consumes it (M1-G closed
-      // `forge-8vfn.5.5` on this surface), so beat 12 can bind it. `running` is
+      // `forge-8vfn.5.5` on this surface), so beat 13 can bind it. `running` is
       // transcribed from `docs/reference/studio-dom-contract.md` and S1's beat 4 —
       // the live page reads `idle` and observing `running` costs a spawn.
       act: 'Run the onboarding agent to re-derive the parts a template cannot write, briefed with the contract’s own north star and gate',

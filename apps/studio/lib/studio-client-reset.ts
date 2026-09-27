@@ -24,6 +24,12 @@ export type ContractDriftRow = {
   before: unknown;
   after: unknown;
   action: 'regenerate' | 'preserve' | 'add' | 'unchanged';
+  /** One sentence: what this element is FOR (bead forge-mfv5.3.1, one table
+   *  server-side, `packages/projects/reset-report.ts`'s `SECTION_PURPOSE`). */
+  purpose: string;
+  /** Present only for `section: 'skills'`/`'demoProcess'` — whether the
+   *  element's own real-world check passes, independent of drift `action`. */
+  verdict?: { pass: boolean; detail: string };
 };
 
 /** One bound skill the reset would relocate to the resolver's canonical
@@ -39,6 +45,10 @@ export type ContractDrift = {
    *  install has no starters to compare against at all (never the "unresolved"
    *  case — that is a distinct 400, see `ContractResetOutcome.availableAppTypes`). */
   appType: string | null;
+  /** Set (bead forge-mfv5.3.2) only when `appType` is `null` because every
+   *  section resolved without needing one — never set for the older,
+   *  separate "no starters exist anywhere" `null` case. */
+  appTypeNote?: string;
   rows: ContractDriftRow[];
   skillMoves: ContractDriftSkillMove[];
 };
@@ -56,14 +66,29 @@ export type ContractResetOutcome = {
   drift?: ContractDrift;
 };
 
+/** `undefined` (never a fabricated verdict) when `raw` isn't a well-formed
+ *  `{pass, detail}` — a row's `verdict` is optional, so a malformed one just
+ *  drops it rather than dropping the whole row. */
+function parseContractDriftVerdict(raw: unknown): { pass: boolean; detail: string } | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.pass !== 'boolean' || typeof o.detail !== 'string') return undefined;
+  return { pass: o.pass, detail: o.detail };
+}
+
 function parseContractDriftRow(raw: unknown): ContractDriftRow | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const o = raw as Record<string, unknown>;
   const action = o.action;
-  if (typeof o.section !== 'string' || (action !== 'regenerate' && action !== 'preserve' && action !== 'add' && action !== 'unchanged')) {
+  if (
+    typeof o.section !== 'string' ||
+    typeof o.purpose !== 'string' ||
+    (action !== 'regenerate' && action !== 'preserve' && action !== 'add' && action !== 'unchanged')
+  ) {
     return null;
   }
-  return { section: o.section, before: o.before, after: o.after, action };
+  const verdict = parseContractDriftVerdict(o.verdict);
+  return { section: o.section, before: o.before, after: o.after, action, purpose: o.purpose, ...(verdict ? { verdict } : {}) };
 }
 
 function parseContractDriftSkillMove(raw: unknown): ContractDriftSkillMove | null {
@@ -84,6 +109,7 @@ function parseContractDrift(raw: unknown): ContractDrift | undefined {
   return {
     projectId: o.projectId,
     appType: typeof o.appType === 'string' ? o.appType : null,
+    ...(typeof o.appTypeNote === 'string' ? { appTypeNote: o.appTypeNote } : {}),
     rows: o.rows.map(parseContractDriftRow).filter((r): r is ContractDriftRow => r !== null),
     skillMoves: Array.isArray(o.skillMoves)
       ? o.skillMoves.map(parseContractDriftSkillMove).filter((m): m is ContractDriftSkillMove => m !== null)
