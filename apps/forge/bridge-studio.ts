@@ -276,8 +276,14 @@ function classifyEvent(e: EventLogEntry): LogLine {
  *  initiativeId is the stable handle — match it second, so
  *  `/api/runs/<initiativeId>` (and `/flows/<flow>/run/<initiativeId>`)
  *  resolves the initiative's run in every queue state. Unknown ids still 404
- *  (an INIT- id never collides with a `<iso>_INIT-…` cycle id). */
-function findRun(forgeRoot: string, id: string): Run | null {
+ *  (an INIT- id never collides with a `<iso>_INIT-…` cycle id).
+ *
+ *  Exported for `bridge-reflect.ts` (ruling 1736, bead forge-8vfn.8.1.34):
+ *  `/api/reflect/<id>` had no initiative-id → cycle-id resolution at all, so
+ *  a DONE run's reflect route 404-shaped to an empty questions array whenever
+ *  it was reached by the initiative id. Reusing THIS resolver — never a
+ *  second one — keeps the two routes agreeing on what an id means. */
+export function findRun(forgeRoot: string, id: string): Run | null {
   const runs = cachedListRuns(forgeRoot, Date.now());
   return runs.find((r) => r.id === id) ?? runs.find((r) => r.initiativeId === id) ?? null;
 }

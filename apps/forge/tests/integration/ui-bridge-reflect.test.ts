@@ -156,3 +156,160 @@ test('R5-01-F1 (FIX 1): FORGE_DRY_BRIDGE=1 still writes user-feedback.md, return
     else process.env.FORGE_DRY_BRIDGE = prior;
   }
 });
+
+// ---------------------------------------------------------------------------
+// Ruling 1736 / bead forge-8vfn.8.1.34 — initiative-id → cycle-id resolution.
+//
+// apps/studio's artifact page reads `artifactId = fetchedRun?.id ?? runId`
+// (app/artifact/page.tsx ~:690), and for a DONE run `Run.id` IS the cycle id
+// (`packages/flows/run-model.ts:339`) — but the route it opens on FIRST LOAD
+// is keyed by whatever id got the operator there, which can be the stable
+// `initiativeId` (`Run.initiativeId`, run-model.ts:344). `findRun`
+// (bridge-studio.ts:280-283) already resolves either id to the same Run; this
+// route never did — `handleReflect` folds `cycleId` straight into
+// `join(logsRoot, cycleId)` with no resolution at all. A GET against the
+// initiative id then reads a `_logs/<initiativeId>/` dir that never existed,
+// gets `questions: []`, and the ReflectionGate renders "no questions filed"
+// with no `submit-reflection` control at all — the exact shape S10 proof run
+// 36's beat 21 hit ("[data-action=\"submit-reflection\"] never
+// appeared").
+// ---------------------------------------------------------------------------
+
+test(
+  'GET /api/reflect/:initiativeId resolves a DONE run to its cycle dir ' +
+    '(bead forge-8vfn.8.1.34, ruling 1736)',
+  async () => {
+    const root = mkdtempSync(join(tmpdir(), 'bridge-reflect-init-'));
+    const initId = 'INIT-2026-09-27-reflect-init-resolve';
+    const cycleId = `2026-09-27T02-01-16_${initId}`;
+    try {
+      mkdirSync(join(root, '_queue', 'done'), { recursive: true });
+      writeFileSync(join(root, '_queue', 'done', `${initId}.md`), [
+        '---',
+        `initiative_id: ${initId}`,
+        'project: test-project',
+        'project_repo_path: /tmp/test-project',
+        'origin: architect',
+        'created_at: 2026-09-27T02:01:00.000Z',
+        'iteration_budget: 5',
+        'cost_budget_usd: 2.0',
+        'class: code',
+        '---',
+        '',
+        '# Test initiative title',
+        '',
+      ].join('\n'));
+      mkdirSync(join(root, '_logs', cycleId), { recursive: true });
+      writeFileSync(
+        join(root, '_logs', cycleId, 'events.jsonl'),
+        JSON.stringify({
+          cycle_id: cycleId,
+          initiative_id: initId,
+          event_id: 'EV_001',
+          phase: 'orchestrator',
+          skill: 'cycle',
+          event_type: 'start',
+          started_at: '2026-09-27T02:01:16.000Z',
+          message: 'cycle.start',
+          input_refs: [],
+          output_refs: [],
+        }) + '\n',
+      );
+      writeFileSync(
+        join(root, '_logs', cycleId, 'user-questions.json'),
+        JSON.stringify([{ question: 'Was the decomposition right?', header: 'Decomp', options: [] }]),
+      );
+
+      const bridge = await startBridge({ forgeRoot: root, port: 0, rerunReflector: () => Promise.resolve() });
+      try {
+        const res = await fetch(`${bridge.url}/api/reflect/${initId}`);
+        assert.equal(res.status, 200);
+        const body = (await res.json()) as { cycleId: string; questions: unknown[]; answered: boolean };
+        assert.equal(
+          body.questions.length,
+          1,
+          `bridge-reflect must resolve initiative id "${initId}" to its DONE run's cycle dir ` +
+            `"${cycleId}" — got ${JSON.stringify(body)}. A run whose id changed on claim (W7-A3) must ` +
+            'still answer to the id the UI is standing on.',
+        );
+      } finally {
+        await bridge.close();
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Ruling 1736 / bead forge-8vfn.8.1.34 — the UNRESOLVABLE-id door. A review
+// finding on the first draft of `resolveCycleId` caught it returning
+// `findRun(...)?.id ?? id`: a bogus id fell through as though it had been
+// resolved, which the POST route would have then treated as a real cycle
+// (writing `user-feedback.md` under it and firing the reflector rerun with
+// it). `resolveCycleId` now returns `null` for an id that names neither an
+// existing `_logs/` dir nor a Run, and each route decides what THAT means —
+// never a silent substitution.
+// ---------------------------------------------------------------------------
+
+test(
+  'GET /api/reflect/:id for an id nothing resolves to is a 404 — ' +
+    'never a 200 with an empty question list (bead forge-8vfn.8.1.34)',
+  async () => {
+    const root = mkdtempSync(join(tmpdir(), 'bridge-reflect-unresolvable-'));
+    const bogusId = 'INIT-2026-09-27-does-not-exist-anywhere';
+    try {
+      mkdirSync(join(root, '_queue'), { recursive: true });
+      const bridge = await startBridge({ forgeRoot: root, port: 0, rerunReflector: () => Promise.resolve() });
+      try {
+        const res = await fetch(`${bridge.url}/api/reflect/${bogusId}`);
+        assert.equal(res.status, 404, 'GET names an unresolvable id as not found');
+        const body = (await res.json()) as { error: string; cycleId: string };
+        assert.equal(body.error, 'cycle not found');
+        assert.equal(body.cycleId, bogusId);
+        assert.ok(
+          !existsSync(join(root, '_logs', bogusId)), 'no directory is created for an unresolvable id',
+        );
+      } finally {
+        await bridge.close();
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  'POST /api/reflect/:id/answer for an id nothing resolves to 404s "cycle not found" — never writes, ' +
+    'never fires the rerun (bead forge-8vfn.8.1.34)',
+  async () => {
+    const root = mkdtempSync(join(tmpdir(), 'bridge-reflect-unresolvable-post-'));
+    const bogusId = 'INIT-2026-09-27-does-not-exist-anywhere';
+    try {
+      mkdirSync(join(root, '_queue'), { recursive: true });
+      let rerunCalls = 0;
+      const bridge = await startBridge({
+        forgeRoot: root, port: 0, rerunReflector: () => { rerunCalls++; return Promise.resolve(); },
+      });
+      try {
+        const res = await fetch(`${bridge.url}/api/reflect/${bogusId}/answer`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+          body: JSON.stringify({ answers: [{ question: 'q', answer: 'a' }], freeform: 'f' }),
+        });
+        assert.equal(res.status, 404);
+        assert.deepEqual(await res.json(), { error: 'cycle not found', cycleId: bogusId });
+        assert.ok(
+          !existsSync(join(root, '_logs', bogusId)),
+          'no user-feedback.md is ever written for an unresolvable id',
+        );
+        await new Promise((r) => setTimeout(r, 20));
+        assert.equal(rerunCalls, 0, 'the reflector rerun must never fire for an id nothing resolves to');
+      } finally {
+        await bridge.close();
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
