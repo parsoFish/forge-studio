@@ -41,10 +41,10 @@ import { isSafeDemoRoute } from '@forge/contracts';
 import {
   MAX_CAPTURED_OUTPUT_BYTES,
   collectCapturedMedia,
-  computeCheckpointDeltas,
   mergeCapturedMedia,
   type DemoModel,
 } from '@forge/stations/demo-model.ts';
+import { computeCheckpointDeltas } from '@forge/stations/demo-delta.ts';
 
 export type CheckpointUrlResolution = { ok: true; url: string } | { ok: false; reason: string };
 

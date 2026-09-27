@@ -26,7 +26,8 @@ import type { DemoStep } from '@forge/contracts';
 import { extractDrivableCommand, extractDemoRoute } from '@forge/contracts';
 import type { MergeGateEvidence } from '@forge/flows';
 
-import { CAPTURE_NORMALISATION_RULES, type DemoModel, type DemoModelCheckpoint, type TestResultRow } from '../demo-model.ts';
+import type { DemoModel, DemoModelCheckpoint, TestResultRow } from '../demo-model.ts';
+import { CAPTURE_NORMALISATION_RULES } from '../demo-delta.ts';
 import type { GateProfile } from '../class-profile-port.ts';
 
 /**

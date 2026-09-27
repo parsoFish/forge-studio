@@ -63,11 +63,11 @@ operator-ratified new cap — never a silent raise.
 | `sessions` | 61 | 20,638 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 85 | 23,996 | **23,796** | ratified 23,796 — forge-1rk5.3 row 137 linkProjectDeps creates .git/info in a template-less repo and returns its problems (emitted, never swallowed), +13 on 23,783, lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 15 | 2,759 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 42 | 11,730 | **11,525** | ratified 11,525 — forge-1rk5.3 row 137 dev-loop emits deps.link-problem (developer-loop.ts split: its emitters moved to dev-loop-events.ts), +22 on 11,503, lane-ratified under ruling 666; see git history for prior raises. |
+| `stations` | 42 | 11,720 | **11,525** | ratified 11,525 — forge-1rk5.3 row 137 dev-loop emits deps.link-problem (developer-loop.ts split: its emitters moved to dev-loop-events.ts), +22 on 11,503, lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,835 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **469** | **127,474** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **469** | **127,464** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -423,10 +423,10 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/testing.ts | stations | verbatim | 23 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `settleWiOutcome`/`assertOutcomesSettled`/`WiOutcome` (phases/developer-loop.ts), `runProjectManager`/`PmQueryFn` (phases/project-manager.ts), `NodeExecutor`/`integrateDeliveryFailure` (phases/executor-table.ts) and `deriveDemoModel` (phases/derive-demo-model.ts) have no production consumer outside this package, only `apps/forge`/`packages/flows` tests reach for them.** |
 | packages/stations/phases/integrate.ts | stations | verbatim | 372 |
 | packages/stations/phases/dev-loop-events.ts | stations | rewritten | 65 |
-| packages/stations/phases/derive-demo-model.ts | stations | verbatim | 282 |
 | packages/stations/phases/derive-pr-body.ts | stations | verbatim | 97 |
-| packages/stations/demo-model.ts | stations | verbatim | 795 |
 | packages/stations/demo-delta.ts | stations | verbatim | 136 |
+| packages/stations/phases/derive-demo-model.ts | stations | verbatim | 283 |
+| packages/stations/demo-model.ts | stations | verbatim | 784 |
 | packages/flows/requeue-resume.ts | flows | verbatim | 193 |
 | packages/flows/review-comments.ts | flows | verbatim | 224 |
 | packages/agents/run-agent.ts | agents | verbatim | 800 |

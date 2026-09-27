@@ -11,7 +11,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { deriveDemoModel, deriveDeltaSummary, type DerivedDemoInput } from '../../phases/derive-demo-model.ts';
-import { validateDemoModel, CAPTURE_NORMALISATION_RULES, type DemoModelCheckpoint } from '../../demo-model.ts';
+import { validateDemoModel, type DemoModelCheckpoint } from '../../demo-model.ts';
+import { CAPTURE_NORMALISATION_RULES } from '../../demo-delta.ts';
 
 const CAPTURE_STEP = {
   kind: 'capture' as const,

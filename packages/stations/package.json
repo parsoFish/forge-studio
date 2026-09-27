@@ -8,6 +8,7 @@
     ".": "./index.ts",
     "./testing": "./testing.ts",
     "./demo-model.ts": "./demo-model.ts",
+    "./demo-delta.ts": "./demo-delta.ts",
     "./demo-types.ts": "./demo-types.ts",
     "./gates/docs-gate.ts": "./gates/docs-gate.ts"
   },

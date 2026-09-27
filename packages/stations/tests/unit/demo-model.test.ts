@@ -19,15 +19,13 @@ import {
   renderDemoBundle,
   mergeCapturedMedia,
   collectCapturedMedia,
-  computeCheckpointDeltas,
   MAX_CAPTURED_OUTPUT_BYTES,
   collectLiveEvidence,
   mergeLiveEvidence,
   stampCaptureNonce,
-  CAPTURE_NORMALISATION_RULES,
-  normaliseCapturedOutput,
   type DemoModel,
 } from '../../demo-model.ts';
+import { CAPTURE_NORMALISATION_RULES, computeCheckpointDeltas, normaliseCapturedOutput } from '../../demo-delta.ts';
 import type { HarnessMetricRow } from '../../demo-types.ts';
 
 function validModel(): DemoModel {

@@ -489,17 +489,6 @@ export function mergeCapturedMedia(model: DemoModel, captured: CapturedMedia[]):
   return { ...model, checkpoints: [...checkpoints, ...appended] };
 }
 
-// Delta honesty (forge-mfv5.1.7 / forge-1rk5.3): normalisation rules,
-// `normaliseCapturedOutput` and `computeCheckpointDeltas` live in
-// demo-delta.ts (split out to respect the 800-line file cap) and are
-// re-exported here so this stays the single import surface.
-export {
-  MAX_DELTA_EXCERPT_CHARS,
-  CAPTURE_NORMALISATION_RULES,
-  normaliseCapturedOutput,
-  computeCheckpointDeltas,
-} from './demo-delta.ts';
-
 export type RenderDemoBundleResult = {
   ok: boolean;
   errors: string[];
