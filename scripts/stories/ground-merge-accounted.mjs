@@ -52,7 +52,9 @@
  * other bucket (produced / ignored / undeclared) is exactly as it was.
  */
 import { execFileSync } from 'node:child_process';
+import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { isDispatchDir } from './beats-channel-scan.mjs';
 
 const MAX_BUFFER = 64 * 1024 * 1024;
 
@@ -141,6 +143,73 @@ function groundCommitParents(dir, sha) {
 }
 
 /**
+ * This run's own cycle-log directories under `_logs/` — `<ts>_<id>`, no
+ * leading underscore, born at or after `sinceMs`. Bead `forge-8vfn.8.1.32`
+ * follow-up, T1 ruling 1736.
+ *
+ * `mintedSessionDirNames` (`ground-minted.mjs`) matches `_<kind>-<id>` SESSION
+ * dirs only; a develop CYCLE dir carries no leading underscore at all
+ * (`isDispatchDir`'s own second shape, `beats-channel-scan.mjs`), so it never
+ * matched and `findMergeAlignment` never saw the one dir that actually carries
+ * `closure.local-aligned-to-remote`. Measured, not hypothetical: S10 proof run
+ * 36's `_logs/2026-09-27T02-01-16_INIT-2026-09-27-exclude-author-filter` sat
+ * right there, unread, and a real merged PR's own 18 changed paths came back
+ * UNDECLARED containment failures.
+ *
+ * BORN AFTER `sinceMs`, never by initiative-id suffix — unlike
+ * `cycleDirForInitiative` (`beats-channel-scan.mjs`), this runs before the
+ * architect has necessarily minted an id this module could match on, so birth
+ * time against the run's own `startedMs` is the only identity available, the
+ * same anchor `newestChannelSince` already trusts for a fresher dispatch.
+ *
+ * SHAPE REUSES `isDispatchDir` rather than a new regex — its own header
+ * already carries both `_logs` shapes this tree uses, and a leading `_` is
+ * exactly the fork point between a session dir and a cycle dir.
+ *
+ * UNKNOWN NEVER RESOLVES TOWARD PROCEEDING (row 29/31 of the
+ * guard-catch-on-UNKNOWN audit, the same errno split `newestChannelSince` and
+ * `cycleDirForInitiative` already apply). A persistent, non-ENOENT failure —
+ * reading `_logs/` itself, or statting one candidate entry — is carried on the
+ * returned array as `.unknown`, distinct from finding nothing: a caller that
+ * silently dropped it would let a real merge sitting behind an unreadable
+ * entry read as "nothing to account for" instead of a named containment gap.
+ *
+ * @param {string} logsDir the run's `_logs/`
+ * @param {number} sinceMs this run's own `startedMs`
+ * @returns {string[] & {unknown?: string[]}}
+ */
+export function mintedCycleLogNames(logsDir, sinceMs) {
+  let entries;
+  try {
+    entries = readdirSync(logsDir, { withFileTypes: true });
+  } catch (err) {
+    const names = [];
+    if (err?.code !== 'ENOENT') names.unknown = [`could not read ${logsDir}: ${err?.code ?? err?.message}`];
+    return names;
+  }
+  const names = [];
+  const unknown = [];
+  for (const e of entries) {
+    if (!e.isDirectory() || !isDispatchDir(e.name) || e.name.startsWith('_')) continue;
+    let born;
+    try {
+      const st = statSync(join(logsDir, e.name));
+      born = st.birthtimeMs || st.ctimeMs;
+    } catch (err) {
+      if (err?.code !== 'ENOENT') {
+        unknown.push(`could not stat ${join(logsDir, e.name)}: ${err?.code ?? err?.message}`);
+      }
+      continue;
+    }
+    if (born < sinceMs) continue;
+    names.push(e.name);
+  }
+  names.sort();
+  if (unknown.length > 0) names.unknown = unknown;
+  return names;
+}
+
+/**
  * This run's merge-alignment evidence, found by scanning the cycle logs it
  * minted — `readEvents(dir)` is `run-observe.mjs`'s `readRunEvents`, injected
  * so this module never has to know `_logs`' on-disk shape or import across
@@ -157,6 +226,33 @@ export function findMergeAlignment(logsDir, mintedLogNames, readEvents) {
     const mergeEvent = events.find((e) => e?.message === 'cycle.post-merge-ci' && typeof e?.metadata?.sha === 'string');
     return { align, merged, crossCheckSha: mergeEvent?.metadata?.sha ?? null, logName: name };
   }
+  return null;
+}
+
+/**
+ * The composed identity lookup `run-story.mjs` actually calls, and calls
+ * BEFORE `reapCensusAndSweep` — T1 ruling 1736. `reapCensusAndSweep` clears
+ * this run's own cycle dir as part of its ordinary initiative-artefact
+ * cleanup (`mintedRunArtefactsToClear`, bead `forge-8vfn.7.6.146`), so a
+ * lookup run AFTER it finds its own evidence already gone; this bundles the
+ * identity resolver above with `findMergeAlignment` so the run computes ONE
+ * value, once, ahead of the sweep, and hands that same value all the way to
+ * the fence — never a second `_logs` read taken after the sweep has run.
+ *
+ * A CONCLUSIVE finding wins over an unrelated entry's read failure, the same
+ * rule `newestChannelSince` applies: only when NOTHING readable co-occurs is
+ * the scan's own `.unknown` surfaced, as `{unknown: true, detail}` — never
+ * silently downgraded to `null` ("no merge, proceed"), which is exactly the
+ * shape a real merge hiding behind an unreadable cycle dir would need to slip
+ * through as an ordinary unmerged story.
+ *
+ * @returns {null | {unknown: true, detail: string} | ReturnType<typeof findMergeAlignment>}
+ */
+export function findMergeAlignmentSince(logsDir, sinceMs, readEvents) {
+  const names = mintedCycleLogNames(logsDir, sinceMs);
+  const found = findMergeAlignment(logsDir, names, readEvents);
+  if (found !== null) return found;
+  if (names.unknown !== undefined) return { unknown: true, detail: names.unknown.join('; ') };
   return null;
 }
 
@@ -228,16 +324,39 @@ export function verifyMergeAlignment({ groundDir, pin, alignment }) {
 }
 
 /**
- * The composed call `run-story.mjs` makes: find the evidence, verify it, and
- * hand back exactly what a caller needs — `expectedChanges` WIDENED by this
- * run's own verified merge (folded into `classifyOwnGroundDrift`'s existing
- * DECLARED bucket, never a second gate), console lines, and a pre-worded
- * containment reason (or null). No merge evidence at all is the common,
- * unremarkable case: `expectedChanges` passes through unchanged.
+ * The composed call `run-story.mjs` makes: verify the evidence and hand back
+ * exactly what a caller needs — `expectedChanges` WIDENED by this run's own
+ * verified merge (folded into `classifyOwnGroundDrift`'s existing DECLARED
+ * bucket, never a second gate), console lines, and a pre-worded containment
+ * reason (or null). No merge evidence at all is the common, unremarkable
+ * case: `expectedChanges` passes through unchanged.
+ *
+ * `alignment` is `findMergeAlignmentSince`'s ALREADY-COMPUTED result, taken as
+ * a value rather than re-derived here — T1 ruling 1736. The lookup must run
+ * before `reapCensusAndSweep` removes the cycle dir it depends on, and this
+ * function runs after; re-scanning `_logs` at this point would read the
+ * sweep's own aftermath, which is the exact defect this ruling closes.
+ *
+ * `{unknown: true, detail}` is NOT the same as no evidence — a candidate cycle
+ * dir this run could not enumerate or stat is a gap in the chain exactly like
+ * an unreadable diff or a dirty tree below, named as a containment failure
+ * rather than silently read as "nothing to account for".
  */
-export function applyMergeAccounting({ groundDir, project, pin, logsDir, mintedLogNames, readEvents, expectedChanges }) {
-  const alignment = findMergeAlignment(logsDir, mintedLogNames, readEvents);
+export function applyMergeAccounting({ groundDir, project, pin, alignment, expectedChanges }) {
   if (alignment === null) return { expectedChanges, lines: [], failureReason: null };
+  if (alignment.unknown === true) {
+    return {
+      expectedChanges,
+      lines: [
+        'own ground: MERGE ALIGNMENT UNVERIFIABLE — could not enumerate this run\'s own cycle logs: ' +
+          alignment.detail,
+      ],
+      failureReason:
+        `CONTAINMENT FAILURE — the merge closure reported for projects/${project} could not be verified: ` +
+        `this run's own cycle logs could not be enumerated (${alignment.detail}). Nothing in it is ` +
+        'accounted for; the run is RED regardless of its beats.',
+    };
+  }
   const verdict = verifyMergeAlignment({ groundDir, pin, alignment });
   if (!verdict.ok) {
     return {

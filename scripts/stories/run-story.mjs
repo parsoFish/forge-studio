@@ -66,7 +66,9 @@ import { loadRegisteredSessionKindIds } from './session-kind-registry.mjs'; // r
 import { driveBeat } from './beats-drive.mjs';
 import { expandForkedBeats, describeDoorFork, frameLabelSuffix } from './beats-fork.mjs';
 import { snapshotForkGrounds, judgeForkGrounds } from './fork-grounds.mjs';
-import { captureGroundPin, applyMergeAccounting } from './ground-merge-accounted.mjs';
+import {
+  captureGroundPin, applyMergeAccounting, findMergeAlignmentSince,
+} from './ground-merge-accounted.mjs';
 import { containmentVerdict } from './run-story-verdict.mjs';
 import { resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
@@ -396,6 +398,17 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // Artefacts`). A re-read afterwards catches a writer the census cannot see
   // — one outside this run's own dispatch tree entirely. See its header in
   // `sweep-teardown.mjs` and the doors in `sweep-teardown.test.ts`.
+  //
+  // Bead `forge-8vfn.8.1.32` follow-up, T1 ruling 1736 — THE MERGE-ALIGNMENT
+  // EVIDENCE IS RESOLVED HERE, BEFORE THE SWEEP BELOW, never after. The sweep
+  // clears exactly the cycle dir `findMergeAlignmentSince` looks in
+  // (`_logs/<ts>_<id>`, `mintedRunArtefactsToClear`, 7.6.146), so a lookup run
+  // after it finds its own evidence already gone — measured on S10 proof run
+  // 36, where a legitimately merged PR's own 18 changed paths came back
+  // UNDECLARED because `applyMergeAccounting` used to re-scan `_logs` post-
+  // sweep. `mergeAlignment` is computed ONCE, here, and handed unchanged all
+  // the way to `applyMergeAccounting` below — never re-derived.
+  const mergeAlignment = findMergeAlignmentSince(logsDir, startedMs, readRunEvents);
   const trailing = await reapCensusAndSweep({
     root: ROOT, storyId: story.id, sinceMs: startedMs,
     groundProject: story.ground?.project, evidenceDir: join(outDir, 'queue-claim'),
@@ -473,17 +486,13 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     // Bead `forge-8vfn.8.1.32`, T1 ruling 1694 — a verified merge widens the
     // licence below; an unverifiable one names a reason the verdict reds on,
     // and this call never touches `expectedChanges` when neither applies.
+    // T1 1736 — `mergeAlignment` is the SAME value `findMergeAlignmentSince`
+    // computed above, before the sweep; this never re-reads `_logs` itself.
     const merge = applyMergeAccounting({
       groundDir,
       project: story.ground.project,
       pin: groundGitPinBefore,
-      logsDir,
-      readEvents: readRunEvents,
-      mintedLogNames: mintedSessionDirNames(
-        logsBefore,
-        readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name),
-        logsDir,
-      ),
+      alignment: mergeAlignment,
       expectedChanges: story.ground?.expectedChanges ?? [],
     });
     for (const line of merge.lines) console.log(`[stories] ${line}`);
