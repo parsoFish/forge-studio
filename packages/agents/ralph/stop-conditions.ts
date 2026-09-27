@@ -11,7 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
+import { deriveResourcePrefix, gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY, RESOURCE_PREFIX_ENV } from '@forge/kernel';
 
 export type StopCondition =
   | { kind: 'quality-gates-pass' }
@@ -251,6 +251,18 @@ export type GateTighteningOptions = {
    * a docs-only cycle. Empty/absent ⇒ no stripping (unchanged behaviour).
    */
   unsetEnv?: readonly string[];
+  /**
+   * forge-mfv5.3.7 (operator ruling 2026-09-12) — the initiative this gate
+   * command runs for. When set, the gate child process receives
+   * `RESOURCE_PREFIX_ENV` (`FORGE_RESOURCE_PREFIX`), a stable, distinct,
+   * cloud-safe prefix derived from this id (`deriveResourcePrefix`,
+   * `@forge/kernel`) — so a live-acceptance test can namespace the cloud
+   * resources it creates and its sweep can delete ONLY its own. Absent ⇒ no
+   * prefix is injected (a gate that never declared an initiative gets no
+   * namespace invented for it). Non-secret: safe alongside `requiredEnv`'s
+   * live creds, and independent of whether `requiredEnv`/`unsetEnv` are set.
+   */
+  initiativeId?: string;
 };
 
 /** Default wall-clock bound for orchestrator-run gate commands (30 min). */
@@ -397,10 +409,16 @@ function runGateCapturing(
   let gateEnv: NodeJS.ProcessEnv | undefined;
   const requiredEnv = options?.requiredEnv ?? [];
   const unsetEnv = options?.unsetEnv ?? [];
-  if (requiredEnv.length > 0 || unsetEnv.length > 0) {
+  const initiativeId = options?.initiativeId;
+  // forge-mfv5.3.7: build gateEnv (a fresh object, never a mutation of
+  // process.env — the same per-call composition buildChildEnv already uses
+  // for agent spawns, so two initiatives' gates never share mutable state)
+  // whenever EITHER requiredEnv, unsetEnv, OR initiativeId is declared.
+  if (requiredEnv.length > 0 || unsetEnv.length > 0 || initiativeId !== undefined) {
     const secrets = readWorktreeSecretsEnv(worktreePath);
     gateEnv = { ...secrets, ...process.env };
     for (const name of unsetEnv) delete gateEnv[name];
+    if (initiativeId !== undefined) gateEnv[RESOURCE_PREFIX_ENV] = deriveResourcePrefix(initiativeId);
   }
   if (requiredEnv.length > 0) {
     const missingEnv = requiredEnv.filter((v) => !gateEnv![v]);
