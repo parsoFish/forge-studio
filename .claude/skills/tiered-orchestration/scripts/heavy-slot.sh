@@ -252,32 +252,18 @@ shift
 QUEUE="$CAMP/queue"
 mkdir -p "$QUEUE" || die "cannot create queue dir $QUEUE"
 
-SEQ="$(allocate_seq "$QUEUE")" || die "could not allocate a ticket sequence number under $QUEUE"
-SEQ_PADDED="$(printf '%010d' "$SEQ")"
-TICKET="$QUEUE/${SEQ_PADDED}-$$.ticket"
-
-FLOOR="$(floor_for_kind "$KIND")"
-case "$FLOOR" in
-  ''|*[!0-9]*) die "HEAVY_SLOT_FLOOR_${KIND^^}_KB must be a whole number of KB, got '$FLOOR'" ;;
-esac
-
-MEM0="$(get_mem_available_kb)"
-TMP="$QUEUE/.tmp.$$.$RANDOM"
-{
-  printf 'pid=%s\n' "$$"
-  printf 'lane=%s\n' "${FORGE_LANE:-unknown}"
-  printf 'kind=%s\n' "$KIND"
-  printf 'cwd=%s\n' "$PWD"
-  printf 'mem_avail_kb_at_enqueue=%s\n' "${MEM0:-unknown}"
-  printf 'cmd=%s\n' "$(quote_argv "$@")"
-} > "$TMP" || die "cannot write ticket $TMP"
-mv -f "$TMP" "$TICKET" || die "cannot place ticket $TICKET"
-
 # ---- signals: remove the ticket, kill the child BY PID, never pkill --------
+# Installed BEFORE the first write into the queue (the sequence lock, the temp
+# file, the ticket): a SIGTERM that landed between the ticket appearing and
+# these traps killed bash by default disposition — exit status null, not 143 —
+# and leaked the ticket. TICKET and TMP stay empty until named; removing an
+# empty name is a no-op.
+TICKET=""
+TMP=""
 
 CHILD_PID=""
 REMOVED=0
-remove_ticket() { [ "$REMOVED" = 1 ] && return 0; rm -f -- "$TICKET" 2>/dev/null; REMOVED=1; }
+remove_ticket() { [ "$REMOVED" = 1 ] && return 0; rm -f -- "$TICKET" "$TMP" 2>/dev/null; REMOVED=1; }
 
 # ALWAYS SIGTERM THE CHILD, even when WE were sent SIGINT. Measured while
 # writing this: `"$@" &` backgrounds the command asynchronously in a
@@ -314,6 +300,30 @@ on_int() {
 }
 trap on_term TERM
 trap on_int INT
+
+# ---- ticket ------------------------------------------------------------------
+
+SEQ="$(allocate_seq "$QUEUE")" || die "could not allocate a ticket sequence number under $QUEUE"
+SEQ_PADDED="$(printf '%010d' "$SEQ")"
+TICKET="$QUEUE/${SEQ_PADDED}-$$.ticket"
+TMP="$QUEUE/.tmp.$$.$RANDOM"
+
+FLOOR="$(floor_for_kind "$KIND")"
+case "$FLOOR" in
+  ''|*[!0-9]*) die "HEAVY_SLOT_FLOOR_${KIND^^}_KB must be a whole number of KB, got '$FLOOR'" ;;
+esac
+
+MEM0="$(get_mem_available_kb)"
+{
+  printf 'pid=%s\n' "$$"
+  printf 'lane=%s\n' "${FORGE_LANE:-unknown}"
+  printf 'kind=%s\n' "$KIND"
+  printf 'cwd=%s\n' "$PWD"
+  printf 'mem_avail_kb_at_enqueue=%s\n' "${MEM0:-unknown}"
+  printf 'cmd=%s\n' "$(quote_argv "$@")"
+} > "$TMP" || die "cannot write ticket $TMP"
+mv -f "$TMP" "$TICKET" || die "cannot place ticket $TICKET"
+
 # Belt-and-braces release on any other exit path (die() inside the wait loop,
 # an unexpected `set -u` trip): an fd never opened makes this a silent no-op.
 trap 'flock -u 8 2>/dev/null' EXIT
