@@ -28,16 +28,16 @@
  * `project-config.ts`'s `validateProjectConfig` sits in that spot next to the
  * evidenced `loadProjectConfig`.
  *
- * `reset.ts` is the ONE deliberate exception to evidence-today, and the
- * reason is recorded so it is not read as drift: `computeContractDrift`,
- * `applyContractReset` and `AppTypeUnresolvedError` are on the door although
- * only `cmdProjectReset` is deep-imported from outside the package right now.
- * The Studio "Rebuild contract" control's route is the consumer, it lands in
- * this same milestone, and #295's security review specifically required the
- * error class be reachable from the index — a route importing it from
- * `./reset.ts` instead would lose `instanceof` narrowing on the one error it
- * exists to render. Adding them later would flip this package's public door
- * twice for a consumer already scheduled. Full accounting in `design.md` and `README.md`'s
+ * `reset.ts`/`reset-report.ts` are the ONE deliberate exception to
+ * evidence-today: `computeContractDrift`, `applyContractReset` and
+ * `AppTypeUnresolvedError` are on the door although only `cmdProjectReset` is
+ * deep-imported from outside the package right now. The Studio "Rebuild
+ * contract" control's route is the consumer, it lands in this same milestone,
+ * and #295's security review specifically required the error class be
+ * reachable from the index — importing it deep instead would lose
+ * `instanceof` narrowing on the one error it exists to render. Adding them
+ * later would flip this package's public door twice. Full accounting in
+ * `design.md` and `README.md`'s
  * "What is not exported" section.
  *
  * TWO DOORS, STATED. The index is the PUBLIC door; the
@@ -79,7 +79,8 @@ export type { ScaffoldResult } from './project-create.ts';
 export { ensureStudioBranch, commitStudioChange, withStudioWrite, dirtyPaths } from './project-repo-tx.ts';
 
 // --- the reset: `forge project reset` / studio "Rebuild contract" ---------
-export { computeContractDrift, applyContractReset, AppTypeUnresolvedError } from './reset.ts';
+export { computeContractDrift, applyContractReset } from './reset.ts';
+export { AppTypeUnresolvedError } from './reset-report.ts';
 export { cmdProjectReset } from './reset-cli.ts';
 export type { ContractSection, DriftAction, DriftRow, SkillMove, DriftReport, ResetResult } from './reset.ts';
 

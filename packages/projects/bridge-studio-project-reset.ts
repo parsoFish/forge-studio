@@ -70,7 +70,8 @@ import {
   type RouteContext,
 } from '@forge/kernel';
 
-import { computeContractDrift, applyContractReset, AppTypeUnresolvedError, type DriftReport } from './reset.ts';
+import { computeContractDrift, applyContractReset, type DriftReport } from './reset.ts';
+import { AppTypeUnresolvedError } from './reset-report.ts';
 
 const DRY_RUN_RE = /^\/api\/studio\/projects\/([^/]+)\/contract-reset$/;
 const APPLY_RE = /^\/api\/studio\/projects\/([^/]+)\/contract-reset\/apply$/;

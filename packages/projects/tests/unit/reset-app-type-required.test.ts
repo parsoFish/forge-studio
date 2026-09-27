@@ -27,7 +27,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { computeContractDrift, AppTypeUnresolvedError } from '../../reset.ts';
+import { computeContractDrift } from '../../reset.ts';
+import { AppTypeUnresolvedError } from '../../reset-report.ts';
 import { projectStartersDir } from '@forge/kernel';
 import { FORGE_ROOT } from '@forge/kernel';
 

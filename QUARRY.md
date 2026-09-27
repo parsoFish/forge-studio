@@ -412,7 +412,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/project-config-validate.ts | projects | verbatim | 425 |
 | packages/projects/project-create.ts | projects | verbatim | 534 |
 | packages/projects/project-repo-tx.ts | projects | verbatim | 237 |
-| packages/projects/reset.ts | projects | verbatim | 713 |
+| packages/projects/reset.ts | projects | verbatim | 711 |
 | packages/projects/reset-cli.ts | projects | verbatim | 160 |
 | packages/projects/reset-command-resolve.ts | projects | verbatim | 74 |
 | packages/projects/testing.ts | projects | verbatim | 12 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `parseSkills` and `checkDemo` have no production consumer outside this package, only `scripts/skill-example-validators.test.ts` and `apps/forge/tests/contract/demo-descriptor-parity.test.ts` reach for them.** |
@@ -577,14 +577,14 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/process-liveness.ts | kernel | rewritten | 63 **Written for bead `forge-8vfn.8.1.6` (T1 review follow-up) — the ONE `/proc/<pid>/stat`-based pid-liveness read (`isProcessRunning`; ENOENT=gone, Z/X=gone, any other read failure=not concluded gone), so `packages/flows/daemon.ts`'s `isAlive` and the story runner's scheduler preflight (`scripts/stories/scheduler-preflight.mjs`, via `scripts/stories/sweep-teardown.mjs`'s `isRunning`) cannot disagree about a zombie pid. `isAlive` delegates to it; `isRunning` delegates to it through a relative `.ts` import (proven to load under the plain `node` the story runner is launched with).** |
 | packages/knowledge/index.ts | knowledge | verbatim | 108 |
 | packages/library/index.ts | library | verbatim | 115 |
-| packages/projects/index.ts | projects | verbatim | 103 |
+| packages/projects/index.ts | projects | verbatim | 104 |
 | packages/projects/project-roster.ts | projects | verbatim | 468 |
 | packages/projects/project-preflight-read.ts | projects | verbatim | 192 |
 | packages/projects/project-roadmap.ts | projects | verbatim | 89 |
 | packages/projects/bridge-studio-project-onboard.ts | projects | verbatim | 656 |
 | packages/projects/bridge-studio-project-preflight-write.ts | projects | verbatim | 298 |
 | packages/projects/project-contract-scaffold.ts | projects | verbatim | 557 |
-| packages/projects/bridge-studio-project-reset.ts | projects | verbatim | 228 |
+| packages/projects/bridge-studio-project-reset.ts | projects | verbatim | 229 |
 | packages/projects/routes.ts | projects | verbatim | 385 |
 | apps/forge/cli-gate.ts | apps/forge | rewritten | 70 |
 | apps/forge/cli-brain-lint.ts | apps/forge | rewritten | 93 |

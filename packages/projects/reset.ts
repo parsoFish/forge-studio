@@ -72,7 +72,6 @@ import {
 import { resolveCommandRow, type CommandAdvisory } from './reset-command-resolve.ts';
 export type { CommandAdvisory } from './reset-command-resolve.ts';
 import { resolveAppTypeForReset, attachReportMetadata } from './reset-report.ts';
-export { AppTypeUnresolvedError } from './reset-report.ts';
 
 // ---------------------------------------------------------------------------
 // Types (Q5's proposal, refined — see the deviations noted per field below)
@@ -222,8 +221,7 @@ export type ResetResult = {
 // ---------------------------------------------------------------------------
 
 /** `AppTypeUnresolvedError`/`resolveAppType`/`loadStarterConfig` moved to
- *  `reset-report.ts` (bead forge-mfv5.3.2, 800-line cap) — see that file's
- *  `resolveAppTypeForReset`, its replacement, re-exported above. */
+ *  `reset-report.ts` (bead forge-mfv5.3.2) — no shim: import directly. */
 function jsonEqual(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
