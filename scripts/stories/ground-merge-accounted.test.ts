@@ -15,7 +15,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 
@@ -24,11 +24,15 @@ import {
   captureGroundPin,
   groundWorkingTreeStatus,
   groundTrackedDiff,
+  mintedCycleLogNames,
   findMergeAlignment,
+  findMergeAlignmentSince,
   verifyMergeAlignment,
   applyMergeAccounting,
 } from './ground-merge-accounted.mjs';
 import { readRunEvents } from './run-observe.mjs';
+import { mintedSessionDirNames } from './ground-minted.mjs';
+import { runnerSourceContaining } from './runner-source.mjs';
 
 function git(dir: string, ...args: string[]): string {
   return execFileSync('git', ['-c', 'commit.gpgsign=false', '-C', dir, ...args], {
@@ -368,17 +372,14 @@ test('verifyMergeAlignment: a cross-check sha that DISAGREES with target_sha —
 
 test('applyMergeAccounting: no merge evidence at all — expectedChanges pass through unchanged, nothing red', () => {
   const dir = repo();
-  const logsDir = scratchLogs();
   try {
     const expectedChanges = [{ path: 'CLAUDE.md', change: 'added' }];
     const result = applyMergeAccounting({
-      groundDir: dir, project: 'gitpulse', pin: git(dir, 'rev-parse', 'HEAD'), logsDir,
-      mintedLogNames: [], readEvents: readRunEvents, expectedChanges,
+      groundDir: dir, project: 'gitpulse', pin: git(dir, 'rev-parse', 'HEAD'), alignment: null, expectedChanges,
     });
     assert.deepEqual(result, { expectedChanges, lines: [], failureReason: null });
   } finally {
     rmSync(dir, { recursive: true, force: true });
-    rmSync(logsDir, { recursive: true, force: true });
   }
 });
 
@@ -389,9 +390,11 @@ test('applyMergeAccounting: run 35\'s shape — a verified merge widens expected
     const pin = git(dir, 'rev-parse', 'HEAD');
     const head = mergePR(dir, { 'src/cli.ts': 'new\n' }, 'merge #26');
     writeCycleLog(logsDir, '_dev-INIT-x', [alignEvent(head), mergedEvent]);
+    // T1 1736 — the caller resolves the alignment itself, ONCE, ahead of the
+    // sweep, and hands the value to `applyMergeAccounting` — never a re-scan.
+    const alignment = findMergeAlignment(logsDir, ['_dev-INIT-x'], readRunEvents);
     const result = applyMergeAccounting({
-      groundDir: dir, project: 'gitpulse', pin, logsDir,
-      mintedLogNames: ['_dev-INIT-x'], readEvents: readRunEvents, expectedChanges: [],
+      groundDir: dir, project: 'gitpulse', pin, alignment, expectedChanges: [],
     });
     assert.equal(result.failureReason, null);
     assert.deepEqual(result.expectedChanges, [{ path: 'src/cli.ts', change: 'added' }]);
@@ -410,10 +413,10 @@ test('applyMergeAccounting: an unverifiable claimed merge is a NAMED containment
     const target = commit(dir, { 'src/cli.ts': 'new\n' }, 'merge #26');
     commit(dir, { 'oops.txt': 'unaccounted\n' }, 'something after alignment');
     writeCycleLog(logsDir, '_dev-INIT-x', [alignEvent(target), mergedEvent]);
+    const alignment = findMergeAlignment(logsDir, ['_dev-INIT-x'], readRunEvents);
     const expectedChanges = [];
     const result = applyMergeAccounting({
-      groundDir: dir, project: 'gitpulse', pin, logsDir,
-      mintedLogNames: ['_dev-INIT-x'], readEvents: readRunEvents, expectedChanges,
+      groundDir: dir, project: 'gitpulse', pin, alignment, expectedChanges,
     });
     assert.equal(result.expectedChanges, expectedChanges);
     assert.match(result.failureReason, /CONTAINMENT FAILURE.*gitpulse.*could not be verified/s);
@@ -422,4 +425,171 @@ test('applyMergeAccounting: an unverifiable claimed merge is a NAMED containment
     rmSync(dir, { recursive: true, force: true });
     rmSync(logsDir, { recursive: true, force: true });
   }
+});
+
+// ──────────────────────────────────────────── mintedCycleLogNames / findMergeAlignmentSince
+//
+// Bead `forge-8vfn.8.1.32` follow-up, T1 ruling 1736. S10 proof run 36's own
+// `_logs/2026-09-27T02-01-16_INIT-2026-09-27-exclude-author-filter` carried a
+// real, verifiable merge and read back as 18 UNDECLARED containment failures
+// because (1) `mintedSessionDirNames`'s `_<kind>-<id>` shape never matches a
+// cycle dir (no leading underscore) and (2) the lookup ran AFTER
+// `reapCensusAndSweep` had already removed that same directory. These tests
+// pin the identity resolver that replaces the session-dir filter for this
+// purpose, and the fact that it runs on evidence the sweep has not touched.
+
+test('mintedCycleLogNames / findMergeAlignmentSince: a real corpus-shaped cycle dir is found; the old session-dir filter finds nothing', () => {
+  const logsDir = scratchLogs();
+  try {
+    const name = '2026-09-27T02-01-16_INIT-2026-09-27-exclude-author-filter';
+    // Real event lines, verbatim field shape (`message`, `metadata.target_sha`,
+    // `metadata.sha`) — copied from a genuine S10 proof run's own cycle log,
+    // not hand-invented. The product's own shape already matches what
+    // `findMergeAlignment` reads; there is no mismatch to report here.
+    writeCycleLog(logsDir, name, [
+      { message: 'closure.local-aligned-to-remote', metadata: { target_sha: 'e6c39105fd215bc2d2346f6ca096117ac6009151' } },
+      { message: 'closure.manifest-moved-to-merged', metadata: { confirmed_merge: true } },
+      { message: 'cycle.post-merge-ci', metadata: { status: 'green', sha: 'e6c39105fd215bc2d2346f6ca096117ac6009151' } },
+    ]);
+    const sinceMs = Date.now() - 60_000;
+
+    // THE OLD PATH — `mintedSessionDirNames` matches `_<kind>-<id>` only, and a
+    // cycle dir carries no leading underscore, so it must find nothing at all.
+    const oldNames = mintedSessionDirNames([], [name], logsDir);
+    assert.deepEqual(oldNames, [], 'the session-dir shape must never match a cycle dir');
+    assert.equal(findMergeAlignment(logsDir, oldNames, readRunEvents), null, 'so the old path never finds this evidence');
+
+    // THE IDENTITY RESOLVER — shaped like a cycle dir, born after sinceMs.
+    const names = mintedCycleLogNames(logsDir, sinceMs);
+    assert.deepEqual(names, [name]);
+    const found = findMergeAlignmentSince(logsDir, sinceMs, readRunEvents);
+    assert.notEqual(found, null);
+    assert.equal((found as { unknown?: true }).unknown, undefined);
+    assert.equal((found as { align: { metadata: { target_sha: string } } }).align.metadata.target_sha, 'e6c39105fd215bc2d2346f6ca096117ac6009151');
+    assert.equal((found as { crossCheckSha: string | null }).crossCheckSha, 'e6c39105fd215bc2d2346f6ca096117ac6009151');
+  } finally {
+    rmSync(logsDir, { recursive: true, force: true });
+  }
+});
+
+test('mintedCycleLogNames: a session dir never counts, and a cycle dir born before the anchor is excluded', () => {
+  // `Date.now() +/- 1_000` rather than a fresh dir vs. an "aged" one — a
+  // directory's birth time cannot be back-dated (`utimesSync` moves only
+  // atime/mtime, never birthtime, `beats-cycle-terminal.test.ts`'s own
+  // lesson), so the anchor moves instead, exactly like `newestChannelSince`'s
+  // own tests (`beats-offsession-stall.test.ts:626`).
+  const logsDir = scratchLogs();
+  try {
+    writeCycleLog(logsDir, '_dev-INIT-old-session', [alignEvent('abc')]); // shaped like a SESSION, never a cycle
+    const cycleName = '2020-01-01T00-00-00_INIT-ancient';
+    mkdirSync(join(logsDir, cycleName), { recursive: true });
+
+    assert.deepEqual(mintedCycleLogNames(logsDir, Date.now() + 1_000), [], 'an anchor after this dir was born sees nothing');
+    assert.deepEqual(
+      mintedCycleLogNames(logsDir, Date.now() - 60_000), [cycleName],
+      'an anchor well before it sees exactly the cycle dir, never the session dir',
+    );
+  } finally {
+    rmSync(logsDir, { recursive: true, force: true });
+  }
+});
+
+test('mintedCycleLogNames: a genuinely absent _logs/ (ENOENT) reads as [], never unknown', () => {
+  const missing = join(mkdtempSync(join(tmpdir(), 'ground-merge-missing-')), '_logs');
+  const names = mintedCycleLogNames(missing, Date.now());
+  assert.deepEqual(names, []);
+  assert.equal(names.unknown, undefined);
+});
+
+test(
+  'mintedCycleLogNames: a persistently unreadable _logs/ is UNKNOWN, never "no cycle dirs" — row 29/31\'s errno split',
+  { skip: process.getuid?.() === 0 ? 'root reads mode-000 dirs' : false },
+  () => {
+    const logsDir = scratchLogs();
+    chmodSync(logsDir, 0o000);
+    try {
+      const names = mintedCycleLogNames(logsDir, Date.now());
+      assert.equal(names.length, 0, 'nothing readable was found');
+      assert.notEqual(names.unknown, undefined, 'but the read failure must be NAMED, never silent');
+      assert.match(names.unknown![0], /EACCES/);
+    } finally {
+      chmodSync(logsDir, 0o755);
+      rmSync(logsDir, { recursive: true, force: true });
+    }
+  },
+);
+
+test('findMergeAlignmentSince: an unreadable _logs/ surfaces as {unknown: true}, never silently "no merge"', { skip: process.getuid?.() === 0 ? 'root reads mode-000 dirs' : false }, () => {
+  const logsDir = scratchLogs();
+  chmodSync(logsDir, 0o000);
+  try {
+    const found = findMergeAlignmentSince(logsDir, Date.now(), readRunEvents);
+    assert.notEqual(found, null, 'unknown must never read the same as "nothing to account for"');
+    assert.equal((found as { unknown: true }).unknown, true);
+    assert.match((found as { detail: string }).detail, /EACCES/);
+  } finally {
+    chmodSync(logsDir, 0o755);
+    rmSync(logsDir, { recursive: true, force: true });
+  }
+});
+
+test('applyMergeAccounting: an {unknown: true} alignment is a NAMED containment failure, never a silent pass', () => {
+  const dir = repo();
+  try {
+    const expectedChanges = [{ path: 'CLAUDE.md', change: 'added' }];
+    const result = applyMergeAccounting({
+      groundDir: dir, project: 'gitpulse', pin: git(dir, 'rev-parse', 'HEAD'),
+      alignment: { unknown: true, detail: 'could not read /fixture/_logs: EACCES' },
+      expectedChanges,
+    });
+    assert.equal(result.expectedChanges, expectedChanges, 'never widened on unverifiable evidence');
+    assert.match(result.failureReason!, /CONTAINMENT FAILURE.*gitpulse.*could not be verified/s);
+    assert.match(result.failureReason!, /could not be enumerated/);
+    assert.ok(result.lines.some((l) => l.includes('MERGE ALIGNMENT UNVERIFIABLE')));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ───────────────────────────────────────────────────────────── T1 1736 wiring (ordering)
+//
+// THE MODULE IS DOORED; THE ORDERING IS THE UNTESTED PART. Bug 2 of the S10
+// proof-run-35 incident was never a wrong predicate — it was `run-story.mjs`
+// calling `reapCensusAndSweep` (which removes this run's own cycle dir)
+// BEFORE the merge-alignment lookup ever ran. A door on `ground-merge-
+// accounted.mjs` alone cannot see that; only the runner's own source order can.
+
+test('T1 1736: findMergeAlignmentSince runs BEFORE reapCensusAndSweep, and hands applyMergeAccounting the SAME binding', () => {
+  const REAP_CALL = 'await reapCensusAndSweep({';
+  const ALIGN_CALL = 'findMergeAlignmentSince(';
+  const runner = runnerSourceContaining(REAP_CALL);
+
+  const alignAt = runner.source.indexOf(ALIGN_CALL);
+  const reapAt = runner.source.indexOf(REAP_CALL);
+  assert.notEqual(alignAt, -1, 'the alignment must be resolved somewhere in the runner');
+  assert.ok(
+    alignAt < reapAt,
+    'findMergeAlignmentSince must be called BEFORE reapCensusAndSweep — the sweep removes the cycle dir ' +
+      'the alignment lookup depends on (forge-8vfn.8.1.32 follow-up, T1 1736)',
+  );
+
+  // THE BINDING MUST BE THE SAME ONE, never a second `_logs` read taken later.
+  const bindingMatch = /const\s+(\w+)\s*=\s*findMergeAlignmentSince\(/.exec(runner.source);
+  assert.notEqual(bindingMatch, null, 'findMergeAlignmentSince\'s result must be bound to a name');
+  const binding = bindingMatch![1];
+
+  const CALL = 'const merge = applyMergeAccounting({';
+  const mergeCaller = runnerSourceContaining(CALL);
+  const mergeAt = mergeCaller.source.indexOf(CALL);
+  const mergeBlock = mergeCaller.source.slice(mergeAt, mergeCaller.source.indexOf('});', mergeAt));
+  assert.match(
+    mergeBlock,
+    new RegExp(`alignment:\\s*${binding}\\b`),
+    `applyMergeAccounting must receive the SAME ${binding} findMergeAlignmentSince produced, never a re-scan`,
+  );
+  assert.doesNotMatch(
+    mergeBlock,
+    /mintedLogNames|readEvents:/,
+    'applyMergeAccounting must not be handed raw _logs-reading arguments — the alignment is already resolved',
+  );
 });
