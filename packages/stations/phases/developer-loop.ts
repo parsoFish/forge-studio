@@ -691,8 +691,20 @@ export async function runDeveloperLoop(
           // false-fires (the WI's sharp gate would have failed cleanly,
           // but cycle-level `npm test` passes on the baseline).
           qualityGate: ((): undefined | (() => boolean) => {
-            const derived = deriveWiGateCmd({ wi, template: localTestProcess?.perWorkItem, fallback: input.qualityGateCmd });
-            if (derived.templateSkipped) emitWiGateTemplateSkipped(logger, { initiativeId: input.initiativeId, parentEventId: wiStart.event_id, workItemId: wi.work_item_id, skill: agentDef.slug, skipped: derived.templateSkipped });
+            const derived = deriveWiGateCmd({
+              wi,
+              template: localTestProcess?.perWorkItem,
+              fallback: input.qualityGateCmd,
+            });
+            if (derived.templateSkipped) {
+              emitWiGateTemplateSkipped(logger, {
+                initiativeId: input.initiativeId,
+                parentEventId: wiStart.event_id,
+                workItemId: wi.work_item_id,
+                skill: agentDef.slug,
+                skipped: derived.templateSkipped,
+              });
+            }
             const effective = derived.cmd;
             if (!effective) return undefined;
             return buildWiQualityGate({
