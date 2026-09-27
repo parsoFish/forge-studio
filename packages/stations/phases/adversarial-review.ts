@@ -35,14 +35,19 @@ import {
   validateReviewFindings,
   writeReviewFindingsJson,
   readWorkItemsFromDir,
-  type ReviewFinding,
-  type ReviewFindingsExpectation,
   type ReviewFindingsRecord,
   type WorkItem,
 } from '@forge/flows';
 import { guardedReadFile, guardedWriteFile, FORGE_ROOT, type EventLogger } from '@forge/kernel';
 import { createHash } from 'node:crypto';
-import { runAgent, takeScopeSnapshot, scopeViolations, type StreamQueryFn } from '@forge/agents';
+import {
+  runAgent,
+  makeToolEventSink,
+  takeScopeSnapshot,
+  scopeViolations,
+  type StreamQueryFn,
+  type HeartbeatTimers,
+} from '@forge/agents';
 import type { AgentDefinition } from '@forge/contracts';
 import { chunkLabel, mergeChunkRecords, partitionChangedFiles, type ReviewChunk,
   splitChunkPerFile, mergeSplitRecords,
@@ -53,7 +58,7 @@ import {
   REVIEW_FINDINGS_FILENAME,
   REVIEW_INPUT_REL_DIR,
 } from './adversarial-review-binding.ts';
-import { trackSpawnRefusal, spawnRefusalFailure } from './review-refusal.ts';
+import { trackSpawnRefusal, spawnRefusalFailure, harvestFindings } from './review-refusal.ts';
 
 const BASE_REF = 'main';
 const MAX_AUTHOR_ATTEMPTS = 2;
@@ -178,6 +183,8 @@ export async function runAdversarialReview(
     signal?: AbortSignal;
     classProfiles?: ClassProfilePort;
     agentDef: AgentDefinition; // seam F4: the executing node's own def, no fallback
+    // 8.1.30 — test-injection, mirrors RunContext.heartbeatTimers.
+    heartbeatTimers?: HeartbeatTimers;
   },
 ): Promise<AdversarialReviewResult> {
   const def = opts.agentDef;
@@ -471,6 +478,13 @@ export async function runAdversarialReview(
             systemPrompt,
             lifecycle: 'caller',
             logger, // forge-8vfn.8.1.10: lets runAgent root the spawn marker at this pipeline's own logger, not <FORGE_ROOT>/_logs.
+            turnSink: makeToolEventSink(logger, {
+              initiativeId: input.initiativeId,
+              parentEventId: input.cycleId,
+              phase: 'orchestrator',
+              skill: def.slug,
+            }),
+            ...(opts.heartbeatTimers !== undefined ? { heartbeatTimers: opts.heartbeatTimers } : {}),
             streamGuard: { label: def.slug, signal: opts.signal },
             bindings: { initiative: { id: input.initiativeId, costBudgetUsd: input.costBudgetUsd } },
             ...(ceilingUsd !== undefined ? { kickoffCeilingUsd: ceilingUsd } : {}),
@@ -762,39 +776,4 @@ export function readChunkRecord(
  *  produced it. */
 export function writeChunkRecord(logsRoot: string, cycleId: string, key: string, entry: StoredChunk): string | null {
   return guardedWriteFile(logsRoot, chunkSegments(cycleId, key), JSON.stringify(entry, null, 2) + '\n');
-}
-
-function harvestFindings(
-  findingsAbs: string,
-  findingsRel: string,
-  identity: { initiative_id: string; cycleId: string; baseRef: string; headSha: string },
-  expected: ReviewFindingsExpectation,
-): { ok: true; record: ReviewFindingsRecord } | { ok: false; errors: string[] } {
-  if (!existsSync(findingsAbs)) {
-    return {
-      ok: false,
-      errors: [
-        `${findingsRel} was not authored — an all-clean review still writes it with findings: [] and an honest summary; a missing file is never a clean pass`,
-      ],
-    };
-  }
-  let raw: unknown;
-  try {
-    raw = JSON.parse(readFileSync(findingsAbs, 'utf8'));
-  } catch (err) {
-    return { ok: false, errors: [`${findingsRel} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
-  }
-  const errors = validateReviewFindings(raw, expected);
-  if (errors.length > 0) return { ok: false, errors };
-  const record = raw as ReviewFindingsRecord;
-  // Identity-echo verification — a record claiming a different run identity is
-  // a stale/replayed artifact, exactly what headSha exists to guard against.
-  for (const key of ['initiative_id', 'cycleId', 'baseRef', 'headSha'] as const) {
-    if (record[key] !== identity[key]) {
-      errors.push(`${key} mismatch — authored "${record[key]}", this run is "${identity[key]}" (echo the injected identity verbatim)`);
-    }
-  }
-  if (errors.length > 0) return { ok: false, errors };
-  const findings: ReviewFinding[] = record.findings;
-  return { ok: true, record: { ...record, findings } };
 }
