@@ -62,7 +62,7 @@ function contentTypeFor(filename: string): string {
  *  `basename()` runs first so a `filename` that still carries `/`-joined
  *  path segments contributes only its leaf.
  *
- *  This is genuinely load-bearing, not decorative, for SOME of the seven
+ *  This is genuinely load-bearing, not decorative, for SOME of the six
  *  call sites and NOT others — checked per route, not assumed: `isSafeSegment`
  *  (packages/kernel/path-guard.ts, backing `isSafeSubPath`/`resolveGuardedPath`,
  *  which gate the `/api/artifact/`, `/api/architect/file/` and
@@ -70,8 +70,7 @@ function contentTypeFor(filename: string): string {
  *  header-injection is ALREADY refused before this ever runs on those three
  *  routes — a 400, not a sanitised 200) but has no opinion on a bare `"`, so
  *  THIS function is what stops a quote breaking out of the quoted-string on
- *  those routes and on `/api/demo-builder/fragment/` (whose `element`
- *  component is checked only by a lexical `startsWith(base)`, same gap).
+ *  those routes.
  *  `/api/demo-builder/generation/`'s `GENERATION_FILENAME_RE` is a strict
  *  `[A-Za-z0-9._-]+` allowlist that already excludes `"` and control
  *  characters — this function is unreachable-but-harmless for that route.

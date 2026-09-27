@@ -123,6 +123,8 @@ export type GenerationGalleryItem = {
   readonly bytes: number;
 };
 
+export type GenerationDeclarationStep = { readonly kind: string; readonly text: string; readonly element?: string };
+
 export type GenerationGalleryEntry = {
   /** Sourced from the snapshot's OWN meta.json `iteration` — never array or
    *  directory position (R4-16 AT-10). A generation whose meta.json is
@@ -132,6 +134,11 @@ export type GenerationGalleryEntry = {
   readonly createdAt: string;
   readonly feedback: string | null;
   readonly targetElement: string | null;
+  /** The `demoProcess` steps this generation proposes — its
+   *  `demo-process.json` snapshot (bead forge-mfv5.2.8), which locking writes
+   *  into `.forge/project.json`. null when absent, unparsable or not a step
+   *  list: never a guessed declaration. */
+  readonly declaration: GenerationDeclarationStep[] | null;
   // Mutable element array — same rationale as RoadmapDraftArtifact.rows: the
   // pinned AT idiom casts the derived artifact to a plain mutable-array
   // shape, and a `readonly T[]` is never assignable to a mutable `T[]` target.
@@ -617,6 +624,26 @@ export function deriveBrainStructure(sessionDir: string, label: string): BrainSt
 
 const GENERATIONS_DIRNAME = 'generations';
 const GENERATION_META_FILENAME = 'meta.json';
+const GENERATION_DECLARATION_FILENAME = 'demo-process.json';
+
+/** A generation's declaration snapshot, read through the same containment
+ *  choke point as every other gallery read; null unless it is a list of
+ *  `{kind, text, element?}` string steps. */
+function readGenerationDeclaration(sessionDir: string, dirName: string): GenerationDeclarationStep[] | null {
+  const raw = safeReadFileInSession(sessionDir, join(GENERATIONS_DIRNAME, dirName, GENERATION_DECLARATION_FILENAME));
+  if (raw === null) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const isStep = (s: unknown): s is GenerationDeclarationStep =>
+    s !== null && typeof s === 'object' && typeof (s as Record<string, unknown>).kind === 'string'
+    && typeof (s as Record<string, unknown>).text === 'string'
+    && ['string', 'undefined'].includes(typeof (s as Record<string, unknown>).element);
+  return Array.isArray(parsed) && parsed.every(isStep) ? parsed : null;
+}
 
 function kindForGalleryItemFilename(name: string): 'html' | 'markdown' | 'file' {
   if (name.endsWith('.html')) return 'html';
@@ -694,6 +721,7 @@ export function deriveGenerationGallery(sessionDir: string, label: string): Gene
       createdAt: meta.createdAt,
       feedback: meta.feedback,
       targetElement: meta.targetElement,
+      declaration: readGenerationDeclaration(sessionDir, dirName),
       items,
     });
   }

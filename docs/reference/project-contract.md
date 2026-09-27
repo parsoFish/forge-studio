@@ -573,21 +573,20 @@ in-app route — and from the initiative's typed acceptance criteria (an AC's
 `demoProcess`'s own, forge-mfv5.1.7). Nothing generated ahead of time is
 required for that derivation to run.
 
-**Demo presentation — an agent-built, per-initiative demo skill, optional and
-presentation-only (Stage B).** The Studio **demo-builder** SESSION may author a
-project-local **demo-generation skill** at `.forge/skills/demo-design/SKILL.md`
-— the machinery that, for each completed **initiative**, renders a rich,
-self-contained, Forge-styled HTML demo of *that initiative's changes*
-(before/after of its diff, with real captured output) for the Studio demo
-page. It is NOT a generic current-state showcase: the unit of a demo is "what
-this initiative changed". The operator builds it interactively — look-and-feel
-prompt + the `demoProcess` above → the agent authors the skill and renders a
-real **sample** (`.forge/demo/DEMO.html`) from a representative recent change
-→ review → feedback → lock for reproducibility. **This composer is never read
-at cycle time** — it shapes only how already-captured evidence is presented in
-Studio (bead forge-mfv5.2.8 tracks folding the session's own output into the
-`demoProcess` declaration more directly); `demoProcess` alone is what a cycle
-captures against.
+**The demo-builder session authors the declaration (bead forge-mfv5.2.8).**
+The Studio **demo-builder** SESSION writes `demoProcess` itself — it writes no
+demo skill and no composer. The operator briefs it interactively
+(look-and-feel prompt, or change-notes when a declaration is already locked);
+each generate turn drafts the declaration's steps and renders a real
+**sample** (`.forge/demo/DEMO.html`) by running them against a representative
+recent change; the operator reviews each generation → feedback → lock.
+Locking a generation writes its steps into `.forge/project.json`
+`demoProcess` through the same writer the Studio project page saves with
+(every other key kept as it was), and only after they pass the rule
+`DEMO-SKILL` applies (next section): a declaration that drives no checkpoint
+is refused with that rule's reason, and nothing is written. The unit of the
+sample is "what this initiative changed", never a generic current-state
+showcase.
 
 ---
 
@@ -602,8 +601,8 @@ when it derives `demo.json`. `forge preflight` WARNs (`DEMO-SKILL`) naming
 every capture step that yields no drivable command and why (no inline-code
 span, or which metacharacter), and onboarding (Step 10) confirms it before
 calling onboarding done. **This clause never checks for a generated file** —
-the demo-builder session's presentation composer (previous section) is not a
-cycle input, so its presence or absence plays no part. Not applicable
+nothing generated is a cycle input, so its presence or absence plays no part;
+the demo-builder session's lock refuses on this same rule (previous section). Not applicable
 (passes) until a `demoProcess` is declared at all — `DEMO` owns that case, so
 there is no double-warn.
 

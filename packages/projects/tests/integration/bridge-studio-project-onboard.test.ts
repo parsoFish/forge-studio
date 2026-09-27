@@ -554,7 +554,7 @@ test('PUT: an AGENTS.md file is the single source of instructions — a body ins
   }
 });
 
-test('PUT: demoDesignNeeded is signalled only on a genuine demoProcess CHANGE, not on every save (W7-B6 projects-28)', async () => {
+test('PUT: declarationChanged is signalled only on a genuine demoProcess CHANGE, not on every save (W7-B6 projects-28; renamed from demoDesignNeeded, forge-mfv5.2.8)', async () => {
   const forgeRoot = baseForgeRoot();
   const steps = [{ kind: 'capture', text: 'before' }, { kind: 'verify', text: 'gate' }];
   projectWithConfig(forgeRoot, 'demoproj', { name: 'demoproj', demoProcess: steps, testProcess: { local: { cmd: ['echo', 'ok'] } } });
@@ -564,13 +564,15 @@ test('PUT: demoDesignNeeded is signalled only on a genuine demoProcess CHANGE, n
     {
       const { res, captured } = mockRes();
       await handleProjectPut(mockReq(), res, ctx(forgeRoot, { demoProcess: structuredClone(steps) }), '/api/studio/projects/demoproj', 'PUT');
-      assert.equal(JSON.parse(captured.body).demoDesignNeeded, undefined, 'byte-equal echo must not trip the banner');
+      assert.equal(JSON.parse(captured.body).declarationChanged, undefined, 'byte-equal echo must not trip the banner');
+      assert.equal(Object.hasOwn(JSON.parse(captured.body), 'demoDesignNeeded'), false, 'the retired field is never sent');
     }
     // A genuinely different demoProcess must trip it.
     {
       const { res, captured } = mockRes();
       await handleProjectPut(mockReq(), res, ctx(forgeRoot, { demoProcess: [...steps, { kind: 'present', text: 'ship it' }] }), '/api/studio/projects/demoproj', 'PUT');
-      assert.equal(JSON.parse(captured.body).demoDesignNeeded, true);
+      assert.equal(JSON.parse(captured.body).declarationChanged, true);
+      assert.equal(Object.hasOwn(JSON.parse(captured.body), 'demoDesignNeeded'), false, 'the retired field is never sent');
     }
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });

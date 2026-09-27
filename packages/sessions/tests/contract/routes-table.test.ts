@@ -70,7 +70,9 @@ function claimant(method: string, url: string): string | null {
 
 test('the table is ordered, and every entry declares method, path, matcher and a dry classification', () => {
   const table = sessionsRoutes(noopDeps);
-  assert.equal(table.length, 37, 'a route added or removed without updating this pin');
+  // 36 since forge-mfv5.2.8 retired GET /api/demo-builder/fragment/…
+  assert.equal(table.length, 36, 'a route added or removed without updating this pin');
+  assert.equal(claimant('GET', '/api/demo-builder/fragment/p/s/e'), null, 'the retired fragment route claims nothing');
   for (const e of table) {
     assert.ok(e.method.length > 0 && e.path.startsWith('/api/'), `${e.path}: method + /api path`);
     assert.equal(typeof e.matches, 'function');

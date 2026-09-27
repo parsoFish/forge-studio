@@ -100,9 +100,9 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
   const [preflight, setPreflight] = useState<PreflightResult | null>(null);
   const [dirty, setDirty] = useState(false);
   const [ready, setReady] = useState(false);
-  // F5: set after a demoProcess save — surfaces data-demo-design-state="needed"
-  // so the operator knows to run `forge run skill demo-design --project <id>`.
-  const [demoDesignNeeded, setDemoDesignNeeded] = useState(false);
+  // F5: set after a save that CHANGED demoProcess — the cycle input itself, nothing is generated
+  // from it (forge-mfv5.2.8) — surfacing data-demo-declaration-state="changed" and the DEMO-SKILL hint.
+  const [declarationChanged, setDeclarationChanged] = useState(false);
   // S6: Editor|Roadmap tab + the read-only roadmap read model.
   const [tab, setTab] = useState<ProjectTab>('editor');
   // W7-A3: `/projects/<id>#roadmap` (the architect committed panel's "Open the
@@ -349,8 +349,8 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       // fields untouched: dirty is false, and it re-hydrates from the roster
       // that now carries exactly what was saved).
       void loadData({ cancelled: false });
-      // F5: surface demo-design trigger when demoProcess was in the save.
-      if (result.demoDesignNeeded) setDemoDesignNeeded(true);
+      // F5: say so when this save changed the demo declaration.
+      if (result.declarationChanged) setDeclarationChanged(true);
     }
     return result;
   });
@@ -444,7 +444,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       data-project-id={id}
       data-dirty={dirty ? 'true' : 'false'}
       data-page-ready={ready ? 'true' : 'false'}
-      data-demo-design-state={demoDesignNeeded ? 'needed' : 'idle'}
+      data-demo-declaration-state={declarationChanged ? 'changed' : 'idle'}
       style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
     >
       <StudioNav />
@@ -605,17 +605,17 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
               </div>
             </div>
 
-            {demoDesignNeeded && (
+            {declarationChanged && (
               <div
-                data-section="demo-design-prompt"
+                data-section="demo-declaration-changed"
                 style={{ background: 'var(--bg-2)', border: '1px solid var(--yellow)', borderRadius: 'var(--radius)', padding: '10px 12px' }}
               >
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--yellow)', marginBottom: 4 }}>Demo machinery needed</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--yellow)', marginBottom: 4 }}>Demo declaration changed</div>
                 <div style={{ fontSize: 11.5, color: 'var(--dim)', lineHeight: 1.5 }}>
-                  demoProcess saved. Run the demo-design skill to generate per-project demo machinery:
+                  demoProcess is the sole cycle-time demo input — every cycle captures against it, and nothing is generated from it. Confirm it drives a checkpoint (DEMO-SKILL):
                 </div>
                 <code style={{ display: 'block', fontSize: 11, color: 'var(--faint)', marginTop: 6, wordBreak: 'break-all' }}>
-                  forge run skill demo-design --project {id}
+                  forge preflight {id}
                 </code>
               </div>
             )}

@@ -57,6 +57,41 @@ export function extractDrivableCommand(text: string): DrivableCommandResult {
   return { ok: true, command: code };
 }
 
+/** A declared demo step, structurally — `DemoStep` (`studio-types.ts`) without
+ *  the import, so this module stays importless. */
+type DeclaredDemoStep = { readonly kind: string; readonly text: string };
+
+/** Whether a whole declaration drives at least one checkpoint, and if not, why. */
+export type DeclarationDriveResult =
+  | { ok: true; drivable: number; captures: number }
+  | { ok: false; reason: string };
+
+/**
+ * Whether a demo declaration drives at least one checkpoint: some `capture`
+ * step's text yields a command under `extractDrivableCommand`. The ONE
+ * whole-declaration rule (bead forge-mfv5.2.8), applied by the `DEMO-SKILL`
+ * preflight clause and by the demo-builder session's lock, so a declaration
+ * the lock accepts is never one preflight then reports as undrivable. The
+ * refusal reason names every capture step and why it cannot run.
+ */
+export function declarationDrivesCheckpoint(steps: readonly DeclaredDemoStep[]): DeclarationDriveResult {
+  const captures = steps
+    .map((step, i) => ({ step, i, result: extractDrivableCommand(step.text) }))
+    .filter(({ step }) => step.kind === 'capture');
+  const drivable = captures.filter(({ result }) => result.ok).length;
+  if (drivable > 0) return { ok: true, drivable, captures: captures.length };
+  if (captures.length === 0) {
+    return { ok: false, reason: "demoProcess declares no step of kind 'capture' — nothing can drive a checkpoint" };
+  }
+  const reasons = captures.map(({ step, i, result }) => {
+    const why = !result.ok && result.reason === 'shell-metacharacters'
+      ? `shell metacharacters in \`${result.code}\``
+      : 'no inline-code span to run';
+    return `capture step ${i} ("${step.text.slice(0, 60)}") yields no drivable command — ${why}`;
+  });
+  return { ok: false, reason: reasons.join('; ') };
+}
+
 /**
  * A safe demo checkpoint route: an absolute in-app path, no traversal. Shared
  * by the AC-derived checkpoint guard (`derive-demo-model.ts`'s
@@ -93,11 +128,11 @@ export function extractDemoRoute(text: string): RouteExtraction {
  * Skill ids that shape the Studio PRESENTATION of a demo, never a cycle
  * input — an agent's prompt must not fold these in (`@forge/projects`'s
  * `loadDeclaredSkills`, the one loader both `runOneShotSpawn` and
- * `createClaudeAgent` call). `demo-design` is the generated
- * `.forge/skills/demo-design/SKILL.md` the demo-builder SESSION writes (bead
- * forge-mfv5.2.8 tracks folding that session's output into the declaration
- * more directly) — presentation guidance for the Studio demo page, read by
- * nothing at cycle time. The integrate band derives checkpoints from
+ * `createClaudeAgent` call). `demo-design` is guidance for AUTHORING the
+ * declaration; a project-local `.forge/skills/demo-design/SKILL.md` left by an
+ * earlier demo-builder session is read by nothing at cycle time (since bead
+ * forge-mfv5.2.8 that session writes the declaration itself, and no SKILL.md).
+ * The integrate band derives checkpoints from
  * `demoProcess` and the initiative's typed acceptance criteria instead
  * (`extractDrivableCommand` / `extractDemoRoute` above).
  */

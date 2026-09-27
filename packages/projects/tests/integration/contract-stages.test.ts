@@ -81,8 +81,9 @@ const STAGE_ORDER = ['contract', 'instructions', 'secrets', 'demo', 'roadmap'] a
  * narrower charset (a charset is still a wildcard, just a smaller one). Both
  * entries are REMOVED from this pattern array — AT-23 below now asserts
  * these two detail lines match EXACTLY the string derivable from the config
- * it planted (`gate command: ${cmd.join(' ')}`, `built demo skill:
- * ${lock.demo_skill}`), so no extra text can ride along in the payload. Note
+ * it planted (`gate command: ${cmd.join(' ')}`, and — `built demo skill:
+ * ${lock.demo_skill}` until forge-mfv5.2.8 — now `locked declaration:
+ * generation ${n}, ${k} step(s)`), so no extra text can ride along in the payload. Note
  * (honesty, not silently omitted): `gate command:`'s payload is VERBATIM
  * project-authored config (`testProcess.local.cmd`, the operator's own
  * `.forge/project.json`) — forge echoing an operator's own command string
@@ -108,8 +109,9 @@ const ALLOWED_DETAIL_PATTERNS: RegExp[] = [
   // can take here — read off the exact emitted string, not guessed:
   // `brain profile: absent (brain/projects/allgreenproj/profile.md)`.
   /^brain profile: (present|absent) \(brain\/projects\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/profile\.md\)$/,
-  // `gate command: …` (contract-stages.ts:134) and `built demo skill: …`
-  // (contract-stages.ts:190) are DELIBERATELY not enumerated here — AT-23
+  // `gate command: …` (contract-stages.ts:134) and `locked declaration: …`
+  // (contract-stages.ts's deriveDemoRow; `built demo skill: …` until
+  // forge-mfv5.2.8) are DELIBERATELY not enumerated here — AT-23
   // below checks them by byte-equality against its own fixture instead (pin
   // 4 above). If either shape appears in a NEW test's rows without that
   // test computing its own expected literal, it will fail this array's
@@ -388,33 +390,43 @@ describe('deriveContractStages — demo stage (AT-13..16)', () => {
     }
   });
 
-  it('AT-14: demo.lock.json present (built) → detail carries the real demo_skill value from the lock file', () => {
+  it('AT-14: demo.lock.json present (locked) → detail carries the generation and step count of the declaration the lock wrote (forge-mfv5.2.8)', () => {
     const projectsRoot = makeProjectsRoot();
     const dir = makeProjectDir(projectsRoot, 'demolockproj');
     writeProjectJson(dir, { ...VALID_CONFIG_BASE, demoProcess: [{ kind: 'capture', text: 'x' }] });
     mkdirSync(join(dir, '.forge', 'demo'), { recursive: true });
     writeFileSync(
       join(dir, '.forge', 'demo', 'demo.lock.json'),
-      JSON.stringify({ demo_skill: '.forge/skills/demo-design-sentinel-77/SKILL.md' }),
+      JSON.stringify({ generation: 2, declaration: [{ kind: 'capture', text: 'Run `x`.' }, { kind: 'verify', text: 'y' }, { kind: 'present', text: 'z' }] }),
       'utf8',
     );
     const rows = okRows(deriveContractStages({ forgeRoot: REPO_ROOT, projectsRoot, projectId: 'demolockproj' }));
     const demo = byStage(rows, 'demo');
     assert.equal(demo.status, 'present');
-    assert.ok(
-      demo.detail.some((d) => d.includes('demo-design-sentinel-77')),
-      `detail must carry the REAL demo_skill value from demo.lock.json, got: ${JSON.stringify(demo.detail)}`,
-    );
+    assert.deepEqual(demo.detail, ['step: capture', 'locked declaration: generation 2, 3 step(s)']);
   });
 
-  it('AT-15: demo.lock.json present with demo_skill:null (a lock whose generator vanished) → still present (the lock exists), never a crash or a fabricated skill path', () => {
+  it('AT-14b: a lock that carries only the retired demo_skill field adds no detail line — the composer is no longer read (forge-mfv5.2.8)', () => {
+    const projectsRoot = makeProjectsRoot();
+    const dir = makeProjectDir(projectsRoot, 'demooldlockproj');
+    writeProjectJson(dir, { ...VALID_CONFIG_BASE, demoProcess: [{ kind: 'capture', text: 'x' }] });
+    mkdirSync(join(dir, '.forge', 'demo'), { recursive: true });
+    writeFileSync(join(dir, '.forge', 'demo', 'demo.lock.json'), JSON.stringify({ demo_skill: '.forge/skills/demo-design/SKILL.md' }), 'utf8');
+    const rows = okRows(deriveContractStages({ forgeRoot: REPO_ROOT, projectsRoot, projectId: 'demooldlockproj' }));
+    const demo = byStage(rows, 'demo');
+    assert.equal(demo.status, 'present', 'the lock file still exists');
+    assert.deepEqual(demo.detail, ['step: capture']);
+  });
+
+  it('AT-15: demo.lock.json present with a malformed declaration (declaration:null) → still present (the lock exists), never a crash or a fabricated detail line', () => {
     const projectsRoot = makeProjectsRoot();
     const dir = makeProjectDir(projectsRoot, 'demonullskillproj');
     writeProjectJson(dir, VALID_CONFIG_BASE);
     mkdirSync(join(dir, '.forge', 'demo'), { recursive: true });
-    writeFileSync(join(dir, '.forge', 'demo', 'demo.lock.json'), JSON.stringify({ demo_skill: null }), 'utf8');
+    writeFileSync(join(dir, '.forge', 'demo', 'demo.lock.json'), JSON.stringify({ generation: 1, declaration: null }), 'utf8');
     const rows = okRows(deriveContractStages({ forgeRoot: REPO_ROOT, projectsRoot, projectId: 'demonullskillproj' }));
     assert.equal(byStage(rows, 'demo').status, 'present');
+    assert.deepEqual(byStage(rows, 'demo').detail, []);
   });
 
   it('AT-16: neither demoProcess declared nor demo.lock.json present → absent', () => {
@@ -533,7 +545,7 @@ describe('deriveContractStages — D11: presence, never a verdict (AT-23, AT-24)
   // the onboarding gate"`), while the OLD substring-ban version stayed
   // green under the identical mutation — see the T3 report for the raw
   // before/after run output.
-  it('AT-23 (REPLACED — allow-list template check, retightened pin 4 item 3 to BYTE-EQUALITY on the two previously-wildcard shapes): every detail line, across all five stages, for a project whose every stage is present, either matches one of the explicitly enumerated ALLOWED_DETAIL_PATTERNS shapes, or — for "gate command:"/"built demo skill:" — equals BYTE-FOR-BYTE the string derivable from the fixture\'s own planted config', () => {
+  it('AT-23 (REPLACED — allow-list template check, retightened pin 4 item 3 to BYTE-EQUALITY on the two previously-wildcard shapes): every detail line, across all five stages, for a project whose every stage is present, either matches one of the explicitly enumerated ALLOWED_DETAIL_PATTERNS shapes, or — for "gate command:"/"locked declaration:" — equals BYTE-FOR-BYTE the string derivable from the fixture\'s own planted config', () => {
     const projectsRoot = makeProjectsRoot();
     const dir = makeProjectDir(projectsRoot, 'allgreenproj');
     writeFileSync(join(dir, 'AGENTS.md'), '# instructions\n', 'utf8');
@@ -542,22 +554,23 @@ describe('deriveContractStages — D11: presence, never a verdict (AT-23, AT-24)
     // strings from the SAME values planted here, never a second guess at
     // what the fixture contains.
     const gateCmd = ['npm', 'test'];
-    const demoSkillPath = '.forge/skills/demo-design-x/SKILL.md';
+    const lockedGeneration = 3;
+    const lockedDeclaration = [{ kind: 'capture', text: 'Run `x`.' }];
     writeProjectJson(dir, {
       testProcess: { local: { cmd: gateCmd }, acceptance: { match: 'acceptance', required: true, requiresEnv: ['X'] } },
       demoProcess: [{ kind: 'capture', text: 'x' }],
     });
     // Also exercise the two CONDITIONAL detail lines (compliance report,
-    // built demo skill) so the allow-list is checked against every shape
+    // locked declaration) so the allow-list is checked against every shape
     // this module can currently produce, not just the unconditional ones.
     writeFileSync(join(dir, '.forge', 'contract-compliance-report.json'), JSON.stringify({ finalHardGreen: true }), 'utf8');
     mkdirSync(join(dir, '.forge', 'demo'), { recursive: true });
-    writeFileSync(join(dir, '.forge', 'demo', 'demo.lock.json'), JSON.stringify({ demo_skill: demoSkillPath }), 'utf8');
+    writeFileSync(join(dir, '.forge', 'demo', 'demo.lock.json'), JSON.stringify({ generation: lockedGeneration, declaration: lockedDeclaration }), 'utf8');
 
     const rows = okRows(deriveContractStages({ forgeRoot: REPO_ROOT, projectsRoot, projectId: 'allgreenproj' }));
     let detailLinesChecked = 0;
     let gateCommandLineSeen = false;
-    let builtDemoSkillLineSeen = false;
+    let lockedDeclarationLineSeen = false;
     for (const row of rows) {
       assert.ok(row.status === 'present' || row.status === 'absent', `status must be exactly "present" or "absent", got: ${JSON.stringify(row.status)}`);
       for (const detail of row.detail) {
@@ -575,11 +588,11 @@ describe('deriveContractStages — D11: presence, never a verdict (AT-23, AT-24)
           );
           continue;
         }
-        if (detail.startsWith('built demo skill: ')) {
-          builtDemoSkillLineSeen = true;
+        if (detail.startsWith('locked declaration: ')) {
+          lockedDeclarationLineSeen = true;
           assert.equal(
-            detail, `built demo skill: ${demoSkillPath}`,
-            `"built demo skill:" must equal byte-for-byte the string derived from demo.lock.json's demo_skill — got: ${JSON.stringify(detail)}`,
+            detail, `locked declaration: generation ${lockedGeneration}, ${lockedDeclaration.length} step(s)`,
+            `"locked declaration:" must equal byte-for-byte the string derived from demo.lock.json's generation/declaration — got: ${JSON.stringify(detail)}`,
           );
           continue;
         }
@@ -590,7 +603,7 @@ describe('deriveContractStages — D11: presence, never a verdict (AT-23, AT-24)
       }
     }
     assert.ok(gateCommandLineSeen, 'expected the fixture to actually produce a "gate command:" detail line');
-    assert.ok(builtDemoSkillLineSeen, 'expected the fixture to actually produce a "built demo skill:" detail line');
+    assert.ok(lockedDeclarationLineSeen, 'expected the fixture to actually produce a "locked declaration:" detail line');
     assert.ok(detailLinesChecked >= 6, `expected the fixture to actually exercise every allow-listed shape at least once, only checked ${detailLinesChecked} detail lines`);
   });
 
@@ -617,7 +630,7 @@ describe('deriveContractStages — D11: presence, never a verdict (AT-23, AT-24)
     // mdtoc declares demoProcess but has no .forge/demo/demo.lock.json yet.
     const demo = byStage(rows, 'demo');
     assert.equal(demo.status, 'present');
-    assert.ok(!demo.detail.some((d) => d.includes('demo-design')), 'mdtoc has no built demo.lock.json — detail must not fabricate a demo_skill line');
+    assert.ok(!demo.detail.some((d) => d.includes('demo-design')), 'mdtoc has no demo.lock.json — detail must not fabricate a lock line');
     assert.equal(byStage(rows, 'roadmap').status, 'present');
   });
 });

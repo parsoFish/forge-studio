@@ -104,7 +104,7 @@ import { runArchitectTurn, type ArchitectStatus } from '../../kinds/architect.ts
 import { runInstructionsTurn, instructionsSessionDir, type InstructionsStatus } from '../../kinds/instructions.ts';
 import { runDemoBuilderTurn, demoSessionDir } from '../../kinds/demo-builder.ts';
 import {
-  DEMO_SKILL_REL_PATH,
+  DEMO_DECLARATION_REL_PATH,
   DEMO_HTML_REL_PATH,
   type DemoBuilderStatus,
 } from '../../kinds/demo-session-store.ts';
@@ -185,14 +185,8 @@ const INSTRUCTIONS_SKILL_FIXTURE = [
 const DEMO_BUILDER_SKILL_FIXTURE = [
   'You are the forge demo-builder (golden-capture fixture v2).',
   '',
-  '<!-- turn: generate-element -->',
-  'FIXTURE demo-builder GENERATE-ELEMENT turn.',
-  '',
-  '<!-- turn: generate-composed -->',
-  'FIXTURE demo-builder GENERATE-COMPOSED turn.',
-  '',
-  '<!-- turn: generate-legacy -->',
-  'FIXTURE demo-builder GENERATE-LEGACY turn.',
+  '<!-- turn: generate-declaration -->',
+  'FIXTURE demo-builder GENERATE-DECLARATION turn.',
   '',
   '<!-- turn: ground-it -->',
   'FIXTURE demo-builder GROUND-IT turn.',
@@ -424,8 +418,7 @@ test('runDemoBuilderTurn (generating): pins the exact {prompt, options} spawn ca
       const cwd = (options?.cwd as string | undefined) ?? '.';
       async function* gen(): AsyncGenerator<unknown> {
         mkdirSync(join(cwd, '.forge', 'demo'), { recursive: true });
-        mkdirSync(join(cwd, '.forge', 'skills', 'demo-design'), { recursive: true });
-        writeFileSync(join(cwd, DEMO_SKILL_REL_PATH), '# demo-design (fixture)\n\nRender before/after HTML.');
+        writeFileSync(join(cwd, DEMO_DECLARATION_REL_PATH), JSON.stringify([{ kind: 'capture', text: 'Run `node bin/cli.js fixture.md`.' }]));
         writeFileSync(join(cwd, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>fixture sample</body></html>');
         yield { type: 'result', total_cost_usd: 0.02 };
       }

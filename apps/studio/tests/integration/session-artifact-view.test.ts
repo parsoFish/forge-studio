@@ -638,6 +638,7 @@ const GALLERY_TWO_GENERATIONS: GenerationGalleryArtifact = {
       createdAt: '2026-08-06T10:00:00.000Z',
       feedback: null,
       targetElement: null,
+      declaration: null,
       items: [{ path: 'DEMO.html', kind: 'html', bytes: 512 }],
     },
     {
@@ -645,6 +646,7 @@ const GALLERY_TWO_GENERATIONS: GenerationGalleryArtifact = {
       createdAt: '2026-08-06T11:00:00.000Z',
       feedback: 'Make it punchier.',
       targetElement: null,
+      declaration: null,
       items: [{ path: 'DEMO.html', kind: 'html', bytes: 700 }],
     },
   ],
@@ -747,9 +749,9 @@ function makeGappyGalleryArtifact(): GenerationGalleryArtifact {
     kind: 'generation-gallery',
     label: 'Demo generations',
     generations: [
-      { number: 1, createdAt: '2026-08-06T10:00:00.000Z', feedback: null, targetElement: null, items: [{ path: 'DEMO.html', kind: 'html', bytes: 100 }] },
-      { number: 3, createdAt: '2026-08-06T11:00:00.000Z', feedback: null, targetElement: null, items: [{ path: 'DEMO.html', kind: 'html', bytes: 200 }] },
-      { number: 4, createdAt: '2026-08-06T12:00:00.000Z', feedback: null, targetElement: null, items: [{ path: 'DEMO.html', kind: 'html', bytes: 300 }] },
+      { number: 1, createdAt: '2026-08-06T10:00:00.000Z', feedback: null, targetElement: null, declaration: null, items: [{ path: 'DEMO.html', kind: 'html', bytes: 100 }] },
+      { number: 3, createdAt: '2026-08-06T11:00:00.000Z', feedback: null, targetElement: null, declaration: null, items: [{ path: 'DEMO.html', kind: 'html', bytes: 200 }] },
+      { number: 4, createdAt: '2026-08-06T12:00:00.000Z', feedback: null, targetElement: null, declaration: null, items: [{ path: 'DEMO.html', kind: 'html', bytes: 300 }] },
     ],
     sourcesScanned: ['generations/* (3 generation(s) found)'],
   };
@@ -831,6 +833,7 @@ function buildContiguousGalleryArtifact(numbers: number[]): GenerationGalleryArt
       createdAt: `2026-08-06T${String(10 + n).padStart(2, '0')}:00:00.000Z`,
       feedback: null,
       targetElement: null,
+      declaration: null,
       items: [{ path: 'DEMO.html', kind: 'html', bytes: 100 * n }],
     })),
     sourcesScanned: [`generations/* (${numbers.length} generation(s) found)`],

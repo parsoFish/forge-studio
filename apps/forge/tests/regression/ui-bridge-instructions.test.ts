@@ -185,30 +185,25 @@ test('POST /api/demo-builder/start with an out-of-envelope modelTier ("haiku") 4
   assert.equal(after, before, 'a rejected modelTier must not create a new session dir');
 });
 
-test('demo sessions surface per-element fragments + the fragment endpoint serves them', async () => {
+// forge-mfv5.2.8 — the demo-builder writes the declaration and no per-element
+// fragments, so nothing lists or serves `.forge/demo/fragments` any more: a
+// fragment left on disk by an older session is not surfaced, and the route is gone.
+test('demo sessions surface no fragments, and there is no fragment route', async () => {
   const started = await post('/api/demo-builder/start', { project: 'demo' });
   const sid = started.json.sessionId as string;
-  // The agent would write per-element fragments here; simulate one.
   mkdirSync(join(repoDir(), '.forge', 'demo', 'fragments'), { recursive: true });
   writeFileSync(join(repoDir(), '.forge', 'demo', 'fragments', 'cli-capture.html'), '<section>cli fragment</section>');
 
   const sessions = (await (await fetch(`${url}/api/demo-builder/sessions`)).json()) as {
-    sessions: Array<{ sessionId: string; fragments: string[] }>;
+    sessions: Array<Record<string, unknown> & { sessionId: string }>;
   };
   const s = sessions.sessions.find((x) => x.sessionId === sid);
-  assert.deepEqual(s!.fragments, ['cli-capture'], 'session surfaces the element fragment ids');
+  assert.ok(s, 'the session is listed');
+  assert.equal(Object.hasOwn(s!, 'fragments'), false, 'no fragments key on a demo session row');
 
   const frag = await fetch(`${url}/api/demo-builder/fragment/demo/${encodeURIComponent(sid)}/cli-capture`);
-  assert.equal(frag.status, 200);
-  const fragHtml = await frag.text();
-  assert.match(fragHtml, /cli fragment/, 'serves the fragment content');
-  // The bare <section> fragment is wrapped into a styled, self-contained HTML doc
-  // so a single component renders as a styled slice of the full demo.
-  assert.match(fragHtml, /^\s*<!doctype html>/i, 'wrapped in a full HTML doc');
-  assert.match(fragHtml, /<style>/, 'carries the Forge demo stylesheet');
-  // A path-escape / missing fragment 404s.
-  const missing = await fetch(`${url}/api/demo-builder/fragment/demo/${encodeURIComponent(sid)}/nope`);
-  assert.equal(missing.status, 404);
+  assert.equal(frag.status, 404, 'the fragment route no longer exists');
+  assert.doesNotMatch(await frag.text(), /cli fragment/);
 });
 
 test('POST /api/demo-builder/brief transitions briefing → generating', async () => {

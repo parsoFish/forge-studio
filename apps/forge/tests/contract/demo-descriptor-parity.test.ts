@@ -3,7 +3,8 @@
  * R1-03) is the ONE shared demo descriptor. Three consumers must agree on it:
  *
  *   (a) the preflight DEMO clause (accepts it as contract-green),
- *   (b) the demo-builder's composition (`demoTaskLines`, Face B — HTML deliverable),
+ *   (b) the demo-builder's declaration turn (`demoTaskLines` — the steps it
+ *       revises and, once locked, writes back as `demoProcess`, forge-mfv5.2.8),
  *   (c) the integrate band's derivation (`deriveDemoModel`, Face A — executed demo).
  *
  * Consumer (c) was the demo-agent's briefing until the LLM integrate node was deleted
@@ -24,7 +25,6 @@ import { test } from 'node:test';
 
 import { checkDemo } from '@forge/projects/testing';
 import { demoTaskLines } from '@forge/sessions';
-import type { DemoBuilderStatus } from '@forge/sessions';
 import { deriveDemoModel } from '@forge/stations/testing';
 // `listDemoElements` moved to `@forge/library` (M4
 // library-by-kind carve, PR 3 / Part 2) and is re-exported from `registry.ts`
@@ -81,13 +81,8 @@ test('consumers (b)+(c): builder composition and the derived demo bundle read th
   const byId = new Map(library.map((e) => [e.id, e]));
   for (const s of FIXTURE_STEPS) assert.ok(byId.has(s.element), `fixture element ${s.element} must exist in the library`);
 
-  // (b) demo-builder composed branch (Face B).
-  const builderText = demoTaskLines({
-    status: { project_repo_path: '/unused' } as unknown as DemoBuilderStatus,
-    composed: true,
-    elementSteps: FIXTURE_STEPS,
-    byId,
-  }).join('\n');
+  // (b) the demo-builder's declaration turn.
+  const builderText = demoTaskLines({ steps: FIXTURE_STEPS, byId }).join('\n');
 
   // (c) the integrate band's derivation (Face A).
   const derived = deriveDemoModel({
@@ -106,7 +101,7 @@ test('consumers (b)+(c): builder composition and the derived demo bundle read th
   assert.equal(derived.ok, true, derived.ok ? '' : derived.errors.join('; '));
   const captions = derived.ok ? derived.model.checkpoints.map((c) => c.caption) : [];
 
-  const ids = FIXTURE_STEPS.map((s) => s.element);
+  const ids = FIXTURE_STEPS.map((s) => `"element": "${s.element}"`);
   assertAscending(positionsOf(builderText, ids), 'demo-builder');
 
   // The derivation reads the SAME descriptor: one checkpoint per `capture` step,
@@ -117,9 +112,9 @@ test('consumers (b)+(c): builder composition and the derived demo bundle read th
     'the derived checkpoints must follow the demoProcess step order',
   );
 
-  // The builder surfaces each element's generator body/kind, not just the id.
+  // The builder surfaces each element's name and config, not just the id.
   for (const s of FIXTURE_STEPS) {
     const el = byId.get(s.element)!;
-    assert.ok(builderText.includes(el.name), `builder inlines ${s.element} generator header`);
+    assert.ok(builderText.includes(el.name), `builder names the ${s.element} element`);
   }
 });

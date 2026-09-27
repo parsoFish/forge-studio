@@ -813,9 +813,10 @@ const WELL_FORMED_GENERATION_GALLERY_ARTIFACT = {
       createdAt: '2026-08-06T10:00:00.000Z',
       feedback: null,
       targetElement: null,
+      declaration: [{ kind: 'capture', text: 'Run `npm run demo`.', element: 'cli-capture' }, { kind: 'verify', text: 'It holds.' }],
       items: [
         { path: 'DEMO.html', kind: 'html', bytes: 512 },
-        { path: 'SKILL.md', kind: 'markdown', bytes: 128 },
+        { path: 'demo-process.json', kind: 'file', bytes: 128 },
       ],
     },
     {
@@ -823,6 +824,7 @@ const WELL_FORMED_GENERATION_GALLERY_ARTIFACT = {
       createdAt: '2026-08-06T11:00:00.000Z',
       feedback: 'Make it punchier.',
       targetElement: 'cli-capture',
+      declaration: null,
       items: [{ path: 'SKILL.md', kind: 'markdown', bytes: 96 }],
     },
   ],
