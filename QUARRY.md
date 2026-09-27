@@ -57,17 +57,17 @@ operator-ratified new cap — never a silent raise.
 | `contracts` | 6 | 1,404 | **1,404** | ratified 1,404 — forge-mfv5.2.8 the whole-declaration drive rule lives once in contracts and DEMO-SKILL applies it (the demo-builder lock validates with it), +35 on 1,369, lane-ratified under ruling 666; see git history for prior raises. |
 | `kernel` | 30 | 5,575 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `projects` | 48 | 11,096 | **9,321** | ratified 9,321 — forge-mfv5.3.6 testProcess.local.perWorkItem gate template, validated at load (one {package}, argv only, no shell metacharacters), +37 on 9,284, lane-ratified under ruling 666; see git history for prior raises. |
+| `projects` | 48 | 11,103 | **9,328** | ratified 9,328 — forge-mfv5.3.6 testProcess.local.perWorkItem gate template, validated at load (one {package}, argv only, no shell metacharacters), +44 on 9,284, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,235 | **13,235** | ratified 13,235 — forge-mfv5.3.7 the gate child env carries FORGE_RESOURCE_PREFIX derived from the initiative id (secrets.env only for a gate that declared requiredEnv/unsetEnv), +22 on 13,213, lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 61 | 20,402 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 85 | 24,012 | **23,812** | ratified 23,812 — row 136 closure.local-aligned-to-remote records target_sha/base_sha (forge-8vfn.8.1.32), +16 on 23,796, lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 15 | 2,763 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 44 | 11,937 | **11,937** | ratified 11,937 — forge-mfv5.3.6 a per-WI gate filled from the WI's package (deriveWiGateCmd, template-skipped event), +95 on 11,842, lane-ratified under ruling 666; see git history for prior raises. |
+| `stations` | 44 | 11,941 | **11,941** | ratified 11,941 — forge-mfv5.3.6 a per-WI gate filled from the WI's package (deriveWiGateCmd, template-skipped event), +99 on 11,842, lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,922 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **473** | **127,971** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **473** | **127,982** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -378,7 +378,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/dev-cost-bound.ts | stations | verbatim | 88 |
 | packages/stations/phases/developer-loop.ts | stations | verbatim | 1831 |
 | packages/stations/phases/live-acceptance-env.ts | stations | verbatim | 22 |
-| packages/stations/phases/wi-quality-gate.ts | stations | verbatim | 131 |
+| packages/stations/phases/wi-quality-gate.ts | stations | verbatim | 135 |
 | packages/flows/phases/gitignored-creates.ts | flows | rewritten | 79 |
 | packages/flows/plan-gate-class-check.ts | flows | rewritten | 59 |
 | packages/stations/phases/pm-binding.ts | stations | verbatim | 384 |
@@ -411,7 +411,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/project-config-write.ts | projects | verbatim | 74 |
 | packages/projects/project-config-sidecar.ts | projects | verbatim | 73 |
 | packages/projects/project-config-types.ts | projects | verbatim | 205 |
-| packages/projects/project-config-validate.ts | projects | verbatim | 457 |
+| packages/projects/project-config-validate.ts | projects | verbatim | 464 |
 | packages/projects/project-create.ts | projects | verbatim | 534 |
 | packages/projects/project-repo-tx.ts | projects | verbatim | 237 |
 | packages/projects/reset.ts | projects | verbatim | 712 |
