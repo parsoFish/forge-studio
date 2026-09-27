@@ -65,9 +65,9 @@ operator-ratified new cap — never a silent raise.
 | `factory` | 15 | 2,759 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 42 | 11,720 | **11,720** | ratified 11,720 — forge-1rk5.3 row 138 honest delta: normalised command-output compare, named rule list, changed-delta excerpt (demo-delta.ts split at 800), +142 (T1 1711) on row 135's 11,578; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
-| `apps/forge` | 28 | 6,929 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
+| `apps/forge` | 28 | 6,923 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **469** | **127,574** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **469** | **127,568** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -169,7 +169,7 @@ operator-ratified new cap — never a silent raise.
 | packages/library/bridge-studio-skills.ts | library | verbatim | 659 |
 | packages/library/bridge-studio-templates.ts | library | verbatim | 427 |
 | apps/forge/bridge-studio-writes.ts | projects | rewritten | 705 |
-| apps/forge/bridge-studio.ts | apps/forge | rewritten | 1221 |
+| apps/forge/bridge-studio.ts | apps/forge | rewritten | 1215 |
 | packages/library/community-refresh-cmd.ts | library | verbatim | 104 |
 | packages/library/community-refresh-run.ts | library | verbatim | 621 |
 | packages/library/community-registry-lock.ts | library | verbatim | 126 |
