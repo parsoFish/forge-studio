@@ -88,7 +88,10 @@ export type WiGateCmd = {
  * `globToRegExp` in `@forge/projects` knows) contributes its static prefix,
  * the segments before the first one holding a `*`; a file its directory.
  * `null` when there is none below the repo root — no paths, a root-level file,
- * a glob with no static directory, or a path leaving the repo.
+ * a glob with no static directory, or a path leaving the repo — and when any
+ * segment starts with `-`: the value is spliced into the gate's argv, and a
+ * PM/agent-authored path such as `-x/evil.py` or `--run=^$/…` would otherwise
+ * reach the very gate that judges the WI as a flag.
  */
 export function wiPackageDir(paths: readonly string[]): string | null {
   const dirs = paths.map((p) => {
@@ -98,6 +101,7 @@ export function wiPackageDir(paths: readonly string[]): string | null {
     return p.endsWith('/') ? segs : segs.slice(0, -1);
   });
   if (dirs.length === 0 || paths.some((p) => p.startsWith('/')) || dirs.some((d) => d.includes('..'))) return null;
+  if (dirs.some((d) => d.some((seg) => seg.startsWith('-')))) return null;
   const common = dirs.reduce((acc, d) => {
     const diverge = acc.findIndex((seg, i) => seg !== d[i]);
     return diverge === -1 ? acc : acc.slice(0, diverge);

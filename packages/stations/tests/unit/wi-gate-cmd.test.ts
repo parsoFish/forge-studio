@@ -94,3 +94,11 @@ test("forge-mfv5.3.6 precedence: no template yields today's fallback — the pro
   assert.equal(deriveWiGateCmd({ wi: { files_in_scope: [] }, template: undefined, fallback: undefined }).cmd, null);
   assert.equal(deriveWiGateCmd({ wi: { quality_gate_cmd: [], files_in_scope: [] }, template: undefined, fallback: [] }).cmd, null, 'an empty argv is absent, as before');
 });
+
+test('forge-mfv5.3.6: a WI path segment starting with "-" never reaches the gate argv — it falls back like a path with no package', () => {
+  assert.equal(wiPackageDir(['-x/evil.py']), null);
+  assert.equal(wiPackageDir(['pkg/--run=^$/a.go']), null);
+  const got = deriveWiGateCmd({ wi: { files_in_scope: ['-x/evil.py'] }, template: TEMPLATE, fallback: PROJECT_GATE });
+  assert.deepEqual(got.cmd, PROJECT_GATE);
+  assert.equal(got.source, 'project');
+});

@@ -226,12 +226,15 @@ to `cmd` (bead forge-mfv5.3.6):
   `azuredevops/internal/service/git/resource_repo.go` plus
   `azuredevops/internal/service/git/*_test.go` fill `./azuredevops/internal/service/git/...`.
 - **No common directory:** when the paths share nothing below the repo root (two
-  top-level trees, a root-level file, a path leaving the repo), forge does not
+  top-level trees, a root-level file, a path leaving the repo, a segment starting
+  with `-` that would become a flag in the gate's argv), forge does not
   guess and never widens to the root: `cmd` runs, and a structured
   `gate.template-skipped` event names the reason and the paths.
 - **Validated at load:** an argv array (never a shell string) with exactly one
-  `{package}` placeholder and, the placeholder aside, no shell metacharacters (the
-  shared `SHELL_METACHARACTERS` rule). A malformed template is a load error
+  `{package}` placeholder, which must not start its token (a fixed prefix such as
+  `./` precedes it, so the filled value can never be read as a flag) and, the
+  placeholder aside, no shell metacharacters (the shared `SHELL_METACHARACTERS`
+  rule). A malformed template is a load error
   naming `testProcess.local.perWorkItem`.
 
 A filled template is still judged by C1: it must fail on a clean tree for the

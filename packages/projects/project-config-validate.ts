@@ -56,6 +56,13 @@ function parsePerWorkItemTemplate(value: unknown): string[] | undefined {
   if (found !== 1) {
     throw new Error(`project-config: ${label} must carry exactly one ${WI_GATE_PACKAGE_PLACEHOLDER} placeholder (found ${found})`);
   }
+  // The filled value comes from a WI's paths; a token that STARTS with the
+  // placeholder would hand that value the first character of an argv token,
+  // where a `-` makes it a flag. A fixed literal (e.g. `./`) must precede it.
+  const leading = argv.find((tok) => tok.startsWith(WI_GATE_PACKAGE_PLACEHOLDER));
+  if (leading !== undefined) {
+    throw new Error(`project-config: ${label} token ${JSON.stringify(leading)}: ${WI_GATE_PACKAGE_PLACEHOLDER} must not start its token — put a fixed prefix such as ./ before it`);
+  }
   const bad = argv.find((tok) => SHELL_METACHARACTERS.test(tok.split(WI_GATE_PACKAGE_PLACEHOLDER).join('')));
   if (bad !== undefined) {
     throw new Error(`project-config: ${label} token ${JSON.stringify(bad)} carries a shell metacharacter — the template runs as a bare argv, never through a shell`);

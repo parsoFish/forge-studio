@@ -57,3 +57,9 @@ test('forge-mfv5.3.6: a template that is not an argv array (a shell string, an e
   assert.throws(() => load('go test ./{package}/...'), /testProcess\.local\.perWorkItem must be an argv string\[\]/);
   assert.throws(() => load([]), /testProcess\.local\.perWorkItem.*\(found 0\)/);
 });
+
+test('forge-mfv5.3.6: a template whose {package} STARTS its token is refused — the filled value could become a flag', () => {
+  assert.throws(() => load(['pytest', '{package}']), /testProcess\.local\.perWorkItem.*must not start its token/);
+  assert.throws(() => load(['go', 'test', '{package}/...']), /must not start its token/);
+  assert.doesNotThrow(() => load(['pytest', './{package}']), 'a fixed literal before the placeholder is fine');
+});
