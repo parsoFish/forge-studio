@@ -73,40 +73,46 @@ const ROW_WITHOUT_VERDICT = {
   purpose: 'The command a developer runs locally to check their own work before pushing.',
 };
 
-test('every drift row renders its purpose', async () => {
+test('every drift row carries its purpose as the data-drift-purpose VALUE, on the SAME element as data-drift-row/data-drift-action', async () => {
+  // The story runner's collector (`beats-page-read.mjs`) reads `data-<key>`
+  // as an ATTRIBUTE via `getAttribute`, and correlates keys that share a
+  // carrying element — a `purpose` on a nested child, off the row's own
+  // `data-drift-row`/`data-drift-action` element, could never be tied back to
+  // the row it describes. Co-location, not child text, is the contract.
   preview.mockResolvedValue({ ok: true, drift: { projectId: 'gitpulse', appType: 'cli', rows: [ROW_WITH_VERDICT, ROW_WITHOUT_VERDICT], skillMoves: [] } });
   await renderAndPreview();
 
   const skillsRow = container.querySelector('[data-drift-row="skills"]');
   const localRow = container.querySelector('[data-drift-row="testProcess.local"]');
-  expect(skillsRow!.querySelector('[data-drift-purpose]')?.textContent).toBe(ROW_WITH_VERDICT.purpose);
-  expect(localRow!.querySelector('[data-drift-purpose]')?.textContent).toBe(ROW_WITHOUT_VERDICT.purpose);
+  expect(skillsRow!.getAttribute('data-drift-purpose')).toBe(ROW_WITH_VERDICT.purpose);
+  expect(localRow!.getAttribute('data-drift-purpose')).toBe(ROW_WITHOUT_VERDICT.purpose);
+  // Still human-readable in the rendered markup, not attribute-only.
+  expect(skillsRow!.textContent).toContain(ROW_WITH_VERDICT.purpose);
 });
 
-test('a row WITH a verdict renders data-drift-verdict="pass"/"fail" and the detail text; a row without one renders neither', async () => {
+test('a row WITH a verdict carries data-drift-verdict="pass"/"fail" on its own element and renders the detail text; a row without one carries neither', async () => {
   preview.mockResolvedValue({ ok: true, drift: { projectId: 'gitpulse', appType: 'cli', rows: [ROW_WITH_VERDICT, ROW_WITHOUT_VERDICT], skillMoves: [] } });
   await renderAndPreview();
 
   const skillsRow = container.querySelector('[data-drift-row="skills"]');
-  const verdictEl = skillsRow!.querySelector('[data-drift-verdict]');
-  expect(verdictEl?.getAttribute('data-drift-verdict')).toBe('pass');
-  expect(verdictEl?.textContent).toBe(ROW_WITH_VERDICT.verdict.detail);
+  expect(skillsRow!.getAttribute('data-drift-verdict')).toBe('pass');
+  expect(skillsRow!.textContent).toContain(ROW_WITH_VERDICT.verdict.detail);
 
   const localRow = container.querySelector('[data-drift-row="testProcess.local"]');
-  expect(localRow!.querySelector('[data-drift-verdict]')).toBeNull();
+  expect(localRow!.hasAttribute('data-drift-verdict')).toBe(false);
 });
 
-test('a FAILING verdict renders data-drift-verdict="fail"', async () => {
+test('a FAILING verdict carries data-drift-verdict="fail"', async () => {
   const failing = { ...ROW_WITH_VERDICT, verdict: { pass: false, detail: 'missing SKILL.md for x' } };
   preview.mockResolvedValue({ ok: true, drift: { projectId: 'gitpulse', appType: 'cli', rows: [failing], skillMoves: [] } });
   await renderAndPreview();
 
-  const el = container.querySelector('[data-drift-verdict]');
-  expect(el?.getAttribute('data-drift-verdict')).toBe('fail');
-  expect(el?.textContent).toBe('missing SKILL.md for x');
+  const el = container.querySelector('[data-drift-row="skills"]');
+  expect(el!.getAttribute('data-drift-verdict')).toBe('fail');
+  expect(el!.textContent).toContain('missing SKILL.md for x');
 });
 
-test('appTypeNote renders data-app-type-note with the note text, when present', async () => {
+test('appTypeNote renders data-app-type-note carrying the note text as its VALUE (readable via getAttribute, not just child text)', async () => {
   preview.mockResolvedValue({
     ok: true,
     drift: { projectId: 'gitpulse', appType: null, appTypeNote: 'no app type needed: every section is hand-authored', rows: [ROW_WITHOUT_VERDICT], skillMoves: [] },
@@ -115,6 +121,7 @@ test('appTypeNote renders data-app-type-note with the note text, when present', 
 
   const note = container.querySelector('[data-app-type-note]');
   expect(note).not.toBeNull();
+  expect(note!.getAttribute('data-app-type-note')).toBe('no app type needed: every section is hand-authored');
   expect(note!.textContent).toBe('no app type needed: every section is hand-authored');
 });
 

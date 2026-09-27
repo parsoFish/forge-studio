@@ -176,7 +176,7 @@ export function RebuildContractPanel({
             Drift report — read this before applying:
           </div>
           {drift.appTypeNote && (
-            <div data-app-type-note style={{ fontSize: 10.5, color: 'var(--faint)', fontStyle: 'italic', marginBottom: 8 }}>
+            <div data-app-type-note={drift.appTypeNote} style={{ fontSize: 10.5, color: 'var(--faint)', fontStyle: 'italic', marginBottom: 8 }}>
               {drift.appTypeNote}
             </div>
           )}
@@ -186,20 +186,17 @@ export function RebuildContractPanel({
                 key={row.section}
                 data-drift-row={row.section}
                 data-drift-action={row.action}
+                data-drift-purpose={row.purpose}
+                {...(row.verdict ? { 'data-drift-verdict': row.verdict.pass ? 'pass' : 'fail' } : {})}
                 style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, fontFamily: 'var(--font-mono)', color: row.action === 'regenerate' || row.action === 'add' ? 'var(--amber)' : 'var(--faint)' }}
               >
                 <div style={{ display: 'flex', gap: 8 }}>
                   <span style={{ flex: 1 }}>{row.section}</span>
                   <span>{row.action}</span>
                 </div>
-                <div data-drift-purpose style={{ fontSize: 10, fontFamily: 'var(--font-body)', color: 'var(--faint)' }}>
-                  {row.purpose}
-                </div>
+                <div style={{ fontSize: 10, fontFamily: 'var(--font-body)', color: 'var(--faint)' }}>{row.purpose}</div>
                 {row.verdict && (
-                  <div
-                    data-drift-verdict={row.verdict.pass ? 'pass' : 'fail'}
-                    style={{ fontSize: 10, fontFamily: 'var(--font-body)', color: row.verdict.pass ? 'var(--dim)' : 'var(--red)' }}
-                  >
+                  <div style={{ fontSize: 10, fontFamily: 'var(--font-body)', color: row.verdict.pass ? 'var(--dim)' : 'var(--red)' }}>
                     {row.verdict.detail}
                   </div>
                 )}
