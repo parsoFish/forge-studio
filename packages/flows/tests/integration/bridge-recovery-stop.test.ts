@@ -15,7 +15,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { recoveryStop, handleRecoveryRoutes } from '../../bridge-recovery.ts';
+import { recoveryStop, handleRecoveryRoutes, moveGatedManifestToFailed } from '../../bridge-recovery.ts';
 import { operatorStopPath } from '../../operator-stop.ts';
 
 const ID = 'INIT-2026-09-27-stop-spec';
@@ -163,6 +163,55 @@ test('recoveryStop: an unknown initiative reports no manifest found', () => {
     const got = recoveryStop('INIT-2026-09-27-nope', ctxFor(root, queueRoot));
     assert.equal(got.ok, false);
     assert.equal(got.detail, 'no manifest found');
+  });
+});
+
+test(
+  'moveGatedManifestToFailed: a manifest gone by rename-time (TOCTOU — an approve won the ' +
+    'race) reports already-resolved, never throws',
+  () => {
+    withTmp((root, queueRoot) => {
+      // A REAL ENOENT, no mock: this path was never created, reproducing
+      // exactly what renameSync sees once a concurrent approve has already
+      // moved the manifest out of ready-for-review/ (round 4 finding).
+      const gonePath = join(queueRoot, 'ready-for-review', `${ID}.md`);
+      const failedDir = join(queueRoot, 'failed');
+      const got = moveGatedManifestToFailed(gonePath, ID, failedDir, join(root, '_logs'));
+      assert.equal(got.ok, false);
+      assert.equal(
+        got.detail,
+        'the run left ready-for-review before the stop landed (already resolved)',
+      );
+      assert.equal((got as { mode?: string }).mode, undefined);
+      assert.ok(!existsSync(join(failedDir, `${ID}.md`)), 'nothing was moved');
+    });
+  },
+);
+
+test('handleRecoveryRoutes: POST stop on an already-resolved (non-active/gated) run → 409', async () => {
+  await withTmpAsync(async (root, queueRoot) => {
+    // A REAL "already resolved" state — no mock: stop it once (moves to
+    // failed/), then stop it again. The second call's locate() finds it in
+    // failed/, which is neither active nor gated — the SAME "not ok, and not
+    // 'no manifest found'" shape the TOCTOU race also produces, so this
+    // proves the route's 409 mapping without needing to reproduce the race.
+    seed(queueRoot, 'ready-for-review', ID, { project_repo_path: join(root, 'projects', 'gitpulse') });
+    const first = recoveryStop(ID, ctxFor(root, queueRoot));
+    assert.equal(first.ok, true, 'precondition: the first stop succeeds');
+
+    const { res, captured } = mockRes();
+    const url = `/api/recovery/${ID}/stop`;
+    const handled = await handleRecoveryRoutes(
+      mockReq('POST', url),
+      res,
+      ctxFor(root, queueRoot),
+      url,
+      'POST',
+    );
+
+    assert.equal(handled, true);
+    assert.equal(captured.status, 409);
+    assert.equal((captured.body as { ok: boolean }).ok, false);
   });
 });
 

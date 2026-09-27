@@ -27,13 +27,16 @@
  * (never a second poller thread), so a run with a wedge budget configured
  * aborts its live turn via the SAME AbortController the wedge-kill uses.
  *
- * WHO DELETES IT. Nothing needs to, urgently: once the manifest for this
- * initiative id leaves `_queue/in-flight/`, the stray flag file is inert
- * (nothing reads `_queue/in-flight/<id>.stop` unless a manifest with that
- * exact id is in-flight again). `forge-requeue.ts`'s existing stale-sidecar
- * sweep (the same one that already clears `.verdict-prompt.md` etc. on every
- * resume/requeue) removes it before the next claim, and `recoveryAbandon`
- * clears it too. No new cleanup timer, no new queue state.
+ * WHO DELETES IT (M7 row 150 round 4). The queue primitives themselves,
+ * unconditionally, so a stale flag can never outlive the halt it belongs to
+ * or meet a fresh cycle of the same initiative id: `queue.ts`'s `moveTo`
+ * removes it on every in-flight → terminal transition (the SAME move that
+ * already clears the `.heartbeat` sidecar), and `queue.ts`'s `claim` removes
+ * any pre-existing one BEFORE renaming pending → in-flight, in case a prior
+ * cycle's flag somehow survived. `forge-requeue.ts`'s stale-sidecar sweep and
+ * `recoveryAbandon` also clear it on their own paths, but neither is the
+ * backstop any more — the queue primitives are. No new cleanup timer, no new
+ * queue state.
  */
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';

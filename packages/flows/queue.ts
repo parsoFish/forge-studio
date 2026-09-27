@@ -32,6 +32,7 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseManifest } from './manifest.ts';
+import { operatorStopPath } from './operator-stop.ts';
 
 export type QueueState =
   | 'pending'
@@ -107,14 +108,33 @@ function safeCount(dir: string): number {
   return readdirSync(dir).filter((f) => f.endsWith('.md')).length;
 }
 
+/** `<id>.md` → `<id>` — the initiative id an operator-stop flag is keyed on. */
+function initiativeIdFromFilename(filename: string): string {
+  return filename.replace(/\.md$/, '');
+}
+
+/** Unlink `<id>.stop` in `_queue/in-flight/` if present; a no-op otherwise. */
+function clearOperatorStopFlag(filename: string, paths: QueuePaths): void {
+  const flagPath = operatorStopPath(paths.inFlight, initiativeIdFromFilename(filename));
+  if (existsSync(flagPath)) unlinkSync(flagPath);
+}
+
 /**
  * Atomically claim a pending initiative by `rename`. Returns the new in-flight
  * path, or `null` if the file is no longer in pending (claimed by a
  * concurrent caller).
+ *
+ * M7 row 150 round 4: a stale `<id>.stop` from a PRIOR cycle of the same
+ * initiative id would otherwise still sit in `_queue/in-flight/` (nothing
+ * else sweeps it before a fresh claim — see operator-stop.ts's header) and
+ * halt the new cycle at its very first boundary with a stop nobody asked
+ * for. Cleared BEFORE the rename so a stale flag can never meet a new cycle,
+ * even if the rename itself then fails.
  */
 export function claim(filename: string, paths = getPaths()): string | null {
   const from = join(paths.pending, filename);
   const to = join(paths.inFlight, filename);
+  clearOperatorStopFlag(filename, paths);
   try {
     renameSync(from, to);
   } catch {
@@ -143,6 +163,10 @@ export function moveTo(
   // Clean up the heartbeat that lived alongside the manifest in in-flight.
   const hbPath = join(paths.inFlight, filename + '.heartbeat');
   if (existsSync(hbPath)) unlinkSync(hbPath);
+  // M7 row 150 round 4: and any operator-stop flag — this halt is now over,
+  // and a stale flag left behind would wrongly halt a later cycle of the
+  // same initiative id at its first boundary (see claim() above).
+  clearOperatorStopFlag(filename, paths);
   return to;
 }
 

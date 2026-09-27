@@ -61,13 +61,13 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,286 | **13,286** | ratified 13,286 — M7 row 150 stop-run: cleanBoundaryHalt + shared prefix constants + one-statement classifier (rulings 1774/1794), +51 on 13,235, lane-ratified (ruling 666, measured). |
 | `sessions` | 61 | 20,402 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
-| `flows` | 86 | 24,434 | **24,234** | ratified 24,234 — M7 row 150 stop-run (operator-stop.ts + runner, bridge and resume wiring): +325 ratified by rulings 1774/1794, +97 lane-ratified (ruling 666), on 23,812. |
+| `flows` | 86 | 24,500 | **24,300** | ratified 24,300 — M7 row 150 stop-run (operator-stop.ts + runner, bridge, queue and resume wiring): +325 ratified by rulings 1774/1794, +163 lane-measured (rounds 3-4, pending T1 ratification), on 23,812. |
 | `factory` | 15 | 2,763 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 44 | 11,882 | **11,882** | ratified 11,882 — M7 row 150 stop-run: the wedge race honours the stop flag (ruling 1774), +40 on 11,842, lane-ratified (ruling 666, measured). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,922 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **474** | **128,376** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **474** | **128,442** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -133,8 +133,8 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/brain-lint-types.ts | knowledge | verbatim | 54 |
 | packages/knowledge/brain-lint.ts | knowledge | verbatim | 668 |
 | packages/flows/bridge-hooks.ts | flows | verbatim | 394 |
-| packages/flows/bridge-recovery.ts | flows | verbatim | 355 |
-| packages/flows/operator-stop.ts | flows | rewritten | 201 |
+| packages/flows/bridge-recovery.ts | flows | verbatim | 394 |
+| packages/flows/operator-stop.ts | flows | rewritten | 204 |
 | packages/sessions/bridge-studio-sessions-affordance-shell.ts | sessions | rewritten | 309 |
 | packages/sessions/bridge-studio-sessions-affordances.ts | sessions | rewritten | 502 |
 | packages/sessions/bridge-studio-agent-capability.ts | sessions | verbatim | 110 |
@@ -421,7 +421,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/reset-report.ts | projects | verbatim | 179 |
 | packages/projects/testing.ts | projects | verbatim | 12 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `parseSkills` and `checkDemo` have no production consumer outside this package, only `scripts/skill-example-validators.test.ts` and `apps/forge/tests/contract/demo-descriptor-parity.test.ts` reach for them.** |
 | packages/flows/promote-manifests.ts | flows | verbatim | 76 |
-| packages/flows/queue.ts | flows | verbatim | 246 |
+| packages/flows/queue.ts | flows | verbatim | 270 |
 | packages/stations/reflector-rerun.ts | stations | verbatim | 116 |
 | packages/stations/release-finalize-invocation.ts | stations | verbatim | 165 |
 | packages/stations/release-process.ts | stations | verbatim | 66 |

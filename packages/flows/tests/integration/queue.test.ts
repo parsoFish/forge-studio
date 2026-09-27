@@ -21,6 +21,7 @@ import {
   recover,
   writeHeartbeat,
 } from '../../queue.ts';
+import { operatorStopPath } from '../../operator-stop.ts';
 
 function mkQueue(): { dir: string; paths: ReturnType<typeof getPaths> } {
   const dir = mkdtempSync(join(tmpdir(), 'forge-queue-'));
@@ -131,6 +132,48 @@ test('queue: recover returns stale-heartbeat items to pending', () => {
     assert.equal(result[0].reason, 'stale-heartbeat');
     assert.deepEqual(result[0].recovered, [filename]);
     assert.ok(existsSync(join(paths.pending, filename)), 'item back in pending');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('queue: moveTo from in-flight removes a live operator-stop flag too (M7 row 150 round 4)', () => {
+  const { dir, paths } = mkQueue();
+  try {
+    const filename = 'INIT-stop-move.md';
+    writeFileSync(join(paths.pending, filename), '---\ninitiative_id: INIT-stop-move\n---\n');
+    claim(filename, paths);
+    const flagPath = operatorStopPath(paths.inFlight, 'INIT-stop-move');
+    writeFileSync(flagPath, '{}');
+    assert.ok(existsSync(flagPath), 'precondition: the flag exists before the move');
+
+    moveTo(filename, 'failed', paths);
+
+    assert.ok(!existsSync(flagPath), 'the operator-stop flag must not outlive the halt');
+    assert.ok(existsSync(join(paths.failed, filename)));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test(
+  'queue: claim removes a STALE operator-stop flag from a prior cycle before renaming ' +
+    '(M7 row 150 round 4)',
+  () => {
+  const { dir, paths } = mkQueue();
+  try {
+    const filename = 'INIT-stale-stop.md';
+    writeFileSync(join(paths.pending, filename), '---\ninitiative_id: INIT-stale-stop\n---\n');
+    const flagPath = operatorStopPath(paths.inFlight, 'INIT-stale-stop');
+    writeFileSync(flagPath, '{}');
+    assert.ok(existsSync(flagPath), 'precondition: a stale flag from a prior cycle is present');
+
+    const claimed = claim(filename, paths);
+
+    assert.ok(claimed, 'claim still succeeds');
+    assert.ok(existsSync(join(paths.inFlight, filename)), 'the manifest is now in-flight');
+    assert.ok(!existsSync(flagPath), 'a stale flag must never meet the new cycle');
+    assert.ok(existsSync(join(paths.inFlight, filename + '.heartbeat')), 'heartbeat still written');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

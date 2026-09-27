@@ -192,6 +192,45 @@ export type RecoveryStopResult = {
 };
 
 /**
+ * The GATED half of `recoveryStop`, extracted so a test can drive the TOCTOU
+ * branch directly with a `manifestPath` it deletes itself, rather than racing
+ * `locate()` and this function's own read/rename inside one synchronous call
+ * (no interleaving point exists between them — the race is real only ACROSS
+ * processes, e.g. a concurrent `applyReviewVerdict` approve in the daemon).
+ *
+ * Round 4 (bridge-recovery review): `locate()` finding the manifest and this
+ * function's own `readFileSync`/`renameSync` are not atomic with each other.
+ * An approve landing in that window moves the manifest out from under this
+ * call, and `renameSync` on the now-gone source throws ENOENT. Caught
+ * specifically (any other error still throws, to the route's 500) and
+ * reported as the SAME "already resolved" shape `applyReviewVerdict` uses
+ * for its own lost-the-race case, never a bare crash.
+ */
+export function moveGatedManifestToFailed(
+  manifestPath: string,
+  initiativeId: string,
+  failedDir: string,
+  logsRoot: string,
+): RecoveryStopResult {
+  mkdirSync(failedDir, { recursive: true });
+  let cycleId: string | undefined;
+  try {
+    cycleId = parseManifest(readFileSync(manifestPath, 'utf8')).cycle_id;
+    renameSync(manifestPath, join(failedDir, `${initiativeId}.md`));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return {
+        ok: false,
+        detail: 'the run left ready-for-review before the stop landed (already resolved)',
+      };
+    }
+    throw err;
+  }
+  if (cycleId) appendOperatorStopEvents(logsRoot, cycleId, initiativeId);
+  return { ok: true, mode: 'gated', movedTo: `failed/${initiativeId}.md` };
+}
+
+/**
  * Port of the `stop-run` control (bead forge-8vfn.8.1.39, rulings 1771 +
  * 1774) — non-destructive, UNLIKE `recoveryAbandon`: never deletes the
  * worktree or branch.
@@ -232,12 +271,8 @@ export function recoveryStop(
   }
 
   if (located.state === 'ready-for-review') {
-    const m = parseManifest(readFileSync(located.path, 'utf8'));
     const failedDir = getPaths(ctx.queueRoot).failed;
-    mkdirSync(failedDir, { recursive: true });
-    renameSync(located.path, join(failedDir, `${initiativeId}.md`));
-    if (m.cycle_id) appendOperatorStopEvents(ctx.logsRoot, m.cycle_id, initiativeId);
-    return { ok: true, mode: 'gated', movedTo: `failed/${initiativeId}.md` };
+    return moveGatedManifestToFailed(located.path, initiativeId, failedDir, ctx.logsRoot);
   }
 
   return { ok: false, detail: `initiative "${initiativeId}" is ${located.state}, not active or gated` };
@@ -293,7 +328,11 @@ export async function handleRecoveryRoutes(
     if (!INIT_ID_RE.test(id)) { sendJson(res, 400, { error: 'invalid initiative id' }, origin); return true; }
     try {
       const result = recoveryStop(id, ctx);
-      sendJson(res, result.ok ? 200 : 404, result, origin);
+      let status = 200;
+      if (!result.ok) {
+        status = result.detail === 'no manifest found' ? 404 : 409;
+      }
+      sendJson(res, status, result, origin);
     } catch (err) { sendJson(res, 500, { error: sanitizeError(err) }, origin); }
     return true;
   }
