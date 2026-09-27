@@ -3012,8 +3012,13 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-skill-id][data-resolved="ok|missing"][data-skill-source="forge|project|missing"]`
   and a missing one renders the word MISSING plus a `title` saying why.
 - **`/projects/[id]` — editor + roadmap.** The project page is
-  `[data-page="projects"][data-project-id][data-dirty][data-page-ready][data-demo-design-state]`
-  with an Editor/Roadmap tab bar
+  `[data-page="projects"][data-project-id][data-dirty][data-page-ready][data-demo-declaration-state="idle"|"changed"]`
+  — `changed` once a save in this visit changed `demoProcess`, which also renders
+  `[data-section="demo-declaration-changed"]`: the declaration IS the cycle input,
+  nothing is generated from it, and the banner points at `forge preflight <id>`'s
+  DEMO-SKILL to confirm it drives a checkpoint (forge-mfv5.2.8 retired
+  `data-demo-design-state="needed"` and its `forge run skill demo-design` prompt)
+  — with an Editor/Roadmap tab bar
   (`[data-tab="editor"|"roadmap"][data-tab-active="true"|"false"]
   [data-action="project-tab-editor"|"project-tab-roadmap"]`,
   `components/studio/project-builder/ProjectTabs.tsx`). The `data-action` half
@@ -4738,8 +4743,11 @@ is what this contract reads — but it cannot be the only distinguisher.
 - **Generation gallery — the demo-builder's session artifact (R4-16-F1,
   2026-08-06; entry point updated W6-B10).** Each completed generate turn is
   SNAPSHOTTED into the session dir
-  (`projects/<p>/_demo/<sid>/generations/<n>/` = `DEMO.html` + `SKILL.md` +
-  `meta.json`), so the generations accumulate instead of overwriting each
+  (`projects/<p>/_demo/<sid>/generations/<n>/` = `DEMO.html` +
+  `demo-process.json` + `meta.json`; bead forge-mfv5.2.8 replaced the
+  composer `SKILL.md` with the proposed demo DECLARATION — the `demoProcess`
+  steps that locking writes into `.forge/project.json`), so the generations
+  accumulate instead of overwriting each
   other, and a new **live** artifact kind `generation-gallery`
   (`studio/session-kinds.yaml`'s fourth descriptor, `id: demo` — the id IS the
   `_<kind>` session-dir segment the read route derives) renders them through
@@ -4779,11 +4787,20 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-generation-item][data-item-path][data-item-kind="html"|"markdown"|"file"][data-item-bytes]`,
   the feedback that drove the selected generation
   `[data-section="generation-feedback"][data-has-feedback="true"|"false"]`,
+  the selected generation's declaration
+  `[data-section="generation-declaration"][data-declaration-state="drivable"|"undrivable"|"missing"][data-declaration-steps]`
+  with one `[data-declaration-step=<i>][data-step-kind]` per step and, when
+  undrivable, `[data-declaration-refusal]` carrying the drive rule's own
+  reason — `drivable` is `declarationDrivesCheckpoint` (`@forge/contracts`),
+  the SAME rule the lock refuses on and `forge preflight`'s DEMO-SKILL clause
+  reports, so the page never offers a lock the runner then refuses
+  (forge-mfv5.2.8),
   the per-item viewer `[data-action="view-generation-item"]` (serving from
   `GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename>`), the
   finalize chooser `[data-action="finalize-generation"][data-generation-number]`
-  (disabled, with its reason, on a terminal session — never a silent
-  no-handler swallow), and an honest `[data-generation-empty="true"]` naming
+  — labelled "Lock this declaration" — (disabled, with its reason, on a
+  terminal session, and on a generation whose declaration is `undrivable` or
+  `missing` — never a silent no-handler swallow), and an honest `[data-generation-empty="true"]` naming
   what was scanned rather than a bare pane. `data-generation-number` is the
   snapshot's OWN recorded iteration, never an array position, so a corrupt
   snapshot leaves a visible gap instead of silently renumbering its
@@ -4794,10 +4811,13 @@ is what this contract reads — but it cannot be the only distinguisher.
   payload (looked up BY VALUE via `preferredGenerationFor`, never an array
   position), because a selection that dies every 3 seconds cannot be acted
   on. Locking a CHOSEN generation via `verdict-approve` — server-side
-  (`handleDemoVerdict`) it restores that snapshot's sample AND its generator
-  skill into the project repo before the same lock runs, so
-  `demo.lock.json`'s `demo_html`/`demo_skill` pair always comes from one
-  generation — now locks the SAME generation the gallery shows selected,
+  (`handleDemoVerdict`) the lock writes that snapshot's declaration into
+  `.forge/project.json` `demoProcess` (through the one project.json writer,
+  every other key kept) and restores its sample, so `demoProcess`,
+  `DEMO.html` and `demo.lock.json`'s `declaration` always come from one
+  generation; an undrivable declaration is refused with the rule's reason
+  and nothing is written (forge-mfv5.2.8) — now locks the SAME generation
+  the gallery shows selected,
   because there is only one selection left to disagree with.
 - **Contract build-out — the onboarding/creation session's artifact (R4-17,
   2026-08-06).** The `onboarding` session-kind descriptor (`studio/

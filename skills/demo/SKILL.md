@@ -1,6 +1,6 @@
 ---
 name: demo
-description: The canonical forge demo capability — how forge runs a demo, what every demo must contain, and how the demo maps to the forge UI review page. A demo makes ONE behavioural delta (prior → new) visible, grounded in the initiative's acceptance criteria. The demo phase agent (skills/demo-agent, R4-07) composes this skill to author the structured demo.json and derive DEMO.md. The demo agent reads the project's generated demo skill (from skills/demo-design) to know what evidence to produce; this skill defines the contract that evidence must satisfy. Scale demo effort to the size of the change.
+description: The canonical forge demo capability — how forge runs a demo, what every demo must contain, and how the demo maps to the forge UI review page. A demo makes ONE behavioural delta (prior → new) visible, grounded in the initiative's acceptance criteria. The demo phase agent (skills/demo-agent, R4-07) composes this skill to author the structured demo.json and derive DEMO.md. The project's demoProcess declaration (.forge/project.json) says what evidence to produce — it is the sole cycle-time demo input; this skill defines the contract that evidence must satisfy. Scale demo effort to the size of the change.
 library: true
 phase: developer-loop
 surface: unattended
@@ -16,15 +16,16 @@ managed project. The review phase's job is to show the operator *what changed*
 so they can make the merge decision; the demo is that artefact. This skill owns:
 
 1. **What a demo must contain** (the contract below).
-2. **How forge runs a demo** — read the project's generated demo skill, author
-   `demo.json`, derive `DEMO.md`.
+2. **How forge runs a demo** — read the project's `demoProcess` declaration,
+   author `demo.json`, derive `DEMO.md`.
 3. **How the demo maps to the forge UI** — the same `demo.json` the review
    screen renders (`DemoComparison`), so the PR artefact and the UI never drift.
 
-The project-side demo machinery is **generated** by `skills/demo-design` when
-the operator configures `demoProcess` in Studio. The generated skill (at
-`<artifactRoot>/skills/<slug>/SKILL.md` in the project repo) tells the demo
-agent (`skills/demo-agent`) what evidence to produce. This skill defines the
+The project side of the demo is its **`demoProcess` declaration** in
+`.forge/project.json` — the sole cycle-time demo input (beads forge-mfv5.2.2,
+forge-mfv5.2.8). Nothing is generated from it: the operator declares it (the
+Studio demo-builder session writes it on lock, `skills/demo-design` teaches how
+to author it), and it says what evidence to produce. This skill defines the
 contract that evidence satisfies — the structured artefact from
 [ADR 021](../../docs/decisions/021-local-review-and-unified-demo.md).
 
@@ -200,10 +201,9 @@ enhancement, never a gate. **Do author `summary` + `apiDiff` + `testEvidence` ev
 for notes-only demos when the diff touches a visible API or adds tests** — these
 sections make the rendered DEMO.md genuinely useful without requiring media capture.
 
-## Evidence forms (what the generated demo skill specifies)
+## Evidence forms (what the declaration's capture steps produce)
 
-The generated project demo skill (from `skills/demo-design`) specifies one of
-these evidence forms based on what the project's code actually exposes:
+A project's `demoProcess` capture steps produce one of these evidence forms based on what the project's code actually exposes:
 
 - **Portal/browser screenshot** — a rendered UI. Author checkpoints; the
   orchestrator's `forge demo capture` run back-fills before/after screenshots.
@@ -277,9 +277,9 @@ must have:
 
 1. **A `demoProcess`** in `.forge/project.json` with ≥1 `capture` and ≥1 `verify`
    step — validated by `forge preflight` DEMO clause.
-2. **Generated demo machinery** — the `skills/demo-design` skill generates
-   `<artifactRoot>/skills/<slug>/SKILL.md` into the project repo; `forge preflight`
-   DEMO clause passes once this is present.
+2. **A drivable declaration** — at least one `capture` step names a bare-argv
+   command in an inline-code span; `forge preflight`'s DEMO-SKILL clause checks
+   exactly this (nothing generated is required).
 3. **A truthful test gate** (contract C1) — the same gate that *proves* the change
    is what the demo *shows*.
 4. **A valid prior state** — running the baseline must not error; the demo frames

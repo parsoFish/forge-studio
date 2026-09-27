@@ -23,7 +23,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FORGE_ROOT } from '@forge/kernel';
 import { demoSessionDir } from '../../../kinds/demo-builder.ts';
-import { DEMO_SKILL_REL_PATH, DEMO_HTML_REL_PATH, type DemoBuilderStatus } from '../../../kinds/demo-session-store.ts';
+import { DEMO_DECLARATION_REL_PATH, DEMO_HTML_REL_PATH, type DemoBuilderStatus } from '../../../kinds/demo-session-store.ts';
 import { type QueryFn } from '../../../interactive-session.ts';
 import { writeSessionStatus } from '../../../interactive-session.ts';
 import { createLogger } from '@forge/kernel';
@@ -39,16 +39,17 @@ import type { DemoStep } from '@forge/contracts';
  * branch bodies — per-element / composed / legacy — plus the update-mode
  * guidance) out of the demo-builder runner (now `kinds/demo-builder.ts`) and into the skill.
  * The runner keeps injecting only DATA: project name/repo path, operator
- * guidance/feedback, the ordered element-step list, the element generator
- * bodies, and the forge base stylesheet.
+ * guidance/feedback, the current declaration's steps in order, the element
+ * library, and the forge base stylesheet.
  *
  * These are the ATs WI-2 must satisfy. THEY ARE IMMUTABLE — an implementer
- * may not weaken an assertion to make it pass; a legitimate rename (e.g. of
- * the turn ids) must still make every AT below pass as written, because the
- * fixtures pin the turn-id convention this design document plans
- * (`generate-element` / `generate-composed` / `generate-legacy`) as part of
- * the accepted contract (see "design ambiguity resolved" note in the PR /
- * session report this file shipped with).
+ * may not weaken an assertion to make it pass. Bead forge-mfv5.2.8 changed
+ * the contract they pinned, not their strength: the three generate branches
+ * (per-element / composed / legacy) each authored a composer or element
+ * SKILL.md, and the bead removed that output outright — the session now
+ * writes the demo DECLARATION through ONE turn, `generate-declaration`. The
+ * ATs were retargeted onto that turn; AT-7 and AT-8 pinned composer prose the
+ * bead deletes on purpose and went with it.
  *
  * Each AT and what it kills:
  *   AT-1 prose-left-the-TS   — an implementer who copy-pastes the prose into
@@ -154,35 +155,16 @@ export function setup(overrides?: Partial<DemoBuilderStatus>, demoProcess?: Demo
 
 export const loggerFor = (logsRoot: string, sid: string) => createLogger(`_demo-${sid}`, logsRoot);
 
-/** Simulates the agent writing the composer skill + sample DEMO.html
- *  (legacy / composed branches). */
+/** Simulates the agent writing the declaration draft + sample DEMO.html. */
 export function makeWritingQueryFn(capture?: (prompt: string) => void): QueryFn {
   return ({ prompt, options }) => {
     capture?.(prompt);
     const cwd = (options?.cwd as string) ?? '.';
     async function* gen(): AsyncGenerator<unknown> {
       mkdirSync(join(cwd, '.forge', 'demo'), { recursive: true });
-      mkdirSync(join(cwd, '.forge', 'skills', 'demo-design'), { recursive: true });
-      writeFileSync(join(cwd, DEMO_SKILL_REL_PATH), '# demo-design (fixture)');
+      writeFileSync(join(cwd, DEMO_DECLARATION_REL_PATH), JSON.stringify([{ kind: 'capture', text: 'Run `npm run demo`.' }]));
       writeFileSync(join(cwd, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>sample</body></html>');
       yield { type: 'result', total_cost_usd: 0.02 };
-    }
-    return gen();
-  };
-}
-
-/** Simulates the agent writing ONLY a per-element project-side skill + the
- *  sample (targetElement branch). */
-export function makeElementWritingQueryFn(elementId: string, capture?: (prompt: string) => void): QueryFn {
-  return ({ prompt, options }) => {
-    capture?.(prompt);
-    const cwd = (options?.cwd as string) ?? '.';
-    async function* gen(): AsyncGenerator<unknown> {
-      mkdirSync(join(cwd, '.forge', 'demo'), { recursive: true });
-      mkdirSync(join(cwd, '.forge', 'skills', 'demo', elementId), { recursive: true });
-      writeFileSync(join(cwd, '.forge', 'skills', 'demo', elementId, 'SKILL.md'), `# ${elementId} element (fixture)`);
-      writeFileSync(join(cwd, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>element fragment</body></html>');
-      yield { type: 'result', total_cost_usd: 0.01 };
     }
     return gen();
   };

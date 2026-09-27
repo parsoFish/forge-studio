@@ -498,7 +498,17 @@ export default {
       // has ever completed a demo generation, so there is no measurement to
       // use either. `MAX_DECLARED_WAIT_MS` it is, said out loud — and the
       // first green run replaces this with a measured number.
-      act: 'Come back to the demo builder, brief it, and lock the demo it makes',
+      //
+      // AMENDED 2026-09-27 (bead forge-mfv5.2.8). The session's output is now
+      // the project's demo DECLARATION — the `demoProcess` steps — and no
+      // composer skill: approving locks the declaration into
+      // `.forge/project.json`, and only a declaration that drives a checkpoint
+      // can be locked (the rule `forge preflight`'s DEMO-SKILL clause applies).
+      // So the beat asserts that too: `declaration-state: 'drivable'` is the
+      // generation gallery's `[data-section="generation-declaration"]`, one
+      // element on the page, so it resolves solo and never joins the
+      // together-rule (§15.178). `locked` alone cannot say WHAT was locked.
+      act: 'Come back to the demo builder, brief it, and lock the demo declaration it makes',
       do: [
         { press: 'view-demo-session' },
         {
@@ -506,7 +516,7 @@ export default {
           with:
             'The demo should show the end-to-end scan and the human-readable summary the quality gate checks — '
             + 'that is this project\'s one capability worth seeing, and what a newcomer needs in order to believe it works. '
-            + 'Design and write the demo; do not run the project to find out.',
+            + 'Declare how the demo is captured and write its sample; do not run the project to find out.',
         },
         { press: 'submit-answers' },
         { press: 'verdict-approve' },
@@ -519,9 +529,10 @@ export default {
           'page-ready': 'true',
           'session-kind': 'demo',
           'session-phase': 'locked',
+          'declaration-state': 'drivable',
         },
       },
-      say: 'Not every contract element is answered by talking. The demo is a build, so it gets its own long-running session: the operator briefs it, leaves, and comes back to a generated demo to approve. Approving locks it — the demo this project will be shown by from now on is a recorded artifact, not a screenshot somebody took once.',
+      say: 'Not every contract element is answered by talking. The demo is a build, so it gets its own long-running session: the operator briefs it, leaves, and comes back to a generated demo declaration — the capture steps every cycle will run — and the sample it drives. Approving locks the declaration into the project contract, and only a declaration that actually drives a checkpoint can be locked: the demo this project will be shown by from now on is what every cycle captures, not a screenshot somebody took once.',
     },
     {
       // Fully expressible, but only because the exit is itself a

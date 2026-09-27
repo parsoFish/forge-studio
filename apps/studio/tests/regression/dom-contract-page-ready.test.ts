@@ -69,6 +69,16 @@ test('[forge-8vfn.5.3] /projects/new: the onboard door carries its own error sen
   expect(openTag).toContain('data-load-error="false"');
 });
 
+// forge-mfv5.2.8 — a saved demoProcess is the cycle input itself; nothing is
+// generated from it, so the project root no longer says "demo-design needed".
+// Its state names whether THIS save changed the declaration.
+test('/projects/<id>: the root carries data-demo-declaration-state (idle until a save changes demoProcess), never the retired demo-design state', async () => {
+  const html = renderToStaticMarkup(React.createElement(ProjectBuilderPage, { params: { id: 'some-project' } }));
+  const root = mainOpenTag(html);
+  expect(root).toContain('data-demo-declaration-state="idle"');
+  expect(root).not.toContain('data-demo-design-state');
+});
+
 test('/architect/new: the root cannot say ready while the roster it renders says loading', async () => {
   const html = renderToStaticMarkup(React.createElement(ArchitectNewPage));
   expect(html).toContain('data-roster-state="loading"');
