@@ -733,6 +733,10 @@ export async function runDeveloperLoop(
           // when ALL of THIS WI's declared outputs are on the branch (a sibling
           // genuinely delivered them) — not on a bare "branch has a commit".
           requiredPaths: wi.creates ?? [],
+          // forge-1rk5.3 row 145: the autocommit safety net's own scope —
+          // unioned with requiredPaths (creates) and the agent's per-iteration
+          // filesChanged inside runRalph itself.
+          filesInScope: wi.files_in_scope,
           failOnHollowIter0Gate: cp.hollowGateGuardFor(classProfile.iter0FailFirst, wi.behavior_preserving),
           // re-review #1: stop early if the gate command can't RUN (broken
           // gate) rather than iterating against it and burning the budget.
@@ -743,7 +747,7 @@ export async function runDeveloperLoop(
           // when it fires the agent's commit-discipline failure becomes a
           // distinct, greppable event instead of being silently absorbed —
           // reflectors see the gap and the skill clause can be tightened.
-          onAutoCommit: (iteration) =>
+          onAutoCommit: (iteration, sweep) =>
             emitUncommittedWorkSwept(logger, {
               initiativeId: input.initiativeId,
               parentEventId: wiStart.event_id,
@@ -751,7 +755,7 @@ export async function runDeveloperLoop(
               worktreePath: wiWorktree.path,
               phase: 'developer-loop',
               skill: agentDef.slug,
-            }, iteration),
+            }, iteration, sweep),
           // F-14: emit per-iteration events so metrics (cycle.ts:metrics.ts)
           // can aggregate iteration counts. F-23 enriches the metadata so
           // post-mortems can see what the agent actually did per iteration

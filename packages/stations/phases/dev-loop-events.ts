@@ -10,6 +10,12 @@ export /**
  * uncommitted-work-dead-ends-the-gate failure mode — but when it fires, the
  * AGENT failed its commit discipline, and that must be a distinct greppable
  * event for reflectors instead of being silently absorbed.
+ *
+ * forge-1rk5.3 row 145 (orchestrator ruling 1742): the net's own scope is
+ * now bounded (agent file_change paths ∪ the WI's files_in_scope/creates),
+ * so a sweep can also RESTORE a tracked file changed outside that boundary,
+ * or LEAVE an untracked one in place. `sweep` carries all three lists so a
+ * reflector can see exactly what happened, not just that something did.
  */
 function emitUncommittedWorkSwept(
   logger: EventLogger,
@@ -22,6 +28,7 @@ function emitUncommittedWorkSwept(
     skill: string; // seam F4: the executing def's own slug, not a fixed literal.
   },
   iteration: number,
+  sweep: { committed: readonly string[]; restored: readonly string[]; left: readonly string[] },
 ): void {
   logger.emit({
     initiative_id: ctx.initiativeId,
@@ -35,8 +42,11 @@ function emitUncommittedWorkSwept(
     metadata: {
       work_item_id: ctx.workItemId,
       iteration,
+      committed: sweep.committed,
+      restored: sweep.restored,
+      left: sweep.left,
       detail:
-        'agent exited the iteration with uncommitted work; the forge-autocommit safety net swept it (commit-discipline gap — the agent must commit its own work, git add -f for gitignored declared deliverables)',
+        'agent exited the iteration with uncommitted work; the forge-autocommit safety net swept it (commit-discipline gap — the agent must commit its own work, git add -f for gitignored declared deliverables). Anything outside the WI scope was restored (tracked) or left in place (untracked), never committed.',
     },
   });
 }
