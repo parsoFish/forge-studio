@@ -646,6 +646,16 @@ test('finding row 75 (agent half) DOOR (second): a writer OUTSIDE this run\'s di
     root, storyId: 'S-sibling', sinceMs, evidenceDir,
     reapedPids: [],
     censusBoundMs: 2000, censusPollMs: 20, rereadDelayMs: 150,
+    // The re-read's wait is the one seam this door cares about, and a clock
+    // lost the race under full-suite load: the sibling was not scheduled
+    // inside 150 ms, so the file was genuinely still absent at the re-read
+    // (exit-proof run 3, 2026-09-27). Wait on the EVENT the re-read exists to
+    // observe — the sibling's write landing again — under a generous bound
+    // (T1 1372: wait on the event, not the clock).
+    sleep: async () => {
+      const deadline = Date.now() + 10_000;
+      while (!existsSync(heartbeat) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 10));
+    },
   });
 
   assert.equal(result.census.empty, true, 'legitimately empty — this run dispatched nothing');
