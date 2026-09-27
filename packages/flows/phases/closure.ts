@@ -296,7 +296,11 @@ export async function runClosure(
       input_refs: [input.worktreePath],
       output_refs: [],
       message: 'closure.local-aligned-to-remote',
-      metadata: { branch, detail: align.detail },
+      // `target_sha`/`base_sha` (bead `forge-8vfn.8.1.32`, T1 ruling 1694) —
+      // the S10 story fence's own-ground check reads `target_sha` to confirm
+      // what this run's ground was ACTUALLY aligned to, verified against the
+      // ground's live git rather than trusted from this event alone.
+      metadata: { branch, target_sha: align.targetSha, base_sha: align.baseSha, detail: align.detail },
     });
   } else {
     logger.emit({

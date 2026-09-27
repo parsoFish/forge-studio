@@ -474,8 +474,12 @@ test('7.6.123 WIRING: the runner actually calls the clear, with the classifier\'
 
   // AND THE GATE. A minted dir surviving the clear must end the run non-zero;
   // a reported-and-continue would leave the next run to refuse on the hash,
-  // which is the behaviour being fixed.
-  const redAt = runner.source.indexOf(RED);
+  // which is the behaviour being fixed. Bead `forge-8vfn.8.1.32` (T1 1694,
+  // a PURE MOVE) put the guard in a DIFFERENT module than the call above —
+  // `runnerSourceContaining` resolved on RED here, not reused from CALL's
+  // `runner`, for exactly the reason its own header names.
+  const verdict = runnerSourceContaining(RED);
+  const redAt = verdict.source.indexOf(RED);
   assert.notEqual(redAt, -1, 'the survivor check must exist in the runner');
   // BRACE-MATCHED, not a fixed char window and not "the next `return 1;`
   // anywhere after this point": finding row 75 (T1 rulings 1258, 1332) added
@@ -490,19 +494,19 @@ test('7.6.123 WIRING: the runner actually calls the clear, with the classifier\'
   // to ITS matching `}` by brace depth, and require the CONTAINMENT
   // FAILURE / `return 1;` pair AND the absence of the next check's marker
   // to all be decided against that one block, not the surrounding text.
-  const braceOpenAt = runner.source.indexOf('{', runner.source.indexOf(')', redAt));
+  const braceOpenAt = verdict.source.indexOf('{', verdict.source.indexOf(')', redAt));
   assert.notEqual(braceOpenAt, -1, 'the survivor check must be an if-block');
   let depth = 0;
   let braceCloseAt = -1;
-  for (let i = braceOpenAt; i < runner.source.length; i++) {
-    if (runner.source[i] === '{') depth++;
-    else if (runner.source[i] === '}') {
+  for (let i = braceOpenAt; i < verdict.source.length; i++) {
+    if (verdict.source[i] === '{') depth++;
+    else if (verdict.source[i] === '}') {
       depth--;
       if (depth === 0) { braceCloseAt = i; break; }
     }
   }
   assert.notEqual(braceCloseAt, -1, 'the survivor check\'s block must close');
-  const redBlock = runner.source.slice(braceOpenAt, braceCloseAt);
+  const redBlock = verdict.source.slice(braceOpenAt, braceCloseAt);
   assert.match(redBlock, /CONTAINMENT FAILURE/, 'and be named as a containment failure like its siblings');
   assert.match(redBlock, /return 1;/, 'and actually return non-zero, from inside this exact check');
   assert.doesNotMatch(

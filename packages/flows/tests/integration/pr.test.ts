@@ -406,6 +406,11 @@ test('alignLocalToRemote: fast-forwards local main to origin/main and prunes the
     const originMain = sh(proj, 'git', ['rev-parse', 'refs/remotes/origin/main']).trim();
     assert.notEqual(afterMain, beforeMain, 'local main moved');
     assert.equal(afterMain, originMain, 'local main == origin/main (fast-forwarded)');
+    // bead `forge-8vfn.8.1.32`, T1 ruling 1694 — the S10 story fence reads
+    // these off the emitted event to verify what the ground was aligned to,
+    // rather than re-parsing them out of `detail`'s human-readable text.
+    assert.equal(r.targetSha, originMain, 'targetSha is what main was aligned TO');
+    assert.equal(r.baseSha, beforeMain, 'baseSha is the pre-align pin');
     // The branch prune is best-effort: `git branch -D` cannot delete the
     // CURRENTLY-CHECKED-OUT branch (the closure runs in the worktree where
     // initiative-x is checked out), so the authoritative branch deletion
@@ -430,9 +435,14 @@ test('alignLocalToRemote: best-effort — returns aligned even when nothing to d
   const { proj, cleanup } = makeRepoWithOrigin();
   try {
     // No remote merge happened; main already matches. Must not throw.
+    const mainNow = sh(proj, 'git', ['rev-parse', 'refs/heads/main']).trim();
     const r = alignLocalToRemote(proj, 'nonexistent-branch');
     assert.equal(r.aligned, true);
     assert.match(r.detail, /already up to date|main/);
+    // origin/main was pushed in makeRepoWithOrigin — targetSha resolves even
+    // on the no-op path, never left null just because nothing had to move.
+    assert.equal(r.targetSha, mainNow);
+    assert.equal(r.baseSha, mainNow);
   } finally {
     cleanup();
   }

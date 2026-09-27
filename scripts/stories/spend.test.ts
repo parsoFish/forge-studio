@@ -254,7 +254,11 @@ test('7.6.51: the runner enforces the ceiling at a beat boundary and exits non-z
   // `spendHalt`. Neither rename changed a behaviour. The property is that the
   // exit code is non-zero whenever the money verdict ended the run, whatever
   // the variable holding it is called.
-  assert.match(src, /row\.status === 'green' && \w+ === null\) \? 0 : 1/,
+  // Bead `forge-8vfn.8.1.32` (T1 1694, a PURE MOVE): the final return moved
+  // into `run-story-verdict.mjs`, a different module than `src` above —
+  // resolved separately, the same reason `runnerSourceContaining` exists.
+  const { source: verdictSrc } = runnerSourceContaining('=== null) ? 0 : 1');
+  assert.match(verdictSrc, /row\.status === 'green' && \w+ === null\) \? 0 : 1/,
     'a halt must make the exit code non-zero whatever the beats did');
 });
 

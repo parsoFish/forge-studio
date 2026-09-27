@@ -54,12 +54,13 @@ test('judgeForkGrounds\'s lines are printed', () => {
 });
 
 test('a non-null redReason ends the run red, regardless of the beats', () => {
-  const runner = runnerSourceContaining(CALL);
-  const callAt = runner.source.indexOf(CALL);
-  // The gate sits near the END of the run (after every other containment
-  // check), so the window is "from the call to EOF" rather than a fixed size.
-  const after = runner.source.slice(callAt);
-  const gateAt = after.indexOf('redReason !== null');
+  // Bead `forge-8vfn.8.1.32` (T1 1694, a PURE MOVE) put the gate in
+  // `run-story-verdict.mjs`, a different module than CALL's `run-story.mjs`
+  // — resolved separately, same reason `runnerSourceContaining`'s own header
+  // gives for existing at all.
+  const GATE = 'redReason !== null';
+  const verdict = runnerSourceContaining(GATE);
+  const gateAt = verdict.source.indexOf(GATE);
   assert.notEqual(gateAt, -1, 'the gate must actually read redReason');
-  assert.match(after.slice(gateAt, gateAt + 200), /return 1;/, 'and end the run non-zero');
+  assert.match(verdict.source.slice(gateAt, gateAt + 200), /return 1;/, 'and end the run non-zero');
 });
