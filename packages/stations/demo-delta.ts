@@ -40,7 +40,7 @@ export const CAPTURE_NORMALISATION_RULES: ReadonlyArray<{
   readonly pattern: RegExp;
   readonly replacement: string;
 }> = Object.freeze([
-  { name: 'tap-duration', pattern: /duration_ms:\s*\d+(?:\.\d+)?/g, replacement: 'duration_ms: <n>' },
+  { name: 'tap-duration', pattern: /duration_ms:?\s+\d+(?:\.\d+)?/g, replacement: 'duration_ms: <n>' }, // per-test `duration_ms: N` and the run summary `# duration_ms N` (row 144)
   { name: 'duration', pattern: /\b\d+(?:\.\d+)?\s?(?:ms|s)\b/g, replacement: '<duration>' },
   {
     name: 'iso-timestamp',
