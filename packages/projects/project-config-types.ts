@@ -70,6 +70,14 @@ export type TestProcessLocal = {
   cmd: string[];
   /** Overrides the 30-min default; `FORGE_GATE_TIMEOUT_MS` still wins. */
   timeoutMs?: number;
+  /**
+   * forge-mfv5.3.6 — the per-work-item gate TEMPLATE: an argv with exactly one
+   * `{package}` placeholder (`WI_GATE_PACKAGE_PLACEHOLDER`) and no shell
+   * metacharacters, validated at load. It fills only a work item's OMITTED
+   * `quality_gate_cmd`, with the one directory the item changes — the
+   * precedence and the derivation are `deriveWiGateCmd` (`@forge/stations`).
+   */
+  perWorkItem?: string[];
 };
 export type TestProcessCi = {
   /**

@@ -27,6 +27,11 @@
               "type": "integer",
               "exclusiveMinimum": 0,
               "description": "Overrides the built-in 30-minute default gate timeout. FORGE_GATE_TIMEOUT_MS (per-run operator override) still wins over this declared value."
+            },
+            "perWorkItem": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "forge-mfv5.3.6: the per-work-item gate TEMPLATE, e.g. [\"go\",\"test\",\"-tags\",\"all\",\"-count=1\",\"./{package}/...\"]. Fills ONLY a work item's omitted quality_gate_cmd, with {package} replaced by the common directory of the item's files_in_scope and creates (repo-relative; a `*` glob contributes its static prefix, a `dir/` entry itself, a file its directory). Precedence: the work item's own quality_gate_cmd, then this template, then `cmd`. When the item's paths share no directory below the repo root the template is not used — `cmd` runs and a gate.template-skipped event names why. Validated at load: argv form, exactly one {package} placeholder, and no shell metacharacters. Optional."
             }
           }
         },
