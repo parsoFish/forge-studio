@@ -52,6 +52,7 @@
 export { loadProjectConfig, readAgentInstructionsFile, resolveProjectIdForRepo, PROJECT_CONFIG_REL_PATH } from './project-config.ts';
 export type { ProjectConfig, AcceptanceGateConfig } from './project-config.ts';
 export { writeProjectConfigPatch } from './project-config-write.ts';
+export { WI_GATE_PACKAGE_PLACEHOLDER } from './project-config-validate.ts';
 export { validateDemoDeclaration } from './preflight-demo.ts';
 
 // --- preflight: the C-clause verdict + the bounded auto-fix loop ----------

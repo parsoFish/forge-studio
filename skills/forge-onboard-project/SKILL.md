@@ -79,6 +79,8 @@ section of the project contract — never
 bare `! cmd` asserts (errexit-exempt: their failures silently don't fail the
 gate).
 
+**Many packages, one gate?** When the project spans many packages with a uniform per-package test command — a large suite, or a partly-red one where only the package under change is reliably green — declare `testProcess.local.perWorkItem` next to `cmd`: an argv with one `{package}` placeholder, e.g. `["go","test","-tags","all","-count=1","./{package}/..."]`. forge fills it with the directory each work item changes, only when the item omits its own `quality_gate_cmd`; `cmd` stays the fallback. Verify fail-then-pass by hand on one real package. Rules: [the per-work-item gate template](../../docs/reference/project-contract.md#the-per-work-item-gate-template-testprocesslocalperworkitem-optional).
+
 **When the natural whole-suite command is red at HEAD by design** — a partly-red suite, e.g. a Python project's `pytest tests/` failing on permanently-red TDD stubs unrelated to any change under review — never declare it: C1 requires green at HEAD, not merely a plausible shape. Measure what CI itself actually runs (`.github/workflows/*` or the project's CI config) and propose THAT narrower command if it measures green; failing that, scope to the package/test files genuinely under change and re-measure. If no scope measures green, say so plainly and ask the operator for the gate — never accept a whole-suite command that can never pass.
 
 ### Step 5 — Hermetic change-capture (C2)

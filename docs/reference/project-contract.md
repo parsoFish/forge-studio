@@ -198,6 +198,50 @@ author it from the [Gate scripts](#gate-scripts) template below
 (`set -euo pipefail` + explicit per-step `fail()` asserts; bare `! cmd` asserts
 are errexit-exempt and forbidden — their failures silently don't fail the gate).
 
+#### The per-work-item gate template (`testProcess.local.perWorkItem`, optional)
+
+`testProcess.local.cmd` is ONE project-wide string, but a roadmap touches many
+packages: a gate frozen on one package judges every work item by that package's
+tests, and widening it to the whole tree kills the fast inner-loop signal (and
+is hollow by C1's own rule). A project may instead declare a **template** next
+to `cmd` (bead forge-mfv5.3.6):
+
+```json
+"testProcess": { "local": {
+  "cmd": ["go", "test", "-tags", "all", "-count=1", "./azuredevops/internal/service/servicehook/..."],
+  "perWorkItem": ["go", "test", "-tags", "all", "-count=1", "./{package}/..."]
+} }
+```
+
+- **What it fills:** only a work item that OMITS its own `quality_gate_cmd`.
+  Precedence is the WI's own gate, then the filled template, then `cmd`. The
+  template never overrides a gate the planner wrote — the same
+  fill-only-what-is-omitted rule as the deterministic injector of
+  [ADR 037](../decisions/037-compiled-wi-contracts.md) (decision item 2; it may
+  add, never override), so no ADR amendment was needed.
+- **`{package}`:** the common directory of the work item's `files_in_scope` ∪
+  `creates`, repo-relative. A `dir/` entry is that directory; a `*` glob
+  contributes its static prefix (the segments before the first `*` — the one
+  wildcard `globToRegExp` knows); a file contributes its directory. So
+  `azuredevops/internal/service/git/resource_repo.go` plus
+  `azuredevops/internal/service/git/*_test.go` fill `./azuredevops/internal/service/git/...`.
+- **No common directory:** when the paths share nothing below the repo root (two
+  top-level trees, a root-level file, a path leaving the repo, a segment starting
+  with `-` that would become a flag in the gate's argv), forge does not
+  guess and never widens to the root: `cmd` runs, and a structured
+  `gate.template-skipped` event names the reason and the paths.
+- **Validated at load:** an argv array (never a shell string) with exactly one
+  `{package}` placeholder, which must not start its token (a fixed prefix such as
+  `./` precedes it, so the filled value can never be read as a flag) and, the
+  placeholder aside, no shell metacharacters (the shared `SHELL_METACHARACTERS`
+  rule). A malformed template is a load error
+  naming `testProcess.local.perWorkItem`.
+
+A filled template is still judged by C1: it must fail on a clean tree for the
+work item's unit of change. It suits a project whose per-package test command
+is uniform; when a package's tests are partly red at HEAD, the planner's own
+sharp `quality_gate_cmd` is the answer for that item.
+
 #### C1b — CI alignment *(HARD when `testProcess.ci` is populated)*
 
 The per-WI `quality_gate_cmd` (HARD structural) must be the CI command or a
