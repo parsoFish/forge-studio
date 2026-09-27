@@ -3605,7 +3605,26 @@ is what this contract reads — but it cannot be the only distinguisher.
      "add"|"unchanged"]` per `DriftReport` row — `section` and `action` are
      the same `<div>`, so a beat reads both together — so the operator reads
      every section that WOULD change, and every one that would not, before
-     committing to anything.
+     committing to anything. **bead forge-mfv5.3.1**: each row's `<div>` also
+     carries a `[data-drift-purpose]` child whose text is the ONE sentence
+     (`packages/projects/reset-report.ts`'s `SECTION_PURPOSE` table) saying
+     what the element is FOR — an operator reading "unchanged" no longer has
+     to already know what `testProcess.ci` means to judge whether that is
+     fine. Exactly two element kinds ALSO carry a
+     `[data-drift-verdict="pass"|"fail"]` child, text the verdict's `detail`:
+     `skills` (each declared skill resolves to a real SKILL.md — reuses
+     `resolveDeclaredSkillPath`, `preflight-skills.ts`) and `demoProcess` (the
+     declaration drives at least one checkpoint — reuses `checkDemoSkill`'s
+     own `extractDrivableCommand` rule, `preflight-demo.ts`); every other row
+     has no verdict element at all, honestly — drift alone doesn't say
+     whether that element still works. **bead forge-mfv5.3.2**: when
+     `computeContractDrift` resolves `appType: null` because every section
+     turned out hand-authored (no starter was ever consulted, never reaching
+     the `needs-app-type` picker in stage 2), the report additionally renders
+     `[data-app-type-note]`, text `DriftReport.appTypeNote` verbatim (e.g.
+     "no app type needed: every section is hand-authored") — so the operator
+     can tell "nothing needed picking" from "you already told me" without
+     reading source.
   4. `[data-action="apply-contract-reset"]` applies it
      (`POST .../contract-reset/apply`) — the SAME `appType`, but a FRESH
      `computeContractDrift` call server-side, never the previewed report
