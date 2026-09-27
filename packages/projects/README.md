@@ -28,7 +28,7 @@ both directions, and is required to FAIL against an empty index.
 | create | `scaffoldGreenfieldProject` · `listProjectStarters` · `projectStartersDir` |
 | repo transactions | `ensureStudioBranch` · `commitStudioChange` · `withStudioWrite` · `dirtyPaths` |
 | the reset | `cmdProjectReset` · `computeContractDrift` · `applyContractReset` · `AppTypeUnresolvedError` |
-| constraint blocks | `authorConstraintBlocks` · `loadProjectConstraintBlocks` · `selectorMatches` |
+| constraint blocks | `authorConstraintBlocks` · `globToRegExp` · `loadProjectConstraintBlocks` · `selectorMatches` |
 | gate recipes | `deriveGateRecipe` · `renderGateRecipeBlock` |
 | onboarding & roster | `scaffoldContractArtifacts` · `demoProcessChanged` · `loadProjectsWithMeta` · `cmdProjectMigrate` |
 | studio validation | `validateDiscoveredProjects` |
