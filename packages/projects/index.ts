@@ -36,7 +36,8 @@
  * and #295's security review specifically required the error class be
  * reachable from the index — importing it deep instead would lose
  * `instanceof` narrowing on the one error it exists to render. Adding them
- * later would flip this package's public door twice. Full accounting in
+ * later would flip this package's public door twice for a consumer already
+ * scheduled. Full accounting in
  * `design.md` and `README.md`'s
  * "What is not exported" section.
  *

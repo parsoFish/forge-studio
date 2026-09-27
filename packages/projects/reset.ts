@@ -221,7 +221,8 @@ export type ResetResult = {
 // ---------------------------------------------------------------------------
 
 /** `AppTypeUnresolvedError`/`resolveAppType`/`loadStarterConfig` moved to
- *  `reset-report.ts` (bead forge-mfv5.3.2) — no shim: import directly. */
+ *  `reset-report.ts` (bead forge-mfv5.3.2, 800-line cap) — see that file's
+ *  `resolveAppTypeForReset`, its replacement. No shim: import it directly. */
 function jsonEqual(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
