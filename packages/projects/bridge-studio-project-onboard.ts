@@ -636,16 +636,16 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
       let save: { merged: boolean; pushed: boolean; detail: string } | undefined;
       try { save = saveProjectRepo(projectRoot); } catch (err) { save = { merged: false, pushed: false, detail: sanitizeError(err) }; }
 
-      // F5: when demoProcess CHANGED in this save, signal that the demo-design
-      // skill should be run to generate per-project demo machinery. The UI
-      // surfaces this as data-demo-design-state="needed" on the project page
-      // so the operator can trigger: `forge run skill demo-design --project <id>`.
+      // F5: when demoProcess CHANGED in this save, say so — the declaration IS
+      // the cycle input (forge-mfv5.2.8), so nothing is generated from it; the
+      // UI surfaces this as data-demo-declaration-state="changed" on the project
+      // page and points the operator at DEMO-SKILL to confirm it drives a checkpoint.
       // W7-B6 (projects-28): the client always sends demoProcess, so mere
       // PRESENCE tripped the banner after every save (a north-star-only edit
       // included) — compare against what was stored instead.
-      const demoDesignNeeded = demoProcessChanged(b['demoProcess'], existingRaw['demoProcess']);
+      const declarationChanged = demoProcessChanged(b['demoProcess'], existingRaw['demoProcess']);
 
-      sendJson(res, 200, { ok: true, id, ...(save ? { save } : {}), ...(demoDesignNeeded ? { demoDesignNeeded: true } : {}) }, origin);
+      sendJson(res, 200, { ok: true, id, ...(save ? { save } : {}), ...(declarationChanged ? { declarationChanged: true } : {}) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

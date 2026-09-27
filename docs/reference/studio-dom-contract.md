@@ -3012,8 +3012,13 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-skill-id][data-resolved="ok|missing"][data-skill-source="forge|project|missing"]`
   and a missing one renders the word MISSING plus a `title` saying why.
 - **`/projects/[id]` — editor + roadmap.** The project page is
-  `[data-page="projects"][data-project-id][data-dirty][data-page-ready][data-demo-design-state]`
-  with an Editor/Roadmap tab bar
+  `[data-page="projects"][data-project-id][data-dirty][data-page-ready][data-demo-declaration-state="idle"|"changed"]`
+  — `changed` once a save in this visit changed `demoProcess`, which also renders
+  `[data-section="demo-declaration-changed"]`: the declaration IS the cycle input,
+  nothing is generated from it, and the banner points at `forge preflight <id>`'s
+  DEMO-SKILL to confirm it drives a checkpoint (forge-mfv5.2.8 retired
+  `data-demo-design-state="needed"` and its `forge run skill demo-design` prompt)
+  — with an Editor/Roadmap tab bar
   (`[data-tab="editor"|"roadmap"][data-tab-active="true"|"false"]
   [data-action="project-tab-editor"|"project-tab-roadmap"]`,
   `components/studio/project-builder/ProjectTabs.tsx`). The `data-action` half

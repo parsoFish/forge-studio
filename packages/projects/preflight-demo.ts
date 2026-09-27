@@ -44,7 +44,7 @@ export function checkDemo(dir: string): ClauseResult {
   const hasCapture = steps.some((s) => s.kind === 'capture');
   const hasVerify = steps.some((s) => s.kind === 'verify');
   if (!hasCapture || !hasVerify) {
-    return { ...base, pass: false, detail: `demoProcess needs ≥1 capture step and ≥1 verify step (found ${steps.length} step(s)). Run the demo-design skill to generate demo machinery. Advisory.` };
+    return { ...base, pass: false, detail: `demoProcess needs ≥1 capture step and ≥1 verify step (found ${steps.length} step(s)). Declare them — demoProcess is the sole cycle-time demo input, and the demo-builder session writes it. Advisory.` };
   }
   return { ...base, pass: true, detail: `demoProcess has ${steps.length} step(s) including capture + verify` };
 }
