@@ -23,6 +23,24 @@ function bullets(lines: readonly string[], empty: string): string[] {
   return lines.length > 0 ? lines.map((l) => `- ${l}`) : [`_${empty}_`];
 }
 
+/**
+ * The evidence lines for `## How`'s checkpoint list. A `changed` checkpoint
+ * that carries a `deltaExcerpt` (forge-1rk5.3) gets it fenced right under its
+ * row — the reader sees exactly what the normaliser did NOT hide, not a bare
+ * claim of "changed" to trust blind. Never emitted for `unchanged`/`unknown`.
+ */
+function checkpointEvidenceLines(checkpoints: readonly DemoModelCheckpoint[]): string[] {
+  if (checkpoints.length === 0) return ['_no evidence was captured for this class_'];
+  return checkpoints.flatMap((c) => {
+    const base = c.command ? `\`${c.command}\` — ${c.caption}` : `${c.label} — ${c.caption}`;
+    const row = c.delta ? `- ${base} (${DELTA_WORDS[c.delta]})` : `- ${base}`;
+    if (c.delta === 'changed' && c.deltaExcerpt) {
+      return [row, '', '```', c.deltaExcerpt, '```'];
+    }
+    return [row];
+  });
+}
+
 /** The delta flag in words, appended to a checkpoint's evidence row. */
 const DELTA_WORDS: Record<NonNullable<DemoModelCheckpoint['delta']>, string> = {
   changed: 'changed',
@@ -36,10 +54,6 @@ export function derivePrBody(model: DemoModel, input: DerivedDemoInput): string 
   const gateRows = input.gateEvidence.map(
     (row) => `- \`${row.cmd.join(' ')}\` (${row.gate}) — ${row.ok ? 'pass' : 'fail'}`,
   );
-  const checkpointRows = model.checkpoints.map((c) => {
-    const base = c.command ? `\`${c.command}\` — ${c.caption}` : `${c.label} — ${c.caption}`;
-    return c.delta ? `- ${base} (${DELTA_WORDS[c.delta]})` : `- ${base}`;
-  });
   const deltaSummary = deriveDeltaSummary(model.checkpoints);
 
   return [
@@ -74,7 +88,7 @@ export function derivePrBody(model: DemoModel, input: DerivedDemoInput): string 
     '',
     'Evidence captured:',
     '',
-    ...bullets(checkpointRows.map((r) => r.replace(/^- /, '')), 'no evidence was captured for this class'),
+    ...checkpointEvidenceLines(model.checkpoints),
     '',
     ...(deltaSummary ? [deltaSummary, ''] : []),
     `_Derived by forge from the acceptance criteria, the gate evidence and the diff — not authored by an agent._`,

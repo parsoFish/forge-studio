@@ -10,8 +10,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { deriveDemoModel, type DerivedDemoInput } from '../../phases/derive-demo-model.ts';
-import { validateDemoModel } from '../../demo-model.ts';
+import { deriveDemoModel, deriveDeltaSummary, type DerivedDemoInput } from '../../phases/derive-demo-model.ts';
+import { validateDemoModel, CAPTURE_NORMALISATION_RULES, type DemoModelCheckpoint } from '../../demo-model.ts';
 
 const CAPTURE_STEP = {
   kind: 'capture' as const,
@@ -224,5 +224,32 @@ describe('deriveDemoModel — the product of the derivation is a valid demo.json
     for (const field of ['title', 'essence', 'project'] as const) {
       assert.ok(String(model[field]).trim().length > 0, `${field} must be non-empty`);
     }
+  });
+});
+
+describe('deriveDeltaSummary — says what was ignored (forge-1rk5.3, CONTROL RED)', () => {
+  const checkpoint = (delta: DemoModelCheckpoint['delta']): DemoModelCheckpoint => ({
+    label: 'c',
+    caption: 'c',
+    delta,
+  });
+
+  it('kills "the normalisation is silent": the sentence names every CAPTURE_NORMALISATION_RULES rule, derived not retyped, plus the worktree token', () => {
+    const summary = deriveDeltaSummary([checkpoint('unchanged')]);
+    assert.ok(summary, 'expected a delta summary once a checkpoint carries a delta');
+    for (const rule of CAPTURE_NORMALISATION_RULES) {
+      assert.ok(summary!.includes(rule.name), `expected rule "${rule.name}" named in: ${summary}`);
+    }
+    assert.ok(summary!.includes('worktree path'), `expected the worktree token named in: ${summary}`);
+  });
+
+  it('kills "the normalisation line replaces the existing sentences": both the existing "no observable change" sentence and the new normalisation line are present', () => {
+    const summary = deriveDeltaSummary([checkpoint('unchanged')]);
+    assert.ok(summary!.includes('No observable behaviour change was captured.'));
+    assert.ok(summary!.includes('Command output compared after normalising:'));
+  });
+
+  it('kills "no capture yet still claims a normalisation ran": returns null when no checkpoint carries a delta', () => {
+    assert.equal(deriveDeltaSummary([{ label: 'c', caption: 'c' }]), null);
   });
 });

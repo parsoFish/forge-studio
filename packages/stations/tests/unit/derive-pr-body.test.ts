@@ -138,3 +138,37 @@ describe('derivePrBody — delta honesty (forge-mfv5.1.7, CONTROL RED)', () => {
     assert.doesNotMatch(body, /captured checkpoints changed behaviour/, 'unknown must never be counted as a "changed" checkpoint');
   });
 });
+
+describe('derivePrBody — deltaExcerpt evidence (forge-1rk5.3, CONTROL RED)', () => {
+  it('kills "a changed checkpoint hides its own evidence": its PR row carries the deltaExcerpt in a fenced block', () => {
+    const derived = deriveDemoModel(input());
+    assert.equal(derived.ok, true);
+    if (!derived.ok) return;
+    const model = {
+      ...derived.model,
+      checkpoints: derived.model.checkpoints.map((c) => ({
+        ...c,
+        delta: 'changed' as const,
+        deltaExcerpt: '- total commits: 4\n+ total commits: 5',
+      })),
+    };
+    const body = derivePrBody(model, input());
+    assert.match(
+      body,
+      /```\n- total commits: 4\n\+ total commits: 5\n```/,
+      `expected a fenced deltaExcerpt block in: ${body}`,
+    );
+  });
+
+  it('kills "an unchanged checkpoint gets a fabricated excerpt": no fenced block is emitted when delta is unchanged (deltaExcerpt absent)', () => {
+    const derived = deriveDemoModel(input());
+    assert.equal(derived.ok, true);
+    if (!derived.ok) return;
+    const model = {
+      ...derived.model,
+      checkpoints: derived.model.checkpoints.map((c) => ({ ...c, delta: 'unchanged' as const })),
+    };
+    const body = derivePrBody(model, input());
+    assert.doesNotMatch(body, /```\n-/, 'no deltaExcerpt fenced block for an unchanged checkpoint');
+  });
+});

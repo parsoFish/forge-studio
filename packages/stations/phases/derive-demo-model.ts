@@ -26,7 +26,7 @@ import type { DemoStep } from '@forge/contracts';
 import { extractDrivableCommand, extractDemoRoute } from '@forge/contracts';
 import type { MergeGateEvidence } from '@forge/flows';
 
-import type { DemoModel, DemoModelCheckpoint, TestResultRow } from '../demo-model.ts';
+import { CAPTURE_NORMALISATION_RULES, type DemoModel, type DemoModelCheckpoint, type TestResultRow } from '../demo-model.ts';
 import type { GateProfile } from '../class-profile-port.ts';
 
 /**
@@ -203,6 +203,13 @@ export function deriveDeltaSummary(checkpoints: readonly DemoModelCheckpoint[]):
   if (unknown.length > 0) {
     sentences.push(`${unknown.length} checkpoint(s) could not be compared: ${unknown.map((c) => c.label).join(', ')}`);
   }
+  // Say what was ignored (forge-1rk5.3): a checkpoint's before/after evidence was
+  // compared after normalising away capture noise, never raw bytes — name every
+  // `CAPTURE_NORMALISATION_RULES` rule (derived from the single list, never
+  // retyped here) plus the worktree-path token applied at capture, so a reader
+  // never has to trust "unchanged" blind.
+  const normalisedAway = [...CAPTURE_NORMALISATION_RULES.map((rule) => rule.name), 'worktree path'];
+  sentences.push(`Command output compared after normalising: ${normalisedAway.join(', ')}.`);
   return sentences.join(' ');
 }
 
