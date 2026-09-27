@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -46,6 +46,29 @@ test('a sidecar-sourced gate validates but is never written into project.json', 
   writeFileSync(join(dir, '.forge', 'quality_gate_cmd'), 'npm test\n');
   writeProjectConfigPatch(dir, () => ({ demoProcess: DECLARATION }), 'test: write');
   assert.deepEqual(readConfig(dir).testProcess, { local: { timeoutMs: 1000 } });
+});
+
+test('a .forge that escapes the project root is refused before anything is read or written', () => {
+  const outside = project({ name: 'outside' });
+  const dir = mkdtempSync(join(tmpdir(), 'project-config-write-escape-'));
+  symlinkSync(join(outside, '.forge'), join(dir, '.forge'));
+  let patchCalled = false;
+  assert.throws(
+    () => writeProjectConfigPatch(dir, () => { patchCalled = true; return { demoProcess: DECLARATION }; }, 'test: write'),
+    (err: unknown) => err instanceof ProjectConfigWriteError && err.reason === 'containment',
+  );
+  assert.equal(patchCalled, false, 'the patch never runs on an escaping path');
+  assert.deepEqual(readConfig(outside), { name: 'outside' });
+});
+
+test('an existing project.json that is not JSON is refused and left as it was', () => {
+  const dir = project({});
+  writeFileSync(join(dir, '.forge', 'project.json'), '{ not json');
+  assert.throws(
+    () => writeProjectConfigPatch(dir, () => ({ demoProcess: DECLARATION }), 'test: write'),
+    (err: unknown) => err instanceof ProjectConfigWriteError && err.reason === 'unreadable',
+  );
+  assert.equal(readFileSync(join(dir, '.forge', 'project.json'), 'utf8'), '{ not json');
 });
 
 test('a merged config that fails validation throws and writes nothing', () => {
