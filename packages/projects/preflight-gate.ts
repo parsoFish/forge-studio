@@ -269,7 +269,7 @@ function checkC7(cfg: ProjectConfig | null): ClauseResult {
     hard: false,
     pass: true,
     detail:
-      `acceptance tier declared (match "${acc.match}", required: ${acc.required}, ` +
+      `acceptance tier declared (match "${acc.match}", required per change class, ` +
       `${env.length === 0 ? 'creds-free' : `requiresEnv: ${env.join(',')}`}) — enforced by the PM phase + dev-loop`,
   };
 }

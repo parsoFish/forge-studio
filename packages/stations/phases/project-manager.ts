@@ -513,25 +513,24 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   }
   const itemErrorCount = Object.values(perItem).reduce((acc, errs) => acc + errs.length, 0);
 
-  // A2a (2026-06-06): live-acceptance-WI requirement (contract C7), scoped by
-  // class (ADR 051 decision 2 — a phase reads the class → gate-profile table;
-  // branching on a class NAME is a conformance failure). Required only when
-  // the initiative's class profile runs project tests at the merge boundary
-  // — a class with none (e.g. docs) has no behaviour to accept, so the rule
-  // is skipped and the skip is logged, never silent. Where it does apply, an
-  // initiative shipped with NO acceptance WI is still a hard PM failure.
+  // A2a (2026-06-06): live-acceptance-WI requirement (contract C7), decided
+  // by class (ADR 051 decision 2 as amended, bead forge-mfv5.3.5 — a phase
+  // reads the class → gate-profile table; branching on a class NAME is a
+  // conformance failure). The project declares the tier (`match`,
+  // `requiresEnv`); the class profile's `acceptance` column says whether this
+  // initiative must prove itself on it. `advisory` (docs — no live behaviour
+  // to prove) skips the rule and logs the skip, never silently. `required`
+  // with NO acceptance WI is a hard PM failure.
   let accGateViolation: string | null = null;
   const accGate = projectConfig?.acceptance_gate;
-  if (accGate?.required && items.length > 0) {
-    const runsMergeBoundaryTests =
-      requireClassProfiles(p.classProfiles, 'project-manager').profileFor(manifest.class).mergeBoundaryTest
-        .length > 0;
-    if (!runsMergeBoundaryTests) {
+  if (accGate && items.length > 0) {
+    const acceptance = requireClassProfiles(p.classProfiles, 'project-manager').profileFor(manifest.class).acceptance;
+    if (acceptance === 'advisory') {
       logger.emit({
         initiative_id: manifest.initiative_id, parent_event_id: parentEventId,
         phase: 'project-manager', skill: def.slug, event_type: 'log',
         input_refs: [], output_refs: [], message: 'pm.acceptance-wi-not-required',
-        metadata: { change_class: manifest.class, reason: 'class profile runs no merge-boundary tests' },
+        metadata: { change_class: manifest.class, reason: "the class profile's acceptance is advisory" },
       });
     } else {
       const hasLiveAccWi = items.some((it) =>

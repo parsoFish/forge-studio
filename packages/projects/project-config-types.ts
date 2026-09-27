@@ -26,15 +26,14 @@ export type LoggingConfig = {
  * decomposition to INCLUDE a live-acceptance WI: ≥1 work item whose
  * `quality_gate_cmd` targets the live acceptance suite. `match` is the
  * substring (any argv token contains it) that identifies such a gate; when
- * `required` is true the PM phase hard-fails the cycle if no emitted WI
- * carries a matching gate. The live test then runs as that WI's own per-WI
+ * the initiative's change class `requires` the tier (the class table's
+ * `acceptance` column, ADR 051 decision 2 as amended, bead forge-mfv5.3.5)
+ * the PM phase hard-fails the cycle if no emitted WI carries a matching gate. The live test then runs as that WI's own per-WI
  * gate during the dev-loop (with TF_ACC + creds from the serve env).
  */
 export type AcceptanceGateConfig = {
   /** Substring identifying a live-acceptance gate in a WI quality_gate_cmd. */
   match: string;
-  /** When true, every initiative must include ≥1 WI whose gate contains `match`. */
-  required: boolean;
   /**
    * Env vars that MUST be set for a matching (live-acceptance) gate to actually
    * run against the live system — e.g. `["TF_ACC"]`. When a WI's gate matches
@@ -96,8 +95,6 @@ export type TestProcessCi = {
 export type TestProcessAcceptance = {
   /** Substring identifying a live-acceptance gate in a WI quality_gate_cmd. */
   match: string;
-  /** When true, every initiative must include ≥1 WI whose gate contains `match`. */
-  required: boolean;
   /** Env vars that MUST be set for a matching gate to run live (else the gate ERRORS, never false-passes). */
   requiresEnv?: string[];
   /** Reserved: acceptance gates run as per-WI gates, so `FORGE_GATE_TIMEOUT_MS` semantics apply. */

@@ -12,8 +12,14 @@
  *   ci_gate            → testProcess.ci.cmd
  *   ci_fix_cmd         → testProcess.ci.fixCmd
  *   ci_gate_unset_env  → testProcess.ci.unsetEnv
- *   acceptance_gate    → testProcess.acceptance ({match, required,
- *                        requires_env → requiresEnv})
+ *   acceptance_gate    → testProcess.acceptance ({match,
+ *                        requires_env → requiresEnv}); its `required` is
+ *                        retired, not carried over, and the drop is reported
+ *                        (bead forge-mfv5.3.5: the class table decides)
+ *
+ * An already-nested contract that still carries the retired
+ * `testProcess.acceptance.required` loses exactly that key, reported with its
+ * value (bead forge-mfv5.3.5) — the loader's refusal names this command.
  *
  * Every OTHER key (unknown keys, `$…comment` keys, demo blocks) is preserved
  * byte-for-value; a present flat key whose value the mapping cannot carry
@@ -102,7 +108,11 @@ export function migrateProjectConfig(projectRoot: string): MigrateOutcome {
 
   const present = FLAT_KEYS.filter((k) => obj[k] !== undefined);
   if (present.length === 0) {
-    return { ok: false, reason: 'nothing-to-migrate', message: `${path} carries no flat gate keys — nothing to migrate` };
+    const retired = withoutRetiredAcceptanceRequired(obj);
+    if (retired === null) {
+      return { ok: false, reason: 'nothing-to-migrate', message: `${path} carries no flat gate keys and no retired key — nothing to migrate` };
+    }
+    return validateThenWrite(projectRoot, path, retired.migrated, [retired.moved]);
   }
   if (obj['testProcess'] !== undefined) {
     // The validator's "conflicting flat gate key(s) alongside testProcess"
@@ -146,15 +156,40 @@ export function migrateProjectConfig(projectRoot: string): MigrateOutcome {
     const g = gate as Record<string, unknown>;
     testProcess['acceptance'] = {
       match: g['match'],
-      required: g['required'],
       ...(g['requires_env'] !== undefined ? { requiresEnv: g['requires_env'] } : {}),
     };
     moved.push('acceptance_gate → testProcess.acceptance (requires_env → requiresEnv)');
+    if (g['required'] !== undefined) {
+      moved.push(`acceptance_gate.required (was ${JSON.stringify(g['required'])}) → retired, not carried over (${RETIRED_REQUIRED_REASON})`);
+    }
   }
 
   const migrated: Record<string, unknown> = { ...obj, testProcess };
   for (const k of FLAT_KEYS) delete migrated[k];
+  return validateThenWrite(projectRoot, path, migrated, moved);
+}
 
+const RETIRED_REQUIRED_REASON = "the change class's `acceptance` column decides, ADR 051 decision 2";
+
+/**
+ * Bead forge-mfv5.3.5: an ALREADY-NESTED contract (gitpulse's, betterado's)
+ * that still carries the retired `testProcess.acceptance.required`. The loader
+ * refuses it and names this command as the fix, so this is that fix: a copy
+ * with exactly that one key deleted, and the deletion reported with its value.
+ * `null` when there is no such key. Every other key keeps its value and order.
+ */
+function withoutRetiredAcceptanceRequired(obj: Record<string, unknown>): { migrated: Record<string, unknown>; moved: string } | null {
+  const tp = obj['testProcess'];
+  if (tp === null || typeof tp !== 'object' || Array.isArray(tp)) return null;
+  const acc = (tp as Record<string, unknown>)['acceptance'];
+  if (acc === null || typeof acc !== 'object' || Array.isArray(acc) || !('required' in acc)) return null;
+  const value = (acc as Record<string, unknown>)['required'];
+  const migrated = structuredClone(obj);
+  delete ((migrated['testProcess'] as Record<string, unknown>)['acceptance'] as Record<string, unknown>)['required'];
+  return { migrated, moved: `testProcess.acceptance.required (was ${JSON.stringify(value)}) → retired, deleted (${RETIRED_REQUIRED_REASON})` };
+}
+
+function validateThenWrite(projectRoot: string, path: string, migrated: Record<string, unknown>, moved: string[]): MigrateOutcome {
   // Validate BEFORE writing — sidecar injected into a validation COPY only
   // (the loader's own single-source rule; the sidecar is never mirrored into
   // the JSON). A config this would break is refused with the validator's text.

@@ -307,7 +307,7 @@ test('DEMO-ALIGN: capture referencing a test-process token (or test-evidence ele
   const { dir, forgeRoot, cleanup } = happyProject();
   try {
     writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({
-      testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance', required: false } },
+      testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance' } },
       demoProcess: [
         { kind: 'capture', text: 'Capture the acceptance run output.' },
         { kind: 'capture', text: 'Anything at all', element: 'test-evidence' },

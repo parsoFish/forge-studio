@@ -32,6 +32,7 @@ import {
   type WorkItem,
 } from '@forge/flows';
 import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
+import { liveAcceptanceEnvFor } from './live-acceptance-env.ts';
 import { type QueryFn, type ClaudeAgentOptions } from '@forge/agents';
 import { getAdapter, resolveSdkId } from '@forge/agents';
 import type { AgentInvocation } from '@forge/agents';
@@ -695,15 +696,9 @@ export async function runDeveloperLoop(
             const fallback = input.qualityGateCmd && input.qualityGateCmd.length > 0 ? input.qualityGateCmd : null;
             const effective = wiCmd ?? fallback;
             if (!effective) return undefined;
-            // Live-acc env guard: if this WI's gate targets the acc suite
-            // (matches the project's acceptance_gate.match) and the project
-            // declares requires_env, demand those vars be set — else the gate
-            // errors (can't validate live) instead of skip-and-false-passing.
-            const requiredEnv =
-              accGate?.requires_env && accGate.requires_env.length > 0 &&
-              effective.some((tok) => tok.includes(accGate!.match))
-                ? accGate.requires_env
-                : undefined;
+            // Live-acc env guard (`liveAcceptanceEnvFor`): a gate that targets
+            // the acc suite runs under requiresEnv whatever the class says.
+            const requiredEnv = liveAcceptanceEnvFor(accGate, effective);
             return makeQualityGateFromCmd(
               wiWorktree.path,
               effective,

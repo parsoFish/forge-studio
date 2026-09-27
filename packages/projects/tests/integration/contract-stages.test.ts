@@ -283,7 +283,7 @@ describe('deriveContractStages — secrets stage is NAMES ONLY (D3, AT-9..12)', 
     const projectsRoot = makeProjectsRoot();
     const dir = makeProjectDir(projectsRoot, 'secretsproj');
     writeProjectJson(dir, {
-      testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance', required: true, requiresEnv: ['TF_ACC', 'ADO_PAT'] } },
+      testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance', requiresEnv: ['TF_ACC', 'ADO_PAT'] } },
     });
     const rows = okRows(deriveContractStages({ forgeRoot: REPO_ROOT, projectsRoot, projectId: 'secretsproj' }));
     const secrets = byStage(rows, 'secrets');
@@ -308,7 +308,7 @@ describe('deriveContractStages — secrets stage is NAMES ONLY (D3, AT-9..12)', 
     const projectsRoot = makeProjectsRoot();
     const dir = makeProjectDir(projectsRoot, 'credsfreeproj');
     writeProjectJson(dir, {
-      testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance', required: true, requiresEnv: [] } },
+      testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance', requiresEnv: [] } },
     });
     const rows = okRows(deriveContractStages({ forgeRoot: REPO_ROOT, projectsRoot, projectId: 'credsfreeproj' }));
     const secrets = byStage(rows, 'secrets');
@@ -329,7 +329,7 @@ describe('deriveContractStages — secrets stage is NAMES ONLY (D3, AT-9..12)', 
     const projectsRoot = makeProjectsRoot();
     const dir = makeProjectDir(projectsRoot, 'credsfreeplusenv');
     writeProjectJson(dir, {
-      testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance', required: false, requiresEnv: [] } },
+      testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance', requiresEnv: [] } },
     });
     const SENTINEL = 'sentinel-value-that-must-never-appear-9f3a';
     writeFileSync(join(dir, 'secrets.env'), `LEAKED_NAME=${SENTINEL}\n`, 'utf8');
@@ -350,7 +350,7 @@ describe('deriveContractStages — secrets stage is NAMES ONLY (D3, AT-9..12)', 
     const projectsRoot = makeProjectsRoot();
     const dir = makeProjectDir(projectsRoot, 'realsecretsproj');
     writeProjectJson(dir, {
-      testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance', required: true, requiresEnv: ['SENTINEL_SECRET_NAME'] } },
+      testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance', requiresEnv: ['SENTINEL_SECRET_NAME'] } },
     });
     const SENTINEL_VALUE = 'TOP-SECRET-VALUE-DO-NOT-LEAK-71a3f9';
     writeFileSync(join(dir, 'secrets.env'), `SENTINEL_SECRET_NAME=${SENTINEL_VALUE}\n`, 'utf8');
@@ -557,7 +557,7 @@ describe('deriveContractStages — D11: presence, never a verdict (AT-23, AT-24)
     const lockedGeneration = 3;
     const lockedDeclaration = [{ kind: 'capture', text: 'Run `x`.' }];
     writeProjectJson(dir, {
-      testProcess: { local: { cmd: gateCmd }, acceptance: { match: 'acceptance', required: true, requiresEnv: ['X'] } },
+      testProcess: { local: { cmd: gateCmd }, acceptance: { match: 'acceptance', requiresEnv: ['X'] } },
       demoProcess: [{ kind: 'capture', text: 'x' }],
     });
     // Also exercise the two CONDITIONAL detail lines (compliance report,
@@ -623,7 +623,7 @@ describe('deriveContractStages — D11: presence, never a verdict (AT-23, AT-24)
     // ground; the value changed here because the RULE changed, and it is
     // recorded against the on-disk file rather than a fixture
     // (`projects/mdtoc/.forge/project.json`, `acceptance: {match:
-    // 'acceptance', required: true, requiresEnv: []}`).
+    // 'acceptance', requiresEnv: []}`).
     const secrets = byStage(rows, 'secrets');
     assert.equal(secrets.status, 'present');
     assert.deepEqual(secrets.detail, ['no environment variables are required — the acceptance tier declares none']);

@@ -391,7 +391,7 @@ remote exists.
 
 ---
 
-### C7 — External-resource model *(HARD when `testProcess.acceptance.required = true`)*
+### C7 — External-resource model *(HARD when `testProcess.acceptance` is declared and the initiative's change class requires it)*
 
 For projects whose behaviour can only be verified against a live external system,
 the done-signal must split into two tiers, both declared in `.forge/project.json`.
@@ -406,12 +406,19 @@ per-WI gate runs with live creds.
 Three structural seams in `.forge/project.json`, all nested under the typed
 `testProcess` object (R1-03-F1), make the two-tier model impossible to bypass:
 
-**`testProcess.acceptance: { match, required, requiresEnv }`** — when
-`required: true`, the PM phase hard-fails unless ≥ 1 emitted WI has a
-`quality_gate_cmd` token matching `match`. `requiresEnv` closes the
-false-pass hole: a matching gate whose listed env vars are unset is
-**errored**, not silently skipped. `requiresEnv` must list every var the
-test's `PreCheck` demands.
+**`testProcess.acceptance: { match, requiresEnv }`** — the project declares
+the tier; whether an initiative must prove itself on it is its change class's
+`acceptance` column in the class table (`packages/factory/class-profiles.ts`,
+ADR 051 decision 2 as amended, bead forge-mfv5.3.5): `required` for `code`,
+`config` and `infra`, `advisory` for `docs`. For a `required` class the PM
+phase hard-fails unless ≥ 1 emitted WI has a `quality_gate_cmd` token matching
+`match`. An `advisory` class is not forced to carry a live-acceptance WI.
+Whatever the class, `requiresEnv` closes the false-pass hole: a gate matching
+`match` whose listed env vars are unset is **errored**, not silently skipped —
+the guard never reads the class, so a mis-declared class cannot switch it off.
+`requiresEnv` must list every var the test's `PreCheck`
+demands. The project-wide `required` boolean this object once carried is
+retired and refused at load; `forge project migrate <project-id>` deletes it.
 
 **`standing_work_item_acs: string[]`** — verbatim testing invariants appended
 to every WI body as a `## Standing acceptance criteria (project contract)`
@@ -800,7 +807,7 @@ gates structurally cannot see.
 | C4 | `forge preflight` — **HARD** | `roadmap.md` (project repo) + `brain/projects/<name>/profile.md` (central forge repo) existence |
 | C5 | `forge preflight` — advisory | Constraints doc presence |
 | C6 | `forge preflight` — advisory | GitHub remote existence |
-| C7 | PM phase — **HARD** (when `required: true`) + dev-loop gate (`requiresEnv` guard) | `testProcess.acceptance` enforcement; `testProcess.ci.unsetEnv` on final delivery gate |
+| C7 | PM phase — **HARD** (when the initiative's change class's `acceptance` is `required`) + dev-loop gate (`requiresEnv` guard, same condition) | `testProcess.acceptance` enforcement; `testProcess.ci.unsetEnv` on final delivery gate |
 | C8 | `forge preflight` — advisory | `AGENTS.md` / `CLAUDE.md` presence **+ coverage (R1-04-F1): the file mentions the declared quality-gate command**; a miss routes to the instructions agent |
 | C9 | Hand-verified at onboarding; HARD for C7 projects (fixture review) | Not yet machine-checked |
 | C10 | Release flow + `forge preflight` — advisory (active when `releaseProcess` declared) | Draft changelog (PM standing AC) + pre-merge finalisation (release-finalizer) + CI release workflow installed; **R1-04-F2: preflight now asserts each declared step's substrate exists (`changelogPath` / `versionFile` / `docsDir`)** |
@@ -834,7 +841,7 @@ flow-ready — the flow engine will not accept it.
 | **C4** | `roadmap.md` at project root. Brain seeded with `profile.md`, release substrate context, failure-mode themes |
 | C5 | `CLAUDE.md`: never run `go build ./...`, never edit tests to pass, user owns git |
 | C6 | GitHub remote at `parsoFish/terraform-provider-betterado` |
-| C7 | `testProcess.acceptance: { match: "acceptancetests", required: true, requiresEnv: ["TF_ACC"] }`. `testProcess.ci.unsetEnv: ["TF_ACC"]`. Two `standing_work_item_acs`. Live tests: unique names, destroy on success/failure, `SharedReleaseFixture`, API GET read-back |
+| C7 | `testProcess.acceptance: { match: "acceptancetests", requiresEnv: ["TF_ACC"] }`. `testProcess.ci.unsetEnv: ["TF_ACC"]`. Two `standing_work_item_acs`. Live tests: unique names, destroy on success/failure, `SharedReleaseFixture`, API GET read-back |
 | C8 | Operator-authored `AGENTS.md` with exact `go test`/`make` invocations and hazard prohibitions — it names the declared local gate (the `.forge/quality_gate_cmd` sidecar `go test …`, matched by the `go test` needle), so the C8 coverage check passes |
 | C9 | `SharedReleaseFixture` uses non-default values (UUID prefix, explicit retention, explicit approvals). `TestCheckResourceAttr` + `ImportStateVerify: true` + `ExpectNonEmptyPlan: false` |
 | C10 | `releaseProcess` with in-cycle `changelog` + pre-merge `version` steps; `changelogPath` + `versionFile` substrate present (preflight asserts they exist) |

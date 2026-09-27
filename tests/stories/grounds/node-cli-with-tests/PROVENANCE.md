@@ -20,7 +20,7 @@ Regenerate the list with:
 git -C projects/gitpulse archive 8d853dc9e83ad30edddb7a6fcbfa90b1b1753054 | tar -tf -
 ```
 
-**Deviations from the source.** None. `git archive` of a tracked tree already excludes
+**Deviations from the source.** None in the snapshot. `git archive` of a tracked tree already excludes
 `node_modules/`, `dist/`, `coverage/` and every session-scratch directory
 (`_architect/`, `_demo/`, `_instructions/`, `_preflight-fix/`, `_project-brain/`) — all of them
 untracked or `.gitignore`d at this commit, so none of them was ever in the archive to drop.
@@ -29,6 +29,8 @@ brief named as things to keep, `.forge/quality_gate_cmd` and `.forge/demo`, do n
 own files at this SHA: the quality-gate command (`npm test`) lives in `.forge/project.json`'s
 `testProcess.local.cmd`, and the demo shape (`cli-diff`, `npm run demo`) lives in the same file's
 `demo` block. Both are carried because `.forge/project.json` is carried whole.
+
+- **Deviation (bead forge-mfv5.3.5):** snapshot + retired `testProcess.acceptance.required` removed by `forge project migrate` (forge-mfv5.3.5). One line of `seed/.forge/project.json` deleted (`"required": true,`); the parsed result equals what `migrateProjectConfig` writes on the pre-deviation seed. Method-C digest of `seed/` after it: **`b8bcac348a5aba3a`** (superseding `0d0dff0bc55c0d07`, stated above as the snapshot's digest).
 
 **Quality gate, checked before freezing.** `testProcess.local.cmd` is `["npm", "test"]`, which
 `package.json` resolves to `node --import tsx --test test/unit.test.ts`. Run inside a temp copy of

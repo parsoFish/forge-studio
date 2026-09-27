@@ -185,7 +185,7 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
     ci_gate: 'testProcess.ci.cmd',
     ci_fix_cmd: 'testProcess.ci.fixCmd',
     ci_gate_unset_env: 'testProcess.ci.unsetEnv',
-    acceptance_gate: 'testProcess.acceptance ({match, required, requiresEnv})',
+    acceptance_gate: 'testProcess.acceptance ({match, requiresEnv})',
   };
   const flatPresent = Object.keys(FLAT_GATE_KEY_MAPPING).filter((k) => obj[k] !== undefined);
   if (flatPresent.length > 0) {
@@ -207,7 +207,6 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
   const acceptance_gate: AcceptanceGateConfig | undefined = testProcess.acceptance
     ? {
         match: testProcess.acceptance.match,
-        required: testProcess.acceptance.required,
         ...(testProcess.acceptance.requiresEnv !== undefined
           ? { requires_env: testProcess.acceptance.requiresEnv }
           : {}),

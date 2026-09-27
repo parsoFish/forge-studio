@@ -83,6 +83,22 @@ export type GateProfile = {
    * stops. Without it "derive from the diff" is "unbounded".
    */
   reviewCeilingUsd: number;
+  /**
+   * Must an initiative of this class prove itself on the project's
+   * live-acceptance tier (`testProcess.acceptance`)? ADR 051 decision 2 as
+   * amended (bead forge-mfv5.3.5): this column replaced the project-wide
+   * `testProcess.acceptance.required` flag.
+   *
+   *   - `'required'` — the project manager must compile ≥1 work item whose
+   *     gate targets the tier's `match`, and the dev-loop refuses to run such
+   *     a gate without the tier's `requiresEnv`.
+   *   - `'advisory'` — neither is forced; a gate that targets the tier still
+   *     runs, but no work item is demanded and the env guard is not imposed.
+   *
+   * Both apply only when the project declares a live-acceptance tier. There is
+   * no third value: a "defer to the project" value would be the retired flag.
+   */
+  acceptance: 'required' | 'advisory';
 };
 
 /**
