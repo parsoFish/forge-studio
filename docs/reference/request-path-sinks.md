@@ -2941,20 +2941,37 @@ section, per this document's own rule.
 
 ### Delta honesty (forge-mfv5.1.7) — two files grow an EXISTING sink by re-reading/re-writing their own already-accepted paths
 
-`computeCheckpointDeltas` (`demo-model.ts`) and `reviseAfterCapture`
-(`integrate.ts`) add call sites, not new untrusted input: each reads or
-writes a path variable the SAME file already read or wrote, unconditionally,
-at an already-baselined call site.
+`computeCheckpointDeltas` (`demo-model.ts`, moved to `demo-delta.ts` at
+forge-1rk5.3 — see below) and `reviseAfterCapture` (`integrate.ts`) add call
+sites, not new untrusted input: each reads or writes a path variable the SAME
+file already read or wrote, unconditionally, at an already-baselined call
+site.
 
 | site | sink | request-derived input | class | guard |
 |---|---|---|---|---|
-| `packages/stations/demo-model.ts` (`checkpointDelta`) | `readFileSync` (+2) | `bundleDir` (`before`/`after` `.out` or `.filmstrip.png`) | guarded `[read]` | `bundleDir` is the same `<demoDir>/.capture` tree `collectCapturedMedia` already reads unconditionally in this file (its pre-existing, already-baselined `readFileSync` rows); `checkpointDelta` adds one more read of that tree, through the same `checkpointArtifactStem`-derived filename |
 | `packages/stations/phases/integrate.ts` (`reviseAfterCapture`) | `readFileSync` (+1) | `demoJsonAbs` | guarded `[read]` | `demoJsonAbs` is `worktreeDemoDir(input.worktreePath, input.initiativeId)` — the cycle's own worktree, the same shape the merge-boundary row above already accepts — and is the exact path `runIntegrateBand` already wrote earlier in this same function; `reviseAfterCapture` runs only after a successful, nonce-verified orchestrated capture |
 | `packages/stations/phases/integrate.ts` (`reviseAfterCapture`) | `writeFileSync` (+2) | `demoJsonAbs`, `prDescriptionAbs` | guarded `[read]` | both are re-writes of paths this function already wrote once earlier in the same call (`demoJsonAbs` at the top of `runIntegrateBand`, `prDescriptionAbs` right after) — no new path is constructed |
 
 `scripts/request-path-sinks.baseline.txt` accepts the grown counts via
 `--write` in the same commit that adds this section, per this document's own
 rule.
+
+### forge-1rk5.3 — `checkpointDelta`'s two reads move to `demo-delta.ts`, unchanged
+
+Normalising captured command output before comparing it (delta honesty; the
+new `CAPTURE_NORMALISATION_RULES` / `normaliseCapturedOutput` /
+`computeCheckpointDeltas`) pushed `demo-model.ts` over the repo's 800-line
+file cap, so `checkpointDelta` and its two `readFileSync` calls moved
+verbatim to a new sibling file, `packages/stations/demo-delta.ts` — same
+function body, same guard, no new input reaches it.
+
+| site | sink | request-derived input | class | guard |
+|---|---|---|---|---|
+| `packages/stations/demo-delta.ts` (`checkpointDelta`) | `readFileSync` (2) | `bundleDir` (`before`/`after` `.out` or `.filmstrip.png`) | guarded `[read]` | identical to the row this replaces: `bundleDir` is the same `<demoDir>/.capture` tree `demo-model.ts`'s `collectCapturedMedia` already reads unconditionally, reached through the same `checkpointArtifactStem`-derived filename — only the file it lives in changed |
+
+`packages/stations/demo-model.ts`'s own `readFileSync` count drops by 2 (the
+two calls that moved out); `scripts/request-path-sinks.baseline.txt` accepts
+both the drop and the new file's count via `--write` in the same commit.
 
 ### forge-mfv5.2.5 — the committed demo media reaches the PR: one new sink, one grown file
 
