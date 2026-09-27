@@ -201,8 +201,30 @@ function aggregateRunWithMapping(args: {
   const manifest = parseManifest(readFileSync(manifestPath, 'utf8'));
   const runStatus = QUEUE_STATE_TO_RUN_STATUS[queueState];
 
-  // For planned runs there's no cycle log yet
-  if (runStatus === 'planned') {
+  // A `pending`-queue manifest is a blank, never-run initiative when NO
+  // cycle has actually STARTED for it yet — which is not the same test as
+  // "does it carry a `cycle_id`". ADR 026 anchors a TRIGGERED initiative's
+  // `cycle_id` at mint time (`mint-triggered-initiative.ts`'s
+  // `mintAndPersistManifestCycleId`), before the scheduler ever claims it —
+  // that manifest sits in `pending/` with a real `cycle_id` and zero event
+  // history, and must still report the blank planned shape keyed by
+  // initiative id (pinned by `bridge-studio-triggers.test.ts`). Separately,
+  // `forge-requeue.ts`'s Resume and Requeue actions (bead forge-8vfn.8.1.43,
+  // ruling 1849, row 155) move an ALREADY-claimed manifest — one with a
+  // cycle log full of real history — back to `pending/` to await the
+  // scheduler's next claim, PRESERVING `cycle_id` across that move so the
+  // resumed cycle runs against the SAME log. Those two shapes are
+  // indistinguishable by `cycle_id` presence alone; the real signal is
+  // whether `_logs/<cycle_id>/events.jsonl` exists. Reporting the second
+  // shape through `makePlannedRun` swapped its `id` from the cycle id
+  // (every OTHER queue state, and this same run a moment earlier, reports
+  // it under) to the bare initiative id, and discarded its real
+  // phases/workItems — breaking any caller still tracking it by cycle id
+  // and blanking a still-resumable run's progress.
+  const pendingCycleId = manifest.cycle_id;
+  const pendingHasHistory =
+    pendingCycleId !== undefined && existsSync(join(resolve(root), '_logs', pendingCycleId, 'events.jsonl'));
+  if (runStatus === 'planned' && !pendingHasHistory) {
     return makePlannedRun(manifest);
   }
 
