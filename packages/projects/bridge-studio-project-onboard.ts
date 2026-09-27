@@ -54,7 +54,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import {
@@ -79,8 +79,9 @@ import {
 
 import { runPreflight } from './preflight.ts';
 import { scaffoldGreenfieldProject } from './project-create.ts';
-import { validateProjectConfig, readAgentInstructionsFile, readQualityGateSidecar, injectSidecarIntoTestProcess } from './project-config.ts';
-import { withStudioWrite, saveProjectRepo } from './project-repo-tx.ts';
+import { validateProjectConfig, readAgentInstructionsFile } from './project-config.ts';
+import { ProjectConfigWriteError, writeProjectConfigPatch } from './project-config-write.ts';
+import { saveProjectRepo } from './project-repo-tx.ts';
 import { checkContractArtifactContainment, scaffoldContractArtifacts, ScaffoldContainmentError } from './project-contract-scaffold.ts';
 
 /** Structural mirror of `@forge/knowledge`'s
@@ -581,19 +582,6 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
         sendJson(res, 400, { error: 'project path escapes forge root' }, origin);
         return true;
       }
-      // Guard `.forge/project.json` through the shared containment guard
-      // (cli/studio-path-guard.ts) instead of a lexical
-      // `startsWith(projectRoot + sep)` check — a symlinked `.forge` dir or a
-      // hardlinked project.json both passed that trivially (verified live,
-      // BLOCKER). `exists` also replaces the separate `existsSync` calls
-      // below so both agree on the same resolved path.
-      const pathGuard = resolveGuardedPath(projectRoot, ['.forge', 'project.json']);
-      if (!pathGuard.ok) {
-        sendJson(res, 400, { error: 'path traversal detected' }, origin);
-        return true;
-      }
-      const projectJsonPath = pathGuard.realPath;
-
       // 4. Parse request body
       let body: unknown;
       try {
@@ -608,67 +596,37 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
       }
       const b = body as Record<string, unknown>;
 
-      // 5. Load existing project.json (if present) and merge M2 fields over it
-      let existingRaw: Record<string, unknown> = {};
-      if (pathGuard.exists) {
-        try {
-          existingRaw = JSON.parse(readFileSync(projectJsonPath, 'utf8')) as Record<string, unknown>;
-        } catch (err) {
-          sendJson(res, 500, { error: sanitizeError(err) }, origin);
-          return true;
-        }
-      }
-
-      // Merge: only override M2 fields from body; preserve all other fields
-      const merged: Record<string, unknown> = { ...existingRaw };
-      if (typeof b['name'] === 'string') merged['name'] = b['name'];
-      if (typeof b['northStar'] === 'string') merged['northStar'] = b['northStar'];
+      // 5–7. Merge only the M2 fields the body carries over the stored file,
+      // validate, and write back committed to the project's forge-studio branch
+      // — `writeProjectConfigPatch`, the one project.json writer (its header
+      // says why it is shared). `.forge/project.json` is guarded there through
+      // the shared containment guard, never a lexical `startsWith` (a
+      // symlinked `.forge` dir or a hardlinked project.json both passed that
+      // trivially — verified live, BLOCKER).
       // AGENTS.md single-source (Stage A): when the project has an agent-instruction
       // file (AGENTS.md / CLAUDE.md), that file IS the instructions — never write a
       // divergent copy into project.json from the editor save (the UI binds the
       // panel read-only to AGENTS.md, but guard here too so any caller is safe).
       const hasAgentFile = readAgentInstructionsFile(projectRoot) !== null;
-      if (!hasAgentFile && typeof b['instructions'] === 'string') {
-        merged['instructions'] = b['instructions'];
-      }
-      if (Array.isArray(b['demoProcess'])) merged['demoProcess'] = b['demoProcess'];
-      if (Array.isArray(b['skills'])) merged['skills'] = b['skills'];
-      // kb can be string or null
-      if (b['kb'] !== undefined) merged['kb'] = b['kb'];
-
-      // 6. Validate the merged config (throws on invalid). Single-source the
-      // quality gate from the `.forge/quality_gate_cmd` sidecar for validation
-      // ONLY (same as loadProjectConfig) — a project that declares the gate in
-      // the sidecar legitimately omits it from project.json, so validate a copy
-      // with the sidecar injected, but write `merged` unchanged (no mirror).
-      const forValidation: Record<string, unknown> = { ...merged };
-      {
-        // ONE shared rule with the loader (injectSidecarIntoTestProcess) —
-        // the predicates previously diverged (review finding: a
-        // sidecar-sourced config declaring only local.timeoutMs loaded fine
-        // but 400'd every Studio save).
-        const sidecar = readQualityGateSidecar(projectRoot);
-        if (sidecar) injectSidecarIntoTestProcess(forValidation, sidecar);
-      }
+      let existingRaw: Record<string, unknown>;
       try {
-        validateProjectConfig(forValidation);
+        ({ previous: existingRaw } = writeProjectConfigPatch(projectRoot, () => ({
+          ...(typeof b['name'] === 'string' ? { name: b['name'] } : {}),
+          ...(typeof b['northStar'] === 'string' ? { northStar: b['northStar'] } : {}),
+          ...(!hasAgentFile && typeof b['instructions'] === 'string' ? { instructions: b['instructions'] } : {}),
+          ...(Array.isArray(b['demoProcess']) ? { demoProcess: b['demoProcess'] } : {}),
+          ...(Array.isArray(b['skills']) ? { skills: b['skills'] } : {}),
+          // kb can be string or null
+          ...(b['kb'] !== undefined ? { kb: b['kb'] } : {}),
+        }), 'forge-studio: update .forge/project.json'));
       } catch (err) {
-        sendJson(res, 400, { error: String(err) }, origin);
+        if (err instanceof ProjectConfigWriteError && err.reason !== 'unreadable') {
+          sendJson(res, 400, { error: err.reason === 'containment' ? 'path traversal detected' : err.message }, origin);
+        } else {
+          sendJson(res, 500, { error: sanitizeError(err) }, origin);
+        }
         return true;
       }
-
-      // 7. Write back (pretty, 2-space), committed to the project's forge-studio branch.
-      // Derive from the ALREADY-GUARDED real path, not a fresh lexical join.
-      const forgeDir = dirname(projectJsonPath);
-      if (!existsSync(forgeDir)) {
-        mkdirSync(forgeDir, { recursive: true });
-      }
-      withStudioWrite(
-        projectRoot,
-        'forge-studio: update .forge/project.json',
-        () => writeFileSync(projectJsonPath, JSON.stringify(merged, null, 2), 'utf8'),
-        ['.forge/project.json'],
-      );
 
       // R1-2: a "Save project" is the ONE durable save — merge the accumulated
       // forge-studio changes (this config edit + any preflight/instructions/demo
