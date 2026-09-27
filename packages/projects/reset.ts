@@ -46,10 +46,7 @@ import { basename, resolve } from 'node:path';
 import {
   FORGE_ROOT,
   guardedFile,
-  guardedReadFile,
   guardedRename,
-  listProjectStarters,
-  projectStartersDir,
   resolveGuardedPath,
   PathGuardContainmentError,
 } from '@forge/kernel';
@@ -74,6 +71,8 @@ import {
 } from './preflight.ts';
 import { resolveCommandRow, type CommandAdvisory } from './reset-command-resolve.ts';
 export type { CommandAdvisory } from './reset-command-resolve.ts';
+import { resolveAppTypeForReset } from './reset-report.ts';
+export { AppTypeUnresolvedError } from './reset-report.ts';
 
 // ---------------------------------------------------------------------------
 // Types (Q5's proposal, refined — see the deviations noted per field below)
@@ -161,12 +160,13 @@ export type DriftReport = {
    * required `string`; `null` is kept for that one genuinely-nothing-to-
    * compare-against case.
    *
-   * Every OTHER "can't resolve" case (starters exist, but neither an explicit
-   * `--app-type` nor a persisted `config.appType` names one — the shipped PR
-   * #289 defect) no longer produces a `DriftReport` with a fabricated/guessed
-   * value here; `computeContractDrift` THROWS `AppTypeUnresolvedError`
-   * instead (ruling 38 fix a) — see that class's doc for why a throw, not a
-   * report state.
+   * When starters exist but neither an explicit `--app-type` nor a persisted
+   * `config.appType` names one (the shipped PR #289 defect), `appType` is
+   * `null` here in exactly one further case (bead forge-mfv5.3.2, see
+   * `appTypeNote` + `reset-report.ts`'s header): every section resolves
+   * without needing a specific starter's opinion. Otherwise
+   * `computeContractDrift` still THROWS `AppTypeUnresolvedError` (ruling 38
+   * fix a) — see that class's doc for why a throw, not a report state.
    *
    * `appType` IS now persisted at creation (`scaffoldGreenfieldProject` →
    * `stampAppType`, ruling 38 fix c) and read here off `config.appType` — so a
@@ -176,6 +176,9 @@ export type DriftReport = {
    * for.
    */
   appType: string | null;
+  /** Set only for the forge-mfv5.3.2 no-app-type-needed case — never for the
+   *  older, separate "no starters exist anywhere" `null` case. */
+  appTypeNote?: string;
   /** The `forgeRoot` the drift was resolved against — carried so
    *  `applyContractReset`'s post-write `runPreflight` uses the SAME root
    *  (not in Q5's proposal; needed so the two-phase call doesn't have to
@@ -203,107 +206,9 @@ export type ResetResult = {
 // computeContractDrift — PURE. Reads the tree; writes nothing, spawns nothing.
 // ---------------------------------------------------------------------------
 
-/**
- * Ruling 38 fix (a), M4-projects-reset — thrown by `resolveAppType` (and so by
- * `computeContractDrift`) whenever this project's app type cannot be pinned
- * to a real starter: either an EXPLICIT `--app-type`/`opts.appType` (or a
- * PERSISTED `config.appType`, fix c) names something `listProjectStarters`
- * doesn't have, or — the shipped PR #289 defect this closes — NEITHER was
- * given at all while starters DO exist, which used to fall back to a guessed
- * default (`cli`, or the first one alphabetically) instead of
- * refusing.
- *
- * SHAPE CHOSEN: a thrown, exported, typed `Error` subclass — not a
- * `DriftReport` field/state. Reasoning (stated once here, not re-litigated at
- * each call site): `computeContractDrift`'s ordinary return type IS a
- * `DriftReport`; overloading that same return type to ALSO mean "unresolved,
- * do not trust the rows" (e.g. a sentinel `appType: 'unresolved'`, or a
- * `rows: []`) would make it possible for a careless caller to read `.rows`
- * off a report that was never actually computed — precisely the false-green
- * shape fix (a) exists to prevent. A thrown, named class makes that
- * impossible: a caller either gets a real `DriftReport` or an exception,
- * never a report-shaped placeholder. `availableAppTypes` is carried as a
- * field (not just interpolated into `.message`) so a programmatic caller —
- * the Studio "Rebuild contract" route this module's header anticipates — can
- * render the real starter list without parsing prose out of an error string.
- * `instanceof AppTypeUnresolvedError` also lets a caller (or the CLI) treat
- * this ONE condition distinctly from every other throw in this module (a
- * malformed config, a containment rejection, an unresolvable projectDir) —
- * all of which stay plain `Error`s, since only this one has a concrete,
- * actionable remedy (`--app-type <one of these>`) worth surfacing structured.
- */
-export class AppTypeUnresolvedError extends Error {
-  readonly availableAppTypes: string[];
-  constructor(message: string, availableAppTypes: string[]) {
-    super(message);
-    this.name = 'AppTypeUnresolvedError';
-    this.availableAppTypes = availableAppTypes;
-  }
-}
-
-/**
- * Resolve the app-type starter to diff against. `requested` is the explicit
- * `--app-type`/`opts.appType`; `persisted` is `config.appType` (ruling 38 fix
- * c) — `requested` wins when both are given (an operator override beats a
- * stale on-disk declaration, e.g. after a language migration).
- *
- *   - EITHER is given and isn't a real starter ⇒ throws `AppTypeUnresolvedError`
- *     (unchanged shape for the explicit case; now also covers a persisted-but-
- *     stale value).
- *   - Neither is given, and NO starters exist at all under `forgeRoot` (a
- *     bare/test forgeRoot) ⇒ `null`. Unaffected by this fix — there is
- *     nothing to compare against, so nothing to guess wrong; see
- *     `reset-containment.test.ts`'s own note on this case.
- *   - Neither is given, and starters DO exist ⇒ throws
- *     `AppTypeUnresolvedError`. THIS is fix (a): guessing a default here was
- *     the shipped defect (PR #289) — a Go/Terraform project silently treated
- *     as `cli`, its whole test/release contract rewritten into
- *     another language's. "No appType known" is no longer an ordinary,
- *     silently-resolved outcome; the operator must say so explicitly.
- */
-function resolveAppType(forgeRoot: string, requested: string | undefined, persisted: string | undefined): string | null {
-  const available = listProjectStarters(forgeRoot);
-  const explicit = requested ?? persisted;
-  if (explicit !== undefined) {
-    if (!available.includes(explicit)) {
-      throw new AppTypeUnresolvedError(
-        `reset: unknown appType "${explicit}" — available: ${available.join(', ') || '(none)'}`,
-        available,
-      );
-    }
-    return explicit;
-  }
-  if (available.length === 0) return null;
-  throw new AppTypeUnresolvedError(
-    `reset: cannot determine this project's app type — .forge/project.json has no persisted appType and none was given. ` +
-      `Pass --app-type explicitly (available: ${available.join(', ')})`,
-    available,
-  );
-}
-
-/**
- * Read `<forgeRoot>/studio/starters/projects/<appType>/.forge/project.json`
- * and validate it — the SAME `validateProjectConfig` every other config
- * consumer uses (ruling 5: the starter's own project.json + the validator's
- * schema are the machine-readable source; `project.json.example` is
- * documentation this module never parses). Template tokens (`{{NAME}}` etc.)
- * only ever appear in `name`/`northStar`/`instructions`/`kb` — none of which
- * this module reads from a starter — so validating the raw, unsubstituted
- * JSON is safe.
- */
-function loadStarterConfig(forgeRoot: string, appType: string): ProjectConfig | null {
-  const startersRoot = projectStartersDir(forgeRoot);
-  const raw = guardedReadFile(startersRoot, [appType, '.forge', 'project.json']);
-  if (raw === null) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  return validateProjectConfig(parsed);
-}
-
+/** `AppTypeUnresolvedError`/`resolveAppType`/`loadStarterConfig` moved to
+ *  `reset-report.ts` (bead forge-mfv5.3.2, 800-line cap) — see that file's
+ *  `resolveAppTypeForReset`, its replacement, re-exported above. */
 function jsonEqual(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
@@ -559,24 +464,13 @@ export function computeContractDrift(
 
   const config = loadProjectConfig(dir); // ProjectConfig | null; propagates a malformed-config throw
 
-  const appType = resolveAppType(forgeRoot, opts.appType, config?.appType);
-  const starter = appType ? loadStarterConfig(forgeRoot, appType) : null;
-  // When NO starter resolves at all (no `studio/starters/projects/` entries
-  // under `forgeRoot`), there is no template to regenerate from — every
-  // field must fall back to 'protected' regardless of its declared mode, or
-  // 'unconditional' would clear a project's own valid declarations to
-  // `undefined` for want of ANY comparison basis (a real bug this module's
-  // own containment tests caught: `reset-containment.test.ts` deliberately
-  // runs against a starter-less forgeRoot).
-  const mode = (m: RegenMode): RegenMode => (starter ? m : 'protected');
-
-  // Every starter forge ships, not only the matched one — bead 6.4's question
-  // ("does this value match ANY template?") is not answerable from one.
-  // `undefined`s are dropped: a starter that is silent on a section offers no
-  // basis to judge against, and an empty basis never claims hand-authored.
-  const everyStarter = listProjectStarters(forgeRoot)
-    .map((id) => loadStarterConfig(forgeRoot, id))
-    .filter((s): s is ProjectConfig => s !== null);
+  // bead forge-mfv5.3.2: required only when some section would actually
+  // regenerate FROM a starter — see `reset-report.ts`'s header + ruling.
+  const resolution = resolveAppTypeForReset(forgeRoot, opts.appType, config?.appType, config);
+  const { appType, starter, everyStarter, appTypeNote } = resolution;
+  // `isFullyProtected` collapses every mode (no comparison basis at all —
+  // `reset-containment.test.ts`); otherwise the declared mode runs as-is.
+  const mode = (m: RegenMode): RegenMode => (resolution.isFullyProtected ? 'protected' : m);
   const across = (pick: (s: ProjectConfig) => unknown): unknown[] =>
     everyStarter.map(pick).filter((value) => value !== undefined);
 
@@ -608,7 +502,7 @@ export function computeContractDrift(
 
   const gitignoreDrift = computeGitignoreDrift(dir);
 
-  return { projectDir: dir, projectId, appType, forgeRoot, rows: resolvedRows, skillMoves, gitignoreDrift, commandAdvisories };
+  return { projectDir: dir, projectId, appType, appTypeNote, forgeRoot, rows: resolvedRows, skillMoves, gitignoreDrift, commandAdvisories };
 }
 
 // ---------------------------------------------------------------------------

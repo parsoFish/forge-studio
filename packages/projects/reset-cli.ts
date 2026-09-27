@@ -34,7 +34,7 @@ import {
 
 function printDriftReport(drift: DriftReport): void {
   console.log(`project: ${drift.projectId}`);
-  console.log(`app type: ${drift.appType ?? '(unresolved — no starter matched; regeneration limited to what is already declared)'}`);
+  console.log(`app type: ${drift.appType ?? drift.appTypeNote ?? '(unresolved — no starter matched; regeneration limited to what is already declared)'}`);
   console.log('');
   console.log('drift report:');
   for (const row of drift.rows) {

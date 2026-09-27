@@ -24,11 +24,23 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { computeContractDrift, AppTypeUnresolvedError } from '../../reset.ts';
 import { projectStartersDir } from '@forge/kernel';
 import { FORGE_ROOT } from '@forge/kernel';
+
+// bead forge-mfv5.3.2's own fixture: the S3 ground (a hand-authored Go/
+// Terraform provider). Fixture seeds are provenance-pinned — read-only, copied
+// to a tmp dir, never edited in place.
+const S3_FIXTURE_SEED = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', 'tests', 'stories', 'grounds', 'go-provider-old-contract', 'seed');
+
+function copyS3Fixture(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'reset-s3-fixture-'));
+  cpSync(S3_FIXTURE_SEED, dir, { recursive: true });
+  return dir;
+}
 
 function isolatedForgeRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'reset-apptype-forge-'));
@@ -158,5 +170,51 @@ test('computeContractDrift: zero starters under forgeRoot (the already-fixed cas
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
     rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
+// ── bead forge-mfv5.3.2: an app type is required ONLY when some section ────
+// would actually be regenerated FROM a starter — never merely because none
+// was given while starters exist (that was fix (a)'s own over-broad net).
+
+test('computeContractDrift on the S3 hand-authored ground succeeds with NO appType: "no app type needed", and no contract section is touched', () => {
+  const dir = copyS3Fixture();
+  try {
+    const drift = computeContractDrift(dir, { forgeRoot: FORGE_ROOT });
+    assert.equal(drift.appType, null, 'a hand-authored ground names no starter');
+    assert.equal(drift.appTypeNote, 'no app type needed: every section is hand-authored');
+    for (const row of drift.rows) {
+      if (row.section === 'skills') continue; // a filesystem relocation, independent of appType
+      assert.ok(
+        row.action === 'preserve' || row.action === 'unchanged',
+        `section "${row.section}" is "${row.action}" with no appType given — a contract section would be regenerated FROM a starter with no operator choice behind it`,
+      );
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('computeContractDrift on the S3 ground still REFUSES with no appType when a section (here, demoProcess) would come from a starter', () => {
+  const dir = copyS3Fixture();
+  try {
+    // Strip the ground's own hand-authored demoProcess: every shipped starter
+    // DOES declare one, so this section can no longer resolve without picking
+    // a specific starter to fill it — the ambiguity fix (a) still refuses.
+    const configPath = join(dir, '.forge', 'project.json');
+    const raw = JSON.parse(readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+    delete raw.demoProcess;
+    writeFileSync(configPath, `${JSON.stringify(raw, null, 2)}\n`);
+
+    assert.throws(
+      () => computeContractDrift(dir, { forgeRoot: FORGE_ROOT }),
+      (err: unknown) => {
+        assert.ok(err instanceof AppTypeUnresolvedError, `expected AppTypeUnresolvedError, got ${err}`);
+        assert.match((err as Error).message, /--app-type/, 'today\'s message — unchanged by forge-mfv5.3.2');
+        return true;
+      },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
