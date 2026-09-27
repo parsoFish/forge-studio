@@ -54,10 +54,10 @@ operator-ratified new cap — never a silent raise.
 
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
-| `contracts` | 6 | 1,404 | **1,369** | ratified 1,369 — forge-mfv5.2.2 demo-declaration rules (command/route extraction, presentation-only skill ids) shared by stations, factory and projects, +106 on 1,263 (T1 1626); see git history for prior raises. |
+| `contracts` | 6 | 1,404 | **1,404** | ratified 1,404 — forge-mfv5.2.8 the whole-declaration drive rule lives once in contracts and DEMO-SKILL applies it (the demo-builder lock validates with it), +35 on 1,369, lane-ratified under ruling 666; see git history for prior raises. |
 | `kernel` | 30 | 5,513 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `projects` | 46 | 10,830 | **9,115** | ratified 9,115 — forge-1rk5.3 row 131 DEPS: node preloading a package (--import/--require/-r/--loader) needs node_modules, +17 on 9,098, lane-ratified under ruling 666; see git history for prior raises. |
+| `projects` | 46 | 10,830 | **9,149** | ratified 9,149 — forge-mfv5.2.8 the demo-builder lock writes demoProcess through the one project.json merge-writer, validated by the shared drive rule, +34 on 9,115, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,213 | **13,213** | ratified 13,213 — forge-1rk5.3 row 145 the safety-net commit is bounded by the WI's scope (restore tracked out-of-scope, leave untracked, report both), +110 on 13,103 (T1 1748); see git history for prior raises. |
 | `sessions` | 61 | 20,402 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
