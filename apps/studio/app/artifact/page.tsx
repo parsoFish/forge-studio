@@ -61,6 +61,7 @@ import { ArchitectPlanGate } from '@/components/studio/artifact/ArchitectPlanGat
 
 import { fetchRunLookup, fetchStudioFlows, type Run, type Flow } from '@/lib/studio-client';
 import { useArchitectSessionPoll } from '@/lib/use-architect-session';
+import { useReflectionPoll } from '@/lib/use-reflection-poll';
 import { fetchDemoModel, fetchWorkItem, fetchReflection, fetchArchitectSessions, resolveBridgeUrl, bridgeFetch, type DemoModel, type ReflectionData, type ArchitectSessionSummary } from '@/lib/bridge-client';
 import { resolveArtifactMode, isRunNotFound, deriveArtifactEmptyReason, type ArtifactEmptyReason } from '@/lib/artifact-mode';
 import { planArtifactRequests, type ArtifactRequestPlan } from '@/lib/artifact-request-plan';
@@ -721,13 +722,11 @@ function ArtifactPageInner() {
       }
 
       // For reflection: fetch the live Stage-2 questions (user-questions.json)
-      // so the operator can answer them in-place. The read-only reflection.json
-      // artifact is fetched separately above for the renderer.
-      // W8-A2 (crosscut-08): NOT `.catch(() => null)` any more — `null` here
-      // renders ReflectionGate's "No reflection questions filed for this
-      // cycle yet." (an absence claim). `fetchReflection` already throws on
-      // any non-404 failure (bridgeReadOr404); let it propagate to this
-      // function's own catch instead of fabricating that claim.
+      // so the operator can answer them in-place (the read-only reflection.json
+      // artifact is fetched separately above for the renderer). W8-A2: `null`
+      // here is an honest "no questions yet" (fetchReflection throws on any
+      // non-404 failure instead of fabricating that claim) — forge-8vfn.8.1.42
+      // /ruling 1849's useReflectionPoll (below) keeps re-fetching until it isn't.
       let refl: ReflectionData | null = null;
       if (type === 'reflection') {
         refl = await fetchReflection(artifactId);
@@ -825,6 +824,7 @@ function ArtifactPageInner() {
   // → awaiting-verdict remounts it). Drives the harness's beat-8 detach→reattach
   // lifecycle without a page reload, and resets the gate's submitted state.
   useArchitectSessionPoll(runId, isArchitect, (s) => { setArchSession(s); setArchSessionResolved(true); });
+  useReflectionPoll(artifactRunId, type === 'reflection', reflectionData, setReflectionData);
 
   // Back-to-monitor link. Only deep-link to /flows/<id> when that flow STILL
   // EXISTS — retired flows (release-refine, forge-cycle-with-review) would 404.
