@@ -72,13 +72,15 @@ renders live in the Studio project builder (the `ContractReadiness` panel).
 
 If your project has a live/external acceptance tier (e.g. a Terraform provider
 hitting a real API), declare a `testProcess.acceptance` block in `.forge/project.json`
-with `requiresEnv` listing every variable a live gate needs:
+with `requiresEnv` listing every variable a live gate needs. Whether an
+initiative must carry a live-acceptance work item is decided by its change
+class, not by this block: code, config and infra initiatives must; docs
+initiatives are not forced to.
 
 ```jsonc
 "testProcess": {
   "acceptance": {
     "match": "TF_ACC=1",
-    "required": true,
     "requiresEnv": ["TF_ACC", "AZDO_ORG_SERVICE_URL", "AZDO_PERSONAL_ACCESS_TOKEN"]
   }
 }

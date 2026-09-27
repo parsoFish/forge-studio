@@ -159,7 +159,7 @@ function sdkFallbackEventSink(
  * forced: the tier may still run, without the demand. `undefined` = no demand.
  */
 export function liveAcceptanceEnvFor(
-  accGate: Pick<AcceptanceGateConfig, 'match' | 'requires_env'> | undefined,
+  accGate: AcceptanceGateConfig | undefined,
   acceptance: GateProfile['acceptance'],
   gateCmd: readonly string[],
 ): string[] | undefined {

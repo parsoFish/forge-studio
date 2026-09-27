@@ -52,7 +52,10 @@ test('AT-B6-7 migrate: the gitpulse shape → typed testProcess; unknown + $comm
     assert.equal(after['acceptance_gate'], undefined, 'flat key removed');
     const tp = after['testProcess'] as Record<string, unknown>;
     assert.deepEqual(tp['local'], { cmd: ['npm', 'test'] });
-    assert.deepEqual(tp['acceptance'], { match: 'acceptance', required: true, requiresEnv: [] }, 'requires_env renamed to requiresEnv');
+    assert.deepEqual(tp['acceptance'], { match: 'acceptance', requiresEnv: [] }, 'requires_env renamed to requiresEnv');
+    // forge-mfv5.3.5: `required` is retired — the class table's `acceptance`
+    // column decides. It is not carried over, and the drop is REPORTED.
+    assert.ok(out.ok && out.moved.some((m) => m.includes('acceptance_gate.required') && m.includes('retired')), 'the retired required key must be reported, never silently dropped');
     // Preservation: unknown/legacy/$comment keys survive byte-for-value.
     assert.equal(after['$comment'], GITPULSE_SHAPE['$comment']);
     assert.deepEqual(after['demo'], GITPULSE_SHAPE['demo']);

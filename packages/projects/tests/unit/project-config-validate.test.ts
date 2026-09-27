@@ -58,13 +58,13 @@ test('validateProjectConfig: testProcess.ci.unsetEnv + standing_work_item_acs + 
     testProcess: {
       local: { cmd: ['true'] },
       ci: { cmd: ['true'], unsetEnv: ['TF_ACC'] },
-      acceptance: { match: 'acceptancetests', required: true, requiresEnv: ['TF_ACC'] },
+      acceptance: { match: 'acceptancetests', requiresEnv: ['TF_ACC'] },
     },
     standing_work_item_acs: ['live acc test', 'CI must be green'],
   });
   assert.deepEqual(cfg.ci_gate_unset_env, ['TF_ACC']);
   assert.deepEqual(cfg.standing_work_item_acs, ['live acc test', 'CI must be green']);
-  assert.deepEqual(cfg.acceptance_gate, { match: 'acceptancetests', required: true, requires_env: ['TF_ACC'] });
+  assert.deepEqual(cfg.acceptance_gate, { match: 'acceptancetests', requires_env: ['TF_ACC'] });
 });
 
 test('validateProjectConfig: the three A2/A3 seams are optional (absent ⇒ undefined)', () => {
@@ -124,23 +124,10 @@ test('validateProjectConfig: testProcess.acceptance requires a non-empty match',
       validateProjectConfig({
         testProcess: {
           local: { cmd: ['true'] },
-          acceptance: { required: true },
+          acceptance: {},
         },
       }),
     /testProcess\.acceptance\.match/,
-  );
-});
-
-test('validateProjectConfig: testProcess.acceptance.required must be a boolean', () => {
-  assert.throws(
-    () =>
-      validateProjectConfig({
-        testProcess: {
-          local: { cmd: ['true'] },
-          acceptance: { match: 'acceptancetests', required: 'yes' },
-        },
-      }),
-    /testProcess\.acceptance\.required/,
   );
 });
 
@@ -695,7 +682,7 @@ test('validateProjectConfig: timeoutMs fields parse (positive int) and reject no
     testProcess: {
       local: { cmd: ['npm', 'test'], timeoutMs: 60000 },
       ci: { cmd: ['make', 'ci'], timeoutMs: 1200000 },
-      acceptance: { match: 'acc', required: false, timeoutMs: 900000 },
+      acceptance: { match: 'acc', timeoutMs: 900000 },
     },
   });
   assert.equal(cfg.testProcess.local.timeoutMs, 60000);
@@ -714,7 +701,7 @@ test('validateProjectConfig: derived flat accessors equal the declared testProce
     testProcess: {
       local: { cmd: ['npm', 'test'] },
       ci: { cmd: ['make', 'ci'], fixCmd: ['make', 'fmt'], unsetEnv: ['TF_ACC'] },
-      acceptance: { match: 'acceptance', required: true, requiresEnv: ['TF_ACC'] },
+      acceptance: { match: 'acceptance', requiresEnv: ['TF_ACC'] },
     },
   });
   assert.deepEqual(cfg.quality_gate_cmd, cfg.testProcess.local.cmd);
@@ -723,7 +710,6 @@ test('validateProjectConfig: derived flat accessors equal the declared testProce
   assert.deepEqual(cfg.ci_gate_unset_env, cfg.testProcess.ci?.unsetEnv);
   assert.deepEqual(cfg.acceptance_gate, {
     match: 'acceptance',
-    required: true,
     requires_env: ['TF_ACC'],
   });
 });

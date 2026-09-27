@@ -100,9 +100,6 @@ export function parseTestProcess(value: unknown): TestProcess {
       if (typeof a.match !== 'string' || a.match.trim() === '') {
         throw new Error('project-config: `testProcess.acceptance.match` must be a non-empty string');
       }
-      if (typeof a.required !== 'boolean') {
-        throw new Error('project-config: `testProcess.acceptance.required` must be a boolean');
-      }
       let requiresEnv: string[] | undefined;
       if (a.requiresEnv !== undefined) {
         if (
@@ -118,7 +115,6 @@ export function parseTestProcess(value: unknown): TestProcess {
       const accTimeout = parseTimeoutMs(a.timeoutMs, 'testProcess.acceptance.timeoutMs');
       acceptance = {
         match: a.match,
-        required: a.required,
         ...(requiresEnv !== undefined ? { requiresEnv } : {}),
         ...(accTimeout !== undefined ? { timeoutMs: accTimeout } : {}),
       };

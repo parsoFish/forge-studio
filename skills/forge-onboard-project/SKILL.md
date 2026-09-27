@@ -148,10 +148,12 @@ into `.forge/project.json` — refused, with the reason, unless they pass the sa
 If behaviour can only be verified live: a creds-free in-loop gate (mocks/in-process)
 plus a confirmation layer (create→confirm→destroy, prefixed/randomized names,
 orphan sweep, creds out-of-band → env). Make the per-WI testing contract structural
-via three `.forge/project.json` fields — `testProcess.acceptance.{match,required,
+via three `.forge/project.json` fields — `testProcess.acceptance.{match,
 requiresEnv}`, `standing_work_item_acs`, `testProcess.ci.unsetEnv` — each field's
 exact contract is `docs/schemas/project-config.schema.json` (C7, ADR 017 amendment
-2026-05-31).
+2026-05-31). Do not write a `required` key: whether an initiative must carry a
+live-acceptance WI is its change class's `acceptance` column (ADR 051), and the
+key is refused at load.
 Compose the project linter into the live-acc per-WI gate (its gate is the acceptance
 test, which omits lint). Enforce C9 on the live tier: UUID-prefixed resources,
 teardown on success AND failure, a `PreCheck` that `t.Fatal`s on absent creds, a

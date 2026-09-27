@@ -12,8 +12,10 @@
  *   ci_gate            → testProcess.ci.cmd
  *   ci_fix_cmd         → testProcess.ci.fixCmd
  *   ci_gate_unset_env  → testProcess.ci.unsetEnv
- *   acceptance_gate    → testProcess.acceptance ({match, required,
- *                        requires_env → requiresEnv})
+ *   acceptance_gate    → testProcess.acceptance ({match,
+ *                        requires_env → requiresEnv}); its `required` is
+ *                        retired, not carried over, and the drop is reported
+ *                        (bead forge-mfv5.3.5: the class table decides)
  *
  * Every OTHER key (unknown keys, `$…comment` keys, demo blocks) is preserved
  * byte-for-value; a present flat key whose value the mapping cannot carry
@@ -146,10 +148,12 @@ export function migrateProjectConfig(projectRoot: string): MigrateOutcome {
     const g = gate as Record<string, unknown>;
     testProcess['acceptance'] = {
       match: g['match'],
-      required: g['required'],
       ...(g['requires_env'] !== undefined ? { requiresEnv: g['requires_env'] } : {}),
     };
     moved.push('acceptance_gate → testProcess.acceptance (requires_env → requiresEnv)');
+    if (g['required'] !== undefined) {
+      moved.push("acceptance_gate.required → retired, not carried over (the change class's `acceptance` column decides, ADR 051 decision 2)");
+    }
   }
 
   const migrated: Record<string, unknown> = { ...obj, testProcess };
