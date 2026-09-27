@@ -768,3 +768,11 @@ test('N2: the capture stamp survives coerceDemoModel and renderDemoBundle live-e
   const { model: coerced } = coerceDemoModel(stamped);
   assert.equal((coerced as DemoModel).capture?.nonce, 'nonce-persist');
 });
+
+// forge-1rk5.3 row 144: node:test prints the run's TOTAL as a TAP summary line `# duration_ms N` (no colon); a
+// behaviour-preserving control run read "changed" on that line alone.
+test('normaliseCapturedOutput: the TAP run-summary `# duration_ms N` is normalised like the per-test form', () => {
+  assert.equal(normaliseCapturedOutput('# duration_ms 189.355513'), normaliseCapturedOutput('# duration_ms 201.657745'));
+  assert.notEqual(normaliseCapturedOutput('# pass 16'), normaliseCapturedOutput('# pass 15'), 'a real count change still differs');
+});
+
