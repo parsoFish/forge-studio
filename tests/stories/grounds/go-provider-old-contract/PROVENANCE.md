@@ -163,6 +163,7 @@ than copied from the old seed, for a clean chain of custody) was safe.
 
 **Deviations from the source.**
 
+- **Deviation (bead forge-mfv5.3.5):** snapshot + retired `testProcess.acceptance.required` removed by `forge project migrate` (forge-mfv5.3.5). One line of `seed/.forge/project.json` deleted (`"required": false,`); the parsed result equals what `migrateProjectConfig` writes on the pre-deviation seed. Method-C digest of `seed/` after it: **`811099b8c4e05f80`** (superseding `94e16fb026da34b0`, stated above as the snapshot's digest).
 - **CLAUDE.md does not exist in this repo — carried `AGENTS.md` instead.** Unchanged reasoning from the
   prior PROVENANCE: this project's own conventions file is `AGENTS.md` (also S3's own
   `'contract-conventions-source': 'AGENTS.md'`).

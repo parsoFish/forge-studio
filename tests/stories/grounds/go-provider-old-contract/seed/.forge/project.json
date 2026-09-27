@@ -27,7 +27,6 @@
     },
     "acceptance": {
       "match": "acceptancetests",
-      "required": false,
       "requiresEnv": [
         "TF_ACC",
         "AZDO_ORG_SERVICE_URL",
