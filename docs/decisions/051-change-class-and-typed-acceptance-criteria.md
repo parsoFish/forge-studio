@@ -50,8 +50,10 @@ failure, because a re-derived profile is a profile that can drift from the table
    `.forge/project.json`. That boolean is retired: a project config that still carries it is refused by name at load,
    never read and never silently ignored. `required` means the project manager must compile at least one work item whose
    gate runs the live-acceptance suite, and the dev-loop refuses to run that gate without the project's `requiresEnv`.
-   `advisory` means neither is forced: the tier still runs when a work item's gate targets it, but no work item is
-   demanded and the env guard is not imposed. Both apply only when the project declares `testProcess.acceptance`; a
+   `advisory` means no such work item is demanded. The env guard is NOT class-dependent: a gate that targets the live
+   suite runs under `requiresEnv` whatever the initiative's class, because a live gate without its credentials skips and
+   false-passes, and a guard keyed on a manifest's self-declared class would let a mis-declared `docs` initiative switch
+   it off. Both apply only when the project declares `testProcess.acceptance`; a
    project with no live tier has nothing to require. The rest of `testProcess.acceptance` (the `match` token, the
    `requiresEnv` secret names, the timeout) stays project data.
 

@@ -344,8 +344,7 @@ export async function runDeveloperLoop(
   );
 
   // Live-acc env guard (2026-06-06): when the project declares an
-  // `acceptance_gate` with `requires_env` and the initiative's class requires
-  // the tier (`liveAcceptanceEnvFor`), a WI whose gate targets the acc
+  // `acceptance_gate` with `requires_env`, a WI whose gate targets the acc
   // suite must run with those vars set — else the runner SKIPS and the gate
   // false-passes (the daemon ran betterado cycles without TF_ACC and shipped
   // unverified resources). Load the config once; absent ⇒ no env requirement.
@@ -697,9 +696,9 @@ export async function runDeveloperLoop(
             const fallback = input.qualityGateCmd && input.qualityGateCmd.length > 0 ? input.qualityGateCmd : null;
             const effective = wiCmd ?? fallback;
             if (!effective) return undefined;
-            // Live-acc env guard — whether it applies is the class's
-            // `acceptance` column, not the project's (`liveAcceptanceEnvFor`).
-            const requiredEnv = liveAcceptanceEnvFor(accGate, classProfile.acceptance, effective);
+            // Live-acc env guard (`liveAcceptanceEnvFor`): a gate that targets
+            // the acc suite runs under requiresEnv whatever the class says.
+            const requiredEnv = liveAcceptanceEnvFor(accGate, effective);
             return makeQualityGateFromCmd(
               wiWorktree.path,
               effective,

@@ -412,10 +412,11 @@ the tier; whether an initiative must prove itself on it is its change class's
 ADR 051 decision 2 as amended, bead forge-mfv5.3.5): `required` for `code`,
 `config` and `infra`, `advisory` for `docs`. For a `required` class the PM
 phase hard-fails unless ≥ 1 emitted WI has a `quality_gate_cmd` token matching
-`match`, and `requiresEnv` closes the false-pass hole: a matching gate whose
-listed env vars are unset is **errored**, not silently skipped. An `advisory`
-class is not forced to carry a live-acceptance WI, and its gates run without
-the env demand. `requiresEnv` must list every var the test's `PreCheck`
+`match`. An `advisory` class is not forced to carry a live-acceptance WI.
+Whatever the class, `requiresEnv` closes the false-pass hole: a gate matching
+`match` whose listed env vars are unset is **errored**, not silently skipped —
+the guard never reads the class, so a mis-declared class cannot switch it off.
+`requiresEnv` must list every var the test's `PreCheck`
 demands. The project-wide `required` boolean this object once carried is
 retired and refused at load; `forge project migrate <project-id>` deletes it.
 
