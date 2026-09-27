@@ -719,6 +719,12 @@ export async function runDeveloperLoop(
                 requiredPaths: gateRequiredPaths(wi, requiredPathsSource),
                 ...(requiredEnv ? { requiredEnv } : {}),
                 ...(ciGateUnsetEnv && ciGateUnsetEnv.length > 0 ? { unsetEnv: ciGateUnsetEnv } : {}),
+                // forge-mfv5.3.7: namespaces whatever cloud resources this
+                // WI's gate command creates (FORGE_RESOURCE_PREFIX,
+                // @forge/kernel's deriveResourcePrefix) so two initiatives
+                // running in parallel never collide over, or sweep, each
+                // other's live resources.
+                initiativeId: input.initiativeId,
                 // R1-03-F1: env override > declared testProcess.local.timeoutMs > default.
                 timeoutMs: resolveGateTimeoutMs(localGateTimeoutMs),
               },
