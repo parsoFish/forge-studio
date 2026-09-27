@@ -11,7 +11,7 @@
  * `data-page="flow-monitor"`). The global `/monitor` route carries
  * `data-ledger-cost-usd` instead, by design and at a different precision
  * (`docs/reference/studio-dom-contract.md` ~1275-1284;
- * `apps/studio/lib/history-ledger-render.test.ts:228-233`).
+ * `apps/studio/tests/integration/history-ledger-render.test.ts:228-233`).
  *
  * THE FIX moves the beat onto the develop flow's own monitor,
  * `/flows/forge-develop`, `page: 'flow-monitor'`. `StudioNav.tsx`'s own
