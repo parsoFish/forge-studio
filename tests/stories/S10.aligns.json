@@ -13,7 +13,7 @@
     {
       "path": "docs/decisions/019-cycle-resume-from-unifier.md",
       "digest": "deb709a1a21f64db",
-      "why": "Act2 (S10.act2.mjs): stop/requeue/resume preserves finished work items and branch commits — \"the second attempt starts from what the first one finished\""
+      "why": "Act2 (S10.act2.mjs): stop/resume-run (ruling 1794's inferRequeueResume path) keeps the finished work item and re-runs the unfinished one — \"the second attempt starts from what the first one finished\""
     },
     {
       "path": "docs/decisions/028-flow-engine.md",

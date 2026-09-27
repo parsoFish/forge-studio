@@ -21,7 +21,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { resolveExpectations } from './beats-page-read.mjs';
+import { resolveExpectations, answers } from './beats-page-read.mjs';
+
+/** Mirrors `beatVerdict`'s own per-key check (`beats-page.mjs`) — the thing
+ *  that actually decides pass/fail from `resolveExpectations`'s output. A
+ *  test that only inspected `seen` and eyeballed it could miss a key
+ *  `resolveExpectations` dropped; this is the same predicate the runner uses. */
+function beatWouldPass(expected: Record<string, string>, seen: Record<string, unknown>): boolean {
+  return Object.entries(expected).every(([k, v]) => Object.hasOwn(seen, k) && answers(seen[k] as string, v));
+}
 
 test('the together-rule resolves the SECOND record when it is the one that matches, not the first', () => {
   const expected = { 'card-id': 'mdtoc', health: 'healthy' };
@@ -132,5 +140,98 @@ test('keys that co-occur only TRANSITIVELY (A+B on one record, B+C on another) s
   assert.deepEqual(
     { a: seen.a, b: seen.b, c: seen.c },
     { a: 'wanted-a', b: 'wanted-b', c: 'wanted-c' },
+  );
+});
+
+// ── ROW 149 ROUND 2/3 (bead `forge-8vfn.8.1.40`, rulings 1771/1774/1794):
+// S10's ACT 2 asserts a specific work item's hex status on the flow monitor,
+// which lists BOTH the first and the second run it started. `data-run-id` is
+// rendered on every rail card (`RunRail.tsx:232`) AND on the `RunControls`
+// section for whichever run is currently SELECTED (`RunControls.tsx:191`) —
+// so a bare `run-id` key is SHARED across all of them, and the together-rule
+// is satisfied the moment ANY ONE record carries the wanted value. ACT 2's
+// own rail card always carries the second run's id, selected or not, so
+// `run-id` alone never actually proves the SELECTED run (RunControls, and
+// the topology hexes derived from the same `view.activeRun`) is the one
+// being read.
+//
+// The fix pairs `run-id` with `section: 'run-controls'`
+// (`RunControls.tsx:189`) — a value no rail card carries — so the two keys
+// can only co-occur, and therefore only be judged together, on
+// `RunControls`' own record. That pairing itself depends on `section` having
+// a SECOND carrier on the page: `HistoryLedger`'s always-rendered
+// `data-section="history-ledger"` (`HistoryLedger.tsx:106-108`, no guard,
+// mounted at `app/flows/[id]/page.tsx:887`). Without it `section` would have
+// exactly one carrier, `resolveExpectations` would read it SOLO (bypassing
+// the together-rule entirely), and the fix would be as vacuous as the bare
+// `run-id` it replaces — the third test below pins that boundary too.
+const RUN_ID_FIXTURE = {
+  data: {},
+  nested: [
+    { 'run-id': 'cycle1' }, // ACT 1's rail card
+    { 'run-id': 'cycle2' }, // ACT 2's rail card
+    { section: 'run-controls', 'run-id': 'cycle1' }, // RunControls: ACT 1 is SELECTED
+    { section: 'history-ledger' }, // always-rendered, unrelated to any run
+    { 'hex-kind': 'wi', 'node-id': 'dev', 'wi-id': 'WI-1', status: 'complete' },
+  ],
+};
+
+test('ROW 149 ROUND 2: a bare run-id is VACUOUS — satisfied by the WRONG run\'s own rail card', () => {
+  const expected = {
+    'run-id': 'cycle2', 'hex-kind': 'wi', 'node-id': 'dev', 'wi-id': 'WI-1', status: 'complete',
+  };
+  const seen = resolveExpectations(expected, RUN_ID_FIXTURE);
+  assert.ok(
+    beatWouldPass(expected, seen),
+    'demonstrating the defect: this must be true even though RunControls (the SELECTED run) is ' +
+      'still cycle1 — a bare run-id is answered by ACT 2\'s own rail card regardless',
+  );
+});
+
+test('ROW 149 ROUND 3: section + run-id together are NOT satisfied while RunControls is wrong', () => {
+  const expected = {
+    section: 'run-controls', 'run-id': 'cycle2',
+    'hex-kind': 'wi', 'node-id': 'dev', 'wi-id': 'WI-1', status: 'complete',
+  };
+  const seen = resolveExpectations(expected, RUN_ID_FIXTURE);
+  assert.ok(
+    !beatWouldPass(expected, seen),
+    'RunControls still reads cycle1 in this fixture — the pinned form must not pass on cycle2\'s ' +
+      'own rail card the way the bare run-id did',
+  );
+});
+
+test('ROW 149 ROUND 3: section + run-id ARE satisfied once RunControls itself shows the right run', () => {
+  const expected = {
+    section: 'run-controls', 'run-id': 'cycle2',
+    'hex-kind': 'wi', 'node-id': 'dev', 'wi-id': 'WI-1', status: 'complete',
+  };
+  const observed = {
+    ...RUN_ID_FIXTURE,
+    nested: RUN_ID_FIXTURE.nested.map((r) =>
+      (Object.hasOwn(r, 'section') && r.section === 'run-controls'
+        ? { section: 'run-controls', 'run-id': 'cycle2' }
+        : r)),
+  };
+  const seen = resolveExpectations(expected, observed);
+  assert.ok(beatWouldPass(expected, seen), 'flipping RunControls to cycle2 must make the pinned form pass');
+});
+
+test('ROW 149 ROUND 3: WITHOUT the history-ledger\'s second `section` carrier, the pinned form is ' +
+  'vacuous too — section is read SOLO', () => {
+  const expected = {
+    section: 'run-controls', 'run-id': 'cycle2',
+    'hex-kind': 'wi', 'node-id': 'dev', 'wi-id': 'WI-1', status: 'complete',
+  };
+  const observedNoLedger = {
+    data: {},
+    nested: RUN_ID_FIXTURE.nested.filter((r) => r.section !== 'history-ledger'),
+  };
+  const seen = resolveExpectations(expected, observedNoLedger);
+  assert.ok(
+    beatWouldPass(expected, seen),
+    'documenting the boundary this fix depends on: with only ONE data-section carrier on the ' +
+      'page, section is read solo (bypassing the together-rule), and the pin would be as vacuous ' +
+      'as the bare run-id it replaces — this is why the always-rendered history-ledger section matters',
   );
 });

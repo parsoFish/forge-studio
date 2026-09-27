@@ -117,3 +117,40 @@ export const SEND_BACK =
   'The precedence when both --author and --exclude-author are given is not stated in the ' +
   'output. Exclude must win, and the header annotation must say how many commits each ' +
   'filter removed, so a zero-commit report is never ambiguous about which filter emptied it.';
+
+/**
+ * ACT 2's SECOND idea (row 149, bead `forge-8vfn.8.1.40`, rulings 1771 / 1774 /
+ * 1794) — a second, small initiative on the SAME gitpulse ground, so ACT 2 has
+ * a real run to stop.
+ *
+ * VERIFIED ABSENT at the ground's declared head: `src/sort.ts`'s `CommandSlug`
+ * union (`'churn' | 'ownership' | 'hotspots' | 'authors' | 'compare' | 'tags'`)
+ * has no `'coupling'` member, and `runCouplingCli` (`src/cli.ts`) parses
+ * `--json`/`--csv`/`--markdown`/`--since`/`--until`/`--exclude`/`--include`/
+ * `--author`/`--since-tag`/`--until-tag` but never `--sort` — the ONE flag
+ * `runTagsCli` and `runCli` (the `authors`/`compare` slugs) already accept via
+ * the shared `parseSortFlag`. Small and additive, the same shape as the FIRST
+ * idea: it extends an existing, shared mechanism rather than adding an island,
+ * and it is naturally at least two facets (parse + validate the flag against a
+ * new `coupling` column registry; apply it to the report's row order) rather
+ * than a single-line change — see the WI-count risk note in S10.act2.mjs.
+ */
+export const SECOND_IDEA =
+  'Add --sort <column>[:asc|:desc] to the coupling report, matching the flag the tags and ' +
+  'authors/compare reports already accept (src/sort.ts). Register coupling\'s own sortable ' +
+  'columns (file, otherFile, count) the same way the other reports do, default to count:desc ' +
+  'when no direction is given, and apply it to both the plain-text and --json row order. ' +
+  'Document the flag in the coupling section of README next to the other two.';
+
+/**
+ * The SECOND initiative's own typed ceiling, in dollars. Smaller than
+ * `CEILING` on purpose: run 37's measured architect-plus-PM cost for the
+ * (larger, precedence-clause-bearing) FIRST idea was $3.0943 through its own
+ * plan gate (spend after beat 9, `_1.0/reports/m7-a-S10-run37.log`), and ACT
+ * 2 never waits the SECOND initiative through to its own `ready-for-review` —
+ * only through one work item's dev-loop completion, then a stop, then a
+ * second work item's completion. DECLARED, NOT MEASURED (this beat sequence
+ * has never been funded): headroom over the FIRST idea's own measured
+ * architect+PM+partial-dev spend, not a guess made from nothing.
+ */
+export const SECOND_CEILING = '12';
