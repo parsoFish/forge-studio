@@ -2,15 +2,16 @@
  * bridge-studio-demo.ts — the demo-builder session kind's `/api/demo-builder/*`
  * routes, carved out of `apps/forge/ui-bridge.ts`.
  *
- * Eleven routes: six reads (sessions list, the demo and fragment servers, a
- * generation file server, and two history routes) and five writes (start,
+ * Ten routes: five reads (sessions list, the demo server, a generation file
+ * server, and two history routes — the fragment server went with the
+ * per-element fragments in forge-mfv5.2.8) and five writes (start,
  * brief, feedback, lock, abandon). Arms VERBATIM; the only edits are
  * `readJson(req)` → `ctx.readBody()` (ruling 30), shared helpers imported from
  * `bridge-studio-session-helpers.ts`, and the host's spawn/serve surface
  * injected.
  *
  * A PRE-EXISTING FINDING CARRIED ACROSS, NOT FIXED HERE. The `/demo/` and
- * `/fragment/` routes' containment is still LEXICAL only — they compare a built
+ * (since retired) `/fragment/` routes' containment is still LEXICAL only — they compare a built
  * path against a built base rather than resolving each untrusted segment
  * through a guard, which is the self-defeating idiom
  * `docs/reference/request-path-sinks.md` already records against bd `forge-28o`.
@@ -19,8 +20,8 @@
  * move. It is recorded on the way past, with its row unchanged.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { existsSync, readFileSync } from 'node:fs';
-import { join, sep } from 'node:path';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { allowedOrigin, sanitizeError, sendJson, SAFE_ID_RE, MAX_SKILL_ID_LENGTH } from '@forge/kernel';
 import { guardedFile, guardedReadDir, guardedReadFile, guardedWriteFile, resolveGuardedPath } from '@forge/kernel';
@@ -83,12 +84,13 @@ export async function handleDemoRoutes(
       // SEC-04 (bd forge-ebj) — `s.project_repo_path` is UNTRUSTED at read time
       // (it is status.json content, git-plantable, not a routing input). These
       // probes existsSync/readdirSync THROUGH it: an out-of-root value was an
-      // existence oracle AND the fragments readdir ENUMERATED (disclosed) an
-      // out-of-root directory's filenames. Contain the value first
+      // existence oracle (and, until forge-mfv5.2.8 retired the per-element
+      // fragments, a readdir ENUMERATED an out-of-root directory's
+      // filenames). Contain the value first
       // (isContainedProjectRepoPath — the same guard the serve routes apply),
       // THEN route each leaf through the per-segment identity guard (leaf
       // included) with that now-contained value as the root. A forged
-      // out-of-root path yields no demoUrl/fragments (safe default), never a
+      // out-of-root path yields no demoUrl (safe default), never a
       // disclosure. DEMO.html lives in the PROJECT REPO under .forge/demo/.
       const repoContained =
         typeof s.project_repo_path === 'string' &&
@@ -96,13 +98,6 @@ export async function handleDemoRoutes(
       const demoUrl = repoContained && guardedFile(s.project_repo_path, DEMO_HTML_REL_PATH.split('/'), 'read') !== null
         ? `/api/demo-builder/demo/${encodeURIComponent(s.project)}/${encodeURIComponent(s.session_id)}`
         : null;
-      // Per-element rendered fragments present in the repo (element ids) — so the
-      // operator can view each part's output independently.
-      const fragmentNames = repoContained ? guardedReadDir(s.project_repo_path, ['.forge', 'demo', 'fragments']) : null;
-      const fragments: string[] = (fragmentNames ?? [])
-        .filter((f) => f.endsWith('.html'))
-        .map((f) => f.slice(0, -'.html'.length));
-
       // W8-A2 (ON-7 defect 1) — see the architect route: the derived lifecycle,
       // and `staleMs` from the runner's own heartbeat/`updated_at`, never the
       // status file's mtime. NOTE the on-disk log dir for this kind is
@@ -122,7 +117,6 @@ export async function handleDemoRoutes(
         iteration: s.iteration,
         prompt: s.prompt,
         demoUrl,
-        fragments,
         hasLockedDemo: repoContained && guardedFile(s.project_repo_path, ['.forge', 'demo', 'demo.lock.json'], 'read') !== null,
         staleMs,
         ...(rowLifecycle ? { lifecycle: rowLifecycle } : {}),
@@ -202,74 +196,6 @@ export async function handleDemoRoutes(
     return true;
   }
 
-  // GET /api/demo-builder/fragment/<project>/<sid>/<element> — serve one element's
-  // rendered HTML fragment (<repo>/.forge/demo/fragments/<element>.html), so the
-  // operator can view a single part's output independently. Path-escape guarded.
-  if (method === 'GET' && url.startsWith('/api/demo-builder/fragment/')) {
-    const rest = url.slice('/api/demo-builder/fragment/'.length).split('/').map(decodeURIComponent);
-    const [project, sessionId, element] = rest;
-    if (!project || !sessionId || !element) {
-      sendJson(res, 400, { error: 'expected /api/demo-builder/fragment/<project>/<sid>/<element>' }, origin);
-      return true;
-    }
-    // SEC-03 WI-6, Half A — see the /demo/ route above for the full
-    // rationale; identical fix, same choke point.
-    const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, project, sessionId);
-    if (!dirOutcome.ok) {
-      sendJson(res, 400, { error: dirOutcome.reason }, origin);
-      return true;
-    }
-    // SEC-04 (bd forge-ebj) — status.json READ through the guarded leaf
-    // sibling (leaf-symlink close).
-    const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, [project, '_demo', sessionId]);
-    if (!status) {
-      sendJson(res, 404, { error: 'session not found', project, sessionId }, origin);
-      return true;
-    }
-    // SEC-03 WI-6, Half B (symmetry) — this route's base/requested check
-    // below is ALSO built from `status.project_repo_path` on both sides, so
-    // it is exactly as tautological in `project_repo_path` as the /demo/
-    // route's deleted check was — the AT-13 non-regression test measures
-    // only that the `element` component (folded into `requested` alone,
-    // fully `join()`-normalised) is already safe; it says nothing about
-    // `project_repo_path` itself. Close the same hole here rather than leave
-    // the twin route exposed. `element`'s own handling below is UNCHANGED.
-    if (typeof status.project_repo_path !== 'string' || !ctx.isContainedProjectRepoPath(status.project_repo_path, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot })) {
-      sendJson(res, 400, { error: 'session data invalid: project_repo_path is not a valid project directory' }, origin);
-      return true;
-    }
-    // The lexical `startsWith(base)` still guards the `element` component's own
-    // `..`/escape shape (AT-13 non-regression, 400). SEC-04 (bd forge-ebj)
-    // additionally routes the actual READ through the per-segment identity +
-    // nlink guard (project_repo_path is proven contained above ⇒ a trusted
-    // root here), so a symlinked/hardlinked fragment LEAF inside the real
-    // fragments dir is refused (⇒ null ⇒ 404), never followed out of root.
-    const base = join(status.project_repo_path, '.forge', 'demo', 'fragments') + sep;
-    const requested = join(status.project_repo_path, '.forge', 'demo', 'fragments', `${element}.html`);
-    if (!requested.startsWith(base)) {
-      sendJson(res, 400, { error: 'path escape rejected' }, origin);
-      return true;
-    }
-    // A fragment is just the element's `<section>` slice. Wrap it in the Forge
-    // demo base stylesheet so the component view is a styled slice of the full
-    // demo (the composer inlines the same CSS into DEMO.html). If the fragment
-    // is already a full HTML doc, serve it untouched.
-    const raw = guardedReadFile(status.project_repo_path, ['.forge', 'demo', 'fragments', ...`${element}.html`.split('/')]);
-    if (raw === null) {
-      sendJson(res, 404, { error: 'fragment not found', project, sessionId, element }, origin);
-      return true;
-    }
-    try {
-      const isFullDoc = /^\s*<!doctype|^\s*<html[\s>]/i.test(raw);
-      const out = isFullDoc ? raw : wrapDemoFragment(ctx.forgeRoot, element, raw);
-      res.writeHead(200, ctx.servedFileHeaders(`${element}.html`, origin));
-      res.end(out);
-    } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
-    }
-    return true;
-  }
-
   // GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename> — serve
   // one R4-16 generation-snapshot file out of <sessionDir>/generations/<n>/.
   // ALL FOUR path segments are validated before any fs call: `project`/
@@ -285,7 +211,7 @@ export async function handleDemoRoutes(
   // from WITHIN the already-validated session dir (e.g. one generation-
   // snapshot FILE symlinked out, rather than the session dir itself).
   //
-  // The sibling /demo/ and /fragment/ GET routes above remain OUT OF SCOPE
+  // The sibling /demo/ and (since retired) /fragment/ GET routes remained OUT OF SCOPE
   // for this round: they still validate `project`/`sessionId` for
   // non-emptiness only and rely solely on a lexical `startsWith(base)` check
   // on the resolved file path — a real gap, filed as an evidenced follow-up
@@ -703,23 +629,6 @@ function resolveDemoSessionDir(projectsRoot: string, project: string, sessionId:
   return { ok: true, dir: guarded.realPath };
 }
 
-/** Wrap one element fragment in a self-contained, Forge-styled HTML doc so a single
- *  component renders as a styled slice of the full demo. */
-function wrapDemoFragment(forgeRoot: string, element: string, fragment: string): string {
-  return [
-    '<!doctype html>',
-    '<html lang="en"><head><meta charset="utf-8">',
-    `<title>demo · ${element}</title>`,
-    `<style>${readForgeDemoCss(forgeRoot)}</style>`,
-    '</head><body>',
-    fragment,
-    '</body></html>',
-  ].join('\n');
-}
-
-
-
-
 function invalidGenerationSessionIdReason(id: string): string | null {
   if (id.length > MAX_GENERATION_SESSION_ID_LENGTH) {
     return `invalid sessionId "${id.slice(0, 40)}…" — ${id.length} characters exceeds the ${MAX_GENERATION_SESSION_ID_LENGTH}-character length limit`;
@@ -741,7 +650,7 @@ function invalidGenerationSessionIdReason(id: string): string | null {
  * enumerated, never caller-supplied — so it is deliberately outside this
  * function's coverage, not an oversight; the original wording overstated
  * this as the ONLY caller of `demoSessionDir` full stop, which is what let
- * the `/demo/` and `/fragment/` GET routes below be written straight past
+ * the `/demo/` and (since retired, forge-mfv5.2.8) `/fragment/` GET routes be written straight past
  * this choke point undetected) — round 1 validated `project`/`sessionId` on
  * the GET generation route alone, which closed that one ROUTE, not the class: the
  * five sibling routes (start/brief/feedback/lock/abandon) built the exact
@@ -771,12 +680,10 @@ function invalidGenerationSessionIdReason(id: string): string | null {
  * CREATE case (`POST /start`'s session dir does not exist yet):
  * `realpathSync` on a path that doesn't exist throws ENOENT, which must be
  * treated as neither an escape NOR a false pass. This walks up from the
- * candidate session dir to the closest EXISTING ancestor (same idea as
- * `closestExistingAncestorContained`, orchestrator/demo-builder-runner.ts —
- * a different module boundary, so not imported across it: that helper is
- * private to the runner's lock-step restore, this one is private to the
- * bridge's route dispatch, and each needs a different reference boundary —
- * a project repo root there, this project's OWN dir here) and proves THAT
+ * candidate session dir to the closest EXISTING ancestor (the runner's
+ * lock step carried a sibling of this walk, `closestExistingAncestorContained`,
+ * until forge-mfv5.2.8 removed the generation-named write target it guarded;
+ * this one's reference boundary is this project's OWN dir) and proves THAT
  * ancestor is contained instead. Any remaining not-yet-existing tail
  * segments are plain literal directory names — `sessionId` already passed
  * SAFE_ID_RE, which forbids "/" — so they cannot themselves introduce an
@@ -785,11 +692,3 @@ function invalidGenerationSessionIdReason(id: string): string | null {
 type DemoSessionDirOutcome =
   | { readonly ok: true; readonly dir: string }
   | { readonly ok: false; readonly reason: string };
-/** Read the Forge demo base stylesheet (best-effort; a minimal dark fallback). */
-function readForgeDemoCss(forgeRoot: string): string {
-  try {
-    return readFileSync(join(forgeRoot, 'studio', 'demo', 'forge-demo.css'), 'utf8');
-  } catch {
-    return 'body{background:#0a0e14;color:#e6edf3;font-family:system-ui,sans-serif;padding:2rem}';
-  }
-}

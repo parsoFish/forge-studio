@@ -20,7 +20,6 @@ function session(overrides: Partial<DemoSessionSummary>): DemoSessionSummary {
     iteration: 1,
     prompt: '',
     demoUrl: null,
-    fragments: [],
     ...overrides,
   };
 }

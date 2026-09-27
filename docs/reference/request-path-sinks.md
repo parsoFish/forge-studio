@@ -3026,3 +3026,11 @@ counts fall with the composer (`existsSync 5 → 1`, `mkdirSync 4 → 2`,
 ONE root, `.forge/demo/`; `.forge/skills/demo-design/` left it with the composer.
 
 `scripts/request-path-sinks.baseline.txt` accepts these counts via `--write` in the same commit, per this document's own rule.
+
+**The fragment route is retired with the fragments it served.** Nothing writes
+`.forge/demo/fragments/` any more, so `GET /api/demo-builder/fragment/:project/:sessionId/:element`
+and the sessions list's fragments readdir are removed (the SEC-03 WI-6 `/fragment/`
+row above is historical). `packages/sessions/bridge-studio-demo.ts` loses its
+`readFileSync` (1 → 0, the fragment wrapper's stylesheet read) and one
+`guardedReadDir`/`guardedReadFile` pair; the `/demo/` route keeps every guard
+the SEC-03 row describes. Accepted via `--write` in the same commit.

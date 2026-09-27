@@ -549,7 +549,6 @@ packages/projects/reset.ts writeFileSync 2
 packages/sessions/bash-fence.ts realpathSync 1
 packages/sessions/bridge-studio-architect.ts readFileSync 1
 packages/sessions/bridge-studio-demo.ts existsSync 1
-packages/sessions/bridge-studio-demo.ts readFileSync 1
 packages/sessions/bridge-studio-instructions.ts readFileSync 1
 packages/sessions/bridge-studio-kickoff.ts mkdirSync 4
 packages/sessions/bridge-studio-kickoff.ts realpathSync 2

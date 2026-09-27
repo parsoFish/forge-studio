@@ -143,7 +143,6 @@ const PB_THEMES_RE = /^\/api\/project-brain\/themes\/([^/]+)\/([^/]+)$/;
 const ONBOARDING_ACTIVE_RE = /^\/api\/studio\/projects\/([^/]+)\/onboarding\/active$/;
 const KB_CLEANUP_START_RE = /^\/api\/studio\/kbs\/([^/]+)\/cleanup\/start$/;
 const DEMO_SERVE_RE = /^\/api\/demo-builder\/demo\//;
-const DEMO_FRAGMENT_RE = /^\/api\/demo-builder\/fragment\//;
 const DEMO_GENERATION_RE = /^\/api\/demo-builder\/generation\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)$/;
 const DEMO_HIST_LIST_RE = /^\/api\/demo-builder\/history\/([^/]+)$/;
 const DEMO_HIST_SERVE_RE = /^\/api\/demo-builder\/history\/([^/]+)\/([^/]+)$/;
@@ -330,13 +329,6 @@ export function sessionsRoutes(deps: SessionsRouteDeps): RouteTable<RouteContext
       method: 'GET',
       path: '/api/demo-builder/demo/:project/:sessionId',
       matches: (url) => DEMO_SERVE_RE.test(pathOf(url)),
-      dryClassification: 'exempt-local',
-      handler: demo,
-    },
-    {
-      method: 'GET',
-      path: '/api/demo-builder/fragment/:project/:sessionId/:element',
-      matches: (url) => DEMO_FRAGMENT_RE.test(pathOf(url)),
       dryClassification: 'exempt-local',
       handler: demo,
     },
