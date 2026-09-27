@@ -10,9 +10,10 @@
  * The cut follows the story's OWN labelled boundary, not the line count. ACT 1
  * is the develop cycle end to end; ACT 2 is the interruption and the recovery,
  * and the file already named it that way in two beat titles before this split
- * existed. Beat 24 (21 when written; later inserts moved it) travels with it
- * because it is ACT 2's setup: the Monitor row is how the operator reaches the
- * running initiative they are about to stop.
+ * existed. Beat 25 (21 when written; later inserts — most recently row 143,
+ * bead `forge-8vfn.8.1.36` — moved it) travels with it because it is ACT 2's
+ * setup: the Monitor row is how the operator reaches the running initiative
+ * they are about to stop.
  *
  * These beats are spread into `beats` at the point they already occupied, so
  * the story's order and numbering are unchanged — a beat's number is how every
