@@ -79,6 +79,8 @@ section of the project contract — never
 bare `! cmd` asserts (errexit-exempt: their failures silently don't fail the
 gate).
 
+**When the natural whole-suite command is red at HEAD by design** — a partly-red suite, e.g. a Python project's `pytest tests/` failing on permanently-red TDD stubs unrelated to any change under review — never declare it: C1 requires green at HEAD, not merely a plausible shape. Measure what CI itself actually runs (`.github/workflows/*` or the project's CI config) and propose THAT narrower command if it measures green; failing that, scope to the package/test files genuinely under change and re-measure. If no scope measures green, say so plainly and ask the operator for the gate — never accept a whole-suite command that can never pass.
+
 ### Step 5 — Hermetic change-capture (C2)
 `.gitignore` so `git add -A` captures only intended source: forge scratch (the
 exact path list — `SCRATCH_PATHS` — is `forge preflight`'s C2 check, ADR 017),

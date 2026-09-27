@@ -43,6 +43,8 @@ substitution, globs, or newlines. `` Run `npm run demo | tee out.txt` ``
 is rejected — pipe it inside a wrapper script instead and name the wrapper:
 `` Run `npm run demo:capture`. ``
 
+The rule is language-agnostic: any bare-argv command qualifies, not only an npm script. A Python project might write `` Run `pytest -q tests/test_report.py` to capture the report assertions. `` — same rule, same rejection of shell metacharacters.
+
 A capture step with no inline-code span, or one whose span fails this rule,
 drives nothing — `DEMO-SKILL` fails and names which step and why (no
 inline-code span, or which metacharacter). A `demoProcess` needs only ONE
