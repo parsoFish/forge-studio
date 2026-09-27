@@ -76,3 +76,17 @@ test('the word "error" in ordinary prose does not fail the stage', () => {
   ]);
   assert.equal(r.ok, true, 'the marker is `· cycle ERROR:`, not the substring "error"');
 });
+
+test('a claim refusal is named with its reason and clause ids, never read as "printed no cycle outcome" (row 128)', () => {
+  const r = classifyServeStageOutcome([
+    'forge serve --once: claiming one initiative…',
+    '[serve] claimed: INIT-x (story-x)',
+    '[serve] INIT-x — claim refused (non-terminal, left in pending): project "story-x" is not contract-ready (failing hard clause(s): C4) — fix the project contract before retrying',
+  ]);
+  assert.equal(r.ok, false);
+  assert.equal(r.errors.length, 1);
+  assert.match(r.errors[0], /claim refused \(non-terminal, left in pending\)/);
+  assert.match(r.errors[0], /failing hard clause\(s\): C4/);
+  assert.doesNotMatch(r.errors[0], /printed no cycle outcome/);
+});
+
