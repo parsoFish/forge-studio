@@ -682,3 +682,25 @@ test('7.6.146: what cannot be captured is not removed', () => {
   assert.ok(existsSync(join(root, '_worktrees', id)), 'still there — nothing is removed on a failed capture');
   rmSync(root, { recursive: true, force: true });
 });
+
+// D's review of `forge-8vfn.8.1.32`: since the guard moved behind `containmentVerdict`, "binding here
+// + guard there" no longer proves they connect. The call must hand over the SAME binding, and the
+// verdict must declare it. Row 75's `trailing` test is the pattern.
+function assertVerdictHandoff(binding: string): void {
+  const call = runnerSourceContaining('return containmentVerdict({');
+  const at = call.source.indexOf('return containmentVerdict({');
+  const handoff = call.source.slice(at, call.source.indexOf('});', at));
+  assert.match(
+    handoff, new RegExp(`(?<![.\\w])${binding}(?![.\\w:])`),
+    `the SAME \`${binding}\` must be handed to containmentVerdict`,
+  );
+  const verdict = runnerSourceContaining('function containmentVerdict(');
+  assert.match(
+    verdict.source, new RegExp(`function containmentVerdict\\(\\{[^}]*\\b${binding}\\b`, 's'),
+    `containmentVerdict must declare a \`${binding}\` parameter`,
+  );
+}
+
+test('forge-8vfn.8.1.32: run-story hands `ownGroundDrift` to containmentVerdict, which declares it', () => {
+  assertVerdictHandoff('ownGroundDrift');
+});

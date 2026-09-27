@@ -43,6 +43,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runnerSourceContaining } from './runner-source.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -757,4 +758,30 @@ test('the fixture-ground teardown is gated on the trailing census being empty', 
   assert.ok(call > 0, 'teardownFixtureGround is called');
   const guard = src.lastIndexOf('trailing.census.empty', call);
   assert.ok(guard > 0 && call - guard < 400, 'the teardown call sits inside a trailing.census.empty guard');
+});
+
+// D's review of `forge-8vfn.8.1.32`: since the guard moved behind `containmentVerdict`, "binding here
+// + guard there" no longer proves they connect. The call must hand over the SAME binding, and the
+// verdict must declare it. Row 75's `trailing` test is the pattern.
+function assertVerdictHandoff(binding: string): void {
+  const call = runnerSourceContaining('return containmentVerdict({');
+  const at = call.source.indexOf('return containmentVerdict({');
+  const handoff = call.source.slice(at, call.source.indexOf('});', at));
+  assert.match(
+    handoff, new RegExp(`(?<![.\\w])${binding}(?![.\\w:])`),
+    `the SAME \`${binding}\` must be handed to containmentVerdict`,
+  );
+  const verdict = runnerSourceContaining('function containmentVerdict(');
+  assert.match(
+    verdict.source, new RegExp(`function containmentVerdict\\(\\{[^}]*\\b${binding}\\b`, 's'),
+    `containmentVerdict must declare a \`${binding}\` parameter`,
+  );
+}
+
+test('forge-8vfn.8.1.32: run-story hands `realFence` to containmentVerdict, which declares it', () => {
+  assertVerdictHandoff('realFence');
+});
+
+test('forge-8vfn.8.1.32: run-story hands `fence` to containmentVerdict, which declares it', () => {
+  assertVerdictHandoff('fence');
 });
