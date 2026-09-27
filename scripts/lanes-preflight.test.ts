@@ -348,7 +348,7 @@ function daemonsReferencing(path: string): number[] {
  */
 function retireRecordedDaemon(camp: string, lane: string): number | null {
   const pidFile = join(camp, 'heartbeat', `${lane}.hb-daemon.pid`);
-  const deadline = performance.now() + 5000;
+  const deadline = performance.now() + 15_000; // the daemon writes its pid once up — slow under a loaded full suite
   while (!existsSync(pidFile) && performance.now() < deadline) spawnSync('sleep', ['0.1']);
   if (!existsSync(pidFile)) return null;
   const pid = Number(readFileSync(pidFile, 'utf8').trim());
@@ -376,6 +376,7 @@ function retireRecordedDaemon(camp: string, lane: string): number | null {
 describe('lanes.sh launch — all five advisory WARNs planted at once still reaches roster-confirm', () => {
   let launchDir: string;
   let camp: string;
+  let launchOk = false; // the daemon test below only expects a recorded pid when launch itself got that far
 
   function tmux(...args: string[]) {
     return spawnSync('tmux', args, { encoding: 'utf8' });
@@ -453,6 +454,9 @@ sleep 120
         LANES_CLAUDE_BIN: bin,
         LANES_PROC_ROOT: root,
         LANES_DNS_CMD: 'false', // row 19b: DNS broken
+        // Under a loaded full suite the roster-confirm step took longer than the file default (6 s) and launch
+        // exited 2; the confirm is real, so its bound is widened for load here, not skipped.
+        LANES_CONFIRM_TIMEOUT_S: '30',
         LANES_WORKTREE_ROOT: launchDir, // the daemon's --worktree-glob must not scan this host's real $HOME
         LANES_CLAUDE_JSON: claudeJson,
         LANES_MEMINFO: (() => {
@@ -461,9 +465,10 @@ sleep 120
           return p;
         })(),
       },
-      20000,
+      60_000,
     );
     tmux('kill-session', '-t', s);
+    launchOk = r.status === 0;
 
     assert.equal(r.status, 0, `launch must still succeed with every advisory WARN tripped; stderr=${r.stderr}`);
     assert.match(r.stdout, /^launched /m, 'launch reaches the roster-confirm step and reports it');
@@ -478,7 +483,9 @@ sleep 120
   // Removing the camp dir never stopped it, so every run of this file left one alive for good.
   test('the heartbeat daemon that launch started is retired by the pid it recorded, and nothing outlives the camp', () => {
     const pid = retireRecordedDaemon(camp, 'allwarn');
-    assert.ok(pid !== null, `launch recorded its daemon pid under ${camp}/heartbeat`);
+    // A launch that failed before starting its daemon (the test above reds on that, by name) recorded no pid;
+    // what must hold regardless is that nothing it did start outlives the camp.
+    if (launchOk) assert.ok(pid !== null, `launch recorded its daemon pid under ${camp}/heartbeat`);
     assert.deepEqual(daemonsReferencing(camp), [], `no lane-heartbeat-daemon may outlive this test's camp ${camp}`);
   });
 });
