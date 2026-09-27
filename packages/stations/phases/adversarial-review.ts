@@ -40,7 +40,14 @@ import {
 } from '@forge/flows';
 import { guardedReadFile, guardedWriteFile, FORGE_ROOT, type EventLogger } from '@forge/kernel';
 import { createHash } from 'node:crypto';
-import { runAgent, takeScopeSnapshot, scopeViolations, type StreamQueryFn } from '@forge/agents';
+import {
+  runAgent,
+  makeToolEventSink,
+  takeScopeSnapshot,
+  scopeViolations,
+  type StreamQueryFn,
+  type HeartbeatTimers,
+} from '@forge/agents';
 import type { AgentDefinition } from '@forge/contracts';
 import { chunkLabel, mergeChunkRecords, partitionChangedFiles, type ReviewChunk,
   splitChunkPerFile, mergeSplitRecords,
@@ -176,6 +183,8 @@ export async function runAdversarialReview(
     signal?: AbortSignal;
     classProfiles?: ClassProfilePort;
     agentDef: AgentDefinition; // seam F4: the executing node's own def, no fallback
+    // 8.1.30 — test-injection, mirrors RunContext.heartbeatTimers.
+    heartbeatTimers?: HeartbeatTimers;
   },
 ): Promise<AdversarialReviewResult> {
   const def = opts.agentDef;
@@ -469,6 +478,13 @@ export async function runAdversarialReview(
             systemPrompt,
             lifecycle: 'caller',
             logger, // forge-8vfn.8.1.10: lets runAgent root the spawn marker at this pipeline's own logger, not <FORGE_ROOT>/_logs.
+            turnSink: makeToolEventSink(logger, {
+              initiativeId: input.initiativeId,
+              parentEventId: input.cycleId,
+              phase: 'orchestrator',
+              skill: def.slug,
+            }),
+            ...(opts.heartbeatTimers !== undefined ? { heartbeatTimers: opts.heartbeatTimers } : {}),
             streamGuard: { label: def.slug, signal: opts.signal },
             bindings: { initiative: { id: input.initiativeId, costBudgetUsd: input.costBudgetUsd } },
             ...(ceilingUsd !== undefined ? { kickoffCeilingUsd: ceilingUsd } : {}),

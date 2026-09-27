@@ -16,7 +16,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { EventLogger, EventLogEntry } from '@forge/kernel';
-import { runAgent } from '@forge/agents';
+import { runAgent, makeToolEventSink } from '@forge/agents';
 import type { AgentDefinition } from '@forge/contracts';
 import { classifyCrash } from '@forge/agents';
 import {
@@ -121,6 +121,17 @@ export async function runReflectorBrainWrites(
         'reflector SKILL.md must declare budgets.maxTurns and budgets.maxBudgetUsd (R4-01-F2 — the live caps are frontmatter data)',
       );
     }
+    // forge-8vfn.8.1.30 / T1 ruling 1693: named for THIS pass (phase
+    // 'reflection', this def's own slug), not runAgent's generic
+    // 'orchestrator' default — a caller-lifecycle turn otherwise emits
+    // nothing while it runs (a live S10 run's reflector went quiet 3m32s
+    // before an external SIGTERM; quiet-based stall rules read that as dead).
+    const turnSink = makeToolEventSink(logger, {
+      initiativeId: input.initiativeId,
+      parentEventId: startEventId ?? cycleId,
+      phase: 'reflection',
+      skill: def.slug,
+    });
     const spawn = await runAgent(def, {
       runId: cycleId,
       workdir: forgeRoot,
@@ -129,6 +140,8 @@ export async function runReflectorBrainWrites(
       systemPrompt,
       lifecycle: 'caller',
       logger, // forge-8vfn.8.1.10: lets runAgent root the spawn marker at this pipeline's own logger, not <FORGE_ROOT>/_logs.
+      turnSink,
+      ...(deps.heartbeatTimers !== undefined ? { heartbeatTimers: deps.heartbeatTimers } : {}),
       onMessage: (msg) => {
         if (typeof msg !== 'object' || msg === null) return;
         const m = msg as {

@@ -59,15 +59,15 @@ operator-ratified new cap — never a silent raise.
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `projects` | 46 | 10,906 | **9,115** | ratified 9,115 — forge-1rk5.3 row 131 DEPS: node preloading a package (--import/--require/-r/--loader) needs node_modules, +17 on 9,098, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
-| `agents` | 46 | 13,098 | **13,098** | ratified 13,098 — row 121 gh 'error connecting to' is a DNS failure (forge-8vfn.8.1.24), +7 lane-ratified under ruling 666; see git history for prior raises. |
+| `agents` | 46 | 13,099 | **13,099** | ratified 13,099 — row 135 HeartbeatTimers type shared by the caller-lifecycle spawns (forge-8vfn.8.1.30), +1 lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 61 | 20,638 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 85 | 23,983 | **23,783** | ratified 23,783 — forge-mfv5.2.5 recorded demo media committed within size bounds (guard root = worktree) and rendered commit-pinned in the PR body (pr-media.ts), +308 on 23,475 (T1 1640/1641/1646); see git history for prior raises. |
 | `factory` | 15 | 2,723 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 40 | 11,503 | **11,503** | ratified 11,503 — forge-mfv5.2.5 DEMO.md links a recording's committed filmstrip/webm; integrate reads the capture-commit result, +21 on 11,482, lane-ratified under ruling 666; see git history for prior raises. |
+| `stations` | 40 | 11,556 | **11,556** | ratified 11,556 — row 135 reflector/PM/adversarial-review turns emit agent_heartbeat (forge-8vfn.8.1.30), row 110 move (forge-8vfn.8.1.33), +53 lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,835 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **467** | **127,193** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **467** | **127,247** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -358,8 +358,8 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/notify.ts | flows | verbatim | 73 |
 | packages/agents/phase-agent.ts | agents | verbatim | 101 |
 | packages/stations/phases/adversarial-review-binding.ts | stations | verbatim | 164 |
-| packages/stations/phases/adversarial-review.ts | stations | verbatim | 800 |
-| packages/stations/phases/review-refusal.ts | stations | rewritten | 84 |
+| packages/stations/phases/adversarial-review.ts | stations | verbatim | 779 |
+| packages/stations/phases/review-refusal.ts | stations | rewritten | 135 |
 | packages/agents/phases/agent-scope-guard.ts | agents | verbatim | 111 |
 | packages/flows/phases/closure.ts | flows | verbatim | 431 |
 | packages/stations/phases/executor-deps.ts | stations | verbatim | 344 |
@@ -383,11 +383,11 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/phases/gitignored-creates.ts | flows | rewritten | 79 |
 | packages/flows/plan-gate-class-check.ts | flows | rewritten | 59 |
 | packages/stations/phases/pm-binding.ts | stations | verbatim | 384 |
-| packages/stations/phases/project-manager.ts | stations | verbatim | 761 |
+| packages/stations/phases/project-manager.ts | stations | verbatim | 769 |
 | packages/flows/phases/ralph-spec-lint.ts | flows | verbatim | 469 |
 | packages/stations/phases/reflector-binding.ts | stations | verbatim | 253 |
-| packages/stations/phases/reflector.ts | stations | verbatim | 705 |
-| packages/stations/phases/reflector-brain-writes.ts | stations | verbatim | 381 |
+| packages/stations/phases/reflector.ts | stations | verbatim | 707 |
+| packages/stations/phases/reflector-brain-writes.ts | stations | verbatim | 394 |
 | packages/stations/phases/release-finalize.ts | stations | verbatim | 299 |
 | packages/flows/phases/wi-spec-compile.ts | flows | verbatim | 532 |
 | packages/agents/pinned-sdk-query.ts | agents | verbatim | 163 |
@@ -539,7 +539,7 @@ operator-ratified new cap — never a silent raise.
 | skills/reflector/SKILL.md | factory | verbatim | 179 |
 | skills/release-finalizer/SKILL.md | flows | verbatim | 92 |
 | apps/forge/index.ts | apps/forge | verbatim | 8 |
-| packages/agents/index.ts | agents | verbatim | 136 |
+| packages/agents/index.ts | agents | verbatim | 137 |
 | packages/contracts/index.ts | contracts | verbatim | 147 |
 | packages/contracts/run-view-types.ts | contracts | rewritten | 94 |
 | packages/contracts/runnable-source.ts | contracts | rewritten | 33 |

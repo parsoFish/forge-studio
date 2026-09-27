@@ -47,6 +47,7 @@
 
 // ---- Run one agent -------------------------------------------------------
 export { runAgent, isSafeRunId } from './run-agent.ts';
+export type { HeartbeatTimers } from './run-agent.ts';
 export { dispatchAgentRun } from './agent-dispatch.ts';
 export { findSessionProject } from './find-session-project.ts';
 

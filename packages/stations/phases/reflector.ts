@@ -29,7 +29,7 @@ import { parseRetroMd } from '../reflection-doc.ts';
 
 import type { EventLogger } from '@forge/kernel';
 import { parseManifest } from '@forge/flows';
-import type { StreamQueryFn } from '@forge/agents';
+import type { StreamQueryFn, HeartbeatTimers } from '@forge/agents';
 import type { AgentDefinition } from '@forge/contracts';
 import { buildReflectorSystemPrompt, renderReflectorUserPrompt } from './reflector-binding.ts';
 import {
@@ -86,6 +86,8 @@ export type ReflectorDeps = {
   acquireBrainWriteLease?: typeof acquireBrainWriteLease;
   /** Seam F4: the executing node's own agent def. REQUIRED — no fallback. */
   agentDef: AgentDefinition;
+  /** 8.1.30 — test-injection only, mirrors `runAgent`'s own `RunContext.heartbeatTimers` (7.6.148). */
+  heartbeatTimers?: HeartbeatTimers;
 };
 
 /**
