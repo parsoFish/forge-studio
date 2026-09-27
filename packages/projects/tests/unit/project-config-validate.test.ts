@@ -131,6 +131,25 @@ test('validateProjectConfig: testProcess.acceptance requires a non-empty match',
   );
 });
 
+test('forge-mfv5.3.5: the retired testProcess.acceptance.required is REFUSED by name, whatever its value — never read, never silently ignored', () => {
+  // ADR 051 decision 2 as amended: whether an initiative must prove itself on
+  // the live-acceptance tier is its change class's `acceptance` column. A
+  // project.json still carrying the project-wide flag would otherwise look
+  // honoured while nothing reads it — the declared-data-fails-open shape.
+  for (const value of [true, false, 'yes']) {
+    assert.throws(
+      () =>
+        validateProjectConfig({
+          testProcess: {
+            local: { cmd: ['true'] },
+            acceptance: { match: 'acceptancetests', required: value },
+          },
+        }),
+      /`testProcess\.acceptance\.required` is retired: whether an initiative must carry a live-acceptance work item is its change class's `acceptance` column \(ADR 051 decision 2\) — delete the key/,
+    );
+  }
+});
+
 // ----- M2 fields (northStar / instructions / demoProcess / skills / kb) -----
 
 test('validateProjectConfig: M2 fields all absent → valid (backward compat)', () => {
