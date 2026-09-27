@@ -417,7 +417,7 @@ listed env vars are unset is **errored**, not silently skipped. An `advisory`
 class is not forced to carry a live-acceptance WI, and its gates run without
 the env demand. `requiresEnv` must list every var the test's `PreCheck`
 demands. The project-wide `required` boolean this object once carried is
-retired and refused at load.
+retired and refused at load; `forge project migrate <project-id>` deletes it.
 
 **`standing_work_item_acs: string[]`** — verbatim testing invariants appended
 to every WI body as a `## Standing acceptance criteria (project contract)`
