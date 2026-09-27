@@ -188,6 +188,161 @@ test('A2a: a declared acceptance tier + no live-acc WI → PM pass fails', async
   }
 });
 
+// ---------------------------------------------------------------------------
+// Row 157 (forge-8vfn.8.1.45, ruling 1873), part (b) ONE REVISE TURN
+// ---------------------------------------------------------------------------
+
+/** A stateful stub: pass `i` of `passes` answers the PM's `i`-th spawn (the
+ *  main pass, then the ONE bounded revise pass) — clamped to the last entry
+ *  so an unexpected extra call still gets an answer instead of hanging. */
+function makeMultiPassStubQueryFn(
+  initiativeId: string,
+  passes: StubWi[][],
+): { queryFn: PmQueryFn; callCount: () => number } {
+  let calls = 0;
+  const queryFn: PmQueryFn = (params) => {
+    const wis = passes[Math.min(calls, passes.length - 1)]!;
+    calls += 1;
+    return makeStubQueryFn(initiativeId, wis)(params);
+  };
+  return { queryFn, callCount: () => calls };
+}
+
+test(
+  'row 157/b: PM omits the acceptance WI, ADDS one on the revise turn → pass ' +
+    'succeeds, exactly one revise, and the ADDED WI is fully compiled (standing ' +
+    'ACs + constraint clause), not a second-class pass-through',
+  async () => {
+    // Row 157 part (b) close-the-gap coverage: a constraint source + standing
+    // ACs, so the revise-ADDED WI-2 can be checked for both — proving
+    // `runCompileStage` ran on it, not just on the first pass's WI-1.
+    const h = setupHarness({
+      ...BASE_CONFIG,
+      testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests' } },
+      standing_work_item_acs: ['Live acceptance: TF_ACC test proves it.'],
+    });
+    const sourcesRoot = mkdtempSync(join(tmpdir(), 'forge-pm-row157-constraint-sources-'));
+    try {
+      const projectDir = join(sourcesRoot, 'brain', 'projects', 'testproj');
+      mkdirSync(projectDir, { recursive: true });
+      writeFileSync(
+        join(projectDir, 'profile.md'),
+        [
+          '<!-- forge:constraint id: go-conventions applies_to: all -->',
+          'Always run gofmt before committing.',
+          '<!-- /forge:constraint -->',
+        ].join('\n'),
+      );
+
+      const accWi = {
+        wiId: 'WI-2',
+        filename: 'azuredevops/internal/acceptancetests/resource_foo_test.go',
+        gate: ACC_GATE,
+      };
+      const { queryFn, callCount } = makeMultiPassStubQueryFn(h.input.initiativeId, [
+        [{ wiId: 'WI-1' }],
+        [{ wiId: 'WI-1' }, accWi],
+      ]);
+      await runProjectManager(h.input, h.logger, {
+        agentDef: canonicalDef('project-manager'),
+        queryFn,
+        constraintSourcesRoot: sourcesRoot,
+        classProfiles: testClassProfilePort(),
+      });
+      assert.equal(callCount(), 2, 'expected exactly one main pass + one bounded revise pass');
+
+      const events = readEvents(h.logger);
+      const start = events.find((e) => e.message === 'pm.acceptance-revise.start');
+      const end = events.find((e) => e.message === 'pm.acceptance-revise.end');
+      assert.ok(start, 'expected pm.acceptance-revise.start');
+      const violation = (start!.metadata as { violation?: string }).violation ?? '';
+      assert.match(violation, /no acceptance work item/);
+      assert.ok(end, 'expected pm.acceptance-revise.end');
+      const revises = events.filter((e) => e.message === 'pm.acceptance-revise.start');
+      assert.equal(revises.length, 1, 'exactly one revise turn');
+
+      const quarantine = events.find((e) => e.message === 'pm.rejected-set-quarantined');
+      assert.equal(quarantine, undefined, 'a resolved revise must not quarantine');
+      const pmEnd = events.find((e) => e.phase === 'project-manager' && e.event_type === 'end');
+      assert.ok(pmEnd, 'expected a successful pm.end event once the revise resolved the gate');
+
+      const manifest = parseManifest(readFileSync(h.input.manifestPath, 'utf8'));
+      assert.deepEqual(
+        manifest.specs,
+        ['WI-1', 'WI-2'],
+        'the REVISED set (post-revise re-read) is what gets persisted',
+      );
+
+      // The close-the-gap assertion: WI-2 only exists because of the revise
+      // turn, and it must be compiled exactly like a first-pass WI.
+      const wi2Path = resolve(h.worktree, '.forge', 'work-items', 'WI-2.md');
+      const wi2Body = readFileSync(wi2Path, 'utf8');
+      assert.match(
+        wi2Body,
+        /## Standing acceptance criteria \(project contract\)/,
+        'the revise-added WI must carry the project standing ACs',
+      );
+      assert.match(
+        wi2Body,
+        /Live acceptance: TF_ACC test proves it\./,
+        'the revise-added WI must carry the SPECIFIC standing AC text',
+      );
+      assert.match(
+        wi2Body,
+        /## Compiled constraints \(project & brain, ADR 037\)/,
+        'the revise-added WI must carry its compiled forge:constraint clause',
+      );
+      assert.match(
+        wi2Body,
+        /<!-- forge:compiled clause="go-conventions" -->/,
+        'the revise-added WI must carry the SPECIFIC compiled clause id',
+      );
+    } finally {
+      rmSync(h.dir, { recursive: true, force: true });
+      rmSync(sourcesRoot, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  'row 157/b: PM omits the acceptance WI on BOTH passes → exactly one ' +
+    'revise, then quarantine + failure',
+  async () => {
+    const h = setupHarness({
+      ...BASE_CONFIG,
+      testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests' } },
+    });
+    try {
+      const { queryFn, callCount } = makeMultiPassStubQueryFn(h.input.initiativeId, [
+        [{ wiId: 'WI-1' }, { wiId: 'WI-2' }],
+        [{ wiId: 'WI-1' }, { wiId: 'WI-2' }],
+      ]);
+      await assert.rejects(
+        () =>
+          runProjectManager(h.input, h.logger, {
+            agentDef: canonicalDef('project-manager'),
+            queryFn,
+            classProfiles: testClassProfilePort(),
+          }),
+        /no acceptance work item/,
+      );
+      assert.equal(
+        callCount(),
+        2,
+        'expected exactly one main pass + one bounded revise pass — never a second revise',
+      );
+
+      const events = readEvents(h.logger);
+      const revises = events.filter((e) => e.message === 'pm.acceptance-revise.start');
+      assert.equal(revises.length, 1, 'exactly one revise turn, even on a still-failing outcome');
+      const quarantined = events.find((e) => e.message === 'pm.rejected-set-quarantined');
+      assert.ok(quarantined, 'a still-violating revise outcome must still quarantine');
+    } finally {
+      rmSync(h.dir, { recursive: true, force: true });
+    }
+  },
+);
+
 test('ADR-051/C7: docs-class + a declared acceptance tier + no acceptance WI → PM pass succeeds and emits the skip event', async () => {
   const h = setupHarness(
     {

@@ -98,11 +98,14 @@ function resolveExecutingAgentDef(ctx: NodeExecContext): AgentDefinition {
   return def;
 }
 
-/** pm: skip + rebase on any resume ('integrate' crash recovery, ADR-019;
- *  'develop' fix-loop re-entry, ADR-040); otherwise run the project manager. */
+/** pm: skip + rebase on a SKIPPING resume ('integrate' crash recovery,
+ *  ADR-019; 'develop' fix-loop re-entry, ADR-040) — but 'plan' (row 157,
+ *  ruling 1873: a PM-phase acceptance-gate failure) rebases and STILL RUNS,
+ *  because the PM is the phase that failed and must re-decompose; otherwise
+ *  (no marker) run the project manager as a normal fresh pass. */
 const execPm: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, nodeId } = ctx;
-  if (input.resumeFrom) {
+  if (input.resumeFrom && input.resumeFrom !== 'plan') {
     // Item 3: rebase the preserved branch onto main before running the dev-loop.
     deps.rebaseForResume(input, nodeLogger);
     nodeLogger.emit({
@@ -117,6 +120,7 @@ const execPm: NodeExecutor = async (ctx) => {
     });
     return;
   }
+  if (input.resumeFrom === 'plan') deps.rebaseForResume(input, nodeLogger);
   const def = resolveExecutingAgentDef(ctx);
   await runWithWedge(ctx, (sig) => deps.runProjectManager(input, nodeLogger, def, sig));
 };

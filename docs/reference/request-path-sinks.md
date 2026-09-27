@@ -3050,3 +3050,22 @@ row above is historical). `packages/sessions/bridge-studio-demo.ts` loses its
 `readFileSync` (1 → 0, the fragment wrapper's stylesheet read) and one
 `guardedReadDir`/`guardedReadFile` pair; the `/demo/` route keeps every guard
 the SEC-03 row describes. Accepted via `--write` in the same commit.
+
+### Row 157 (forge-8vfn.8.1.45, ruling 1873) — `appendStandingAcs` relocated, no new surface
+
+| file | sink | before | after |
+|---|---|---|---|
+| `packages/stations/phases/project-manager.ts` | `writeFileSync` | 1 | **row deleted** |
+| `packages/stations/phases/pm-acceptance-gate.ts` | `writeFileSync` | — | 1 |
+
+**PURE MOVE, same call site, same taint analysis.** `appendStandingAcs` (the
+A2b standing-ACs writer, already classified where `project-manager.ts` first
+carried it — an existing trusted `workItemsDir` the phase already reads and
+writes elsewhere, never a request-derived path) moved verbatim to
+`pm-acceptance-gate.ts` so it can sit beside `runCompileStage`, the function
+that now calls it a second time (once for the PM's first pass, once for the
+row-157 acceptance-gate revise turn's re-read set — both calls pass the SAME
+`workItemsDir` the caller already resolved, never a new input). The
+`writeFileSync` row on `project-manager.ts` is DELETED rather than left at
+zero (ruling 102's shape, the same rule the M5-A relocation above follows).
+Accepted via `--write` in the same commit.

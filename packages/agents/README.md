@@ -14,7 +14,7 @@ rather than importing what they need.
 
 | seam | exports |
 |---|---|
-| run one agent | `runAgent` · `isSafeRunId` · `dispatchAgentRun` · `cmdAgent` · `cmdAgentRun` · `cmdAgentDispatch` · `parseAgentDispatchArgs` · `findSessionProject` |
+| run one agent | `runAgent` · `isSafeRunId` · `resolveOneShotBudgetUsd` · `dispatchAgentRun` · `cmdAgent` · `cmdAgentRun` · `cmdAgentDispatch` · `parseAgentDispatchArgs` · `findSessionProject` |
 | bands | `resolveBandGuard` · `BAND_GUARD_IDS` · `PLATFORM_GUARD_IDS` · `BAND_CANONICAL_SLUG` · `runBandAgentStandalone` · `isStandaloneBandAgent` · `dispatchStandaloneBand` |
 | the Ralph loop | `runRalphLoop` · `makeQualityGateFromCmd` · `resolveGateTimeoutMs` |
 | the Agent kind | `loadAgentDefinition` · `listAgentDefinitions` · `listStarterAgents` · `isStudioAgent` · `isUnfilteredStudioAgent` · `deriveAgentSpec` · `agentCapabilityDescriptor` · `serializeAgentDefinition` · `PHASE_EXECUTOR_KINDS` |

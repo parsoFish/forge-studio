@@ -9,7 +9,11 @@
  */
 
 import type { EventLogEntry } from '@forge/kernel';
-import { COST_CEILING_MESSAGE_PREFIX, OPERATOR_STOP_MESSAGE_PREFIX } from '@forge/contracts';
+import {
+  COST_CEILING_MESSAGE_PREFIX,
+  OPERATOR_STOP_MESSAGE_PREFIX,
+  PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX,
+} from '@forge/contracts';
 
 export type FailureKind = 'transient' | 'terminal';
 
@@ -34,6 +38,14 @@ export type FailureClassification = {
    * on sniffing the classifier's own re-authored `reason` prose.
    */
   cleanBoundaryHalt: boolean;
+  /**
+   * Row 157 (bead forge-8vfn.8.1.45, ruling 1873): set to `'plan'` for a
+   * PM-phase acceptance-gate violation that survived its one bounded revise
+   * turn — deterministic (never auto-retried, `kind: 'terminal'`) but a
+   * requeue's inference (`requeue-resume.ts`) resumes it at the plan
+   * (project-manager) node instead of wiping the worktree for nothing salvaged.
+   */
+  resumeFrom?: 'plan';
   /** Up to 5 event_ids whose content drove the classification. */
   evidence_event_ids: string[];
 };
@@ -44,12 +56,14 @@ const T = (
   evidence: string[],
   environment = false,
   cleanBoundaryHalt = false,
+  resumeFrom?: 'plan',
 ): FailureClassification => ({
   kind,
   reason,
   recoverable: kind === 'transient',
   environment,
   cleanBoundaryHalt,
+  ...(resumeFrom ? { resumeFrom } : {}),
   evidence_event_ids: evidence,
 });
 
@@ -310,6 +324,10 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // AbortController — the SAME "flow's own halt firing" shape as
   // costCeilingHit above, never a defect in the work.
   let operatorStopHit = false, operatorStopMessage = '';
+  // Row 157 (ruling 1873): the PM's own rejection summary, prefixed by the
+  // writer (project-manager.ts) when an acceptance-gate violation survived
+  // its one bounded revise turn — see the shared constant's own doc.
+  let pmAcceptanceGateUnresolved = false;
 
   for (const e of windowed) {
     const md = (e.metadata ?? {}) as Record<string, unknown>;
@@ -336,6 +354,13 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     if (e.event_type === 'error' && msg.startsWith(OPERATOR_STOP_MESSAGE_PREFIX)) {
       operatorStopHit = true;
       operatorStopMessage = msg;
+      ev(e);
+    }
+    // Row 157: the wrapper `runProjectManager` throws ("project-manager phase
+    // failed: …") precedes the prefix, so this is `includes`, not `startsWith`
+    // — the two above are unwrapped throws and anchor at position 0.
+    if (e.event_type === 'error' && msg.includes(PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX)) {
+      pmAcceptanceGateUnresolved = true;
       ev(e);
     }
     if (msg === 'ralph.end' && md.status === 'failed' && (md.iterations === 0 || md.iterations === undefined) && md.stop_reason === 'quality-gates-pass') { trivialPass = true; ev(e); }
@@ -549,6 +574,17 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     // see it.
     if (pmHiddenCoupling) return T('terminal', 'PM emitted overlapping WIs (hidden coupling) — deterministic: the same decomposition re-runs the same violation, so no auto-retry. Fix the decomposition (add the missing depends_on edge, or merge the WIs) and re-dispatch', evidence);
     if (pmInvalidWorkItems) return T('terminal', 'PM emitted schema-invalid WIs — deterministic: the same decomposition re-runs the same validation errors, so no auto-retry. Fix the WI frontmatter (see `set_errors` / the per-item errors on the project-manager error event) and re-dispatch', evidence);
+    // Row 157 (ruling 1873): the acceptance-gate violation survived its one
+    // bounded revise turn — deterministic (a fresh PM pass reasons from the
+    // same manifest + class profile), but well-understood: never "examine
+    // events.jsonl manually", resumable at the plan (project-manager) node.
+    if (pmAcceptanceGateUnresolved) {
+      const why =
+        'PM did not compile an acceptance work item even after its one bounded revise turn — ' +
+        'deterministic: the same class profile and project acceptance-gate config re-derive the ' +
+        'same requirement, so no auto-retry. Resume from the plan node to re-decompose.';
+      return T('terminal', why, evidence, false, false, 'plan');
+    }
     return null;
   })();
   if (deterministic) return deterministic;

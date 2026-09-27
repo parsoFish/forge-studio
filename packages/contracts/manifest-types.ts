@@ -145,9 +145,14 @@ export type InitiativeManifest = {
    *     shortcut, new review-fix WIs build); then the post-develop spine
    *     re-presents. Set by `persistManifestSendBack` under the verdict
    *     handler's manifest lock.
+   *   - `'plan'` — row 157 (ruling 1873): a PM-phase acceptance-gate
+   *     violation that survived its one bounded revise turn (deterministic,
+   *     `failure-classifier.ts`). The PM phase rebases AND RUNS (unlike the
+   *     other two, it is not skipped — the plan itself must re-decompose).
+   *     Set by `forge requeue`'s inference over the prior failure signal.
    * Absent ⇒ normal full cycle.
    */
-  resume_from?: 'integrate' | 'develop';
+  resume_from?: 'integrate' | 'develop' | 'plan';
   /**
    * ADR 040: send-back round counter. Incremented by the review verdict
    * handler (`persistManifestSendBack`) each time review feedback compiles

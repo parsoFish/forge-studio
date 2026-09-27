@@ -158,7 +158,7 @@ export function parseManifest(content: string): InitiativeManifest {
     const deps = (data.depends_on_initiatives as unknown[]).filter((s): s is string => typeof s === 'string');
     if (deps.length > 0) manifest.depends_on_initiatives = deps;
   }
-  if (data.resume_from === 'integrate' || data.resume_from === 'develop') {
+  if (data.resume_from === 'integrate' || data.resume_from === 'develop' || data.resume_from === 'plan') {
     manifest.resume_from = data.resume_from;
   }
   if (
@@ -231,7 +231,7 @@ export function serializeManifest(m: InitiativeManifest): string {
   if (m.depends_on_initiatives && m.depends_on_initiatives.length > 0) {
     data.depends_on_initiatives = m.depends_on_initiatives;
   }
-  if (m.resume_from === 'integrate' || m.resume_from === 'develop') {
+  if (m.resume_from === 'integrate' || m.resume_from === 'develop' || m.resume_from === 'plan') {
     data.resume_from = m.resume_from;
   }
   if (typeof m.review_rounds === 'number') {

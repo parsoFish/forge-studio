@@ -110,9 +110,11 @@ export type CycleInput = {
    *     re-verify cheaply via the iter-0 already-complete shortcut, new
    *     review-fix WIs build); then the post-develop spine re-presents. Set
    *     by the review→develop fix-loop drain.
+   *   - `'plan'` — row 157 (ruling 1873): a PM-phase acceptance-gate failure
+   *     that survived its bounded revise turn. PM rebases and STILL RUNS.
    * Absent ⇒ normal full cycle.
    */
-  resumeFrom?: 'integrate' | 'develop';
+  resumeFrom?: 'integrate' | 'develop' | 'plan';
   /** Project quality-gate command run by the orchestrator between review iterations. Defaults to `npm test` if package.json is present, otherwise `true`. */
   qualityGateCmd?: string[];
   /**

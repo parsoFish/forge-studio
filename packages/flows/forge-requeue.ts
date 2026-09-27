@@ -210,7 +210,9 @@ export function runRequeue(
     resume_from:
       resumeDecision.resume && resumeDecision.resume_from === 'integrate'
         ? ('integrate' as const)
-        : undefined,
+        : resumeDecision.resume && resumeDecision.resume_from === 'plan'
+          ? ('plan' as const)
+          : undefined,
   };
 
   // 3. Atomic move to pending/ via tmp+rename.
