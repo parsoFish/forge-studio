@@ -59,14 +59,21 @@ export const CLOSE = [
         { fill: 'freeform', with: 'No additional notes this cycle.' },
         { press: 'submit-reflection' },
       ],
-      // Anchored on this beat's own start (T1 718(1)): the reflector this waits
-      // for is the RERUN `fireReflectorRerun` fires from the answer POST above
-      // (`bridge-reflect.ts`), not the interactive session's first
-      // `reflector.end`, which already fired before this beat pressed
-      // anything. `terminal: 'reflected'` + `cycleOf` still route to the
-      // reflector's OWN terminal (`makeReflectionWatch`) — unchanged from
-      // before this fix — so it is the RERUN's end this resolves on.
-      wait: { for: 'agent', terminal: 'reflected', cycleOf: '<runId>', upTo: 900_000 },
+      // Ruling 1736, round 3 (bead `forge-8vfn.8.1.34`) — `terminal:
+      // 'reflected'` is the WRONG word here. Anchored on this beat's own start
+      // (T1 718(1)), it admits the INTERACTIVE reflector's first, PRE-ANSWER
+      // pass too: that reflection published `user-questions.json` and reached
+      // `reflector.end` before this beat pressed anything (run 36:
+      // reflector.start 02:59:43, reflector.end 03:04:36 — beat 21 started
+      // 02:59:12), so the very next poll after the answer POSTed above saw
+      // that ALREADY-terminal event and resolved at once — racing the
+      // detached rerun `fireReflectorRerun` (`bridge-reflect.ts`) had only
+      // just fired. `terminal: 'reflected-answered'` (same door,
+      // `beats-reflection-terminal.mjs`) adds the one gate that gets this
+      // right: only a terminal whose PRECEDING `reflector.start` is at or
+      // after `user-feedback.md`'s mtime counts, so it is the RERUN's own
+      // terminal this resolves on, never the first reflection's.
+      wait: { for: 'agent', terminal: 'reflected-answered', cycleOf: '<runId>', upTo: 900_000 },
       expect: { route: '/artifact', data: { section: 'reflect-done' } },
       say:
         'The cycle ends by writing down what it learned. The operator answers every question the ' +

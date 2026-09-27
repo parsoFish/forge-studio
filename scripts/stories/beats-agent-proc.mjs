@@ -28,9 +28,6 @@ import { queueManifestTerminal, FS_CLOCK_SLACK_MS, channelTerminalState } from '
 // Split out at the 800-line cap (T1 ruling 492: SPLIT, NEVER BASELINE) —
 // see beats-channel-scan.mjs's own header for what moved and why.
 import { isDispatchDir, newestChannelSince, scanSummary, cycleDirForInitiative } from './beats-channel-scan.mjs';
-// T1 1693 (bead `forge-8vfn.8.1.31`) — the REFLECTION door's own event reader:
-// the SAME reader every other agent-evidence reader in this file resolves
-// through, never a second `events.jsonl` parser invented for one door.
 // T1 ruling 1471 — re-exported so `beats-page.mjs` names the wall ceiling
 // beside `STALL_CEILING_MS`/`TERMINAL_UI_GRACE_MS`, its two siblings that
 // already live in THIS file rather than in the schema that only validates what
@@ -489,12 +486,14 @@ export function makeCycleTerminalWatch(forgeRoot, wantState, opts = null) {
 /**
  * THE GRACE-WINDOW WRAPPER ITSELF, pulled out from underneath
  * `makeCycleTerminalWatch` alone (T1 1693, bead `forge-8vfn.8.1.31`) so
- * `makeReflectionWatch` (below) gets the IDENTICAL `cycle-ended` /
- * `cycle-done-ui-stale` split and `cycleOf`-keyed inactivity window
- * `waitForConsequence` already reads off `.progressIdleMs`, rather than a
- * second, driftable copy of this state machine for one more door. A PURE
+ * `makeReflectionWatch` (`beats-reflection-terminal.mjs`) gets the IDENTICAL
+ * `cycle-ended` / `cycle-done-ui-stale` split and `cycleOf`-keyed inactivity
+ * window `waitForConsequence` already reads off `.progressIdleMs`, rather than
+ * a second, driftable copy of this state machine for one more door. A PURE
  * EXTRACTION: every line below is unchanged from `makeCycleTerminalWatch`'s
  * own body, generalised only in WHICH door supplies `{done, state, detail}`.
+ * Exported for that file to import — the reflection door's grace window is
+ * this SAME wrapper, never a second one (forge-8vfn.8.1.34).
  */
 export function terminalWatchAround(forgeRoot, door, wantState, cycleOf) {
   if (door === null) return null;
