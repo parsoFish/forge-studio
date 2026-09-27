@@ -630,9 +630,10 @@ packages/stations/cycle-recap.ts readdirSync 1
 packages/stations/cycle-recap.ts readFileSync 4
 packages/stations/cycle-recap.ts statSync 1
 packages/stations/cycle-recap.ts writeFileSync 1
+packages/stations/demo-delta.ts readFileSync 2
 packages/stations/demo-model.ts existsSync 1
 packages/stations/demo-model.ts readdirSync 2
-packages/stations/demo-model.ts readFileSync 6
+packages/stations/demo-model.ts readFileSync 4
 packages/stations/demo-model.ts writeFileSync 2
 packages/stations/gates/docs-gate.ts existsSync 2
 packages/stations/gates/docs-gate.ts readFileSync 1
