@@ -145,3 +145,18 @@ export type MaterialKind = (typeof MATERIAL_KINDS)[number];
  * contracts and nothing else.
  */
 export type CycleOutcome = 'merged' | 'pr-open' | 'ready-for-review';
+
+// ── Failure signatures (M7 row 150, ruling 1794 round 3) ──
+
+/**
+ * `CostCeilingError` (`packages/flows/flow-budgets.ts`) and `OperatorStopError`
+ * (`packages/flows/operator-stop.ts`) each prefix their thrown message with
+ * one of these — the exact literal `failure-classifier.ts` scans incoming
+ * `event_type: 'error'` messages for. `agents` (rank 3) may not import
+ * `@forge/flows` (rank 5), so the prefix cannot live beside either error class
+ * without a boundary violation; `contracts` (rank 0) is the one place both
+ * the writer and the reader can import, keeping ONE literal instead of two
+ * hand-typed copies that could drift apart.
+ */
+export const COST_CEILING_MESSAGE_PREFIX = 'cost-ceiling:' as const;
+export const OPERATOR_STOP_MESSAGE_PREFIX = 'operator-stop:' as const;

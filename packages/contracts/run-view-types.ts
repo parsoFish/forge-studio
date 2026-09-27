@@ -72,6 +72,9 @@ export type Run = {
     totalWorkItems: number;
     stoppedBeforeNode?: string;
   };
+  /** An operator-requested stop (M7 row 150, ruling 1774) — resumable, distinct
+   *  from an ordinary crash, same shape as `stopOnBudget` above. */
+  operatorStop?: boolean;
   reflectionLost?: string;           // merged/closed cycle whose reflection was lost (cause)
   reflectionLostNote?: string;
   /** `costUsd` optional per work item — the wire-parse carries this array through unvalidated. */

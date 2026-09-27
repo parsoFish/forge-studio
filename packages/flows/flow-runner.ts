@@ -34,7 +34,7 @@
  * proceeds.
  */
 
-import { resolve, basename } from 'node:path';
+import { resolve, basename, dirname } from 'node:path';
 import { readFileSync } from 'node:fs';
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
 import { type ClosureResult, type CycleInput, type CycleOutcome, type ReviewerOutcome } from './cycle-context.ts';
@@ -55,6 +55,7 @@ import { findFanOutViolations } from './flow-fanout.ts';
 import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';
 import { stageFlowRunRequest } from './flow-run-requests.ts';
+import { readOperatorStopRequest, OperatorStopError } from './operator-stop.ts';
 
 import type { PhaseExecutor, ProjectGate } from '@forge/kernel';
 import type { NodeExecContext, NodeRunState } from './flow-node-context.ts';
@@ -445,9 +446,23 @@ export async function runFlow({
   // the threading note above `runFlow`), so this shadows the destructured
   // `rawInput` with a single augmented object rather than mutating it
   // in place or rebuilding it per node.
+  // ADR 028 amendment (M7 row 150, ruling 1774): the operator-stop flag file is
+  // a SECOND trigger on this SAME clean-boundary halt, checked at the identical
+  // two boundaries as the cost ceiling (here, and at the node boundary below).
+  // `inFlightDir` is `dirname(rawInput.manifestPath)` — while a cycle RUNS, its
+  // manifest always sits in `_queue/in-flight/` (`scheduler-run-one.ts`'s
+  // `claim()` hands `runCycle` exactly that path), which is also where the
+  // bridge's stop route writes the flag. Non-destructive, existence-only read.
+  const inFlightDir = dirname(rawInput.manifestPath);
+  const checkOperatorStop = () => readOperatorStopRequest(inFlightDir, rawInput.initiativeId);
+
   const input: CycleInput = {
     ...rawInput,
-    shouldStopBeforeWorkItem: (workItemId: string) => costTracker.stopReasonBeforeNextWorkItem(workItemId),
+    shouldStopBeforeWorkItem: (workItemId: string) => {
+      const costReason = costTracker.stopReasonBeforeNextWorkItem(workItemId);
+      if (costReason !== null) return costReason;
+      return checkOperatorStop() ? new OperatorStopError().message : null;
+    },
     // M7-A: the SAME tracker's live remaining-budget reading (field doc above).
     remainingCostBudgetUsd: () => costTracker.remainingUsd,
     // Operator ruling 97 (seam F6 half 2): THIS flow's own declared review
@@ -602,6 +617,22 @@ export async function runFlow({
     const currentIdx = order.indexOf(nodeId);
     const nextNodeId = currentIdx >= 0 ? (order[currentIdx + 1] ?? null) : null;
     costTracker.checkCeiling({ throw: true, nextNodeId: nextNodeId ?? undefined });
+
+    // ADR 028 amendment (ruling 1774): the operator-stop flag, checked at the
+    // SAME clean node boundary — never mid-write, same as the ceiling above.
+    if (checkOperatorStop()) {
+      nodeLogger.emit({
+        initiative_id: input.initiativeId,
+        phase: 'orchestrator',
+        skill: 'flow-budgets',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'flow.operator-stop',
+        metadata: { stoppedBeforeNode: nextNodeId ?? null },
+      });
+      throw new OperatorStopError();
+    }
   }
 
   // Fire `on: flow-complete` triggers on terminal SUCCESS only — failures exit

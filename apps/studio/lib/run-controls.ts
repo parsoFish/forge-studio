@@ -19,7 +19,7 @@
  */
 import type { Run } from './studio-client';
 
-export type RunControlId = 'resume' | 'requeue' | 'abandon';
+export type RunControlId = 'resume' | 'requeue' | 'abandon' | 'stop';
 
 export type RunControl = {
   id: RunControlId;
@@ -33,7 +33,29 @@ export type RunControl = {
 };
 
 /** The full action vocabulary, in render order. */
-export const RUN_CONTROL_ACTIONS = ['resume-run', 'requeue-run', 'abandon-run'] as const;
+export const RUN_CONTROL_ACTIONS = ['stop-run', 'resume-run', 'requeue-run', 'abandon-run'] as const;
+
+/**
+ * M7 row 150 (bead forge-8vfn.8.1.39, rulings 1771 + 1774) — the ONLY control
+ * an active/gated run offers. Non-destructive by construction: it never
+ * deletes the worktree or branch (`Abandon` does; `Stop` never does), so it
+ * posts on its own click like Resume/Requeue, no arm-then-confirm step.
+ */
+const RUNNING_CONTROLS: RunControl[] = [
+  {
+    id: 'stop',
+    action: 'stop-run',
+    label: 'Stop',
+    // `POST /api/recovery/:id/stop`. Active: writes a stop flag the runner
+    // consults at its next clean node/work-item boundary (the SAME boundary
+    // the cost ceiling already halts at — ADR 028 amendment). Gated: no live
+    // agent to signal, so this moves the manifest to failed/ directly.
+    detail:
+      'Halts at the next clean boundary (or immediately if gated). The worktree and ' +
+      'branch are kept — resumable.',
+    destructive: false,
+  },
+];
 
 const FAILED_CONTROLS: RunControl[] = [
   {
@@ -62,10 +84,17 @@ const FAILED_CONTROLS: RunControl[] = [
   },
 ];
 
-/** The recovery controls a run offers right now. Only a FAILED run offers any. */
+/**
+ * The recovery controls a run offers right now. A FAILED run offers the
+ * destructive/resume set; an ACTIVE or GATED run offers only the
+ * non-destructive Stop (M7 row 150, rulings 1771 + 1774). Every other status
+ * (planned, complete) offers none.
+ */
 export function deriveRunControls(run: Run | null): RunControl[] {
-  if (run === null || run.status !== 'failed') return [];
-  return FAILED_CONTROLS;
+  if (run === null) return [];
+  if (run.status === 'failed') return FAILED_CONTROLS;
+  if (run.status === 'active' || run.status === 'gated') return RUNNING_CONTROLS;
+  return [];
 }
 
 /**
@@ -166,6 +195,12 @@ export function describeStopOnBudget(stop: NonNullable<Run['stopOnBudget']>): st
   return `Stopped on budget — $${stop.spentUsd.toFixed(2)} of $${stop.ceilingUsd.toFixed(2)} spent, ${stop.completedWorkItems} of ${stop.totalWorkItems} work items complete${boundary}.`;
 }
 
+/** M7 row 150 (ruling 1774) — `describeStopOnBudget`'s sibling: the ONE copy
+ *  for an operator-requested stop, so RunControls and RunRail can't drift. */
+export function describeOperatorStop(): string {
+  return 'Stopped by the operator — resumable; the worktree and branch are kept.';
+}
+
 /**
  * W8-A2 (ON-7 defect 2) — the ONE decision `RunControls` and `RunRail` both
  * route through for "which failure note, if any" — so the "stopOnBudget
@@ -174,10 +209,18 @@ export function describeStopOnBudget(stop: NonNullable<Run['stopOnBudget']>): st
  * renders either; every other status renders neither (unchanged from
  * today, where both components already gate on `run.status === 'failed'`
  * before looking at `failNote`).
+ *
+ * M7 row 150 (ruling 1774): `operatorStop` is a THIRD kind, same priority
+ * band as `stopOnBudget` (a clean, resumable, non-crash halt) — checked
+ * after budget (mutually exclusive in practice: whichever boundary check
+ * threw first is the one that ran) and before the generic fail-note.
  */
-export function runFailureNoteKind(run: Pick<Run, 'status' | 'stopOnBudget' | 'failNote'>): 'budget' | 'fail-note' | null {
+export function runFailureNoteKind(
+  run: Pick<Run, 'status' | 'stopOnBudget' | 'operatorStop' | 'failNote'>,
+): 'budget' | 'operator-stop' | 'fail-note' | null {
   if (run.status !== 'failed') return null;
   if (run.stopOnBudget) return 'budget';
+  if (run.operatorStop) return 'operator-stop';
   if (run.failNote) return 'fail-note';
   return null;
 }

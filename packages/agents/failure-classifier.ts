@@ -9,6 +9,7 @@
  */
 
 import type { EventLogEntry } from '@forge/kernel';
+import { COST_CEILING_MESSAGE_PREFIX, OPERATOR_STOP_MESSAGE_PREFIX } from '@forge/contracts';
 
 export type FailureKind = 'transient' | 'terminal';
 
@@ -25,6 +26,14 @@ export type FailureClassification = {
    * sniffing reason text. Always a subset of `transient`.
    */
   environment: boolean;
+  /**
+   * M7 row 150 round 3 (ruling 1794, generalising `environment`'s own N7
+   * doc above): true iff the flow's OWN clean-boundary halt fired — a cost
+   * ceiling or an operator stop, never a defect in the work and never API
+   * pressure. Structured so the requeue-resume decision keys on a flag, not
+   * on sniffing the classifier's own re-authored `reason` prose.
+   */
+  cleanBoundaryHalt: boolean;
   /** Up to 5 event_ids whose content drove the classification. */
   evidence_event_ids: string[];
 };
@@ -34,8 +43,14 @@ const T = (
   reason: string,
   evidence: string[],
   environment = false,
+  cleanBoundaryHalt = false,
 ): FailureClassification => ({
-  kind, reason, recoverable: kind === 'transient', environment, evidence_event_ids: evidence,
+  kind,
+  reason,
+  recoverable: kind === 'transient',
+  environment,
+  cleanBoundaryHalt,
+  evidence_event_ids: evidence,
 });
 
 // ---------------------------------------------------------------------------
@@ -290,19 +305,39 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // it (the message already names the spend, the ceiling, and that the stop
   // was at a clean, resumable phase boundary).
   let costCeilingHit = false, costCeilingMessage = '';
+  // M7 row 150 / ruling 1774: an OperatorStopError (operator-stop.ts) firing
+  // at a clean node/WI boundary, or through the wedge-kill's shared
+  // AbortController — the SAME "flow's own halt firing" shape as
+  // costCeilingHit above, never a defect in the work.
+  let operatorStopHit = false, operatorStopMessage = '';
 
   for (const e of windowed) {
     const md = (e.metadata ?? {}) as Record<string, unknown>;
     const msg = e.message ?? '';
     const pmErr = e.phase === 'project-manager' && e.event_type === 'error';
 
-    // CostCeilingError's message (flow-budgets.ts) always starts with this
-    // literal prefix. W8-F3: capturing the signal early was never enough —
-    // this comment used to claim the branch "never depends on the blob-based
-    // rate-limit/agent_threw checks happening to miss it", which was false,
-    // because the RETURN below sat under `rateLimited`. The precedence, not
-    // the capture, is what decides. It is now in the deterministic block.
-    if (e.event_type === 'error' && msg.startsWith('cost-ceiling:')) { costCeilingHit = true; costCeilingMessage = msg; ev(e); }
+    // CostCeilingError's message (flow-budgets.ts) always starts with
+    // `COST_CEILING_MESSAGE_PREFIX` (@forge/contracts — the one rank both
+    // that class and this file can import, so the two never hand-type two
+    // independent copies of the same literal). W8-F3: capturing the signal
+    // early was never enough — this comment used to claim the branch "never
+    // depends on the blob-based rate-limit/agent_threw checks happening to
+    // miss it", which was false, because the RETURN below sat under
+    // `rateLimited`. The precedence, not the capture, is what decides. It is
+    // now in the deterministic block.
+    if (e.event_type === 'error' && msg.startsWith(COST_CEILING_MESSAGE_PREFIX)) {
+      costCeilingHit = true;
+      costCeilingMessage = msg;
+      ev(e);
+    }
+    // OperatorStopError's message (operator-stop.ts) always starts with
+    // `OPERATOR_STOP_MESSAGE_PREFIX` (@forge/contracts) — the same
+    // shared-constant convention as cost-ceiling above.
+    if (e.event_type === 'error' && msg.startsWith(OPERATOR_STOP_MESSAGE_PREFIX)) {
+      operatorStopHit = true;
+      operatorStopMessage = msg;
+      ev(e);
+    }
     if (msg === 'ralph.end' && md.status === 'failed' && (md.iterations === 0 || md.iterations === undefined) && md.stop_reason === 'quality-gates-pass') { trivialPass = true; ev(e); }
     if (e.event_type === 'error' && (msg.includes('brain-skipped') || msg.includes('brain-first mandate'))) { brainSkipped = true; ev(e); }
     if (e.phase === 'project-manager' && (md.result_subtype === 'error_max_turns' || md.result_subtype === 'error_max_budget_usd')) {
@@ -465,7 +500,23 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     // `kind: 'terminal'` (recoverable: false) even though it is, in the
     // "an operator could resume this" sense, the least "terminal" terminal
     // failure in this file. Do not "fix" this to transient.
-    if (costCeilingHit) return T('terminal', `cost ceiling reached — ${costCeilingMessage} An auto-retry would immediately re-spend against the same already-crossed ceiling with zero new work; continuing is an OPERATOR decision (raise the ceiling and resume from this phase boundary, or abandon), never an unattended scheduler retry.`, evidence);
+    if (costCeilingHit) {
+      const why =
+        `cost ceiling reached — ${costCeilingMessage} An auto-retry would immediately re-spend against the ` +
+        'same already-crossed ceiling with zero new work; continuing is an OPERATOR decision (raise the ' +
+        'ceiling and resume from this phase boundary, or abandon), never an unattended scheduler retry.';
+      return T('terminal', why, evidence, false, true);
+    }
+    // M7 row 150 / ruling 1774: an operator-requested stop is the SAME
+    // "flow's own halt" shape as costCeilingHit above — never a defect, and
+    // an auto-retry would defeat the whole point of the operator's stop.
+    // `environment: false` too: this is not API pressure, it is the operator.
+    if (operatorStopHit) {
+      const why =
+        `${operatorStopMessage} An auto-retry would immediately undo the operator's stop; resuming is an ` +
+        "OPERATOR decision (the run's Resume control), never an unattended scheduler retry.";
+      return T('terminal', why, evidence, false, true);
+    }
     // G3 (plan 2.3): `classifyCrash` checks the API-pressure signatures FIRST
     // and returns `transient` for them, so a crash that reaches
     // `deterministic` is by construction NOT rate-limit death — it is context

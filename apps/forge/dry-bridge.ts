@@ -124,6 +124,14 @@ export const HAND_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/runs/:id/resume', classification: 'refuse', action: 'git-remote', guard: 'route',
     reason: 'delegates to the same runRequeue git ops as recovery/requeue' },
 
+  // ---- exempt-local: M7 row 150 (rulings 1771 + 1774) — unlike abandon/
+  // requeue/resume above, `stop` never touches git or spawns anything in
+  // EITHER of its two modes: active writes a flag file the runner polls
+  // (recoveryStop, bridge-recovery.ts); gated moves a manifest, same shape as
+  // the /api/develop/start row below. ---------------------------------------
+  { method: 'POST', route: '/api/recovery/:id/stop', classification: 'exempt-local',
+    reason: 'active: writes a stop flag file only (the daemon halts itself at the next clean node/work-item boundary, same shape as the cost-ceiling stop); gated: manifest move only — no worktree/branch git ops, unlike abandon' },
+
   // ---- refuse: has a RouteEntry, but the row states an `action`/`guard` no
   // RouteEntry field carries — kept hand, not a duplicate. -------------------
   { method: 'POST', route: '/api/studio/community/refresh', classification: 'refuse', action: 'network', guard: 'route',

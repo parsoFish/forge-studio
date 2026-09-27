@@ -16,6 +16,7 @@
 
 import type { EventLogEntry, EventLogger } from '@forge/kernel';
 import { isAuthoritativeCostEvent } from '@forge/kernel';
+import { COST_CEILING_MESSAGE_PREFIX } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // Custom errors
@@ -31,8 +32,8 @@ export class CostCeilingError extends Error {
   readonly ceilingUsd: number;
   constructor(spentUsd: number, ceilingUsd: number) {
     super(
-      `cost-ceiling: flow spent $${spentUsd.toFixed(4)} which meets or exceeds the ` +
-        `$${ceilingUsd.toFixed(2)} ceiling — stopping at a clean phase boundary (resumable).`,
+      `${COST_CEILING_MESSAGE_PREFIX} flow spent $${spentUsd.toFixed(4)} which meets or exceeds ` +
+        `the $${ceilingUsd.toFixed(2)} ceiling — stopping at a clean phase boundary (resumable).`,
     );
     this.name = 'CostCeilingError';
     this.spentUsd = spentUsd;

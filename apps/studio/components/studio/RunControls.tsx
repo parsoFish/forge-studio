@@ -46,14 +46,27 @@ import { useState } from 'react';
 
 import { EnqueueOutcomeLine } from '@/components/studio/EnqueueOutcomeLine';
 import { SchedulerCard } from '@/components/SchedulerCard';
-import { resumeRun, recoveryRequeue, recoveryAbandon } from '@/lib/bridge-client';
-import { armedControl, deriveRunControls, describeStopOnBudget, intentForControlClick, mayPostControl, runAwaitsScheduler, runControlsShouldRender, runFailureNoteKind, type RunControl, type RunControlId } from '@/lib/run-controls';
+import { resumeRun, recoveryRequeue, recoveryAbandon, recoveryStop } from '@/lib/bridge-client';
+import {
+  armedControl,
+  deriveRunControls,
+  describeOperatorStop,
+  describeStopOnBudget,
+  intentForControlClick,
+  mayPostControl,
+  runAwaitsScheduler,
+  runControlsShouldRender,
+  runFailureNoteKind,
+  type RunControl,
+  type RunControlId,
+} from '@/lib/run-controls';
 import type { Run } from '@/lib/studio-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
 
 async function post(id: RunControlId, initiativeId: string): Promise<{ ok: boolean; error?: string }> {
   if (id === 'resume') return resumeRun(initiativeId);
   if (id === 'requeue') return recoveryRequeue(initiativeId, { resetRetries: true });
+  if (id === 'stop') return recoveryStop(initiativeId);
   return recoveryAbandon(initiativeId);
 }
 
@@ -196,11 +209,14 @@ export function RunControls({
         <span
           data-component="run-status-line"
           data-stop-on-budget={failureNoteKind === 'budget' ? 'true' : undefined}
+          data-run-stop-reason={failureNoteKind === 'operator-stop' ? 'operator-stop' : undefined}
           style={{ fontSize: 12, color: 'var(--faint)' }}
         >
           {failureNoteKind === 'budget'
             ? describeStopOnBudget(run.stopOnBudget!)
-            : `Run failed${failureNoteKind === 'fail-note' ? ` — ${run.failNote}` : ''}.`}
+            : failureNoteKind === 'operator-stop'
+              ? describeOperatorStop()
+              : `Run failed${failureNoteKind === 'fail-note' ? ` — ${run.failNote}` : ''}.`}
         </span>
       )}
       {controls.map((c) => (
@@ -254,9 +270,10 @@ export function RunControls({
       )}
 
       {/* A resume/requeue is a QUEUE WRITE — say what the scheduler will (or
-          will not) do with it, and offer Start when it is stopped. Abandon is
-          terminal: it enqueues nothing, so it gets no scheduler line. */}
-      {done !== null && done !== 'abandon' && (
+          will not) do with it, and offer Start when it is stopped. Abandon and
+          Stop are both terminal for THIS act — neither enqueues anything, so
+          neither gets the scheduler line. */}
+      {done !== null && done !== 'abandon' && done !== 'stop' && (
         <div data-component="run-control-outcome" data-outcome-control={done}>
           <EnqueueOutcomeLine kind="flow" runAction="open-recovered-run" runId={initiativeId} flowId={run.flowId} />
         </div>
@@ -264,6 +281,15 @@ export function RunControls({
       {done === 'abandon' && (
         <span data-component="run-control-outcome" data-outcome-control="abandon" style={{ fontSize: 12, color: 'var(--faint)' }}>
           Abandoned — the initiative is in failed/ and its worktree and branch are gone.
+        </span>
+      )}
+      {done === 'stop' && (
+        <span
+          data-component="run-control-outcome"
+          data-outcome-control="stop"
+          style={{ fontSize: 12, color: 'var(--faint)' }}
+        >
+          Stop requested — the run halts at its next clean boundary; the worktree and branch are kept.
         </span>
       )}
 

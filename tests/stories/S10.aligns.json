@@ -13,12 +13,12 @@
     {
       "path": "docs/decisions/019-cycle-resume-from-unifier.md",
       "digest": "deb709a1a21f64db",
-      "why": "Act2 (S10.act2.mjs): abandon/requeue/resume preserves finished work items and branch commits — \"the second attempt starts from what the first one finished\""
+      "why": "Act2 (S10.act2.mjs): stop/requeue/resume preserves finished work items and branch commits — \"the second attempt starts from what the first one finished\""
     },
     {
       "path": "docs/decisions/028-flow-engine.md",
-      "digest": "d6070562f8b90422",
-      "why": "forge-develop flow run: node ids dev/integrate/adversarial-review/review, timeline rows and per-node status/cost"
+      "digest": "918c5c17f2a60e7a",
+      "why": "forge-develop flow run: node ids dev/integrate/adversarial-review/review, timeline rows and per-node status/cost; Act2's non-destructive stop-run control (M7 row 150 amendment)"
     },
     {
       "path": "docs/decisions/036-orchestrator-owned-gate-execution.md",

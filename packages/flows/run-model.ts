@@ -38,6 +38,7 @@ import {
   deriveWorkItems,
   deriveArtifacts,
   deriveStopOnBudget,
+  deriveOperatorStop,
   findGateNodeId,
   findGateNote,
   findFailure,
@@ -286,6 +287,10 @@ function buildRun(args: {
   // same pass, alongside failure/gate/reflection derivation, not stored. ---
   const stopOnBudget = deriveStopOnBudget(events, workItems);
 
+  // --- Operator-stop (M7 row 150, ruling 1774): same derive-don't-store shape
+  // as stopOnBudget above, from the runner's own `flow.operator-stop` event. ---
+  const operatorStop = deriveOperatorStop(events);
+
   // --- Initiative title: manifest metadata (title: / initiative_id), W7-A4 ---
   const initiative = initiativeTitle(manifest);
 
@@ -367,6 +372,7 @@ function buildRun(args: {
     ...(failedAt !== undefined ? { failedAt } : {}),
     ...(failNote !== undefined ? { failNote } : {}),
     ...(stopOnBudget !== null ? { stopOnBudget } : {}),
+    ...(operatorStop ? { operatorStop } : {}),
     ...(reflectionLoss !== undefined
       ? { reflectionLost: reflectionLoss.cause, reflectionLostNote: reflectionLoss.note }
       : {}),

@@ -87,6 +87,17 @@ export { finalizeMergedReadyForReview } from './finalize-merged.ts';
 export { type ReviewFinding, type ReviewFindingsRecord, type ReviewFindingsExpectation, reviewFindingsJsonPath, validateReviewFindings, writeReleaseJson, writeReviewFindingsJson } from './flow-artifacts.ts';
 export { DEMO_JSON_BASENAME, DEMO_MD_BASENAME, worktreeDemoDir, worktreeDemoJsonPath, worktreeDemoRelDir } from './demo-paths.ts';
 export { CostCeilingError, WedgeDetector, WedgeKillError } from './flow-budgets.ts';
+export {
+  OPERATOR_STOP_REASON,
+  OperatorStopError,
+  appendOperatorStopEvents,
+  describeNodeAbort,
+  operatorStopFilename,
+  operatorStopPath,
+  readOperatorStopRequest,
+  wedgeKillRunnerError,
+  type OperatorStopRequest,
+} from './operator-stop.ts';
 
 // ---- Route factories the assembly plugs in (ruling 59) ---------------------
 export { handleHookRoutes } from './bridge-hooks.ts';

@@ -10,6 +10,7 @@
   "package-layer-order|packages/agents/tests/regression/failure-classifier.w8f3.test.ts|packages/flows/index.ts",
   "package-layer-order|packages/agents/tests/regression/legacy-dispatch-project-guard.test.ts|packages/sessions/index.ts",
   "package-layer-order|packages/agents/tests/test-fixtures/interactive-runner-log-observer.ts|packages/sessions/index.ts",
+  "package-layer-order|packages/agents/tests/unit/failure-classifier.operator-stop.test.ts|packages/flows/index.ts",
   "package-layer-order|packages/agents/tests/unit/failure-classifier.test.ts|packages/flows/index.ts",
   "package-layer-order|packages/flows/tests/integration/cycle-pm-hallucination.test.ts|packages/stations/testing.ts",
   "package-layer-order|packages/flows/tests/regression/wi-dispatch-scheduler.test.ts|packages/stations/testing.ts",

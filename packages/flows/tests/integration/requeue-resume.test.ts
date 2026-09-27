@@ -26,7 +26,7 @@ import {
   branchHasCommittedWork,
   decideRequeueResume,
   inferRequeueResume,
-  readPriorFailureEnvironment,
+  readPriorFailureSignal,
   summarizeWorkItemStatuses,
 } from '../../requeue-resume.ts';
 import { serializeWorkItem, type WorkItem } from '../../work-item.ts';
@@ -233,37 +233,58 @@ test('summarizeWorkItemStatuses: missing work-items dir → null', () => {
 });
 
 // ---------------------------------------------------------------------------
-// readPriorFailureEnvironment — the classification stamped by cycle.ts
+// readPriorFailureSignal — the classification stamped by cycle.ts
 // ---------------------------------------------------------------------------
 
-test('readPriorFailureEnvironment: environment:true classification in the cycle log → true', () => {
+test('readPriorFailureSignal: environment:true classification in the cycle log → environment true', () => {
   const root = makeForgeRoot('cyc-1', { failure_mode: 'transient', recoverable: true, environment: true, reason: 'rate-limited (environment failure)' });
   try {
-    assert.equal(readPriorFailureEnvironment(root, 'cyc-1'), true);
+    assert.equal(readPriorFailureSignal(root, 'cyc-1').environment, true);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('readPriorFailureEnvironment: terminal / non-environment classification → false', () => {
+test('readPriorFailureSignal: terminal / non-environment classification → environment false', () => {
   const root = makeForgeRoot('cyc-2', { failure_mode: 'terminal', recoverable: false, reason: 'unifier did not pass' });
   try {
-    assert.equal(readPriorFailureEnvironment(root, 'cyc-2'), false);
+    assert.equal(readPriorFailureSignal(root, 'cyc-2').environment, false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('readPriorFailureEnvironment: no classification event / missing log → false', () => {
+test('readPriorFailureSignal: no classification event / missing log → all-false signal', () => {
   const root = makeForgeRoot('cyc-3', null);
+  const allFalse = { environment: false, cleanBoundaryHalt: false };
   try {
-    assert.equal(readPriorFailureEnvironment(root, 'cyc-3'), false);
-    assert.equal(readPriorFailureEnvironment(root, 'no-such-cycle'), false);
-    assert.equal(readPriorFailureEnvironment(root, undefined), false);
+    assert.deepEqual(readPriorFailureSignal(root, 'cyc-3'), allFalse);
+    assert.deepEqual(readPriorFailureSignal(root, 'no-such-cycle'), allFalse);
+    assert.deepEqual(readPriorFailureSignal(root, undefined), allFalse);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test(
+  'readPriorFailureSignal (round 3): reads cleanBoundaryHalt off the STRUCTURED field — ' +
+    'reason prose is not parsed',
+  () => {
+    const root = makeForgeRoot('cyc-4', {
+      failure_mode: 'terminal',
+      recoverable: false,
+      environment: false,
+      cleanBoundaryHalt: true,
+      reason: 'a reason string that says nothing about cost ceilings or operator stops',
+    });
+    try {
+      const expected = { environment: false, cleanBoundaryHalt: true };
+      assert.deepEqual(readPriorFailureSignal(root, 'cyc-4'), expected);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
 
 // ---------------------------------------------------------------------------
 // inferRequeueResume — composition over real fixtures

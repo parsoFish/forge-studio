@@ -531,6 +531,9 @@ function emitFailureClassification(
         recoverable: cls.recoverable,
         // N7: structured environment marker — requeue-resume keys on this.
         environment: cls.environment,
+        // M7 row 150 round 3 (ruling 1794): structured clean-boundary-halt
+        // marker — requeue-resume keys on this, not on reason-text sniffing.
+        cleanBoundaryHalt: cls.cleanBoundaryHalt,
         reason: cls.reason,
         evidence_event_ids: cls.evidence_event_ids,
       },

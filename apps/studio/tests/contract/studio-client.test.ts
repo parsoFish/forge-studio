@@ -837,7 +837,7 @@ test('parseRun: FIELD-PARITY PIN — every field declared on the client Run type
   // fallback default (status/origin/costUsd), and every object/array field
   // is non-empty, so a defaulted-instead-of-carried field cannot
   // coincidentally match the expectation.
-  const raw: Required<Run> = {
+  const raw: Omit<Required<Run>, 'operatorStop'> = { // operatorStop: studio-client-operator-stop.test.ts
     id: 'CYCLE-field-parity-probe',
     flowId: 'forge-develop',
     initiativeId: 'INIT-field-parity',
@@ -890,7 +890,7 @@ test('parseRun: FIELD-PARITY PIN — every field declared on the client Run type
 
   const parsed = parseRun(raw);
 
-  for (const key of Object.keys(raw) as (keyof Run)[]) {
+  for (const key of Object.keys(raw) as (keyof typeof raw)[]) {
     expect(parsed[key], `field "${key}" was dropped (undefined) by parseRun`).not.toBeUndefined();
     expect(parsed[key], `field "${key}" was mutated, not carried through verbatim`).toEqual(raw[key]);
   }

@@ -38,7 +38,7 @@ import { FORGE_ROOT } from '@forge/kernel';
 import { getPaths } from './queue.ts';
 import { resolveInitiativeId } from './initiative-id.ts';
 import { parseManifest, serializeManifest } from './manifest.ts';
-import { inferRequeueResume, type RequeueResumeDecision } from './requeue-resume.ts';
+import { inferRequeueResume, readPriorFailureSignal, type RequeueResumeDecision } from './requeue-resume.ts';
 import { assertManifestPathFields } from './manifest-path-guard.ts';
 
 export type RequeueOptions = {
@@ -164,20 +164,33 @@ export function runRequeue(
     { forgeRoot, projectsRoot: opts.projectsRoot },
   );
 
-  // ADR 019 + N7: decide the resume position. An explicit
-  // `--resume-from=integrate` is the operator's override; otherwise infer from
-  // the prior failure classification + the preserved worktree/branch state
-  // (environment failure with salvageable committed work resumes; everything
+  // M7 row 150 addendum (ruling 1794): a clean-boundary halt (operator-stop
+  // or cost-ceiling) is resumable for exactly the WI-completion reason an
+  // environment failure is — even under the OPERATOR's own
+  // `--resume-from=integrate` override below, which otherwise jumps straight
+  // to `integrate` and SKIPS any WI that never ran. Read once, from the SAME
+  // `failure_classification` event `inferRequeueResume` itself reads.
+  const priorFailure = readPriorFailureSignal(forgeRoot, manifest.cycle_id);
+
+  // ADR 019 + N7 (+ M7 row 150, ruling 1794): decide the resume position. An
+  // explicit `--resume-from=integrate` is the operator's override — UNLESS
+  // the prior failure was a clean-boundary halt, where honouring it
+  // unconditionally would silently skip WIs that never ran; that case
+  // defers to the SAME WI-completion inference an environment failure
+  // already gets. Otherwise infer from the prior failure classification +
+  // the preserved worktree/branch state (environment failure OR
+  // clean-boundary halt with salvageable committed work resumes; everything
   // else re-runs fresh from main — the pre-N7 behaviour).
-  const resumeDecision: RequeueResumeDecision = opts.resumeFromIntegrate
-    ? { resume: true, resume_from: 'integrate', reason: 'operator-requested --resume-from=integrate' }
-    : inferRequeueResume({
-        forgeRoot,
-        cycleId: manifest.cycle_id,
-        initiativeId,
-        worktreePath,
-        projectRepoPath,
-      });
+  const resumeDecision: RequeueResumeDecision =
+    opts.resumeFromIntegrate && !priorFailure.cleanBoundaryHalt
+      ? { resume: true, resume_from: 'integrate', reason: 'operator-requested --resume-from=integrate' }
+      : inferRequeueResume({
+          forgeRoot,
+          cycleId: manifest.cycle_id,
+          initiativeId,
+          worktreePath,
+          projectRepoPath,
+        });
 
   // A resume preserves the worktree + branch (the salvaged per-WI work the
   // resumed cycle runs against). Only a full (non-resume) requeue wipes them
@@ -211,7 +224,13 @@ export function runRequeue(
   //    send-back thread (review feedback is now appended UWIs in the worktree),
   //    so always clear any legacy feedback file too — it is no longer read.
   const verdictsRemoved: string[] = [];
-  const staleSuffixes = ['.verdict-prompt.md', '.verdict-response.md', '.pr-feedback.md'];
+  // M7 row 150 (ruling 1774): `.stop` joins the stale-sidecar sweep — the
+  // ONLY cleanup an operator-stop flag file needs. It is inert the moment its
+  // manifest leaves `in-flight/` (nothing reads `_queue/in-flight/<id>.stop`
+  // unless that id is in-flight again), so clearing it here, before this
+  // requeue's move back to `pending/`, is enough: no new cleanup timer, no
+  // new queue state.
+  const staleSuffixes = ['.verdict-prompt.md', '.verdict-response.md', '.pr-feedback.md', '.stop'];
   for (const c of candidates) {
     for (const suffix of staleSuffixes) {
       const path = join(c.dir, `${initiativeId}${suffix}`);
