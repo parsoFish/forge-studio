@@ -3,16 +3,19 @@
  * per-WI gate's env, alongside forge-mfv5.3.5 / ADR 051 decision 2's
  * class-independent live-acceptance guard.
  *
- * `runDeveloperLoop` itself can't be called directly in a test (it always
- * spawns a real Claude SDK query internally — see
- * `developer-loop.cost-ceiling.test.ts`'s own note); per the precedent
- * already established there and in `developer-loop.wi-worktree-fanin.test.ts`,
- * this file drives the SAME building blocks `developer-loop.ts`'s per-WI
- * qualityGate closure uses (`liveAcceptanceEnvFor`, `makeQualityGateFromCmd`,
- * `resolveGateTimeoutMs`), at the SAME option shape, rather than
- * re-implementing their logic — `buildDevLoopGate` below is a literal mirror
- * of that closure (developer-loop.ts's per-WI dispatch body, the
- * `qualityGate: ((): ... => {...})()` IIFE), kept in step with it.
+ * Calls `buildWiQualityGate` (`packages/stations/phases/wi-quality-gate.ts`)
+ * DIRECTLY — the exact function `developer-loop.ts`'s per-WI dispatch body
+ * calls to build the `qualityGate` it hands `runRalph`. This is a
+ * *structural* pin, not a hand-written mirror of the closure: if
+ * `developer-loop.ts` (or `wi-quality-gate.ts` itself) ever stopped passing
+ * `initiativeId` through, or the live-acc guard stopped firing, THIS test
+ * would fail on the real production code path, not on a copy of it that
+ * could silently drift out of step.
+ *
+ * `runDeveloperLoop` itself still can't be called directly in a test (it
+ * always spawns a real Claude SDK query internally — see
+ * `developer-loop.cost-ceiling.test.ts`'s own note); `buildWiQualityGate` is
+ * the narrowest real seam that exists below that spawn.
  *
  * Proves two things:
  *   (a) a WI's gate command sees FORGE_RESOURCE_PREFIX equal to
@@ -20,8 +23,9 @@
  *   (b) a WI gate that targets the project's live-acceptance suite (`match`)
  *       with `requiresEnv` declared and unset is still ERRORED by the guard
  *       — never run and passed — and this holds with NO notion of "class"
- *       anywhere in the call: `liveAcceptanceEnvFor` takes only the gate
- *       config and the WI's own command (see also
+ *       anywhere in the call: `liveAcceptanceEnvFor` (which
+ *       `buildWiQualityGate` calls) takes only the gate config and the WI's
+ *       own command (see also
  *       `packages/stations/tests/unit/live-acceptance-env.test.ts`, which
  *       pins that the function itself takes no class argument). A
  *       DOCS-class initiative's PM-time decision to skip planning an
@@ -35,47 +39,47 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '@forge/agents';
+import type { GateRunInfo } from '@forge/agents';
 import { RESOURCE_PREFIX_ENV, RESOURCE_PREFIX_RE, deriveResourcePrefix } from '@forge/kernel';
 import type { AcceptanceGateConfig } from '@forge/projects';
+import type { WorkItem } from '@forge/flows';
 
-import { liveAcceptanceEnvFor } from '../../phases/live-acceptance-env.ts';
+import { buildWiQualityGate } from '../../phases/wi-quality-gate.ts';
 
-/**
- * Literal mirror of developer-loop.ts's per-WI qualityGate closure
- * (`runDeveloperLoop`'s per-WI dispatch body): `liveAcceptanceEnvFor` decides
- * `requiredEnv`, then `makeQualityGateFromCmd` is built with that plus
- * `initiativeId` and the declared timeout — the same three real, exported
- * production functions developer-loop.ts calls, at the same shape. Update
- * this alongside any change to that closure's option shape.
- */
-function buildDevLoopGate(args: {
-  worktreePath: string;
-  accGate: AcceptanceGateConfig | undefined;
-  effective: readonly string[];
-  initiativeId: string;
-  onRun: (info: GateRunInfo) => void;
-}): () => boolean {
-  const requiredEnv = liveAcceptanceEnvFor(args.accGate, args.effective);
-  return makeQualityGateFromCmd(args.worktreePath, args.effective, args.onRun, {
-    requiredPaths: [],
-    ...(requiredEnv ? { requiredEnv } : {}),
-    initiativeId: args.initiativeId,
-    timeoutMs: resolveGateTimeoutMs(),
-  });
+/** A minimal WI fixture — only the fields `gateRequiredPaths`/`buildWiQualityGate`
+ *  actually read matter to these tests; `files_in_scope: []` + a
+ *  `'files-in-scope'` source keeps `requiredPaths` empty, isolating the two
+ *  behaviours under test. */
+function wi(cmd: readonly string[]): WorkItem {
+  return {
+    work_item_id: 'WI-1',
+    initiative_id: 'initiative-devloop-alpha',
+    status: 'pending',
+    depends_on: [],
+    acceptance_criteria: [{ given: 'g', when: 'w', then: 't' }],
+    files_in_scope: [],
+    quality_gate_cmd: [...cmd],
+    estimated_iterations: 1,
+    body: '',
+  };
 }
 
 test('dev-loop per-WI gate: FORGE_RESOURCE_PREFIX reaches the gate child, equal to deriveResourcePrefix(initiativeId) (forge-mfv5.3.7)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-devloop-nsprefix-'));
   try {
     const initiativeId = 'initiative-devloop-alpha';
+    const effective = ['sh', '-c', `echo "PREFIX=$${RESOURCE_PREFIX_ENV}"`];
     let info: GateRunInfo | undefined;
-    const gate = buildDevLoopGate({
+    const gate = buildWiQualityGate({
       worktreePath: dir,
       // No live-acc tier declared — isolates the resource-prefix behaviour
       // from the requiredEnv guard exercised in the test below.
       accGate: undefined,
-      effective: ['sh', '-c', `echo "PREFIX=$${RESOURCE_PREFIX_ENV}"`],
+      effective,
+      wi: wi(effective),
+      requiredPathsSource: 'files-in-scope',
+      ciGateUnsetEnv: undefined,
+      localGateTimeoutMs: undefined,
       initiativeId,
       onRun: (i) => { info = i; },
     });
@@ -101,15 +105,19 @@ test("dev-loop per-WI gate: a WI gate targeting the live-acc suite with requires
     // invocation whose target package path names the acc suite). If the
     // guard ever let this actually RUN, it would echo the marker and exit 0
     // — a silent false-pass. There is no "class" parameter anywhere in this
-    // test, in `buildDevLoopGate`, or in `liveAcceptanceEnvFor`'s own
+    // test, in `buildWiQualityGate`, or in `liveAcceptanceEnvFor`'s own
     // signature: the guard fires purely because the WI's own command
     // matches the project's declared `match`.
     const effective = ['sh', '-c', 'echo RAN_AND_PASSED_MARKER; exit 0 # target: acceptancetests'];
     let info: GateRunInfo | undefined;
-    const gate = buildDevLoopGate({
+    const gate = buildWiQualityGate({
       worktreePath: dir,
       accGate,
       effective,
+      wi: wi(effective),
+      requiredPathsSource: 'files-in-scope',
+      ciGateUnsetEnv: undefined,
+      localGateTimeoutMs: undefined,
       initiativeId: 'initiative-devloop-docs-class-wi',
       onRun: (i) => { info = i; },
     });
