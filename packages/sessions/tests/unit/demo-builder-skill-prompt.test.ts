@@ -1,4 +1,4 @@
-import { OPERATOR_GUIDANCE_SENTINEL, promptPathSource, SKILL_MD_PATH, loggerFor, makeElementWritingQueryFn, makeWritingQueryFn, norm, setup } from './test-fixtures/demo-builder-skill-prompt-setup.ts';
+import { OPERATOR_GUIDANCE_SENTINEL, promptPathSource, SKILL_MD_PATH, loggerFor, makeWritingQueryFn, norm, setup } from './test-fixtures/demo-builder-skill-prompt-setup.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
@@ -12,7 +12,6 @@ import type { DemoBuilderStatus } from '../../kinds/demo-session-store.ts';
 import { type QueryFn } from '../../interactive-session.ts';
 import { listDemoElements } from '@forge/library';
 import type { DemoStep } from '@forge/contracts';
-import { splitSkillTurnSections } from '@forge/agents';
 
 // ---------------------------------------------------------------------------
 // AT-1 — prose-left-the-TS (grep-assert, both files read from disk at test time)
@@ -22,44 +21,31 @@ import { splitSkillTurnSections } from '@forge/agents';
 // `demo-builder-runner.ts`, now `kinds/demo-builder.ts`); the assertions
 // below are the live re-check on every run.
 const MOVED_SENTENCES: Array<{ label: string; text: string }> = [
+  // Bead forge-mfv5.2.8 retargeted this list: the three composer/element
+  // branch sentences it used to carry named output the bead deletes. What it
+  // pins now is the same property over the one generate turn — its task prose
+  // lives in the SKILL, not in the runner.
   {
-    // packages/sessions/demo-builder-runner.ts:709 (demoTaskLines, `target` branch).
-    // Verified present in the .ts today; absent from SKILL.md today.
-    label: 'element branch — "Author/refine the project-side element-skill at"',
-    text: 'Author/refine the project-side element-skill at',
+    label: 'generate-declaration — the narrowing rule for a targeted element',
+    text: 'change only the steps bound to it and carry every other step over unchanged',
   },
   {
-    // packages/sessions/demo-builder-runner.ts:724 (demoTaskLines, composed branch).
-    // Verified present in the .ts today; absent from SKILL.md today.
-    label: 'composed branch — "the composer that reads those fragments IN THIS ORDER"',
-    text: 'the composer that reads those fragments IN THIS ORDER',
+    label: 'generate-declaration — the sample is what the declaration drives',
+    text: 'a sample of what the declaration drives',
   },
   {
-    // packages/sessions/demo-builder-runner.ts:736 (demoTaskLines, legacy branch).
-    // Verified present in the .ts today; absent from SKILL.md today.
-    label: "legacy branch — \"the reusable generator that renders a before/after HTML demo of an INITIATIVE'S CHANGES\"",
-    text: "the reusable generator that renders a before/after HTML demo of an INITIATIVE'S CHANGES",
+    label: 'update-mode — "UPDATE MODE: a declaration is already locked"',
+    text: 'UPDATE MODE: a declaration is already locked',
   },
   {
-    // packages/sessions/demo-builder-runner.ts:309 (runGenerateStep, mode==='update' block).
-    // Verified present in the .ts today; absent from SKILL.md today.
-    label: 'update-mode — "UPDATE MODE: a locked demo already exists"',
-    text: 'UPDATE MODE: a locked demo already exists',
-  },
-  {
-    // packages/sessions/demo-builder-runner.ts:724 (demoTaskLines, composed branch,
-    // same paragraph as the composer sentence above — a distinct sentence).
-    // AMENDED by bead 6.11.49: this instruction told the WRITE pass to produce
-    // real output, and the write pass no longer has Bash to produce it with. The
-    // instruction did not disappear — it moved to the `ground-it` turn, whose
-    // pass does have Bash. The entry follows it there rather than being deleted,
-    // and AT-10 below pins the other half: no generate-* section may carry it.
+    // AMENDED by bead 6.11.49: this instruction lives in the `ground-it` turn,
+    // whose pass has Bash; AT-10 below pins that no generate section carries it.
     label: 'grounding instruction — moved to the ground-it turn by the two-pass split (6.11.49)',
     text: 'render an actual before/after of it — real output on both sides, not a mock.',
   },
 ];
 
-test('AT-1: prose-left-the-TS — 5 distinctive instruction sentences (all 3 branches + update-mode) moved from the runner .ts into skills/demo-builder/SKILL.md', () => {
+test('AT-1: prose-left-the-TS — the generate turn\'s distinctive instruction sentences live in skills/demo-builder/SKILL.md, never in the runner .ts', () => {
   const tsNorm = norm(promptPathSource());
   const skillNorm = norm(readFileSync(SKILL_MD_PATH, 'utf8'));
 
@@ -97,26 +83,20 @@ test('AT-2: no fail-open remains — the generic fallback prompt string and the 
 // ---------------------------------------------------------------------------
 
 const BASE_SENTINEL = 'BASE-SENTINEL-9f3a2b (shared preamble — proves the fixture skillPromptPath was actually loaded)';
-const ELEMENT_ONLY_SENTINEL = 'ELEMENT-ONLY-SENTINEL-71c4';
-const COMPOSED_ONLY_SENTINEL = 'COMPOSED-ONLY-SENTINEL-52e9';
-const LEGACY_ONLY_SENTINEL = 'LEGACY-ONLY-SENTINEL-8d16';
+const DECLARATION_ONLY_SENTINEL = 'DECLARATION-ONLY-SENTINEL-71c4';
 const GROUND_ONLY_SENTINEL = 'GROUND-ONLY-SENTINEL-3ba7 (the second pass only — must never reach the write pass, which has no Bash to ground anything with)';
 
-/** A fixture SKILL.md carrying one uniquely-sentineled section per planned
- *  turn id (`generate-element` / `generate-composed` / `generate-legacy`) —
- *  this pins the turn-id convention the design document plans; see the file
- *  header. */
 /** Bead 7.3.6 (T1 ruling 642) — a generate turn runs the agent THREE times:
  *  READ, then WRITE, then GROUND. These tests are about what the WRITE pass is
  *  told, so they keep every prompt and read the second — and assert the count,
  *  so a change to the pass structure fails HERE, loudly, rather than quietly
- *  re-pointing every assertion below at a different pass. 6.11.49 wrote this
- *  helper for two passes and it caught exactly that when the third went in. */
+ *  re-pointing every assertion below at a different pass. */
 function writePassPrompt(prompts: readonly string[]): string {
   assert.equal(prompts.length, 3, 'a generate turn must run exactly three agent passes — read, write, ground');
   return prompts[1]!;
 }
 
+/** A fixture SKILL.md carrying one uniquely-sentineled section per turn id. */
 function writeSelectionFixture(): string {
   const dir = mkdtempSync(join(tmpdir(), 'demo-builder-fixture-'));
   const p = join(dir, 'demo-builder-SKILL.md');
@@ -129,14 +109,8 @@ function writeSelectionFixture(): string {
       '',
       BASE_SENTINEL,
       '',
-      '<!-- turn: generate-element -->',
-      ELEMENT_ONLY_SENTINEL,
-      '',
-      '<!-- turn: generate-composed -->',
-      COMPOSED_ONLY_SENTINEL,
-      '',
-      '<!-- turn: generate-legacy -->',
-      LEGACY_ONLY_SENTINEL,
+      '<!-- turn: generate-declaration -->',
+      DECLARATION_ONLY_SENTINEL,
       '',
       '<!-- turn: ground-it -->',
       GROUND_ONLY_SENTINEL,
@@ -146,86 +120,39 @@ function writeSelectionFixture(): string {
   return p;
 }
 
-test('AT-3a: targetElement scenario selects the generate-element turn section only', async () => {
-  const composedProcess: DemoStep[] = [{ kind: 'capture', text: 'capture the cli', element: 'cli-capture' }];
-  const { projectRoot, logsRoot, sessionId } = setup({ phase: 'generating', targetElement: 'cli-capture' }, composedProcess);
-  const skillPromptPath = writeSelectionFixture();
-  const prompts: string[] = [];
-  await runDemoBuilderTurn({
-    sessionId,
-    projectRoot,
-    forgeRoot: FORGE_ROOT,
-    skillPromptPath,
-    queryFn: makeElementWritingQueryFn('cli-capture', (p) => { prompts.push(p); }),
-    logger: loggerFor(logsRoot, sessionId),
-    logsRoot,
-  });
-  const captured = writePassPrompt(prompts);
-  assert.ok(captured.includes(BASE_SENTINEL), 'the fixture skillPromptPath must actually be loaded (shared preamble present)');
-  assert.ok(captured.includes(ELEMENT_ONLY_SENTINEL), 'the generate-element turn section must reach the prompt for a targetElement scenario');
-  assert.ok(!captured.includes(COMPOSED_ONLY_SENTINEL), 'the generate-composed turn section must NOT leak into a targetElement scenario');
-  assert.ok(!captured.includes(LEGACY_ONLY_SENTINEL), 'the generate-legacy turn section must NOT leak into a targetElement scenario');
-  assert.ok(!captured.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must NOT reach the write pass, which has no Bash');
-  assert.ok(prompts[2]!.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must reach the SECOND pass');
-});
+// Every generate scenario — targeted element, element-bound declaration,
+// free-text declaration — selects the ONE generate-declaration section
+// (forge-mfv5.2.8 collapsed the three branches that each authored a skill).
+const SCENARIOS: Array<{ label: string; overrides: Partial<DemoBuilderStatus>; demoProcess?: DemoStep[] }> = [
+  { label: 'targetElement', overrides: { phase: 'generating', targetElement: 'cli-capture' }, demoProcess: [{ kind: 'capture', text: 'capture the cli', element: 'cli-capture' }] },
+  { label: 'element-bound declaration', overrides: { phase: 'generating' }, demoProcess: [{ kind: 'capture', text: 'capture the cli', element: 'cli-capture' }, { kind: 'verify', text: 'npm test', element: 'test-evidence' }] },
+  { label: 'free-text declaration', overrides: { phase: 'generating' } },
+];
 
-test('AT-3b: composed (multi-element, no targetElement) scenario selects the generate-composed turn section only', async () => {
-  const composedProcess: DemoStep[] = [
-    { kind: 'capture', text: 'capture the cli', element: 'cli-capture' },
-    { kind: 'verify', text: 'npm test', element: 'test-evidence' },
-  ];
-  const { projectRoot, logsRoot, sessionId } = setup({ phase: 'generating' }, composedProcess);
-  const skillPromptPath = writeSelectionFixture();
-  const prompts: string[] = [];
-  await runDemoBuilderTurn({
-    sessionId,
-    projectRoot,
-    forgeRoot: FORGE_ROOT,
-    skillPromptPath,
-    queryFn: makeWritingQueryFn((p) => { prompts.push(p); }),
-    logger: loggerFor(logsRoot, sessionId),
-    logsRoot,
+for (const { label, overrides, demoProcess } of SCENARIOS) {
+  test(`AT-3: the ${label} scenario selects the generate-declaration section for the write pass and ground-it for the second`, async () => {
+    const { projectRoot, logsRoot, sessionId } = setup(overrides, demoProcess);
+    const skillPromptPath = writeSelectionFixture();
+    const prompts: string[] = [];
+    await runDemoBuilderTurn({
+      sessionId, projectRoot, forgeRoot: FORGE_ROOT, skillPromptPath,
+      queryFn: makeWritingQueryFn((p) => { prompts.push(p); }),
+      logger: loggerFor(logsRoot, sessionId), logsRoot,
+    });
+    const captured = writePassPrompt(prompts);
+    assert.ok(captured.includes(BASE_SENTINEL), 'the fixture skillPromptPath must actually be loaded (shared preamble present)');
+    assert.ok(captured.includes(DECLARATION_ONLY_SENTINEL), 'the generate-declaration turn section must reach the write pass');
+    assert.ok(!captured.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must NOT reach the write pass, which has no Bash');
+    assert.ok(prompts[2]!.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must reach the SECOND pass');
   });
-  const captured = writePassPrompt(prompts);
-  assert.ok(captured.includes(BASE_SENTINEL), 'the fixture skillPromptPath must actually be loaded (shared preamble present)');
-  assert.ok(captured.includes(COMPOSED_ONLY_SENTINEL), 'the generate-composed turn section must reach the prompt for a composed scenario');
-  assert.ok(!captured.includes(ELEMENT_ONLY_SENTINEL), 'the generate-element turn section must NOT leak into a composed scenario');
-  assert.ok(!captured.includes(LEGACY_ONLY_SENTINEL), 'the generate-legacy turn section must NOT leak into a composed scenario');
-  assert.ok(!captured.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must NOT reach the write pass, which has no Bash');
-  assert.ok(prompts[2]!.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must reach the SECOND pass');
-});
-
-test('AT-3c: no-elements-configured (legacy) scenario selects the generate-legacy turn section only', async () => {
-  // Default setup() demoProcess has capture/verify steps with NO `element`
-  // field — no elements configured at all (the legacy branch).
-  const { projectRoot, logsRoot, sessionId } = setup({ phase: 'generating' });
-  const skillPromptPath = writeSelectionFixture();
-  const prompts: string[] = [];
-  await runDemoBuilderTurn({
-    sessionId,
-    projectRoot,
-    forgeRoot: FORGE_ROOT,
-    skillPromptPath,
-    queryFn: makeWritingQueryFn((p) => { prompts.push(p); }),
-    logger: loggerFor(logsRoot, sessionId),
-    logsRoot,
-  });
-  const captured = writePassPrompt(prompts);
-  assert.ok(captured.includes(BASE_SENTINEL), 'the fixture skillPromptPath must actually be loaded (shared preamble present)');
-  assert.ok(captured.includes(LEGACY_ONLY_SENTINEL), 'the generate-legacy turn section must reach the prompt for a no-elements-configured scenario');
-  assert.ok(!captured.includes(ELEMENT_ONLY_SENTINEL), 'the generate-element turn section must NOT leak into a legacy scenario');
-  assert.ok(!captured.includes(COMPOSED_ONLY_SENTINEL), 'the generate-composed turn section must NOT leak into a legacy scenario');
-  assert.ok(!captured.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must NOT reach the write pass, which has no Bash');
-  assert.ok(prompts[2]!.includes(GROUND_ONLY_SENTINEL), 'the ground-it turn section must reach the SECOND pass');
-});
+}
 
 // ---------------------------------------------------------------------------
 // AT-4 — fail-loud
 // ---------------------------------------------------------------------------
 
 test('AT-4: a skillPromptPath fixture with no turn markers makes the generate turn THROW, naming the skill and the turn id — never a silent default prompt', async () => {
-  // Legacy (no-elements-configured) scenario, driving the expected
-  // 'generate-legacy' turn id. A queryFn that WOULD succeed if reached is
+  // Drives the one generate turn id, 'generate-declaration'. A queryFn that WOULD succeed if reached is
   // deliberately used (not a noop) so a base-line "no throw at all" failure
   // is unambiguous, rather than accidentally rejecting for an unrelated
   // reason (e.g. "no DEMO.html produced").
@@ -247,7 +174,7 @@ test('AT-4: a skillPromptPath fixture with no turn markers makes the generate tu
     (err: unknown) => {
       assert.ok(err instanceof Error, 'must throw an Error');
       assert.match(err.message, /demo-builder/, 'the thrown message must name the skill ("demo-builder")');
-      assert.match(err.message, /generate-legacy/, 'the thrown message must name the turn id it could not find ("generate-legacy" for a no-elements-configured scenario)');
+      assert.match(err.message, /generate-declaration/, 'the thrown message must name the turn id it could not find ("generate-declaration")');
       return true;
     },
   );
@@ -257,7 +184,7 @@ test('AT-4: a skillPromptPath fixture with no turn markers makes the generate tu
 // AT-5 — data-half preserved
 // ---------------------------------------------------------------------------
 
-test('AT-5: the composed prompt still carries the runner-injected DATA half — project name, repo path, operator guidance, operator feedback, the forge base stylesheet, and the ordered element list', async () => {
+test('AT-5: the prompt still carries the runner-injected DATA half — project name, repo path, operator guidance, operator feedback, the forge base stylesheet, and the current declaration in step order', async () => {
   const composedProcess: DemoStep[] = [
     { kind: 'present', text: 'lead', element: 'narrative' },
     { kind: 'capture', text: 'capture the cli', element: 'cli-capture' },
@@ -292,14 +219,14 @@ test('AT-5: the composed prompt still carries the runner-injected DATA half — 
   assert.ok(captured.includes(cssLine!.trim()), 'the forge base stylesheet must be inlined into the prompt as a fenced block, verbatim from disk');
   assert.ok(captured.includes('```css'), 'the base stylesheet must remain fenced as a css code block');
 
-  const ids = ['narrative', 'cli-capture', 'test-evidence'];
-  const positions = ids.map((id) => {
-    const i = captured.indexOf(id);
-    assert.ok(i !== -1, `element id "${id}" must appear in the composed prompt`);
+  const steps = ['"text": "lead"', '"text": "capture the cli"', '"text": "npm test"'];
+  const positions = steps.map((step) => {
+    const i = captured.indexOf(step);
+    assert.ok(i !== -1, `declared step ${step} must appear in the prompt`);
     return i;
   });
   for (let i = 1; i < positions.length; i += 1) {
-    assert.ok(positions[i]! > positions[i - 1]!, 'the ordered element-step list must preserve demoProcess step order (narrative, cli-capture, test-evidence)');
+    assert.ok(positions[i]! > positions[i - 1]!, 'the current declaration must preserve demoProcess step order (lead, capture the cli, npm test)');
   }
 });
 
@@ -312,7 +239,7 @@ test('AT-5: the composed prompt still carries the runner-injected DATA half — 
 // AT-6 — the exported demoTaskLines contract survives
 // ---------------------------------------------------------------------------
 
-test('AT-6: the demoTaskLines export contract survives — composed-branch output lists every element id in descriptor order, both directly and via the runner-composed prompt', async () => {
+test('AT-6: the demoTaskLines export contract survives — its output lists every declared step in descriptor order, both directly and via the runner-composed prompt', async () => {
   // Mirrors apps/forge/tests/contract/demo-descriptor-parity.test.ts's shared fixture
   // (deliberately NOT alphabetical, so order-preservation is actually
   // asserted, not accidentally true because of a sort).
@@ -330,14 +257,9 @@ test('AT-6: the demoTaskLines export contract survives — composed-branch outpu
   // Secondary assertion — demoTaskLines() called directly. If the implementer
   // renames or removes this export, this import fails to compile/resolve;
   // if they break its output contract, this assertion fails.
-  const directLines = demoTaskLines({
-    status: { project_repo_path: '/unused' } as unknown as DemoBuilderStatus,
-    composed: true,
-    elementSteps: FIXTURE_STEPS,
-    byId,
-  }).join('\n');
+  const directLines = demoTaskLines({ steps: FIXTURE_STEPS, byId }).join('\n');
   const directPositions = ids.map((id) => {
-    const i = directLines.indexOf(id);
+    const i = directLines.indexOf(`"element": "${id}"`);
     assert.ok(i !== -1, `demoTaskLines() direct output must include element id "${id}"`);
     return i;
   });
@@ -360,7 +282,7 @@ test('AT-6: the demoTaskLines export contract survives — composed-branch outpu
   });
   const captured = writePassPrompt(prompts);
   const runnerPositions = ids.map((id) => {
-    const i = captured.indexOf(id);
+    const i = captured.indexOf(`"element": "${id}"`);
     assert.ok(i !== -1, `the runner-composed prompt must include element id "${id}"`);
     return i;
   });
@@ -373,183 +295,18 @@ test('AT-6: the demoTaskLines export contract survives — composed-branch outpu
 // already at base — demoTaskLines and its ordering contract already exist and
 // already work. It still pins real value as a regression guard: it goes RED
 // the instant an implementer drops/renames the export, stops calling it from
-// the composed branch, or breaks step ordering while re-authoring the prompt.
+// the generate turn, or breaks step ordering while re-authoring the prompt.
 
 // ===========================================================================
 // ROUND 2 — adversarial-review acceptance tests (R4-23 WI-2 round-2).
-//
-// AT-1..AT-6 above pin a HAND-PICKED handful of moved sentences. The round-2
-// review found that the WI-2 fold silently DROPPED two whole instructions
-// nobody's hand-picked list happened to name, and left no positional-drift
-// check at all. AT-7..AT-10 close that gap:
-//   AT-7  (Part A) — a FROZEN, exhaustive no-content-loss catalog: every
-//         distinct pre-lane instruction, not just 6 hand-picked sentences.
-//   AT-8  (Part B) — per-SECTION reachability: a sentence surviving in the
-//         FILE is still a loss if only one of the two multi-fragment
-//         branches (generate-composed / generate-legacy) can see it.
 //   AT-9  (Part C) — positional-reference integrity: no turn section may
 //         call a data item "above" when that data is emitted after it.
 //   AT-10 (Part D) — the project-repo write transaction (ensureStudioBranch
 //         → dispatch → commitStudioChange) must survive a mid-turn throw.
+// AT-7 (a frozen catalog of pre-lane composer prose) and AT-8 (the composer
+// quality bar reaching both composer branches) pinned the composer SKILL.md
+// output bead forge-mfv5.2.8 removes; they went with it.
 // ===========================================================================
-
-// ---------------------------------------------------------------------------
-// AT-7 — Part A: frozen no-content-loss set.
-//
-// Every entry's `text` was verified present, at base c45e3892, in the cited
-// source (`source`) by direct reading of `git show c45e3892:<path>` (see the
-// session investigation this file shipped with). Two entries are KNOWN
-// DROPPED per the round-2 design brief's explicit callout and are expected
-// to make this AT RED today — that is the point: it pins the fix.
-// ---------------------------------------------------------------------------
-
-type FrozenEntry = { label: string; source: string; text: string };
-
-const FROZEN_DEMO_BUILDER: FrozenEntry[] = [
-  // -- untouched region (git diff c45e3892..HEAD carries no hunk before
-  //    "## The two deliverables") — two sample sentences stand in for the
-  //    whole intro paragraph, per the design's untouched-region allowance. --
-  {
-    label: 'untouched intro — job framing ("NOT a one-off marketing page")',
-    source: 'c45e3892:skills/demo-builder/SKILL.md (intro paragraph)',
-    text: 'Your job is **NOT** to write a one-off marketing page for the whole project.',
-  },
-  {
-    label: 'untouched intro — demo.json replacement',
-    source: 'c45e3892:skills/demo-builder/SKILL.md (intro paragraph)',
-    text: "This replaces the rigid `demo.json` contract: demos are bespoke HTML the project's own skill generates, tailored per project, scoped to what an initiative changed.",
-  },
-  // -- untouched "## Scope every demo" / "## Ground it in REAL output"
-  //    sections — one sample sentence each. --
-  {
-    label: 'untouched — scope to an initiative\'s CHANGES',
-    source: 'c45e3892:skills/demo-builder/SKILL.md ("## Scope every demo to an initiative\'s CHANGES")',
-    text: 'The unit of a demo is "what this initiative changed", not "what the project is".',
-  },
-  {
-    label: 'untouched — ground in real output, never fabricate',
-    source: 'c45e3892:skills/demo-builder/SKILL.md ("## Ground it in REAL output")',
-    text: 'Never fabricate results, fake metrics, or invent a passing run.',
-  },
-  // -- "## The two deliverables (every generate turn)" — removed as a
-  //    SHARED section, its content folded per-branch. Deliverable #1's
-  //    elaboration survives (generalised) in generate-legacy. --
-  {
-    label: 'deliverable #1 elaboration — what the generator skill must instruct a future agent to do',
-    source: 'c45e3892:skills/demo-builder/SKILL.md ("## The two deliverables", item 1)',
-    text: 'render a self-contained Forge-styled HTML demo that showcases the changes that initiative introduced — the new behaviour, the diff that matters, real captured output before vs after, the verification that makes it non-trivial',
-  },
-  {
-    // AMENDED by bead forge-mfv5.2.2: the DEMO-SKILL clause no longer checks
-    // this file's existence — it checks that the project's demo DECLARATION
-    // (`demoProcess`) drives a checkpoint, since the integrate band never
-    // reads this generated composer. The old sentence was corrected, not
-    // dropped; the corrected sentence is what this entry now pins.
-    label: 'deliverable #1 — forge preflight DEMO-SKILL significance (corrected, forge-mfv5.2.2)',
-    source: 'c45e3892:skills/demo-builder/SKILL.md ("## The two deliverables", item 1)',
-    text: "DEMO-SKILL clause instead checks that the project's demo declaration",
-  },
-  {
-    // KNOWN DROPPED — verified absent from both packages/sessions/kinds/demo-builder.ts
-    // and skills/demo-builder/SKILL.md today (see AT-1's file header + the grep
-    // run recorded in this file's session report: 0 hits either side).
-    label: 'KNOWN-DROPPED — deliverable #2, "find a real recent change" sourcing instruction',
-    source: 'c45e3892:skills/demo-builder/SKILL.md ("## The two deliverables", item 2)',
-    text: 'Use Bash + git to find one (`git log --oneline -20`; pick the most recent substantive feature commit or commit range) and render an actual before/after of it — real output on both sides, not a mock.',
-  },
-  // -- "## Honor the inputs" — the revision-editing discipline. --
-  {
-    // KNOWN DROPPED — same verification as above.
-    label: 'KNOWN-DROPPED — revision discipline ("EDIT the existing skill + sample toward the feedback")',
-    source: 'c45e3892:skills/demo-builder/SKILL.md ("## Honor the inputs")',
-    text: "On a revision, EDIT the existing skill + sample toward the feedback; don't rebuild from scratch unless asked.",
-  },
-  // -- "## Contract" — one untouched bullet survives the section rewrite. --
-  {
-    label: 'Contract — keep the sample tight and readable',
-    source: 'c45e3892:skills/demo-builder/SKILL.md ("## Contract")',
-    text: 'Keep the sample tight and readable; lead with a one-line essence of the change.',
-  },
-  // -- packages/sessions/demo-builder-runner.ts's demoTaskLines() branch prose
-  //    (moved into the three turn sections, re-anchored). --
-  {
-    label: 'element branch — perfect-this-element-first / do-not-build-others discipline',
-    source: 'c45e3892:packages/sessions/demo-builder-runner.ts (demoTaskLines, target branch)',
-    text: 'so the operator can perfect this element before composing the whole demo. Do NOT build the other elements this turn.',
-  },
-  {
-    label: 'composed branch — composer assembly instruction',
-    source: 'c45e3892:packages/sessions/demo-builder-runner.ts (demoTaskLines, composed branch)',
-    text: 'the composer that reads those fragments IN THIS ORDER and assembles them into',
-  },
-  {
-    label: 'legacy branch — deliverable #2 restated (the part that DID survive)',
-    source: 'c45e3892:packages/sessions/demo-builder-runner.ts (demoTaskLines, legacy branch)',
-    // AMENDED by bead 6.11.49, same reason as MOVED_SENTENCES' grounding entry:
-    // the write pass authors the sample with marked placeholders, the ground
-    // pass fills them from real output. The restatement that survives in the
-    // legacy turn section is the one frozen here.
-    text: 'a sample produced by running that generator against a representative recent change, structured as a before/after with the captured output left as marked placeholders for the grounding pass. This sample, once grounded, is what the operator reviews to judge the skill.',
-  },
-  {
-    label: "runGenerateStep — UPDATE MODE guidance (mode==='update' block)",
-    source: "c45e3892:packages/sessions/demo-builder-runner.ts (runGenerateStep, mode==='update' block)",
-    text: 'UPDATE MODE: a locked demo already exists',
-  },
-];
-
-test('AT-7 (Round-2, Part A): frozen no-content-loss set — every distinct pre-lane instruction is still reachable in skills/demo-builder/SKILL.md (2 entries are KNOWN-DROPPED and pin the round-2 defect; expected RED today)', () => {
-  const skillNorm = norm(readFileSync(SKILL_MD_PATH, 'utf8'));
-  const failures: string[] = [];
-  for (const entry of FROZEN_DEMO_BUILDER) {
-    if (!skillNorm.includes(norm(entry.text))) {
-      failures.push(`[${entry.label}] (${entry.source}) NOT reachable in skills/demo-builder/SKILL.md — expected substring: "${entry.text}"`);
-    }
-  }
-  assert.deepEqual(
-    failures,
-    [],
-    `frozen no-content-loss set has ${failures.length} unreachable instruction(s):\n${failures.join('\n')}`,
-  );
-});
-
-// ---------------------------------------------------------------------------
-// AT-8 — Part B: per-SECTION reachability (not just per-file). The composer-
-// skill quality bar must reach BOTH generate-composed and generate-legacy —
-// before this lane it lived in the shared "## The two deliverables" section
-// and reached every generate turn; after the fold it only survives (in full)
-// inside generate-legacy.
-// ---------------------------------------------------------------------------
-
-test('AT-8 (Round-2, Part B): the composer-skill quality bar reaches BOTH generate-composed and generate-legacy turns, not just generate-legacy (expected RED today)', () => {
-  const skillText = readFileSync(SKILL_MD_PATH, 'utf8');
-  const { base, turns } = splitSkillTurnSections(skillText);
-  const composedSection = turns.get('generate-composed');
-  const legacySection = turns.get('generate-legacy');
-  assert.ok(composedSection !== undefined, 'sanity: skills/demo-builder/SKILL.md must carry a generate-composed turn section');
-  assert.ok(legacySection !== undefined, 'sanity: skills/demo-builder/SKILL.md must carry a generate-legacy turn section');
-
-  const reachableComposed = norm(`${base}\n${composedSection}`);
-  const reachableLegacy = norm(`${base}\n${legacySection}`);
-
-  const QUALITY_BAR_CLAUSES = [
-    'the new behaviour, the diff that matters, real captured output before vs after, the verification that makes it non-trivial',
-    // AMENDED by bead forge-mfv5.2.2 — see FROZEN_DEMO_BUILDER's matching entry.
-    "DEMO-SKILL clause instead checks that the project's demo declaration",
-  ];
-
-  for (const clause of QUALITY_BAR_CLAUSES) {
-    const needle = norm(clause);
-    assert.ok(
-      reachableComposed.includes(needle),
-      `generate-composed turn (base preamble + its own section) must carry the composer-skill quality-bar clause: "${clause}" — before this lane it lived in the shared "## The two deliverables" section and reached every generate turn`,
-    );
-    assert.ok(
-      reachableLegacy.includes(needle),
-      `generate-legacy turn (base preamble + its own section) must carry the composer-skill quality-bar clause: "${clause}"`,
-    );
-  }
-});
 
 // ---------------------------------------------------------------------------
 // AT-9 — Part C: positional-reference integrity across all 3 generate
@@ -566,16 +323,14 @@ test('AT-8 (Round-2, Part B): the composer-skill quality bar reaches BOTH genera
 // prompt that precedes the data half, proven with an index comparison below.
 // ---------------------------------------------------------------------------
 
-test('AT-9 (Round-2, Part C): no stale "above" reference to data emitted after the skill/turn text, in any of the 3 real generate branches', async () => {
+test('AT-9 (Round-2, Part C): no stale "above" reference to data emitted after the skill/turn text, in any real generate scenario', async () => {
   async function composeRealPrompt(
     overrides: Partial<DemoBuilderStatus>,
     demoProcess?: DemoStep[],
   ): Promise<string> {
     const { projectRoot, logsRoot, sessionId } = setup(overrides, demoProcess);
     const prompts: string[] = [];
-    const queryFn = overrides.targetElement
-      ? makeElementWritingQueryFn(overrides.targetElement, (p) => { prompts.push(p); })
-      : makeWritingQueryFn((p) => { prompts.push(p); });
+    const queryFn = makeWritingQueryFn((p) => { prompts.push(p); });
     await runDemoBuilderTurn({
       sessionId,
       projectRoot,
@@ -595,9 +350,9 @@ test('AT-9 (Round-2, Part C): no stale "above" reference to data emitted after t
   ];
 
   const branches: Array<{ label: string; prompt: string }> = [
-    { label: 'generate-element', prompt: await composeRealPrompt({ phase: 'generating', targetElement: 'cli-capture' }, elementProcess) },
-    { label: 'generate-composed', prompt: await composeRealPrompt({ phase: 'generating' }, composedProcess) },
-    { label: 'generate-legacy', prompt: await composeRealPrompt({ phase: 'generating' }) },
+    { label: 'targetElement', prompt: await composeRealPrompt({ phase: 'generating', targetElement: 'cli-capture' }, elementProcess) },
+    { label: 'element-bound declaration', prompt: await composeRealPrompt({ phase: 'generating' }, composedProcess) },
+    { label: 'free-text declaration', prompt: await composeRealPrompt({ phase: 'generating' }) },
   ];
 
   for (const { label, prompt } of branches) {
@@ -656,7 +411,7 @@ test('AT-10 (Round-2, Part D): a throw inside runGenerateStep after the agent al
       mkdirSync(join(cwd, '.forge', 'demo'), { recursive: true });
       writeFileSync(join(cwd, OWN_PARTIAL_REL), '<!-- half a fragment -->\n');
       writeFileSync(join(cwd, MARKER_REL), 'partial work from an agent turn that never finished the deliverables\n');
-      // ... but never produces .forge/skills/demo-design/SKILL.md or
+      // ... but never produces .forge/demo/demo-process.json or
       // .forge/demo/DEMO.html, so runGenerateStep's existing required-file
       // check throws AFTER this write already landed on disk.
       yield { type: 'result', total_cost_usd: 0.01 };
@@ -731,7 +486,7 @@ test('AT-10: no generate-* turn section instructs the agent to capture real outp
   const skill = readFileSync(SKILL_MD_PATH, 'utf8');
   const sections = skill.split(/<!-- turn: /).slice(1);
   const generate = sections.filter((sec) => sec.startsWith('generate-'));
-  assert.equal(generate.length, 3, 'the skill must still declare exactly the three generate turns');
+  assert.equal(generate.length, 1, 'the skill must declare exactly one generate turn (forge-mfv5.2.8)');
   const ground = sections.filter((sec) => sec.startsWith('ground-it'));
   assert.equal(ground.length, 1, 'the skill must declare the ground-it turn the second pass loads');
 

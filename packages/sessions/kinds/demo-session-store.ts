@@ -11,7 +11,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { guardedFile, guardedReadFile, guardedReadDir } from '@forge/kernel';
+import { guardedFile, guardedReadDir } from '@forge/kernel';
 import type { ModelTier } from '@forge/agents';
 
 /** R4-16 — session-dir-relative home for per-generation snapshots
@@ -20,10 +20,10 @@ import type { ModelTier } from '@forge/agents';
  *  commit intermediate generations onto the project's forge-studio branch). */
 export const GENERATIONS_DIRNAME = 'generations';
 /** The two files a generation snapshots — exactly the pair `runGenerateStep`
- *  already verifies (D5) — plus the metadata file recording how to restore
- *  them. */
+ *  verifies (D5): the reviewable sample and the proposed demo declaration
+ *  (bead forge-mfv5.2.8) — plus the metadata file recording what drove it. */
 export const GENERATION_DEMO_FILENAME = 'DEMO.html';
-export const GENERATION_SKILL_FILENAME = 'SKILL.md';
+export const GENERATION_DECLARATION_FILENAME = 'demo-process.json';
 export const GENERATION_META_FILENAME = 'meta.json';
 
 /** The kind-dir under a project root that holds demo-builder sessions. */
@@ -33,29 +33,6 @@ export const DEMO_KIND_DIR = '_demo';
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** R4-16 — the subset of a generation's meta.json the lock-step restore
- *  needs. Fails CLOSED (returns null) on ANY shape violation: missing file,
- *  unreadable, not JSON, or a missing/non-string `skillRelPath` (the field
- *  the restore writes the skill back to — load-bearing). */
-type GenerationSnapshotMeta = { readonly skillRelPath: string };
-
-export function readGenerationSnapshotMeta(projectRoot: string, sessionId: string, n: number): GenerationSnapshotMeta | null {
-  // SEC-04 leaf: route the meta.json read through the guard (leaf included) so a
-  // symlinked meta.json under generations/<n>/ collapses to null.
-  const raw = guardedReadFile(projectRoot, [DEMO_KIND_DIR, sessionId, GENERATIONS_DIRNAME, String(n), GENERATION_META_FILENAME]);
-  if (raw === null) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-  const rec = parsed as Record<string, unknown>;
-  if (typeof rec.skillRelPath !== 'string' || rec.skillRelPath.length === 0) return null;
-  return { skillRelPath: rec.skillRelPath };
-}
 
 /** The generation numbers that DO have a `generations/<n>/` dir on disk —
  *  used only to name what's available in the R4-16 fail-closed lock error.
@@ -91,20 +68,17 @@ export function guardedGenerationWritePath(projectRoot: string, segs: readonly s
 // about where a demo session's bytes live, which both step modules stand on.
 // ---------------------------------------------------------------------------
 export const DEMO_REL_DIR = '.forge/demo';
-/** The presentation composer the agent authors for the Studio demo page. Not a cycle
- *  input: capture derives from demoProcess alone (forge-mfv5.2.2, forge-mfv5.2.8). */
-export const DEMO_SKILL_REL_PATH = '.forge/skills/demo-design/SKILL.md';
-
-
-/** The reviewable sample the generator renders from a representative real change. */
+/** Where the generate turn's write pass authors its proposed demo declaration
+ *  — the `demoProcess` steps, as a JSON array (bead forge-mfv5.2.8). A draft
+ *  only: the step moves it into the generation snapshot and removes it from
+ *  the repo, so `.forge/project.json` stays the one declared source and a lock
+ *  is the only thing that writes it there. */
+export const DEMO_DECLARATION_REL_PATH = '.forge/demo/demo-process.json';
+/** The reviewable sample the ground pass renders by running the declaration. */
 export const DEMO_HTML_REL_PATH = '.forge/demo/DEMO.html';
 export const DEMO_LOCK_REL_PATH = '.forge/demo/demo.lock.json';
 /** Where each locked demo is snapshotted so previous demos stay viewable. */
 export const DEMO_HISTORY_REL_DIR = '.forge/demo/history';
-/** Per-element rendered fragments — one `<id>.html` each, so the operator can
- *  view a single part's output independently. The composer assembles these in
- *  demoProcess order into DEMO.html. */
-export const DEMO_FRAGMENTS_REL_DIR = '.forge/demo/fragments';
 /** Forge-root-relative path to the base stylesheet the agent inlines. */
 export const FORGE_DEMO_CSS_REL_PATH = 'studio/demo/forge-demo.css';
 
@@ -123,16 +97,16 @@ export type DemoBuilderStatus = {
   project_repo_path: string;
   phase: DemoBuilderPhase;
   /**
-   * `create` — no locked demo yet, build one. `update` — a demo skill/sample
-   * already exists; the operator's brief is change-notes and the agent revises
-   * the existing skill + sample rather than rebuilding. Absent ⇒ `create`.
+   * `create` — no locked demo yet, build one. `update` — a declaration is
+   * already locked; the operator's brief is change-notes and the agent revises
+   * the declared steps rather than rebuilding them. Absent ⇒ `create`.
    */
   mode?: 'create' | 'update';
   /**
-   * When set, the agent iterates ONLY this demo-element kind (a "smaller chunk"):
-   * it authors/refines `.forge/skills/demo/<targetElement>/` and renders just that
-   * element's fragment as the sample, so the operator can perfect one element
-   * before composing the whole demo. Absent ⇒ compose the full demo.
+   * When set, the agent revises ONLY the declared steps bound to this
+   * demo-element kind (a "smaller chunk") and carries every other step over
+   * unchanged, so the operator can perfect one element's steps before the
+   * whole declaration. Absent ⇒ the whole declaration.
    */
   targetElement?: string;
   /** 1-based generate-turn counter. */
@@ -143,10 +117,10 @@ export type DemoBuilderStatus = {
   /**
    * R4-16 — the generation number the operator chose to lock, DECLARED here
    * and ENFORCED by `runLockStep` (D6): naming a generation with no
-   * readable/parsable snapshot fails the lock loudly (declared-data-fails-open
-   * is the antipattern this guards against — it must never silently lock the
-   * latest). Absent ⇒ lock whatever is currently in the repo (today's
-   * behaviour, unchanged) and `demo.lock.json.generation` records `null`.
+   * readable snapshot fails the lock loudly (declared-data-fails-open is the
+   * antipattern this guards against — it must never silently lock the
+   * latest). Absent ⇒ lock the newest generation on disk; either way
+   * `demo.lock.json.generation` records the generation actually locked.
    */
   selectedGeneration?: number;
   /**
@@ -161,7 +135,8 @@ export type DemoBuilderStatus = {
    * W7-C2 (sessions-kinds-36) — the permanent pointer at what this session
    * produced, written once at lock success and read back by the
    * session-shell route on every GET (`finalized` on the wire). `demo` names
-   * the project whose `.forge/demo/demo.lock.json` was written. Absent until
+   * the project whose `demoProcess` and `.forge/demo/demo.lock.json` were
+   * written. Absent until
    * the session locks.
    */
   finalized?: { kind: string; id: string };

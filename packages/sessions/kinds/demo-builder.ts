@@ -2,9 +2,11 @@
  * The `demo` session kind — a registered step-handler variant (ADR 043 as
  * amended 2026-09-03, M4 ruling 60).
  *
- * Builds a project's demo: an agent authors demo machinery and DEMO.html into
- * the project repo, the operator reviews it, and an approved generation is
- * locked with a snapshot.
+ * Builds a project's demo DECLARATION (bead forge-mfv5.2.8): an agent drafts
+ * the `demoProcess` steps and renders a sample DEMO.html by running them, the
+ * operator reviews the generation, and locking it writes the declaration into
+ * `.forge/project.json` — the sole cycle-time demo input — once it passes the
+ * drive rule `forge preflight`'s DEMO-SKILL clause applies.
  *
  * THE NAME TRAP, which is real and load-bearing (`AgentRunnerEntry.kindDir`'s
  * own doc calls it out): the operator types the agent-id `demo-builder`, but
@@ -27,8 +29,8 @@
  */
 
 import type { ServerResponse } from 'node:http';
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
-import { dirname, join, sep } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 
 import {
@@ -37,7 +39,7 @@ import {
   type KindTurnPlumbing,
   type SessionKindVariant,
 } from './kind-turn.ts';
-import { emitGroundFileChanges, guardedFile, guardedWriteFile, sendJson, SLUG_RE } from '@forge/kernel';
+import { emitGroundFileChanges, guardedFile, guardedReadFile, guardedWriteFile, sendJson } from '@forge/kernel';
 import { guardedWriteSessionStatus } from '../session-status-io.ts';
 import {
   DEMO_HISTORY_REL_DIR,
@@ -45,12 +47,10 @@ import {
   DEMO_HTML_REL_PATH,
   DEMO_KIND_DIR,
   DEMO_LOCK_REL_PATH,
-  DEMO_SKILL_REL_PATH,
   GENERATIONS_DIRNAME,
+  GENERATION_DECLARATION_FILENAME,
   GENERATION_DEMO_FILENAME,
-  GENERATION_SKILL_FILENAME,
   listExistingGenerationNumbers,
-  readGenerationSnapshotMeta,
   type DemoBuilderStatus,
   type RunDemoBuilderTurnResult,
 } from './demo-session-store.ts';
@@ -64,7 +64,7 @@ import {
   readAnswersBody,
   type AffordanceRouteContext,
 } from '../bridge-studio-sessions-affordance-shell.ts';
-import { ensureStudioBranch, commitStudioChange } from '@forge/projects';
+import { ensureStudioBranch, commitStudioChange, PROJECT_CONFIG_REL_PATH, validateDemoDeclaration, writeProjectConfigPatch } from '@forge/projects';
 // Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
 // architect-session.ts's own module doc — `kinds/registry.ts` needs
 // `demoKind` fully bound at its own top level).
@@ -115,7 +115,7 @@ async function withStudioRepo<T>(
     return result;
   } finally {
     try {
-      const own = [DEMO_REL_DIR, DEMO_SKILL_REL_PATH, '.forge/skills/demo'].filter((p) => existsSync(join(status.project_repo_path, p))); // 7.3.6 — why: packages/sessions/tests/unit/demo-commit-scope.test.ts
+      const own = [DEMO_REL_DIR].filter((p) => existsSync(join(status.project_repo_path, p))); // 7.3.6 — why: packages/sessions/tests/unit/demo-commit-scope.test.ts
       if (own.length > 0) commitStudioChange(status.project_repo_path, `forge-studio: demo machinery (${status.phase})`, own);
     } catch (commitErr) {
       if (succeeded) throw commitErr; // run() succeeded — a swallowed commit failure is a silent data loss.
@@ -161,7 +161,7 @@ export async function runDemoBuilderTurn(
 
 
 // ---------------------------------------------------------------------------
-// Lock step — deterministic: record the locked demo for reproducibility
+// Lock step — deterministic: write the declaration, record the locked demo
 // ---------------------------------------------------------------------------
 
 function runLockStep(args: {
@@ -173,115 +173,81 @@ function runLockStep(args: {
   const { input, status, plumbing, writeStatus } = args;
   const { logger, initiativeId, sessionDir } = plumbing;
 
-  // R4-16 pin 2 (Finding C) — set only when THIS lock actually restored a
-  // generation's snapshot; then it names the skill THAT generation recorded,
-  // never the hardcoded composer path. Left null for an unselected lock
-  // (behaviour unchanged — falls back to DEMO_SKILL_REL_PATH below, exactly
-  // as before this fix).
-  let restoredSkillRelPath: string | null = null;
-
-  // R4-16 (D6) — a chosen generation is validated and restored BEFORE any
-  // write happens. Fail closed: a selectedGeneration naming a missing or
-  // unparsable snapshot throws, naming the requested number AND the
-  // generations that DO exist — no lock file, no history entry, phase not
-  // flipped, repo files untouched (declared-data-fails-open is exactly the
-  // antipattern this guards against; it must never silently lock the latest).
-  if (status.selectedGeneration !== undefined) {
-    const genSegs = [DEMO_KIND_DIR, input.sessionId, GENERATIONS_DIRNAME, String(status.selectedGeneration)];
-    const meta = readGenerationSnapshotMeta(input.projectRoot, input.sessionId, status.selectedGeneration);
-    const genDir = join(sessionDir, GENERATIONS_DIRNAME, String(status.selectedGeneration));
-    // SEC-04 leaf: resolve the snapshot leaves under the session dir through the
-    // guard (leaf included) — a symlinked snapshot slot collapses to null, the
-    // same no-oracle answer as absent.
-    const snapshotDemoPath = guardedFile(input.projectRoot, [...genSegs, GENERATION_DEMO_FILENAME], 'read');
-    const snapshotSkillPath = guardedFile(input.projectRoot, [...genSegs, GENERATION_SKILL_FILENAME], 'read');
-    if (meta === null || snapshotDemoPath === null || snapshotSkillPath === null) {
-      const existing = listExistingGenerationNumbers(input.projectRoot, input.sessionId);
-      throw new Error(
-        `demo-builder runner: cannot lock — generation ${status.selectedGeneration} has no readable/parsable snapshot at ` +
-        `${genDir}. Generations on disk: ${existing.length > 0 ? existing.join(', ') : '(none)'}.`,
-      );
-    }
-
-    // R4-16 pin 2 (Finding B) — `meta.skillRelPath` is a WRITE target read
-    // back off disk (a generation's own meta.json, which — per AT-43..45 — a
-    // compromised agent turn or an operator-facing bug could smuggle a
-    // malicious value into). An ALLOWLIST, never a ".." blocklist: a
-    // blocklist would still admit an absolute-shaped path with zero ".."
-    // segments (AT-44), and neither an allowlist nor a blocklist alone stops
-    // a path that LEXICALLY matches the legitimate shape but resolves
-    // through a symlinked directory (AT-45) — hence the realpath containment
-    // check right after.
-    if (!isAllowedSkillRelPath(meta.skillRelPath)) {
-      throw new Error(
-        `demo-builder runner: cannot lock — generation ${status.selectedGeneration}'s skillRelPath "${meta.skillRelPath}" ` +
-        `is not an allowed write target (must be "${DEMO_SKILL_REL_PATH}" or match ".forge/skills/demo/<slug>/SKILL.md") — refusing to write anywhere.`,
-      );
-    }
-    const destSkillPath = join(status.project_repo_path, meta.skillRelPath);
-    let realRepoRoot: string;
-    try {
-      realRepoRoot = realpathSync(status.project_repo_path);
-    } catch {
-      throw new Error(
-        `demo-builder runner: cannot lock — project repo "${status.project_repo_path}" could not be resolved to verify write containment.`,
-      );
-    }
-    if (!closestExistingAncestorContained(dirname(destSkillPath), realRepoRoot)) {
-      throw new Error(
-        `demo-builder runner: cannot lock — generation ${status.selectedGeneration}'s skillRelPath "${meta.skillRelPath}" ` +
-        'resolves outside the project repo (a symlinked directory along its path) — refusing to write.',
-      );
-    }
-
-    mkdirSync(dirname(destSkillPath), { recursive: true });
-    mkdirSync(join(status.project_repo_path, DEMO_REL_DIR), { recursive: true });
-    writeFileSync(join(status.project_repo_path, DEMO_HTML_REL_PATH), readFileSync(snapshotDemoPath));
-    writeFileSync(destSkillPath, readFileSync(snapshotSkillPath));
-    restoredSkillRelPath = meta.skillRelPath;
+  // R4-16 (D6) — the chosen generation, else the newest on disk, is validated
+  // BEFORE any write happens. Fail closed: a generation with no readable
+  // snapshot throws, naming the requested number AND the generations that DO
+  // exist — no project.json write, no lock file, no history entry, phase not
+  // flipped (declared-data-fails-open is exactly the antipattern this guards
+  // against; it must never silently lock something else).
+  const existing = listExistingGenerationNumbers(input.projectRoot, input.sessionId);
+  const generation = status.selectedGeneration ?? existing[existing.length - 1];
+  if (generation === undefined) {
+    throw new Error('demo-builder runner: cannot lock — no generation on disk. Generate a demo before locking.');
   }
-
-  const demoPath = join(status.project_repo_path, DEMO_HTML_REL_PATH);
-  if (!existsSync(demoPath)) {
+  const genSegs = [DEMO_KIND_DIR, input.sessionId, GENERATIONS_DIRNAME, String(generation)];
+  // SEC-04 leaf: resolve the snapshot leaves under the session dir through the
+  // guard (leaf included) — a symlinked snapshot slot collapses to null, the
+  // same no-oracle answer as absent.
+  const snapshotDemoPath = guardedFile(input.projectRoot, [...genSegs, GENERATION_DEMO_FILENAME], 'read');
+  const declarationRaw = guardedReadFile(input.projectRoot, [...genSegs, GENERATION_DECLARATION_FILENAME]);
+  if (snapshotDemoPath === null || declarationRaw === null) {
     throw new Error(
-      `demo-builder runner: cannot lock — no ${DEMO_HTML_REL_PATH} in the repo. Generate a demo before locking.`,
+      `demo-builder runner: cannot lock — generation ${generation} has no readable snapshot at ` +
+      `${join(sessionDir, GENERATIONS_DIRNAME, String(generation))}. Generations on disk: ${existing.length > 0 ? existing.join(', ') : '(none)'}.`,
     );
   }
-  // R4-16 pin 2 (Finding C) — the generator this lock actually restored
-  // (per-element or composer), never a hardcoded composer-path check that
-  // ignores which skill this generation used. `restoredSkillRelPath` is null
-  // only when no generation was selected this lock (unchanged fallback).
-  const demoSkillRelPathForLock = restoredSkillRelPath ?? DEMO_SKILL_REL_PATH;
-  const demoSkillAbsPathForLock = join(status.project_repo_path, demoSkillRelPathForLock);
+
+  // Bead forge-mfv5.2.8 — the declaration is refused HERE, with the drive
+  // rule's own words, when it could not drive a checkpoint: the same rule
+  // `forge preflight`'s DEMO-SKILL clause applies, so a lock never writes a
+  // declaration preflight then reports as undrivable. Nothing is written.
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(declarationRaw);
+  } catch (err) {
+    throw new Error(`demo-builder runner: cannot lock — generation ${generation}'s declaration is not JSON: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  const declaration = validateDemoDeclaration(parsed);
+  if (!declaration.ok) {
+    throw new Error(`demo-builder runner: cannot lock — generation ${generation}'s declaration is refused: ${declaration.reason}`);
+  }
+
+  // Read BEFORE the writes, or a re-lock looks like a creation (#663's shape:
+  // a write that MODIFIES cannot appear in a created-list by construction).
+  // GUARDED, not `existsSync`: `project_repo_path` is request-derived and
+  // `check-request-path-sinks` refuses the bare form. `guardedFile(root,
+  // segments, 'read')` is null for absent OR unresolvable, which is the same
+  // existence answer with the root contained.
+  const configExisted = guardedFile(status.project_repo_path, PROJECT_CONFIG_REL_PATH.split('/'), 'read') !== null;
+  const lockExisted = guardedFile(status.project_repo_path, ['.forge', 'demo', 'demo.lock.json'], 'read') !== null;
+  const demoExisted = guardedFile(status.project_repo_path, DEMO_HTML_REL_PATH.split('/'), 'read') !== null;
+
+  // The ONE project.json writer — every other key survives as it was.
+  writeProjectConfigPatch(
+    status.project_repo_path,
+    () => ({ demoProcess: declaration.steps }),
+    `forge-studio: demo declaration (session ${status.session_id})`,
+  );
+
+  mkdirSync(join(status.project_repo_path, DEMO_REL_DIR), { recursive: true });
+  const demoPath = join(status.project_repo_path, DEMO_HTML_REL_PATH);
+  writeFileSync(demoPath, readFileSync(snapshotDemoPath));
   const lockPath = join(status.project_repo_path, DEMO_LOCK_REL_PATH);
   const lock = {
     session_id: status.session_id,
     project: status.project,
     prompt: status.prompt,
     iterations: status.iteration,
-    // The locked, reproducible generator — future cycles run it per completed
-    // initiative to render a before/after demo of that initiative's changes.
-    // null only if the generator this lock actually names genuinely is not
-    // on disk (never fabricated, never a stale/unrelated generator's path).
-    demo_skill: existsSync(demoSkillAbsPathForLock) ? demoSkillRelPathForLock : null,
+    // The declaration this lock wrote into `.forge/project.json` demoProcess —
+    // recorded so the locked demo stays reproducible from its own record.
+    declaration: declaration.steps,
     demo_html: DEMO_HTML_REL_PATH,
-    // R4-16 (D6) — the CHOSEN generation, never attributed from
+    // R4-16 (D6) — the generation actually locked, never attributed from
     // status.iteration (a field that happens to be a number is not the same
-    // thing as "the chosen generation"). null when nothing was chosen.
-    generation: status.selectedGeneration ?? null,
+    // thing as "the chosen generation").
+    generation,
     locked_at: status.updated_at,
   };
-  if (!existsSync(join(status.project_repo_path, DEMO_REL_DIR))) {
-    mkdirSync(join(status.project_repo_path, DEMO_REL_DIR), { recursive: true });
-  }
-  // Read BEFORE the write, or a re-lock looks like a creation (#663's shape:
-  // a write that MODIFIES cannot appear in a created-list by construction).
-  // GUARDED, not `existsSync(lockPath)`: `project_repo_path` is request-derived
-  // and `check-request-path-sinks` refused the bare form on this PR's first
-  // run. `guardedFile(root, segments, 'read')` is null for absent OR
-  // unresolvable, which is the same existence answer with the root contained —
-  // the shape `bridge-studio-demo.ts:126` already uses on this exact file.
-  const lockExisted = guardedFile(status.project_repo_path, ['.forge', 'demo', 'demo.lock.json'], 'read') !== null;
   writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
 
   // Archive this locked demo into history/<sessionId>/ so previous demos remain
@@ -298,35 +264,26 @@ function runLockStep(args: {
   // write tool's refs by name — a path appearing in a log is not evidence the
   // run wrote it. `logger` is the SESSION's: handed none,
   // `emitGroundFileChanges` opens a bridge run and the fence stays green with
-  // the wrong author recorded.
+  // the wrong author recorded. forge-mfv5.2.8 added `.forge/project.json`
+  // (the declaration) and the restored DEMO.html to what this step writes.
   const lockCause = `demo-builder lock (session ${status.session_id})`;
-  emitGroundFileChanges({
-    forgeRoot: plumbing.forgeRoot,
-    cause: lockCause,
-    projectRoot: status.project_repo_path,
-    relPaths: [DEMO_LOCK_REL_PATH],
-    op: lockExisted ? 'modify' : 'write',
-    logger,
-  });
+  const emit = (relPaths: string[], op: 'write' | 'modify') =>
+    emitGroundFileChanges({ forgeRoot: plumbing.forgeRoot, cause: lockCause, projectRoot: status.project_repo_path, relPaths, op, logger });
+  emit([PROJECT_CONFIG_REL_PATH], configExisted ? 'modify' : 'write');
+  emit([DEMO_HTML_REL_PATH], demoExisted ? 'modify' : 'write');
+  emit([DEMO_LOCK_REL_PATH], lockExisted ? 'modify' : 'write');
   // `history/<sessionId>/` is per-session, so these two are always creations —
   // stated as a fact about the path, not assumed from the lock's own op.
-  emitGroundFileChanges({
-    forgeRoot: plumbing.forgeRoot,
-    cause: lockCause,
-    projectRoot: status.project_repo_path,
-    relPaths: [
-      `${DEMO_HISTORY_REL_DIR}/${status.session_id}/DEMO.html`,
-      `${DEMO_HISTORY_REL_DIR}/${status.session_id}/meta.json`,
-    ],
-    op: 'write',
-    logger,
-  });
+  emit([
+    `${DEMO_HISTORY_REL_DIR}/${status.session_id}/DEMO.html`,
+    `${DEMO_HISTORY_REL_DIR}/${status.session_id}/meta.json`,
+  ], 'write');
 
   // W7-C2 T1 review (P0-4, sessions-kinds-36) — the permanent "what this
   // session produced" pointer (see instructions-runner's own note for why
   // all five finalizing kinds now write one). A locked demo IS the project's
-  // .forge/demo/demo.lock.json, so the pointer names the PROJECT; the shell
-  // route derives whether that lock is still on disk.
+  // declaration + .forge/demo/demo.lock.json, so the pointer names the
+  // PROJECT; the shell route derives whether that lock is still on disk.
   writeStatus({
     ...status,
     phase: 'locked',
@@ -335,73 +292,12 @@ function runLockStep(args: {
 
   logger.emit({
     initiative_id: initiativeId, phase: 'demo', skill: 'demo-builder-runner',
-    event_type: 'log', input_refs: [demoPath], output_refs: [lockPath, join(histDir, 'DEMO.html')],
-    message: 'demo-locked (snapshotted to history; machinery reproducible in the repo)',
-    metadata: { session_id: input.sessionId, lock_path: lockPath, history_dir: histDir },
+    event_type: 'log', input_refs: [snapshotDemoPath], output_refs: [join(status.project_repo_path, PROJECT_CONFIG_REL_PATH), lockPath, join(histDir, 'DEMO.html')],
+    message: `demo-locked (generation ${generation}: ${declaration.steps.length} declared step(s) written to demoProcess; snapshotted to history)`,
+    metadata: { session_id: input.sessionId, lock_path: lockPath, history_dir: histDir, generation },
   });
 
-  return { phase: 'locked', wrote: [lockPath, join(histDir, 'DEMO.html')], lockPath };
-}
-/** R4-16 pin 2 (Finding B) — the ONLY two shapes `readGenerationSnapshotMeta`'s
- *  `skillRelPath` may ever legitimately carry, because they are the only two
- *  shapes the runner ITSELF ever writes there (see `runGenerateStep`'s
- *  `requiredSkillRel`): the fixed composer path, or a per-element path whose
- *  slug matches the SAME `SLUG_RE` forge's own demo-element library ids use
- *  (`elementSkillRelPath` above). An allowlist, not a ".." blocklist — see
- *  `isAllowedSkillRelPath`'s call site for why a blocklist is insufficient.
- *  `SLUG_RE.source` carries its OWN `^`/`$` anchors (it is normally matched
- *  standalone against a whole slug) — stripped here before splicing into a
- *  larger pattern, since an embedded mid-pattern `^`/`$` would anchor to the
- *  position 0 / end of the ENTIRE tested string, not the slug segment, and
- *  silently reject every legitimate input. */
-const SLUG_SEGMENT_SOURCE = SLUG_RE.source.replace(/^\^/, '').replace(/\$$/, '');
-const ELEMENT_SKILL_REL_PATH_RE = new RegExp(`^\\.forge/skills/demo/(?:${SLUG_SEGMENT_SOURCE})/SKILL\\.md$`);
-
-function isAllowedSkillRelPath(relPath: string): boolean {
-  return relPath === DEMO_SKILL_REL_PATH || ELEMENT_SKILL_REL_PATH_RE.test(relPath);
-}
-
-/** R4-16 pin 2 (Finding B) — belt-and-braces beyond the allowlist above: a
- *  `skillRelPath` can lexically match the legitimate shape and STILL resolve
- *  outside the repo if some directory along its path is a symlink to an
- *  outside location (AT-45 — the allowlist only proves the path STRING's
- *  shape, never where it resolves). Walks up from `dir` to the closest
- *  EXISTING ancestor — the allowlist already forbids ".." and absolute paths,
- *  so once that ancestor is verified contained, the remaining NEW segments
- *  are plain literal directory names, not symlinks — and verifies THAT
- *  ancestor's realpath stays inside `repoRealPath`. Fails closed (false) if
- *  no ancestor can be resolved at all.
- *
- *  Honest limit (R4-16 round 2), same trust tier as the TOCTOU residual
- *  documented in `packages/sessions/studio/session-transcript.ts`'s header — read
- *  that first; this follows the same disclosure shape (mechanism, trust
- *  tier, why accepted). This check and the `mkdirSync`/`writeFileSync` calls
- *  it gates (this function's caller, above) are separate syscalls, not one
- *  atomic operation: "cannot escape" above describes the segments as they
- *  are checked, not a guarantee that holds across time. An attacker able to
- *  race a symlink into one of those NEW segments in the gap between this
- *  check returning `true` and the write actually landing defeats
- *  containment. Accepted, not fixed, on the same basis as
- *  session-transcript.ts's TOCTOU note: mounting that race requires the same
- *  local write access inside the project repo that would let an attacker
- *  write the outside content in directly, so closing it (e.g. holding an
- *  open directory file descriptor from `mkdir` instead of re-resolving paths
- *  by name) buys negligible additional protection for real implementation
- *  cost. */
-function closestExistingAncestorContained(dir: string, repoRealPath: string): boolean {
-  let candidate = dir;
-  while (!existsSync(candidate)) {
-    const parent = dirname(candidate);
-    if (parent === candidate) return false;
-    candidate = parent;
-  }
-  let real: string;
-  try {
-    real = realpathSync(candidate);
-  } catch {
-    return false;
-  }
-  return real === repoRealPath || real.startsWith(repoRealPath + sep);
+  return { phase: 'locked', wrote: [join(status.project_repo_path, PROJECT_CONFIG_REL_PATH), lockPath, join(histDir, 'DEMO.html')], lockPath };
 }
 
 // W6-B1 review round 2 removed this file's local makeReasoningSink/

@@ -96,6 +96,7 @@ const GALLERY_ARTIFACT: SessionArtifactPayload = {
       createdAt: '2026-08-27T09:00:00.000Z',
       feedback: null,
       targetElement: null,
+      declaration: null,
       items: [{ path: 'demo.html', kind: 'html', bytes: 128 }],
     },
   ],

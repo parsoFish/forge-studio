@@ -38,7 +38,7 @@ function generationGallery(numbers: number[]): SessionArtifactPayload {
     kind: 'generation-gallery',
     label: 'Demo generations',
     sourcesScanned: [],
-    generations: numbers.map((n) => ({ number: n, createdAt: '2026-08-15T00:00:00Z', feedback: null, targetElement: null, items: [] })),
+    generations: numbers.map((n) => ({ number: n, createdAt: '2026-08-15T00:00:00Z', feedback: null, targetElement: null, declaration: null, items: [] })),
   } as never;
 }
 

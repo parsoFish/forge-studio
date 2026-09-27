@@ -46,6 +46,7 @@
 
 import { bridgeFetch } from './bridge-client';
 import { parseSessionLifecycle, type SessionLifecycle } from './session-lifecycle-client';
+import { parseGenerationDeclaration, type GenerationDeclarationStep } from './generation-declaration';
 
 export type { SessionLifecycle } from './session-lifecycle-client';
 
@@ -238,6 +239,9 @@ export type GenerationGalleryEntry = {
   createdAt: string;
   feedback: string | null;
   targetElement: string | null;
+  /** The declaration this generation proposes — what locking it writes into
+   *  `.forge/project.json` demoProcess. null when the snapshot has none. */
+  declaration: GenerationDeclarationStep[] | null;
   items: GenerationGalleryItem[];
 };
 
@@ -453,6 +457,7 @@ function parseGenerationGalleryEntry(raw: unknown, index: number): GenerationGal
     createdAt: requireString(raw, 'createdAt'),
     feedback: requireNullable(raw, 'feedback', 'string'),
     targetElement: requireNullable(raw, 'targetElement', 'string'),
+    declaration: parseGenerationDeclaration(raw['declaration']),
     items: itemsRaw.map((it, i) => parseGenerationGalleryItem(it, i)),
   };
 }

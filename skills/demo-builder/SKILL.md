@@ -1,13 +1,13 @@
 ---
 name: demo-builder
-description: Author a project's reusable demo-generation skill — the machinery that showcases an initiative's CHANGES (before/after) as a Forge-styled HTML page — and render a real sample from a recent change, iterating on operator feedback until locked.
+description: Author a project's demo declaration — the demoProcess steps (.forge/project.json) whose capture commands drive every cycle's demo evidence — and render a real sample by running them against a recent change, iterating on operator feedback until the declaration is locked.
 phase: demo
 surface: interactive
 # Operator-driven setup helper dispatched by the bridge (like brain-fix), never
 # composed into a flow. `library: false` keeps it out of the Studio agent roster
 # while retaining the runtime spec deriveAgentSpec needs.
 library: false
-purpose: Build the project's per-initiative demo skill (before/after HTML of an initiative's changes) + a real sample, refined by operator feedback.
+purpose: Author the project's demo declaration (demoProcess) + a real sample it drives, refined by operator feedback.
 composition:
   skills: []
   tools: []
@@ -20,7 +20,7 @@ runtime:
     - claude-sonnet-4-6
     - claude-opus-4-8
 brainAccess: none
-interactivity: Operator-driven; builds the demo skill, renders a sample, and revises on direct feedback until the operator locks it.
+interactivity: Operator-driven; drafts the demo declaration, renders a sample by running it, and revises on direct feedback until the operator locks it.
 allowed-tools: [Read, Grep, Glob, Bash, Write, Edit]
 disallowed-tools: [NotebookEdit, WebFetch, WebSearch, Task, Agent]
 budgets: {}
@@ -28,122 +28,89 @@ budgets: {}
 
 # Demo-Builder
 
-Your job is **NOT** to write a one-off marketing page for the whole project. It is
-to build the project's **reusable demo-generation skill** — the machinery that,
-every time forge finishes an **initiative**, produces a rich **before/after HTML
-demo of THAT initiative's changes** — and then render one real **sample** so the
-operator can judge the machinery. You run with write tools, with the project repo
-as your working directory.
-
-This replaces the rigid `demo.json` contract: demos are bespoke HTML the project's
-own skill generates, tailored per project, scoped to what an initiative changed.
+Your job is to author the project's **demo declaration** — the `demoProcess`
+steps in `.forge/project.json` — and render one real **sample** so the operator
+can judge it. The declaration is the **sole cycle-time demo input** (bead
+forge-mfv5.2.8): every time forge finishes an **initiative**, the integrate band
+derives that initiative's demo checkpoints from these steps and runs them. You
+write no demo skill and no machinery; what you write is what every future cycle
+runs. You run with write tools, with the project repo as your working directory.
 
 ## Scope every demo to an initiative's CHANGES
 
 The unit of a demo is "what this initiative changed", not "what the project is".
-A good generated demo answers: *what was true before, what is true now, and the
-concrete evidence of the difference* — for the slice of behaviour the initiative
-touched. Design the skill around a before/after pair (two states of the repo) and
-make the sample a genuine before/after of a real change.
+A good declaration names the commands whose output, captured before and after a
+change, shows *what was true before, what is true now, and the concrete evidence
+of the difference*. Make the sample a genuine before/after of a real change.
+
+## The declaration
+
+A JSON array of steps, each `{ "kind": "capture" | "verify" | "present",
+"text": "...", "element"?: "<id>" }`:
+
+- **`capture`** — what before/after evidence to record. Its `text` names the
+  command in an **inline-code span**: `` Run `npm run demo` to render the report. ``
+  The span is spawned as a **bare argv with no shell**, so it may not contain any
+  of `` | & ; < > $ ` \ ( ) { } [ ] * ? ~ `` or a newline. A capture step whose
+  span breaks that rule — or that has no span — drives nothing.
+- **`verify`** — the assertion that makes the captured evidence non-trivial.
+- **`present`** — how the evidence is surfaced.
+- **`element`** — optional: binds the step to a demo-element kind from the
+  library listed in the data block below.
+
+At least one `capture` step MUST drive a checkpoint. Locking refuses a
+declaration that drives none, with the reason — the same rule `forge preflight`'s
+DEMO-SKILL clause applies.
 
 ## Update mode
 
 When the `Mode:` line in the data block below reads `update` — UPDATE MODE: a
-locked demo already exists — `.forge/skills/demo-design/SKILL.md` (the composer) and
-`.forge/demo/DEMO.html` (the sample). READ them and REVISE per the operator's
-change-notes; do NOT rebuild from scratch.
+declaration is already locked, and it is the current declaration in the data
+block below. REVISE it per the operator's change-notes; do NOT rebuild from
+scratch.
 
 ## Two passes, and this one is the FIRST
 
 Every generate turn runs you twice. **This pass has no Bash**: author the
 deliverables its task section names, from what you can read. Put a clearly marked
-placeholder wherever real captured output belongs — the second pass fills those
-in with genuine before/after output and has the tools to do it. Do not describe
-output you have not seen; mark the slot and move on.
-
-## The demo skill's quality bar
-
-Whichever demo skill you author this turn — the composer at
-`.forge/skills/demo-design/SKILL.md`, or a per-element skill — it must instruct a
-future agent how to, given an initiative's before/after (a base SHA / worktree vs
-the merged result), render a self-contained Forge-styled HTML demo that showcases
-the changes that initiative introduced — the new behaviour, the diff that matters,
-real captured output before vs after, the verification that makes it non-trivial.
-This composer is presentation guidance for the Studio demo page, not a cycle
-input: `forge preflight`'s DEMO-SKILL clause instead checks that the project's
-demo declaration (`demoProcess`) itself drives at least one checkpoint (bead
-forge-mfv5.2.8 tracks folding this session's own output into that declaration
-more directly).
+placeholder wherever real captured output belongs in the sample — the second
+pass fills those in by running the declared commands. Do not describe output you
+have not seen; mark the slot and move on.
 
 ## Honor the inputs
 
 Each turn's data block below gives you the operator's **look-and-feel guidance**
-(or, on an update turn, their **change-notes**), the project's configured **demo
-process** where relevant, and — on revision turns — the operator's **feedback** on
-the previous sample. Apply all of them. On a revision, EDIT the existing skill +
-sample toward the feedback; don't rebuild from scratch unless asked.
+(or, on an update turn, their **change-notes**), the **current declaration**,
+the demo-element library, and — on revision turns — the operator's **feedback**
+on the previous sample. Apply all of them. On a revision, EDIT the current
+declaration toward the feedback; don't rebuild from scratch unless asked.
 
 ## Contract
 
-- Write under `.forge/skills/demo-design/` (or, for a targeted element,
-  `.forge/skills/demo/<id>/`) and `.forge/demo/` (and nowhere surprising); touch
-  the project's source only for a tiny, reversible hook if the demo genuinely
-  needs one (call it out).
+- Write only under `.forge/demo/`; touch the project's source only for a tiny,
+  reversible hook if the demo genuinely needs one (call it out).
 - The deliverable paths this turn's instructions name below MUST both exist when
   your turn ends.
 - Keep the sample tight and readable; lead with a one-line essence of the change.
-- The operator reviews the sample and either gives feedback (another turn) or
-  locks it.
+- The operator reviews the declaration and its sample and either gives feedback
+  (another turn) or locks it, which writes the declaration into
+  `.forge/project.json`.
 
-<!-- turn: generate-element -->
-## Your task this turn: refine the targeted demo element
-
-Author/refine the project-side element-skill at the path named `Target element
-skill path:` in the data block below, using its generator (also in the data block
-below). Write this element's rendered HTML fragment to the path named `Target
-element fragment path:` in the data block below (so the operator can view this
-part's output independently), and render `.forge/demo/DEMO.html` as JUST this
-element's fragment (wrapped, with the base CSS), structured as a before/after
-with the captured output left as marked placeholders for the grounding pass, so
-the operator can perfect this element before composing the whole demo. Do NOT
-build the other elements this turn.
-
-Stop when the target element's skill path and `.forge/demo/DEMO.html` both exist.
-
-<!-- turn: generate-composed -->
-## Your task this turn: build the demo + render a sample
-
-For each element kind in the ordered list below: author/refresh a project-side
-element-skill at `.forge/skills/demo/<id>/SKILL.md` using its generator (below)
-AND have it write its rendered HTML fragment to `.forge/demo/fragments/<id>.html`
-(one file per element, so each part's output is viewable independently). Then
-author `.forge/skills/demo-design/SKILL.md` — the composer that reads those
-fragments IN THIS ORDER and assembles them into `.forge/demo/DEMO.html` (wrapped
-with <html>/<body> + the base CSS). Structure every fragment as a before/after,
-leaving the captured output as marked placeholders for the grounding pass.
-
-Scope to what a change introduced, not the whole project. Stop when
-`.forge/skills/demo-design/SKILL.md` and `.forge/demo/DEMO.html` exist.
-
-
-<!-- turn: generate-legacy -->
-## Your task this turn: build the demo + render a sample
+<!-- turn: generate-declaration -->
+## Your task this turn: draft the declaration + render a sample
 
 Deliver BOTH:
-1. `.forge/skills/demo-design/SKILL.md` — the reusable generator that renders a
-   before/after HTML demo of an INITIATIVE'S CHANGES, meeting the demo skill's
-   quality bar. It bakes in the concrete commands for THIS project drawn from the
-   configured demo process in the data block below, and inlines the Forge demo
-   base stylesheet from the data block below so every generated demo reads as
-   Forge.
-2. `.forge/demo/DEMO.html` — a sample produced by running that generator against
-   a representative recent change, structured as a before/after with the
-   captured output left as marked placeholders for the grounding pass. This
-   sample, once grounded, is what the operator reviews to judge the skill.
+1. `.forge/demo/demo-process.json` — the declaration: the JSON array of steps
+   `## The declaration` describes, revised from the current declaration in the data block
+   below. When the data block names ONE element to revise, change only the
+   steps bound to it and carry every other step over unchanged.
+2. `.forge/demo/DEMO.html` — a sample of what the declaration drives: a
+   before/after of a representative recent change, one section per capture
+   step, with the captured output left as marked placeholders for the grounding
+   pass. Inline the Forge demo base stylesheet from the data block below.
 
-Scope the demo to what a change introduced, not the whole project. Stop when both
-`.forge/skills/demo-design/SKILL.md` and `.forge/demo/DEMO.html` exist.
-
+Scope the demo to what a change introduced, not the whole project. Stop when
+both `.forge/demo/demo-process.json` and `.forge/demo/DEMO.html` exist.
 
 <!-- turn: ground-it -->
 ## Your task this turn: ground the sample in REAL output
@@ -151,14 +118,16 @@ Scope the demo to what a change introduced, not the whole project. Stop when bot
 The deliverables already exist — the previous pass authored them. **Edit them; do
 not rebuild them.**
 
-Use Bash to actually check out / build / run the relevant states and capture real
-output into the sample, replacing the placeholders the previous pass marked.
-Ground the sample in a representative recent change. Use Bash + git to find one
+Use Bash to actually check out / build / run the relevant states, running each
+capture step's command exactly as declared — as a bare argv, no shell — and
+capture real output into the sample, replacing the placeholders the previous
+pass marked. Ground the sample
+in a representative recent change. Use Bash + git to find one
 (`git log --oneline -20`; pick the most recent substantive feature commit or
 commit range) and render an actual before/after of it — real output on both
 sides, not a mock. Never fabricate results, fake metrics, or invent a passing
 run. If a before/after can't be produced for the chosen change, pick a different
 recent change or say so in the page — don't fake it.
 
-Also fold what you learned into the demo SKILL the previous pass wrote, so the
-next agent to run it produces real output the same way.
+If a declared command does not run as written, fix the step in
+`.forge/demo/demo-process.json` so the next cycle runs what you actually ran.

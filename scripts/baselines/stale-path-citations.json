@@ -5568,12 +5568,6 @@
     "count": 2
   },
   {
-    "file": "packages/projects/bridge-studio-project-onboard.ts",
-    "kind": "path",
-    "cited": "cli/studio-path-guard.ts",
-    "count": 1
-  },
-  {
     "file": "packages/projects/bridge-studio-project-preflight-write.ts",
     "kind": "path",
     "cited": "cli/dry-bridge.ts",
@@ -6394,18 +6388,6 @@
     "kind": "stem",
     "cited": "brain-fix-runner",
     "count": 1
-  },
-  {
-    "file": "packages/sessions/tests/unit/demo-builder-runner.test.ts",
-    "kind": "stem",
-    "cited": "demo-builder-runner",
-    "count": 1
-  },
-  {
-    "file": "packages/sessions/tests/unit/demo-builder-skill-prompt.test.ts",
-    "kind": "path",
-    "cited": "packages/sessions/demo-builder-runner.ts",
-    "count": 6
   },
   {
     "file": "packages/sessions/tests/unit/demo-builder-skill-prompt.test.ts",
