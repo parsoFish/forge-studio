@@ -210,3 +210,104 @@ no seed flow uses it today. Engine semantics are otherwise unchanged: agent
 targets dispatch directly (no `_queue/flow-runs/` staging — that path remains
 flow-target-only), and the flow-runner/`claim-validator`/`run-model` lose
 their reflect-flow special cases (reflection adds no lineage entry).
+
+## Amendment (M7 row 150, 2026-09-27): operator stop is a second trigger on the clean-boundary halt
+
+Bead `forge-8vfn.8.1.39`, ruling 1774 (re-ruling the initial design of ruling
+1771 after a T3 worker's implementation attempt stopped and reported the
+initial design unbuildable as specified).
+
+**Why a flag file, and not a live handle.** The bridge and the daemon (`forge
+serve`) are separate OS processes (ADR 011) — the bridge never spawns a
+cycle in-request (it only ever writes a claimable manifest; the daemon's own
+poll/claim loop is what runs one), and the daemon's in-flight cycle map
+(`scheduler.ts`'s `inFlight`) is a local variable inside `serve()`'s own
+closure, never exposed. There is no cycle registry the bridge can reach into,
+and none of the *existing* recovery actions (abandon/requeue/resume) reach
+into a *live* cycle either — every one of them operates purely on the
+filesystem, and only ever runs after the daemon has already finished with
+that initiative (`run.status === 'failed'`). Building a live bridge→cycle
+handle to support an instant kill would mean inventing the process-isolator/
+job-queue machinery ADRs 011–013 already refuse to re-introduce.
+
+**The halt already exists.** §4 above already gives a running cycle exactly
+one non-destructive way to stop mid-flight: the cost ceiling, which "stops at
+a clean phase boundary at 100%, never mid-write" (`CostTracker.checkCeiling`,
+node boundary) and at a work-item boundary
+(`CostTracker.stopReasonBeforeNextWorkItem`, consulted via
+`CycleInput.shouldStopBeforeWorkItem` before a WI's worktree is created), plus
+the per-node wedge-kill's `AbortController`, chained as `externalSignal` into
+PM and the dev-loop's per-WI Ralphs (R2-03-F4). An operator stop is declared a
+**second trigger on this SAME halt**, not a new mechanism: rather than the
+`CostTracker` deciding to stop, an operator-written flag file does.
+
+**Mechanism.** `packages/flows/operator-stop.ts` is the whole seam:
+
+- A flag file, `_queue/in-flight/<initiativeId>.stop`, written by the bridge's
+  `POST /api/recovery/:id/stop` for an ACTIVE (in-flight) run — plain JSON
+  (`{reason: "operator-stop", ts, actor}`), presence-based like `daemon.ts`'s
+  `.paused` flag ("presence, not contents, is the signal"). For a GATED
+  (ready-for-review) run there is no live agent to signal at all; the bridge
+  moves the manifest straight to `failed/` instead (`recoveryAbandon` minus
+  the worktree/branch delete) and appends the equivalent event pair directly
+  to that cycle's own `events.jsonl`.
+- `flow-runner.ts`'s node-boundary check and its
+  `CycleInput.shouldStopBeforeWorkItem` closure both consult the flag
+  file, at the identical two boundaries the cost ceiling already checks, and
+  throw `OperatorStopError` (mirrors `CostCeilingError`) when it is present.
+- `executor-table.ts`'s `runWithWedge` / `executor-deps.ts`'s `raceWithWedge`
+  poll the SAME flag from the SAME 100ms interval the wedge-kill timer
+  already runs, aborting the SAME shared `AbortController` — so a *live* PM
+  or dev-loop Ralph turn is cancelled through the existing `externalSignal`
+  chain, never a second poller thread. This only reaches a live turn on a
+  node with a wedge budget configured (`wedgeDetector.active`); a node with
+  none still halts, but only at the next clean boundary — exactly the cost
+  ceiling's own scope today (and, as measured during this amendment's
+  implementation, `cycle.ts` never threads `nodeBudgets` into `runFlow` in
+  production, so wedge-kill's live-abort path is itself presently dormant
+  outside tests — a pre-existing gap this amendment does not attempt to
+  close).
+- The halt lands exactly where a cost-ceiling stop lands: `cycle.ts`'s
+  existing catch-and-classify path moves the manifest to `_queue/failed/`
+  with the worktree and branch KEPT (the existing `preserveWorktree` rule for
+  a `'failed'` outcome, `scheduler-run-one.ts`) — no new terminal state.
+  `failure-classifier.ts` recognises the `operator-stop:` message prefix the
+  same way it already recognises `cost-ceiling:`, classified `terminal`,
+  `recoverable: false` (never auto-retried), `environment: false` (this is
+  the operator, not API pressure).
+- **Amendment addendum (ruling 1794): resume after either halt continues from
+  the unfinished WIs, never skips them.** `POST /api/runs/:id/resume` calls
+  `runRequeue(id, { resumeFromIntegrate: true })` unconditionally, which
+  stamps `resume_from: integrate` — the dev-loop node then dispatches NO work
+  items at all, correct only when every WI already finished before the halt.
+  A stop or cost-ceiling halt reached mid-dev-loop, with WIs that never ran,
+  would otherwise have Resume silently skip them. `runRequeue`
+  (`forge-requeue.ts`) now checks, via the SAME `failure_classification`
+  event `inferRequeueResume`'s N7 machinery already reads
+  (`requeue-resume.ts`'s `readPriorFailureSignal`), whether the prior failure
+  was a clean-boundary halt — its `reason` text starts with either
+  `cost ceiling reached —` or `operator-stop:`, the two signatures
+  `failure-classifier.ts`'s own `costCeilingHit`/`operatorStopHit` branches
+  always produce. When it was, the operator's `resumeFromIntegrate` override
+  defers to `inferRequeueResume`'s existing WI-completion decision instead of
+  being honoured blindly: all WIs complete → `resume_from: integrate`
+  (unchanged); some incomplete → the worktree and branch are preserved with
+  NO marker, and the scheduler's preserved-work-items reuse path re-runs the
+  dev-loop in place, so a WI that never started actually runs and a WI that
+  already finished takes the iter-0 already-complete shortcut. Every other
+  failure (an ordinary crash, a PM defect, …) keeps the pre-1794 behaviour —
+  the operator's override is honoured exactly as before. `decideRequeueResume`
+  gained one new, OPTIONAL `cleanBoundaryHalt` input alongside its existing
+  `environmentFailure` one — the two are OR'd into a single "is this
+  resumable" gate — so the WI-completion branching itself is not duplicated;
+  it is the SAME code an environment-classified failure already runs through.
+- The flag file needs no dedicated cleanup timer: once its manifest leaves
+  `in-flight/`, it is inert (nothing reads it unless that id is in-flight
+  again), and `forge-requeue.ts`'s existing stale-sidecar sweep (already
+  clearing `.verdict-prompt.md` etc. on every resume/requeue) removes it
+  before the next claim; `recoveryAbandon` clears it too.
+
+**What this is not.** No cycle registry, no per-run pid tracking, no IPC
+channel between the bridge and the daemon, and no new `_queue/` state — the
+manifest still only ever moves between the same six directories ADR 011
+already names. The engine + run model are otherwise unchanged.
