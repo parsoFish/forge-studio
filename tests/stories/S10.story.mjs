@@ -742,9 +742,15 @@ export default {
       // `data-section="reflect-done"` (`:165`). NOT ONE of these is
       // corroborated by any test file — a repo-wide grep for
       // `reflect-questions`, `reflect-done` in `*.test.ts` returns zero hits.
+      // T1 1693 (bead `forge-8vfn.8.1.31`, S10 proof run 35). `merged` is a
+      // PRECONDITION of reflection, not its terminal — a plain agent wait fell
+      // through to the generic channel-ended door, which read `merged` as the
+      // whole cycle's word and stopped 180s into a reflection that had barely
+      // started. `terminal: 'reflected'` + `cycleOf` route this wait to the
+      // reflector's OWN terminal (`makeReflectionWatch`) instead.
       act: 'Reflect on the cycle',
       do: [{ press: 'open-reflect' }, { press: 'submit-reflection' }],
-      wait: { for: 'agent', upTo: 900_000 },
+      wait: { for: 'agent', terminal: 'reflected', cycleOf: '<runId>', upTo: 900_000 },
       expect: { route: '/artifact', data: { section: 'reflect-done' } },
       say: 'The cycle ends by writing down what it learned. This is the step that makes the next cycle cheaper, and it is one shot — the operator confirms what the reflector inferred rather than filling in a form.',
     },
