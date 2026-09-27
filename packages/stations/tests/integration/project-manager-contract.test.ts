@@ -209,7 +209,7 @@ test('ADR-051/C7: docs-class + acceptance_gate.required + no acceptance WI → P
     assert.ok(skip, 'expected a structured skip event so the class-scoped skip is visible, not silent');
     const md = skip!.metadata as { change_class?: string; reason?: string };
     assert.equal(md.change_class, 'docs');
-    assert.match(md.reason ?? '', /class profile runs no merge-boundary tests/);
+    assert.match(md.reason ?? '', /the class profile's acceptance is advisory/);
   } finally {
     rmSync(h.dir, { recursive: true, force: true });
   }
@@ -232,6 +232,28 @@ test('ADR-051/C7 regression lock: code-class + acceptance_gate.required + no acc
     const events = readEvents(h.logger);
     const skip = events.find((e) => e.message === 'pm.acceptance-wi-not-required');
     assert.equal(skip, undefined, 'the code class runs merge-boundary tests — the rule must still apply, no skip event');
+  } finally {
+    rmSync(h.dir, { recursive: true, force: true });
+  }
+});
+
+test('forge-mfv5.3.5: the CLASS decides the live-acceptance WI, not the project — a code initiative on a project whose flag says "not required" is still refused', async () => {
+  // The project's own `required: false` is the retired project-wide flag. The
+  // code row's `acceptance: 'required'` is the only answer the PM may read, so
+  // a project with a live-acceptance command still owes a live WI for code.
+  const h = setupHarness(
+    {
+      ...BASE_CONFIG,
+      testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests', required: false } },
+    },
+    { class: 'code' },
+  );
+  try {
+    const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }, { wiId: 'WI-2' }]);
+    await assert.rejects(
+      () => runProjectManager(h.input, h.logger, { agentDef: canonicalDef('project-manager'), queryFn, classProfiles: testClassProfilePort() }),
+      /no acceptance work item/,
+    );
   } finally {
     rmSync(h.dir, { recursive: true, force: true });
   }

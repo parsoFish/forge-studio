@@ -54,6 +54,7 @@ export const CLASS_PROFILES: Readonly<Record<ChangeClass, GateProfile>> = {
     reviewLenses: ['correctness', 'containment', 'test-strength', 'boundary'],
     singleWiAllowed: false,
     reviewCeilingUsd: 8,
+    acceptance: 'required',
   },
   docs: {
     iter0FailFirst: 'off',
@@ -65,6 +66,7 @@ export const CLASS_PROFILES: Readonly<Record<ChangeClass, GateProfile>> = {
     reviewLenses: ['accuracy-against-source', 'link-integrity', 'forbidden-tokens', 'structure'],
     singleWiAllowed: true,
     reviewCeilingUsd: 4,
+    acceptance: 'advisory',
   },
   config: {
     iter0FailFirst: 'off',
@@ -75,6 +77,7 @@ export const CLASS_PROFILES: Readonly<Record<ChangeClass, GateProfile>> = {
     reviewLenses: ['schema-validity', 'secret-exposure', 'drift-from-declared', 'rollback'],
     singleWiAllowed: true,
     reviewCeilingUsd: 4,
+    acceptance: 'required',
   },
   infra: {
     iter0FailFirst: 'required',
@@ -85,6 +88,7 @@ export const CLASS_PROFILES: Readonly<Record<ChangeClass, GateProfile>> = {
     reviewLenses: ['blast-radius', 'idempotence', 'secret-exposure', 'rollback'],
     singleWiAllowed: false,
     reviewCeilingUsd: 8,
+    acceptance: 'required',
   },
 };
 

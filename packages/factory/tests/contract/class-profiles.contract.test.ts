@@ -61,6 +61,7 @@ const COLUMNS: ReadonlyArray<keyof GateProfile> = [
   'reviewLenses',
   'singleWiAllowed',
   'reviewCeilingUsd',
+  'acceptance',
 ];
 
 /**
@@ -184,6 +185,18 @@ describe('class profiles — no phase re-derives what the table decides', () => 
       }
     }
     assert.deepEqual(offenders, [], 'a profile re-derived from a class name can drift from the table it claims to obey');
+  });
+});
+
+describe('class profiles — the live-acceptance tier is the class\'s, not the project\'s', () => {
+  it('kills "the tier is still one project-wide flag": code/config/infra require it, docs is advisory', () => {
+    // ADR 051 decision 2, amended (bead forge-mfv5.3.5, operator ruling
+    // 2026-09-12). A single `required` for every class is the retired
+    // `testProcess.acceptance.required` boolean under a new name; the docs row
+    // is the one that must differ, because a docs initiative has no live
+    // behaviour to prove and must never be forced to fabricate a live WI.
+    const actual = Object.fromEntries(CHANGE_CLASSES.map((cls) => [cls, profileFor(cls).acceptance]));
+    assert.deepEqual(actual, { code: 'required', docs: 'advisory', config: 'required', infra: 'required' });
   });
 });
 

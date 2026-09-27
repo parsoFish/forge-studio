@@ -31,7 +31,7 @@ import {
   writeWorkItemStatus,
   type WorkItem,
 } from '@forge/flows';
-import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
+import { requireClassProfiles, type ClassProfilePort, type GateProfile } from '../class-profile-port.ts';
 import { type QueryFn, type ClaudeAgentOptions } from '@forge/agents';
 import { getAdapter, resolveSdkId } from '@forge/agents';
 import type { AgentInvocation } from '@forge/agents';
@@ -146,6 +146,25 @@ function sdkFallbackEventSink(
       metadata: { requested_sdk: event.sdk ?? null, resolved_sdk: 'claude' },
     });
   };
+}
+
+/**
+ * The live-acceptance env guard's one decision (ADR 051 decision 2 as amended,
+ * bead forge-mfv5.3.5). When the initiative's class `requires` the tier and
+ * this WI's gate targets the project's live-acceptance suite (its `match`),
+ * the gate must run with the tier's `requiresEnv` set — else the runner SKIPS
+ * and the gate false-passes (the daemon ran betterado cycles without TF_ACC
+ * and shipped unverified resources). The returned names are handed to the
+ * gate, which ERRORS when one is unset. An `advisory` class (docs) is not
+ * forced: the tier may still run, without the demand. `undefined` = no demand.
+ */
+export function liveAcceptanceEnvFor(
+  accGate: Pick<AcceptanceGateConfig, 'match' | 'requires_env'> | undefined,
+  acceptance: GateProfile['acceptance'],
+  gateCmd: readonly string[],
+): string[] | undefined {
+  if (acceptance !== 'required' || !accGate?.requires_env || accGate.requires_env.length === 0) return undefined;
+  return gateCmd.some((tok) => tok.includes(accGate.match)) ? accGate.requires_env : undefined;
 }
 
 /**
@@ -343,7 +362,8 @@ export async function runDeveloperLoop(
   );
 
   // Live-acc env guard (2026-06-06): when the project declares an
-  // `acceptance_gate` with `requires_env`, a WI whose gate targets the acc
+  // `acceptance_gate` with `requires_env` and the initiative's class requires
+  // the tier (`liveAcceptanceEnvFor`), a WI whose gate targets the acc
   // suite must run with those vars set — else the runner SKIPS and the gate
   // false-passes (the daemon ran betterado cycles without TF_ACC and shipped
   // unverified resources). Load the config once; absent ⇒ no env requirement.
@@ -695,15 +715,9 @@ export async function runDeveloperLoop(
             const fallback = input.qualityGateCmd && input.qualityGateCmd.length > 0 ? input.qualityGateCmd : null;
             const effective = wiCmd ?? fallback;
             if (!effective) return undefined;
-            // Live-acc env guard: if this WI's gate targets the acc suite
-            // (matches the project's acceptance_gate.match) and the project
-            // declares requires_env, demand those vars be set — else the gate
-            // errors (can't validate live) instead of skip-and-false-passing.
-            const requiredEnv =
-              accGate?.requires_env && accGate.requires_env.length > 0 &&
-              effective.some((tok) => tok.includes(accGate!.match))
-                ? accGate.requires_env
-                : undefined;
+            // Live-acc env guard — whether it applies is the class's
+            // `acceptance` column, not the project's (`liveAcceptanceEnvFor`).
+            const requiredEnv = liveAcceptanceEnvFor(accGate, classProfile.acceptance, effective);
             return makeQualityGateFromCmd(
               wiWorktree.path,
               effective,
