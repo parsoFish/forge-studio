@@ -240,6 +240,44 @@ test('580 (CONTROL): the handle appearing still wins, immediately', async () => 
   assert.ok(Date.now() - began < 500, 'a present handle is checked before the door');
 });
 
+// Bead `forge-8vfn.8.1.34` / ruling 1736 — S10 proof run 36's beat 21
+// spent its whole 504 s bound in exactly this wait, `[data-action=
+// "submit-reflection"]` absent throughout, and the runner printed NOTHING
+// about it: `describeControl` only speaks once, in the FINAL verdict, after
+// the bound is already spent. `watchControlState` (bead `6.11.30`) already
+// reports "first poll + on change" for the ACT that follows a successful
+// wait; this proves the SAME reporter is now wrapped around the wait itself.
+test(
+  '8.1.34: an off-session wait for an ABSENT handle reports it WHILE waiting, not only in the final verdict',
+  async () => {
+    // Long enough to span several polls (CONSEQUENCE_POLL_MS = 100 ms) so the
+    // watcher's first sample has time to land before the bound expires — short
+    // enough not to slow the suite.
+    const SPANS_SEVERAL_POLLS = 350;
+    const page = artifactPage({ runId: null });
+    const lines: string[] = [];
+    const originalLog = console.log;
+    console.log = (line: string) => { lines.push(line); };
+    try {
+      const stall = await waitForHandleOrStall(page as never, HANDLE, SPANS_SEVERAL_POLLS, null, null, null);
+      assert.equal(stall, null, 'no door was configured — the bound alone ends this wait');
+    } finally {
+      console.log = originalLog;
+    }
+    const reported = lines.find((l) => l.includes(`while waiting on ${HANDLE}`));
+    assert.ok(
+      reported,
+      `expected a "while waiting on ${HANDLE}" line — the beat had no visibility at all until this bead, ` +
+        `got: ${JSON.stringify(lines)}`,
+    );
+    assert.match(
+      reported!,
+      /no element carries that handle yet/,
+      'the control was genuinely absent, not merely disabled',
+    );
+  },
+);
+
 /**
  * The two fixtures ruling 626 requires, driven through the REAL door against a
  * REAL `_logs` tree rather than a stand-in.

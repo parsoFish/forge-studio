@@ -25,6 +25,7 @@ import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile } fr
 import { fireReflectorRerun } from './example-hooks.ts';
 import type { InstalledFactory } from './factory-wiring.ts';
 import { readJson } from './bridge-http.ts';
+import { findRun } from './bridge-studio.ts';
 
 type RerunReflectorFn = InstalledFactory['rerunReflector'];
 
@@ -32,9 +33,45 @@ type RerunReflectorFn = InstalledFactory['rerunReflector'];
 export type ReflectContext = {
   logsRoot: string;
   queueRoot: string;
+  /** ruling 1736 (bead forge-8vfn.8.1.34) — needed by `findRun`'s resolution below. */
+  forgeRoot: string;
   /** D — re-run the reflector on operator feedback. Injectable; defaults to the real helper. */
   rerunReflector: RerunReflectorFn;
 };
+
+/**
+ * Ruling 1736 / bead forge-8vfn.8.1.34. A run's id CHANGES on claim (planned:
+ * initiativeId, claimed: cycleId — W7-A3, bridge-studio.ts:273-279), and this
+ * route family is keyed on whatever id the operator's browser is standing on,
+ * which for a DONE run can be either one. `_logs/` is keyed by cycleId only,
+ * so an initiativeId request used to read a directory that never existed and
+ * got back `{ questions: [] }` — the exact shape that made S10 proof run 36's
+ * beat 21 find no `submit-reflection` control at all.
+ *
+ * THE CHAIN IS EXPLICIT, and returning `null` on the third step is load
+ * bearing: this function names what it KNOWS, never what it guesses.
+ *   1. `id` names an existing `_logs/<id>/` dir — that IS the cycle (cheap:
+ *      one guard call, no queue walk — the shape every existing caller
+ *      already relies on, including this file's own fixture tests, which
+ *      write straight to a literal `_logs/<id>/` with no queue manifest
+ *      behind it at all).
+ *   2. Otherwise, `findRun` (bridge-studio.ts) — the SAME lookup `/api/runs/
+ *      <id>` already uses, never a second heuristic, no glob, no
+ *      timestamp-prefix guess, so the two routes cannot disagree about what
+ *      an id means.
+ *   3. Otherwise, `null` — an id this function cannot vouch for. Each CALLER
+ *      decides what that means for its own route, rather than this function
+ *      silently handing back the unverified literal as though it had been
+ *      resolved (bought by a review finding: an earlier draft returned
+ *      `findRun(...)?.id ?? id`, which let a bogus id flow into the POST
+ *      route's rerun trigger as if it named a real cycle).
+ */
+function resolveCycleId(ctx: ReflectContext, id: string): string | null {
+  const literal = resolveGuardedPath(ctx.logsRoot, [id]);
+  if (literal.ok && literal.exists) return id;
+  const run = findRun(ctx.forgeRoot, id);
+  return run !== null ? run.id : null;
+}
 
 /** Parse an already-read JSON string; null on malformed content. Companion to
  *  the guarded read primitives (which return raw contents, not parsed JSON) so
@@ -61,8 +98,29 @@ export async function handleReflect(
   const origin = allowedOrigin(req);
 
   if (method === 'GET' && url.startsWith('/api/reflect/') && !url.endsWith('/answer')) {
-    const cycleId = decodeURIComponent(url.slice('/api/reflect/'.length));
-    if (!cycleId) { sendJson(res, 400, { error: 'expected /api/reflect/<cycleId>' }, origin); return true; }
+    const requestedCycleId = decodeURIComponent(url.slice('/api/reflect/'.length));
+    if (!requestedCycleId) {
+      sendJson(res, 400, { error: 'expected /api/reflect/<cycleId>' }, origin);
+      return true;
+    }
+    // SEC-04 first: an unsafe request segment is a 400 with no read, before any
+    // resolution is attempted.
+    const requestGuard = resolveGuardedPath(ctx.logsRoot, [requestedCycleId]);
+    if (!requestGuard.ok) {
+      sendJson(res, 400, { error: 'invalid cycleId' }, origin);
+      return true;
+    }
+    // Ruling 1736 (bead forge-8vfn.8.1.34) — an initiativeId for a DONE run
+    // reads its real `_logs/<cycleId>/`, never a directory that does not exist.
+    // An id nothing resolves to is a 404, never a 200 with an empty question
+    // list: that empty answer is what hid S10 run 36's missing reflect form.
+    // `fetchReflection` (apps/studio) already reads this route through
+    // `bridgeReadOr404`.
+    const cycleId = resolveCycleId(ctx, requestedCycleId);
+    if (cycleId === null) {
+      sendJson(res, 404, { error: 'cycle not found', cycleId: requestedCycleId }, origin);
+      return true;
+    }
     // SEC-04 (bd forge-ebj) — cycleId was folded raw into `join(logsRoot,
     // cycleId)` and each leaf raw-appended: a `%2F`-smuggled `../..` cycleId
     // disclosed an out-of-root user-questions.json, and a symlinked leaf inside
@@ -84,7 +142,11 @@ export async function handleReflect(
     const modeRaw = guardedReadFile(ctx.logsRoot, [cycleId, 'reflect-mode.json']);
     const modeDoc = modeRaw !== null ? safeParseJson<{ mode?: string }>(modeRaw) : null;
     const mode = modeDoc?.mode === 'automated' ? 'automated' : modeDoc?.mode === 'interactive' ? 'interactive' : undefined;
-    sendJson(res, 200, { cycleId, questions, answered, ...(mode ? { mode } : {}) }, origin);
+    // The response echoes the id the CLIENT asked with, never the resolved
+    // one — the same convention `/api/runs/<id>/phases/.../log`'s 404 uses
+    // (bridge-studio.ts) — so a caller comparing against its own request sees
+    // no surprise substitution.
+    sendJson(res, 200, { cycleId: requestedCycleId, questions, answered, ...(mode ? { mode } : {}) }, origin);
     return true;
   }
 
@@ -94,9 +156,29 @@ export async function handleReflect(
     // and detached-firing rerunReflector (the real agent turn). Only the
     // latter is dry-bridge-gated below; the write always proceeds so the
     // route's normal 200 stays truthful ("feedback captured").
-    const cycleId = decodeURIComponent(url.slice('/api/reflect/'.length, url.length - '/answer'.length));
+    const requestedCycleId = decodeURIComponent(
+      url.slice('/api/reflect/'.length, url.length - '/answer'.length),
+    );
     try {
       const body = (await readJson(req)) as { answers?: { question: string; answer: string }[]; freeform?: string };
+      // Ruling 1736 (bead forge-8vfn.8.1.34) — same resolution as the GET
+      // route above, and load-bearing here in a second way: `fireReflectorRerun`
+      // below needs the REAL `_logs/<cycleId>/` dir name, not the initiativeId
+      // — `reflector-rerun.ts`'s own resolution only recovers an initiativeId
+      // FROM a cycleId, never the other way round, so a write under the wrong
+      // id would strand the feedback where the rerun can never find it.
+      //
+      // UNLIKE GET, an unresolved id here reports "cycle not found" directly —
+      // never `requestedCycleId` treated as though it were a real cycle dir.
+      // This route WRITES and fires a detached rerun; substituting a borrowed
+      // literal for either would be a silent action against the wrong id
+      // (or, for the rerun, no id at all), not a safe empty read.
+      const resolvedCycleId = resolveCycleId(ctx, requestedCycleId);
+      if (resolvedCycleId === null) {
+        sendJson(res, 404, { error: 'cycle not found', cycleId: requestedCycleId }, origin);
+        return true;
+      }
+      const cycleId = resolvedCycleId;
       // SEC-04 (bd forge-ebj) — the WRITE twin of the reflect GET read. cycleId
       // was folded raw into `join(logsRoot, cycleId)` and `user-feedback.md`
       // raw-appended: a `%2F`-smuggled `../..` cycleId overwrote an out-of-root
@@ -105,8 +187,14 @@ export async function handleReflect(
       // traversed/symlinked dir (400, no write) and keep the "cycle not found"
       // 404 for a genuinely absent in-root cycle.
       const dirGuard = resolveGuardedPath(ctx.logsRoot, [cycleId]);
-      if (!dirGuard.ok) { sendJson(res, 400, { error: 'invalid cycleId', cycleId }, origin); return true; }
-      if (!dirGuard.exists) { sendJson(res, 404, { error: 'cycle not found', cycleId }, origin); return true; }
+      if (!dirGuard.ok) {
+        sendJson(res, 400, { error: 'invalid cycleId', cycleId: requestedCycleId }, origin);
+        return true;
+      }
+      if (!dirGuard.exists) {
+        sendJson(res, 404, { error: 'cycle not found', cycleId: requestedCycleId }, origin);
+        return true;
+      }
       const dir = dirGuard.realPath;
       const lines = [`# Reflection feedback — ${cycleId}`, '', '## Answers to numbered questions', ''];
       for (const a of body.answers ?? []) {

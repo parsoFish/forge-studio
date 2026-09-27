@@ -36,7 +36,10 @@ import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, utimesSync, writeFil
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { makeReflectionDoor, makeReflectionWatch, REFLECTION_TERMINAL_STATE, STALL_CEILING_MS } from './beats-agent-proc.mjs';
+import { STALL_CEILING_MS } from './beats-agent-proc.mjs';
+import {
+  makeReflectionDoor, makeReflectionWatch, REFLECTION_TERMINAL_STATE, REFLECTION_ANSWERED_TERMINAL_STATE,
+} from './beats-reflection-terminal.mjs';
 import { channelTerminalState } from './beats-queue-terminal.mjs';
 
 const INIT = 'INIT-2026-09-25-exclude-author-flag';
@@ -234,4 +237,104 @@ test("D's review: an unparseable started_at is skipped, never counted", () => {
 
   const door = makeReflectionDoor(root, INIT)!;
   assert.equal(door(null, ANCHOR, REFLECTION_TERMINAL_STATE), null);
+});
+
+// ---------------------------------------------------------------------------
+// `reflected-answered` — ruling 1736, round 3 (bead `forge-8vfn.8.1.34`).
+//
+// S10 proof run 36's beat 21 declared `terminal: 'reflected'` and resolved on
+// the FIRST reflection, before the operator's answer had even POSTed: that
+// reflection's own `reflector.start`/`reflector.end` (02:59:43.219Z /
+// 03:04:36.716Z below, copied verbatim from run 36's events.jsonl) both land
+// AFTER beat 21's press, so `sinceMs` admits them, and `reflected` has no
+// notion of an answer at all. `reflected-answered` adds exactly one gate: the
+// winning terminal's PRECEDING `reflector.start` must be at or after
+// `user-feedback.md`'s mtime — the file the POST route writes synchronously,
+// before it fires the detached rerun (`apps/forge/bridge-reflect.ts`).
+// ---------------------------------------------------------------------------
+
+/** Beat 21's own press, run 36 — before either reflector event below. */
+const RUN_36_ANCHOR = Date.parse('2026-09-27T02:59:12.000Z');
+/** Run 36's actual first reflection, copied from its events.jsonl. */
+const RUN_36_FIRST_START = '2026-09-27T02:59:43.219Z';
+const RUN_36_FIRST_END = '2026-09-27T03:04:36.716Z';
+
+function writeFeedback(dir: string, whenIso: string): void {
+  const path = join(dir, 'user-feedback.md');
+  writeFileSync(path, '# Reflection feedback\n');
+  const secs = Date.parse(whenIso) / 1000;
+  utimesSync(path, secs, secs);
+}
+
+test(
+  '8.1.34 (a): feedback present, only the FIRST start/end pair before its mtime — not done, ' +
+    'waiting for the rerun',
+  () => {
+    const { root, logs } = cycleRoot();
+    const dir = cycleDir(logs, INIT, '2026-09-27T02:57:03.058Z');
+    appendEvent(dir, 'reflector.start', RUN_36_FIRST_START);
+    appendEvent(dir, 'reflector.end', RUN_36_FIRST_END);
+    // The operator answers AFTER seeing the first reflection's own published
+    // questions — mtime necessarily follows that reflection's end.
+    writeFeedback(dir, '2026-09-27T03:05:00.000Z');
+
+    const door = makeReflectionDoor(root, INIT)!;
+    const seen = door(null, RUN_36_ANCHOR, REFLECTION_ANSWERED_TERMINAL_STATE);
+    assert.equal(
+      seen, null, 'the only terminal so far belongs to the PRE-answer reflection — it must not count',
+    );
+    assert.match(door.lastSeen, /started before the answer/);
+    assert.match(door.lastSeen, /waiting for the rerun/);
+  },
+);
+
+test('8.1.34 (b): a second start and end AFTER the feedback mtime — done', () => {
+  const { root, logs } = cycleRoot();
+  const dir = cycleDir(logs, INIT, '2026-09-27T02:57:03.058Z');
+  appendEvent(dir, 'reflector.start', RUN_36_FIRST_START);
+  appendEvent(dir, 'reflector.end', RUN_36_FIRST_END);
+  writeFeedback(dir, '2026-09-27T03:05:00.000Z');
+  // The detached rerun `fireReflectorRerun` fires after the answer POST.
+  appendEvent(dir, 'reflector.start', '2026-09-27T03:05:10.000Z');
+  appendEvent(dir, 'reflector.end', '2026-09-27T03:09:00.000Z');
+
+  const door = makeReflectionDoor(root, INIT)!;
+  const seen = door(null, RUN_36_ANCHOR, REFLECTION_ANSWERED_TERMINAL_STATE)!;
+  assert.equal(seen.done, true, seen?.detail);
+  assert.equal(seen.state, REFLECTION_ANSWERED_TERMINAL_STATE);
+
+  // Through the watch, the SAME fixture reaches `reflect-done` rather than
+  // reddening on the first reflection's `reflected`-but-not-`reflected-answered` mismatch —
+  // exactly the race ruling 1736's round 3 fixes.
+  const watch = makeReflectionWatch(root, INIT, REFLECTION_ANSWERED_TERMINAL_STATE)!;
+  assert.equal(watch(null, RUN_36_ANCHOR), null, 'the beat is not stopped — the wanted terminal was reached');
+});
+
+test('8.1.34 (c): feedback absent — not done, regardless of how many reflections have run', () => {
+  const { root, logs } = cycleRoot();
+  const dir = cycleDir(logs, INIT, '2026-09-27T02:57:03.058Z');
+  appendEvent(dir, 'reflector.start', RUN_36_FIRST_START);
+  appendEvent(dir, 'reflector.end', RUN_36_FIRST_END);
+  // No user-feedback.md written at all — the operator has not submitted yet.
+
+  const door = makeReflectionDoor(root, INIT)!;
+  const seen = door(null, RUN_36_ANCHOR, REFLECTION_ANSWERED_TERMINAL_STATE);
+  assert.equal(seen, null, 'no feedback file yet — this is the ordinary "still waiting", never UNKNOWN');
+  assert.match(door.lastSeen, /answer is not recorded yet/);
+});
+
+test('8.1.34 (d): plain `reflected` is UNCHANGED — the same fixture resolves on the FIRST reflection', () => {
+  const { root, logs } = cycleRoot();
+  const dir = cycleDir(logs, INIT, '2026-09-27T02:57:03.058Z');
+  appendEvent(dir, 'reflector.start', RUN_36_FIRST_START);
+  appendEvent(dir, 'reflector.end', RUN_36_FIRST_END);
+  writeFeedback(dir, '2026-09-27T03:05:00.000Z');
+
+  const door = makeReflectionDoor(root, INIT)!;
+  const seen = door(null, RUN_36_ANCHOR, REFLECTION_TERMINAL_STATE)!;
+  assert.equal(
+    seen.done, true,
+    'plain `reflected` never looks at the feedback file — this is exactly the race it carries',
+  );
+  assert.equal(seen.state, REFLECTION_TERMINAL_STATE);
 });

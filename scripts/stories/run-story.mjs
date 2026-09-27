@@ -25,9 +25,10 @@
  * this is one expression evaluated twice, not a constant with two possible
  * values.
  */
+import { makeAgentProcProbe, makeAgentChannelDoor, makeCycleTerminalWatch } from './beats-agent-proc.mjs';
 import {
-  makeAgentProcProbe, makeAgentChannelDoor, makeCycleTerminalWatch, makeReflectionWatch, REFLECTION_TERMINAL_STATE,
-} from './beats-agent-proc.mjs';
+  makeReflectionWatch, REFLECTION_TERMINAL_STATE, REFLECTION_ANSWERED_TERMINAL_STATE,
+} from './beats-reflection-terminal.mjs';
 import { readdirSync, mkdirSync, writeFileSync, renameSync, rmSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { chromium } from 'playwright-core';
@@ -178,8 +179,14 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // T1 1693 (`forge-8vfn.8.1.31`) — `REFLECTION_TERMINAL_STATE` routes to the
   // reflector's OWN terminal (reflector.end/crashed/reflection-lost) instead
   // of a `_queue/` state: `merged` precedes reflection, it does not end it.
-  const cycleWatchFor = (wantState, cycleOf = null) => (wantState === REFLECTION_TERMINAL_STATE
-    ? makeReflectionWatch(ROOT, cycleOf)
+  // `REFLECTION_ANSWERED_TERMINAL_STATE` (bead `forge-8vfn.8.1.34`, ruling
+  // 1736 round 3) routes to the SAME watch, told which word it wants: the
+  // door reads the same events either way, gated by the operator's answer
+  // only for the second word.
+  const isReflectionState = (s) =>
+    s === REFLECTION_TERMINAL_STATE || s === REFLECTION_ANSWERED_TERMINAL_STATE;
+  const cycleWatchFor = (wantState, cycleOf = null) => (isReflectionState(wantState)
+    ? makeReflectionWatch(ROOT, cycleOf, wantState)
     : makeCycleTerminalWatch(ROOT, wantState, cycleOf === null ? null : { cycleOf }));
   // What earlier beats bound, for the routes later beats build from it. Rebuilt
   // per beat rather than mutated — a beat's verdict states what IT learned.

@@ -277,7 +277,7 @@ function classifyEvent(e: EventLogEntry): LogLine {
  *  `/api/runs/<initiativeId>` (and `/flows/<flow>/run/<initiativeId>`)
  *  resolves the initiative's run in every queue state. Unknown ids still 404
  *  (an INIT- id never collides with a `<iso>_INIT-…` cycle id). */
-function findRun(forgeRoot: string, id: string): Run | null {
+export function findRun(forgeRoot: string, id: string): Run | null {
   const runs = cachedListRuns(forgeRoot, Date.now());
   return runs.find((r) => r.id === id) ?? runs.find((r) => r.initiativeId === id) ?? null;
 }

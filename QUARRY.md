@@ -65,9 +65,9 @@ operator-ratified new cap — never a silent raise.
 | `factory` | 15 | 2,759 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 42 | 11,735 | **11,735** | ratified 11,735 — forge-1rk5.3 row 145 the swept event carries committed/restored/left, +15 on 11,720, lane-ratified under ruling 666; see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
-| `apps/forge` | 28 | 6,835 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
+| `apps/forge` | 28 | 6,923 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **469** | **127,605** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **469** | **127,693** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -259,7 +259,7 @@ operator-ratified new cap — never a silent raise.
 | apps/forge/bridge-run-triggers.ts | apps/forge | rewritten | 285 |
 | apps/forge/bridge-review-comments.ts | apps/forge | rewritten | 203 |
 | apps/forge/bridge-agent-dispatch.ts | apps/forge | rewritten | 398 |
-| apps/forge/bridge-reflect.ts | apps/forge | rewritten | 149 |
+| apps/forge/bridge-reflect.ts | apps/forge | rewritten | 237 |
 | apps/forge/bridge-cycle-scan.ts | apps/forge | rewritten | 259 |
 | apps/forge/bridge-http.ts | apps/forge | rewritten | 60 |
 | apps/forge/bridge-broadcast-log.ts | apps/forge | rewritten | 92 |

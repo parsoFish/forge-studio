@@ -83,8 +83,36 @@ function validateDoSteps(raw, at) {
       // PER CARD on a list surface (Home's session strip). Scopes the press
       // to the element whose `data-<attr>` equals an earlier beat's binding.
       const isPressWithin = Object.hasOwn(step, 'pressWithin');
-      if ([isFill, isFillAll, isPress, isRepeat, isPressBound, isPressWithin].filter(Boolean).length !== 1) {
-        fail(where, `expected exactly one of {fill, with}, {fillAll, with}, {press}, {pressBound}, {pressWithin} or {repeat}, got ${JSON.stringify(step)}`);
+      // `pressFirstEach` — bead `forge-8vfn.8.1.34` (ruling 1736). `ReflectionGate`
+      // renders `data-option-label` as a RADIO per option (`type="radio"
+      // name="rq-${i}"`), grouped one `data-question-index` fieldset PER
+      // QUESTION, across a MODEL-DETERMINED number of questions (the reflector
+      // decides how many, exactly like the architect's question count). A bare
+      // `press` clicks only `.first()` of the whole page (question 0 alone),
+      // and clicking EVERY option would leave the LAST one checked in each
+      // radio group, not the first. Names two plain `data-*` attributes, never
+      // `data-action`/`data-field` VALUES: the container to iterate (`within`)
+      // and the descendant to press the first of, inside each one.
+      const isPressFirstEach = Object.hasOwn(step, 'pressFirstEach');
+      // `fillAllMatching` — bead `forge-8vfn.8.1.34` (ruling 1736). `fillAll`'s
+      // reason, over a plain `data-*` attribute instead of the `data-field`
+      // vocabulary: `ReflectionGate`'s per-question freeform textarea carries a
+      // bare `data-question-freeform` (no `data-field` — its own file header
+      // names the two separately), so `fillAll` cannot address it. Validated
+      // exactly like `pressFirstEach`: a plain attribute name, `SAFE_KEY`-checked,
+      // never a `data-field` VALUE.
+      const isFillAllMatching = Object.hasOwn(step, 'fillAllMatching');
+      const stepForms = [
+        isFill, isFillAll, isPress, isRepeat, isPressBound, isPressWithin,
+        isPressFirstEach, isFillAllMatching,
+      ];
+      if (stepForms.filter(Boolean).length !== 1) {
+        fail(
+          where,
+          'expected exactly one of {fill, with}, {fillAll, with}, {press}, {pressBound}, ' +
+            '{pressWithin}, {pressFirstEach, within}, {fillAllMatching, with} or {repeat}, got ' +
+            JSON.stringify(step),
+        );
       }
       if (isRepeat) {
         if (!Array.isArray(step.repeat) || step.repeat.length === 0) {
@@ -245,6 +273,42 @@ function validateDoSteps(raw, at) {
       if (isPress) {
         requireNonEmptyString(step.press, `${where}.press`);
         return Object.freeze({ press: step.press });
+      }
+      if (isPressFirstEach) {
+        requireNonEmptyString(step.pressFirstEach, `${where}.pressFirstEach`);
+        requireNonEmptyString(step.within, `${where}.within`);
+        // Both are interpolated into CSS attribute-presence selectors
+        // (`[data-<attr>]`, `beats-steps.mjs`) — the SAME allowlist
+        // `pressWithin.scope.attr` is bound to above, never a second one.
+        if (!SAFE_KEY.test(step.pressFirstEach)) {
+          fail(
+            `${where}.pressFirstEach`,
+            'expected a plain data-* key (letter, then letters/digits/hyphens), got ' +
+              JSON.stringify(step.pressFirstEach),
+          );
+        }
+        if (!SAFE_KEY.test(step.within)) {
+          fail(
+            `${where}.within`,
+            'expected a plain data-* key (letter, then letters/digits/hyphens), got ' +
+              JSON.stringify(step.within),
+          );
+        }
+        return Object.freeze({ pressFirstEach: step.pressFirstEach, within: step.within });
+      }
+      if (isFillAllMatching) {
+        requireNonEmptyString(step.fillAllMatching, `${where}.fillAllMatching`);
+        if (!SAFE_KEY.test(step.fillAllMatching)) {
+          fail(
+            `${where}.fillAllMatching`,
+            'expected a plain data-* key (letter, then letters/digits/hyphens), got ' +
+              JSON.stringify(step.fillAllMatching),
+          );
+        }
+        if (typeof step.with !== 'string') {
+          fail(`${where}.with`, `expected a string value to fill, got ${JSON.stringify(step.with)}`);
+        }
+        return Object.freeze({ fillAllMatching: step.fillAllMatching, with: step.with });
       }
       const key = isFillAll ? 'fillAll' : 'fill';
       requireNonEmptyString(step[key], `${where}.${key}`);

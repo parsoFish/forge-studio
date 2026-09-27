@@ -92,6 +92,7 @@
 
 import { ACT_2 } from './S10.act2.mjs';
 import { REVIEW_LOOP } from './S10.review.mjs';
+import { CLOSE } from './S10.close.mjs';
 import { IDEA, CEILING, GROUND, CYCLE_BOUND } from './S10.constants.mjs';
 
 export default {
@@ -735,57 +736,7 @@ export default {
       say: 'Between building and judging there is a step that puts the change together with the evidence for it — the diff, the acceptance criteria and what was actually demonstrated. The reviewer reads that, not a pile of commits.',
     },
     ...REVIEW_LOOP,
-    {
-      // SOURCE-DERIVED. `data-action="open-reflect"` (`app/artifact/page.tsx
-      // :1194`, named in that file's own comment at :1177),
-      // `data-action="submit-reflection"` (`ReflectionGate.tsx:297`),
-      // `data-section="reflect-done"` (`:165`). NOT ONE of these is
-      // corroborated by any test file — a repo-wide grep for
-      // `reflect-questions`, `reflect-done` in `*.test.ts` returns zero hits.
-      // T1 1693 (bead `forge-8vfn.8.1.31`, S10 proof run 35). `merged` is a
-      // PRECONDITION of reflection, not its terminal — a plain agent wait fell
-      // through to the generic channel-ended door, which read `merged` as the
-      // whole cycle's word and stopped 180s into a reflection that had barely
-      // started. `terminal: 'reflected'` + `cycleOf` route this wait to the
-      // reflector's OWN terminal (`makeReflectionWatch`) instead.
-      act: 'Reflect on the cycle',
-      do: [{ press: 'open-reflect' }, { press: 'submit-reflection' }],
-      wait: { for: 'agent', terminal: 'reflected', cycleOf: '<runId>', upTo: 900_000 },
-      expect: { route: '/artifact', data: { section: 'reflect-done' } },
-      say: 'The cycle ends by writing down what it learned. This is the step that makes the next cycle cheaper, and it is one shot — the operator confirms what the reflector inferred rather than filling in a form.',
-    },
-    {
-      // SOURCE-DERIVED for the reflected theme. `data-theme-node` /
-      // `data-theme-active` (`ThemeList.tsx:34-35`) are the SHAPE S6 b7 already
-      // asserts VERIFIED — but S6's theme comes from a project-brain SEEDING
-      // session, and no pinned story has ever asserted a REFLECTOR-produced
-      // theme. `data-ingest-fresh-themes` (`app/knowledge/page.tsx:824-826`) is
-      // the reflector-side evidence and is source-only.
-      act: 'Find what the cycle learned on the knowledge graph',
-      expect: {
-        route: '/knowledge',
-        data: { page: 'knowledge', 'page-ready': 'true', 'kb-id': 'gitpulse' },
-      },
-      say: 'The theme the reflector wrote is now a node the next planner will read. That is the loop closing: this cycle made the project\'s brain bigger, and nobody typed it in.',
-    },
-    {
-      // SOURCE-DERIVED, and the comparison is the hard part. `data-run-cost-usd`
-      // is `.toFixed(4)` on the monitor strip (`MonitorSummary.tsx:53,101`)
-      // while `data-phase-cost-usd` is `.toFixed(2)` per node
-      // (`FlowRunDetail.tsx:285`) — DELIBERATELY different attribute names and
-      // precisions (`lib/history-ledger-render.test.ts:228-233` documents the
-      // non-collision). NO `event`/`event-log` data key exists anywhere, so the
-      // page cannot be compared against the log from inside a beat; the exit
-      // row does that comparison outside, with
-      // `sumAuthoritativeCostFromLines` over the run's events.jsonl — never the
-      // naive sum, which double-counts by more than 2× (M3's measurement).
-      act: 'Check what the run cost',
-      expect: {
-        route: '/monitor',
-        data: { page: 'monitor', 'page-ready': 'true', 'run-cost-usd': '<runCostUsd>' },
-      },
-      say: 'One figure, and it is the same figure the event log holds. A run that cannot say honestly what it spent cannot be trusted with a ceiling, so this is checked against the log rather than taken from the screen.',
-    },
+    ...CLOSE,
     ...ACT_2,
   ],
 };
