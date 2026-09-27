@@ -598,7 +598,7 @@ const INFERRED_ANSWER_RE = /^\s*\*\*Inferred answer:\*\*\s*(.+)$/i;
  * Returns one entry per `## ` heading found. Content before the first such
  * heading (an H1 title, a preamble) is dropped rather than read as a question.
  */
-function parseUserQuestionsMd(raw: string, mode: ReflectMode = 'interactive'): UserQuestion[] {
+export function parseUserQuestionsMd(raw: string, mode: ReflectMode = 'interactive'): UserQuestion[] {
   const out: UserQuestion[] = [];
   // Split on `## ` headings; drop any leading section that isn't one (REF-1 H1/preamble, forge-8vfn.8.1.35).
   const sections = raw.split(/^(?=## )/m).filter((s) => s.trim().startsWith('## '));
