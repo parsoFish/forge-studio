@@ -1,4 +1,6 @@
 /**
+ * PR #289 — ruling 4: guards applyContractReset against ever generating or overwriting an agent-instruction file.
+ *
  * Ruling 4 (T1/operator, binding) — `applyContractReset` NEVER generates an
  * agent-instruction file. C8 (`docs/reference/project-contract.md`) requires a
  * HUMAN-authored `AGENTS.md`/`CLAUDE.md` to be present and nothing more; the

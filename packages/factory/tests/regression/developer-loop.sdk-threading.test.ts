@@ -1,4 +1,6 @@
 /**
+ * commit a7b268d84 — an unavailable runtime.sdk value reached getAdapter and threw instead of falling back to claude.
+ *
  * SDK-threading regression (WS-C / C1, ADR 029).
  *
  * `deriveAgentSpec` now carries the SKILL.md `runtime.sdk` through to the

@@ -1,4 +1,6 @@
 /**
+ * PR #817 — sessionPaths() lexically joined an escaping/malicious session id instead of refusing it.
+ *
  * `sessionPaths` refuses an escaping/malicious session id, or a poisoned
  * `_architect` dir, ON ITS OWN — the same shape ruling 102 already fixed for
  * `archiveSessionDir` in this same file (`kinds/architect-plan.ts`).

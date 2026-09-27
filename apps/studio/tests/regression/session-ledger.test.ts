@@ -1,4 +1,6 @@
 /**
+ * PR #539 — /monitor double-counted onboarding's session against its own standalone-run row, inflating the operator-visible total.
+ *
  * `deriveSessionLedgerRows` — M6-A exit row 3, S9 beats 13-14.
  *
  * The dedupe is the load-bearing part and it was measured, not guessed: S9

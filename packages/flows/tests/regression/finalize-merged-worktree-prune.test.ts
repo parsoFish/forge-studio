@@ -1,4 +1,6 @@
 /**
+ * PR #932 — F-09 gap: a merged cycle's worktree and per-WI scratch were never pruned on the merge path.
+ *
  * Defect fix (F-09 gap) — a merged cycle's worktree cleanup was NEVER wired
  * up: scheduler-run-one.ts's `preserveWorktree` keeps the cycle worktree
  * alive through `ready-for-review`/`pr-open` on the promise "cleanup happens

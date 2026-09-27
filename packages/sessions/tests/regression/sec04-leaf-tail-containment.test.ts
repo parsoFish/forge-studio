@@ -1,4 +1,6 @@
 /**
+ * PR #100 — SEC-04: interactive-session and contract-stages raw-appended a leaf, so a symlinked questions.json/answers.json/project.json escaped containment.
+ *
  * SEC-04 — LEAF-TAIL containment pin (the last raw-append leaves the gap-closure
  * appliers flagged after the status.json siblings were routed through the guard).
  *

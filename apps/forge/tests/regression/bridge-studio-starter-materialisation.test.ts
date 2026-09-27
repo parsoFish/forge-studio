@@ -1,4 +1,6 @@
 /**
+ * PR #200 — W7-D exit gate: a materialised starter agent landed without a phase field, so every dispatch of the shipped starter flow died.
+ *
  * agents-44 — a materialised starter agent must be DISPATCHABLE.
  *
  * WHAT MOVED (operator ruling 384, shape settled by T1 ruling 459). The flow

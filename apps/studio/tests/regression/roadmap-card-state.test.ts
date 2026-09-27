@@ -1,4 +1,6 @@
 /**
+ * PR #206 — round 2: repoint-requires-confirm collapsed into a generic error, so a card's retry button re-posted the same unconfirmed request forever.
+ *
  * W8-A3 — `flows-37`, adversarial review round 2 findings 1 and 2.
  *
  * THE DEFECT THESE KILL. Both mappers collapsed `repoint-requires-confirm` — a

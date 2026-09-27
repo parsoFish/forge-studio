@@ -1,4 +1,6 @@
 /**
+ * PR #221 — W8-F3: a deterministic failure was misclassified transient because a project-supplied string happened to contain a rate-limit token.
+ *
  * W8-F3 (ON-7 residue) — a DETERMINISTIC failure must never be classified
  * transient because a project-supplied string happened to contain a
  * rate-limit token.

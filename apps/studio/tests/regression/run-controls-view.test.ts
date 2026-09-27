@@ -1,4 +1,6 @@
 /**
+ * PR #206 — W8-A3 WI-3 (flows-28/49/23): the same three run-controls defects, pure derivation half.
+ *
  * W8-A3 WI-3 — `flows-28`, `flows-49`, `flows-23`: the pure half of the run's
  * recovery controls.
  *

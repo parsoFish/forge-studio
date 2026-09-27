@@ -1,4 +1,6 @@
 /**
+ * PR #208 — a SIGKILLed or wedged standalone run read "running" forever, with real leaked zombie run dirs on disk.
+ *
  * W8-A2 (ON-7 defect 4, WI-1a item 4) — `deriveStandaloneRunState` /
  * `deriveStandaloneStateFromEvents` produced `running | done | failed |
  * suppressed | budget-exceeded | cancelled` with NO time-based staleness

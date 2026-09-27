@@ -1,4 +1,6 @@
 /**
+ * PR #89 — SEC-03: mintTriggeredInitiative bypassed the manifest choke point, letting a flow's project field traverse out of the projects root.
+ *
  * ACCEPTANCE TESTS (SEC-03, T3) — Defect 3: `mintTriggeredInitiative`
  * (packages/flows/mint-triggered-initiative.ts:97) bypasses the manifest
  * choke point. It writes a manifest with `serializeManifest` +

@@ -1,4 +1,6 @@
 /**
+ * PR #214 — W8-B5 WI-2(b), exit row E4: serializeCommunityRegistry dropped in-block YAML comments.
+ *
  * W8-B5 WI-2(b) — closing the comment-loss CLASS (exit row E4, community-28),
  * driven through the REAL `forge studio lint` entry point.
  *

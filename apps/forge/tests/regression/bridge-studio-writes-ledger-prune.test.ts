@@ -1,4 +1,6 @@
 /**
+ * PR #213 — W8-B4 FIX-2: the agent-DELETE route left a stranger row in installed-skills.yaml (library-35's bug via a fourth path).
+ *
  * W8-B4 FIX-2 (library-35's fourth path) — live-bridge reproduction pins for
  * the agent-DELETE route's install-ledger prune, mirroring
  * packages/library/tests/integration/bridge-studio-skills.test.ts's own "library-35" tests (the skills

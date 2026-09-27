@@ -1,4 +1,6 @@
 /**
+ * PR #214 — W8-B5 security finding 1: two unlocked read-modify-write callers on registry.yaml silently clobbered each other's writes.
+ *
  * W8-B5 security review, FINDING 1 — `studio/community/registry.yaml` has
  * TWO independent read-modify-write callers and, before this file existed,
  * not one of them took a lock:
