@@ -159,7 +159,7 @@ test('R4-12 AT-F1-4 (server half, GREEN-ON-ARRIVAL REGRESSION LOCK): deriveContr
     JSON.stringify({
       testProcess: {
         local: { cmd: ['npm', 'test'] },
-        acceptance: { match: 'acceptance', required: true, requiresEnv: ['FOO'] },
+        acceptance: { match: 'acceptance', requiresEnv: ['FOO'] },
       },
     }),
     'utf8',
@@ -182,7 +182,7 @@ test('R4-12 AT-F1-4 (server half, GREEN-ON-ARRIVAL REGRESSION LOCK): deriveContr
     JSON.stringify({
       testProcess: {
         local: { cmd: ['npm', 'test'] },
-        acceptance: { match: 'acceptance', required: true, requiresEnv: ['FOO', 'NEW_SECRET'] },
+        acceptance: { match: 'acceptance', requiresEnv: ['FOO', 'NEW_SECRET'] },
       },
     }),
     'utf8',

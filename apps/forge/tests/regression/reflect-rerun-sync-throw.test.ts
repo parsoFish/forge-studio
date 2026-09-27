@@ -1,4 +1,6 @@
 /**
+ * PR #559 — a synchronous throw from the detached reflector rerun crashed the bridge process (ERR_HTTP_HEADERS_SENT on a second response).
+ *
  * T1 ruling 485 — a synchronous throw from the detached reflector rerun must
  * not take the bridge process down.
  *

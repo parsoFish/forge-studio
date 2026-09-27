@@ -19,7 +19,9 @@ seed/README.md                                seed/roadmap.md        seed/src/to
 seed/test/fixtures/release-notes.md           seed/test/unit.test.ts seed/tsconfig.json
 ```
 
-**Deviations from the source.** None.
+**Deviations from the source.** None in the snapshot.
+
+- **Deviation (bead forge-mfv5.3.5):** snapshot + retired `testProcess.acceptance.required` removed by `forge project migrate` (forge-mfv5.3.5). One line of `seed/.forge/project.json` deleted (`"required": true,`); the parsed result equals what `migrateProjectConfig` writes on the pre-deviation seed. Method-C digest of `seed/` after it: **`0aa6db84cd6a661b`** (superseding `bcb1c45a7fe99b04`, stated above as the snapshot's digest).
 
 **Traits carried, and the learning each encodes.**
 

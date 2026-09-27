@@ -1,4 +1,6 @@
 /**
+ * PR #122 — SEC-06: the legacy forge agent run dispatch path folded an untrusted --project value into the root before any containment check.
+ *
  * SEC-06 acceptance pins: the legacy `forge agent run <agent-id> <session-id>
  * --project <name>` dispatch skeleton in `cmdAgentRun` (`packages/agents/agent-run.ts`)
  * must guard an untrusted `--project` value the same way the newer turnSpec

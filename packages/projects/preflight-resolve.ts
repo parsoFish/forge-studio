@@ -37,7 +37,7 @@ const TABLE: Record<ClauseId, ClauseClassification> = {
 
   // AGENT — route to the matching agentic runner.
   C8: { resolution: 'agent', route: 'instructions', fixHint: 'Author or edit AGENTS.md with the instructions agent (operator-confirmed) — absent ⇒ create it, present-but-missing-the-gate ⇒ edit it.' },
-  DEMO: { resolution: 'agent', route: 'demo-builder', fixHint: 'Build the demo with the demo agent (declares demoProcess + machinery).' },
+  DEMO: { resolution: 'agent', route: 'demo-builder', fixHint: 'Declare demoProcess — the sole cycle-time demo input — with the demo-builder session.' },
   // DEMO-SKILL (bead forge-mfv5.2.2): the demo declaration itself must drive a
   // checkpoint — ≥1 capture step naming a bare-argv command in inline code.
   // Still routes to demo-builder: authoring the declaration and its Studio
@@ -51,7 +51,7 @@ const TABLE: Record<ClauseId, ClauseClassification> = {
   C1: { resolution: 'user', fixHint: 'Declare a single fast, deterministic test command (testProcess.local.cmd, the .forge/quality_gate_cmd sidecar, or package.json "test").', target: { kind: 'config', keyPath: 'testProcess.local.cmd', shape: '["<argv0>", "<arg>", …]' } },
   // R1-03-F1: the CI net + acceptance tier are operator-declared gate policy.
   C1b: { resolution: 'user', fixHint: 'Declare testProcess.ci ({cmd, fixCmd?, unsetEnv?}) — the full CI mirror that keeps a red whole-module baseline from ever shipping.', target: { kind: 'config', keyPath: 'testProcess.ci', shape: '{"cmd": ["<argv0>", …], "fixCmd"?: ["…"], "unsetEnv"?: ["ENV_NAME"]}' } },
-  C7: { resolution: 'user', fixHint: 'External-resource projects declare testProcess.acceptance ({match, required, requiresEnv}) so merges are backed by a live acceptance test.', target: { kind: 'config', keyPath: 'testProcess.acceptance', shape: '{"match": "<substring of a WI gate>", "required": true, "requiresEnv"?: ["ENV_NAME"]}' } },
+  C7: { resolution: 'user', fixHint: 'External-resource projects declare testProcess.acceptance ({match, requiresEnv}) so merges are backed by a live acceptance test.', target: { kind: 'config', keyPath: 'testProcess.acceptance', shape: '{"match": "<substring of a WI gate>", "requiresEnv"?: ["ENV_NAME"]}' } },
   C5: { resolution: 'user', fixHint: 'Declare locked-core constraints (CLAUDE.md / AGENTS.md / CONSTRAINTS.md).', target: { kind: 'file', candidates: ['CLAUDE.md', 'CONSTRAINTS.md'] } },
   C6: { resolution: 'user', fixHint: 'Add a GitHub remote so forge can open + merge PRs.', target: { kind: 'operator', reason: 'Add a GitHub `origin` remote (git remote add) — the skill must never add a remote itself; this is the operator\'s to do.' } },
   // R1-04-F2: release substrate is operator-owned (creating a changelog/version file blind is presumptuous).

@@ -1,4 +1,6 @@
 /**
+ * PR #137 — W7-B5: per-agent history fan-out + client dedupe published a failed $4.79 run as a $0.00 "complete".
+ *
  * Acceptance tests for `./agents-index.ts` — ⚑ REWRITTEN by W7-B5
  * (agents-03 / agents-04 / agents-39): the module no longer fans one
  * `GET /api/agents/:slug/history` out per roster agent and client-side-

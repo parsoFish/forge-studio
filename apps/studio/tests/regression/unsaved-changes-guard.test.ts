@@ -1,4 +1,6 @@
 /**
+ * PR #853 — agents-48: closing, reloading or navigating away from the agent builder silently discarded unsaved changes.
+ *
  * unsaved-changes-guard.test.ts — agents-48: leaving the agent builder
  * silently discarded unsaved changes despite the "Unsaved changes"
  * indicator. `handleSelectAgent` (app/agents/[id]/page.tsx) guards only the

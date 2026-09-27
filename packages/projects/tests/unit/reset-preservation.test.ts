@@ -103,7 +103,7 @@ function betteradoShapedProject(): string {
             fixCmd: ['bash', '-c', 'make fmt && make terrafmt'],
             unsetEnv: ['TF_ACC'],
           },
-          acceptance: { match: 'TF_ACC', required: true, requiresEnv: [SECRET_NAME] },
+          acceptance: { match: 'TF_ACC', requiresEnv: [SECRET_NAME] },
         },
         demoProcess: [{ kind: 'capture', text: 'a stale, pre-current-template demo step' }],
         releaseProcess: { steps: [{ kind: 'docs', phase: 'pre-merge', text: 'a stale release step' }] },

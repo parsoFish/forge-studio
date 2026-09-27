@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { delimiter, resolve } from 'node:path';
 
 /**
@@ -258,4 +259,65 @@ export function forwardChildStderr(chunk: string, callerSink?: (m: string) => vo
 export function sdkStderrSink(callerOptions?: unknown): (chunk: string) => void {
   const caller = (callerOptions as { stderr?: (m: string) => void } | undefined)?.stderr;
   return (chunk: string) => forwardChildStderr(chunk, caller);
+}
+
+/**
+ * forge-mfv5.3.7 (operator ruling 2026-09-12) — the ONE env var forge hands a
+ * live-acceptance/gate child process so it can namespace whatever live cloud
+ * resources it creates. Initiatives run in parallel where the DAG allows
+ * (per-initiative namespaced fixtures), so a betterADO-style live-acceptance
+ * suite for one initiative must never collide with — or, in its sweep,
+ * delete — another initiative's in-flight resources.
+ *
+ * Named to match the existing FORGE_* vocabulary this same seam already uses
+ * (`FORGE_GATE_TIMEOUT_MS`, `FORGE_CLAUDE_CLI`): forge-provided, non-secret,
+ * read by the PROJECT's own live-acceptance test and sweep code. The project
+ * never invents its own prefix — see docs/reference/project-contract.md's C7
+ * section for the normative convention this env var backs.
+ *
+ * Consumed at `packages/agents/ralph/stop-conditions.ts`'s `runGateCapturing`
+ * (the one seam that assembles a gate child's env), via
+ * `GateTighteningOptions.initiativeId`.
+ */
+export const RESOURCE_PREFIX_ENV = 'FORGE_RESOURCE_PREFIX';
+
+/**
+ * Total length cap on a derived prefix: 24, the tightest limit among common
+ * cloud resource names (an Azure Storage account name — Azure being
+ * betterADO's own cloud — caps at 24), so a project can use the WHOLE prefix
+ * as-is without truncating it further itself.
+ */
+export const RESOURCE_PREFIX_MAX_LENGTH = 24;
+
+/**
+ * The charset every derived prefix satisfies: lowercase ASCII letters,
+ * digits and hyphens, always starting with a letter — the common
+ * denominator every major cloud resource-naming scheme accepts.
+ */
+export const RESOURCE_PREFIX_RE = /^[a-z][a-z0-9-]{0,23}$/;
+
+/** `RESOURCE_PREFIX_MAX_LENGTH` minus the 8-hex-char hash and its separating
+ *  hyphen — how much of the slug half a derived prefix can keep. */
+const RESOURCE_PREFIX_HASH_LEN = 8;
+const RESOURCE_PREFIX_SLUG_MAX = RESOURCE_PREFIX_MAX_LENGTH - RESOURCE_PREFIX_HASH_LEN - 1;
+
+/**
+ * Pure: derive a stable, distinct, cloud-safe resource-name prefix from an
+ * initiative id.
+ *
+ * Stable — the same id always derives the same prefix, so a WI's retries and
+ * every WI of the same initiative share one namespace. Distinct — the hash
+ * half digests the FULL id (not the truncated slug half), so two ids that
+ * happen to share their first `RESOURCE_PREFIX_SLUG_MAX` characters still
+ * diverge. Safe — always matches `RESOURCE_PREFIX_RE` and
+ * `RESOURCE_PREFIX_MAX_LENGTH`, for any input: an id with no ASCII-alnum
+ * characters, an empty string, or one far longer than the bound all still
+ * produce a legal prefix. Never throws.
+ */
+export function deriveResourcePrefix(initiativeId: string): string {
+  const cleaned = initiativeId.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const lettered = cleaned === '' ? 'initiative' : /^[a-z]/.test(cleaned) ? cleaned : `i-${cleaned}`;
+  const slug = lettered.slice(0, RESOURCE_PREFIX_SLUG_MAX).replace(/-+$/g, '') || 'i';
+  const hash = createHash('sha1').update(initiativeId).digest('hex').slice(0, RESOURCE_PREFIX_HASH_LEN);
+  return `${slug}-${hash}`;
 }

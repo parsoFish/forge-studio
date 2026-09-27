@@ -1,4 +1,6 @@
 /**
+ * PR #182 — W7A4-03: project Save always echoed kb, freezing a derived binding into project.json.
+ *
  * W7-FIX-A4 (W7A4-03) — the project↔KB binding is DERIVED (packages/knowledge/kb-sites.ts
  * `projectKbBindings`, "never stored") from kb.yaml `binding.ref`, and the
  * roster hands the derived value to the editor as `project.kb`. The editor

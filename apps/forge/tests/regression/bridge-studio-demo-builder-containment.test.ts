@@ -1,4 +1,8 @@
 /**
+ * forge-mfv5.2.8 retired the `/fragment/` route (the demo-builder writes no
+ * per-element fragments), and its ATs with it; the header below is the
+ * original round's record and still names both routes.
+ *
  * ACCEPTANCE TESTS (SEC-03, T3, appended round) — Defect 4: `GET
  * /api/demo-builder/demo/<project>/<sid>` and `GET
  * /api/demo-builder/fragment/<project>/<sid>/<element>`
@@ -52,9 +56,6 @@
  * project/sessionId pair still defeats it — the trust hole is one layer
  * below the routing escape (the field inside status.json), which is why a
  * routing-only fix is necessary but the guard-shape itself is also named.
- *
- * MEASURED (not assumed) on the `fragment` route's `element` component: see
- * the dedicated test/comment near the bottom.
  *
  * Binding rules applied throughout: property assertions, not status codes;
  * mandatory positive controls (pass before AND after any fix, said so in
@@ -146,12 +147,6 @@ function plantDemoHtml(repoPath: string, content: string): void {
   writeFileSync(join(dir, 'DEMO.html'), content);
 }
 
-function plantFragment(repoPath: string, element: string, content: string): void {
-  const dir = join(repoPath, '.forge', 'demo', 'fragments');
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${element}.html`), content);
-}
-
 function skipIfNoSymlinks(t: { skip: (msg?: string) => void }): boolean {
   if (symlinksUnavailable) {
     t.skip('symlink creation unavailable in this environment');
@@ -173,7 +168,6 @@ before(async () => {
   // and the "guard cannot fail" demonstration).
   mkdirSync(join(projectsRoot, 'legit-project'), { recursive: true });
   plantDemoHtml(join(projectsRoot, 'legit-project'), 'REAL-DEMO-CONTENT-4f81c');
-  plantFragment(join(projectsRoot, 'legit-project'), 'hero', 'REAL-FRAGMENT-CONTENT-9b03e');
   plantStatus(
     join(projectsRoot, 'legit-project', '_demo', 'legit-session'),
     makeStatus({ session_id: 'legit-session', project: 'legit-project', project_repo_path: join(projectsRoot, 'legit-project') }),
@@ -184,7 +178,6 @@ before(async () => {
   // project's route.
   mkdirSync(join(projectsRoot, 'victim-project'), { recursive: true });
   plantDemoHtml(join(projectsRoot, 'victim-project'), 'VICTIM-PROJECT-DEMO-CONTENT-2e77a');
-  plantFragment(join(projectsRoot, 'victim-project'), 'panel', 'VICTIM-PROJECT-FRAGMENT-CONTENT-6c19f');
   plantStatus(
     join(projectsRoot, 'victim-project', '_demo', 'victim-session'),
     makeStatus({ session_id: 'victim-session', project: 'victim-project', project_repo_path: join(projectsRoot, 'victim-project') }),
@@ -224,12 +217,6 @@ test('positive control (passes before AND after any fix): GET /api/demo-builder/
   assert.equal(text, 'REAL-DEMO-CONTENT-4f81c');
 });
 
-test('positive control (passes before AND after any fix): GET /api/demo-builder/fragment/<legit>/<legit>/<element> serves the real fragment', async () => {
-  const res = await fetch(`${bridgeUrl}/api/demo-builder/fragment/legit-project/legit-session/hero`);
-  const text = await res.text();
-  assert.equal(res.status, 200, `expected the legitimate fragment route to succeed — got ${res.status}: ${text}`);
-  assert.ok(text.includes('REAL-FRAGMENT-CONTENT-9b03e'), `expected the real fragment content in the (possibly wrapped) body — got: ${text}`);
-});
 
 // ---------------------------------------------------------------------------
 // DEFECT 4, shape: %2F-encoded ".." traversal in `project`.
@@ -251,20 +238,6 @@ test('(RED) [Defect 4, %2F traversal in project, /demo/ route] a raw request wit
   );
 });
 
-test('(RED) [Defect 4, %2F traversal in project, /fragment/ route] a raw request with project="..%2F..%2F<outside>" serves the attacker-planted fragment', async () => {
-  const outside = newOutsideDir('demo-builder-project-traversal-fragment-outside-');
-  plantStatus(join(outside, '_demo', 'x'), makeStatus({ session_id: 'x', project: 'irrelevant', project_repo_path: outside }));
-  plantFragment(outside, 'evil', 'PWNED-FRAGMENT-CONTENT-b2e41');
-
-  const rel = relative(projectsRoot, outside);
-  const rawPath = `/api/demo-builder/fragment/${encodeSlashes(rel)}/x/evil`;
-
-  const { status, body } = await rawGet(bridgeUrl, rawPath);
-  assert.ok(
-    !body.includes('PWNED-FRAGMENT-CONTENT-b2e41'),
-    `the response must NEVER contain the outside sentinel — status ${status}: ${body}`,
-  );
-});
 
 // ---------------------------------------------------------------------------
 // DEFECT 4, shape: %2F-encoded ".." traversal in `sessionId` (project stays a
@@ -290,21 +263,6 @@ test('(RED) [Defect 4, %2F traversal in sessionId, /demo/ route] a raw request w
   );
 });
 
-test('(RED) [Defect 4, %2F traversal in sessionId, /fragment/ route] a raw request with a real project but sessionId="..%2F..%2F..%2F..%2F<outside>" serves attacker content', async () => {
-  const outside = newOutsideDir('demo-builder-session-traversal-fragment-outside-');
-  plantStatus(join(outside, '_demo', 'ignored'), makeStatus({ session_id: 'ignored', project: 'irrelevant', project_repo_path: outside }));
-  plantFragment(outside, 'evil', 'PWNED-FRAGMENT-CONTENT-SESSIONID-d4a63');
-
-  const demoDir = join(projectsRoot, 'legit-project', '_demo');
-  const relToSession = relative(demoDir, join(outside, '_demo', 'ignored'));
-  const rawPath = `/api/demo-builder/fragment/legit-project/${encodeSlashes(relToSession)}/evil`;
-
-  const { status, body } = await rawGet(bridgeUrl, rawPath);
-  assert.ok(
-    !body.includes('PWNED-FRAGMENT-CONTENT-SESSIONID-d4a63'),
-    `the response must NEVER contain the outside sentinel — status ${status}: ${body}`,
-  );
-});
 
 // ---------------------------------------------------------------------------
 // DEFECT 4, shape: symlinked session directory whose NAME legitimately
@@ -327,20 +285,6 @@ test('(RED) [Defect 4, symlinked session dir, /demo/ route] a legitimately-named
   );
 });
 
-test('(RED) [Defect 4, symlinked session dir, /fragment/ route] a legitimately-named session dir that is really a symlink to an outside dir serves attacker content', async (t) => {
-  if (skipIfNoSymlinks(t)) return;
-  const outside = newOutsideDir('demo-builder-symlink-fragment-outside-');
-  plantStatus(outside, makeStatus({ session_id: 'symlinked-session-2', project: 'legit-project', project_repo_path: outside }));
-  plantFragment(outside, 'evil', 'PWNED-FRAGMENT-CONTENT-SYMLINK-f6c85');
-  symlinkSync(outside, join(projectsRoot, 'legit-project', '_demo', 'symlinked-session-2'), 'dir');
-
-  const res = await fetch(`${bridgeUrl}/api/demo-builder/fragment/legit-project/symlinked-session-2/evil`);
-  const text = await res.text();
-  assert.ok(
-    !text.includes('PWNED-FRAGMENT-CONTENT-SYMLINK-f6c85'),
-    `the response must NEVER contain the outside sentinel — status ${res.status}: ${text}`,
-  );
-});
 
 // ---------------------------------------------------------------------------
 // DEFECT 4, shape: cross-project symlink — a session dir under ONE project's
@@ -366,21 +310,6 @@ test('(RED) [Defect 4, cross-project symlink, /demo/ route] attacker-project ali
   );
 });
 
-test('(RED) [Defect 4, cross-project symlink, /fragment/ route] attacker-project aliasing victim-project must not serve victim content through the WRONG project route', async (t) => {
-  if (skipIfNoSymlinks(t)) return;
-  symlinkSync(
-    join(projectsRoot, 'victim-project', '_demo', 'victim-session'),
-    join(projectsRoot, 'attacker-project', '_demo', 'cross-session-2'),
-    'dir',
-  );
-
-  const res = await fetch(`${bridgeUrl}/api/demo-builder/fragment/attacker-project/cross-session-2/panel`);
-  const text = await res.text();
-  assert.ok(
-    !text.includes('VICTIM-PROJECT-FRAGMENT-CONTENT-6c19f'),
-    `victim-project's real fragment must NEVER be reachable through attacker-project's route — status ${res.status}: ${text}`,
-  );
-});
 
 // ---------------------------------------------------------------------------
 // "Guard that cannot fail" — /demo/'s base/requested check is tautological.
@@ -438,44 +367,5 @@ test('(RED) ["guard that cannot fail", live] a completely ordinary, non-traversi
   assert.ok(
     !text.includes('PWNED-DEMO-CONTENT-GUARDCANNOTFAIL-g7d96'),
     `an ordinary, non-escaping project/sessionId pair must never be able to serve arbitrary outside content via a status.json field the route trusts unchecked — status ${res.status}: ${text}`,
-  );
-});
-
-// ---------------------------------------------------------------------------
-// MEASURED (not assumed): the fragment route's `element` component.
-// ---------------------------------------------------------------------------
-//
-// Unlike `project`/`sessionId` (used to build the SESSION DIR that is read
-// for status.json), `element` is folded into `requested` via
-// `join(project_repo_path,'.forge','demo','fragments', \`${element}.html\`)`
-// — and `path.join()` FULLY NORMALISES the entire joined string, including
-// any ".." smuggled into `element` via the same %2F-split-before-decode
-// mechanism. Measured live below: a %2F-smuggled traversal in `element`
-// aimed at a sentinel file OUTSIDE `fragments/` (and outside the project
-// entirely) is REJECTED by the existing `requested.startsWith(base)` check,
-// because that check runs on the fully-`join()`-normalised `requested` —
-// unlike `/demo/`'s tautological check above, THIS base/requested pair has
-// genuine discriminating power: `base` is fixed relative to
-// `project_repo_path`, only `requested` folds in the untrusted `element`.
-// This mirrors the SEC-03 finding on POST /api/studio/projects' plain
-// ".."-traversal shapes: a lexical check on an ALREADY-RESOLVED path
-// legitimately catches a plain (non-symlink) traversal. Pinned as a
-// non-regression test, not a RED one, per binding rule 1 (a test that
-// already passes today is not an acceptance pin for a defect).
-// ---------------------------------------------------------------------------
-
-test('non-regression (passes today; must keep passing after any fix): a %2F-smuggled ".." traversal in the fragment route\'s `element` component is ALREADY rejected — join() normalises it before the base/requested comparison runs', async () => {
-  const outside = newOutsideDir('demo-builder-element-traversal-outside-');
-  writeFileSync(join(outside, 'pwned.html'), 'PWNED-ELEMENT-CONTENT-h8e07');
-
-  const fragmentsDir = join(projectsRoot, 'legit-project', '.forge', 'demo', 'fragments');
-  const relDir = relative(fragmentsDir, outside);
-  const element = relDir ? join(relDir, 'pwned') : 'pwned'; // "${element}.html" reassembles to the exact real file
-  const rawPath = `/api/demo-builder/fragment/legit-project/legit-session/${encodeSlashes(element)}`;
-
-  const { status, body } = await rawGet(bridgeUrl, rawPath);
-  assert.ok(
-    !body.includes('PWNED-ELEMENT-CONTENT-h8e07'),
-    `expected the existing base/requested check (on the fully join()-normalised "requested") to already reject a ".."-traversal smuggled into "element" — got ${status}: ${body}`,
   );
 });

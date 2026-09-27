@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 /**
+ * PR #548 — /hooks/new offered a matcher on events that can never fire it, so hook creation silently failed with no nav or error.
+ *
  * `/hooks/new` offers a matcher only where one can be honoured — the product
  * half of story S7 beats 7–10 (T1 ruling 415).
  *

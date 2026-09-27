@@ -2,9 +2,10 @@
  * PM testing-contract tests (A2, 2026-06-06; M2-3 brainAccess gate, 2026-06-13).
  *
  * Covers:
- *   - A2a: `acceptance_gate.required` ⇒ the decomposition MUST include ≥1 WI
+ *   - A2a: a declared acceptance tier + a class whose `acceptance` column is
+ *     `required` (bead forge-mfv5.3.5) ⇒ the decomposition MUST include ≥1 WI
  *     whose `quality_gate_cmd` targets the live acceptance suite, else the PM
- *     pass fails.
+ *     pass fails. An `advisory` class (docs) is not forced.
  *   - A2b: `standing_work_item_acs` ⇒ every emitted WI body gets a fixed
  *     "## Standing acceptance criteria (project contract)" section, idempotently.
  *   - M2-3 brainAccess gate: PM_BRAIN_ACCESS drives the 0-reads abort; mandatory
@@ -159,10 +160,10 @@ const ACC_GATE = [
   '-timeout', '30m', './azuredevops/internal/acceptancetests/...',
 ];
 
-test('A2a: acceptance_gate.required + no live-acc WI → PM pass fails', async () => {
+test('A2a: a declared acceptance tier + no live-acc WI → PM pass fails', async () => {
   const h = setupHarness({
     ...BASE_CONFIG,
-    testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests', required: true } },
+    testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests' } },
   });
   try {
     const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }, { wiId: 'WI-2' }]);
@@ -187,11 +188,11 @@ test('A2a: acceptance_gate.required + no live-acc WI → PM pass fails', async (
   }
 });
 
-test('ADR-051/C7: docs-class + acceptance_gate.required + no acceptance WI → PM pass succeeds and emits the skip event', async () => {
+test('ADR-051/C7: docs-class + a declared acceptance tier + no acceptance WI → PM pass succeeds and emits the skip event', async () => {
   const h = setupHarness(
     {
       ...BASE_CONFIG,
-      testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests', required: true } },
+      testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests' } },
     },
     { class: 'docs' },
   );
@@ -209,17 +210,17 @@ test('ADR-051/C7: docs-class + acceptance_gate.required + no acceptance WI → P
     assert.ok(skip, 'expected a structured skip event so the class-scoped skip is visible, not silent');
     const md = skip!.metadata as { change_class?: string; reason?: string };
     assert.equal(md.change_class, 'docs');
-    assert.match(md.reason ?? '', /class profile runs no merge-boundary tests/);
+    assert.match(md.reason ?? '', /the class profile's acceptance is advisory/);
   } finally {
     rmSync(h.dir, { recursive: true, force: true });
   }
 });
 
-test('ADR-051/C7 regression lock: code-class + acceptance_gate.required + no acceptance WI → still refused, unchanged message', async () => {
+test('ADR-051/C7 regression lock: code-class + a declared acceptance tier + no acceptance WI → still refused, unchanged message', async () => {
   const h = setupHarness(
     {
       ...BASE_CONFIG,
-      testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests', required: true } },
+      testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests' } },
     },
     { class: 'code' },
   );
@@ -237,11 +238,11 @@ test('ADR-051/C7 regression lock: code-class + acceptance_gate.required + no acc
   }
 });
 
-test('ADR-051/C7: acceptance_gate.required with no class-profile table bound → refuses by name (ClassProfilePort)', async () => {
+test('ADR-051/C7: a declared acceptance tier with no class-profile table bound → refuses by name (ClassProfilePort)', async () => {
   const h = setupHarness(
     {
       ...BASE_CONFIG,
-      testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests', required: true } },
+      testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests' } },
     },
     { class: 'docs' },
   );
@@ -258,10 +259,10 @@ test('ADR-051/C7: acceptance_gate.required with no class-profile table bound →
   }
 });
 
-test('A2a: acceptance_gate.required + a matching live-acc WI → PM pass succeeds', async () => {
+test('A2a: a declared acceptance tier + a matching live-acc WI → PM pass succeeds', async () => {
   const h = setupHarness({
     ...BASE_CONFIG,
-    testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests', required: true } },
+    testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests' } },
   });
   try {
     const queryFn = makeStubQueryFn(h.input.initiativeId, [
@@ -280,7 +281,7 @@ test('A2a: acceptance_gate.required + a matching live-acc WI → PM pass succeed
 test('R4-05-F2: a successful PM pass persists specs (the produced work_item_ids) onto the manifest', async () => {
   const h = setupHarness({
     ...BASE_CONFIG,
-    testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests', required: true } },
+    testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests' } },
   });
   try {
     const queryFn = makeStubQueryFn(h.input.initiativeId, [
@@ -298,7 +299,7 @@ test('R4-05-F2: a successful PM pass persists specs (the produced work_item_ids)
 test('R4-05-F2: a failed PM pass (accGateViolation) does NOT persist specs onto the manifest', async () => {
   const h = setupHarness({
     ...BASE_CONFIG,
-    testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests', required: true } },
+    testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests' } },
   });
   try {
     // Neither WI's gate matches "acceptancetests" — same fixture as the

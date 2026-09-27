@@ -10,13 +10,16 @@
  * untouched today (no downgrade, no advisory) — no starter declares either
  * shape yet; extend here if one starts to.
  *
- * `ContractSection`/`DriftRow` are imported TYPE-ONLY so this file and
+ * `ContractSection`/`RawDriftRow` are imported TYPE-ONLY so this file and
  * `reset.ts` (which imports `resolveCommandRow` back) never form a runtime
- * cycle — `import type` erases at strip/build time.
+ * cycle — `import type` erases at strip/build time. `RawDriftRow` (not the
+ * report-ready `DriftRow`, bead forge-mfv5.3.1) because this runs BEFORE
+ * `reset-report.ts` attaches `purpose`/`verdict` — this file's own row
+ * reconstruction below has no opinion on either.
  */
 import { guardedReadFile } from '@forge/kernel';
 
-import type { ContractSection, DriftRow } from './reset.ts';
+import type { ContractSection, RawDriftRow } from './reset.ts';
 
 /** A template npm script this project doesn't have — named, never silently added or dropped. */
 export type CommandAdvisory = { section: ContractSection; message: string };
@@ -55,7 +58,7 @@ function npmCommandsInSection(section: ContractSection, after: unknown): string[
  * npm script this project's package.json doesn't declare downgrades to
  * `'unchanged'`, reported as a named `CommandAdvisory`.
  */
-export function resolveCommandRow(row: DriftRow, projectDir: string): { row: DriftRow; advisory?: CommandAdvisory } {
+export function resolveCommandRow(row: RawDriftRow, projectDir: string): { row: RawDriftRow; advisory?: CommandAdvisory } {
   if (row.action !== 'add') return { row };
   for (const cmd of npmCommandsInSection(row.section, row.after)) {
     const scripts = readPackageScripts(projectDir);

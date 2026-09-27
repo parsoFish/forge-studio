@@ -204,14 +204,17 @@ function deriveDemoRow(projectDir: string, config: ProjectConfig | null): Contra
     try {
       const parsedLock: unknown = JSON.parse(lockRaw);
       if (parsedLock !== null && typeof parsedLock === 'object' && !Array.isArray(parsedLock)) {
-        const demoSkill = (parsedLock as Record<string, unknown>).demo_skill;
-        if (typeof demoSkill === 'string' && demoSkill.length > 0) {
-          detail.push(`built demo skill: ${demoSkill}`);
+        // forge-mfv5.2.8 — the lock records the declaration it wrote into
+        // demoProcess and the generation it came from. A lock without both
+        // (including one carrying only the retired `demo_skill`) adds no line.
+        const { generation, declaration } = parsedLock as Record<string, unknown>;
+        if (typeof generation === 'number' && Number.isInteger(generation) && generation >= 1 && Array.isArray(declaration)) {
+          detail.push(`locked declaration: generation ${generation}, ${declaration.length} step(s)`);
         }
       }
     } catch {
       // Unparseable lock — its mere presence still counts (the lock exists);
-      // never fabricate a demo_skill line for it, never crash.
+      // never fabricate a detail line for it, never crash.
     }
   }
   return { stage: 'demo', status, source: '.forge/project.json + .forge/demo/demo.lock.json', detail, bytes: null };

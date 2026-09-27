@@ -1,4 +1,6 @@
 /**
+ * PR #581 — classifyCycleFailure returned "could not be classified" on four of six archived cycles that actually had a diagnosable PM set_errors failure.
+ *
  * `classifyCycleFailure` against five cycles that actually ran.
  *
  * T1 ruling 507. Four of the campaign's six archived cycles ended with the

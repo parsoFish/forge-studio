@@ -60,22 +60,18 @@
         },
         "acceptance": {
           "type": "object",
-          "description": "The live-acceptance tier (contract C7). For external-resource projects whose behaviour can only be proven against a live system, `local` stays fast/creds-free/deterministic while `acceptance` requires the PM to emit a mandatory live-acceptance work item. Optional — absent ⇒ no check.",
-          "required": ["match", "required"],
+          "description": "The live-acceptance tier (contract C7). For external-resource projects whose behaviour can only be proven against a live system, `local` stays fast/creds-free/deterministic while `acceptance` declares the tier. Whether an initiative must prove itself on it is its change class's `acceptance` column (ADR 051 decision 2 as amended, bead forge-mfv5.3.5): for a `required` class the PM must emit a live-acceptance work item and the dev-loop enforces `requiresEnv`; an `advisory` class (docs) is not forced. A `required` key here is retired and refused at load. Optional — absent ⇒ no check.",
+          "required": ["match"],
           "additionalProperties": false,
           "properties": {
             "match": {
               "type": "string",
               "description": "Substring that identifies a live-acceptance gate in a WI's testProcess.local.cmd (any argv token contains it), e.g. 'acceptancetests'."
             },
-            "required": {
-              "type": "boolean",
-              "description": "When true, the PM phase HARD-FAILS the cycle unless ≥1 emitted WI has a local.cmd token containing `match` — guaranteeing every initiative is proven by a live acceptance test."
-            },
             "requiresEnv": {
               "type": "array",
               "items": { "type": "string" },
-              "description": "Env vars that MUST be set for a matching (live-acc) gate to actually run live, e.g. [\"TF_ACC\"]. If a WI's gate matches `match` but one is unset, the dev-loop ERRORS the gate instead of letting a skipped runner (`ok pkg 0.00s`) false-pass. Optional — list every var the test's PreCheck demands."
+              "description": "Env vars that MUST be set for a matching (live-acc) gate to actually run live, e.g. [\"TF_ACC\"]. If a WI's gate matches `match`, its initiative's class requires the tier, and one is unset, the dev-loop ERRORS the gate instead of letting a skipped runner (`ok pkg 0.00s`) false-pass. Optional — list every var the test's PreCheck demands."
             },
             "timeoutMs": {
               "type": "integer",

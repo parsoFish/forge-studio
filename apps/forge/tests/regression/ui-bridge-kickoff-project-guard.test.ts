@@ -1,4 +1,6 @@
 /**
+ * PR #188 — W7-B6 WI-3: session /start routes accepted any project string, minting phantom project directories.
+ *
  * W7-B6 WI-3 — kickoff roster guard + architect cost ceiling
  * (sessions-kinds-02, projects-15, crosscut-21, projects-14).
  *

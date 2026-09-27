@@ -24,7 +24,6 @@ import {
 import { skillPathRelative } from '@forge/agents';
 import type { AgentDefinition } from '@forge/contracts';
 import {
-  gateRequiredPaths,
   readWorkItemsFromDir,
   topologicalOrder,
   validateWorkItemSet,
@@ -32,6 +31,7 @@ import {
   type WorkItem,
 } from '@forge/flows';
 import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
+import { buildWiQualityGate } from './wi-quality-gate.ts';
 import { type QueryFn, type ClaudeAgentOptions } from '@forge/agents';
 import { getAdapter, resolveSdkId } from '@forge/agents';
 import type { AgentInvocation } from '@forge/agents';
@@ -695,39 +695,21 @@ export async function runDeveloperLoop(
             const fallback = input.qualityGateCmd && input.qualityGateCmd.length > 0 ? input.qualityGateCmd : null;
             const effective = wiCmd ?? fallback;
             if (!effective) return undefined;
-            // Live-acc env guard: if this WI's gate targets the acc suite
-            // (matches the project's acceptance_gate.match) and the project
-            // declares requires_env, demand those vars be set — else the gate
-            // errors (can't validate live) instead of skip-and-false-passing.
-            const requiredEnv =
-              accGate?.requires_env && accGate.requires_env.length > 0 &&
-              effective.some((tok) => tok.includes(accGate!.match))
-                ? accGate.requires_env
-                : undefined;
-            return makeQualityGateFromCmd(
-              wiWorktree.path,
+            return buildWiQualityGate({
+              worktreePath: wiWorktree.path,
               effective,
+              accGate,
+              wi,
+              requiredPathsSource,
+              ciGateUnsetEnv,
+              localGateTimeoutMs,
+              initiativeId: input.initiativeId,
               // N10: a TIMED-OUT gate also stops the loop early (iterating
               // doesn't fix machine load and burns agent spend) — but its
               // distinct gate.timeout event classifies as transient/environment
               // so the scheduler retries instead of failing the work as wrong.
-              (gateInfo) => { lastGateErrored = (gateInfo.errored ?? false) || (gateInfo.timedOut ?? false); emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo); writeGateFeedback(wiWorktree.path, gateInfo); },
-              // Wave B (2026-06-04): the WI's declared paths MUST appear in
-              // the branch diff before the gate can pass, catching "agent
-              // exited without writing declared files" independently of
-              // whether a sibling produced them (the `already-complete` 3-way
-              // runner check handles that case upstream). WHICH paths is the
-              // class's answer, not this file's — `gateRequiredPaths` and its
-              // `RequiredPathsSource` union carry the 2026-07-11 incident that
-              // set the rule.
-              {
-                requiredPaths: gateRequiredPaths(wi, requiredPathsSource),
-                ...(requiredEnv ? { requiredEnv } : {}),
-                ...(ciGateUnsetEnv && ciGateUnsetEnv.length > 0 ? { unsetEnv: ciGateUnsetEnv } : {}),
-                // R1-03-F1: env override > declared testProcess.local.timeoutMs > default.
-                timeoutMs: resolveGateTimeoutMs(localGateTimeoutMs),
-              },
-            );
+              onRun: (gateInfo) => { lastGateErrored = (gateInfo.errored ?? false) || (gateInfo.timedOut ?? false); emitGateEvent(logger, input.initiativeId, wiStart.event_id, wi.work_item_id, gateInfo); writeGateFeedback(wiWorktree.path, gateInfo); },
+            });
           })(),
           // re-review #3: the runner only takes the `already-complete` shortcut
           // when ALL of THIS WI's declared outputs are on the branch (a sibling

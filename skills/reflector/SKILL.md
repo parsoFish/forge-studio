@@ -19,7 +19,7 @@ brainAccess: mandatory
 interactivity: Autonomous self-reflection with an optional operator feedback round.
 allowed-tools: [Read, Grep, Glob, Write, Edit, Bash]
 disallowed-tools: [NotebookEdit, WebFetch, WebSearch, Task, Agent]
-budgets: {maxTurns: 60, maxBudgetUsd: 1.5}
+budgets: {maxTurns: 60, maxBudgetUsd: 3.0}
 ---
 
 # Reflector

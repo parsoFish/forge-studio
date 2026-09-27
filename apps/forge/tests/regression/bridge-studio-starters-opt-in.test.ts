@@ -1,4 +1,6 @@
 /**
+ * PR #555 — saving a flow silently materialised roster agents the operator never authored (three unrequested agents from one Save).
+ *
  * Starter agents are EXPLICIT OPT-IN — operator ruling 384, shape settled by
  * T1 ruling 459 (option 1, seed-then-save).
  *

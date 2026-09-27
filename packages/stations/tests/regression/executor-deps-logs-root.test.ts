@@ -1,4 +1,6 @@
 /**
+ * PR #410 — A1: DEFAULT_DEPS resolved logsRoot relative to the process cwd, not the forge checkout, so a run from elsewhere wrote evidence nowhere findable.
+ *
  * A1 (handoff, agents s4 re-confirmed on `05b327f0`): `DEFAULT_DEPS` resolved the
  * historical: demo-agent and review pipelines' `logsRoot` with `resolve('_logs')` — relative to
  * the PROCESS's cwd, not to the forge checkout. A cycle started from anywhere but

@@ -1,4 +1,6 @@
 /**
+ * PR #266 — M4-library: moved from packages/library (a library-to-agents layering violation); pins that a hook id colliding with a band id must never reach dispatch.
+ *
  * Dispatch-hijack proof: `resolveBandGuard` reads ONLY `composition.guards`.
  *
  * A library hook whose id COLLIDES with a band id must never reach band

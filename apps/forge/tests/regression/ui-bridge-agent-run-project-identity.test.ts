@@ -1,4 +1,6 @@
 /**
+ * PR #123 — SEC-07: POST /api/agents/:slug/run accepted a symlinked --project name that escaped the projects root.
+ *
  * SEC-07 acceptance pins: the bridge route `POST /api/agents/<slug>/run`
  * (`apps/forge/ui-bridge.ts`) must validate an untrusted `body.project` by realpath
  * IDENTITY, not merely by shape (`SAFE_PROJECT_NAME_RE`) + existence

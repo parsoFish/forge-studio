@@ -52,7 +52,10 @@ test('AT-B6-7 migrate: the gitpulse shape → typed testProcess; unknown + $comm
     assert.equal(after['acceptance_gate'], undefined, 'flat key removed');
     const tp = after['testProcess'] as Record<string, unknown>;
     assert.deepEqual(tp['local'], { cmd: ['npm', 'test'] });
-    assert.deepEqual(tp['acceptance'], { match: 'acceptance', required: true, requiresEnv: [] }, 'requires_env renamed to requiresEnv');
+    assert.deepEqual(tp['acceptance'], { match: 'acceptance', requiresEnv: [] }, 'requires_env renamed to requiresEnv');
+    // forge-mfv5.3.5: `required` is retired — the class table's `acceptance`
+    // column decides. It is not carried over, and the drop is REPORTED.
+    assert.ok(out.ok && out.moved.some((m) => m.includes('acceptance_gate.required') && m.includes('retired')), 'the retired required key must be reported, never silently dropped');
     // Preservation: unknown/legacy/$comment keys survive byte-for-value.
     assert.equal(after['$comment'], GITPULSE_SHAPE['$comment']);
     assert.deepEqual(after['demo'], GITPULSE_SHAPE['demo']);
@@ -155,6 +158,48 @@ test('AT-B6-10 migrate: a migration that would fail validation writes NOTHING (v
     const out = migrateProjectConfig(root);
     assert.ok(!out.ok && out.reason === 'validation-failed', `got ${JSON.stringify(out)}`);
     assert.equal(readFileSync(join(root, '.forge', 'project.json'), 'utf8'), bytes, 'an invalid migration must not write');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// forge-mfv5.3.5 — the loader refuses a NESTED contract that still carries the
+// retired `testProcess.acceptance.required` and names this command as the fix,
+// so this command must be that fix: gitpulse's and betterado's real contracts
+// are already nested, and "nothing-to-migrate" would leave the refusal with no
+// remedy. Exactly that one key goes; its value is reported; nothing else moves.
+const NESTED_WITH_RETIRED_KEY: Record<string, unknown> = {
+  $comment: 'already-nested contract, shaped like the real gitpulse/betterado files',
+  testProcess: {
+    local: { cmd: ['npm', 'test'] },
+    ci: { cmd: ['make', 'ci'], unsetEnv: ['TF_ACC'] },
+    acceptance: { match: 'acceptancetests', required: false, requiresEnv: ['TF_ACC', 'AZDO_PERSONAL_ACCESS_TOKEN'] },
+  },
+  standing_work_item_acs: ['Live acceptance proves it.'],
+  kb: 'betterado',
+};
+
+test('forge-mfv5.3.5 migrate: a nested contract carrying the retired acceptance.required loses exactly that key, reported with its value; the loader then accepts it', () => {
+  const root = plantProject(NESTED_WITH_RETIRED_KEY);
+  try {
+    assert.throws(() => loadProjectConfig(root), /forge project migrate/, 'the refusal must name this command as the remedy');
+
+    const out = migrateProjectConfig(root);
+    assert.ok(out.ok, `expected ok — got ${JSON.stringify(out)}`);
+    assert.ok(
+      out.ok && out.moved.some((m) => m.includes('testProcess.acceptance.required') && m.includes('false') && m.includes('retired')),
+      `the deleted key and its value must be reported (got ${JSON.stringify(out.ok && out.moved)})`,
+    );
+
+    const after = JSON.parse(readFileSync(join(root, '.forge', 'project.json'), 'utf8')) as Record<string, unknown>;
+    const expected = structuredClone(NESTED_WITH_RETIRED_KEY);
+    delete ((expected['testProcess'] as Record<string, unknown>)['acceptance'] as Record<string, unknown>)['required'];
+    assert.deepEqual(after, expected, 'exactly the retired key is deleted — match, requiresEnv and every other key survive');
+    assert.equal(loadProjectConfig(root)?.acceptance_gate?.match, 'acceptancetests');
+
+    const second = migrateProjectConfig(root);
+    assert.equal(second.ok, false);
+    assert.equal(!second.ok && second.reason, 'nothing-to-migrate', 'idempotent: a second run has nothing left to do');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

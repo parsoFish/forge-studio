@@ -1,0 +1,10 @@
+id: returning-cli
+name: returning-cli (project)
+binding:
+  kind: project
+  ref: returning-cli
+desc: >-
+  SYNTHETIC fixture Brain 3 for the node-returning-no-contract ground
+  (bead forge-mfv5.2.6) — shaped from a real project's kb.yaml, but this
+  descriptor names no real project and carries no real knowledge.
+backend: filesystem

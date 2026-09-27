@@ -1,4 +1,6 @@
 /**
+ * PR #214 — W8-B5 WI-6, exit rows E11/E14/E16: category search and hub empty-state defects.
+ *
  * W8-B5 / WI-6 — the three PURE `/community` defects (exit rows E11, E14, E16).
  *
  * Kept in its own file rather than appended to community-view.test.ts: that

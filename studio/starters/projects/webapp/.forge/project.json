@@ -9,7 +9,7 @@
   "testProcess": {
     "local": { "cmd": ["npm", "test"] },
     "ci": { "cmd": ["npm", "run", "ci"] },
-    "acceptance": { "match": "npm run acceptance", "required": false, "requiresEnv": [] }
+    "acceptance": { "match": "npm run acceptance", "requiresEnv": [] }
   },
   "skills": ["webapp-conventions"],
   "kb": "{{NAME}}"

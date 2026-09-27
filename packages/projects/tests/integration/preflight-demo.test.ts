@@ -181,6 +181,23 @@ test('DEMO (ADVISORY): demoProcess with capture + verify passes', () => {
   }
 });
 
+// forge-mfv5.2.8 — DEMO's advice names the declaration as the cycle input.
+test('DEMO (ADVISORY): a too-thin demoProcess is told to declare capture + verify steps — the declaration is the cycle input, never "machinery"', () => {
+  const p = happyProject();
+  try {
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({ testProcess: { local: { cmd: ['vitest', 'run'] } }, demoProcess: [{ kind: 'verify', text: 'x' }] }),
+    );
+    const c = clause(runPreflight(p.dir, { forgeRoot: p.forgeRoot }), 'DEMO');
+    assert.equal(c.pass, false);
+    assert.match(c.detail, /sole cycle-time demo input/);
+    assert.doesNotMatch(c.detail, /machinery|demo-design skill/);
+  } finally {
+    p.cleanup();
+  }
+});
+
 // DEMO-SKILL's meaning (forge-mfv5.2.2): the demo DECLARATION drives at least
 // one checkpoint — never whether any generated file exists. `existsSync` of
 // the composer at `.forge/skills/demo-design/SKILL.md` plays no part any
@@ -290,7 +307,7 @@ test('DEMO-ALIGN: capture referencing a test-process token (or test-evidence ele
   const { dir, forgeRoot, cleanup } = happyProject();
   try {
     writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({
-      testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance', required: false } },
+      testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance' } },
       demoProcess: [
         { kind: 'capture', text: 'Capture the acceptance run output.' },
         { kind: 'capture', text: 'Anything at all', element: 'test-evidence' },

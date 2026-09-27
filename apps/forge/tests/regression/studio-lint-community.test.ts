@@ -1,4 +1,6 @@
 /**
+ * PR #80 — R3-07 T2 round 2: lintCommunityIndex was unit-tested but never wired into runStudioLint.
+ *
  * REAL-ENTRY-POINT acceptance test for R3-07's `lintCommunityIndex` — driven
  * through the ACTUAL `forge studio lint` entry point (`runStudioLint`,
  * `apps/forge/studio-lint.ts`), not a hand-rolled/direct call to

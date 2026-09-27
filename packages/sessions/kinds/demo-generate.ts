@@ -5,10 +5,10 @@
  * here, why the DAG is one-way, and why the agent spec arrives as a parameter:
  * `packages/sessions/design.md` §"The demo kind is three modules".
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { resolveGuardedPath } from '@forge/kernel';
+import { guardedReadFile, resolveGuardedPath } from '@forge/kernel';
 import { runAgentTurn } from '../interactive-session.ts';
 import type { KindTurnInput, KindTurnPlumbing } from './kind-turn.ts';
 // Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
@@ -19,16 +19,16 @@ import { listDemoElements } from '@forge/library';
 import type { DemoStep, DemoElementDefinition } from '@forge/contracts';
 import { loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
 import {
-  DEMO_FRAGMENTS_REL_DIR,
+  DEMO_DECLARATION_REL_PATH,
   DEMO_KIND_DIR,
   DEMO_HTML_REL_PATH,
-  DEMO_SKILL_REL_PATH,
   FORGE_DEMO_CSS_REL_PATH,
   GENERATIONS_DIRNAME,
+  GENERATION_DECLARATION_FILENAME,
   GENERATION_DEMO_FILENAME,
   GENERATION_META_FILENAME,
-  GENERATION_SKILL_FILENAME,
   guardedGenerationWritePath,
+  listExistingGenerationNumbers,
   type DemoBuilderStatus,
   type RunDemoBuilderTurnResult,
 } from './demo-session-store.ts';
@@ -50,12 +50,14 @@ export const DEMO_READ_TOOLS: readonly string[] = ['Read', 'Glob', 'Grep'];
 export const DEMO_WRITE_PASS_DENIED: readonly string[] = [
   'Bash', 'Glob', 'Grep', 'TodoWrite', 'LSP', 'TaskOutput', 'Skill',
 ];
-/** `forge-a9o9`/7.3.6 (T1 ruling 703) — the two directories this pass exists to
- *  fill. `Read` is PERMITTED inside them and refused everywhere else, which is
- *  why it left the deny list above. §15.397: a deny that makes a required
+/** `forge-a9o9`/7.3.6 (T1 ruling 703) — the directory this pass exists to
+ *  fill (bead forge-mfv5.2.8 took `.forge/skills/demo-design` off it: the
+ *  pass writes the declaration draft beside the sample, and no SKILL.md).
+ *  `Read` is PERMITTED inside it and refused everywhere else, which is why it
+ *  left the deny list above. §15.397: a deny that makes a required
  *  protocol step impossible is a trap, not a fence — S1 run 6 measured the
  *  trap, and the measurement is in `session-write-fence.ts`'s read-root note. */
-export const DEMO_PASS_ROOTS: readonly string[] = ['.forge/demo', '.forge/skills/demo-design'];
+export const DEMO_PASS_ROOTS: readonly string[] = ['.forge/demo'];
 export const DEMO_GROUND_PASS_MAX_TURNS = 16;
 
 export async function runGenerateStep(args: {
@@ -73,27 +75,15 @@ export async function runGenerateStep(args: {
   // never cleared it, so one revise kept steering every later generation.
   return await plumbing.withOperatorFeedback(async (feedback) => {
 
-  // Composition: the demoProcess may reference demo-element kinds from the forge
-  // library. When it does, the demo is COMPOSED of project-side element-skills the
-  // agent authors (per the library's skill-creating-skill generators) + a composer
-  // that runs them in order. `targetElement` narrows the turn to ONE element.
-  const steps = loadDemoSteps(status.project_repo_path);
+  // Bead forge-mfv5.2.8 — the turn's output IS the declaration: the
+  // `demoProcess` steps a lock writes into `.forge/project.json`. The agent
+  // revises the current declaration (the newest generation's draft, else the
+  // project's declared steps); `targetElement` narrows the revision to the
+  // steps bound to one demo-element kind from the forge library.
   const byId = new Map(listDemoElements(forgeRoot).map((e) => [e.id, e]));
-  const elementSteps = steps.filter(
-    (s): s is DemoStep & { element: string } => typeof s.element === 'string' && byId.has(s.element),
-  );
   const target = status.targetElement && byId.has(status.targetElement) ? status.targetElement : undefined;
-  const composed = elementSteps.length > 0;
-
-  // ADR-024 (R4-23): the turn id selects the SAME branch this runner has always
-  // taken — `target` ⇒ per-element, `composed` ⇒ multi-element, else the legacy
-  // monolithic generator — but the task instructions for that branch now live in
-  // skills/demo-builder/SKILL.md as a `<!-- turn: ... -->` section rather than
-  // being hand-composed here; this function keeps only the branch selection + data.
-  const turnId = target ? 'generate-element' : composed ? 'generate-composed' : 'generate-legacy';
-  const skill = loadSkillTurnPrompt({ name: 'demo-builder', turnId, skillPromptPath: input.skillPromptPath, root: forgeRoot });
-
-  const taskLines = demoTaskLines({ status, target, composed, elementSteps, byId });
+  const skill = loadSkillTurnPrompt({ name: 'demo-builder', turnId: 'generate-declaration', skillPromptPath: input.skillPromptPath, root: forgeRoot });
+  const taskLines = demoTaskLines({ steps: currentDeclaration(input.projectRoot, input.sessionId, status), target, byId });
 
   const prompt = [
     skill,
@@ -108,7 +98,7 @@ export async function runGenerateStep(args: {
     '',
     ...taskLines,
     '',
-    '## Forge demo base stylesheet — the demo skill(s) must inline this verbatim into the HTML they emit',
+    '## Forge demo base stylesheet — inline this verbatim into the sample DEMO.html',
     '```css',
     baseCss,
     '```',
@@ -158,8 +148,8 @@ export async function runGenerateStep(args: {
   // Bash, Write, Edit]`, true of the KIND and false of this pass. On S1 run 5
   // the agent believed it over four failing tool calls — TaskOutput, LSP, Glob,
   // Skill — before writing one of its two deliverables and ending the turn.
-  // The two directories this pass fills, created before the turn so the fence
-  // can realpath them — a root that will not resolve now DENIES rather than
+  // The directory this pass fills, created before the turn so the fence can
+  // realpath it — a root that will not resolve now DENIES rather than
   // ungates (see `makeWriteRootCanUseTool`'s fail-closed note).
   // GUARDED, because `project_repo_path` is request-derived at the bridge and
   // `check-request-path-sinks` caught the bare `join` on its first gate — the
@@ -179,12 +169,12 @@ export async function runGenerateStep(args: {
       'tool list in the frontmatter above is this KIND across all its turns, not what you hold now.',
       'Do not spend calls hunting for another way to read — the reading is done and its findings are',
       'below. Author BOTH deliverables from them, leaving the captured output as the marked',
-      'placeholders the grounding pass replaces. That pass has Bash to run the generator; you do not,',
-      'so a sample you cannot run is expected of you and a sample you invent is not.',
+      'placeholders the grounding pass replaces. That pass has Bash to run the declared commands; you',
+      'do not, so a sample you cannot run is expected of you and a sample you invent is not.',
       '',
-      'WRITE `.forge/demo/DEMO.html` FIRST, in one call. It does not exist yet, and a path that does',
-      'not exist needs no prior Read. Then write the SKILL. You may Read inside `.forge/demo/` and',
-      '`.forge/skills/demo-design/` if you need to re-write a file you already created — nowhere else.',
+      `WRITE \`${DEMO_DECLARATION_REL_PATH}\` FIRST, in one call, then \`${DEMO_HTML_REL_PATH}\`. Neither`,
+      'exists yet, and a path that does not exist needs no prior Read. You may Read inside',
+      '`.forge/demo/` if you need to re-write a file you already created — nowhere else.',
       '',
       '## Findings from your read turn', findings.trim() || '_(none recorded)_',
     ].join('\n'),
@@ -192,14 +182,11 @@ export async function runGenerateStep(args: {
     DEMO_WRITE_PASS_MAX_TURNS, DEMO_WRITE_PASS_DENIED, undefined, passRoots,
   );
 
-  // The required generator skill is the per-element skill when iterating one
-  // element, else the composer/demo-design skill; the sample DEMO.html is always
-  // the reviewable artifact.
+  // The declaration draft and the sample it renders are the two deliverables.
   const demoPath = join(status.project_repo_path, DEMO_HTML_REL_PATH);
-  const requiredSkillRel = target ? elementSkillRelPath(target) : DEMO_SKILL_REL_PATH;
-  const requiredSkillPath = join(status.project_repo_path, requiredSkillRel);
+  const declarationPath = join(status.project_repo_path, DEMO_DECLARATION_REL_PATH);
   const missing = [
-    !existsSync(requiredSkillPath) ? requiredSkillRel : null,
+    !existsSync(declarationPath) ? DEMO_DECLARATION_REL_PATH : null,
     !existsSync(demoPath) ? DEMO_HTML_REL_PATH : null,
   ].filter(Boolean);
   if (missing.length > 0) {
@@ -215,7 +202,7 @@ export async function runGenerateStep(args: {
       '',
       `Project repo (your working directory): ${status.project_repo_path}`,
       '',
-      `The two deliverables already exist: ${requiredSkillRel} and ${DEMO_HTML_REL_PATH}.`,
+      `The two deliverables already exist: ${DEMO_DECLARATION_REL_PATH} and ${DEMO_HTML_REL_PATH}.`,
     ].join('\n'),
     agentSpec.allowedTools,
     DEMO_GROUND_PASS_MAX_TURNS,
@@ -225,19 +212,25 @@ export async function runGenerateStep(args: {
     ? null
     : (writePass.costUsd ?? 0) + (groundPass.costUsd ?? 0);
 
-  // R4-16: snapshot this turn's verified DEMO.html + generator skill into
+  // R4-16: snapshot this turn's verified DEMO.html + declaration draft into
   // <sessionDir>/generations/<iteration>/ (D4/D5) — byte copies (Buffer, not
   // utf8 decode/re-encode) so a later lock-time restore is byte-identical.
   // Snapshots ACCUMULATE: this never touches an earlier generation's dir.
   // SEC-04 leaf: each snapshot leaf under <sessionDir>/generations/<n>/ is
   // written through the guard (leaf included) so a symlinked snapshot slot
-  // cannot escape; the demoPath/skillPath READS are repo-side (project-repo
-  // root) byte copies (Buffer) preserved for byte-identical lock-time restore.
+  // cannot escape; the demoPath/declarationPath READS are repo-side
+  // (project-repo root) byte copies.
   const genSegs = [DEMO_KIND_DIR, input.sessionId, GENERATIONS_DIRNAME, String(status.iteration)];
   const demoSnapPath = guardedGenerationWritePath(input.projectRoot, [...genSegs, GENERATION_DEMO_FILENAME], 'generation DEMO.html snapshot');
   writeFileSync(demoSnapPath, readFileSync(demoPath));
-  const skillSnapPath = guardedGenerationWritePath(input.projectRoot, [...genSegs, GENERATION_SKILL_FILENAME], 'generation SKILL.md snapshot');
-  writeFileSync(skillSnapPath, readFileSync(requiredSkillPath));
+  const declarationSnapPath = guardedGenerationWritePath(input.projectRoot, [...genSegs, GENERATION_DECLARATION_FILENAME], 'generation declaration snapshot');
+  writeFileSync(declarationSnapPath, readFileSync(declarationPath));
+  // The draft LEAVES the repo once snapshotted (forge-mfv5.2.8): left there it
+  // would be committed beside `demoProcess` as a second declared source. The
+  // lock writes the chosen generation's declaration into project.json.
+  const draft = resolveGuardedPath(status.project_repo_path, DEMO_DECLARATION_REL_PATH.split('/'));
+  if (!draft.ok) throw new Error(`demo-builder runner: ${DEMO_DECLARATION_REL_PATH} does not resolve beneath ${status.project_repo_path}`);
+  rmSync(draft.realPath, { force: true });
   // feedback.md at TURN END (D8) — records what THIS generation consumed.
   // Before the M4 ruling-60 port this re-read the file, on the premise that
   // "the runner never clears it"; the port falsifies that premise (the driver
@@ -249,8 +242,6 @@ export async function runGenerateStep(args: {
     createdAt: new Date().toISOString(),
     feedback,
     targetElement: target ?? null,
-    composed,
-    skillRelPath: requiredSkillRel,
   };
   const metaSnapPath = guardedGenerationWritePath(input.projectRoot, [...genSegs, GENERATION_META_FILENAME], 'generation meta.json');
   writeFileSync(metaSnapPath, `${JSON.stringify(generationMeta, null, 2)}\n`);
@@ -258,84 +249,66 @@ export async function runGenerateStep(args: {
   writeStatus({ ...status, phase: 'awaiting-review' });
   logger.emit({
     initiative_id: initiativeId, phase: 'demo', skill: 'demo-builder-runner',
-    event_type: 'log', input_refs: [], output_refs: [requiredSkillPath, demoPath],
+    event_type: 'log', input_refs: [], output_refs: [declarationSnapPath, demoPath],
     ...(costUsd !== null ? { cost_usd: costUsd } : {}),
-    message: `demo-generated (iteration ${status.iteration}${target ? `, element=${target}` : composed ? ', composed' : ''}, awaiting review)`,
-    metadata: { session_id: input.sessionId, iteration: status.iteration, target_element: target ?? null, composed },
+    message: `demo-generated (iteration ${status.iteration}${target ? `, element=${target}` : ''}, awaiting review)`,
+    metadata: { session_id: input.sessionId, iteration: status.iteration, target_element: target ?? null },
   });
 
-  return { phase: 'awaiting-review', wrote: [requiredSkillPath, demoPath], demoPath };
+  return { phase: 'awaiting-review', wrote: [declarationSnapPath, demoPath], demoPath };
   });
 }
 
-function describeDemoProcess(projectRepoPath: string): string {
-  let steps;
-  try {
-    steps = loadProjectConfig(projectRepoPath)?.demoProcess;
-  } catch {
-    steps = undefined;
+/**
+ * The declaration this turn revises: the newest earlier generation's draft
+ * (a revision builds on what the operator just reviewed), else the steps the
+ * project already declares. A draft that no longer parses is shown as nothing
+ * rather than guessed at — the project's own steps stand in for it.
+ */
+function currentDeclaration(projectRoot: string, sessionId: string, status: DemoBuilderStatus): DemoStep[] {
+  const earlier = listExistingGenerationNumbers(projectRoot, sessionId).filter((n) => n < status.iteration);
+  const latest = earlier.length > 0 ? earlier[earlier.length - 1] : undefined;
+  if (latest !== undefined) {
+    const raw = guardedReadFile(projectRoot, [DEMO_KIND_DIR, sessionId, GENERATIONS_DIRNAME, String(latest), GENERATION_DECLARATION_FILENAME]);
+    try {
+      const parsed: unknown = raw === null ? null : JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed as DemoStep[];
+    } catch { /* an unparsable draft falls through to the declared steps */ }
   }
-  if (!steps || steps.length === 0) return '_(no demo process configured — design the skill around a representative initiative\'s before/after changes; ground the sample in a real recent change)_';
-  return steps.map((s, i) => `${i + 1}. [${s.kind}] ${s.text}`).join('\n');
-}
-
-function loadDemoSteps(projectRepoPath: string): DemoStep[] {
   try {
-    return loadProjectConfig(projectRepoPath)?.demoProcess ?? [];
+    return loadProjectConfig(status.project_repo_path)?.demoProcess ?? [];
   } catch {
     return [];
   }
 }
 
-/** The project-side, concrete element-skill the generator authors for an element kind. */
-function elementSkillRelPath(id: string): string {
-  return `.forge/skills/demo/${id}/SKILL.md`;
+/** One library element as the declaration's author needs it: what it is and
+ *  what per-step config it takes. */
+function elementLine(e: DemoElementDefinition): string {
+  return `- \`${e.id}\` (${e.name}, phase: ${e.phase}) — ${e.description} Config: ${e.configHint}`;
 }
 
-/** The generator bodies for a set of elements (the skill-creating-skill prompts). */
-function elementGeneratorLines(els: DemoElementDefinition[]): string[] {
-  const out: string[] = ['', '### Element generators — author each project-side element-skill per these'];
-  for (const e of els) {
-    out.push('', `#### ${e.id} (${e.name}, phase: ${e.phase})`, e.body);
-  }
-  return out;
-}
-
-/** The task-specific instruction block: per-element iteration, composed, or legacy.
- * Exported (read-only) for the R4-07 descriptor-parity test — the builder and the
- * demo agent must consume the same demoProcess descriptor in the same step order. */
+/** The task-specific data block: the declaration to revise, the element
+ * library its steps may bind to, and — when narrowed — the one element whose
+ * steps this turn revises. Exported (read-only) for the R4-07 descriptor-parity
+ * test — the builder and the integrate band must read the same demoProcess
+ * descriptor in the same step order. */
 export function demoTaskLines(args: {
-  status: DemoBuilderStatus;
+  steps: readonly DemoStep[];
   target?: string;
-  composed: boolean;
-  elementSteps: Array<DemoStep & { element: string }>;
   byId: Map<string, DemoElementDefinition>;
 }): string[] {
-  const { status, target, composed, elementSteps, byId } = args;
-  if (target) {
-    const el = byId.get(target)!;
-    return [
-      `## Iterate ONE element: '${target}' (${el.name})`,
-      `Target element skill path: ${elementSkillRelPath(target)}`,
-      `Target element fragment path: ${DEMO_FRAGMENTS_REL_DIR}/${target}.html`,
-      ...elementGeneratorLines([el]),
-    ];
-  }
-  if (composed) {
-    const usedEls = [...new Map(elementSteps.map((s) => [s.element, byId.get(s.element)!])).values()];
-    const order = elementSteps
-      .map((s, i) => `  ${i + 1}. [${s.kind}] ${s.element}${s.text ? ` — ${s.text}` : ''}`)
-      .join('\n');
-    return [
-      '## This demo is COMPOSED of demo elements, run in this order:',
-      order,
-      ...elementGeneratorLines(usedEls),
-    ];
-  }
-  // Legacy / no elements configured — the single monolithic generator.
+  const { steps, target, byId } = args;
+  const current = steps.length > 0
+    ? ['```json', JSON.stringify(steps, null, 2), '```']
+    : ['_(none declared yet — author the declaration from a representative recent change)_'];
   return [
-    'Configured demo process (capture / verify / present steps to bake into the skill):',
-    describeDemoProcess(status.project_repo_path),
+    '## The current demo declaration (the steps you revise)',
+    ...current,
+    '',
+    '## Demo elements a step may bind to (`element`)',
+    ...(byId.size > 0 ? [...byId.values()].map(elementLine) : ['_(the library holds no elements — leave `element` off)_']),
+    ...(target ? ['', `## Revise ONLY the steps bound to element '${target}' — carry every other step over unchanged`] : []),
   ];
 }
 

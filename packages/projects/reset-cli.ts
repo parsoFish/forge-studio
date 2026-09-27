@@ -34,11 +34,13 @@ import {
 
 function printDriftReport(drift: DriftReport): void {
   console.log(`project: ${drift.projectId}`);
-  console.log(`app type: ${drift.appType ?? '(unresolved — no starter matched; regeneration limited to what is already declared)'}`);
+  console.log(`app type: ${drift.appType ?? drift.appTypeNote ?? '(unresolved — no starter matched; regeneration limited to what is already declared)'}`);
   console.log('');
   console.log('drift report:');
   for (const row of drift.rows) {
     console.log(`  [${row.action}] ${row.section}${row.reason === undefined ? '' : ` — ${row.reason === 'hand-authored' ? 'matches no starter; this is yours' : 'the matched starter declares nothing here'}`}`);
+    console.log(`      purpose: ${row.purpose}`);
+    if (row.verdict) console.log(`      verdict: ${row.verdict.pass ? 'PASS' : 'FAIL'} — ${row.verdict.detail}`);
     if (row.action !== 'unchanged') {
       console.log(`      before: ${JSON.stringify(row.before)}`);
       console.log(`      after:  ${JSON.stringify(row.after)}`);

@@ -335,8 +335,6 @@ export function writeGeneration(
     createdAt?: string;
     feedback?: string | null;
     targetElement?: string | null;
-    composed?: boolean;
-    skillRelPath?: string;
     files?: Record<string, string>;
     metaRaw?: string;
     extraMetaFields?: Record<string, unknown>;
@@ -344,7 +342,7 @@ export function writeGeneration(
 ): void {
   const dir = join(sessionDir, 'generations', String(n));
   mkdirSync(dir, { recursive: true });
-  const files = opts.files ?? { 'DEMO.html': `<html>generation ${n}</html>`, 'SKILL.md': `# skill ${n}` };
+  const files = opts.files ?? { 'DEMO.html': `<html>generation ${n}</html>`, 'demo-process.json': `[{"kind":"capture","text":"Run \`step ${n}\`."}]` };
   for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body, 'utf8');
   if (opts.metaRaw !== undefined) {
     writeFileSync(join(dir, 'meta.json'), opts.metaRaw, 'utf8');
@@ -355,8 +353,6 @@ export function writeGeneration(
     createdAt: opts.createdAt ?? '2026-08-06T10:00:00.000Z',
     feedback: opts.feedback === undefined ? null : opts.feedback,
     targetElement: opts.targetElement === undefined ? null : opts.targetElement,
-    composed: opts.composed ?? false,
-    skillRelPath: opts.skillRelPath ?? '.forge/skills/demo-design/SKILL.md',
     ...(opts.extraMetaFields ?? {}),
   };
   writeFileSync(join(dir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf8');

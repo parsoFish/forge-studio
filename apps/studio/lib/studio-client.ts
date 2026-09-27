@@ -1211,13 +1211,13 @@ export async function deleteAgent(slug: string): Promise<{ ok: boolean; error?: 
 export async function saveProject(
   id: string,
   body: Record<string, unknown>,
-): Promise<{ ok: boolean; error?: string; demoDesignNeeded?: boolean }> {
+): Promise<{ ok: boolean; error?: string; declarationChanged?: boolean }> {
   const r = await studioPut(`/api/studio/projects/${encodeURIComponent(id)}`, body);
   return {
     ok: r.ok,
     error: r.error,
     // F5: set when demoProcess was saved — the demo-design skill should be run.
-    demoDesignNeeded: r.data?.demoDesignNeeded === true,
+    declarationChanged: r.data?.declarationChanged === true,
   };
 }
 

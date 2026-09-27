@@ -48,8 +48,9 @@ import { acquireBrainWriteLease, BrainWriteLeaseContentionError } from '@forge/k
 import { getPaths, type QueuePaths } from '@forge/flows';
 import { emitReflectionLost, runReflectorBrainWrites, listFreshThemes } from './reflector-brain-writes.ts';
 
-// The live turn/budget caps (60 turns / $1.50 — bench 5-fixture median was
-// ~$0.74, the cap gives 2x headroom) are DECLARED DATA now: `budgets.maxTurns`
+// The live turn/budget caps (60 turns / $3.00 — raised from $1.50 by
+// forge-8vfn.8.1.37 / ruling 1770 row 147, after a real S10 run hit
+// error_max_budget_usd at $1.5376) are DECLARED DATA now: `budgets.maxTurns`
 // / `budgets.maxBudgetUsd` in skills/reflector/SKILL.md, resolved by
 // `runAgent`'s one-shot path (R4-01-F2, ADR-039).
 
@@ -243,6 +244,14 @@ export async function runReflector(
     mode: reflectMode,
   });
 
+  // forge-8vfn.8.1.37 / ruling 1770 (row 147): user-questions.md may already
+  // be on disk by the time the SDK run is lost below (budget/turn exhaustion,
+  // crash, or a failed brain-gate) — the agent writes it before its result
+  // message arrives. Resolve the paths up front so the lost-reflection branch
+  // can still derive the .json the operator's /reflect screen reads.
+  const userQuestionsPath = resolve(cycleLogDir, 'user-questions.md');
+  const userQuestionsJsonPath = resolve(cycleLogDir, 'user-questions.json');
+
   // forge-ler4 — one brain-writing turn at a time (design.md "Brain-write
   // lease"). Covers the SDK spawn plus its post-exit brain writes.
   const acquireLease = deps.acquireBrainWriteLease ?? acquireBrainWriteLease;
@@ -270,7 +279,15 @@ export async function runReflector(
   } finally {
     await releaseLease();
   }
-  if (!brainWrites.ok) return { reflection_status: 'failed', lint_status: 'skipped' };
+  if (!brainWrites.ok) {
+    // forge-8vfn.8.1.37 / ruling 1770: a lost reflection must not also lose
+    // an already-written user-questions.md. An absent .md still writes
+    // nothing here, matching the pre-fix contract for that case.
+    if (existsSync(userQuestionsPath)) {
+      deriveUserQuestionsJson(userQuestionsPath, userQuestionsJsonPath, reflectMode);
+    }
+    return { reflection_status: 'failed', lint_status: 'skipped' };
+  }
   const { costUsd, durationMs, resultSubtype, retention, toolUseSummary } = brainWrites;
 
   // S6A — brain-lint trigger. Run AFTER themes + archive are written (and after
@@ -293,8 +310,6 @@ export async function runReflector(
   // post-exit so the in-UI /reflect screen has an AskUserQuestion-shaped array
   // to render. Best-effort: a missing or unparse-able .md results in an empty
   // array (no questions shown), which is acceptable (the .md is still readable).
-  const userQuestionsPath = resolve(cycleLogDir, 'user-questions.md');
-  const userQuestionsJsonPath = resolve(cycleLogDir, 'user-questions.json');
   deriveUserQuestionsJson(userQuestionsPath, userQuestionsJsonPath, reflectMode);
 
   // REF-4: the brain index is regenerated as the KB-health `ingest` builtin

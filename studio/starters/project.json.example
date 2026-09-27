@@ -67,13 +67,16 @@
     //   "timeoutMs": 1200000
     // }
 
-    // acceptance (optional, C7 — HARD only when required=true): declare this
+    // acceptance (optional, C7 — HARD for the change classes that require it:
+    // code, config and infra; advisory for docs): declare this
     // ONLY if the project has a live/external acceptance tier (e.g. a
     // Terraform provider hitting a real API). Omit it entirely otherwise.
     //   match       — substring identifying a live-acceptance gate in a WI's
     //                 quality_gate_cmd (e.g. "TF_ACC=1").
-    //   required    — when true, the PM phase hard-fails a cycle unless >= 1
-    //                 WI carries a matching live gate.
+    //   (no `required` key: whether the PM phase hard-fails a cycle unless
+    //                 >= 1 WI carries a matching live gate is the initiative's
+    //                 change class's `acceptance` column — the key is retired
+    //                 and refused at load.)
     //   requiresEnv — every env var a matching live gate needs to actually
     //                 run against the live system (e.g.
     //                 ["TF_ACC","AZDO_ORG_SERVICE_URL"]). These are looked up
@@ -83,7 +86,6 @@
     //                 false pass).
     // , "acceptance": {
     //   "match": "<live-gate token, e.g. TF_ACC=1>",
-    //   "required": true,
     //   "requiresEnv": ["<ENV_VAR_1>", "<ENV_VAR_2>"]
     // }
   },

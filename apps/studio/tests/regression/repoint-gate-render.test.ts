@@ -1,4 +1,6 @@
 /**
+ * PR #206 — W8-A3: a repoint control stayed live beside its own confirmation and could re-post the unconfirmed request.
+ *
  * W8-A3 — `RepointGate`, the structural cure for the defect adversarial review
  * found FOUR times on four different controls across three fix rounds:
  *

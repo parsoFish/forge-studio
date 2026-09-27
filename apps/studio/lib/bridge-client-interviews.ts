@@ -271,9 +271,6 @@ export type DemoSessionSummary = {
   prompt: string;
   /** Bridge-relative URL to the generated DEMO.html, or null until generated. */
   demoUrl: string | null;
-  /** Element ids that have a rendered fragment in the repo
-   *  (.forge/demo/fragments/<id>.html) — each viewable independently. */
-  fragments: string[];
   /** Milliseconds since the last sign of life (heartbeat mtime or status.updated_at).
    *  Use this to detect a stalled runner. Derived from `lifecycle.idleMs`
    *  (W8-A2, ON-7 defect 1). */
@@ -282,11 +279,6 @@ export type DemoSessionSummary = {
    *  comment; the same wiring for `GET /api/demo-builder/sessions`. */
   lifecycle?: SessionLifecycle;
 };
-
-/** Bridge-relative URL serving one element's rendered fragment for a demo session. */
-export function demoFragmentUrl(project: string, sessionId: string, element: string): string {
-  return `/api/demo-builder/fragment/${encodeURIComponent(project)}/${encodeURIComponent(sessionId)}/${encodeURIComponent(element)}`;
-}
 
 /** R4-16: bridge-relative URL serving one file out of a specific demo
  *  generation snapshot (`GET /api/demo-builder/generation/<project>/<sid>/

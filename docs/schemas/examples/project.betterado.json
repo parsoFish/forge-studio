@@ -1,7 +1,7 @@
 {
   "$comment": "forge per-project config. The quality gate is single-sourced from .forge/quality_gate_cmd (preflight AND loadProjectConfig read the sidecar); this file omits testProcess.local for that reason — see $testProcess_comment. The gate is the FAST, deterministic, creds-free OFFLINE unit suite scoped to the fork's net-new packages (release + taskagent) — NOT the live TF_ACC acceptance tests (those need a PAT + are 120m-timeout, so they run as sharp per-WI gates / operator confirmation, never as the project default). This pairing is the project-scoped fix for the 2026-05-23 dogfood false-pass (brain: themes/2026-05-23-dogfood-cycle-false-pass-gate.md).",
 
-  "$testProcess_comment": "R1-03-F1: the typed test-process contract object. Schema marks testProcess.local required, but THIS file intentionally OMITS it: the fast per-WI gate is single-sourced from the `.forge/quality_gate_cmd` sidecar (`go test -tags all -count=1 ./azuredevops/internal/service/servicehook/...`). loadProjectConfig folds the sidecar into testProcess.local.cmd before validation, so the merged/loaded config always has it — mdtoc (the other example) shows the inline `local` form instead. `ci` is the full CI verification (mirrors GitHub golint.yml: gofmt-check + whole-module `go test` + golangci-lint v2 + terrafmt-check), with `unsetEnv: [\"TF_ACC\"]` stripping the live-test trigger so the CI mirror never runs the whole live suite (contract A3). `acceptance` is the live-acceptance tier (contract C7): `required` is ADVISORY (false) — the PM adds a live-acceptance WI only when the initiative actually ships or changes live ADO behaviour; `requiresEnv` lists every var the acceptance test's PreCheck demands, so a WI whose gate matches `match` but lacks one of these ERRORS instead of silently skipping (`ok pkg 0.00s`).",
+  "$testProcess_comment": "R1-03-F1: the typed test-process contract object. Schema marks testProcess.local required, but THIS file intentionally OMITS it: the fast per-WI gate is single-sourced from the `.forge/quality_gate_cmd` sidecar (`go test -tags all -count=1 ./azuredevops/internal/service/servicehook/...`). loadProjectConfig folds the sidecar into testProcess.local.cmd before validation, so the merged/loaded config always has it — mdtoc (the other example) shows the inline `local` form instead. `ci` is the full CI verification (mirrors GitHub golint.yml: gofmt-check + whole-module `go test` + golangci-lint v2 + terrafmt-check), with `unsetEnv: [\"TF_ACC\"]` stripping the live-test trigger so the CI mirror never runs the whole live suite (contract A3). `acceptance` is the live-acceptance tier (contract C7): whether an initiative must carry a live-acceptance WI is its change class's `acceptance` column (bead forge-mfv5.3.5: required for code, config and infra, advisory for docs), not a project flag; `requiresEnv` lists every var the acceptance test's PreCheck demands, so a WI whose gate matches `match` but lacks one of these ERRORS instead of silently skipping (`ok pkg 0.00s`).",
   "testProcess": {
     "ci": {
       "cmd": ["bash", "-c", "make test && golangci-lint run ./azuredevops/... && make terrafmt-check"],
@@ -10,7 +10,6 @@
     },
     "acceptance": {
       "match": "acceptancetests",
-      "required": false,
       "requiresEnv": ["TF_ACC", "AZDO_ORG_SERVICE_URL", "AZDO_PERSONAL_ACCESS_TOKEN"]
     }
   },

@@ -1,4 +1,6 @@
 /**
+ * PR #892 — operator item 87: community discovery's refresh reported discovered rows but never persisted them to registry.yaml.
+ *
  * Operator item 87 (T1 ledger 1216) — community discovery MAY WRITE to
  * `registry.yaml`. Ruling 566's "proposes, never writes" is superseded: a hub
  * chip's count must reflect REAL rows, not a proposal nobody has acted on.

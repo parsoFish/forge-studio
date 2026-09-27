@@ -79,7 +79,6 @@
     },
     "acceptance": {
       "match": "acceptance",
-      "required": true,
       "requiresEnv": []
     }
   }

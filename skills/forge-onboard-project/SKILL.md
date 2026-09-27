@@ -79,6 +79,8 @@ section of the project contract — never
 bare `! cmd` asserts (errexit-exempt: their failures silently don't fail the
 gate).
 
+**When the natural whole-suite command is red at HEAD by design** — a partly-red suite, e.g. a Python project's `pytest tests/` failing on permanently-red TDD stubs unrelated to any change under review — never declare it: C1 requires green at HEAD, not merely a plausible shape. Measure what CI itself actually runs (`.github/workflows/*` or the project's CI config) and propose THAT narrower command if it measures green; failing that, scope to the package/test files genuinely under change and re-measure. If no scope measures green, say so plainly and ask the operator for the gate — never accept a whole-suite command that can never pass.
+
 ### Step 5 — Hermetic change-capture (C2)
 `.gitignore` so `git add -A` captures only intended source: forge scratch (the
 exact path list — `SCRATCH_PATHS` — is `forge preflight`'s C2 check, ADR 017),
@@ -136,29 +138,30 @@ never that any generated file exists. **Confirm `forge preflight <project>`
 reports `DEMO-SKILL` ✓ — i.e. at least one capture step names a drivable
 command — before considering onboarding done.**
 
-Optionally, run the `demo-builder` session afterwards to author a presentation
-composer (`.forge/skills/demo-design/SKILL.md`) that renders a rich,
-Forge-styled HTML view of each initiative's captured evidence for the Studio
-demo page — it assesses the right presentation form (portal/browser
-screenshot opportunistically when a renderable surface exists, harness
-metrics when a measurement command exists, live external API round-trip when
-the code calls a live system, JSON-diff/notes-only by default). That composer
-is presentation guidance ONLY, never a cycle input — bead forge-mfv5.2.8
-tracks folding the session's own output into the `demoProcess` declaration
-more directly.
+Optionally, run the `demo-builder` session afterwards to author the declaration
+interactively: each generation drafts the `demoProcess` steps and renders a
+real before/after sample by running them, and locking one writes those steps
+into `.forge/project.json` — refused, with the reason, unless they pass the same
+`DEMO-SKILL` rule (bead forge-mfv5.2.8). It writes no demo skill or composer.
 
 ### Step 11 — External-resource model (C7, only if needed)
 If behaviour can only be verified live: a creds-free in-loop gate (mocks/in-process)
 plus a confirmation layer (create→confirm→destroy, prefixed/randomized names,
 orphan sweep, creds out-of-band → env). Make the per-WI testing contract structural
-via three `.forge/project.json` fields — `testProcess.acceptance.{match,required,
+via three `.forge/project.json` fields — `testProcess.acceptance.{match,
 requiresEnv}`, `standing_work_item_acs`, `testProcess.ci.unsetEnv` — each field's
 exact contract is `docs/schemas/project-config.schema.json` (C7, ADR 017 amendment
-2026-05-31).
+2026-05-31). Do not write a `required` key: whether an initiative must carry a
+live-acceptance WI is its change class's `acceptance` column (ADR 051), and the
+key is refused at load.
 Compose the project linter into the live-acc per-WI gate (its gate is the acceptance
-test, which omits lint). Enforce C9 on the live tier: UUID-prefixed resources,
-teardown on success AND failure, a `PreCheck` that `t.Fatal`s on absent creds, a
-read-back assertion on every written field.
+test, which omits lint). Enforce C9 on the live tier: resources named under the
+`FORGE_RESOURCE_PREFIX` env var forge supplies to the gate command (never a
+project-invented prefix — forge-mfv5.3.7, so two initiatives' live tests can
+run in parallel without colliding), teardown on success AND failure (the
+project's sweep deletes only ITS OWN `FORGE_RESOURCE_PREFIX`, never a
+bare-pattern sweep), a `PreCheck` that `t.Fatal`s on absent creds, a read-back
+assertion on every written field.
 
 ### Step 11.5 — Release process & CI release workflow (C10, only if the project releases)
 If the project ships versioned releases (a library, CLI, provider, or any package

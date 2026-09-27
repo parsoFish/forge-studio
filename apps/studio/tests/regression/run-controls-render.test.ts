@@ -1,4 +1,6 @@
 /**
+ * PR #206 — W8-A3 WI-3 (flows-28/49/23): a failed/queued run had no controls, no Resume-vs-Requeue disclosure, no scheduler card.
+ *
  * W8-A3 WI-3 — `RunControls` rendered, and its composition into the run detail
  * page (`flows-28`, `flows-49`, `flows-23`).
  *

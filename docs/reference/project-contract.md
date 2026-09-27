@@ -391,7 +391,7 @@ remote exists.
 
 ---
 
-### C7 — External-resource model *(HARD when `testProcess.acceptance.required = true`)*
+### C7 — External-resource model *(HARD when `testProcess.acceptance` is declared and the initiative's change class requires it)*
 
 For projects whose behaviour can only be verified against a live external system,
 the done-signal must split into two tiers, both declared in `.forge/project.json`.
@@ -406,12 +406,19 @@ per-WI gate runs with live creds.
 Three structural seams in `.forge/project.json`, all nested under the typed
 `testProcess` object (R1-03-F1), make the two-tier model impossible to bypass:
 
-**`testProcess.acceptance: { match, required, requiresEnv }`** — when
-`required: true`, the PM phase hard-fails unless ≥ 1 emitted WI has a
-`quality_gate_cmd` token matching `match`. `requiresEnv` closes the
-false-pass hole: a matching gate whose listed env vars are unset is
-**errored**, not silently skipped. `requiresEnv` must list every var the
-test's `PreCheck` demands.
+**`testProcess.acceptance: { match, requiresEnv }`** — the project declares
+the tier; whether an initiative must prove itself on it is its change class's
+`acceptance` column in the class table (`packages/factory/class-profiles.ts`,
+ADR 051 decision 2 as amended, bead forge-mfv5.3.5): `required` for `code`,
+`config` and `infra`, `advisory` for `docs`. For a `required` class the PM
+phase hard-fails unless ≥ 1 emitted WI has a `quality_gate_cmd` token matching
+`match`. An `advisory` class is not forced to carry a live-acceptance WI.
+Whatever the class, `requiresEnv` closes the false-pass hole: a gate matching
+`match` whose listed env vars are unset is **errored**, not silently skipped —
+the guard never reads the class, so a mis-declared class cannot switch it off.
+`requiresEnv` must list every var the test's `PreCheck`
+demands. The project-wide `required` boolean this object once carried is
+retired and refused at load; `forge project migrate <project-id>` deletes it.
 
 **`standing_work_item_acs: string[]`** — verbatim testing invariants appended
 to every WI body as a `## Standing acceptance criteria (project contract)`
@@ -425,6 +432,19 @@ Live-tier discipline: each live test creates uniquely named resources
 (UUID-prefixed); teardown runs on success AND failure; creds via a gitignored
 `secrets.env`; read-back assertion (separate GET/describe after
 create/update); non-default fixture values for every field under test (see C9).
+
+**Per-initiative resource namespace (forge-mfv5.3.7, operator ruling
+2026-09-12).** Initiatives run in parallel where the DAG allows, so two live
+tests for two different initiatives can be creating resources in the same
+external system at once. Forge hands every live-acceptance/gate command an
+env var, `FORGE_RESOURCE_PREFIX` — a stable, distinct, cloud-safe prefix
+derived from the initiative id — so:
+- a project's live-acceptance tests MUST create their resources' names under
+  this prefix (in place of, or in addition to, the UUID above);
+- a project's sweep MUST delete only resources carrying its OWN
+  `FORGE_RESOURCE_PREFIX`, never a bare-pattern sweep that could reach a
+  sibling initiative's live resources;
+- forge supplies the value; the project never invents or derives its own.
 
 ---
 
@@ -573,21 +593,20 @@ in-app route — and from the initiative's typed acceptance criteria (an AC's
 `demoProcess`'s own, forge-mfv5.1.7). Nothing generated ahead of time is
 required for that derivation to run.
 
-**Demo presentation — an agent-built, per-initiative demo skill, optional and
-presentation-only (Stage B).** The Studio **demo-builder** SESSION may author a
-project-local **demo-generation skill** at `.forge/skills/demo-design/SKILL.md`
-— the machinery that, for each completed **initiative**, renders a rich,
-self-contained, Forge-styled HTML demo of *that initiative's changes*
-(before/after of its diff, with real captured output) for the Studio demo
-page. It is NOT a generic current-state showcase: the unit of a demo is "what
-this initiative changed". The operator builds it interactively — look-and-feel
-prompt + the `demoProcess` above → the agent authors the skill and renders a
-real **sample** (`.forge/demo/DEMO.html`) from a representative recent change
-→ review → feedback → lock for reproducibility. **This composer is never read
-at cycle time** — it shapes only how already-captured evidence is presented in
-Studio (bead forge-mfv5.2.8 tracks folding the session's own output into the
-`demoProcess` declaration more directly); `demoProcess` alone is what a cycle
-captures against.
+**The demo-builder session authors the declaration (bead forge-mfv5.2.8).**
+The Studio **demo-builder** SESSION writes `demoProcess` itself — it writes no
+demo skill and no composer. The operator briefs it interactively
+(look-and-feel prompt, or change-notes when a declaration is already locked);
+each generate turn drafts the declaration's steps and renders a real
+**sample** (`.forge/demo/DEMO.html`) by running them against a representative
+recent change; the operator reviews each generation → feedback → lock.
+Locking a generation writes its steps into `.forge/project.json`
+`demoProcess` through the same writer the Studio project page saves with
+(every other key kept as it was), and only after they pass the rule
+`DEMO-SKILL` applies (next section): a declaration that drives no checkpoint
+is refused with that rule's reason, and nothing is written. The unit of the
+sample is "what this initiative changed", never a generic current-state
+showcase.
 
 ---
 
@@ -602,8 +621,8 @@ when it derives `demo.json`. `forge preflight` WARNs (`DEMO-SKILL`) naming
 every capture step that yields no drivable command and why (no inline-code
 span, or which metacharacter), and onboarding (Step 10) confirms it before
 calling onboarding done. **This clause never checks for a generated file** —
-the demo-builder session's presentation composer (previous section) is not a
-cycle input, so its presence or absence plays no part. Not applicable
+nothing generated is a cycle input, so its presence or absence plays no part;
+the demo-builder session's lock refuses on this same rule (previous section). Not applicable
 (passes) until a `demoProcess` is declared at all — `DEMO` owns that case, so
 there is no double-warn.
 
@@ -801,7 +820,7 @@ gates structurally cannot see.
 | C4 | `forge preflight` — **HARD** | `roadmap.md` (project repo) + `brain/projects/<name>/profile.md` (central forge repo) existence |
 | C5 | `forge preflight` — advisory | Constraints doc presence |
 | C6 | `forge preflight` — advisory | GitHub remote existence |
-| C7 | PM phase — **HARD** (when `required: true`) + dev-loop gate (`requiresEnv` guard) | `testProcess.acceptance` enforcement; `testProcess.ci.unsetEnv` on final delivery gate |
+| C7 | PM phase — **HARD** (when the initiative's change class's `acceptance` is `required`) + dev-loop gate (`requiresEnv` guard, same condition) | `testProcess.acceptance` enforcement; `testProcess.ci.unsetEnv` on final delivery gate |
 | C8 | `forge preflight` — advisory | `AGENTS.md` / `CLAUDE.md` presence **+ coverage (R1-04-F1): the file mentions the declared quality-gate command**; a miss routes to the instructions agent |
 | C9 | Hand-verified at onboarding; HARD for C7 projects (fixture review) | Not yet machine-checked |
 | C10 | Release flow + `forge preflight` — advisory (active when `releaseProcess` declared) | Draft changelog (PM standing AC) + pre-merge finalisation (release-finalizer) + CI release workflow installed; **R1-04-F2: preflight now asserts each declared step's substrate exists (`changelogPath` / `versionFile` / `docsDir`)** |
@@ -835,7 +854,7 @@ flow-ready — the flow engine will not accept it.
 | **C4** | `roadmap.md` at project root. Brain seeded with `profile.md`, release substrate context, failure-mode themes |
 | C5 | `CLAUDE.md`: never run `go build ./...`, never edit tests to pass, user owns git |
 | C6 | GitHub remote at `parsoFish/terraform-provider-betterado` |
-| C7 | `testProcess.acceptance: { match: "acceptancetests", required: true, requiresEnv: ["TF_ACC"] }`. `testProcess.ci.unsetEnv: ["TF_ACC"]`. Two `standing_work_item_acs`. Live tests: unique names, destroy on success/failure, `SharedReleaseFixture`, API GET read-back |
+| C7 | `testProcess.acceptance: { match: "acceptancetests", requiresEnv: ["TF_ACC"] }`. `testProcess.ci.unsetEnv: ["TF_ACC"]`. Two `standing_work_item_acs`. Live tests: unique names, destroy on success/failure, `SharedReleaseFixture`, API GET read-back |
 | C8 | Operator-authored `AGENTS.md` with exact `go test`/`make` invocations and hazard prohibitions — it names the declared local gate (the `.forge/quality_gate_cmd` sidecar `go test …`, matched by the `go test` needle), so the C8 coverage check passes |
 | C9 | `SharedReleaseFixture` uses non-default values (UUID prefix, explicit retention, explicit approvals). `TestCheckResourceAttr` + `ImportStateVerify: true` + `ExpectNonEmptyPlan: false` |
 | C10 | `releaseProcess` with in-cycle `changelog` + pre-merge `version` steps; `changelogPath` + `versionFile` substrate present (preflight asserts they exist) |
