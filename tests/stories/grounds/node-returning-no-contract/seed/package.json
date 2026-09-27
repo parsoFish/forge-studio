@@ -1,0 +1,21 @@
+{
+  "name": "gitpulse",
+  "version": "0.15.1",
+  "description": "A dependency-light CLI that prints commit-stats analytics for a git repository.",
+  "type": "module",
+  "bin": {
+    "gitpulse": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --import tsx --test test/unit.test.ts",
+    "acceptance": "node --import tsx test/acceptance/run.ts",
+    "demo": "node --import tsx test/acceptance/run.ts --demo"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "tsx": "^4.22.4",
+    "typescript": "^5.6.0"
+  },
+  "license": "AGPL-3.0"
+}
