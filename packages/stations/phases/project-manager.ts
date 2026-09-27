@@ -5,7 +5,7 @@
  * items, and emits decomposition telemetry.
  */
 
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pinnedStreamQuery, type StreamQueryFn, type HeartbeatTimers } from '@forge/agents';
 
@@ -23,10 +23,8 @@ import {
 } from './pm-binding.ts';
 import {
   readWorkItemsFromDir,
-  serializeWorkItem,
   validateWorkItemSet,
   type CouplingPair,
-  type WorkItem,
 } from '@forge/flows';
 import { loadProjectConfig, type ProjectConfig } from '@forge/projects';
 import { releaseDraftAcs } from '../release-process.ts';
@@ -43,6 +41,7 @@ import { readPmBrainContext, readProjectContext } from './pm-prompt-context.ts';
 import { underDecomposedFlag } from './pm-class-set-rules.ts';
 import { requireClassProfiles, type ClassProfilePort } from '../class-profile-port.ts';
 import { deriveKbIdFromBrainPath } from '@forge/knowledge';
+import { appendStandingAcs } from './pm-acceptance-gate.ts';
 
 /**
  * Injection seam for tests. The live cycle uses the pinned stream query;
@@ -730,39 +729,4 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
 
   // 8vfn.6.1 / §15.167 — claimants read the DIRECTORY. Story: pm-rejected-set.ts.
   return rejectWorkItemSet(workItemsDir, summary, { logger, initiativeId: input.initiativeId, parentEventId, skill: def.slug });
-}
-
-/** Heading for the project-contract standing-AC section injected per WI. */
-const STANDING_ACS_HEADER = '## Standing acceptance criteria (project contract)';
-
-/**
- * A2b (2026-06-06) — append the project's `standing_work_item_acs` to every WI
- * body as a fixed contract section, then re-serialise the file. Body-only
- * (frontmatter byte-stable via `serializeWorkItem`), idempotent (a WI already
- * carrying the header is left untouched — safe on resume). Best-effort per
- * file: a write error leaves that WI unchanged rather than failing the PM pass.
- * Returns the items with their in-memory bodies updated to match disk.
- */
-function appendStandingAcs(
-  workItemsDir: string,
-  items: ReadonlyArray<WorkItem>,
-  standingAcs: ReadonlyArray<string>,
-): WorkItem[] {
-  const section = [
-    STANDING_ACS_HEADER,
-    '',
-    'These project-wide testing invariants apply to **every** work item in this initiative, in addition to the work-specific acceptance criteria above. The dev-loop must satisfy them and the reviewer must confirm them:',
-    '',
-    ...standingAcs.map((ac) => `- ${ac}`),
-  ].join('\n');
-  return items.map((item) => {
-    if (item.body.includes(STANDING_ACS_HEADER)) return item; // idempotent
-    const updated: WorkItem = { ...item, body: `${item.body.replace(/\s+$/, '')}\n\n${section}\n` };
-    try {
-      writeFileSync(join(workItemsDir, `${item.work_item_id}.md`), serializeWorkItem(updated));
-      return updated;
-    } catch {
-      return item; // best-effort — never fail the PM pass on a write error
-    }
-  });
 }
