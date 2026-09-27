@@ -10,9 +10,10 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { extractDrivableCommand } from '@forge/contracts';
+import { declarationDrivesCheckpoint } from '@forge/contracts';
 
-import { loadProjectConfig, type ProjectConfig } from './project-config.ts';
+import { loadProjectConfig, type ProjectConfig, type DemoStep } from './project-config.ts';
+import { parseDemoProcess } from './project-config-validate.ts';
 import type { ClauseResult } from '@forge/kernel';
 
 // --- DEMO: the project declares how its change is demonstrated (ADVISORY) ---
@@ -43,7 +44,7 @@ export function checkDemo(dir: string): ClauseResult {
   const hasCapture = steps.some((s) => s.kind === 'capture');
   const hasVerify = steps.some((s) => s.kind === 'verify');
   if (!hasCapture || !hasVerify) {
-    return { ...base, pass: false, detail: `demoProcess needs ≥1 capture step and ≥1 verify step (found ${steps.length} step(s)). Run the demo-design skill to generate demo machinery. Advisory.` };
+    return { ...base, pass: false, detail: `demoProcess needs ≥1 capture step and ≥1 verify step (found ${steps.length} step(s)). Declare them — demoProcess is the sole cycle-time demo input, and the demo-builder session writes it. Advisory.` };
   }
   return { ...base, pass: true, detail: `demoProcess has ${steps.length} step(s) including capture + verify` };
 }
@@ -55,15 +56,17 @@ export function checkDemo(dir: string): ClauseResult {
  * integrate band derives checkpoints from it (and from the initiative's typed
  * acceptance criteria), never from any generated file. This clause used to
  * check `existsSync` of a generated `.forge/skills/demo-design/SKILL.md`; that
- * file is presentation guidance for the Studio demo page (authored by the
- * demo-builder session) and is read by nothing at cycle time, so its presence
+ * file was presentation guidance for the Studio demo page (once authored by
+ * the demo-builder session) and is read by nothing at cycle time, so its presence
  * proved nothing about whether the declaration could actually drive a demo.
  *
- * The clause now applies `extractDrivableCommand` (`@forge/contracts`) — the
- * SAME rule `derive-demo-model.ts`'s `captureCheckpoints` applies at cycle
- * time — to every `kind: 'capture'` step, and passes iff at least one yields a
- * bare-argv command. `checkDemo` only validates the demoProcess SHAPE (≥1
- * capture + ≥1 verify); this verifies at least one capture step is actually
+ * The clause now applies `declarationDrivesCheckpoint` (`@forge/contracts`) —
+ * `extractDrivableCommand`, the SAME rule `derive-demo-model.ts`'s
+ * `captureCheckpoints` applies at cycle time, over every `kind: 'capture'`
+ * step — and passes iff at least one yields a bare-argv command. The
+ * demo-builder session's lock refuses on the same rule (forge-mfv5.2.8).
+ * `checkDemo` only validates the demoProcess SHAPE (≥1 capture + ≥1
+ * verify); this verifies at least one capture step is actually
  * actionable. Advisory: not applicable until a demoProcess is declared at all
  * (`checkDemo` owns that case — no double-warn).
  */
@@ -84,34 +87,28 @@ function checkDemoSkill(dir: string): ClauseResult {
     // No demoProcess yet at all → not applicable; checkDemo already warns.
     return { ...base, pass: true, detail: 'no demoProcess declared yet — not applicable' };
   }
-  const captureSteps = steps
-    .map((step, i) => ({ step, i }))
-    .filter(({ step }) => step.kind === 'capture');
-  const drivable = captureSteps.filter(({ step }) => extractDrivableCommand(step.text).ok);
-  if (drivable.length > 0) {
-    return {
-      ...base,
-      pass: true,
-      detail: `${drivable.length} of ${captureSteps.length} capture step(s) drive a checkpoint`,
-    };
+  const drive = declarationDrivesCheckpoint(steps);
+  return drive.ok
+    ? { ...base, pass: true, detail: `${drive.drivable} of ${drive.captures} capture step(s) drive a checkpoint` }
+    : { ...base, pass: false, detail: `${drive.reason}. Advisory.` };
+}
+
+/**
+ * The demo-builder session's lock gate (bead forge-mfv5.2.8): a proposed
+ * declaration is written to `demoProcess` only when it has the schema's shape
+ * (`parseDemoProcess`, the loader's own parser) AND drives a checkpoint under
+ * the rule `DEMO-SKILL` applies — so a declaration the lock accepts is one
+ * this preflight then passes. The reason is the rule's own words.
+ */
+export function validateDemoDeclaration(raw: unknown): { ok: true; steps: DemoStep[] } | { ok: false; reason: string } {
+  let steps: DemoStep[];
+  try {
+    steps = parseDemoProcess(raw) ?? [];
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
   }
-  if (captureSteps.length === 0) {
-    return {
-      ...base,
-      pass: false,
-      detail: "demoProcess declares no step of kind 'capture' — nothing can drive a checkpoint. Advisory.",
-    };
-  }
-  const reasons = captureSteps.map(({ step, i }) => {
-    const result = extractDrivableCommand(step.text);
-    const why = result.ok
-      ? '' // unreachable: drivable.length === 0 means every entry is !ok
-      : result.reason === 'no-inline-code'
-        ? 'no inline-code span to run'
-        : `shell metacharacters in \`${result.code}\``;
-    return `capture step ${i} ("${step.text.slice(0, 60)}") yields no drivable command — ${why}`;
-  });
-  return { ...base, pass: false, detail: `${reasons.join('; ')}. Advisory.` };
+  const drive = declarationDrivesCheckpoint(steps);
+  return drive.ok ? { ok: true, steps } : { ok: false, reason: drive.reason };
 }
 
 // --- DEMO-ALIGN: demo-builds-off-testing alignment (ADVISORY, R1-03-F3) ---

@@ -21,7 +21,7 @@ import {
   runDemoBuilderTurn, demoSessionDir, demoBuilderAgentSpec, DEMO_BUILDER_MODEL,
 } from '../../../kinds/demo-builder.ts';
 import {
-  DEMO_HTML_REL_PATH, DEMO_SKILL_REL_PATH, DEMO_LOCK_REL_PATH, type DemoBuilderStatus,
+  DEMO_DECLARATION_REL_PATH, DEMO_HTML_REL_PATH, DEMO_LOCK_REL_PATH, type DemoBuilderStatus,
 } from '../../../kinds/demo-session-store.ts';
 import { REDACTED_THINKING_MARKER, type QueryFn } from '../../../interactive-session.ts';
 import { writeSessionStatus, readSessionStatus } from '../../../interactive-session.ts';
@@ -36,16 +36,21 @@ import { createLogger } from '@forge/kernel';
 
 
 
-/** A queryFn simulating the agent writing BOTH the reusable demo-design skill and
- *  the sample DEMO.html into its cwd (the project repo). */
-export function makeWritingQueryFn(capture?: (prompt: string) => void): QueryFn {
+/** A declaration the drive rule accepts (bead forge-mfv5.2.8). */
+export const DRIVABLE_DECLARATION = [
+  { kind: 'capture', text: 'Run `node bin/cli.js --summary` on both trees.' },
+  { kind: 'verify', text: 'Output matches the golden file.' },
+];
+
+/** A queryFn simulating the agent writing BOTH the declaration draft and the
+ *  sample DEMO.html into its cwd (the project repo). */
+export function makeWritingQueryFn(capture?: (prompt: string) => void, declaration: unknown = DRIVABLE_DECLARATION): QueryFn {
   return ({ prompt, options }) => {
     capture?.(prompt);
     const cwd = (options?.cwd as string) ?? '.';
     async function* gen(): AsyncGenerator<unknown> {
       mkdirSync(join(cwd, '.forge', 'demo'), { recursive: true });
-      mkdirSync(join(cwd, '.forge', 'skills', 'demo-design'), { recursive: true });
-      writeFileSync(join(cwd, DEMO_SKILL_REL_PATH), '# demo-design\n\nRender before/after HTML of an initiative\'s changes.');
+      writeFileSync(join(cwd, DEMO_DECLARATION_REL_PATH), JSON.stringify(declaration));
       writeFileSync(join(cwd, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>before/after sample</body></html>');
       yield { type: 'result', total_cost_usd: 0.05 };
     }
@@ -53,7 +58,7 @@ export function makeWritingQueryFn(capture?: (prompt: string) => void): QueryFn 
   };
 }
 
-/** A queryFn that writes ONLY the sample (missing the reusable skill). */
+/** A queryFn that writes ONLY the sample (missing the declaration). */
 function makeSampleOnlyQueryFn(): QueryFn {
   return ({ options }) => {
     const cwd = (options?.cwd as string) ?? '.';
@@ -111,13 +116,15 @@ export function setup(overrides?: Partial<DemoBuilderStatus>): {
 
 export const logger = (logsRoot: string, sid: string) => createLogger(`_demo-${sid}`, logsRoot);
 
-test('generating → agent produces the demo skill + sample → awaiting-review', async () => {
+test('generating → agent produces the declaration + sample → awaiting-review', async () => {
   const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup();
   const result = await runDemoBuilderTurn({
     sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
   });
   assert.equal(result.phase, 'awaiting-review');
-  assert.ok(existsSync(join(repoPath, DEMO_SKILL_REL_PATH)), 'reusable demo-design skill authored');
+  assert.equal(readFileSync(join(sessionDir, 'generations', '1', 'demo-process.json'), 'utf8'), JSON.stringify(DRIVABLE_DECLARATION), 'the declaration draft is the generation');
+  assert.ok(!existsSync(join(repoPath, DEMO_DECLARATION_REL_PATH)), 'the draft never stays in the repo beside demoProcess');
+  assert.ok(!existsSync(join(repoPath, '.forge', 'skills')), 'no composer SKILL.md (or any skill) is written');
   assert.ok(existsSync(join(repoPath, DEMO_HTML_REL_PATH)), 'sample DEMO.html rendered');
   assert.equal(result.demoPath, join(repoPath, DEMO_HTML_REL_PATH));
   assert.equal(readSessionStatus<DemoBuilderStatus>(sessionDir)?.phase, 'awaiting-review');
@@ -131,11 +138,11 @@ test('generating but neither file produced → throws a clear, recoverable error
   );
 });
 
-test('generating with the sample but NOT the reusable demo skill → throws (skill is required)', async () => {
+test('generating with the sample but NOT the declaration → throws (the declaration is the output)', async () => {
   const { projectRoot, logsRoot, sessionId } = setup();
   await assert.rejects(
     () => runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeSampleOnlyQueryFn(), logger: logger(logsRoot, sessionId), logsRoot }),
-    /demo-design\/SKILL\.md/,
+    /without producing \.forge\/demo\/demo-process\.json — /,
   );
 });
 
@@ -157,10 +164,11 @@ test('generate prompt carries the demoProcess, look-and-feel, feedback, and the 
   assert.match(captured, /dark and minimal/, 'look-and-feel guidance injected');
   assert.match(captured, /drop the footer/, 'feedback injected');
   assert.match(captured, /--bg: #0a0e14/, 'forge demo base CSS inlined into the prompt');
-  // Re-orientation (Fix 3): the task is a reusable per-initiative-change demo
-  // skill + a real sample, NOT a generic current-state showcase.
-  assert.match(captured, /demo-design\/SKILL\.md/, 'directs authoring the reusable demo skill');
-  assert.match(captured, /INITIATIVE'S CHANGES|before\/after/i, 'scopes the demo to an initiative\'s changes');
+  // forge-mfv5.2.8: the task is the demo DECLARATION + a real sample it
+  // drives, and never a composer skill.
+  assert.match(captured, /\.forge\/demo\/demo-process\.json/, 'directs authoring the declaration');
+  assert.doesNotMatch(captured, /demo-design\/SKILL\.md/, 'never directs authoring a composer skill');
+  assert.match(captured, /before\/after/i, 'scopes the demo to an initiative\'s changes');
   // Moved, not dropped: sampling a real recent change is what the GROUNDING
   // pass is for, and it is the pass that has Bash to do it (6.11.49).
   assert.match(prompts[2], /git (log|diff)/i, 'the grounding pass directs sampling from a real recent change');
@@ -194,8 +202,7 @@ test('W6-B1: generating turn forwards thinking + coalesced redacted_thinking to 
         },
       };
       mkdirSync(join(cwd, '.forge', 'demo'), { recursive: true });
-      mkdirSync(join(cwd, '.forge', 'skills', 'demo-design'), { recursive: true });
-      writeFileSync(join(cwd, DEMO_SKILL_REL_PATH), '# demo-design\n');
+      writeFileSync(join(cwd, DEMO_DECLARATION_REL_PATH), JSON.stringify(DRIVABLE_DECLARATION));
       writeFileSync(join(cwd, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>sample</body></html>');
       yield { type: 'result', total_cost_usd: 0 };
     }
@@ -220,24 +227,25 @@ test('W6-B1: generating turn forwards thinking + coalesced redacted_thinking to 
   assert.equal(readToolUses.length, READ_CALLS, 'sampler opts {readOnlySampleRate:1, cap:200} — every Read emitted, none sampled out');
 });
 
-test('locking → writes demo.lock.json + status locked', async () => {
-  const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup({ phase: 'locking', iteration: 3 });
-  // A prior generate left the reusable skill + the sample in the repo.
-  mkdirSync(join(repoPath, '.forge', 'demo'), { recursive: true });
-  mkdirSync(join(repoPath, '.forge', 'skills', 'demo-design'), { recursive: true });
-  writeFileSync(join(repoPath, DEMO_SKILL_REL_PATH), '# demo-design');
-  writeFileSync(join(repoPath, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>demo</body></html>');
+test('locking → writes the declaration into demoProcess + demo.lock.json + status locked', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup();
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  writeSessionStatus(sessionDir, { ...readSessionStatus<DemoBuilderStatus>(sessionDir)!, phase: 'locking', iteration: 3 });
 
   const result = await runDemoBuilderTurn({
     sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
   });
   assert.equal(result.phase, 'locked');
+  assert.deepEqual(JSON.parse(readFileSync(join(repoPath, '.forge', 'project.json'), 'utf8')).demoProcess, DRIVABLE_DECLARATION);
   const lockPath = join(repoPath, DEMO_LOCK_REL_PATH);
   assert.ok(existsSync(lockPath));
   const lock = JSON.parse(readFileSync(lockPath, 'utf8'));
   assert.equal(lock.iterations, 3);
   assert.equal(lock.demo_html, DEMO_HTML_REL_PATH);
-  assert.equal(lock.demo_skill, DEMO_SKILL_REL_PATH, 'lock records the reusable generator');
+  assert.deepEqual(lock.declaration, DRIVABLE_DECLARATION, 'lock records the declaration it wrote');
+  assert.equal(Object.prototype.hasOwnProperty.call(lock, 'demo_skill'), false, 'no composer skill is recorded');
   // The locked demo is snapshotted to history/<sessionId>/ so it stays viewable.
   const histDemo = join(repoPath, '.forge', 'demo', 'history', sessionId, 'DEMO.html');
   assert.ok(existsSync(histDemo), 'locked demo archived to history');
@@ -245,86 +253,36 @@ test('locking → writes demo.lock.json + status locked', async () => {
   assert.equal(readSessionStatus<DemoBuilderStatus>(sessionDir)?.phase, 'locked');
 });
 
-test('locking with no DEMO.html in the repo → throws', async () => {
+test('locking with no generation on disk → throws', async () => {
   const { projectRoot, logsRoot, sessionId } = setup({ phase: 'locking' });
   await assert.rejects(
     () => runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot }),
-    /cannot lock/,
+    /cannot lock — no generation on disk/,
   );
 });
 
-/** A queryFn that writes ONLY a per-element project-side skill + the sample. */
-export function makeElementQueryFn(elementId: string, capture?: (p: string) => void): QueryFn {
-  return ({ prompt, options }) => {
-    capture?.(prompt);
-    const cwd = (options?.cwd as string) ?? '.';
-    async function* gen(): AsyncGenerator<unknown> {
-      mkdirSync(join(cwd, '.forge', 'demo'), { recursive: true });
-      mkdirSync(join(cwd, '.forge', 'skills', 'demo', elementId), { recursive: true });
-      writeFileSync(join(cwd, '.forge', 'skills', 'demo', elementId, 'SKILL.md'), `# ${elementId} element`);
-      writeFileSync(join(cwd, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>element fragment</body></html>');
-      yield { type: 'result', total_cost_usd: 0.02 };
-    }
-    return gen();
-  };
-}
+test('the generate prompt carries the current declaration and the demo-element library', async () => {
+  const { projectRoot, logsRoot, sessionId } = setup();
+  const prompts: string[] = [];
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  const captured = prompts[1];
+  assert.match(captured, /## The current demo declaration/, 'the declaration to revise is framed');
+  assert.match(captured, /"text": "Run the CLI on a sample\."/, "the project's declared steps are the current declaration");
+  assert.match(captured, /`cli-capture` \(CLI before\/after, phase: capture\)/, 'the element library is listed');
+  assert.doesNotMatch(captured, /Revise ONLY the steps bound to/, 'no element narrowing without a target');
+});
 
-export function writeComposedProcess(repoPath: string): void {
-  writeFileSync(
-    join(repoPath, '.forge', 'project.json'),
-    JSON.stringify({
-      testProcess: { local: { cmd: ['npm', 'test'] } },
-      demoProcess: [
-        { kind: 'present', text: 'Lead', element: 'narrative' },
-        { kind: 'capture', text: 'node bin/x.js --write', element: 'cli-capture' },
-        { kind: 'verify', text: 'npm test', element: 'test-evidence' },
-      ],
-    }),
-  );
-}
-
-test('composed demo: the generate prompt lists the ordered elements + injects their generators', async () => {
-  const { projectRoot, repoPath, logsRoot, sessionId } = setup();
-  writeComposedProcess(repoPath);
-  // 6.11.49: two agent passes per generate turn — `captured` is the WRITE
-  // pass's prompt, which is what these assertions have always been about.
+test('per-element iteration: targetElement narrows the revision to that element\'s steps', async () => {
+  const { projectRoot, logsRoot, sessionId, sessionDir } = setup({ phase: 'generating', targetElement: 'cli-capture' });
   const prompts: string[] = [];
   const result = await runDemoBuilderTurn({
     sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn((p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
   });
-  const captured = prompts[1];
   assert.equal(result.phase, 'awaiting-review');
-  assert.match(captured, /COMPOSED of demo elements/, 'composition framing present');
-  assert.match(captured, /\[present\] narrative/, 'ordered element list (narrative first)');
-  assert.match(captured, /\[capture\] cli-capture/, 'cli-capture in the order');
-  assert.match(captured, /Element generators/, 'element generator bodies injected');
-  assert.match(captured, /#### cli-capture/, 'the cli-capture generator block header is included');
-  assert.match(captured, /REAL stdout on the baseline/, 'the cli-capture generator body text is included');
-});
-
-test('per-element iteration: targetElement focuses the turn + requires the element skill', async () => {
-  const { projectRoot, repoPath, logsRoot, sessionId } = setup({ phase: 'generating', targetElement: 'cli-capture' });
-  writeComposedProcess(repoPath);
-  // 6.11.49: two agent passes per generate turn — `captured` is the WRITE
-  // pass's prompt, which is what these assertions have always been about.
-  const prompts: string[] = [];
-  const result = await runDemoBuilderTurn({
-    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeElementQueryFn('cli-capture', (p) => { prompts.push(p); }), logger: logger(logsRoot, sessionId), logsRoot,
-  });
-  const captured = prompts[1];
-  assert.equal(result.phase, 'awaiting-review');
-  assert.match(captured, /Iterate ONE element: 'cli-capture'/, 'focused on the one element');
-  // It required + accepted the per-element skill (NOT the demo-design composer).
-  assert.ok(existsSync(join(repoPath, '.forge', 'skills', 'demo', 'cli-capture', 'SKILL.md')));
-});
-
-test('per-element iteration: missing the element skill → throws naming that element skill', async () => {
-  const { projectRoot, repoPath, logsRoot, sessionId } = setup({ phase: 'generating', targetElement: 'cli-capture' });
-  writeComposedProcess(repoPath);
-  await assert.rejects(
-    () => runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot }),
-    /demo\/cli-capture\/SKILL\.md/,
-  );
+  assert.match(prompts[1], /Revise ONLY the steps bound to element 'cli-capture'/);
+  assert.equal(JSON.parse(readFileSync(join(sessionDir, 'generations', '1', 'meta.json'), 'utf8')).targetElement, 'cli-capture');
 });
 
 test('briefing turn is a no-op (the operator provides notes before the agent runs)', async () => {
@@ -334,7 +292,7 @@ test('briefing turn is a no-op (the operator provides notes before the agent run
   assert.equal(result.wrote.length, 0);
 });
 
-test('update mode: the generate prompt carries an UPDATE framing referencing the locked skill + sample', async () => {
+test('update mode: the generate prompt carries an UPDATE framing over the locked declaration', async () => {
   const { projectRoot, logsRoot, sessionId } = setup({ phase: 'generating', mode: 'update' });
   // Bead 6.11.49: a generate turn now runs TWO agent passes, so a capture that
   // keeps the last prompt would silently start asserting against the grounding
@@ -346,7 +304,7 @@ test('update mode: the generate prompt carries an UPDATE framing referencing the
   });
   const captured = prompts[1];
   assert.match(captured, /UPDATE MODE/, 'update framing present');
-  assert.match(captured, /demo-design\/SKILL\.md/, 'references the existing generator');
+  assert.match(captured, /REVISE it per the operator's change-notes/, 'revises the locked declaration');
   assert.match(captured, /change-notes/i, 'frames the brief as change-notes');
 });
 

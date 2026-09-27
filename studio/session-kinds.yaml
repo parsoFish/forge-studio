@@ -174,7 +174,8 @@
       - { phase: briefing, step: noop, awaits: questions }
       # orchestrator/demo-builder-runner.ts:16, runGenerateStep (agent turn,
       # orchestrator/demo-builder-runner.ts:279) — writes DEMO.html + the
-      # generator skill (orchestrator/demo-builder-runner.ts:402), advances to
+      # proposed demo declaration (forge-mfv5.2.8, packages/sessions/kinds/
+      # demo-generate.ts; once the composer skill), advances to
       # awaiting-review.
       - { phase: generating, step: agent, writes: [demo], next: awaiting-review }
       # orchestrator/demo-builder-runner.ts:16 — operator decision point
@@ -188,6 +189,7 @@
       # was unreachable from the generic panel after W6-B10.
       - { phase: awaiting-review, step: noop, awaits: verdict, verdicts: [approve, revise, reject] }
       # orchestrator/demo-builder-runner.ts:19, runLockStep (deterministic —
+      # writes the declaration into .forge/project.json demoProcess, then
       # "record the locked demo for reproducibility",
       # orchestrator/demo-builder-runner.ts:405-409; no agent call).
       - { phase: locking, step: finalize, finalizer: recordLockedDemo, next: locked }

@@ -29,9 +29,9 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { FORGE_ROOT } from '@forge/kernel';
 
-import { logger, setup } from './test-fixtures/demo-builder-runner-fixtures.ts';
+import { DRIVABLE_DECLARATION, logger, setup } from './test-fixtures/demo-builder-runner-fixtures.ts';
 import { runDemoBuilderTurn } from '../../kinds/demo-builder.ts';
-import { DEMO_HTML_REL_PATH, DEMO_REL_DIR, DEMO_SKILL_REL_PATH } from '../../kinds/demo-session-store.ts';
+import { DEMO_DECLARATION_REL_PATH, DEMO_HTML_REL_PATH, DEMO_REL_DIR } from '../../kinds/demo-session-store.ts';
 import { type QueryFn } from '../../interactive-session.ts';
 import { StudioWritePathIgnoredError } from '@forge/projects/testing';
 
@@ -65,8 +65,8 @@ function repoWithIgnoredDemoDir(repoPath: string): void {
   git(repoPath, ['-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'ground']);
 }
 
-/** Writes ONLY the sample DEMO.html (no reusable skill) — `runGenerateStep`
- *  then throws its own "ended without producing ... SKILL.md" error, but the
+/** Writes ONLY the sample DEMO.html (no declaration) — `runGenerateStep`
+ *  then throws its own "ended without producing ... demo-process.json" error, but the
  *  partial `.forge/demo/` it already wrote is left on disk for the `finally`
  *  to (fail to) commit. */
 function partialWriteQueryFn(): QueryFn {
@@ -86,8 +86,8 @@ function queryFn(writes: boolean): QueryFn {
     const cwd = (options as { cwd?: string } | undefined)?.cwd ?? '.';
     async function* gen(): AsyncGenerator<unknown> {
       if (writes) {
-        execFileSync('mkdir', ['-p', join(cwd, '.forge', 'demo'), join(cwd, '.forge', 'skills', 'demo-design')]);
-        writeFileSync(join(cwd, DEMO_SKILL_REL_PATH), '# demo-design (fixture)');
+        execFileSync('mkdir', ['-p', join(cwd, '.forge', 'demo')]);
+        writeFileSync(join(cwd, DEMO_DECLARATION_REL_PATH), JSON.stringify(DRIVABLE_DECLARATION));
         writeFileSync(join(cwd, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>sample</body></html>');
       }
       yield { type: 'result', total_cost_usd: 0.01 };
@@ -124,6 +124,7 @@ test('AT-7.3.6-2 a turn that DOES write commits its own demo and still leaves th
 
   const files = git(repoPath, ['show', '--stat', '--name-only', '--format=', 'HEAD']);
   assert.match(files, /\.forge\/demo\/DEMO\.html/, 'the deliverable it wrote belongs in its own commit');
+  assert.doesNotMatch(files, /demo-process\.json/, 'the declaration draft is snapshotted out of the repo, never committed beside demoProcess');
   assert.doesNotMatch(files, /roadmap\.md/, 'the ONBOARDING agent’s file must never appear in a demo commit');
   assert.match(git(repoPath, ['status', '--porcelain']), /roadmap\.md/, 'and it stays uncommitted, exactly as the demo builder found it');
 });
@@ -157,7 +158,7 @@ test('AT-7.3.6-4 when the step itself throws, the rejection is the step’s own 
     (err: unknown) => {
       assert.ok(!(err instanceof StudioWritePathIgnoredError), 'must be the step’s own error, not the commit failure over the same ignored partial write');
       assert.match((err as Error).message, /without producing/);
-      assert.match((err as Error).message, /demo-design\/SKILL\.md/);
+      assert.match((err as Error).message, /demo-process\.json/);
       return true;
     },
   );

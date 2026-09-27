@@ -36,7 +36,6 @@ import { runDemoBuilderTurn, demoSessionDir } from '../../kinds/demo-builder.ts'
 import {
   DEMO_HTML_REL_PATH,
   DEMO_LOCK_REL_PATH,
-  DEMO_SKILL_REL_PATH,
   type DemoBuilderStatus,
 } from '../../kinds/demo-session-store.ts';
 import { writeSessionStatus, type QueryFn } from '../../interactive-session.ts';
@@ -51,22 +50,25 @@ const noopQueryFn: QueryFn = () => {
   return gen();
 };
 
-/** A repo whose generate pass already left the skill and the sample behind. */
+/** A repo whose generate pass already left the sample behind, and a session
+ *  whose generation 1 snapshot carries a drivable declaration (forge-mfv5.2.8). */
 function setupLockable(): { projectRoot: string; repoPath: string; logsRoot: string } {
   const root = mkdtempSync(join(tmpdir(), 'demo-lock-emit-'));
   const projectRoot = join(root, 'project');
   const repoPath = join(root, 'repo');
   mkdirSync(join(repoPath, '.forge', 'demo'), { recursive: true });
-  mkdirSync(join(repoPath, '.forge', 'skills', 'demo-design'), { recursive: true });
   writeFileSync(
     join(repoPath, '.forge', 'project.json'),
     JSON.stringify({ testProcess: { local: { cmd: ['npm', 'test'] } }, demoProcess: [] }),
   );
-  writeFileSync(join(repoPath, DEMO_SKILL_REL_PATH), '# demo-design');
   writeFileSync(join(repoPath, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>demo</body></html>');
 
   const sessionDir = demoSessionDir(projectRoot, SESSION_ID);
-  mkdirSync(sessionDir, { recursive: true });
+  const generation = join(sessionDir, 'generations', '1');
+  mkdirSync(generation, { recursive: true });
+  writeFileSync(join(generation, 'DEMO.html'), '<!DOCTYPE html><html><body>demo</body></html>');
+  writeFileSync(join(generation, 'demo-process.json'), JSON.stringify([{ kind: 'capture', text: 'Run `npm run demo`.' }]));
+  writeFileSync(join(generation, 'meta.json'), JSON.stringify({ iteration: 1, createdAt: '2026-09-12T00:00:00.000Z', feedback: null, targetElement: null }));
   const status: DemoBuilderStatus = {
     session_id: SESSION_ID,
     project: 'demo',
@@ -95,7 +97,7 @@ function fileChangeRows(logsRoot: string): { path: string; op: string; cause: st
     }));
 }
 
-test('locking declares all three of its ground writes as file_change rows', async () => {
+test('locking declares every one of its ground writes as a file_change row', async () => {
   const { projectRoot, repoPath, logsRoot } = setupLockable();
 
   const result = await runDemoBuilderTurn({
@@ -111,18 +113,25 @@ test('locking declares all three of its ground writes as file_change rows', asyn
   const declared = fileChangeRows(logsRoot);
   const paths = declared.map((r) => r.path).sort();
 
-  // The three paths S1 run 7 measured as undeclared, named absolutely — the
-  // fence discards a relative `output_ref` outright, so an emission that used
-  // a bare rel path would read as no emission at all.
+  // The three paths S1 run 7 measured as undeclared, plus the two
+  // forge-mfv5.2.8 added (the declaration in project.json, the restored
+  // sample), named absolutely — the fence discards a relative `output_ref`
+  // outright, so an emission that used a bare rel path would read as no
+  // emission at all.
   const expected = [
+    join(repoPath, '.forge', 'project.json'),
+    join(repoPath, DEMO_HTML_REL_PATH),
     join(repoPath, DEMO_LOCK_REL_PATH),
     join(repoPath, '.forge', 'demo', 'history', SESSION_ID, 'DEMO.html'),
     join(repoPath, '.forge', 'demo', 'history', SESSION_ID, 'meta.json'),
   ].sort();
 
   assert.deepEqual(paths, expected, 'every file the lock step writes into the ground is declared');
+  const ops = new Map(declared.map((r) => [r.path, r.op]));
+  assert.equal(ops.get(join(repoPath, '.forge', 'project.json')), 'modify', 'project.json existed — the declaration modifies it');
+  assert.equal(ops.get(join(repoPath, DEMO_HTML_REL_PATH)), 'modify', 'the sample existed — the restore modifies it');
+  assert.equal(ops.get(join(repoPath, DEMO_LOCK_REL_PATH)), 'write');
   for (const row of declared) {
-    assert.equal(row.op, 'write', `${row.path} declared as a write`);
     assert.match(row.cause, /lock/i, `${row.path}'s cause names the lock that made it`);
   }
 });
@@ -172,5 +181,5 @@ test('the lock step emits into the SESSION log, not a fresh bridge run', async (
   // would attribute the lock's writes to `_bridge/<id>` instead of the session
   // that made them. The fence accepts either, so nothing goes red — the run
   // just records the wrong author. Assert the session carries them.
-  assert.equal(fileChangeRows(logsRoot).length, 3, 'all three rows in the demo session log');
+  assert.equal(fileChangeRows(logsRoot).length, 5, 'all five rows in the demo session log');
 });

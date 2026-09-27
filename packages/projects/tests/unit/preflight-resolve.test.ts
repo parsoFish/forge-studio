@@ -52,3 +52,11 @@ test('every USER-tier clause carries a target (config key / file / operator-owne
     if (c.target.kind === 'config') assert.ok(c.target.shape.startsWith('{') || c.target.shape.startsWith('['), `${id}'s config target must state its JSON value shape`);
   }
 });
+
+// forge-mfv5.2.8 — the DEMO fix names the declaration as the cycle input, never "machinery".
+test('the DEMO fixHint says demoProcess is the cycle input and the demo-builder declares it', () => {
+  const hint = classifyClause(clause('DEMO')).fixHint ?? '';
+  assert.match(hint, /demoProcess/);
+  assert.match(hint, /sole cycle-time demo input/);
+  assert.doesNotMatch(hint, /machinery/);
+});

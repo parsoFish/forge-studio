@@ -4,6 +4,7 @@ import { generationGalleryView, preferredGenerationFor, type GenerationGalleryVi
 import type { GenerationGalleryArtifact, GenerationGalleryEntry, GenerationGalleryItem } from '@/lib/session-client';
 import { architectFileUrl, demoGenerationFileUrl } from '@/lib/bridge-client';
 import { disabledAttrs } from '@/lib/disabled-reason';
+import { declarationDrivesCheckpoint } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // GenerationGallery — the demo-builder's accumulating generation selector
@@ -167,9 +168,42 @@ function GenerationDetail({
   finalizeUnavailableReason?: string | null;
 }): JSX.Element {
   const hasFeedback = generation.feedback !== null;
+  // Bead forge-mfv5.2.8 — the generation IS its declaration, judged by the
+  // same rule the lock refuses on, so a lock this page offers is never one
+  // the runner then refuses.
+  const drive = generation.declaration === null ? null : declarationDrivesCheckpoint(generation.declaration);
+  const declarationState = drive === null ? 'missing' : drive.ok ? 'drivable' : 'undrivable';
+  const lockBlocked = drive === null
+    ? 'This generation has no declaration to lock'
+    : drive.ok ? null : `This declaration drives no checkpoint — locking would be refused: ${drive.reason}`;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div
+        data-section="generation-declaration"
+        data-declaration-state={declarationState}
+        data-declaration-steps={generation.declaration?.length ?? 0}
+        style={{ fontSize: 12.5, padding: '8px 12px', border: '1px solid var(--line)', borderRadius: 8, background: 'var(--panel)' }}
+      >
+        <strong style={{ color: 'var(--faint)', fontWeight: 700, textTransform: 'uppercase', fontSize: 10.5, letterSpacing: '.05em' }}>
+          Demo declaration — locking writes it to .forge/project.json demoProcess
+        </strong>
+        {generation.declaration === null ? (
+          <div style={{ marginTop: 4, color: 'var(--faint)', fontStyle: 'italic' }}>This generation carries no declaration.</div>
+        ) : (
+          <ol style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+            {generation.declaration.map((step, i) => (
+              <li key={i} data-declaration-step={i} data-step-kind={step.kind} style={{ color: 'var(--text)' }}>
+                <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--faint)' }}>[{step.kind}{step.element ? ` · ${step.element}` : ''}]</span> {step.text}
+              </li>
+            ))}
+          </ol>
+        )}
+        {drive !== null && !drive.ok && (
+          <div data-declaration-refusal style={{ marginTop: 6, color: 'var(--ember)' }}>{drive.reason}</div>
+        )}
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         {generation.items.map((item) => (
           <GenerationItemCard
@@ -212,21 +246,21 @@ function GenerationDetail({
         data-action="finalize-generation"
         data-generation-number={generation.number}
         onClick={() => onFinalize?.(generation.number)}
-        {...disabledAttrs(onFinalize ? null : (finalizeUnavailableReason ?? 'This generation cannot be finalized from here'))}
+        {...disabledAttrs(onFinalize ? lockBlocked : (finalizeUnavailableReason ?? 'This generation cannot be finalized from here'))}
         style={{
           alignSelf: 'flex-start',
           fontSize: 13,
           fontWeight: 600,
           color: '#fff',
-          background: onFinalize ? '#238636' : 'var(--panel-2)',
+          background: onFinalize && lockBlocked === null ? '#238636' : 'var(--panel-2)',
           border: '1px solid var(--line)',
           borderRadius: 6,
           padding: '7px 16px',
-          cursor: onFinalize ? 'pointer' : 'default',
-          opacity: onFinalize ? 1 : 0.5,
+          cursor: onFinalize && lockBlocked === null ? 'pointer' : 'default',
+          opacity: onFinalize && lockBlocked === null ? 1 : 0.5,
         }}
       >
-        Finalize this generation
+        Lock this declaration
       </button>
     </div>
   );

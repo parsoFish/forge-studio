@@ -136,16 +136,11 @@ never that any generated file exists. **Confirm `forge preflight <project>`
 reports `DEMO-SKILL` ✓ — i.e. at least one capture step names a drivable
 command — before considering onboarding done.**
 
-Optionally, run the `demo-builder` session afterwards to author a presentation
-composer (`.forge/skills/demo-design/SKILL.md`) that renders a rich,
-Forge-styled HTML view of each initiative's captured evidence for the Studio
-demo page — it assesses the right presentation form (portal/browser
-screenshot opportunistically when a renderable surface exists, harness
-metrics when a measurement command exists, live external API round-trip when
-the code calls a live system, JSON-diff/notes-only by default). That composer
-is presentation guidance ONLY, never a cycle input — bead forge-mfv5.2.8
-tracks folding the session's own output into the `demoProcess` declaration
-more directly.
+Optionally, run the `demo-builder` session afterwards to author the declaration
+interactively: each generation drafts the `demoProcess` steps and renders a
+real before/after sample by running them, and locking one writes those steps
+into `.forge/project.json` — refused, with the reason, unless they pass the same
+`DEMO-SKILL` rule (bead forge-mfv5.2.8). It writes no demo skill or composer.
 
 ### Step 11 — External-resource model (C7, only if needed)
 If behaviour can only be verified live: a creds-free in-loop gate (mocks/in-process)

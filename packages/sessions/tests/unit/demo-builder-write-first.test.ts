@@ -29,10 +29,10 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { FORGE_ROOT } from '@forge/kernel';
 
-import { logger, setup } from './test-fixtures/demo-builder-runner-fixtures.ts';
+import { DRIVABLE_DECLARATION, logger, setup } from './test-fixtures/demo-builder-runner-fixtures.ts';
 import { runDemoBuilderTurn } from '../../kinds/demo-builder.ts';
 import { DEMO_WRITE_PASS_MAX_TURNS, DEMO_READ_PASS_MAX_TURNS } from '../../kinds/demo-generate.ts';
-import { DEMO_HTML_REL_PATH, DEMO_SKILL_REL_PATH } from '../../kinds/demo-session-store.ts';
+import { DEMO_DECLARATION_REL_PATH, DEMO_HTML_REL_PATH } from '../../kinds/demo-session-store.ts';
 import { type QueryFn } from '../../interactive-session.ts';
 
 type CanUseTool = (t: string, i: Record<string, unknown>, o: Record<string, unknown>) => Promise<{ behavior: string; message?: string }>;
@@ -59,8 +59,7 @@ function recordingQueryFn(writeOn: number | null, passes: Pass[]): QueryFn {
     async function* gen(): AsyncGenerator<unknown> {
       if (writeOn !== null && n === writeOn) {
         mkdirSync(join(cwd, '.forge', 'demo'), { recursive: true });
-        mkdirSync(join(cwd, '.forge', 'skills', 'demo-design'), { recursive: true });
-        writeFileSync(join(cwd, DEMO_SKILL_REL_PATH), '# demo-design (fixture)');
+        writeFileSync(join(cwd, DEMO_DECLARATION_REL_PATH), JSON.stringify(DRIVABLE_DECLARATION));
         writeFileSync(join(cwd, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>sample</body></html>');
       }
       yield { type: 'result', total_cost_usd: 0.02 };
@@ -93,7 +92,7 @@ test('6.11.49: pass 1 runs with NO Bash and a budget well inside 24 — the agen
   assert.ok(passes[1].disallowedTools.includes('Bash'), `pass 1 must DENY Bash — got disallowedTools ${passes[1].disallowedTools.join(', ') || '(none)'}`);
   assert.ok(!passes[1].allowedTools.includes('Bash'), `pass 1 must not carry Bash — got ${passes[1].allowedTools.join(', ')}`);
   // AMENDED by 703: the write pass is now write-root AND read-root FENCED to
-  // `.forge/demo/` + `.forge/skills/demo-design/`, and a fenced turn STRIPS the
+  // `.forge/demo/` (the only root since forge-mfv5.2.8), and a fenced turn STRIPS the
   // gated names from `allowedTools` on purpose — a name left there is
   // pre-approved by the SDK and would never reach the callback that scopes it
   // (`session-write-fence.ts`: "a fence is three settings, not one"). So the
@@ -115,7 +114,7 @@ test('6.11.49: an agent that writes NOTHING fails NAMING both artifacts, inside 
       queryFn: recordingQueryFn(null, passes), logger: logger(logsRoot, sessionId),
     }),
     (err: Error) => {
-      assert.match(err.message, /\.forge\/skills\/demo-design\/SKILL\.md/, 'the failure names the missing skill');
+      assert.match(err.message, /\.forge\/demo\/demo-process\.json/, 'the failure names the missing declaration');
       assert.match(err.message, /\.forge\/demo\/DEMO\.html/, 'the failure names the missing sample');
       return true;
     },
@@ -201,8 +200,11 @@ test('7.3.6: the WRITE pass has no read door at all — Bash was never the only 
   // and S1 run 6 measured the agent looping on `Edit` because of it.
   const fence = write.canUseTool!;
   assert.equal((await fence('Write', { file_path: `${repoPath}/.forge/demo/DEMO.html`, content: 'x' }, {})).behavior, 'allow', 'it can still author, in its own root');
-  const readIn = await fence('Read', { file_path: `${repoPath}/.forge/skills/demo-design/SKILL.md` }, {});
+  const readIn = await fence('Read', { file_path: `${repoPath}/.forge/demo/demo-process.json` }, {});
   assert.equal(readIn.behavior, 'allow', 'and re-read what it wrote, which is what the Write-after-Read rule demands');
+  // forge-mfv5.2.8: the composer directory is no longer this pass's to fill.
+  const writeSkill = await fence('Write', { file_path: `${repoPath}/.forge/skills/demo-design/SKILL.md`, content: 'x' }, {});
+  assert.equal(writeSkill.behavior, 'deny', 'the pass writes the declaration, never a composer SKILL.md');
   const readOut = await fence('Read', { file_path: `${repoPath}/README.md` }, {});
   assert.equal(readOut.behavior, 'deny', 'but nowhere else — the scope is the fence, not the absence of one');
   assert.match(String(readOut.message), /read-root fence/, 'and the refusal says which fence refused it');

@@ -19,19 +19,18 @@
  *   GET /api/architect/file/<project>/<sid>/<filename>
  *   GET /api/instructions/file/<project>/<sid>/<filename>
  *   GET /api/demo-builder/demo/<project>/<sid>                (DEMO.html)
- *   GET /api/demo-builder/fragment/<project>/<sid>/<element>
  *   GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename>
  *   GET /api/demo-builder/history/<project>/<id>               (DEMO.html)
  *
  * Two kinds of assertion:
  *   1. Per-route, real-request-path pins (one `before()`-seeded fixture per
- *      route, all seven driven through a live `startBridge()` — never a
+ *      route, all six driven through a live `startBridge()` — never a
  *      helper called directly, so a route that forgets to wire the helper
  *      in shows up here, not just in the source ratchet).
  *   2. A source-level ENUMERATION RATCHET: `contentTypeFor` must have no
  *      direct caller anywhere in apps/forge/bridge-cycle-data.ts outside the
  *      one hardening helper (`servedFileHeaders`) — this is what catches the
- *      EIGHTH route a future change adds, which the seven fixtures above
+ *      SEVENTH route a future change adds, which the six fixtures above
  *      structurally cannot.
  *
  * Header-injection scope, checked per mechanism rather than assumed:
@@ -123,11 +122,10 @@ before(async () => {
   mkdirSync(join(repoDir(), '_instructions', INSTR_SID), { recursive: true });
   writeFileSync(join(repoDir(), '_instructions', INSTR_SID, 'AGENTS.draft.md'), '# draft');
 
-  // Routes 4+5 — GET /api/demo-builder/demo/<project>/<sid> and
-  // GET /api/demo-builder/fragment/<project>/<sid>/<element>
-  mkdirSync(join(repoDir(), '.forge', 'demo', 'fragments'), { recursive: true });
+  // Route 4 — GET /api/demo-builder/demo/<project>/<sid> (the fragment
+  // route that was route 5 went with the per-element fragments, forge-mfv5.2.8)
+  mkdirSync(join(repoDir(), '.forge', 'demo'), { recursive: true });
   writeFileSync(join(repoDir(), '.forge', 'demo', 'DEMO.html'), '<!doctype html><body>demo</body>');
-  writeFileSync(join(repoDir(), '.forge', 'demo', 'fragments', 'hero.html'), '<section>hero</section>');
   plantStatus(
     join(repoDir(), '_demo', DEMO_SID),
     makeStatus({ session_id: DEMO_SID, project: 'demo', project_repo_path: repoDir() }),
@@ -197,12 +195,6 @@ const ROUTES: RouteCase[] = [
     path: () => `/api/demo-builder/demo/demo/${DEMO_SID}`,
     wantContentTypeFamily: 'html',
     wantDispositionFilename: 'DEMO.html',
-  },
-  {
-    name: 'GET /api/demo-builder/fragment/<project>/<sid>/<element>',
-    path: () => `/api/demo-builder/fragment/demo/${DEMO_SID}/hero`,
-    wantContentTypeFamily: 'html',
-    wantDispositionFilename: 'hero.html',
   },
   {
     name: 'GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename>',
@@ -369,10 +361,13 @@ test('enumeration ratchet: contentTypeFor has NO direct callers in apps/forge/br
   );
 });
 
-test('enumeration re-derivation: exactly 7 res.writeHead(200, ...) call sites reference the hardening helper, across the host AND the carved session routes', () => {
+test('enumeration re-derivation: exactly 6 res.writeHead(200, ...) call sites reference the hardening helper, across the host AND the carved session routes', () => {
   // This pin is defense-in-depth for a security invariant: every file served on
   // the bridge origin must get its content-type through `servedFileHeaders`, so
   // the CSP / x-content-type-options / content-disposition hardening rides along.
+  //
+  // forge-mfv5.2.8 retired the fragment route, so seven became six — a route
+  // REMOVED, not carved, which is the one reason this count may drop.
   //
   // M4's session-routes carve moved one of the seven call sites out of
   // `apps/forge/ui-bridge.ts` and into `@forge/sessions`, where the helper arrives
@@ -400,7 +395,7 @@ test('enumeration re-derivation: exactly 7 res.writeHead(200, ...) call sites re
     {
       path: join(import.meta.dirname, '..', '..', '..', '..', 'packages', 'sessions', 'bridge-studio-demo.ts'),
       rel: 'packages/sessions/bridge-studio-demo.ts',
-      expected: 4,
+      expected: 3,
     },
   ];
   let total = 0;
@@ -416,5 +411,5 @@ test('enumeration re-derivation: exactly 7 res.writeHead(200, ...) call sites re
     );
     total += matches.length;
   }
-  assert.equal(total, 7, `the invariant is about the seven served-file routes as a whole, wherever they live — found ${total}`);
+  assert.equal(total, 6, `the invariant is about the six served-file routes as a whole, wherever they live — found ${total}`);
 });

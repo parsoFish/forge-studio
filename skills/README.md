@@ -70,7 +70,7 @@ system skills carry `library: false`.
 | [`forge-onboard-project`](./forge-onboard-project/SKILL.md) | interactive | Bring a project up to the forge↔project contract |
 | [`preflight-fix`](./preflight-fix/SKILL.md) | unattended | Apply one operator-approved preflight contract fix |
 | [`project-brain-builder`](./project-brain-builder/SKILL.md) | unattended | Author a managed project's initial brain |
-| [`demo-design`](./demo-design/SKILL.md) | operator-triggered | Generate per-project demo machinery |
+| [`demo-design`](./demo-design/SKILL.md) | operator-triggered | Author the project's demoProcess declaration (the sole cycle-time demo input) |
 
 ### Maintenance
 | Skill | Surface | Purpose |
