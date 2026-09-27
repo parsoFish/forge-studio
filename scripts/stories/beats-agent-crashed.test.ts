@@ -175,6 +175,10 @@ test('518 (RED) the crashed lifecycle banner ends a bounded agent wait at the cr
   assert.match(said, /crashed/, `the verdict must NAME the crash. Got: ${said}`);
   assert.match(said, /spawn claude ENOENT/, `the verdict must carry the PAGE'S OWN message, not a sentence about it. Got: ${said}`);
   assert.doesNotMatch(said, /gave up at the agent wait/, `it did not give up at the bound — the page had already said the turn crashed. Got: ${said}`);
+  // redKind: `stopReasonFor` is the product's own crashed-lifecycle signal —
+  // the one stall this module never marks `stoppedBy: 'runner'` — so this is
+  // a real product fact, never 'harness'.
+  assert.equal(verdict.redKind, 'product', JSON.stringify(verdict));
 });
 
 test('518 (RED) the crashed banner ends the wait for a CONTROL too, not only the wait for state', async () => {

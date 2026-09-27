@@ -117,6 +117,10 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
       act: rawBeat.act,
       say: rawBeat.say,
       status: 'red',
+      // 'harness': this is a wiring/authoring refusal caught BEFORE the beat
+      // ever touches a page — there is no product observation to attribute
+      // the red to.
+      redKind: 'harness',
       failures: Object.freeze([
         `route "${rawBeat.expect.route}" needs <${unbound}>, which no earlier beat bound. ` +
           'A beat binds a segment by expecting `<name>` for a data-* key the product mints.',
@@ -163,6 +167,9 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
       act: rawBeat.act,
       say: rawBeat.say,
       status: 'red',
+      // 'harness', for the same reason the route-placeholder refusal above
+      // is: caught before the beat ever touches a page.
+      redKind: 'harness',
       failures: Object.freeze([
         `wait.cycleOf "${rawBeat.wait.cycleOf}" needs <${cycleOfUnbound}>, which no earlier beat bound — ` +
           'so this beat cannot say WHICH cycle it is watching. A beat binds a placeholder by expecting ' +
@@ -204,7 +211,18 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
           ? null
           : `gave up at the ${bound.label}`;
     if (why === null) return verdict;
-    return Object.freeze({ ...verdict, status: 'red', failures: Object.freeze([...verdict.failures, why]) });
+    // redKind mirrors the SAME `because` distinction, not a new one: a stop
+    // NOT carrying `stoppedBy: 'runner'` is the product's own terminal signal
+    // (the session/cycle really did end, just not in the wanted state) — a
+    // real product fact, so 'product', overriding whatever `beatVerdict`'s
+    // fresh (and here, stale/misleading) read happened to say. A stop that
+    // IS `stoppedBy: 'runner'` (a bound genuinely expired with nothing to
+    // show) is the runner's own finding — 'harness' — UNLESS `beatVerdict`
+    // already found a real, independent mismatch (`verdict.redKind` already
+    // 'product'), which survives untouched: a genuine defect does not become
+    // a harness timeout because a bound also happened to expire.
+    const redKind = stalled !== null && stalled.stoppedBy !== 'runner' ? 'product' : (verdict.redKind ?? 'harness');
+    return Object.freeze({ ...verdict, status: 'red', redKind, failures: Object.freeze([...verdict.failures, why]) });
   };
 
   if (index === 0) {

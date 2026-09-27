@@ -21,7 +21,7 @@ import { PLACEHOLDER, resolveExpectations, ERROR_SENTINELS, routeMatches } from 
  *
  * @param {{act: string, say: string, expect: {route: string, data: Record<string,string>}}} beat
  * @param {{route: string, data: Record<string,string>, nested?: readonly Record<string,string>[]}} observed
- * @returns {Readonly<{act: string, say: string, status: 'green'|'red', failures: readonly string[], bindings: Readonly<Record<string,string>>}>}
+ * @returns {Readonly<{act: string, say: string, status: 'green'|'red', redKind?: 'product'|'harness', failures: readonly string[], bindings: Readonly<Record<string,string>>}>}
  */
 export function beatVerdict(beat, observed, { boundMs = null, bound = {} } = {}) {
   const failures = [];
@@ -116,6 +116,13 @@ export function beatVerdict(beat, observed, { boundMs = null, bound = {} } = {})
     act: beat.act,
     say: beat.say,
     status: failures.length === 0 ? 'green' : 'red',
+    // `redKind` names WHO produced the red, for a story.json reader who was
+    // not in the room: 'product' means the runner reached the page and
+    // JUDGED it — a real route/data mismatch, exactly this function's own
+    // domain — as distinct from `stuckVerdict`'s 'harness' (the runner never
+    // reached a page to judge at all). Omitted on green: the field means
+    // nothing until there is a red to attribute.
+    ...(failures.length > 0 ? { redKind: 'product' } : {}),
     failures: Object.freeze(failures),
     bindings: Object.freeze(bindings),
     // What the beat was JUDGED against, root and nested alike. The how-to
@@ -149,6 +156,11 @@ export function stuckVerdict(beat, observed, failure) {
   return Object.freeze({
     ...beatVerdict(beat, observed),
     status: 'red',
+    // ALWAYS 'harness', unconditionally: this verdict exists precisely
+    // because the beat never reached a page for the product to answer on —
+    // there is no observed state left for `beatVerdict`'s own `redKind` (set
+    // by the spread above, on whatever stale page it read) to survive as.
+    redKind: 'harness',
     failures: Object.freeze([failure]),
     bindings: Object.freeze({}),
     data: observed.data,
