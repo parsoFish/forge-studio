@@ -6,6 +6,7 @@
  * boolean.
  */
 
+import { globToRegExp } from '@forge/projects';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -567,22 +568,14 @@ export type AutoCommitSweepResult = {
  * match, a directory prefix (entry ends with `/`, matching `isTrackedConfig`
  * in `packages/flows/pr-branch-sync.ts` and `trackedConfigProbe`/
  * `giTextCovers` in `packages/projects/preflight-repo.ts`), or a `*`-only
- * glob (matching `globToRegExp` in `packages/projects/constraint-blocks.ts`).
- * Both conventions are mirrored here rather than imported: `agents` (rank 3
- * in `scripts/check-boundaries.mjs`'s PACKAGE_RANK) could reach `projects`
- * (rank 2), but neither helper is in that package's public `exports` map,
- * and adding one is a `packages/projects` change this WI's scope (agents/
- * stations/flows) does not cover — so the algorithm is reused, not a new one
- * invented, even though the two lines of code are not literally shared.
+ * glob (`globToRegExp`, imported from `@forge/projects` — the one glob
+ * matcher, never a second copy).
  */
 function pathInScope(changedPath: string, scope: readonly string[]): boolean {
   return scope.some((entry) => {
     if (entry === changedPath) return true;
     if (entry.endsWith('/')) return changedPath.startsWith(entry);
-    if (entry.includes('*')) {
-      const escaped = entry.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-      return new RegExp(`^${escaped}$`).test(changedPath);
-    }
+    if (entry.includes('*')) return globToRegExp(entry).test(changedPath);
     return false;
   });
 }
