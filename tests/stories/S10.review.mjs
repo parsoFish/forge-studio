@@ -19,7 +19,7 @@
  * verdict, evidence dir and ruling refers to it, and renumbering to suit a
  * file split would invalidate the campaign's own record of this story.
  */
-import { SEND_BACK } from './S10.constants.mjs';
+import { SEND_BACK, CYCLE_BOUND } from './S10.constants.mjs';
 
 export const REVIEW_LOOP = [
     {
@@ -406,18 +406,85 @@ export const REVIEW_LOOP = [
       // Recorded as an open item — the exit row re-derives the merge with
       // `gh pr view --repo parsoFish/gitpulse`, not from this page.
       //
-      // ROW 115 (bead `forge-8vfn.8.1.20`). With no `wait` this beat took the
-      // 15 s DOM default while `approve-and-merge`'s POST blocks through
-      // release-finalize and the merge itself — measured at ~72 s on run 29.
-      // `gateState` (`app/artifact/page.tsx:585`) starts `'idle'` and
-      // `DemoReviewSurface`'s `onSubmitted` (`:1148-1169`) does not flip it to
-      // `'approved'` until `onSubmit`'s `await submitVerdict(...)` RETURNS, so
-      // `idle` IS the blocking POST in flight — a `settle` wait that sits
-      // through exactly that value, same shape as S6 beat 9's drain
-      // (`S6.story.mjs:560`) and S8 beat 4's refresh (`S8.story.mjs:248`).
+      // ROW 153 (bead `forge-8vfn.8.1.41`, ruling 1843), S10 REAL RUN 39 —
+      // WHY A `settle` WAIT WAS THE WRONG SHAPE HERE. ROW 115's own fix
+      // (below, superseded) gave this beat a `settle` wait because the old
+      // reading was "a blocking POST in flight" — a synchronous flip, wide
+      // enough at 180 s for run 29's ~72 s. Run 39 reded: `data-gate-state:
+      // expected "approved", got "idle"` / `gave up at the settle wait
+      // (declared 180000 ms)`. The cycle's own `events.jsonl` names what the
+      // 180 s was actually racing: `release-finalize.start` (phase
+      // `release-finalize`, skill `release-finalizer`) fired at
+      // `16:25:36.243Z`, six ms after the press — an AGENT TURN, not a
+      // synchronous flip, and it did not finish (`release.finalized`) until
+      // `16:32:40.833Z` — `duration_ms:451472`, ~7 m 32 s, four minutes past
+      // beat 20's own bound. Run 37 (`_1.0/reports/m7-a-S10-run37.log` beat
+      // 20 timing, corroborated by that run's own archived
+      // `release-finalize.start`/`release.finalized` pair) measured the SAME
+      // step at 64986 ms (~65 s) — under the old bound by luck, not by
+      // construction: nothing in a `settle` wait's shape can size itself to
+      // an agent turn whose length the story does not control.
+      //
+      // THE FIX: an `agent` wait, watching the SAME develop cycle beats
+      // 8/10/16 already watch by identity — `cycleOf: '<runId>'`, the one
+      // placeholder this file already binds — resolving on the product's OWN
+      // word for "the merge landed": `terminal: 'merged'`. `closure.ts`
+      // moves the manifest into `_queue/merged/` and logs
+      // `closure.manifest-moved-to-merged`
+      // (`packages/flows/phases/closure.ts:109,331`) only once
+      // release-finalize has actually run the merge — confirmed on run 39's
+      // own log: that event fired at `16:32:50.416Z`, AFTER
+      // `release.finalized`, never before. Unlike `ready-for-review`,
+      // `merged` has no rename-in-place hazard (a manifest reaches it once
+      // and is never rewritten there), so it takes the plain mtime read
+      // every OTHER terminal word already gets (`beats-queue-terminal.mjs`
+      // `queueManifestTerminal`, its file header's own "EVERY OTHER TERMINAL
+      // STATE ... keeps reading mtime" clause) — no new door, no new event
+      // wiring.
+      //
+      // WHY `cycleOf` (BY IDENTITY), NOT A BORN-AFTER-THE-ANCHOR SCAN. The
+      // develop cycle's last `cycle.start` fired at the send-back's own
+      // re-dispatch (beat 16), long before this press — so a scan for a
+      // channel born since THIS beat's anchor would find nothing, beat 16's
+      // own run-30 trap one beat later. It also means a plain
+      // `cycleStartedSince` gate would read `false` for the identical
+      // reason — T1 1503's row 98 shape, reproduced here — but
+      // `makeCycleTerminalDoor` reads the queue's terminal BY IDENTITY
+      // before it ever reaches that gate (`beats-agent-proc.mjs:362-375`,
+      // "TERMINAL WINS, BEFORE ANY WINDOW ARITHMETIC"), so this wait is
+      // unaffected by it, exactly as row 98's own fix intended.
+      //
+      // `upTo: CYCLE_BOUND.ms` — the house derivation (`S10.constants.mjs`),
+      // not a new literal, and the SAME outer backstop beats 8/10/16 already
+      // declare for a wait watching this cycle by identity. It costs a
+      // healthy run nothing: the terminal ends the wait the instant
+      // `_queue/merged/` receives the manifest. At this ground's declared
+      // $44 it derives to `MAX_DECLARED_WAIT_MS` (1 800 000 ms), a ~4x
+      // margin over run 39's measured 451 472 ms finalize span and a ~28x
+      // margin over run 37's 64 986 ms — comfortable room for the variance
+      // an agent turn carries without inventing a second guessed number.
+      //
+      // NO RELOAD NEEDED (checked, not assumed). `gateState` is plain client
+      // state (`app/artifact/page.tsx:586`) flipped only by
+      // `DemoReviewSurface`'s `onSubmitted` (`:140-155`) once its own
+      // `submitVerdict` fetch resolves — and that fetch carries no
+      // client-side timeout (`bridge-client-core.ts`'s `bridgePost`/
+      // `bridgeFetch` never pass an `AbortSignal`), so the SAME page's
+      // pending request eventually resolves on its own. Run 37 shows the
+      // race resolved in the DOM's favour already: `gate-state` flipped to
+      // `approved` at `07:17:35.814Z`, three seconds BEFORE the queue even
+      // reached `_queue/merged/` (`07:17:38.434Z`) — so by the time this
+      // wait's terminal is satisfied, `expect.data`'s `gate-state: approved`
+      // is already true on the page the runner is still standing on.
       act: 'Approve — which is the merge',
       do: [{ press: 'approve-and-merge' }],
-      wait: { for: 'settle', upTo: 180_000, key: 'gate-state', while: 'idle' },
+      wait: {
+        for: 'agent', anchor: 'approve-and-merge',
+        cycleOf: '<runId>',
+        terminal: 'merged',
+        upTo: CYCLE_BOUND.ms,
+        boundBasis: CYCLE_BOUND.label,
+      },
       expect: {
         route: '/artifact',
         data: { page: 'artifact', 'gate-state': 'approved' },
