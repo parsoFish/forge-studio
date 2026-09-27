@@ -70,7 +70,8 @@ import {
   type RouteContext,
 } from '@forge/kernel';
 
-import { computeContractDrift, applyContractReset, AppTypeUnresolvedError, type DriftReport } from './reset.ts';
+import { computeContractDrift, applyContractReset, type DriftReport } from './reset.ts';
+import { AppTypeUnresolvedError } from './reset-report.ts';
 
 const DRY_RUN_RE = /^\/api\/studio\/projects\/([^/]+)\/contract-reset$/;
 const APPLY_RE = /^\/api\/studio\/projects\/([^/]+)\/contract-reset\/apply$/;
@@ -112,12 +113,13 @@ function resolveProjectRootForReset(
 function driftDto(drift: DriftReport): {
   projectId: string;
   appType: string | null;
+  appTypeNote?: string;
   rows: DriftReport['rows'];
   skillMoves: DriftReport['skillMoves'];
   gitignoreDrift: DriftReport['gitignoreDrift'];
   commandAdvisories: DriftReport['commandAdvisories'];
 } {
-  return { projectId: drift.projectId, appType: drift.appType, rows: drift.rows, skillMoves: drift.skillMoves, gitignoreDrift: drift.gitignoreDrift, commandAdvisories: drift.commandAdvisories };
+  return { projectId: drift.projectId, appType: drift.appType, appTypeNote: drift.appTypeNote, rows: drift.rows, skillMoves: drift.skillMoves, gitignoreDrift: drift.gitignoreDrift, commandAdvisories: drift.commandAdvisories };
 }
 
 /** Read the optional `{ appType?: string }` body both routes accept. An
