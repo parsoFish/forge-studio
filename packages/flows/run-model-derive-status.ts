@@ -458,3 +458,24 @@ export function deriveStopOnBudget(
     ...(stop.stoppedBeforeNode !== undefined ? { stoppedBeforeNode: stop.stoppedBeforeNode } : {}),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Operator-stop outcome (M7 row 150, ruling 1774)
+// ---------------------------------------------------------------------------
+
+/**
+ * An operator-requested stop is a DIFFERENT terminal outcome from an
+ * ordinary crash, same reasoning as `deriveStopOnBudget` above: the flow
+ * halted at a clean, resumable boundary because the OPERATOR asked it to,
+ * not because anything broke. Derived — nothing is stored (the
+ * `derive-status-dont-store-it` convention this file's `deriveStopOnBudget`
+ * doc already names) — from the runner's own `flow.operator-stop` log event
+ * (`flow-runner.ts`'s node-boundary check, `executor-table.ts`'s
+ * `runWithWedge` on a live-turn abort), which fires at the exact instant
+ * `OperatorStopError` is thrown/aborted-into. Its one call sites always
+ * request the halt, so this event firing is synonymous with the flow having
+ * stopped via an operator request.
+ */
+export function deriveOperatorStop(events: readonly EventLogEntry[]): boolean {
+  return events.some((e) => e.message === 'flow.operator-stop');
+}

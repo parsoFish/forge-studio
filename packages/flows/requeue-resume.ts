@@ -54,18 +54,37 @@ export type RequeueResumeDecision =
 export type WorkItemStatusSummary = { total: number; complete: number };
 
 /**
- * Read the prior cycle's `failure_classification` event (stamped by
- * `runCycle` on every failed cycle) and report whether it was an
- * ENVIRONMENT failure. Missing log / cycle id / classification event all
- * yield false — the requeue then behaves exactly as before (fresh re-run).
+ * M7 row 150 addendum (ruling 1794, round 3): whether the prior cycle was an
+ * ENVIRONMENT failure (N7, unchanged), PLUS whether it was a CLEAN-BOUNDARY
+ * HALT — an operator-stop or a cost-ceiling stop, neither an environment
+ * failure (both classify `environment: false` in failure-classifier.ts —
+ * neither is API pressure, it is the flow's own halt firing) but resumable
+ * for the identical WI-completion reason. Both fields are read STRUCTURED,
+ * off `FailureClassification.environment` / `.cleanBoundaryHalt`
+ * (failure-classifier.ts) as the classifier itself computed them — never by
+ * re-sniffing the classifier's own re-authored `reason` prose here, which is
+ * free-text meant for a human, not a parser.
  */
-export function readPriorFailureEnvironment(
+export type PriorFailureSignal = {
+  environment: boolean;
+  cleanBoundaryHalt: boolean;
+};
+
+const NO_PRIOR_FAILURE_SIGNAL: PriorFailureSignal = { environment: false, cleanBoundaryHalt: false };
+
+/**
+ * Read the prior cycle's `failure_classification` event (stamped by
+ * `runCycle` on every failed cycle). Missing log / cycle id / classification
+ * event all yield the all-false signal — the requeue then behaves exactly as
+ * before (fresh re-run).
+ */
+export function readPriorFailureSignal(
   forgeRoot: string,
   cycleId: string | undefined,
-): boolean {
-  if (!cycleId) return false;
+): PriorFailureSignal {
+  if (!cycleId) return NO_PRIOR_FAILURE_SIGNAL;
   const logPath = join(forgeRoot, '_logs', cycleId, 'events.jsonl');
-  if (!existsSync(logPath)) return false;
+  if (!existsSync(logPath)) return NO_PRIOR_FAILURE_SIGNAL;
   try {
     const lines = readFileSync(logPath, 'utf8').split('\n');
     for (let i = lines.length - 1; i >= 0; i--) {
@@ -78,13 +97,16 @@ export function readPriorFailureEnvironment(
         continue;
       }
       if (e.message === 'failure_classification') {
-        return e.metadata?.environment === true;
+        return {
+          environment: e.metadata?.environment === true,
+          cleanBoundaryHalt: e.metadata?.cleanBoundaryHalt === true,
+        };
       }
     }
   } catch {
-    return false;
+    return NO_PRIOR_FAILURE_SIGNAL;
   }
-  return false;
+  return NO_PRIOR_FAILURE_SIGNAL;
 }
 
 /**
@@ -142,12 +164,26 @@ export function summarizeWorkItemStatuses(worktreePath: string): WorkItemStatusS
  */
 export function decideRequeueResume(args: {
   environmentFailure: boolean;
+  /**
+   * M7 row 150 addendum (ruling 1794): true when the prior failure was an
+   * operator-stop or a cost-ceiling stop (see `PriorFailureSignal`'s own
+   * doc). Resumable for the SAME WI-completion reason `environmentFailure`
+   * already is, gated here as a second, independent trigger on the
+   * identical downstream branching — never a second copy of it. Optional so
+   * every pre-existing caller/test keeps compiling and behaving unchanged
+   * when it is omitted.
+   */
+  cleanBoundaryHalt?: boolean;
   worktreePresent: boolean;
   branchHasWork: boolean;
   workItems: WorkItemStatusSummary | null;
 }): RequeueResumeDecision {
-  if (!args.environmentFailure) {
-    return { resume: false, reason: 'prior failure not environment-classified — fresh re-run' };
+  const resumable = args.environmentFailure || args.cleanBoundaryHalt === true;
+  if (!resumable) {
+    return {
+      resume: false,
+      reason: 'prior failure neither environment-classified nor a clean-boundary halt — fresh re-run',
+    };
   }
   if (!args.worktreePresent) {
     return { resume: false, reason: 'no preserved worktree — fresh re-run' };
@@ -158,18 +194,20 @@ export function decideRequeueResume(args: {
   if (!args.workItems) {
     return { resume: false, reason: 'no readable work-item specs in the preserved worktree — fresh re-run' };
   }
+  // The two triggers share the same reason vocabulary from here — the
+  // downstream operator only needs "why does this branch resume", and
+  // "environment failure" / "clean-boundary halt" answer that identically.
+  const triggerLabel = args.environmentFailure ? 'environment failure' : 'clean-boundary halt';
   if (args.workItems.complete === args.workItems.total) {
-    return {
-      resume: true,
-      resume_from: 'integrate',
-      reason: `environment failure with all ${args.workItems.total} WIs complete on the preserved branch — resume from the integrate node (ADR 019)`,
-    };
+    const allCompleteReason =
+      `${triggerLabel} with all ${args.workItems.total} WIs complete on the preserved branch — ` +
+      'resume from the integrate node (ADR 019)';
+    return { resume: true, resume_from: 'integrate', reason: allCompleteReason };
   }
-  return {
-    resume: true,
-    resume_from: null,
-    reason: `environment failure with ${args.workItems.complete}/${args.workItems.total} WIs complete — preserve worktree; dev-loop re-runs in place`,
-  };
+  const partialReason =
+    `${triggerLabel} with ${args.workItems.complete}/${args.workItems.total} WIs complete — ` +
+    'preserve worktree; dev-loop re-runs in place';
+  return { resume: true, resume_from: null, reason: partialReason };
 }
 
 /**
@@ -182,8 +220,10 @@ export function inferRequeueResume(args: {
   worktreePath: string;
   projectRepoPath: string;
 }): RequeueResumeDecision {
+  const priorFailure = readPriorFailureSignal(args.forgeRoot, args.cycleId);
   return decideRequeueResume({
-    environmentFailure: readPriorFailureEnvironment(args.forgeRoot, args.cycleId),
+    environmentFailure: priorFailure.environment,
+    cleanBoundaryHalt: priorFailure.cleanBoundaryHalt,
     worktreePresent: existsSync(args.worktreePath),
     branchHasWork:
       existsSync(args.projectRepoPath) &&

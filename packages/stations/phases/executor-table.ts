@@ -7,7 +7,7 @@
  * cannot register a band nothing dispatches.
  */
 
-import { resolve, basename } from 'node:path';
+import { resolve, basename, dirname } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { parseManifest } from '@forge/flows';
 import { REFLECTION_LOST_EVENT, type CycleInput, type CycleOutcome } from '@forge/flows';
@@ -23,6 +23,7 @@ import { createBandRegistry, FORGE_ROOT } from '@forge/kernel';
 import { BAND_GUARD_IDS, type BandGuardId } from '@forge/contracts';
 import type { NodeExecContext } from '@forge/flows';
 import type { NodeKind } from '@forge/flows';
+import { readOperatorStopRequest } from '@forge/flows';
 import { type FlowRunnerDeps, buildDefaultDeps, raceWithWedge } from './executor-deps.ts';
 import { requireCycleId } from './cycle-id.ts';
 import type { ClassProfilePort } from '../class-profile-port.ts';
@@ -38,8 +39,14 @@ export type NodeExecutor = (ctx: ExecContext) => Promise<void>;
 
 /**
  * Run a phase fn under optional wedge detection. When wedgeKillMs is set
- * (wedgeDetector.active), races the fn against the wedge timer and emits
- * phase.wedge-killed on kill; otherwise calls it with an undefined signal.
+ * (wedgeDetector.active), races the fn against the wedge timer (AND, ADR 028
+ * amendment/ruling 1774, the operator-stop flag — the SAME race, so a live PM
+ * or dev-loop turn is cancelled through the identical AbortController) and
+ * emits phase.wedge-killed on kill; otherwise calls it with an undefined
+ * signal — a node with no wedge budget configured still halts on an operator
+ * stop, but only at the next clean node/WI boundary (flow-runner.ts), same as
+ * it would for a cost-ceiling stop today; there is no live signal to abort
+ * mid-turn without a wedge budget's AbortController already in play.
  */
 async function runWithWedge<T>(
   ctx: NodeExecContext,
@@ -47,6 +54,7 @@ async function runWithWedge<T>(
 ): Promise<T> {
   const { wedgeDetector, costLogger, input, nodeId, nodeBudget } = ctx;
   if (!wedgeDetector.active) return fn(undefined);
+  const inFlightDir = dirname(input.manifestPath);
   return raceWithWedge(
     (sig) => fn(sig),
     wedgeDetector,
@@ -60,6 +68,19 @@ async function runWithWedge<T>(
         output_refs: [],
         message: 'phase.wedge-killed',
         metadata: { node: nodeId, wedgeKillMs: nodeBudget?.wedgeKillMs, lastProgressAt: killErr.lastProgressAt },
+      });
+    },
+    () => readOperatorStopRequest(inFlightDir, input.initiativeId) !== null,
+    () => {
+      costLogger.emit({
+        initiative_id: input.initiativeId,
+        phase: 'orchestrator',
+        skill: 'flow-budgets',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'flow.operator-stop',
+        metadata: { node: nodeId },
       });
     },
   );

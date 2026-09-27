@@ -2,7 +2,7 @@
   "aligns": [
     {
       "path": "docs/decisions/028-flow-engine.md",
-      "digest": "d6070562f8b90422",
+      "digest": "918c5c17f2a60e7a",
       "why": "The whole builder: FlowDef stations/edges, validateFlow's agent-ref check, save/lint (beats 4-7)"
     },
     {

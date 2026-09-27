@@ -39,24 +39,27 @@ export const ACT_2 = [
       say: 'Act 2 starts where act 1 was watched from: the operator opens the run they are about to stop.',
     },
     {
-      // ACT 2 — SOURCE-DERIVED, and NOTHING in the pinned corpus covers it: a
-      // grep for `resume`, `forced stop`, `abort`, `kill`, `pause` across all
-      // eleven story files returns zero matches. Handles:
-      // `data-section="run-controls"` (`RunControls.tsx:176-180`, corroborated
-      // `lib/run-controls-render.test.ts:63-64`), `data-action="abandon-run"` /
-      // `"requeue-run"` / `"resume-run"` (`lib/run-controls.ts:41,49,57`,
-      // corroborated `lib/run-controls.test.ts:60`), and the arm-then-confirm
-      // pair `data-component="abandon-confirm"` + `data-action="confirm-abandon"`
-      // (`RunControls.tsx:227,235,243`, corroborated
-      // `run-controls-render.test.ts:79-80`). THIS SURFACE CONFIRMS; the
-      // roadmap drawer's `recovery-abandon` does not (header note).
+      // ACT 2 — SOURCE-DERIVED. M7 row 150 (bead forge-8vfn.8.1.39, rulings
+      // 1771 + 1774) landed the real non-destructive `stop-run` control this
+      // beat's own comment (below, before this edit) said the pinned corpus
+      // had zero coverage for — it used `abandon-run` as a stand-in, which
+      // this beat's OWN narration ("the commits are still on the branch")
+      // never matched: Abandon deletes the worktree and branch; Stop never
+      // does. Handles: `data-section="run-controls"` (`RunControls.tsx:176-180`,
+      // corroborated `apps/studio/tests/regression/run-controls-render.test.ts`),
+      // `data-action="stop-run"` (`lib/run-controls.ts`'s `RUNNING_CONTROLS`,
+      // corroborated `apps/studio/tests/regression/run-controls-view.test.ts`).
+      // Non-destructive: posts on its own click, no arm-then-confirm step
+      // (unlike the retired `abandon-run`/`confirm-abandon` pair this beat
+      // used to press) — `intentForControlClick` returns 'post' directly for
+      // a non-destructive control.
       act: 'ACT 2 — stop a run mid-flight',
-      do: [{ press: 'abandon-run' }, { press: 'confirm-abandon' }],
+      do: [{ press: 'stop-run' }],
       expect: {
         route: '/flows/forge-develop/run/<runId>',
-        data: { page: 'flow-run', section: 'run-controls', component: 'abandon-confirm' },
+        data: { page: 'flow-run', section: 'run-controls', 'outcome-control': 'stop' },
       },
-      say: 'Things stop halfway. What matters is not that it never happens but that stopping is a decision the operator makes on purpose, twice, rather than something they discover.',
+      say: 'Things stop halfway. What matters is not that it never happens but that stopping is a decision the operator makes on purpose — and that it never throws away the work already done.',
     },
     {
       // NAVIGATION-ONLY (T1 ruling 533, the 504 class: `route` plus

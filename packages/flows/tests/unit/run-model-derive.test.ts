@@ -10,7 +10,16 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildNodeMeta, deriveWorkItems, findDelivered, eventToNodeId, deriveNodeStatuses, findFailure, deriveStopOnBudget } from '../../run-model-derive.ts';
+import {
+  buildNodeMeta,
+  deriveWorkItems,
+  findDelivered,
+  eventToNodeId,
+  deriveNodeStatuses,
+  findFailure,
+  deriveStopOnBudget,
+  deriveOperatorStop,
+} from '../../run-model-derive.ts';
 import type { EventLogEntry, Phase } from '@forge/kernel';
 import type { RunPhaseStatus } from '../../run-model.ts';
 
@@ -609,4 +618,29 @@ test('deriveStopOnBudget: a stop event with no stoppedBeforeNode omits the field
   const r = deriveStopOnBudget(events, [] as never);
   assert.ok(r);
   assert.equal(r.stoppedBeforeNode, undefined);
+});
+
+// ---------------------------------------------------------------------------
+// M7 row 150 (ruling 1774) — deriveOperatorStop: same derive-don't-store shape
+// as deriveStopOnBudget above, keyed on the runner's own flow.operator-stop event.
+// ---------------------------------------------------------------------------
+
+test('deriveOperatorStop: an operator-stop event derives true', () => {
+  const events = [
+    ev('orchestrator', 'log', { message: 'flow.operator-stop', metadata: { stoppedBeforeNode: null } }),
+  ];
+  assert.equal(deriveOperatorStop(events), true);
+});
+
+test(
+  'deriveOperatorStop: no operator-stop event derives false — an ordinary failure never reads ' +
+    'as an operator stop',
+  () => {
+    const events = [ev('developer-loop', 'error', { message: 'agent process crashed' })];
+    assert.equal(deriveOperatorStop(events), false);
+  },
+);
+
+test('deriveOperatorStop: an empty event stream derives false', () => {
+  assert.equal(deriveOperatorStop([]), false);
 });

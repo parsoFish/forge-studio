@@ -218,6 +218,16 @@ export async function recoveryAbandon(initiativeId: string): Promise<{ ok: boole
   return bridgePost(`/api/recovery/${encodeURIComponent(initiativeId)}/abandon`);
 }
 
+/**
+ * Stop an active or gated run (M7 row 150, rulings 1771 + 1774). Never
+ * destructive: active writes a stop flag the runner consults at its next
+ * clean boundary; gated moves straight to failed/ (no live agent) — both
+ * KEEP the worktree and branch, unlike abandon.
+ */
+export async function recoveryStop(initiativeId: string): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost(`/api/recovery/${encodeURIComponent(initiativeId)}/stop`);
+}
+
 export type SchedulerStatus = {
   running: boolean;
   pid?: number | null;

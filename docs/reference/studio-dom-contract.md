@@ -1164,6 +1164,27 @@ is what this contract reads — but it cannot be the only distinguisher.
   there. A **queued** (`planned`) run has no run-scoped control and instead
   mounts the `strip` SchedulerCard, which is the only thing that can start it
   (`schedulerStrip={false}` on the monitor, which mounts its own strip already).
+
+  **M7 row 150 (bead `forge-8vfn.8.1.39`, rulings 1771 + 1774):** an **active**
+  or **gated** run offers exactly one control,
+  `button[data-action="stop-run"]`, alongside
+  `[data-component="run-control-detail"][data-control="stop"]`. It is
+  non-destructive (posts on its own click, no arm-then-confirm — unlike
+  Abandon) and never touches the worktree or branch: active writes a flag file
+  the runner consults at its next clean node/work-item boundary (the same
+  boundary the cost-ceiling stop already halts at, ADR 028's amendment);
+  gated has no live agent, so it moves the manifest to `failed/` directly. A
+  successful post renders `[data-component="run-control-outcome"]
+  [data-outcome-control="stop"]` (plain text, not the scheduler-aware
+  `enqueue-outcome` line — a stop enqueues nothing). Once the halt lands the
+  run is `failed`, and the status line/RunRail note that already prefer
+  `stopOnBudget` over `failNote` (above) prefer this THIRD, same-priority-band
+  kind too: `[data-component="run-status-line"][data-run-stop-reason
+  ="operator-stop"]` (mirrored on RunRail's own note, `[data-run-stop-reason
+  ="operator-stop"]`) — derived per read from the run's own `flow.operator-stop`
+  event (`deriveOperatorStop`, `packages/flows/run-model-derive-status.ts`),
+  never stored.
+
   Any other status renders nothing at all. The summary
   strip's ELAPSED stops at `run.completedAt` for a finished run
   (`[data-elapsed-final="true"]`, `lib/run-elapsed.ts`); the event tail's

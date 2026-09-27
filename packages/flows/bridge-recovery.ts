@@ -10,6 +10,12 @@
  *   POST /api/recovery/:id/abandon  → move it to failed/ + clean worktree + branch
  *   POST /api/recovery/:id/requeue  → move it back to pending/ (resetRetries /
  *                                     resumeFromIntegrate), wrapping runRequeue
+ *   POST /api/recovery/:id/stop     → M7 row 150 (rulings 1771 + 1774) — a
+ *                                     NON-destructive halt: active writes a
+ *                                     flag file the runner polls at its next
+ *                                     clean boundary; gated (no live agent)
+ *                                     moves straight to failed/. NEVER
+ *                                     touches the worktree or branch.
  *   POST /api/initiatives           → enqueue a fresh manifest from a spec body
  *                                     (recovery-grade; the architect flow is the
  *                                     canonical authoring path)
@@ -20,7 +26,7 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, renameSync, rmSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { getPaths } from './queue.ts';
@@ -29,6 +35,12 @@ import { runRequeue } from './forge-requeue.ts';
 import { sendJson, pathOnly, allowedOrigin, sanitizeError } from '@forge/kernel';
 import { INIT_ID_RE } from './bridge-studio-runs.ts';
 import { isDryBridge, refuseDryBridge } from '@forge/kernel';
+import {
+  OPERATOR_STOP_REASON,
+  appendOperatorStopEvents,
+  operatorStopPath,
+  type OperatorStopRequest,
+} from './operator-stop.ts';
 import {
   validateManifestPathFields,
   isContainedWorktreePath,
@@ -159,15 +171,76 @@ export function recoveryAbandon(initiativeId: string, ctx: RecoveryContext): { o
   const failedDir = getPaths(ctx.queueRoot).failed;
   mkdirSync(failedDir, { recursive: true });
   renameSync(located.path, join(failedDir, `${initiativeId}.md`));
-  // Drop any stale verdict sidecars in in-flight.
+  // Drop any stale verdict sidecars in in-flight — `.stop` joins the sweep
+  // (M7 row 150, ruling 1774): a prior operator-stop's flag file, now inert.
   const inFlight = getPaths(ctx.queueRoot).inFlight;
-  for (const suffix of ['.verdict-prompt.md', '.verdict-response.md']) {
+  for (const suffix of ['.verdict-prompt.md', '.verdict-response.md', '.stop']) {
     const p = join(inFlight, `${initiativeId}${suffix}`);
     if (existsSync(p)) { try { rmSync(p, { force: true }); } catch { /* */ } }
   }
   // Return a queue-relative reference (not an absolute fs path) — same convention
   // as the rest of the bridge's sanitised responses (security review, S9).
   return { ok: true, movedTo: `failed/${initiativeId}.md` };
+}
+
+export type RecoveryStopResult = {
+  ok: boolean;
+  detail?: string;
+  /** Which half of the non-destructive stop ran (M7 row 150, ruling 1774). */
+  mode?: 'active' | 'gated';
+  movedTo?: string;
+};
+
+/**
+ * Port of the `stop-run` control (bead forge-8vfn.8.1.39, rulings 1771 +
+ * 1774) — non-destructive, UNLIKE `recoveryAbandon`: never deletes the
+ * worktree or branch.
+ *
+ * ACTIVE (in-flight): there IS a live agent, running in the SEPARATE `forge
+ * serve` daemon process — this bridge process has no handle on it (ADR 011
+ * process boundary) and does not try to build one. It writes a flag file the
+ * runner already polls at its existing clean-boundary checks (the SAME
+ * mechanism the cost ceiling halts at — `flow-runner.ts`, ADR 028
+ * amendment). Pure filesystem write, so no dry-bridge refusal is needed
+ * (`apps/forge/dry-bridge.ts` classifies this route `exempt-local`).
+ *
+ * GATED (ready-for-review): there is NO live agent at all — the cycle
+ * already finished and is idle, waiting on the operator's PR merge. This is
+ * `recoveryAbandon` minus the worktree/branch delete: move the manifest to
+ * `failed/` directly and record the SAME reason `deriveOperatorStop` reads
+ * for the active path (`appendOperatorStopEvents`), since nothing will ever
+ * run the runner's own boundary check for a manifest that already left
+ * in-flight.
+ */
+export function recoveryStop(
+  initiativeId: string,
+  ctx: RecoveryContext,
+  actor = 'operator',
+): RecoveryStopResult {
+  const located = locate(initiativeId, ctx.queueRoot);
+  if (!located) return { ok: false, detail: 'no manifest found' };
+
+  if (located.state === 'in-flight') {
+    const flagPath = operatorStopPath(getPaths(ctx.queueRoot).inFlight, initiativeId);
+    const request: OperatorStopRequest = {
+      reason: OPERATOR_STOP_REASON,
+      ts: new Date().toISOString(),
+      actor,
+    };
+    writeFileSync(flagPath, JSON.stringify(request, null, 2));
+    return { ok: true, mode: 'active' };
+  }
+
+  if (located.state === 'ready-for-review') {
+    const m = parseManifest(readFileSync(located.path, 'utf8'));
+    const failedDir = getPaths(ctx.queueRoot).failed;
+    mkdirSync(failedDir, { recursive: true });
+    renameSync(located.path, join(failedDir, `${initiativeId}.md`));
+    if (m.cycle_id) appendOperatorStopEvents(ctx.logsRoot, m.cycle_id, initiativeId);
+    return { ok: true, mode: 'gated', movedTo: `failed/${initiativeId}.md` };
+  }
+
+  return { ok: false, detail: `initiative "${initiativeId}" is ${located.state}, not active or gated` };
 }
 
 /**
@@ -205,6 +278,21 @@ export async function handleRecoveryRoutes(
     if (!INIT_ID_RE.test(id)) { sendJson(res, 400, { error: 'invalid initiative id' }, origin); return true; }
     try {
       const result = recoveryAbandon(id, ctx);
+      sendJson(res, result.ok ? 200 : 404, result, origin);
+    } catch (err) { sendJson(res, 500, { error: sanitizeError(err) }, origin); }
+    return true;
+  }
+
+  // POST /api/recovery/:id/stop — non-destructive (M7 row 150, ruling 1774).
+  // exempt-local under the dry bridge: active writes a flag file, gated
+  // moves a manifest — neither spawns, neither touches git (dry-bridge.ts's
+  // HAND_ROUTE_CLASSIFICATION row for this route states the same).
+  const stopMatch = url.match(/^\/api\/recovery\/([^/]+)\/stop$/);
+  if (method === 'POST' && stopMatch) {
+    const id = decodeURIComponent(stopMatch[1]);
+    if (!INIT_ID_RE.test(id)) { sendJson(res, 400, { error: 'invalid initiative id' }, origin); return true; }
+    try {
+      const result = recoveryStop(id, ctx);
       sendJson(res, result.ok ? 200 : 404, result, origin);
     } catch (err) { sendJson(res, 500, { error: sanitizeError(err) }, origin); }
     return true;

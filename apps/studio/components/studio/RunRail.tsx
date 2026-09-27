@@ -6,7 +6,7 @@ import Link from 'next/link';
 import type { Flow, Run } from '@/lib/studio-client';
 import { gateArtifactHref } from '@/lib/gate-artifact-href';
 import { initialCollapsed, railStorageKey, serializeCollapsed, visibleGroupRuns, type RailCollapsed } from '@/lib/run-rail-collapse';
-import { describeStopOnBudget, runFailureNoteKind } from '@/lib/run-controls';
+import { describeOperatorStop, describeStopOnBudget, runFailureNoteKind } from '@/lib/run-controls';
 
 // ---------------------------------------------------------------------------
 // RunRail — left panel listing runs grouped by status. Each group is a
@@ -345,6 +345,21 @@ function RunCard({
           }}
         >
           {describeStopOnBudget(run.stopOnBudget!)}
+        </div>
+      )}
+      {/* M7 row 150 (ruling 1774): `operatorStop`'s sibling to the budget-stop
+          block above — same amber "nothing crashed" treatment. */}
+      {failureNoteKind === 'operator-stop' && (
+        <div
+          data-run-stop-reason="operator-stop"
+          style={{
+            fontSize: 11,
+            color: 'var(--amber)',
+            lineHeight: 1.4,
+            marginTop: 2,
+          }}
+        >
+          {describeOperatorStop()}
         </div>
       )}
       {failureNoteKind === 'fail-note' && (

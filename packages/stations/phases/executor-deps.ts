@@ -19,7 +19,7 @@ import { FORGE_ROOT } from '@forge/kernel';
 import type { AgentDefinition } from '@forge/contracts';
 import type { ProjectGate } from '@forge/kernel';
 import { type ClosureResult, type CycleInput, type ReviewerOutcome } from '@forge/flows';
-import { WedgeDetector, WedgeKillError } from '@forge/flows';
+import { WedgeDetector, WedgeKillError, OperatorStopError } from '@forge/flows';
 import { runProjectManager as realRunProjectManager } from './project-manager.ts';
 import { requireCycleId } from './cycle-id.ts';
 import { runDeveloperLoop as realRunDeveloperLoop, emitDeliverySummary } from './developer-loop.ts';
@@ -286,22 +286,34 @@ export function buildDefaultDeps(classProfiles?: ClassProfilePort): FlowRunnerDe
 }
 
 /**
- * Race an executor promise against a concurrent wedge-kill timer.
- * Returns the executor result when it wins. Throws WedgeKillError when
- * the wedge timer wins (even if the executor never resolves — this is the
+ * Race an executor promise against a concurrent wedge-kill timer, AND (ADR 028
+ * amendment, ruling 1774) an operator-stop flag — the SAME timer, the SAME
+ * AbortController, so a live turn (PM / dev-loop Ralph, the two callers that
+ * thread this signal on as `externalSignal`) is cancelled the identical way a
+ * wedge-kill cancels it, never a second poller thread. Returns the executor
+ * result when it wins. Throws WedgeKillError / OperatorStopError when the
+ * timer wins instead (even if the executor never resolves — this is the
  * gap-closing path).
  *
- * The wedgeAbort signal is passed to the executor for best-effort SDK cancel.
- * The poll interval is 100ms — accurate enough for minute-scale wedge windows,
- * imperceptible overhead.
+ * The wedgeAbort signal is passed to the executor for best-effort SDK cancel,
+ * with the winning error as `AbortController.abort(reason)`'s reason so a
+ * caller reading `signal.reason` can tell wedge-kill and operator-stop apart
+ * (`developer-loop.ts`'s two abort-message sites do exactly this).
  *
- * Only called when wedgeDetector.active is true (wedgeKillMs is set).
+ * The poll interval is 100ms — accurate enough for minute-scale wedge windows
+ * and an operator's own reaction time, imperceptible overhead.
+ *
+ * Only called when wedgeDetector.active is true (wedgeKillMs is set) — see
+ * `runWithWedge`'s own doc for why an operator stop still halts a node with no
+ * wedge budget configured, via the boundary checks alone (flow-runner.ts).
  * Cleans up the poll timer on BOTH outcomes.
  */
 export async function raceWithWedge<T>(
   executorFn: (signal: AbortSignal) => Promise<T>,
   wedgeDetector: WedgeDetector,
   onKill: (err: WedgeKillError) => void,
+  checkOperatorStop: () => boolean,
+  onOperatorStop: (err: OperatorStopError) => void,
 ): Promise<T> {
   const wedgeAbort = new AbortController();
   let pollHandle: ReturnType<typeof setInterval> | undefined;
@@ -314,7 +326,14 @@ export async function raceWithWedge<T>(
         // Reject BEFORE abort so the race rejects with WedgeKillError even
         // if the executor's abort listener resolves its promise synchronously.
         reject(killErr);
-        wedgeAbort.abort();
+        wedgeAbort.abort(killErr);
+        return;
+      }
+      if (checkOperatorStop()) {
+        const stopErr = new OperatorStopError();
+        onOperatorStop(stopErr);
+        reject(stopErr);
+        wedgeAbort.abort(stopErr);
       }
     }, 100);
   });

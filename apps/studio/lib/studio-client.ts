@@ -40,6 +40,7 @@ import { parseStandingTriggers, type StandingTrigger } from './standing-triggers
 import { parseContractStageRow, type ContractStageRow } from './session-client';
 import { parseSessionLifecycle, type SessionLifecycle } from './session-lifecycle-client';
 import { MATERIAL_KINDS, type MaterialKind } from '@forge/contracts';
+import { carryWireFieldIfDefined } from './run-wire-field';
 // agents-15 (forge-6gv.5.1): the Agent wire type + its parse function(s) and
 // agent-only helpers live in their own module now, split out so this file
 // can grow the fields the Definition Preview needs
@@ -889,11 +890,10 @@ export function parseRun(raw: unknown): Run {
     gateNote:      r.gateNote,
     failedAt:      r.failedAt,
     failNote:      r.failNote,
-    // W8-A2 (ON-7 defect 2): same declared-data-fails-open guard as
-    // trigger/reflectionLost/prUrl below — stopOnBudget was already served
-    // on the wire but silently dropped here before RunControls/RunRail
-    // ever saw it.
-    ...(r.stopOnBudget !== undefined ? { stopOnBudget: r.stopOnBudget } : {}),
+    // W8-A2 (ON-7 defect 2) / M7 row 150 (ruling 1774): the declared-data-fails-
+    // open guard (run-wire-field.ts) — see that file for the full history.
+    ...carryWireFieldIfDefined(r.stopOnBudget, 'stopOnBudget'),
+    ...carryWireFieldIfDefined(r.operatorStop, 'operatorStop'),
     workItems:     r.workItems     ?? [],
     flowLineage:   r.flowLineage   ?? [],
     // R6-01 WI-2: carried through, never defaulted — an absent `trigger` key

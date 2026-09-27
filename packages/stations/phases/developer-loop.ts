@@ -39,7 +39,7 @@ import { makeToolEventSink } from '@forge/agents';
 import { makeProjectSkillsLoadedSink } from '@forge/agents';
 import { runRalphLoop as runRalph, type LoopResult } from '@forge/agents';
 import { matchesRateLimitSignature } from '@forge/agents';
-import { createWiWorktree, removeWiWorktree } from '@forge/flows';
+import { createWiWorktree, removeWiWorktree, wedgeKillRunnerError } from '@forge/flows';
 import { emitDepsLinkProblems, emitGateEvent, emitUncommittedWorkSwept } from './dev-loop-events.ts';
 import { createMergeQueue, mergeAndPublish, type MergeConflictDetail } from '@forge/flows';
 import { makeQualityGateFromCmd, resolveGateTimeoutMs, type GateRunInfo } from '@forge/agents';
@@ -663,7 +663,7 @@ export async function runDeveloperLoop(
     // F-44: bounded retry on transient agent-subprocess crash only.
     for (let attempt = 0; attempt <= DEV_AGENT_CRASH_MAX_RETRIES; attempt++) {
       // R2-03-F4: a wedge-kill mid-flight must not spawn a fresh retry attempt.
-      if (signal?.aborted) { runnerError = { kind: 'aborted', message: 'wedge-kill: node aborted' }; break; }
+      if (signal?.aborted) { runnerError = wedgeKillRunnerError(signal, 'wedge-kill: node aborted'); break; }
       runnerError = undefined;
       try {
         // re-review #1: captured by the gate's onRun each run; read by the
@@ -800,7 +800,7 @@ export async function runDeveloperLoop(
       // Reclassify to `aborted` and break, mirroring the between-attempt guard
       // at the top of this loop.
       if (runnerError && signal?.aborted) {
-        runnerError = { kind: 'aborted', message: 'wedge-kill: node aborted mid-attempt' };
+        runnerError = wedgeKillRunnerError(signal, 'wedge-kill: node aborted mid-attempt');
         break;
       }
 

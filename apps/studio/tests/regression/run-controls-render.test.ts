@@ -55,14 +55,38 @@ function markup(Component: unknown, props: Record<string, unknown>): string {
 
 // ---- flows-28 / flows-49: the failed-run controls ---------------------------
 
+// row 150 (rulings 1771 + 1774): `RUN_CONTROL_ACTIONS` now also carries
+// `stop-run`, which a FAILED run never renders (it is active/gated-only) —
+// so the failed-run assertions below name their three actions explicitly
+// rather than looping the whole vocabulary.
+const FAILED_RUN_ACTIONS = ['resume-run', 'requeue-run', 'abandon-run'] as const;
+
 test('flows-28: a failed run renders all three recovery controls, each with its own run id', () => {
   const html = markup(RunControls, { run: run('failed') });
-  for (const action of RUN_CONTROL_ACTIONS) {
+  for (const action of FAILED_RUN_ACTIONS) {
     expect(html, action).toContain(`data-action="${action}"`);
   }
+  expect(html).not.toContain('data-action="stop-run"');
   expect(html).toContain('data-section="run-controls"');
   expect(html).toContain('data-control-count="3"');
   expect(html).toContain('data-run-status="failed"');
+});
+
+test('row 150: an ACTIVE or GATED run renders stop-run, and none of the failed-run actions', () => {
+  for (const status of ['active', 'gated'] as RunStatus[]) {
+    const html = markup(RunControls, { run: run(status) });
+    expect(html, status).toContain('data-action="stop-run"');
+    expect(html, status).toContain('data-control-count="1"');
+    for (const action of FAILED_RUN_ACTIONS) {
+      expect(html, `${status}/${action}`).not.toContain(`data-action="${action}"`);
+    }
+  }
+});
+
+test('row 150: stop-run posts on its own click — no arm-then-confirm ceremony (unlike abandon)', () => {
+  const html = markup(RunControls, { run: run('active') });
+  expect(html).toContain('data-control-intent="post"');
+  expect(html).not.toContain('data-control-intent="arm"');
 });
 
 test('flows-49: each control renders its own disclosure of what it does', () => {
@@ -139,9 +163,9 @@ test('flows-23: the scheduler strip can be opted out of where a surface already 
 });
 
 test('a run with neither recovery controls nor a scheduler dependency renders nothing at all', () => {
-  for (const status of ['active', 'gated', 'complete'] as RunStatus[]) {
-    expect(markup(RunControls, { run: run(status) }), status).toBe('');
-  }
+  // row 150 (rulings 1771 + 1774): active/gated now offer stop-run — pinned
+  // in its own test above; only complete (and null) render nothing.
+  expect(markup(RunControls, { run: run('complete') })).toBe('');
   expect(markup(RunControls, { run: null })).toBe('');
 });
 
@@ -159,7 +183,7 @@ test('flows-23: the run detail page shows the run\'s status in the body, not onl
 
 test('flows-23: the run detail page of a FAILED run carries the recovery controls', () => {
   const html = detail(run('failed'));
-  for (const action of RUN_CONTROL_ACTIONS) {
+  for (const action of FAILED_RUN_ACTIONS) {
     expect(html, action).toContain(`data-action="${action}"`);
   }
 });

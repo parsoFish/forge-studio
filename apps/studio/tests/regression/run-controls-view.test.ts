@@ -57,7 +57,29 @@ test('flows-28: every control names the bridge action it drives, and abandon is 
   expect(controls.map((c) => c.action)).toEqual(['resume-run', 'requeue-run', 'abandon-run']);
   expect(controls.filter((c) => c.destructive).map((c) => c.id)).toEqual(['abandon']);
   // RUN_CONTROL_ACTIONS is what the DOM contract and the journeys key on.
-  expect(RUN_CONTROL_ACTIONS).toEqual(['resume-run', 'requeue-run', 'abandon-run']);
+  expect(RUN_CONTROL_ACTIONS).toEqual(['stop-run', 'resume-run', 'requeue-run', 'abandon-run']);
+});
+
+// ---------------------------------------------------------------------------
+// M7 row 150 (bead forge-8vfn.8.1.39, rulings 1771 + 1774) — the
+// non-destructive stop-run control.
+// ---------------------------------------------------------------------------
+
+test('row 150: an ACTIVE or GATED run offers stop-run, and ONLY stop-run', () => {
+  for (const status of ['active', 'gated'] as RunStatus[]) {
+    const controls = deriveRunControls(run(status));
+    expect(controls.map((c) => c.id), status).toEqual(['stop']);
+    expect(controls[0]!.action, status).toBe('stop-run');
+    // Non-destructive: unlike Abandon, Stop posts on its own click.
+    expect(controls[0]!.destructive, status).toBe(false);
+    expect(intentForControlClick(controls[0]!), status).toBe('post');
+  }
+});
+
+test('row 150: a FAILED run is unchanged by the new control — resume/requeue/abandon, never stop', () => {
+  const ids = deriveRunControls(run('failed')).map((c) => c.id);
+  expect(ids).toEqual(['resume', 'requeue', 'abandon']);
+  expect(ids).not.toContain('stop');
 });
 
 test('flows-49: resume and requeue disclose that they are DIFFERENT acts', () => {
@@ -73,8 +95,10 @@ test('flows-49: resume and requeue disclose that they are DIFFERENT acts', () =>
   expect(byId.resume.detail).not.toBe(byId.requeue.detail);
 });
 
-test('flows-28: a run that has not failed offers no recovery control at all', () => {
-  for (const status of ['planned', 'active', 'gated', 'complete'] as RunStatus[]) {
+test('flows-28: a QUEUED or COMPLETE run offers no recovery control at all', () => {
+  // row 150 (rulings 1771 + 1774): active/gated now offer stop-run — moved to
+  // their own test above; planned/complete are unaffected by that change.
+  for (const status of ['planned', 'complete'] as RunStatus[]) {
     expect(deriveRunControls(run(status)), status).toEqual([]);
   }
   expect(deriveRunControls(null)).toEqual([]);
@@ -213,4 +237,32 @@ test('WI-1a-5: describeStopOnBudget omits the resumable-boundary clause honestly
   const text = describeStopOnBudget(rest as NonNullable<Run['stopOnBudget']>);
   expect(text).toContain(', resumable.');
   expect(text).not.toContain('resumable before');
+});
+
+// ---------------------------------------------------------------------------
+// M7 row 150 (ruling 1774) — `operatorStop` is a THIRD `runFailureNoteKind`,
+// same priority band as `stopOnBudget`: same "clean, resumable, no crash"
+// shape, checked directly against `describeStopOnBudget`'s own precedent.
+// ---------------------------------------------------------------------------
+import { describeOperatorStop } from '../../lib/run-controls.ts';
+
+test('row 150: a run with operatorStop renders the operator-stop note, never the generic failNote', () => {
+  const failed = run('failed', {
+    operatorStop: true,
+    failNote: 'failure could not be classified — examine events.jsonl manually',
+  });
+  expect(runFailureNoteKind(failed)).toBe('operator-stop');
+  expect(describeOperatorStop()).not.toContain('could not be classified');
+  expect(describeOperatorStop()).toMatch(/operator/i);
+});
+
+test('row 150: stopOnBudget still wins over operatorStop when (hypothetically) both are set', () => {
+  // Mutually exclusive in practice (whichever boundary threw first is the one
+  // that ran) — this pins the DECLARED priority order rather than assuming it.
+  const failed = run('failed', { stopOnBudget: STOP_ON_BUDGET, operatorStop: true });
+  expect(runFailureNoteKind(failed)).toBe('budget');
+});
+
+test('row 150: operatorStop on a non-failed run never renders (same status gate as stopOnBudget)', () => {
+  expect(runFailureNoteKind(run('active', { operatorStop: true }))).toBe(null);
 });
