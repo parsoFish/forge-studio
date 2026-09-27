@@ -60,7 +60,15 @@ report green, not to claim it did.
    fast, deterministic test command from `package.json` `scripts.test`, a
    `Makefile`, or the language's convention (shape criteria the gate must meet:
    `forge-onboard-project` Step 4 / `docs/schemas/project-config.schema.json`).
-   Write it to `.forge/project.json` `testProcess.local.cmd` (create the file
+   **Run the candidate command once and confirm it exits green at HEAD before
+   declaring it** — C1 requires green at HEAD, not merely a plausible shape.
+   If the natural whole-suite command is red at HEAD by design (a partly-red
+   suite, e.g. permanently-red TDD stubs), do not declare it: propose the
+   command CI itself actually runs (read `.github/workflows/*`) if that
+   measures green, or a package/test-file scope that does. If no scope
+   measures green, stop and report — same as an unfixable hard clause (Step 8)
+   — rather than declaring a gate that can never pass. Write the verified
+   command to `.forge/project.json` `testProcess.local.cmd` (create the file
    if absent). **This must precede any AGENTS.md authoring** — the
    instructions-coverage check only engages once the gate command is declared.
 
