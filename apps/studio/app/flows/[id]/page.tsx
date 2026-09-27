@@ -8,6 +8,7 @@ import { fetchRuns, fetchRun, fetchStudioFlows, fetchFlow, fetchStudioAgents, fe
 import type { Run, Flow, Agent } from '@/lib/studio-client';
 import { resolveFlowViewState } from '@/lib/flow-view-state';
 import { runsForFlow, splitRunsForFlow } from '@/lib/home-view';
+import { readStickyRunSelection, resolveInitialRun, writeStickyRunSelection } from '@/lib/run-selection';
 import { StudioNav } from '@/components/StudioNav';
 import { NotFound } from '@/components/NotFound';
 import { PageLoadError } from '@/components/PageLoadError';
@@ -46,18 +47,6 @@ import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 //       {type:'event', cycleId} for active run's cycleId → append to tail + refresh run
 //       {type:'cycle-list-changed'} → re-fetch runs
 // ---------------------------------------------------------------------------
-
-/** W7-B4 (flows-27): a stable, key-sorted serialisation of the builder's
- *  editable state — header fields + canvas nodes/edges — used to detect
- *  unsaved edits before they are silently discarded on a tab switch. */
-function pickDefaultRun(runs: Run[]): Run | null {
-  // Priority: gated → active → first complete → first planned
-  const gated    = runs.find((r) => r.status === 'gated');
-  const active   = runs.find((r) => r.status === 'active');
-  const complete = runs.find((r) => r.status === 'complete');
-  const planned  = runs.find((r) => r.status === 'planned');
-  return gated ?? active ?? complete ?? planned ?? runs[0] ?? null;
-}
 
 // W6-SW-3 (sweep C3#6): ConnectionState → the shared status-dot vocabulary
 // (globals.css only styles pending/active/complete/retrying/failed). Both
@@ -191,20 +180,13 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
         const allRuns = runsForFlow(id, everyRun);
         setRuns(allRuns);
 
-        // Selection precedence: explicit preserve id → the user's sticky pick
-        // (sessionStorage, survives reloads) → gated-first default. Without
-        // the sticky layer, pickDefaultRun's gated-first priority pulls focus
-        // to the top "needs you" run on every page load.
-        let sticky: string | null = null;
-        try {
-          sticky = sessionStorage.getItem(`forge-run-sel:${id}`);
-        } catch {
-          /* non-fatal */
-        }
-        const next =
-          (preserveRunId ? allRuns.find((r) => r.id === preserveRunId) : undefined) ??
-          (sticky ? allRuns.find((r) => r.id === sticky) : undefined) ??
-          pickDefaultRun(allRuns);
+        // Selection precedence (lib/run-selection.ts): explicit preserve id →
+        // the user's sticky pick (sessionStorage, survives reloads) →
+        // gated-first default. Without the sticky layer, the default's
+        // gated-first priority pulls focus to the top "needs you" run on
+        // every page load.
+        const sticky = readStickyRunSelection(id);
+        const next = resolveInitialRun(allRuns, { preserveRunId, sticky });
         setActiveRun(next);
         setKickoffOpen((prev) => (prev === null ? allRuns.length === 0 : prev));
         setLoadError(null);
@@ -464,13 +446,9 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
       const run = runs.find((r) => r.id === runId) ?? null;
       setActiveRun(run);
       // Sticky selection: the user's explicit pick must survive reloads and
-      // data refreshes — without this, pickDefaultRun's gated-first priority
+      // data refreshes — without this, the default's gated-first priority
       // yanks focus back to the top "needs you" run on every re-derivation.
-      try {
-        if (run) sessionStorage.setItem(`forge-run-sel:${id}`, run.id);
-      } catch {
-        /* sessionStorage unavailable (SSR/private mode) — non-fatal */
-      }
+      if (run) writeStickyRunSelection(id, run.id);
       setTailEvents([]); // clear tail on run switch
       setDrawer({ node: null, hexKind: 'phase' });
     },

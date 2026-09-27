@@ -72,16 +72,40 @@
  * (`app/flows/[id]/page.tsx`'s own header comment), so every wait declared
  * there is an ordinary DOM poll against a page that is actually live.
  *
- * `pickDefaultRun` (`app/flows/[id]/page.tsx:53-59`) resolves the monitor's
- * selected run fresh on every load when nothing is sticky (`gated ?? active
- * ?? complete ?? planned ?? runs[0]`) — this story never presses a run row
- * (`RunCard` carries no `data-action` a `press` step could reach), so nothing
- * here ever sets the sessionStorage sticky pick, and the monitor always
- * re-derives live. `complete` outranks `planned`, so a monitor visit in the
- * WINDOW between a stop and the scheduler reclaiming the resumed manifest
- * can show ACT 1's OWN `complete` run instead of the second one — and ACT 1
- * has its own `WI-1`, already `complete`, so a bare `wi-id`/`status`
- * assertion cannot tell the two runs apart (ROW 149 ROUND 2).
+ * `pickDefaultRun` (`lib/run-selection.ts`'s `resolveInitialRun`, moved out of
+ * `app/flows/[id]/page.tsx` by row 156) resolves the monitor's selected run
+ * fresh on every load when nothing is sticky (`gated ?? active ?? complete ??
+ * planned ?? runs[0]`). Before row 156 this story never pressed a run row (the
+ * rail had no `data-action` a press could reach), so nothing ever set the
+ * sessionStorage sticky pick and the monitor always re-derived live —
+ * `complete` outranks `planned`, so a monitor visit in the WINDOW between a
+ * stop and the scheduler reclaiming the resumed manifest could show ACT 1's
+ * OWN `complete` run instead of the second one, and ACT 1 has its own `WI-1`,
+ * already `complete`, so a bare `wi-id`/`status` assertion could not tell the
+ * two runs apart (ROW 149 ROUND 2). Row 156 (immediately below) makes
+ * selection explicit instead of relying on that re-derivation.
+ *
+ * ROW 156 (`forge-8vfn.8.1.44`, ruling 1852) gave `RunCard` a real
+ * `[data-action="select-run-<runId>"][data-run-id]` handle on the SAME element
+ * as its existing `onClick` — the run's own id CONCATENATED into the
+ * `data-action` value, the same convention `open-initiative-<id>` already uses
+ * (`InitiativeDetail.tsx`), never a bare `select-run` plus a separate
+ * `data-run-id` to scope it (which no DSL verb can target: an unscoped
+ * `press: 'select-run'` resolves via `.first()`, ambiguous the moment two run
+ * cards are on the rail, and `pressWithin`'s scoped handle,
+ * `[data-<attr>="<value>"] [data-action="<action>"]`, is a CSS DESCENDANT
+ * selector that never matches an action and its scoping attribute on the SAME
+ * element). Every one of the FIVE monitor-hex beats below now presses it
+ * FIRST, as `{ pressBound: { action: 'select-run-', bind: 'cycleId2' } }` —
+ * the SAME `pressBound` shape the "open the second initiative" beat already
+ * uses for `open-initiative-<id>` (`resolveBoundPresses`, `beats.mjs`,
+ * concatenates the bound `<cycleId2>` value straight onto the action string) —
+ * so the monitor's shown run is ACT 2's own `<cycleId2>` by construction,
+ * never whichever run `pickDefaultRun` or the rail's group order would have
+ * picked. The `section`+`run-id` pairing ROUND 3 already requires on every
+ * monitor hex assertion below is UNCHANGED and remains the load-bearing guard
+ * — a press that (somehow) lands on the wrong card still reds there, honestly,
+ * rather than passing on a coincidence.
  *
  * ROW 149 ROUND 3 — `run-id` ALONE DOES NOT GUARD IT, AND WHY. The first fix
  * added `run-id: '<cycleId2>'` beside every hex assertion, reasoning that
@@ -409,8 +433,18 @@ export const ACT_2 = [
       // reusing `CYCLE_BOUND` (derived from the FIRST initiative's larger
       // budget) is deliberately generous for this smaller one — a wider
       // bound costs patience, never money.
+      //
+      // ROW 156 — `select-run-<cycleId2>` FIRST. The predecessor beat
+      // ("open the develop flow monitor") is NAVIGATION-ONLY and already
+      // lands on `/flows/forge-develop`, so this `do` starts already on the
+      // monitor (`do` runs BEFORE any navigation of its OWN, and this beat
+      // navigates nowhere) — the press finds ACT 2's own card the instant it
+      // is rendered, `waitForHandleOrStall`'s ordinary handle wait covers the
+      // window before it appears. Selecting FIRST, before the `wait` below,
+      // makes `RunControls` show `<cycleId2>` for the whole polling window
+      // that follows, rather than whatever `pickDefaultRun` would have shown.
       act: 'ACT 2 — wait for the second run\'s first work item to start',
-      do: [],
+      do: [{ pressBound: { action: 'select-run-', bind: 'cycleId2' } }],
       wait: {
         for: 'agent', anchor: 'start-development',
         upTo: CYCLE_BOUND.ms,
@@ -500,8 +534,14 @@ export const ACT_2 = [
       // (the stop beat's own `cycleOf`/`terminal` wait); this one is only
       // for the monitor's own live-refresh to catch up, which `CYCLE_BOUND`
       // is generous headroom for.
+      //
+      // ROW 156 — `select-run-<cycleId2>` FIRST, same reasoning as the
+      // earlier hex beat: the predecessor ("step away while the halt lands")
+      // presses `back-to-monitor` and its OWN `expect.route` is already
+      // `/flows/forge-develop`, so this beat's `do` starts on the monitor —
+      // no navigation of its own runs after this press.
       act: 'ACT 2 — after the halt, the running work item finished naturally',
-      do: [],
+      do: [{ pressBound: { action: 'select-run-', bind: 'cycleId2' } }],
       wait: {
         for: 'agent', anchor: 'stop-run',
         upTo: CYCLE_BOUND.ms,
@@ -527,8 +567,13 @@ export const ACT_2 = [
       // (`developer-loop.ts:1152`). No wait of its own: this beat reads the
       // SAME settled state the previous beat's wait already brought current.
       // `section`+`run-id`, same ROUND 3 pinning as every other hex beat.
+      //
+      // ROW 156 — `select-run-<cycleId2>` FIRST, harmless-but-idempotent here:
+      // the previous beat already selected it and nothing since has changed
+      // the selection, but every monitor hex beat presses it on its own terms
+      // rather than relying on an earlier beat's press outliving it.
       act: 'ACT 2 — and the next work item never started at all',
-      do: [],
+      do: [{ pressBound: { action: 'select-run-', bind: 'cycleId2' } }],
       expect: {
         route: '/flows/forge-develop',
         data: {
@@ -630,12 +675,33 @@ export const ACT_2 = [
       // FIRST half of that: the finished work item's hex still reads
       // `complete` after the stop and the resume, on the SAME `wi-id` the
       // earlier beat waited for. `section`+`run-id` guard the same wrong-run
-      // risk this file's header explains — a resumed run sits briefly
-      // `planned` before the scheduler reclaims it, `pickDefaultRun` ranks
-      // ACT 1's own `complete` run above `planned`, and `run-id` alone would
-      // be satisfied by ACT 2's own rail card regardless (ROUND 3).
+      // risk this file's header explains — without an explicit select, a
+      // resumed run sits briefly `planned` before the scheduler reclaims it,
+      // `pickDefaultRun` ranks ACT 1's own `complete` run above `planned`, and
+      // `run-id` alone would be satisfied by ACT 2's own rail card regardless
+      // (ROUND 3).
+      //
+      // ROW 156 — `select-run-<cycleId2>` FIRST, same predecessor shape as
+      // above ("step back to the monitor" presses `back-to-monitor`, whose
+      // OWN `expect.route` is already `/flows/forge-develop`), and this is
+      // where the transient-`planned` window matters: `RunControls` renders
+      // NOTHING for a `planned` selected run (`runControlsShouldRender`,
+      // `schedulerStrip={false}` on the monitor), so `section: 'run-controls'`
+      // is briefly ABSENT right after the press. No new wait shape is needed
+      // for that: `wait: { for: 'agent', ... }` with no `terminal`/`cycleOf`
+      // is a bounded POLL of `expect.data` (`waitForConsequence`'s `for (;;)`
+      // loop, `beats-page.mjs`) that already keeps re-checking until it
+      // matches or the bound expires — it silently rides out the gap the same
+      // way it rides out any other not-yet-true state. What the press adds is
+      // making SURE the thing being polled is ACT 2's own run throughout that
+      // whole window: selection is sticky (`writeStickyRunSelection`) and
+      // `refreshRuns` re-finds the SAME run object by id on every live update
+      // (`app/flows/[id]/page.tsx`), so once the scheduler reclaims it and its
+      // status moves past `planned`, `RunControls` starts rendering again for
+      // the run this beat actually means, not whichever one `pickDefaultRun`
+      // would have re-derived on a fresh load.
       act: 'ACT 2 — the finished work item survived the stop and the resume',
-      do: [],
+      do: [{ pressBound: { action: 'select-run-', bind: 'cycleId2' } }],
       wait: {
         for: 'agent', anchor: 'resume-run',
         upTo: CYCLE_BOUND.ms,
@@ -670,8 +736,14 @@ export const ACT_2 = [
       // `section`+`run-id`, the same ROUND 3 pinning as every other hex
       // beat — this is the work item that read `pending` two beats before
       // the resume, never assumed to have been the unfinished one.
+      //
+      // ROW 156 — `select-run-<cycleId2>` FIRST, same reasoning as the
+      // previous beat's own note on the transient `planned` window: harmless
+      // to repeat (the selection is already pinned by then), but every
+      // monitor hex beat presses on its own terms rather than relying on an
+      // earlier beat's press outliving it across this beat's own wait.
       act: 'ACT 2 — the unfinished work item resumes, not skipped',
-      do: [],
+      do: [{ pressBound: { action: 'select-run-', bind: 'cycleId2' } }],
       wait: {
         for: 'agent', anchor: 'resume-run',
         upTo: CYCLE_BOUND.ms,

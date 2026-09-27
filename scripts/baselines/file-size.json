@@ -16,7 +16,7 @@
   "apps/forge/tests/unit/studio-lint.test.ts": 1158,
   "apps/studio/app/agents/[id]/page.tsx": 925,
   "apps/studio/app/artifact/page.tsx": 1419,
-  "apps/studio/app/flows/[id]/page.tsx": 992,
+  "apps/studio/app/flows/[id]/page.tsx": 970,
   "apps/studio/app/knowledge/page.tsx": 837,
   "apps/studio/app/projects/[id]/page.tsx": 1350,
   "apps/studio/components/studio/PhaseDrawer.tsx": 916,
