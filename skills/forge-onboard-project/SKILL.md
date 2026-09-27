@@ -155,9 +155,13 @@ exact contract is `docs/schemas/project-config.schema.json` (C7, ADR 017 amendme
 live-acceptance WI is its change class's `acceptance` column (ADR 051), and the
 key is refused at load.
 Compose the project linter into the live-acc per-WI gate (its gate is the acceptance
-test, which omits lint). Enforce C9 on the live tier: UUID-prefixed resources,
-teardown on success AND failure, a `PreCheck` that `t.Fatal`s on absent creds, a
-read-back assertion on every written field.
+test, which omits lint). Enforce C9 on the live tier: resources named under the
+`FORGE_RESOURCE_PREFIX` env var forge supplies to the gate command (never a
+project-invented prefix — forge-mfv5.3.7, so two initiatives' live tests can
+run in parallel without colliding), teardown on success AND failure (the
+project's sweep deletes only ITS OWN `FORGE_RESOURCE_PREFIX`, never a
+bare-pattern sweep), a `PreCheck` that `t.Fatal`s on absent creds, a read-back
+assertion on every written field.
 
 ### Step 11.5 — Release process & CI release workflow (C10, only if the project releases)
 If the project ships versioned releases (a library, CLI, provider, or any package
