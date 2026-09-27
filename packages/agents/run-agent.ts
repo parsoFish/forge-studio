@@ -135,6 +135,12 @@ export type InitiativeBinding = {
  */
 export type StreamGuard = { label: string; signal?: AbortSignal };
 
+export type HeartbeatTimers = {
+  setInterval: (fn: () => void, ms: number) => unknown;
+  clearInterval: (handle: unknown) => void;
+  now: () => number;
+};
+
 /**
  * The context one `runAgent` call executes under. Deliberately open-ended:
  * `bindings` is conceptually a map of named domain bindings — `project` and
@@ -173,16 +179,10 @@ export type RunContext = {
   /** Installed verbatim at `options.canUseTool`; the reason lives in `packages/sessions/session-write-fence.ts`. */
   canUseTool?: unknown;
   streamGuard?: StreamGuard;
-  /**
-   * 7.6.148 — inject the heartbeat timer, exactly as `claude-agent.ts` lets its
-   * own be injected. A door for "a slow turn still says it is alive" cannot
-   * wait fifteen real seconds, and one that did would be a door nobody runs.
-   */
-  heartbeatTimers?: {
-    setInterval: (fn: () => void, ms: number) => unknown;
-    clearInterval: (handle: unknown) => void;
-    now: () => number;
-  };
+  /** 7.6.148 — the heartbeat timer, as `claude-agent.ts` lets its own be injected. 8.1.30/ruling
+   *  1693 — `turnSink` is the same opt-in for a 'caller'-lifecycle turn: its own phase/skill sink. */
+  heartbeatTimers?: HeartbeatTimers;
+  turnSink?: ReturnType<typeof makeToolEventSink>;
   /**
    * Observer for every raw streamed SDK message on the one-shot path,
    * called before runAgent's own result-message handling. Telemetry
@@ -379,7 +379,7 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
     // exists, so it is written immediately before the spawn that creates one
     // and never for a run that does not spawn. This branch always spawns.
     recordRunMarkerBestEffort(logsRoot, ctx.runId, runMarker);
-    return runOneShotSpawn(def, ctx, spec, runMarker);
+    return runOneShotSpawn(def, ctx, spec, runMarker, ctx.turnSink);
   }
 
   if (!ctx.runId) throw new Error('runAgent: ctx.runId is required');

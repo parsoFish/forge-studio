@@ -18,7 +18,15 @@
  * `matchesRateLimitSignature` (failure-classifier.ts) — never a parallel
  * regex — for a producer that reports neither structured field.
  */
+import { existsSync, readFileSync } from 'node:fs';
+
 import { matchesRateLimitSignature } from '@forge/agents';
+import {
+  validateReviewFindings,
+  type ReviewFinding,
+  type ReviewFindingsExpectation,
+  type ReviewFindingsRecord,
+} from '@forge/flows';
 
 export type SpawnRefusalSignal = {
   assistantError?: string;
@@ -81,4 +89,47 @@ export function spawnRefusalFailure(
       `${ctx.chunk}: spawn attempt ${ctx.attempt} was refused by the account's own API/usage limit, ` +
       `not authored — auto-retry once the limit resets; never treat as author-invalid`,
   };
+}
+
+/**
+ * Row 110 (T1) — the author-validation half of this file's own name, moved
+ * verbatim from `adversarial-review.ts` (a pure move, zero behaviour change):
+ * harvest + validate a chunk's `.forge/review-findings.json` (schema +
+ * identity-echo). Same rationale as the refusal half above — this is the
+ * cohesive block that decides whether an agent's turn produced a real,
+ * usable verdict, kept in ONE file rather than split across two.
+ */
+export function harvestFindings(
+  findingsAbs: string,
+  findingsRel: string,
+  identity: { initiative_id: string; cycleId: string; baseRef: string; headSha: string },
+  expected: ReviewFindingsExpectation,
+): { ok: true; record: ReviewFindingsRecord } | { ok: false; errors: string[] } {
+  if (!existsSync(findingsAbs)) {
+    return {
+      ok: false,
+      errors: [
+        `${findingsRel} was not authored — an all-clean review still writes it with findings: [] and an honest summary; a missing file is never a clean pass`,
+      ],
+    };
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(findingsAbs, 'utf8'));
+  } catch (err) {
+    return { ok: false, errors: [`${findingsRel} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
+  }
+  const errors = validateReviewFindings(raw, expected);
+  if (errors.length > 0) return { ok: false, errors };
+  const record = raw as ReviewFindingsRecord;
+  // Identity-echo verification — a record claiming a different run identity is
+  // a stale/replayed artifact, exactly what headSha exists to guard against.
+  for (const key of ['initiative_id', 'cycleId', 'baseRef', 'headSha'] as const) {
+    if (record[key] !== identity[key]) {
+      errors.push(`${key} mismatch — authored "${record[key]}", this run is "${identity[key]}" (echo the injected identity verbatim)`);
+    }
+  }
+  if (errors.length > 0) return { ok: false, errors };
+  const findings: ReviewFinding[] = record.findings;
+  return { ok: true, record: { ...record, findings } };
 }

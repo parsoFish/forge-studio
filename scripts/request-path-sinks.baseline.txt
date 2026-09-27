@@ -637,9 +637,9 @@ packages/stations/demo-model.ts writeFileSync 2
 packages/stations/gates/docs-gate.ts existsSync 2
 packages/stations/gates/docs-gate.ts readFileSync 1
 packages/stations/phases/adversarial-review.ts execFileSync 1
-packages/stations/phases/adversarial-review.ts existsSync 5
+packages/stations/phases/adversarial-review.ts existsSync 4
 packages/stations/phases/adversarial-review.ts mkdirSync 2
-packages/stations/phases/adversarial-review.ts readFileSync 2
+packages/stations/phases/adversarial-review.ts readFileSync 1
 packages/stations/phases/adversarial-review.ts realpathSync 1
 packages/stations/phases/adversarial-review.ts rmSync 1
 packages/stations/phases/adversarial-review.ts unlinkSync 2
@@ -689,6 +689,8 @@ packages/stations/phases/reflector.ts writeFileSync 8
 packages/stations/phases/release-finalize.ts execFileSync 1
 packages/stations/phases/release-finalize.ts existsSync 1
 packages/stations/phases/release-finalize.ts readFileSync 1
+packages/stations/phases/review-refusal.ts existsSync 1
+packages/stations/phases/review-refusal.ts readFileSync 1
 packages/stations/reflect-reconcile.ts existsSync 4
 packages/stations/reflect-reconcile.ts readdirSync 1
 packages/stations/reflect-reconcile.ts readFileSync 2

@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { pinnedStreamQuery, type StreamQueryFn } from '@forge/agents';
+import { pinnedStreamQuery, type StreamQueryFn, type HeartbeatTimers } from '@forge/agents';
 
 import type { EventLogger } from '@forge/kernel';
 import { parseManifest, persistManifestSpecs } from '@forge/flows';
@@ -75,6 +75,8 @@ export type RunProjectManagerOptions = {
   classProfiles?: ClassProfilePort;
   /** Seam F4: the executing node's own agent def. REQUIRED — no fallback. */
   agentDef: AgentDefinition;
+  /** 8.1.30 — test-injection only, mirrors `runAgent`'s `RunContext.heartbeatTimers` (7.6.148). */
+  heartbeatTimers?: HeartbeatTimers;
 };
 
 // The live turn/budget caps are DECLARED DATA now (R4-01-F2, ADR-039):
@@ -118,6 +120,7 @@ export async function runProjectManager(
     constraintSourcesRoot: options.constraintSourcesRoot,
     classProfiles: options.classProfiles,
     agentDef: options.agentDef,
+    heartbeatTimers: options.heartbeatTimers,
   });
 
   if (result.kind === 'success') return;
@@ -139,6 +142,8 @@ type PmPassInput = {
   classProfiles?: ClassProfilePort;
   /** Seam F4 — see RunProjectManagerOptions.agentDef. REQUIRED. */
   agentDef: AgentDefinition;
+  /** 8.1.30 — see RunProjectManagerOptions.heartbeatTimers. */
+  heartbeatTimers?: RunProjectManagerOptions['heartbeatTimers'];
 };
 
 type PmPassOutcome =
@@ -152,7 +157,7 @@ type PmPassOutcome =
  * the outer orchestrator can decide how to handle failure.
  */
 async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
-  const { input, logger, manifest, manifestRaw, parentEventId, queryFn, signal } = p;
+  const { input, logger, manifest, manifestRaw, parentEventId, queryFn, signal, heartbeatTimers } = p;
 
   // F-21: wipe any stale `.forge/work-items/` inherited from the project's
   // base branch. The dev-loop's pre-review boundary snapshot historically
@@ -303,6 +308,9 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     systemPrompt,
     lifecycle: 'caller',
     logger, // forge-8vfn.8.1.10: lets runAgent root the spawn marker at this pipeline's own logger, not <FORGE_ROOT>/_logs.
+    // 8.1.30: the SAME sink `pmToolSink` above — turns on the heartbeat.
+    turnSink: pmToolSink,
+    ...(heartbeatTimers !== undefined ? { heartbeatTimers } : {}),
     streamGuard: { label: 'project-manager', signal },
     bindings: {
       initiative: {

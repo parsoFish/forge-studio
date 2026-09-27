@@ -29,7 +29,7 @@ import { testClassProfilePort } from './class-profile-port-fixture.ts';
 import { canonicalDef } from './canonical-def-fixture.ts';
 import { createLogger, type EventLogEntry } from '@forge/kernel';
 import { serializeWorkItem, type WorkItem } from '@forge/flows';
-import type { StreamQueryFn } from '@forge/agents';
+import type { StreamQueryFn, HeartbeatTimers } from '@forge/agents';
 
 export const INIT_ID = 'INIT-2026-07-24-rev';
 export const CYCLE_ID = 'CY-rev-1';
@@ -195,8 +195,12 @@ export async function run(
   logger: ReturnType<typeof createLogger>,
   // Seam F6 half 2 (operator ruling 97): opt-in flow-review narrowing —
   // every existing caller passes nothing and gets exactly the unnarrowed
-  // 'code'-class fixture it had.
-  opts: { flowReview?: { flowId: string; lenses: readonly string[] } } = {},
+  // 'code'-class fixture it had. `heartbeatTimers` (8.1.30) is the same
+  // opt-in shape — absent for every existing caller.
+  opts: {
+    flowReview?: { flowId: string; lenses: readonly string[] };
+    heartbeatTimers?: HeartbeatTimers;
+  } = {},
 ): Promise<AdversarialReviewResult> {
   return runAdversarialReview(
     {
@@ -209,6 +213,11 @@ export async function run(
       flowReview: opts.flowReview,
     },
     logger,
-    { queryFn, classProfiles: testClassProfilePort(), agentDef: canonicalDef('adversarial-review') },
+    {
+      queryFn,
+      classProfiles: testClassProfilePort(),
+      agentDef: canonicalDef('adversarial-review'),
+      heartbeatTimers: opts.heartbeatTimers,
+    },
   );
 }
