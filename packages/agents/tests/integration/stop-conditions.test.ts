@@ -376,6 +376,30 @@ test('makeQualityGateFromCmd: without initiativeId declared, FORGE_RESOURCE_PREF
   }
 });
 
+test('makeQualityGateFromCmd: an initiativeId alone never pulls the worktree secrets.env into an ordinary gate (forge-mfv5.3.7)', () => {
+  // The prefix is non-secret; the live creds in secrets.env reach a gate child
+  // ONLY when it declared requiredEnv/unsetEnv. Every WI gate carries an
+  // initiativeId, and its stdout/stderr tail is persisted to the event log,
+  // so an ordinary `npm test` that echoed its env would publish the creds.
+  const dir = mkdtempSync(join(tmpdir(), 'forge-gate-nsprefix-nosecrets-'));
+  const secretName = 'FORGE_TEST_SECRET_ONLY_IN_SECRETS_ENV';
+  try {
+    writeFileSync(join(dir, 'secrets.env'), `${secretName}=topsecretvalue\n`);
+    let info: GateRunInfo | undefined;
+    const gate = makeQualityGateFromCmd(
+      dir,
+      ['sh', '-c', `echo "SEEN=\${${secretName}:-UNSET} PREFIX=$${RESOURCE_PREFIX_ENV}"`],
+      (i) => { info = i; },
+      { initiativeId: 'initiative-alpha' },
+    );
+    assert.equal(gate(), true);
+    assert.match(info!.stdoutTail, /SEEN=UNSET/, 'secrets.env must not reach a gate that declared no requiredEnv/unsetEnv');
+    assert.match(info!.stdoutTail, /PREFIX=\S+/, 'the non-secret prefix still reaches it');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('readWorktreeSecretsEnv: parses KEY=VALUE, skips comments/blanks, strips export + quotes', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-secrets-parse-'));
   try {

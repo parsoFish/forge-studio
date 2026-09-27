@@ -413,9 +413,13 @@ function runGateCapturing(
   // forge-mfv5.3.7: build gateEnv (a fresh object, never a mutation of
   // process.env — the same per-call composition buildChildEnv already uses
   // for agent spawns, so two initiatives' gates never share mutable state)
-  // whenever EITHER requiredEnv, unsetEnv, OR initiativeId is declared.
+  // whenever EITHER requiredEnv, unsetEnv, OR initiativeId is declared. The
+  // worktree's secrets.env (live creds) is merged ONLY for a gate that
+  // declared requiredEnv/unsetEnv: every WI gate carries an initiativeId and
+  // its output tail is persisted to the event log, so the non-secret prefix
+  // alone must never pull the creds into an ordinary gate's child env.
   if (requiredEnv.length > 0 || unsetEnv.length > 0 || initiativeId !== undefined) {
-    const secrets = readWorktreeSecretsEnv(worktreePath);
+    const secrets = requiredEnv.length > 0 || unsetEnv.length > 0 ? readWorktreeSecretsEnv(worktreePath) : {};
     gateEnv = { ...secrets, ...process.env };
     for (const name of unsetEnv) delete gateEnv[name];
     if (initiativeId !== undefined) gateEnv[RESOURCE_PREFIX_ENV] = deriveResourcePrefix(initiativeId);
