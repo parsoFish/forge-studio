@@ -14,6 +14,32 @@
  * different act), and asserts both that the finished work item survived and
  * that the unfinished one resumes rather than being skipped.
  *
+ * ROUND 2 (adversarial review, two blockers). (1) Waiting for WI-1 to be
+ * `complete` before pressing stop let WI-2's own worktree already exist by
+ * the time the press landed — the operator stop is honoured only before a
+ * WI's worktree is created or at a node boundary (`developer-loop.ts:1152`,
+ * `flow-runner.ts:461-464`; no wedge budget is threaded in production,
+ * `docs/decisions/028-flow-engine.md` ~262-269), so WI-2 ran to completion
+ * regardless and "WI-2 resumes" passed vacuously. The fix waits for `active`
+ * and asserts an explicit `pending` for the NEXT work item right after the
+ * halt, before any resume. (2) `pickDefaultRun` ranks ACT 1's own `complete`
+ * run above a resumed run's transient `planned` state, and ACT 1 has its own
+ * `complete` `WI-1` — so a bare `wi-id`/`status` assertion could pass against
+ * the WRONG run. The fix requires `run-id` on every monitor hex assertion.
+ *
+ * ROUND 3 (adversarial review again): `run-id` alone is ITSELF vacuous —
+ * `data-run-id` is rendered on every rail card too (`RunRail.tsx:232`), not
+ * only on the SELECTED run's `RunControls` section, so the together-rule
+ * (`beats-page-read.mjs`) is satisfied by ACT 2's own (always-present) rail
+ * card regardless of which run is actually selected. The fix pairs `run-id`
+ * with `section: 'run-controls'` (`RunControls.tsx:189`, a value no rail
+ * card carries), which only works because `data-section` has a second,
+ * always-rendered carrier on this page (`HistoryLedger.tsx:106-108`,
+ * mounted unconditionally at `app/flows/[id]/page.tsx:887`) that keeps
+ * `section` out of the solo path. Proved directly on `resolveExpectations`
+ * in `beats-page-read.test.ts`'s "ROW 149 ROUND 2/3" tests before trusting
+ * it here.
+ *
  * This asserts the REAL S10 story, through the REAL parser, rather than a
  * hand-built fixture — same convention as `beats-kb-select-nav.test.ts` and
  * `beats-cost-route.test.ts`.
@@ -99,7 +125,66 @@ test('row 149: the survived and the re-run work item are DIFFERENT wi-id records
   for (const b of wiBeats) {
     assert.equal(b.expect.data['hex-kind'], 'wi', 'a wi-id assertion must be scoped to a wi-kind hex');
     assert.equal(b.expect.route, '/flows/forge-develop', 'per-work-item status only exists on the monitor');
+    assert.equal(
+      b.expect.data['run-id'], '<cycleId2>',
+      'row 149 round 2: EVERY monitor hex beat must also assert run-id, or it can pass against ' +
+        'ACT 1\'s own stale run instead of the second one',
+    );
+    assert.equal(
+      b.expect.data['section'], 'run-controls',
+      'row 149 round 3: run-id alone is VACUOUS — data-run-id is on every rail card too ' +
+        '(RunRail.tsx:232), so it must be paired with section: "run-controls" ' +
+        '(RunControls.tsx:189), the only value that pins run-id to the SELECTED run\'s own ' +
+        'element rather than any rail card that happens to carry the wanted id ' +
+        '(beats-page-read.test.ts\'s "ROW 149 ROUND 2/3" tests prove this on resolveExpectations ' +
+        'directly)',
+    );
   }
+});
+
+test('row 149 round 2: the stop is pressed while WI-1 is active, never after it is complete', async () => {
+  const beats = await act2Beats();
+  const stopIndex = beats.findIndex((b: any) =>
+    (b.do ?? []).some((step: any) => step.press === 'stop-run'));
+  assert.notEqual(stopIndex, -1, 'a beat must press stop-run');
+
+  const before = beats.slice(0, stopIndex);
+  const wi1CompleteBeforeStop = before.some((b: any) =>
+    b.expect.data['wi-id'] === 'WI-1' && b.expect.data['status'] === 'complete');
+  assert.ok(
+    !wi1CompleteBeforeStop,
+    'no beat before the stop may wait for WI-1 to be complete — by then WI-2\'s own worktree ' +
+      'already exists and the stop cannot land before it, making the resume checks vacuous',
+  );
+
+  const wi1ActiveBeforeStop = before.some((b: any) =>
+    b.expect.data['wi-id'] === 'WI-1' && b.expect.data['status'] === 'active');
+  assert.ok(wi1ActiveBeforeStop, 'a beat before the stop must wait for WI-1 to be active (still running)');
+});
+
+test('row 149 round 2: after the halt, WI-2 is explicitly asserted NOT complete', async () => {
+  const beats = await act2Beats();
+  const stopIndex = beats.findIndex((b: any) =>
+    (b.do ?? []).some((step: any) => step.press === 'stop-run'));
+  const resumeIndex = beats.findIndex((b: any) =>
+    (b.do ?? []).some((step: any) => step.press === 'resume-run'));
+  assert.notEqual(stopIndex, -1, 'a beat must press stop-run');
+  assert.notEqual(resumeIndex, -1, 'a beat must press resume-run');
+  assert.ok(resumeIndex > stopIndex, 'resume must come after stop');
+
+  const betweenStopAndResume = beats.slice(stopIndex + 1, resumeIndex);
+  const wi2NotComplete = betweenStopAndResume.find((b: any) =>
+    b.expect.data['wi-id'] === 'WI-2' && Object.hasOwn(b.expect.data, 'status'));
+  assert.ok(wi2NotComplete, 'a beat between stop and resume must assert WI-2\'s status explicitly');
+  assert.notEqual(
+    wi2NotComplete.expect.data['status'], 'complete',
+    'WI-2 must be asserted NOT complete after the halt — "unfinished work" must be a checked ' +
+      'fact, not an assumption made from having waited for WI-1 alone',
+  );
+
+  const wi1CompleteAfterStop = betweenStopAndResume.some((b: any) =>
+    b.expect.data['wi-id'] === 'WI-1' && b.expect.data['status'] === 'complete');
+  assert.ok(wi1CompleteAfterStop, 'a beat between stop and resume must assert WI-1 finished naturally');
 });
 
 test('row 149: a beat resolves the second run\'s own cycle id, distinct from ACT 1\'s', async () => {

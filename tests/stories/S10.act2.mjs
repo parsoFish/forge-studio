@@ -12,11 +12,14 @@
  * through the real UI (`SECOND_IDEA`, `S10.constants.mjs`) — the cheapest real
  * path this product offers, since no interview-free / quick-idea kickoff
  * exists anywhere in `apps/studio` (checked: no `quick-idea`, `skip-interview`
- * or similar handle in the codebase) — waits for its first work item to
- * finish, stops the run mid-build, confirms the halt landed on the product's
- * own `operator-stop` terms, resumes it, and confirms the finished work item
- * survived while the unfinished one resumes rather than being skipped. It
- * ends there — the ruling is "do not wait for the resumed run to merge" —
+ * or similar handle in the codebase) — waits for its first work item to be
+ * genuinely IN FLIGHT (never for it to finish — ROW 149 ROUND 2's own beat
+ * comment explains why that shape is vacuous), stops the run mid-build,
+ * confirms the halt landed on the product's own `operator-stop` terms with
+ * the finished work item complete and the next one never started, resumes
+ * it, and confirms the finished work item survived while the unfinished one
+ * resumes rather than being skipped. It ends there — the ruling is "do not
+ * wait for the resumed run to merge" —
  * and the runner's own teardown (`sweep-teardown.mjs`'s
  * `stopSchedulerCensusAndRelease` / `reapCensusAndSweep`) is what cleans up
  * the still-running resumed cycle: it releases and reaps by `_queue/
@@ -74,11 +77,42 @@
  * ?? complete ?? planned ?? runs[0]`) — this story never presses a run row
  * (`RunCard` carries no `data-action` a `press` step could reach), so nothing
  * here ever sets the sessionStorage sticky pick, and the monitor always
- * re-derives live. That is safe exactly while the second run is `active` or
- * `gated` (it then outranks ACT 1's own `complete` run) and is why every
- * monitor-page assertion in this file is placed at a moment the run is
- * expected to be active, never in the `failed` window between the stop and a
- * successful resume-claim.
+ * re-derives live. `complete` outranks `planned`, so a monitor visit in the
+ * WINDOW between a stop and the scheduler reclaiming the resumed manifest
+ * can show ACT 1's OWN `complete` run instead of the second one — and ACT 1
+ * has its own `WI-1`, already `complete`, so a bare `wi-id`/`status`
+ * assertion cannot tell the two runs apart (ROW 149 ROUND 2).
+ *
+ * ROW 149 ROUND 3 — `run-id` ALONE DOES NOT GUARD IT, AND WHY. The first fix
+ * added `run-id: '<cycleId2>'` beside every hex assertion, reasoning that
+ * `RunControls`' `data-run-id={run.id}` (`RunControls.tsx:191`, mounted on
+ * the monitor too, `schedulerStrip={false}`) names the SELECTED run. True,
+ * but `data-run-id` is ALSO rendered on EVERY rail card (`RunRail.tsx:232`),
+ * one per run — so `resolveExpectations` (`beats-page-read.mjs`) treats
+ * `run-id` as a SHARED key with THREE carriers (two rail cards, one
+ * `RunControls`), and its together-rule is satisfied the moment ANY ONE of
+ * them carries the wanted value: ACT 2's own rail card (which always exists
+ * and always carries `run-id: '<cycleId2>'`, selected or not) satisfies the
+ * key on its own, regardless of which run `RunControls`/the topology are
+ * actually showing. Proved empirically in
+ * `beats-page-read.test.ts` ("ROW 149 ROUND 2/3" tests) before trusting it
+ * here. The fix pins `run-id` to `RunControls`' OWN element specifically by
+ * pairing it with `section: 'run-controls'` (`RunControls.tsx:189`) — a
+ * value no rail card carries at all. That pairing only works because
+ * `data-section` has a SECOND, unconditional carrier on this exact page:
+ * `HistoryLedger`'s own `<section data-section="history-ledger">`
+ * (`HistoryLedger.tsx:106-108`), mounted with no guard at all
+ * (`app/flows/[id]/page.tsx:887`) whenever the monitor renders a flow at
+ * all. Without that second carrier, `section` would have exactly ONE carrier
+ * too, `resolveExpectations` would read it SOLO (bypassing the together-rule
+ * entirely), and `section`+`run-id` would be assembled from two DIFFERENT
+ * records again — the identical vacuity one level up. With it, `section` is
+ * a genuinely SHARED key, `section` and `run-id` co-occur on the SAME record
+ * only in `RunControls`' own output, and the union-find groups them there —
+ * so `RunControls` showing the wrong run leaves the group unsatisfiable and
+ * the beat correctly does not pass. EVERY monitor-page hex assertion in this
+ * file therefore names `section: 'run-controls'` TOGETHER WITH
+ * `run-id: '<cycleId2>'`, never one without the other.
  *
  * SPLIT, NEVER BASELINE (ruling 492), same as `S10.review.mjs`'s own header.
  * These beats are spread into `beats` at the point they already occupied.
@@ -325,17 +359,57 @@ export const ACT_2 = [
       say: 'This is the surface with per-work-item evidence — the run\'s own detail page has none.',
     },
     {
-      // SOURCE-DERIVED. The monitor is LIVE (this file's header explains
-      // why), so a plain DOM poll here sees the daemon's own progress as it
-      // happens. `pickDefaultRun` already prefers this run (`active` beats
-      // ACT 1's own `complete`), so no explicit selection is needed.
-      // `hex-kind`/`wi-id`/`node-id`/`status` all co-occur on the SAME hex
-      // element (`FlowTopology.tsx:404-412`), so the together-rule resolves
-      // this to the ONE hex carrying `WI-1` specifically, not any other
-      // work item's. UNMEASURED bound: reusing `CYCLE_BOUND` (derived from
-      // the FIRST initiative's larger budget) is deliberately generous for
-      // this smaller one — a wider bound costs patience, never money.
-      act: 'ACT 2 — wait for the second run\'s first work item to finish',
+      // ROW 149 ROUND 2 — WAITS FOR `active`, NEVER `complete`, AND WHY.
+      // `resolveDevWiConcurrency` (`packages/kernel/config.ts:325-333`)
+      // resolves to `DEFAULT_DEV_WI_CONCURRENCY = 1` (`:299`) for this ground
+      // (no `FORGE_DEV_WI_CONCURRENCY` env, no `dev.maxConcurrentWorkItems` in
+      // gitpulse's `forge.config.json`, and `developer-ralph`'s own SKILL.md
+      // frontmatter declares `fanout: concurrencyCap: 1`,
+      // `skills/developer-ralph/SKILL.md:26-29`) — WIs dispatch SEQUENTIALLY,
+      // one Ralph loop at a time (`developer-loop.ts:1196-1210`'s
+      // `runConcurrentDispatch`). But the operator stop is honoured ONLY at
+      // TWO checkpoints — `CycleInput.shouldStopBeforeWorkItem`, consulted
+      // BEFORE a WI's worktree is created (`developer-loop.ts:1152`,
+      // wired to the flag file at `flow-runner.ts:461-464`), and the next
+      // clean NODE boundary — never mid-turn: ADR 028's amendment records
+      // that `cycle.ts` never threads `nodeBudgets` into `runFlow` in
+      // production, so the wedge-kill live-abort path is "presently dormant
+      // outside tests" (`docs/decisions/028-flow-engine.md` ~262-269).
+      // Waiting for WI-1 `complete` before pressing stop (the ORIGINAL,
+      // wrong shape) means WI-2's worktree is already created and its own
+      // Ralph loop is already running by the time the press lands — the next
+      // `shouldStopBeforeWorkItem` check is for a WI-3 that does not exist,
+      // so nothing stops WI-2 from running to completion, and "WI-2 resumes"
+      // would pass VACUOUSLY on a WI-2 the stop never touched. Waiting for
+      // `active` instead presses stop WHILE WI-1 is still building: WI-1
+      // finishes naturally (nothing aborts a live turn), and the very next
+      // checkpoint — before WI-2's worktree would be created — is where the
+      // halt actually lands, which is what makes "WI-2 was genuinely
+      // unfinished at the stop" a checked fact two beats from here, not an
+      // assumption.
+      //
+      // `active` is `wiStatusFor`'s own word for "has a start event, no end
+      // yet, no error" (`packages/flows/run-model-derive-status.ts:176-194`),
+      // the SAME `RunPhaseStatus` union `complete`/`pending` come from
+      // (`packages/contracts/run-view-types.ts:25`).
+      //
+      // `section: 'run-controls'` PAIRED WITH `run-id: '<cycleId2>'` GUARDS
+      // AGAINST THE WRONG RUN — `run-id` ALONE DOES NOT (ROW 149 ROUND 3,
+      // this file's header has the full trace, proved in
+      // `beats-page-read.test.ts`): `data-run-id` is also on every rail
+      // card (`RunRail.tsx:232`), so a bare `run-id` key is satisfied by
+      // ACT 2's own (always-present) rail card regardless of which run
+      // `RunControls`/the topology actually show. Pairing it with
+      // `section: 'run-controls'` (`RunControls.tsx:189,191`, unique to
+      // that one element, and kept out of the solo path by
+      // `HistoryLedger`'s own always-rendered `data-section=
+      // "history-ledger"`, `HistoryLedger.tsx:106-108`) pins both keys to
+      // the SAME record — the selected run's own `RunControls` section —
+      // via `beats-page-read.mjs`'s co-occurrence union. UNMEASURED bound:
+      // reusing `CYCLE_BOUND` (derived from the FIRST initiative's larger
+      // budget) is deliberately generous for this smaller one — a wider
+      // bound costs patience, never money.
+      act: 'ACT 2 — wait for the second run\'s first work item to start',
       do: [],
       wait: {
         for: 'agent', anchor: 'start-development',
@@ -345,14 +419,14 @@ export const ACT_2 = [
       expect: {
         route: '/flows/forge-develop',
         data: {
-          page: 'flow-monitor',
+          page: 'flow-monitor', section: 'run-controls', 'run-id': '<cycleId2>',
           'hex-kind': 'wi', 'node-id': 'dev', 'wi-id': 'WI-1',
-          status: 'complete',
+          status: 'active',
         },
       },
       say:
-        'Something has finished before anything is interrupted — otherwise stopping mid-flight ' +
-        'proves nothing.',
+        'Something is genuinely in flight before anything is interrupted — otherwise stopping ' +
+        'mid-flight proves nothing.',
     },
     {
       // NAVIGATION-ONLY, reached by `RunRail`'s own `open-run-detail` link
@@ -403,7 +477,9 @@ export const ACT_2 = [
     },
     {
       // Forces a fresh read (this file's header): the run-detail page fetched
-      // once, before the halt landed, and never refetches on its own.
+      // once, before the halt landed, and never refetches on its own. Also
+      // where the halt's WORK-ITEM-LEVEL effect is checked (the next two
+      // beats) — the monitor, not the run-detail page, carries it.
       act: 'ACT 2 — step away while the halt lands',
       do: [{ press: 'back-to-monitor' }],
       expect: {
@@ -413,15 +489,86 @@ export const ACT_2 = [
       say: 'The runner needs a moment to reach the boundary it halts at.',
     },
     {
-      // Re-opens the SAME run's detail page — a fresh mount, a fresh fetch,
-      // this time reading the STATE AFTER the halt the previous beats' own
-      // `cycleOf`/`terminal` wait already confirmed on disk. `data-run-status`
-      // is the page root's own attribute (`FlowRunDetail.tsx`'s `main`,
-      // solo — the only element on the page carrying it), and
-      // `data-run-stop-reason="operator-stop"` is `RunControls`' own status
-      // line (`run-controls.ts`'s `runFailureNoteKind`/`describeOperatorStop`,
-      // ROW 150 ruling 1774), derived per read from the run's own
-      // `flow.operator-stop` event rather than stored.
+      // ROW 149 ROUND 2, REQUIREMENT 3 — THE UNFINISHED WORK IS A CHECKED
+      // FACT, NOT AN ASSUMPTION. This beat and the next assert the halt's
+      // own two-sided effect BEFORE any resume: the work item the stop's own
+      // wait (previous beats) let finish naturally is `complete`, and the one
+      // it never let start is still `pending` — never inferred from having
+      // waited for `active` earlier. `section`+`run-id` guard the wrong-run
+      // risk this file's header explains (ROUND 3: `run-id` alone is
+      // vacuous). UNMEASURED bound: the halt was already confirmed on disk
+      // (the stop beat's own `cycleOf`/`terminal` wait); this one is only
+      // for the monitor's own live-refresh to catch up, which `CYCLE_BOUND`
+      // is generous headroom for.
+      act: 'ACT 2 — after the halt, the running work item finished naturally',
+      do: [],
+      wait: {
+        for: 'agent', anchor: 'stop-run',
+        upTo: CYCLE_BOUND.ms,
+        boundBasis: CYCLE_BOUND.label,
+      },
+      expect: {
+        route: '/flows/forge-develop',
+        data: {
+          page: 'flow-monitor', section: 'run-controls', 'run-id': '<cycleId2>',
+          'hex-kind': 'wi', 'node-id': 'dev', 'wi-id': 'WI-1',
+          status: 'complete',
+        },
+      },
+      say:
+        'The work item already in flight when the operator stopped the run is not thrown away ' +
+        'mid-turn — it finishes, because nothing in this product aborts a live turn.',
+    },
+    {
+      // The SECOND half, on the SAME fresh read: the work item the halt
+      // never let start. `pending` is `wiStatusFor`'s own word for "zero
+      // events" (`run-model-derive-status.ts:177`) — its worktree was never
+      // created, because `shouldStopBeforeWorkItem` refused it BEFORE that
+      // (`developer-loop.ts:1152`). No wait of its own: this beat reads the
+      // SAME settled state the previous beat's wait already brought current.
+      // `section`+`run-id`, same ROUND 3 pinning as every other hex beat.
+      act: 'ACT 2 — and the next work item never started at all',
+      do: [],
+      expect: {
+        route: '/flows/forge-develop',
+        data: {
+          page: 'flow-monitor', section: 'run-controls', 'run-id': '<cycleId2>',
+          'hex-kind': 'wi', 'node-id': 'dev', 'wi-id': 'WI-2',
+          status: 'pending',
+        },
+      },
+      say:
+        'That is the fact a resume has to prove it does not skip — not an assumption this story ' +
+        'is making about it.',
+    },
+    {
+      // NAVIGATION-ONLY, back to the same run's own detail page for the
+      // resume control (`resume-run` lives in `RunControls`, mounted there
+      // too, but the failed/stop-reason read and the resume press both need
+      // the run-detail page's own unambiguous, URL-keyed identity — never
+      // the monitor's `pickDefaultRun`-derived selection). Same
+      // `RunRail`/`open-run-detail` link as the earlier visit
+      // (`RunRail.tsx:408-421`); `routeMatches`' own destination filter
+      // (`beats-drive.mjs`) picks the ONE link whose href is THIS cycle id,
+      // never ACT 1's, so two runs on the rail is not an ambiguity here the
+      // way it would be for a bare `press`.
+      act: 'ACT 2 — open the second run\'s own detail page again',
+      expect: {
+        route: '/flows/forge-develop/run/<cycleId2>',
+        data: { page: 'flow-run', 'run-found': 'true', 'page-ready': 'true' },
+      },
+      say: 'Back to the run itself to confirm why it stopped, and then to resume it.',
+    },
+    {
+      // A fresh mount, a fresh fetch (this file's header), reading the STATE
+      // AFTER the halt the earlier beats' own `cycleOf`/`terminal` wait
+      // already confirmed on disk. `data-run-status` is the page root's own
+      // attribute (`FlowRunDetail.tsx`'s `main`, solo — the only element on
+      // the page carrying it), and `data-run-stop-reason="operator-stop"` is
+      // `RunControls`' own status line (`run-controls.ts`'s
+      // `runFailureNoteKind`/`describeOperatorStop`, ROW 150 ruling 1774),
+      // derived per read from the run's own `flow.operator-stop` event
+      // rather than stored.
       act: 'ACT 2 — confirm the stopped, resumable state',
       expect: {
         route: '/flows/forge-develop/run/<cycleId2>',
@@ -482,7 +629,11 @@ export const ACT_2 = [
       // place — WI-1's own commits are never rebuilt. This beat asserts the
       // FIRST half of that: the finished work item's hex still reads
       // `complete` after the stop and the resume, on the SAME `wi-id` the
-      // earlier beat waited for.
+      // earlier beat waited for. `section`+`run-id` guard the same wrong-run
+      // risk this file's header explains — a resumed run sits briefly
+      // `planned` before the scheduler reclaims it, `pickDefaultRun` ranks
+      // ACT 1's own `complete` run above `planned`, and `run-id` alone would
+      // be satisfied by ACT 2's own rail card regardless (ROUND 3).
       act: 'ACT 2 — the finished work item survived the stop and the resume',
       do: [],
       wait: {
@@ -493,7 +644,7 @@ export const ACT_2 = [
       expect: {
         route: '/flows/forge-develop',
         data: {
-          page: 'flow-monitor',
+          page: 'flow-monitor', section: 'run-controls', 'run-id': '<cycleId2>',
           'hex-kind': 'wi', 'node-id': 'dev', 'wi-id': 'WI-1',
           status: 'complete',
         },
@@ -515,7 +666,10 @@ export const ACT_2 = [
       // readings named by row 149, not a weaker substitute for it. Its own
       // wait, separate from the previous beat's: WI-1's survival and WI-2's
       // completion are two different facts and there is no reason one
-      // beat's patience should be spent proving the other.
+      // beat's patience should be spent proving the other. Also carries
+      // `section`+`run-id`, the same ROUND 3 pinning as every other hex
+      // beat — this is the work item that read `pending` two beats before
+      // the resume, never assumed to have been the unfinished one.
       act: 'ACT 2 — the unfinished work item resumes, not skipped',
       do: [],
       wait: {
@@ -526,7 +680,7 @@ export const ACT_2 = [
       expect: {
         route: '/flows/forge-develop',
         data: {
-          page: 'flow-monitor',
+          page: 'flow-monitor', section: 'run-controls', 'run-id': '<cycleId2>',
           'hex-kind': 'wi', 'node-id': 'dev', 'wi-id': 'WI-2',
           status: 'complete',
         },
