@@ -160,12 +160,24 @@ function fakeClaude() {
  * construction, exactly the pid that becomes `comm=claude` — no fork, no
  * poll, no window for anything to diverge from what gets written.
  */
-function laneBin(name: string, opts: { lateSpawnS?: number } = {}) {
-  const late = opts.lateSpawnS ? `trap '' HUP\nsleep ${opts.lateSpawnS}\n` : '';
+function laneBin(name: string, opts: { lateSpawnS?: number; spawnOnHup?: boolean } = {}) {
   const detachedpid = join(dir, `${name}.detachedpid`);
+  const spawn = `setsid nohup bash -c 'echo $$ > "$1"; exec "$2" "$3"' _ '${detachedpid}' '${fakeClaude()}' 300 </dev/null >/dev/null 2>&1 &`;
+  if (opts.spawnOnHup) {
+    // The spawn is TRIGGERED by the kill's own HUP (forge-1rk5.3 row 139): it lands after the before-kill census by
+    // construction and immediately after the kill, whatever the host load — no wall-clock sleep racing die_launch's
+    // re-census window. `sleep & wait` so the trap runs at once rather than after a foreground sleep ends.
+    return writeExec(name, `#!/usr/bin/env bash
+echo $$ > '${join(dir, `${name}.selfpid`)}'
+trap '${spawn.replace(/'/g, "'\\''")}' HUP
+sleep 120 & wait $!
+sleep 120
+`);
+  }
+  const late = opts.lateSpawnS ? `trap '' HUP\nsleep ${opts.lateSpawnS}\n` : '';
   return writeExec(name, `#!/usr/bin/env bash
 echo $$ > '${join(dir, `${name}.selfpid`)}'
-${late}setsid nohup bash -c 'echo $$ > "$1"; exec "$2" "$3"' _ '${detachedpid}' '${fakeClaude()}' 300 </dev/null >/dev/null 2>&1 &
+${late}${spawn}
 sleep 120
 `);
 }
@@ -489,22 +501,19 @@ describe('7.6.105 — die_launch retires a claude that appears AFTER the tmux HU
     }
   });
 
-  test('M7-C last-flakes #2: a spawn 6 s late — well past the 4 s confirm window — is still retired by the AFTER-kill census', () => {
-    // No host load needed: with LANES_CONFIRM_TIMEOUT_S at its production
-    // default, a 6 s spawn is guaranteed to land AFTER the before-kill
-    // census every run, so this exercises die_launch's launch_pid-gated
-    // after-kill loop directly, not the before-kill shortcut the test above
-    // relies on. LANES_RECENSUS_S is die_launch's own legitimate ceiling
-    // (never the thing under test), widened only far enough to outlast the
-    // deliberately late 6 s spawn.
-    const bin = laneBin('lane-margin', { lateSpawnS: 6 });
-    const { r } = launchUnconfirmed('margin', bin, { LANES_RECENSUS_S: '8' });
+  test('M7-C last-flakes #2: a spawn AFTER the kill — triggered by the kill itself, past the confirm window — is still retired by the AFTER-kill census', () => {
+    // The spawn is triggered by the kill's own HUP (forge-1rk5.3 row 139), so it lands AFTER the before-kill census
+    // by construction and exercises die_launch's launch_pid-gated after-kill loop directly. It used to be a wall-clock
+    // `sleep 6` racing a tick-counted re-census window — green or red with host load (measured: red at a 3 s ceiling,
+    // green at 2 s, same tree). die_launch's own ceiling now stays at its production default.
+    const bin = laneBin('lane-margin', { spawnOnHup: true });
+    const { r } = launchUnconfirmed('margin', bin);
     const self = pidFrom('lane-margin.selfpid', 8000);
     const stray = pidFrom('lane-margin.detachedpid', 12000);
     try {
       assert.ok(
         waitGone(stray),
-        `a spawn 6 s late is still retired by the after-kill census once it is gated on the pane's own launch_pid rather than a fixed quiet window (pid ${stray}); die_launch stderr:\n${r.stderr}`,
+        `a spawn after the kill is still retired by the after-kill census once it is gated on the pane's own launch_pid rather than a fixed quiet window (pid ${stray}); die_launch stderr:\n${r.stderr}`,
       );
       assert.match(r.stderr, new RegExp(`retired pid ${stray}\\b`), 'the pid it retired is printed');
       assert.match(r.stderr, /census: 0 claude pid\(s\) .* before the kill/, 'the spawn is NOT yet running at the before-kill census — this exercises the after-kill loop, not the deterministic before-kill shortcut');
