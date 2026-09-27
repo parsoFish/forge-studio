@@ -2,17 +2,17 @@
  * The dev-loop's live-acceptance env guard reads the CLASS, not the project
  * (ADR 051 decision 2 as amended, bead forge-mfv5.3.5).
  *
- * `liveAcceptanceEnvFor` is the one decision the per-WI gate wiring in
- * `developer-loop.ts` makes about `requiresEnv`: for a `required` class a WI
- * gate that targets the project's live-acceptance suite may not run without
- * the declared env (else the runner skips and the gate false-passes); for an
+ * `liveAcceptanceEnvFor` (`phases/live-acceptance-env.ts`) is the one decision
+ * the per-WI gate wiring in `developer-loop.ts` makes about `requiresEnv`: for
+ * a `required` class a WI gate that targets the project's live-acceptance
+ * suite may not run without the declared env (else the runner skips and the gate false-passes); for an
  * `advisory` class the tier may still run, but the guard is not imposed.
  */
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { liveAcceptanceEnvFor } from '../../phases/developer-loop.ts';
+import { liveAcceptanceEnvFor } from '../../phases/live-acceptance-env.ts';
 
 const ACC_GATE = { match: 'acceptancetests', requires_env: ['TF_ACC', 'AZDO_PERSONAL_ACCESS_TOKEN'] };
 const LIVE_CMD = ['go', 'test', '-run', 'TestAccFoo', './azuredevops/internal/acceptancetests/...'];
