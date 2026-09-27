@@ -19,13 +19,13 @@ import {
   renderDemoBundle,
   mergeCapturedMedia,
   collectCapturedMedia,
-  computeCheckpointDeltas,
   MAX_CAPTURED_OUTPUT_BYTES,
   collectLiveEvidence,
   mergeLiveEvidence,
   stampCaptureNonce,
   type DemoModel,
 } from '../../demo-model.ts';
+import { CAPTURE_NORMALISATION_RULES, computeCheckpointDeltas, normaliseCapturedOutput } from '../../demo-delta.ts';
 import type { HarnessMetricRow } from '../../demo-types.ts';
 
 function validModel(): DemoModel {
@@ -610,6 +610,105 @@ test('computeCheckpointDeltas: a browser checkpoint with differing filmstrips is
   const out = computeCheckpointDeltas(model, dir);
   assert.equal(out.checkpoints[0]?.delta, 'changed');
   assert.equal(out.checkpoints[1]?.delta, 'unknown');
+});
+
+// ── forge-1rk5.3: normalisation — volatile command output must not read as
+// "changed behaviour" (TAP durations, ms/s durations, ISO timestamps). ────
+
+test('CAPTURE_NORMALISATION_RULES: names exactly tap-duration, duration, iso-timestamp', () => {
+  assert.deepEqual(
+    CAPTURE_NORMALISATION_RULES.map((r) => r.name),
+    ['tap-duration', 'duration', 'iso-timestamp'],
+  );
+});
+
+test('normaliseCapturedOutput: collapses a TAP duration_ms line', () => {
+  const out = normaliseCapturedOutput('ok 1 - foo\n  duration_ms: 7.136265\n');
+  assert.equal(out, 'ok 1 - foo\n  duration_ms: <n>\n');
+});
+
+test('normaliseCapturedOutput: collapses a bare ms/s duration', () => {
+  assert.equal(normaliseCapturedOutput('built in 12ms'), 'built in <duration>');
+  assert.equal(normaliseCapturedOutput('finished in 1.5 s'), 'finished in <duration>');
+});
+
+test('normaliseCapturedOutput: collapses an ISO-8601 timestamp', () => {
+  assert.equal(
+    normaliseCapturedOutput('demo evidence written at 2026-09-27T01:02:03.456Z\n'),
+    'demo evidence written at <timestamp>\n',
+  );
+  assert.equal(
+    normaliseCapturedOutput('stamped 2026-09-27T01:02:03+01:00'),
+    'stamped <timestamp>',
+  );
+});
+
+test('normaliseCapturedOutput: a real one-token change survives normalisation', () => {
+  assert.equal(normaliseCapturedOutput('total commits: 4'), 'total commits: 4');
+  assert.equal(normaliseCapturedOutput('total commits: 5'), 'total commits: 5');
+});
+
+test('computeCheckpointDeltas: a command checkpoint differing only in duration_ms is "unchanged" (RED FIRST — currently compares raw bytes)', () => {
+  const dir = deltaBundle();
+  writeFileSync(join(dir, 'before', 'suite.out'), 'ok 1 - a\n  duration_ms: 7.136265\n');
+  writeFileSync(join(dir, 'after', 'suite.out'), 'ok 1 - a\n  duration_ms: 9.987654\n');
+  const model: DemoModel = {
+    title: 'T', essence: 'E', project: 'p', diffStat: 'd',
+    checkpoints: [{ label: 'suite', caption: 'c', command: 'npm test' }],
+  };
+  const out = computeCheckpointDeltas(model, dir);
+  assert.equal(out.checkpoints[0]?.delta, 'unchanged');
+  assert.equal(out.checkpoints[0]?.deltaExcerpt, undefined);
+});
+
+test('computeCheckpointDeltas: unchanged when the worktree path is already tokenised on both sides, or raw outputs differ only in ISO timestamps / "N ms"', () => {
+  const dir = deltaBundle();
+  writeFileSync(join(dir, 'before', 'wt.out'), 'demo evidence written to <worktree>/history/run.json\n');
+  writeFileSync(join(dir, 'after', 'wt.out'), 'demo evidence written to <worktree>/history/run.json\n');
+  const model: DemoModel = {
+    title: 'T', essence: 'E', project: 'p', diffStat: 'd',
+    checkpoints: [{ label: 'wt', caption: 'c', command: 'forge demo capture' }],
+  };
+  assert.equal(computeCheckpointDeltas(model, dir).checkpoints[0]?.delta, 'unchanged');
+
+  const dir2 = deltaBundle();
+  writeFileSync(join(dir2, 'before', 'iso.out'), 'run at 2026-09-27T01:02:03Z took 12ms\n');
+  writeFileSync(join(dir2, 'after', 'iso.out'), 'run at 2026-09-27T09:00:00.001Z took 1.5 s\n');
+  const model2: DemoModel = {
+    title: 'T', essence: 'E', project: 'p', diffStat: 'd',
+    checkpoints: [{ label: 'iso', caption: 'c', command: 'gitpulse churn .' }],
+  };
+  assert.equal(computeCheckpointDeltas(model2, dir2).checkpoints[0]?.delta, 'unchanged');
+});
+
+test('computeCheckpointDeltas: a real one-token change is "changed" AND deltaExcerpt names both the before and after value — the normaliser must not hide behaviour', () => {
+  const dir = deltaBundle();
+  writeFileSync(join(dir, 'before', 'commits.out'), 'duration_ms: 1.0\ntotal commits: 4\n');
+  writeFileSync(join(dir, 'after', 'commits.out'), 'duration_ms: 2.0\ntotal commits: 5\n');
+  const model: DemoModel = {
+    title: 'T', essence: 'E', project: 'p', diffStat: 'd',
+    checkpoints: [{ label: 'commits', caption: 'c', command: 'gitpulse churn .' }],
+  };
+  const out = computeCheckpointDeltas(model, dir);
+  assert.equal(out.checkpoints[0]?.delta, 'changed');
+  const excerpt = out.checkpoints[0]?.deltaExcerpt;
+  assert.ok(excerpt, 'expected a deltaExcerpt on a changed checkpoint');
+  assert.ok(excerpt!.includes('4'), `expected the before value "4" in: ${excerpt}`);
+  assert.ok(excerpt!.includes('5'), `expected the after value "5" in: ${excerpt}`);
+  assert.ok(excerpt!.length <= 1200, 'deltaExcerpt must be bounded to <=1200 chars');
+});
+
+test('validateDemoModel: accepts a deltaExcerpt string within the bound and rejects an oversized one', () => {
+  const base = { title: 't', essence: 'e', project: 'p', diffStat: 'd' };
+  assert.deepEqual(
+    validateDemoModel({ ...base, checkpoints: [{ label: 'c', caption: 'c', delta: 'changed', deltaExcerpt: '- a\n+ b' }] }),
+    [],
+  );
+  const bad = validateDemoModel({
+    ...base,
+    checkpoints: [{ label: 'c', caption: 'c', delta: 'changed', deltaExcerpt: 'x'.repeat(1201) }],
+  });
+  assert.ok(bad.some((e) => e.includes('deltaExcerpt')), `expected a deltaExcerpt error, got ${bad}`);
 });
 
 test('mergeCapturedMedia: back-fills captured outputs into a command checkpoint (kind unchanged)', () => {
