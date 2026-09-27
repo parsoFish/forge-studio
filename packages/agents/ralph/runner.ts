@@ -34,6 +34,7 @@ import {
   checkBranchHasCommitsVsBase,
   checkStopConditions,
   defaultQualityGates,
+  type AutoCommitSweepResult,
   type StopCondition,
   type LoopState,
 } from './stop-conditions.ts';
@@ -91,6 +92,18 @@ export type LoopInput = {
    */
   requiredPaths?: string[];
   /**
+   * forge-1rk5.3 row 145 (orchestrator ruling 1742): THIS work item's
+   * `files_in_scope`, worktree-relative. Unioned with `requiredPaths`
+   * (the WI's `creates`) and the agent's own per-iteration `filesChanged`,
+   * this is the post-iteration autocommit safety net's commit boundary —
+   * see `autoCommitWorktreeIfDirty`'s `AutoCommitScope` in stop-conditions.ts.
+   * Passed down from the already-parsed `WorkItem` rather than re-parsed
+   * from `workItemSpecPath` here, so a spec file with no valid frontmatter
+   * (some test fixtures) never turns into a swallowed parse error that
+   * silently blocks an otherwise-valid sweep.
+   */
+  filesInScope?: string[];
+  /**
    * 2026-06-05 (re-review #1): predicate returning whether the LAST gate run
    * could not RUN (missing binary / EACCES / killed by signal), as opposed to
    * running and returning non-zero. When true the runner stops EARLY with
@@ -121,8 +134,11 @@ export type LoopInput = {
    * commit-discipline failure must be VISIBLE: the caller emits a distinct
    * `ralph.uncommitted-work-swept` event so reflectors see the gap instead
    * of it being silently absorbed.
+   *
+   * forge-1rk5.3 row 145: also carries the sweep's committed/restored/left
+   * paths so the emitted event's metadata can name all three.
    */
-  onAutoCommit?: (iteration: number) => void;
+  onAutoCommit?: (iteration: number, sweep: AutoCommitSweepResult) => void;
 };
 
 /**
@@ -355,8 +371,13 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
     // G1 rescope (plan item 2.6): the net staying silent was hiding the
     // agent's commit-discipline failure — when it actually sweeps, report it
     // so the caller emits `ralph.uncommitted-work-swept`.
-    const swept = autoCommitWorktreeIfDirty(input.worktreePath, state.iteration, deriveWorkItemId(input.workItemSpecPath));
-    if (swept) input.onAutoCommit?.(state.iteration);
+    const swept = autoCommitWorktreeIfDirty(
+      input.worktreePath,
+      state.iteration,
+      deriveWorkItemId(input.workItemSpecPath),
+      { agentPaths: result.filesChanged, scopedPaths: [...(input.filesInScope ?? []), ...(input.requiredPaths ?? [])] },
+    );
+    if (swept) input.onAutoCommit?.(state.iteration, swept);
     if (input.onIteration) {
       // F-23: forward all rich-info fields the agent populated. Plain assignment
       // (no field-by-field copy) keeps onIteration backward compatible with the

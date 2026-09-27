@@ -92,6 +92,13 @@ We need a helper to support feature X.
       event_type: 'end', input_refs: [], output_refs: [], message: 'cycle.end',
       duration_ms: 300000, metadata: { status: 'merged', reflection_status: 'closed' },
     },
+    // forge-1rk5.3 row 145: the scoped autocommit sweep's own log event must
+    // surface in the Key events table alongside verdict/merged/skipped.
+    {
+      event_id: 'EV_7', cycle_id: cycleId, started_at: '2026-05-10T12:03:30Z',
+      initiative_id: initiativeId, phase: 'developer-loop', skill: 'dev-binding',
+      event_type: 'log', input_refs: [], output_refs: [], message: 'ralph.uncommitted-work-swept',
+    },
   ];
   writeFileSync(
     join(cycleLogDir, 'events.jsonl'),
@@ -207,6 +214,7 @@ test('buildCycleReport: emits all load-bearing sections for a successful cycle',
     assert.match(md, /\| `project-manager` \| \$0\.45 \|/);
     assert.match(md, /3 brain read/);
     assert.match(md, /reviewer\.merged/);
+    assert.match(md, /ralph\.uncommitted-work-swept/, 'a scoped autocommit sweep must appear in the Key events table');
 
     // Verification
     assert.match(md, /PR merged/);
