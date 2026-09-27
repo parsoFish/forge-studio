@@ -595,13 +595,13 @@ const INFERRED_ANSWER_RE = /^\s*\*\*Inferred answer:\*\*\s*(.+)$/i;
  *   ## 1. <heading text>
  *   <body paragraphs>
  *
- * Returns one entry per heading found. If no headings match the pattern,
- * falls back to treating the entire file body as a single question.
+ * Returns one entry per `## ` heading found. Content before the first such
+ * heading (an H1 title, a preamble) is dropped rather than read as a question.
  */
 function parseUserQuestionsMd(raw: string, mode: ReflectMode = 'interactive'): UserQuestion[] {
   const out: UserQuestion[] = [];
-  // Split on lines that start a numbered or unnumbered ## heading.
-  const sections = raw.split(/^(?=## )/m).filter((s) => s.trim());
+  // Split on `## ` headings; drop any leading section that isn't one (REF-1 H1/preamble, forge-8vfn.8.1.35).
+  const sections = raw.split(/^(?=## )/m).filter((s) => s.trim().startsWith('## '));
   for (const section of sections) {
     const lines = section.split(/\r?\n/);
     const heading = lines[0].replace(/^##\s+\d+\.\s*/, '').replace(/^##\s+/, '').trim();

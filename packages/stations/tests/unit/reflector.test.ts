@@ -507,6 +507,69 @@ test('runReflector: REF-1 — section with a markdown option list → structured
   }
 });
 
+test(
+  'runReflector: REF-1 — H1 title + preamble before the first ## heading is not a question ' +
+    '(forge-8vfn.8.1.35)',
+  async () => {
+    // Corpus-shaped fixture: an H1 title line then numbered ## sections, copied
+    // from a real run's user-questions.md (see ruling 1736 / row 142). Before
+    // the fix, `raw.split(/^(?=## )/m)` yielded the H1+preamble as section 0,
+    // and it became a bogus question with header "# User quest".
+    const h = setupHarness({ suffix: 'uq-h1-preamble' });
+    try {
+      mkdirSync(h.cycleLogDir, { recursive: true });
+      const mdPath = resolve(h.cycleLogDir, 'user-questions.md');
+      writeFileSync(
+        mdPath,
+        [
+          '# User questions — INIT-2026-09-27-exclude-author-filter',
+          '',
+          '## 1. Was the work-item decomposition the right size?',
+          '',
+          'WI-2 was the largest: all CLI wiring in a single WI. It completed cleanly but was wide.',
+          '',
+          '- too-few WIs (WI-2 was too large; should split by output-format)',
+          '- right-sized (4 WIs for this scope is appropriate)',
+          '- too-many WIs',
+          '',
+          '## 2. Did the implementation match the design intent?',
+          '',
+          'The PR description states it explicitly as a fix, not scope drift.',
+          '',
+          '## 3. Any other notes on this initiative?',
+          '',
+          '_(freeform — precedence semantics, annotation UX, cost, anything)_',
+          '',
+        ].join('\n'),
+      );
+
+      const result = await runReflector(makeInput(h), h.logger, {
+        sdkQuery: fakeSdkQueryClean,
+        brainLint: makeCleanLintStub(),
+      });
+      assert.equal(result.reflection_status, 'closed');
+
+      const jsonPath = resolve(h.cycleLogDir, 'user-questions.json');
+      const parsed = JSON.parse(readFileSync(jsonPath, 'utf8')) as
+        Array<{ question: string; header: string }>;
+      const headingCount = (readFileSync(mdPath, 'utf8').match(/^## /gm) ?? []).length;
+      assert.equal(
+        parsed.length,
+        headingCount,
+        'question count must equal the number of ## sections, excluding the H1 preamble',
+      );
+      for (const q of parsed) {
+        assert.ok(
+          !q.header.startsWith('# User'), `H1 preamble leaked in as a question header: "${q.header}"`,
+        );
+        assert.ok(!/^#\s/.test(q.header), `question header must not carry a markdown heading: "${q.header}"`);
+      }
+    } finally {
+      h.cleanup();
+    }
+  },
+);
+
 test('runReflector: REF-1 — absent user-questions.md → user-questions.json is empty array', async () => {
   // When the agent writes no questions (no warranted questions this cycle),
   // user-questions.md is absent. The orchestrator must write [] so the UI
