@@ -229,6 +229,7 @@ function RunCard({
   return (
     <div
       className={`fb-run-card${isSelected ? ' active-card' : ''}${isGated ? ' gated-card' : ''}${isFailed ? ' failed-card' : ''}`}
+      data-action={`select-run-${run.id}`}
       data-run-id={run.id}
       data-run-status={run.status}
       data-reflection-lost={run.reflectionLost}

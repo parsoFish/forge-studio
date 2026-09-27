@@ -142,6 +142,33 @@ test('row 149: the survived and the re-run work item are DIFFERENT wi-id records
   }
 });
 
+test(
+  'row 156: EVERY monitor hex beat presses select-run-<cycleId2> FIRST — the monitor\'s shown run ' +
+    'is chosen explicitly, never left to pickDefaultRun/the rail\'s group order',
+  async () => {
+    const beats = await act2Beats();
+    const wiBeats = beats.filter((b: any) => Object.hasOwn(b.expect.data, 'wi-id'));
+    assert.ok(wiBeats.length >= 2, 'at least two beats must assert a specific work item\'s hex status');
+
+    for (const b of wiBeats) {
+      const first = (b.do ?? [])[0];
+      assert.ok(
+        first !== undefined && Object.hasOwn(first, 'pressBound'),
+        `every monitor hex beat's FIRST do step must be a pressBound (beat: ${b.act})`,
+      );
+      assert.deepEqual(
+        first.pressBound,
+        { action: 'select-run-', bind: 'cycleId2' },
+        'row 156 (forge-8vfn.8.1.44, ruling 1852): RunCard\'s handle concatenates the run\'s own id ' +
+          'into data-action (the SAME open-initiative-<id> convention pressBound already resolves for ' +
+          '"open the second initiative") — a bare press: "select-run" cannot target one card among ' +
+          'two on the rail, and pressWithin\'s scoped selector never matches an action and its scoping ' +
+          'attribute on the SAME element, so this is the one DSL shape that reaches it',
+      );
+    }
+  },
+);
+
 test('row 149 round 2: the stop is pressed while WI-1 is active, never after it is complete', async () => {
   const beats = await act2Beats();
   const stopIndex = beats.findIndex((b: any) =>

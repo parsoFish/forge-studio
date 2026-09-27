@@ -1202,8 +1202,34 @@ is what this contract reads — but it cannot be the only distinguisher.
   renders the SELECTED run's card, `[data-run-group] [data-run-id]
   [data-pinned-selection="true"]`, so collapse hides the pile, never the
   selection; the HistoryLedger row carries the same `data-run-id` on a LINK,
-  so journeys select via the rail-scoped selector) and the phase drawer skips the log
-  fetch for a `pending` node (no 404 per hex click on a queued run). forge-7wc: a
+  so journeys select via the rail-scoped selector). **`forge-8vfn.8.1.44` (row
+  156, ruling 1852): the run CARD itself is the select-run control** —
+  `[data-action="select-run-<runId>"][data-run-id]` sits on the same element as
+  the existing `onClick={() => onSelect(run.id)}` (`RunRail.tsx`'s `RunCard`),
+  never a second selection mechanism. The run's own id is CONCATENATED into the
+  `data-action` value, the SAME convention `open-initiative-<id>` already uses
+  (`InitiativeDetail.tsx`) — never a bare `select-run` plus a separate
+  `data-run-id` to pair it with, because a `press` step resolves an unscoped
+  `[data-action="<action>"]` handle via `.first()` in document order
+  (`beats-steps.mjs`), which is ambiguous the moment two run cards are on the
+  rail at once, and the DSL's `pressWithin` scoping form only matches an action
+  on a DESCENDANT of the scoping attribute's element, never the SAME element a
+  card's `data-run-id` and `data-action` both sit on — `pressBound: { action:
+  'select-run-', bind: '<name>' }` is what resolves this handle by an
+  EARLIER-bound run id, exactly as `pressBound: { action: 'open-initiative-',
+  bind: '<name>' }` already does. Before this the card was clickable but
+  advertised no `data-action`, so nothing but a raw click on an unlabelled div
+  could pick a run — after S10 ACT 2 stops its second run (failed), a fresh
+  monitor mount's `pickDefaultRun` never picks a FAILED run (its priority is
+  gated → active → complete → planned, no `failed` branch — `resolveInitialRun`
+  in `lib/run-selection.ts`, which also owns the `forge-run-sel:<flowId>`
+  sticky read/write both the page and this control go through), so the operator
+  was stranded on an earlier COMPLETE run with no pressable way off it. Pressing
+  a card calls the SAME `handleSelectRun` the sticky layer already used —
+  selecting is what makes the monitor's shown run (`RunControls`/
+  `MonitorSummary`/`FlowTopology`, all keyed off `view.activeRun`) become that
+  run, and the sticky write means a remount (or the collapsed-group pin above)
+  keeps showing it. The phase drawer skips the log
   rejected log fetch (idle/terminal node) renders
   `[data-component="phase-log-error"]` with the failure's own message — a
   state distinct from, and checked before, the drawer's existing "no log
