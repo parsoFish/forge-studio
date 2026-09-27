@@ -28,14 +28,10 @@ import { queueManifestTerminal, FS_CLOCK_SLACK_MS, channelTerminalState } from '
 // Split out at the 800-line cap (T1 ruling 492: SPLIT, NEVER BASELINE) —
 // see beats-channel-scan.mjs's own header for what moved and why.
 import { isDispatchDir, newestChannelSince, scanSummary, cycleDirForInitiative } from './beats-channel-scan.mjs';
-// ROW 109 (T1 1549) — the `priced` wait's own borrowed pieces: the SAME event
-// reader and "was any row priced" predicate `reap.mjs`'s teardown polls with,
-// so "priced" means one thing across the whole runner. T1 1583 adds a THIRD
-// borrowed piece — `collectAgentRuns`, the same record teardown reaps by, and
-// its `PID_READ_UNKNOWN` sentinel — rather than a second discovery rule here.
+// T1 1693 (bead `forge-8vfn.8.1.31`) — the REFLECTION door's own event reader:
+// the SAME reader every other agent-evidence reader in this file resolves
+// through, never a second `events.jsonl` parser invented for one door.
 import { readRunEvents } from './run-observe.mjs';
-import { hasPricedEvent, collectAgentRuns, PID_READ_UNKNOWN } from './reap.mjs';
-import { CONSEQUENCE_POLL_MS } from './beats-page-read.mjs';
 // T1 ruling 1471 — re-exported so `beats-page.mjs` names the wall ceiling
 // beside `STALL_CEILING_MS`/`TERMINAL_UI_GRACE_MS`, its two siblings that
 // already live in THIS file rather than in the schema that only validates what
@@ -487,7 +483,21 @@ export const TERMINAL_UI_GRACE_MS = 30_000;
  */
 export function makeCycleTerminalWatch(forgeRoot, wantState, opts = null) {
   if (typeof wantState !== 'string' || wantState === '') return null;
-  const door = makeCycleTerminalDoor(forgeRoot, opts);
+  const cycleOf = typeof opts?.cycleOf === 'string' && opts.cycleOf !== '' ? opts.cycleOf : null;
+  return terminalWatchAround(forgeRoot, makeCycleTerminalDoor(forgeRoot, opts), wantState, cycleOf);
+}
+
+/**
+ * THE GRACE-WINDOW WRAPPER ITSELF, pulled out from underneath
+ * `makeCycleTerminalWatch` alone (T1 1693, bead `forge-8vfn.8.1.31`) so
+ * `makeReflectionWatch` (below) gets the IDENTICAL `cycle-ended` /
+ * `cycle-done-ui-stale` split and `cycleOf`-keyed inactivity window
+ * `waitForConsequence` already reads off `.progressIdleMs`, rather than a
+ * second, driftable copy of this state machine for one more door. A PURE
+ * EXTRACTION: every line below is unchanged from `makeCycleTerminalWatch`'s
+ * own body, generalised only in WHICH door supplies `{done, state, detail}`.
+ */
+function terminalWatchAround(forgeRoot, door, wantState, cycleOf) {
   if (door === null) return null;
   // Re-derived rather than read off `door`: `makeCycleTerminalDoor` keeps its
   // own `logsDir` private, and re-joining `forgeRoot` here is one string concat
@@ -535,7 +545,6 @@ export function makeCycleTerminalWatch(forgeRoot, wantState, opts = null) {
   // normalised. A wait with no `cycleOf` keeps its plain, unreset deadline —
   // that form has no stable identity to read progress FROM, only "born since
   // the press", which is not a channel `cycleProgressIdleMs` can watch.
-  const cycleOf = typeof opts?.cycleOf === 'string' && opts.cycleOf !== '' ? opts.cycleOf : null;
   Object.defineProperty(watch, 'cycleOf', { value: cycleOf });
   // BY IDENTITY, the same dir the door above resolves — never
   // `newestChannelSince`'s born-after-the-anchor form, which finds nothing for
@@ -550,6 +559,127 @@ export function makeCycleTerminalWatch(forgeRoot, wantState, opts = null) {
     },
   });
   return watch;
+}
+
+/**
+ * `wait.terminal`'s value for a REFLECT beat — never a real `_queue/` state,
+ * so `run-story.mjs`'s `cycleWatchFor` can route a reflection wait to
+ * `makeReflectionWatch` (below) by a DECLARED NAME rather than by guessing
+ * from which beat or act string is asking (T1 1693, bead `forge-8vfn.8.1.31`).
+ */
+export const REFLECTION_TERMINAL_STATE = 'reflected';
+
+const REFLECTOR_END_EVENT = 'reflector.end'; // packages/stations/phases/reflector.ts:355
+const REFLECTOR_CRASHED_EVENT = 'reflector.crashed'; // packages/stations/phases/reflector-brain-writes.ts:155
+const REFLECTION_LOST_EVENT = 'cycle.reflection-lost'; // packages/flows/cycle-context.ts:176
+
+/**
+ * THE REFLECTION DOOR — bead `forge-8vfn.8.1.31`, T1 ruling 1693 (S10 proof
+ * run 35). MEASURED: closure moved the initiative into `_queue/merged/`, the
+ * post-merge reflector's own `reflector.start` landed at 23:00:15 and was
+ * still running, and `makeAgentChannelDoor`'s generic `channelTerminalState`
+ * — which knows only `_queue/` states — read `merged` as the whole channel's
+ * terminal word and stopped the REFLECT beat's wait at 23:03:15, 180s later,
+ * on a reflection that had barely begun. `merged` is a PRECONDITION of
+ * reflection (`finalize-merged.ts`: closure moves the manifest to `merged/`
+ * BEFORE firing the reflector, and only promotes it on to `done/` once that
+ * reflection has resolved, either way) — never reflection's own terminal — so
+ * THIS DOOR NEVER READS THE QUEUE AT ALL.
+ *
+ * THE REFLECTOR RUNS INSIDE THE SAME CYCLE PROCESS and appends to the SAME
+ * cycle `events.jsonl` `cycleDirForInitiative` already resolves BY IDENTITY
+ * for every other `cycleOf` wait (`latestCycleId`, `finalize-merged.ts`, names
+ * the identical dir the develop cycle wrote to) — never
+ * `newestChannelSince`'s born-after-the-anchor scan, which finds nothing for a
+ * cycle this press did not mint. So this door reads THAT dir's events for the
+ * reflector's own three terminal messages: end, crashed, or the product's own
+ * "never got to run or finish" word (constants above, each cited to the line
+ * that emits it). THE LAST ONE IN LOG ORDER WINS: a boot-reconcile rerun can
+ * recover from an earlier crash with a later `reflector.end`
+ * (`run-model.test.ts`'s "reflection lost then RECOVERED"), and latching the
+ * first-seen crash over that recovery would be wrong in the opposite
+ * direction.
+ *
+ * UNKNOWN NEVER RESOLVES TOWARD PROCEEDING (§15.504): no cycle dir yet, one
+ * that could not be read, or one carrying none of the three messages is
+ * `null` — the identical shape `makeCycleTerminalDoor` returns for "nothing
+ * resolved this poll", never a manufactured terminal. Only the beat's own
+ * declared `upTo` can end a wait like that, and it does so BY NAME:
+ * `waitForConsequence`'s "the declared terminal … was never reached — last
+ * seen: …", fed straight from `door.lastSeen` below.
+ *
+ * @returns {null | ((runId: string|null, sinceMs: number, wantState: string) => {done: boolean, state: string, detail: string}|null)}
+ */
+export function makeReflectionDoor(forgeRoot, cycleOf) {
+  if (typeof forgeRoot !== 'string' || forgeRoot === '') return null;
+  if (typeof cycleOf !== 'string' || cycleOf === '') return null;
+  const logsDir = join(forgeRoot, '_logs');
+  const door = (_runId, sinceMs, wantState) => {
+    // D's review (row 125's hazard class): DEC-2 keeps one cycle dir across rounds, so only a
+    // terminal logged at or after THIS beat's anchor is this reflection's. No anchor → keep waiting.
+    if (!Number.isFinite(sinceMs)) {
+      door.lastSeen = `no anchor for this reflect wait (${String(sinceMs)}) — `
+        + "cannot tell this reflection's terminal";
+      return null;
+    }
+    const resolved = cycleDirForInitiative(logsDir, cycleOf);
+    if (resolved !== null && typeof resolved !== 'string') {
+      door.lastSeen = `could not resolve the cycle dir for ${cycleOf}: ${resolved.detail}`;
+      return null;
+    }
+    if (resolved === null) {
+      door.lastSeen = `no cycle directory found yet for ${cycleOf} — the reflector has not appeared`;
+      return null;
+    }
+    door.sawCycle = true;
+    const rows = readRunEvents(resolved);
+    if (rows.unknown !== undefined) {
+      door.lastSeen = `could not read ${join(resolved, 'events.jsonl')}: ${rows.unknown.map((u) => u.error).join('; ')}`;
+      return null;
+    }
+    let found = null;
+    for (const ev of rows) {
+      const at = Date.parse(ev?.started_at ?? '');
+      if (!Number.isFinite(at) || at < sinceMs) continue;
+      if (ev?.message === REFLECTOR_END_EVENT) {
+        found = { state: REFLECTION_TERMINAL_STATE, detail: `the reflector's own ${REFLECTOR_END_EVENT} event fired for ${cycleOf}` };
+      } else if (ev?.message === REFLECTOR_CRASHED_EVENT) {
+        found = {
+          state: 'crashed',
+          detail: `the reflector's own ${REFLECTOR_CRASHED_EVENT} event fired for ${cycleOf} — the reflection crashed rather than completing`,
+        };
+      } else if (ev?.message === REFLECTION_LOST_EVENT) {
+        found = {
+          state: 'lost',
+          detail: `the product's own ${REFLECTION_LOST_EVENT} event fired for ${cycleOf} — the reflection was lost, not completed`,
+        };
+      }
+    }
+    if (found === null) {
+      door.lastSeen =
+        `no ${REFLECTOR_END_EVENT}/${REFLECTOR_CRASHED_EVENT}/${REFLECTION_LOST_EVENT} event since the anchor ` +
+        `(${new Date(sinceMs).toISOString()}) in ${join(resolved, 'events.jsonl')} for ${cycleOf}`;
+      return null;
+    }
+    door.lastSeen = found.detail;
+    return Object.freeze({ done: found.state === wantState, state: found.state, detail: found.detail });
+  };
+  door.sawCycle = false;
+  door.lastSeen = 'no cycle resolved yet';
+  return door;
+}
+
+/**
+ * `makeReflectionDoor` wrapped in the SAME grace window `makeCycleTerminalWatch`
+ * uses (`terminalWatchAround`, above), so a reflect beat gets the identical
+ * `cycle-ended` / `cycle-done-ui-stale` split and inactivity-window extension
+ * for free rather than a second copy of that machinery for one door.
+ * `wantState` is fixed at `REFLECTION_TERMINAL_STATE` — reflection has exactly
+ * one success state, never a story-chosen value the way a queue wait's is.
+ */
+export function makeReflectionWatch(forgeRoot, cycleOf) {
+  const normalisedCycleOf = typeof cycleOf === 'string' && cycleOf !== '' ? cycleOf : null;
+  return terminalWatchAround(forgeRoot, makeReflectionDoor(forgeRoot, normalisedCycleOf), REFLECTION_TERMINAL_STATE, normalisedCycleOf);
 }
 
 export function makeAgentChannelDoor(forgeRoot) {
@@ -650,148 +780,4 @@ export function makeAgentChannelDoor(forgeRoot) {
           : `. ${terminal.detail}, so "stalled" is this door's best reading and not a verdict the product published.`),
     };
   };
-}
-
-/**
- * ROW 109 (T1 1549). S3's terminal beat follows the onboarding session it just
- * launched — "Follow View onboarding session and watch it work" — and its own
- * `expect.data` is satisfied the moment the session page renders, long before
- * that session's first turn prices itself. The run then ends and
- * `reap.mjs`'s own `FIRST_PRICED_EVENT_GRACE_MS` (<= 30 s) teardown grace is
- * not enough: run 2 measured "terminated before first priced event (30000
- * ms)". So spend read UNMEASURED by construction — not because nothing was
- * spent, but because nothing was given the chance to say so, one layer up
- * from the exact gap `FIRST_PRICED_EVENT_GRACE_MS` was minted for.
- *
- * `wait: { for: 'priced', upTo }` gives the beat itself a bounded, REAL
- * wall-clock chance to see a priced event before `driveBeat` returns and the
- * run moves on toward teardown — buying the session more total time to price
- * itself than the reap grace alone ever could.
- *
- * NEVER A VERDICT INPUT. This is evidence, full stop: it runs AFTER the
- * beat's own `expect.data` has already decided pass/fail (`beats-drive.mjs`
- * attaches its outcome onto an already-finished verdict) and never touches
- * `status` or `failures` either way — a beat that would have gone green does
- * not turn red because nothing priced within `upTo`, and one that would have
- * gone red is not rescued by a priced event landing.
- *
- * THE RESOLVER IS BORROWED, NOT DUPLICATED: `sessionLogDir` (above, this
- * file) turns the LIVE route the page is standing on into the same log dir
- * every other agent-evidence reader in this file already resolves. THE
- * PREDICATE IS BORROWED TOO: `hasPricedEvent` (`reap.mjs`) is the exact
- * reading `waitForFirstPricedEvent` polls teardown with, so a non-priced
- * event row (a `start`, a phase change, anything with no genuine
- * `cost_usd`) can never be mistaken for the thing this wait exists to see.
- *
- * T1 1583 — THE SESSION DIR IS NOT WHERE THE MONEY LANDS. Measured live, S3
- * funded run 3: the session dir never carried a `cost_usd` row across the
- * WHOLE 180 s bound, while the agent this beat dispatched wrote exactly one
- * in ITS OWN dispatch dir (`_agent-onboarding-agent-<ts>-<rand>`) — a sibling
- * directory `sessionLogDir` never looks at. The wait never ended, so the
- * still-working agent went on writing and committing in the ground: a
- * containment red caused by watching the wrong directory.
- *
- * SO THIS ALSO WATCHES EVERY AGENT RUN THIS STORY DISPATCHED, discovered THE
- * SAME WAY TEARDOWN DISCOVERS THEM — `collectAgentRuns` (`reap.mjs`), never a
- * second discovery rule invented here. A run counts only when born AT OR
- * AFTER this wait's own anchor (`opts.sinceMs`, else this call's own start): a
- * dir born earlier belongs to a PREVIOUS dispatch, exactly as a stale
- * `_logs/` entry is not `collectAgentRuns`'s to reap. The session dir is
- * always a candidate too (the common case), and whichever candidate prices
- * FIRST ends the wait, named on the result (`dir`) so a reader never has to
- * guess which log actually carried the spend.
- *
- * FAIL-CLOSED ON A ROUTE THIS RUNNER CANNOT RESOLVE (§6.15) — `by:
- * 'unresolved'`, immediately, no poll at all; reading it as "not yet priced"
- * would burn the whole bound on a loop that could never succeed. THE SAME
- * RULE COVERS A `_logs/` SCAN THAT COULD NOT BE TRUSTED: `collectAgentRuns`
- * reports that as its `PID_READ_UNKNOWN` sentinel rather than throwing, and
- * this reads it as `by: 'unresolved'` too, immediately — never "nothing
- * found", which would silently narrow to the session dir alone and call that
- * patience rather than the blind spot it is. NEVER THROWS OTHERWISE: a read
- * that fails mid-poll (an injected fake, a torn file, a `collectRuns` call
- * that itself throws) is read as "not yet" and the poll continues — aborting
- * the whole beat over a wait that was only ever evidence is worse.
- *
- * @param {string|null} forgeRoot
- * @param {string|null} route the LIVE route the page is standing on
- * @param {number} upTo the beat's own declared bound, in ms
- * @param {{readEvents?: (dir: string) => object[], collectRuns?: (root: string, sinceMs: number) => {dir: string, pid: number|string, markers?: string[]}[], sinceMs?: number, pollMs?: number, sleep?: (ms: number) => Promise<void>, now?: () => number, log?: (line: string) => void}} [opts]
- * @returns {Promise<{by: 'event'|'timeout'|'unresolved', afterMs: number, dir: string|null}>}
- */
-export async function waitForPricedEvent(forgeRoot, route, upTo, opts = {}) {
-  const {
-    readEvents: readEventsIn = readRunEvents,
-    collectRuns = collectAgentRuns,
-    sinceMs,
-    pollMs = CONSEQUENCE_POLL_MS,
-    sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-    now = () => Date.now(),
-    log = (line) => console.error(line),
-  } = opts;
-  const dir = typeof forgeRoot === 'string' && forgeRoot !== '' ? sessionLogDir(forgeRoot, route) : null;
-  const named = (by) => {
-    const where = dir ?? `an unresolved session for route ${JSON.stringify(route ?? null)}`;
-    log(`priced wait: no priced event from ${where} within ${upTo} ms — the spend line will say why`);
-    return Object.freeze({ by, afterMs: by === 'unresolved' ? 0 : upTo, dir: null });
-  };
-  if (dir === null) return named('unresolved');
-  const startedAt = now();
-  const anchorMs = typeof sinceMs === 'number' ? sinceMs : startedAt;
-
-  // Every dir worth asking THIS poll: the session dir first (the common
-  // case), then every agent run `collectAgentRuns` admits since the anchor —
-  // deduped, since an onboarding session's own dir carries a `turn.pid` too
-  // (the exact shape `collectAgentRuns`'s own header names) and would
-  // otherwise be read twice. `null` return means the scan itself could not be
-  // trusted (`PID_READ_UNKNOWN`), carried as a named detail rather than a dir
-  // list.
-  const candidates = () => {
-    let runs;
-    try {
-      runs = collectRuns(forgeRoot, anchorMs);
-    } catch {
-      return { dirs: [dir], scanFailed: null }; // a scan that could not even run is not evidence either way
-    }
-    const list = Array.isArray(runs) ? runs : [];
-    const unreadable = list.find((r) => r?.pid === PID_READ_UNKNOWN);
-    if (unreadable !== undefined) {
-      return {
-        dirs: [],
-        scanFailed: `could not scan _logs/ for the agent run(s) this beat dispatched — ${unreadable.dir} could not be read`,
-      };
-    }
-    const dirs = [dir];
-    for (const run of list) if (typeof run?.dir === 'string' && !dirs.includes(run.dir)) dirs.push(run.dir);
-    return { dirs, scanFailed: null };
-  };
-  const check = () => {
-    const { dirs, scanFailed } = candidates();
-    if (scanFailed !== null) return { unresolved: scanFailed };
-    for (const candidate of dirs) {
-      try {
-        if (hasPricedEvent(readEventsIn(candidate))) return { dir: candidate };
-      } catch {
-        // A read that could not happen is not evidence of "not priced" either
-        // way — try the remaining candidates, or the next poll.
-      }
-    }
-    return null;
-  };
-  const unresolvedScan = (detail) => {
-    log(`priced wait: ${detail} — the spend line will say why`);
-    return Object.freeze({ by: 'unresolved', afterMs: 0, dir: null });
-  };
-
-  const first = check();
-  if (first?.unresolved) return unresolvedScan(first.unresolved);
-  if (first?.dir) return Object.freeze({ by: 'event', afterMs: 0, dir: first.dir });
-  for (;;) {
-    const elapsed = now() - startedAt;
-    if (elapsed >= upTo) return named('timeout');
-    await sleep(Math.min(pollMs, upTo - elapsed));
-    const found = check();
-    if (found?.unresolved) return unresolvedScan(found.unresolved);
-    if (found?.dir) return Object.freeze({ by: 'event', afterMs: now() - startedAt, dir: found.dir });
-  }
 }

@@ -32,7 +32,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { driveBeat } from './beats-drive.mjs';
-import { waitForPricedEvent } from './beats-agent-proc.mjs';
+import { waitForPricedEvent } from './beats-priced-wait.mjs';
 import { PID_READ_UNKNOWN } from './reap.mjs';
 
 // ───────────────────────────────────────────── waitForPricedEvent (pure)

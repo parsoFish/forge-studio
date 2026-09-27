@@ -40,7 +40,9 @@ import {
 // why the split went this way round and not the other.
 import { performSteps } from './beats-steps.mjs';
 import { readProgress, sessionEventLines } from './beats-progress.mjs';
-import { STALL_CEILING_MS, doorWorthRunning, sessionLogDir, waitForPricedEvent } from './beats-agent-proc.mjs';
+import { STALL_CEILING_MS, doorWorthRunning, sessionLogDir } from './beats-agent-proc.mjs';
+// Split out of `beats-agent-proc.mjs` at the 800-line cap (bead `forge-8vfn.8.1.31`, T1 1693).
+import { waitForPricedEvent } from './beats-priced-wait.mjs';
 
 
 
