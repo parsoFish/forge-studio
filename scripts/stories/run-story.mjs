@@ -25,9 +25,8 @@
  * this is one expression evaluated twice, not a constant with two possible
  * values.
  */
-import {
-  makeAgentProcProbe, makeAgentChannelDoor, makeCycleTerminalWatch, makeReflectionWatch, REFLECTION_TERMINAL_STATE,
-} from './beats-agent-proc.mjs';
+import { makeAgentProcProbe, makeAgentChannelDoor, makeCycleTerminalWatch } from './beats-agent-proc.mjs';
+import { makeReflectionWatch, REFLECTION_TERMINAL_STATE } from './beats-reflection-terminal.mjs';
 import { readdirSync, mkdirSync, writeFileSync, renameSync, rmSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { chromium } from 'playwright-core';

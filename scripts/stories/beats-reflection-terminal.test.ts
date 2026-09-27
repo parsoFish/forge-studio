@@ -36,7 +36,10 @@ import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, utimesSync, writeFil
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { makeReflectionDoor, makeReflectionWatch, REFLECTION_TERMINAL_STATE, STALL_CEILING_MS } from './beats-agent-proc.mjs';
+import { STALL_CEILING_MS } from './beats-agent-proc.mjs';
+import {
+  makeReflectionDoor, makeReflectionWatch, REFLECTION_TERMINAL_STATE,
+} from './beats-reflection-terminal.mjs';
 import { channelTerminalState } from './beats-queue-terminal.mjs';
 
 const INIT = 'INIT-2026-09-25-exclude-author-flag';
