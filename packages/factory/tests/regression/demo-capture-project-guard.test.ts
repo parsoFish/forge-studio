@@ -1,4 +1,6 @@
 /**
+ * PR #123 — SEC-07: forge demo capture accepted an escaping --project value before ever checking for a demo.json.
+ *
  * SEC-07 refusal-boundary pin (P3): `forge demo capture <init> --project
  * <name>` (`cmdDemo`, `orchestrator/cli.ts`) must refuse an escaping
  * `--project` value with exit 2 + a containment message BEFORE it resolves the

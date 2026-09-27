@@ -406,6 +406,37 @@ test('stuckVerdict still reports the page it was stuck on, for the operator read
   assert.equal(v.data.page, 'projects');
 });
 
+// redKind — the story.json ARTIFACT must say WHO caused a red: the runner
+// itself (never reached/judged the page — stuckVerdict's whole domain) or the
+// product (a beat's own expect.data/route mismatch, computed above by
+// beatVerdict). Before this field, both shapes were byte-identical
+// `{status: 'red', failures: [...]}` records, and a reader of story.json
+// could not tell "the harness never looked" from "it looked and the page was
+// wrong" without re-parsing the free-text failure prose.
+test('redKind: a green verdict carries no redKind at all — the field only means something on a red', () => {
+  const v = beatVerdict(beat, { route: '/projects', data: { 'page-ready': 'true', 'project-count': '3' } });
+  assert.equal(v.status, 'green');
+  assert.equal('redKind' in v, false);
+});
+
+test('redKind: a beatVerdict red (route/data mismatch) is redKind "product" — the runner looked and the page disagreed', () => {
+  const v = beatVerdict(beat, { route: '/projects', data: { 'page-ready': 'true', 'project-count': '0' } });
+  assert.equal(v.status, 'red');
+  assert.equal(v.redKind, 'product');
+});
+
+test('redKind: landing on the wrong route is still redKind "product" — the page answered, just not with what was declared', () => {
+  const v = beatVerdict({ ...beat, expect: { ...beat.expect, route: '/projects' } }, { route: '/agents', data: beat.expect.data });
+  assert.equal(v.status, 'red');
+  assert.equal(v.redKind, 'product');
+});
+
+test('redKind: stuckVerdict is ALWAYS redKind "harness" — the beat never reached a page for the product to answer on', () => {
+  const v = stuckVerdict(bindBeat, { route: '/projects/new', data: {}, nested: [] }, 'could not press it');
+  assert.equal(v.status, 'red');
+  assert.equal(v.redKind, 'harness');
+});
+
 test('the verdict carries the NESTED values it judged, so the generated doc documents them', () => {
   // The how-to fragment renders `verdict.data` as its "what you should see"
   // list. Reading only the page root there means a beat can assert

@@ -1,4 +1,6 @@
 /**
+ * PR #533 — the onboarding kickoff route dropped the tier the form collected, rendering a fixed picker instead of a range.
+ *
  * M6-A exit row 1 (rulings 417-419) — "SDK / model / effort are set per
  * session" (1.0.md §3, row S9) at the onboarding kickoff's own door.
  *

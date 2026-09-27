@@ -1,4 +1,6 @@
 /**
+ * PR #176 — W7-A1: the malformed-id error text was garbled by sanitizeError's own path redaction.
+ *
  * W7-A1 (walkthrough library-13) — the malformed-id error the bridge sends
  * for `/api/studio/{hooks,connections,community}/<bad-id>` must (a) name the
  * RIGHT object kind and (b) survive `sanitizeError`'s path redaction intact.

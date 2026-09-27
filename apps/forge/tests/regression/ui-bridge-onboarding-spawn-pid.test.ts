@@ -1,4 +1,6 @@
 /**
+ * PR #183 — W7-FIX-A2 (W7A2-01): onboarding's dispatch pid was never recorded, so cancel could not kill it.
+ *
  * W7-FIX-A2 (W7A2-01, HIGH) — `POST /api/studio/onboarding/start` records
  * its dispatch child's pid where the generic cancel route looks.
  *

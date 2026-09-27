@@ -1,4 +1,6 @@
 /**
+ * PR #190 — W7-B4: a starter flow could reference an agent that resolves nowhere, making it unsaveable.
+ *
  * W7-B4 (flows-09, lint half) — the starter flow must be SAVEABLE by
  * construction: every node agent in studio/starters/flows/basic.yaml must
  * resolve in skills/ OR studio/starters/agents/ (the closed set the flow PUT

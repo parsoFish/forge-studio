@@ -1,4 +1,6 @@
 /**
+ * PR #100 — SEC-04: the architect's own per-session-file helpers raw-appended a leaf, so a symlinked questions.json/answers.json escaped containment.
+ *
  * SEC-04 FINAL-CLOSURE PINS — the architect module's OWN raw-leaf-append helpers
  * that the earlier passes (2d5b1ab9 → cb3c44f3) did NOT route through the leaf
  * guard. The prior passes contained the architect session DIR (runner leg +

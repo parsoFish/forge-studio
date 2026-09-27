@@ -1,4 +1,6 @@
 /**
+ * PR #197 — W7-C1 (agents-27): UsedInFlows presented production-wired agents as unused orphans.
+ *
  * W7-C1 (agents-27) — render pins for `UsedInFlows`
  * (components/studio/agent-builder/UsedInFlows.tsx).
  *

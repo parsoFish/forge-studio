@@ -1,4 +1,6 @@
 /**
+ * PR #85 — SEC-02 round 4: the drain-fix-loop sweep re-entered a whole cycle against unguarded manifest paths.
+ *
  * Tests for the ADR 040 fix-loop drain — selection + re-claim logic. The cycle
  * run is injected (`runDrainCycle`) so these stay git/SDK-free; the real spine
  * is exercised end-to-end by a live cycle (verify:cycle).

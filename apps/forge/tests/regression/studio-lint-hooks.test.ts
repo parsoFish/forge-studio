@@ -1,4 +1,6 @@
 /**
+ * PR #78 — R3-03-F1b: lintHookComposition/lintHookDefinitions were unit-tested but never wired into runStudioLint.
+ *
  * REAL-ENTRY-POINT acceptance tests for R3-03-F1b's symmetric enforcement
  * (composition.hooks vs composition.guards) — driven through the ACTUAL
  * `forge studio lint` entry point (`runStudioLint`, `apps/forge/studio-lint.ts`),

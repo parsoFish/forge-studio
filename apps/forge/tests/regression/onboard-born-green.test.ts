@@ -1,4 +1,6 @@
 /**
+ * PR #195 — W7-FIX-B-PROJ: a from-scratch project was born hard-failing (no .gitignore).
+ *
  * W7-FIX-B-PROJ — route-level "born contract-green" pin (R1-03-F1).
  *
  * The stand-up-create A0 journey beat encodes the invariant: creating a

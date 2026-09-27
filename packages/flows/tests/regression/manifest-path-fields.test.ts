@@ -1,4 +1,6 @@
 /**
+ * PR #85 — SEC-02: no validator existed at all for manifest worktree_path/project_repo_path/cycle_id/project fields.
+ *
  * ACCEPTANCE TESTS (must be RED until SEC-02 lands) — validator + escape-shape
  * catalog for `packages/flows/manifest-path-guard.ts` (does not exist yet as of this
  * writing; every import below is expected to fail module resolution until

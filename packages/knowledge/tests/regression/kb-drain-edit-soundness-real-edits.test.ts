@@ -1,4 +1,6 @@
 /**
+ * PR #210 — W8-B2: replays the gitpulse edge-deletion and trafficGame dead-for-dead edits (2026-08-22) the structural gate alone had classified as landable.
+ *
  * The two REAL edits, replayed — plus the index-page shapes of the same defect.
  *
  * These cases are why the soundness gate exists: a gitpulse edge deletion and a

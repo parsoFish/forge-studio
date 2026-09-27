@@ -1,4 +1,6 @@
 /**
+ * PR #107 — R1-06 KB create/seeding hand-off: silent data loss + phantom-project pollution.
+ *
  * R1-06 WI-2 review pins — two MAJOR correctness bugs in the KB create
  * hand-off + descriptor-derived seeding path.
  *

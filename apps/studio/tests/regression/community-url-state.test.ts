@@ -1,4 +1,6 @@
 /**
+ * PR #214 — W8-B5 WI-6, exit row E15: /community's filter/hub/search/sort state was lost on navigation.
+ *
  * W8-B5 / WI-6 (exit row E15) — `/community`'s browse state lives in the URL.
  *
  * DOES NOT EXIST YET when this file is first written: `./community-url-state.ts`

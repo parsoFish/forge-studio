@@ -1,4 +1,6 @@
 /**
+ * PR #289 — adversarial containment review: applyContractReset's skills[]/artifactRoot segments were reachable via an attacker-writable project.json.
+ *
  * Adversarial containment review (skill: `adversarial-containment-review`) —
  * `computeContractDrift`/`applyContractReset` treat `projectDir` as the
  * TRUSTED root (the same convention every sibling package function uses —

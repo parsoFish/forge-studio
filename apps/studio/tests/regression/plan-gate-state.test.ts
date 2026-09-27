@@ -1,4 +1,6 @@
 /**
+ * commit 82a7bd6f9 — the ArchitectPlanGate's approved flag survived a completeness-critic block, so a re-armed gate still showed "Approved".
+ *
  * Tests for `plan-gate-state.ts` — the ArchitectPlanGate approval-reset logic.
  *
  * Bug: the gate's optimistic `approved` flag survived a completeness-critic

@@ -1,4 +1,6 @@
 /**
+ * PR #188 — W7-B6 WI-6: the demo-design banner fired on every save, not on an actual change.
+ *
  * W7-B6 WI-6 — projects-28 pin: the "Demo machinery needed" signal fires on
  * CHANGE, not presence. The client always sends demoProcess in the save
  * body, so the old `Array.isArray(body.demoProcess)` rule tripped the banner

@@ -122,6 +122,34 @@ test('a route nothing links to and no press reaches is still RED, naming where i
   const v = await driveBeat(page, beat, 1, 'http://localhost:4124');
   assert.equal(v.status, 'red');
   assert.match(v.failures.join(' | '), /no real-nav path to "\/nowhere" from "\/agents"/);
+  // redKind: the runner never reached a page for the product to answer on —
+  // this is `stuckVerdict`'s whole domain, always 'harness'.
+  assert.equal(v.redKind, 'harness');
+});
+
+test('redKind: an unbound route placeholder refuses before touching a page, and is redKind "harness"', async () => {
+  const beat = {
+    act: 'Reach the project the previous beat should have bound',
+    expect: { route: '/projects/<projectId>', data: {} },
+    say: 'Never reached — no earlier beat bound <projectId>.',
+  };
+  const v = await driveBeat(null, beat, 0, 'http://localhost:4124');
+  assert.equal(v.status, 'red');
+  assert.match(v.failures.join(' | '), /needs <projectId>, which no earlier beat bound/);
+  assert.equal(v.redKind, 'harness');
+});
+
+test('redKind: an unbound wait.cycleOf placeholder refuses before touching a page, and is redKind "harness"', async () => {
+  const beat = {
+    act: 'Watch a cycle the previous beat should have bound',
+    expect: { route: '/projects/gitpulse', data: {} },
+    wait: { for: 'agent', terminal: 'ready-for-review', cycleOf: '<initiativeId>', upTo: 1_000 },
+    say: 'Never reached — no earlier beat bound <initiativeId>.',
+  };
+  const v = await driveBeat(null, beat, 0, 'http://localhost:4124');
+  assert.equal(v.status, 'red');
+  assert.match(v.failures.join(' | '), /needs <initiativeId>, which no earlier beat bound/);
+  assert.equal(v.redKind, 'harness');
 });
 
 // ---------------------------------------------------------------------------
@@ -751,4 +779,11 @@ test('forge-8vfn.8.1.4: a stalled wait reds the beat even though its plain expec
   const said = v.failures.join(' | ');
   assert.match(said, /cycle-ended/, said);
   assert.match(said, /failed/, said);
+  // redKind: `terminalWatchAround`'s "cycle-ended" stop is marked
+  // `stoppedBy: 'runner'` (this module's own line, deliberately: it is the
+  // RUNNER deciding further waiting is pointless from a directory-state
+  // measurement, not the session's own crashed/terminal-phase self-report —
+  // see `stopReasonFor`'s header for the distinction this file already
+  // draws), so this is 'harness'.
+  assert.equal(v.redKind, 'harness', JSON.stringify(v));
 });

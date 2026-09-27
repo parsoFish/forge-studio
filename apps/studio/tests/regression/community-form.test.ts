@@ -1,4 +1,6 @@
 /**
+ * PR #214 — W8-B5 WI-6, exit rows E9/E10: the Add-disabled reason named the wrong required fields.
+ *
  * W8-B5 / WI-6 — the registry form's REQUIRED-FIELD SSOT (exit row E10) and
  * the edit-load outcome classifier (exit row E9).
  *

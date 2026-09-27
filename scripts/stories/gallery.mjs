@@ -12,6 +12,20 @@
  * the value from its source of truth and give the object no field to hold a
  * stale copy in.
  *
+ * Each RED beat in `story.json`'s `beats[]` also carries `redKind: 'product'
+ * | 'harness'` (absent on a green beat — see `beatVerdict`/`stuckVerdict` in
+ * `beats.mjs` and `named()` in `beats-drive.mjs`, the field's three sources).
+ * 'product' means the runner reached a page and JUDGED it against the beat's
+ * declared `expect` — a real route/data mismatch, or a session/cycle's own
+ * reported crashed/terminal-not-wanted state. 'harness' means the runner
+ * itself refused or gave up before any such judgement was possible: an
+ * unbound route/`wait.cycleOf` placeholder, a `do` step that could not act,
+ * a route predicate that threw, or a bound that simply expired with no
+ * product signal to attribute the red to. Before this field, both shapes
+ * were byte-identical `{status: 'red', failures: [string]}` records, and a
+ * reader of story.json could not tell "the harness never looked" from "it
+ * looked and the page was wrong" without re-parsing free-text failure prose.
+ *
  * The gallery is both the demo and the regression report, so a red story is
  * shown red. A failing story displayed as if it passed makes the demo a lie.
  */

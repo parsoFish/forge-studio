@@ -1,4 +1,6 @@
 /**
+ * PR #588 — G2 resume 5 (2026-09-08): the unattributed review chunk was given work-item criteria to judge but none of its own, so it could only fail.
+ *
  * The `unattributed` chunk must be able to produce a VALID review record.
  *
  * G2 resume 5 (2026-09-08) died here, on its last chunk, after every other
