@@ -268,16 +268,20 @@ test('startDescendantSampler: a LISTING failure is retried under a bound (mirror
   assert.equal(errnos.EIO, 1, 'the one failed attempt is still visible, even though the sample recovered');
 });
 
-test('startDescendantSampler: continuous /proc-listing failure for longer than the blind bound leaves longestGapMs over it', async () => {
+test('startDescendantSampler: continuous /proc-listing failure for longer than the blind bound leaves longestGapMs over it', () => {
+  // A deterministic clock (known flake: under a loaded full suite, real /proc timing let the gap read 0). Every
+  // reading advances 20 ms, so the sampler observes a blackout from its start to stop() whatever the scheduler does.
+  let t = 1_000_000;
   const sampler = startDescendantSampler({
     rootPid: 100,
     procRoot: '/unused-for-this-test',
-    intervalMs: 10,
+    intervalMs: 10_000_000, // the constructor's immediate sample is the one observed; no real ticks are relied on
+    now: () => (t += 20),
     listPids: () => { throw Object.assign(new Error('EACCES'), { code: 'EACCES' }); },
   });
-  await new Promise((r) => setTimeout(r, 80)); // several real ticks, ALL failing — well past 3 × 10ms
+  t += 60; // time passes, all of it blind
   const { erroredSamples, longestGapMs, samples } = sampler.stop();
-  assert.ok(samples >= 4, `expected several samples over 80ms at a 10ms interval, got ${samples}`);
+  assert.equal(samples, 1);
   assert.ok(erroredSamples >= 1);
   assert.ok(longestGapMs > 30, `longestGapMs (${longestGapMs}) must exceed the 3×10ms bound — nothing ever succeeded`);
   const [got] = attributeEscapes([{ root: '/sib/tree', paths: ['a.txt'] }], { touchedRoots: new Map(), erroredSamples, longestGapMs, intervalMs: 10 });
@@ -285,6 +289,7 @@ test('startDescendantSampler: continuous /proc-listing failure for longer than t
   assert.match(got.reason, /longestGapMs/, 'the line names the gap');
   assert.match(got.reason, /30|bound/, 'the line names the bound it exceeded');
 });
+
 
 test('startDescendantSampler: an exception from pidsDescendedFrom (or a per-pid read) inside one sample is contained — the interval keeps running and later samples still succeed', async () => {
   let calls = 0;

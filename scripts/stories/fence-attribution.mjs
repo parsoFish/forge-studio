@@ -405,6 +405,7 @@ export function startDescendantSampler(opts) {
   const {
     rootPid, intervalMs = DESCENDANT_SAMPLE_INTERVAL_MS, procRoot = '/proc',
     listPids, readCwd, listFds, readFd,
+    now: nowFn = Date.now, // injectable so a gap is measured on a clock the caller controls (known flake, forge-1rk5.3)
   } = opts;
   const listPidsFn = listPids ?? (() =>
     readdirSync(procRoot, { withFileTypes: true }).filter((e) => /^[0-9]+$/.test(e.name)).map((e) => e.name));
@@ -414,7 +415,7 @@ export function startDescendantSampler(opts) {
   const errnos = new Map();
   let erroredSamples = 0;
   let samples = 0;
-  const startedAt = Date.now();
+  const startedAt = nowFn();
   let lastSuccessAt = null; // null: no sample has ever succeeded yet
   let failingSince = null; // start of the current failure window, or null while sighted
   let longestGapMs = 0;
@@ -438,7 +439,7 @@ export function startDescendantSampler(opts) {
 
   const sampleOnce = () => {
     samples += 1;
-    const now = Date.now();
+    const now = nowFn();
 
     // (1) The listing itself: retried, within THIS sample, under the same
     // bound `livePidCwds` already uses for an UNKNOWN pid read — errored only
@@ -491,7 +492,7 @@ export function startDescendantSampler(opts) {
   return {
     stop: () => {
       clearInterval(timer);
-      if (failingSince !== null) longestGapMs = Math.max(longestGapMs, Date.now() - failingSince); // never recovered: window runs to stop
+      if (failingSince !== null) longestGapMs = Math.max(longestGapMs, nowFn() - failingSince); // never recovered: window runs to stop
       return { touchedRoots, samples, erroredSamples, errnos: Object.fromEntries(errnos), longestGapMs, intervalMs };
     },
   };
