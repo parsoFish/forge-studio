@@ -59,7 +59,7 @@ operator-ratified new cap — never a silent raise.
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `projects` | 48 | 11,057 | **9,284** | ratified 9,284 — forge-mfv5.3.5 retired acceptance.required: refused at load by name, deleted and reported by forge project migrate, +35 on 9,249 (T1-ratified); see git history for prior raises. |
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
-| `agents` | 46 | 13,231 | **13,231** | ratified 13,231 — forge-mfv5.3.7 the gate child env carries FORGE_RESOURCE_PREFIX derived from the initiative id, +18 on 13,213, lane-ratified under ruling 666; see git history for prior raises. |
+| `agents` | 46 | 13,235 | **13,235** | ratified 13,235 — forge-mfv5.3.7 the gate child env carries FORGE_RESOURCE_PREFIX derived from the initiative id (secrets.env only for a gate that declared requiredEnv/unsetEnv), +22 on 13,213, lane-ratified under ruling 666; see git history for prior raises. |
 | `sessions` | 61 | 20,402 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 85 | 24,012 | **23,812** | ratified 23,812 — row 136 closure.local-aligned-to-remote records target_sha/base_sha (forge-8vfn.8.1.32), +16 on 23,796, lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 15 | 2,763 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
@@ -67,7 +67,7 @@ operator-ratified new cap — never a silent raise.
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,922 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **473** | **127,833** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **473** | **127,837** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -273,7 +273,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/_adapters/types.ts | agents | verbatim | 56 |
 | packages/agents/ralph/claude-agent.ts | agents | verbatim | 577 |
 | packages/agents/ralph/runner.ts | agents | verbatim | 484 |
-| packages/agents/ralph/stop-conditions.ts | agents | verbatim | 796 |
+| packages/agents/ralph/stop-conditions.ts | agents | verbatim | 800 |
 | packages/agents/agent-bands.ts | agents | verbatim | 76 |
 | packages/agents/agent-dispatch.ts | agents | verbatim | 420 |
 | packages/agents/dispatch-terminal.ts | agents | verbatim | 194 |
