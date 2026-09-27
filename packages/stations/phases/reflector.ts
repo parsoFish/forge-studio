@@ -595,8 +595,8 @@ const INFERRED_ANSWER_RE = /^\s*\*\*Inferred answer:\*\*\s*(.+)$/i;
  *   ## 1. <heading text>
  *   <body paragraphs>
  *
- * Returns one entry per `## ` heading found. Content before the first such
- * heading (an H1 title, a preamble) is dropped rather than read as a question.
+ * Returns one entry per `## ` heading found — nothing else is ever read as one, so
+ * an H1/preamble prefix is dropped and a heading-less file yields `[]`, never a stand-in.
  */
 export function parseUserQuestionsMd(raw: string, mode: ReflectMode = 'interactive'): UserQuestion[] {
   const out: UserQuestion[] = [];

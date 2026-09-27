@@ -51,3 +51,13 @@ test('parseUserQuestionsMd: the ## sections keep their order and their options',
   assert.match(questions[2].question, /freeform/);
   assert.deepEqual(questions[2].options, []);
 });
+
+// SHOULD-FIX 2 (forge-8vfn.8.1.34): a file with NO `## ` heading at all names no
+// numbered question — `[]`, never the whole body read as one bogus question (the
+// pre-fix behaviour this same bead's H1-preamble door already covers for a
+// heading-BEFORE-the-first-`## ` prefix). Both shapes share one rule: only
+// content that starts a `## ` section is ever read as a question.
+test('parseUserQuestionsMd: a file with no ## heading at all yields [], never a placeholder question', () => {
+  const questions = parseUserQuestionsMd('_(no open questions — prior feedback covers this cycle)_');
+  assert.deepEqual(questions, []);
+});
