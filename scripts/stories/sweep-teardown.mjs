@@ -25,7 +25,8 @@ import { join, relative } from 'node:path';
 import { readProcTable, descendantsOf, agentRunsReadable } from './reap.mjs';
 import { waitForCensusEmpty, describeCensus, identifyPid, verifiedKill } from './reap-census.mjs';
 import { quiesceWriters, describeQuiesce } from './quiesce.mjs';
-import { sweepProductFixtures, sweepCycleArtefacts } from './sweep.mjs';
+import { sweepProductFixtures } from './sweep.mjs';
+import { sweepCycleArtefacts } from './sweep-cycle-artefacts.mjs';
 import { describeRunArtefactsClear } from './ground-clear.mjs';
 // Split out at the 800-line cap (SPLIT, NEVER BASELINE — T1 ruling 492); importers use
 // the sibling module directly — no re-export (CLAUDE.md: no backwards-compat paths).

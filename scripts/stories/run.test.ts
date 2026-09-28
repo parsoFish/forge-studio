@@ -85,7 +85,7 @@ test('MUST 1: the final return still reads the SAME exitCode variable the teardo
 test('row 146: run.mjs imports sweepCycleArtefacts — same claim-then-clear as the trailing sweep', () => {
   assert.match(
     src(),
-    /import\s*\{[^}]*\bsweepCycleArtefacts\b[^}]*\}\s*from\s*'\.\/sweep\.mjs';/,
+    /import\s*\{[^}]*\bsweepCycleArtefacts\b[^}]*\}\s*from\s*'\.\/sweep-cycle-artefacts\.mjs';/,
     'the post-stop sweep must reuse sweepProductFixtures\' own function, never a second copy of the claim',
   );
 });

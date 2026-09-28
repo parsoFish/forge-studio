@@ -45,7 +45,8 @@ import {
 } from './preflight.mjs';
 import { ownGroundManifest } from './ground-hash.mjs';
 import { suiteLockVerdict, lockOrderVerdict, EXIT_LOCK_REFUSED } from './lock-guard.mjs';
-import { sweepStoryResidue, sweepCycleArtefacts } from './sweep.mjs';
+import { sweepStoryResidue } from './sweep.mjs';
+import { sweepCycleArtefacts } from './sweep-cycle-artefacts.mjs';
 import { captureAndClearBornLogDirs, describeBornLogDirsClear } from './sweep-post-stop-logs.mjs';
 import { provisionFixtureGrounds, teardownFixtureGround } from './fixture-ground.mjs';
 import { captureAndSweepAgentLogs } from './sweep-agent-logs.mjs';
