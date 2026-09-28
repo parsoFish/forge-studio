@@ -8,7 +8,9 @@ import { StageHex } from '@/components/StageHex';
 import { ArchitectQuestionForm } from '@/components/ArchitectQuestionForm';
 import { ActivityLog } from '@/components/studio/ActivityLog';
 import { ArchitectCommittedView } from '@/components/studio/session/ArchitectCommittedView';
-import { architectHexMeta, architectHexMetaForLifecycle, isArchitectWorking, isSessionStale } from '@/lib/architect-hex';
+import {
+  architectHexMeta, architectHexMetaForLifecycle, architectInterviewState, isArchitectWorking, isSessionStale,
+} from '@/lib/architect-hex';
 import { architectPlanArtifactHref } from '@/lib/architect-plan-view';
 import { useLoopClosureState } from '@/lib/use-loop-closure-state';
 
@@ -78,6 +80,14 @@ export function SessionArchitectPanel({
           extraData={{
             'data-architect-phase': session.phase,
             'data-architect-active': active ? 'true' : 'false',
+            // forge-8vfn.8.1.48 (ruling 1891, row 160) — the POSITIVE
+            // "interview concluded" signal, derived from the phase this
+            // panel already carries. `questions` is only ever non-null
+            // while `phase === 'awaiting-answers'`, so its length is the
+            // pending round's own count — 0 whenever nothing is pending,
+            // which is exactly run 41's shape once the interview concludes.
+            'data-interview-state': architectInterviewState(session.phase),
+            'data-interview-questions': String(session.questions?.length ?? 0),
           }}
         />
       </div>

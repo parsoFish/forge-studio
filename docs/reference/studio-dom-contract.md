@@ -3983,7 +3983,8 @@ is what this contract reads — but it cannot be the only distinguisher.
   **Every per-kind operator affordance keeps its original `data-*` name** so
   the harness drives it unchanged, **with one exception (W6-B7, below):**
   the architect hex
-  (`[data-component="architect-hex"][data-architect-phase][data-architect-active]`,
+  (`[data-component="architect-hex"][data-architect-phase][data-architect-active]
+  [data-interview-state="asking"|"concluded"][data-interview-questions]`,
   `[data-tool-burst]` chips), `[data-section="architect-interview"|"architect-status"]`
   with `[data-architect-round][data-questions-answered]`, per-question
   `[data-question-index][data-question-resolved]`, per-option
@@ -4026,6 +4027,17 @@ is what this contract reads — but it cannot be the only distinguisher.
   `revising` (a draft round it bounced back) are new; both read
   `data-architect-active="true"` and fold into `working` on the COARSE
   `/artifact` union documented above — no new value on that one.
+  **forge-8vfn.8.1.48 (ruling 1891, row 160):** `data-interview-state` is the
+  POSITIVE, DERIVED counterpart to the raw phase above — `"asking"` for
+  `interviewing`/`awaiting-answers` (another question could still arrive),
+  `"concluded"` for every later phase, whether that took zero interview
+  rounds (run 41's shape: straight from `interviewing` to `exploring`, the
+  question form never rendered) or several. `data-interview-questions` is
+  the CURRENT round's pending question count — `session.questions?.length`,
+  already on the wire, `0` whenever nothing is pending. A story branches on
+  THESE, never on the absence of `[data-field="question-freetext"]`, which
+  is indistinguishable from "the round has not rendered yet" without them.
+  See `apps/studio/lib/architect-hex.ts`'s `architectInterviewState`.
   The project-brain side's
   `[data-section="brain-briefing"|"brain-analyzing"|"brain-review"|"brain-committing"|"brain-committed"|"brain-abandoned"]`
   (`brain-review` carries `data-theme-count`; **W7-C2, sessions-kinds-22:
