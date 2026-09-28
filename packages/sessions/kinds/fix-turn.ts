@@ -44,11 +44,10 @@ import { createLogger, type EventLogger, type Phase } from '@forge/kernel';
 import {
   REDACTED_THINKING_MARKER,
   isProgressMessage,
-  makeHeartbeatTick,
-  makeHeartbeatWriter,
   makeReasoningSink,
   makeThinkingSink,
 } from '../interactive-session.ts';
+import { makeHeartbeatTick, makeHeartbeatWriter } from '../heartbeat.ts';
 
 /**
  * The query seam, declared HERE with `options` REQUIRED because that is what

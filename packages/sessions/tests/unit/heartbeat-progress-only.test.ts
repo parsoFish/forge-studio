@@ -17,7 +17,8 @@ import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runStructuredTurn, runAgentTurn, makeHeartbeatWriter, type QueryFn } from '../../interactive-session.ts';
+import { runStructuredTurn, runAgentTurn, type QueryFn } from '../../interactive-session.ts';
+import { makeHeartbeatWriter } from '../../heartbeat.ts';
 import { DEFAULT_IDLE_DEADLINE_MS } from '@forge/agents/testing';
 
 const MODEL = 'claude-sonnet-5';

@@ -55,7 +55,8 @@ import { sdkHooksForAgent } from '@forge/agents/studio/hook-dispatch.ts';
 import { makeToolEventSink } from '@forge/agents/tool-event-emit.ts';
 import { createLogger, guardedReadFile, resolveGuardedPath, type EventLogger, type Phase } from '@forge/kernel';
 
-import { makeHeartbeatWriter, makeReasoningSink, makeThinkingSink, runAgentTurn, type QueryFn } from '../interactive-session.ts';
+import { makeReasoningSink, makeThinkingSink, runAgentTurn, type QueryFn } from '../interactive-session.ts';
+import { makeHeartbeatWriter } from '../heartbeat.ts';
 
 /**
  * The ONE "hooks, or nothing" spread. `sdkHooksForAgent` returns undefined when

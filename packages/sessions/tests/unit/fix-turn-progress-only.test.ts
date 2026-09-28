@@ -4,9 +4,9 @@
  * call with no `isProgress`, and an unconditional `onHeartbeat()` before the
  * type check) and is itself a session kind the Studio stall detector watches
  * (`bridge-studio-lifecycle.ts`, kb-cleanup/authoring/preflight-fix all route
- * through it). Same fix, same shared helpers
- * (`isProgressMessage`/`makeHeartbeatTick` from `../../interactive-session.ts`
- * — never re-derived here), same test shape as
+ * through it). Same fix, same shared helpers (`isProgressMessage` from
+ * `../../interactive-session.ts`, `makeHeartbeatTick` from
+ * `../../heartbeat.ts` — never re-derived here), same test shape as
  * `heartbeat-progress-only.test.ts`.
  *
  * `runFixTurn` never rethrows a stall to its caller (its own catch emits an
