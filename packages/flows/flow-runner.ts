@@ -53,6 +53,7 @@ import { FORGE_ROOT } from '@forge/kernel';
 import { flowRoots, resolveIdAcrossRoots, skillRoots } from '@forge/kernel';
 import { findFanOutViolations } from './flow-fanout.ts';
 import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
+import { rebaseForResume } from './cycle-helpers.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';
 import { stageFlowRunRequest } from './flow-run-requests.ts';
 import { readOperatorStopRequest, OperatorStopError } from './operator-stop.ts';
@@ -371,6 +372,17 @@ export function checkFlowVersionSeam(
 // ---------------------------------------------------------------------------
 
 /**
+ * Row 167 (bead forge-8vfn.8.1.61, ruling 1916): the three `resumeFrom`
+ * values that re-enter the develop flow directly, skipping past the
+ * architect/PM pair that only ever run on `forge-architect`. `'plan'` (row
+ * 157) is deliberately absent — that one re-enters `forge-architect`'s own
+ * `pm` node, which still rebases itself (executor-table.ts's `execPm`).
+ */
+const RESUME_POINTS_INTO_DEVELOP: ReadonlySet<CycleInput['resumeFrom']> = new Set([
+  'integrate', 'pr-open', 'develop',
+]);
+
+/**
  * Walk the flow's nodes in topological order and execute each node.
  *
  * Threading: CycleInput is passed UNCHANGED to every executor — same object,
@@ -379,12 +391,25 @@ export function checkFlowVersionSeam(
  * The caller (runCycle) must have already resolved resolveQualityGateCmd and
  * threaded inputWithGate — runFlow receives the already-resolved input (item 1).
  *
- * resumeFrom: when `input.resumeFrom === 'integrate'`, the pm node rebases + skips
- * (item 3), the dev node runs but self-no-ops the per-WI work (toRun=[], still
- * emitting its start/end{resumed:true} events so the dev hex resolves complete),
- * and the `integrate` node (declared `resumable`) is the resume target — the DAG walk
- * re-enters the post-develop band (integrate → adversarial-review → verdict) against
- * the preserved branch without rebuilding any WI.
+ * resumeFrom: Row 167 (ruling 1916) — a resume that re-enters the develop flow
+ * ('integrate' ADR 019, 'pr-open' row 122, 'develop' ADR 040 fix loop) rebases
+ * the preserved worktree onto current main EXACTLY ONCE here, before the first
+ * node runs (`RESUME_POINTS_INTO_DEVELOP`, below). This is resume machinery,
+ * not a phase's job — no node on the shipped `forge-develop` flow is the PM,
+ * so a phase executor never saw these three resume points rebase anything.
+ * A failed rebase throws through `rebaseForResume` (cycle-helpers.ts), which
+ * already emits the `cycle.resume-needs-rebase` event `classifyCycleFailure`
+ * classifies as `terminal` — the SAME classified-failure path `'plan'`'s
+ * rebase (still inside `execPm`, unchanged) has always gone through. The
+ * manifest's own `resume_from` is never touched here, so a later requeue
+ * still targets the same point once the conflict is resolved by hand.
+ *
+ * With `input.resumeFrom === 'integrate'`, the dev node then runs but
+ * self-no-ops the per-WI work (toRun=[], still emitting its start/end
+ * {resumed:true} events so the dev hex resolves complete), and the
+ * `integrate` node (declared `resumable`) is the resume target — the DAG walk
+ * re-enters the post-develop band (integrate → adversarial-review → verdict)
+ * against the preserved (now rebased) branch without rebuilding any WI.
  *
  * Row 122 (bead forge-8vfn.8.1.55): `input.resumeFrom === 'pr-open'` is a
  * narrower resume for the SAME kind of environment failure, classified
@@ -486,6 +511,15 @@ export async function runFlow({
   // Wrap the logger once for cost tracking. Node-level wedge wrapping happens
   // per-node below so each node gets a fresh WedgeDetector.
   const costLogger = wrapLoggerForCost(logger, costTracker);
+
+  // Row 167 (ruling 1916): re-entry rebase, ONCE, before the first node runs
+  // (see this function's own doc above). A failed rebase throws here — before
+  // any node's try/catch, so it is never reclassified as a node's own error —
+  // and `rebaseForResume` has already emitted the classified `cycle.resume-
+  // needs-rebase` event the caller's `classifyCycleFailure` reads.
+  if (RESUME_POINTS_INTO_DEVELOP.has(input.resumeFrom)) {
+    rebaseForResume(input, costLogger);
+  }
 
   // Track outcome state — mirrors cycle.ts. 'failed' never appears here:
   // failures throw and are caught by runCycle's outer try/catch.
