@@ -53,7 +53,6 @@ import { FORGE_ROOT } from '@forge/kernel';
 import { flowRoots, resolveIdAcrossRoots, skillRoots } from '@forge/kernel';
 import { findFanOutViolations } from './flow-fanout.ts';
 import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
-import { rebaseForResume } from './cycle-helpers.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';
 import { stageFlowRunRequest } from './flow-run-requests.ts';
 import { readOperatorStopRequest, OperatorStopError } from './operator-stop.ts';
@@ -202,6 +201,18 @@ export type FlowRunArgs = {
     logger: EventLogger,
     reviewerOutcome: ReviewerOutcome,
   ) => Promise<ClosureResult>;
+  /**
+   * Row 167 (ruling 1916): the re-entry rebase (see `runFlow`'s own doc,
+   * below). Injected — never imported directly — for the SAME reason
+   * `executor`/`projectGate`/`runClosure` are: it is resume machinery, not a
+   * station, so it is not part of the `PhaseExecutor` port, and it needs the
+   * SAME dependency a test (or a future factory) injects into the executor
+   * table, not a second independent implementation. No default and no
+   * fallback (CLAUDE.md) — `cycle.ts` binds the one real implementation
+   * (`cycle-helpers.ts`'s `rebaseForResume`) directly; a caller that cannot
+   * name it has no business resuming a cycle.
+   */
+  rebaseForResume: (input: CycleInput, logger: EventLogger) => void;
   /**
    * Stage a triggered flow run. Injectable because the trigger tests assert the
    * call, not its side effect on disk. It is NOT part of the phase set: staging
@@ -397,12 +408,16 @@ const RESUME_POINTS_INTO_DEVELOP: ReadonlySet<CycleInput['resumeFrom']> = new Se
  * node runs (`RESUME_POINTS_INTO_DEVELOP`, below). This is resume machinery,
  * not a phase's job — no node on the shipped `forge-develop` flow is the PM,
  * so a phase executor never saw these three resume points rebase anything.
- * A failed rebase throws through `rebaseForResume` (cycle-helpers.ts), which
- * already emits the `cycle.resume-needs-rebase` event `classifyCycleFailure`
- * classifies as `terminal` — the SAME classified-failure path `'plan'`'s
- * rebase (still inside `execPm`, unchanged) has always gone through. The
- * manifest's own `resume_from` is never touched here, so a later requeue
- * still targets the same point once the conflict is resolved by hand.
+ * `rebaseForResume` arrives on `FlowRunArgs` as an injected dependency (its
+ * own field doc), never a direct import — the same seam the executor table
+ * binds its own copy of `cycle-helpers.ts`'s `rebaseForResume` through, so a
+ * test that injects a mock rebase sees it here too. A failed rebase throws,
+ * having already emitted the `cycle.resume-needs-rebase` event
+ * `classifyCycleFailure` classifies as `terminal` — the SAME classified-
+ * failure path `'plan'`'s rebase (still inside `execPm`, unchanged) has
+ * always gone through. The manifest's own `resume_from` is never touched
+ * here, so a later requeue still targets the same point once the conflict is
+ * resolved by hand.
  *
  * With `input.resumeFrom === 'integrate'`, the dev node then runs but
  * self-no-ops the per-WI work (toRun=[], still emitting its start/end
@@ -429,6 +444,7 @@ export async function runFlow({
   executor,
   projectGate,
   runClosure,
+  rebaseForResume,
   enqueueFlowRun = defaultEnqueueFlowRun,
   nodeBudgets,
   rateLimitGate: injectedGate,

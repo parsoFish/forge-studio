@@ -18,6 +18,12 @@
  * the flow runner executes the fixture's one node straight off the stale
  * branch.
  *
+ * `rebaseForResume` arrives on `runFlow` as an injected `FlowRunArgs` field
+ * (never a direct import — a mock-injecting caller, e.g.
+ * `apps/forge/tests/unit/flow-runner.test.ts`, must see the runner call ITS
+ * mock), so every call below passes the real one explicitly, through the
+ * same seam production (`cycle.ts`) binds it through.
+ *
  * Real temp git repos, no mocked git — the same fixture shape as
  * `resume-rebase.test.ts` (the raw `rebasePreservedBranchOntoMain` unit tests)
  * and `stations/tests/regression/pr-open-resume-skips-bands.test.ts` (the
@@ -40,6 +46,7 @@ import { runFlow } from '../../flow-runner.ts';
 import type { NodeExecContext } from '../../flow-node-context.ts';
 import type { CycleInput } from '../../cycle-context.ts';
 import { parseManifest, serializeManifest, type InitiativeManifest } from '../../manifest.ts';
+import { rebaseForResume } from '../../cycle-helpers.ts';
 
 function gitRepo(): { dir: string; git: (args: string[]) => string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), 'forge-reentry-rebase-repo-'));
@@ -151,6 +158,7 @@ for (const resumeFrom of ['integrate', 'pr-open', 'develop'] as const) {
         executor,
         projectGate: { runPreflight: neverCall('runPreflight') },
         runClosure: neverCall('runClosure'),
+        rebaseForResume,
       });
 
       assert.doesNotThrow(
@@ -198,6 +206,7 @@ test('runFlow CONTROL: a fresh (non-resume) run does not rebase — the worktree
       executor,
       projectGate: { runPreflight: neverCall('runPreflight') },
       runClosure: neverCall('runClosure'),
+      rebaseForResume,
     });
 
     assert.throws(
@@ -251,6 +260,7 @@ test('runFlow: a CONFLICTING main fails the re-entry rebase as a classified TERM
         executor,
         projectGate: { runPreflight: neverCall('runPreflight') },
         runClosure: neverCall('runClosure'),
+        rebaseForResume,
       }),
       /resume-needs-rebase/,
     );

@@ -98,17 +98,38 @@ function resolveExecutingAgentDef(ctx: NodeExecContext): AgentDefinition {
   return def;
 }
 
-/** pm: 'plan' (row 157, ruling 1873: a PM-phase acceptance-gate failure)
- *  rebases and STILL RUNS, because the PM is the phase that failed and must
- *  re-decompose; otherwise (no marker, or any other resume point) run the
- *  project manager as a normal fresh pass. Row 167 (ruling 1916): 'integrate'
- *  / 'pr-open' / 'develop' never reach this executor at all — PM is not a
- *  node on the shipped `forge-develop` flow those three resume — so their
- *  re-entry rebase moved to the flow runner itself (flow-runner.ts's
- *  `runFlow`, `RESUME_POINTS_INTO_DEVELOP`), the one place that actually sees
- *  every one of them. */
+/** pm: skip + rebase on a SKIPPING resume ('integrate' crash recovery,
+ *  ADR-019; 'develop' fix-loop re-entry, ADR-040) — but 'plan' (row 157,
+ *  ruling 1873: a PM-phase acceptance-gate failure) rebases and STILL RUNS,
+ *  because the PM is the phase that failed and must re-decompose; otherwise
+ *  (no marker) run the project manager as a normal fresh pass. This branch is
+ *  the GENERIC mechanism for a flow whose `pm` node is still on the resumed
+ *  path — the shipped `forge-develop` flow is not one of those (PM lives only
+ *  on `forge-architect`, entered at `resumeFrom:'plan'`), which is exactly
+ *  why row 167 (ruling 1916) ALSO rebases at the flow runner's own re-entry
+ *  (flow-runner.ts's `runFlow`, `RESUME_POINTS_INTO_DEVELOP`) — the one place
+ *  that sees every one of 'integrate'/'pr-open'/'develop' regardless of
+ *  whether the flow being resumed happens to carry a `pm` node. A flow with
+ *  both (this executor's own skip AND the runner's re-entry rebase both
+ *  firing) rebases twice — harmless, since `rebaseForResume` no-ops once main
+ *  is already an ancestor. */
 const execPm: NodeExecutor = async (ctx) => {
-  const { input, nodeLogger, deps } = ctx;
+  const { input, nodeLogger, deps, nodeId } = ctx;
+  if (input.resumeFrom && input.resumeFrom !== 'plan') {
+    // Item 3: rebase the preserved branch onto main before running the dev-loop.
+    deps.rebaseForResume(input, nodeLogger);
+    nodeLogger.emit({
+      initiative_id: input.initiativeId,
+      phase: 'orchestrator',
+      skill: 'flow-runner',
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: 'flow-runner.pm-skipped-resume',
+      metadata: { node_id: nodeId, resume_from: input.resumeFrom },
+    });
+    return;
+  }
   if (input.resumeFrom === 'plan') deps.rebaseForResume(input, nodeLogger);
   const def = resolveExecutingAgentDef(ctx);
   await runWithWedge(ctx, (sig) => deps.runProjectManager(input, nodeLogger, def, sig));

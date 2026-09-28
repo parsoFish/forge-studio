@@ -61,13 +61,13 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,386 | **13,386** | ratified 13,386 — row 122 (forge-8vfn.8.1.55): `classifyCycleFailure` narrows a DNS/environment PR-open failure to `resumeFrom:'pr-open'`, +31 on 13,355, lane-ratified (ruling 666, measured). |
 | `sessions` | 63 | 20,663 | **20,625** | ratified 20,625 — row 129 (forge-8vfn.8.1.56): idempotent initiative-id minting (`mintInitiativeId`, `architect-manifest.ts`), +25 on 20,600, lane-ratified (ruling 666, measured); see git history for prior raises. |
-| `flows` | 86 | 24,821 | **24,621** | ratified 24,621 — row 167 (forge-8vfn.8.1.61, ruling 1916): re-entry rebase moves from the PM executor to the flow runner, +74 on 24,547, lane-ratified (ruling 666, measured); see git history for prior raises. |
+| `flows` | 86 | 24,851 | **24,651** | ratified 24,651 — row 167 (forge-8vfn.8.1.61): a resume re-entering the develop flow rebases once at re-entry, +104 on 24,547, T1-ratified (ruling 1928, >100); see git history for prior raises. |
 | `factory` | 15 | 2,763 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 45 | 12,245 | **12,245** | ratified 12,245 — row 167 (forge-8vfn.8.1.61, ruling 1916): `rebaseForResume` moved to `packages/flows/cycle-helpers.ts` and `execPm`'s unreachable non-plan skip removed, −41 on 12,286 (cap lowered to measured); see git history for prior raises. |
+| `stations` | 45 | 12,266 | **12,266** | ratified 12,266 — row 167 (forge-8vfn.8.1.61, ruling 1916): `rebaseForResume` moved out to `packages/flows/cycle-helpers.ts`, −20 on 12,286 (cap lowered to measured); see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,922 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **477** | **129,566** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **477** | **129,617** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -314,7 +314,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/cycle-helpers.ts | flows | verbatim | 715 |
 | packages/flows/cycle-pr-open.ts | flows | rewritten | 148 |
 | packages/flows/cycle-report.ts | flows | verbatim | 31 |
-| packages/flows/cycle.ts | flows | verbatim | 552 |
+| packages/flows/cycle.ts | flows | verbatim | 566 |
 | packages/flows/daemon.ts | flows | verbatim | 245 |
 | packages/sessions/kinds/demo-builder.ts | sessions | verbatim | 411 |
 | packages/sessions/kinds/authoring.ts | sessions | rewritten | 141 |
@@ -333,7 +333,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/flow-run-requests.ts | flows | verbatim | 408 |
 | packages/flows/flow-node-context.ts | flows | verbatim | 54 |
 | packages/flows/flow-node-kind.ts | flows | verbatim | 66 |
-| packages/flows/flow-runner.ts | flows | rewritten | 755 |
+| packages/flows/flow-runner.ts | flows | rewritten | 771 |
 | packages/flows/flow-fanout.ts | flows | verbatim | 34 |
 | packages/flows/flow-accepts-class.ts | flows | rewritten | 34 |
 | packages/flows/flow-trigger.ts | flows | verbatim | 222 |
@@ -367,7 +367,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/session-write-fence.ts | sessions | verbatim | 300 |
 | packages/sessions/testing.ts | sessions | verbatim | 15 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `tests/architect-ports-stub.ts`'s `stubArchitectManifestPorts`, three `kinds/architect-critic.ts` symbols, and three `turn-cost-rows.ts` symbols have no production consumer outside this package, only `apps/forge`/`scripts/stories` tests reach for them.** |
 | packages/stations/phases/cycle-id.ts | stations | rewritten | 12 |
-| packages/stations/phases/executor-table.ts | stations | verbatim | 716 |
+| packages/stations/phases/executor-table.ts | stations | verbatim | 737 |
 | packages/stations/phases/agent-skill-text.ts | stations | rewritten | 30 |
 | packages/forge-docs/skills/docs-integrate/SKILL.md | forge-docs | rewritten | 70 |
 | packages/forge-docs/skills/docs-review/SKILL.md | forge-docs | rewritten | 173 |
