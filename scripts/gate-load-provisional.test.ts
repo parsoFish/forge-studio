@@ -27,7 +27,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync, spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -71,6 +71,17 @@ function loadavgFixture(text: string): string {
   const f = join(mkdtempSync(join(tmpdir(), 'gate-loadavg-')), 'loadavg');
   writeFileSync(f, text);
   return f;
+}
+
+/** `MAJOR:MINOR` the way `/proc/locks` itself prints it (row 151, bead
+ *  forge-8vfn.8.1.53) — `%Hd`/`%Ld` are `st_dev`'s own major/minor (decimal),
+ *  never `<INO>`'s neighbour a fixture can afford to hard-code: two boxes
+ *  mount their temp dir on different devices, and a fixture row claiming the
+ *  wrong one must be rejected exactly like an unrelated file's would be. */
+function devHex(path: string): string {
+  const out = spawnSync('stat', ['-c', '%Hd:%Ld', path], { encoding: 'utf8' }).stdout.trim();
+  const [major, minor] = out.split(':').map(Number);
+  return `${major.toString(16).padStart(2, '0')}:${minor.toString(16).padStart(2, '0')}`;
 }
 
 /** 649's rule, restated by every split of this file: strip the lock env vars
@@ -125,6 +136,56 @@ describe('gate.sh — M7 findings row 15: host contention bracket', () => {
       assert.match(out, /^GATE_RUNLOCK_HOLDER_END=STRANGER:\d+$/m, `Output: ${out}`);
     } finally {
       try { process.kill(holder.pid!, 'SIGKILL'); } catch { /* gone */ }
+    }
+  });
+
+  test('a stranger holder is named once, never twice from an unrelated same-inode row', async () => {
+    // Row 151 (bead forge-8vfn.8.1.53): a real gate run under host contention
+    // printed `GATE_RUNLOCK_HOLDER_START=STRANGER:3914347 3914347` — the SAME
+    // pid twice. `lock_holder_pids` matched by bare INODE alone, and an inode
+    // number is unique only PER DEVICE: a busy box's `/proc/locks` legitimately
+    // lists several files, on several devices, held by the same pid (measured
+    // live on this host: one pid held locks on two different devices at once).
+    // A collision between the target's inode and some unrelated file's, on a
+    // different device, misattributes that unrelated row to the same holder.
+    //
+    // `FORGE_PROC_LOCKS` reproduces the two-row shape deterministically rather
+    // than waiting for a host-contention coincidence: the real holder's own
+    // row is duplicated, plus a THIRD row sharing the same bare inode number
+    // on a fake device, attributed to an unrelated BYSTANDER process — alive,
+    // but holding no fd on `runLock` at all. A fix that only deduped the
+    // final string would still keep that third row (a different pid is never
+    // a "duplicate"); only a fix that also checks the device drops it.
+    const dir = tree(PASSING_CI);
+    const camp = mkdtempSync(join(tmpdir(), 'gate-load-camp-dup-'));
+    const runLock = join(camp, '.run-lock');
+    writeFileSync(runLock, '');
+    const holder = spawn('flock', [runLock, 'sleep', '5'], { detached: true, stdio: 'ignore' });
+    const bystander = spawn('sleep', ['5'], { detached: true, stdio: 'ignore' });
+    await new Promise((r) => setTimeout(r, 400));
+    try {
+      const ino = statSync(runLock).ino;
+      const dev = devHex(runLock);
+      const fixture = [
+        `1: FLOCK  ADVISORY  WRITE ${holder.pid} ${dev}:${ino} 0 EOF`,
+        `2: FLOCK  ADVISORY  WRITE ${holder.pid} ${dev}:${ino} 0 EOF`,
+        `3: FLOCK  ADVISORY  WRITE ${bystander.pid} 00:99:${ino} 0 EOF`,
+        '',
+      ].join('\n');
+      const procLocksDir = mkdtempSync(join(tmpdir(), 'gate-proclocks-'));
+      const procLocks = join(procLocksDir, 'locks');
+      writeFileSync(procLocks, fixture);
+      const out = gate(
+        [dir, camp],
+        { FORGE_LOADAVG_FILE: loadavgFixture('0.10 0.20 0.30\n'), FORGE_PROC_LOCKS: procLocks },
+      );
+      assert.match(
+        out, new RegExp(`^GATE_RUNLOCK_HOLDER_START=STRANGER:${holder.pid}$`, 'm'),
+        `each holder exactly once, never a repeat or an unconfirmed same-inode pid: ${out}`,
+      );
+    } finally {
+      try { process.kill(holder.pid!, 'SIGKILL'); } catch { /* gone */ }
+      try { process.kill(bystander.pid!, 'SIGKILL'); } catch { /* gone */ }
     }
   });
 

@@ -20,9 +20,8 @@
  */
 import { rmSync, existsSync, readdirSync, statSync, realpathSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { claimQueueWrites } from './queue-claim.mjs';
-import { captureAndClearMintedRunArtefacts, describeRunArtefactsClear } from './ground-clear.mjs';
-import { join, relative, resolve, basename } from 'node:path';
+import { join, relative, resolve } from 'node:path';
+import { assertCycleArtefactArgs, sweepCycleArtefacts } from './sweep-cycle-artefacts.mjs';
 
 import { liveProcessRoots, liveSessionOwners } from './fence-attribution.mjs';
 
@@ -170,15 +169,10 @@ export function sweepStoryResidue(storyId, root) {
  * The trailing half of §3.1's duty: the product fixtures this story minted, and
  * never its own artifact. Same removal, a narrower list.
  */
-export function sweepProductFixtures(storyId, root, { sinceMs, untilMs, groundProject, evidenceDir, keepProjects }) {
-  // FAIL FAST RATHER THAN SKIP. The queue claim needs a window and somewhere to
-  // capture to, and a default that quietly skipped it would print a clean
-  // trailing sweep for a run that never looked at `_queue` — §15.507, a green
-  // for a case that did not run, which is the shape of the defect this bead
-  // exists to close.
-  if (typeof sinceMs !== 'number' || typeof evidenceDir !== 'string' || evidenceDir === '') {
-    throw new Error('sweepProductFixtures needs { sinceMs, evidenceDir } to claim this run\'s queue writes (forge-8vfn.7.6.74)');
-  }
+export function sweepProductFixtures(storyId, root, {
+  sinceMs, untilMs, groundProject, evidenceDir, keepProjects, schedulerAlive,
+}) {
+  assertCycleArtefactArgs('sweepProductFixtures', sinceMs, evidenceDir);
   // M7-D — a FIXTURE GROUND is the run's OWN ground, not its debris: `run.mjs`
   // provisions `projects/story-<id>` before the beats run, and it is judged —
   // by the fence and by the verdict this trailing sweep runs inside — before
@@ -194,41 +188,20 @@ export function sweepProductFixtures(storyId, root, { sinceMs, untilMs, groundPr
     return false;
   });
   const r = removeAll(paths);
-  // THE CYCLE'S OWN WRITES, WHICH NO STORY-ID GLOB CAN REACH (`forge-8vfn.7.6.74`).
-  // `productFixturePathsFor` finds `_queue/in-flight|failed/STORY-<id>.md` — two
-  // states of six, both named after the STORY. A ground cycle mints its work
-  // under the INITIATIVE's name into whatever state it reached, so run 14's
-  // initiative sat in `ready-for-review` for thirteen hours while
-  // `git status --porcelain` read 0 (`.gitignore:42`).
-  const claim = claimQueueWrites({ root, sinceMs, untilMs, groundProject, evidenceDir });
-
-  // `forge-8vfn.7.6.146` — THE REST OF WHAT THIS RUN MINTED, derived from the
-  // very ids the claim above just ATTRIBUTED by `created_at`. The claim takes
-  // the `INIT-<id>.md` manifests and, by its own words, LEAVES everything else:
-  // "LEFT … not an INIT manifest (the story-id sweep owns it)". Nothing owned
-  // them. Runs 20 and 21 left a `.md.heartbeat`, two `_worktrees/` trees and a
-  // `_logs/<ts>_INIT-*` cycle dir, and the next costed run's residue door
-  // refused on each in turn at $0 — three correct refusals, three hand clears.
-  //
-  // Derived, never a pattern: a `_worktrees/*` sweep would take a concurrent
-  // lane's trees, and this box runs four lanes.
-  const claimedIds = claim.claimed
-    .map((c) => basename(String(c.path)))
-    .filter((n) => n.endsWith('.md'))
-    .map((n) => n.slice(0, -3));
-  const artefacts = captureAndClearMintedRunArtefacts({
-    root, storyId, runStamp: String(sinceMs), initiativeIds: claimedIds,
+  // ROW 166 — `schedulerAlive` passes straight through to `sweepCycleArtefacts`,
+  // whose own header explains why every caller must state its own answer.
+  const cycle = sweepCycleArtefacts(storyId, root, {
+    sinceMs, untilMs, groundProject, evidenceDir, schedulerAlive,
   });
 
   return {
     ...r,
-    claim,
-    artefacts,
+    claim: cycle.claim,
+    artefacts: cycle.artefacts,
     lines: [
       ...r.removed.map((p) => `[stories] trailing sweep removed ${p}`),
       ...keptLines,
-      ...claim.lines,
-      ...describeRunArtefactsClear(artefacts),
+      ...cycle.lines,
     ],
   };
 }

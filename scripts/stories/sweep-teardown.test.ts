@@ -427,7 +427,13 @@ test('finding row 75 DOOR: stopSchedulerCensusAndRelease kills the grandchild, c
   `, ralphPidFile);
   t.after(() => rmSync(root, { recursive: true, force: true }));
 
-  const result = await stopSchedulerCensusAndRelease(root, { graceMs: 300, censusBoundMs: 3000, censusPollMs: 20, rereadDelayMs: 150 });
+  // ROW 166 — a window that plants nothing inside it: `plantInFlightClaim`'s
+  // manifest carries no `created_at`, so the window-based claim below can
+  // never attribute it; only the path-based `releaseOwnInFlight` this door
+  // is actually about ever touches it.
+  const result = await stopSchedulerCensusAndRelease(root, {
+    graceMs: 300, censusBoundMs: 3000, censusPollMs: 20, rereadDelayMs: 150, sinceMs: Date.now() - 60_000,
+  });
 
   assert.equal(result.sched.how, 'SIGKILL');
   assert.equal(result.sched.drained, false);
@@ -470,7 +476,10 @@ test('finding row 75 DOOR (second): a writer OUTSIDE the daemon\'s tree is invis
   await waitForFileToExist(daemonReady);
   await waitForProcVisible(sibling.pid!);
 
-  const result = await stopSchedulerCensusAndRelease(root, { graceMs: 300, censusBoundMs: 2000, censusPollMs: 20, rereadDelayMs: 150 });
+  // ROW 166 — a window that plants nothing inside it, same reasoning as the DOOR test above.
+  const result = await stopSchedulerCensusAndRelease(root, {
+    graceMs: 300, censusBoundMs: 2000, censusPollMs: 20, rereadDelayMs: 150, sinceMs: Date.now() - 60_000,
+  });
 
   assert.equal(result.census?.empty, true, 'the census is legitimately empty — the sibling is not in the daemon\'s tree');
   assert.ok(result.release?.released.includes('INIT-mine.md.heartbeat'), 'the release itself still ran');
@@ -501,7 +510,10 @@ test('finding row 75 DOOR (third): a TERM-respecting grandchild exits within the
   `, ralphPidFile);
   t.after(() => rmSync(root, { recursive: true, force: true }));
 
-  const result = await stopSchedulerCensusAndRelease(root, { graceMs: 300, censusBoundMs: 3000, censusPollMs: 20, rereadDelayMs: 100 });
+  // ROW 166 — a window that plants nothing inside it, same reasoning as above.
+  const result = await stopSchedulerCensusAndRelease(root, {
+    graceMs: 300, censusBoundMs: 3000, censusPollMs: 20, rereadDelayMs: 100, sinceMs: Date.now() - 60_000,
+  });
 
   assert.equal(result.census?.empty, true);
   assert.ok(result.census!.waitedMs < 1500, `a TERM-respecting child must not consume the full bound: waited ${result.census!.waitedMs} ms`);

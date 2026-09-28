@@ -113,6 +113,76 @@ lock_pid_alive() {
   [ -n "$state" ] && [ "$state" != "Z" ]
 }
 
+# HOLDERS ONLY, AND NEVER BY POSITION (`forge-s9g1`), moved here from `gate.sh`
+# at row 151 (bead `forge-8vfn.8.1.53`) — `suite_lock_state` there reads BOTH
+# `.suite-lock` and `.run-lock` through this ONE `/proc/locks` classifier, so
+# it belongs beside its sibling candidate-gatherer below rather than living a
+# second place. Shipped in 7.6.48 as
+#
+#     awk -v ino=":$ino " '$0 ~ ino {print $5}' /proc/locks
+#
+# and it printed garbage in production twice:
+#
+#     suite-lock: WAITING on stranger pid(s) 3048432 WRITE — another lane's suite holds it
+#
+# A HOLDER row is `6: FLOCK ADVISORY WRITE 784079 08:30:2025251 0 EOF`, where $5
+# IS the pid. A BLOCKED WAITER is a CONTINUATION row — `2: -> FLOCK ADVISORY
+# WRITE 1677053 …` — and the `->` shifts every field by one, so $5 there is the
+# literal string `WRITE` and the pid sits at $6. Cosmetic while a caller's own
+# `is_ancestor` compares `WRITE` against numeric pids and never matches; NOT
+# cosmetic the moment anything downstream reads the list as pids, and not
+# cosmetic even once the pids are right — a blocked WAITER that happens to be
+# the caller's own ancestor would classify as ANCESTOR for a lock nobody holds.
+#
+# So: skip continuation rows, because a waiter is not a holder and this
+# function is named for what it returns; and find the pid as the field BEFORE
+# the MAJ:MIN:INODE token rather than counting from the left, so no future
+# field can shift it again. POSITION WAS NEVER THE PROPERTY.
+#
+# ROW 151, THE SECOND POSITION BUG: bare INODE was never the property either.
+# A real gate run under host contention printed `STRANGER:3914347 3914347` —
+# the SAME pid twice. An inode number is unique only PER DEVICE, and a busy
+# box's `/proc/locks` legitimately lists several files, on several devices,
+# held by one pid (measured live: one pid held flocks on two devices at once).
+# A collision between the target's inode and some unrelated file's, on a
+# different device, misattributes that unrelated row to the same holder — or
+# worse, to a DIFFERENT pid that never touched this lock at all. So the match
+# is now the FULL `MAJOR:MINOR:INODE` triple a `/proc/locks` row already
+# carries, never the inode alone — `%Hd`/`%Ld` (GNU `stat`'s own major/minor of
+# `st_dev`, decimal) formatted `%02x:%02x` to match the width the kernel prints
+# for the row, since `/proc/locks` gives no other way to derive it. The loop
+# still dedupes the pid list on top of that — `flock()` is per
+# open-file-description, and two compatible (shared) locks on the one file
+# from the one process are a real, if rare, shape — but that dedupe is a
+# SECOND, narrower property: on its own, applied to the OLD inode-only match,
+# it would still have kept a different, unconfirmed pid that merely shared the
+# bare inode. The device check is the fix at the source; the dedupe is not a
+# stand-in for it.
+#
+# `FORGE_PROC_LOCKS` is a TEST SEAM and says so: `/proc/locks` cannot be made to
+# hold a chosen row, so the two-row case both bugs above live in is unreachable
+# without one. It defaults to the real file and no caller in the campaign sets
+# it — `lock-guard.mjs` earned its twelve doors the same way, with `procRoot`.
+lock_holder_pids() {
+  local f="$1" ino major minor want pid seen=""
+  ino="$(stat -c '%i' "$f" 2>/dev/null)" || return 0
+  major="$(stat -c '%Hd' "$f" 2>/dev/null)" || return 0
+  minor="$(stat -c '%Ld' "$f" 2>/dev/null)" || return 0
+  want="$(printf '%02x:%02x' "$major" "$minor")"
+  for pid in $(awk -v ino="$ino" -v want="$want" '
+    $2 == "->" { next }                 # a blocked waiter is not a holder
+    {
+      for (i = 2; i <= NF; i++) {
+        n = split($i, a, ":")
+        if (n == 3 && a[3] == ino && (a[1] ":" a[2]) == want) { print $(i - 1); next }
+      }
+    }' "${FORGE_PROC_LOCKS:-/proc/locks}"); do
+    case " $seen " in *" $pid "*) continue ;; esac
+    seen="$seen $pid"
+    printf '%s\n' "$pid"
+  done
+}
+
 # Candidates only: "<pid> <fd>" pairs whose fd resolves (dev+inode) to the
 # lock file — NOT yet a hold (see the header: naming alone over-reports both
 # a stale opener and, critically, ANY co-opener including the checker's own).

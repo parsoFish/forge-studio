@@ -183,6 +183,30 @@ export async function plantDaemonWithGrandchild(t, root, grandchildScript, ralph
   return daemon;
 }
 
+/** ROW 166 (S10 run 44) — a LONE scheduler daemon, no grandchild at all, that
+ *  writes `writerScript`'s own heartbeat from a `setInterval` INSIDE ITSELF —
+ *  standing in for `scheduler-run-one.ts`'s real writer, which never spawns a
+ *  descendant. No process census can see this writer: the pid it runs as is
+ *  `DAEMON_PID_FILE`'s own, the ONE pid `reapCensusAndSweep` deliberately
+ *  never touches (T1 1418 — it must survive for the next story in the batch).
+ *  Ready once the daemon's own `setInterval` call has executed (registered),
+ *  the same readiness rule `plantDaemonWithGrandchild` applies to its
+ *  grandchild's writer — never a guess about when the first tick fires. */
+export async function plantDaemonAsHeartbeatWriter(t, root, writerScript, opts = {}) {
+  const daemonArgv = opts.daemonArgv ?? [join(root, 'apps', 'forge', 'cli.ts'), 'serve'];
+  mkdirSync(join(root, '_logs', 'daemon'), { recursive: true });
+  const ready = join(root, '.daemon-writer-ready');
+  const daemon = spawn(process.execPath, ['-e', withReady(writerScript, ready), ...daemonArgv], {
+    cwd: root, stdio: 'ignore',
+  });
+  writeFileSync(join(root, DAEMON_PID_FILE), String(daemon.pid));
+  t.after(() => killIfAlive(daemon.pid));
+  if (!(await waitForFileToExist(ready))) {
+    throw new Error(`sweep-teardown-plant: daemon pid ${daemon.pid} never reached its own ready marker`);
+  }
+  return daemon;
+}
+
 /** A real process standing in for a pid `reapAgentRuns` already believes it
  *  reaped — its own liveness does not matter to the door, only that a
  *  detached grandchild running `grandchildScript` outlives it. No daemon pid

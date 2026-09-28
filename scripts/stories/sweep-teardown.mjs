@@ -26,6 +26,8 @@ import { readProcTable, descendantsOf, agentRunsReadable } from './reap.mjs';
 import { waitForCensusEmpty, describeCensus, identifyPid, verifiedKill } from './reap-census.mjs';
 import { quiesceWriters, describeQuiesce } from './quiesce.mjs';
 import { sweepProductFixtures } from './sweep.mjs';
+import { sweepCycleArtefacts } from './sweep-cycle-artefacts.mjs';
+import { describeRunArtefactsClear } from './ground-clear.mjs';
 // Split out at the 800-line cap (SPLIT, NEVER BASELINE — T1 ruling 492); importers use
 // the sibling module directly — no re-export (CLAUDE.md: no backwards-compat paths).
 import { DAEMON_PID_FILE, DRAIN_GRACE_MS, ownSchedulerPidState, ownSchedulerPid, stopOwnScheduler } from './sweep-teardown-scheduler.mjs';
@@ -192,18 +194,63 @@ export function releaseOwnInFlight(root) {
  * process on this four-lane host before the signal lands, and `kill()` taking
  * a bare number cannot tell the difference.
  *
+ * ROW 166 FOLLOW-UP (S10 run 44, bead `forge-8vfn.8.1.60`) — DEFERRED
+ * INITIATIVES, once the daemon above is CONFIRMED dead (drained, or killed and
+ * censused empty). `claimQueueWrites` (queue-claim.mjs's own header) now never
+ * claims an in-flight manifest while its owning scheduler is alive, so a cycle
+ * still running when a story ends — S10's own ACT 2, by design — is correctly
+ * LEFT by the per-story trailing sweep, heartbeat, worktrees, dispatch dir and
+ * all. Left there forever it is exactly the residue `releaseOwnInFlight` above
+ * exists to clear, except `releaseOwnInFlight` only ever `rmSync`s the `.md`
+ * and `.heartbeat` — no capture, and it never touches `_worktrees/<id>`,
+ * `_worktrees/wi/<id>` or the `_logs/<ts>_<id>` dispatch dir. So, ONLY once
+ * this daemon is confirmed dead, `sweepCycleArtefacts` (sweep.mjs) — the SAME
+ * attribute-capture-clear pass the per-story sweep and `run.mjs`'s post-stop
+ * sweep both use (bead `forge-8vfn.8.1.52`, row 146) — runs here, scoped to
+ * `opts.sinceMs` (this run's own window): it captures the manifest to
+ * evidence exactly as the per-story queue claim used to, before deferring
+ * ever existed, and clears everything `captureAndClearMintedRunArtefacts`
+ * knows to look for under the ids it just claimed. `releaseOwnInFlight` still
+ * runs straight after, unchanged, as the path-attributed backstop for
+ * whatever this window-based claim could not attribute (T1 1332's own
+ * "capture-then-clear, and a second door for what the first cannot see").
+ *
+ * `schedulerAlive: false`, EXPLICIT, never inherited — `sweepCycleArtefacts`'s
+ * own header requires every caller to state this rather than default it. This
+ * call is only ever reached once the daemon above is CONFIRMED dead (drained,
+ * or killed and censused empty), so there is no live writer left to defer to;
+ * that is the entire premise of running the clear at all.
+ *
+ * REQUIRED, FAIL FAST — the same rule `sweepProductFixtures` already applies
+ * to its own `sinceMs` (`forge-8vfn.7.6.74`). A default that quietly skipped
+ * the deferred clear would print a clean teardown for a call that never
+ * looked at `_queue` for a deferred initiative at all — a green for a case
+ * that did not run, the shape of defect this bead exists to close, and a
+ * second, optional code path is exactly the back-compat shim CLAUDE.md
+ * refuses. Every caller supplies its own window, `run.mjs`'s own `startedMs`
+ * included; a stop/release-only door supplies one that plants nothing inside
+ * it — the honest way to exercise "nothing to clear", never an omission.
+ *
  * @param {string} root the run's own worktree
- * @param {{graceMs?: number, censusBoundMs?: number, censusPollMs?: number,
+ * @param {{sinceMs: number, graceMs?: number, censusBoundMs?: number, censusPollMs?: number,
  *          rereadDelayMs?: number, procRoot?: string,
  *          procTable?: () => Map<number, {ppid: number, pgrp: number}>,
  *          kill?: (pid: number|string, sig: NodeJS.Signals) => void,
  *          sleep?: (ms: number) => Promise<void>,
- *          release?: (root: string) => {released: string[], failed: object[]}}} [opts]
+ *          release?: (root: string) => {released: string[], failed: object[]},
+ *          deferredClear?: typeof sweepCycleArtefacts}} opts
  * @returns {Promise<{sched: object, census: object|null,
  *   release: ({released: string[], failed: object[], reappeared: string[]})|null,
+ *   deferred: {claim: object, artefacts: object}|null,
  *   lines: string[]}>}
  */
 export async function stopSchedulerCensusAndRelease(root, opts = {}) {
+  if (typeof opts.sinceMs !== 'number') {
+    throw new Error(
+      'stopSchedulerCensusAndRelease needs { sinceMs } to claim a deferred initiative\'s own queue writes ' +
+      '(forge-8vfn.8.1.60) — a stop/release-only caller passes a window that plants nothing inside it',
+    );
+  }
   const graceMs = opts.graceMs ?? DRAIN_GRACE_MS;
   const censusBoundMs = opts.censusBoundMs ?? 5000;
   const censusPollMs = opts.censusPollMs ?? 100;
@@ -213,6 +260,21 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
   const kill = opts.kill ?? ((pid, sig) => process.kill(pid, sig));
   const sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const release = opts.release ?? releaseOwnInFlight;
+  const sinceMs = opts.sinceMs;
+  const deferredClear = opts.deferredClear ?? sweepCycleArtefacts;
+  // Run ONLY once the daemon above is confirmed dead — see this function's
+  // own header.
+  const runDeferredClear = () => {
+    const evidenceDir = join(root, '_logs', '_batch-teardown-queue-claim', String(sinceMs));
+    // `schedulerAlive: false` — explicit, see this function's own header.
+    const { claim, artefacts } = deferredClear('batch-teardown', root, {
+      sinceMs, evidenceDir, schedulerAlive: false,
+    });
+    return {
+      deferred: { claim, artefacts },
+      lines: [...claim.lines, ...describeRunArtefactsClear(artefacts)],
+    };
+  };
 
   let daemonPid = null;
   try {
@@ -230,6 +292,7 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
         sched: null,
         census: { empty: false, survivors: null, waitedMs: 0, reason },
         release: null,
+        deferred: null,
         lines: [`[stories] REFUSING teardown: ${reason}`],
       };
     }
@@ -250,6 +313,7 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
       sched: null,
       census: { empty: false, survivors: null, waitedMs: 0, reason },
       release: null,
+      deferred: null,
       lines: [`[stories] REFUSING teardown: ${reason}`],
     };
   }
@@ -264,6 +328,7 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
       sched,
       census: { empty: false, survivors: null, waitedMs: 0, reason },
       release: null,
+      deferred: null,
       lines: [`[stories] REFUSING teardown: ${reason}`],
     };
   }
@@ -277,7 +342,13 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
   if (sched.note !== null) lines.push(`[stories] scheduler: ${sched.note}`);
 
   if (sched.stopped === null || sched.drained) {
-    return { sched, census: null, release: null, lines };
+    // ROW 166 follow-up — a daemon this tree owned, confirmed dead by draining
+    // cleanly, may still have left an initiative behind. `sched.stopped ===
+    // null` means no daemon was ever ours here, so there is nothing to defer.
+    const { deferred, lines: deferredLines } = sched.stopped !== null
+      ? runDeferredClear()
+      : { deferred: null, lines: [] };
+    return { sched, census: null, release: null, deferred, lines: [...lines, ...deferredLines] };
   }
 
   // The daemon did not drain, so a dispatch it started (detached, with its OWN
@@ -310,8 +381,17 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
       'writer, which is the defect this census exists to close. The claim STAYS; the next run\'s residue ' +
       'door will report it, at $0.',
     );
-    return { sched, census, release: null, lines };
+    return { sched, census, release: null, deferred: null, lines };
   }
+
+  // ROW 166 follow-up — CAPTURE-THEN-CLEAR FIRST, before `release` below ever
+  // `rmSync`s the same manifest uncaptured: an initiative this window can
+  // attribute is claimed with its evidence kept and its worktrees/dispatch
+  // dir cleared, exactly what the per-story sweep deferred while this daemon
+  // was alive. `release` still runs straight after, unchanged, as the
+  // path-attributed backstop for whatever this claim did not attribute.
+  const { deferred, lines: deferredLines } = runDeferredClear();
+  lines.push(...deferredLines);
 
   const rel = release(root);
   for (const p of rel.released) {
@@ -330,7 +410,7 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
     );
   }
 
-  return { sched, census, release: { ...rel, reappeared }, lines };
+  return { sched, census, release: { ...rel, reappeared }, deferred, lines };
 }
 
 /**
@@ -382,6 +462,7 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
  *
  * @param {{root: string, storyId: string, sinceMs: number, groundProject?: string,
  *   evidenceDir: string, reapedPids: (number|string)[], schedulerPid?: number|null,
+ *   schedulerAlive?: boolean,
  *   quiesce?: typeof quiesceWriters, sweep?: typeof sweepProductFixtures,
  *   censusBoundMs?: number, censusPollMs?: number, procRoot?: string,
  *   rereadDelayMs?: number, sleep?: (ms: number) => Promise<void>}} args
@@ -402,6 +483,13 @@ export async function reapCensusAndSweep({
   // silently default to null the way a direct `ownSchedulerPid(root)` default
   // expression would.
   schedulerPid,
+  // ROW 166 (S10 run 44) — whether THAT scheduler's own in-process heartbeat
+  // writer (`scheduler-run-one.ts`'s `setInterval`, never a spawned
+  // descendant) must be treated as still live. Omitted (`undefined`) is the
+  // production default, resolved below from `schedulerPid` once it is known —
+  // a test can still override it directly to stand in for the OLD,
+  // writer-blind shape, the same seam `schedulerPid` itself offers.
+  schedulerAlive,
   // M7-D — grounds the sweep must NOT remove yet (a fixture ground is judged
   // before its teardown); passed straight through to `sweepProductFixtures`.
   keepProjects,
@@ -437,6 +525,11 @@ export async function reapCensusAndSweep({
     }
     schedulerPid = state.pid;
   }
+  // ROW 166 — the writer census `claimQueueWrites` cannot perform itself
+  // (queue-claim.mjs's own header). Defaulted from the JUST-resolved
+  // `schedulerPid` so a real caller (`run-story.mjs`) needs no new argument,
+  // exactly as `schedulerPid` itself required none once T1 1418 landed.
+  if (schedulerAlive === undefined) schedulerAlive = schedulerPid !== null;
 
   // ROW 101 / M7-D residual — `reapedPids` (`run-story.mjs`'s
   // `reap.reaped.map((r) => r.pid)`) never carries a PID_READ_UNKNOWN row: it
@@ -503,7 +596,9 @@ export async function reapCensusAndSweep({
     return { quiesce: quiesceResult, census, sweep: null, reappearedArtefacts: [], lines, warnLines: [] };
   }
 
-  const sweepResult = sweep(storyId, root, { sinceMs, groundProject, evidenceDir, ...(keepProjects ? { keepProjects } : {}) });
+  const sweepResult = sweep(storyId, root, {
+    sinceMs, groundProject, evidenceDir, schedulerAlive, ...(keepProjects ? { keepProjects } : {}),
+  });
   lines.push(
     ...sweepResult.lines, // 7.6.74: the removals AND the cycle's own queue writes, which no story-id glob reaches
   );

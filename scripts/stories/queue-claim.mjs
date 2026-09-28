@@ -89,14 +89,29 @@ function createdAtMs(value) {
  * Which queue files belong to this run, which do not, and which could not be
  * told apart — with the per-state census either way.
  *
+ * ROW 166 (S10 run 44) — `in-flight` NEVER CLAIMS while `schedulerAlive` is
+ * true. `scheduler-run-one.ts` writes `<manifest>.heartbeat` from a
+ * `setInterval` inside the daemon's OWN process, never a spawned descendant,
+ * so no process census (`reapCensusAndSweep`'s) can ever prove that writer is
+ * gone while the daemon itself is deliberately kept alive for the next story
+ * in the batch. A manifest still resting in `in-flight` while its owning
+ * scheduler is alive is exactly the shape of "might still be written" — the
+ * run's leading sweep (next run) or the batch-end
+ * `stopSchedulerCensusAndRelease` (once the daemon is actually stopped) is
+ * where a genuinely stuck claim gets cleared instead.
+ *
  * @param {{root: string, sinceMs: number, untilMs?: number, groundProject?: string,
- *          evidenceDir: string, capture?: typeof captureToEvidence}} args
+ *          evidenceDir: string, capture?: typeof captureToEvidence,
+ *          schedulerAlive?: boolean}} args
  * @returns {{ok: boolean, claimed: {path: string, state: string, reason: string}[],
  *            left: {path: string, state: string, reason: string}[],
  *            unattributable: {path: string, state: string, reason: string}[],
  *            failed: {path: string, error: string}[], lines: string[]}}
  */
-export function claimQueueWrites({ root, sinceMs, untilMs = Date.now(), groundProject, evidenceDir, capture = captureToEvidence }) {
+export function claimQueueWrites({
+  root, sinceMs, untilMs = Date.now(), groundProject, evidenceDir, capture = captureToEvidence,
+  schedulerAlive = false,
+}) {
   const queue = join(root, '_queue');
   const claimed = [];
   const left = [];
@@ -138,6 +153,21 @@ export function claimQueueWrites({ root, sinceMs, untilMs = Date.now(), groundPr
       if (!INIT_FILE.test(name)) {
         left.push({ path, state, reason: 'not an INIT manifest — the story-id sweep owns this one' });
         lines.push(`[stories] queue claim: LEFT ${path} — not an INIT manifest (the story-id sweep owns it)`);
+        continue;
+      }
+      // ROW 166 — a live scheduler's OWN heartbeat writer is invisible to any
+      // process census (see this function's header); never claim what it may
+      // still be writing, whatever the attribution below would otherwise say.
+      if (state === 'in-flight' && schedulerAlive) {
+        left.push({
+          path, state,
+          reason: 'this tree\'s own scheduler is alive — an in-flight manifest is never claimed while its ' +
+            'heartbeat writer could still be running (row 166)',
+        });
+        lines.push(
+          `[stories] queue claim: LEFT ${path} — the scheduler this run started is still alive, so an ` +
+          'in-flight manifest is never claimed while its heartbeat writer might still be running (row 166)',
+        );
         continue;
       }
       let data;

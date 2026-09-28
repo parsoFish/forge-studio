@@ -46,6 +46,8 @@ import {
 import { ownGroundManifest } from './ground-hash.mjs';
 import { suiteLockVerdict, lockOrderVerdict, EXIT_LOCK_REFUSED } from './lock-guard.mjs';
 import { sweepStoryResidue } from './sweep.mjs';
+import { sweepCycleArtefacts } from './sweep-cycle-artefacts.mjs';
+import { captureAndClearBornLogDirs, describeBornLogDirsClear } from './sweep-post-stop-logs.mjs';
 import { provisionFixtureGrounds, teardownFixtureGround } from './fixture-ground.mjs';
 import { captureAndSweepAgentLogs } from './sweep-agent-logs.mjs';
 import { restoreSweptCommitted, stopSchedulerCensusAndRelease, teardownExitCode } from './sweep-teardown.mjs';
@@ -106,6 +108,79 @@ async function main() {
   // Stamped before anything runs: the reaper only claims sessions THIS run
   // created, so a previous run's residue is never signalled (reap.mjs header).
   const startedMs = Date.now();
+
+  // ROW 146 (`forge-8vfn.8.1.52`, ruling 1911) — a SIGTERM/SIGINT to this
+  // run's own process group (an operator stop) skips the `finally` block at
+  // the bottom of this function entirely: with no listener installed, Node
+  // terminates on either signal before a single pending `finally` runs
+  // (`sweep.mjs`'s own header states this). S10 run 43 measured exactly
+  // that — its own-artefacts clear never ran, so `_logs/<ts>_INIT-*` and
+  // `_queue/done/INIT-*.md` survived, and the NEXT run's residue guard
+  // (`.claude/skills/tiered-orchestration/scripts/residue.sh`) refused to
+  // launch on them.
+  //
+  // Registering a handler is what gives a STOPPED run the chance to clear
+  // its own `_queue/*`, `_worktrees` and `_logs/<ts>_INIT-*` before it
+  // actually exits — `sweepCycleArtefacts` is the exact same claim-then-clear
+  // `sweepProductFixtures` already runs at a green finish, over exactly the
+  // targets the residue guard gates on, never a second copy of it. Scoped to
+  // `startedMs`, the same born-within-this-run window every other reader of
+  // this run's own artefacts uses (`collectAgentRuns`, `claimQueueWrites`),
+  // so a stop can only ever claim what THIS run created.
+  //
+  // Deliberately narrower than the trailing sweep: it does not touch
+  // `productFixturePathsFor` (`demos/stories/<id>`, a fixture ground and the
+  // like) — a stopped run keeps those for evidence exactly as a crash does,
+  // same as `sweepProductFixtures` already keeps a fixture ground standing
+  // until its own teardown call, and the residue guard never gates on them.
+  //
+  // `residue.sh` also gates `_logs/_agent-*` and `_logs/_authoring-*`
+  // (lines 68-69) — a stopped run strands a Studio agent or authoring
+  // session exactly as it strands the queue/worktree/cycle-dir targets
+  // above, so `captureAndClearBornLogDirs` clears those two families too,
+  // over the SAME `startedMs` birth-time window and never a story name or a
+  // ground-manifest diff (`sweep-post-stop-logs.mjs`'s own header).
+  //
+  // `once`, not `on`: a second signal while the sweep is already running
+  // must not re-enter it and race its own capture-then-remove.
+  //
+  // ROW 166 follow-up (bead `forge-8vfn.8.1.60`) — `schedulerAlive: false`,
+  // EXPLICIT below, never defaulted: `sweepCycleArtefacts`'s own header
+  // requires every caller to state this rather than inherit a default. At a
+  // stop, the SIGNAL THAT REACHED THIS HANDLER is what is killing the
+  // scheduler this run may have started, in the SAME process group being
+  // torn down here — so by the time this sweep runs, that daemon is not a
+  // live writer to defer to. Claiming what it left behind IS this sweep's
+  // job, not a race with it.
+  let stopping = false;
+  const onStopSignal = (signal) => {
+    if (stopping) return;
+    stopping = true;
+    const runStamp = new Date(startedMs).toISOString().replace(/[:.]/g, '-');
+    const evidenceDir = join(ROOT, '_logs', '_story-post-stop-sweep', 'stopped-run', runStamp);
+    console.log(`[stories] received ${signal} — running the post-stop sweep before exit`);
+    try {
+      const swept = sweepCycleArtefacts('stopped-run', ROOT, {
+        sinceMs: startedMs, evidenceDir, schedulerAlive: false,
+      });
+      for (const line of swept.lines) console.log(`[stories] post-stop sweep: ${line}`);
+    } catch (err) {
+      console.error(`[stories] post-stop sweep failed: ${err?.message ?? err}`);
+    }
+    try {
+      const bornLogs = captureAndClearBornLogDirs(ROOT, {
+        prefixes: ['_agent-', '_authoring-'], sinceMs: startedMs, evidenceDir,
+      });
+      for (const line of describeBornLogDirsClear(bornLogs)) {
+        console.log(`[stories] post-stop sweep: ${line}`);
+      }
+    } catch (err) {
+      console.error(`[stories] post-stop sweep (agent/authoring logs) failed: ${err?.message ?? err}`);
+    }
+    process.exit(signal === 'SIGINT' ? 130 : 143); // 128+signum, the conventional signal exit code
+  };
+  process.once('SIGTERM', () => onStopSignal('SIGTERM'));
+  process.once('SIGINT', () => onStopSignal('SIGINT'));
 
   // 0. THE TWO CHECKOUT-OVERLAP LOCKS — moved ahead of even loading a story
   //    file (M7-COMMON §6.16, `lock-guard.test.ts`'s "DOOR: a story run
@@ -478,7 +553,13 @@ async function main() {
     // and only then releases — with a re-read after, because the census cannot
     // see a writer outside the daemon's own tree. See its header in
     // `sweep-teardown.mjs` and the three doors in `sweep-teardown.test.ts`.
-    const stop = await stopSchedulerCensusAndRelease(ROOT);
+    //
+    // ROW 166 follow-up (bead `forge-8vfn.8.1.60`) — `sinceMs: startedMs` is
+    // this run's own window, so a DEFERRED initiative (still in flight when
+    // its story ended, because the scheduler that owned it was still alive)
+    // is captured and cleared here too, once that daemon is confirmed dead.
+    // REQUIRED, not optional — see the function's own header for why.
+    const stop = await stopSchedulerCensusAndRelease(ROOT, { sinceMs: startedMs });
     for (const line of stop.lines) console.log(line);
     // MUST 1 (D's review of #906) — the teardown's own outcome must reach the
     // process's exit code, not only the log: a surviving daemon grandchild
