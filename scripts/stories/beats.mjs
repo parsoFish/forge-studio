@@ -457,6 +457,37 @@ export function resolveCycleOf(cycleOf, bindings) {
   return unbound === null ? { value, unbound: null } : { value: null, unbound };
 }
 
+/**
+ * A beat's own `'run-id'` expectation, resolved against the bindings — ROW 162
+ * (S10 run 42, bead `forge-8vfn.8.1.49`, T1 ruling 1898).
+ *
+ * The story already binds this: beat 50 selects `<cycleId2>` (an earlier
+ * beat's own `pressBound`) and then asserts `'run-id': '<cycleId2>'` — the
+ * SAME literal the product's `run.id` carries, which IS the exact `_logs/`
+ * dispatch dir name (`packages/flows/run-model.ts`'s own `cycleId format:
+ * <ISO-dashes>_<initiativeId>`). Nothing before this read it for the agent
+ * channel door: `waitForConsequence`'s `runId` comes only from the DOM's own
+ * `data-run` (`main[data-page]`, `beats-page.mjs`'s `readRunId`), which
+ * `/flows/[id]` never publishes — the monitor's selected-run id lives on
+ * `RunControls`' NESTED `data-run-id`, a different element entirely. So a
+ * beat standing on the monitor, watching a run it already knows the id of,
+ * reached the door with nothing to key on.
+ *
+ * Returns null for the ordinary, unaffected beat: one that declares no
+ * `'run-id'` key, or whose placeholder is not (yet) bound. Never a partial
+ * substitution — `'run-id'` is a single scalar value, not `resolveCycleOf`'s
+ * multi-placeholder string, so an unbound placeholder simply yields nothing
+ * to key on rather than a half-built id.
+ */
+export function resolveBoundRunId(expectData, bindings) {
+  const want = expectData?.['run-id'];
+  if (typeof want !== 'string') return null;
+  const placeholder = PLACEHOLDER.exec(want);
+  if (placeholder === null) return null;
+  const bound = bindings?.[placeholder[1]];
+  return typeof bound === 'string' && bound !== '' ? bound : null;
+}
+
 export function resolveBeatRoute(beat, bindings) {
   let unbound = null;
   const route = beat.expect.route.replace(/<([A-Za-z][A-Za-z0-9_]*)>/g, (whole, name) => {
