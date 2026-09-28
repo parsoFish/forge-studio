@@ -21,6 +21,12 @@ import { dispatchTerminalStatus } from './scheduler-dispatch.ts';
 import { validateClaimable } from './claim-validator.ts';
 import { pruneStaleWiWorktrees } from './wi-worktree.ts';
 import { probeRemoteBranch, shouldRefuseFreshAttempt } from './stale-remote-branch-guard.ts';
+import {
+  decideRequeueResume,
+  branchHasCommittedWork,
+  summarizeWorkItemStatuses,
+  readPriorFailureSignalFromLog,
+} from './requeue-resume.ts';
 import type { SchedulerConfig } from './scheduler.ts'; // type-only: erased, no runtime cycle
 
 /**
@@ -220,6 +226,13 @@ export async function runOne(
     initiativeId: string;
   } | null = null;
   let cycleFailed = false; // a 'failed' result, or a thrown exception
+  // row 163 (S10 run 42, ruling 1899): the just-finished cycle's own log path
+  // (CycleResult.log_path — the exact file `createLogger` wrote), so the
+  // cleanup below can read its `failure_classification` event and decide
+  // resumability via the SAME predicate `forge requeue` uses. Null when the
+  // attempt never reached a `runCycle` result at all (claim refused, or an
+  // exception thrown from this function's own scaffolding).
+  let cycleLogPath: string | null = null;
   try {
     const manifest = parseManifest(manifestPath);
     if (tee) console.log(`[serve] claimed: ${manifest.initiativeId} (${manifest.project})`);
@@ -403,6 +416,7 @@ export async function runOne(
       // review phase opens the PR and stops at ready-for-review.
     }, wiring);
 
+    cycleLogPath = result.log_path;
     if (tee) console.log(`[serve] ${manifest.initiativeId} · cycle ${result.status}`);
     // F-28 + Phase 6: any cycle outcome that ends with the manifest in
     // `ready-for-review/` means a human will look at the work next.
@@ -457,8 +471,43 @@ export async function runOne(
     );
   } finally {
     clearInterval(heartbeat);
-    // bead forge-8vfn.8.1.8: delete ONLY a branch this attempt pushed, never a force-push. Best-effort.
+    // row 163 (S10 run 42, ruling 1899): a branch this attempt pushed is kept
+    // whenever its own failure is RESUMABLE. The remote branch is the sole
+    // backup of the pushed WI work once the worktree is lost — S10 run 42
+    // survived a stop-mid-flight only because the resumed attempt re-pushed
+    // WI-1; deleting the branch of a run that is ABOUT to be resumed
+    // (operator-stop, a cost ceiling, or any other halt `forge requeue` would
+    // resume) throws that work away for nothing. Reuse `decideRequeueResume`,
+    // the SAME predicate `forge requeue` uses, rather than a second, ad hoc
+    // "was this a clean halt" detector here.
+    let resumableHalt = false;
     if (cycleFailed && staleBranchOwnedByThisAttempt) {
+      const { branch, projectRepoPath, initiativeId } = staleBranchOwnedByThisAttempt;
+      const priorFailure = cycleLogPath
+        ? readPriorFailureSignalFromLog(cycleLogPath)
+        : { environment: false, cleanBoundaryHalt: false };
+      const resumeDecision = decideRequeueResume({
+        environmentFailure: priorFailure.environment,
+        cleanBoundaryHalt: priorFailure.cleanBoundaryHalt,
+        resumeFromPlan: priorFailure.resumeFrom === 'plan',
+        worktreePresent: wtHandle !== null && existsSync(wtHandle.path),
+        branchHasWork: branchHasCommittedWork(projectRepoPath, branch),
+        workItems: wtHandle !== null ? summarizeWorkItemStatuses(wtHandle.path) : null,
+      });
+      resumableHalt = resumeDecision.resume;
+      if (resumableHalt) {
+        emitOrchestratorEvent(logsRoot, initiativeId, 'log', 'stale-remote-branch.kept-resumable', {
+          branch,
+          reason: resumeDecision.reason,
+        });
+        if (tee) {
+          const msg = `kept remote branch ${branch} (resumable): ${resumeDecision.reason}`;
+          console.log(`[serve] ${initiativeId} — ${msg}`);
+        }
+      }
+    }
+    // bead forge-8vfn.8.1.8: delete ONLY a branch this attempt pushed, never a force-push. Best-effort.
+    if (cycleFailed && staleBranchOwnedByThisAttempt && !resumableHalt) {
       const { branch, projectRepoPath, initiativeId } = staleBranchOwnedByThisAttempt;
       try {
         const probe = probeRemoteBranch(projectRepoPath, branch);
