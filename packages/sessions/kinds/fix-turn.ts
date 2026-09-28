@@ -47,7 +47,7 @@ import {
   makeReasoningSink,
   makeThinkingSink,
 } from '../interactive-session.ts';
-import { makeHeartbeatTick, makeHeartbeatWriter } from '../heartbeat.ts';
+import { makeHeartbeatTick, makeHeartbeatWriter, startHeartbeatTicker } from '../heartbeat.ts';
 
 /**
  * The query seam, declared HERE with `options` REQUIRED because that is what
@@ -156,8 +156,9 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
   // where the logger has not yet written anything into the cycle dir.
   const heartbeatDir = resolve(logsRoot, cycleId);
   mkdirSync(heartbeatDir, { recursive: true });
+  const onHeartbeat = makeHeartbeatWriter(heartbeatDir);
   // forge-8vfn.8.1.9 — ticks only from a progress branch below, same as the spine.
-  const tickHeartbeat = makeHeartbeatTick(makeHeartbeatWriter(heartbeatDir));
+  const tickHeartbeat = makeHeartbeatTick(onHeartbeat);
 
   const startEv = logger.emit({
     initiative_id: cycleId,
@@ -225,6 +226,11 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
   let costUsd = 0;
   let toolSeq = 0;
 
+  // Row 164 (bead forge-8vfn.8.1.51, S10 run 43) — started before the SDK
+  // call begins, stopped in the `finally` below once it ends: see
+  // `startHeartbeatTicker`'s own doc comment (heartbeat.ts).
+  const stopHeartbeatTicker = startHeartbeatTicker(onHeartbeat);
+
   try {
     for await (const msg of withIdleDeadline(queryImpl({ prompt: spawn.prompt, options }), {
       label: `${variant.eventSkill}-${input.runId}`,
@@ -282,6 +288,9 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
     // a crashed turn must not appear to have completed. `finish` still runs:
     // a crashed turn's writes are on disk and brain-fix audits them.
     return variant.finish({ input, pre, costUsd, crashed: true }).result;
+  } finally {
+    // Row 164 — the call is no longer in flight, however it ended.
+    stopHeartbeatTicker();
   }
 
   sink.flushIteration(1);

@@ -85,7 +85,7 @@ import { writeRootFenceOptions, type BashFenceMode } from './session-write-fence
 
 // The `.heartbeat` liveness primitives live in their own module (file-size
 // budget, 1.0.md §0) — imported directly, never re-exported from here.
-import { makeHeartbeatTick } from './heartbeat.ts';
+import { makeHeartbeatTick, startHeartbeatTicker } from './heartbeat.ts';
 
 /** PROGRESS predicate shared by every turn loop (forge-8vfn.8.1.9, incl.
  *  `kinds/fix-turn.ts`): an `assistant` message or the terminal `result` is
@@ -394,6 +394,10 @@ export async function runStructuredTurn<T>(args: {
   let toolSeq = 0;
   const reads: string[] = [];
   const tickHeartbeat = makeHeartbeatTick(args.onHeartbeat);
+  // Row 164 (bead forge-8vfn.8.1.51, S10 run 43) — started before the SDK
+  // call begins, stopped in the `finally` below once it ends: see
+  // `startHeartbeatTicker`'s own doc comment (heartbeat.ts).
+  const stopHeartbeatTicker = startHeartbeatTicker(args.onHeartbeat);
   // `SeenUsage`/`recordUsage`/`unpricedReason`/`unpricedTokens` are declared
   // below, between this function and `runAgentTurn`, because both primitives
   // use them. 7.6.55 built them for the agent turn; 7.6.73 found the same
@@ -458,6 +462,9 @@ export async function runStructuredTurn<T>(args: {
     // consumed tokens can ever be reported.
     reportUnpriced(args.onTurnEndedUnpriced, unpricedReason(err), seen);
     throw err;
+  } finally {
+    // Row 164 — the call is no longer in flight, however it ended.
+    stopHeartbeatTicker();
   }
 
   // THE CLEAN END WITH NO PRICE — the case a throw never covers and the one
@@ -689,6 +696,10 @@ export async function runAgentTurn(args: {
   const seen: SeenUsage = { sawAny: false, tokensOutSum: 0, tokensInLast: 0, cacheReadLast: 0, cacheCreateLast: 0 };
   let toolSeq = 0;
   const tickHeartbeat = makeHeartbeatTick(args.onHeartbeat);
+  // Row 164 (bead forge-8vfn.8.1.51, S10 run 43) — started before the SDK
+  // call begins, stopped in the `finally` below once it ends: see
+  // `startHeartbeatTicker`'s own doc comment (heartbeat.ts).
+  const stopHeartbeatTicker = startHeartbeatTicker(args.onHeartbeat);
 
   try {
   for await (const msg of withIdleDeadline(args.queryFn({ prompt: args.prompt, options }), {
@@ -739,6 +750,9 @@ export async function runAgentTurn(args: {
     // caller's error handling is unchanged.
     reportUnpriced(args.onTurnEndedUnpriced, unpricedReason(err), seen);
     throw err;
+  } finally {
+    // Row 164 — the call is no longer in flight, however it ended.
+    stopHeartbeatTicker();
   }
 
   // 7.6.73 — the clean end with no price. `interactive-agent-step` emits a
