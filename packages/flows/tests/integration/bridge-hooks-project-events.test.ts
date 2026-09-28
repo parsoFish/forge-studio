@@ -64,7 +64,7 @@ function githubSig(secret: string, payload: string): string {
  * only), FLOW_ID (declares the `on: pr-merged` trigger under test, SCOPED to
  * `projects: [PROJECT_DIR]`), and a REAL project directory declaring
  * `repo: ALLOWED_REPO` — the R2-08-F3 declaration this hook's resolution
- * must read (packages/projects/tests/integration/project-config-repo.test.ts pins the field itself;
+ * must read (packages/flows/tests/integration/project-config-repo.test.ts pins the field itself;
  * apps/forge/tests/contract/project-event-resolve.test.ts pins the resolution function).
  */
 function setup(): { forgeRoot: string } {

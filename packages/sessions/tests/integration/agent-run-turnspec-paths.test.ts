@@ -40,7 +40,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { AGENT_RUNNERS } from '../../agent-run.ts';
+import { AGENT_RUNNERS } from '@forge/agents';
 import { loadSessionKinds } from '@forge/sessions';
 import { writeSessionStatus, readSessionStatus } from '@forge/sessions';
 import { FORGE_ROOT } from '@forge/kernel';
@@ -55,7 +55,7 @@ import {
   snapshotLogs,
   assertNoInteractiveRunnerSkillEvent,
   type TurnspecFixture,
-} from '../test-fixtures/interactive-runner-log-observer.ts';
+} from '../../../agents/tests/test-fixtures/interactive-runner-log-observer.ts';
 
 // ===========================================================================
 // R4-21 phase 2, WI-1 (_wave5/unit-specs/R4-21-phase2.md) — the REAL

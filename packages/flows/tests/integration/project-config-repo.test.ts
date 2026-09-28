@@ -17,6 +17,14 @@
  *
  * Kept as its own small file (not appended to the already-1025-line
  * packages/projects/tests/integration/project-config.test.ts) per the global small-focused-files rule.
+ *
+ * Moved from packages/projects (package-layer-order): test 2d/2e's whole
+ * point is pinning that `loadProjectConfig` invokes the SAME `REPO_RE`
+ * singleton `trigger-payload.ts` (packages/flows) exports — flows is a
+ * strictly higher rank than projects, and replacing the identity pin with a
+ * local literal would be exactly the "weakened test" this refactor forbids.
+ * `loadProjectConfig` is imported from `@forge/projects` (a strictly lower
+ * rank than flows) instead of the projects package's own internals.
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -24,8 +32,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { loadProjectConfig } from '../../project-config.ts';
-import { REPO_RE } from '@forge/flows';
+import { loadProjectConfig } from '@forge/projects';
+import { REPO_RE } from '../../trigger-payload.ts';
 
 function newTempDir(): string {
   return mkdtempSync(join(tmpdir(), 'forge-project-config-repo-test-'));
