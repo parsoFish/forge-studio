@@ -62,3 +62,8 @@ number (next free: **052**).
 | 014 | Project `roadmap.md` schema | Superseded 2026-06-03 — the roadmap is a derived view of `_queue/` manifests + `depends_on_initiatives`; nothing writes the old format |
 | 016 | Demo recording tooling (VHS/Playwright) | ADR 021 status block + `skills/demo/SKILL.md` |
 | 023 | UI is the sole operator surface | Folded into [ADR 031](./031-studio-consolidation.md) "Surviving principle" — the UI/bridge is the sole operator interaction surface, each human moment explicit + impossible to auto-satisfy |
+
+**Never minted: 047, 049, 050.** The 1.0 plan reserved 046–051 for the
+decisions its milestones might need; only 046, 048 and 051 were taken. The
+three unused numbers stay reserved and are never reused, so next free stays
+**052**.

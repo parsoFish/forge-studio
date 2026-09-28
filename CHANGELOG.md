@@ -5,7 +5,77 @@ All notable changes to Forge are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.0] - Unreleased
+
+**The 1.0 plan: a construction platform, packaged along its seams.** *Delete
+the weight, cut the tree along its real boundaries, make the example factory
+deletable, and prove it with ten operator stories that are the e2e test, the
+demo and the usage doc at once.* Eight milestones (M0–M7) driven as parallel
+lanes, PRs #228 onward, each milestone closed by a real merge on a real
+ground or recorded NOT MET. The version stays 0.x until the tag is cut after
+the capstones; the plan and its exit tables are in
+[`docs/roadmaps/1.0.md`](docs/roadmaps/1.0.md).
+
+### Added
+
+- **Nine packages and two apps** (M2–M4, [ADR 046](docs/decisions/046-package-layout-and-boundary-lint.md)):
+  `contracts ← kernel ← {library, knowledge, projects} ← agents ← sessions ←
+  flows ← stations ← factory ← apps/{forge, studio}` under npm workspaces, the
+  allow-graph enforced by dependency-cruiser as a shrinking ratchet, per-package
+  LOC caps in `QUARRY.md`, an 800-line file cap and one owner per file.
+  `SPEC.md` holds the six contracts, each enforced by a contract test.
+- **The story harness** (M1, M6): ten operator stories under `tests/stories/`
+  — onboard a project, create one, reset a contract, create a flow, an agent,
+  a KB, library components, install from the community registry, do it all
+  through the assistant, and run the example factory to a merged PR from
+  Studio. One script yields the verdict per beat, the clip and frames, and the
+  tutorial or how-to page. Stories run on forge-owned fixture grounds (M7).
+- **A deletable example factory** (M5, [ADR 048](docs/decisions/048-deletable-example-factory.md)):
+  no package imports `@forge/factory`; the assembly reaches it through one
+  resolution seam that treats absence as supported, and a CI job proves the
+  platform boots with the package removed.
+- **Change class and typed acceptance criteria** (M5, [ADR 051](docs/decisions/051-change-class-and-typed-acceptance-criteria.md)):
+  a required `class: code | docs | config | infra` the architect sets and every
+  work item inherits; an operator-authored class → gate-profile table; typed
+  `{given, when, then}` criteria shared by architect, PM, review and PLAN.html.
+- **A second factory from data** (M7): `forge-docs` runs architect → plan →
+  build → integrate → review → verdict with one enumerated seam entry in
+  `apps/forge` and zero platform edits, merged on gitpulse.
+- **A spend bound that halts** (M7): a declared per-initiative ceiling stops
+  the cycle with a named, resumable event; proven by a deliberate-breach
+  control run.
+- **`forge project reset` / Studio "Rebuild contract"** (M4–M5): regenerates a
+  project's contract mechanisms from the current template, preserving its
+  north star, instructions and secrets, with a drift report.
+- **Every operator interaction is a session kind** (M7, [ADR 043](docs/decisions/043-generic-interactive-surface.md)):
+  the plan gate, verdict gate and reflection run through the one generic
+  session panel with a finalizer; the second verdict-write path is gone.
+- **Demo evidence** (M7): story-derived demos, in-clip cinematography, media
+  in the PR, and a no-delta control run.
+
+### Changed
+
+- **Identity** (M7): the package is `forge-studio`, a builder of software
+  factories. The develop flow is the example factory, and its gates are its
+  own; `check-identity` fails any current-state doc that narrates them as the
+  product's.
+- **Stories run from Studio end to end**, driving the real nav and asserting
+  `data-*` state per beat; costed stories refuse to start without
+  `--approve-spend`.
+- **Resume** keeps a halted attempt's work: `resume_from` gains `plan` and
+  `pr-open`, and a resumed develop run rebases once at re-entry
+  ([ADR 019](docs/decisions/019-cycle-resume-from-unifier.md)).
+
+### Removed
+
+- The flat `orchestrator/` and `cli/` production trees, `loops/`, the old
+  journey harness (`scripts/e2e-journey.mjs`, `scripts/journeys/`,
+  `scripts/ui-walkthrough/`, `demos/e2e/`) and its CI jobs.
+- The instruction-layer cruft (M0): stale docs, one-shot brain notes and
+  SKILL.md drift, culled before any code moved; hand-written docs held at
+  ≤ 25 pages.
+- Every open bead the plan produced (M7): closed as fixed and merged or
+  closed with a named reason; the flake register emptied.
 
 ## [0.9.0] - 2026-08-28
 
@@ -604,7 +674,7 @@ real data-table dispatch and a second, gated implementation behind it).
   that means for self-hosting operators and contributors, plus a dependency license
   audit.
 
-[Unreleased]: https://github.com/Parso/forge/compare/v0.1.1...HEAD
-[0.1.1]: https://github.com/Parso/forge/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/Parso/forge/releases/tag/v0.1.0
+[1.0.0]: https://github.com/parsoFish/forge-studio/commits/main
+[0.1.1]: https://github.com/parsoFish/forge-studio/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/parsoFish/forge-studio/releases/tag/v0.1.0
 [DEC-3]: docs/decisions/
