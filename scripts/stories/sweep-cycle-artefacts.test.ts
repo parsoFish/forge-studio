@@ -25,7 +25,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, utimesSync }
 import { tmpdir } from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-import { sweepCycleArtefacts } from './sweep.mjs';
+import { sweepCycleArtefacts } from './sweep-cycle-artefacts.mjs';
 import { captureAndClearBornLogDirs } from './sweep-post-stop-logs.mjs';
 
 const scratch = () => mkdtempSync(join(tmpdir(), 'stories-sweep-cycle-'));
