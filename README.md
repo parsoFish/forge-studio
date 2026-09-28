@@ -94,7 +94,7 @@ The platform prescribes no fixed human moments: a factory declares its own gates
 
 ## Repository layout
 
-Every path belongs to one of **three scopes** — framework (1), cycles/agents/flows (2), projects (3). See **[docs/explanation/architecture.md](./docs/explanation/architecture.md)** for the full map and the cross-scope rule.
+The platform is nine ranked packages and two apps, their allow-graph enforced by a boundary lint; the factory content (flows, agents, skills, brain) is data on top, and managed projects sit outside the tree. The scope column says which: platform (1), factory content (2), projects (3). See **[docs/explanation/architecture.md](./docs/explanation/architecture.md)** for the full map and why.
 
 | Path | Scope | What lives here |
 |---|---|---|
@@ -104,7 +104,6 @@ Every path belongs to one of **three scopes** — framework (1), cycles/agents/f
 | [`packages/`](./packages/) | 1 | The ranked packages — `contracts ← kernel ← {library, knowledge, projects} ← agents ← sessions ← flows ← stations ← factory` |
 | [`apps/forge/`](./apps/forge/) | 1 | The assembly — `forge` CLI entry, the UI bridge and its routes, assembly-side bindings |
 | [`apps/studio/`](./apps/studio/) | 1 | Forge Studio — the Next.js operator UI (launched by `forge studio`) |
-| [`orchestrator/`](./orchestrator/) | 1 | Legacy residue still being quarried (`phases/`, `studio/validate.ts`, fixtures) |
 | [`studio/`](./studio/) | 2 | Studio definitions as data — flows, agents, catalog, KBs |
 | [`skills/`](./skills/) | 2 | Claude Code skills — the agent surface |
 | [`brain/`](./brain/) | 2·3 | The compounding engineering wiki (three scoped graphs) |

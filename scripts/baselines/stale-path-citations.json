@@ -6474,12 +6474,6 @@
     "count": 1
   },
   {
-    "file": "README.md",
-    "kind": "path",
-    "cited": "studio/validate.ts",
-    "count": 1
-  },
-  {
     "file": "scripts/check-boundaries.mjs",
     "kind": "path",
     "cited": "forge-ui/tsconfig.json",
