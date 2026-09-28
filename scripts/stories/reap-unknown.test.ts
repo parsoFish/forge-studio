@@ -157,6 +157,49 @@ test('readProcTable control: a pid that exited between the listing and the read 
   assert.equal(table!.has(8), false, 'a raced exit is skipped, not fabricated');
 });
 
+test('readProcTable (RED) / row 168 forge-8vfn.8.1.63: a pid that exited between the listing and the read can throw ESRCH, not ENOENT — same fact, same ordinary skip', () => {
+  // Measured under real /proc churn (busy-loop process spawning): a pid that
+  // races out between `readdirSync('/proc')` and its own `stat` read comes
+  // back ESRCH far more often than ENOENT. The old code only recognised
+  // ENOENT here, so this exact race refused the WHOLE table on a pid that was
+  // never in reapAgentRuns's own input list.
+  const table = readProcTable({
+    listPids: () => [7, 8],
+    readStat: (pid: number) => { if (pid === 8) throw errno('ESRCH', 'no such process'); return `${pid} (node) S 1 1 0`; },
+  });
+  assert.notEqual(table, null, 'ESRCH on a raced-out pid must read the same as ENOENT, not as a table failure');
+  assert.equal(table!.has(7), true);
+  assert.equal(table!.has(8), false, 'a raced exit is skipped, not fabricated');
+});
+
+test('reapAgentRuns (RED) / row 168 forge-8vfn.8.1.63: an unrelated ESRCH race in the SAME /proc snapshot must not add a second, unrelated skip beside the recorded pid\'s own decision', async () => {
+  // T1 1451's real-process test feeds ONE recorded pid whose real cwd is
+  // outside the run worktree, so its own decision refuses it — one skip. A
+  // live sibling process ANYWHERE on the host racing out of `/proc` during
+  // the SAME snapshot used to fold the whole table build into `null` (the
+  // ENOENT-only check above), adding a second, unrelated `pid: null` skip
+  // with no connection to this call's input at all.
+  const report = await reapAgentRuns([{ dir: '/r/_logs/_agent-fed', pid: 4242, markers: [] }], {
+    ownRoot: '/r',
+    cwdOf: () => '/elsewhere', // readable, outside root — refused before any table use
+    procTable: () => readProcTable({
+      listPids: () => [9999], // a live pid this run never dispatched
+      readStat: () => { throw errno('ESRCH', 'no such process'); }, // raced out mid-snapshot
+    }),
+    isAlive: () => true,
+    kill: () => { throw new Error('must never be called — refused before any signal'); },
+    graceMs: 20,
+    pollMs: 5,
+    sleep: async () => {},
+  } as any);
+  assert.deepEqual(report.reaped, []);
+  assert.equal(
+    report.skipped.length, 1,
+    `an unrelated /proc race must not surface as a second skip: ${JSON.stringify(report.skipped)}`,
+  );
+  assert.match(report.skipped[0].reason, /outside the run worktree/);
+});
+
 // --------------------------------------------------------------- isAlive
 
 test('reapAgentRuns (RED) / ROW 102b finding 21: an EPERM on kill(pid,0) must read as ALIVE, not gone', async () => {

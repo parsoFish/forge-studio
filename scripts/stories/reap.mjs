@@ -333,7 +333,10 @@ export function readProcTable(deps = {}) {
     try {
       raw = readStat(pid);
     } catch (err) {
-      if (err?.code === 'ENOENT') continue; // exited between the listing and the read — not an error
+      // ROW 168 (forge-8vfn.8.1.63) — a pid that races out between the
+      // listing and this read can throw ESRCH here rather than ENOENT; the
+      // same "exited between the listing and the read" fact either way.
+      if (err?.code === 'ENOENT' || err?.code === 'ESRCH') continue;
       // ROW 102b/20 — any OTHER failure must not silently drop just this row;
       // refuse the WHOLE table, the same null sentinel finding 6 uses above.
       return null;
