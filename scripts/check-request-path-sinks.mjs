@@ -145,22 +145,20 @@ export const DEFAULT_BASELINE_PATH = join(FORGE_ROOT, 'scripts/request-path-sink
 export const DEFAULT_DOC_PATH = join(FORGE_ROOT, 'docs/reference/request-path-sinks.md');
 
 /**
- * The trees this walk may enter. `packages/` and `apps/` joined in M2: the
- * kernel move took `cli/studio-path-guard.ts` — the containment guard this
- * lint exists to watch — to `packages/kernel/path-guard.ts`, and with only
- * `cli/` and `orchestrator/` here the guard's own six raw fs sinks silently
- * became "tighten" rows and both ratchets went on reporting PASS. A lint that
- * loses sight of its subject when the subject moves is worse than no lint,
- * because it still says green.
+ * The trees this walk may enter. `packages/` and `apps/` are the production
+ * trees; `cli/` and `orchestrator/` no longer exist in the repo and stay only
+ * because this lint's own unit tests build their fixture trees under them.
+ * A lint that loses sight of its subject when the subject moves is worse than
+ * no lint, because it still says green — the containment guard once moved
+ * into a tree this list did not name, and its own six raw fs sinks silently
+ * became "tighten" rows while both ratchets reported PASS.
  */
 const WALK_ALLOWED_PREFIXES = ['cli/', 'orchestrator/', 'packages/', 'apps/'];
 
 /**
  * A workspace package specifier — `@forge/kernel` -> `packages/kernel/index.ts`.
- * The ONLY edge from the legacy tree into a package is
- * `orchestrator/_pkg/<pkg>.ts`, which re-exports a BARE specifier. A walker
- * that follows relative specifiers only stops dead at that shim, so every
- * package would sit outside this lint's universe forever.
+ * Packages reach each other by BARE specifier, so a walker that followed
+ * relative specifiers only would stop dead at every package boundary.
  */
 const WORKSPACE_SPEC_RE = /^@forge\/([^/]+)(\/.*)?$/;
 

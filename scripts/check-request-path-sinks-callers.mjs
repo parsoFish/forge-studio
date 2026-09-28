@@ -48,11 +48,11 @@ function isCommentLine(line) {
 
 export const DESIGNATED_UNGUARDED_FUNCTIONS = {
   readSessionStatus: {
-    defModule: 'orchestrator/interactive-session.ts',
+    defModule: 'packages/sessions/interactive-session.ts',
     why: 'Reads status.json from a caller-supplied sessionDir; no containment of its own — the dir it is handed must already be resolveSafeSessionDir-guarded.',
   },
   writeSessionStatus: {
-    defModule: 'orchestrator/interactive-session.ts',
+    defModule: 'packages/sessions/interactive-session.ts',
     why: 'Writes status.json into a caller-supplied sessionDir; same contract as readSessionStatus — the dir must already be guarded.',
   },
   architectSessionDir: {

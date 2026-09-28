@@ -33,15 +33,13 @@ function run(args: string[] = []): { code: number; out: string } {
 }
 
 /** Runs the checker against the real quarry plus one extra or altered row. */
-function withQuarry(mutate: (rows: string[]) => string[], body: (quarryPath: string, baselinePath: string) => void): void {
+function withQuarry(mutate: (rows: string[]) => string[], body: (quarryPath: string) => void): void {
   const rows = readFileSync(QUARRY, 'utf8').split('\n');
   const dir = mkdtempSync(join(tmpdir(), 'quarry-'));
   const quarryPath = join(dir, 'QUARRY.md');
-  const baselinePath = join(dir, 'owner.json');
   writeFileSync(quarryPath, `${mutate(rows).join('\n')}\n`);
-  writeFileSync(baselinePath, `${JSON.stringify({ unowned: 0 })}\n`);
   try {
-    body(quarryPath, baselinePath);
+    body(quarryPath);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -84,16 +82,16 @@ function aQuarriedProductionFile(): string {
 
 test('it FAILS on an unowned file — a row removed (the defect it exists for)', () => {
   const subject = aQuarriedProductionFile();
-  withQuarry((rows) => rows.filter((l) => !l.includes(`| ${subject} |`)), (q, b) => {
-    const { code, out } = run(['--quarry', q, '--baseline', b]);
+  withQuarry((rows) => rows.filter((l) => !l.includes(`| ${subject} |`)), (q) => {
+    const { code, out } = run(['--quarry', q]);
     assert.equal(code, 1, `a file with no row must fail — got exit 0:\n${out}`);
     assert.ok(out.includes(`unowned: ${subject}`), `the offending file must be named — got:\n${out}`);
   });
 });
 
 test('it FAILS on an orphan row — the quarry describing a file that is not there', () => {
-  withQuarry((rows) => [...rows, '| orchestrator/__never_existed__.ts | kernel | verbatim | 12 |'], (q, b) => {
-    const { code, out } = run(['--quarry', q, '--baseline', b]);
+  withQuarry((rows) => [...rows, '| orchestrator/__never_existed__.ts | kernel | verbatim | 12 |'], (q) => {
+    const { code, out } = run(['--quarry', q]);
     assert.equal(code, 1, `a row for a missing file must fail — got exit 0:\n${out}`);
     assert.match(out, /orphan row: orchestrator\/__never_existed__\.ts/);
   });
@@ -101,8 +99,8 @@ test('it FAILS on an orphan row — the quarry describing a file that is not the
 
 test('it FAILS on a duplicate row — a file has exactly one owner', () => {
   const subj = aQuarriedProductionFile();
-  withQuarry((rows) => [...rows, `| ${subj} | flows | verbatim | 1 |`], (q, b) => {
-    const { code, out } = run(['--quarry', q, '--baseline', b]);
+  withQuarry((rows) => [...rows, `| ${subj} | flows | verbatim | 1 |`], (q) => {
+    const { code, out } = run(['--quarry', q]);
     assert.equal(code, 1, `two rows for one file must fail — got exit 0:\n${out}`);
     assert.ok(out.includes(`duplicate row: ${subj}`), `the duplicate must be named — got:\n${out}`);
   });
@@ -110,8 +108,8 @@ test('it FAILS on a duplicate row — a file has exactly one owner', () => {
 
 test('it FAILS on an owner outside the eleven-package vocabulary', () => {
   const subj = aQuarriedProductionFile();
-  withQuarry((rows) => rows.map((l) => (l.includes(`| ${subj} |`) ? `| ${subj} | kernal | verbatim | 1 |` : l)), (q, b) => {
-    const { code, out } = run(['--quarry', q, '--baseline', b]);
+  withQuarry((rows) => rows.map((l) => (l.includes(`| ${subj} |`) ? `| ${subj} | kernal | verbatim | 1 |` : l)), (q) => {
+    const { code, out } = run(['--quarry', q]);
     assert.equal(code, 1, `a typo'd owner must fail — got exit 0:\n${out}`);
     assert.ok(out.includes(`unknown owner: ${subj} (owner "kernal")`), `the offending owner must be named — got:\n${out}`);
   });
@@ -119,24 +117,11 @@ test('it FAILS on an owner outside the eleven-package vocabulary', () => {
 
 test('it FAILS on a disposition outside verbatim|pruned|rewritten|deleted', () => {
   const subj = aQuarriedProductionFile();
-  withQuarry((rows) => rows.map((l) => (l.includes(`| ${subj} |`) ? `| ${subj} | kernel | moved | 1 |` : l)), (q, b) => {
-    const { code, out } = run(['--quarry', q, '--baseline', b]);
+  withQuarry((rows) => rows.map((l) => (l.includes(`| ${subj} |`) ? `| ${subj} | kernel | moved | 1 |` : l)), (q) => {
+    const { code, out } = run(['--quarry', q]);
     assert.equal(code, 1, `an invented disposition must fail — got exit 0:\n${out}`);
     assert.ok(out.includes(`unknown disposition: ${subj} (disposition "moved")`), `the offending disposition must be named — got:\n${out}`);
   });
-});
-
-test('it FAILS when unowned drops BELOW the baseline — the ratchet must be tightened', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'quarry-baseline-'));
-  const baselinePath = join(dir, 'owner.json');
-  writeFileSync(baselinePath, `${JSON.stringify({ unowned: 5 })}\n`);
-  try {
-    const { code, out } = run(['--baseline', baselinePath]);
-    assert.equal(code, 1, `a slack baseline must fail — got exit 0:\n${out}`);
-    assert.match(out, /below the baseline of 5/);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
 });
 
 test('it FAILS when QUARRY.md is absent — ownership has no other source', () => {
@@ -159,8 +144,8 @@ test('it FAILS on a row LOC that disagrees with the real file — the defect thi
   const subject = aQuarriedProductionFile();
   withQuarry(
     (rows) => rows.map((l) => (l.trim().startsWith(`| ${subject} |`) ? l.replace(/\|\s*\d+\s*\|$/, '| 999999 |') : l)),
-    (q, b) => {
-      const { code, out } = run(['--quarry', q, '--baseline', b, '--json']);
+    (q) => {
+      const { code, out } = run(['--quarry', q, '--json']);
       assert.equal(code, 1, `a wrong row loc must fail — got exit 0:\n${out}`);
       const json = JSON.parse(out) as { locDrift: { path: string; quarried: number; measured: number }[] };
       const found = json.locDrift.find((d) => d.path === subject);
@@ -188,11 +173,9 @@ test('the loc drift list in prose output is capped, not a flood — a fixture wi
   assert.ok(mutated >= 16, `fixture needs enough packages/ rows to exceed the 15-row cap, got ${mutated}`);
   const dir = mkdtempSync(join(tmpdir(), 'quarry-cap-'));
   const quarryPath = join(dir, 'QUARRY.md');
-  const baselinePath = join(dir, 'owner.json');
   writeFileSync(quarryPath, `${doctored.join('\n')}\n`);
-  writeFileSync(baselinePath, `${JSON.stringify({ unowned: 0 })}\n`);
   try {
-    const { code, out } = run(['--quarry', quarryPath, '--baseline', baselinePath]);
+    const { code, out } = run(['--quarry', quarryPath]);
     assert.equal(code, 1, out);
     const printed = (out.match(/^  loc drift: /gm) ?? []).length;
     assert.equal(printed, 15, `the printed list must be capped at 15 — got ${printed}`);
@@ -205,8 +188,8 @@ test('the loc drift list in prose output is capped, not a flood — a fixture wi
 test('it FAILS on a disposition summary count that disagrees with the per-file table', () => {
   withQuarry(
     (rows) => rows.map((l) => (l.trim().startsWith('| `verbatim`') ? l.replace(/\|\s*\d+\s*\|$/, '| 999999 |') : l)),
-    (q, b) => {
-      const { code, out } = run(['--quarry', q, '--baseline', b]);
+    (q) => {
+      const { code, out } = run(['--quarry', q]);
       assert.equal(code, 1, `a wrong disposition summary count must fail — got exit 0:\n${out}`);
       assert.ok(
         out.includes('disposition summary drift: `verbatim` — header says 999999'),
@@ -219,8 +202,8 @@ test('it FAILS on a disposition summary count that disagrees with the per-file t
 test('it FAILS on a per-package "files" column that disagrees with the rows', () => {
   withQuarry(
     (rows) => rows.map((l) => (l.trim().startsWith('| `kernel` |') ? l.replace(/^(\|\s*`kernel`\s*\|)\s*\d+\s*\|/, '$1 999999 |') : l)),
-    (q, b) => {
-      const { code, out } = run(['--quarry', q, '--baseline', b]);
+    (q) => {
+      const { code, out } = run(['--quarry', q]);
       assert.equal(code, 1, `a wrong package files column must fail — got exit 0:\n${out}`);
       assert.ok(
         out.includes('package table drift: `kernel` files — header says 999999'),
@@ -233,8 +216,8 @@ test('it FAILS on a per-package "files" column that disagrees with the rows', ()
 test('it FAILS on the **total** row when it disagrees with the sum of the packages', () => {
   withQuarry(
     (rows) => rows.map((l) => (l.trim().startsWith('| **total**') ? l.replace(/(\|\s*\*\*total\*\*\s*\|\s*\*\*)\d+(\*\*\s*\|)/, '$1999999$2') : l)),
-    (q, b) => {
-      const { code, out } = run(['--quarry', q, '--baseline', b]);
+    (q) => {
+      const { code, out } = run(['--quarry', q]);
       assert.equal(code, 1, `a wrong total row must fail — got exit 0:\n${out}`);
       assert.ok(
         out.includes('package table drift: `total` files — header says 999999'),
@@ -253,15 +236,15 @@ test('--write recomputes loc, the disposition summary and the package columns fr
       if (l.trim().startsWith('| `kernel` |')) return l.replace(/^(\|\s*`kernel`\s*\|)\s*\d+\s*\|/, '$1 999999 |');
       return l;
     }),
-    (q, b) => {
-      const before = run(['--quarry', q, '--baseline', b]);
+    (q) => {
+      const before = run(['--quarry', q]);
       assert.equal(before.code, 1, `the doctored quarry must start red:\n${before.out}`);
 
-      const written = run(['--quarry', q, '--baseline', b, '--write']);
+      const written = run(['--quarry', q, '--write']);
       assert.equal(written.code, 0, `--write must exit 0 — got:\n${written.out}`);
       assert.match(written.out, /check-owner: WROTE/);
 
-      const after = run(['--quarry', q, '--baseline', b]);
+      const after = run(['--quarry', q]);
       assert.equal(after.code, 0, `the checker must pass after --write — got:\n${after.out}`);
       assert.match(after.out, /check-owner: PASS/);
 
@@ -285,8 +268,8 @@ test('--write fixes the loc NUMBER on a row that carries a ceiling-rekey note, a
         ? l.replace(/\|\s*(\d+)\s*\|$/, '| $1 **A note that must survive --write.** |')
         : l
     )),
-    (q, b) => {
-      const written = run(['--quarry', q, '--baseline', b, '--write']);
+    (q) => {
+      const written = run(['--quarry', q, '--write']);
       assert.equal(written.code, 0, written.out);
 
       const after = readFileSync(q, 'utf8');
@@ -411,8 +394,8 @@ test('a row may be owned by any real package directory; an owner that names noth
 test('it FAILS on a per-package "files" column that disagrees with the rows — a hyphenated package (forge-docs)', () => {
   withQuarry(
     (rows) => rows.map((l) => (l.trim().startsWith('| `forge-docs` |') ? l.replace(/^(\|\s*`forge-docs`\s*\|)\s*\d+\s*\|/, '$1 999999 |') : l)),
-    (q, b) => {
-      const { code, out } = run(['--quarry', q, '--baseline', b]);
+    (q) => {
+      const { code, out } = run(['--quarry', q]);
       assert.equal(code, 1, `a wrong forge-docs files column must fail — got exit 0:\n${out}`);
       assert.ok(
         out.includes('package table drift: `forge-docs` files — header says 999999'),
@@ -429,15 +412,15 @@ test('--write recomputes a hyphenated package (forge-docs) files/loc, not just t
         ? l.replace(/^(\|\s*`forge-docs`\s*\|)\s*\d+\s*\|\s*\d+\s*\|/, '$1 999999 | 999999 |')
         : l
     )),
-    (q, b) => {
-      const before = run(['--quarry', q, '--baseline', b]);
+    (q) => {
+      const before = run(['--quarry', q]);
       assert.equal(before.code, 1, `the doctored forge-docs row must start red:\n${before.out}`);
 
-      const written = run(['--quarry', q, '--baseline', b, '--write']);
+      const written = run(['--quarry', q, '--write']);
       assert.equal(written.code, 0, `--write must exit 0 — got:\n${written.out}`);
       assert.match(written.out, /check-owner: WROTE/);
 
-      const after = run(['--quarry', q, '--baseline', b]);
+      const after = run(['--quarry', q]);
       assert.equal(after.code, 0, `the checker must pass after --write — got:\n${after.out}`);
 
       const rewrittenRow = readFileSync(q, 'utf8').split('\n').find((l) => l.trim().startsWith('| `forge-docs` |'));
