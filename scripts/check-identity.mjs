@@ -4,11 +4,12 @@
  *
  * Spec §2 (docs/superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md):
  * forge has one name, forge-studio, and "ideas machine", "forge v2",
- * "unifier" and "zep" are retired. A fresh session must not be able to learn
+ * "unifier" and "zep" are retired — and so is the claim that the product runs
+ * between "three human interaction points" (operator item 86). A fresh session must not be able to learn
  * a retired concept from the repo's own instructions, so this lint fails CI
  * when a CURRENT-STATE doc, skill or README still narrates one of them.
  *
- * Scanned: CLAUDE.md, README.md, ARCHITECTURE.md, docs/**\/*.{md,json},
+ * Scanned: CLAUDE.md, README.md, ARCHITECTURE.md, PRINCIPLES.md, docs/**\/*.{md,json},
  * skills/**\/SKILL.md — enumerated with `git ls-files`, so only TRACKED files
  * count. A checker must scan the REPO, not the working directory: walking the
  * tree made this gate red on the operator's checkout (gitignored local notes
@@ -28,8 +29,17 @@ import { spawnSync } from 'node:child_process';
 import { join, relative, resolve, dirname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const TOKENS = ['unifier', 'ideas machine', 'forge v2', 'zep'];
+const TOKENS = ['unifier', 'ideas machine', 'idea machine', 'forge v2', 'zep'];
 const TOKEN_RE = new RegExp(`\\b(${TOKENS.join('|')})\\b`, 'gi');
+
+/**
+ * The retired product claim (operator item 86, M7). forge-studio is a builder
+ * of software factories; "three human interaction points" (architect, review,
+ * reflection) is the shape of the EXAMPLE develop factory, and narrating it as
+ * the product's own is the identity drift this gate exists to stop. Naming the
+ * example factory's gates stays legal — only the "three human …" claim is caught.
+ */
+const PHRASE_RE = /\bthree\s+(?:deliberate\s+)?human\s+(?:interaction\s+points?|moments?)\b/gi;
 
 /**
  * The identifier arm. A retired term hides in two places, and word boundaries
@@ -71,7 +81,7 @@ const EXCLUDED_FILES = new Map([
 
 /** The scanned roots: a git pathspec, and which of its tracked files count. */
 const SCANNED = [
-  { pathspec: ['CLAUDE.md', 'README.md', 'ARCHITECTURE.md'], keep: () => true },
+  { pathspec: ['CLAUDE.md', 'README.md', 'ARCHITECTURE.md', 'PRINCIPLES.md'], keep: () => true },
   { pathspec: ['docs'], keep: (p) => p.endsWith('.md') || p.endsWith('.json') },
   { pathspec: ['skills'], keep: (p) => p.endsWith('SKILL.md') },
 ];
@@ -148,6 +158,10 @@ function scan() {
       let m;
       while ((m = TOKEN_RE.exec(text)) !== null) {
         hits.push({ file: rel(abs), line: i + 1, token: m[1].toLowerCase(), text: raw.trim() });
+      }
+      PHRASE_RE.lastIndex = 0;
+      while ((m = PHRASE_RE.exec(text)) !== null) {
+        hits.push({ file: rel(abs), line: i + 1, token: m[0].toLowerCase(), text: raw.trim() });
       }
       IDENT_RE.lastIndex = 0;
       while ((m = IDENT_RE.exec(text)) !== null) {
