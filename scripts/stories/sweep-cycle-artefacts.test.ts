@@ -205,3 +205,32 @@ test('row 146 control: _agent-*/_authoring-* dirs born BEFORE this run\'s window
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+/**
+ * Row 146b: the filesystem stamps mtime with sub-millisecond precision while
+ * the window's end is `Date.now()`, a whole millisecond. A dir made in the
+ * same millisecond as the call carried an mtimeMs a fraction ABOVE the window
+ * end, so it read as "born after this run" and was left behind — CI on #1027
+ * caught exactly that on the test above. Pinned here without racing the
+ * clock: the dir's mtime is set to 0.7 ms past a whole-millisecond window end.
+ */
+test('row 146b: a dir stamped in the same millisecond as the window end is still in the window', () => {
+  const root = scratch();
+  try {
+    const untilMs = Date.now();
+    const agentDir = join(root, '_logs', '_agent-2026-09-28T10-30-00');
+    mkdirSync(agentDir, { recursive: true });
+    const stampSeconds = (untilMs + 0.7) / 1000;
+    utimesSync(agentDir, stampSeconds, stampSeconds);
+
+    const evidenceDir = join(root, '_logs', '_story-post-stop-sweep', 'stopped-run', String(untilMs));
+    const r = captureAndClearBornLogDirs(root, {
+      prefixes: ['_agent-'], sinceMs: untilMs - 60_000, untilMs, evidenceDir,
+    });
+
+    assert.deepEqual(r.captured, ['_agent-2026-09-28T10-30-00']);
+    assert.equal(existsSync(agentDir), false, 'the same-millisecond dir is cleared, not left as residue');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -35,8 +35,16 @@
  */
 import { readdirSync, statSync, mkdirSync, cpSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { FS_CLOCK_SLACK_MS } from './beats-queue-terminal.mjs';
 
-/** `_logs/<prefix><anything>` dirs born in [sinceMs, untilMs]. */
+/**
+ * `_logs/<prefix><anything>` dirs born in [sinceMs, untilMs], widened by
+ * `FS_CLOCK_SLACK_MS` at both ends. Row 146b: the kernel stamps mtime from a
+ * coarse clock with sub-millisecond precision, while both bounds come from
+ * `Date.now()`'s whole milliseconds, so a dir made in the same millisecond as
+ * the window's end read as born after it — CI on #1027 left exactly such a
+ * dir behind. The slack is the tree's one measured allowance for that skew.
+ */
 function bornLogDirNames(logsDir, prefix, sinceMs, untilMs) {
   let entries;
   try {
@@ -53,7 +61,11 @@ function bornLogDirNames(logsDir, prefix, sinceMs, untilMs) {
     } catch {
       continue; // gone by the time we looked — nothing left to capture
     }
-    if (mtimeMs >= sinceMs && mtimeMs <= untilMs) out.push(e.name);
+    const bornAfterStart = mtimeMs >= sinceMs - FS_CLOCK_SLACK_MS;
+    const bornBeforeEnd = mtimeMs <= untilMs + FS_CLOCK_SLACK_MS;
+    if (bornAfterStart && bornBeforeEnd) {
+      out.push(e.name);
+    }
   }
   return out.sort();
 }
