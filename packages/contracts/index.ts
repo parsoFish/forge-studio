@@ -169,3 +169,13 @@ export const OPERATOR_STOP_MESSAGE_PREFIX = 'operator-stop:' as const;
  * resumable from the plan node, instead of "could not be classified".
  */
 export const PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX = 'pm-acceptance-gate-unresolved:' as const;
+/**
+ * Row 159 (bead forge-8vfn.8.1.47, ruling 1891): the architect runner
+ * (`packages/sessions/kinds/architect-draft-repair.ts`) prefixes its
+ * classified throw with this literal when a draft's manifest-validation
+ * error (ADR 051's `requireDraftAcceptanceCriteria` / `requireChangeClass`,
+ * `architect-manifest.ts`) survives the ONE bounded repair turn —
+ * `failure-classifier.ts` scans an `architect`-phase error event for it, the
+ * same convention as `PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX` above.
+ */
+export const ARCHITECT_DRAFT_MANIFEST_UNRESOLVED_PREFIX = 'architect-draft-manifest-unresolved:' as const;

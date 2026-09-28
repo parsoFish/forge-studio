@@ -10,6 +10,7 @@
 
 import type { EventLogEntry } from '@forge/kernel';
 import {
+  ARCHITECT_DRAFT_MANIFEST_UNRESOLVED_PREFIX,
   COST_CEILING_MESSAGE_PREFIX,
   OPERATOR_STOP_MESSAGE_PREFIX,
   PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX,
@@ -328,6 +329,10 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // writer (project-manager.ts) when an acceptance-gate violation survived
   // its one bounded revise turn — see the shared constant's own doc.
   let pmAcceptanceGateUnresolved = false;
+  // Row 159 (ruling 1891): the architect's own draft-manifest validation
+  // failure, prefixed by the writer (architect-draft-repair.ts) when it
+  // survived its one bounded repair turn — see the shared constant's own doc.
+  let architectDraftManifestUnresolved = false;
 
   for (const e of windowed) {
     const md = (e.metadata ?? {}) as Record<string, unknown>;
@@ -361,6 +366,17 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
     // — the two above are unwrapped throws and anchor at position 0.
     if (e.event_type === 'error' && msg.includes(PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX)) {
       pmAcceptanceGateUnresolved = true;
+      ev(e);
+    }
+    // Row 159: the architect phase's own thrown message (agent-dispatch-cmd.ts's
+    // catch stamps it onto status.json.error verbatim) — `includes`, matching
+    // row 157's own convention, since a wrapping caller may prefix its own text.
+    if (
+      e.phase === 'architect' &&
+      e.event_type === 'error' &&
+      msg.includes(ARCHITECT_DRAFT_MANIFEST_UNRESOLVED_PREFIX)
+    ) {
+      architectDraftManifestUnresolved = true;
       ev(e);
     }
     if (msg === 'ralph.end' && md.status === 'failed' && (md.iterations === 0 || md.iterations === undefined) && md.stop_reason === 'quality-gates-pass') { trivialPass = true; ev(e); }
@@ -584,6 +600,23 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
         'deterministic: the same class profile and project acceptance-gate config re-derive the ' +
         'same requirement, so no auto-retry. Resume from the plan node to re-decompose.';
       return T('terminal', why, evidence, false, false, 'plan');
+    }
+    // Row 159 (ruling 1891): a draft-manifest validation error that survived
+    // the architect's one bounded repair turn — deterministic (the same
+    // draft content re-derives the same validation error), never
+    // auto-retried. Unlike row 157 this has no `resumeFrom: 'plan'`: the
+    // architect is an operator-driven interactive session (ARCHITECTURE.md
+    // §2), not a scheduled develop-flow cycle, so there is no scheduler
+    // resume point to name — the operator edits the idea/interview answers
+    // and starts a fresh draft turn.
+    if (architectDraftManifestUnresolved) {
+      return T(
+        'terminal',
+        'architect draft-manifest validation failed even after its one bounded repair turn — ' +
+          'deterministic: the same draft content re-derives the same validation error, so no ' +
+          'auto-retry. Revise the idea / interview answers and start a fresh draft.',
+        evidence,
+      );
     }
     return null;
   })();
