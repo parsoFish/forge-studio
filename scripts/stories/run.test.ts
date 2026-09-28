@@ -60,3 +60,66 @@ test('MUST 1: the final return still reads the SAME exitCode variable the teardo
   const s = src();
   assert.match(s, /\n\s*return exitCode;\s*\n\}/, 'main() must still return the mutable exitCode, not a snapshot taken before the finally block');
 });
+
+/**
+ * Row 146 (`forge-8vfn.8.1.52`) — a SIGTERM/SIGINT to this run's own process
+ * group skips `main()`'s `finally` block entirely: Node terminates on either
+ * signal, with no listener installed, before a pending `finally` ever runs
+ * (`sweep.mjs`'s own header). S10 run 43 measured exactly that — its
+ * own-artefacts clear never ran, and the next run's residue guard refused on
+ * what it left (ruling 1911). These doors read the SOURCE TEXT for the same
+ * reason the MUST 1 doors above do: `main()` cannot be exercised as a unit.
+ */
+test('row 146: run.mjs imports sweepCycleArtefacts — same claim-then-clear as the trailing sweep', () => {
+  assert.match(
+    src(),
+    /import\s*\{[^}]*\bsweepCycleArtefacts\b[^}]*\}\s*from\s*'\.\/sweep\.mjs';/,
+    'the post-stop sweep must reuse sweepProductFixtures\' own function, never a second copy of the claim',
+  );
+});
+
+test('row 146: SIGTERM and SIGINT are both handled, so a stop gets a chance to sweep before exit', () => {
+  const s = src();
+  assert.match(s, /process\.once\(\s*'SIGTERM'/, 'SIGTERM must be handled — otherwise Node exits unswept');
+  assert.match(s, /process\.once\(\s*'SIGINT'/, 'SIGINT must be handled for the same reason');
+});
+
+test('row 146: the signal handler calls sweepCycleArtefacts scoped to this run\'s startedMs window', () => {
+  const s = src();
+  const handlerAt = s.indexOf('const onStopSignal =');
+  assert.notEqual(
+    handlerAt, -1,
+    'the post-stop handler must exist as one named function, not inlined twice for the two signals',
+  );
+  const callAt = s.indexOf('sweepCycleArtefacts(', handlerAt);
+  assert.notEqual(callAt, -1, 'the handler must call sweepCycleArtefacts');
+  const sinceAt = s.indexOf('sinceMs: startedMs', callAt);
+  assert.notEqual(
+    sinceAt, -1,
+    'the sweep must be scoped to startedMs — never another run\'s artefacts (born-within-this-run)',
+  );
+});
+
+test('row 146: both signals are wired to the SAME handler, not two independent copies of it', () => {
+  const s = src();
+  assert.match(s, /process\.once\(\s*'SIGTERM',\s*\(\)\s*=>\s*onStopSignal\('SIGTERM'\)\)/);
+  assert.match(s, /process\.once\(\s*'SIGINT',\s*\(\)\s*=>\s*onStopSignal\('SIGINT'\)\)/);
+});
+
+test('row 146: the handler also clears _agent-*/_authoring-* dirs residue.sh gates, same window', () => {
+  const s = src();
+  assert.match(
+    s,
+    /import\s*\{[^}]*\bcaptureAndClearBornLogDirs\b[^}]*\}\s*from\s*'\.\/sweep-post-stop-logs\.mjs';/,
+    'the two Studio-session families residue.sh gates (lines 68-69) need the same post-stop clear',
+  );
+  const handlerAt = s.indexOf('const onStopSignal =');
+  const callAt = s.indexOf('captureAndClearBornLogDirs(', handlerAt);
+  assert.notEqual(callAt, -1, 'the handler must call captureAndClearBornLogDirs');
+  const sinceAt = s.indexOf('sinceMs: startedMs', callAt);
+  assert.notEqual(
+    sinceAt, -1,
+    'the born-log clear must share the SAME startedMs window, never another run\'s',
+  );
+  assert.match(s.slice(callAt, sinceAt), /_agent-.*_authoring-|_authoring-.*_agent-/s);
+});
