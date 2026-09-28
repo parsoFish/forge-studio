@@ -25,7 +25,7 @@ import { join, relative } from 'node:path';
 import { readProcTable, descendantsOf, agentRunsReadable } from './reap.mjs';
 import { waitForCensusEmpty, describeCensus, identifyPid, verifiedKill } from './reap-census.mjs';
 import { quiesceWriters, describeQuiesce } from './quiesce.mjs';
-import { sweepProductFixtures, claimAndClearCycleArtefacts } from './sweep.mjs';
+import { sweepProductFixtures, sweepCycleArtefacts } from './sweep.mjs';
 import { describeRunArtefactsClear } from './ground-clear.mjs';
 // Split out at the 800-line cap (SPLIT, NEVER BASELINE — T1 ruling 492); importers use
 // the sibling module directly — no re-export (CLAUDE.md: no backwards-compat paths).
@@ -203,15 +203,22 @@ export function releaseOwnInFlight(root) {
  * exists to clear, except `releaseOwnInFlight` only ever `rmSync`s the `.md`
  * and `.heartbeat` — no capture, and it never touches `_worktrees/<id>`,
  * `_worktrees/wi/<id>` or the `_logs/<ts>_<id>` dispatch dir. So, ONLY once
- * this daemon is confirmed dead, `claimAndClearCycleArtefacts` (sweep.mjs) —
- * the SAME attribute-capture-clear pass the per-story sweep uses — runs here,
- * scoped to `opts.sinceMs` (this run's own window): it captures the manifest
- * to evidence exactly as the per-story queue claim used to, before deferring
+ * this daemon is confirmed dead, `sweepCycleArtefacts` (sweep.mjs) — the SAME
+ * attribute-capture-clear pass the per-story sweep and `run.mjs`'s post-stop
+ * sweep both use (bead `forge-8vfn.8.1.52`, row 146) — runs here, scoped to
+ * `opts.sinceMs` (this run's own window): it captures the manifest to
+ * evidence exactly as the per-story queue claim used to, before deferring
  * ever existed, and clears everything `captureAndClearMintedRunArtefacts`
  * knows to look for under the ids it just claimed. `releaseOwnInFlight` still
  * runs straight after, unchanged, as the path-attributed backstop for
  * whatever this window-based claim could not attribute (T1 1332's own
  * "capture-then-clear, and a second door for what the first cannot see").
+ *
+ * `schedulerAlive: false`, EXPLICIT, never inherited — `sweepCycleArtefacts`'s
+ * own header requires every caller to state this rather than default it. This
+ * call is only ever reached once the daemon above is CONFIRMED dead (drained,
+ * or killed and censused empty), so there is no live writer left to defer to;
+ * that is the entire premise of running the clear at all.
  *
  * REQUIRED, FAIL FAST — the same rule `sweepProductFixtures` already applies
  * to its own `sinceMs` (`forge-8vfn.7.6.74`). A default that quietly skipped
@@ -230,7 +237,7 @@ export function releaseOwnInFlight(root) {
  *          kill?: (pid: number|string, sig: NodeJS.Signals) => void,
  *          sleep?: (ms: number) => Promise<void>,
  *          release?: (root: string) => {released: string[], failed: object[]},
- *          deferredClear?: typeof claimAndClearCycleArtefacts}} opts
+ *          deferredClear?: typeof sweepCycleArtefacts}} opts
  * @returns {Promise<{sched: object, census: object|null,
  *   release: ({released: string[], failed: object[], reappeared: string[]})|null,
  *   deferred: {claim: object, artefacts: object}|null,
@@ -253,13 +260,14 @@ export async function stopSchedulerCensusAndRelease(root, opts = {}) {
   const sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const release = opts.release ?? releaseOwnInFlight;
   const sinceMs = opts.sinceMs;
-  const deferredClear = opts.deferredClear ?? claimAndClearCycleArtefacts;
+  const deferredClear = opts.deferredClear ?? sweepCycleArtefacts;
   // Run ONLY once the daemon above is confirmed dead — see this function's
   // own header.
   const runDeferredClear = () => {
     const evidenceDir = join(root, '_logs', '_batch-teardown-queue-claim', String(sinceMs));
-    const { claim, artefacts } = deferredClear({
-      root, storyId: 'batch-teardown', sinceMs, evidenceDir,
+    // `schedulerAlive: false` — explicit, see this function's own header.
+    const { claim, artefacts } = deferredClear('batch-teardown', root, {
+      sinceMs, evidenceDir, schedulerAlive: false,
     });
     return {
       deferred: { claim, artefacts },

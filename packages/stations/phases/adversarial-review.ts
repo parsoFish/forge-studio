@@ -38,8 +38,7 @@ import {
   type ReviewFindingsRecord,
   type WorkItem,
 } from '@forge/flows';
-import { guardedReadFile, guardedWriteFile, FORGE_ROOT, type EventLogger } from '@forge/kernel';
-import { createHash } from 'node:crypto';
+import { FORGE_ROOT, type EventLogger } from '@forge/kernel';
 import {
   runAgent,
   makeToolEventSink,
@@ -50,7 +49,7 @@ import {
 } from '@forge/agents';
 import type { AgentDefinition } from '@forge/contracts';
 import { chunkLabel, mergeChunkRecords, partitionChangedFiles, type ReviewChunk,
-  splitChunkPerFile, mergeSplitRecords,
+  splitChunkPerFile, mergeSplitRecords, diffSha, readChunkRecord, writeChunkRecord,
 } from './review-chunks.ts';
 import {
   buildAdversarialReviewSystemPrompt,
@@ -693,87 +692,4 @@ export async function runAdversarialReview(
   } finally {
     scrub();
   }
-}
-
-// ---------------------------------------------------------------------------
-// One chunk's finished review, kept — bead forge-8vfn.6.10.27.
-//
-// G2's resume paid for `WI-1`, `WI-2` exhausted, and the pipeline returned a
-// failure — so `WI-1`'s completed record died with it and every retry re-buys
-// every chunk that already succeeded: the resume problem the cycle solves one
-// level up, unsolved one level down.
-//
-// Keyed by chunk INDEX, not by label: a label is a work-item id today and a FILE
-// PATH inside a split, and a path is not a filename. The index is generated
-// here, and the read/write go through `guardedReadFile`/`guardedWriteFile`, so
-// this adds neither a path-safety predicate nor a raw sink on a bridge-reachable
-// module. Label and head SHA live INSIDE the file and are checked on read, so an
-// index that has come to mean something else is a MISS, not a wrong answer.
-// ---------------------------------------------------------------------------
-
-type StoredChunk = {
-  label: string;
-  /** sha256 of the exact diff this chunk was reviewed FROM — the reuse key. */
-  diffSha: string;
-  /** The head it was first reviewed at. Provenance only: never the reuse key. */
-  headSha: string;
-  record: ReviewFindingsRecord;
-};
-
-/**
- * The reuse key: what a review is a review OF.
- *
- * It was `headSha`, and G2 measured that wrong (ledger, 2026-09-06): the
- * integrate band commits TWICE on every run — `chore(developer-loop): pre-review
- * boundary snapshot` and `chore(demo): demo artifacts` — so the head differed on
- * every attempt and every persisted record was rejected as stale by the guard
- * that exists to stop a review of code nobody is merging. The store worked
- * perfectly within one pass and was dead across the only boundary that matters.
- *
- * The diff is the honest key: a chunk whose diff is byte-identical has already
- * been reviewed, whatever the orchestrator wrote to the branch since, and a
- * chunk whose diff moved is refused exactly as before.
- */
-function diffSha(diff: string): string {
-  return createHash('sha256').update(diff).digest('hex');
-}
-
-/**
- * The key is built here from integers only — a chunk's ordinal, and for a
- * split's part its parent's ordinal and its own (`"3.5"`). It is never
- * caller-supplied, so it cannot carry a separator or a `..`; the guarded
- * wrappers below still resolve every segment.
- */
-const chunkSegments = (cycleId: string, key: string): string[] => [cycleId, 'artifacts', 'review-chunks', `chunk-${key}.json`];
-
-/**
- * The persisted record for this chunk, or `null` — and `null` for EVERY reason
- * that is not an exact match: rejected path, no file, unreadable, a different
- * label at this index, or a record authored against a different head. A stale
- * reuse would be a review of code nobody is merging; a miss costs only what the
- * review already costs, so the miss is always the safe answer.
- */
-export function readChunkRecord(
-  logsRoot: string,
-  cycleId: string,
-  key: string,
-  expect: { label: string; diffSha: string },
-): ReviewFindingsRecord | null {
-  const raw = guardedReadFile(logsRoot, chunkSegments(cycleId, key));
-  if (raw === null) return null;
-  try {
-    const stored = JSON.parse(raw) as Partial<StoredChunk>;
-    if (stored.label !== expect.label || stored.diffSha !== expect.diffSha) return null;
-    if (stored.record === undefined) return null;
-    return stored.record;
-  } catch {
-    return null;
-  }
-}
-
-/** Persist one finished chunk; the written path, or `null` if the guard refused
- *  or the write failed — a durable record must never break the review that
- *  produced it. */
-export function writeChunkRecord(logsRoot: string, cycleId: string, key: string, entry: StoredChunk): string | null {
-  return guardedWriteFile(logsRoot, chunkSegments(cycleId, key), JSON.stringify(entry, null, 2) + '\n');
 }
