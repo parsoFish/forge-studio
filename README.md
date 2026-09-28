@@ -1,38 +1,38 @@
 # Forge Studio
 
-> The steerable composition layer for autonomous software delivery — for one operator running a portfolio of projects.
+> A construction platform for agentic software factories — for one operator running a portfolio of projects.
 
-Forge Studio is a **visual, autonomous software-engineering pipeline you can see, edit, and trust**. You hand it a direction (an idea, a roadmap); agents do the implementation, unattended, between three deliberate human moments. It is built for the **single technical operator running many side projects** — the buyer that team tools (Devin, Factory, Copilot) and in-IDE assistants (Cursor) leave under-served. Under the hood it's two levels: **a modular platform for building agentic software factories** (SWE-focused for now by explicit choice), which ships **one worked example factory — the develop flow** — out of the box (2026-07-17, [ADR 038](./docs/decisions/038-north-star-platform-and-ootb.md)).
+**forge-studio** is a small set of composable primitives — agents, skills, flows, knowledge and gates — that one operator assembles into a purpose-built delivery pipeline for any codebase. A **factory** is one assembled, running pipeline; forge-studio is the kit you build factories with, and **Forge Studio** is the one operator surface you build, run and watch them from. It ships **one deletable example factory, the develop flow** (idea → plan → build → review → merge → reflect), to prove the primitives out of the box: evidence the kit works, not the product itself ([ADR 038](./docs/decisions/038-north-star-platform-and-ootb.md), [ADR 048](./docs/decisions/048-deletable-example-factory.md)). It is SWE-focused by explicit choice, and built for the **single technical operator running many side projects**.
 
-Three things make it one product rather than three:
+Three properties make it one kit rather than a bag of scripts:
 
-- **A visual SWE pipeline.** The autonomous cycle — architect → plan → decompose → developer loop → demo + adversarial-review → reflection — is *data*, not a hardcoded script. "Forge is just one flow" ([ADR 028](./docs/decisions/028-flow-engine.md)): a generic flow engine dispatches each node through a node-executor registry. You see the pipeline, change the pipeline, run the pipeline.
-- **Code-enforced gates.** The three human moments (architect, review, reflect) are structural, not advisory. There is **no auto-approve code path anywhere** — forge cannot accidentally skip you, because the gate lives in the code, not in a prompt. These are gates you can *read*, not just trust.
-- **A compounding engineering brain.** Every cycle's reflection is distilled into a human-navigable engineering wiki ([ADR 018](./docs/decisions/018-three-brain-model.md), three scoped graphs) that planners query *before* designing the next initiative. Memory tools cache for runtime recall; the brain compounds — it tunes *how the next plan is designed*, across every project.
+- **Factories are data.** A factory's flow is a `FlowDef` — stations and gates declared in YAML — walked by one generic flow engine through a node-executor registry ([ADR 028](./docs/decisions/028-flow-engine.md)). You see the pipeline, change the pipeline, run the pipeline. A second factory is built from data plus one enumerated seam entry, with no platform edits; deleting the example package leaves the platform running, and CI proves it.
+- **Gates live in the code.** A factory declares where it stops for a human, and those stops are structural, not advisory: there is **no auto-approve code path anywhere**, so a factory cannot accidentally skip its operator. Every interactive stop is a session kind with a finalizer ([ADR 043](./docs/decisions/043-generic-interactive-surface.md)) — gates you can *read*, not just trust.
+- **Knowledge compounds.** Reflections are distilled into a human-navigable engineering wiki ([ADR 018](./docs/decisions/018-three-brain-model.md), three scoped graphs) that planning agents query *before* designing the next piece of work, across every project.
 
 Full competitive analysis and the strategic frame: [`brain/forge-dev/themes/studio-differentiation-and-subsumption-moat.md`](./brain/forge-dev/themes/studio-differentiation-and-subsumption-moat.md).
 
 ## See it run
 
-The canonical walkthrough is the **story suite** — new idea → architect interview + PLAN gate → decomposition into work items → developer loop (dependency-ordered) → the demo + review band → an *interactive* review demo → reflection — driven entirely through Forge Studio. Each story records a video + an annotated frame gallery, asserts the DOM-as-metrics invariants per beat, and emits a how-to document from the same run. Regenerate any of them with `npm run stories -- --story <id>` (output: [`demos/stories/index.html`](./demos/stories)).
+The canonical walkthrough is the **story suite** — ten operator stories driven entirely through Forge Studio: onboard an existing project, create one from scratch, reset a project contract, create a flow, an agent, a knowledge base and library components, install from the community registry, do all of it through the assistant, and run the example factory to a merged PR. Each story records a video and an annotated frame gallery, asserts the DOM-as-metrics invariants per beat, and emits a tutorial or how-to document from the same run. Regenerate any of them with `npm run stories -- --story <id>` (output: [`demos/stories/index.html`](./demos/stories)).
 
 ## The moat
 
 There are two layers to the differentiation, and keeping them distinct matters.
 
-**Today — the intersection (§1).** Forge is the only system that combines a *visually editable* autonomous-SWE pipeline, *structurally code-enforced* human gates, and a *compounding, human-navigable engineering knowledge graph wired into planning*, for a single operator running a portfolio. Each capability has a competitor; the combination has none — and Forge is **the only open product at that intersection.** Open matters here for a specific reason: when the gate is in the code and the code is yours to read, "won't skip the human" is a property you can *verify*, not a vendor promise.
+**Today — the intersection (§1).** forge-studio is the only system that combines *visually editable* agentic pipelines, *structurally code-enforced* human gates, and a *compounding, human-navigable engineering knowledge graph wired into planning*, for a single operator running a portfolio. Each capability has a competitor; the combination has none — and forge-studio is **the only open product at that intersection.** Open matters here for a specific reason: when the gate is in the code and the code is yours to read, "won't skip the human" is a property you can *verify*, not a vendor promise.
 
-**Over time — modularity-as-subsumption (§3).** Forge's objects are declarative data over swappable seams, so it can **absorb the best point-solution in each sub-domain — turning competitors into components** — instead of out-building them. The seams are real and used in production; the **runtime-adapter** seam carries a second implementation behind it:
+**Over time — modularity-as-subsumption (§3).** forge-studio's objects are declarative data over swappable seams, so it can **absorb the best point-solution in each sub-domain — turning competitors into components** — instead of out-building them. The seams are real and used in production; the **runtime-adapter** seam carries a second implementation behind it:
 
 | Seam | Live | Second implementation (seam-proven) | ADR |
 |---|---|---|---|
 | Runtime / model | Claude Agent SDK | Gemini, Aider adapters | [029](./docs/decisions/029-runtime-adapters.md) |
-| Flow engine | node-executor registry (the old `classifyNode` switch is gone) | any node type as a data-table entry | [028](./docs/decisions/028-flow-engine.md) |
+| Flow engine | node-executor registry | any node type as a data-table entry | [028](./docs/decisions/028-flow-engine.md) |
 | Knowledge backend | filesystem brain (`FilesystemKbBackend`) | seam present; filesystem-only today | [027](./docs/decisions/027-studio-object-model.md) |
 
-A standing test (`orchestrator/subsumption-proof.test.ts`) asserts the runtime-adapter seam resolves a second implementation — "competitors → components" made mechanically true, not just asserted.
+A standing conformance suite (`packages/agents/tests/contract/conformance.test.ts`) runs every registered runtime adapter, the second implementations included, through the same contract — "competitors → components" made mechanically true, not just asserted.
 
-**Honest caveats (do not skip — see §3.4 + [ADR 032](./docs/decisions/032-subsumption-proof.md)).** *Generic* modularity is a crowded pitch; the defensible claim is the *specific* one: subsumption of best-in-class **software-engineering** components under a **steerable, gated, knowledge-compounding** pipeline for a **portfolio** operator. Today the **runtime-adapter** seam is the one with a shipped second implementation (the KB seam is filesystem-only — `FilesystemKbBackend` — and the flow engine is registry-driven). The second adapters are **seam-proven but provisioning-gated** (`available: false` until their dep + creds are present); a *live* combined cycle additionally needs a Gemini tool executor and per-adapter model resolution. The seam accepts the component today; each live integration ships as it is provisioned.
+**Honest caveats (do not skip — see §3.4 + [ADR 032](./docs/decisions/032-subsumption-proof.md)).** *Generic* modularity is a crowded pitch; the defensible claim is the *specific* one: subsumption of best-in-class **software-engineering** components under **steerable, gated, knowledge-compounding** factories for a **portfolio** operator. Today the **runtime-adapter** seam is the one with a shipped second implementation (the KB seam is filesystem-only — `FilesystemKbBackend` — and the flow engine is registry-driven). The second adapters are **seam-proven but provisioning-gated** (`available: false` until their dep + creds are present); a *live* combined cycle additionally needs a Gemini tool executor and per-adapter model resolution. The seam accepts the component today; each live integration ships as it is provisioned.
 
 ## Quickstart
 
@@ -81,15 +81,16 @@ contract file is a managed project. To get one ready:
 3. Run `forge preflight <id>` until every hard clause is green (or onboard via
    Studio → Projects → New, which scaffolds the contract files for you).
 
-## The three human moments
+## The example factory's gates
 
-Forge runs unattended **between** exactly three deliberate human interaction points; everything else is autonomous. All three render natively in Forge Studio ([ADR 031](./docs/decisions/031-studio-consolidation.md)): the architect interview + PLAN gate, and the review/reflect moments through the unified `/artifact` viewer ([ADR 020](./docs/decisions/020-architect-in-ui.md), [ADR 021](./docs/decisions/021-local-review-and-unified-demo.md)).
+The platform prescribes no fixed human moments: a factory declares its own gates in its flow, and Studio renders each one as a session the operator finalizes. The example develop factory ([stations and gates](./docs/explanation/example-factory.md)) is built with four operator acts; everything between them runs unattended:
 
-| Moment | What you do | Forge produces |
+| Act | What you do in Studio | The factory produces |
 |---|---|---|
-| **Architect** | drop an idea → interview → approve the PLAN | a queued initiative; the scheduler picks it up |
-| **Review** | inspect the demo-embedded PR → approve (merge in GitHub) or send back | a self-contained PR; closure fires reflection on merge |
-| **Reflect** | answer the reflector's questions | brain themes + retro + cycle archive |
+| **Plan gate** | drop an idea → interview → approve the PLAN | a queued initiative on the project's roadmap |
+| **Kickoff** | on the project's roadmap, start the scheduler (it plans the initiative into work items), then press Develop on the initiative's card | the build → integrate → review run |
+| **Verdict gate** | inspect the demo-embedded PR → approve (merge) or send back | a self-contained PR; merge fires reflection |
+| **Reflection** | answer the reflector's questions | brain themes + retro + cycle archive |
 
 ## Repository layout
 

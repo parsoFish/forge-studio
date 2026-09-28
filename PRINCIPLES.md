@@ -64,4 +64,4 @@ The non-goals section of [`docs/decisions/`](./docs/decisions/) is also load-bea
 - [ADR 008 — JSONL event log per cycle](./docs/decisions/008-jsonl-event-log.md)
 - [`packages/kernel/logging.ts`](./packages/kernel/logging.ts) — central event-log writer with documented schema
 - [`packages/flows/metrics.ts`](./packages/flows/metrics.ts) — aggregations (cost, iterations, duration)
-- [`orchestrator/visualise.ts`](./orchestrator/visualise.ts) — event-log aggregation; the **forge UI** ([`forge-ui/`](./forge-ui/)) is the live monitoring surface (`monitor/` was deleted)
+- Forge Studio's **Monitor** pillar ([`apps/studio/app/monitor/`](./apps/studio/app/monitor/)) — the live view of flow runs, agent runs, sessions and the scheduler, derived from the same event log

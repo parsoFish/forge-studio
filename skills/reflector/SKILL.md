@@ -28,9 +28,9 @@ budgets: {maxTurns: 60, maxBudgetUsd: 3.0}
 
 Close the learning loop. After an initiative is merged, run the four-stage retro (per the [Reflect section of the example-factory explanation](../../docs/explanation/example-factory.md#reflect--closing-the-loop)) and write findings into the brain by **direct file writes** — theme markdown files under `brain/projects/<project>/themes/` plus a cycle archive under `brain/cycles/_raw/<cycle-id>.md`.
 
-## Operator handoff (the reflection human moment)
+## Operator handoff (the example factory's reflection gate)
 
-The **in-UI `/reflect` screen** is the operator surface (ADR 023): it renders the `user-questions.json` this skill emits, writes `user-feedback.md`, and the bridge auto-reruns the reflector. In **interactive** mode (the default) the feedback is supplied by a human. In **automated** mode (R4-09-F3, selected by the trigger's `mode: automated`) there is no human: the reflector infers each answer from the cycle logs / demo / diff and self-answers with `inferred: true` provenance — the per-cycle brief's Stage 2/3 tells you which mode you are in and exactly what to write.
+The reflection gate on Studio's unified **`/artifact`** viewer is the operator surface ([ADR 031](../../docs/decisions/031-studio-consolidation.md)): it renders the `user-questions.json` this skill emits, writes `user-feedback.md`, and the bridge auto-reruns the reflector. In **interactive** mode (the default) the feedback is supplied by a human. In **automated** mode (R4-09-F3, selected by the trigger's `mode: automated`) there is no human: the reflector infers each answer from the cycle logs / demo / diff and self-answers with `inferred: true` provenance — the per-cycle brief's Stage 2/3 tells you which mode you are in and exactly what to write.
 
 **Reads:** `_logs/<id>/user-questions.json` (≤4 entries; `[]` if none written); `_logs/<id>/retro.md` + `_logs/<id>/events.jsonl` for context.
 

@@ -10,7 +10,7 @@
 > **refreshed 2026-06-14** post-M7/M8 consolidation. Key load-bearing facts:
 > (a) **Forge Studio is the one product ([ADR 031](./docs/decisions/031-studio-consolidation.md))** —
 > the pre-Studio `/dashboard` is deleted; `forge studio` is the canonical launcher
-> (`forge watch` is gone); all human moments are Studio screens; (b) **brain-first
+> (`forge watch` is gone); every operator gate is a Studio screen; (b) **brain-first
 > is narrowed** — the planner and reflector read the brain; the dev-loop and
 > reviewer do not ([ADR 010](./docs/decisions/010-brain-first.md));
 > (c) **no auto-merge** — the GitHub PR is the operator's merge surface;
@@ -22,22 +22,23 @@
 > runtime adapter registry and the KbBackend seam (filesystem-only today) — the
 > **runtime adapter** seam carries a second implementation shipped.
 >
-> **Note (2026-07-17, [ADR 038](./docs/decisions/038-north-star-platform-and-ootb.md)):**
-> the phases below are the shipped OOTB suite (Scope 2) riding Scope 1's
-> engine/seams, not the whole of what forge is — forge's platform (Scope 1:
-> `packages/*`, `apps/forge`, `apps/studio`, the seams) is generic to any
-> agentic flow. A full rewrite of this document to lead with the platform view
-> is deliberately deferred to R4-01.
+> **Platform and example ([ADR 038](./docs/decisions/038-north-star-platform-and-ootb.md), [ADR 048](./docs/decisions/048-deletable-example-factory.md)):**
+> forge-studio is a builder of software factories. The platform — `packages/*`,
+> `apps/forge`, `apps/studio` and their seams — is generic to any factory; the
+> phases below are the stations and gates of the **example develop factory**
+> (`@forge/factory`, a deletable package), described here because it is the
+> worked example every seam is proven on. Its gates are that factory's, not
+> the platform's: a factory you build declares its own.
 
 ## Overview
 
-Forge's work is carried by three composable flows backed by a brain. The flow engine
+The platform runs any factory's flows on one engine; the example develop factory's work is carried by composable flows backed by a brain. The flow engine
 ([`packages/flows/flow-runner.ts`](./packages/flows/flow-runner.ts)) walks a
 `FlowDefinition` (a YAML-declared DAG, ADR 028) in topological order, dispatching
 each node through a **node-executor registry** — no `classifyNode` switch. The
-forge cycle ships as two chained flows — `studio/flows/forge-architect/`
+example factory ships as two chained flows — `studio/flows/forge-architect/`
 (plan + decompose) and `studio/flows/forge-develop/` (dev → review) — handing
-off Architect → Develop (operator-selected); on a confirmed merge,
+off Architect → Develop through the operator's kickoff (Develop on the roadmap card); on a confirmed merge,
 `packages/flows/finalize-merged.ts` dispatches the **standalone reflector agent
 run** (forge-develop's declared `{on: merged, target: {kind: agent, ref:
 reflector}}` trigger, resolved through the `reflection-close` band guard —
@@ -185,8 +186,8 @@ Responsibility: turn ideas + existing roadmap + brain knowledge into **initiativ
 The architect uses the **LLM Council pattern** — a chain of perspectives (CEO, eng, design, DX) that auto-resolves mechanical questions and only escalates the taste decisions — run inside [`skills/architect/`](./skills/architect/) via [`orchestrator/architect-runner.ts`](./orchestrator/architect-runner.ts). The PLAN gate (a human approval step on the Studio screen) is satisfied before the scheduler picks up the run.
 
 **Intentionally out-of-cycle (by design, not a gap).** The architect is
-**not** wired into `runCycle` and is **not** auto-invoked: it is a
-deliberate human moment. Its only handoff is the files it writes
+**not** wired into `runCycle` and is **not** auto-invoked: it is the
+example factory's plan gate, a deliberate operator act. Its only handoff is the files it writes
 (`_queue/pending/INIT-*.md`); the scheduler picks those up unattended.
 The roadmap is **not** written by the architect — it is a derived view
 of the `_queue/` manifests + their `depends_on_initiatives` chain. Design of record:
@@ -243,7 +244,7 @@ The verdict gate (the develop flow's successor band's quality gate) runs between
 
 Cap: fixed at ≤2 send-back rounds (iteration cap removed from the reviewer when `computeAdaptiveReviewIterationCap` was deleted with the Ralph reviewer in S4). There is **no per-iteration $/turn budget guard** on the reviewer agent (removed 2026-05-18 — it was undersized and cut every iteration before a verdict). Cap-exhausted leaves the manifest in `_queue/ready-for-review/` for manual operator pickup; never a hard cycle failure.
 
-The review human moment is the **`/artifact/<cycleId>` UI screen** (Studio's unified artifact viewer — [ADR 031](./docs/decisions/031-studio-consolidation.md)). The operator approves or sends-back directly there; the bridge writes the `verdict-response.md` handoff.
+The example factory's verdict gate is the **`/artifact/<cycleId>` UI screen** (Studio's unified artifact viewer — [ADR 031](./docs/decisions/031-studio-consolidation.md)). The operator approves or sends-back directly there; the bridge writes the `verdict-response.md` handoff.
 
 ### 6. Reflection *(human-in-the-loop, then unattended ingest)*
 
@@ -259,9 +260,12 @@ All three feed `brain-ingest`, which is what makes forge learn cycle-over-cycle.
 
 ### Unattended operation
 
-Three human interaction points, all on **Forge Studio** — the sole operator
+A factory runs unattended between the gates its flow declares. The example
+develop factory's gates are below, all on **Forge Studio** — the sole operator
 surface ([ADR 031](./docs/decisions/031-studio-consolidation.md); `forge studio` is the
-one launcher command). The load-bearing invariant is preserved: each moment is
+one launcher command) — with the kickoff (Develop on the roadmap card) as the
+named operator act between its two flows. The load-bearing platform invariant is
+that every gate, in any factory, is
 **explicit, operator-initiated, and impossible to silently auto-satisfy** (no
 auto-approve, no bench simulator in production —
 [`brain/forge-dev/themes/human-interaction-via-own-session.md`](./brain/forge-dev/themes/human-interaction-via-own-session.md)).

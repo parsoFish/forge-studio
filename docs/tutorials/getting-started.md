@@ -1,7 +1,7 @@
 # Getting started — install to first merge
 
-This is the end-to-end path from a fresh checkout to forge shipping a merged PR
-against one of your projects. It assumes you have already built forge
+This is the end-to-end path from a fresh checkout to the example develop
+factory shipping a merged PR against one of your projects. It assumes you have already built forge
 (`npm install && npm run build && npm link`) and can run `forge --help`.
 
 The five steps:
@@ -12,8 +12,9 @@ The five steps:
 4. [Kick off the architect](#4-kick-off-the-architect)
 5. [Review and merge](#5-review-and-merge)
 
-Forge runs unattended **between** three deliberate human moments — architect,
-review, reflect. Everything else is autonomous.
+The example factory runs unattended between its gates — the plan gate, the
+kickoff, the verdict gate and reflection — which are that factory's, declared in
+its flow; a factory you build declares its own. Everything else is autonomous.
 
 ---
 
@@ -126,7 +127,7 @@ A **flow** is the agent pipeline that builds your project (plan → dev → revi
 
 ## 4. Kick off the architect
 
-The architect is the first human moment. In Studio, go to **`/architect/new`**,
+The architect session ends at the factory's **plan gate**. In Studio, go to **`/architect/new`**,
 drop an idea, answer the interview, and approve the **PLAN** at the plan gate.
 Approving queues an initiative; the scheduler (`forge serve`) picks it up and
 runs the flow autonomously — plan → change → verify → package — fanning work out
@@ -144,13 +145,13 @@ verbs are `forge init`, `forge studio`, and `forge studio lint`. The scheduler d
 ## 5. Review and merge
 
 When the cycle finishes, forge produces a **self-contained, demo-embedded PR**
-and stops. This is the second human moment: inspect the PR's demo (real evidence
+and stops at the factory's **verdict gate**: inspect the PR's demo (real evidence
 — an API response, a rendered page, plan output — not a table of test names),
 then either **approve** (merge it in GitHub) or **send it back** from the
 unified `/artifact/<cycleId>` viewer in Studio.
 
-Merging fires **closure**, which runs the third human moment — **reflection** —
-where the reflector asks its questions and writes brain themes + a retro + the
+Merging fires **closure**, which dispatches the reflector — the factory's
+**reflection** gate — where the reflector asks its questions and writes brain themes + a retro + the
 cycle archive, so the next cycle is smarter.
 
 ---
