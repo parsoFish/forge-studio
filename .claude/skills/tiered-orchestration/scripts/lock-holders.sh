@@ -113,6 +113,52 @@ lock_pid_alive() {
   [ -n "$state" ] && [ "$state" != "Z" ]
 }
 
+# MOVED HERE FROM `gate.sh`, verbatim — `suite_lock_state` there reads BOTH
+# `.suite-lock` and `.run-lock` through this ONE `/proc/locks` classifier, so
+# it belongs beside its sibling candidate-gatherer below rather than living a
+# second place.
+#
+# HOLDERS ONLY, AND NEVER BY POSITION (`forge-s9g1`). Shipped in 7.6.48 as
+#
+#     awk -v ino=":$ino " '$0 ~ ino {print $5}' /proc/locks
+#
+# and it printed garbage in production twice:
+#
+#     suite-lock: WAITING on stranger pid(s) 3048432 WRITE — another lane's suite holds it
+#
+# A HOLDER row is `6: FLOCK ADVISORY WRITE 784079 08:30:2025251 0 EOF`, where $5
+# IS the pid. A BLOCKED WAITER is a CONTINUATION row — `2: -> FLOCK ADVISORY
+# WRITE 1677053 …` — and the `->` shifts every field by one, so $5 there is the
+# literal string `WRITE` and the pid sits at $6. Cosmetic while `is_ancestor`
+# compares `WRITE` against numeric pids and never matches; NOT cosmetic the
+# moment anything downstream reads the list as pids, and not cosmetic even now
+# once the pids are right — a blocked WAITER that happens to be this gate's own
+# ancestor would classify as ANCESTOR for a lock nobody holds.
+#
+# So: skip continuation rows, because a waiter is not a holder and this function
+# is named for what it returns; and find the pid as the field BEFORE the
+# MAJ:MIN:INODE token rather than counting from the left, so no future field can
+# shift it again. POSITION WAS NEVER THE PROPERTY — the same lesson this file
+# already states 120 lines above, about reading the guard's refusal line BY NAME
+# and never by position.
+#
+# `FORGE_PROC_LOCKS` is a TEST SEAM and says so: `/proc/locks` cannot be made to
+# hold a chosen row, so the two-row case this bug lives in is unreachable without
+# one. It defaults to the real file and no caller in the campaign sets it —
+# `lock-guard.mjs` earned its twelve doors the same way, with `procRoot`.
+lock_holder_pids() {
+  local f="$1" ino
+  ino="$(stat -c '%i' "$f" 2>/dev/null)" || return 0
+  awk -v ino="$ino" '
+    $2 == "->" { next }                 # a blocked waiter is not a holder
+    {
+      for (i = 2; i <= NF; i++) {
+        n = split($i, a, ":")
+        if (n == 3 && a[3] == ino) { print $(i - 1); next }
+      }
+    }' "${FORGE_PROC_LOCKS:-/proc/locks}"
+}
+
 # Candidates only: "<pid> <fd>" pairs whose fd resolves (dev+inode) to the
 # lock file — NOT yet a hold (see the header: naming alone over-reports both
 # a stale opener and, critically, ANY co-opener including the checker's own).

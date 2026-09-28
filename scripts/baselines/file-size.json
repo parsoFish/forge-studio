@@ -49,6 +49,5 @@
   "scripts/check-raw-fs-guarded.mjs": 1346,
   "scripts/check-raw-fs-guarded.test.ts": 1032,
   "scripts/verify-cycle.mjs": 1219,
-  ".claude/skills/tiered-orchestration/scripts/gate.sh": 801,
   ".claude/skills/tiered-orchestration/scripts/lanes.sh": 1064
 }
