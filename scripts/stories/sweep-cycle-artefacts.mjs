@@ -47,13 +47,30 @@ export function assertCycleArtefactArgs(fnName, sinceMs, evidenceDir) {
  * `sinceMs`/`untilMs` window alone — the existing born-within-this-run rule,
  * unchanged.
  *
- * ROW 166 (`forge-8vfn.8.1.60`) — `schedulerAlive`, threaded into
- * `claimQueueWrites` (its own header). Never defaulted here: the trailing
- * sweep passes what `reapCensusAndSweep` resolved (the scheduler outlives the
- * story); the post-stop sweep and the batch-end deferred clear pass `false`
- * — their scheduler is already being killed or is confirmed dead.
+ * ROW 166 (`forge-8vfn.8.1.60`) — `schedulerAlive`, threaded straight into
+ * `claimQueueWrites` (its own header explains why: that daemon's heartbeat
+ * writer is a `setInterval` inside its OWN process, never a spawned
+ * descendant, so no process census can prove it dead short of killing the
+ * daemon itself, and an in-flight manifest it might still own is never
+ * claimed out from under it). Never given a default AT THIS LEVEL — the
+ * right answer is a per-caller fact, not a property of this function:
+ *   · the trailing sweep (`sweepProductFixtures`) passes what
+ *     `reapCensusAndSweep` already resolved — the scheduler outlives the
+ *     STORY, so a cycle it still owns must be deferred, not claimed.
+ *   · the post-stop sweep (`run.mjs`'s SIGTERM/SIGINT handler) passes
+ *     `false` — the signal that triggers this sweep is what is killing the
+ *     scheduler, in the SAME process group, so by the time this sweep runs
+ *     there is no live writer left to defer to; claiming what it left behind
+ *     is this sweep's entire job.
+ *   · the batch-end deferred clear (`sweep-teardown.mjs`'s
+ *     `stopSchedulerCensusAndRelease`) passes `false` too: it runs only once
+ *     that daemon is CONFIRMED dead (drained, or killed and censused empty).
+ * `claimQueueWrites`'s own default (`false`) covers a caller with no opinion
+ * at all — never inherited here as license to skip stating one.
  */
-export function sweepCycleArtefacts(storyId, root, { sinceMs, untilMs, groundProject, evidenceDir, schedulerAlive }) {
+export function sweepCycleArtefacts(storyId, root, {
+  sinceMs, untilMs, groundProject, evidenceDir, schedulerAlive,
+}) {
   assertCycleArtefactArgs('sweepCycleArtefacts', sinceMs, evidenceDir);
   const claim = claimQueueWrites({ root, sinceMs, untilMs, groundProject, evidenceDir, schedulerAlive });
 

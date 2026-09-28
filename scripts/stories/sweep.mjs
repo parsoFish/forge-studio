@@ -188,7 +188,11 @@ export function sweepProductFixtures(storyId, root, {
     return false;
   });
   const r = removeAll(paths);
-  const cycle = sweepCycleArtefacts(storyId, root, { sinceMs, untilMs, groundProject, evidenceDir, schedulerAlive });
+  // ROW 166 — `schedulerAlive` passes straight through to `sweepCycleArtefacts`,
+  // whose own header explains why every caller must state its own answer.
+  const cycle = sweepCycleArtefacts(storyId, root, {
+    sinceMs, untilMs, groundProject, evidenceDir, schedulerAlive,
+  });
 
   return {
     ...r,
