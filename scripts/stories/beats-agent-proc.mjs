@@ -28,6 +28,9 @@ import { queueManifestTerminal, FS_CLOCK_SLACK_MS, channelTerminalState } from '
 // Split out at the 800-line cap (T1 ruling 492: SPLIT, NEVER BASELINE) —
 // see beats-channel-scan.mjs's own header for what moved and why.
 import { isDispatchDir, newestChannelSince, scanSummary, cycleDirForInitiative } from './beats-channel-scan.mjs';
+// ROW 162 — `channelProvenSince` (below) reuses this reader rather than a
+// second parser, the same reader the reflection door already trusts.
+import { readRunEvents } from './run-observe.mjs';
 // T1 ruling 1471 — re-exported so `beats-page.mjs` names the wall ceiling
 // beside `STALL_CEILING_MS`/`TERMINAL_UI_GRACE_MS`, its two siblings that
 // already live in THIS file rather than in the schema that only validates what
@@ -231,6 +234,7 @@ export function doorWorthRunning(boundMs, ceilingMs) {
  * already failed.
  *
  * THE CHANNEL, in order: the run the page names (`data-run` → `_logs/<id>`),
+ * else the run the BEAT itself already bound (`boundRunId`, row 162 below),
  * else the newest `_logs/_*` dispatch created since the press. The session in
  * scope is the first channel and is handled by `stopReasonFor` on the scoped
  * path, which runs before this.
@@ -244,8 +248,27 @@ export function doorWorthRunning(boundMs, ceilingMs) {
  * The declared `upTo` remains the hard maximum; this can only end a wait
  * EARLIER. A beat whose channel is writing keeps its full bound.
  *
+ * ROW 162 (S10 run 42, bead `forge-8vfn.8.1.49`, T1 ruling 1898) —
+ * `boundRunId`. A RESUME continues the run's EXISTING dispatch dir (the
+ * product preserves the run id on purpose), which is born long before this
+ * beat's own anchor — invisible to the born-after-the-anchor scan below — and
+ * the monitor page names no run at the `data-run` this door already reads
+ * (`RunControls`' own selected-run id lives on a NESTED `data-run-id`, never
+ * on `main[data-page]`). Run 42 measured it: beat 50 pressed resume, doored
+ * `no-channel` at 175 s while the resumed cycle's `events.jsonl` had already
+ * taken a fresh `cycle.start` six seconds after the press. `boundRunId` is
+ * the story's OWN already-bound run id (`resolveBoundRunId`, `beats.mjs`) —
+ * resolved BY IDENTITY (`runLogDir`, an exact `_logs/` join, never a scan),
+ * and accepted only on a POSITIVE SIGNAL: an event in that dir's own
+ * `events.jsonl` timestamped after this beat's anchor (`channelProvenSince`
+ * below). Never on the directory's mtime, and never on "no fresher dir turned
+ * up" — a dir this old is not asked to prove a negative, it has to prove a
+ * write. No qualifying event yet is reported exactly like no channel at all,
+ * unchanged after the same ceiling.
+ *
  * @param {string} forgeRoot
- * @returns {null | ((runId: string|null, sinceMs: number) => {reason: string, detail: string}|null)}
+ * @returns {null | ((runId: string|null, sinceMs: number, boundRunId?: string|null) =>
+ *   {reason: string, detail: string}|null)}
  */
 /**
  * THE CYCLE-TERMINAL DOOR — `forge-8vfn.7.6.118`, T1 ruling 1086, §15.559.
@@ -559,10 +582,41 @@ export function terminalWatchAround(forgeRoot, door, wantState, cycleOf) {
   return watch;
 }
 
+/**
+ * Row 162's own proof: has `dir`'s `events.jsonl` gained an event stamped at or
+ * after `sinceMs`? THE POSITIVE SIGNAL, and the only one this door trusts for a
+ * dir resolved by identity rather than by birth time — never the directory's
+ * mtime, which a resumed run's dir can carry from LONG before the press (the
+ * run sat paused between the stop and the resume) and which would otherwise
+ * read as "quiet past the ceiling" on the very first poll after a press that
+ * has not had time to write anything yet.
+ *
+ * Reuses `readRunEvents` (`run-observe.mjs`) rather than a second parser, the
+ * same reader `beats-reflection-terminal.mjs`'s own by-identity door already
+ * trusts for exactly this question. ENOENT (no `events.jsonl` yet) reads as
+ * "not proven", not a nonexistent finding — a dispatch dir can exist a moment
+ * before its first event lands.
+ *
+ * @returns {boolean | {unknown: true, detail: string}}
+ */
+function channelProvenSince(dir, sinceMs) {
+  const rows = readRunEvents(dir);
+  if (rows.unknown !== undefined) {
+    return {
+      unknown: true,
+      detail: `could not read ${join(dir, 'events.jsonl')}: ${rows.unknown.map((u) => u.error).join('; ')}`,
+    };
+  }
+  return rows.some((ev) => {
+    const at = Date.parse(ev?.started_at ?? '');
+    return Number.isFinite(at) && at >= sinceMs;
+  });
+}
+
 export function makeAgentChannelDoor(forgeRoot) {
   if (typeof forgeRoot !== 'string' || forgeRoot === '') return null;
   const logsDir = join(forgeRoot, '_logs');
-  return (runId, sinceMs) => {
+  return (runId, sinceMs, boundRunId = null) => {
     const named = runLogDir(forgeRoot, runId);
     // Rows 28/29 of the guard-catch-on-UNKNOWN audit. Unlike
     // `makeCycleTerminalDoor` above — whose contract is that an unreadable
@@ -573,8 +627,28 @@ export function makeAgentChannelDoor(forgeRoot) {
     // blast radius.
     let dir;
     let scanUnknown = null;
+    // ROW 162 — a run the BEAT itself already bound, tried before the
+    // born-after-the-anchor scan and never folded into it: the scan would
+    // reject this exact dir for being born too early, which is precisely the
+    // dir a resume means to continue.
+    const bound = typeof boundRunId === 'string' && boundRunId !== '' ? boundRunId : null;
     if (named !== null && runLogIdleMs(named) !== null) {
       dir = named;
+    } else if (bound !== null) {
+      const resolved = runLogDir(forgeRoot, bound);
+      if (resolved === null) {
+        dir = null;
+      } else {
+        const proven = channelProvenSince(resolved, sinceMs);
+        if (proven === true) {
+          dir = resolved;
+        } else if (proven === false) {
+          dir = null;
+        } else {
+          scanUnknown = proven;
+          dir = null;
+        }
+      }
     } else {
       const scanned = newestChannelSince(logsDir, sinceMs);
       if (scanned !== null && typeof scanned !== 'string') {
@@ -598,6 +672,18 @@ export function makeAgentChannelDoor(forgeRoot) {
             `could not scan _logs/ for a channel this press started, for ${Math.round(waited / 1000)}s — ` +
             `${scanUnknown.detail}. An unreadable scan is not "nothing was created"; the declared bound would ` +
             `otherwise be spent unable to tell.`,
+        };
+      }
+      if (bound !== null) {
+        // ROW 162 — the positive-signal guarantee: a bound run with no
+        // qualifying event yet is reported exactly like no channel at all,
+        // never accepted on the strength of merely existing.
+        return {
+          reason: 'no-channel',
+          detail:
+            `no agent channel appeared in ${Math.round(waited / 1000)}s — the bound run ${bound}'s own ` +
+            `dispatch dir carries no event since the press yet. The declared bound would have been spent ` +
+            `waiting on work that never resumed.`,
         };
       }
       // 664(ii): SAY WHAT WAS SCANNED. Lane A's S1 beat 9 reded `no-channel`

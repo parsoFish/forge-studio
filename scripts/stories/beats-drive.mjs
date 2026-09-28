@@ -34,7 +34,8 @@ import {
 // re-exports for the modules and tests that already name it here.
 export { routeMatches };
 import {
-  READY_TIMEOUT_MS, beatBound, withAgentProc, withDoorSkipped, beatVerdict, stuckVerdict, resolveBeatRoute, resolveBoundPresses, resolveCycleOf } from './beats.mjs';
+  READY_TIMEOUT_MS, beatBound, withAgentProc, withDoorSkipped, beatVerdict, stuckVerdict, resolveBeatRoute,
+  resolveBoundPresses, resolveCycleOf, resolveBoundRunId } from './beats.mjs';
 // `performSteps` moved to `beats-steps.mjs` at the 800-line cap (ruling 492).
 // `driveBeat` calls it and nothing there calls back — that one-way dependency is
 // why the split went this way round and not the other.
@@ -185,6 +186,16 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   const cycleWatch = typeof cycleWatchFor === 'function'
     ? cycleWatchFor(rawBeat?.wait?.terminal ?? null, cycleOfResolved)
     : null;
+  // ROW 162 (S10 run 42, bead `forge-8vfn.8.1.49`, T1 ruling 1898) — the run id
+  // THIS BEAT ALREADY BOUND, for the agent-channel door's own by-identity form
+  // (`makeAgentChannelDoor`'s `boundRunId`, `beats-agent-proc.mjs`). Resolved
+  // from `beat.expect.data['run-id']` against `bindings` — never from a NEW
+  // wait field: `resolveBoundRunId` (`beats.mjs`) reads what beat 50 already
+  // declares (`'run-id': '<cycleId2>'`), which an earlier beat already bound
+  // pressing `select-run-<cycleId2>`. `null` for every beat that declares no
+  // `'run-id'` key or whose placeholder is not yet bound — the door falls back
+  // to today's born-after-the-anchor scan exactly as before.
+  const boundRunId = resolveBoundRunId(beat.expect.data, bindings);
   // WHO stopped the beat decides the clause. A stop carrying `stoppedBy:
   // 'runner'` is the RUNNER's own finding — 7.6.77's per-transition bound —
   // and appending "the product had already said so about this session" to it
@@ -479,6 +490,11 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
           // wait, not only at the beat boundary either side of it: a wait long
           // enough to matter is long enough to cross a ceiling mid-flight.
           spendGuard,
+          // ROW 162 — this beat's own already-bound run id, so the channel
+          // door can resolve a RESUMED run's dispatch dir by identity when the
+          // page names none and the scan's born-after-the-anchor filter would
+          // reject a dir the resume is continuing rather than minting.
+          boundRunId,
         );
         // 7.6.143 (b2). A `terminal:` declaration counts as consumed only when
         // the watch actually RESOLVED a cycle — not merely when it was called.

@@ -291,7 +291,20 @@ async function readRunId(page) {
  * its own terms — the same catch-and-let-the-verdict-explain shape every
  * other wait in this function already uses.
  */
-export async function waitForConsequence(page, beat, timeoutMs, sessionScope, probe = null, settle = null, stallDoor = null, anchorMs = null, progress = null, cycleWatch = null, spendGuard = null) {
+export async function waitForConsequence(
+  page,
+  beat,
+  timeoutMs,
+  sessionScope,
+  probe = null,
+  settle = null,
+  stallDoor = null,
+  anchorMs = null,
+  progress = null,
+  cycleWatch = null,
+  spendGuard = null,
+  boundRunId = null,
+) {
   const wanted = Object.entries(beat.expect.data);
   if (wanted.length === 0) return null;
   const startedAt = Date.now();
@@ -337,6 +350,12 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
   // — and I changed the wait I had been reading instead of the wait the
   // measurement named (§15.356).
   const runId = stallDoor === null ? null : await readRunId(page);
+  // ROW 162 (S10 run 42) — `boundRunId` is the caller's OWN fallback identity,
+  // resolved off the story's bindings rather than the DOM (`resolveBoundRunId`,
+  // `beats.mjs`): the flow monitor never publishes `data-run` on `readRunId`'s
+  // own element, so `runId` above is null for exactly the beat this exists for.
+  // Handed to `stallDoor` unconditionally; `makeAgentChannelDoor` only consults
+  // it once the DOM-named form has nothing.
   for (;;) {
     // T1 ruling 1471 — THE RUN'S OWN $ CEILING BOUNDS THE WHOLE WAIT, checked
     // FIRST and ahead of the DOM read: a run's own funding is a harder fact
@@ -457,7 +476,7 @@ export async function waitForConsequence(page, beat, timeoutMs, sessionScope, pr
       // wait's own start otherwise. The BOUND is unaffected either way: it is
       // still measured from `startedAt`, because a bound says how long THIS
       // step may take and nothing about where its evidence begins.
-      const stop = stallDoor(runId, anchorMs ?? startedAt);
+      const stop = stallDoor(runId, anchorMs ?? startedAt, boundRunId);
       if (stop !== null) {
         // `stoppedBy: 'runner'` for the same reason the progress bound sets it,
         // and C is right that this is not a widened diff but the identical
