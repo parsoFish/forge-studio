@@ -30,8 +30,7 @@ import { changedMarkdownFiles, runClassMergeBoundary } from './merge-boundary.ts
 import { runDocsGate } from '../gates/docs-gate.ts';
 import { runClosure, promoteMergedToDone } from '@forge/flows';
 import { runReflector } from './reflector.ts';
-import { rebasePreservedBranchOntoMain } from '@forge/flows';
-import { openPrInline, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, runMergeBoundaryGate, preservingForgeScratch, type MergeGateEvidence, type MergeGateResult } from '@forge/flows';
+import { openPrInline, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, runMergeBoundaryGate, rebaseForResume, type MergeGateEvidence, type MergeGateResult } from '@forge/flows';
 
 
 /**
@@ -152,35 +151,6 @@ export type FlowRunnerDeps = {
 
 };
 
-/**
- * Item 3 (ported from cycle.ts:176-209): rebase the preserved branch onto
- * main for a unifier resume, preserving .forge scratch dirs across the rebase.
- */
-function defaultRebaseForResume(input: CycleInput, logger: EventLogger): void {
-  const rebase = preservingForgeScratch(
-    input.worktreePath,
-    ['.forge/work-items', '.forge/unifier-items'],
-    () => rebasePreservedBranchOntoMain(input.worktreePath),
-  );
-  logger.emit({
-    initiative_id: input.initiativeId,
-    phase: 'orchestrator',
-    skill: 'cycle',
-    event_type: rebase.ok ? 'log' : 'error',
-    input_refs: [input.worktreePath],
-    output_refs: [],
-    message: rebase.ok
-      ? (rebase.rebased ? 'cycle.resume-rebased' : 'cycle.resume-no-rebase-needed')
-      : 'cycle.resume-needs-rebase',
-    metadata: { base: rebase.base, rebased: rebase.rebased, reason: rebase.reason ?? null },
-  });
-  if (!rebase.ok) {
-    throw new Error(
-      `resume-needs-rebase: ${rebase.reason ?? 'the preserved branch must be rebased onto current main before resuming'}`,
-    );
-  }
-}
-
 
 /** Best-effort manifest `cost_budget_usd` read (resolves a def's declared
  *  share cap; a fixture/dry manifest simply yields undefined → flat floor). */
@@ -281,7 +251,7 @@ export function buildDefaultDeps(classProfiles?: ClassProfilePort): FlowRunnerDe
     enforceDevLoopCloseInvariant,
     assertNonEmptyDelivery,
     enforceFinalCiGate,
-    rebaseForResume: defaultRebaseForResume,
+    rebaseForResume,
   };
 }
 
