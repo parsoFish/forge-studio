@@ -18,6 +18,15 @@
  * rather than computing a fold nobody reads — exactly the shape of MUST 1's
  * defect (a surviving daemon grandchild printed a REFUSING/DID NOT HOLD line
  * and the process still exited 0).
+ *
+ * ROW 166 FOLLOW-UP (bead `forge-8vfn.8.1.60`) — the anchor below now carries
+ * `{ sinceMs: startedMs }`: without it, `stopSchedulerCensusAndRelease`
+ * silently skips the deferred-initiative clear (its own header explains why
+ * that argument is optional rather than fail-fast), and a DEFERRED
+ * initiative — one still in flight when its story ended, by design — would
+ * never be captured or cleared at batch end. This flips a previously pinned
+ * exact-call-text anchor; the shape it now pins is CALLED WITH the run's own
+ * window, never bare.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -26,6 +35,7 @@ import { join } from 'node:path';
 
 const SRC_PATH = join(import.meta.dirname, 'run.mjs');
 const src = () => readFileSync(SRC_PATH, 'utf8');
+const STOP_CALL = 'const stop = await stopSchedulerCensusAndRelease(ROOT, { sinceMs: startedMs });';
 
 test('MUST 1: teardownExitCode is imported from sweep-teardown.mjs', () => {
   assert.match(
@@ -37,8 +47,10 @@ test('MUST 1: teardownExitCode is imported from sweep-teardown.mjs', () => {
 
 test('MUST 1: the teardown\'s stop result is folded into exitCode, and exitCode is REASSIGNED from it', () => {
   const s = src();
-  const stopAt = s.indexOf('const stop = await stopSchedulerCensusAndRelease(ROOT);');
-  assert.notEqual(stopAt, -1, 'the teardown call itself must still exist, unmoved');
+  const stopAt = s.indexOf(STOP_CALL);
+  assert.notEqual(
+    stopAt, -1, 'the teardown call itself must still exist, unmoved, and still carry its window (row 166)',
+  );
   const foldAt = s.indexOf('teardownExitCode(exitCode, stop)', stopAt);
   assert.notEqual(foldAt, -1, 'teardownExitCode must be called with the CURRENT exitCode and the stop it just produced, after the stop call');
   const reassignAt = s.indexOf('exitCode = teardown.exitCode;', foldAt);
@@ -48,7 +60,7 @@ test('MUST 1: the teardown\'s stop result is folded into exitCode, and exitCode 
 test('MUST 1: the fold runs inside the SAME finally block as the teardown call, before that block ends', () => {
   const s = src();
   const finallyAt = s.indexOf('} finally {');
-  const stopAt = s.indexOf('const stop = await stopSchedulerCensusAndRelease(ROOT);');
+  const stopAt = s.indexOf(STOP_CALL);
   const reassignAt = s.indexOf('exitCode = teardown.exitCode;');
   const finallyCloses = s.indexOf('\n  }\n', reassignAt); // the finally block's own closing brace, first one after the reassignment
   assert.ok(finallyAt !== -1 && finallyAt < stopAt, 'the teardown call must be inside the finally block, not the try');

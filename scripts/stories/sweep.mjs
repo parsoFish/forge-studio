@@ -167,10 +167,37 @@ export function sweepStoryResidue(storyId, root) {
 }
 
 /**
+ * `claimQueueWrites` + `captureAndClearMintedRunArtefacts`, composed — the ONE
+ * attribute-capture-clear pass, reused by `sweepProductFixtures` below AND the
+ * batch-end deferred-initiative clear (`sweep-teardown.mjs`'s
+ * `stopSchedulerCensusAndRelease`, ROW 166 follow-up, bead `forge-8vfn.8.1.60`).
+ * `forge-8vfn.7.6.74` claims the manifest itself by `created_at`/`project`
+ * attribution; `forge-8vfn.7.6.146` derives THE REST OF WHAT THAT INITIATIVE
+ * MINTED from the very ids just claimed — the `.md.heartbeat`, `_worktrees/`
+ * trees and `_logs/<ts>_INIT-*` cycle dir no story-id glob can reach. One
+ * function, so a caller can never capture-and-clear one half without the other.
+ */
+export function claimAndClearCycleArtefacts({
+  root, storyId, sinceMs, untilMs, groundProject, evidenceDir, schedulerAlive,
+}) {
+  const claim = claimQueueWrites({ root, sinceMs, untilMs, groundProject, evidenceDir, schedulerAlive });
+  const claimedIds = claim.claimed
+    .map((c) => basename(String(c.path)))
+    .filter((n) => n.endsWith('.md'))
+    .map((n) => n.slice(0, -3));
+  const artefacts = captureAndClearMintedRunArtefacts({
+    root, storyId, runStamp: String(sinceMs), initiativeIds: claimedIds,
+  });
+  return { claim, artefacts };
+}
+
+/**
  * The trailing half of §3.1's duty: the product fixtures this story minted, and
  * never its own artifact. Same removal, a narrower list.
  */
-export function sweepProductFixtures(storyId, root, { sinceMs, untilMs, groundProject, evidenceDir, keepProjects }) {
+export function sweepProductFixtures(storyId, root, {
+  sinceMs, untilMs, groundProject, evidenceDir, keepProjects, schedulerAlive,
+}) {
   // FAIL FAST RATHER THAN SKIP. The queue claim needs a window and somewhere to
   // capture to, and a default that quietly skipped it would print a clean
   // trailing sweep for a run that never looked at `_queue` — §15.507, a green
@@ -194,30 +221,13 @@ export function sweepProductFixtures(storyId, root, { sinceMs, untilMs, groundPr
     return false;
   });
   const r = removeAll(paths);
-  // THE CYCLE'S OWN WRITES, WHICH NO STORY-ID GLOB CAN REACH (`forge-8vfn.7.6.74`).
-  // `productFixturePathsFor` finds `_queue/in-flight|failed/STORY-<id>.md` — two
-  // states of six, both named after the STORY. A ground cycle mints its work
-  // under the INITIATIVE's name into whatever state it reached, so run 14's
-  // initiative sat in `ready-for-review` for thirteen hours while
-  // `git status --porcelain` read 0 (`.gitignore:42`).
-  const claim = claimQueueWrites({ root, sinceMs, untilMs, groundProject, evidenceDir });
-
-  // `forge-8vfn.7.6.146` — THE REST OF WHAT THIS RUN MINTED, derived from the
-  // very ids the claim above just ATTRIBUTED by `created_at`. The claim takes
-  // the `INIT-<id>.md` manifests and, by its own words, LEAVES everything else:
-  // "LEFT … not an INIT manifest (the story-id sweep owns it)". Nothing owned
-  // them. Runs 20 and 21 left a `.md.heartbeat`, two `_worktrees/` trees and a
-  // `_logs/<ts>_INIT-*` cycle dir, and the next costed run's residue door
-  // refused on each in turn at $0 — three correct refusals, three hand clears.
-  //
-  // Derived, never a pattern: a `_worktrees/*` sweep would take a concurrent
-  // lane's trees, and this box runs four lanes.
-  const claimedIds = claim.claimed
-    .map((c) => basename(String(c.path)))
-    .filter((n) => n.endsWith('.md'))
-    .map((n) => n.slice(0, -3));
-  const artefacts = captureAndClearMintedRunArtefacts({
-    root, storyId, runStamp: String(sinceMs), initiativeIds: claimedIds,
+  // THE CYCLE'S OWN WRITES, WHICH NO STORY-ID GLOB CAN REACH (`forge-8vfn.7.6.74`,
+  // `forge-8vfn.7.6.146`) — `claimAndClearCycleArtefacts` above, whose own header
+  // has the full story. ROW 166's `schedulerAlive` passes straight through to
+  // `claimQueueWrites`, whose own header explains why an in-flight manifest is
+  // never claimed while it is true.
+  const { claim, artefacts } = claimAndClearCycleArtefacts({
+    root, storyId, sinceMs, untilMs, groundProject, evidenceDir, schedulerAlive,
   });
 
   return {

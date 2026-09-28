@@ -170,7 +170,9 @@ test('ROW 101 (RED) / M7-D finding 3: stopSchedulerCensusAndRelease REFUSES the 
   const root = rootWithPidFile();
   chmodSync(join(root, DAEMON_PID_FILE), 0o000);
   try {
-    const result = await stopSchedulerCensusAndRelease(root);
+    // ROW 166 — a window that plants nothing inside it: this root has no
+    // `_queue` at all, so there is honestly nothing for it to claim.
+    const result = await stopSchedulerCensusAndRelease(root, { sinceMs: Date.now() - 60_000 });
     assert.equal(result.release, null, 'the release must never run when the pre-signal snapshot is UNKNOWN');
     assert.equal(result.sched, null);
     assert.equal(result.census?.empty, false);
@@ -187,7 +189,8 @@ test('ROW 101 (RED) / M7-D finding 3: stopSchedulerCensusAndRelease REFUSES the 
 test('control: stopSchedulerCensusAndRelease with genuinely no pidfile (real ENOENT) proceeds exactly as before', async () => {
   const root = mkdtempSync(join(tmpdir(), 'sweep-teardown-unknown-stop-ctrl-'));
   try {
-    const result = await stopSchedulerCensusAndRelease(root);
+    // ROW 166 — a window that plants nothing inside it, same reasoning as above.
+    const result = await stopSchedulerCensusAndRelease(root, { sinceMs: Date.now() - 60_000 });
     assert.equal(result.sched.stopped, null);
     assert.equal(result.sched.note, null);
     assert.equal(result.census, null, 'no daemon means nothing to census, unchanged');

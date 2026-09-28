@@ -478,7 +478,13 @@ async function main() {
     // and only then releases — with a re-read after, because the census cannot
     // see a writer outside the daemon's own tree. See its header in
     // `sweep-teardown.mjs` and the three doors in `sweep-teardown.test.ts`.
-    const stop = await stopSchedulerCensusAndRelease(ROOT);
+    //
+    // ROW 166 follow-up (bead `forge-8vfn.8.1.60`) — `sinceMs: startedMs` is
+    // this run's own window, so a DEFERRED initiative (still in flight when
+    // its story ended, because the scheduler that owned it was still alive)
+    // is captured and cleared here too, once that daemon is confirmed dead.
+    // REQUIRED, not optional — see the function's own header for why.
+    const stop = await stopSchedulerCensusAndRelease(ROOT, { sinceMs: startedMs });
     for (const line of stop.lines) console.log(line);
     // MUST 1 (D's review of #906) — the teardown's own outcome must reach the
     // process's exit code, not only the log: a surviving daemon grandchild
