@@ -1380,12 +1380,6 @@
     "count": 1
   },
   {
-    "file": "ARCHITECTURE.md",
-    "kind": "path",
-    "cited": "orchestrator/subsumption-proof.test.ts",
-    "count": 1
-  },
-  {
     "file": "CHANGELOG.md",
     "kind": "path",
     "cited": "demos/e2e/results.json",

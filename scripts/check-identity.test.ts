@@ -277,6 +277,13 @@ test('"three deliberate human moments" FAILS too — the same claim, reworded', 
   });
 });
 
+test('the hyphenated "three deliberate human-interaction moments" FAILS too', () => {
+  withFixture({ 'docs/y.md': 'It runs between three deliberate human-interaction moments.\n' }, (r) => {
+    assert.equal(r.code, 1, `expected exit 1, got ${r.code}: ${r.out}`);
+    assert.match(r.out, /docs\/y\.md:1/, r.out);
+  });
+});
+
 test('"idea machine" (singular) is retired alongside "ideas machine"', () => {
   withFixture({ 'docs/x.md': 'An idea machine for one human.\n' }, (r) => {
     assert.equal(r.code, 1, `expected exit 1, got ${r.code}: ${r.out}`);

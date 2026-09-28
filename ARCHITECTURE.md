@@ -330,7 +330,7 @@ engine** is registry-driven (any node type is a data-table entry).
 | **KbBackend** (ADR 027) | `KbBackend` · `packages/knowledge/kb-backend.ts` | `FilesystemKbBackend` (reads `brain/<kbId>/`) | none today — seam present, filesystem-only |
 | **Dev-loop runtime** | via RuntimeAdapter seam | Ralph + Claude Agent SDK | Aider CLI via `aiderAdapter` — DEP-gated |
 
-The closure is `orchestrator/subsumption-proof.test.ts`: asserts the runtime adapter seam resolves a second implementation.
+The closure is `packages/agents/tests/contract/conformance.test.ts`: it runs every registered runtime adapter, the Gemini and Aider second implementations included, through one contract.
 
 Cycle helpers extracted to `packages/flows/cycle-helpers.ts` to break the `flow-runner ↔ cycle` circular dependency: `openPrInline`, `commitDevLoopBoundary`, `enforceDevLoopCloseInvariant`, `assertNonEmptyDelivery`, `enforceFinalCiGate`, `preservingForgeScratch`. That extraction left a three-module cycle behind it — `cycle → flow-runner → cycle-helpers → cycle` — which M2-B closed: the runner no longer imports `cycle-helpers.ts` at all (the phases reach it through the port's deps), and the CI-gate decision core the helpers reached back into `cycle.ts` for now sits below both, in `packages/flows/ci-gate.ts`.
 

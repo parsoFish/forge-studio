@@ -39,7 +39,7 @@ const TOKEN_RE = new RegExp(`\\b(${TOKENS.join('|')})\\b`, 'gi');
  * the product's own is the identity drift this gate exists to stop. Naming the
  * example factory's gates stays legal — only the "three human …" claim is caught.
  */
-const PHRASE_RE = /\bthree\s+(?:deliberate\s+)?human\s+(?:interaction\s+points?|moments?)\b/gi;
+const PHRASE_RE = /\bthree\s+(?:deliberate\s+)?human[\s-]+(?:interaction[\s-]+(?:points?|moments?)|moments?)\b/gi;
 
 /**
  * The identifier arm. A retired term hides in two places, and word boundaries
