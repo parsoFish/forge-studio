@@ -68,9 +68,9 @@ the capstones; the plan and its exit tables are in
 
 ### Removed
 
-- The flat `orchestrator/` and `cli/` production trees, `loops/`, the old
-  journey harness (`scripts/e2e-journey.mjs`, `scripts/journeys/`,
-  `scripts/ui-walkthrough/`, `demos/e2e/`) and its CI jobs.
+- The flat `orchestrator/` and `cli/` production trees, `loops/`, and the old
+  journey harness — its journey scripts, UI walkthrough, dead-paths crawler,
+  recorded e2e demos and their CI jobs — replaced by the story suite.
 - The instruction-layer cruft (M0): stale docs, one-shot brain notes and
   SKILL.md drift, culled before any code moved; hand-written docs held at
   ≤ 25 pages.
