@@ -39,7 +39,7 @@ export function buildManifest(
       (d.depends_on ?? [])
         .map((s) => slugify(s))
         .filter((dep) => dep && dep !== slug && (knownSlugs ? knownSlugs.has(dep) : true))
-        .map((dep) => `INIT-${datePart}-${dep}`),
+        .map((dep) => mintInitiativeId(datePart, dep)),
     ),
   );
   // W7-FIX-A4 (W7A4-01): the human title the architect skill emits IS the
@@ -59,7 +59,7 @@ export function buildManifest(
   const changeClass = requireChangeClass(d, slug);
   const acceptance_criteria = requireDraftAcceptanceCriteria(d, slug);
   return {
-    initiative_id: `INIT-${datePart}-${slug}`,
+    initiative_id: mintInitiativeId(datePart, slug),
     ...(title ? { title } : {}),
     project: status.project,
     project_repo_path: status.project_repo_path,
@@ -128,6 +128,35 @@ function requireDraftAcceptanceCriteria(
     }
     return { given: String(e['given']), when: String(e['when']), then: String(e['then']) };
   });
+}
+
+/**
+ * Row 129 (bead forge-8vfn.8.1.56) — the ONE place `INIT-<date>-` gets
+ * prepended onto a slug, so the two call sites above cannot drift apart on
+ * how they guard against doubling it. The architect's own slug can already
+ * carry a date, or the literal `INIT-` token, or both: real runs minted
+ * `INIT-2026-09-26-2026-09-26-exclude-author-flag` (S10 run 34) and
+ * `INIT-2026-09-27-2026-09-28-exclude-author-filter` (run 41 — the two dates
+ * DIFFER, the slug carried the PREVIOUS day's date). Stripping any such
+ * prefix off the slug before applying the mint date keeps an ordinary slug
+ * untouched and makes a re-mint of an already-prefixed one idempotent.
+ */
+export function mintInitiativeId(datePart: string, slug: string): string {
+  return `INIT-${datePart}-${stripLeadingIdPrefixes(slug)}`;
+}
+
+const LEADING_INIT_TOKEN = /^init-/i;
+const LEADING_DATE_SEGMENT = /^\d{4}-\d{2}-\d{2}(-|$)/;
+
+function stripLeadingIdPrefixes(slug: string): string {
+  let s = slug.replace(LEADING_INIT_TOKEN, '');
+  while (LEADING_DATE_SEGMENT.test(s)) {
+    s = s.replace(LEADING_DATE_SEGMENT, '');
+  }
+  if (s === '') {
+    throw new Error(`architect draft slug "${slug}" is only an id prefix — no initiative name is left to mint`);
+  }
+  return s;
 }
 
 export function slugify(s: string): string {
