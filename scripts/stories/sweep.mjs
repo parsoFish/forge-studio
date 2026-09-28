@@ -166,40 +166,45 @@ export function sweepStoryResidue(storyId, root) {
   return removeAll(fixturePathsFor(storyId, root));
 }
 
-/**
- * The trailing half of §3.1's duty: the product fixtures this story minted, and
- * never its own artifact. Same removal, a narrower list.
- */
-export function sweepProductFixtures(storyId, root, { sinceMs, untilMs, groundProject, evidenceDir, keepProjects }) {
-  // FAIL FAST RATHER THAN SKIP. The queue claim needs a window and somewhere to
-  // capture to, and a default that quietly skipped it would print a clean
-  // trailing sweep for a run that never looked at `_queue` — §15.507, a green
-  // for a case that did not run, which is the shape of the defect this bead
-  // exists to close.
+// FAIL FAST RATHER THAN SKIP. The queue claim needs a window and somewhere to
+// capture to, and a default that quietly skipped it would print a clean
+// trailing sweep for a run that never looked at `_queue` — §15.507, a green
+// for a case that did not run, which is the shape of the defect this bead
+// exists to close. Shared by every caller of `sweepCycleArtefacts` — the
+// trailing sweep and the post-stop sweep alike — so the two can never drift
+// on what counts as a usable window.
+function assertCycleArtefactArgs(fnName, sinceMs, evidenceDir) {
   if (typeof sinceMs !== 'number' || typeof evidenceDir !== 'string' || evidenceDir === '') {
-    throw new Error('sweepProductFixtures needs { sinceMs, evidenceDir } to claim this run\'s queue writes (forge-8vfn.7.6.74)');
+    throw new Error(
+      `${fnName} needs { sinceMs, evidenceDir } to claim this run's queue writes (forge-8vfn.7.6.74)`,
+    );
   }
-  // M7-D — a FIXTURE GROUND is the run's OWN ground, not its debris: `run.mjs`
-  // provisions `projects/story-<id>` before the beats run, and it is judged —
-  // by the fence and by the verdict this trailing sweep runs inside — before
-  // `teardownFixtureGround` removes it. `applyFence`'s `defer` already holds
-  // the ground's Brain 3 sub-wiki the same way ("held, not kept"); this is
-  // that same hold applied to the project directory. An OPT-IN list, so a story that has never heard of a fixture
-  // keeps today's unconditional removal exactly.
-  const keepPaths = new Set((keepProjects ?? []).map((name) => join(root, 'projects', name)));
-  const keptLines = [];
-  const paths = productFixturePathsFor(storyId, root).filter((p) => {
-    if (!keepPaths.has(p)) return true;
-    keptLines.push(`[stories] trailing sweep KEPT ${relative(root, p)} — a fixture ground is judged before it is torn down`);
-    return false;
-  });
-  const r = removeAll(paths);
-  // THE CYCLE'S OWN WRITES, WHICH NO STORY-ID GLOB CAN REACH (`forge-8vfn.7.6.74`).
-  // `productFixturePathsFor` finds `_queue/in-flight|failed/STORY-<id>.md` — two
-  // states of six, both named after the STORY. A ground cycle mints its work
-  // under the INITIATIVE's name into whatever state it reached, so run 14's
-  // initiative sat in `ready-for-review` for thirteen hours while
-  // `git status --porcelain` read 0 (`.gitignore:42`).
+}
+
+/**
+ * THE CYCLE'S OWN WRITES, WHICH NO STORY-ID GLOB CAN REACH (`forge-8vfn.7.6.74`,
+ * `forge-8vfn.7.6.146`) — the `INIT-<id>.md` queue manifest, its `.heartbeat`,
+ * `_worktrees/<id>` and `_worktrees/wi/<id>`, and the `_logs/<ts>_INIT-*` cycle
+ * dir. Exactly the targets `residue.sh`
+ * (`.claude/skills/tiered-orchestration/scripts/residue.sh`) gates on for a
+ * develop-flow cycle: `_queue/*`, `_worktrees` and `_logs/<ts>_INIT-*`.
+ *
+ * SPLIT OUT OF `sweepProductFixtures` (bead `forge-8vfn.8.1.52`, row 146) so
+ * the post-stop sweep on the SIGTERM/SIGINT path (`run.mjs`) can call the
+ * exact same claim-then-clear a normal trailing sweep does, rather than a
+ * second copy of it. `sweepProductFixtures`'s OWN residue — the story-named
+ * fixtures `productFixturePathsFor` finds — is not this function's business;
+ * a run stopped mid-flight keeps its fixture ground for evidence exactly as a
+ * crash does, and the residue guard never gates on it.
+ *
+ * `groundProject` is OPTIONAL here for the same reason it always was: when the
+ * caller has no single ground to exempt (the post-stop sweep does not know
+ * which story, if any, was in flight), attribution falls back to the
+ * `sinceMs`/`untilMs` window alone — the existing born-within-this-run rule,
+ * unchanged.
+ */
+export function sweepCycleArtefacts(storyId, root, { sinceMs, untilMs, groundProject, evidenceDir }) {
+  assertCycleArtefactArgs('sweepCycleArtefacts', sinceMs, evidenceDir);
   const claim = claimQueueWrites({ root, sinceMs, untilMs, groundProject, evidenceDir });
 
   // `forge-8vfn.7.6.146` — THE REST OF WHAT THIS RUN MINTED, derived from the
@@ -221,14 +226,43 @@ export function sweepProductFixtures(storyId, root, { sinceMs, untilMs, groundPr
   });
 
   return {
-    ...r,
     claim,
     artefacts,
+    lines: [...claim.lines, ...describeRunArtefactsClear(artefacts)],
+  };
+}
+
+/**
+ * The trailing half of §3.1's duty: the product fixtures this story minted, and
+ * never its own artifact. Same removal, a narrower list.
+ */
+export function sweepProductFixtures(storyId, root, { sinceMs, untilMs, groundProject, evidenceDir, keepProjects }) {
+  assertCycleArtefactArgs('sweepProductFixtures', sinceMs, evidenceDir);
+  // M7-D — a FIXTURE GROUND is the run's OWN ground, not its debris: `run.mjs`
+  // provisions `projects/story-<id>` before the beats run, and it is judged —
+  // by the fence and by the verdict this trailing sweep runs inside — before
+  // `teardownFixtureGround` removes it. `applyFence`'s `defer` already holds
+  // the ground's Brain 3 sub-wiki the same way ("held, not kept"); this is
+  // that same hold applied to the project directory. An OPT-IN list, so a story that has never heard of a fixture
+  // keeps today's unconditional removal exactly.
+  const keepPaths = new Set((keepProjects ?? []).map((name) => join(root, 'projects', name)));
+  const keptLines = [];
+  const paths = productFixturePathsFor(storyId, root).filter((p) => {
+    if (!keepPaths.has(p)) return true;
+    keptLines.push(`[stories] trailing sweep KEPT ${relative(root, p)} — a fixture ground is judged before it is torn down`);
+    return false;
+  });
+  const r = removeAll(paths);
+  const cycle = sweepCycleArtefacts(storyId, root, { sinceMs, untilMs, groundProject, evidenceDir });
+
+  return {
+    ...r,
+    claim: cycle.claim,
+    artefacts: cycle.artefacts,
     lines: [
       ...r.removed.map((p) => `[stories] trailing sweep removed ${p}`),
       ...keptLines,
-      ...claim.lines,
-      ...describeRunArtefactsClear(artefacts),
+      ...cycle.lines,
     ],
   };
 }
