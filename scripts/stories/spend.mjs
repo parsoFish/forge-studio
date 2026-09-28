@@ -78,24 +78,89 @@ export function summariseRunSpend({ realSpawn, events = [] }) {
   // log held `orchestrator` + `architect` + `project-manager`. Rows with no
   // `phase` at all (the `_agent-*` shape) are keyed by their own log, because
   // nothing links them to a phase and collapsing them would under-report.
-  const groups = new Map();
-  events.forEach((log, logIndex) => {
+  //
+  // GROUPS ARE KEYED BY (CYCLE, PHASE), NOT BY PHASE ALONE — bead
+  // `forge-8vfn.8.1.59`, row 165, T1 867's own sequel. S10 run 43 read
+  // "architect: aggregate $1.9671 ≠ parts $3.4758" as a disagreement; it was
+  // a MIS-KEYED COMPARISON. The $1.9671 rollup was ACT 1's own cycle, counted
+  // correctly, while "parts" silently summed ACT 1's session together with
+  // ACT 2's, which never reached a cycle at all — keying by phase alone across
+  // the WHOLE RUN merges dispatches that share a phase name but not a cycle.
+  // The latent twin: two DIFFERENT cycles sharing a phase name can also merge
+  // their rollups together, so a cycle whose rollup exceeds its own parts can
+  // be masked by a sibling cycle whose parts exceed ITS rollup — max-of-two
+  // stops protecting anything once the two accounts are summed across cycles
+  // first.
+  //
+  // A cycle log's rows belong to ITS OWN cycle, identified by its position in
+  // `events` (one dir is one cycle log). A session dir's rows join that same
+  // group only when the run's own rows carry the link: `cycle.ts`'s
+  // `emitSyntheticArchitectEvents` stamps the linked session's raw id onto
+  // `metadata.session_id` on the cycle log's own `<phase>.start`/`.end` rows,
+  // and a session dir's OWN `cycle_id` is shaped `_<phase>-<sessionId>` by
+  // `createLogger` (`packages/kernel/logging.ts`) — so a session dir can derive
+  // its own id and look itself up against every cycle log's linked ids. A
+  // session with no cycle yet (or none this run can see) is its OWN group —
+  // parts only, and nothing to disagree with, so no note.
+  const logs = events.map((log, logIndex) => {
     const rows = log ?? [];
     const phases = new Set(rows.map((e) => e?.phase).filter((p) => typeof p === 'string' && p !== ''));
-    const isCycleLog = phases.size > 1;
+    return { logIndex, rows, isCycleLog: phases.size > 1 };
+  });
+
+  // Built from the CYCLE LOGS ONLY, in a pass of their own: a session dir's
+  // rows never carry `metadata.session_id` themselves (only a cycle log's
+  // synthetic rows do), so this map is the one place that link can be read
+  // from, before the session side ever needs to look itself up in it.
+  const cycleForSessionPhase = new Map();
+  for (const { rows, isCycleLog, logIndex } of logs) {
+    if (!isCycleLog) continue;
+    for (const e of rows) {
+      const phase = typeof e?.phase === 'string' && e.phase !== '' ? e.phase : null;
+      if (phase === null) continue;
+      const sessionId = e?.metadata && typeof e.metadata === 'object' ? e.metadata.session_id : undefined;
+      if (typeof sessionId === 'string' && sessionId !== '') {
+        cycleForSessionPhase.set(`${phase}::${sessionId}`, logIndex);
+      }
+    }
+  }
+
+  const groups = new Map();
+  for (const { rows, isCycleLog, logIndex } of logs) {
     for (const e of rows) {
       const c = e?.cost_usd;
       // Only genuine, non-negative numbers. A string "0.50" is a shape the
       // event contract does not promise, and a negative is never a real spend.
       if (typeof c !== 'number' || !Number.isFinite(c) || c < 0) continue;
       const phase = typeof e?.phase === 'string' && e.phase !== '' ? e.phase : null;
-      const key = phase ?? `log:${logIndex}`;
+
+      let key;
+      let toRollup;
+      if (phase === null) {
+        key = `log:${logIndex}`;
+        toRollup = false;
+      } else if (isCycleLog) {
+        key = `cycle:${logIndex}:${phase}`;
+        toRollup = true;
+      } else {
+        const ownCycleId = typeof e?.cycle_id === 'string' ? e.cycle_id : '';
+        const prefix = `_${phase}-`;
+        const sessionId = ownCycleId.startsWith(prefix) ? ownCycleId.slice(prefix.length) : null;
+        const linkedLogIndex = sessionId === null
+          ? undefined
+          : cycleForSessionPhase.get(`${phase}::${sessionId}`);
+        key = linkedLogIndex === undefined
+          ? `session:${logIndex}:${phase}`
+          : `cycle:${linkedLogIndex}:${phase}`;
+        toRollup = false;
+      }
+
       let g = groups.get(key);
       if (g === undefined) {
         g = { phase, parts: 0, partsCount: 0, rollup: 0, rollupCount: 0 };
         groups.set(key, g);
       }
-      if (phase !== null && isCycleLog) {
+      if (toRollup) {
         g.rollup += c;
         g.rollupCount += 1;
       } else {
@@ -103,7 +168,7 @@ export function summariseRunSpend({ realSpawn, events = [] }) {
         g.partsCount += 1;
       }
     }
-  });
+  }
 
   let priced = 0;
   let total = 0;
