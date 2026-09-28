@@ -63,11 +63,11 @@ operator-ratified new cap — never a silent raise.
 | `sessions` | 63 | 20,663 | **20,625** | ratified 20,625 — row 129 (forge-8vfn.8.1.56): idempotent initiative-id minting (`mintInitiativeId`, `architect-manifest.ts`), +25 on 20,600, lane-ratified (ruling 666, measured); see git history for prior raises. |
 | `flows` | 86 | 24,639 | **24,439** | ratified 24,439 — row 133 (forge-8vfn.8.1.57, ruling 1680): linkProjectDeps' silent skip is now a structured event, +23 on 24,416, lane-ratified (ruling 666, measured); see git history for prior raises. |
 | `factory` | 15 | 2,763 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
-| `stations` | 45 | 12,245 | **12,245** | ratified 12,245 — row 157 (forge-8vfn.8.1.45, ruling 1884): PM brief + one bounded revise turn + compile-stage re-run, +264 on 11,981, ratified (ruling 1884). |
+| `stations` | 45 | 12,247 | **12,247** | ratified 12,247 — row 110 (forge-8vfn.8.1.15): the chunk-record persistence tail's pure move out of `adversarial-review.ts` into `review-chunks.ts` left a net +2 lines of import/export scaffolding on 12,245, lane-ratified (ruling 666, measured). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,922 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **477** | **129,344** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **477** | **129,346** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -186,7 +186,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/review-budget.ts | stations | verbatim | 136 |
 | packages/stations/phases/capture-nonce.ts | stations | verbatim | 58 |
 | packages/stations/phases/pm-decomposition-doc.ts | stations | verbatim | 68 |
-| packages/stations/phases/review-chunks.ts | stations | verbatim | 182 |
+| packages/stations/phases/review-chunks.ts | stations | verbatim | 268 |
 | packages/stations/phases/merge-boundary.ts | stations | verbatim | 115 |
 | packages/knowledge/cycle-retention.ts | knowledge | verbatim | 204 |
 | packages/factory/demo-overlay.ts | factory | rewritten | 195 |
@@ -358,7 +358,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/notify.ts | flows | verbatim | 73 |
 | packages/agents/phase-agent.ts | agents | verbatim | 101 |
 | packages/stations/phases/adversarial-review-binding.ts | stations | verbatim | 164 |
-| packages/stations/phases/adversarial-review.ts | stations | verbatim | 779 |
+| packages/stations/phases/adversarial-review.ts | stations | verbatim | 695 |
 | packages/stations/phases/review-refusal.ts | stations | rewritten | 135 |
 | packages/agents/phases/agent-scope-guard.ts | agents | verbatim | 111 |
 | packages/flows/phases/closure.ts | flows | verbatim | 435 |
