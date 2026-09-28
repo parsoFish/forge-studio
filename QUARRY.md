@@ -60,14 +60,14 @@ operator-ratified new cap — never a silent raise.
 | `projects` | 48 | 11,103 | **9,328** | ratified 9,328 — forge-mfv5.3.6 testProcess.local.perWorkItem gate template, validated at load (one {package}, argv only, no shell metacharacters), +44 on 9,284, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,355 | **13,355** | ratified 13,355 — row 159 (forge-8vfn.8.1.47, ruling 1891): the architect draft-manifest-unresolved classifier branch, +33 on 13,322, lane-ratified (ruling 666, measured). |
-| `sessions` | 63 | 20,634 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
+| `sessions` | 63 | 20,663 | **20,625** | ratified 20,625 — row 129 (forge-8vfn.8.1.56): idempotent initiative-id minting (`mintInitiativeId`, `architect-manifest.ts`), +25 on 20,600, lane-ratified (ruling 666, measured); see git history for prior raises. |
 | `flows` | 86 | 24,616 | **24,416** | ratified 24,416 — row 163 (forge-8vfn.8.1.50, ruling 1899): a resumable halt keeps the branch its attempt pushed, gated on `decideRequeueResume`, +65 on 24,351, lane-ratified (ruling 666, measured); see git history for prior raises. |
 | `factory` | 15 | 2,763 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 45 | 12,245 | **12,245** | ratified 12,245 — row 157 (forge-8vfn.8.1.45, ruling 1884): PM brief + one bounded revise turn + compile-stage re-run, +264 on 11,981, ratified (ruling 1884). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,922 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **477** | **129,292** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **477** | **129,321** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -294,7 +294,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/architect-steps.ts | sessions | rewritten | 752 |
 | packages/sessions/kinds/architect-stage-events.ts | sessions | rewritten | 40 The architect's per-stage `architect.<stage>.start` event, emitted before each stage's model turn (forge-8vfn.8.1.14). |
 | packages/sessions/kinds/architect-structured-turn.ts | sessions | rewritten | 97 `runStructured` moved out of `architect-steps.ts` verbatim (forge-8vfn.8.1.14) to give that file headroom for the critiquing/revising phase writes. |
-| packages/sessions/kinds/architect-manifest.ts | sessions | rewritten | 141 |
+| packages/sessions/kinds/architect-manifest.ts | sessions | rewritten | 170 |
 | packages/sessions/kinds/architect-draft-repair.ts | sessions | rewritten | 114 **New file, row 159 (forge-8vfn.8.1.47, ruling 1891):** the architect's ONE bounded draft-manifest repair turn, split out of `architect-steps.ts` (file-size budget) — mirrors `stations/phases/pm-acceptance-gate.ts`'s row-157 shape. |
 | packages/sessions/kinds/architect-brain-read.ts | sessions | rewritten | 93 **New file, M7-C ABR (forge-8vfn.8.3.5, ruling 666):** the architect's own `brain.read` tally + emission, wrapping each phase's `KindStepHandler` from outside `architect-steps.ts` (near the file cap) and `kind-turn.ts` (ruling 78's hook budget). Priced into `sessions`'s cap-table raise 20,000 → 20,093. |
 | packages/sessions/bash-fence.ts | sessions | verbatim | 508 |
