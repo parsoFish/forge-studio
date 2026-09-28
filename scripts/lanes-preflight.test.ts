@@ -345,6 +345,13 @@ function daemonsReferencing(path: string): number[] {
  * pid is its process group: signalling the group also ends the `sleep` child it is waiting in.
  * The daemon writes the pidfile once up, so wait for it (bounded). Returns the pid, or null when
  * none was ever recorded.
+ *
+ * Row 161 (forge-8vfn.8.1.58): a kill-then-scan race — this used to send SIGKILL and return in
+ * the same breath, before the pid had actually gone. `kill()` only queues a signal; it does not
+ * wait for delivery, so an immediate scan of /proc right after could still find the pid alive.
+ * Every signal is now followed by a bounded poll for the pid to actually vanish (the same TERM-
+ * then-KILL-then-verify shape as lanes.sh's own retire_pid/wait_dead), and it throws rather than
+ * reporting a pid retired while it is still alive after both.
  */
 function retireRecordedDaemon(camp: string, lane: string): number | null {
   const pidFile = join(camp, 'heartbeat', `${lane}.hb-daemon.pid`);
@@ -361,10 +368,18 @@ function retireRecordedDaemon(camp: string, lane: string): number | null {
     }
   };
   const gone = () => !existsSync(`/proc/${pid}`);
+  const waitGone = (ceilingMs: number) => {
+    const stop = performance.now() + ceilingMs;
+    while (!gone() && performance.now() < stop) spawnSync('sleep', ['0.1']);
+    return gone();
+  };
   signal('SIGTERM');
-  const termDeadline = performance.now() + 5000;
-  while (!gone() && performance.now() < termDeadline) spawnSync('sleep', ['0.1']);
-  if (!gone()) signal('SIGKILL');
+  if (!waitGone(5000)) {
+    signal('SIGKILL');
+    if (!waitGone(5000)) {
+      throw new Error(`daemon pid ${pid} (recorded in ${pidFile}) is still alive after SIGTERM+SIGKILL`);
+    }
+  }
   return pid;
 }
 
@@ -487,5 +502,62 @@ sleep 120
     // what must hold regardless is that nothing it did start outlives the camp.
     if (launchOk) assert.ok(pid !== null, `launch recorded its daemon pid under ${camp}/heartbeat`);
     assert.deepEqual(daemonsReferencing(camp), [], `no lane-heartbeat-daemon may outlive this test's camp ${camp}`);
+  });
+});
+
+/**
+ * Row 161 (forge-8vfn.8.1.58). A kill-then-scan race: `retireRecordedDaemon` used to send its
+ * final signal and return in the same breath, before the target had actually been torn down —
+ * `kill()` only QUEUES a signal, it does not wait for delivery, so a scan of /proc taken right
+ * after can still find the pid, full argv intact. Forced deterministically: a stand-in that
+ * traps (ignores) SIGTERM outright always outlives the 5 s TERM wait, so every run of this test
+ * reaches the SIGKILL branch — the one branch that used to return with no check at all.
+ */
+describe('retireRecordedDaemon — must not report a pid retired before it is actually gone', () => {
+  let raceDir: string;
+  let camp: string;
+
+  before(() => {
+    raceDir = mkdtempSync(join(tmpdir(), 'lanes-preflight-race-'));
+    camp = join(raceDir, 'camp');
+    mkdirSync(join(camp, 'heartbeat'), { recursive: true });
+  });
+  after(() => {
+    if (raceDir) rmSync(raceDir, { recursive: true, force: true });
+  });
+
+  test('a daemon that ignores SIGTERM is not reported retired until SIGKILL has actually landed', () => {
+    const lane = 'race';
+    // Named exactly like the real daemon, and writing ITS OWN pidfile exactly the way the real
+    // one does (line 115 of lane-heartbeat-daemon.sh) — retireRecordedDaemon trusts nothing else.
+    const standIn = join(raceDir, 'lane-heartbeat-daemon.sh');
+    const standInBody = [
+      '#!/usr/bin/env bash',
+      "trap '' TERM",
+      'printf \'%s\\n\' "$$" > "$1/heartbeat/$2.hb-daemon.pid"',
+      'while :; do sleep 1; done',
+      '',
+    ].join('\n');
+    writeFileSync(standIn, standInBody);
+    chmodSync(standIn, 0o755);
+    // Launched the same way `launch` starts the real daemon (`nohup setsid ... & disown`): a
+    // fresh session/process group, reparented once this wrapper exits, never a direct child of
+    // this test process — a direct Node child gets reaped by libuv's own SIGCHLD handler near
+    // instantly, which would mask the exact race this test exists to force.
+    const wrapper = spawnSync(
+      'bash',
+      ['-c', 'setsid "$0" "$1" "$2" >/dev/null 2>&1 < /dev/null & disown', standIn, camp, lane],
+      { encoding: 'utf8' },
+    );
+    assert.equal(wrapper.status, 0, `stand-in daemon failed to launch: ${wrapper.stderr}`);
+
+    const retired = retireRecordedDaemon(camp, lane);
+
+    assert.notEqual(retired, null, 'the stand-in daemon must have recorded its pid');
+    assert.equal(
+      existsSync(`/proc/${retired}`),
+      false,
+      `retireRecordedDaemon must not return until pid ${retired} is actually gone from /proc`,
+    );
   });
 });
