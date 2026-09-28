@@ -144,6 +144,45 @@ test('forge-8vfn.8.1.24: "reviewer.pr-open-failed: error connecting to api.githu
   assert.doesNotMatch(c.reason, /unifier did not author the PR/);
 });
 
+// ---------------------------------------------------------------------------
+// Row 122 (bead forge-8vfn.8.1.55) — the SAME PR-open DNS signature above
+// also names the dedicated `pr-open` resume point, so a requeue re-enters
+// only the review node instead of the whole post-develop band `'integrate'`
+// would re-run.
+// ---------------------------------------------------------------------------
+
+test(
+  'row 122: "reviewer.pr-open-failed: error connecting to api.github.com" also sets ' +
+    'resumeFrom:"pr-open"',
+  () => {
+    const events: EventLogEntry[] = [
+      ev({
+        phase: 'orchestrator',
+        skill: 'cycle',
+        event_type: 'error',
+        message: 'reviewer.pr-open-failed: error connecting to api.github.com',
+      }),
+    ];
+    const c = classifyCycleFailure(events);
+    assert.equal(c.environment, true);
+    assert.equal(c.kind, 'transient');
+    const got = JSON.stringify(c);
+    assert.equal(c.resumeFrom, 'pr-open', `expected resumeFrom:'pr-open', got ${got}`);
+  },
+);
+
+test(
+  'row 122: negative control — a DNS failure NOT at PR-open (e.g. mid-WI push) stays ' +
+    'environment/transient but names NO resumeFrom',
+  () => {
+    const c = classifyCycleFailure([REAL_TRACE[0]!]);
+    assert.equal(c.environment, true);
+    assert.equal(c.kind, 'transient');
+    const got = JSON.stringify(c);
+    assert.equal(c.resumeFrom, undefined, `expected no resumeFrom for a non-PR-open DNS failure, got ${got}`);
+  },
+);
+
 test('forge-8vfn.8.1.24: negative control — a genuine missing-DEMO.md pr-open failure stays terminal unifierNoDemo', () => {
   const events: EventLogEntry[] = [
     ev({

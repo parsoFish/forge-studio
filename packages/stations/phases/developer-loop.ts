@@ -52,7 +52,7 @@ import {
 } from '@forge/kernel';
 import { runConcurrentDispatch, type DispatchOutcome } from '@forge/flows';
 import { loadProjectConfig, type AcceptanceGateConfig, type ProjectConfig } from '@forge/projects';
-import type { CycleInput } from '@forge/flows';
+import { type CycleInput, resumeSkipsPerWiWork } from '@forge/flows';
 import { resolveWiCostBudgetUsd, makeCostCeilingCheck, isCostCeilingHalt } from './dev-cost-bound.ts';
 
 /**
@@ -306,15 +306,15 @@ export async function runDeveloperLoop(
   }
 
   const ordered = topologicalOrder(items);
-  // ADR 019: resume-from-integrate skips the per-WI dev-loop entirely — the WI
-  // commits already exist on the preserved branch from the prior cycle. We
-  // still read + validate the WI set above (the post-develop band uses it for
-  // context), but run the per-WI loop over an empty list so the walk re-enters
-  // at the `integrate` node without rebuilding any WI.
+  // ADR 019: a resume that skips per-WI work (see `resumeSkipsPerWiWork`) skips the
+  // per-WI dev-loop entirely — the WI commits already exist on the preserved branch
+  // from the prior cycle. We still read + validate the WI set above (the
+  // post-develop band uses it for context), but run the per-WI loop over an empty
+  // list so the walk re-enters at the `integrate` node without rebuilding any WI.
   // ADR 040: resume-from-develop (the fix loop) RUNS the full list — prior WIs
   // fast-exit via the iter-0 already-complete shortcut, fix WIs build.
-  const resumeFromIntegrate = input.resumeFrom === 'integrate';
-  const toRun = resumeFromIntegrate ? [] : ordered;
+  const skipsPerWiWork = resumeSkipsPerWiWork(input.resumeFrom);
+  const toRun = skipsPerWiWork ? [] : ordered;
 
   // cascade-v4 #2: establish a known-green baseline ONCE before any WI work.
   // On a fresh (non-resume) dev-loop the worktree sits at the initiative
@@ -1232,7 +1232,7 @@ export async function runDeveloperLoop(
       // ADR 019: flag resume runs so the report/UI can distinguish a
       // unifier-only resume (0 WIs run, commits already on branch) from a
       // genuine 0/N total failure.
-      resumed: resumeFromIntegrate,
+      resumed: skipsPerWiWork,
       // ADR 040: which resume kind, when any — 'develop' is the fix-loop
       // re-entry (full list run, prior WIs fast-exit).
       ...(input.resumeFrom ? { resumed_from: input.resumeFrom } : {}),
@@ -1245,9 +1245,9 @@ export async function runDeveloperLoop(
   // identify what's missing, and feedback rounds can complete the work.
   // Only throw when ZERO WIs succeeded (total dev-loop failure); otherwise
   // emit the partial outcome and hand off to the post-develop band.
-  // ADR 019: on resume-from-integrate zero WIs run by design (their commits are
-  // already on the branch), so the total-failure guard must not fire.
-  if (!resumeFromIntegrate && completeCount === 0 && items.length > 0) {
+  // ADR 019: on a resume that skips per-WI work (see `resumeSkipsPerWiWork`) zero WIs run by design
+  // (their commits are already on the branch), so the total-failure guard must not fire.
+  if (!skipsPerWiWork && completeCount === 0 && items.length > 0) {
     throw new Error(
       `developer-loop: 0/${items.length} work items completed — total failure`,
     );

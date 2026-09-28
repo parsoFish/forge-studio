@@ -160,3 +160,61 @@ The explicit CLI override pattern is unchanged: an operator can still force
 `runRequeue`'s reading of the classifier's structured output), mirroring how
 N7's environment-failure inference above was implemented before it grew an
 explicit flag.
+
+## Amendment (row 122, 2026-09-28): `pr-open` narrows `integrate` for a PR-open-only environment failure — dev, integrate AND adversarial-review already succeeded, so only the review node re-enters
+
+Bead forge-8vfn.8.1.55, T1 1609/1617. The N7 environment-failure inference
+above (and `openPrInline`'s own direct stamp, T1 ruling 1609) treats EVERY
+environment failure with all WIs complete the same way: `resume_from:
+integrate`, re-entering the whole post-develop band (integrate →
+adversarial-review → review). That is correct for a failure mid-integrate or
+mid-adversarial-review, but wasteful for the S10 run 31 incident this row
+fixes: a DNS outage struck `gh api user` INSIDE the review node's own
+PR-open call (`openPrInline`, `packages/flows/cycle-pr-open.ts`), after
+integrate and adversarial-review had both already succeeded in the SAME
+cycle attempt. Resuming at `integrate` re-derives a demo bundle and
+re-runs the adversarial-review pipeline that are already correct on the
+preserved worktree, for nothing.
+
+`'pr-open'` is a fourth resume value, a SKIPPING resume like `'integrate'`
+(not a phase-rerunning one like `'plan'`) but narrower: it skips the
+architect, the PM, the per-WI dev-loop, AND the whole post-develop band,
+re-entering only the `review` node (`execReview`: `openPrInline` +
+`runClosure`) against the artifacts integrate and adversarial-review already
+wrote to the preserved worktree (`demo.json`, `DEMO.md`,
+`.forge/pr-description.md`, `.forge/review-findings.json`). Mechanism:
+
+- `openPrInline` stamps `resume_from: 'pr-open'` directly (via
+  `persistManifestResumeFromPrOpen`, `packages/flows/manifest.ts`) the moment
+  it classifies its OWN failure as environment/DNS — the same
+  `matchesDnsFailureSignature` check row 121 (bead forge-8vfn.8.1.24) added,
+  narrowed to name this node instead of the generic post-develop band.
+- `classifyCycleFailure` (`packages/agents/failure-classifier.ts`) also
+  carries the signal structurally: a DNS failure whose message embeds the
+  `reviewer.pr-open-failed` prefix sets `resumeFrom: 'pr-open'` on the
+  classification, so `runRequeue`'s inference (`decideRequeueResume`,
+  `packages/flows/requeue-resume.ts`) picks `'pr-open'` over the generic
+  all-WI-complete ⇒ `'integrate'` rule even when an operator (not the
+  scheduler's own auto-retry) requeues the cycle later.
+- `execIntegrate` and `execAdversarialReview`
+  (`packages/stations/phases/executor-table.ts`) both self-no-op on
+  `resumeFrom === 'pr-open'`, each emitting one
+  `flow-runner.<node>-skipped-resume` log event — the same shape `execPm`'s
+  existing skip branch uses — rather than re-running their bands.
+  `runDeveloperLoop` treats `'pr-open'` exactly like `'integrate'` for the
+  per-WI skip (same `toRun = []`, same resumed-flag metadata).
+
+The enumerated resume points, updated to their current, complete set:
+
+- `'integrate'`: SKIPS the architect, the PM and the per-WI dev-loop;
+  re-enters at the post-develop `integrate` node.
+- `'develop'`: SKIPS the PM; RUNS the per-WI dev loop.
+- `'plan'`: does not skip anything — RUNS the PM again.
+- `'pr-open'` (this amendment): SKIPS everything `'integrate'` skips PLUS the
+  whole post-develop band (integrate, adversarial-review); re-enters at the
+  `review` node only.
+
+Like `'plan'`, `'pr-open'` is inference/direct-stamp only for now — no new
+`--resume-from=pr-open` CLI override. An operator can still force
+`--resume-from=integrate`, which just re-runs the already-succeeded bands
+harmlessly.

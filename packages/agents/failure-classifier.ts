@@ -45,8 +45,15 @@ export type FailureClassification = {
    * turn — deterministic (never auto-retried, `kind: 'terminal'`) but a
    * requeue's inference (`requeue-resume.ts`) resumes it at the plan
    * (project-manager) node instead of wiping the worktree for nothing salvaged.
+   *
+   * Row 122 (bead forge-8vfn.8.1.55): set to `'pr-open'` for a DNS/transient-
+   * network failure at the review node's own PR-open call — `environment: true`,
+   * `kind: 'transient'` (unlike `'plan'`, this IS auto-retried), but a
+   * requeue's inference must resume it at the review node only, not re-enter
+   * the whole post-develop band the generic `environment: true` + all-WI-
+   * complete inference would otherwise pick (`'integrate'`).
    */
-  resumeFrom?: 'plan';
+  resumeFrom?: 'plan' | 'pr-open';
   /** Up to 5 event_ids whose content drove the classification. */
   evidence_event_ids: string[];
 };
@@ -57,7 +64,7 @@ const T = (
   evidence: string[],
   environment = false,
   cleanBoundaryHalt = false,
-  resumeFrom?: 'plan',
+  resumeFrom?: 'plan' | 'pr-open',
 ): FailureClassification => ({
   kind,
   reason,
@@ -314,6 +321,9 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   let rateLimited = false, brainSkipped = false, trivialPass = false;
   let gateErrored = false, gateTimedOut = false, transientLint = false;
   let crashDeterministic = false, dnsFailure = false;
+  // Row 122 (bead forge-8vfn.8.1.55): narrows `dnsFailure` to "specifically at
+  // the review node's PR-open call" — see the detection site below.
+  let dnsFailureAtPrOpen = false;
   // W8-A2 (ON-7 defect 2a): the flow's own budget guard (CostTracker.
   // checkCeiling, flow-budgets.ts) firing. Captured verbatim so the reason
   // string below can quote the flow's own accounting instead of re-deriving
@@ -451,6 +461,14 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
       const reason = typeof md.reason === 'string' ? md.reason : '';
       if (matchesDnsFailureSignature(msg) || matchesDnsFailureSignature(reason)) {
         dnsFailure = true;
+        // Row 122: openPrInline's own thrown message (and the orchestrator's
+        // re-authored error event carrying it) embeds this exact prefix — a
+        // DNS signature riding on it means dev, integrate and
+        // adversarial-review already succeeded before PR-open failed, so a
+        // resume needs only the review node, not the whole post-develop band
+        // the bare `dnsFailure` signal (a DNS failure anywhere, e.g. mid a
+        // per-WI push) would otherwise imply.
+        if (msg.includes('reviewer.pr-open-failed')) dnsFailureAtPrOpen = true;
         ev(e);
       }
       if (msg.includes('agent_threw') || md.kind === 'agent_threw') { agentThrew = true; ev(e); }
@@ -637,7 +655,20 @@ export function classifyCycleFailure(events: readonly EventLogEntry[]): FailureC
   // collapsing behind a dead one.
   if (rateLimited) return T('transient', 'agent rate-limited / usage-limited / stream stalled (environment failure — transient API pressure, NOT a work failure) — auto-retry', evidence, true);
   // forge-8vfn.8.1.11: the resolver outage CAUSES the terminal-looking signals below, so it wins.
-  if (dnsFailure) return T('transient', 'DNS resolution failed while pushing/fetching against the git remote ("Could not resolve host" / ENOTFOUND / EAI_AGAIN / getaddrinfo — environment failure: the host\'s resolver was down or flaky, NOT a work failure) — auto-retry once DNS recovers', evidence, true);
+  if (dnsFailure) {
+    // Row 122: a DNS failure AT the review node's PR-open call names the
+    // dedicated `'pr-open'` resume point (dev/integrate/adversarial-review
+    // already succeeded); anywhere else, the generic resume inference
+    // (environment + all-WI-complete ⇒ `'integrate'`) still applies.
+    return T(
+      'transient',
+      'DNS resolution failed while pushing/fetching against the git remote ("Could not resolve host" / ENOTFOUND / EAI_AGAIN / getaddrinfo — environment failure: the host\'s resolver was down or flaky, NOT a work failure) — auto-retry once DNS recovers',
+      evidence,
+      true,
+      false,
+      dnsFailureAtPrOpen ? 'pr-open' : undefined,
+    );
+  }
 
   // Terminal first — manifest/env/code defects auto-retry can't fix.
   // W8-A2 (ON-7 defect 2a): a CostCeilingError is the flow's OWN budget

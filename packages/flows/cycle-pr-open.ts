@@ -10,7 +10,7 @@ import { matchesDnsFailureSignature } from '@forge/agents';
 import type { CycleInput } from './cycle-context.ts';
 import { DEMO_MD_BASENAME, worktreeDemoMdPath, worktreeDemoRelDir } from './demo-paths.ts';
 import { openPullRequest } from './pr.ts';
-import { persistManifestResumeFromIntegrate } from './manifest.ts';
+import { persistManifestResumeFromPrOpen } from './manifest.ts';
 
 // ---------------------------------------------------------------------------
 // openPrInline
@@ -103,18 +103,20 @@ export async function openPrInline(
       );
     }
 
-    // Bead forge-8vfn.8.1.24 / T1 ruling 1609: both prerequisites exist — the
+    // Bead forge-8vfn.8.1.24 / T1 ruling 1609, narrowed by row 122 (bead
+    // forge-8vfn.8.1.55, T1 1609/1617): both prerequisites exist — the
     // dev-loop + integrate + adversarial-review bands already succeeded, and
     // the failure is `openPullRequest` itself (push / gh), not a missing
     // artefact. When the cause matches the environment/DNS/transient-network
-    // signatures PR #946 taught the classifier, stamp the ADR-019 resume
-    // marker BEFORE throwing: a resume must reuse the preserved worktree and
-    // re-enter at `integrate` (skipping PM + per-WI dev-loop, ADR 019) rather
-    // than wipe `.forge/work-items/` and rebuild everything from scratch.
-    // `persistManifestResumeFromIntegrate` already existed for exactly this
-    // case; it had no caller until now.
+    // signatures PR #946 taught the classifier, stamp the dedicated ADR-019
+    // `pr-open` resume marker BEFORE throwing: a resume must reuse the
+    // preserved worktree and re-enter at THIS node only — skipping PM, the
+    // per-WI dev-loop AND the whole post-develop band (integrate,
+    // adversarial-review), which already produced everything this node needs
+    // — rather than wipe `.forge/work-items/` and rebuild from scratch, or
+    // needlessly re-run bands that already succeeded.
     if (errorText !== null && matchesDnsFailureSignature(errorText)) {
-      persistManifestResumeFromIntegrate(input.manifestPath);
+      persistManifestResumeFromPrOpen(input.manifestPath);
     }
 
     logger.emit({
