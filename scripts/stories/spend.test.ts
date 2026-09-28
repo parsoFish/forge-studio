@@ -446,17 +446,40 @@ test('AT-7.6.76-6 with no previous read at all, growth is measured from zero', (
  * description.
  *
  * Provenance: `_1.0/evidence/m6-c-S10-run15/{architect-session,cycle-channel}/events.jsonl`.
+ *
+ * `cycle_id` (session dir) and `metadata.session_id` (cycle log) were ADDED
+ * for row 165 (bead `forge-8vfn.8.1.59`) — the original trim dropped them
+ * along with `started_at`/`initiative_id`/`skill`, but both are real fields
+ * `createLogger` and `emitSyntheticArchitectEvents` always stamp, and the new
+ * (cycle, phase) keying needs the link between them to join this session's
+ * parts to its own cycle's rollup rather than reading them as unrelated.
  */
+const S10_RUN15_SESSION = '_architect-S10-RUN15';
 const RUN15_ARCHITECT_DIR = [
-  { event_id: 'EV_mty24xo8_5ohrgfq9', phase: 'architect', event_type: 'end', cost_usd: 0.6016058 },
-  { event_id: 'EV_mty269q8_lfvl4ddg', phase: 'architect', event_type: 'end', cost_usd: 0.40530105 },
-  { event_id: 'EV_mty28uun_17y27b72', phase: 'architect', event_type: 'end', cost_usd: 0.5572269000000001 },
-  { event_id: 'EV_mty2cy8n_ben3odtb', phase: 'architect', event_type: 'end', cost_usd: 0.62746895 },
+  {
+    event_id: 'EV_mty24xo8_5ohrgfq9', phase: 'architect', event_type: 'end', cost_usd: 0.6016058,
+    cycle_id: S10_RUN15_SESSION,
+  },
+  {
+    event_id: 'EV_mty269q8_lfvl4ddg', phase: 'architect', event_type: 'end', cost_usd: 0.40530105,
+    cycle_id: S10_RUN15_SESSION,
+  },
+  {
+    event_id: 'EV_mty28uun_17y27b72', phase: 'architect', event_type: 'end', cost_usd: 0.5572269000000001,
+    cycle_id: S10_RUN15_SESSION,
+  },
+  {
+    event_id: 'EV_mty2cy8n_ben3odtb', phase: 'architect', event_type: 'end', cost_usd: 0.62746895,
+    cycle_id: S10_RUN15_SESSION,
+  },
 ];
 /** Multi-phase, which is what makes it a CYCLE log rather than a session dir. */
 const RUN15_CYCLE_LOG = [
   { event_id: 'EV_orch_1', phase: 'orchestrator', event_type: 'log' },
-  { event_id: 'EV_mty2d91k_6gjmufk8', phase: 'architect', event_type: 'end', cost_usd: 2.1916027000000002 },
+  {
+    event_id: 'EV_mty2d91k_6gjmufk8', phase: 'architect', event_type: 'end', cost_usd: 2.1916027000000002,
+    metadata: { session_id: 'S10-RUN15' },
+  },
   { event_id: 'EV_mty2gi4v_k7jeu7dh', phase: 'project-manager', event_type: 'error', cost_usd: 0.6774190500000001 },
 ];
 
@@ -474,14 +497,27 @@ describe('summariseRunSpend — one phase counts once, at the higher of its two 
   });
 
   test('forge-rzrs (2): TWO architect sessions both count — the group is not collapsed to one dir', () => {
+    const secondSession = '_architect-SECOND-RUN15';
     const second = [
-      { event_id: 'EV_second_a', phase: 'architect', event_type: 'end', cost_usd: 1 },
-      { event_id: 'EV_second_b', phase: 'architect', event_type: 'end', cost_usd: 0.5 },
+      {
+        event_id: 'EV_second_a', phase: 'architect', event_type: 'end', cost_usd: 1,
+        cycle_id: secondSession,
+      },
+      {
+        event_id: 'EV_second_b', phase: 'architect', event_type: 'end', cost_usd: 0.5,
+        cycle_id: secondSession,
+      },
     ];
     const rollups = [
       { event_id: 'EV_o', phase: 'orchestrator', event_type: 'log' },
-      { event_id: 'EV_r1', phase: 'architect', event_type: 'end', cost_usd: 2.1916027000000002 },
-      { event_id: 'EV_r2', phase: 'architect', event_type: 'end', cost_usd: 1.5 },
+      {
+        event_id: 'EV_r1', phase: 'architect', event_type: 'end', cost_usd: 2.1916027000000002,
+        metadata: { session_id: 'S10-RUN15' },
+      },
+      {
+        event_id: 'EV_r2', phase: 'architect', event_type: 'end', cost_usd: 1.5,
+        metadata: { session_id: 'SECOND-RUN15' },
+      },
     ];
 
     const s = summariseRunSpend({ realSpawn: true, events: [RUN15_ARCHITECT_DIR, second, rollups] });
@@ -490,7 +526,12 @@ describe('summariseRunSpend — one phase counts once, at the higher of its two 
   });
 
   test('forge-rzrs (3): when the rollup EXCEEDS the parts, the rollup wins and the disagreement is NAMED', () => {
-    const partial = [{ event_id: 'EV_one_turn', phase: 'architect', event_type: 'end', cost_usd: 0.6016058 }];
+    const partial = [
+      {
+        event_id: 'EV_one_turn', phase: 'architect', event_type: 'end', cost_usd: 0.6016058,
+        cycle_id: S10_RUN15_SESSION,
+      },
+    ];
 
     const s = summariseRunSpend({ realSpawn: true, events: [partial, RUN15_CYCLE_LOG] });
 
@@ -506,6 +547,117 @@ describe('summariseRunSpend — one phase counts once, at the higher of its two 
     const s = summariseRunSpend({ realSpawn: true, events: [agentA, agentB] });
 
     assert.equal(s.usd, 2, 'two unphased dispatches are two spends; collapsing them would UNDER-report');
+  });
+});
+
+/**
+ * Bead `forge-8vfn.8.1.59`, row 165 — groups are keyed by (cycle, phase), not
+ * by phase alone across the whole run. S10 run 43's own postmortem read
+ * "architect: aggregate $1.9671 ≠ parts $3.4758" as a disagreement; it was a
+ * MIS-KEYED COMPARISON, not an under-count — $1.9671 was ACT 1's own cycle
+ * rollup, exactly equal to ACT 1's own session, while "parts" silently summed
+ * ACT 1's session together with ACT 2's, which never reached a cycle at all.
+ *
+ * Fixed by threading the link a cycle log's own rows already carry:
+ * `emitSyntheticArchitectEvents` (`cycle.ts`) stamps the linked session's raw
+ * id onto `metadata.session_id` on that cycle's own `architect.start`/`.end`
+ * rows, and a session dir's OWN `cycle_id` is shaped `_<phase>-<sessionId>` by
+ * `createLogger` — the two sides of one seam, never invented here.
+ */
+describe('summariseRunSpend keys groups by (cycle, phase) — bead forge-8vfn.8.1.59, row 165', () => {
+  test('run 43: ACT 1 (linked) + ACT 2 (unlinked) are two real spends, not a mis-keyed disagreement', () => {
+    const act1Session = '_architect-ACT1';
+    const act1Rows = [
+      { event_id: 'EV_a1_1', phase: 'architect', event_type: 'end', cost_usd: 0.4021, cycle_id: act1Session },
+      { event_id: 'EV_a1_2', phase: 'architect', event_type: 'end', cost_usd: 0.3550, cycle_id: act1Session },
+      { event_id: 'EV_a1_3', phase: 'architect', event_type: 'end', cost_usd: 0.2998, cycle_id: act1Session },
+      { event_id: 'EV_a1_4', phase: 'architect', event_type: 'end', cost_usd: 0.2542, cycle_id: act1Session },
+      { event_id: 'EV_a1_5', phase: 'architect', event_type: 'end', cost_usd: 0.2671, cycle_id: act1Session },
+      { event_id: 'EV_a1_6', phase: 'architect', event_type: 'end', cost_usd: 0.3889, cycle_id: act1Session },
+    ];
+    const act1Sum = act1Rows.reduce((sum, r) => sum + r.cost_usd, 0);
+    const c1CycleLog = [
+      { event_id: 'EV_c1_orch', phase: 'orchestrator', event_type: 'log' },
+      {
+        event_id: 'EV_c1_arch', phase: 'architect', event_type: 'end', cost_usd: act1Sum,
+        metadata: { session_id: 'ACT1' },
+      },
+    ];
+    const act2Session = '_architect-ACT2';
+    const act2Rows = [
+      { event_id: 'EV_a2_1', phase: 'architect', event_type: 'end', cost_usd: 0.6, cycle_id: act2Session },
+      { event_id: 'EV_a2_2', phase: 'architect', event_type: 'end', cost_usd: 0.5087, cycle_id: act2Session },
+      { event_id: 'EV_a2_3', phase: 'architect', event_type: 'end', cost_usd: 0.4, cycle_id: act2Session },
+    ];
+
+    const s = summariseRunSpend({ realSpawn: true, events: [act1Rows, c1CycleLog, act2Rows] });
+
+    assert.equal(
+      s.usd?.toFixed(4), '3.4758',
+      'ACT 1 counts once against its own cycle and ACT 2 counts on its own — the true total, never ' +
+        '$1.9671 read against a merged $3.4758',
+    );
+    assert.deepEqual(
+      s.notes, [],
+      'ACT 1 agrees with its own cycle and ACT 2 has no cycle to disagree with — neither is a genuine ' +
+        'disagreement',
+    );
+  });
+
+  test('a genuine same-cycle disagreement is still noted, with the higher counted', () => {
+    const sessionRows = [
+      {
+        event_id: 'EV_d1', phase: 'architect', event_type: 'end', cost_usd: 1,
+        cycle_id: '_architect-DISAGREE',
+      },
+    ];
+    const cycleLog = [
+      { event_id: 'EV_d_orch', phase: 'orchestrator', event_type: 'log' },
+      {
+        event_id: 'EV_d_arch', phase: 'architect', event_type: 'end', cost_usd: 2.5,
+        metadata: { session_id: 'DISAGREE' },
+      },
+    ];
+
+    const s = summariseRunSpend({ realSpawn: true, events: [sessionRows, cycleLog] });
+
+    assert.equal(
+      s.usd?.toFixed(4), '2.5000',
+      'the cycle rollup is higher and wins, exactly like a session that logged only some of its own turns',
+    );
+    assert.equal(s.notes.length, 1, 'a real same-cycle disagreement must still surface');
+    assert.match(s.notes[0], /architect: aggregate \$2\.5000 ≠ parts \$1\.0000/);
+  });
+
+  test('two cycles sharing a phase name never share a bucket — the cross-cycle under-count edge', () => {
+    const c1Log = [
+      { event_id: 'EV_c1_orch', phase: 'orchestrator', event_type: 'log' },
+      {
+        event_id: 'EV_c1_arch', phase: 'architect', event_type: 'end', cost_usd: 3,
+        metadata: { session_id: 'C1' },
+      },
+    ];
+    const c1Session = [
+      { event_id: 'EV_c1_s', phase: 'architect', event_type: 'end', cost_usd: 1, cycle_id: '_architect-C1' },
+    ];
+    const c2Log = [
+      { event_id: 'EV_c2_orch', phase: 'orchestrator', event_type: 'log' },
+      {
+        event_id: 'EV_c2_arch', phase: 'architect', event_type: 'end', cost_usd: 1,
+        metadata: { session_id: 'C2' },
+      },
+    ];
+    const c2Session = [
+      { event_id: 'EV_c2_s', phase: 'architect', event_type: 'end', cost_usd: 3, cycle_id: '_architect-C2' },
+    ];
+
+    const s = summariseRunSpend({ realSpawn: true, events: [c1Log, c1Session, c2Log, c2Session] });
+
+    assert.equal(
+      s.usd, 6,
+      'C1 (rollup 3 > parts 1) and C2 (parts 3 > rollup 1) each count their own max; keying by phase alone ' +
+        'merges them into rollup 4 = parts 4 and under-counts to 4',
+    );
   });
 });
 
