@@ -105,6 +105,26 @@ export function isArchitectWorking(phase: HexPhase): boolean {
 }
 
 /**
+ * forge-8vfn.8.1.48 (ruling 1891, row 160) — a POSITIVE signal for "the
+ * interview is over", so a story branches on THIS instead of on the
+ * ABSENCE of `[data-field="question-freetext"]`.
+ *
+ * Run 41's architect asked no questions at all and went straight from
+ * `interviewing` to `exploring` — the question form never rendered, and a
+ * beat waiting on it alone cannot tell that apart from a genuinely missing
+ * affordance. `interviewing`/`awaiting-answers` are the only two phases
+ * where another question can still arrive; every later phase means the
+ * architect decided it had enough, whether that took zero rounds or several.
+ */
+export type ArchitectInterviewState = 'asking' | 'concluded';
+
+const ARCHITECT_ASKING_PHASES = new Set<ArchitectPhase>(['interviewing', 'awaiting-answers']);
+
+export function architectInterviewState(phase: ArchitectPhase): ArchitectInterviewState {
+  return ARCHITECT_ASKING_PHASES.has(phase) ? 'asking' : 'concluded';
+}
+
+/**
  * P1 — is this session stale? True only when the runner is in a working phase
  * AND has been silent for longer than {@link STALE_THRESHOLD_MS}. A fresh
  * `staleMs` (session refresh) clears it; a non-working phase never reads stale.
