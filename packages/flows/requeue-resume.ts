@@ -79,17 +79,19 @@ export type PriorFailureSignal = {
 const NO_PRIOR_FAILURE_SIGNAL: PriorFailureSignal = { environment: false, cleanBoundaryHalt: false };
 
 /**
- * Read the prior cycle's `failure_classification` event (stamped by
- * `runCycle` on every failed cycle). Missing log / cycle id / classification
- * event all yield the all-false signal — the requeue then behaves exactly as
- * before (fresh re-run).
+ * Read the prior cycle's `failure_classification` event straight from its
+ * `events.jsonl` path. Missing log / classification event both yield the
+ * all-false signal — the caller then behaves exactly as it would for an
+ * unclassified failure (fresh re-run / no special-casing).
+ *
+ * row 163 (S10 run 42, ruling 1899): factored out of `readPriorFailureSignal`
+ * so `scheduler-run-one.ts`'s own end-of-attempt cleanup can read the SAME
+ * classification straight off `CycleResult.log_path` — the exact path
+ * `createLogger` already wrote it to — without re-deriving a `<root>/_logs/
+ * <cycleId>/` join that only holds for the DEFAULT logs root, not a caller
+ * (tests; a future multi-tenant logsRoot) that configured its own.
  */
-export function readPriorFailureSignal(
-  forgeRoot: string,
-  cycleId: string | undefined,
-): PriorFailureSignal {
-  if (!cycleId) return NO_PRIOR_FAILURE_SIGNAL;
-  const logPath = join(forgeRoot, '_logs', cycleId, 'events.jsonl');
+export function readPriorFailureSignalFromLog(logPath: string): PriorFailureSignal {
   if (!existsSync(logPath)) return NO_PRIOR_FAILURE_SIGNAL;
   try {
     const lines = readFileSync(logPath, 'utf8').split('\n');
@@ -114,6 +116,20 @@ export function readPriorFailureSignal(
     return NO_PRIOR_FAILURE_SIGNAL;
   }
   return NO_PRIOR_FAILURE_SIGNAL;
+}
+
+/**
+ * `forge requeue`'s own entry point: it only ever has a `forgeRoot` +
+ * `cycleId` (from the manifest), never the exact log path — it always writes
+ * under the default `<forgeRoot>/_logs/<cycleId>/events.jsonl`, so the join
+ * is reconstructed here rather than threaded as a parameter everywhere.
+ */
+export function readPriorFailureSignal(
+  forgeRoot: string,
+  cycleId: string | undefined,
+): PriorFailureSignal {
+  if (!cycleId) return NO_PRIOR_FAILURE_SIGNAL;
+  return readPriorFailureSignalFromLog(join(forgeRoot, '_logs', cycleId, 'events.jsonl'));
 }
 
 /**

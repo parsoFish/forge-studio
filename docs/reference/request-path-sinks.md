@@ -3069,3 +3069,12 @@ row-157 acceptance-gate revise turn's re-read set — both calls pass the SAME
 `writeFileSync` row on `project-manager.ts` is DELETED rather than left at
 zero (ruling 102's shape, the same rule the M5-A relocation above follows).
 Accepted via `--write` in the same commit.
+
+### M7 row 163 — a resumable halt keeps the remote branch its attempt pushed (bead `forge-8vfn.8.1.50`, ruling 1899)
+
+| file (function) | sink (delta) | input | classification | why |
+|---|---|---|---|---|
+| `packages/flows/scheduler-run-one.ts` (`runOne`, end-of-attempt cleanup) | `existsSync` (5 → 6) | `wtHandle.path` — the worktree path this same attempt resolved from `cfg.worktreesRoot` + the claimed manifest's `initiativeId` | not request-derived | the same `expectedWtPath` the claim already validated (`validateClaimable`) before any worktree was created; read only to tell `decideRequeueResume` whether the kept worktree still exists, never written or deleted here. |
+
+`scripts/request-path-sinks.baseline.txt` accepts the grown count via `--write`
+in the same commit that adds this section, per this document's own rule.
