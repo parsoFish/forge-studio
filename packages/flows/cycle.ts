@@ -64,6 +64,9 @@ export {
   enforceDevLoopCloseInvariant,
   enforceFinalCiGate,
 } from './cycle-helpers.ts';
+// Row 167 (ruling 1916): the one real implementation `runFlow` is handed
+// below, at its own re-entry-rebase seam — no default, no fallback (CLAUDE.md).
+import { rebaseForResume } from './cycle-helpers.ts';
 
 // Flow-runner: the phase-sequencing DAG executor (ADR-028, M3-2).
 import { runFlow, flowPathForId } from './flow-runner.ts';
@@ -307,7 +310,18 @@ export async function runCycle(input: CycleInput, wiring: PhaseWiring): Promise<
       }
       const flow = loadFlowDefinition(flowPath);
       const { ceilingUsd: costCeilingUsd, source: costCeilingSource } = resolveCostCeilingOverride(input.manifestPath);
-      const flowResult = await runFlow({ flow, input: inputWithGate, logger, costCeilingUsd, costCeilingSource, priorSpendEvents, executor: wiring.executor, projectGate: wiring.projectGate, runClosure: wiring.runClosure });
+      const flowResult = await runFlow({
+        flow,
+        input: inputWithGate,
+        logger,
+        costCeilingUsd,
+        costCeilingSource,
+        priorSpendEvents,
+        executor: wiring.executor,
+        projectGate: wiring.projectGate,
+        runClosure: wiring.runClosure,
+        rebaseForResume,
+      });
       cycleOutcome = flowResult.cycleOutcome;
       reflectionStatus = flowResult.reflectionStatus as ReflectionStatus;
       lintStatus = flowResult.lintStatus as LintStatus;

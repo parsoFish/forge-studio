@@ -518,8 +518,8 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
     // separate unifier re-arm — the integrate node owns the re-demo now.
     assert.deepEqual(
       tracker.calls,
-      ['runDeveloperLoop', 'computeDeliveryStats', 'runMergeBoundaryGate', 'runIntegrate', 'runAdversarialReview', 'openPrInline', 'runClosure'],
-      'resume_from:develop re-runs the full dev→integrate→adversarial-review→verdict spine through the one develop executor',
+      ['rebaseForResume', 'runDeveloperLoop', 'computeDeliveryStats', 'runMergeBoundaryGate', 'runIntegrate', 'runAdversarialReview', 'openPrInline', 'runClosure'],
+      'resume_from:develop rebases once at re-entry (row 167 — forge-develop has no pm node), then re-runs the full dev→integrate→adversarial-review→verdict spine through the one develop executor',
     );
     assert.ok(!tracker.calls.includes('runUnifier'), 're-entry never re-arms a unifier — the integrate node re-authors');
   });

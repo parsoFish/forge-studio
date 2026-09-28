@@ -20,7 +20,7 @@ import { join, resolve } from 'node:path';
 import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from '@forge/kernel';
 import type { EventLogger } from '@forge/kernel';
 import type { CycleInput } from './cycle-context.ts';
-import { assertLocalRemoteSynced, checkLocalRemoteSynced, pushInitiativeBranch } from './pr.ts';
+import { assertLocalRemoteSynced, checkLocalRemoteSynced, pushInitiativeBranch, rebasePreservedBranchOntoMain } from './pr.ts';
 import { loadProjectConfig } from '@forge/projects';
 import { decideFinalCiGate, execCommandVector } from './ci-gate.ts';
 import { resolveGateTimeoutMs } from '@forge/agents';
@@ -59,6 +59,46 @@ export function preservingForgeScratch<T>(worktreePath: string, relDirs: string[
       }
       rmSync(b.bak, { recursive: true, force: true });
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// rebaseForResume
+// ---------------------------------------------------------------------------
+
+/**
+ * Row 167 (bead forge-8vfn.8.1.61, ruling 1916): pure move off
+ * `packages/stations/phases/executor-deps.ts`'s `defaultRebaseForResume` — a
+ * station executor (rank 6) may not be the one place this lives, because the
+ * flow runner (`flow-runner.ts`, this same package, rank 5) needs to call it
+ * too, and rank 5 may not import rank 6. Neither owner name is right for it
+ * either way: it is resume machinery, not a phase.
+ *
+ * Item 3 (ported from cycle.ts:176-209): rebase the preserved branch onto
+ * main for a unifier resume, preserving .forge scratch dirs across the rebase.
+ */
+export function rebaseForResume(input: CycleInput, logger: EventLogger): void {
+  const rebase = preservingForgeScratch(
+    input.worktreePath,
+    ['.forge/work-items', '.forge/unifier-items'],
+    () => rebasePreservedBranchOntoMain(input.worktreePath),
+  );
+  logger.emit({
+    initiative_id: input.initiativeId,
+    phase: 'orchestrator',
+    skill: 'cycle',
+    event_type: rebase.ok ? 'log' : 'error',
+    input_refs: [input.worktreePath],
+    output_refs: [],
+    message: rebase.ok
+      ? (rebase.rebased ? 'cycle.resume-rebased' : 'cycle.resume-no-rebase-needed')
+      : 'cycle.resume-needs-rebase',
+    metadata: { base: rebase.base, rebased: rebase.rebased, reason: rebase.reason ?? null },
+  });
+  if (!rebase.ok) {
+    throw new Error(
+      `resume-needs-rebase: ${rebase.reason ?? 'the preserved branch must be rebased onto current main before resuming'}`,
+    );
   }
 }
 

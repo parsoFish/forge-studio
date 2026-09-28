@@ -102,7 +102,17 @@ function resolveExecutingAgentDef(ctx: NodeExecContext): AgentDefinition {
  *  ADR-019; 'develop' fix-loop re-entry, ADR-040) — but 'plan' (row 157,
  *  ruling 1873: a PM-phase acceptance-gate failure) rebases and STILL RUNS,
  *  because the PM is the phase that failed and must re-decompose; otherwise
- *  (no marker) run the project manager as a normal fresh pass. */
+ *  (no marker) run the project manager as a normal fresh pass. This branch is
+ *  the GENERIC mechanism for a flow whose `pm` node is still on the resumed
+ *  path — the shipped `forge-develop` flow is not one of those (PM lives only
+ *  on `forge-architect`, entered at `resumeFrom:'plan'`), which is exactly
+ *  why row 167 (ruling 1916) ALSO rebases at the flow runner's own re-entry
+ *  (flow-runner.ts's `runFlow`, `RESUME_POINTS_INTO_DEVELOP`) — the one place
+ *  that sees every one of 'integrate'/'pr-open'/'develop' regardless of
+ *  whether the flow being resumed happens to carry a `pm` node. A flow with
+ *  both (this executor's own skip AND the runner's re-entry rebase both
+ *  firing) rebases twice — harmless, since `rebaseForResume` no-ops once main
+ *  is already an ancestor. */
 const execPm: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, nodeId } = ctx;
   if (input.resumeFrom && input.resumeFrom !== 'plan') {

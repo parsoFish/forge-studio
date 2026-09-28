@@ -15,7 +15,7 @@
  * The port itself — a stub executor that touches no phase — is exercised
  * directly by `apps/forge/tests/contract/flow-runner.port-conformance.test.ts`.
  */
-import { runFlow, type FlowRunArgs } from '@forge/flows';
+import { runFlow, rebaseForResume as defaultRebaseForResume, type FlowRunArgs } from '@forge/flows';
 import { createPhaseExecutor } from '@forge/stations';
 import type { NodeExecutor } from '@forge/stations/testing';
 import { createProjectGate, defaultRunClosure } from '@forge/stations';
@@ -31,20 +31,27 @@ export function runFlowT({
   deps,
   nodeExecutors,
   ...rest
-}: Omit<FlowRunArgs, 'executor' | 'projectGate' | 'runClosure'> & {
+}: Omit<FlowRunArgs, 'executor' | 'projectGate' | 'runClosure' | 'rebaseForResume'> & {
   projectGate?: FlowRunArgs['projectGate'];
   runClosure?: FlowRunArgs['runClosure'];
+  // Row 167 (ruling 1916): `runFlow` now performs the re-entry rebase
+  // through this SAME injected dependency, not a direct import — so a suite
+  // that mocks `deps.rebaseForResume` (below) must see the runner call ITS
+  // mock, not the real git rebase. Resolved from `deps.rebaseForResume` the
+  // same way `runClosure` resolves from `deps.runClosure`, one line down.
+  rebaseForResume?: FlowRunArgs['rebaseForResume'];
   deps?: TestDepsPartial;
   nodeExecutors?: Partial<Record<NodeKind, NodeExecutor>>;
 }): ReturnType<typeof runFlow> {
   const { enqueueFlowRun, ...phaseDeps } = deps ?? {};
-  const { projectGate, runClosure, ...args } = rest;
+  const { projectGate, runClosure, rebaseForResume, ...args } = rest;
   return runFlow({
     ...args,
     // Defaults resolve AFTER the caller's fields, so an explicit `undefined`
     // cannot silently win against a required argument.
     projectGate: projectGate ?? createProjectGate(),
     runClosure: runClosure ?? phaseDeps.runClosure ?? defaultRunClosure,
+    rebaseForResume: rebaseForResume ?? phaseDeps.rebaseForResume ?? defaultRebaseForResume,
     // Hermetic by default: `stageFlowRunRequest` writes claimable run requests
     // into the repo's `_queue/`, which a running `forge serve` would drain, so a
     // suite that does not care about triggers must not reach it by omission.

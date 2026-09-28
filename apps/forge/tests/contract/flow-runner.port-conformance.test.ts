@@ -48,6 +48,13 @@ function makeLogger(): EventLogger & { events: unknown[] } {
   };
 }
 
+/** None of this file's flows ever declare a `resumeFrom` — a stub that would
+ *  fail loudly if the runner ever reached it proves that, rather than
+ *  silently no-opping like a real rebase's happy path would. */
+function unreachableRebaseForResume(): never {
+  throw new Error('rebaseForResume must not run — no fixture flow in this file uses resumeFrom');
+}
+
 function makeFlow(nodes: FlowDefinition['nodes'], edges: FlowDefinition['edges'] = []): FlowDefinition {
   return {
     id: 'port-flow',
@@ -86,6 +93,7 @@ test('runFlow drives every node through the injected PhaseExecutor — a stub th
     executor: stub,
     projectGate: { runPreflight: () => { throw new Error('the stub flow must never reach the preflight'); } },
     runClosure: async () => { throw new Error('a flow that does not terminate early must never close'); },
+    rebaseForResume: unreachableRebaseForResume,
   });
 
   assert.deepEqual(seen, ['pm', 'review'], 'every node executed through the port, in topological order');
@@ -109,6 +117,7 @@ test('the port receives the resolved node kind and the shared mutable state, so 
     executor: stub,
     projectGate: { runPreflight: () => { throw new Error('unreachable'); } },
     runClosure: async () => { throw new Error('unreachable'); },
+    rebaseForResume: unreachableRebaseForResume,
   });
 
   assert.deepEqual(kinds, ['review'], 'the runner resolved the node kind and handed it over on the context');
@@ -123,6 +132,7 @@ test('a ProjectGate that refuses parks the flow at ready-for-review, and the run
     logger: makeLogger(),
     executor: createPhaseExecutor(),
     runClosure: async (_i, _l, reviewerOutcome) => { closures.push(reviewerOutcome); return { outcome: 'ready-for-review', merged: false }; },
+    rebaseForResume: unreachableRebaseForResume,
     projectGate: {
       runPreflight: () => ({
         projectDir: '/tmp/port/project',
@@ -145,6 +155,7 @@ test('a ProjectGate that PASSES lets the flow finish — the positive control th
     logger: makeLogger(),
     executor: createPhaseExecutor(),
     runClosure: async (_i, _l, reviewerOutcome) => { closures.push(reviewerOutcome); return { outcome: 'ready-for-review', merged: false }; },
+    rebaseForResume: unreachableRebaseForResume,
     projectGate: {
       runPreflight: () => ({
         projectDir: '/tmp/port/project',
@@ -200,6 +211,7 @@ test('spend that happened BEFORE the runner existed is counted by the ceiling it
     executor: stub,
     projectGate: { runPreflight: () => { throw new Error('unreachable'); } },
     runClosure: async () => { throw new Error('unreachable'); },
+    rebaseForResume: unreachableRebaseForResume,
     priorSpendEvents: [architectEnd],
   });
 
@@ -219,6 +231,7 @@ test('the port is optional and additive: a run given no prior spend behaves exac
     executor: stub,
     projectGate: { runPreflight: () => { throw new Error('unreachable'); } },
     runClosure: async () => { throw new Error('unreachable'); },
+    rebaseForResume: unreachableRebaseForResume,
   });
 
   assert.ok(!(logger.events as Array<Record<string, unknown>>).some((e) => e['message'] === 'flow.cost-warn'));
@@ -251,6 +264,7 @@ test('(RED) [forge-8vfn.5.20] a flow that terminates early must NOT fire its on:
       assert.equal(reviewerOutcome, 'ready-for-review', 'the early-termination closure must park at ready-for-review');
       return { outcome: 'ready-for-review', merged: false };
     },
+    rebaseForResume: unreachableRebaseForResume,
     enqueueFlowRun: (flowId, opts) => { enqueued.push({ flowId, targetKind: opts.targetKind }); },
   });
 

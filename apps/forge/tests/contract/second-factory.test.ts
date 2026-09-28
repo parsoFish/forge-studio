@@ -149,6 +149,7 @@ test('the real runner walks the second factory build → integrate → review �
     executor: stub,
     projectGate: { runPreflight: () => { throw new Error('the walk must never reach the preflight'); } },
     runClosure: async () => { throw new Error('the walk must never close'); },
+    rebaseForResume: () => { throw new Error('the walk never uses resumeFrom, so rebaseForResume must not run'); },
   });
   assert.deepEqual(seen, [['build', 'agent'], ['integrate', 'agent'], ['review', 'agent'], ['verdict', 'review']]);
 });
