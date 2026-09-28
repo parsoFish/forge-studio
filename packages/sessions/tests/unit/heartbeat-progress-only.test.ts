@@ -7,9 +7,20 @@
  *
  * `packages/agents/tests/unit/stream-deadline.test.ts` pins the `isProgress`
  * predicate itself; `architect-idle-deadline.test.ts` pins where it lands on
- * the architect path. This file pins the two primitives directly:
- * `.heartbeat` must never advance on a ping-only stream, and the turn must
- * end with a named stall naming what it saw instead of progress.
+ * the architect path. This file still pins (a): `withIdleDeadline` must
+ * reject a ping-only stream, naming what it saw instead of progress.
+ *
+ * (b) is SUPERSEDED by row 164 (bead forge-8vfn.8.1.51, S10 run 43, ruling
+ * 1904): `startHeartbeatTicker` (heartbeat.ts) now keeps
+ * `.heartbeat` warm on a fixed interval for as long as the SDK call is in
+ * flight, independent of what the stream produces — a ping-only stream is
+ * still an ALIVE call, and "a live in-flight turn never reads stalled" makes
+ * no exception for what kind of message it emits. The message-driven
+ * `isProgressMessage` gate this file used to prove (b) with still exists
+ * (`makeHeartbeatTick`, unchanged) and still gates `withIdleDeadline`'s own
+ * window below — it is simply no longer the ONLY thing keeping `.heartbeat`
+ * warm. The ONE authority on an actual hang is `withIdleDeadline` alone,
+ * which this file's rejection assertions still exercise directly.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,7 +28,8 @@ import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runStructuredTurn, runAgentTurn, makeHeartbeatWriter, type QueryFn } from '../../interactive-session.ts';
+import { runStructuredTurn, runAgentTurn, type QueryFn } from '../../interactive-session.ts';
+import { makeHeartbeatWriter } from '../../heartbeat.ts';
 import { DEFAULT_IDLE_DEADLINE_MS } from '@forge/agents/testing';
 
 const MODEL = 'claude-sonnet-5';
@@ -44,7 +56,7 @@ async function tripDeadline(t: { mock: { timers: { tick: (ms: number) => void } 
   await new Promise((r) => setImmediate(r));
 }
 
-test('runStructuredTurn: a stream producing only non-progress pings rejects naming them, and NEVER refreshes .heartbeat', async (t) => {
+test('runStructuredTurn: a stream producing only non-progress pings rejects naming them, but the interval ticker still keeps .heartbeat warm (row 164)', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'progress-only-structured-'));
   const hbDir = join(dir, '_logs', 'sess');
   const hbPath = join(hbDir, '.heartbeat');
@@ -73,7 +85,9 @@ test('runStructuredTurn: a stream producing only non-progress pings rejects nami
     assert.match(err.message, /saw only non-progress messages/, err.message);
     assert.match(err.message, /tool_progress×5/, err.message);
 
-    assert.equal(existsSync(hbPath), false, '.heartbeat must never have been written — every message was a non-progress ping');
+    // Row 164 — the call was alive the whole time, so the interval ticker
+    // kept `.heartbeat` warm regardless of the ping-only stream.
+    assert.equal(existsSync(hbPath), true, '.heartbeat must be kept warm by the interval ticker while the call is in flight, even on a ping-only stream');
   } finally {
     t.mock.timers.reset();
   }
@@ -95,7 +109,7 @@ test('runStructuredTurn: an assistant/result message DOES refresh .heartbeat (po
   assert.ok(existsSync(hbPath), '.heartbeat must be written once a real progress message arrives');
 });
 
-test('runAgentTurn: a stream producing only non-progress pings rejects naming them, and NEVER refreshes .heartbeat', async (t) => {
+test('runAgentTurn: a stream producing only non-progress pings rejects naming them, but the interval ticker still keeps .heartbeat warm (row 164)', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'progress-only-agent-'));
   const hbDir = join(dir, '_logs', 'sess');
   const hbPath = join(hbDir, '.heartbeat');
@@ -122,7 +136,9 @@ test('runAgentTurn: a stream producing only non-progress pings rejects naming th
     assert.match(err.message, /saw only non-progress messages/, err.message);
     assert.match(err.message, /system×4/, err.message);
 
-    assert.equal(existsSync(hbPath), false, '.heartbeat must never have been written — every message was a non-progress ping');
+    // Row 164 — the call was alive the whole time, so the interval ticker
+    // kept `.heartbeat` warm regardless of the ping-only stream.
+    assert.equal(existsSync(hbPath), true, '.heartbeat must be kept warm by the interval ticker while the call is in flight, even on a ping-only stream');
   } finally {
     t.mock.timers.reset();
   }

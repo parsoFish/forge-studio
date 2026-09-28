@@ -564,6 +564,8 @@ packages/sessions/bridge-studio-lifecycle.ts statSync 2
 packages/sessions/bridge-studio-session-index.ts existsSync 9
 packages/sessions/bridge-studio-session-index.ts readdirSync 10
 packages/sessions/bridge-studio-session-index.ts readFileSync 1
+packages/sessions/heartbeat.ts mkdirSync 1
+packages/sessions/heartbeat.ts writeFileSync 1
 packages/sessions/interactive-agent-step.ts lstatSync 1
 packages/sessions/interactive-agent-step.ts mkdirSync 2
 packages/sessions/interactive-agent-step.ts readdirSync 1
@@ -576,9 +578,9 @@ packages/sessions/interactive-finalizers.ts readdirSync 1
 packages/sessions/interactive-finalizers.ts readFileSync 1
 packages/sessions/interactive-finalizers.ts realpathSync 1
 packages/sessions/interactive-session.ts existsSync 2
-packages/sessions/interactive-session.ts mkdirSync 2
+packages/sessions/interactive-session.ts mkdirSync 1
 packages/sessions/interactive-session.ts readFileSync 1
-packages/sessions/interactive-session.ts writeFileSync 2
+packages/sessions/interactive-session.ts writeFileSync 1
 packages/sessions/kinds/architect-critic.ts existsSync 3
 packages/sessions/kinds/architect-critic.ts readdirSync 1
 packages/sessions/kinds/architect-critic.ts readFileSync 4

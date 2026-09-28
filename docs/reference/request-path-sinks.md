@@ -3078,3 +3078,28 @@ Accepted via `--write` in the same commit.
 
 `scripts/request-path-sinks.baseline.txt` accepts the grown count via `--write`
 in the same commit that adds this section, per this document's own rule.
+
+### Row 164 prep (bead `forge-8vfn.8.1.51`) — `makeHeartbeatWriter` relocated to `heartbeat.ts`, no new surface
+
+| file | sink | before | after |
+|---|---|---|---|
+| `packages/sessions/interactive-session.ts` | `mkdirSync` | 2 | 1 |
+| `packages/sessions/interactive-session.ts` | `writeFileSync` | 2 | 1 |
+| `packages/sessions/heartbeat.ts` | `mkdirSync` | — | 1 |
+| `packages/sessions/heartbeat.ts` | `writeFileSync` | — | 1 |
+
+**PURE MOVE, same call site, same taint analysis.** `makeHeartbeatWriter`
+(both its `mkdirSync(heartbeatDir, ...)` and its `writeFileSync(heartbeatPath,
+...)`) moved verbatim out of `interactive-session.ts` into the new
+`heartbeat.ts` (file-size budget) — the exact function already classified
+above (the M4 ports 5–6 note: "the hand-rolled throttled heartbeat write was
+replaced by the spine's existing `makeHeartbeatWriter`… whose `writeFileSync`
+was already baselined"). `heartbeatDir` is still the same CALLER-TRUSTED
+directory path every call site already resolves before handing it in
+(`resolve(logsRoot, cycleId)` in `kinds/fix-turn.ts`, `join(logsRoot,
+cycleId)` in `interactive-runner.ts`/`kinds/kind-turn.ts`) — never
+request-derived at this layer, unchanged by the move. `interactive-session.ts`
+keeps ONE of each sink (`writeSessionStatus`'s own `mkdirSync`/`writeFileSync`
+on its guarded `sessionDir`), so its rows are DECREMENTED rather than deleted
+(unlike the row-157 relocation above, where the source call disappeared
+entirely). Accepted via `--write` in the same commit.

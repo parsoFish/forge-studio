@@ -30,9 +30,9 @@ file reaches its package at M3:
 
 | disposition | meaning | count |
 |---|---|---|
-| `verbatim` | moves unchanged | 365 |
+| `verbatim` | moves unchanged | 364 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 107 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 109 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -60,14 +60,14 @@ operator-ratified new cap — never a silent raise.
 | `projects` | 48 | 11,103 | **9,328** | ratified 9,328 — forge-mfv5.3.6 testProcess.local.perWorkItem gate template, validated at load (one {package}, argv only, no shell metacharacters), +44 on 9,284, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,355 | **13,355** | ratified 13,355 — row 159 (forge-8vfn.8.1.47, ruling 1891): the architect draft-manifest-unresolved classifier branch, +33 on 13,322, lane-ratified (ruling 666, measured). |
-| `sessions` | 62 | 20,538 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
+| `sessions` | 63 | 20,634 | **20,600** | ratified 20,600 — row 108 architect critiquing/revising phases + stage-start events (forge-8vfn.8.1.14), +96 lane-ratified under ruling 666; see git history for prior raises. |
 | `flows` | 86 | 24,616 | **24,416** | ratified 24,416 — row 163 (forge-8vfn.8.1.50, ruling 1899): a resumable halt keeps the branch its attempt pushed, gated on `decideRequeueResume`, +65 on 24,351, lane-ratified (ruling 666, measured); see git history for prior raises. |
 | `factory` | 15 | 2,763 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 45 | 12,245 | **12,245** | ratified 12,245 — row 157 (forge-8vfn.8.1.45, ruling 1884): PM brief + one bounded revise turn + compile-stage re-run, +264 on 11,981, ratified (ruling 1884). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,922 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **476** | **129,196** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **477** | **129,292** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -299,7 +299,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/architect-brain-read.ts | sessions | rewritten | 93 **New file, M7-C ABR (forge-8vfn.8.3.5, ruling 666):** the architect's own `brain.read` tally + emission, wrapping each phase's `KindStepHandler` from outside `architect-steps.ts` (near the file cap) and `kind-turn.ts` (ruling 78's hook budget). Priced into `sessions`'s cap-table raise 20,000 → 20,093. |
 | packages/sessions/bash-fence.ts | sessions | verbatim | 508 |
 | packages/sessions/kinds/brain-fix.ts | sessions | rewritten | 276 |
-| packages/sessions/kinds/fix-turn.ts | sessions | rewritten | 305 |
+| packages/sessions/kinds/fix-turn.ts | sessions | rewritten | 313 Row 164 (forge-8vfn.8.1.51, ruling 1904): wires the shared interval heartbeat ticker around its own stream loop, stopped in a `finally`. |
 | packages/sessions/kinds/fix-registry.ts | sessions | rewritten | 76 |
 | packages/knowledge/brain-paths.ts | knowledge | pruned | 198 |
 | packages/flows/claim-validator.ts | flows | verbatim | 264 |
@@ -343,9 +343,10 @@ operator-ratified new cap — never a silent raise.
 | packages/library/instruction-seed-match.ts | library | verbatim | 152 |
 | packages/sessions/kinds/instructions.ts | sessions | verbatim | 744 |
 | packages/sessions/interactive-finalizers.ts | sessions | verbatim | 589 |
-| packages/sessions/interactive-runner.ts | sessions | verbatim | 294 |
+| packages/sessions/interactive-runner.ts | sessions | verbatim | 295 `makeHeartbeatWriter` now imported from the new `heartbeat.ts` (pure move, forge-8vfn.8.1.51 prep). |
 | packages/sessions/interactive-agent-step.ts | sessions | rewritten | 730 |
-| packages/sessions/interactive-session.ts | sessions | verbatim | 790 |
+| packages/sessions/interactive-session.ts | sessions | rewritten | 767 Row 164 (forge-8vfn.8.1.51, ruling 1904): wires the shared interval heartbeat ticker around `runStructuredTurn`/`runAgentTurn`'s stream loops, stopped in a `finally`. |
+| packages/sessions/heartbeat.ts | sessions | rewritten | 109 Row 164 (forge-8vfn.8.1.51, ruling 1904): adds `startHeartbeatTicker`, the interval ticker every SDK-call path shares — see the function's own doc comment. |
 | packages/sessions/turn-cost-rows.ts | sessions | verbatim | 160 |
 | packages/sessions/session-status-io.ts | sessions | rewritten | 224 |
 | packages/knowledge/kb-backend.ts | knowledge | verbatim | 280 |
@@ -398,7 +399,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/pr-branch-sync.ts | flows | verbatim | 595 |
 | packages/flows/pr-ci-watch.ts | flows | verbatim | 187 |
 | packages/sessions/kinds/preflight-fix.ts | sessions | rewritten | 171 |
-| packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 431 |
+| packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 432 `makeHeartbeatWriter` now imported from the new `heartbeat.ts` (pure move, forge-8vfn.8.1.51 prep). |
 | packages/sessions/kinds/project-brain.ts | sessions | rewritten | 182 |
 | packages/sessions/kinds/registry.ts | sessions | rewritten | 131 |
 | packages/sessions/kinds/architect-ports.ts | sessions | rewritten | 48 |

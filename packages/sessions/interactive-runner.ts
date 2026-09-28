@@ -86,7 +86,8 @@
 
 import { join, resolve } from 'node:path';
 
-import { makeHeartbeatWriter, makeReasoningSink, makeThinkingSink } from './interactive-session.ts';
+import { makeReasoningSink, makeThinkingSink } from './interactive-session.ts';
+import { makeHeartbeatWriter } from './heartbeat.ts';
 import { guardedReadSessionStatus } from './session-status-io.ts';
 import { emitTurnCostRow, emitTurnEndedUnpricedRow } from './turn-cost-rows.ts';
 import { createLogger, resolveGuardedPath } from '@forge/kernel';

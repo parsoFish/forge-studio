@@ -27,7 +27,7 @@
  *     untrusted content it reads (a fetched web page, a finding message) —
  *     this is the actual per-call enforcement point against the real disk.
  *   - session-dir status I/O (`readSessionStatus` / `writeSessionStatus`).
- *   - a throttled heartbeat writer (`makeHeartbeatWriter`).
+ *   - the `.heartbeat` liveness tick (`makeHeartbeatTick`, from `heartbeat.ts`).
  *
  * The LLM call sits behind an injectable `queryFn` seam so every turn is
  * unit-testable without a live LLM. Extracted from architect-runner.ts (which
@@ -83,10 +83,9 @@ import type { ToolUseLiveDetail } from '@forge/agents';
 // The write-root fence lives in its own module; importers reach it directly.
 import { writeRootFenceOptions, type BashFenceMode } from './session-write-fence.ts';
 
-/** Heartbeat cadence — the runner touches its `.heartbeat` file at most this
- *  often during an SDK stream, so the UI staleness checker has a liveness pulse
- *  without flooding the filesystem. */
-export const HEARTBEAT_THROTTLE_MS = 2000;
+// The `.heartbeat` liveness primitives live in their own module (file-size
+// budget, 1.0.md §0) — imported directly, never re-exported from here.
+import { makeHeartbeatTick, startHeartbeatTicker } from './heartbeat.ts';
 
 /** PROGRESS predicate shared by every turn loop (forge-8vfn.8.1.9, incl.
  *  `kinds/fix-turn.ts`): an `assistant` message or the terminal `result` is
@@ -97,21 +96,6 @@ export function isProgressMessage(msg: unknown): boolean {
   if (msg === null || typeof msg !== 'object') return false;
   const type = (msg as { type?: unknown }).type;
   return type === 'assistant' || type === 'result';
-}
-
-/** Throttled `.heartbeat` tick: fires at most once per HEARTBEAT_THROTTLE_MS,
- *  called only from a progress branch. Shared by every turn loop below and
- *  `kinds/fix-turn.ts`. */
-export function makeHeartbeatTick(onHeartbeat: (() => void) | undefined): () => void {
-  let lastHeartbeatMs = 0;
-  return () => {
-    if (!onHeartbeat) return;
-    const now = Date.now();
-    if (now - lastHeartbeatMs >= HEARTBEAT_THROTTLE_MS) {
-      onHeartbeat();
-      lastHeartbeatMs = now;
-    }
-  };
 }
 
 /**
@@ -410,6 +394,10 @@ export async function runStructuredTurn<T>(args: {
   let toolSeq = 0;
   const reads: string[] = [];
   const tickHeartbeat = makeHeartbeatTick(args.onHeartbeat);
+  // Row 164 (bead forge-8vfn.8.1.51, S10 run 43) — started before the SDK
+  // call begins, stopped in the `finally` below once it ends: see
+  // `startHeartbeatTicker`'s own doc comment (heartbeat.ts).
+  const stopHeartbeatTicker = startHeartbeatTicker(args.onHeartbeat);
   // `SeenUsage`/`recordUsage`/`unpricedReason`/`unpricedTokens` are declared
   // below, between this function and `runAgentTurn`, because both primitives
   // use them. 7.6.55 built them for the agent turn; 7.6.73 found the same
@@ -474,6 +462,9 @@ export async function runStructuredTurn<T>(args: {
     // consumed tokens can ever be reported.
     reportUnpriced(args.onTurnEndedUnpriced, unpricedReason(err), seen);
     throw err;
+  } finally {
+    // Row 164 — the call is no longer in flight, however it ended.
+    stopHeartbeatTicker();
   }
 
   // THE CLEAN END WITH NO PRICE — the case a throw never covers and the one
@@ -705,6 +696,10 @@ export async function runAgentTurn(args: {
   const seen: SeenUsage = { sawAny: false, tokensOutSum: 0, tokensInLast: 0, cacheReadLast: 0, cacheCreateLast: 0 };
   let toolSeq = 0;
   const tickHeartbeat = makeHeartbeatTick(args.onHeartbeat);
+  // Row 164 (bead forge-8vfn.8.1.51, S10 run 43) — started before the SDK
+  // call begins, stopped in the `finally` below once it ends: see
+  // `startHeartbeatTicker`'s own doc comment (heartbeat.ts).
+  const stopHeartbeatTicker = startHeartbeatTicker(args.onHeartbeat);
 
   try {
   for await (const msg of withIdleDeadline(args.queryFn({ prompt: args.prompt, options }), {
@@ -755,6 +750,9 @@ export async function runAgentTurn(args: {
     // caller's error handling is unchanged.
     reportUnpriced(args.onTurnEndedUnpriced, unpricedReason(err), seen);
     throw err;
+  } finally {
+    // Row 164 — the call is no longer in flight, however it ended.
+    stopHeartbeatTicker();
   }
 
   // 7.6.73 — the clean end with no price. `interactive-agent-step` emits a
@@ -765,26 +763,5 @@ export async function runAgentTurn(args: {
   if (costUsd === null) reportUnpriced(args.onTurnEndedUnpriced, 'no-result', seen);
 
   return { costUsd };
-}
-
-/**
- * Build a throttled heartbeat writer for `<heartbeatDir>/.heartbeat`. Each call
- * writes the current ISO timestamp at most once per HEARTBEAT_THROTTLE_MS;
- * best-effort (never throws). The directory is created up front.
- */
-export function makeHeartbeatWriter(heartbeatDir: string): () => void {
-  mkdirSync(heartbeatDir, { recursive: true });
-  const heartbeatPath = join(heartbeatDir, '.heartbeat');
-  let lastMs = 0;
-  return () => {
-    const now = Date.now();
-    if (now - lastMs < HEARTBEAT_THROTTLE_MS) return;
-    lastMs = now;
-    try {
-      writeFileSync(heartbeatPath, new Date().toISOString());
-    } catch {
-      /* best-effort */
-    }
-  };
 }
 

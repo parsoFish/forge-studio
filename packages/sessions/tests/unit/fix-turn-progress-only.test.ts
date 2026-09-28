@@ -4,15 +4,22 @@
  * call with no `isProgress`, and an unconditional `onHeartbeat()` before the
  * type check) and is itself a session kind the Studio stall detector watches
  * (`bridge-studio-lifecycle.ts`, kb-cleanup/authoring/preflight-fix all route
- * through it). Same fix, same shared helpers
- * (`isProgressMessage`/`makeHeartbeatTick` from `../../interactive-session.ts`
- * — never re-derived here), same test shape as
+ * through it). Same fix, same shared helpers (`isProgressMessage` from
+ * `../../interactive-session.ts`, `makeHeartbeatTick` from
+ * `../../heartbeat.ts` — never re-derived here), same test shape as
  * `heartbeat-progress-only.test.ts`.
  *
  * `runFixTurn` never rethrows a stall to its caller (its own catch emits an
  * `error` event and calls the variant's `finish({crashed: true})`), so this
  * pins the SAME two facts through the observable surface `runFixTurn` DOES
  * expose: the `error` event's message, and whether `.heartbeat` exists.
+ *
+ * Row 164 (bead forge-8vfn.8.1.51, S10 run 43, ruling 1904) SUPERSEDES the
+ * `.heartbeat` half of that pin the same way it does in
+ * `heartbeat-progress-only.test.ts`: `startHeartbeatTicker` keeps
+ * `.heartbeat` warm on an interval for as long as `runFixTurn`'s SDK call is
+ * in flight, independent of message content, so a ping-only stream is no
+ * longer exempt. The stall itself is still pinned below, unchanged.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -41,7 +48,7 @@ function setup(): { forgeRoot: string; projectDir: string; logsRoot: string } {
   return { forgeRoot, projectDir, logsRoot: join(forgeRoot, '_logs') };
 }
 
-test('runFixTurn (via preflight-fix): a stream producing only non-progress pings logs a stall naming them, and NEVER refreshes .heartbeat', async (t) => {
+test('runFixTurn (via preflight-fix): a stream producing only non-progress pings logs a stall naming them, but the interval ticker still keeps .heartbeat warm (row 164)', async (t) => {
   const { forgeRoot, projectDir, logsRoot } = setup();
   const runId = 'test-progress-only';
   const logDir = join(logsRoot, `_preflight-fix-${runId}`);
@@ -78,7 +85,9 @@ test('runFixTurn (via preflight-fix): a stream producing only non-progress pings
     assert.match(message, /saw only non-progress messages/, message);
     assert.match(message, /tool_progress×5/, message);
 
-    assert.equal(existsSync(join(logDir, '.heartbeat')), false, '.heartbeat must never have been written — every message was a non-progress ping');
+    // Row 164 — the call was alive the whole time, so the interval ticker
+    // kept `.heartbeat` warm regardless of the ping-only stream.
+    assert.equal(existsSync(join(logDir, '.heartbeat')), true, '.heartbeat must be kept warm by the interval ticker while the call is in flight, even on a ping-only stream');
   } finally {
     t.mock.timers.reset();
   }
