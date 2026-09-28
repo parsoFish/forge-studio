@@ -28,6 +28,11 @@
  *   - anything else → fresh full re-run (wipe worktree + branch), exactly
  *     the pre-N7 behaviour.
  *
+ * Row 122 (bead forge-8vfn.8.1.55) adds a narrower case ahead of the one
+ * above: a failure classified AT the review node's PR-open call resumes
+ * `resume_from: pr-open` — the whole post-develop band already succeeded, so
+ * only the review node re-enters, not the generic `'integrate'` case above.
+ *
  * All helpers are read-only; the caller (`runRequeue`) owns every mutation.
  */
 
@@ -45,10 +50,12 @@ export type RequeueResumeDecision =
        * `'integrate'` → stamp `resume_from: integrate` (ADR 019). `'plan'` →
        * stamp `resume_from: plan` (row 157, ruling 1873) — the PM node
        * RE-RUNS (it is the phase that failed), unlike the other two markers.
+       * `'pr-open'` → stamp `resume_from: pr-open` (row 122) — narrower than
+       * `'integrate'`: the failure was AT the review node's PR-open call.
        * `null` → preserve the worktree with NO marker; the scheduler's
        * preserved work-items reuse path re-runs the dev-loop in place.
        */
-      resume_from: 'integrate' | 'plan' | null;
+      resume_from: 'integrate' | 'plan' | 'pr-open' | null;
       reason: string;
     };
 
@@ -70,10 +77,11 @@ export type WorkItemStatusSummary = { total: number; complete: number };
 export type PriorFailureSignal = {
   environment: boolean;
   cleanBoundaryHalt: boolean;
-  /** Row 157 (ruling 1873): `'plan'` when the classifier's own `resumeFrom`
-   *  named the plan node — read structured, off `failure_classification`'s
-   *  `resume_from` metadata, never by re-sniffing `reason` prose. */
-  resumeFrom?: 'plan';
+  /** Row 157 (ruling 1873): `'plan'` when the classifier named the plan
+   *  node; row 122: `'pr-open'` when it named the review node instead — both
+   *  read structured, off `failure_classification`'s `resume_from`
+   *  metadata, never by re-sniffing `reason` prose. */
+  resumeFrom?: 'plan' | 'pr-open';
 };
 
 const NO_PRIOR_FAILURE_SIGNAL: PriorFailureSignal = { environment: false, cleanBoundaryHalt: false };
@@ -108,7 +116,11 @@ export function readPriorFailureSignalFromLog(logPath: string): PriorFailureSign
         return {
           environment: e.metadata?.environment === true,
           cleanBoundaryHalt: e.metadata?.cleanBoundaryHalt === true,
-          ...(e.metadata?.resume_from === 'plan' ? { resumeFrom: 'plan' as const } : {}),
+          ...(e.metadata?.resume_from === 'plan'
+            ? { resumeFrom: 'plan' as const }
+            : e.metadata?.resume_from === 'pr-open'
+              ? { resumeFrom: 'pr-open' as const }
+              : {}),
         };
       }
     }
@@ -204,6 +216,14 @@ export function decideRequeueResume(args: {
    * nothing to check worktree/branch state for — the plan node just re-runs.
    */
   resumeFromPlan?: boolean;
+  /**
+   * Row 122: the classifier's own `resumeFrom:'pr-open'` — an environment
+   * failure at the review node's PR-open call. PR-open is the flow's last
+   * node, so dev/integrate/adversarial-review are guaranteed already
+   * succeeded; only the preserved worktree is checked (WI counting, below,
+   * does not apply).
+   */
+  resumeFromPrOpen?: boolean;
   worktreePresent: boolean;
   branchHasWork: boolean;
   workItems: WorkItemStatusSummary | null;
@@ -213,6 +233,20 @@ export function decideRequeueResume(args: {
       'prior failure was a PM-phase acceptance-gate violation, deterministic after its one ' +
       'bounded revise turn — resume at the plan node to re-decompose';
     return { resume: true, resume_from: 'plan', reason };
+  }
+  if (args.resumeFromPrOpen) {
+    if (!args.worktreePresent) {
+      return {
+        resume: false,
+        reason:
+          'prior failure was an environment failure at PR-open, but the preserved worktree is gone — ' +
+          'fresh re-run',
+      };
+    }
+    const reason =
+      "prior failure was an environment failure at the review node's PR-open call — dev, integrate " +
+      'and adversarial-review already succeeded; resume at the pr-open node to re-open the PR only';
+    return { resume: true, resume_from: 'pr-open', reason };
   }
   const resumable = args.environmentFailure || args.cleanBoundaryHalt === true;
   if (!resumable) {
@@ -261,6 +295,7 @@ export function inferRequeueResume(args: {
     environmentFailure: priorFailure.environment,
     cleanBoundaryHalt: priorFailure.cleanBoundaryHalt,
     resumeFromPlan: priorFailure.resumeFrom === 'plan',
+    resumeFromPrOpen: priorFailure.resumeFrom === 'pr-open',
     worktreePresent: existsSync(args.worktreePath),
     branchHasWork:
       existsSync(args.projectRepoPath) &&

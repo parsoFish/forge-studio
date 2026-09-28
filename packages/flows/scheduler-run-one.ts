@@ -513,6 +513,7 @@ export async function runOne(
         environmentFailure: priorFailure.environment,
         cleanBoundaryHalt: priorFailure.cleanBoundaryHalt,
         resumeFromPlan: priorFailure.resumeFrom === 'plan',
+        resumeFromPrOpen: priorFailure.resumeFrom === 'pr-open',
         worktreePresent: wtHandle !== null && existsSync(wtHandle.path),
         branchHasWork: branchHasCommittedWork(projectRepoPath, branch),
         workItems: wtHandle !== null ? summarizeWorkItemStatuses(wtHandle.path) : null,
@@ -593,8 +594,10 @@ type ParsedManifest = {
    * re-enters at the post-develop `integrate` node (WI commits already present);
    * 'develop' (ADR 040 send-back re-entry) rebase-skips PM and RUNS the dev loop.
    * 'plan' (row 157) rebases and STILL RUNS PM — it is the phase that failed.
+   * 'pr-open' (row 122) skips PM, the dev-loop AND the whole post-develop band
+   * (integrate, adversarial-review) — only the review node re-runs.
    */
-  resumeFrom?: 'integrate' | 'develop' | 'plan';
+  resumeFrom?: 'integrate' | 'develop' | 'plan' | 'pr-open';
 };
 
 function parseManifest(path: string): ParsedManifest {

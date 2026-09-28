@@ -158,9 +158,30 @@ const execDev: NodeExecutor = async (ctx) => {
  * the EXECUTING node's own def slug (`resolveExecutingAgentDef`), never a
  * hardcoded canonical literal — a canonical run still resolves to
  * historical: `demo-agent`, so this is a no-op for the shipped flow.
+ *
+ * Row 122 (bead forge-8vfn.8.1.55): on a `resumeFrom: 'pr-open'` run (an
+ * environment failure classified specifically at the review node's PR-open
+ * call, ADR 019 amendment) this band SKIPS entirely — it already succeeded
+ * before PR-open failed, and its artifacts (demo.json, DEMO.md,
+ * .forge/pr-description.md) already sit in the preserved worktree. Re-running
+ * it would re-derive a bundle that is already correct, at the cost of a full
+ * merge-boundary gate pass for nothing.
  */
 const execIntegrate: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, nodeId, state } = ctx;
+  if (input.resumeFrom === 'pr-open') {
+    nodeLogger.emit({
+      initiative_id: input.initiativeId,
+      phase: 'orchestrator',
+      skill: 'flow-runner',
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: 'flow-runner.integrate-skipped-resume',
+      metadata: { node_id: nodeId, resume_from: input.resumeFrom },
+    });
+    return;
+  }
   const def = resolveExecutingAgentDef(ctx);
   const start = nodeLogger.emit({
     initiative_id: input.initiativeId,
@@ -299,9 +320,27 @@ const execIntegrate: NodeExecutor = async (ctx) => {
  * operator signal weighed at the verdict (ADR-021), never an auto-block; but a
  * pipeline FAILURE produced NO findings, so it fails loud (symmetric with the
  * integrate delivery gate) rather than open a PR the operator would review blind.
+ *
+ * Row 122 (bead forge-8vfn.8.1.55): SKIPS on a `resumeFrom: 'pr-open'` run for
+ * the same reason `execIntegrate` skips — it already succeeded before PR-open
+ * failed, and its `review-findings` artifact already sits in the preserved
+ * worktree's `.forge/`. See `execIntegrate`'s doc comment for the full reasoning.
  */
 const execAdversarialReview: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, nodeId } = ctx;
+  if (input.resumeFrom === 'pr-open') {
+    nodeLogger.emit({
+      initiative_id: input.initiativeId,
+      phase: 'orchestrator',
+      skill: 'flow-runner',
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: 'flow-runner.adversarial-review-skipped-resume',
+      metadata: { node_id: nodeId, resume_from: input.resumeFrom },
+    });
+    return;
+  }
   const def = resolveExecutingAgentDef(ctx);
   const start = nodeLogger.emit({
     initiative_id: input.initiativeId,

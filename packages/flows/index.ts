@@ -36,7 +36,7 @@ export { type TriggerCheckOpts, checkFlowTriggers } from './studio/validate-trig
 
 // ---- The cycle the develop flow runs ---------------------------------------
 export { resolveCostCeilingOverride } from './cycle.ts';
-export { type ClosureResult, type CycleInput, type CycleOutcome, type LintStatus, REFLECTION_LOST_EVENT, REFLECT_MODE_FILE, type ReflectMode, type ReflectionStatus, type ReflectorPhaseResult, type ReleaseFinalizePhaseResult, type ReviewerOutcome, recordBrainGateResult } from './cycle-context.ts';
+export { type ClosureResult, type CycleInput, type CycleOutcome, type LintStatus, REFLECTION_LOST_EVENT, REFLECT_MODE_FILE, type ReflectMode, type ReflectionStatus, type ReflectorPhaseResult, type ReleaseFinalizePhaseResult, type ReviewerOutcome, recordBrainGateResult, resumeSkipsPerWiWork } from './cycle-context.ts';
 export { type MergeGateResult, type MergeGateEvidence, assertNonEmptyDelivery, commitDevLoopBoundary, enforceDevLoopCloseInvariant, enforceFinalCiGate, preservingForgeScratch, runMergeBoundaryGate } from './cycle-helpers.ts';
 export { openPrInline } from './cycle-pr-open.ts';
 export { promoteMergedToDone, runClosure } from './phases/closure.ts';

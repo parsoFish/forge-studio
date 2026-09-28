@@ -1,6 +1,7 @@
 /**
  * `openPrInline` — the environment/DNS PR-open failure path. Bead
- * `forge-8vfn.8.1.24` / T1 ruling 1609.
+ * `forge-8vfn.8.1.24` / T1 ruling 1609, narrowed by row 122 (bead
+ * forge-8vfn.8.1.55, T1 1609/1617).
  *
  * THE DEFECT (verified from a live run). At the PR-open step a DNS outage made
  * `gh api user --jq .login` fail with "error connecting to api.github.com".
@@ -19,9 +20,10 @@
  *     `unifier.prerequisite-missing` event, the error rides in
  *     `reviewer.pr-open-failed`'s `metadata.error` and in the thrown message,
  *     `classifyCycleFailure` reads `environment:true, recoverable:true` (never
- *     `unifierNoDemo`), and the manifest is stamped `resume_from: 'integrate'`
- *     (ADR 019) so a resume reuses the preserved worktree/branch instead of
- *     wiping `.forge/work-items/` and rebuilding from scratch.
+ *     `unifierNoDemo`), and the manifest is stamped `resume_from: 'pr-open'`
+ *     (ADR 019, row 122) — dev, integrate AND adversarial-review already
+ *     succeeded, so a resume must re-enter ONLY the review node, not the
+ *     whole post-develop band `resume_from: 'integrate'` would re-run.
  *   - the tracked demo bundle GENUINELY missing → the original
  *     `unifier.prerequisite-missing` behaviour is unchanged, and NO resume
  *     marker is stamped (this is a real defect, not an environment blip).
@@ -150,7 +152,7 @@ function readEvents(logFilePath: string): EventLogEntry[] {
     .map((l) => JSON.parse(l) as EventLogEntry);
 }
 
-test('openPrInline: DNS/environment PR-open failure with both prerequisites present — no prerequisite-missing, error named, resume_from:integrate stamped', async () => {
+test('openPrInline: DNS PR-open failure, prerequisites present → resume_from:pr-open stamped', async () => {
   const { root, proj, manifestPath } = setupRepo(true);
   try {
     __resetGhRunnerCache();
@@ -184,11 +186,14 @@ test('openPrInline: DNS/environment PR-open failure with both prerequisites pres
     assert.equal(md.pr_created, false);
     assert.match(md.error, /error connecting to api\.github\.com/);
 
-    // ADR 019 resume marker — stamped directly by openPrInline on an
-    // environment failure so F-27's ordinary pending-requeue resumes at
-    // `integrate` instead of wiping `.forge/work-items/` and rebuilding.
+    // Row 122 (bead forge-8vfn.8.1.55) resume marker — stamped directly by
+    // openPrInline on an environment failure so F-27's ordinary
+    // pending-requeue resumes at `pr-open` (the review node only) instead of
+    // `integrate` (which would needlessly re-run the already-succeeded
+    // integrate + adversarial-review bands) or wiping `.forge/work-items/`
+    // and rebuilding from scratch.
     const onDisk = parseManifest(readFileSync(manifestPath, 'utf8'));
-    assert.equal(onDisk.resume_from, 'integrate');
+    assert.equal(onDisk.resume_from, 'pr-open');
 
     // classifyCycleFailure (the same function runCycle's catch calls) must
     // read this as environment/transient, never unifierNoDemo terminal —
@@ -208,6 +213,10 @@ test('openPrInline: DNS/environment PR-open failure with both prerequisites pres
     assert.equal(cls.kind, 'transient');
     assert.equal(cls.recoverable, true);
     assert.doesNotMatch(cls.reason, /unifier did not author the PR/);
+    // Row 122: the classifier's own structured signal also names the review
+    // node — `requeue-resume.ts` reads THIS field (not just `environment`) to
+    // pick `resume_from: pr-open` over the generic `'integrate'` inference.
+    assert.equal(cls.resumeFrom, 'pr-open', `expected resumeFrom:'pr-open', got ${JSON.stringify(cls)}`);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

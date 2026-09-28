@@ -150,9 +150,18 @@ export type InitiativeManifest = {
    *     `failure-classifier.ts`). The PM phase rebases AND RUNS (unlike the
    *     other two, it is not skipped — the plan itself must re-decompose).
    *     Set by `forge requeue`'s inference over the prior failure signal.
+   *   - `'pr-open'` — row 122 (bead forge-8vfn.8.1.55): an ENVIRONMENT failure
+   *     classified specifically at the review node's PR-open call. Narrower
+   *     than `'integrate'`: dev, integrate AND adversarial-review already
+   *     succeeded by the time PR-open failed, so the resume skips the WHOLE
+   *     post-develop band and re-enters only the review node (openPrInline +
+   *     runClosure) against the artifacts those bands already produced. Set
+   *     directly by `openPrInline` (`cycle-pr-open.ts`) on the environment
+   *     failure, and by `forge requeue`'s inference over the prior failure
+   *     signal.
    * Absent ⇒ normal full cycle.
    */
-  resume_from?: 'integrate' | 'develop' | 'plan';
+  resume_from?: 'integrate' | 'develop' | 'plan' | 'pr-open';
   /**
    * ADR 040: send-back round counter. Incremented by the review verdict
    * handler (`persistManifestSendBack`) each time review feedback compiles

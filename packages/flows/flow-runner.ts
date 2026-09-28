@@ -386,6 +386,15 @@ export function checkFlowVersionSeam(
  * re-enters the post-develop band (integrate → adversarial-review → verdict) against
  * the preserved branch without rebuilding any WI.
  *
+ * Row 122 (bead forge-8vfn.8.1.55): `input.resumeFrom === 'pr-open'` is a
+ * narrower resume for the SAME kind of environment failure, classified
+ * specifically at the review node's PR-open call — dev self-no-ops exactly as
+ * above, and `execIntegrate`/`execAdversarialReview` ALSO self-no-op (a
+ * `flow-runner.*-skipped-resume` log event each, no re-derivation), so the
+ * `review` node (openPrInline + runClosure) is the only node that actually
+ * runs, against the demo bundle / PR description / review-findings the prior
+ * attempt already produced.
+ *
  * Returns enough for runCycle to build the full CycleResult.
  */
 export async function runFlow({
