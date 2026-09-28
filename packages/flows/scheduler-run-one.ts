@@ -33,21 +33,32 @@ import type { SchedulerConfig } from './scheduler.ts'; // type-only: erased, no 
  * F-24: link gitignored dependency directories from the source repo into the
  * worktree so `npm test` / `pytest` etc. can actually resolve their imports.
  * Symlinks (not copies) keep this fast — install once at the project level,
- * every cycle's worktree shares it. Idempotent; missing source is a no-op
- * (the project may not use that dep system).
+ * every cycle's worktree shares it. Idempotent; a missing source is a no-op
+ * — row 133 (bead forge-8vfn.8.1.57): the caller must still record that,
+ * never let it vanish (see `DepsLinkResult.skipped`).
  *
  * Currently links Node's `node_modules`. Generalise here when forge picks up
  * Python (`.venv`) or Rust (`target`) projects that need similar.
  */
-/** What linking a worktree's deps could not do — empty when everything it attempted held. */
-export type DepsLinkResult = { problems: string[] };
+/**
+ * What linking a worktree's deps did. `problems`: something it tried and
+ * failed at (a symlink or git-exclude write threw) — never swallowed.
+ * `skipped`: a dep dir with no source to link — a benign no-op (the ground
+ * may not use that dep system, or just isn't provisioned yet), but row 133
+ * (bead forge-8vfn.8.1.57): recorded now instead of vanishing silently.
+ */
+export type DepsLinkResult = { problems: string[]; skipped: string[] };
 
 export function linkProjectDeps(projectRepoPath: string, worktreePath: string): DepsLinkResult {
   const problems: string[] = [];
+  const skipped: string[] = [];
   for (const dir of ['node_modules']) {
     const src = resolve(projectRepoPath, dir);
     const dst = resolve(worktreePath, dir);
-    if (!existsSync(src)) continue;
+    if (!existsSync(src)) {
+      skipped.push(`${dir} not found at ${src} — nothing to link`);
+      continue;
+    }
     // Skip if `git worktree add` somehow already produced this path (shouldn't,
     // since it's gitignored, but defend against it). lstatSync, not statSync,
     // so an existing symlink doesn't follow.
@@ -93,7 +104,7 @@ export function linkProjectDeps(projectRepoPath: string, worktreePath: string): 
     // Never swallowed: without this exclude a `git add -A` in the worktree stages the symlink.
     problems.push(`could not write node_modules into the worktree's git exclude: ${(err as NodeJS.ErrnoException).code ?? (err as Error).message}`);
   }
-  return { problems };
+  return { problems, skipped };
 }
 
 /**
@@ -371,10 +382,22 @@ export async function runOne(
     // `git worktree add` only checks out tracked files, but `node_modules/`
     // is gitignored — without this, `npm test` fails at module resolution
     // before any test runs, and the dev-loop wedges trying to "fix" what
-    // looks like a broken codebase. Idempotent — missing source is a no-op.
+    // looks like a broken codebase. Idempotent — a missing source is a no-op.
     const depsLink = linkProjectDeps(manifest.projectRepoPath, wtHandle.path);
     if (depsLink.problems.length > 0) {
       emitOrchestratorEvent(logsRoot, manifest.initiativeId, 'error', 'deps.link-problem', { problems: depsLink.problems, worktree: wtHandle.path });
+    }
+    // row 133 (bead forge-8vfn.8.1.57): `validateClaimable` above already
+    // refuses a claim whose declared gate NEEDS node_modules and finds none
+    // (the DEPS clause, claim-validator.ts via runPreflight's
+    // requireRunnableGate) — that case never reaches here. A skip reaching
+    // this point means the gate does not need node_modules: a benign no-op,
+    // but no longer silent — it is now named.
+    if (depsLink.skipped.length > 0) {
+      emitOrchestratorEvent(logsRoot, manifest.initiativeId, 'log', 'deps.link-skipped', {
+        skipped: depsLink.skipped,
+        worktree: wtHandle.path,
+      });
     }
     annotateManifest(manifestPath, { worktree_path: wtHandle.path });
 

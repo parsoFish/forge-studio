@@ -61,13 +61,13 @@ operator-ratified new cap — never a silent raise.
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,386 | **13,386** | ratified 13,386 — row 122 (forge-8vfn.8.1.55): `classifyCycleFailure` narrows a DNS/environment PR-open failure to `resumeFrom:'pr-open'`, +31 on 13,355, lane-ratified (ruling 666, measured). |
 | `sessions` | 63 | 20,663 | **20,625** | ratified 20,625 — row 129 (forge-8vfn.8.1.56): idempotent initiative-id minting (`mintInitiativeId`, `architect-manifest.ts`), +25 on 20,600, lane-ratified (ruling 666, measured); see git history for prior raises. |
-| `flows` | 86 | 24,724 | **24,524** | ratified 24,524 — row 122 (forge-8vfn.8.1.55): the `pr-open` resume point + shared `resumeSkipsPerWiWork` predicate, +108 on 24,416, T1-ratified (ruling 1918, >100, operator veto window until merge); see git history for detail. |
+| `flows` | 86 | 24,747 | **24,547** | ratified 24,547 — row 122 (forge-8vfn.8.1.55): the `pr-open` resume point + shared `resumeSkipsPerWiWork` predicate, +108 on 24,439, T1-ratified (ruling 1918, >100, operator veto window until merge); see git history for prior raises. |
 | `factory` | 15 | 2,763 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 45 | 12,284 | **12,284** | ratified 12,284 — row 122 (forge-8vfn.8.1.55): `execIntegrate`/`execAdversarialReview` pr-open skip branches (the developer-loop `skipsPerWiWork` widening is comment-neutral), +39 on 12,245, lane-ratified (ruling 666, measured). |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,922 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **477** | **129,508** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **477** | **129,531** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -449,7 +449,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/scheduler-dispatch.ts | flows | verbatim | 252 |
 | packages/flows/scheduler.ts | flows | verbatim | 398 |
 | packages/flows/scheduler-sweeps.ts | flows | verbatim | 177 |
-| packages/flows/scheduler-run-one.ts | flows | verbatim | 646 |
+| packages/flows/scheduler-run-one.ts | flows | verbatim | 669 |
 | packages/flows/stale-remote-branch-guard.ts | flows | verbatim | 116 |
 | packages/agents/skill-path.ts | agents | verbatim | 239 |
 | packages/agents/stream-deadline.ts | agents | verbatim | 126 |
