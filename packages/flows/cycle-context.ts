@@ -112,9 +112,15 @@ export type CycleInput = {
    *     by the review→develop fix-loop drain.
    *   - `'plan'` — row 157 (ruling 1873): a PM-phase acceptance-gate failure
    *     that survived its bounded revise turn. PM rebases and STILL RUNS.
+   *   - `'pr-open'` — row 122 (bead forge-8vfn.8.1.55): an environment failure
+   *     at the review node's PR-open call, narrower than `'integrate'` — dev,
+   *     integrate and adversarial-review already succeeded, so this skips the
+   *     WHOLE post-develop band (not just per-WI work) and re-enters only the
+   *     review node against the artifacts those bands already produced. Set
+   *     by `openPrInline` directly, or by `forge requeue`'s inference.
    * Absent ⇒ normal full cycle.
    */
-  resumeFrom?: 'integrate' | 'develop' | 'plan';
+  resumeFrom?: 'integrate' | 'develop' | 'plan' | 'pr-open';
   /** Project quality-gate command run by the orchestrator between review iterations. Defaults to `npm test` if package.json is present, otherwise `true`. */
   qualityGateCmd?: string[];
   /**
@@ -158,6 +164,15 @@ export type CycleInput = {
    */
   flowReview?: { flowId: string; lenses: readonly string[] };
 };
+
+/**
+ * Row 122 (bead forge-8vfn.8.1.55): true for the two `resumeFrom` values —
+ * `'integrate'` and `'pr-open'` — whose resume skips the per-WI dev-loop
+ * entirely (see `resumeFrom`'s own doc above for the full enumeration).
+ */
+export function resumeSkipsPerWiWork(resumeFrom: CycleInput['resumeFrom']): boolean {
+  return resumeFrom === 'integrate' || resumeFrom === 'pr-open';
+}
 
 export type ReflectionStatus = 'closed' | 'failed' | 'skipped';
 

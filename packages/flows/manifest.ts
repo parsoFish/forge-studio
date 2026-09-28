@@ -158,7 +158,12 @@ export function parseManifest(content: string): InitiativeManifest {
     const deps = (data.depends_on_initiatives as unknown[]).filter((s): s is string => typeof s === 'string');
     if (deps.length > 0) manifest.depends_on_initiatives = deps;
   }
-  if (data.resume_from === 'integrate' || data.resume_from === 'develop' || data.resume_from === 'plan') {
+  if (
+    data.resume_from === 'integrate' ||
+    data.resume_from === 'develop' ||
+    data.resume_from === 'plan' ||
+    data.resume_from === 'pr-open'
+  ) {
     manifest.resume_from = data.resume_from;
   }
   if (
@@ -231,7 +236,12 @@ export function serializeManifest(m: InitiativeManifest): string {
   if (m.depends_on_initiatives && m.depends_on_initiatives.length > 0) {
     data.depends_on_initiatives = m.depends_on_initiatives;
   }
-  if (m.resume_from === 'integrate' || m.resume_from === 'develop' || m.resume_from === 'plan') {
+  if (
+    m.resume_from === 'integrate' ||
+    m.resume_from === 'develop' ||
+    m.resume_from === 'plan' ||
+    m.resume_from === 'pr-open'
+  ) {
     data.resume_from = m.resume_from;
   }
   if (typeof m.review_rounds === 'number') {
@@ -544,14 +554,12 @@ export function persistManifestSpecs(manifestPath: string, specs: string[]): voi
  * cycle. Idempotent + best-effort. `forge requeue` (full re-run) clears it.
  * (Was `persistManifestResumeFromDemo` pre-rename (8vfn.6.10.18); `persistManifestResumeFromUnifier` pre-cutover.)
  *
- * Bead `forge-8vfn.8.1.24` / T1 ruling 1609: also the call `openPrInline`
- * (`cycle-helpers.ts`) makes on an ENVIRONMENT PR-open failure — dev,
- * integrate and adversarial-review already succeeded by the time the review
- * node's PR-open call fails, so the precondition this function requires
- * (every WI complete, post-develop band unfinished) is trivially satisfied.
- * That call site does not wait for a crash: the exception path stamps the
- * marker directly, so F-27's ordinary pending-requeue (scheduler-dispatch.ts)
- * resumes at `integrate` instead of wiping `.forge/work-items/` and rebuilding.
+ * Row 122 (bead forge-8vfn.8.1.55) narrowed `openPrInline`'s own ENVIRONMENT
+ * PR-open failure call site off this function onto `persistManifestResumeFromPrOpen`
+ * below — dev, integrate and adversarial-review already succeeded by the time
+ * the review node's PR-open call fails, so a resume needs only that last node,
+ * not the whole post-develop band this function re-enters at. This function's
+ * own crash-recovery use (the daemon crash sweep, above) is unchanged.
  */
 export function persistManifestResumeFromIntegrate(manifestPath: string): void {
   try {
@@ -559,6 +567,31 @@ export function persistManifestResumeFromIntegrate(manifestPath: string): void {
     const m = parseManifest(readFileSync(manifestPath, 'utf8'));
     if (m.resume_from === 'integrate') return;
     writeFileSync(manifestPath, serializeManifest({ ...m, resume_from: 'integrate' }));
+  } catch {
+    /* best-effort — must not fail the verdict request */
+  }
+}
+
+/**
+ * Row 122 (bead forge-8vfn.8.1.55, T1 1609/1617): stamp `resume_from: 'pr-open'`
+ * when `openPrInline`'s own PR-open call fails for an ENVIRONMENT reason (DNS /
+ * transient network, `matchesDnsFailureSignature`) — dev, integrate AND
+ * adversarial-review have already succeeded by the time the review node's
+ * PR-open call runs, so a resume must re-run ONLY the review node (openPrInline
+ * + runClosure) against the demo bundle / PR description / review-findings
+ * those bands already wrote to the preserved worktree, never re-derive them.
+ * Narrower than `persistManifestResumeFromIntegrate` above, which re-enters
+ * the whole post-develop band (integrate → adversarial-review → review) — the
+ * ADR 019 amendment this function implements exists precisely because that is
+ * wasted, already-done work when the failure is known to be AT PR-open.
+ * Idempotent + best-effort, same contract as its sibling above.
+ */
+export function persistManifestResumeFromPrOpen(manifestPath: string): void {
+  try {
+    if (!existsSync(manifestPath)) return;
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    if (m.resume_from === 'pr-open') return;
+    writeFileSync(manifestPath, serializeManifest({ ...m, resume_from: 'pr-open' }));
   } catch {
     /* best-effort — must not fail the verdict request */
   }

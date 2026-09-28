@@ -27,6 +27,12 @@
  * worktree with no marker (the scheduler's preserved-work-items reuse path
  * re-runs the dev-loop in place). Everything else re-runs fresh from main.
  *
+ * Row 122 (bead forge-8vfn.8.1.55) narrows that inference further: an
+ * environment failure classified specifically AT the review node's PR-open
+ * call ⇒ `resume_from: pr-open` — the whole post-develop band (integrate,
+ * adversarial-review) is guaranteed to have already succeeded, so only the
+ * review node re-runs, never the generic `'integrate'` re-entry above.
+ *
  * Each step is idempotent; running on an already-cleaned manifest is safe.
  */
 
@@ -203,16 +209,21 @@ export function runRequeue(
     previous_failure_modes: previousFailureModesAfter,
     // ADR 019: stamp the resume marker so the scheduler runs the cycle from the
     // preserved worktree — `integrate` re-enters at the post-develop `integrate` node
-    // (successor develop flow, R4-10-F6). A fresh (non-resume) requeue CLEARS any
-    // resume marker (e.g. one a send-back stamped, ADR 040) so the re-run is a true
-    // full cycle. N7's in-place dev-loop resume deliberately stamps NOTHING: the
-    // scheduler's preserved-work-items reuse path detects it from the worktree itself.
+    // (successor develop flow, R4-10-F6); `pr-open` (row 122, bead forge-8vfn.8.1.55)
+    // re-enters at the review node only — a narrower resume for a failure classified
+    // specifically at the PR-open call, where the post-develop band already succeeded.
+    // A fresh (non-resume) requeue CLEARS any resume marker (e.g. one a send-back
+    // stamped, ADR 040) so the re-run is a true full cycle. N7's in-place dev-loop
+    // resume deliberately stamps NOTHING: the scheduler's preserved-work-items reuse
+    // path detects it from the worktree itself.
     resume_from:
       resumeDecision.resume && resumeDecision.resume_from === 'integrate'
         ? ('integrate' as const)
         : resumeDecision.resume && resumeDecision.resume_from === 'plan'
           ? ('plan' as const)
-          : undefined,
+          : resumeDecision.resume && resumeDecision.resume_from === 'pr-open'
+            ? ('pr-open' as const)
+            : undefined,
   };
 
   // 3. Atomic move to pending/ via tmp+rename.

@@ -3103,3 +3103,13 @@ keeps ONE of each sink (`writeSessionStatus`'s own `mkdirSync`/`writeFileSync`
 on its guarded `sessionDir`), so its rows are DECREMENTED rather than deleted
 (unlike the row-157 relocation above, where the source call disappeared
 entirely). Accepted via `--write` in the same commit.
+
+### Row 122 (bead `forge-8vfn.8.1.55`) — `persistManifestResumeFromPrOpen`, same manifestPath pattern as its `resume_from:'integrate'` sibling
+
+| file (function) | sink (delta) | input | classification | why |
+|---|---|---|---|---|
+| `packages/flows/manifest.ts` (`persistManifestResumeFromPrOpen`) | `existsSync` / `readFileSync` / `writeFileSync` (5→6 / 9→10 / 6→7) | `manifestPath` — passed in verbatim by `openPrInline` (`cycle-pr-open.ts`) as `input.manifestPath`, the scheduler's own claim-time path | not request-derived | Byte-for-byte the SAME three-call read-modify-write shape `persistManifestResumeFromIntegrate` (already baselined, same file) uses on the SAME `manifestPath` — a new function, not a new input. `input.manifestPath` is never caller/request-supplied at this layer (`CycleInput` is built by the scheduler from `_queue/`); no new escape shape is planted. |
+
+`scripts/request-path-sinks.baseline.txt` accepts the grown counts via
+`--write` in the same commit that adds this section, per this document's own
+rule.

@@ -39,21 +39,37 @@ const GATE = join(
   import.meta.dirname, '..', '.claude', 'skills', 'tiered-orchestration', 'scripts', 'gate.sh',
 );
 
-/** One classification against a fixture `/proc/locks`. `<INO>` is replaced
- *  with the real inode of a real temp lock file, because the parser stats
- *  it. `<PID>` is replaced with a REAL pid — T1 1361 (this file's other
- *  describe block) made `suite_lock_state` require a LISTED pid to be
- *  LIVE before it counts as a holder, so the shipped bug's original fixture
- *  pid (a fixed, permanently non-existent number) would now be filtered out
- *  before the row-parsing this file is about is ever exercised. */
+/** `MAJOR:MINOR` the way `/proc/locks` itself prints it (row 151, bead
+ *  forge-8vfn.8.1.53) — `%Hd`/`%Ld` are `st_dev`'s own major/minor (decimal),
+ *  formatted to the width the kernel uses. Needed once the classifier checks
+ *  the device too, never just the inode: a fixture claiming the wrong device
+ *  for a real file must be rejected exactly like an unrelated file's would be. */
+function devHex(path: string): string {
+  const out = spawnSync('stat', ['-c', '%Hd:%Ld', path], { encoding: 'utf8' }).stdout.trim();
+  const [major, minor] = out.split(':').map(Number);
+  return `${major.toString(16).padStart(2, '0')}:${minor.toString(16).padStart(2, '0')}`;
+}
+
+/** One classification against a fixture `/proc/locks`. `<INO>` and `<DEV>`
+ *  are replaced with the real inode and device of a real temp lock file,
+ *  because the parser stats it for both, not just the inode (row 151). `<PID>`
+ *  is replaced with a REAL pid — T1 1361 (this file's other describe block)
+ *  made `suite_lock_state` require a LISTED pid to be LIVE before it counts as
+ *  a holder, so the shipped bug's original fixture pid (a fixed, permanently
+ *  non-existent number) would now be filtered out before the row-parsing this
+ *  file is about is ever exercised. */
 function lockState(locksBody: string, pid: number | string = 0): string {
   const d = mkdtempSync(join(tmpdir(), 'gate-s9g1-'));
   try {
     const lock = join(d, '.lk');
     writeFileSync(lock, '');
     const ino = spawnSync('stat', ['-c', '%i', lock], { encoding: 'utf8' }).stdout.trim();
+    const dev = devHex(lock);
     const locks = join(d, 'locks');
-    writeFileSync(locks, locksBody.replaceAll('<INO>', ino).replaceAll('<PID>', String(pid)));
+    writeFileSync(
+      locks,
+      locksBody.replaceAll('<INO>', ino).replaceAll('<DEV>', dev).replaceAll('<PID>', String(pid)),
+    );
     const r = spawnSync('bash', [GATE, '--lock-state', lock], {
       encoding: 'utf8',
       env: { ...process.env, FORGE_PROC_LOCKS: locks },
@@ -72,8 +88,8 @@ function liveSibling(): ChildProcess {
   return spawn('sleep', ['30'], { stdio: 'ignore' });
 }
 
-const HOLDER = '1: FLOCK  ADVISORY  WRITE <PID> 08:30:<INO> 0 EOF\n';
-const WAITER = '2: -> FLOCK  ADVISORY  WRITE 1677053 08:30:<INO> 0 EOF\n';
+const HOLDER = '1: FLOCK  ADVISORY  WRITE <PID> <DEV>:<INO> 0 EOF\n';
+const WAITER = '2: -> FLOCK  ADVISORY  WRITE 1677053 <DEV>:<INO> 0 EOF\n';
 
 describe('forge-s9g1 — a blocked waiter is not a holder, and position was never the property', () => {
   test('holder + blocked waiter on ONE inode returns exactly one pid, and it is numeric', () => {

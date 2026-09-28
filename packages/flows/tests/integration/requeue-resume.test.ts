@@ -184,6 +184,36 @@ test(
   },
 );
 
+test(
+  'decideRequeueResume: row 122 resumeFromPrOpen → resume from pr-open, no WI-count check needed',
+  () => {
+    const d = decideRequeueResume({
+      environmentFailure: true,
+      resumeFromPrOpen: true,
+      worktreePresent: true,
+      // Deliberately false/null — a `pr-open` resume never consults these;
+      // dev, integrate and adversarial-review are guaranteed to have
+      // succeeded already (PR-open is the flow's last node), so there is
+      // nothing to count WIs for the way the generic 'integrate' branch does.
+      branchHasWork: false,
+      workItems: null,
+    });
+    assert.equal(d.resume, true);
+    if (d.resume) assert.equal(d.resume_from, 'pr-open');
+  },
+);
+
+test('decideRequeueResume: row 122 resumeFromPrOpen but the preserved worktree is gone → no resume', () => {
+  const d = decideRequeueResume({
+    environmentFailure: true,
+    resumeFromPrOpen: true,
+    worktreePresent: false,
+    branchHasWork: false,
+    workItems: null,
+  });
+  assert.equal(d.resume, false);
+});
+
 // ---------------------------------------------------------------------------
 // branchHasCommittedWork — fixture git repos
 // ---------------------------------------------------------------------------
@@ -282,6 +312,20 @@ test('readPriorFailureSignal: row 157 resume_from:"plan" in the classification �
   }
 });
 
+test('readPriorFailureSignal: row 122 resume_from:"pr-open" → resumeFrom "pr-open"', () => {
+  const root = makeForgeRoot('cyc-pr-open', {
+    failure_mode: 'transient', recoverable: true, environment: true, cleanBoundaryHalt: false,
+    resume_from: 'pr-open', reason: 'DNS resolution failed while pushing/fetching …',
+  });
+  try {
+    const signal = readPriorFailureSignal(root, 'cyc-pr-open');
+    assert.equal(signal.environment, true);
+    assert.equal(signal.resumeFrom, 'pr-open');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('readPriorFailureSignal: no classification event / missing log → all-false signal', () => {
   const root = makeForgeRoot('cyc-3', null);
   const allFalse = { environment: false, cleanBoundaryHalt: false };
@@ -363,6 +407,42 @@ test('inferRequeueResume: environment death after all WIs complete → resume fr
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test(
+  'inferRequeueResume: row 122 — environment failure classified at PR-open → resume from pr-open, ' +
+    'not the generic integrate re-entry',
+  () => {
+    const repo = initRepo();
+    const wt = makeWorktree([wi('WI-1', 'complete'), wi('WI-2', 'complete')]);
+    const root = makeForgeRoot('cyc-pr-open-infer', {
+      failure_mode: 'transient',
+      recoverable: true,
+      environment: true,
+      resume_from: 'pr-open',
+      reason: 'DNS resolution failed while pushing/fetching …',
+    });
+    try {
+      addBranch(repo, `forge/${INIT}`, true);
+
+      const d = inferRequeueResume({
+        forgeRoot: root,
+        cycleId: 'cyc-pr-open-infer',
+        initiativeId: INIT,
+        worktreePath: wt,
+        projectRepoPath: repo,
+      });
+      assert.equal(d.resume, true);
+      // Every WI is complete here too (a PR-open failure implies it), but the
+      // classifier's own `resumeFrom:'pr-open'` signal must win over the
+      // generic all-WI-complete ⇒ `'integrate'` inference.
+      if (d.resume) assert.equal(d.resume_from, 'pr-open');
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(wt, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
 
 test('inferRequeueResume: terminal failure → no resume even with preserved state', () => {
   const repo = initRepo();

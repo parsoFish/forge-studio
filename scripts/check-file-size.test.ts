@@ -469,9 +469,14 @@ describe('forge-8vfn.8.1.29: the 800-line cap also scans .sh files', () => {
     }
   });
 
-  test('the real baseline names the two real oversized .sh files, and never the deleted merge-slot-doors.sh', () => {
+  test('the real baseline names the one real oversized .sh file, and never a file that fits the cap', () => {
     const real = JSON.parse(readFileSync(BASELINE, 'utf8')) as Record<string, number>;
-    assert.equal(real['.claude/skills/tiered-orchestration/scripts/gate.sh'], 801);
+    // row 151: moving lock_holder_pids into lock-holders.sh brought gate.sh
+    // under the cap, so its exemption is gone rather than left as slack.
+    assert.ok(
+      !('.claude/skills/tiered-orchestration/scripts/gate.sh' in real),
+      'gate.sh fits the 800-line cap now — it must not keep a baseline exemption',
+    );
     assert.equal(real['.claude/skills/tiered-orchestration/scripts/lanes.sh'], 1064);
     assert.ok(
       !('.claude/skills/tiered-orchestration/tests/merge-slot-doors.sh' in real),
