@@ -16,7 +16,7 @@ Five baselined violations of that rule survive in `cycle.ts`,
 `finalize-merged.ts` and two tests — owned by M5-A, listed in `design.md`. The
 rule is the target, not a description of today.
 
-## API (146 values)
+## API (150 values)
 
 | run one flow — the station engine | `checkFlowTriggers` · `findFanOutViolations` · `flowPathForId` · `listFlowBandIds` · `loadFlowDefinition` · `loadStarterFlow` · `resolveNodeKind` · `runFlow` |
 | the cycle the develop flow runs | `CAPTURE_NONCE_ENV` · `MAX_COMMITTED_DEMO_MEDIA_BYTES` · `MAX_COMMITTED_DEMO_WEBM_BYTES` · `REFLECTION_LOST_EVENT` · `REFLECT_MODE_FILE` · `assertNonEmptyDelivery` · `buildDemoCaptureArgv` · `commitDevLoopBoundary` · `commitOrchestratedCaptureArtifacts` · `compileWorkItemSpecs` · `demoJsonWantsCapture` · `enforceDevLoopCloseInvariant` · `enforceFinalCiGate` · `generateCaptureNonce` · `openPrInline` · `preflightDemoCaptureCommands` · `preservingForgeScratch` · `promoteMergedToDone` · `rebaseForResume` · `recordBrainGateResult` · `resolveCostCeilingOverride` · `resolveDemoCaptureTimeoutMs` · `resumeSkipsPerWiWork` · `runClosure` · `runMergeBoundaryGate` · `runOrchestratorCommand` |

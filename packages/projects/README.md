@@ -18,7 +18,7 @@ collapsed the legacy `"./*"` door; every importer now goes through
 `contract.test.ts` asserts this list against what the index actually exports, in
 both directions, and is required to FAIL against an empty index.
 
-### Values (37)
+### Values (42)
 
 | area | exports |
 |---|---|
@@ -105,11 +105,11 @@ paths for this reason; see that package's README for the sessions-side note.
 ## Crash and recovery
 
 - **Greenfield create** (`scaffoldGreenfieldProject`, `project-create.ts`) stages the project and its brain stub in sibling `.staging-<id>-*` dirs on the same filesystem as their destinations, then `renameSync`s each into place only once scaffolding, `git init`, the first commit, brain seeding and preflight all succeed; any failure `rmSync`s both staging trees before rethrowing, so an identical retry lands clean instead of hitting "already exists" — see the AT-4on-* cases in `packages/projects/tests/regression/project-create-atomicity.test.ts`.
-- **Disclosed residual**: `projects/` and `brain/projects/` are separate filesystem roots, so the two renames above are not one transaction — a crash between them can leave an orphaned brain directory with no matching project, which nothing auto-repairs; an operator removes it by hand.
+- **The two renames are not one transaction** (`projects/` and `brain/projects/` are separate roots), so the brain is renamed first and the project last: a crash between them leaves a brain with no project. The next create for that id repairs it — the injected brain seeder's `isUntouchedStub` confirms the brain is exactly the stub this function seeds (`kb.yaml`, `profile.md`, `themes/README.md`, no symlinks, nothing else) before it is removed; a brain holding anything else still refuses — see `packages/projects/tests/regression/project-create-brain-repair.test.ts`.
 - **`.forge/project.json` writes** (`writeProjectConfigPatch` in `project-config-write.ts`, `applyContractReset` in `reset.ts`) validate the merged config before writing, then `writeFileSync` the real path directly — not tmp-then-rename. Every write commits through `withStudioWrite` (`project-repo-tx.ts`) to the project's own `forge-studio` branch, scoped to only the paths it touched (never a bare `add -A`), so a crash before or after the write leaves at worst a visible, uncommitted diff in `git status` — never a silent loss and never an unrelated file swept in — see `packages/projects/tests/regression/project-repo-tx.test.ts` and `packages/projects/tests/unit/project-config-write.test.ts`.
 - **Contract reset**'s skill relocations run first through the kernel's `guardedRename`, fail-closed on the first rejection with no rollback of moves already made; a partial reset is left as ordinary uncommitted working-tree changes for the operator to inspect, not a silent half-reset — see `packages/projects/tests/integration/reset-drift-report.test.ts` and `packages/projects/tests/integration/reset-tracked-commit.test.ts`.
 - **Contract migration** (`project-migrate.ts`) validates the migrated shape before writing and writes nothing on a failed validation; a repeat run against an already-migrated file reports nothing-to-migrate and leaves it byte-unchanged, so re-running after a crash is always safe — see `packages/projects/tests/regression/project-migrate.test.ts` (AT-B6-8, AT-B6-10).
-- **Onboarding an existing repo** (`bridge-studio-project-onboard.ts`) checks containment up front but is not staged: `mkdirSync(projectRoot)`, contract scaffolding, brain seeding and the `project.json` write land directly on the final path in sequence, so a crash between any two can leave a partially scaffolded project behind with no automatic unwind — unlike create, this path carries no dedicated crash-recovery test.
+- **Onboarding an existing repo** (`bridge-studio-project-onboard.ts`) checks containment up front, then writes in sequence: `mkdirSync(projectRoot)`, contract scaffolding, brain seeding, and `.forge/project.json` last. A directory is a managed project only once that file exists, and it is written as a temp file in `.forge/` renamed onto the guard-verified path, so a crash at any earlier step leaves a directory discovery does not pick up, and a re-run onboards over it — see `packages/projects/tests/regression/onboard-project-json-atomicity.test.ts`.
 
 ## Layout
 

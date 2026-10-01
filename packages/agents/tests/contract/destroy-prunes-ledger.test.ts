@@ -155,6 +155,11 @@ const DESTROY_VERBS_NOT_SKILL_SCOPED = new Map<string, RegExp>([
   // `packages/agents/bridge-agents-studio.ts` (registered in the census below,
   // with its prune). What remains is the FLOW delete.
   ['apps/forge/bridge-studio-writes.ts', /rmSync\(dirname\(flowYamlPath\)/],
+  // forge-8vfn.8.5.2: installSkillPackage stages a package in a sibling
+  // staging dir and renames it into place; its only destroy verbs are that
+  // rename and the staging dir's cleanup. An install never removes an
+  // installed skill, so there is no ledger row to prune.
+  ['packages/library/studio/skill-install.ts', /rmSync\(stagingDir, \{ recursive: true, force: true \}\)/],
 ]);
 
 const GUARD_CALL_NAMES = ['resolveGuardedPath', 'guardedFile'];
@@ -373,11 +378,17 @@ function scanTree(): FileScan[] {
  * `bridge-studio-authoring-hook.ts` (which contains no destroy verb at all).
  * The whole-file co-occurrence that produced the false positive no longer
  * occurs, so the suppression is not merely stale — the split removed the cause.
- * Verified: no file among the five carries both a destroy verb and a hooksDir
- * reference. An empty allowlist is the honest state; a row that suppresses
- * nothing is a row that hides the next real one.
+ * The one current entry is the staged community install (below): it renames a
+ * staging dir into place and cleans the staging dir up, and never destroys an
+ * installed hook. A row that suppresses nothing is a row that hides the next
+ * real one.
  */
-const HOOK_CENSUS_ALLOWLIST: Record<string, string> = {};
+const HOOK_CENSUS_ALLOWLIST: Record<string, string> = {
+  'packages/library/studio/community-install.ts':
+    'forge-8vfn.8.5.2: installCommunityHookPackage stages the package in a sibling staging dir under ' +
+    'hooksDir and renames it into place; its only destroy verbs are that rename and the staging dir\'s ' +
+    'cleanup on failure. An install never removes an installed hook, so there is no approval to revoke.',
+};
 
 test('ENUMERATION (library-34 class): every hook-package-destroying module is the known DELETE route (plus audited false positives), and calls revokeHookApprovalIfPresent', () => {
   const scans = scanTree();
@@ -421,6 +432,9 @@ test('ENUMERATION (library-35 class): every skill-package-destroying module is a
     'packages/library/bridge-studio-skills.ts',
     'apps/forge/bridge-studio-writes.ts',
     'packages/agents/bridge-agents-studio.ts',
+    // forge-8vfn.8.5.2: the staged install's rename + staging cleanup —
+    // exempted below through DESTROY_VERBS_NOT_SKILL_SCOPED, falsifiably.
+    'packages/library/studio/skill-install.ts',
   ].sort();
   assert.deepEqual(
     files,
