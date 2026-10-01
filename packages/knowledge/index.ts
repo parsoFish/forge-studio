@@ -70,7 +70,7 @@ export { guardAgentKbEdits, snapshotBrainTree, noKbEdits } from './kb-drain-edit
 export type { KbEditGateResult } from './kb-drain-edit-soundness.ts';
 
 // --- project brain seeding --------------------------------------------------
-export { checkProjectBrainSeedContainment, seedProjectBrain } from './project-brain-seed.ts';
+export { checkProjectBrainSeedContainment, seedProjectBrain, isUntouchedBrainSeedStub } from './project-brain-seed.ts';
 export {
   PROJECT_BRAIN_KIND_DIR,
   buildAnalyzePlan,

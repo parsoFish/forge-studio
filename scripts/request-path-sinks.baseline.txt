@@ -392,8 +392,9 @@ packages/knowledge/kb-lint-summary.ts readdirSync 1
 packages/knowledge/kb-lint-summary.ts statSync 1
 packages/knowledge/kb-sites.ts existsSync 2
 packages/knowledge/kb-sites.ts readdirSync 1
-packages/knowledge/project-brain-seed.ts existsSync 2
+packages/knowledge/project-brain-seed.ts existsSync 3
 packages/knowledge/project-brain-seed.ts mkdirSync 2
+packages/knowledge/project-brain-seed.ts readdirSync 1
 packages/knowledge/project-brain-seed.ts writeFileSync 1
 packages/knowledge/theme-frontmatter.ts readFileSync 1
 packages/library/bridge-studio-authoring-hook.ts mkdirSync 2
@@ -492,6 +493,7 @@ packages/library/studio/template-library.ts readdirSync 5
 packages/library/studio/template-library.ts readFileSync 3
 packages/projects/bridge-studio-project-onboard.ts existsSync 4
 packages/projects/bridge-studio-project-onboard.ts mkdirSync 2
+packages/projects/bridge-studio-project-onboard.ts renameSync 1
 packages/projects/bridge-studio-project-onboard.ts writeFileSync 1
 packages/projects/constraint-author.ts existsSync 3
 packages/projects/constraint-author.ts readFileSync 3
@@ -539,7 +541,7 @@ packages/projects/project-create.ts mkdirSync 2
 packages/projects/project-create.ts readdirSync 3
 packages/projects/project-create.ts readFileSync 2
 packages/projects/project-create.ts renameSync 2
-packages/projects/project-create.ts rmSync 4
+packages/projects/project-create.ts rmSync 5
 packages/projects/project-create.ts writeFileSync 3
 packages/projects/project-migrate.ts existsSync 2
 packages/projects/project-migrate.ts readFileSync 1

@@ -27,8 +27,8 @@
  * behaviour (that shape is `packages/knowledge/tests/unit/project-brain-seed.test.ts`'s
  * job, against the real function).
  */
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { resolveGuardedPath, PathGuardContainmentError } from '@forge/kernel';
 import type { ProjectBrainSeeder } from '../../project-create.ts';
 
@@ -87,6 +87,31 @@ function seed(
   return { projectId, brainDir, files };
 }
 
+/** Mirrors `@forge/knowledge`'s real `isUntouchedBrainSeedStub` (G3,
+ *  forge-8vfn.8.5.3) — true iff `brainDir` carries EXACTLY the three leaf
+ *  files `seed` above writes, nothing more. Shape-only, same as the real
+ *  implementation — fixture content doesn't need to match, only presence. */
+function isUntouchedStub(forgeRoot: string, projectId: string, dirName: string = projectId): boolean {
+  const { brainDir, targets } = seedTargets(forgeRoot, dirName);
+  if (!existsSync(brainDir)) return false;
+  const expected = new Set(targets.map((t) => relative(brainDir, t.absPath)));
+  const found: string[] = [];
+  const walk = (dir: string, rel: string): boolean => {
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return false; }
+    for (const entry of entries) {
+      const relPath = rel ? join(rel, entry.name) : entry.name;
+      if (entry.isDirectory()) { if (!walk(join(dir, entry.name), relPath)) return false; continue; }
+      if (!entry.isFile()) return false;
+      if (found.length >= expected.size) return false;
+      found.push(relPath);
+    }
+    return true;
+  };
+  if (!walk(brainDir, '')) return false;
+  return found.length === expected.size && found.every((p) => expected.has(p));
+}
+
 /** Drop-in `ProjectBrainSeeder` for any test that calls `scaffoldGreenfieldProject`
  *  directly (never asserts call args — for that, use a recording spy instead). */
-export const FAKE_BRAIN_SEEDER: ProjectBrainSeeder = { seed, checkContainment };
+export const FAKE_BRAIN_SEEDER: ProjectBrainSeeder = { seed, checkContainment, isUntouchedStub };

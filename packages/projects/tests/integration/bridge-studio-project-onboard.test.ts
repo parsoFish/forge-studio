@@ -444,6 +444,11 @@ test('[forge-8vfn.5.3] onboard: an id collision with an ALREADY-ONBOARDED projec
   }
 });
 
+// G4 (bead forge-8vfn.8.5.4) — the crash-before-project.json retry-tolerance
+// AT moved to the sibling `../regression/onboard-project-json-atomicity.test.ts`
+// (this file hit the 800-line baseline cap — scripts/baselines/file-size.json
+// / check-file-size.mjs).
+
 // ---------------------------------------------------------------------------
 // handleProjectPut — PUT and POST /api/studio/projects/:id (never DELETE)
 // ---------------------------------------------------------------------------
