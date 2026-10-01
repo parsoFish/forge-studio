@@ -774,3 +774,7 @@ test('AT-B6-4 (RED, projects-11) a greenfield create is its OWN git repo with a 
     rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
+
+// G3 (bead forge-8vfn.8.5.3) — the crash-orphan repair ATs moved to the
+// sibling `project-create-brain-repair.test.ts` (this file hit the 800-line
+// baseline cap — scripts/baselines/file-size.json / check-file-size.mjs).

@@ -58,6 +58,10 @@ export {
   computeAgentCleanupFindings,
   loadKbDescriptors,
 } from './bridge-studio-kbs.ts';
+// forge-8vfn.8.5.1 — the boot-time reconcile for a kb-cleanup apply a hard
+// bridge crash left wedged at 'applying'. Public because its one caller
+// (apps/forge/ui-bridge.ts, called once at startup) is cross-package.
+export { releaseInterruptedKbCleanupApplies } from './kb-drain-store.ts';
 // The seam itself (SPEC.md §4, ADR 018): every per-KB read and write goes
 // through `KbBackend`. M7-C KN1 — `@forge/sessions` is this seam's first
 // cross-package consumer, which is what makes it a public-door export rather
@@ -70,7 +74,7 @@ export { guardAgentKbEdits, snapshotBrainTree, noKbEdits } from './kb-drain-edit
 export type { KbEditGateResult } from './kb-drain-edit-soundness.ts';
 
 // --- project brain seeding --------------------------------------------------
-export { checkProjectBrainSeedContainment, seedProjectBrain } from './project-brain-seed.ts';
+export { checkProjectBrainSeedContainment, seedProjectBrain, isUntouchedBrainSeedStub } from './project-brain-seed.ts';
 export {
   PROJECT_BRAIN_KIND_DIR,
   buildAnalyzePlan,

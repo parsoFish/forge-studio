@@ -18,7 +18,7 @@ port, never through a direct import of `class-profiles.ts`.
 that needs the class table throws, naming `ClassProfilePort`, rather than
 silently guessing a default profile.
 
-## API (9 values)
+## API (10 values)
 
 | the station executor | `createPhaseExecutor` · `createProjectGate` · `defaultRunClosure` · `registeredBandIds` |
 | bands the assembly binds statically | `reconcileReflectFeedback` · `rerunReflector` · `runAdversarialReview` · `runReflector` · `runReleaseFinalize` |
