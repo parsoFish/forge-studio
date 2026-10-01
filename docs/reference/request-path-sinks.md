@@ -3146,7 +3146,6 @@ same commit.
 `--write` in the same commit that adds this section, per this document's own
 rule.
 
-
 ### Added (bead `forge-8vfn.8.5.2`) — `installCommunityHookPackage`/`installSkillPackage` adopt `vendorFetchedPackage`'s stage-then-rename (two sink pairs, no new surface)
 
 | file (function) | sink (delta) | input | classification | why |

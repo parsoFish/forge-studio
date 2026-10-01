@@ -57,7 +57,7 @@ operator-ratified new cap — never a silent raise.
 | `contracts` | 7 | 1,573 | **1,573** | **pure transfers (7.1c boundary fix): REPO_RE, the work-item id patterns, SESSION_STAGES + ContractStage types from flows/sessions (+83); the session anchors from sessions (+35). Shared vocabulary only, no logic.** |
 | `kernel` | 31 | 5,618 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,109 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
-| `projects` | 48 | 11,179 | **9,404** | ratified 9,404 — G3/G4 crash-safe create + onboard (forge-8vfn.8.5.3/.4); +51 net on 9,353, lane-ratified under ruling 666. |
+| `projects` | 48 | 11,170 | **9,404** | ratified 9,404 — G3/G4 crash-safe create + onboard (forge-8vfn.8.5.3/.4); +51 net on 9,353, lane-ratified under ruling 666. |
 | `knowledge` | 44 | 13,346 | **12,768** | ratified 12,768 — G1 boot-time release of a kb-cleanup apply stuck at applying (+74, forge-8vfn.8.5.1) and G3 isUntouchedBrainSeedStub crash-orphan check (+43, 8.5.3): +117 on 12,651, T1-ratified (>100). |
 | `agents` | 44 | 12,433 | **12,433** | **pure transfer to apps/forge (7.1c boundary fix): the agent CLI verbs agent-run.ts + agent-dispatch-cmd.ts moved out, trigger firing moved to cmdAgentDispatch; runner.ts comment trimmed. −953 on 13,386, cap lowered to measured.** |
 | `sessions` | 63 | 20,603 | **20,565** | **pure transfers to contracts (SESSION_STAGES + ContractStage types −25; session anchors −14) and safeReadFileInSession to kernel (7.1c boundary fix); cap lowered to measured.** |
@@ -67,7 +67,7 @@ operator-ratified new cap — never a silent raise.
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 32 | 7,913 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **481** | **129,998** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **481** | **129,989** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -169,7 +169,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/session-resolution.ts | sessions | rewritten | 447 |
 | packages/library/bridge-studio-skills.ts | library | verbatim | 659 |
 | packages/library/bridge-studio-templates.ts | library | verbatim | 427 |
-| apps/forge/bridge-studio-writes.ts | projects | rewritten | 705 |
+| apps/forge/bridge-studio-writes.ts | projects | rewritten | 703 |
 | apps/forge/bridge-studio.ts | apps/forge | rewritten | 1215 |
 | packages/library/community-refresh-cmd.ts | library | verbatim | 104 |
 | packages/library/community-refresh-run.ts | library | verbatim | 621 |
@@ -218,7 +218,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/metrics.ts | flows | verbatim | 208 |
 | packages/projects/preflight-fix-auto.ts | projects | verbatim | 201 |
 | packages/projects/preflight-resolve.ts | projects | verbatim | 77 |
-| packages/projects/preflight.ts | projects | pruned | 278 |
+| packages/projects/preflight.ts | projects | pruned | 277 |
 | packages/projects/preflight-build.ts | projects | verbatim | 138 |
 | packages/projects/preflight-demo.ts | projects | verbatim | 179 |
 | packages/projects/preflight-gate.ts | projects | verbatim | 281 |
@@ -591,7 +591,7 @@ operator-ratified new cap — never a silent raise.
 | packages/projects/project-preflight-read.ts | projects | verbatim | 192 |
 | packages/projects/project-roadmap.ts | projects | verbatim | 89 |
 | packages/projects/bridge-studio-project-onboard.ts | projects | verbatim | 682 |
-| packages/projects/bridge-studio-project-preflight-write.ts | projects | verbatim | 298 |
+| packages/projects/bridge-studio-project-preflight-write.ts | projects | verbatim | 292 |
 | packages/projects/project-contract-scaffold.ts | projects | verbatim | 557 |
 | packages/projects/bridge-studio-project-reset.ts | projects | verbatim | 229 |
 | packages/projects/routes.ts | projects | verbatim | 389 |

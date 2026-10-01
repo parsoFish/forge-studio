@@ -8,11 +8,9 @@
  * file-size.json`) with zero headroom — adding cases there would trip
  * check-file-size's `grew` failure.
  *
- * IN-PROCESS dispatch, NOT `startBridge`/`apps/forge/ui-bridge.ts` — unlike
- * its sibling files (whose real-socket `startBridge` import is a GRANDFATHERED
- * `package-to-assembly` entry in `scripts/baselines/boundaries.json`), this is
- * a NEW file and `check-boundaries.mjs`'s baseline "may only shrink" (its own
- * header) — a brand-new entry there is refused. `dispatchRoute(libraryRoutes(
+ * IN-PROCESS dispatch, NOT `startBridge`/`apps/forge/ui-bridge.ts`: a package
+ * test may not import the assembly (`check-boundaries.mjs`'s
+ * `package-to-assembly` rule, which tolerates no edge). `dispatchRoute(libraryRoutes(
  * deps), ...)` against hand-built `IncomingMessage`/`ServerResponse` stand-ins
  * is the SAME direct-invocation idiom every sibling file's own
  * "passthrough contract" test already uses (see bridge-studio-templates.test.ts's
