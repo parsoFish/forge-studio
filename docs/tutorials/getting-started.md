@@ -173,8 +173,10 @@ verbs are `forge init`, `forge studio`, and `forge studio lint`. The scheduler d
 When the cycle finishes, forge produces a **self-contained, demo-embedded PR**
 and stops at the factory's **verdict gate**: inspect the PR's demo (real evidence
 — an API response, a rendered page, plan output — not a table of test names),
-then either **approve** (merge it in GitHub) or **send it back** from the
-unified `/artifact/<cycleId>` viewer in Studio.
+then either **approve** or **send it back** from the unified
+`/artifact/<cycleId>` viewer in Studio. Approving merges the PR: forge runs the
+merge itself, so you do not merge it in GitHub. If that merge fails, Studio says
+so and you merge the PR on GitHub instead.
 
 Merging fires **closure**, which dispatches the reflector — the factory's
 **reflection** gate — where the reflector asks its questions and writes brain themes + a retro + the
