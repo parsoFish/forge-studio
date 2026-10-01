@@ -1,6 +1,5 @@
 [
   "package-layer-order|packages/agents/agent-dispatch-cmd.ts|packages/sessions/index.ts",
   "package-layer-order|packages/agents/agent-dispatch.ts|packages/flows/index.ts",
-  "package-layer-order|packages/agents/agent-run.ts|packages/sessions/index.ts",
-  "package-layer-order|packages/projects/project-create.ts|packages/knowledge/index.ts"
+  "package-layer-order|packages/agents/agent-run.ts|packages/sessions/index.ts"
 ]
