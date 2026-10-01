@@ -18,7 +18,6 @@
   "package-layer-order|packages/projects/contract-stages.ts|packages/sessions/studio/session-kinds.ts",
   "package-layer-order|packages/projects/contract-stages.ts|packages/sessions/studio/session-transcript.ts",
   "package-layer-order|packages/projects/project-config.ts|packages/flows/trigger-payload.ts",
-  "package-layer-order|packages/projects/project-create.ts|packages/knowledge/index.ts",
   "package-layer-order|packages/projects/tests/integration/project-config-repo.test.ts|packages/flows/index.ts",
   "package-layer-order|packages/sessions/tests/integration/test-fixtures/studio-sessions-bridge.ts|packages/flows/index.ts",
   "package-layer-order|packages/sessions/tests/integration/test-fixtures/studio-sessions-builders.ts|packages/flows/index.ts",

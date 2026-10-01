@@ -20,7 +20,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-  scaffoldGreenfieldProject,
+  scaffoldGreenfieldProject as scaffoldGreenfieldProjectWithSeeder,
   validateCreationManifest,
   listProjectStarters,
   projectStartersDir,
@@ -29,6 +29,17 @@ import {
 import { loadProjectConfig } from '../../project-config.ts';
 import { discoverProjects } from '@forge/kernel';
 import { FORGE_ROOT } from '@forge/kernel';
+import { FAKE_BRAIN_SEEDER } from '../test-fixtures/fake-brain-seeder.ts';
+
+/** `scaffoldGreenfieldProject` with the `brainSeeder` port pre-filled by the
+ *  fake (see `../test-fixtures/fake-brain-seeder.ts`'s header for why this
+ *  package's own tests can't inject the real `@forge/knowledge` functions
+ *  directly) — every call site below is unchanged from before the DI split. */
+function scaffoldGreenfieldProject(
+  input: Omit<Parameters<typeof scaffoldGreenfieldProjectWithSeeder>[0], 'brainSeeder'>,
+): ReturnType<typeof scaffoldGreenfieldProjectWithSeeder> {
+  return scaffoldGreenfieldProjectWithSeeder({ ...input, brainSeeder: FAKE_BRAIN_SEEDER });
+}
 
 /** A temp forge root with the real project starters copied in + a brain/projects dir. */
 import { runPreflight, SCRATCH_PATHS } from '../../preflight.ts';

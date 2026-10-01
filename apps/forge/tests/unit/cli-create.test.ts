@@ -41,7 +41,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, cpSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { runCreate } from '../../cli.ts';
+import { runCreate } from '../../cli-create.ts';
 
 const REAL_TYPESCRIPT_CLI_TEMPLATE = resolve(
   import.meta.dirname,
