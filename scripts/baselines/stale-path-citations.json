@@ -4128,12 +4128,6 @@
     "count": 1
   },
   {
-    "file": "packages/agents/studio/agent-registry.ts",
-    "kind": "path",
-    "cited": "orchestrator/studio/registry.ts",
-    "count": 2
-  },
-  {
     "file": "packages/agents/studio/guards-migration-validate-rules.test.ts",
     "kind": "path",
     "cited": "orchestrator/studio/validate.ts",
@@ -6561,12 +6555,6 @@
     "file": "scripts/check-raw-fs-guarded.test.ts",
     "kind": "stem",
     "cited": "architect-runner",
-    "count": 1
-  },
-  {
-    "file": "scripts/check-request-path-sinks.mjs",
-    "kind": "path",
-    "cited": "cli/studio-path-guard.ts",
     "count": 1
   },
   {

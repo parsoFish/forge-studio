@@ -16,13 +16,12 @@
  *
  *     | path | owner | disposition | loc |
  *
- * WHAT FAILS. `unowned` — a file in the tree with no row — is ratcheted
- * through `scripts/baselines/owner.json` and must reach **zero** by the
- * skeleton PR. The other classes have NO baseline and always fail, because
- * each is cheap to keep at zero and each makes the file silently lie: an
- * `orphan` row (no such file) makes the quarry describe a tree that does not
- * exist, a `duplicate` row gives one file two owners, and an owner or
- * disposition outside the vocabulary is a typo that would survive the move.
+ * WHAT FAILS. Every class here has NO baseline and always fails, because each
+ * is cheap to keep at zero and each makes the file silently lie: `unowned` is
+ * a file in the tree with no row naming its package, an `orphan` row (no such
+ * file) makes the quarry describe a tree that does not exist, a `duplicate`
+ * row gives one file two owners, and an owner or disposition outside the
+ * vocabulary is a typo that would survive the move.
  *
  * THE NUMBERS (forge-8vfn.5.18). Owning a row was checked; nothing checked
  * that the row was TRUE. Three more classes, still with no baseline:
@@ -46,7 +45,7 @@
  * rewrites QUARRY.md in place; it never touches `owner`, `disposition`, the
  * `cap` column or any note.
  *
- * RUN: node scripts/check-owner.mjs [--json] [--quarry <path>] [--baseline <path>] [--write]
+ * RUN: node scripts/check-owner.mjs [--json] [--quarry <path>] [--write]
  */
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -401,22 +400,11 @@ export function rewriteQuarry(root, markdown) {
   return { content: lines.join('\n'), locRows, dispositionRows, packageRows };
 }
 
-function readBaseline(path) {
-  if (!existsSync(path)) return { unowned: 0 };
-  const parsed = JSON.parse(readFileSync(path, 'utf8'));
-  if (parsed === null || typeof parsed !== 'object' || !Number.isInteger(parsed.unowned)) {
-    throw new Error(`${path}: expected { "unowned": <integer> }`);
-  }
-  return parsed;
-}
-
 function main(argv) {
   const json = argv.includes('--json');
   const write = argv.includes('--write');
   const qAt = argv.indexOf('--quarry');
-  const bAt = argv.indexOf('--baseline');
   const quarryPath = qAt === -1 ? join(ROOT, 'QUARRY.md') : resolve(argv[qAt + 1]);
-  const baselinePath = bAt === -1 ? join(ROOT, 'scripts/baselines/owner.json') : resolve(argv[bAt + 1]);
 
   if (!existsSync(quarryPath)) {
     process.stdout.write(`check-owner: FAIL — ${quarryPath} does not exist; the quarry is the source of ownership\n`);
@@ -434,15 +422,12 @@ function main(argv) {
   }
 
   const result = audit(ROOT, readFileSync(quarryPath, 'utf8'));
-  const baseline = readBaseline(baselinePath);
-  const over = result.unowned.length > baseline.unowned;
-  const stale = result.unowned.length < baseline.unowned;
-  const hard = result.orphans.length + result.duplicates.length + result.badOwner.length + result.badDisposition.length
+  const hard = result.unowned.length + result.orphans.length + result.duplicates.length + result.badOwner.length + result.badDisposition.length
     + result.badLoc.length + result.locDrift.length + result.dispositionDrift.length + result.packageDrift.length;
 
-  if (json) process.stdout.write(`${JSON.stringify({ ...result, baselineUnowned: baseline.unowned }, null, 2)}\n`);
+  if (json) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 
-  if (!over && !stale && hard === 0) {
+  if (hard === 0) {
     if (!json) {
       process.stdout.write(
         `check-owner: PASS — ${result.rows} rows own ${result.files} production files, unowned: ${result.unowned.length}\n`,
@@ -463,10 +448,10 @@ function main(argv) {
     if (result.locDrift.length > 15) process.stdout.write(`  … and ${result.locDrift.length - 15} more loc drift row(s)\n`);
     for (const d of result.dispositionDrift) process.stdout.write(`  disposition summary drift: \`${d.disposition}\` — header says ${d.header}, the table counts ${d.table}\n`);
     for (const d of result.packageDrift) process.stdout.write(`  package table drift: \`${d.name}\` ${d.column} — header says ${d.header}, the table counts ${d.table}\n`);
-    if (over) process.stdout.write(`check-owner: FAIL — ${result.unowned.length} unowned files, above the baseline of ${baseline.unowned}\n`);
-    else if (stale) process.stdout.write(`check-owner: FAIL — ${result.unowned.length} unowned files, below the baseline of ${baseline.unowned}; tighten scripts/baselines/owner.json\n`);
-    else {
-      process.stdout.write(`check-owner: FAIL — ${hard} row error(s); these have no baseline\n`);
+    if (hard === result.unowned.length) {
+      process.stdout.write(`check-owner: FAIL — ${result.unowned.length} unowned file(s); every production file needs a QUARRY.md row\n`);
+    } else {
+      process.stdout.write(`check-owner: FAIL — ${hard} row error(s)\n`);
       if (result.locDrift.length + result.dispositionDrift.length + result.packageDrift.length > 0) {
         process.stdout.write('  run `node scripts/check-owner.mjs --write` to recompute the drifted numbers from the rows and the tree\n');
       }
