@@ -32,7 +32,7 @@ import { scaffoldGreenfieldProject, listProjectStarters, type ScaffoldResult } f
 import { assertEnv, defaultConfigPath, forgeBinOnPath, loadConfig, resolveProjectsDir, runInit,
   ensureLayoutDirs, ensureDefaultConfig, resolveGuardedPath, writeProjectGroundFile, describeProjectStarters, type InitReport } from '@forge/kernel';
 import { worktreeDemoDir } from '@forge/flows';
-import { cmdAgent, cmdAgentRun } from '@forge/agents';
+import { cmdAgent, cmdAgentRun } from './agent-run.ts';
 import { AGENT_DISPATCH_DEPS } from './session-kind-deps.ts';
 
 import { cmdProjectMigrate } from '@forge/projects';
@@ -57,7 +57,7 @@ process.env['PATH'] = forgeBinOnPath(FORGE_ROOT, process.env['PATH']); // 6.11.2
 // R2-01-F3a: `forge agent run <agent-id> <session-id> [--project <name>]` —
 // the generic path over the 4 interactive runners (architect / instructions /
 // demo-builder / project-brain) — and the `cmdAgent`/`cmdAgentRun` skeleton
-// live in `packages/agents/agent-run.ts`; the 4 thin `cmd<X>Run` delegations
+// live in `apps/forge/agent-run.ts`; the 4 thin `cmd<X>Run` delegations
 // below import them from there. `cmdAgentRun` resolves an agent-id from TWO
 // tables: the un-ported `AGENT_RUNNERS` there, and `SESSION_KIND_RUNNERS`
 // (`packages/sessions/kinds/registry.ts`) for each PORTED kind (ruling 60).

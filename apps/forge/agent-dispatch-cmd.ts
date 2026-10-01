@@ -11,7 +11,7 @@
  * WHY THE FORK STAYED PUT. `agent-run.ts` keeps `AGENT_RUNNERS` and the
  * `AGENT_RUNNERS[id] ?? SESSION_KIND_RUNNERS[id]` resolution even though the
  * table is now EMPTY, because it is load-bearing in a way its size hides:
- * `packages/sessions/studio/session-kinds.test.ts` imports it and asserts it
+ * `packages/sessions/tests/contract/session-kinds-panel.test.ts` imports it and asserts it
  * gains no `kb-cleanup` key, which is the tripwire keeping ADR-043 §3's
  * dispatch fork from re-opening the per-runner cap park, and `knownAgentIds`
  * derives the operator's usage line from the UNION of both tables so a ported
@@ -22,12 +22,21 @@ import { existsSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { guardedReadFile, resolveGuardedPath } from '@forge/kernel';
 import { guardedWriteSessionStatus } from '@forge/sessions';
-import { dispatchAgentRun } from './agent-dispatch.ts';
-import { isSafeRunId } from './run-agent.ts';
-import { installDispatchSignalGuard, recordDispatchTerminal } from './dispatch-terminal.ts';
-import { isStandaloneBandAgent, dispatchStandaloneBand, type BandAgentDeps } from './band-agent-run.ts';
+import {
+  dispatchAgentRun, isSafeRunId, isStandaloneBandAgent, dispatchStandaloneBand,
+  installDispatchSignalGuard, recordDispatchTerminal, type BandAgentDeps,
+} from '@forge/agents';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { skillRoots } from '@forge/kernel';
+// M7-E boundary fix: the on:agent-complete trigger scan that used to run
+// INSIDE `dispatchAgentRun` (packages/agents/agent-dispatch.ts) moved here —
+// this is `dispatchAgentRun`'s one production caller, and the assembly is
+// where a package (agents, rank 4) may not import flows (rank 6) but the
+// composition of the two is legal. See `loadFlowRosterBestEffort` and its
+// call site below.
+import { listFlowIds, loadFlowDefinition, fireAgentCompleteTriggers } from '@forge/flows';
+import { flowRoots, resolveIdAcrossRoots, normalizeProjectId } from '@forge/kernel';
+import type { FlowDefinition } from '@forge/contracts';
 
 /**
  * R4-17, D7 — writes the TERMINAL phase (`complete`/`failed`) into
@@ -39,7 +48,7 @@ import { skillRoots } from '@forge/kernel';
  *
  * D6: this is purely ADDITIVE — a dispatch invoked WITHOUT `--session-dir`
  * never calls this at all, so behaviour without the flag stays byte-
- * identical to before R4-17 (pinned by `packages/agents/tests/integration/agent-run-dispatch.test.ts`'s
+ * identical to before R4-17 (pinned by `apps/forge/tests/integration/agent-run-dispatch.test.ts`'s
  * AT-D7-3).
  *
  * `sessionDir` is a CLI flag from our OWN spawning code
@@ -343,6 +352,34 @@ export type AgentDispatchDeps = {
 };
 
 /**
+ * Best-effort flow-roster load for the `fireAgentCompleteTriggers` scan
+ * below — mirrors `cron-triggers.ts`'s `scanDeclaredCronTriggers`: a flow
+ * whose `flow.yaml` fails to load is skipped rather than aborting the whole
+ * scan (one broken flow definition must not block every other watcher).
+ *
+ * M7-E boundary fix: moved here (from `packages/agents/agent-dispatch.ts`)
+ * along with the trigger-firing call in `cmdAgentDispatch` below — see that
+ * module's doc for why.
+ */
+function loadFlowRosterBestEffort(forgeRoot: string): Array<Pick<FlowDefinition, 'id' | 'triggers'>> {
+  const root = resolve(forgeRoot);
+  const roots = flowRoots(root);
+  const out: Array<Pick<FlowDefinition, 'id' | 'triggers'>> = [];
+  for (const flowId of listFlowIds(root)) {
+    // SEAM F1: search every flow root directly via kernel (not `@forge/
+    // flows`' `flowPathForId` — this file's boundary edge to `flow-runner.ts`
+    // is not baselined, unlike its existing edge to `flow-registry.ts`).
+    const path = resolveIdAcrossRoots(roots, flowId, ['flow.yaml'])?.path ?? join(roots[0], flowId, 'flow.yaml');
+    try {
+      out.push(loadFlowDefinition(path));
+    } catch {
+      /* skip a broken flow.yaml — it must not block other flows' watchers */
+    }
+  }
+  return out;
+}
+
+/**
  * `forge agent dispatch <slug> --run-id <id> [--project <name>] [--input k=v]
  * [--session-dir <abs>] [--cost-ceiling-usd <usd>]` — the generic
  * standalone-run path for a NON-interactive roster agent (R2-01-F3 dispatch
@@ -439,7 +476,7 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string, deps?:
   const dispatch = deps?.dispatch ?? dispatchAgentRun;
 
   // forge-8vfn.5.38 — a SIGTERM ran neither the success path below nor its
-  // catch, so a run cut short ended with no terminus. See ./dispatch-terminal.ts.
+  // catch, so a run cut short ended with no terminus. See `packages/agents/dispatch-terminal.ts` (reached through the `@forge/agents` door).
   const writePhase = sessionDir
     ? (o: 'failed', d: string) => writeSessionTerminalPhase(forgeRoot, sessionDir, o, trustedProjectsRoot, d)
     : undefined;
@@ -476,6 +513,31 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string, deps?:
       ...(costCeilingUsd !== undefined ? { kickoffCeilingUsd: costCeilingUsd } : {}),
     });
     const { result } = out;
+    // R2-08-F2, M7-E boundary fix: on a real (non-suppressed) completion,
+    // fire every declared `on: agent-complete` watcher for this slug — the
+    // ONE production standalone-agent completion site (moved here from
+    // `dispatchAgentRun` itself; see that function's doc). A firing failure
+    // must never fail the dispatch itself: caught and surfaced via
+    // `console.error`, never silently swallowed.
+    if (!result.suppressed) {
+      const forgeRootResolved = resolve(forgeRoot);
+      try {
+        await fireAgentCompleteTriggers(loadFlowRosterBestEffort(forgeRootResolved), out.slug, {
+          queueRoot: join(forgeRootResolved, '_queue'),
+          // N1 (round-4): `project.name` is a raw operator/request-supplied
+          // directory name (e.g. this CLI's `--project` value, or the
+          // bridge's `body.project` — both checked against `existsSync`,
+          // never against `discoverProjects`' normalized ids), so it is run
+          // through the SAME `normalizeProjectId` `discoverProjects` uses —
+          // lint and dispatch must read identical evidence (rule 2).
+          ...(project ? { eventProject: normalizeProjectId(project.name) } : {}),
+        });
+      } catch (err) {
+        console.error(
+          `forge agent dispatch: firing on:agent-complete triggers for "${out.slug}" failed (agent run itself already succeeded — not failing it): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
     if (result.suppressed) {
       console.log(`agent dispatch: ${out.slug} run ${out.runId} — spawn suppressed (dry-bridge / no-spawn seam)`);
     } else {
@@ -488,7 +550,7 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string, deps?:
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`forge agent dispatch: ${msg}`);
     // The terminal failure marker (the bridge reports `failed` rather than a
-    // perpetual `running`). Moved to ./dispatch-terminal.ts with the signal
+    // perpetual `running`). Moved to `packages/agents/dispatch-terminal.ts` with the signal
     // path's terminus — and it no longer swallows its own write failure.
     recordDispatchTerminal({ runId, slug, forgeRoot, outcome: 'failed', detail: msg });
     // D7 — the run ended in failure: write the terminal phase before exiting.

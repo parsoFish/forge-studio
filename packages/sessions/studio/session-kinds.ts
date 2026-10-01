@@ -417,7 +417,7 @@ export type TurnSpec = {
  *  SAME frozen vocabulary (TURN_STEPS/FINALIZER_IDS) as `turnSpec.phases`,
  *  but carry no `kindDir`/`style`/`schema`: `panel` is consumed ONLY by
  *  `deriveSessionAffordances` (the read half) and is INVISIBLE to dispatch —
- *  `cmdAgentRun`'s turnSpec-fork condition (packages/agents/agent-run.ts) never looks at
+ *  `cmdAgentRun`'s turnSpec-fork condition (apps/forge/agent-run.ts) never looks at
  *  it, so a kind carrying `panel` still dispatches through `AGENT_RUNNERS`
  *  exactly as before this field existed. */
 export type SessionKindPanel = {

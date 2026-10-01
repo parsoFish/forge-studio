@@ -5,7 +5,7 @@
  * `orchestrator/*-runner.ts` (architect-runner.ts / instructions-runner.ts /
  * demo-builder-runner.ts / kinds/project-brain.ts — all four stay
  * byte-for-byte untouched; ADR-043 §3's dispatch fork lives in
- * `packages/agents/agent-run.ts`, NOT here).
+ * `apps/forge/agent-run.ts`, NOT here).
  *
  * Owns, ONCE, everything those four duplicate:
  *   - the SEC-04 containment preamble: `resolveGuardedPath(projectRoot,

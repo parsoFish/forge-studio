@@ -14,14 +14,15 @@ rather than importing what they need.
 
 | seam | exports |
 |---|---|
-| run one agent | `runAgent` · `isSafeRunId` · `resolveOneShotBudgetUsd` · `dispatchAgentRun` · `cmdAgent` · `cmdAgentRun` · `cmdAgentDispatch` · `parseAgentDispatchArgs` · `findSessionProject` |
+| run one agent | `runAgent` · `isSafeRunId` · `resolveOneShotBudgetUsd` · `dispatchAgentRun` · `findSessionProject` |
+| dispatch terminus recording | `installDispatchSignalGuard` · `recordDispatchTerminal` |
 | bands | `resolveBandGuard` · `BAND_GUARD_IDS` · `PLATFORM_GUARD_IDS` · `BAND_CANONICAL_SLUG` · `runBandAgentStandalone` · `isStandaloneBandAgent` · `dispatchStandaloneBand` |
 | the Ralph loop | `runRalphLoop` · `makeQualityGateFromCmd` · `resolveGateTimeoutMs` |
 | the Agent kind | `loadAgentDefinition` · `listAgentDefinitions` · `listStarterAgents` · `isStudioAgent` · `isUnfilteredStudioAgent` · `deriveAgentSpec` · `agentCapabilityDescriptor` · `serializeAgentDefinition` · `PHASE_EXECUTOR_KINDS` |
 | the reverse index | `agentUsageIndex` · `agentsUsing` |
 | adapters | `getAdapter` · `resolveSdkId` · `isSdkAvailable` |
 | the pinned SDK seam | `pinnedSdkQuery` · `pinnedStreamQuery` · `withRunMarker` · `withIdleDeadline` · `StreamDeadlineError` |
-| spawn containment | `processesCarryingMarker` · `readRunMarkers` · `tokenBelongsToRunDir` |
+| spawn containment | `processesCarryingMarker` · `readRunMarkers` · `tokenBelongsToRunDir` · `AGENT_RUN_MARKER_FILE` |
 | skill packages | `skillPath` · `skillsDir` · `skillPathRelative` · `assertSkillSlug` · `listSkillMdDirs` · `listSkillDirs` · `loadSkillTurnPrompt` · `splitSkillTurnSections` · `SLUG_RE` (kernel's own object, re-exported — AT-89) |
 | declared-skill composition | `makeProjectSkillsLoadedSink` |
 | the agent-slug route helpers | `SAFE_AGENT_SLUG_RE` |
@@ -30,7 +31,6 @@ rather than importing what they need.
 | events and classification | `makeToolEventSink` · `extractLiveToolDetails` · `classifyCycleFailure` · `classifyCrash` · `matchesRateLimitSignature` · `matchesDnsFailureSignature` |
 | scope and hooks | `takeScopeSnapshot` · `scopeViolations` · `sdkHooksForAgent` |
 | AGENTS.md and HTTP | `composeAgentsMd` · `agentsRoutes` |
-| the legacy dispatch table | `AGENT_RUNNERS` |
 
 ### Types (14)
 
@@ -47,8 +47,9 @@ rather than importing what they need.
 `tool-event-emit.ts`, `stream-deadline.ts` and
 `packages/agents/studio/agent-registry.ts` — bead `forge-8vfn.5.31`'s repoint work
 surfaced a live cross-package cycle: `agent-run.ts`/`agent-dispatch-cmd.ts`
-import `@forge/sessions` (an already-baselined allow-graph violation), and a
-dozen-plus `packages/sessions/*.ts`/`kinds/*.ts` files call `deriveAgentSpec(
+(back then still in this package) imported `@forge/sessions` (an
+already-baselined allow-graph violation), and a dozen-plus
+`packages/sessions/*.ts`/`kinds/*.ts` files call `deriveAgentSpec(
 skillPathRelative(...))` — or build a `kinds/registry.ts`-style object
 literal of sibling kind modules — at their OWN top level. A sessions file
 reached through THIS door would nest back into `@forge/sessions` while still
@@ -58,6 +59,12 @@ the eight files above reaches no higher than `@forge/kernel`/`@forge/library`/
 `@forge/contracts`, so a sessions `kinds/*.ts` file importing them directly
 never re-enters `@forge/sessions` — see `packages/sessions/kinds/
 architect-session.ts`'s own module doc for the full chain that was measured.
+M7-E moved `agent-run.ts`/`agent-dispatch-cmd.ts` themselves out to
+`apps/forge/` (they never belonged to this seam — they compose agents with
+sessions and flows), so this door's own top level no longer imports sessions
+at all; the eight subpaths stay exactly as they were, unvalidated against
+whether that specific cycle edge still applies, since collapsing them is a
+separate, unstarted effort.
 
 ### The one test-only subpath
 
@@ -89,18 +96,18 @@ consumers are listings — a per-id lookup would turn one walk into N and could
 not report `scanned` at all. `agentsUsing(kind, id, root)` is the thin per-id
 wrapper over the same index.
 
-**`AGENT_RUNNERS` is exported although it is empty.** All four legacy kinds have
-been ported to `packages/sessions/kinds/`. It stays because
-`packages/sessions/studio/session-kinds.test.ts` asserts against it — the
-tripwire keeping ADR-043 §3's dispatch fork from re-opening the per-runner cap
-park — and because `knownAgentIds` derives the operator's usage line from the
-union of both tables, so a ported kind cannot go invisible while still working.
-
 ## Layout
 
-`run-agent.ts` is the spawn primitive; `agent-dispatch.ts` and
-`agent-dispatch-cmd.ts` are the one-shot dispatch verb; `agent-run.ts` is the
-interactive turn verb. `band-agent-run.ts` runs the two banded successors
+`run-agent.ts` is the spawn primitive; `agent-dispatch.ts` is the one-shot
+dispatch verb's package-side half (`dispatchAgentRun` — resolve, assemble the
+prompt, run it). Its CLI wrapper `agent-dispatch-cmd.ts` (`cmdAgentDispatch`)
+and the interactive turn verb `agent-run.ts` (`cmdAgent`/`cmdAgentRun`/
+`AGENT_RUNNERS`) moved to `apps/forge/` (M7-E): both compose this package with
+`@forge/sessions` and `@forge/flows`, which is the assembly's job, not this
+one-door package's. `agent-dispatch.ts` no longer fires `on: agent-complete`
+triggers itself — `cmdAgentDispatch` does that immediately after
+`dispatchAgentRun` returns, since firing them needs `@forge/flows` (rank 6),
+above this package's rank. `band-agent-run.ts` runs the two banded successors
 through their real flow pipelines, injected. `ralph/` is the multi-iteration
 loop. `studio/` is the Agent kind — loader, derivation, usage index, hook
 dispatch. `_adapters/` is the SDK registry. `routes.ts` plus

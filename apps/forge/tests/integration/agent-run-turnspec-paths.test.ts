@@ -22,7 +22,7 @@
  * what proves the rule is generic rather than hardcoded to a name.
  *
  * SPLIT FROM a 1,226-line file. Its 268-line shared block became a real
- * fixture module, `packages/agents/tests/test-fixtures/interactive-runner-log-observer.ts`,
+ * fixture module, `apps/forge/tests/test-fixtures/interactive-runner-log-observer.ts`,
  * because all four of its clusters used it and one of them tests the log
  * walker as its subject — three duplicated copies of a 162-line walker is the
  * signal that a seam is wrong, not a smaller file (T1 ruling 94). The three
@@ -76,7 +76,7 @@ import {
 // duplicate of the authoring row (which would only prove the generic
 // mechanism again, redundant with AT-1 above): reading the actual file
 // means a typo/drift the WI-1 implementer introduces in the real file is
-// caught here, not just in session-kinds.test.ts's structural pins.
+// caught here, not just in session-kinds.test.ts's structural pins (historical: now session-kinds-panel.test.ts).
 // ===========================================================================
 
 test('R4-21 phase 2, WI-1: cmdAgentRun(["authoring", sid, "--project", p]) reaches runInteractiveTurn and NOT AGENT_RUNNERS — driven by the REAL checked-in session-kinds.yaml through the REAL CLI entry point', async () => {
@@ -139,7 +139,7 @@ test('R4-21 phase 2, WI-1: cmdAgentRun(["authoring", sid, "--project", p]) reach
 // ===========================================================================
 // R4-21 phase 2, amendment round 2, correction B (_wave5/unit-specs/
 // R4-21-phase2.md's own T2 spec does not cover this — the T3 amendment brief
-// does): `runTurnSpecAgent` (packages/agents/agent-run.ts) resolves the projects root
+// does): `runTurnSpecAgent` (apps/forge/agent-run.ts) resolves the projects root
 // with a HARDCODED `resolveGuardedPath(resolve('projects'), [projectArg])` —
 // `<cwd>/projects`, ignoring `forge.config.json`'s `projectsDir` and the
 // `FORGE_PROJECTS_DIR` env var entirely. Every bridge route instead resolves

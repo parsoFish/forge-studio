@@ -2,12 +2,12 @@
  * PR #122 — SEC-06: the legacy forge agent run dispatch path folded an untrusted --project value into the root before any containment check.
  *
  * SEC-06 acceptance pins: the legacy `forge agent run <agent-id> <session-id>
- * --project <name>` dispatch skeleton in `cmdAgentRun` (`packages/agents/agent-run.ts`)
+ * --project <name>` dispatch skeleton in `cmdAgentRun` (`apps/forge/agent-run.ts`)
  * must guard an untrusted `--project` value the same way the newer turnSpec
  * road in the same file already does (`runTurnSpecAgent`) — as its OWN
  * guarded path segment against the trusted projects root, never folded into
  * the root itself before any containment check runs. See
- * `cli/studio-path-guard.ts`'s module docstring (the CONTRACT section) for
+ * `packages/kernel/path-guard.ts`'s module docstring (the CONTRACT section) for
  * the general root-folding shape this closes: a guard whose `root` parameter
  * is itself untrusted can never fail, because `resolveGuardedPath` performs
  * no identity check on `root` — only on `segments[]`.
@@ -42,12 +42,12 @@ process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
 
 /** A rejection reason naming the offending shape — mirrors the containment
  *  vocabulary already established by `resolveGuardedPath`'s own `reason`
- *  strings and `runTurnSpecAgent`'s own error text (both `cli/
- *  studio-path-guard.ts` / `packages/agents/agent-run.ts`), not invented wording. */
+ *  strings and `runTurnSpecAgent`'s own error text (both `packages/kernel/
+ *  path-guard.ts` / `apps/forge/agent-run.ts`), not invented wording. */
 const CONTAINMENT_RE = /is not a valid project name|unsafe path segment|identity mismatch|containment|escapes/i;
 
 // ---------------------------------------------------------------------------
-// Driver — mirrors `cli/agent-run.test.ts`'s own `run()`/`withCwd()` helpers
+// Driver — mirrors `cli/agent-run.test.ts`'s own `run()`/`withCwd()` helpers (historical: long since split up)
 // (the established house pattern for this file's sibling suite: a sentinel
 // thrown from a stubbed `process.exit` returns control without tearing down
 // the test runner). ONE disclosed hardening: a real, non-`__exit__` throw is
@@ -87,7 +87,7 @@ async function run(args: string[], forgeRoot: string): Promise<{ exitCode: numbe
 /** chdir for the duration of `fn`, always restoring. Load-bearing, not
  *  cosmetic: the legacy branch's `resolve('projects', projectArg)` is
  *  cwd-relative, so the fixture forgeRoot must also be the process cwd for
- *  the call, mirroring `cli/agent-run.test.ts`'s own established technique. */
+ *  the call, mirroring `cli/agent-run.test.ts`'s own established technique (historical: long since split up). */
 async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> {
   const prev = process.cwd();
   process.chdir(dir);
@@ -216,7 +216,7 @@ test('regression lock: an empty --project is diverted to safe auto-discovery and
 // Regression locks — must stay green before AND after the fix. These prove
 // the guard is not a blunt instrument: an ordinary project name, and a name
 // that merely STARTS WITH ".." without a separator (a legitimate, contained
-// name per `cli/studio-path-guard.ts`'s own documented `isSafeSegment`
+// name per `packages/kernel/path-guard.ts`'s own documented `isSafeSegment`
 // precedent), must both sail past the guard step untouched.
 // ---------------------------------------------------------------------------
 
@@ -254,7 +254,7 @@ test('regression lock: a name starting with ".." but containing no separator is 
 // (`apps/forge/ui-bridge.ts`) before any mkdir/write/spawn, independent of the
 // legacy CLI-dispatch fix this file otherwise pins. Included here because it
 // is the call-site family the SEC-06 sweep names as the OTHER way an
-// untrusted project value reaches the CLI (a detached `orchestrator/cli.ts
+// untrusted project value reaches the CLI (a detached `apps/forge/cli.ts
 // <verb> run <sid> --project <project>` spawn) — this test proves the value
 // is already sanitized before that spawn is even considered. GREEN ON
 // ARRIVAL (measured, not assumed — see the test-writer's report): kills a

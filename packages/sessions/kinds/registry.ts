@@ -3,7 +3,7 @@
  * (ADR 043 as amended 2026-09-03, M4 ruling 60; exit row 3 of the M4 sessions
  * lane reads its count from here and from `AGENT_RUNNERS`).
  *
- * BEFORE the ports, `packages/agents/agent-run.ts`'s `AGENT_RUNNERS` held one
+ * BEFORE the ports, `apps/forge/agent-run.ts`'s `AGENT_RUNNERS` held one
  * row per bespoke interactive runner even though every one of those runners
  * lives in `packages/sessions` — the dispatch table sat one package below the
  * code it dispatched. Each port moves its row HERE, beside the kind module it

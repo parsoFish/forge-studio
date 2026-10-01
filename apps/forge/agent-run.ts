@@ -33,7 +33,7 @@ import { resolveGuardedPath } from '@forge/kernel';
 import {
   cmdAgentDispatch, writeSessionTerminalPhase, type AgentDispatchDeps,
 } from './agent-dispatch-cmd.ts';
-import { findSessionProject } from './find-session-project.ts';
+import { findSessionProject } from '@forge/agents';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '@forge/kernel';
 import { runInteractiveTurn } from '@forge/sessions';
 import { loadSessionKinds, type SessionKindDescriptor } from '@forge/sessions';
@@ -70,12 +70,12 @@ export interface AgentRunnerEntry {
    *  session dir lives under (`<projectRoot>/<kindDir>/<sessionId>/status.json`),
    *  mirroring `TurnSpec.kindDir` for the new-road turnSpec kinds
    *  (`runTurnSpecAgent` below). Read STRAIGHT off each runner's own
-   *  `*_KIND_DIR` constant — `packages/sessions/architect-runner.ts` ('_architect'),
-   *  `packages/sessions/instructions-runner.ts` ('_instructions'),
+   *  `*_KIND_DIR` constant — `packages/sessions/architect-runner.ts` ('_architect', historical: since ported),
+   *  `packages/sessions/instructions-runner.ts` ('_instructions', historical: since ported),
    *  `packages/sessions/kinds/project-brain.ts` ('_project-brain', now a
    *  `SESSION_KIND_RUNNERS` row) — with
    *  ONE deliberate trap: demo-builder's is `_demo`, NOT `_demo-builder` (see
-   *  `packages/sessions/demo-builder-runner.ts`'s `DEMO_KIND_DIR` and
+   *  `packages/sessions/demo-builder-runner.ts`'s `DEMO_KIND_DIR` (historical: since ported) and
    *  `studio/session-kinds.yaml`'s own "id is demo — NOT demo-builder" comment
    *  on the "demo" descriptor — the AGENT_RUNNERS *key* `demo-builder` and the
    *  on-disk dir are intentionally different strings). Used ONLY by

@@ -161,7 +161,7 @@ export function emitDryBridgeSkip(
  * instructions/demo-builder/project-brain/onboarding/authoring/kb-cleanup —
  * see `BRIDGE_ROUTE_CLASSIFICATION` in `apps/forge/dry-bridge.ts`) passes a
  * session id whose own terminal state lives in `status.json`
- * (`writeSessionTerminalPhase`, `packages/agents/agent-run.ts`), not in an
+ * (`writeSessionTerminalPhase`, `apps/forge/agent-run.ts`), not in an
  * events.jsonl any standalone-run deriver ever reads — so only THIS route
  * gets the extra write below.
  */

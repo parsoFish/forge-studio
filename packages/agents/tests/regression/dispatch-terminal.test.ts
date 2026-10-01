@@ -35,6 +35,12 @@ import { FORGE_ROOT } from '@forge/kernel';
 // only at run time. Anchored on the package directory via kernel's FORGE_ROOT
 // so the value is the same from any depth this file is bucketed to.
 const HERE = join(FORGE_ROOT, 'packages', 'agents');
+// M7-E boundary fix: `cmdAgentDispatch` (`agent-dispatch-cmd.ts`) moved to
+// `apps/forge/` — it composes this package with `@forge/sessions`/
+// `@forge/flows`, the assembly's job, not this package's. The REPRODUCTION
+// test below drives it directly as a subprocess import string, same reason
+// as `HERE` above.
+const HERE_APPS_FORGE = join(FORGE_ROOT, 'apps', 'forge');
 
 function readEvents(forgeRoot: string, runId: string): Array<Record<string, unknown>> {
   const path = join(forgeRoot, '_logs', runId, 'events.jsonl');
@@ -324,7 +330,7 @@ test('REPRODUCTION: cmdAgentDispatch SIGTERMed mid-dispatch writes a terminus (r
   const childPath = join(forgeRoot, 'child.ts');
   writeFileSync(
     childPath,
-    `import { cmdAgentDispatch } from ${JSON.stringify(join(HERE, 'agent-dispatch-cmd.ts'))};
+    `import { cmdAgentDispatch } from ${JSON.stringify(join(HERE_APPS_FORGE, 'agent-dispatch-cmd.ts'))};
      // Node exits on an unsettled top-level await unless something holds the
      // loop open — without this the child dies before the signal arrives and
      // the test would pass for the wrong reason (no terminus because no run).

@@ -36,20 +36,18 @@ import { mkdirSync, mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { dispatchAgentRun } from '../../agent-dispatch.ts';
-import { runAgent } from '../../run-agent.ts';
+import { dispatchAgentRun, runAgent, AGENT_RUN_MARKER_FILE, readRunMarkers } from '@forge/agents';
 import { cmdAgentDispatch } from '../../agent-dispatch-cmd.ts';
 import { FORGE_ROOT } from '@forge/kernel';
 import type { AgentDefinition } from '@forge/contracts';
-import type { StreamQueryFn } from '../../pinned-sdk-query.ts';
-import { AGENT_RUN_MARKER_FILE, readRunMarkers } from '../../spawn-marker.ts';
+import type { StreamQueryFn } from '@forge/agents';
 
 const SKILLS = join(FORGE_ROOT, 'skills');
 
 /**
- * A synthetic one-shot definition rather than a real roster entry. The roster
- * loader still lives in `orchestrator/studio/registry.ts`, and importing it
- * from a NEW file would mint a fresh `package-to-legacy` boundary row —
+ * A synthetic one-shot definition rather than a real roster entry. At the time
+ * this was written, the roster loader still lived in `orchestrator/studio/registry.ts` (historical: since deleted — see `studio/agent-registry.ts`).
+ * Importing it from a NEW file would mint a fresh `package-to-legacy` boundary row —
  * `check-boundaries` refused exactly that and was right to: the baseline only
  * shrinks. The dispatch's `loadDefs` seam is injected here anyway, so nothing
  * about this test needed the real roster; what it needs is *an* agent, and a

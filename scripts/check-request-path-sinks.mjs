@@ -18,8 +18,9 @@
  * bridge HTTP route". Both were stale and the second was load-bearing: the
  * package move put the subject under packages/, and a scope that is only ever
  * a bridge route cannot see a CLI dispatch entry — which is precisely how a
- * planted sink in packages/agents/agent-run.ts stayed invisible here while
- * the sibling lint caught it on the same line (bead forge-8vfn.5.48).
+ * planted sink in packages/agents/agent-run.ts (now at apps/forge/agent-run.ts)
+ * stayed invisible here while the sibling lint caught it on the same line
+ * (bead forge-8vfn.5.48).
  *
  * ============================================================================
  * WHAT THIS RATCHET DOES NOT COVER (read this before trusting a green run)
@@ -319,12 +320,13 @@ const HOST_TREES = ['cli', 'apps/forge'];
  * disagreed about their own scope: measured on `b3f728c0`, four of that
  * script's thirty modules were unreachable from this walk and therefore
  * invisible here while the sibling audited them. A planted sink in
- * `packages/agents/agent-run.ts` was caught by one lint and not the other, on
- * the same line. Declared HERE, once, and consumed by both.
+ * `packages/agents/agent-run.ts` (now at `apps/forge/agent-run.ts`) was
+ * caught by one lint and not the other, on the same line. Declared HERE,
+ * once, and consumed by both.
  */
 export const DISPATCH_ENTRY_MODULES = [
-  'packages/agents/agent-dispatch-cmd.ts',
-  'packages/agents/agent-run.ts',
+  'apps/forge/agent-dispatch-cmd.ts',
+  'apps/forge/agent-run.ts',
   'packages/agents/find-session-project.ts',
   'packages/sessions/kinds/project-brain.ts',
 ];
