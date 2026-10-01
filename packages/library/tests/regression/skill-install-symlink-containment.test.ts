@@ -254,7 +254,7 @@ test('readSkillPackage still reads an ordinary package containing a REAL (non-sy
 // cannot redefine these modules' named ESM imports either — the same
 // empirically-verified limitation `apps/forge/tests/regression/
 // instructions-start-read-guard.test.ts` and
-// `packages/factory/tests/regression/demo-builder-start-read-guard.test.ts`
+// `apps/forge/tests/regression/demo-builder-start-read-guard.test.ts`
 // document and route around with a SOURCE-STRUCTURAL pin instead. This is
 // that same pattern applied here: the only honest RED-at-base assertion is
 // that every touch AFTER the containment check goes through the validated

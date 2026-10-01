@@ -27,6 +27,7 @@ export * from './gh-identity.ts';
 export * from './init.ts';
 /** The realpath containment guard every request-derived path passes through. */
 export * from './path-guard.ts';
+export { safeReadFileInSession } from './contained-read.ts';
 /** The direct-filesystem case-folding probe shared by every staging module
  *  that dedupes entries by resolved path before writing them (forge-qn8,
  *  forge-gp4) — moved down from `agents`/`library` (M7-C) so both rank-3

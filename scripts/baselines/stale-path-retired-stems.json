@@ -371,6 +371,7 @@
   "developer-loop.gate-events.test",
   "developer-loop.gate-feedback-loop.test",
   "developer-loop.git-identity.test",
+  "developer-loop.live-acceptance-env.test",
   "developer-loop.merge-conflict-feedback.test",
   "developer-loop.merge-conflict-requeue.test",
   "developer-loop.outcomes-map.test",

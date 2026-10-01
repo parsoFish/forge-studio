@@ -1,3 +1,7 @@
+apps/forge/agent-dispatch-cmd.ts existsSync 3
+apps/forge/agent-dispatch-cmd.ts realpathSync 5
+apps/forge/agent-dispatch-cmd.ts statSync 2
+apps/forge/agent-run.ts existsSync 2
 apps/forge/brain-fix-turn.ts existsSync 1
 apps/forge/brain-fix-turn.ts readFileSync 1
 apps/forge/bridge-agent-dispatch.ts mkdirSync 2
@@ -35,11 +39,7 @@ packages/agents/_adapters/aider/index.ts execFile 1
 packages/agents/_adapters/aider/index.ts execFileSync 4
 packages/agents/_adapters/aider/index.ts readFileSync 1
 packages/agents/_adapters/gemini/index.ts readFileSync 1
-packages/agents/agent-dispatch-cmd.ts existsSync 3
-packages/agents/agent-dispatch-cmd.ts realpathSync 5
-packages/agents/agent-dispatch-cmd.ts statSync 2
 packages/agents/agent-dispatch.ts readdirSync 1
-packages/agents/agent-run.ts existsSync 2
 packages/agents/agents-md-compose.ts existsSync 2
 packages/agents/agents-md-compose.ts readFileSync 1
 packages/agents/agents-md-compose.ts writeFileSync 1
@@ -276,6 +276,8 @@ packages/kernel/claude-cli-path.ts statSync 1
 packages/kernel/config.ts existsSync 2
 packages/kernel/config.ts readdirSync 1
 packages/kernel/config.ts readFileSync 2
+packages/kernel/contained-read.ts readFileSync 1
+packages/kernel/contained-read.ts realpathSync 2
 packages/kernel/discovery-roots.ts readdirSync 1
 packages/kernel/gh-identity.ts execFileSync 1
 packages/kernel/guarded-scan.ts openSync 1
@@ -627,8 +629,7 @@ packages/sessions/session-status-io.ts readFileSync 2
 packages/sessions/session-status-io.ts writeFileSync 2
 packages/sessions/session-write-fence.ts realpathSync 3
 packages/sessions/studio/session-artifact-derivers.ts readdirSync 2
-packages/sessions/studio/session-artifact-derivers.ts readFileSync 1
-packages/sessions/studio/session-artifact-derivers.ts realpathSync 6
+packages/sessions/studio/session-artifact-derivers.ts realpathSync 4
 packages/sessions/studio/session-kinds-validate.ts existsSync 1
 packages/sessions/studio/session-kinds-validate.ts readFileSync 1
 packages/sessions/studio/session-kinds.ts readFileSync 1

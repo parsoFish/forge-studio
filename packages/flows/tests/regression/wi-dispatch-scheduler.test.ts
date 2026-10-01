@@ -18,8 +18,46 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { runConcurrentDispatch } from '../../wi-dispatch-scheduler.ts';
-import { settleWiOutcome, assertOutcomesSettled, type WiOutcome } from '@forge/stations/testing';
 import type { WorkItem } from '../../work-item.ts';
+
+/**
+ * `settleWiOutcome` / `assertOutcomesSettled` / `WiOutcome` duplicated locally
+ * from `packages/stations/phases/developer-loop.ts` (via `@forge/stations/
+ * testing`) rather than imported: stations is a higher rank than this package
+ * (package-layer-order), and this file's own SUBJECT is `runConcurrentDispatch`
+ * (flows) — the outcome-settlement bookkeeping below is a generic completeness
+ * invariant used to build/check the dispatcher's test scenarios, not a
+ * station-specific behaviour under test. Kept byte-for-byte identical to the
+ * production functions (same double-settle guard, same completeness error
+ * shape) so this duplication cannot silently drift into a weaker check.
+ */
+type WiOutcome = {
+  id: string;
+  status: WorkItem['status'];
+  result: unknown;
+  environment?: boolean;
+};
+
+function settleWiOutcome(outcomes: Map<string, WiOutcome>, outcome: WiOutcome): void {
+  if (outcomes.has(outcome.id)) {
+    throw new Error(
+      `developer-loop: internal error — work item '${outcome.id}' settled twice (double-settle)`,
+    );
+  }
+  outcomes.set(outcome.id, outcome);
+}
+
+function assertOutcomesSettled(
+  outcomes: ReadonlyMap<string, WiOutcome>,
+  wisRun: ReadonlyArray<WorkItem>,
+): void {
+  if (outcomes.size === wisRun.length) return;
+  const missing = wisRun.filter((wi) => !outcomes.has(wi.work_item_id)).map((wi) => wi.work_item_id);
+  throw new Error(
+    `developer-loop: internal error — incomplete outcome snapshot before summary ` +
+      `(${outcomes.size}/${wisRun.length} settled)${missing.length > 0 ? `; missing: ${missing.join(', ')}` : ''}`,
+  );
+}
 
 function wi(id: string, dependsOn: string[] = []): WorkItem {
   return {

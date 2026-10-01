@@ -29,8 +29,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyCycleFailure, matchesRateLimitSignature } from '../../failure-classifier.ts';
-import { CostCeilingError } from '@forge/flows';
+import { COST_CEILING_MESSAGE_PREFIX } from '@forge/contracts';
 import type { EventLogEntry } from '@forge/kernel';
+
+/** `CostCeilingError`'s own message (packages/flows/flow-budgets.ts), built
+ *  locally from the SAME `@forge/contracts` prefix constant the real class
+ *  and `failure-classifier.ts`'s own signature match both key on — flows is a
+ *  higher rank than this package (package-layer-order), and the message shape
+ *  is what this test needs, not the class identity. */
+function costCeilingMessage(spentUsd: number, ceilingUsd: number): string {
+  return (
+    `${COST_CEILING_MESSAGE_PREFIX} flow spent $${spentUsd.toFixed(4)} which meets or exceeds ` +
+    `the $${ceilingUsd.toFixed(2)} ceiling — stopping at a clean phase boundary (resumable).`
+  );
+}
 
 function ev(overrides: Partial<EventLogEntry>): EventLogEntry {
   return {
@@ -712,7 +724,7 @@ test('classifyCycleFailure: CostCeilingError message classifies to a cost-ceilin
   // Kills a naive implementation that leaves this on the default branch
   // (kind:'terminal', reason:'failure could not be classified — examine
   // events.jsonl manually') — that reason names nothing; this one must.
-  const realError = new CostCeilingError(80.8324, 52);
+  const realError = { message: costCeilingMessage(80.8324, 52) };
   const events = [
     ev({
       phase: 'orchestrator',

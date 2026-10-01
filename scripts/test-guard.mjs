@@ -2,7 +2,7 @@
  * test-guard.mjs — the suite's half of the symmetric lock refusal.
  *
  * Bead `forge-8vfn.7.6.13`, T1 ruling 634. `npm test` writes into `projects/`
- * (`packages/agents/tests/integration/agent-run-dispatch.test.ts` builds a
+ * (`apps/forge/tests/integration/agent-run-dispatch.test.ts` builds a
  * fixture there and sweeps it), and that is the directory a story run hashes
  * before and after to prove its ground did not drift. The two took different
  * locks, so they overlapped by construction.

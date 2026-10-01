@@ -18,8 +18,9 @@
  * bridge HTTP route". Both were stale and the second was load-bearing: the
  * package move put the subject under packages/, and a scope that is only ever
  * a bridge route cannot see a CLI dispatch entry — which is precisely how a
- * planted sink in packages/agents/agent-run.ts stayed invisible here while
- * the sibling lint caught it on the same line (bead forge-8vfn.5.48).
+ * planted sink in packages/agents/agent-run.ts (now at apps/forge/agent-run.ts)
+ * stayed invisible here while the sibling lint caught it on the same line
+ * (bead forge-8vfn.5.48).
  *
  * ============================================================================
  * WHAT THIS RATCHET DOES NOT COVER (read this before trusting a green run)
@@ -145,22 +146,20 @@ export const DEFAULT_BASELINE_PATH = join(FORGE_ROOT, 'scripts/request-path-sink
 export const DEFAULT_DOC_PATH = join(FORGE_ROOT, 'docs/reference/request-path-sinks.md');
 
 /**
- * The trees this walk may enter. `packages/` and `apps/` joined in M2: the
- * kernel move took `cli/studio-path-guard.ts` — the containment guard this
- * lint exists to watch — to `packages/kernel/path-guard.ts`, and with only
- * `cli/` and `orchestrator/` here the guard's own six raw fs sinks silently
- * became "tighten" rows and both ratchets went on reporting PASS. A lint that
- * loses sight of its subject when the subject moves is worse than no lint,
- * because it still says green.
+ * The trees this walk may enter. `packages/` and `apps/` are the production
+ * trees; `cli/` and `orchestrator/` no longer exist in the repo and stay only
+ * because this lint's own unit tests build their fixture trees under them.
+ * A lint that loses sight of its subject when the subject moves is worse than
+ * no lint, because it still says green — the containment guard once moved
+ * into a tree this list did not name, and its own six raw fs sinks silently
+ * became "tighten" rows while both ratchets reported PASS.
  */
 const WALK_ALLOWED_PREFIXES = ['cli/', 'orchestrator/', 'packages/', 'apps/'];
 
 /**
  * A workspace package specifier — `@forge/kernel` -> `packages/kernel/index.ts`.
- * The ONLY edge from the legacy tree into a package is
- * `orchestrator/_pkg/<pkg>.ts`, which re-exports a BARE specifier. A walker
- * that follows relative specifiers only stops dead at that shim, so every
- * package would sit outside this lint's universe forever.
+ * Packages reach each other by BARE specifier, so a walker that followed
+ * relative specifiers only would stop dead at every package boundary.
  */
 const WORKSPACE_SPEC_RE = /^@forge\/([^/]+)(\/.*)?$/;
 
@@ -319,12 +318,13 @@ const HOST_TREES = ['cli', 'apps/forge'];
  * disagreed about their own scope: measured on `b3f728c0`, four of that
  * script's thirty modules were unreachable from this walk and therefore
  * invisible here while the sibling audited them. A planted sink in
- * `packages/agents/agent-run.ts` was caught by one lint and not the other, on
- * the same line. Declared HERE, once, and consumed by both.
+ * `packages/agents/agent-run.ts` (now at `apps/forge/agent-run.ts`) was
+ * caught by one lint and not the other, on the same line. Declared HERE,
+ * once, and consumed by both.
  */
 export const DISPATCH_ENTRY_MODULES = [
-  'packages/agents/agent-dispatch-cmd.ts',
-  'packages/agents/agent-run.ts',
+  'apps/forge/agent-dispatch-cmd.ts',
+  'apps/forge/agent-run.ts',
   'packages/agents/find-session-project.ts',
   'packages/sessions/kinds/project-brain.ts',
 ];

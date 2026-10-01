@@ -252,7 +252,7 @@ test('F18: a surplus occurrence beyond the audited count is kept as ONE build-fa
       'apps/forge/cli.ts': `const a = ${site};\nconst b = ${site};\n`,
       // Remaining fold-scope modules present but benign, so the scan sees a
       // complete module set rather than skipping absent files.
-      'packages/agents/agent-run.ts': 'export const noop = true;\n',
+      'apps/forge/agent-run.ts': 'export const noop = true;\n',
       'packages/agents/agent-dispatch.ts': 'export const noop = true;\n',
       'packages/flows/scheduler.ts': 'export const noop = true;\n',
     },
@@ -285,7 +285,7 @@ test('F19: exactly the audited number of occurrences is fully suppressed (0 kept
   withFixture(
     {
       'apps/forge/cli.ts': `const a = ${PROJECTS_ROOT_FOLD_ALLOWLIST.find((r) => r.file === 'apps/forge/cli.ts' && r.folded === 'target')!.site};\n`,
-      'packages/agents/agent-run.ts': 'export const noop = true;\n',
+      'apps/forge/agent-run.ts': 'export const noop = true;\n',
       'packages/agents/agent-dispatch.ts': 'export const noop = true;\n',
       'packages/flows/scheduler.ts': 'export const noop = true;\n',
     },
@@ -319,20 +319,20 @@ test('G20: runLint against the real repo root has zero fold findings and no stal
 
 // =============================================================================
 // H. MUTATION ON THE REAL TREE — the durable class-closer. Each evasion shape is
-// appended to the REAL packages/agents/agent-run.ts text (never written to disk); the
+// appended to the REAL apps/forge/agent-run.ts text (never written to disk); the
 // mutation's presence is asserted BEFORE any verdict is read.
 // =============================================================================
 
 test('H21a: a renamed-import/local-alias callee fold, re-introduced into the real tree, is caught', () => {
-  const realPath = join(REPO_ROOT, 'packages/agents/agent-run.ts');
+  const realPath = join(REPO_ROOT, 'apps/forge/agent-run.ts');
   const realText = readFileSync(realPath, 'utf8');
-  const realFindings = scanProjectsRootFold(realText, 'packages/agents/agent-run.ts');
+  const realFindings = scanProjectsRootFold(realText, 'apps/forge/agent-run.ts');
 
   const MUT = "const localResolve = resolve;\nconst mutatedEvasionPath1 = localResolve('projects', evasionTokenAlias);";
   const mutatedText = `${realText}\n${MUT}\n`;
   assert.ok(mutatedText.includes(MUT), 'precondition: the alias-callee mutation is present in the text');
 
-  const mutatedFindings = scanProjectsRootFold(mutatedText, 'packages/agents/agent-run.ts');
+  const mutatedFindings = scanProjectsRootFold(mutatedText, 'apps/forge/agent-run.ts');
   assert.ok(
     mutatedFindings.length > realFindings.length,
     'the alias-callee fold adds a finding beyond the unmutated baseline',
@@ -344,15 +344,15 @@ test('H21a: a renamed-import/local-alias callee fold, re-introduced into the rea
 });
 
 test('H21b: a differently-named-root binding fold, re-introduced into the real tree, is caught', () => {
-  const realPath = join(REPO_ROOT, 'packages/agents/agent-run.ts');
+  const realPath = join(REPO_ROOT, 'apps/forge/agent-run.ts');
   const realText = readFileSync(realPath, 'utf8');
-  const realFindings = scanProjectsRootFold(realText, 'packages/agents/agent-run.ts');
+  const realFindings = scanProjectsRootFold(realText, 'apps/forge/agent-run.ts');
 
   const MUT = "const evasionBase = resolve('projects');\nconst mutatedEvasionPath2 = join(evasionBase, evasionTokenBinding);";
   const mutatedText = `${realText}\n${MUT}\n`;
   assert.ok(mutatedText.includes(MUT), 'precondition: the differently-named-root-binding mutation is present in the text');
 
-  const mutatedFindings = scanProjectsRootFold(mutatedText, 'packages/agents/agent-run.ts');
+  const mutatedFindings = scanProjectsRootFold(mutatedText, 'apps/forge/agent-run.ts');
   assert.ok(
     mutatedFindings.length > realFindings.length,
     'the differently-named-root-binding fold adds a finding beyond the unmutated baseline',
@@ -364,15 +364,15 @@ test('H21b: a differently-named-root binding fold, re-introduced into the real t
 });
 
 test('H21c: a template-literal fold, re-introduced into the real tree, is caught', () => {
-  const realPath = join(REPO_ROOT, 'packages/agents/agent-run.ts');
+  const realPath = join(REPO_ROOT, 'apps/forge/agent-run.ts');
   const realText = readFileSync(realPath, 'utf8');
-  const realFindings = scanProjectsRootFold(realText, 'packages/agents/agent-run.ts');
+  const realFindings = scanProjectsRootFold(realText, 'apps/forge/agent-run.ts');
 
   const MUT = 'const mutatedEvasionPath3 = `projects/${evasionTokenTemplate}`;';
   const mutatedText = `${realText}\n${MUT}\n`;
   assert.ok(mutatedText.includes(MUT), 'precondition: the template-literal mutation is present in the text');
 
-  const mutatedFindings = scanProjectsRootFold(mutatedText, 'packages/agents/agent-run.ts');
+  const mutatedFindings = scanProjectsRootFold(mutatedText, 'apps/forge/agent-run.ts');
   assert.ok(
     mutatedFindings.length > realFindings.length,
     'the template-literal fold adds a finding beyond the unmutated baseline',

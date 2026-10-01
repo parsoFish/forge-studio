@@ -38,13 +38,42 @@ import { randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 
-import { seedProjectBrain, checkProjectBrainSeedContainment } from '@forge/knowledge';
 import { runPreflight, type ClauseResult } from './preflight.ts';
 import {
   projectStartersDir, listProjectStarters, resolveGuardedPath, recordMintedRemote,
   assertGhOwner, ghRunnerFor, loadConfig, defaultConfigPath, isReservedId,
 } from '@forge/kernel';
 import { PROJECT_CONFIG_REL_PATH } from './project-config.ts';
+
+/** Structural mirror of `@forge/knowledge`'s `ProjectBrainSeedResult` — not
+ *  imported (see `ProjectBrainSeeder` below for why). */
+type ProjectBrainSeedResult = {
+  projectId: string;
+  brainDir: string;
+  files: { path: string; action: 'created' | 'skipped-existing' }[];
+};
+
+/**
+ * `projects` and `knowledge` are the SAME rank (M4 §0 rank 2), so this
+ * package importing `@forge/knowledge`'s `seedProjectBrain` /
+ * `checkProjectBrainSeedContainment` directly is a `package-layer-order`
+ * violation (`scripts/check-boundaries.mjs`). Both are supplied by the host
+ * (`apps/forge/cli.ts`, `apps/forge/routes.ts` via
+ * `bridge-studio-project-onboard.ts`'s `OnboardDeps`) at call time instead —
+ * the same injection shape already established for the onboard route's own
+ * `seedBrain`/`checkBrainSeedContainment` fields. Declared structurally
+ * (never `import type` of the real functions' own types) for the same reason
+ * `OnboardDeps` is: `check-boundaries.mjs` tracks type-only imports as real
+ * edges too.
+ */
+export type ProjectBrainSeeder = {
+  /** `@forge/knowledge`'s `seedProjectBrain`. */
+  seed: (forgeRoot: string, projectId: string, name: string, opts?: { dirName?: string }) => ProjectBrainSeedResult;
+  /** `@forge/knowledge`'s `checkProjectBrainSeedContainment`. Throws on
+   *  rejection (a real `@forge/kernel` `PathGuardContainmentError` in the
+   *  real implementation — that import is rank-safe and stays direct). */
+  checkContainment: (forgeRoot: string, projectId: string, dirName?: string) => void;
+};
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 // {{NAME}} = the slug id (npm-safe: package.json name/bin, the kb binding, the
@@ -350,6 +379,11 @@ export function scaffoldGreenfieldProject(input: {
   /** Mint a GitHub remote and push the scaffold commit. ABSENT = no `gh` call
    *  at all: an outward-facing side effect happens only when asked for. */
   remote?: { create: boolean; account?: string; visibility?: string; runGh?: (args: string[], cwd?: string) => string };
+  /** `@forge/knowledge`'s brain-seeding step, injected (see `ProjectBrainSeeder`
+   *  above) — REQUIRED, never defaulted: seeding stays mandatory on every
+   *  create, so a caller that dropped it fails to compile rather than
+   *  silently scaffolding a project with no central brain. */
+  brainSeeder: ProjectBrainSeeder;
 }): ScaffoldResult {
   const manifest = validateCreationManifest(input.manifest);
   const id = slugifyProjectName(manifest.name);
@@ -430,7 +464,7 @@ export function scaffoldGreenfieldProject(input: {
   // symlink/hardlink at the final brain target — the SEC-03 vector) throws with
   // NOTHING on disk anywhere. The staged seed below re-verifies its own (fresh,
   // random) staging path independently; this guards the rename DESTINATION.
-  checkProjectBrainSeedContainment(input.forgeRoot, id);
+  input.brainSeeder.checkContainment(input.forgeRoot, id);
 
   // Phase 2 — STAGE-then-atomic-move. Build the ENTIRE project + brain stub into
   // sibling `.staging-<id>-<rand>` dirs on the SAME filesystem as their
@@ -473,7 +507,7 @@ export function scaffoldGreenfieldProject(input: {
     // only forge-owned artifact not in the template. Seeded into the STAGING
     // dir; its CONTENT is still keyed to `id` (kb id, binding ref) so a rename
     // into `<id>` is byte-identical to seeding there directly.
-    seedProjectBrain(input.forgeRoot, id, manifest.name, { dirName: stagingName });
+    input.brainSeeder.seed(input.forgeRoot, id, manifest.name, { dirName: stagingName });
     // Pure, non-throwing reporter — reads the staged tree only, so it can never
     // itself orphan. `hardGreen` computed here is valid for the final dir: the
     // staged trees are byte-identical to their post-rename form.

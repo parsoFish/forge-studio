@@ -25,7 +25,7 @@
  *
  * ---------------------------------------------------------------------------
  * CONTRACT DECISIONS made here that the spec did not fully dictate (mirrors
- * the AT file's own header — see packages/library/tests/integration/bridge-studio-connections.test.ts):
+ * the AT file's own header — see apps/forge/tests/integration/bridge-studio-connections.test.ts):
  *
  *  D-1. Response envelope: `{ connections: [...] }` (list) / a flat
  *       `ConnectionWire` object (detail) — same shape at both depths (D5:

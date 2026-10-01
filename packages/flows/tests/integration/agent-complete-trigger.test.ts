@@ -58,33 +58,12 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FORGE_ROOT } from '@forge/kernel';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { listFlowRunRequests } from '../../flow-run-requests.ts';
-import { dispatchAgentRun } from '@forge/agents';
-import type { StreamQueryFn } from '@forge/agents';
 import type { FlowTrigger } from '@forge/contracts';
-
-// Bead forge-8vfn.5.53: anchored on kernel's FORGE_ROOT, not the process cwd.
-// This test dispatches a REAL agent run, and the agent roster is discovered
-// from `<root>/skills`; with cwd = packages/flows the roster came back empty
-// and the failure read as a product defect ("no runnable agent … (known: )").
-const ROOT = FORGE_ROOT;
-
-/** Mirrors `fakeQueryFn` in run-agent.test.ts — the canonical stub for the
- *  locked `RunContext.queryFn` shape: a fake SDK query() yielding one
- *  `result` message reporting the given cost, never touching the real SDK. */
-function fakeQueryFn(costUsd: number): StreamQueryFn {
-  return ((_params: { prompt: unknown; options?: unknown }) => {
-    async function* gen() {
-      yield { type: 'result', subtype: 'success', total_cost_usd: costUsd, usage: { input_tokens: 1, output_tokens: 1 } };
-    }
-    return gen();
-  }) as unknown as StreamQueryFn;
-}
 
 function setup(): string {
   return mkdtempSync(join(tmpdir(), 'agent-complete-trigger-'));
@@ -229,138 +208,16 @@ test('(RED) [F2 #11, T1 ruling #1] source-agent matching is strict IDENTITY, not
 });
 
 // ---------------------------------------------------------------------------
-// ACCEPTANCE TESTS (T3, R2-08-F2, round-3 real-path pin) — this site is
-// broken in TWO distinct, separately-provable ways. Escalated to T1 (not
-// guessed): the second (structural) finding is more severe than the
-// projects/eventProject omission T1 originally flagged for the other three
-// sites.
+// The round-3 real-path acceptance test that used to live here (driving a
+// REAL `dispatchAgentRun` completion end to end) MOVED to
+// `apps/forge/tests/integration/agent-dispatch-complete-trigger.test.ts`
+// (M7-E boundary fix): the trigger-firing scan this test proved is wired
+// moved from `dispatchAgentRun` (packages/agents/agent-dispatch.ts) to
+// `cmdAgentDispatch` (apps/forge/agent-dispatch-cmd.ts) — agents may not
+// import flows, and `cmdAgentDispatch` is `dispatchAgentRun`'s one
+// production caller, already in the assembly. See that file's own header for
+// the full account.
 // ---------------------------------------------------------------------------
-
-/**
- * FINDING (new, round-3): `dispatchAgentRun` (orchestrator/agent-dispatch.ts)
- * — the module's OWN doc comment names it "the generic standalone-run path
- * for an UNATTENDED runnable roster agent", i.e. THE real production site
- * for "a standalone agent run completes" — never calls
- * `fireAgentCompleteTriggers` anywhere. Verified by reading the full function
- * body and grepping the whole tree: zero non-test references to
- * `fireAgentCompleteTriggers` exist outside packages/flows/flow-trigger.ts
- * itself. `dispatchAgentRun`'s own signature has no `forgeRoot`/`queueRoot`/
- * flow-roster parameter at all, so it COULD NOT call it even if it tried.
- * This means test #11's "stages a claimable run request when a standalone
- * agent run completes" acceptance criterion has NEVER been exercised through
- * the real completion path — every existing passing test (including this
- * file's own #11 tests above) calls `fireAgentCompleteTriggers` directly with
- * a hand-built `flows` array, which is exactly the "test on the wrong
- * surface" trap this round's ruling was about, one level deeper than the
- * `projects` field.
- *
- * This is a DIFFERENT KIND of gap than the other three sites' — cron,
- * webhook, and flow-complete all pass SOME opts to their staging call, just
- * without `projects`. Here, the staging call is never reached at all. Given
- * that, an `eventProject` question for this site doesn't yet have anywhere
- * to attach — there is no wiring for it to ride on. Escalated rather than
- * invented.
- */
-// ---------------------------------------------------------------------------
-// This test drives the REAL dispatchAgentRun completion path, which routes
-// through runAgent's dry-bridge/no-spawn suppression seam
-// (packages/agents/run-agent.ts) BEFORE the injected fakeQueryFn is ever
-// reached. That seam is env-only (FORGE_ARCHITECT_NO_SPAWN /
-// FORGE_DRY_BRIDGE — no injectable override), and CI sets
-// FORGE_ARCHITECT_NO_SPAWN=1 for every `npm test` run (.github/workflows/ci.yml).
-// The test MUST establish its own non-suppressed precondition rather than
-// inherit it from whatever the ambient environment happens to be — a prior
-// version of this test asserted `suppressed === false` while relying on the
-// CI/ambient env to already have both vars unset, which is guaranteed FALSE
-// under CI and made the test unpassable there regardless of production
-// correctness (the reported defect).
-// ---------------------------------------------------------------------------
-
-test('(RED) [round-3 real-path] a REAL dispatchAgentRun completion of a slug with a matching on:agent-complete watcher stages exactly the expected claimable request — fireAgentCompleteTriggers is wired to the real standalone-run completion path', async () => {
-  const forgeRoot = mkdtempSync(join(tmpdir(), 'agent-complete-wiring-'));
-  const queueRoot = join(forgeRoot, '_queue');
-  // Establish the precondition explicitly — never inherit it from the
-  // ambient environment (CI sets FORGE_ARCHITECT_NO_SPAWN=1 for every test
-  // run; this must still pass there). Restored in `finally`, including on
-  // the failure path, so a throw can never leak a modified env into a
-  // sibling test running later in this same file's process.
-  const savedNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
-  const savedDry = process.env.FORGE_DRY_BRIDGE;
-  delete process.env.FORGE_ARCHITECT_NO_SPAWN;
-  delete process.env.FORGE_DRY_BRIDGE;
-  try {
-    // A real, valid on:agent-complete watcher for the exact agent we're about
-    // to dispatch — if the wiring exists, this MUST fire.
-    const watcherDir = join(forgeRoot, 'studio', 'flows', 'watcher-flow');
-    mkdirSync(watcherDir, { recursive: true });
-    writeFileSync(
-      join(watcherDir, 'flow.yaml'),
-      [
-        'id: watcher-flow',
-        'name: watcher-flow',
-        'version: 1',
-        'goal: fixture watcher for the round-3 wiring-gap pin',
-        'project: null',
-        'kb: null',
-        'costCeilingUsd: 5',
-        'origin: seed',
-        'accepts: [code]',
-        'nodes:',
-        '  - { id: only, agent: developer-ralph }',
-        'edges: []',
-        'triggers:',
-        '  - on: agent-complete',
-        '    target: { kind: flow, ref: downstream-flow }',
-        '    agent: project-scoped-review',
-      ].join('\n'),
-    );
-
-    // Wraps fakeQueryFn with an invocation spy: with the no-spawn/dry-bridge
-    // guard removed above, the test must DEMONSTRATE its own no-real-spawn
-    // safety — the injected fake being the thing that actually ran — rather
-    // than rely on the env var it just deleted.
-    let queryFnCalled = false;
-    const spiedQueryFn: StreamQueryFn = ((params: { prompt: unknown; options?: unknown }) => {
-      queryFnCalled = true;
-      return (fakeQueryFn(0.01) as unknown as (p: typeof params) => unknown)(params);
-    }) as unknown as StreamQueryFn;
-
-    const runId = '_agent-complete-wiring-test';
-    const result = await dispatchAgentRun({
-      slug: 'project-scoped-review',
-      skillsDir: join(ROOT, 'skills'),
-      runId,
-      logsRoot: join(forgeRoot, '_logs'),
-      queryFn: spiedQueryFn,
-    });
-
-    assert.equal(
-      result.result.suppressed,
-      false,
-      'sanity: the dispatch actually ran (not suppressed) — now guaranteed by the explicit env deletion above, not inherited from ambient state',
-    );
-    assert.equal(
-      queryFnCalled,
-      true,
-      'the injected fake queryFn must be the thing that actually ran with the guard removed — proves this test is still safe with no real SDK call, rather than merely asserting suppressed:false and hoping',
-    );
-
-    // The CORRECT target behaviour: a matching on:agent-complete watcher
-    // stages exactly one claimable request now that this site is wired.
-    const staged = listFlowRunRequests({ queueRoot });
-    assert.equal(
-      staged.length,
-      1,
-      `expected exactly ONE staged request for "downstream-flow" (a real, valid on:agent-complete watcher exists) — got ${JSON.stringify(staged)}.`,
-    );
-  } finally {
-    if (savedNoSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
-    else process.env.FORGE_ARCHITECT_NO_SPAWN = savedNoSpawn;
-    if (savedDry === undefined) delete process.env.FORGE_DRY_BRIDGE;
-    else process.env.FORGE_DRY_BRIDGE = savedDry;
-    rmSync(forgeRoot, { recursive: true, force: true });
-  }
-});
 
 /**
  * Second, narrower finding: EVEN IF `fireAgentCompleteTriggers` were wired up

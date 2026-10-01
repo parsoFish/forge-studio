@@ -8,7 +8,7 @@
  *     /home/parso/forge-m6-d while pid 1235057 was working there
  *
  * and the pid was a `node --test` worker from a full suite.
- * `packages/agents/tests/integration/agent-run-dispatch.test.ts` builds a
+ * `apps/forge/tests/integration/agent-run-dispatch.test.ts` builds a
  * fixture at `<root>/projects/_r4-17-dispatch-fixture-proj` and sweeps it in a
  * module-level `after()`. Benign — and beside the point.
  *

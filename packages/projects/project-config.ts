@@ -21,26 +21,25 @@
  * create a literal circular import with `loadProjectConfig`, which it calls in
  * a loop). `validateProjectConfig` and its one cross-package field parser,
  * `parseRepo`, ALSO stay here rather than moving to `project-config-validate.ts`
- * with the rest of the field parsers: `parseRepo` needs `REPO_RE` from
- * `@forge/flows`, the SAME already-baselined edge
- * `resolveProjectIdForRepo` needs (`scripts/baselines/boundaries.json`,
- * `package-layer-order|packages/projects/project-config.ts|packages/flows/trigger-payload.ts`).
- * Moving `parseRepo` out would add a second, unbaselined edge to the same
- * target; moving `validateProjectConfig` out too (so it could call a
- * validate.ts-resident `parseRepo`) would instead create a real barrel↔
- * validate.ts import cycle (the barrel already needs `validateProjectConfig`
- * for `loadProjectConfig`). This worker was told not to touch
- * `scripts/baselines/` and not to create a cycle, so both stay here. Every
- * symbol this file exported before the split is still exported (directly or
- * re-exported) from this same path. Siblings: `project-config-types.ts` (the
- * `ProjectConfig` type family), `project-config-validate.ts` (the other field
- * parsers), `project-config-sidecar.ts` (the `.forge/quality_gate_cmd`
- * sidecar).
+ * with the rest of the field parsers: moving `validateProjectConfig` out (so
+ * it could call a validate.ts-resident `parseRepo`) would create a real
+ * barrel↔validate.ts import cycle (the barrel already needs
+ * `validateProjectConfig` for `loadProjectConfig`). `parseRepo`'s own
+ * `REPO_RE` dependency no longer constrains this split either way: `REPO_RE`
+ * is the `@forge/contracts` SSOT (pure transfer, forge-8vfn M7-E boundary
+ * fix — it was `@forge/flows/trigger-payload.ts` and this file's import of it
+ * was a baselined `package-layer-order` violation; `@forge/contracts` sits
+ * below every package, so importing it from here crosses no boundary at all).
+ * Every symbol this file exported before the split is still exported
+ * (directly or re-exported) from this same path. Siblings:
+ * `project-config-types.ts` (the `ProjectConfig` type family),
+ * `project-config-validate.ts` (the other field parsers),
+ * `project-config-sidecar.ts` (the `.forge/quality_gate_cmd` sidecar).
  */
 
 import { join, resolve } from 'node:path';
 import { guardedReadFile } from '@forge/kernel';
-import { REPO_RE } from '@forge/flows/trigger-payload.ts';
+import { REPO_RE } from '@forge/contracts';
 import { defaultConfigPath, discoverProjects, loadConfig, resolveProjectsDir } from '@forge/kernel';
 
 export type { DemoStep, DemoStepKind } from '@forge/contracts';
