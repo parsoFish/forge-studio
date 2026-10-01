@@ -71,7 +71,11 @@ forge preflight <id>
 ```
 
 Hard clauses (C1 quality gate, C2 scratch hygiene, C4 machine-readable context)
-must pass before forge will run a flow. Advisory clauses (C5/C6/C8, DEMO,
+must pass before forge will run a flow. One more hard clause, DEPS, is checked
+only when the scheduler claims an initiative, not by `forge preflight`: install
+the project's dependencies in `projects/<id>` (for a Node project, `npm ci`)
+before you kick off, or the claim is refused and the initiative stays pending
+([DEPS](../reference/project-contract.md#deps--the-declared-gate-is-runnable-in-the-ground-hard-at-claim-time-only)). Advisory clauses (C5/C6/C8, DEMO,
 ARTIFACTS) only warn. Iterate until every hard clause is green. The same verdict
 renders live in the Studio project builder (the `ContractReadiness` panel).
 
