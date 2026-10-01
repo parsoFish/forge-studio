@@ -14,7 +14,7 @@ the legacy `"./*"` door; every importer now goes through `@forge/knowledge`.
 `contract.test.ts` asserts this list against what the index actually
 exports, in both directions, and is required to FAIL against an empty index.
 
-### Values (46)
+### Values (47)
 
 | area | exports |
 |---|---|
@@ -22,7 +22,7 @@ exports, in both directions, and is required to FAIL against an empty index.
 | brain index | `loadBrainIndex` · `regenerateBrainIndex` |
 | brain lint | `CHECK_NAMES` · `classify` · `classifyFinding` · `lintThemeFiles` · `runBrainLint` · `brainTruthRates` · `formatTruthfulnessLines` |
 | KB descriptors | `loadKbDescriptor` · `serializeKbDescriptor` · `projectKbBindings` · `unroutableKbReason` · `kbReadPolicyViolation` |
-| KB surface | `KB_SEEDING_ANCHOR_PREFIX` · `approveKbCleanup` · `computeAgentCleanupFindings` · `loadKbDescriptors` · `activeJobReason` · `deriveKbActiveJob` · `runPostReflectionKbHealth` · `guardAgentKbEdits` · `snapshotBrainTree` · `noKbEdits` · `tryGetKbBackend` |
+| KB surface | `KB_SEEDING_ANCHOR_PREFIX` · `approveKbCleanup` · `computeAgentCleanupFindings` · `loadKbDescriptors` · `releaseInterruptedKbCleanupApplies` · `activeJobReason` · `deriveKbActiveJob` · `runPostReflectionKbHealth` · `guardAgentKbEdits` · `snapshotBrainTree` · `noKbEdits` · `tryGetKbBackend` |
 | project brain seeding | `checkProjectBrainSeedContainment` · `seedProjectBrain` · `PROJECT_BRAIN_KIND_DIR` · `buildAnalyzePlan` · `commitProjectBrain` · `listStagedThemes` |
 | brain write lease | `acquireBrainWriteLease` · `BrainWriteLeaseContentionError` |
 | KB validation | `validateKb` |

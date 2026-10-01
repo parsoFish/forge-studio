@@ -40,7 +40,8 @@ import {
   allowedOrigin,
   CSRF_HEADER,
 } from './bridge-studio.ts';
-import { makeRouteTable, dispatchRoute, type AssembledRouteTable } from './routes.ts';
+import { makeRouteTable, dispatchRoute, knowledgeSessionStatusIo, type AssembledRouteTable } from './routes.ts';
+import { releaseInterruptedKbCleanupApplies } from '@forge/knowledge';
 // M4 §4 step 2 — the four `@forge/library` prefix dispatchers this file imported
 // here (skills, hooks, authoring, templates) are GONE: every arm is now a
 // per-route handler in `packages/library/routes.ts`, which the `routeTable`
@@ -219,6 +220,17 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
       rerunReflector: rerunReflectorFn,
       log: (msg) => console.error(`[bridge] ${msg}`),
     }).catch((err) => console.error(`[bridge] reflect reconcile failed: ${String(err)}`));
+  }
+
+  // forge-8vfn.8.5.1 — release any kb-cleanup session a hard bridge crash left
+  // wedged at 'applying' forever (apply runs IN this process, so a session
+  // still claimed at boot is necessarily orphaned, never legitimately
+  // in-flight). Pure file hygiene, not a spawn: unlike the reflect-reconcile
+  // above, this runs unconditionally — no isDryBridge/no-spawn guard applies,
+  // since nothing here dispatches an agent.
+  const releasedKbCleanupCount = releaseInterruptedKbCleanupApplies(forgeRoot, projectsRoot, knowledgeSessionStatusIo);
+  if (releasedKbCleanupCount > 0) {
+    console.error(`[bridge] released ${releasedKbCleanupCount} kb-cleanup session(s) stuck at 'applying' after a restart`);
   }
 
   const clients = new Set<WebSocket>();

@@ -146,8 +146,13 @@ export type AssembledRouteTable = RouteTable<RouteContext>;
  * sides — exactly as `KbDrainRunFixTurnFn` is for `realKbDrainFixTurn`. If
  * either real function's signature moves, this line fails to compile rather
  * than silently satisfying a port that no longer describes it.
+ *
+ * EXPORTED (forge-8vfn.8.5.1) — `apps/forge/ui-bridge.ts` reuses this SAME
+ * bound instance for its own boot-time call to
+ * `releaseInterruptedKbCleanupApplies`, rather than constructing a second
+ * port the two could drift apart on.
  */
-const knowledgeSessionStatusIo: SessionStatusIoPort = {
+export const knowledgeSessionStatusIo: SessionStatusIoPort = {
   read: guardedReadSessionStatus,
   write: guardedWriteSessionStatus,
 };
