@@ -137,18 +137,32 @@ const UNKNOWN_READ_RETRIES = 2;
  * @param {{listPids?: () => string[], readCwd?: (pid: string) => string}} [deps] injection seam for the test
  */
 function livePidCwds(deps = {}) {
-  const listPids = deps.listPids ?? (() => {
-    try {
-      return readdirSync('/proc', { withFileTypes: true })
-        .filter((e) => /^[0-9]+$/.test(e.name))
-        .map((e) => e.name);
-    } catch {
-      return []; // no /proc: nothing can be attributed, so nothing is excused
-    }
-  });
+  const listPids = deps.listPids ?? (() =>
+    readdirSync('/proc', { withFileTypes: true })
+      .filter((e) => /^[0-9]+$/.test(e.name))
+      .map((e) => e.name));
   const readCwd = deps.readCwd ?? ((pid) => readlinkSync(join('/proc', pid, 'cwd')));
+  // Row 170 (forge-8vfn.8.5.5) — the LISTING itself never got po2h's fix: a
+  // bare try/catch used to fold ANY failure enumerating `/proc` — ENOENT (no
+  // /proc at all) same as EMFILE/EAGAIN/EACCES (a transient failure, exactly
+  // what full-suite file-descriptor/process pressure produces) — into
+  // `return []`, no retry. An empty pid list loses EVERY candidate in the
+  // walk in one shot, which is how 7.5.6 measured BOTH overlapping lanes'
+  // sleepers unattributed at once, not just the nearer one racing. Same
+  // three-state split as the per-pid read below: ENOENT is genuine absence,
+  // read once; anything else is UNKNOWN and gets the same bounded retry.
+  let pids;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      pids = listPids();
+      break;
+    } catch (err) {
+      if (err?.code === 'ENOENT') { pids = []; break; } // no /proc: nothing can be attributed
+      if (attempt >= UNKNOWN_READ_RETRIES) { pids = []; break; } // still UNKNOWN after retrying: skipped, same as no /proc
+    }
+  }
   const out = [];
-  for (const pid of listPids()) {
+  for (const pid of pids) {
     if (Number(pid) === process.pid) continue;
     let cwd;
     for (let attempt = 0; ; attempt += 1) {
