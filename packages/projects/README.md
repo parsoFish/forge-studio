@@ -18,7 +18,7 @@ collapsed the legacy `"./*"` door; every importer now goes through
 `contract.test.ts` asserts this list against what the index actually exports, in
 both directions, and is required to FAIL against an empty index.
 
-### Values (37)
+### Values (42)
 
 | area | exports |
 |---|---|
