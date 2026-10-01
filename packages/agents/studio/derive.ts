@@ -1,10 +1,9 @@
 /**
  * Derive a PhaseAgentSpec from a studio SKILL.md (ADR-027).
  *
- * M0 no-drift lock: until M2 flips invocation files to single-source, the
- * SKILL.md frontmatter and the hardcoded PhaseAgentSpec constants in the
- * invocation modules must agree. `derive.test.ts` enforces this with a
- * deep-equal assertion on every in-cycle agent.
+ * The SKILL.md is the single source: every invocation module calls
+ * `deriveAgentSpec` on its agent's file, and no module holds a hardcoded
+ * PhaseAgentSpec constant that could drift from it.
  */
 
 import { resolve, join } from 'node:path';

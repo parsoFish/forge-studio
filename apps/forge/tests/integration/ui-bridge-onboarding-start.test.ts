@@ -54,7 +54,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { startBridge } from '../../ui-bridge.ts';
-import { cmdAgentDispatch } from '@forge/agents';
+import { cmdAgentDispatch } from '../../agent-dispatch-cmd.ts';
 import { SAFE_ID_RE } from '../../bridge-studio.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
@@ -327,7 +327,7 @@ Fixture body for ${equivSlug}.
 // writes outside projectsRoot), a symlink that resolves back INSIDE
 // projectsRoot is still accepted (AT-8, the false-rejection control — a
 // guard that rejects every symlink is over-strict, not containment), and the
-// downstream write sink (`writeSessionTerminalPhase`, packages/agents/agent-run.ts) is
+// downstream write sink (`writeSessionTerminalPhase`, apps/forge/agent-run.ts) is
 // guarded independently of this route (AT-9, RED now — that function has no
 // projectsRoot-containment check at all today; see the T3 report for why).
 // ---------------------------------------------------------------------------
@@ -410,7 +410,7 @@ test('R4-17 AT-9 (BLOCKER, consequence path — "one sink, many entry points"): 
     console.log = origLog;
     rmSync(outsideSessionDir, { recursive: true, force: true });
     // The failure path logs a terminal marker via createLogger(runId,
-    // '_logs') — hardcoded CWD-relative in packages/agents/agent-run.ts, not threaded
+    // '_logs') — hardcoded CWD-relative in apps/forge/agent-run.ts, not threaded
     // through the (temp) forgeRoot used elsewhere in this file — so it lands
     // under the REAL repo's _logs/, exactly as cli/agent-run-dispatch.
     // test.ts's own AT-D7-2 fixture already has to clean up.
@@ -423,7 +423,7 @@ test('R4-17 AT-9 (BLOCKER, consequence path — "one sink, many entry points"): 
 // here is computed as `resolve(forgeRoot, 'projects')` (apps/forge/ui-bridge.ts:222)
 // — a hardcoded literal that NEVER consults `FORGE_PROJECTS_DIR` or
 // `forge.config.json`'s `projectsDir`, unlike `writeSessionTerminalPhase`
-// (packages/agents/agent-run.ts:201, the sink AT-9 above guards), which resolves the
+// (apps/forge/agent-run.ts:201, the sink AT-9 above guards), which resolves the
 // SAME concept via `resolveProjectsDir(resolve(forgeRoot), loadConfig())` —
 // the config-aware helper 23 OTHER call sites in this repo already use
 // (apps/forge/ui-bridge.ts:222 is the one outlier). When an operator configures a
@@ -439,7 +439,7 @@ test('R4-17 AT-9 (BLOCKER, consequence path — "one sink, many entry points"): 
 // configured root, so it 404s instead of placing the session there). The
 // CONSUMER half (writeSessionTerminalPhase already being config-aware, and
 // staying refuse-outside-the-configured-root even once this producer bug is
-// fixed) is pinned separately, in `packages/agents/tests/integration/agent-run-dispatch.test.ts`'s new
+// fixed) is pinned separately, in `apps/forge/tests/integration/agent-run-dispatch.test.ts`'s new
 // AT-D7-6..9 — that function was never the broken half; this route is.
 // ---------------------------------------------------------------------------
 

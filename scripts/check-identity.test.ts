@@ -140,7 +140,6 @@ test('record-type files are excluded — but a NEW roadmap doc is still policed'
       'docs/decisions/024-x.md': 'the unifier\n',
       'docs/superpowers/specs/blueprint.md': 'the ideas machine\n',
       'docs/roadmaps/1.0.md': 'the unifier is retired\n',
-      'docs/roadmaps/1.0-kickoffs.md': 'the unifier is retired\n',
       'docs/roadmaps/archive/R4-ootb-suite.md': 'the unifier\n',
       'docs/roadmaps/archive/README.md': 'the unifier\n',
       // M6 archived R1-R8: the RECORD is docs/roadmaps/archive/README.md, and
@@ -161,7 +160,6 @@ test('record-type files are excluded — but a NEW roadmap doc is still policed'
         'docs/decisions/024-x.md',
         'docs/superpowers/specs/blueprint.md',
         'docs/roadmaps/1.0.md',
-        'docs/roadmaps/1.0-kickoffs.md',
         'docs/roadmaps/archive/R4-ootb-suite.md',
         'docs/roadmaps/archive/README.md',
       ]) {

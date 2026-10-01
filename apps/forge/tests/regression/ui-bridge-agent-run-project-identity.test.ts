@@ -16,7 +16,7 @@
  * Fixture mirrors `apps/forge/tests/integration/ui-bridge-agent-run.test.ts` (its `studioAgent`
  * generator, `test-runnable` unattended slug, and CSRF headers) and the
  * per-test `startBridge({ forgeRoot, port: 0 })` shape used by the last test
- * in `packages/agents/tests/regression/legacy-dispatch-project-guard.test.ts`.
+ * in `apps/forge/tests/regression/legacy-dispatch-project-guard.test.ts`.
  *
  * PUBLIC-REPO NOTE: neutral naming — these describe what the route REJECTS (a
  * project name whose directory identity does not match its expected in-root

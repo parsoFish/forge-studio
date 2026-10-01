@@ -20,12 +20,23 @@ import { join } from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
 
 import {
-  scaffoldGreenfieldProject,
+  scaffoldGreenfieldProject as scaffoldGreenfieldProjectWithSeeder,
   validateCreationManifest,
   projectStartersDir,
   type CreationManifest,
 } from '../../project-create.ts';
 import { FORGE_ROOT } from '@forge/kernel';
+import { FAKE_BRAIN_SEEDER } from '../test-fixtures/fake-brain-seeder.ts';
+
+/** `scaffoldGreenfieldProject` with the `brainSeeder` port pre-filled by the
+ *  fake (see `../test-fixtures/fake-brain-seeder.ts`'s header for why this
+ *  package's own tests can't inject the real `@forge/knowledge` functions
+ *  directly) — every call site below is unchanged from before the DI split. */
+function scaffoldGreenfieldProject(
+  input: Omit<Parameters<typeof scaffoldGreenfieldProjectWithSeeder>[0], 'brainSeeder'>,
+): ReturnType<typeof scaffoldGreenfieldProjectWithSeeder> {
+  return scaffoldGreenfieldProjectWithSeeder({ ...input, brainSeeder: FAKE_BRAIN_SEEDER });
+}
 
 /** A temp forge root with the real project starters copied in + a brain/projects dir.
  *  Duplicated from project-create.test.ts (small + self-contained — see the
@@ -763,3 +774,7 @@ test('AT-B6-4 (RED, projects-11) a greenfield create is its OWN git repo with a 
     rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
+
+// G3 (bead forge-8vfn.8.5.3) — the crash-orphan repair ATs moved to the
+// sibling `project-create-brain-repair.test.ts` (this file hit the 800-line
+// baseline cap — scripts/baselines/file-size.json / check-file-size.mjs).

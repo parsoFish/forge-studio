@@ -36,6 +36,8 @@ A standing conformance suite (`packages/agents/tests/contract/conformance.test.t
 
 ## Quickstart
 
+**Supported platform: WSL2 or Linux.** macOS and native Windows are not supported. The install form is a Node source checkout: clone this repository and build it; there is no npm package.
+
 ```bash
 # Prerequisites
 node --version           # Node 20+

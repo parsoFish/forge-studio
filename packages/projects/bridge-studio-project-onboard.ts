@@ -54,7 +54,8 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import {
@@ -109,6 +110,10 @@ export type OnboardDeps = {
   readArtifactRoot: (projectRoot: string) => string;
   /** `@forge/flows`'s `isContainedProjectRepoPath`. */
   isContainedProjectRepoPath: (p: string, opts: { forgeRoot: string; projectsRoot?: string }) => boolean;
+  /** `@forge/knowledge`'s `isUntouchedBrainSeedStub` (G3, forge-8vfn.8.5.3),
+   *  threaded into `scaffoldGreenfieldProject`'s `brainSeeder.isUntouchedStub`
+   *  below. OPTIONAL — see that port field's own doc for why. */
+  isUntouchedBrainSeedStub?: (forgeRoot: string, projectId: string, dirName?: string) => boolean;
   /**
    * How the route runs `gh`, injected (`forge-8vfn.6.11.27`). Minting is the
    * one thing this route does that leaves the machine, and an un-injectable
@@ -222,6 +227,11 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
           forgeRoot: ctx.forgeRoot,
           projectsRoot: projectsDir,
           ...(mintRemote ? { remote: { create: true, ...(deps.runGh ? { runGh: deps.runGh } : {}) } } : {}),
+          // Same injected pair this file already threads through
+          // `checkBrainSeedContainment`/`seedBrain` below (OnboardDeps, this
+          // file's header) — `scaffoldGreenfieldProject` now takes the same
+          // port directly instead of importing `@forge/knowledge` itself.
+          brainSeeder: { seed: deps.seedBrain, checkContainment: deps.checkBrainSeedContainment, isUntouchedStub: deps.isUntouchedBrainSeedStub },
         });
       } catch (err) {
         // Validation / unknown-app-type / duplicate-id are operator errors → 400.
@@ -496,9 +506,25 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
       // not a fresh unguarded resolve(projectRoot, '.forge', 'project.json')
       // — reusing the guarded value end-to-end means there is no second,
       // unguarded path construction for this write to slip through.
+      //
+      // G4 (forge-8vfn.8.5.4): this write is `.forge/project.json`'s FIRST
+      // appearance, and its presence is the ONLY thing that makes
+      // `discoverProjects`/`hasConfig` treat this directory as a managed
+      // project — every write above it (mkdir, scaffoldContractArtifacts,
+      // seedBrain) is either a plain mkdir or already idempotent, so a crash
+      // anywhere before this point just leaves a dir a retry safely resumes
+      // over (the duplicate-id and `.forge/project.json` existence guards
+      // above only trip once a project is actually onboarded). Making THIS
+      // write itself atomic — build it in a sibling tmp file in the SAME
+      // directory, then `renameSync` into place — closes the one remaining
+      // torn-write window: a crash mid-`writeFileSync` can no longer leave a
+      // truncated/partial `project.json` that `existsSync` would still read
+      // as "managed".
       const forgeDirPath = dirname(forgeGuard.realPath);
       if (!existsSync(forgeDirPath)) mkdirSync(forgeDirPath, { recursive: true });
-      writeFileSync(forgeGuard.realPath, JSON.stringify(cfg, null, 2), 'utf8');
+      const tmpConfigPath = join(forgeDirPath, `.project.json.tmp-${randomBytes(6).toString('hex')}`);
+      writeFileSync(tmpConfigPath, JSON.stringify(cfg, null, 2), 'utf8');
+      renameSync(tmpConfigPath, forgeGuard.realPath);
 
       const scaffolded = [
         ...scaffoldedLocal,

@@ -16,7 +16,7 @@
  * never the derivation called directly — so a route that forgets to wire
  * the helper in shows up here, exactly the discipline
  * `apps/forge/tests/contract/ui-bridge-served-file-headers.test.ts` and
- * `packages/sessions/tests/integration/bridge-studio-lifecycle.test.ts` already established for this file.
+ * `apps/forge/tests/integration/bridge-studio-lifecycle.test.ts` already established for this file.
  *
  * RUN: node --experimental-strip-types --test apps/forge/tests/contract/ui-bridge-session-list-lifecycle.test.ts
  */
@@ -44,7 +44,7 @@ const NOW = Date.now();
 const MIN = 60_000;
 
 // The operator's real crashed-session shape (mirrors
-// packages/sessions/tests/integration/bridge-studio-lifecycle.test.ts's KB_CLEANUP_STDERR — an
+// apps/forge/tests/integration/bridge-studio-lifecycle.test.ts's KB_CLEANUP_STDERR — an
 // InteractiveRunnerError, last non-stack line is the message
 // `extractErrorMessage` must surface).
 const ARCHITECT_STDERR = [

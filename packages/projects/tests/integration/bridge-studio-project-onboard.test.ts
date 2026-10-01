@@ -75,9 +75,17 @@ function fakeDeps(overrides: Partial<OnboardDeps> = {}): FakeDeps {
   const seedBrainCalls: FakeDeps['seedBrainCalls'] = [];
   const checkBrainSeedContainmentCalls: FakeDeps['checkBrainSeedContainmentCalls'] = [];
   const deps: OnboardDeps = {
-    seedBrain: (forgeRoot, projectId, name) => {
+    // `opts.dirName` (optional — same shape as the real `seedProjectBrain`):
+    // the CREATE route's `scaffoldGreenfieldProject` seeds into a
+    // `.staging-<id>-<rand>` dir and renames it into place on success
+    // (`project-create.ts`'s transactional staging), so a fake that always
+    // wrote to `<projectId>` would leave the staging brain dir missing and
+    // fail that rename — onboard (no staging) never passes this, so it still
+    // defaults to `projectId`.
+    seedBrain: (forgeRoot, projectId, name, opts?: { dirName?: string }) => {
       seedBrainCalls.push({ forgeRoot, projectId, name });
-      const brainDir = join(forgeRoot, 'brain', 'projects', projectId);
+      const dirName = opts?.dirName ?? projectId;
+      const brainDir = join(forgeRoot, 'brain', 'projects', dirName);
       mkdirSync(brainDir, { recursive: true });
       writeFileSync(join(brainDir, 'kb.yaml'), `id: ${projectId}\n`);
       writeFileSync(join(brainDir, 'profile.md'), `# ${name}\n`);
@@ -85,8 +93,8 @@ function fakeDeps(overrides: Partial<OnboardDeps> = {}): FakeDeps {
         projectId,
         brainDir,
         files: [
-          { path: `brain/projects/${projectId}/kb.yaml`, action: 'created' },
-          { path: `brain/projects/${projectId}/profile.md`, action: 'created' },
+          { path: `brain/projects/${dirName}/kb.yaml`, action: 'created' },
+          { path: `brain/projects/${dirName}/profile.md`, action: 'created' },
         ],
       };
     },
@@ -435,6 +443,11 @@ test('[forge-8vfn.5.3] onboard: an id collision with an ALREADY-ONBOARDED projec
     rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
+
+// G4 (bead forge-8vfn.8.5.4) — the crash-before-project.json retry-tolerance
+// AT moved to the sibling `../regression/onboard-project-json-atomicity.test.ts`
+// (this file hit the 800-line baseline cap — scripts/baselines/file-size.json
+// / check-file-size.mjs).
 
 // ---------------------------------------------------------------------------
 // handleProjectPut — PUT and POST /api/studio/projects/:id (never DELETE)

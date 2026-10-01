@@ -83,9 +83,8 @@ machine-readable contracts, not usage docs:
   plus the retirement ledger. If a change conflicts with an ADR, the ADR is
   updated first, with rationale.
 - **[Roadmaps](./roadmaps/README.md)** — [`1.0.md`](./roadmaps/1.0.md) is the
-  single roadmap driving all current forge work; its companions
-  ([`1.0-kickoffs.md`](./roadmaps/1.0-kickoffs.md),
-  [`1.0-skills.md`](./roadmaps/1.0-skills.md)) and the
+  single roadmap driving all current forge work; its companion
+  [`1.0-skills.md`](./roadmaps/1.0-skills.md) and the
   [design spec](./superpowers/specs/2026-08-28-forge-1-0-blueprint-design.md)
   sit alongside it. [`roadmaps/archive/`](./roadmaps/README.md) keeps the
   R1–R8 roadmaps that drove forge before the 1.0 plan — superseded for new

@@ -121,6 +121,7 @@ export {
 export type { ReviewComment, AcceptanceCriterion, ReviewCommentsSidecar, NewReviewComment, DerivedVerdict } from './review-comments.ts';
 export { summariseCycle } from './metrics.ts';
 export type { CycleMetrics } from './metrics.ts';
+export { costByClass, type CostByClassRow, type CostClass } from './cost-by-class.ts';
 
 // ---- Studio flow surface: kickoff derivation, validation -------------------
 export { deriveFlowKickoff } from './studio/flow-kickoff.ts';

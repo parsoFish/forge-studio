@@ -244,7 +244,7 @@ export async function handleKickoffRoutes(
   // with no way back to a still-running server-side onboarding dispatch even
   // though the run's own `status.json` (written by `writeOnboardingSession`
   // above with `phase: 'running'`, then updated to a terminal phase by
-  // `writeSessionTerminalPhase`, packages/agents/agent-run.ts) already carries everything
+  // `writeSessionTerminalPhase`, apps/forge/agent-run.ts) already carries everything
   // needed to reattach. This is that tiny GET: find this project's most
   // recent `_onboarding/<sessionId>` (sessionId embeds a sortable
   // `newArchitectSessionId()` timestamp, above — a plain string sort picks
@@ -344,7 +344,7 @@ export async function handleKickoffRoutes(
   // `creation-agent` — is CLOSED. `ctx.spawnAgentTurn(forgeRoot, 'authoring',
   // project, sessionId)` below spawns `forge agent run authoring <sid>
   // --project <p>`, which reaches the generic `runInteractiveTurn` spine
-  // (ADR-043 §3, `packages/agents/agent-run.ts`'s `cmdAgentRun` dispatch fork) via the
+  // (ADR-043 §3, `apps/forge/agent-run.ts`'s `cmdAgentRun` dispatch fork) via the
   // `authoring` session-kind's `turnSpec` — the SAME bounded-turn shape
   // architect/instructions/demo-builder/project-brain already use, just
   // through the generic spine rather than a bespoke `*-runner.ts`.

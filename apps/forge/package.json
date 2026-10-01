@@ -9,6 +9,6 @@
     "./*": "./*"
   },
   "scripts": {
-    "test": "node --test --experimental-strip-types \"**/*.test.ts\""
+    "test": "cd ../.. && node --import=./scripts/test-preload/bridge-fetch-close.mjs --import=./scripts/test-preload/logs-residue-guard.mjs --import=./scripts/test-preload/git-residue-guard.mjs --test --experimental-strip-types \"apps/forge/**/*.test.ts\""
   }
 }

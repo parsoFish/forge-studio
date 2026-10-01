@@ -3,7 +3,7 @@
  *
  * W8-B4 FIX-2 (library-35's fourth path) — live-bridge reproduction pins for
  * the agent-DELETE route's install-ledger prune, mirroring
- * packages/library/tests/integration/bridge-studio-skills.test.ts's own "library-35" tests (the skills
+ * apps/forge/tests/integration/bridge-studio-skills.test.ts's own "library-35" tests (the skills
  * DELETE route) at the sibling agents DELETE route.
  *
  * Root cause: apps/forge/bridge-studio-writes.ts's agent-DELETE route

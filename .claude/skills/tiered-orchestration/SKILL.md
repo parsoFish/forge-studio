@@ -90,7 +90,6 @@ Each was rebuilt by hand in a gitignored campaign dir for three campaigns runnin
 | `owner-census.sh <campaign>` | every pinned file owned by >1 `gate-manifests/*.txt`, and who; a report, not a gate — always exits 0, not wired into `gate.sh` | `scripts/owner-census.test.ts` |
 | `pin-reconcile.sh <repo> <campaign> <glob> <from> <to> "<label>"` | rehash only the pin entries a merge touched, and append the amendment | — |
 | `prod-lines.mjs [root]` | production lines per package, by that root's own `check-owner.mjs` definition | — |
-| `boundary-share.mjs [pkg]` | who owns each `boundaries.json` row | — |
 
 ## See also
 

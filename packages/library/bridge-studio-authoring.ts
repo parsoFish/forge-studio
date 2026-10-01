@@ -13,7 +13,7 @@
  *
  * ---------------------------------------------------------------------------
  * CONTRACT (D5, `_wave5/unit-specs/R4-21-phase2.md`; mirrored from
- * `packages/library/tests/integration/bridge-studio-authoring-finalize.test.ts`'s own header — that file is
+ * `apps/forge/tests/integration/bridge-studio-authoring-finalize.test.ts`'s own header — that file is
  * this module's spec):
  *
  *  Wire contract: `POST /api/studio/authoring/finalize { project, sessionId,
@@ -181,7 +181,7 @@ import { resolveProjectsDir, loadConfig, defaultConfigPath } from '@forge/kernel
 // `interactive-runner.ts`, not this module, is what drags the SDK in).
 // Type-only — erased by --experimental-strip-types, so this does NOT pull the
 // Claude Agent SDK into bridge start-up. The runtime function is imported
-// DYNAMICALLY, inside runFinalize, below (mirrors packages/agents/agent-run.ts's own
+// DYNAMICALLY, inside runFinalize, below (mirrors apps/forge/agent-run.ts's own
 // project-brain kind's dynamic-import precedent).
 import { finalizeSkillFromLanded } from './bridge-studio-authoring-skill.ts';
 import { finalizeHookFromLanded } from './bridge-studio-authoring-hook.ts';
@@ -350,7 +350,7 @@ export async function runFinalize(
       // Step 5 — run ONE turn on the SAME spine the CLI dispatches to.
       // Dynamically imported so a static import never pulls the Claude Agent
       // SDK into bridge start-up (apps/forge/ui-bridge.ts does not import
-      // packages/agents/agent-run.ts today) — mirrors packages/agents/agent-run.ts's own
+      // apps/forge/agent-run.ts today) — mirrors apps/forge/agent-run.ts's own
       // project-brain kind's dynamic-import precedent.
       const turnResult: AuthoringTurnResult | null = await sessions.runAuthoringTurn({
         sessionId,

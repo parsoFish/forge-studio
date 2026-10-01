@@ -71,7 +71,6 @@ const EXCLUDED_TREES = [
 /** Individual record files, each with the reason it is not current-state prose. */
 const EXCLUDED_FILES = new Map([
   ['docs/roadmaps/1.0.md', 'the active plan — it names the retired tokens as tokens'],
-  ['docs/roadmaps/1.0-kickoffs.md', 'the active plan’s kickoff prompts'],
   ['docs/roadmaps/archive/README.md', 'the R1–R8 register and driving order, archived by M6 (1.0.md §7)'],
   ['docs/roadmaps/archive/R1-contract-componentry.md', 'R1–R8 record, archived by M6 (1.0.md §7)'],
   ['docs/roadmaps/archive/R2-runnable-componentry.md', 'R1–R8 record, archived by M6 (1.0.md §7)'],

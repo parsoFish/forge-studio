@@ -108,7 +108,7 @@
  *   - New CLI flag name: `--cost-ceiling-usd <value>`.
  *   - `parseAgentDispatchArgs` (round 3, replacing round 2's `mock.module`
  *     approach) — a NEW pure exported helper the implementer extracts from
- *     `cmdAgentDispatch`'s existing inline flag-parsing (`packages/agents/agent-run.ts`):
+ *     `cmdAgentDispatch`'s existing inline flag-parsing (`apps/forge/agent-run.ts`):
  *     slug/`--run-id`/`--project`/`--input`/`--session-dir` extraction, PLUS
  *     the new `--cost-ceiling-usd`. Assumed exported from `./agent-run.ts`
  *     (same file `cmdAgentDispatch` already lives in) with signature
@@ -163,7 +163,7 @@
  *
  * defaulting to the real `dispatchAgentRun` when omitted (production
  * behaviour unchanged — every OTHER test in this file, and
- * `packages/agents/tests/integration/agent-run-dispatch.test.ts`, calls `cmdAgentDispatch` with no third
+ * `apps/forge/tests/integration/agent-run-dispatch.test.ts`, calls `cmdAgentDispatch` with no third
  * argument and must keep passing byte-identically). The two tests at the end
  * of section (E) below drive `cmdAgentDispatch` with REAL argv, inject a
  * capturing fake in place of `dispatchAgentRun`, and assert the CALL RECORD
@@ -184,7 +184,7 @@ import { tmpdir } from 'node:os';
 
 import { startBridge } from '../../ui-bridge.ts';
 import { buildAgentDispatchArgs } from '../../bridge-agent-dispatch.ts';
-import { cmdAgentDispatch, parseAgentDispatchArgs } from '@forge/agents';
+import { cmdAgentDispatch, parseAgentDispatchArgs } from '../../agent-dispatch-cmd.ts';
 import { DRY_BRIDGE_LOG_BUCKET } from '../../dry-bridge.ts';
 import { runAgent } from '@forge/agents';
 import { MAX_KICKOFF_COST_CEILING_USD, DEFAULT_KICKOFF_COST_CEILING_USD } from '@forge/kernel';
@@ -682,7 +682,7 @@ test('GET /api/studio/agents: defaultCostCeilingUsd is a TOP-LEVEL sibling of ag
 //      real subprocess-argv boundary, with NO spawn/mock/flag required.
 // A single `cmdAgentDispatch`-level integration test (E5, real static
 // import, no mock — plain `process.exit`/console stub, matching
-// `packages/agents/tests/integration/agent-run-dispatch.test.ts`'s own established pattern) additionally
+// `apps/forge/tests/integration/agent-run-dispatch.test.ts`'s own established pattern) additionally
 // pins that `cmdAgentDispatch` actually WIRES `parseAgentDispatchArgs` in
 // (not just defines it unused) by observing the CLI-level exit code on a
 // malformed ceiling — that malformed-input path never reaches any spawn
@@ -832,14 +832,14 @@ test('ROUND-TRIP, absence direction: no costCeilingUsd given to buildAgentDispat
  *  test-injection pattern (`packages/agents/run-agent.ts`): production code
  *  defaults to the real `dispatchAgentRun` when `deps`/`deps.dispatch` is
  *  omitted, so every OTHER call site (including every other test in this
- *  file and `packages/agents/tests/integration/agent-run-dispatch.test.ts`) is byte-identical. */
+ *  file and `apps/forge/tests/integration/agent-run-dispatch.test.ts`) is byte-identical. */
 type InjectedDispatch = (opts: DispatchAgentRunOpts) => Promise<DispatchAgentRunResult>;
 type CmdAgentDispatchDeps = { dispatch?: InjectedDispatch };
 type CmdAgentDispatchWithDeps = (rest: string[], forgeRoot: string, deps?: CmdAgentDispatchDeps) => Promise<void>;
 
 /** Stub process.exit/console around one `cmdAgentDispatch` invocation, so an
  *  exit-2 validation refusal is observable without tearing down the test
- *  runner. Mirrors `packages/agents/tests/integration/agent-run-dispatch.test.ts`'s identical helper. No
+ *  runner. Mirrors `apps/forge/tests/integration/agent-run-dispatch.test.ts`'s identical helper. No
  *  mock needed here (round 3 removed `node:test`'s `mock.module` entirely):
  *  a malformed `--cost-ceiling-usd` must make `parseAgentDispatchArgs` throw
  *  BEFORE `cmdAgentDispatch` ever reaches a dispatch/spawn call, so this is

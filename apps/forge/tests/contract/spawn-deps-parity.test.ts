@@ -21,13 +21,22 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { FORGE_ROOT } from '@forge/kernel';
 import { SPAWN_AGENT_SPECS } from '../../bridge-agent-dispatch.ts';
 
-const CLI_SRC = readFileSync(join(FORGE_ROOT, 'apps', 'forge', 'cli.ts'), 'utf8');
+// The CLI's verbs live in cli.ts and in the cli-*.ts modules split out of it
+// (cli-instructions.ts holds `cmdInstructionsRun`), so the delegates are
+// searched across all of them — a delegate moved to a verb module is still
+// held to the same wiring rule.
+const CLI_DIR = join(FORGE_ROOT, 'apps', 'forge');
+const CLI_SRC = readdirSync(CLI_DIR)
+  .filter((f) => f === 'cli.ts' || /^cli-[\w-]+\.ts$/.test(f))
+  .sort()
+  .map((f) => readFileSync(join(CLI_DIR, f), 'utf8'))
+  .join('\n');
 const DEPS_SRC = readFileSync(join(FORGE_ROOT, 'apps', 'forge', 'session-kind-deps.ts'), 'utf8');
 
 /** The delegate a legacy `<verb> run` prefix lands in, e.g. `demo-builder` →

@@ -168,6 +168,18 @@
     "count": 1
   },
   {
+    "file": "apps/forge/tests/integration/bridge-studio-authoring-finalize.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/skill-library.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio-authoring-finalize.test.ts",
+    "kind": "path",
+    "cited": "skills/authored-skill/SKILL.md",
+    "count": 1
+  },
+  {
     "file": "apps/forge/tests/integration/bridge-studio-contract-stages.test.ts",
     "kind": "path",
     "cited": "packages/sessions/bridge-studio-sessions.test.ts",
@@ -178,6 +190,12 @@
     "kind": "path",
     "cited": "skills/test-agent/SKILL.md",
     "count": 2
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio-hooks.test.ts",
+    "kind": "stem",
+    "cited": "skill-library",
+    "count": 1
   },
   {
     "file": "apps/forge/tests/integration/bridge-studio-kb-ingest-activity.test.ts",
@@ -195,6 +213,36 @@
     "file": "apps/forge/tests/integration/bridge-studio-package-owned-flows.test.ts",
     "kind": "path",
     "cited": "packages/demo-pkg/skills/x/SKILL.md",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio-sessions-kinds.test.ts",
+    "kind": "stem",
+    "cited": "session-transcript.test",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio-sessions-routes.test.ts",
+    "kind": "stem",
+    "cited": "session-transcript.test",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio-skills.test.ts",
+    "kind": "path",
+    "cited": "cli/skill-md-path-guard.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio-skills.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/skill-library.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/bridge-studio-skills.test.ts",
+    "kind": "stem",
+    "cited": "bridge-studio-kbs.test",
     "count": 1
   },
   {
@@ -225,6 +273,12 @@
     "file": "apps/forge/tests/integration/bridge-studio.test.ts",
     "kind": "path",
     "cited": "skills/test-agent/SKILL.md",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/integration/connection-validate.test.ts",
+    "kind": "path",
+    "cited": "orchestrator/studio/validate.ts",
     "count": 1
   },
   {
@@ -408,6 +462,12 @@
     "count": 1
   },
   {
+    "file": "apps/forge/tests/regression/demo-builder-start-nonstring-project.test.ts",
+    "kind": "path",
+    "cited": "cli/studio-path-guard.ts",
+    "count": 1
+  },
+  {
     "file": "apps/forge/tests/regression/guards-migration-catalog.test.ts",
     "kind": "path",
     "cited": "orchestrator/studio/registry.ts",
@@ -466,6 +526,36 @@
     "kind": "path",
     "cited": "orchestrator/cli.ts",
     "count": 1
+  },
+  {
+    "file": "apps/forge/tests/test-fixtures/studio-sessions-builders.ts",
+    "kind": "path",
+    "cited": "packages/sessions/instructions-runner.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/test-fixtures/studio-sessions-builders.ts",
+    "kind": "path",
+    "cited": "packages/sessions/studio/session-kinds.test.ts",
+    "count": 2
+  },
+  {
+    "file": "apps/forge/tests/test-fixtures/studio-sessions-builders.ts",
+    "kind": "path",
+    "cited": "packages/sessions/studio/session-transcript.test.ts",
+    "count": 1
+  },
+  {
+    "file": "apps/forge/tests/test-fixtures/studio-sessions-builders.ts",
+    "kind": "stem",
+    "cited": "session-kinds.test",
+    "count": 2
+  },
+  {
+    "file": "apps/forge/tests/test-fixtures/studio-sessions-builders.ts",
+    "kind": "stem",
+    "cited": "session-transcript.test",
+    "count": 4
   },
   {
     "file": "apps/forge/tests/unit/agent-composition-hooks.test.ts",
@@ -1848,168 +1938,6 @@
     "count": 1
   },
   {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "demos/stories/S10/story.json",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "docs/architect-pm-merger-brief.md",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "docs/forge-studio-market-and-differentiation.md",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "docs/forge-ui-dom-and-harness.md",
-    "count": 2
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "docs/known-gaps.md",
-    "count": 2
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "docs/operator-journey.md",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "docs/phases/developer-loop.md",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "docs/phases/review-loop.md",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "docs/reference/quarantine.md",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "docs/roadmaps/wave-7-walkthrough-findings.md",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "docs/security-request-path-audit.md",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "orchestrator/phases/demo-agent.ts",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "orchestrator/studio/registry.ts",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "packages/kernel/README.md",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "scripts/e2e-deadpaths.mjs",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "scripts/e2e-journey.mjs",
-    "count": 6
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "scripts/journeys/story-registry.mjs",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "scripts/lib/story-parity.mjs",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "scripts/story-parity.mjs",
-    "count": 2
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "scripts/story-parity.test.ts",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "studio/starters/project.json",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
-    "cited": "tests/stories/S1..S4.story.mjs",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "stem",
-    "cited": "check-baseline-shrinks",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "stem",
-    "cited": "e2e-journey",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "stem",
-    "cited": "journeys-data",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "stem",
-    "cited": "preflight-fix-runner",
-    "count": 2
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "stem",
-    "cited": "story-parity",
-    "count": 2
-  },
-  {
     "file": "docs/roadmaps/1.0-skills.md",
     "kind": "path",
     "cited": "scripts/e2e-journey.mjs",
@@ -2306,12 +2234,6 @@
   {
     "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
     "kind": "path",
-    "cited": "apps/forge/ui-bridge-agent-run.test.ts",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
-    "kind": "path",
     "cited": "cli/studio-path-guard.ts",
     "count": 2
   },
@@ -2396,18 +2318,6 @@
   {
     "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
     "kind": "path",
-    "cited": "orchestrator/agent-dispatch.test.ts",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
-    "kind": "path",
-    "cited": "orchestrator/agent-dispatch.ts",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
-    "kind": "path",
     "cited": "orchestrator/architect-runner.ts",
     "count": 1
   },
@@ -2457,7 +2367,7 @@
     "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
     "kind": "path",
     "cited": "orchestrator/flow-runner.ts",
-    "count": 3
+    "count": 2
   },
   {
     "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
@@ -2505,18 +2415,12 @@
     "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
     "kind": "path",
     "cited": "orchestrator/run-agent.ts",
-    "count": 2
-  },
-  {
-    "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
-    "kind": "path",
-    "cited": "orchestrator/run-model-derive.ts",
     "count": 1
   },
   {
     "file": "docs/roadmaps/archive/R2-runnable-componentry.md",
     "kind": "path",
-    "cited": "orchestrator/run-model.ts",
+    "cited": "orchestrator/run-model-derive.ts",
     "count": 1
   },
   {
@@ -3972,36 +3876,6 @@
     "count": 2
   },
   {
-    "file": "packages/agents/agent-dispatch-cmd.ts",
-    "kind": "path",
-    "cited": "packages/sessions/studio/session-kinds.test.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/agent-dispatch.ts",
-    "kind": "path",
-    "cited": "orchestrator/studio/registry.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/agent-run.ts",
-    "kind": "path",
-    "cited": "packages/sessions/architect-runner.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/agent-run.ts",
-    "kind": "path",
-    "cited": "packages/sessions/demo-builder-runner.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/agent-run.ts",
-    "kind": "path",
-    "cited": "packages/sessions/instructions-runner.ts",
-    "count": 1
-  },
-  {
     "file": "packages/agents/agents-md-compose.ts",
     "kind": "stem",
     "cited": "instructions-runner",
@@ -4086,12 +3960,6 @@
     "count": 1
   },
   {
-    "file": "packages/agents/README.md",
-    "kind": "path",
-    "cited": "packages/sessions/studio/session-kinds.test.ts",
-    "count": 1
-  },
-  {
     "file": "packages/agents/routes.ts",
     "kind": "path",
     "cited": "cli/dry-bridge.ts",
@@ -4122,12 +3990,6 @@
     "count": 1
   },
   {
-    "file": "packages/agents/studio/agent-registry.ts",
-    "kind": "path",
-    "cited": "orchestrator/studio/registry.ts",
-    "count": 2
-  },
-  {
     "file": "packages/agents/studio/guards-migration-validate-rules.test.ts",
     "kind": "path",
     "cited": "orchestrator/studio/validate.ts",
@@ -4153,12 +4015,6 @@
   },
   {
     "file": "packages/agents/tests/contract/agent-dispatch-resolve.test.ts",
-    "kind": "path",
-    "cited": "tests/README.md",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/tests/contract/agent-run-dispatch-fork.test.ts",
     "kind": "path",
     "cited": "tests/README.md",
     "count": 1
@@ -4206,33 +4062,9 @@
     "count": 1
   },
   {
-    "file": "packages/agents/tests/integration/agent-dispatch-project-guard.test.ts",
-    "kind": "path",
-    "cited": "cli/studio-path-guard.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/tests/integration/agent-dispatch-project-guard.test.ts",
-    "kind": "path",
-    "cited": "orchestrator/agent-dispatch.ts",
-    "count": 1
-  },
-  {
     "file": "packages/agents/tests/integration/agent-dispatch-wiring.test.ts",
     "kind": "path",
     "cited": "cli/studio-path-guard.test.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/tests/integration/agent-run-turnspec-paths.test.ts",
-    "kind": "stem",
-    "cited": "session-kinds.test",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/tests/integration/instructions-turn-prompt.test.ts",
-    "kind": "stem",
-    "cited": "instructions-runner",
     "count": 1
   },
   {
@@ -4242,87 +4074,9 @@
     "count": 1
   },
   {
-    "file": "packages/agents/tests/regression/agent-dispatch-containment.test.ts",
-    "kind": "path",
-    "cited": "orchestrator/studio/registry.ts",
-    "count": 1
-  },
-  {
     "file": "packages/agents/tests/regression/agent-run-log-dir-colocation.test.ts",
     "kind": "path",
     "cited": "packages/sessions/interactive-finalizers.test.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/tests/regression/agent-run-turn-failure.test.ts",
-    "kind": "path",
-    "cited": "cli/agent-run.test.ts",
-    "count": 2
-  },
-  {
-    "file": "packages/agents/tests/regression/agent-run-turn-failure.test.ts",
-    "kind": "path",
-    "cited": "orchestrator/architect-runner.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/tests/regression/agent-run-turn-failure.test.ts",
-    "kind": "path",
-    "cited": "orchestrator/cli.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/tests/regression/legacy-dispatch-project-guard.test.ts",
-    "kind": "path",
-    "cited": "cli/agent-run.test.ts",
-    "count": 2
-  },
-  {
-    "file": "packages/agents/tests/regression/legacy-dispatch-project-guard.test.ts",
-    "kind": "path",
-    "cited": "cli/studio-path-guard.ts",
-    "count": 2
-  },
-  {
-    "file": "packages/agents/tests/regression/legacy-dispatch-project-guard.test.ts",
-    "kind": "path",
-    "cited": "orchestrator/cli.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/tests/regression/legacy-dispatch-project-guard.test.ts",
-    "kind": "stem",
-    "cited": "studio-path-guard",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/tests/test-fixtures/interactive-runner-log-observer.ts",
-    "kind": "path",
-    "cited": "orchestrator/interactive-runner.test.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/tests/test-fixtures/interactive-runner-log-observer.ts",
-    "kind": "stem",
-    "cited": "agent-run.test",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/tests/test-fixtures/interactive-runner-log-observer.ts",
-    "kind": "stem",
-    "cited": "architect-runner",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/tests/test-fixtures/interactive-runner-log-observer.ts",
-    "kind": "stem",
-    "cited": "demo-builder-runner",
-    "count": 1
-  },
-  {
-    "file": "packages/agents/tests/test-fixtures/interactive-runner-log-observer.ts",
-    "kind": "stem",
-    "cited": "instructions-runner",
     "count": 1
   },
   {
@@ -4365,12 +4119,6 @@
     "file": "packages/factory/tests/integration/demo.test.ts",
     "kind": "stem",
     "cited": "demo-html",
-    "count": 1
-  },
-  {
-    "file": "packages/factory/tests/regression/demo-builder-start-nonstring-project.test.ts",
-    "kind": "path",
-    "cited": "cli/studio-path-guard.ts",
     "count": 1
   },
   {
@@ -4545,7 +4293,7 @@
     "file": "packages/flows/tests/integration/agent-complete-trigger.test.ts",
     "kind": "path",
     "cited": "orchestrator/agent-dispatch.ts",
-    "count": 2
+    "count": 1
   },
   {
     "file": "packages/flows/tests/integration/agent-complete-trigger.test.ts",
@@ -5052,12 +4800,6 @@
     "count": 1
   },
   {
-    "file": "packages/knowledge/tests/regression/kb-drain-gate-regression.test.ts",
-    "kind": "path",
-    "cited": "cli/kb-drain-edit-soundness.test.ts",
-    "count": 1
-  },
-  {
     "file": "packages/knowledge/tests/regression/test-fixtures/kb-drain-edit-soundness.ts",
     "kind": "stem",
     "cited": "kb-drain-edit-soundness.test",
@@ -5394,42 +5136,6 @@
     "count": 1
   },
   {
-    "file": "packages/library/tests/integration/bridge-studio-authoring-finalize.test.ts",
-    "kind": "path",
-    "cited": "orchestrator/studio/skill-library.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/library/tests/integration/bridge-studio-authoring-finalize.test.ts",
-    "kind": "path",
-    "cited": "skills/authored-skill/SKILL.md",
-    "count": 1
-  },
-  {
-    "file": "packages/library/tests/integration/bridge-studio-hooks.test.ts",
-    "kind": "stem",
-    "cited": "skill-library",
-    "count": 1
-  },
-  {
-    "file": "packages/library/tests/integration/bridge-studio-skills.test.ts",
-    "kind": "path",
-    "cited": "cli/skill-md-path-guard.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/library/tests/integration/bridge-studio-skills.test.ts",
-    "kind": "path",
-    "cited": "orchestrator/studio/skill-library.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/library/tests/integration/bridge-studio-skills.test.ts",
-    "kind": "stem",
-    "cited": "bridge-studio-kbs.test",
-    "count": 1
-  },
-  {
     "file": "packages/library/tests/integration/community-index.test.ts",
     "kind": "stem",
     "cited": "skill-library",
@@ -5446,12 +5152,6 @@
     "kind": "stem",
     "cited": "skill-library",
     "count": 2
-  },
-  {
-    "file": "packages/library/tests/integration/connection-validate.test.ts",
-    "kind": "path",
-    "cited": "orchestrator/studio/validate.ts",
-    "count": 1
   },
   {
     "file": "packages/library/tests/integration/hook-runtime.test.ts",
@@ -5560,12 +5260,6 @@
     "kind": "path",
     "cited": "brain/profile.md",
     "count": 2
-  },
-  {
-    "file": "packages/projects/bridge-studio-project-preflight-write.ts",
-    "kind": "path",
-    "cited": "cli/dry-bridge.ts",
-    "count": 1
   },
   {
     "file": "packages/projects/bridge-studio-project-reset.ts",
@@ -6234,15 +5928,9 @@
     "count": 1
   },
   {
-    "file": "packages/sessions/tests/integration/bridge-studio-sessions-kinds.test.ts",
+    "file": "packages/sessions/tests/integration/instructions-turn-prompt.test.ts",
     "kind": "stem",
-    "cited": "session-transcript.test",
-    "count": 1
-  },
-  {
-    "file": "packages/sessions/tests/integration/bridge-studio-sessions-routes.test.ts",
-    "kind": "stem",
-    "cited": "session-transcript.test",
+    "cited": "instructions-runner",
     "count": 1
   },
   {
@@ -6250,36 +5938,6 @@
     "kind": "path",
     "cited": "orchestrator/studio/registry.ts",
     "count": 1
-  },
-  {
-    "file": "packages/sessions/tests/integration/test-fixtures/studio-sessions-builders.ts",
-    "kind": "path",
-    "cited": "packages/sessions/instructions-runner.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/sessions/tests/integration/test-fixtures/studio-sessions-builders.ts",
-    "kind": "path",
-    "cited": "packages/sessions/studio/session-kinds.test.ts",
-    "count": 2
-  },
-  {
-    "file": "packages/sessions/tests/integration/test-fixtures/studio-sessions-builders.ts",
-    "kind": "path",
-    "cited": "packages/sessions/studio/session-transcript.test.ts",
-    "count": 1
-  },
-  {
-    "file": "packages/sessions/tests/integration/test-fixtures/studio-sessions-builders.ts",
-    "kind": "stem",
-    "cited": "session-kinds.test",
-    "count": 2
-  },
-  {
-    "file": "packages/sessions/tests/integration/test-fixtures/studio-sessions-builders.ts",
-    "kind": "stem",
-    "cited": "session-transcript.test",
-    "count": 4
   },
   {
     "file": "packages/sessions/tests/regression/fix-turn-capture.test.ts",
@@ -6315,6 +5973,12 @@
     "file": "packages/sessions/tests/regression/interactive-runners-golden.test.ts",
     "kind": "stem",
     "cited": "skill-library",
+    "count": 1
+  },
+  {
+    "file": "packages/sessions/tests/regression/kb-drain-gate-regression.test.ts",
+    "kind": "path",
+    "cited": "cli/kb-drain-edit-soundness.test.ts",
     "count": 1
   },
   {
@@ -6537,12 +6201,6 @@
     "file": "scripts/check-raw-fs-guarded.test.ts",
     "kind": "stem",
     "cited": "architect-runner",
-    "count": 1
-  },
-  {
-    "file": "scripts/check-request-path-sinks.mjs",
-    "kind": "path",
-    "cited": "cli/studio-path-guard.ts",
     "count": 1
   },
   {
@@ -6789,12 +6447,6 @@
     "file": "skills/reflector/SKILL.md",
     "kind": "path",
     "cited": "cli/brain-lint.ts",
-    "count": 1
-  },
-  {
-    "file": "SPEC.md",
-    "kind": "path",
-    "cited": "packages/kernel/contract.test.ts",
     "count": 1
   },
   {

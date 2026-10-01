@@ -1,0 +1,73 @@
+/**
+ * The package's contract: the public door exports exactly what `README.md`
+ * says it does, and this test fails against an empty index.
+ *
+ * THE README IS PARSED, NOT TRANSCRIBED. The expected list is read out of
+ * `README.md` at run time, so it cannot drift from the document humans read.
+ * A hand-copied list here would be a second source of truth, and the first
+ * thing it would do is disagree. Mirrors `packages/agents/contract.test.ts`'s
+ * shape (`packages/agents/README.md`'s own door convention).
+ *
+ * The last test is the acceptance criterion for the whole file: the same
+ * comparison must REJECT an empty export map. Without it, an index that
+ * regressed to `export {}` alongside a README emptied to match would be two
+ * near-empty sets agreeing with each other, and this file would report
+ * success.
+ */
+
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { test } from 'node:test';
+
+import * as kernel from './index.ts';
+
+const README = new URL('./README.md', import.meta.url);
+
+/** Pull the backtick-quoted identifiers out of the README's API table: the
+ *  values table's rows are `| seam | `a` · `b` |`, the Types paragraph is a
+ *  `·`-separated run. Both come from the same document the humans read. */
+function readmeApi(): { values: string[]; types: string[] } {
+  const text = readFileSync(README, 'utf8');
+  const section = (heading: string, until: string): string => {
+    const from = text.indexOf(heading);
+    assert.ok(from >= 0, `README.md must contain a "${heading}" heading — this test reads its API list from there`);
+    const end = text.indexOf(until, from + heading.length);
+    return text.slice(from, end === -1 ? text.length : end);
+  };
+  const ids = (chunk: string): string[] =>
+    [...new Set([...chunk.matchAll(/`([A-Za-z_$][\w$]*)`/g)].map((m) => m[1]!))].sort();
+  return {
+    values: ids(section('## API', '### Types')),
+    types: ids(section('### Types', '## Crash and recovery')),
+  };
+}
+
+const exported = (): string[] => Object.keys(kernel).sort();
+
+test('contract: the index exports exactly the values README.md advertises — no undocumented export, no documented-but-missing one', () => {
+  const want = readmeApi().values;
+  const got = exported();
+  assert.deepEqual(got, want,
+    'the public door and its documentation have diverged.\n' +
+    `  documented but NOT exported (an importer following the README gets undefined): ${want.filter((w) => !got.includes(w)).join(', ') || 'none'}\n` +
+    `  exported but NOT documented (public surface nobody agreed to support):        ${got.filter((g) => !want.includes(g)).join(', ') || 'none'}`);
+});
+
+test('contract: the README advertises a non-trivial API — a list that shrank to nothing would make the assertion above vacuous', () => {
+  const { values, types } = readmeApi();
+  assert.ok(values.length >= 120,
+    `README.md advertises only ${values.length} value exports. The measured external surface of this package is 149 ` +
+    'values; a list this short means the README was emptied rather than the package, and the equality assertion ' +
+    'above would then be comparing two near-empty sets and reporting success.');
+  assert.ok(types.length >= 35, `README.md advertises only ${types.length} types; expected the 44 the package exports.`);
+});
+
+test('contract (CONTROL): the same comparison REJECTS an empty index — this is the acceptance criterion for the whole file', () => {
+  const want = readmeApi().values;
+  assert.throws(
+    () => assert.deepEqual([], want),
+    'comparing an EMPTY export map against the README API list must throw. If this control passes silently, the ' +
+    'assertion in the first test cannot distinguish a populated index from `export {}`, which is exactly the ' +
+    'vacuous-contract shape the door convention exists to remove.',
+  );
+});

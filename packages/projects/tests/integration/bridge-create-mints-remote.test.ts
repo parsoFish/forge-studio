@@ -40,6 +40,14 @@ import type { ServerResponse } from 'node:http';
 import { type RouteContext } from '@forge/kernel';
 import { makeOnboardHandlers } from '../../bridge-studio-project-onboard.ts';
 import { projectStartersDir } from '../../project-create.ts';
+import { FAKE_BRAIN_SEEDER } from '../test-fixtures/fake-brain-seeder.ts';
+
+/** Every `handleProjectsCreate` call below now reaches `scaffoldGreenfieldProject`'s
+ *  `brainSeeder` port (the `package-layer-order` DI split) — supplied here via
+ *  the shared fake (see its header for why this package's tests can't inject
+ *  the real `@forge/knowledge` functions directly). This file's own concern
+ *  (gh minting) is untouched by that — these two fields are plumbing only. */
+const BRAIN_SEEDER_DEPS = { seedBrain: FAKE_BRAIN_SEEDER.seed, checkBrainSeedContainment: FAKE_BRAIN_SEEDER.checkContainment };
 
 const FORGE_ROOT = join(import.meta.dirname, '..', '..', '..', '..');
 
@@ -88,6 +96,7 @@ test('6.11.27: the CREATE ROUTE mints a remote — the path the operator takes, 
   const ghCalls: string[][] = [];
   try {
     const { handleProjectsCreate } = makeOnboardHandlers({
+      ...BRAIN_SEEDER_DEPS,
       runGh: (args: string[]) => {
         ghCalls.push(args);
         // 6.11.35: the gate reads the OWNER's token, then asks who it is.
@@ -135,6 +144,7 @@ test('323: with the switch OFF — the default — nothing reaches gh and the pr
   const ghCalls: string[][] = [];
   try {
     const { handleProjectsCreate } = makeOnboardHandlers({
+      ...BRAIN_SEEDER_DEPS,
       runGh: (args: string[]) => { ghCalls.push(args); return ''; },
     } as never);
     const { res, captured } = mockRes();
@@ -162,6 +172,7 @@ test('323: an ABSENT config is the same as off — the switch fails closed', asy
   const ghCalls: string[][] = [];
   try {
     const { handleProjectsCreate } = makeOnboardHandlers({
+      ...BRAIN_SEEDER_DEPS,
       runGh: (args: string[]) => { ghCalls.push(args); return ''; },
     } as never);
     const { res, captured } = mockRes();
@@ -196,6 +207,7 @@ test('6.11.36: when the mint fails, the route says WHICH step failed and that th
   setRemoteSwitch(forgeRoot, true);
   try {
     const { handleProjectsCreate } = makeOnboardHandlers({
+      ...BRAIN_SEEDER_DEPS,
       runGh: (args: string[]) => {
         if (args[0] === 'auth') return 'gho_fixture_token';
         if (args[0] === 'api') return 'parsoFish';           // identity is FINE — 6.11.35 passed

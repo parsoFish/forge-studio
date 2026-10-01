@@ -38,13 +38,49 @@ import { randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 
-import { seedProjectBrain, checkProjectBrainSeedContainment } from '@forge/knowledge';
 import { runPreflight, type ClauseResult } from './preflight.ts';
 import {
   projectStartersDir, listProjectStarters, resolveGuardedPath, recordMintedRemote,
   assertGhOwner, ghRunnerFor, loadConfig, defaultConfigPath, isReservedId,
 } from '@forge/kernel';
 import { PROJECT_CONFIG_REL_PATH } from './project-config.ts';
+
+/** Structural mirror of `@forge/knowledge`'s `ProjectBrainSeedResult` — not
+ *  imported (see `ProjectBrainSeeder` below for why). */
+type ProjectBrainSeedResult = {
+  projectId: string;
+  brainDir: string;
+  files: { path: string; action: 'created' | 'skipped-existing' }[];
+};
+
+/**
+ * `projects` and `knowledge` are the SAME rank (M4 §0 rank 2), so this
+ * package importing `@forge/knowledge`'s `seedProjectBrain` /
+ * `checkProjectBrainSeedContainment` directly is a `package-layer-order`
+ * violation (`scripts/check-boundaries.mjs`). Both are supplied by the host
+ * (`apps/forge/cli.ts`, `apps/forge/routes.ts` via
+ * `bridge-studio-project-onboard.ts`'s `OnboardDeps`) at call time instead —
+ * the same injection shape already established for the onboard route's own
+ * `seedBrain`/`checkBrainSeedContainment` fields. Declared structurally
+ * (never `import type` of the real functions' own types) for the same reason
+ * `OnboardDeps` is: `check-boundaries.mjs` tracks type-only imports as real
+ * edges too.
+ */
+export type ProjectBrainSeeder = {
+  /** `@forge/knowledge`'s `seedProjectBrain`. */
+  seed: (forgeRoot: string, projectId: string, name: string, opts?: { dirName?: string }) => ProjectBrainSeedResult;
+  /** `@forge/knowledge`'s `checkProjectBrainSeedContainment`. Throws on
+   *  rejection (a real `@forge/kernel` `PathGuardContainmentError` in the
+   *  real implementation — that import is rank-safe and stays direct). */
+  checkContainment: (forgeRoot: string, projectId: string, dirName?: string) => void;
+  /** `@forge/knowledge`'s `isUntouchedBrainSeedStub` (G3, forge-8vfn.8.5.3) —
+   *  true iff `brain/projects/<dirName>` is EXACTLY the untouched 3-file stub
+   *  `seed` writes, nothing more. OPTIONAL: a caller that omits it gets the
+   *  pre-G3 behaviour (a brain-without-project always refuses) rather than a
+   *  compile break, since not every `ProjectBrainSeeder` construction site
+   *  needs the repair path wired through immediately. */
+  isUntouchedStub?: (forgeRoot: string, projectId: string, dirName?: string) => boolean;
+};
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 // {{NAME}} = the slug id (npm-safe: package.json name/bin, the kb binding, the
@@ -350,6 +386,11 @@ export function scaffoldGreenfieldProject(input: {
   /** Mint a GitHub remote and push the scaffold commit. ABSENT = no `gh` call
    *  at all: an outward-facing side effect happens only when asked for. */
   remote?: { create: boolean; account?: string; visibility?: string; runGh?: (args: string[], cwd?: string) => string };
+  /** `@forge/knowledge`'s brain-seeding step, injected (see `ProjectBrainSeeder`
+   *  above) — REQUIRED, never defaulted: seeding stays mandatory on every
+   *  create, so a caller that dropped it fails to compile rather than
+   *  silently scaffolding a project with no central brain. */
+  brainSeeder: ProjectBrainSeeder;
 }): ScaffoldResult {
   const manifest = validateCreationManifest(input.manifest);
   const id = slugifyProjectName(manifest.name);
@@ -417,11 +458,28 @@ export function scaffoldGreenfieldProject(input: {
   let brainEntry = null;
   try { brainEntry = lstatSync(finalBrainDir); } catch { /* absent — the create path */ }
   if (brainEntry !== null && !brainEntry.isSymbolicLink()) {
-    throw new Error(
-      `a project brain already exists at ${finalBrainDir} — refusing to replace it. Brain-3 dirs are repo-tracked ` +
-        `and may belong to a real project not checked out on this disk; remove it deliberately if it is truly stale, ` +
-        `or choose another name`,
-    );
+    // G3 repair (forge-8vfn.8.5.3): a brain-without-project is EITHER a crash
+    // orphan from an earlier attempt at THIS id (the two renames below land on
+    // separate fs roots — see the tail-of-function note) OR a real,
+    // repo-tracked Brain-3 for a project not checked out on this disk (the
+    // fresh-clone shape, projects-35) — and those two cases must be told
+    // apart, never conflated. `isUntouchedStub` tells them apart by SHAPE: a
+    // crash orphan still carries EXACTLY the three files `seed` writes and
+    // nothing else, because nothing has ever had a project here to attach
+    // real knowledge to. Only a PROVABLY untouched stub is removed; anything
+    // else — including a stub with ONE extra file — still refuses exactly as
+    // before.
+    const isCrashOrphan = input.brainSeeder.isUntouchedStub?.(input.forgeRoot, id) ?? false;
+    if (isCrashOrphan) {
+      rmSync(finalBrainDir, { recursive: true, force: true });
+      brainEntry = null;
+    } else {
+      throw new Error(
+        `a project brain already exists at ${finalBrainDir} — refusing to replace it. Brain-3 dirs are repo-tracked ` +
+          `and may belong to a real project not checked out on this disk; remove it deliberately if it is truly stale, ` +
+          `or choose another name`,
+      );
+    }
   }
 
   // Phase 1 (SEC-03 round 4, T1 ruling) — a PURE containment check for every
@@ -430,7 +488,7 @@ export function scaffoldGreenfieldProject(input: {
   // symlink/hardlink at the final brain target — the SEC-03 vector) throws with
   // NOTHING on disk anywhere. The staged seed below re-verifies its own (fresh,
   // random) staging path independently; this guards the rename DESTINATION.
-  checkProjectBrainSeedContainment(input.forgeRoot, id);
+  input.brainSeeder.checkContainment(input.forgeRoot, id);
 
   // Phase 2 — STAGE-then-atomic-move. Build the ENTIRE project + brain stub into
   // sibling `.staging-<id>-<rand>` dirs on the SAME filesystem as their
@@ -473,7 +531,7 @@ export function scaffoldGreenfieldProject(input: {
     // only forge-owned artifact not in the template. Seeded into the STAGING
     // dir; its CONTENT is still keyed to `id` (kb id, binding ref) so a rename
     // into `<id>` is byte-identical to seeding there directly.
-    seedProjectBrain(input.forgeRoot, id, manifest.name, { dirName: stagingName });
+    input.brainSeeder.seed(input.forgeRoot, id, manifest.name, { dirName: stagingName });
     // Pure, non-throwing reporter — reads the staged tree only, so it can never
     // itself orphan. `hardGreen` computed here is valid for the final dir: the
     // staged trees are byte-identical to their post-rename form.
@@ -503,17 +561,19 @@ export function scaffoldGreenfieldProject(input: {
     throw err;
   }
 
-  // DISCLOSED RESIDUAL (accepted, not silently swallowed): `projectsRoot` and
+  // NARROW WINDOW, REPAIRED ON RETRY (G3, forge-8vfn.8.5.3): `projectsRoot` and
   // `brain/projects/` are SEPARATE filesystem roots, so the two `renameSync`
-  // calls are NOT one transaction. A crash AFTER the brain rename but BEFORE
-  // the project rename leaves a `brain/projects/<id>` with no matching project.
-  // W7-B6 (projects-35): that leftover is now REFUSED on retry (never swept —
-  // a repo-tracked Brain-3 for a not-checked-out project is byte-identical in
-  // shape, and deleting it destroys real knowledge); the refusal message names
-  // the brain path so the operator can remove a genuinely stale one
-  // deliberately. Fail-safe-and-manual beats automatic-and-occasionally-
-  // catastrophic here — this narrow between-renames window is the residual
-  // this design accepts in exchange for closing the data-loss class.
+  // calls above are NOT one transaction — brain FIRST, project LAST, so a
+  // crash in this window leaves a `brain/projects/<id>` with no matching
+  // project. W7-B6 (projects-35) made that leftover REFUSED on retry
+  // (never swept — a repo-tracked Brain-3 for a not-checked-out project is
+  // byte-identical in shape, and deleting it would destroy real knowledge).
+  // G3 narrows the refusal further: the pre-create check above now REMOVES the
+  // orphan and proceeds, but ONLY when `isUntouchedStub` proves it is still
+  // EXACTLY the stub this function staged a moment ago — anything with even
+  // one extra file (real knowledge, or a repo-tracked brain for an
+  // uncheckout project) still refuses, naming the brain path so the operator
+  // can remove a genuinely stale one deliberately.
 
   // LAST, and that is a CONTAINMENT property, not a preference: the unwind
   // above deletes a staged directory and CANNOT delete a GitHub repository

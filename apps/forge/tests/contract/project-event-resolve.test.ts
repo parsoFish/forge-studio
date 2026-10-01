@@ -3,7 +3,7 @@
  * of "project-event trigger kinds". Per the ruling brief:
  *
  *   - Resolution is an IDENTITY match of the payload's repo against declared
- *     `repo` values (packages/projects/tests/integration/project-config-repo.test.ts pins the field
+ *     `repo` values (packages/flows/tests/integration/project-config-repo.test.ts pins the field
  *     itself); the result is the project's ENUMERATION id
  *     (`@forge/kernel` `discoverProjects` / `normalizeProjectId`),
  *     never the payload string, never the raw directory name.

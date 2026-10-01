@@ -67,9 +67,7 @@ import {
 // C4 contract-artifact scaffolding (B3) — MOVED to
 // @forge/projects (M4-projects carve, worker B).
 // `scaffoldContractArtifacts` is re-exported here, with `readArtifactRoot`
-// wired to the real @forge/knowledge implementation (already an accepted,
-// baselined `legacy-to-package-not-via-shim` edge for this legacy file —
-// see scripts/baselines/boundaries.json), ONLY because
+// wired to the real @forge/knowledge implementation, ONLY because
 // apps/forge/tests/regression/onboard-git-init.test.ts imports it directly from this module. Every
 // other helper that used to live here (ScaffoldContainmentError,
 // contractArtifactTargets, needsGitInit, isPackageManagerShaped,

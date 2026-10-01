@@ -19,7 +19,6 @@
 
 import { chromium, type Browser, type BrowserContext, type Page, type Video } from 'playwright-core';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { installForgeOverlay, type OverlayRegion, type ForgeOverlayHandle } from './demo-overlay.ts';
@@ -112,8 +111,22 @@ export type RecordBrowserInput = {
 
 type Recording = { browser: Browser; context: BrowserContext; page: Page; videoDir: string };
 
-async function launchRecording(): Promise<Recording> {
-  const videoDir = mkdtempSync(join(tmpdir(), 'forge-demo-video-'));
+/**
+ * Where a recording's temporary video file lives while playwright writes it —
+ * under the bundle's own `_trees` (forge-8vfn.8.5.6), never the OS temp dir.
+ * `captureCheckpoints` (demo.ts) pre-cleans `_trees` at the start of every
+ * capture, so a hard crash mid-recording leaves nothing anywhere else for
+ * anything to sweep. One sub-directory per recording (`mkdtempSync` under
+ * this root) keeps concurrent/sequential recordings from colliding.
+ */
+export function videoDirRoot(bundleDir: string): string {
+  return join(bundleDir, '_trees', 'video');
+}
+
+async function launchRecording(bundleDir: string): Promise<Recording> {
+  const videoRoot = videoDirRoot(bundleDir);
+  mkdirSync(videoRoot, { recursive: true });
+  const videoDir = mkdtempSync(join(videoRoot, 'rec-'));
   let browser: Browser;
   try {
     browser = await chromium.launch();
@@ -230,7 +243,7 @@ export function terminalPageHtml(side: RecordSide, label: string): string {
 export async function recordTerminal(input: RecordTerminalInput): Promise<RecordResult> {
   const side = assertSide(input.side, 'recordTerminal');
   const label = assertPathSegment(input.label, 'recordTerminal: label');
-  const { browser, context, page, videoDir } = await launchRecording();
+  const { browser, context, page, videoDir } = await launchRecording(input.bundleDir);
   let contextClosed = false;
   try {
     // A `data:` navigation, not `page.setContent()` — measured (chromium
@@ -277,7 +290,7 @@ export async function recordTerminal(input: RecordTerminalInput): Promise<Record
 export async function recordBrowser(input: RecordBrowserInput): Promise<RecordResult> {
   const side = assertSide(input.side, 'recordBrowser');
   const label = assertPathSegment(input.label, 'recordBrowser: label');
-  const { browser, context, page, videoDir } = await launchRecording();
+  const { browser, context, page, videoDir } = await launchRecording(input.bundleDir);
   let contextClosed = false;
   try {
     await page.goto(input.url, { timeout: NAV_TIMEOUT_MS });

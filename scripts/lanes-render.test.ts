@@ -122,7 +122,7 @@ describe('lanes.sh render — OUTCOME and named ledger sections, under a measure
 });
 
 /**
- * Bead forge-uowf / §15.59 (T1, wave-3 launch): `lanes.sh render docs/roadmaps/1.0-kickoffs.md
+ * Bead forge-uowf / §15.59 (T1, wave-3 launch): `lanes.sh render <kickoffs file>
  * '11. M4-' out` produced the T1 kickoff block from §1 — twice — because a heading regex that
  * matches nothing left `found` false and the first ```text block in the file won. A rendered
  * prompt that is silently the wrong prompt is worse than no prompt. (Moved here from

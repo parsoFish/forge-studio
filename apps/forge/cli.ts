@@ -23,16 +23,17 @@ import { requireFactoryDemo, requireInstalledFactory } from './factory-cli-wirin
 import { loadBrainIndex, regenerateBrainIndex } from '@forge/knowledge';
 import { cmdBrainLint } from './cli-brain-lint.ts';
 import { cmdGate } from './cli-gate.ts';
+import { cmdCreate } from './cli-create.ts';
+import { cmdCost } from './cli-cost.ts';
+import { cmdInstructions, cmdConstraints } from './cli-instructions.ts';
+import { flagValue, flagValueStrict } from './cli-flags.ts';
 import { runStudioLint } from './studio-lint.ts';
 import { runPreflight, formatPreflightReport, buildVerdictEvent } from '@forge/projects';
 import { runContractComplianceLoop, formatComplianceReport } from '@forge/projects';
-import { composeAgentsMd } from '@forge/agents';
-import { authorConstraintBlocks } from '@forge/projects';
-import { scaffoldGreenfieldProject, listProjectStarters, type ScaffoldResult } from '@forge/projects';
 import { assertEnv, defaultConfigPath, forgeBinOnPath, loadConfig, resolveProjectsDir, runInit,
-  ensureLayoutDirs, ensureDefaultConfig, resolveGuardedPath, writeProjectGroundFile, describeProjectStarters, type InitReport } from '@forge/kernel';
+  ensureLayoutDirs, ensureDefaultConfig, resolveGuardedPath, writeProjectGroundFile, type InitReport } from '@forge/kernel';
 import { worktreeDemoDir } from '@forge/flows';
-import { cmdAgent, cmdAgentRun } from '@forge/agents';
+import { cmdAgent, cmdAgentRun } from './agent-run.ts';
 import { AGENT_DISPATCH_DEPS } from './session-kind-deps.ts';
 
 import { cmdProjectMigrate } from '@forge/projects';
@@ -57,7 +58,7 @@ process.env['PATH'] = forgeBinOnPath(FORGE_ROOT, process.env['PATH']); // 6.11.2
 // R2-01-F3a: `forge agent run <agent-id> <session-id> [--project <name>]` —
 // the generic path over the 4 interactive runners (architect / instructions /
 // demo-builder / project-brain) — and the `cmdAgent`/`cmdAgentRun` skeleton
-// live in `packages/agents/agent-run.ts`; the 4 thin `cmd<X>Run` delegations
+// live in `apps/forge/agent-run.ts`; the 4 thin `cmd<X>Run` delegations
 // below import them from there. `cmdAgentRun` resolves an agent-id from TWO
 // tables: the un-ported `AGENT_RUNNERS` there, and `SESSION_KIND_RUNNERS`
 // (`packages/sessions/kinds/registry.ts`) for each PORTED kind (ruling 60).
@@ -97,10 +98,10 @@ process.env['PATH'] = forgeBinOnPath(FORGE_ROOT, process.env['PATH']); // 6.11.2
     case 'architect':
       return await cmdArchitect(args.slice(1));
     case 'instructions':
-      return await cmdInstructions(args.slice(1));
+      return await cmdInstructions(args.slice(1), resolvePreflightProjectDir);
 
     case 'constraints':
-      return cmdConstraints(args.slice(1));
+      return cmdConstraints(args.slice(1), resolvePreflightProjectDir);
 
     case 'create':
       return cmdCreate(args.slice(1));
@@ -112,6 +113,8 @@ process.env['PATH'] = forgeBinOnPath(FORGE_ROOT, process.env['PATH']); // 6.11.2
       return await cmdBrain(args.slice(1));
     case 'gate':
       return await cmdGate(args.slice(1));
+    case 'cost':
+      return cmdCost(args.slice(1), FORGE_ROOT);
     case 'demo':
       return await cmdDemo(args.slice(1));
     case 'project-brain':
@@ -258,17 +261,6 @@ function cmdBrain(rest: string[]): void | Promise<void> {
   if (sub === 'fix') return cmdBrainFix(rest.slice(1));
   console.error('forge brain: subcommands: index | lint | fix');
   process.exit(2);
-}
-
-// `--<name> value` lookup shared by the cmd*/runCreate flag parsers (6.11.33 dedupe).
-function flagValue(rest: string[], name: string): string | undefined {
-  const i = rest.indexOf(`--${name}`);
-  return i >= 0 ? rest[i + 1] : undefined;
-}
-// As `flagValue`, but never returns the NEXT flag's name as this flag's value.
-function flagValueStrict(rest: string[], name: string): string | undefined {
-  const v = flagValue(rest, name);
-  return v !== undefined && !v.startsWith('--') ? v : undefined;
 }
 
 /**
@@ -496,165 +488,6 @@ async function cmdProjectBrain(rest: string[]): Promise<void> {
 // printed summary) is unchanged.
 async function cmdProjectBrainRun(rest: string[]): Promise<void> {
   return cmdAgentRun(['project-brain', ...rest], FORGE_ROOT, AGENT_DISPATCH_DEPS);
-}
-
-/**
- * `forge create` (R4-03) — decision core, extracted from `cmdCreate` below
- * (forge-qb5) so it can be driven hermetically: parse flags → build a typed
- * manifest → scaffold a greenfield project from its framework template + seed
- * the central brain, then preflight — all returned as data. Pure-ish (its
- * only side effects are the ones `forge create` exists to have — writing the
- * scaffolded project + brain stub via `scaffoldGreenfieldProject`): it never
- * calls `process.exit` and never writes to stdout/stderr for control flow, so
- * a test can assert on the returned result instead of process exit codes.
- * `forgeRoot` is an injected parameter (defaulting to the module's
- * `FORGE_ROOT`), so a test can point it at a throwaway temp directory instead
- * of the real install root. ADR 042 boundary 3: a pure function with an
- * explicit error contract may be exported for direct tests even though its
- * only production caller (`cmdCreate`) lives in this same module.
- */
-export type CreateResult =
-  | { ok: true; kind: 'list'; appTypes: string[] }
-  | { ok: true; kind: 'scaffolded'; exitCode: 0 | 1; out: ScaffoldResult }
-  | { ok: false; kind: 'invalid-args'; exitCode: 2; appTypes: string[] }
-  | { ok: false; kind: 'error'; exitCode: 1; message: string };
-
-export function runCreate(rest: string[], opts: { forgeRoot?: string } = {}): CreateResult {
-  const forgeRoot = opts.forgeRoot ?? FORGE_ROOT;
-  if (rest[0] === 'list' || rest.includes('--list')) {
-    return { ok: true, kind: 'list', appTypes: listProjectStarters(forgeRoot) };
-  }
-  const flag = (name: string): string | undefined => flagValueStrict(rest, name);
-  const name = flag('name');
-  const appType = flag('app-type');
-  const northStar = flag('north-star');
-  if (!name || !appType || !northStar) {
-    return { ok: false, kind: 'invalid-args', exitCode: 2, appTypes: listProjectStarters(forgeRoot) };
-  }
-  try {
-    const explicitLanguage = flag('language');
-    const starter = explicitLanguage ? undefined : describeProjectStarters(forgeRoot).find((s) => s.id === appType); // 6.11.33: the starter's own declared language (6.11.4); explicit input wins
-    if (starter && starter.language === null) throw new Error(`starter "${appType}" declares no language — add one to starters.json before creating from it`);
-    const out = scaffoldGreenfieldProject({
-      manifest: {
-        name,
-        appType,
-        language: explicitLanguage || starter?.language || 'typescript',
-        northStar,
-        ...(flag('architecture') ? { architecture: flag('architecture') as string } : {}),
-      },
-      forgeRoot,
-      // Ruling 323 — the SAME switch the bridge route reads, so both doors into
-      // creation agree; a CLI that minted while the UI did not would make the
-      // config a lie about half the product. Default OFF.
-      ...(loadConfig(defaultConfigPath(forgeRoot)).projects?.remote?.create === true
-        ? { remote: { create: true } }
-        : {}),
-    });
-    return { ok: true, kind: 'scaffolded', exitCode: out.hardGreen ? 0 : 1, out };
-  } catch (err) {
-    return { ok: false, kind: 'error', exitCode: 1, message: err instanceof Error ? err.message : String(err) };
-  }
-}
-
-/**
- * `forge create --name <name> --app-type <type> [--language ts] --north-star
- * <text> [--architecture <notes>]` (R4-03) — the creation interview as CLI
- * flags → a typed manifest → scaffold a greenfield project from its framework
- * template + seed the central brain, then preflight. Exits 0 iff contract-green
- * (ready for the first architect run). Thin CLI edge over `runCreate`: maps
- * its result onto the exact same console output + exit codes this command
- * always produced (forge-qb5 — behaviour-preserving extraction).
- */
-function cmdCreate(rest: string[]): void {
-  const result = runCreate(rest, { forgeRoot: FORGE_ROOT });
-  switch (result.kind) {
-    case 'list':
-      console.log(`available app types: ${result.appTypes.join(', ') || '(none)'}`);
-      return;
-    case 'invalid-args':
-      console.error('forge create: requires --name <name> --app-type <type> --north-star <text> [--language ts] [--architecture <notes>]');
-      console.error(`  app types: ${result.appTypes.join(', ') || '(none)'}  (or: forge create list)`);
-      process.exit(result.exitCode);
-      return;
-    case 'scaffolded': {
-      const out = result.out;
-      console.log(`create: scaffolded "${out.id}" (${out.appType}) at ${out.projectDir} — ${out.filesWritten.length} file(s)`);
-      if (out.hardGreen) {
-        console.log('create: contract-green — ready for the first architect run.');
-      } else {
-        console.log(`create: NOT contract-green — failing hard clauses: ${out.failingClauses.map((c) => c.clause).join(', ')}`);
-      }
-      process.exit(result.exitCode);
-      return;
-    }
-    case 'error':
-      console.error(`forge create: ${result.message}`);
-      process.exit(result.exitCode);
-      return;
-  }
-}
-
-async function cmdInstructions(rest: string[]): Promise<void> {
-  const sub = rest[0];
-  if (sub === 'run') return await cmdInstructionsRun(rest.slice(1));
-  if (sub === 'compose') return cmdInstructionsCompose(rest.slice(1));
-  console.error('forge instructions: subcommands: run <session-id> --project <name> | compose --project <name>');
-  console.error('  forge instructions run <session-id> --project <name>');
-  console.error('  forge instructions compose --project <name>   (R4-02-F4: unattended AGENTS.md from seeds)');
-  process.exit(2);
-}
-
-/** `forge instructions compose --project <name>` (R4-02-F4) — deterministically
- *  author AGENTS.md from the matched instruction seeds + the declared gate. */
-function cmdInstructionsCompose(rest: string[]): void {
-  const i = rest.indexOf('--project');
-  const project = i >= 0 ? rest[i + 1] : rest.find((a) => !a.startsWith('--'));
-  if (!project) { console.error('forge instructions compose: requires --project <name>'); process.exit(2); return; }
-  const projectDir = resolvePreflightProjectDir(project);
-  const out = composeAgentsMd({ projectDir, forgeRoot: FORGE_ROOT });
-  const gateNote = out.gateCmd
-    ? ` — gate "${out.gateCmd}" covered: ${out.gateCovered}`
-    : ' — no gate declared yet (declare it first for C8 coverage)';
-  console.log(
-    out.wrote
-      ? `instructions compose: wrote ${out.path} — ${out.seedIds.length} seed(s): ${out.seedIds.join(', ') || '(none)'}${gateNote}`
-      : `instructions compose: ${out.path} already exists — left untouched${gateNote}${out.gateCmd && !out.gateCovered ? ' (edit it by hand to name the gate)' : ''}`,
-  );
-  // A declared-but-uncovered gate is a real C8 miss the caller must address.
-  if (out.gateCmd && !out.gateCovered) process.exit(1);
-}
-
-/** `forge constraints author --project <name>` (R4-02-F5) — author the project's
- *  locked-core constraints as live forge:constraint blocks in central profile.md. */
-function cmdConstraints(rest: string[]): void {
-  const sub = rest[0];
-  if (sub !== 'author') {
-    console.error('forge constraints: subcommands: author --project <name>');
-    process.exit(2);
-    return;
-  }
-  const flags = rest.slice(1);
-  const i = flags.indexOf('--project');
-  const project = i >= 0 ? flags[i + 1] : flags.find((a) => !a.startsWith('--'));
-  if (!project) { console.error('forge constraints author: requires --project <name>'); process.exit(2); return; }
-  try {
-    const out = authorConstraintBlocks({ projectDir: resolvePreflightProjectDir(project), forgeRoot: FORGE_ROOT, project });
-    console.log(
-      out.authored.length > 0
-        ? `constraints author: wrote ${out.authored.length} block(s) [${out.authored.join(', ')}] from ${out.source} → ${out.profilePath}`
-        : `constraints author: no constraints source (CONSTRAINTS.md / Locked-core section) — profile left untagged (compiles under the ADR-037 default)`,
-    );
-  } catch (err) {
-    console.error(`forge constraints author: ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
-  }
-}
-
-// R2-01-F3a: delegates into the shared cmdAgentRun skeleton (see the registry
-// above) — behavior (error text, exit codes, printed summary) is unchanged.
-async function cmdInstructionsRun(rest: string[]): Promise<void> {
-  return cmdAgentRun(['instructions', ...rest], FORGE_ROOT, AGENT_DISPATCH_DEPS);
 }
 
 // ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@
  * Contract: a `SESSION_KIND_RUNNERS` row and an `AGENT_RUNNERS` row are the
  * SAME shape.
  *
- * `cmdAgentRun` (packages/agents/agent-run.ts) resolves an agent-id from
+ * `cmdAgentRun` (apps/forge/agent-run.ts) resolves an agent-id from
  * `AGENT_RUNNERS` first and `SESSION_KIND_RUNNERS` second, then drives ONE
  * code path over whichever it found. Neither package imports the other's row
  * type — agents already imports this package, so a type import back would
