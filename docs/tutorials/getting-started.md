@@ -138,8 +138,15 @@ pick the project, drop an idea, answer the interview, and approve the **PLAN** a
 
 **Where a budget is set.** The same form's **Cost ceiling (USD, optional)**
 field caps the architect session: the runner checks it at the start of every
-turn. The develop run that follows carries the plan's `cost_budget_usd`, which
-the PLAN shows at the plan gate (see [the example factory](../explanation/example-factory.md)).
+turn. Each initiative in the plan carries a `cost_budget_usd`, which the PLAN
+shows as an informational footprint: it sizes the develop run, and forge does
+not halt the run at that number. Whether the footprint is acceptable is your
+call at the plan gate.
+
+**The interview is optional.** A precise idea can go straight to a PLAN with no
+interview rounds. The PLAN may arrive with findings from the advisory
+completeness critic ([the example factory](../explanation/example-factory.md));
+approve the plan as it stands, or revise it with feedback that addresses them.
 Approving queues an initiative; the scheduler (`forge serve`) picks it up and
 runs the flow autonomously — plan → change → verify → package — fanning work out
 across parallel work items.
