@@ -52,7 +52,7 @@ import { join } from 'node:path';
 // knowledge's public door (only its main-door-exported symbols are), so it is
 // reached by a relative path, matching this repo's own precedent for a test
 // reaching across a package boundary for a symbol its target does not export
-// (e.g. `packages/agents/tests/regression/legacy-dispatch-project-guard.test.ts`
+// (e.g. `apps/forge/tests/regression/legacy-dispatch-project-guard.test.ts`
 // reaching `apps/forge/ui-bridge.ts`).
 import { runKbDrain } from '../../../knowledge/bridge-studio-kb-drain.ts';
 import { noKbEdits } from '@forge/knowledge';
