@@ -17,19 +17,10 @@
 import { test, expect } from 'vitest';
 import * as React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { resolve } from 'node:path';
 
 import { SessionInteractivePanel } from '../../components/studio/session/SessionInteractivePanel';
 import type { SessionAffordance, SessionArtifactPayload } from '@/lib/session-client';
 import type { EventLogEntry } from '@/lib/bridge-client';
-// The REAL loader/deriver pair, against the live registry: the `authoring`
-// test below drives the same wire affordance the bridge sends rather than a
-// hand-written stand-in. (Its community-14 counterpart did too until that kind
-// was retired in W8-B5b WI-3; those tests now use hand-built fixtures.)
-import { loadSessionKinds } from '../../../../packages/sessions/studio/session-kinds.ts';
-import { deriveSessionAffordances } from '../../../../packages/sessions/studio/session-kinds-affordances.ts';
-
-const FORGE_ROOT = resolve(__dirname, '..', '..', '..', '..');
 
 function render(props: {
   kind: string;
@@ -773,15 +764,24 @@ test('W8-B3 (sessions-kinds-06): a verdict whose row requires NOTHING renders no
   expect(html).not.toContain('SKILL.md or hook.yaml');
 });
 
+// ADR 046 (`studio-beyond-contracts`): this used to derive `verdict` from
+// the live registry via `loadSessionKinds`/`deriveSessionAffordances`
+// (packages/sessions/studio/session-kinds*.ts), which apps/studio tests may
+// no longer import. Hand-built below instead, this file's own convention
+// (see community-14 above); `scripts/studio-parity-session-kinds.test.ts`
+// still derives the shape from the real registry, so drift is still caught.
 test('W8-B3 (sessions-kinds-06): a verdict whose row DOES require an id still renders the field and the shape hint — the fix must not delete the affordance it scopes', () => {
-  const descriptor = loadSessionKinds(FORGE_ROOT).find((k) => k.id === 'authoring');
-  const verdict = deriveSessionAffordances(descriptor!, 'awaiting-review').find((a) => a.kind === 'verdict');
-  expect(verdict!.meta?.requires ?? []).toEqual(['id']);
+  const verdict: SessionAffordance = {
+    id: 'awaiting-review-verdict',
+    kind: 'verdict',
+    phase: 'awaiting-review',
+    meta: { verdicts: ['approve', 'revise', 'reject'], requires: ['id'] },
+  };
 
   const html = render({
     kind: 'authoring',
     phase: 'awaiting-review',
-    affordances: [verdict as SessionAffordance],
+    affordances: [verdict],
     // Still drafting: neither marker file has landed, so the shape advisory
     // genuinely applies here.
     artifact: filePackage([{ path: 'notes.md', body: 'wip' }]),

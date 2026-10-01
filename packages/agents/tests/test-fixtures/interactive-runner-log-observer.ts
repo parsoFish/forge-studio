@@ -63,13 +63,24 @@ import {
   readFileSync,
   readdirSync,
   statSync,
+  existsSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { cmdAgentRun } from '../../agent-run.ts';
 import type { AgentDispatchDeps } from '../../agent-dispatch-cmd.ts';
-import { writeSessionStatus } from '@forge/sessions';
+
+/** `writeSessionStatus`'s own body (packages/sessions/interactive-session.ts)
+ *  duplicated locally rather than imported: sessions is a higher rank than
+ *  this package (package-layer-order), and this fixture is also reached by
+ *  two consumers that stay in THIS package (agent-run-log-observer.test.ts,
+ *  agent-run-promote-queue-wiring.test.ts) — moving the fixture to sessions
+ *  would newly cross the boundary for them instead of clearing it. */
+function writeSessionStatusFixture(sessionDir: string, status: Record<string, unknown>): void {
+  if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
+  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ ...status, updated_at: new Date().toISOString() }, null, 2));
+}
 
 // ---------------------------------------------------------------------------
 // cmdAgentRun driver — mirrors packages/agents/tests/integration/agent-run-dispatch.test.ts's own `run()`
@@ -195,7 +206,7 @@ export function setupTurnspecFixture(): TurnspecFixture {
   const sessionId = '2026-08-11T00-00-00-wi5fixture';
   const sessionDir = join(projectRoot, KIND_DIR, sessionId);
   mkdirSync(sessionDir, { recursive: true });
-  writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'p1', updated_at: new Date(0).toISOString() });
+  writeSessionStatusFixture(sessionDir, { session_id: sessionId, phase: 'p1', updated_at: new Date(0).toISOString() });
 
   return { forgeRoot, projectArg, projectRoot, sessionId, sessionDir };
 }
@@ -214,7 +225,7 @@ export function setupPromoteQueueFixture(): TurnspecFixture {
   const sessionId = '2026-09-25T00-00-00-promotequeue';
   const sessionDir = join(projectRoot, PROMOTE_QUEUE_KIND_DIR, sessionId);
   mkdirSync(sessionDir, { recursive: true });
-  writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'committing', updated_at: new Date(0).toISOString() });
+  writeSessionStatusFixture(sessionDir, { session_id: sessionId, phase: 'committing', updated_at: new Date(0).toISOString() });
 
   return { forgeRoot, projectArg, projectRoot, sessionId, sessionDir };
 }

@@ -91,7 +91,7 @@ export function newRunStamp(): string {
  *  construction produced, just spelled as a literal array.
  *
  *  W6-B2 review fix (MEDIUM 1) — exported (with SPAWN_AGENT_SPECS below) so
- *  packages/sessions/tests/contract/session-tail-kind-parity.test.ts can import the real table directly
+ *  apps/forge/tests/contract/session-tail-kind-parity.test.ts can import the real table directly
  *  and assert, for every studio/session-kinds.yaml descriptor with a
  *  corresponding entry here, that `logPrefix === descriptor.id` — the
  *  coincidence ensureSessionTail's `_${kind}-${sessionId}` derivation

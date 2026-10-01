@@ -6,32 +6,28 @@
  * rate-limit token.
  *
  * SPLIT FROM `failure-classifier.test.ts` (1,235 lines) at the seam that file
- * declared, and landed in `regression/` rather than `unit/` for two reasons
- * that agree: W8-F3 is a NAMED defect whose tests were red before the fix,
- * and this half is the only one that reaches past the classifier — it builds a
- * real queue directory (`getPaths`, `mkdtempSync`) and drives flows'
- * `decideAutoRetry` to prove the verdict actually grants zero retries. The
- * corpus replays below are archived-cycle evidence pinned so the blob scan
- * cannot come back.
+ * declared, and landed in `regression/` rather than `unit/` because W8-F3 is
+ * a NAMED defect whose tests were red before the fix. The corpus replays
+ * below are archived-cycle evidence pinned so the blob scan cannot come back.
+ *
+ * The end-to-end `decideAutoRetry` verdict this file used to also pin moved
+ * to `packages/flows/tests/regression/failure-classifier-w8f3-decide-auto-
+ * retry.test.ts` (package-layer-order: `decideAutoRetry` is a flows-package
+ * subject, a strictly higher rank than this package) — see that file's
+ * header.
  *
  * What is pinned here: the deterministic PM-coupling failures that carry a
  * rate-limit token in a PATH · the differential and doc-path controls · the
- * end-to-end `decideAutoRetry` verdict · the real archived golangci-lint gate
- * failure whose `:1529:` is a line number · hidden coupling under a capped
- * partial-usable run · cost-ceiling ordering against a rate-limit error in the
- * same window · and the metadata-shaped reads (typed SDK error kind, HTTP
- * status as a NUMBER, project payload, a project test that QUOTES the
- * contention string).
+ * real archived golangci-lint gate failure whose `:1529:` is a line number ·
+ * hidden coupling under a capped partial-usable run · cost-ceiling ordering
+ * against a rate-limit error in the same window · and the metadata-shaped
+ * reads (typed SDK error kind, HTTP status as a NUMBER, project payload, a
+ * project test that QUOTES the contention string).
  */
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { classifyCycleFailure } from '../../failure-classifier.ts';
-import { decideAutoRetry } from '@forge/flows';
-import { getPaths } from '@forge/flows';
 import type { EventLogEntry } from '@forge/kernel';
 
 /** The sibling suite's fixture builder, duplicated rather than exported: a
@@ -145,45 +141,10 @@ test('classifyCycleFailure: W8-F3 — schema-invalid WIs on a rate_limit path st
   assert.match(c.reason, /schema-invalid/i);
 });
 
-test('decideAutoRetry: W8-F3 end-to-end — the REAL classifier verdict grants ZERO retries for a rate-limit-token deterministic PM failure', () => {
-  // Exit row 1 names classifyCycleFailure AND decideAutoRetry, so this pin
-  // runs the real classifier and feeds its real output into the real retry
-  // decision through a real on-disk log + manifest. (The pre-existing
-  // decideAutoRetry tests hand-write the classification event, which cannot
-  // catch a misclassification — a test that stubs the gate is not a gate
-  // test.)
-  const dir = mkdtempSync(join(tmpdir(), 'forge-f3-retry-'));
-  try {
-    const paths = getPaths(join(dir, '_queue'));
-    mkdirSync(paths.inFlight, { recursive: true });
-    const id = 'INIT-2026-08-14-betterado-gap-registry';
-    writeFileSync(
-      join(paths.inFlight, `${id}.md`),
-      `---\ninitiative_id: ${id}\nproject: betterado\nproject_repo_path: projects/betterado\ncreated_at: 2026-08-14T00:00:00Z\niteration_budget: 1\ncost_budget_usd: 12\nclass: code\nphase: in-flight\n---\n\n# ${id}\n`,
-    );
-    const cls = classifyCycleFailure(pmDeterministicFailure('internal/provider/rate_limit.go'));
-    const logPath = join(dir, 'events.jsonl');
-    // Exactly the event `cycle.ts:emitFailureClassification` writes.
-    writeFileSync(
-      logPath,
-      JSON.stringify({
-        event_id: 'EV_fc', cycle_id: 'c', initiative_id: id, started_at: '2026-08-22T18:49:47.923Z',
-        phase: 'orchestrator', skill: 'cycle', event_type: 'log', input_refs: [], output_refs: [],
-        message: 'failure_classification',
-        metadata: {
-          cycle_id: 'c', failure_mode: cls.kind, failure_kind: cls.kind,
-          recoverable: cls.recoverable, environment: cls.environment,
-          reason: cls.reason, evidence_event_ids: cls.evidence_event_ids,
-        },
-      }) + '\n',
-    );
-    const decision = decideAutoRetry(`${id}.md`, paths, logPath);
-    assert.equal(decision.retry, false, 'a deterministic decomposition defect must land in failed/ on the FIRST failure');
-    if (!decision.retry) assert.match(decision.reason, /terminal/i);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
+// The end-to-end `decideAutoRetry` pin for this same fixture moved to
+// packages/flows/tests/regression/failure-classifier-w8f3-decide-auto-retry.test.ts
+// (package-layer-order: `decideAutoRetry` is a flows-package subject, a
+// strictly higher rank than this package) — see that file's header.
 
 // ---------------------------------------------------------------------------
 // W8-F3 — the blob scan's real-world precision is ZERO.

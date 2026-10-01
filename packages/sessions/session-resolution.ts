@@ -24,6 +24,7 @@ import { KB_SEEDING_ANCHOR_PREFIX } from '@forge/knowledge';
 import { LEGACY_SESSION_TERMINAL_PHASES, CANCELLED_PHASE } from './session-phases.ts';
 import { safeReadFileInSession } from './studio/session-transcript.ts';
 import { resolveLegacySession } from './session-readability.ts';
+import { COMMUNITY_REFRESH_PROJECT_ANCHOR, isPseudoProjectAnchor } from '@forge/contracts';
 
 /** `status.json`'s filename, relative to a session dir — read via
  *  `safeReadFileInSession` (the SAME realpath-guarded choke point
@@ -71,38 +72,23 @@ export function invalidSessionIdReason(id: string): string | null {
   return null;
 }
 
-// W6-CR-3 (HISTORY) — the retired community-refresh kind's anchor: ONE fixed,
-// dot-prefixed pseudo-project (unparameterized, unlike KB_SEEDING_ANCHOR_PREFIX
-// below, because there was exactly one community registry forge-wide). It never
-// surfaced as a phantom project — `discoverProjects` filters dot-prefixed dirs.
-// Its kickoff route and verdict dispatch are gone (W8-B5b) but the constant
-// STAYS EXPORTED for one live reason: forge-ui's session-shell back-link maps
-// it to `/community` via a parity test against this SSOT
-// (apps/studio/tests/contract/session-shell-view.test.ts). `invalidProjectReason`'s
-// carve-out below does NOT make pre-retirement sessions reachable — kind
-// resolution against `loadSessionKinds` (bridge-studio-sessions.ts) 404s on
-// "community-refresh" before the project carve-out is ever consulted, so
-// those sessions are unreachable, deliberately (see forge-6gv.21).
-export const COMMUNITY_REFRESH_PROJECT_ANCHOR = '.community-registry';
-
-// W6-B9 reviewer fix — the general invariant this file's own KB-seeding
-// carve-out comment (below) and W6-CR-3's comment (above) both already
-// state: `discoverProjects` (@forge/kernel) filters EVERY
-// dot-prefixed directory out of the real project list, categorically — not
-// just `.kb-<id>` (KB_SEEDING_ANCHOR_PREFIX) or `.community-registry`
-// (COMMUNITY_REFRESH_PROJECT_ANCHOR, above). A project id starting with "."
-// is therefore NEVER a real registered project, full stop — this is that
-// one general check, exported so a consumer that only needs "is this a
-// phantom anchor, yes/no" (as opposed to `invalidProjectReason`'s full
-// validate-or-reject contract) has a single source rather than re-deriving
-// the same leading-"." fact. forge-ui never imports cli/ at runtime (see
-// this repo's SSOT-parity-test convention, e.g.
-// apps/studio/tests/contract/trigger-kind-parity.test.ts) — its own `isPseudoProjectAnchor`
-// (apps/studio/lib/session-shell-view.ts) is a small, independently-declared
-// mirror, kept honest by a parity test (apps/studio/tests/contract/session-shell-view.test.ts).
-export function isPseudoProjectAnchor(project: string): boolean {
-  return project.startsWith('.');
-}
+// `COMMUNITY_REFRESH_PROJECT_ANCHOR` (the retired community-refresh kind's
+// fixed pseudo-project anchor, W6-CR-3 HISTORY — the kind is gone (W8-B5b)
+// but historical sessions still live under it) and `isPseudoProjectAnchor`
+// (the general leading-"." check `discoverProjects`, `@forge/kernel`,
+// mirrors categorically) are now a PURE TRANSFER, defined in
+// `@forge/contracts` (ADR 046 boundary fix, `studio-beyond-contracts` edge
+// 3) and imported above. `apps/studio`'s own former mirror
+// (`apps/studio/lib/session-shell-view.ts`) now re-exports the same
+// contracts symbols instead of independently declaring them, so the parity
+// test that used to hold the two mirrors in step
+// (`apps/studio/tests/contract/session-shell-view.test.ts`) no longer has
+// anything to compare and was removed. Re-exported here (rather than only
+// from contracts) because `invalidProjectReason` below still uses
+// `COMMUNITY_REFRESH_PROJECT_ANCHOR`, and this package's own
+// `bridge-studio-sessions-kinds.test.ts` imports `isPseudoProjectAnchor` from
+// this file's path.
+export { COMMUNITY_REFRESH_PROJECT_ANCHOR, isPseudoProjectAnchor };
 
 export function invalidProjectReason(id: string): string | null {
   if (id.length === 0) {
