@@ -11,33 +11,54 @@ Rank 0: it imports no other forge package, and it is the ONE package
 `apps/studio` may import — anything a browser-bundled component needs has to
 be reachable from here or it cannot reach the browser at all.
 
-## API (124 values)
+## API (47 values)
 
-| the Studio object model — agents (composition, runtime, budgets, fanout) | `BrainAccess` · `ModelStrategy` · `AgentComposition` · `AgentRuntime` · `AgentBudgets` · `AgentFanout` · `FANOUT_ISOLATION_KINDS` · `AgentDefinition` |
-| the Studio object model — flows, triggers & kickoff | `FlowNode` · `FlowEdge` · `TriggerTarget` · `WebhookTriggerConfig` · `TRIGGER_MODES` · `TriggerMode` · `FlowTrigger` · `FLOW_KICKOFF_KINDS` · `FlowKickoffKind` · `FlowKickoff` · `FlowReview` · `FlowDefinition` |
-| the Studio object model — artifact templates | `ARTIFACT_KINDS` · `ArtifactKind` · `ArtifactTemplateSchema` · `ArtifactTemplate` |
-| the Studio object model — instruction seeds | `INSTRUCTION_SEED_KINDS` · `InstructionSeedKind` · `INSTRUCTION_SEED_SCOPES` · `InstructionSeedScope` · `InstructionSeed` |
-| the Studio object model — KB descriptors | `KB_BACKENDS` · `KbBindingKind` · `KB_BINDING_KINDS` · `KbBinding` · `KbProcessImpl` · `KB_READ_SURFACES` · `KbReadSurface` · `KB_READER_ROLES` · `KbReaderRole` · `KbUsagePolicy` · `KbProcesses` · `KbDescriptor` |
-| the Studio object model — catalog (sdks/models/tools/mcps/guards) | `CatalogSdk` · `CatalogModel` · `CatalogEntry` · `CatalogGuardKind` · `CatalogGuardEntry` · `CatalogInstallMethod` · `CatalogProbeSpec` · `CatalogConfigVar` · `CatalogCapability` · `CatalogConnectionEntry` · `Catalog` |
-| the Studio object model — community skill/hook/mcp/tool registry | `CommunitySkill` · `COMMUNITY_REGISTRY_KINDS` · `CommunityRegistryKind` · `CommunityRegistrySignals` · `CommunityRegistryItem` · `CommunityRegistrySource` · `CommunityRegistry` |
-| the Studio object model — demo & release process declarations | `DEMO_STEP_KINDS` · `DemoStepKind` · `DemoStep` · `DemoElementDefinition` · `RELEASE_STEP_KINDS` · `ReleaseStepKind` · `RELEASE_STEP_PHASES` · `ReleaseStepPhase` · `ReleaseStep` · `ReleaseConfig` · `BuildProcess` |
-| the Studio object model — projects | `ProjectDefinition` · `ProjectRef` |
-| the initiative manifest shape | `ManifestPhase` · `InitiativeOrigin` · `ManifestClass` · `InitiativeManifest` |
-| the runnable-source rule — whether `enqueueFlowRun` may claim a manifest | `DEVELOP_FLOW_ID` · `isRunnableSource` |
-| the run view's wire shape | `RunStatus` · `RunPhaseStatus` · `RunPhaseMeta` · `Run` |
-| the demo declaration's pure extraction rules | `SHELL_METACHARACTERS` · `inlineCodeSpan` · `DrivableCommandResult` · `extractDrivableCommand` · `DeclarationDriveResult` · `declarationDrivesCheckpoint` · `isSafeDemoRoute` · `RouteExtraction` · `extractDemoRoute` · `PRESENTATION_ONLY_SKILL_IDS` · `PresentationOnlySkillId` |
-| work-item status vocabulary | `WorkItemStatus` · `WORK_ITEM_STATUSES` |
+| agent fanout isolation kinds | `FANOUT_ISOLATION_KINDS` |
+| flow trigger & kickoff vocabulary | `TRIGGER_MODES` · `FLOW_KICKOFF_KINDS` |
+| artifact-template vocabulary | `ARTIFACT_KINDS` |
+| instruction-seed vocabulary | `INSTRUCTION_SEED_KINDS` · `INSTRUCTION_SEED_SCOPES` |
+| KB descriptor vocabulary | `KB_BACKENDS` · `KB_BINDING_KINDS` · `KB_READ_SURFACES` · `KB_READER_ROLES` |
+| community registry vocabulary | `COMMUNITY_REGISTRY_KINDS` |
+| demo & release-process vocabulary | `DEMO_STEP_KINDS` · `RELEASE_STEP_KINDS` · `RELEASE_STEP_PHASES` |
+| the runnable-source rule — whether enqueueFlowRun may claim a manifest | `DEVELOP_FLOW_ID` · `isRunnableSource` |
+| the demo declaration's pure extraction rules | `SHELL_METACHARACTERS` · `inlineCodeSpan` · `extractDrivableCommand` · `declarationDrivesCheckpoint` · `isSafeDemoRoute` · `extractDemoRoute` · `PRESENTATION_ONLY_SKILL_IDS` |
+| pseudo-project session anchors | `COMMUNITY_REFRESH_PROJECT_ANCHOR` · `isPseudoProjectAnchor` |
+| work-item status vocabulary | `WORK_ITEM_STATUSES` |
 | work-item id patterns (`WI-`/`UWI-`, the split-suffix rule) + numeric stem | `WORK_ITEM_ID_PATTERN` · `WORK_ITEM_FILE_PATTERN` · `DEV_WORK_ITEM_ID_PATTERN` · `devWorkItemIdStem` |
 | trigger payloads — the owner/repo full-name validator | `REPO_RE` |
-| trigger-kind registry (ADR 041) | `TRIGGER_KINDS` · `TriggerKindId` · `TRIGGER_KIND_IDS` · `SHIPPED_TRIGGER_KIND_IDS` |
-| onboarding session-stage vocabulary + the contract-stage report row | `SESSION_STAGES` · `SessionStage` · `ContractStageStatus` · `ContractStage` · `ContractStageRow` |
-| agent-band / guard vocabulary (ADR 039) | `BAND_GUARD_IDS` · `BandGuardId` · `TOGGLE_GUARD_IDS` · `PLATFORM_GUARD_IDS` |
+| trigger-kind registry (ADR 041) | `TRIGGER_KINDS` · `TRIGGER_KIND_IDS` · `SHIPPED_TRIGGER_KIND_IDS` |
+| onboarding session-stage vocabulary | `SESSION_STAGES` |
+| agent-band / guard vocabulary (ADR 039) | `BAND_GUARD_IDS` · `TOGGLE_GUARD_IDS` · `PLATFORM_GUARD_IDS` |
 | spend ceilings | `DEFAULT_KICKOFF_COST_CEILING_USD` · `MAX_KICKOFF_COST_CEILING_USD` |
 | the fixed bridge port (ADR 031) | `DEFAULT_BRIDGE_PORT` |
 | KB drain round cap | `KB_DRAIN_MAX_ROUNDS` |
-| upload-materials vocabulary | `MATERIAL_KINDS` · `MaterialKind` |
-| cycle outcome | `CycleOutcome` |
-| failure-signature prefixes `failure-classifier.ts` scans for | `COST_CEILING_MESSAGE_PREFIX` · `OPERATOR_STOP_MESSAGE_PREFIX` · `PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX` · `ARCHITECT_DRAFT_MANIFEST_UNRESOLVED_PREFIX` |
+| upload-materials vocabulary | `MATERIAL_KINDS` |
+| failure-signature prefixes failure-classifier.ts scans for | `COST_CEILING_MESSAGE_PREFIX` · `OPERATOR_STOP_MESSAGE_PREFIX` · `PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX` · `ARCHITECT_DRAFT_MANIFEST_UNRESOLVED_PREFIX` |
+
+### Types (79)
+
+`AgentBudgets` · `AgentComposition` · `AgentDefinition` · `AgentFanout` ·
+`AgentRuntime` · `ArtifactKind` · `ArtifactTemplate` · `ArtifactTemplateSchema` ·
+`BandGuardId` · `BrainAccess` · `BuildProcess` · `Catalog` · `CatalogCapability` ·
+`CatalogConfigVar` · `CatalogConnectionEntry` · `CatalogEntry` ·
+`CatalogGuardEntry` · `CatalogGuardKind` · `CatalogInstallMethod` ·
+`CatalogModel` · `CatalogProbeSpec` · `CatalogSdk` · `CommunityRegistry` ·
+`CommunityRegistryItem` · `CommunityRegistryKind` · `CommunityRegistrySignals` ·
+`CommunityRegistrySource` · `CommunitySkill` · `ContractStage` ·
+`ContractStageRow` · `ContractStageStatus` · `CycleOutcome` ·
+`DeclarationDriveResult` · `DemoElementDefinition` · `DemoStep` ·
+`DemoStepKind` · `DrivableCommandResult` · `FlowDefinition` · `FlowEdge` ·
+`FlowKickoff` · `FlowKickoffKind` · `FlowNode` · `FlowReview` · `FlowTrigger` ·
+`InitiativeManifest` · `InitiativeOrigin` · `InstructionSeed` ·
+`InstructionSeedKind` · `InstructionSeedScope` · `KbBinding` ·
+`KbBindingKind` · `KbDescriptor` · `KbProcessImpl` · `KbProcesses` ·
+`KbReadSurface` · `KbReaderRole` · `KbUsagePolicy` · `ManifestClass` ·
+`ManifestPhase` · `MaterialKind` · `ModelStrategy` · `PresentationOnlySkillId` ·
+`ProjectDefinition` · `ProjectRef` · `ReleaseConfig` · `ReleaseStep` ·
+`ReleaseStepKind` · `ReleaseStepPhase` · `RouteExtraction` · `Run` ·
+`RunPhaseMeta` · `RunPhaseStatus` · `RunStatus` · `SessionStage` ·
+`TriggerKindId` · `TriggerMode` · `TriggerTarget` · `WebhookTriggerConfig` ·
+`WorkItemStatus`
 
 `design.md` documents two of the above in more depth: why `runnable-source.ts`'s
 claim rule lives here and is deliberately importless (a real bug — three UI

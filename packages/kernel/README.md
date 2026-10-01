@@ -16,36 +16,51 @@ package above kernel — `library`, `knowledge`, `projects`, `agents`,
 `sessions`, `flows`, `stations`, `factory`, and both apps — imports it
 directly.
 
-## API (192 values)
+## API (149 values)
 
-| the JSONL event log + cost accounting | `Phase` · `EventType` · `EventLogEntry` · `EventLogger` · `LoggerOptions` · `createLogger` · `bridgeCycleId` · `emitGroundFileChanges` · `writeProjectGroundFile` · `phasesWithIterationEvents` · `isAuthoritativeCostEvent` · `restatedSyntheticEventIds` · `CostStreamFacts` · `costStreamFacts` · `countsTowardCost` · `sumAuthoritativeCostUsd` · `deriveSessionCostUsd` |
-| the SDK tool-use fence | `CanUseTool` · `ToolFenceOptions` · `toolFenceOptions` |
-| operator config (`forge.config.json`) + project starters | `ForgeConfig` · `loadConfig` · `defaultConfigPath` · `resolveProjectsDir` · `PROJECT_STARTERS_MANIFEST` · `ProjectStarterDescription` · `projectStartersDir` · `listProjectStarters` · `describeProjectStarters` |
+| the JSONL event log + cost accounting | `createLogger` · `bridgeCycleId` · `emitGroundFileChanges` · `writeProjectGroundFile` · `phasesWithIterationEvents` · `isAuthoritativeCostEvent` · `restatedSyntheticEventIds` · `costStreamFacts` · `countsTowardCost` · `sumAuthoritativeCostUsd` · `deriveSessionCostUsd` |
+| the SDK tool-use fence | `toolFenceOptions` |
+| operator config (`forge.config.json`) + project starters | `loadConfig` · `defaultConfigPath` · `resolveProjectsDir` · `PROJECT_STARTERS_MANIFEST` · `projectStartersDir` · `listProjectStarters` · `describeProjectStarters` |
 | tunable caps & budgets resolved from config + env | `DEFAULT_DEV_WI_CONCURRENCY` · `DEV_WI_CONCURRENCY_CEILING` · `resolveDevWiConcurrency` · `DEFAULT_POST_MERGE_CI_TIMEOUT_MS` · `DEFAULT_POST_MERGE_CI_POLL_INTERVAL_MS` · `resolvePostMergeCiConfig` · `DEFAULT_REVIEW_MAX_SEND_BACK_ROUNDS` · `DEFAULT_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS` · `resolveReviewLoopCaps` · `DEFAULT_TRIGGERED_RUN_COST_BUDGET_USD` · `DEFAULT_TRIGGERED_RUN_ITERATION_BUDGET` · `resolveTriggeredRunBudgets` · `DEFAULT_KICKOFF_COST_CEILING_USD` · `MAX_KICKOFF_COST_CEILING_USD` · `resolveDefaultKickoffCeilingUsd` |
-| the env-assertion boundary | `EnvAssertionMode` · `collectEnvIssues` · `assertEnv` |
-| git commit identity (author, not the GitHub host identity below) | `GitIdentity` · `ralphGitIdentity` · `UNIFIER_GIT_IDENTITY` · `ORCHESTRATOR_GIT_IDENTITY` · `gitIdentityEnvOverlay` · `gitIdentityConfigArgs` |
-| GitHub host identity for outward `gh` actions | `GhExec` · `ghTokenFor` · `assertGhOwner` · `ghRunnerFor` |
-| first-run scaffolding (`forge init`) | `QUEUE_SUBDIRS` · `layoutDirs` · `defaultConfigJson` · `ghAuthed` · `LayoutDirsResult` · `ConfigResult` · `LayoutResult` · `InitReport` · `ensureLayoutDirs` · `ensureDefaultConfig` · `runInit` |
-| the path-containment guard + guarded fs primitives | `PathGuardOk` · `PathGuardReject` · `PathGuardResult` · `PathGuardContainmentError` · `isSafeSegment` · `isSafeSubPath` · `resolveGuardedPath` · `guardedFile` · `guardedReadFile` · `guardedWriteFile` · `guardedReadDir` · `guardedRename` |
-| case-folding probe (duplicate-target detection) | `CaseFoldingProbeError` · `CaseFoldingProbe` · `detectVolumeCaseFolding` |
+| the env-assertion boundary | `collectEnvIssues` · `assertEnv` |
+| git commit identity (author, not the GitHub host identity below) | `ralphGitIdentity` · `UNIFIER_GIT_IDENTITY` · `ORCHESTRATOR_GIT_IDENTITY` · `gitIdentityEnvOverlay` · `gitIdentityConfigArgs` |
+| GitHub host identity for outward gh actions | `ghTokenFor` · `assertGhOwner` · `ghRunnerFor` |
+| first-run scaffolding (`forge init`) | `QUEUE_SUBDIRS` · `layoutDirs` · `defaultConfigJson` · `ghAuthed` · `ensureLayoutDirs` · `ensureDefaultConfig` · `runInit` |
+| the path-containment guard + guarded fs primitives | `PathGuardContainmentError` · `isSafeSegment` · `isSafeSubPath` · `resolveGuardedPath` · `guardedFile` · `guardedReadFile` · `guardedWriteFile` · `guardedReadDir` · `guardedRename` |
+| the session/project-dir realpath-guarded single-file read | `safeReadFileInSession` |
+| case-folding probe (duplicate-target detection) | `CaseFoldingProbeError` · `detectVolumeCaseFolding` |
 | guarded scan (bounded mtime + tail reads) | `guardedMtime` · `selectRecentEntries` · `guardedReadFileTail` |
-| the project-contract report shape | `ClauseId` · `ClauseResult` · `PreflightReport` · `PreflightOptions` |
-| the studio validator `Finding` shape | `Finding` · `err` · `flag` |
-| station + band ports (SPEC.md §2) | `PhaseExecutor` · `ProjectGate` · `BandExecutor` · `BandRegistry` · `createBandRegistry` |
+| the studio validator Finding shape | `err` · `flag` |
+| station + band ports (SPEC.md §2) | `createBandRegistry` |
 | id vocabulary + the one slug guard | `SLUG_RE` · `EXACT_ID_RE` · `PROJECT_ID_RE` · `KB_ID_RE` · `MAX_EXACT_ID_LENGTH` · `SAFE_ID_RE` · `RESERVED_OBJECT_IDS` · `isReservedId` · `MAX_SKILL_ID_LENGTH` · `SLUG_RULE_TEXT` · `assertSkillSlug` · `FORGE_ROOT` |
-| origin -> provenance mapping | `Provenance` · `provenanceOfOrigin` · `AGENT_PROVENANCE` · `PROJECT_PROVENANCE` · `HookTemplateOrigin` · `originOfHookOrTemplate` · `SCAFFOLD_TEMPLATE_ORIGIN` |
-| project-layout SSOT (id normalisation, discovery, brain dirs) | `DiscoveredProject` · `normalizeProjectId` · `discoverProjects` · `projectBrainDir` · `projectThemesDir` · `mintedRemotesManifestPath` · `recordMintedRemote` · `rootManagesProject` · `rootMismatchReason` |
+| origin -> provenance mapping | `provenanceOfOrigin` · `AGENT_PROVENANCE` · `PROJECT_PROVENANCE` · `originOfHookOrTemplate` · `SCAFFOLD_TEMPLATE_ORIGIN` |
+| project-layout SSOT (id normalisation, discovery, brain dirs) | `normalizeProjectId` · `discoverProjects` · `projectBrainDir` · `projectThemesDir` · `mintedRemotesManifestPath` · `recordMintedRemote` · `rootManagesProject` · `rootMismatchReason` |
 | spawn-env allowlist (child-process env seam) | `AGENT_ENV_ALLOWLIST` · `MAX_ENV_OVERRIDE_KEYS` · `HOOK_ENV_CREDENTIAL_EXCLUSIONS` · `HOOK_ENV_BASE_ALLOWLIST` · `buildChildEnv` · `forgeBinOnPath` · `forwardChildStderr` · `sdkStderrSink` · `RESOURCE_PREFIX_ENV` · `RESOURCE_PREFIX_MAX_LENGTH` · `RESOURCE_PREFIX_RE` · `deriveResourcePrefix` |
-| route-table shape + dispatcher | `DryClassification` · `RouteMethod` · `RouteContext` · `RouteEntry` · `RouteTable` · `dispatchRoute` |
-| HTTP response envelope | `StudioContext` · `allowedOrigin` · `sendJson` · `sanitizeError` · `pathOnly` · `parseQuery` |
-| dry-bridge gate + typed refusal | `DRY_BRIDGE_ENV` · `DRY_BRIDGE_LOG_BUCKET` · `isDryBridge` · `DRY_BRIDGE_ACTIONS` · `DryBridgeAction` · `DryBridgeRefusalInput` · `emitDryBridgeRefusal` · `refuseDryBridge` · `DryBridgeStubAction` · `emitDryBridgeSkip` · `dryBridgeAgentTurnMarker` |
+| route-table shape + dispatcher | `dispatchRoute` |
+| HTTP response envelope | `allowedOrigin` · `sendJson` · `sanitizeError` · `pathOnly` · `parseQuery` |
+| dry-bridge gate + typed refusal | `DRY_BRIDGE_ENV` · `DRY_BRIDGE_LOG_BUCKET` · `isDryBridge` · `DRY_BRIDGE_ACTIONS` · `emitDryBridgeRefusal` · `refuseDryBridge` · `emitDryBridgeSkip` · `dryBridgeAgentTurnMarker` |
 | log-cycle discovery + run-id charset gate | `listCycles` · `isSafeRunId` · `composeSafeRunId` · `refuseBareInitiativeRunId` |
-| package-owned discovery roots (flows/skills) | `flowRoots` · `skillRoots` · `RootMatch` · `resolveIdAcrossRoots` · `listIdsAcrossRoots` |
-| the `FORGE_CLAUDE_CLI` seam | `CLAUDE_CLI_ENV` · `ClaudeCliPathError` · `resolveClaudeCliPath` |
-| studio-object frontmatter parsing | `FrontmatterDoc` · `readFrontmatter` · `loadStudioObject` |
+| package-owned discovery roots (flows/skills) | `flowRoots` · `skillRoots` · `resolveIdAcrossRoots` · `listIdsAcrossRoots` |
+| the FORGE_CLAUDE_CLI seam | `CLAUDE_CLI_ENV` · `ClaudeCliPathError` · `resolveClaudeCliPath` |
+| studio-object frontmatter parsing | `readFrontmatter` · `loadStudioObject` |
 | the shared YAML-field readers | `reqString` · `optString` · `reqNumber` · `optNumber` · `optBool` · `stringArray` · `reqObject` · `RegistryError` · `oneOf` · `loadYaml` · `loadYamlWithRaw` |
 | bounded per-key JSON log | `readBoundedLog` · `appendBoundedLog` · `boundedLogSegments` · `truncateTail` |
 | process liveness (`/proc` pid check) | `isProcessRunning` |
+
+### Types (44)
+
+`BandExecutor` · `BandRegistry` · `CanUseTool` · `CaseFoldingProbe` ·
+`ClauseId` · `ClauseResult` · `ConfigResult` · `CostStreamFacts` ·
+`DiscoveredProject` · `DryBridgeAction` · `DryBridgeRefusalInput` ·
+`DryBridgeStubAction` · `DryClassification` · `EnvAssertionMode` ·
+`EventLogEntry` · `EventLogger` · `EventType` · `Finding` · `ForgeConfig` ·
+`FrontmatterDoc` · `GhExec` · `GitIdentity` · `HookTemplateOrigin` ·
+`InitReport` · `LayoutDirsResult` · `LayoutResult` · `LoggerOptions` ·
+`PathGuardOk` · `PathGuardReject` · `PathGuardResult` · `Phase` ·
+`PhaseExecutor` · `PreflightOptions` · `PreflightReport` · `ProjectGate` ·
+`ProjectStarterDescription` · `Provenance` · `RootMatch` · `RouteContext` ·
+`RouteEntry` · `RouteMethod` · `RouteTable` · `StudioContext` ·
+`ToolFenceOptions`
 
 ## Crash and recovery
 
