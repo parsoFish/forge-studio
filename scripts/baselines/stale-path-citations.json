@@ -6240,13 +6240,13 @@
     "count": 1
   },
   {
-    "file": "packages/sessions/tests/integration/bridge-studio-sessions-kinds.test.ts",
+    "file": "apps/forge/tests/integration/bridge-studio-sessions-kinds.test.ts",
     "kind": "stem",
     "cited": "session-transcript.test",
     "count": 1
   },
   {
-    "file": "packages/sessions/tests/integration/bridge-studio-sessions-routes.test.ts",
+    "file": "apps/forge/tests/integration/bridge-studio-sessions-routes.test.ts",
     "kind": "stem",
     "cited": "session-transcript.test",
     "count": 1
