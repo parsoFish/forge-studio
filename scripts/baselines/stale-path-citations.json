@@ -6474,12 +6474,6 @@
     "count": 1
   },
   {
-    "file": "SPEC.md",
-    "kind": "path",
-    "cited": "packages/kernel/contract.test.ts",
-    "count": 1
-  },
-  {
     "file": "studio/artifact-templates/README.md",
     "kind": "path",
     "cited": "orchestrator/studio/validate.ts",

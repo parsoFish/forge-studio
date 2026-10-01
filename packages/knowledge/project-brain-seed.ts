@@ -31,7 +31,7 @@
  * brain build — this module only guarantees the stub exists.
  */
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import { loadKbDescriptor, serializeKbDescriptor } from './studio/kb-descriptor.ts';
@@ -350,4 +350,47 @@ export function seedProjectBrain(
   }
 
   return { projectId, brainDir, files };
+}
+
+/** The exact leaf paths (relative to `brainDir`) a freshly seeded, never-
+ *  touched stub carries — nothing more. Used by `isUntouchedBrainSeedStub`
+ *  below as the shape a crash-orphaned brain dir must match EXACTLY to be
+ *  provably safe to remove. */
+const STUB_LEAF_PATHS = ['kb.yaml', 'profile.md', join('themes', 'README.md')];
+
+/**
+ * True iff `brainProjectsRoot/dirName` exists and contains EXACTLY the three
+ * files `seedProjectBrain` writes — nothing more, nothing missing. Used by the
+ * greenfield create's crash-orphan repair (G3, forge-8vfn.8.5.3): its two
+ * `renameSync` calls land on SEPARATE filesystem roots, so a crash between
+ * them can leave `brain/projects/<id>` renamed into place with no matching
+ * `projects/<id>`. That orphan is safe to remove ONLY when it is PROVABLY
+ * still the untouched stub this module just staged — any extra file (a
+ * reflector theme, an operator note, anything) means real knowledge may have
+ * accumulated and the caller must refuse instead, the same as it refuses a
+ * REAL repo-tracked Brain-3 for a project not checked out on this disk (which
+ * also has no matching `projects/<id>`, and must never be swept either).
+ *
+ * A directory that does not exist is NOT a stub (nothing to repair) — returns
+ * `false` so a caller's repair path is always a safe no-op on a genuinely
+ * absent brain.
+ */
+export function isUntouchedBrainSeedStub(forgeRoot: string, projectId: string, dirName: string = projectId): boolean {
+  const { brainDir } = brainSeedTargets(forgeRoot, projectId, dirName);
+  if (!existsSync(brainDir)) return false;
+  const found: string[] = [];
+  const walk = (dir: string, rel: string): boolean => {
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return false; }
+    for (const entry of entries) {
+      const relPath = rel ? join(rel, entry.name) : entry.name;
+      if (entry.isDirectory()) { if (!walk(join(dir, entry.name), relPath)) return false; continue; }
+      if (!entry.isFile()) return false; // a symlink or other special entry is never "just a stub"
+      if (found.length >= STUB_LEAF_PATHS.length) return false; // extra content — bail early
+      found.push(relPath);
+    }
+    return true;
+  };
+  if (!walk(brainDir, '')) return false;
+  return found.length === STUB_LEAF_PATHS.length && STUB_LEAF_PATHS.every((p) => found.includes(p));
 }

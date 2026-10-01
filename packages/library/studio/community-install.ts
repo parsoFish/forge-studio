@@ -37,8 +37,9 @@
  * word.
  */
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { randomBytes } from 'node:crypto';
 
 import { assertSkillSlug } from '@forge/kernel';
 import { guardedSkillMdPath } from '../skill-path.ts';
@@ -174,6 +175,11 @@ export function routeCommunityInstall(forgeRoot: string, kind: CommunityKind, id
 export interface InstallCommunityHookInput {
   forgeRoot: string;
   id: string;
+  /** TEST-ONLY seam (forge-8vfn.8.5.2) — lets a test inject a failure partway
+   *  through the staged writes below, to prove the crash-safety contract
+   *  without actually crashing the process. NOT a fallback path: production
+   *  never passes this and always gets node:fs's own `writeFileSync`. */
+  writeFile?: (path: string, data: string, encoding: 'utf8') => void;
 }
 
 export interface InstallCommunityHookResult {
@@ -181,7 +187,7 @@ export interface InstallCommunityHookResult {
 }
 
 export function installCommunityHookPackage(input: InstallCommunityHookInput): InstallCommunityHookResult {
-  const { forgeRoot, id } = input;
+  const { forgeRoot, id, writeFile = writeFileSync } = input;
   assertSkillSlug(id);
 
   const vendoredDir = vendoredPackageDir(forgeRoot, 'hook', id);
@@ -223,29 +229,56 @@ export function installCommunityHookPackage(input: InstallCommunityHookInput): I
   // identity walk below; the root itself is trusted by contract.
   mkdirSync(hooksDir(forgeRoot), { recursive: true });
 
-  // PHASE 1 — bless every destination path through the SAME realpath guard,
-  // LEAF INCLUDED, before any write (mirrors installSkillPackage's own AT-21
-  // "validate the whole package, then write" discipline). A lexical
+  // PHASE 1 — bless every STAGING destination path through the SAME realpath
+  // guard, LEAF INCLUDED, before any write (mirrors installSkillPackage's own
+  // AT-21 "validate the whole package, then write" discipline). A lexical
   // `resolve().startsWith(boundary)` check is worthless here: it normalises
   // `..` away and is blind to a symlinked `studio/hooks/<id>` install
-  // destination, through which `writeFileSync` would follow the symlink and
-  // land the vendored bytes OUTSIDE the boundary (zip-slip into the install
+  // destination, through which a write would follow the symlink and land the
+  // vendored bytes OUTSIDE the boundary (zip-slip into the install
   // destination). `guardedFile` 'write' resolves every ancestor segment's
-  // realpath — a symlinked `<id>` segment yields null → refusal, so no vendored
-  // byte is ever written through the symlink. A failure here must never leave a
-  // partial install on disk, so nothing is written until every path is blessed.
+  // realpath — a symlinked segment yields null → refusal, so no vendored byte
+  // is ever written through the symlink. A failure here must never leave a
+  // partial install on disk, so nothing is written until every path is
+  // blessed.
+  //
+  // forge-8vfn.8.5.2 — STAGE THEN RENAME, `vendorFetchedPackage`'s discipline
+  // (community-fetch-package.ts) reused here rather than retyped. Every file
+  // lands under a sibling staging directory (`<id>.staging-<random>`, same
+  // parent as the real destination so the final rename stays on one
+  // filesystem), and only a single `renameSync` ever touches the real
+  // `studio/hooks/<id>/`. A crash or thrown error at any point before that
+  // rename therefore leaves NOTHING at the real destination — never a
+  // half-written package that the dedup check above would misread as
+  // installed.
+  const stagingId = `${id}.staging-${randomBytes(6).toString('hex')}`;
   const blessed = files.map((file) => {
-    const realPath = guardedFile(hooksDir(forgeRoot), [id, ...file.path.split('/')], 'write');
+    const realPath = guardedFile(hooksDir(forgeRoot), [stagingId, ...file.path.split('/')], 'write');
     if (realPath === null) {
-      throw new Error(`installCommunityHookPackage: destination for "${file.path}" is not contained under studio/hooks/${id}/ (traversal or symlink) — refusing to write`);
+      throw new Error(`installCommunityHookPackage: staging destination for "${file.path}" is not contained under studio/hooks/ (traversal or symlink) — refusing to write`);
     }
     return { realPath, file };
   });
+  const stagingDir = guardedFile(hooksDir(forgeRoot), [stagingId], 'write');
+  const finalDir = guardedFile(hooksDir(forgeRoot), [id], 'write');
+  if (stagingDir === null || finalDir === null) {
+    throw new Error(`installCommunityHookPackage: destination for "studio/hooks/${id}" is not contained under studio/hooks/ (traversal or symlink) — refusing to write`);
+  }
 
-  // PHASE 2 — every path is blessed; materialise the bytes.
-  for (const { realPath, file } of blessed) {
-    mkdirSync(dirname(realPath), { recursive: true });
-    writeFileSync(realPath, file.body, 'utf8');
+  // PHASE 2 — every path (staging AND the final rename target) is blessed;
+  // materialise the bytes into staging, then rename the whole staging
+  // directory into place in ONE atomic step. Any failure removes the staging
+  // directory and rethrows — the real destination is never touched until the
+  // rename, so it is never left half-written.
+  try {
+    for (const { realPath, file } of blessed) {
+      mkdirSync(dirname(realPath), { recursive: true });
+      writeFile(realPath, file.body, 'utf8');
+    }
+    renameSync(stagingDir, finalDir);
+  } catch (err) {
+    rmSync(stagingDir, { recursive: true, force: true });
+    throw err;
   }
 
   return { alreadyInstalled: false };

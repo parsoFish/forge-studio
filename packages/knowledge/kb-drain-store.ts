@@ -11,14 +11,14 @@
  * server-minted `runId` under the trusted `_logs` root.
  */
 import { requireSessionStatusIo } from './kb-drain-model.ts';
-import type { GuardedWriteSessionStatusFn } from './kb-drain-model.ts';
+import type { GuardedWriteSessionStatusFn, SessionStatusIoPort } from './kb-drain-model.ts';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { tryGetKbBackend } from './kb-backend.ts';
-import { loadConfig, defaultConfigPath, resolveProjectsDir, guardedWriteFile } from '@forge/kernel';
+import { loadConfig, defaultConfigPath, resolveProjectsDir, guardedWriteFile, guardedReadDir, createLogger } from '@forge/kernel';
 import { loadKbDescriptor } from './studio/kb-descriptor.ts';
-import { KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
+import { KB_SEEDING_ANCHOR_PREFIX, loadKbDescriptors } from './bridge-studio-kbs.ts';
 import { buildUnifiedDiff, type KbEditChange } from './kb-drain-structural.ts';
 import { auditKbEdit, buildKbEditSoundnessCtx } from './kb-drain-edit-soundness.ts';
 import { parseKbRunEvents, terminalKbRunEvent, firstKbRunEventTs, kbDrainRunIdsFor, consolidateRunIdsFor } from './kb-job-state.ts';
@@ -238,6 +238,76 @@ export function listKbRuns(forgeRoot: string, kbId: string, sessionIsReadable: S
   }
 
   return rows.sort((a, b) => (a.when < b.when ? 1 : a.when > b.when ? -1 : 0));
+}
+
+// ---------------------------------------------------------------------------
+// Crash recovery (bead forge-8vfn.8.5.1) — a kb-cleanup apply the bridge
+// never finished claiming.
+// ---------------------------------------------------------------------------
+
+/** Boot-time bucket for this reconcile's own JSONL trail — same construction
+ *  class as `DRY_BRIDGE_LOG_BUCKET` (packages/kernel/dry-bridge.ts): no
+ *  natural per-cycle id exists for a reconcile that runs once at process
+ *  start, across every project. */
+export const KB_CLEANUP_RECONCILE_LOG_BUCKET = '_kb-cleanup-reconcile';
+
+/**
+ * `approveKbCleanup`'s draft-apply arm (bridge-studio-kbs.ts) claims a
+ * session SYNCHRONOUSLY by writing `phase: 'applying'` before its draft
+ * writes land, and releases the claim back to `awaiting-approval` on any
+ * CAUGHT write error. A HARD crash (the bridge process killed) between the
+ * claim and the terminal `applied` stamp skips that release entirely: the
+ * apply runs IN the bridge process, so any session still at `applying` after
+ * a restart is necessarily orphaned — the only writer of that phase is this
+ * same process, and it just restarted. Every draft write is a whole-file
+ * replacement (W8-F1's re-audit-at-apply runs again regardless), so
+ * releasing back to `awaiting-approval` unconditionally — no crash forensics
+ * needed — is safe: the operator sees the same approve affordance they would
+ * have seen had the crash never happened.
+ *
+ * Called ONCE at bridge start (`apps/forge/ui-bridge.ts`), never from a
+ * route. Reuses `loadKbDescriptors` for the KB roster and each KB's own
+ * `binding` for its session anchor — the SAME derivation `listKbRuns` above
+ * already does per-kb — plus the guarded `_kb-cleanup` dir listing
+ * (`guardedReadDir`) and the injected `sessionStatusIo` port for every
+ * read/write: no new raw fs path, and no session in any OTHER phase is ever
+ * touched.
+ */
+export function releaseInterruptedKbCleanupApplies(
+  forgeRoot: string,
+  projectsRoot: string,
+  sessionStatusIo: SessionStatusIoPort | undefined,
+): number {
+  const io = requireSessionStatusIo(sessionStatusIo, 'releaseInterruptedKbCleanupApplies');
+  const logger = createLogger(KB_CLEANUP_RECONCILE_LOG_BUCKET, join(forgeRoot, '_logs'));
+  let released = 0;
+  for (const kb of loadKbDescriptors(forgeRoot)) {
+    const anchor = kb.binding.kind === 'project' ? kb.binding.ref : `${KB_SEEDING_ANCHOR_PREFIX}${kb.id}`;
+    const sids = guardedReadDir(projectsRoot, [anchor, '_kb-cleanup']) ?? [];
+    for (const sid of sids) {
+      const dirSegs = [anchor, '_kb-cleanup', sid];
+      const status = io.read<{ phase?: unknown } & Record<string, unknown>>(projectsRoot, dirSegs);
+      if (!status || status.phase !== 'applying') continue; // never touch any other phase
+      const written = io.write(projectsRoot, dirSegs, {
+        ...status,
+        phase: 'awaiting-approval',
+        apply_error: 'apply interrupted: the bridge restarted before the draft finished; whole-file writes make a retry safe',
+      });
+      if (written === null) continue; // containment refusal — not counted as released
+      released += 1;
+      logger.emit({
+        initiative_id: KB_CLEANUP_RECONCILE_LOG_BUCKET,
+        phase: 'orchestrator',
+        skill: 'kb-cleanup-reconcile',
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [`${anchor}/_kb-cleanup/${sid}`],
+        message: 'kb-cleanup.apply-released',
+        metadata: { project: anchor, sessionId: sid, kbId: kb.id },
+      });
+    }
+  }
+  return released;
 }
 
 export function initialKbDrainStatus(

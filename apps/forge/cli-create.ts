@@ -7,7 +7,7 @@
 import { resolve } from 'node:path';
 import { scaffoldGreenfieldProject, listProjectStarters, type ScaffoldResult } from '@forge/projects';
 import { defaultConfigPath, loadConfig, describeProjectStarters } from '@forge/kernel';
-import { seedProjectBrain, checkProjectBrainSeedContainment } from '@forge/knowledge';
+import { seedProjectBrain, checkProjectBrainSeedContainment, isUntouchedBrainSeedStub } from '@forge/knowledge';
 import { flagValueStrict } from './cli-flags.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
@@ -65,7 +65,7 @@ export function runCreate(rest: string[], opts: { forgeRoot?: string } = {}): Cr
       // `projects` (rank 2) may not import `@forge/knowledge` (same rank) —
       // this assembly point may import both, so the real seeding pair is
       // supplied here, same as the bridge route's `OnboardDeps` wiring.
-      brainSeeder: { seed: seedProjectBrain, checkContainment: checkProjectBrainSeedContainment },
+      brainSeeder: { seed: seedProjectBrain, checkContainment: checkProjectBrainSeedContainment, isUntouchedStub: isUntouchedBrainSeedStub },
     });
     return { ok: true, kind: 'scaffolded', exitCode: out.hardGreen ? 0 : 1, out };
   } catch (err) {
