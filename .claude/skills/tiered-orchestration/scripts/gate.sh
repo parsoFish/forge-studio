@@ -717,8 +717,6 @@ echo "== steps this gate did NOT run (named, never silent) =="
 
 echo "== production totals, by the repo's own productionFiles() =="
 node "$HERE/prod-lines.mjs" "$R" || fail=1
-echo "== boundary rows by owner =="
-( cd "$R" && node "$HERE/boundary-share.mjs" ) | head -12 || fail=1
 
 echo "== proving commands =="
 echo "guards:        $(ls "$R"/scripts/check-*.mjs 2>/dev/null | wc -l)"
