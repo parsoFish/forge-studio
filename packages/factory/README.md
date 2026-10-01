@@ -79,6 +79,25 @@ are still the example's to legalise. `@forge/stations`'s own `package.json`
 now carries the corresponding entries for the files that moved; see that
 package's README.
 
+## Crash and recovery
+
+The factory writes durable state only while capturing a demo
+(`captureCheckpoints`, `packages/factory/demo.ts`). It materialises two
+detached worktrees of the project repo under the bundle's `_trees/before` and
+`_trees/after`, writes each checkpoint's `.out` evidence into `before/` and
+`after/`, and removes both worktrees at the end. Each capture first runs
+`cleanupWorktreeAt` on those same two paths, so a capture interrupted by a
+crash is repaired by the next capture of that bundle: the stale worktrees
+are removed and pruned before new ones are added. The `.out` files are plain
+writes, overwritten whole on the next run.
+
+Not recovered by this package: a hard crash mid-recording leaves its
+`forge-demo-video-*` temp directory (`packages/factory/demo-capture.ts`) in
+the OS temp dir. It also leaves a dev server started for a browser checkpoint
+(`startServer`, `packages/factory/demo-runtime.ts`, a detached process group
+stopped by SIGTERM on the normal path) running until someone kills it.
+Nothing sweeps either one at the next start.
+
 ## What is inside
 
 `design.md` is the internal shape — the bands, the phases, which files are over
