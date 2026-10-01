@@ -107,10 +107,10 @@ during post-merge reflection is recorded (`REFLECTION_LOST_EVENT`,
 `finalize-merged.ts`) and recovered via `forge reflect --rerun`, never
 auto-retried.
 
-Tests: `tests/integration/queue.test.ts` (claim/heartbeat/recover/moveTo),
-`tests/integration/reentry-rebase.test.ts` + `resume-rebase.test.ts`
-(rebase at re-entry), `tests/integration/requeue-resume.test.ts` (resume
-inference), `tests/unit/operator-stop.test.ts` (stop-flag lifecycle).
+Tests: `packages/flows/tests/integration/queue.test.ts` (claim/heartbeat/recover/moveTo),
+`packages/flows/tests/integration/reentry-rebase.test.ts` + `resume-rebase.test.ts`
+(rebase at re-entry), `packages/flows/tests/integration/requeue-resume.test.ts` (resume
+inference), `packages/flows/tests/unit/operator-stop.test.ts` (stop-flag lifecycle).
 
 ## What was here before
 

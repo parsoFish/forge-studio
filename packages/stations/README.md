@@ -105,10 +105,10 @@ rest. `forge reflect <id> --rerun` (`reflector-rerun.ts`) is the manual
 counterpart, resolving the manifest across all five queue states
 (`done → merged → ready-for-review → in-flight → failed`).
 
-Tests: `tests/unit/demo-model.test.ts` (`renderDemoBundle` fail-closed),
-`tests/unit/dev-cost-bound.test.ts` (`isCostCeilingHalt`),
-`tests/unit/release-finalize.test.ts` (log-and-continue),
-`tests/unit/reflect-reconcile.test.ts` (boot reconcile, recovery window,
+Tests: `packages/stations/tests/unit/demo-model.test.ts` (`renderDemoBundle` fail-closed),
+`packages/stations/tests/unit/dev-cost-bound.test.ts` (`isCostCeilingHalt`),
+`packages/stations/tests/unit/release-finalize.test.ts` (log-and-continue),
+`packages/stations/tests/unit/reflect-reconcile.test.ts` (boot reconcile, recovery window,
 throw-and-continue).
 
 ## What is inside

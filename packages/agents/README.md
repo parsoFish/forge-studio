@@ -135,9 +135,9 @@ env before re-exec is invisible to it. A cost-ceiling halt classifies
 raise the ceiling and requeue from that phase boundary, not that the
 scheduler retries it unattended.
 
-Tests: `tests/regression/dispatch-terminal.test.ts` (SIGTERM terminus,
-idempotence, unwritable-log reporting), `tests/regression/spawn-marker.test.ts`
-(token binding + sweep), `tests/unit/failure-classifier.test.ts`
+Tests: `packages/agents/tests/regression/dispatch-terminal.test.ts` (SIGTERM terminus,
+idempotence, unwritable-log reporting), `packages/agents/tests/regression/spawn-marker.test.ts`
+(token binding + sweep), `packages/agents/tests/unit/failure-classifier.test.ts`
 (cost-ceiling classification). Standalone crashed/stalled derivation is
 proven in `apps/forge/tests/regression/ui-bridge-standalone-stalled.test.ts`,
 outside this package because `AgentRunStateDeps` is bound at `apps/forge`.
