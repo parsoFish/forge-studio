@@ -21,14 +21,15 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { runProjectManager, type PmQueryFn } from '@forge/stations/testing';
+import { runProjectManager, type PmQueryFn } from '../../phases/project-manager.ts';
 import { createLogger, FORGE_ROOT, type EventLogEntry } from '@forge/kernel';
-import type { CycleInput } from '../../cycle-context.ts';
+import type { CycleInput } from '@forge/flows';
 import { classifyCycleFailure, loadAgentDefinition, skillPath } from '@forge/agents';
 
-// Seam F4: this file lives in packages/flows and may not reach into
-// packages/stations' own test-fixtures (package-layer-order) — loads the
-// canonical project-manager def itself via @forge/agents (rank-safe).
+// Moved from packages/flows (package-layer-order: `runProjectManager` is a
+// stations-package subject, a strictly higher rank than flows) — this file
+// now lives in packages/stations, so it loads runProjectManager directly and
+// CycleInput via @forge/flows (a strictly lower rank than stations).
 const canonicalDef = (slug: string) => loadAgentDefinition(skillPath(slug));
 
 const DEFAULT_INITIATIVE_ID = 'INIT-2026-05-20-pm-decomp-test';

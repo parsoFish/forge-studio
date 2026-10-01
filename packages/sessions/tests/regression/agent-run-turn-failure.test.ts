@@ -32,7 +32,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { cmdAgentRun } from '../../agent-run.ts';
+import { cmdAgentRun } from '@forge/agents';
 import { writeSessionStatus, readSessionStatus } from '@forge/sessions';
 
 // ---------------------------------------------------------------------------

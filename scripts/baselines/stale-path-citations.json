@@ -4164,7 +4164,7 @@
     "count": 1
   },
   {
-    "file": "packages/agents/tests/contract/agent-run-dispatch-fork.test.ts",
+    "file": "packages/sessions/tests/contract/agent-run-dispatch-fork.test.ts",
     "kind": "path",
     "cited": "tests/README.md",
     "count": 1
@@ -4230,13 +4230,13 @@
     "count": 1
   },
   {
-    "file": "packages/agents/tests/integration/agent-run-turnspec-paths.test.ts",
+    "file": "packages/sessions/tests/integration/agent-run-turnspec-paths.test.ts",
     "kind": "stem",
     "cited": "session-kinds.test",
     "count": 1
   },
   {
-    "file": "packages/agents/tests/integration/instructions-turn-prompt.test.ts",
+    "file": "packages/sessions/tests/integration/instructions-turn-prompt.test.ts",
     "kind": "stem",
     "cited": "instructions-runner",
     "count": 1
@@ -4260,19 +4260,19 @@
     "count": 1
   },
   {
-    "file": "packages/agents/tests/regression/agent-run-turn-failure.test.ts",
+    "file": "packages/sessions/tests/regression/agent-run-turn-failure.test.ts",
     "kind": "path",
     "cited": "cli/agent-run.test.ts",
     "count": 2
   },
   {
-    "file": "packages/agents/tests/regression/agent-run-turn-failure.test.ts",
+    "file": "packages/sessions/tests/regression/agent-run-turn-failure.test.ts",
     "kind": "path",
     "cited": "orchestrator/architect-runner.ts",
     "count": 1
   },
   {
-    "file": "packages/agents/tests/regression/agent-run-turn-failure.test.ts",
+    "file": "packages/sessions/tests/regression/agent-run-turn-failure.test.ts",
     "kind": "path",
     "cited": "orchestrator/cli.ts",
     "count": 1
@@ -5058,7 +5058,7 @@
     "count": 1
   },
   {
-    "file": "packages/knowledge/tests/regression/kb-drain-gate-regression.test.ts",
+    "file": "packages/sessions/tests/regression/kb-drain-gate-regression.test.ts",
     "kind": "path",
     "cited": "cli/kb-drain-edit-soundness.test.ts",
     "count": 1

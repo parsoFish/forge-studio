@@ -38,7 +38,7 @@ import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENT_RUNNERS } from '../../agent-run.ts';
+import { AGENT_RUNNERS } from '@forge/agents';
 import { SESSION_KIND_RUNNERS } from '@forge/sessions';
 import { loadSessionKinds } from '@forge/sessions';
 import { readSessionStatus } from '@forge/sessions';
@@ -51,7 +51,7 @@ import {
   findInteractiveRunnerStartEvent,
   snapshotLogs,
   assertNoInteractiveRunnerSkillEvent,
-} from '../test-fixtures/interactive-runner-log-observer.ts';
+} from '../../../agents/tests/test-fixtures/interactive-runner-log-observer.ts';
 
 const ROOT = FORGE_ROOT;
 

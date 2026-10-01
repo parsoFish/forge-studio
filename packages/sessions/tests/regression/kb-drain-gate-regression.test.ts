@@ -43,19 +43,22 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runKbDrain } from '../../bridge-studio-kb-drain.ts';
-import { noKbEdits } from '../../kb-drain-edit-soundness.ts';
-import type { KbDrainFixTurnInput, KbDrainFixTurnResult } from '../../bridge-studio-kb-drain.ts';
-// M4 ruling 86 — THE ONE REMAINING knowledge -> sessions edge on the fix turn,
-// and it is deliberate. Every other importer took the turn by injection or
-// repointed to this package's own port type; this file cannot, because its
-// whole purpose is to drive the REAL turn through the seam and prove the edit
-// gate runs INSIDE it (see the block comment above `realTurn`). A hand-rolled
-// stand-in here would assert that a stand-in behaves, which is what the
-// 2026-08-22 defects already did. The row is recorded with this reason rather
-// than closed by weakening the test.
+// Moved from packages/knowledge (package-layer-order): this file's whole
+// purpose is driving the REAL `runBrainFixTurn` (packages/sessions) through
+// the seam to prove the edit gate runs INSIDE it (see the block comment above
+// `realTurn`) — sessions is a strictly higher rank than knowledge, so the
+// test belongs here, with knowledge (a strictly lower rank than sessions)
+// reached for its own subject, `runKbDrain`. `runKbDrain` is not on
+// knowledge's public door (only its main-door-exported symbols are), so it is
+// reached by a relative path, matching this repo's own precedent for a test
+// reaching across a package boundary for a symbol its target does not export
+// (e.g. `packages/agents/tests/regression/legacy-dispatch-project-guard.test.ts`
+// reaching `apps/forge/ui-bridge.ts`).
+import { runKbDrain } from '../../../knowledge/bridge-studio-kb-drain.ts';
+import { noKbEdits } from '@forge/knowledge';
+import type { KbDrainFixTurnInput, KbDrainFixTurnResult } from '@forge/knowledge';
 import { runBrainFixTurn } from '@forge/sessions';
-import type { Finding } from '../../brain-lint.ts';
+import type { Finding } from '@forge/knowledge';
 
 // ---------------------------------------------------------------------------
 // Fixture scaffolding
