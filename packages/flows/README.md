@@ -68,6 +68,50 @@ names disagree with the modules behind it is worse than a bad name: the fix is
 to rename `add` in `worktree.ts` and let the door follow. **Recorded as an M5
 finding, not silently papered over here.**
 
+## Crash and recovery
+
+State lives in `_queue/` as directories, not rows (ADR 011). `claim()` renames
+a manifest `pending → in-flight` with one `renameSync` — atomic, "the entire
+claim mechanism" (`queue.ts:17-18,134-145`) — and drops a `.heartbeat`
+sidecar (`writeHeartbeat`, `queue.ts:204-207`, a plain `writeFileSync`; only
+its mtime is ever read, so a torn write is harmless). `recover()`
+(`queue.ts:218-251`) sweeps `in-flight/` every scheduler tick and once,
+un-guarded by try/catch, at daemon startup (`scheduler-sweeps.ts:104-124`),
+renaming an item back to `pending` on a heartbeat >5 min stale or a manifest
+whose `worktree_path` no longer exists. `claim`/`moveTo`
+(`queue.ts:134-171`) also clear the heartbeat and any `<id>.stop`
+operator-stop flag on every state transition, so a stale flag can never
+outlive its halt or meet a fresh cycle of the same id
+(`operator-stop.ts:30-36`).
+
+Manifest frontmatter (`resume_from`, cost ceilings) is a plain
+`writeFileSync`, not tmp+rename (`manifest.ts:518-573`) — a crash mid-write
+can truncate it — and every `persistManifest*` writer except one is
+best-effort. The exception, `persistManifestSendBack`
+(`manifest.ts:618-623`), throws instead of swallowing: it runs under a
+caller-held `proper-lockfile` lock (`bridge-studio-runs-review.ts:364`), and
+a send-back the manifest doesn't durably record would leave its fix
+work-items undrainable. The daemon-crash story itself is
+`persistManifestResumeFromIntegrate` (`manifest.ts:564-573`): once every WI
+is `complete` but the post-develop band hasn't finished, it stamps
+`resume_from: integrate` on the manifest *before* a crash can happen, so the
+recovery sweep's rename-to-`pending` plus that pre-set marker resumes at
+`integrate` rather than re-running PM + the whole dev-loop. `resume_from`
+(ADR 019, `manifest.ts:161-167`) also takes `plan | develop | pr-open`;
+`inferRequeueResume` (`requeue-resume.ts`) derives it from the prior
+`failure_classification` event when a WI died mid-cycle instead, and
+`rebaseForResume` (`cycle-helpers.ts:80-103`) rebases the preserved branch
+onto current `main` at re-entry, preserving `.forge/work-items` across the
+rebase and failing closed on a conflict rather than guessing a merge. A crash
+during post-merge reflection is recorded (`REFLECTION_LOST_EVENT`,
+`finalize-merged.ts`) and recovered via `forge reflect --rerun`, never
+auto-retried.
+
+Tests: `packages/flows/tests/integration/queue.test.ts` (claim/heartbeat/recover/moveTo),
+`packages/flows/tests/integration/reentry-rebase.test.ts` + `resume-rebase.test.ts`
+(rebase at re-entry), `packages/flows/tests/integration/requeue-resume.test.ts` (resume
+inference), `packages/flows/tests/unit/operator-stop.test.ts` (stop-flag lifecycle).
+
 ## What was here before
 
 This file did not exist, and `index.ts` was `export {}` from the M2 skeleton

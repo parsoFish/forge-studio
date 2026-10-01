@@ -64,6 +64,53 @@ production consumer outside this package, only `apps/forge`'s
 `second-factory.test.ts` (the G3 proof) and `packages/flows` tests reach for
 them.
 
+## Crash and recovery
+
+Nothing a band writes is a checkpoint to resume from mid-write — each is
+either a small idempotent status marker or fully re-derivable. The
+`integrate` band's own doc states this directly: "everything it writes is
+DERIVED — from the acceptance criteria the work items carry, from the gate
+evidence the merge-boundary gate just produced, and from the diff"
+(`phases/integrate.ts:6-9`), so a crash mid-band just means the next attempt
+re-derives `demo.json` / `DEMO.md` / the PR body from already-durable
+inputs — nothing to reconcile. `renderDemoBundle` (`demo-model.ts:565-598`)
+fails closed the same way: a missing or crash-truncated `demo.json` returns
+`{ ok: false, errors }` rather than throwing, so a capture cut short reads as
+a clear, retriable error, not a wedge.
+
+The developer loop's own durable fact per work item is its `status` field,
+written only at the *end* of that WI's Ralph loop (`writeWorkItemStatus`,
+`@forge/flows`'s `work-item.ts:519-526`, a plain `writeFileSync`, called from
+`developer-loop.ts:457,955,1177`) — a crash mid-WI leaves the file at its
+pre-attempt status, which is exactly what `@forge/flows`'s
+preserved-worktree resume path re-reads to decide which WIs still need
+building. A cost-ceiling halt inside a WI's own loop leaves it `pending`,
+never `failed` (`isCostCeilingHalt`, `phases/dev-cost-bound.ts:70-88`) — an
+orchestrator decision, resumable by a later cycle with more budget, not a
+quality verdict. `release-finalize` is explicit log-and-continue
+(`phases/release-finalize.ts:12-15`): a thrown finaliser — including one
+killed mid-call — returns `release_status: 'failed'` and never blocks the
+merge; the status is recorded via `writeReleaseJson` (`@forge/flows`'s
+`flow-artifacts.ts:426-440`, itself a non-atomic, idempotent-unless-`overwrite`
+`writeFileSync` that returns `null` rather than throw), and the in-cycle
+draft changelog is the fallback.
+
+The reflector is the one band with its own boot-time reconciliation:
+`reconcileReflectFeedback` (`reflect-reconcile.ts:124-163`) re-runs it at
+bridge startup for any cycle whose `user-feedback.md` postdates its last
+`reflector.end`, bounded to a 7-day window (`RECONCILE_MAX_AGE_MS`,
+`reflect-reconcile.ts:97-102`) so a stale operator note doesn't flood a fresh
+boot; a throwing rerun is logged and skipped, the pass continues over the
+rest. `forge reflect <id> --rerun` (`reflector-rerun.ts`) is the manual
+counterpart, resolving the manifest across all five queue states
+(`done → merged → ready-for-review → in-flight → failed`).
+
+Tests: `packages/stations/tests/unit/demo-model.test.ts` (`renderDemoBundle` fail-closed),
+`packages/stations/tests/unit/dev-cost-bound.test.ts` (`isCostCeilingHalt`),
+`packages/stations/tests/unit/release-finalize.test.ts` (log-and-continue),
+`packages/stations/tests/unit/reflect-reconcile.test.ts` (boot reconcile, recovery window,
+throw-and-continue).
+
 ## What is inside
 
 `class-profile-port.ts` declares the port (`ClassProfilePort`, and the

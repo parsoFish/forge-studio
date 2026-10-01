@@ -36,6 +36,8 @@ A standing test (`orchestrator/subsumption-proof.test.ts`) asserts the runtime-a
 
 ## Quickstart
 
+**Supported platform: WSL2 or Linux.** macOS and native Windows are not supported. The install form is a Node source checkout: clone this repository and build it; there is no npm package.
+
 ```bash
 # Prerequisites
 node --version           # Node 20+
