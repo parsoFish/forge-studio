@@ -3133,3 +3133,14 @@ The derivers import it back from `@forge/kernel` and re-export it, so every
 sessions caller is unchanged. The derivers' `readFileSync` row is deleted, not
 left at zero. Total sink calls are conserved. Accepted via `--write` in the
 same commit.
+
+### §7.3 — `packages/flows/cost-by-class.ts` (new file, `forge cost by-class`)
+
+| file (function) | sink (delta) | input | classification | why |
+|---|---|---|---|---|
+| `packages/flows/cost-by-class.ts` (`costByClass`) | `existsSync` (0 → 2) | `forgeRoot` — a param of the exported `costByClass(forgeRoot)` | not request-derived | `forgeRoot` is never sourced from an HTTP request: the only caller is `apps/forge/cli-cost.ts`'s `cmdCost`, a CLI verb (`forge cost by-class`) dispatched from `argv`, defaulting to the install-root `FORGE_ROOT` constant or an operator-typed `--root` flag. No bridge route calls `costByClass` or `cmdCost`. The two calls check for `_queue/done/` and `_logs/<cycleId>/events.jsonl` under this trusted root. |
+| `packages/flows/cost-by-class.ts` (`costByClass`) | `readdirSync` (0 → 1) | `doneDir` = `join(forgeRoot, '_queue', 'done')` | not request-derived | Same `forgeRoot` as above; the joined segments are fixed literals, not caller input. |
+| `packages/flows/cost-by-class.ts` (`readClassAndCycleId`, `readCycleCostUsd`) | `readFileSync` (0 → 2) | a manifest path under `doneDir` (filename enumerated by the `readdirSync` above, never caller-supplied) and `join(logsRoot, cycleId, 'events.jsonl')`, where `cycleId` is read from that SAME manifest's own frontmatter, written only by this repo's own `mintAndPersistManifestCycleId`/`persistManifestCycleId` (`manifest.ts`), never by an HTTP caller | not request-derived | Mirrors `packages/flows/forge-metrics.ts`'s pre-existing, identically-shaped `loadEvents`/`loadManifest` (also un-guarded `existsSync`/`readFileSync`/`readdirSync` over `_queue/*` and `_logs/<cycleId>`, same trusted-root precedent) and `packages/flows/metrics.ts`'s `summariseCycle`, which DOES sit behind a request-derived `cycleId` (`GET /api/cost/:cycleId`, row above) and for that reason routes the leaf through `guardedReadFile`. `costByClass`'s `cycleId` is never request input — it is read back off a manifest this same function just enumerated from a fixed, non-request directory — so no guard has anything to contain. |
+
+`scripts/request-path-sinks.baseline.txt` accepts the new rows via `--write`
+in the same commit that adds this section, per this document's own rule.
