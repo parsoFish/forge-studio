@@ -91,12 +91,21 @@ crash is repaired by the next capture of that bundle: the stale worktrees
 are removed and pruned before new ones are added. The `.out` files are plain
 writes, overwritten whole on the next run.
 
-Not recovered by this package: a hard crash mid-recording leaves its
-`forge-demo-video-*` temp directory (`packages/factory/demo-capture.ts`) in
-the OS temp dir. It also leaves a dev server started for a browser checkpoint
-(`startServer`, `packages/factory/demo-runtime.ts`, a detached process group
-stopped by SIGTERM on the normal path) running until someone kills it.
-Nothing sweeps either one at the next start.
+A hard crash mid-capture is swept by the next capture too:
+
+- Recordings live under the bundle, one `rec-*` dir per recording in
+  `<bundle>/_trees/video` (`videoDirRoot`, `packages/factory/demo-capture.ts`),
+  never in the OS temp dir, so the same `_trees` pre-clean removes a crashed
+  run's video.
+- A dev server started for a browser checkpoint (`startServer`,
+  `packages/factory/demo-runtime.ts`) records its process-group id and its
+  `/proc` start time in `<bundle>/_trees/server.pid`; the normal stop removes
+  the record. The next capture first runs `sweepStaleServer`, which kills
+  that group only if `/proc` still shows the pid with the same start time, so
+  a recycled pid is never killed. A gone pid or a mismatch just clears the
+  record. An unreadable `/proc` read is treated as unknown: nothing is killed
+  and the record stays. See
+  `packages/factory/tests/integration/demo-runtime.test.ts`.
 
 ## What is inside
 
