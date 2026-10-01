@@ -3145,3 +3145,15 @@ same commit.
 `scripts/request-path-sinks.baseline.txt` accepts the grown counts via
 `--write` in the same commit that adds this section, per this document's own
 rule.
+
+
+### Added (bead `forge-8vfn.8.5.2`) — `installCommunityHookPackage`/`installSkillPackage` adopt `vendorFetchedPackage`'s stage-then-rename (two sink pairs, no new surface)
+
+| file (function) | sink (delta) | input | classification | why |
+|---|---|---|---|---|
+| `packages/library/studio/community-install.ts` (`installCommunityHookPackage`) | `renameSync` (0→1), `rmSync` (0→1); `writeFileSync` (1→0, see "why") | `id` — `assertSkillSlug`-gated before any path is built; vendored bytes read from `studio/community/hooks/<id>/` | guarded `[read]` | Reuses `vendorFetchedPackage`'s stage-then-rename discipline (row above, same doc): every file is written under a sibling `<id>.staging-<random>` segment, blessed through the SAME `guardedFile(hooksDir(forgeRoot), [...], 'write')` call the final destination already used, and only one `renameSync` ever touches the real `studio/hooks/<id>/`. A crash or thrown error before that rename leaves nothing at the real destination — never a half-written package the dedup check misreads as installed. `rmSync` removes only the staging directory, on the failure path. The literal `writeFileSync` count drops to 0 because the call site now goes through a `writeFile` parameter defaulting to `writeFileSync` — a TEST-ONLY injection seam that lets a test simulate a crash partway through the staged writes, never a fallback path in production. It is the same sink, reached one indirection later; nothing about containment changes. |
+| `packages/library/studio/skill-install.ts` (`installSkillPackage`) | `renameSync` (0→1), `rmSync` (0→1); `writeFileSync` (4→2, see "why") | `id` — `assertSkillSlug`-gated before any path is built; package bytes read from the caller-supplied `packageDir`, already walked/validated by `walkPackageDir` | guarded `[read]` | Same discipline, same precedent: every destination is blessed under a sibling `<id>.staging-<random>` segment via `guardedFile(skillsDir(forgeRoot), [...], 'write')`, and a single `renameSync` moves the whole staged package into `skills/<id>/` in one atomic step; a failure removes only the staging directory and rethrows. The two `writeFileSync` calls still counted here (`approveSkillDraft`/`repinSkillPackage`) are untouched by this fix; the two that drop out of the literal grep are the install loop's own, now reached through the same TEST-ONLY `writeFile` seam described in the row above. |
+
+`scripts/request-path-sinks.baseline.txt` accepts the grown and decremented
+counts via `--write` in the same commit that adds this section, per this
+document's own rule.
