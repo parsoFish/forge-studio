@@ -1,8 +1,9 @@
 # Getting started — install to first merge
 
 This is the end-to-end path from a fresh checkout to the example develop
-factory shipping a merged PR against one of your projects. It assumes you have already built forge
-(`npm install && npm run build && npm link`) and can run `forge --help`.
+factory shipping a merged PR against one of your projects. It assumes you have already followed the
+README quickstart: forge is built and linked, `forge init` has run, `FORGE_CLAUDE_CLI` is exported,
+and `forge studio` is up with Studio open in a browser at http://localhost:4124.
 
 The five steps:
 
@@ -35,6 +36,11 @@ ln -s ~/path/to/repo projects/<id>
 
 The directory name becomes the project id (lowercased). The repo **must be a git
 repository** — forge develops on branches and hands you a PR.
+
+**Already onboarded?** If the repository already ships a `.forge/project.json`
+(the reference project `gitpulse` does), there is nothing to scaffold: clone it
+into `projects/<id>`, go straight to step 2, and when preflight is green skip to
+step 4.
 
 Then make it satisfy the **forge↔project contract**
 ([docs/reference/project-contract.md](../reference/project-contract.md)). Two ways:
@@ -128,7 +134,12 @@ A **flow** is the agent pipeline that builds your project (plan → dev → revi
 ## 4. Kick off the architect
 
 The architect session ends at the factory's **plan gate**. In Studio, go to **`/architect/new`**,
-drop an idea, answer the interview, and approve the **PLAN** at the plan gate.
+pick the project, drop an idea, answer the interview, and approve the **PLAN** at the plan gate.
+
+**Where a budget is set.** The same form's **Cost ceiling (USD, optional)**
+field caps the architect session: the runner checks it at the start of every
+turn. The develop run that follows carries the plan's `cost_budget_usd`, which
+the PLAN shows at the plan gate (see [the example factory](../explanation/example-factory.md)).
 Approving queues an initiative; the scheduler (`forge serve`) picks it up and
 runs the flow autonomously — plan → change → verify → package — fanning work out
 across parallel work items.

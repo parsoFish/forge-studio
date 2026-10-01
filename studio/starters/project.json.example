@@ -8,7 +8,7 @@
 // command strings differ.
 //
 // Validate with:  forge preflight <project-id>
-// Full spec:      docs/forge-project-contract.md
+// Full spec:      docs/reference/project-contract.md
 {
   // ── Identity (Studio face) ────────────────────────────────────────────────
 
@@ -31,10 +31,12 @@
     // , { "kind": "present", "text": "<optional: how to present the evidence>" }
   ],
 
-  // skills (optional): per-project skill slugs the agents may compose.
+  // skills (required for Studio's contract readiness: >= 1 skill slug; `forge
+  // preflight` does not check it): skill slugs folded into every agent's prompt.
   "skills": [],
 
-  // kb (optional): the knowledge-base id this project's brain binds to, or null.
+  // kb (required for Studio's contract readiness: a bound knowledge-base id;
+  // `forge preflight` does not check it). null leaves it unbound until Brain 3 exists.
   "kb": null,
 
   // ── Test process (C1 local HARD; C1b ci HARD once declared; C7 acceptance
@@ -81,7 +83,7 @@
     //                 run against the live system (e.g.
     //                 ["TF_ACC","AZDO_ORG_SERVICE_URL"]). These are looked up
     //                 in the project's gitignored secrets.env (see
-    //                 docs/getting-started.md). If a matching gate runs with
+    //                 docs/tutorials/getting-started.md). If a matching gate runs with
     //                 one of these unset, the dev-loop ERRORS the gate (no
     //                 false pass).
     // , "acceptance": {

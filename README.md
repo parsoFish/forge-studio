@@ -38,17 +38,27 @@ A standing conformance suite (`packages/agents/tests/contract/conformance.test.t
 
 **Supported platform: WSL2 or Linux.** macOS and native Windows are not supported. The install form is a Node source checkout: clone this repository and build it; there is no npm package.
 
+This README and the pages it links to are the documentation. Files an AI coding assistant may load on its own, such as `CLAUDE.md`, are instructions for agents working on forge itself, not a setup guide.
+
+**Studio is a browser UI.** On WSL2, open http://localhost:4124 in your Windows browser once `forge studio` is up.
+
 ```bash
 # Prerequisites
 node --version           # Node 20+
-gh --version             # GitHub CLI
+gh --version             # GitHub CLI, logged in: gh auth status
 git --version            # 2.20+ (for git worktree)
+claude --version         # Claude Code, logged in (`claude`, then /login) — forge's agents run through it
+
+# Clone — the full history is about 3 GB, so expect several minutes with little progress output
+git clone https://github.com/parsoFish/forge-studio.git && cd forge-studio
 
 # Install + build + test
 npm install
 npm run build
 npm test                 # the full node:test suite
 npm link                 # puts the `forge` command on PATH (bin/forge.mjs)
+forge init               # creates forge.config.json and the working dirs, and checks gh + credentials
+export FORGE_CLAUDE_CLI="$(readlink -f "$(command -v claude)")"   # required: agents spawn through this binary (see .env.example)
 
 # Launch Forge Studio — the operator UI is the whole product
 forge studio             # health-probes the bridge + UI, then opens the browser
