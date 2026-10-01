@@ -21,6 +21,8 @@ import { readFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 
 import { runPreflight } from './preflight.ts';
+import { checkDeps } from './preflight-deps.ts';
+import { loadProjectConfig, type ProjectConfig } from './project-config.ts';
 import { classifyClause } from './preflight-resolve.ts';
 import { hasPendingStudioChanges, STUDIO_BRANCH } from './project-repo-tx.ts';
 import {
@@ -80,6 +82,15 @@ function readPreflightFixState(
   return { state: 'running', cleared: false };
 }
 
+/** The project's config, or null when it cannot load — `checkDeps` then reads the gate from package.json (C1 reports the load error). */
+function readConfigOrNull(projectRoot: string): ProjectConfig | null {
+  try {
+    return loadProjectConfig(projectRoot);
+  } catch {
+    return null;
+  }
+}
+
 /** GET /api/studio/projects/:id/preflight */
 export async function handleProjectPreflight(
   req: IncomingMessage,
@@ -126,7 +137,11 @@ export async function handleProjectPreflight(
           fixHint: cls.fixHint,
         };
       });
-      sendJson(res, 200, { clauses, ready: report.ok }, origin);
+      // Row 174: `ready` is the BIRTH verdict (DEPS off — a project is born
+      // green before anything is installed). The claim also judges DEPS
+      // (claim-validator.ts), so its verdict rides beside it, untouched by it.
+      const deps = checkDeps(projectRoot, readConfigOrNull(projectRoot));
+      sendJson(res, 200, { clauses, ready: report.ok, runnableGate: { pass: deps.pass, detail: deps.detail } }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

@@ -1883,7 +1883,10 @@ export type PreflightClause = {
 
 export type PreflightResult = {
   clauses: PreflightClause[];
+  /** The BIRTH verdict: hard clauses with DEPS off. */
   ready: boolean;
+  /** Row 174: the claim's DEPS verdict — false means the scheduler would refuse the claim. */
+  runnableGate: { pass: boolean; detail: string };
 };
 
 export async function fetchPreflight(projectId: string): Promise<PreflightResult | null> {

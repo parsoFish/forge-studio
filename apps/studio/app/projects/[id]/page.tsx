@@ -59,6 +59,7 @@ import { planCycleCostFetch } from '@/lib/cycle-cost-cache';
 import { ProjectArchitectEntry } from '@/components/studio/ProjectArchitectEntry';
 import { ProjectTabs, type ProjectTab } from '@/components/studio/project-builder/ProjectTabs';
 import { SchedulerCard } from '@/components/SchedulerCard';
+import { NotClaimableNotice } from '@/components/studio/NotClaimableNotice';
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 import { disabledAttrs } from '@/lib/disabled-reason';
 
@@ -676,6 +677,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       {tab === 'roadmap' && (
         <RoadmapView
           projectId={id}
+          runnableGate={preflight?.runnableGate ?? null}
           roadmap={roadmap}
           cycleGroups={cycleGroups}
           onRefresh={refreshRoadmap}
@@ -965,12 +967,15 @@ function ProjectOnboardForm() {
  */
 function RoadmapView({
   projectId,
+  runnableGate,
   roadmap,
   cycleGroups,
   onRefresh,
   onOpenDemo,
 }: {
   projectId: string;
+  /** Row 174: the claim's DEPS verdict from the preflight read; null until it loads. */
+  runnableGate: { pass: boolean; detail: string } | null;
   roadmap: ProjectRoadmap | null;
   cycleGroups: InitiativeGroup[];
   onRefresh: () => Promise<void>;
@@ -1153,6 +1158,7 @@ function RoadmapView({
           control below is a queue write — the scheduler daemon does the
           running. Its real state + Start/Pause/Stop sit right above them. */}
       <SchedulerCard variant="strip" queuedCount={initiatives.filter((i) => i.status === 'pending').length} />
+      <NotClaimableNotice projectId={projectId} runnableGate={runnableGate} />
 
       {/* W7-B6 (projects-18): "what needs me now" — the actionable buckets as
           a LIST beside the canvas, with the same actions the per-node drawer
