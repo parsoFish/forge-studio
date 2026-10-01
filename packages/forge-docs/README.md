@@ -13,10 +13,10 @@ None. The surface is data:
 
 | item | what it is |
 |---|---|
-| `flows/forge-docs/flow.yaml` | the flow: `build` (docs-writer) → `integrate` (docs-integrate, resumable) → `review` (docs-review) → `verdict` (a gate). Class `docs`, `costCeilingUsd: 12`, no reflect. |
-| `skills/docs-writer/SKILL.md` | runs the Ralph loop on one docs work item until the docs gate passes or its budget ends |
-| `skills/docs-integrate/SKILL.md` | the declaration for the platform's integrate band; no model is spawned |
-| `skills/docs-review/SKILL.md` | the one read-only review agent, under a single accuracy-against-source lens; it judges and never edits |
+| `packages/forge-docs/flows/forge-docs/flow.yaml` | the flow: `build` (docs-writer) → `integrate` (docs-integrate, resumable) → `review` (docs-review) → `verdict` (a gate). Class `docs`, `costCeilingUsd: 12`, no reflect. |
+| `packages/forge-docs/skills/docs-writer/SKILL.md` | runs the Ralph loop on one docs work item until the docs gate passes or its budget ends |
+| `packages/forge-docs/skills/docs-integrate/SKILL.md` | the declaration for the platform's integrate band; no model is spawned |
+| `packages/forge-docs/skills/docs-review/SKILL.md` | the one read-only review agent, under a single accuracy-against-source lens; it judges and never edits |
 
 Every station dispatches through the platform's existing executors in
 `@forge/stations`; this package adds no station of its own.
