@@ -40,8 +40,7 @@ import {
   remoteSwitchVerdict,
   queueStateVerdict,
   declaredCommitsVerdict,
-  groundPinVerdict,
-  GROUND_PIN_ENV,
+  groundPinVerdicts,
 } from './preflight.mjs';
 import { ownGroundManifest } from './ground-hash.mjs';
 import { suiteLockVerdict, lockOrderVerdict, EXIT_LOCK_REFUSED } from './lock-guard.mjs';
@@ -319,18 +318,19 @@ async function main() {
   //     starts the run another way. The cost was that a declaration going
   //     unmatched because the PRODUCT stopped and one going unmatched because
   //     the GROUND WAS ALREADY MIGRATED were a single green state.
-  for (const s of stories) {
-    const measured = ownGroundManifest(ROOT, s.ground.project ?? null);
-    const v = groundPinVerdict(s.ground, {
-      declaredPin: process.env[GROUND_PIN_ENV],
-      measured: measured === null ? null : measured.digest,
-    });
-    if (!v.ok) {
-      console.error(`[stories] REFUSING ${s.id}: ${v.reason}`);
-      return 1;
-    }
-    console.log(`[stories] ground pin ok — ${v.reason}`);
+  //
+  //     Row 171 (forge-8vfn.8.5.7): each real ground reads its own
+  //     `FORGE_GROUND_PIN_<project>`; the bare form is refused for a run with
+  //     more than one costed story, and a story-minted ground never consults one.
+  const pins = groundPinVerdicts(stories, {
+    env: process.env,
+    measure: (project) => ownGroundManifest(ROOT, project)?.digest ?? null,
+  });
+  if (!pins.ok) {
+    console.error(`[stories] REFUSING ${pins.reason}`);
+    return 1;
   }
+  for (const v of pins.verdicts) console.log(`[stories] ground pin ok — ${v.id}: ${v.reason}`);
 
   if (stories.some((s) => s.ground.realSpawn || s.ground.budget_usd > 0)) {
     const declared = (process.env.FORGE_STORY_REQUIRES ?? '').split(',').map((c) => c.trim()).filter(Boolean);
