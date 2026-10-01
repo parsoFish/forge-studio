@@ -428,6 +428,13 @@ export function groundPinVerdict(ground, { declaredPin, measured, storyId, envNa
 /** A story that spends — the same predicate run.mjs gates every costed precondition on. */
 const isCosted = (ground) => ground?.realSpawn === true || (ground?.budget_usd ?? 0) > 0;
 
+/** A costed story on a REAL ground — the only kind `groundPinVerdict` compares against a pin. */
+const consultsPin = (s) =>
+  isCosted(s.ground) &&
+  typeof s.ground.project === 'string' &&
+  typeof s.ground.fixture !== 'string' &&
+  !storyFixtureNames(s.id).includes(s.ground.project);
+
 /**
  * Every selected story's ground pin, resolved from `env` — row 171
  * (forge-8vfn.8.5.7). Returns `{ ok: true, verdicts }` or the FIRST refusal as
@@ -447,11 +454,7 @@ export function groundPinVerdicts(stories, { env, measure }) {
   const hasBare = typeof bare === 'string' && bare.length > 0;
   const costed = stories.filter((s) => isCosted(s.ground));
   if (hasBare && costed.length > 1) {
-    const needsPin = (s) =>
-      typeof s.ground.project === 'string' &&
-      typeof s.ground.fixture !== 'string' &&
-      !storyFixtureNames(s.id).includes(s.ground.project);
-    const keyed = [...new Set(costed.filter(needsPin).map((s) => s.ground.project))].map(groundPinEnvName);
+    const keyed = [...new Set(costed.filter(consultsPin).map((s) => s.ground.project))].map(groundPinEnvName);
     return Object.freeze({
       ok: false,
       reason:
@@ -467,7 +470,7 @@ export function groundPinVerdicts(stories, { env, measure }) {
     const envName = typeof project === 'string' ? groundPinEnvName(project) : GROUND_PIN_ENV;
     const keyedPin = typeof project === 'string' ? env[envName] : undefined;
     const hasKeyed = typeof keyedPin === 'string' && keyedPin.length > 0;
-    if (hasBare && hasKeyed && bare !== keyedPin) {
+    if (consultsPin(s) && hasBare && hasKeyed && bare !== keyedPin) {
       return Object.freeze({
         ok: false,
         reason:

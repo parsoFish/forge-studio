@@ -95,3 +95,20 @@ test('only the story\'s OWN namespace is minted: S2 declaring another story\'s g
   const r = groundPinVerdicts([borrowed], { env: {}, measure });
   assert.equal(r.ok, false);
 });
+
+test('a disagreement on a ground NO selected costed story consults is not a refusal', () => {
+  // Review finding: a stale keyed pin naming a costless story's ground must not block a run.
+  const costlessOnGitpulse = { id: 'S1', ground: { project: 'gitpulse', realSpawn: false, budget_usd: 0 } };
+  const r = groundPinVerdicts([costlessOnGitpulse, s10], {
+    env: { [GROUND_PIN_ENV]: GITPULSE_PIN, [groundPinEnvName('gitpulse')]: '0000000000000000' },
+    measure,
+  });
+  // S10 still disagrees on gitpulse and is refused; S1 alone is not.
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /^S10:/);
+  const alone = groundPinVerdicts([costlessOnGitpulse, s2], {
+    env: { [GROUND_PIN_ENV]: GITPULSE_PIN, [groundPinEnvName('gitpulse')]: '0000000000000000', [groundPinEnvName('story-s2')]: 'x' },
+    measure,
+  });
+  assert.equal(alone.ok, true, alone.ok ? '' : alone.reason);
+});
