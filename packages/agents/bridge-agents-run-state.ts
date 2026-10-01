@@ -178,7 +178,7 @@ export type StandaloneRunState = {
 export function deriveStandaloneStateFromEvents(parsed: readonly Record<string, unknown>[]): StandaloneRunState {
   const suppressed = parsed.some((e) => e['message'] === 'run-agent.spawn-suppressed');
   // `runAgent` emits `end` only on success; a crashed dispatch writes a
-  // terminal 'agent-dispatch.failed' marker (packages/agents/agent-run.ts) instead —
+  // terminal 'agent-dispatch.failed' marker (apps/forge/agent-run.ts) instead —
   // without it the run would read 'running' forever.
   const failedMarker = [...parsed].reverse().find((e) => e['message'] === 'agent-dispatch.failed');
   // W7-B5 (agents-30): an operator cancel writes a durable

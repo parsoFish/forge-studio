@@ -10,7 +10,7 @@
  *   - `withIdleDeadline` (packages/agents/stream-deadline.ts) wraps every
  *     `runStructuredTurn` stream with a 6-minute idle window and THROWS
  *     `StreamDeadlineError` when it lapses;
- *   - `cmdAgentRun`'s failed-turn catch (packages/agents/agent-run.ts) writes a
+ *   - `cmdAgentRun`'s failed-turn catch (apps/forge/agent-run.ts) writes a
  *     terminal `failed` phase into the session's `status.json` for any throw
  *     out of the runner.
  *

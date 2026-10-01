@@ -502,7 +502,7 @@ test('root-folding negative control: a candidate whose FIRST segment under the r
 // `forge.config.json`'s `projectsDir` — unlike `resolveProjectsDir`
 // (packages/kernel/config.ts), which every OTHER projects-root resolution in
 // this repo (`ctx.projectsRoot` in apps/forge/ui-bridge.ts, `writeSessionTerminalPhase`
-// in packages/agents/agent-run.ts, etc.) already goes through. Under a configured
+// in apps/forge/agent-run.ts, etc.) already goes through. Under a configured
 // projects root this function DISAGREES with the producers that correctly
 // used `resolveProjectsDir` — reachable from the approve/finalize path
 // (packages/flows/bridge-studio-runs.ts:222/390, packages/flows/finalize-merged.ts:301,

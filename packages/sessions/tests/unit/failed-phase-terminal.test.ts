@@ -2,7 +2,7 @@
  * forge-8vfn.7.3.3 — two paths publish one "this session failed" verdict, and
  * they disagree by KIND.
  *
- * WRITTEN. `packages/agents/agent-run.ts:249` and `:381` catch a throw out of
+ * WRITTEN. `apps/forge/agent-run.ts:249` and `:381` catch a throw out of
  * the turn and write `phase: 'failed'` via `writeSessionTerminalPhase`. Both
  * sites cover every kind — `:249` is the turnSpec path, `:381` the legacy
  * runners that `spawnAgentTurn` uses.

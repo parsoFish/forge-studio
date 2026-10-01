@@ -59,15 +59,15 @@ operator-ratified new cap — never a silent raise.
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `projects` | 48 | 11,128 | **9,353** | ratified 9,353 — 7.1c boundary fix: brain seeder injected into project creation (+39), contract-stages/project-config comment trims (−14); +25 net on 9,328, lane-ratified under ruling 666. |
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
-| `agents` | 46 | 13,375 | **13,386** | ratified 13,386 — row 122 (forge-8vfn.8.1.55): `classifyCycleFailure` narrows a DNS/environment PR-open failure to `resumeFrom:'pr-open'`, +31 on 13,355, lane-ratified (ruling 666, measured). |
+| `agents` | 44 | 12,433 | **12,433** | **pure transfer to apps/forge (7.1c boundary fix): the agent CLI verbs agent-run.ts + agent-dispatch-cmd.ts moved out, trigger firing moved to cmdAgentDispatch; runner.ts comment trimmed. −953 on 13,386, cap lowered to measured.** |
 | `sessions` | 63 | 20,603 | **20,565** | **pure transfers to contracts (SESSION_STAGES + ContractStage types −25; session anchors −14) and safeReadFileInSession to kernel (7.1c boundary fix); cap lowered to measured.** |
 | `flows` | 86 | 24,843 | **24,643** | **pure transfer: REPO_RE, WORK_ITEM_ID_PATTERN, WORK_ITEM_FILE_PATTERN, DEV_WORK_ITEM_ID_PATTERN, devWorkItemIdStem to contracts (−8 net) — forge-8vfn M7-E boundary fix; cap lowered to measured.** |
 | `factory` | 15 | 2,763 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 45 | 12,266 | **12,266** | ratified 12,266 — row 167 (forge-8vfn.8.1.61, ruling 1916): `rebaseForResume` moved out to `packages/flows/cycle-helpers.ts`, −20 on 12,286 (cap lowered to measured); see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
-| `apps/forge` | 30 | 6,942 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
+| `apps/forge` | 32 | 7,894 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **481** | **129,736** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **481** | **129,746** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -120,7 +120,7 @@ operator-ratified new cap — never a silent raise.
 
 | path | owner | disposition | loc |
 |---|---|---|---|
-| packages/agents/agent-run.ts | agents | verbatim | 386 |
+| apps/forge/agent-run.ts | apps/forge | verbatim | 386 |
 | packages/sessions/kinds/architect-plan.ts | sessions | verbatim | 399 |
 | packages/sessions/kinds/architect-plan-html.ts | sessions | rewritten | 356 |
 | packages/knowledge/brain-fix-auto.ts | knowledge | verbatim | 270 |
@@ -277,7 +277,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/ralph/runner.ts | agents | verbatim | 484 |
 | packages/agents/ralph/stop-conditions.ts | agents | verbatim | 800 |
 | packages/agents/agent-bands.ts | agents | verbatim | 76 |
-| packages/agents/agent-dispatch.ts | agents | verbatim | 420 |
+| packages/agents/agent-dispatch.ts | agents | verbatim | 372 |
 | packages/agents/dispatch-terminal.ts | agents | verbatim | 194 |
 | packages/agents/band-agent-run.ts | agents | rewritten | 379 |
 | packages/agents/routes.ts | agents | rewritten | 134 |
@@ -286,7 +286,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/bridge-agents-runs.ts | agents | rewritten | 240 |
 | packages/agents/bridge-agents-slug.ts | agents | rewritten | 564 |
 | packages/agents/bridge-agents-studio.ts | agents | rewritten | 639 |
-| packages/agents/agent-dispatch-cmd.ts | agents | rewritten | 504 |
+| apps/forge/agent-dispatch-cmd.ts | apps/forge | rewritten | 566 |
 | packages/agents/find-session-project.ts | agents | verbatim | 52 |
 | packages/agents/agents-md-compose.ts | agents | verbatim | 116 |
 | apps/forge/band-agent-deps.ts | apps/forge | verbatim | 63 |
@@ -549,7 +549,7 @@ operator-ratified new cap — never a silent raise.
 | skills/reflector/SKILL.md | factory | verbatim | 179 |
 | skills/release-finalizer/SKILL.md | flows | verbatim | 92 |
 | apps/forge/index.ts | apps/forge | verbatim | 8 |
-| packages/agents/index.ts | agents | verbatim | 137 |
+| packages/agents/index.ts | agents | verbatim | 133 |
 | packages/contracts/index.ts | contracts | verbatim | 268 |
 | packages/contracts/run-view-types.ts | contracts | rewritten | 97 |
 | packages/contracts/runnable-source.ts | contracts | rewritten | 33 |

@@ -18,25 +18,17 @@
  */
 
 import { readdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { listAgentDefinitions } from './studio/agent-registry.ts';
 import { resolveBandGuard } from './agent-bands.ts';
-// §15.43: `normalizeProjectId` is a kernel export this file was taking via a
-// legacy re-export detour — imported from its real owner instead of moved.
-import { normalizeProjectId } from '@forge/kernel';
-// The Flow kind stays in `orchestrator/studio/registry.ts` until wave 4 —
-// handed, listed in the share report, not closed here.
-import { listFlowIds, loadFlowDefinition } from '@forge/flows';
-import { flowRoots, resolveIdAcrossRoots } from '@forge/kernel';
 import { agentCapabilityDescriptor } from './studio/derive.ts';
 import { runAgent, isSafeRunId, type ProjectBinding, type RunAgentResult } from './run-agent.ts';
 import { materialKindForFilename } from './studio/materials.ts';
 import { createLogger } from '@forge/kernel';
 import { FORGE_ROOT } from '@forge/kernel';
-import { fireAgentCompleteTriggers } from '@forge/flows';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
-import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
+import type { AgentDefinition } from '@forge/contracts';
 
 /** One reference to an already-staged kickoff material — a relative path
  *  (e.g. `materials/photo.png`) plus its derived kind. NEVER carries bytes:
@@ -269,45 +261,21 @@ const MATERIALS_UNREADABLE_MESSAGE = 'agent-dispatch.materials-unreadable';
 const NO_PROJECT_BOUND_MESSAGE = 'agent-dispatch.no-project-bound';
 
 /**
- * Best-effort flow-roster load for the `fireAgentCompleteTriggers` scan
- * below — mirrors `cron-triggers.ts`'s `scanDeclaredCronTriggers`: a flow
- * whose `flow.yaml` fails to load is skipped rather than aborting the whole
- * scan (one broken flow definition must not block every other watcher).
- */
-function loadFlowRosterBestEffort(forgeRoot: string): Array<Pick<FlowDefinition, 'id' | 'triggers'>> {
-  const root = resolve(forgeRoot);
-  const roots = flowRoots(root);
-  const out: Array<Pick<FlowDefinition, 'id' | 'triggers'>> = [];
-  for (const flowId of listFlowIds(root)) {
-    // SEAM F1: search every flow root directly via kernel (not `@forge/
-    // flows`' `flowPathForId` — this file's boundary edge to `flow-runner.ts`
-    // is not baselined, unlike its existing edge to `flow-registry.ts`).
-    const path = resolveIdAcrossRoots(roots, flowId, ['flow.yaml'])?.path ?? join(roots[0], flowId, 'flow.yaml');
-    try {
-      out.push(loadFlowDefinition(path));
-    } catch {
-      /* skip a broken flow.yaml — it must not block other flows' watchers */
-    }
-  }
-  return out;
-}
-
-/**
  * Dispatch one non-interactive roster agent through the F1 `runAgent`
  * primitive. Returns the run result (or the suppressed marker under the
  * dry-bridge / no-spawn seam). Throws on an unknown/interactive slug or an
  * unsafe runId before any I/O.
  *
- * R2-08-F2: on a real (non-suppressed) completion, fires every declared
- * `on: agent-complete` watcher for this slug (`fireAgentCompleteTriggers`) —
- * this is THE real standalone-agent completion site the module doc names.
- * `forgeRoot` (the flow-roster + queue root) is derived from `logsRoot`
- * (always `<forgeRoot>/_logs` by convention, e.g.
- * `flow-run-requests.ts`'s own `mintTriggeredInitiative` call) rather than
- * `skillsDir` — the two are NOT interchangeable: `skillsDir` names the roster
- * dir a caller may point anywhere valid skill packages live. A firing
- * failure must never fail the agent run itself: caught and surfaced via
- * `console.error`, never silently swallowed.
+ * NOTE (M7-E boundary fix): this function used to also fire every declared
+ * `on: agent-complete` watcher for `def.slug` on a real (non-suppressed)
+ * completion, via `@forge/flows`' `fireAgentCompleteTriggers`. That call —
+ * and the `loadFlowRosterBestEffort` helper it needed — moved to
+ * `apps/forge/agent-dispatch-cmd.ts`'s `cmdAgentDispatch`, the ONE production
+ * caller of this function: agents (rank 4) may not import flows (rank 6), and
+ * the assembly, which already imports both, is the natural place to compose
+ * "a standalone run completed" with "scan the flow roster and stage a
+ * request". `cmdAgentDispatch` performs the identical scan + fire immediately
+ * after this function returns, gated on the same `!result.suppressed` check.
  */
 export async function dispatchAgentRun(opts: DispatchAgentRunOpts): Promise<DispatchAgentRunResult> {
   if (!opts.runId) throw new Error('dispatchAgentRun: runId is required');
@@ -397,24 +365,8 @@ export async function dispatchAgentRun(opts: DispatchAgentRunOpts): Promise<Disp
     ...(opts.queryFn ? { queryFn: opts.queryFn } : {}),
     ...(opts.kickoffCeilingUsd !== undefined ? { kickoffCeilingUsd: opts.kickoffCeilingUsd } : {}),
   });
-  if (!result.suppressed) {
-    const forgeRoot = resolve(dirname(logsRoot));
-    try {
-      await fireAgentCompleteTriggers(loadFlowRosterBestEffort(forgeRoot), def.slug, {
-        queueRoot: join(forgeRoot, '_queue'),
-        // N1 (round-4): `opts.project.name` is a raw operator/request-supplied
-        // directory name (e.g. the CLI's `--project` value, or the bridge's
-        // `body.project` — both checked against `existsSync`, never against
-        // `discoverProjects`' normalized ids), so it is run through the SAME
-        // `normalizeProjectId` `discoverProjects` uses — lint and dispatch
-        // must read identical evidence (rule 2).
-        ...(opts.project ? { eventProject: normalizeProjectId(opts.project.name) } : {}),
-      });
-    } catch (err) {
-      console.error(
-        `dispatchAgentRun: firing on:agent-complete triggers for "${def.slug}" failed (agent run itself already succeeded — not failing it): ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
+  // The on:agent-complete trigger scan used to happen HERE — see this
+  // function's module doc (M7-E boundary fix) for why it now happens in
+  // `cmdAgentDispatch` instead, immediately after this call returns.
   return { runId: opts.runId, slug: def.slug, result };
 }

@@ -24,7 +24,7 @@ export const EXPLICIT_MODULES = [
   // R4-22 WI-3 (ADR-043 §2): the generic interactive-turn spine, and the four
   // legacy runners. They cannot be reached by the reachability walk (that walk
   // follows relative imports from the bridge entry points; the
-  // packages/agents/agent-run.ts -> runInteractiveTurn dispatch crosses a PROCESS-SPAWN
+  // apps/forge/agent-run.ts -> runInteractiveTurn dispatch crosses a PROCESS-SPAWN
   // boundary), so this list is the only mechanism that lints them. Session-
   // derived (kindDir, sessionId) and finalizer-bound (packageId) paths reach fs
   // sinks in every one.

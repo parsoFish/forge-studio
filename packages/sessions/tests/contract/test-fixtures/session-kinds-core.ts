@@ -170,12 +170,12 @@ import { type SessionKindDescriptor } from '../../../studio/session-kinds.ts';
 // R4-19-F2 — the constraint test (ADR-043's whole point): a new interactive
 // session kind must ride the EXISTING generic runInteractiveTurn spine, never
 // a new AGENT_RUNNERS entry. Imported directly from the real production
-// registry (packages/agents/agent-run.ts), not re-derived, so the assertion below is
+// registry (apps/forge/agent-run.ts), not re-derived, so the assertion below is
 // against the actual dispatch table a "just add a fifth runner"
 // implementation would touch. `cli/` importing FROM `orchestrator/studio/` is
 // the established direction (this test file lives at
-// packages/sessions/studio/session-kinds.test.ts and imports packages/agents/agent-run.ts, the
-// mirror image of packages/agents/agent-run.ts's own `import { loadSessionKinds } from
+// packages/sessions/studio/session-kinds.test.ts and imports apps/forge/agent-run.ts, the
+// mirror image of apps/forge/agent-run.ts's own `import { loadSessionKinds } from
 // '../../../packages/sessions/studio/session-kinds.ts'` at its top) — no cycle: this
 // TEST file is never itself imported by production code.
 // The real Finding type (level/object/check/message) `validateSessionKinds`

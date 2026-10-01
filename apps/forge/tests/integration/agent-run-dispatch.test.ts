@@ -233,7 +233,7 @@ test('cmdAgentDispatch: R4-17 AT-D7-3 (D6 — byte-identical without the flag) �
 
 // ---------------------------------------------------------------------------
 // R4-17 pin 3, item 3 (NEW — T2 ruling, binding): the containment root for
-// `writeSessionTerminalPhase` (packages/agents/agent-run.ts:193) must be `projectsRoot`,
+// `writeSessionTerminalPhase` (apps/forge/agent-run.ts:193) must be `projectsRoot`,
 // not `forgeRoot`. The round-1 fix widened the boundary to `forgeRoot`
 // solely to keep the D7-1/2/3 fixtures above passing while they still lived
 // under `<ROOT>/_logs/…` — disclosed honestly in that function's own header,
@@ -348,7 +348,7 @@ test('cmdAgentDispatch: W7-FIX-A2 sticky-cancel — a FAILED dispatch (unknown s
 // R4-17 pin 4, item 1 (BLOCKER, round-2 adversarial review): `writeSessionTerminalPhase`
 // (agent-run.ts:194, exercised here via `cmdAgentDispatch`) resolves
 // `projectsRoot` via `resolveProjectsDir(resolve(forgeRoot), loadConfig())`
-// (packages/agents/agent-run.ts:201) — config-aware, honouring BOTH `FORGE_PROJECTS_DIR`
+// (apps/forge/agent-run.ts:201) — config-aware, honouring BOTH `FORGE_PROJECTS_DIR`
 // (env) and `forge.config.json`'s `projectsDir` (file), per
 // `packages/kernel/config.ts:106-121`'s documented precedence. The BLOCKER is
 // that `apps/forge/ui-bridge.ts:222` — `POST /api/studio/onboarding/start`, the ONE

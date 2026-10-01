@@ -1,12 +1,9 @@
 import { wellFormedTurnSpec, turnSpecDescriptor } from './test-fixtures/session-kinds-turnspec.ts';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { SESSION_ARTIFACT_KINDS, sessionArtifactKindState, loadSessionKinds, FINALIZER_IDS, type SessionKindDescriptor } from '../../studio/session-kinds.ts';
 import { validateSessionKinds } from '../../studio/session-kinds-validate.ts';
 import { deriveSessionAffordances } from '../../studio/session-kinds-affordances.ts';
-import { AGENT_RUNNERS } from '@forge/agents';
 import type { Finding } from '@forge/kernel';
 
 import { type FixtureDescriptor, REPO_ROOT, baseDescriptor, byId, makeForgeRoot, writeAgentSkill, writeSessionKindsYaml } from './test-fixtures/session-kinds-core.ts';
@@ -120,40 +117,25 @@ describe('R4-19-F2 — the "kb-cleanup" session kind (brain-maintenance, cleanup
 });
 
 // ===========================================================================
-// R4-19-F2 — THE CONSTRAINT TEST. ADR-043's entire reason for existing: a new
-// interactive session kind is authored as turnSpec DATA riding the EXISTING
-// generic `runInteractiveTurn` spine — NEVER a new orchestrator runner, NEVER
-// a new `AGENT_RUNNERS` entry, NEVER a new `FINALIZER_IDS` row (kb-cleanup's
-// phase table — drafting(agent) -> awaiting-approval(noop) -> applied
-// (terminal) — has no `finalize` step at all, so it needs no finalizer).
-// Asserted against the REAL source files, not a fixture or a hand-built
+// R4-19-F2 — THE CONSTRAINT: a new interactive session kind is authored as
+// turnSpec DATA riding the EXISTING generic `runInteractiveTurn` spine —
+// NEVER a new orchestrator runner, NEVER a new `AGENT_RUNNERS` entry (that
+// half now lives in `apps/forge/tests/contract/agent-run-no-kb-cleanup.test.ts`
+// — `AGENT_RUNNERS` moved to `apps/forge/agent-run.ts`, M7-E boundary fix, so
+// this package can no longer reach it), NEVER a new `FINALIZER_IDS` row
+// (kb-cleanup's phase table — drafting(agent) -> awaiting-approval(noop) ->
+// applied (terminal) — has no `finalize` step at all, so it needs no
+// finalizer). Asserted against the REAL source, not a fixture or a hand-built
 // registry snapshot — this is the test that kills a "just add a fifth
 // runner" implementation, the exact per-kind re-invention ADR-043 dissolves.
 //
-// Both checks below are ALREADY TRUE today (GREEN, not RED) — they are
-// regression ratchets pinning an invariant a correct kb-cleanup
+// The check below is ALREADY TRUE today (GREEN, not RED) — it is a
+// regression ratchet pinning an invariant a correct kb-cleanup
 // implementation must never violate, not a not-yet-built capability like
 // AT-1..AT-3 above.
 // ===========================================================================
 
 describe('R4-19-F2 — the constraint: no new orchestrator runner for kb-cleanup', () => {
-  it('AGENT_RUNNERS (packages/agents/agent-run.ts) gains NO "kb-cleanup" key — the session rides the existing turnSpec dispatch fork in cmdAgentRun, not a new bespoke runner', () => {
-    assert.ok(
-      !Object.prototype.hasOwnProperty.call(AGENT_RUNNERS, 'kb-cleanup'),
-      `AGENT_RUNNERS must not gain a "kb-cleanup" entry — got keys: ${Object.keys(AGENT_RUNNERS).join(', ')}. A turnSpec-bearing descriptor is dispatched by cmdAgentRun's ADR-043 §3 fork BEFORE AGENT_RUNNERS is ever consulted (packages/agents/agent-run.ts); adding a key here re-opens the exact per-runner cap park ADR-043 dissolved.`,
-    );
-    // Belt-and-suspenders grep on the real source TEXT (not just the
-    // imported object's own keys) — catches a "kb-cleanup" entry added under
-    // a shape the plain object-key check above might not observe (e.g. a
-    // computed-key assignment appended after the object literal).
-    const src = readFileSync(join(REPO_ROOT, 'packages', 'agents', 'agent-run.ts'), 'utf8');
-    assert.doesNotMatch(
-      src,
-      /['"]kb-cleanup['"]\s*:/,
-      'the real packages/agents/agent-run.ts source text must not declare a "kb-cleanup" key anywhere',
-    );
-  });
-
   it('FINALIZER_IDS (packages/sessions/studio/session-kinds.ts) gains no new row FOR kb-cleanup specifically — its phase table declares no `finalize` step, so a correct implementation needs no finalizer for it (updated W6-B3: FINALIZER_IDS DOES grow, for a DIFFERENT reason — the new panel.phases finalize steps on demo/instructions need named finalizer identities; W6-CR-3 briefly grew it a third time for community-refresh\'s real dispatchable turnSpec finalizer, commitRegistryDraft — retired in W8-B5b along with the kind; this assertion is scoped to "not because of kb-cleanup", not "never grows at all")', () => {
     assert.deepEqual(
       FINALIZER_IDS.map((f) => f.id),
@@ -567,7 +549,7 @@ describe('the real repo (studio/session-kinds.yaml) — panel.phases on demo/ins
       // generic question-form affordance instructions and demo already use, and
       // that write is what advances to `running` and spawns the agent. The tail
       // is unchanged and still mirrors writeSessionTerminalPhase
-      // (packages/agents/agent-run.ts:198).
+      // (apps/forge/agent-run.ts:198).
       { phases: [
         { phase: 'briefing', step: 'noop', awaits: 'questions' },
         { phase: 'running', step: 'agent' },

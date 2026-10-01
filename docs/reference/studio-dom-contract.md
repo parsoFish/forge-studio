@@ -4068,7 +4068,7 @@ is what this contract reads — but it cannot be the only distinguisher.
   session lives on `/skills/new` and `/hooks/new` (see those pages' entries,
   above) — `AuthoringLauncher`, POSTing `POST /api/studio/authoring/start`,
   which spawns `forge agent run authoring <sid> --project <p>` (the generic
-  dispatch fork, `packages/agents/agent-run.ts`'s `cmdAgentRun`) rather than the generic
+  dispatch fork, `apps/forge/agent-run.ts`'s `cmdAgentRun`) rather than the generic
   one-shot dispatch host.
   **`/architect/new` stays** as the native "start a run" entry that replaced
   the retired `/dashboard` launcher —

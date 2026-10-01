@@ -52,7 +52,7 @@ export function makeHeartbeatTick(onHeartbeat: (() => void) | undefined): () => 
  * the call is no longer in flight, the caller stops this ticker, and the
  * thrown `StreamDeadlineError` already routes to a classified `failed`
  * terminal phase (`cmdAgentRun`'s catch → `writeSessionTerminalPhase`,
- * `packages/agents/agent-run.ts`) — which `isTerminalPhase`
+ * `apps/forge/agent-run.ts`) — which `isTerminalPhase`
  * (`session-resolution.ts`) treats as terminal for every kind, universally,
  * before any per-kind table is even consulted. Never a silent death.
  *

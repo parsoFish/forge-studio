@@ -14,7 +14,7 @@
  * carried by the SAME `deps` object `apps/forge/session-kind-deps.ts`
  * already assembles for architect — see its own `AGENT_DISPATCH_DEPS`).
  *
- * This test proves the FORWARDING half only (packages/agents/agent-run.ts's
+ * This test proves the FORWARDING half only (apps/forge/agent-run.ts's
  * turnSpec fork must thread `deps.sessionKind` into `runInteractiveTurn`'s
  * ctx, exactly like the pre-existing legacy-runner branch one function up
  * already does) — it drives the REAL cmdAgentRun -> runTurnSpecAgent ->
