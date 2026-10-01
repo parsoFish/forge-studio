@@ -32,7 +32,7 @@ file reaches its package at M3:
 |---|---|---|
 | `verbatim` | moves unchanged | 365 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
-| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 109 |
+| `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 110 |
 | `deleted` | not carried forward | 0 |
 
 ## Per-file 800-line ratchet — ratified raises
@@ -54,20 +54,20 @@ operator-ratified new cap — never a silent raise.
 
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
-| `contracts` | 6 | 1,538 | **1,538** | **pure transfer: REPO_RE, WORK_ITEM_ID_PATTERN, WORK_ITEM_FILE_PATTERN, DEV_WORK_ITEM_ID_PATTERN, devWorkItemIdStem from flows + SESSION_STAGES, ContractStage, ContractStageRow, ContractStageStatus from sessions (+83) — forge-8vfn M7-E boundary fix, lane-ratified (ruling 666, measured).** |
+| `contracts` | 7 | 1,573 | **1,573** | **pure transfers (7.1c boundary fix): REPO_RE, the work-item id patterns, SESSION_STAGES + ContractStage types from flows/sessions (+83); the session anchors from sessions (+35). Shared vocabulary only, no logic.** |
 | `kernel` | 31 | 5,618 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
 | `projects` | 48 | 11,089 | **9,328** | ratified 9,328 — forge-mfv5.3.6 testProcess.local.perWorkItem gate template, validated at load (one {package}, argv only, no shell metacharacters), +44 on 9,284, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
-| `agents` | 46 | 13,386 | **13,386** | ratified 13,386 — row 122 (forge-8vfn.8.1.55): `classifyCycleFailure` narrows a DNS/environment PR-open failure to `resumeFrom:'pr-open'`, +31 on 13,355, lane-ratified (ruling 666, measured). |
-| `sessions` | 63 | 20,617 | **20,600** | **pure transfer: SESSION_STAGES, ContractStage, ContractStageRow, ContractStageStatus to contracts (−25) — forge-8vfn M7-E boundary fix; cap lowered to measured.** |
+| `agents` | 46 | 13,375 | **13,386** | ratified 13,386 — row 122 (forge-8vfn.8.1.55): `classifyCycleFailure` narrows a DNS/environment PR-open failure to `resumeFrom:'pr-open'`, +31 on 13,355, lane-ratified (ruling 666, measured). |
+| `sessions` | 63 | 20,603 | **20,565** | **pure transfers to contracts (SESSION_STAGES + ContractStage types −25; session anchors −14) and safeReadFileInSession to kernel (7.1c boundary fix); cap lowered to measured.** |
 | `flows` | 86 | 24,843 | **24,643** | **pure transfer: REPO_RE, WORK_ITEM_ID_PATTERN, WORK_ITEM_FILE_PATTERN, DEV_WORK_ITEM_ID_PATTERN, devWorkItemIdStem to contracts (−8 net) — forge-8vfn M7-E boundary fix; cap lowered to measured.** |
 | `factory` | 15 | 2,763 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 45 | 12,266 | **12,266** | ratified 12,266 — row 167 (forge-8vfn.8.1.61, ruling 1916): `rebaseForResume` moved out to `packages/flows/cycle-helpers.ts`, −20 on 12,286 (cap lowered to measured); see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,922 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **478** | **129,667** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **479** | **129,677** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -166,7 +166,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/bridge-studio-runs-review.ts | flows | verbatim | 528 |
 | packages/sessions/bridge-studio-session-cancel.ts | sessions | verbatim | 214 |
 | packages/sessions/bridge-studio-sessions.ts | sessions | verbatim | 680 **Ceiling re-keyed +4 (M4-sessions s3 3b, T1 ruling 83):** the ruled manifest seam (ruling 81) threads an injected port through this file — three `package-layer-order` rows closed for it. Paid down as far as the file allows before the re-key: the ports contract was extracted to `kinds/architect-ports.ts` (which returned `kinds/architect.ts` to exactly 1,584, no raise), every added comment tightened, and stale runner paths corrected. Not a licence — the next edit measures against the new number. |
-| packages/sessions/session-resolution.ts | sessions | rewritten | 461 |
+| packages/sessions/session-resolution.ts | sessions | rewritten | 447 |
 | packages/library/bridge-studio-skills.ts | library | verbatim | 659 |
 | packages/library/bridge-studio-templates.ts | library | verbatim | 427 |
 | apps/forge/bridge-studio-writes.ts | projects | rewritten | 705 |
@@ -474,10 +474,10 @@ operator-ratified new cap — never a silent raise.
 | packages/library/studio/connection-readiness.ts | library | verbatim | 49 |
 | packages/agents/studio/connection-run-gate.ts | agents | verbatim | 71 |
 | packages/library/studio/connection-validate.ts | library | verbatim | 217 |
-| packages/agents/studio/agent-registry.ts | agents | verbatim | 297 |
+| packages/agents/studio/agent-registry.ts | agents | verbatim | 287 |
 | packages/agents/studio/validate-agent.ts | agents | rewritten | 297 |
 | packages/agents/studio/agent-usage.ts | agents | verbatim | 122 |
-| packages/agents/studio/derive.ts | agents | verbatim | 301 |
+| packages/agents/studio/derive.ts | agents | verbatim | 300 |
 | packages/agents/studio/hook-dispatch.ts | agents | verbatim | 546 |
 | packages/library/studio/hook-library.ts | library | verbatim | 536 |
 | packages/library/studio/hook-package.ts | library | verbatim | 502 |
@@ -550,11 +550,12 @@ operator-ratified new cap — never a silent raise.
 | skills/release-finalizer/SKILL.md | flows | verbatim | 92 |
 | apps/forge/index.ts | apps/forge | verbatim | 8 |
 | packages/agents/index.ts | agents | verbatim | 137 |
-| packages/contracts/index.ts | contracts | verbatim | 264 |
+| packages/contracts/index.ts | contracts | verbatim | 268 |
 | packages/contracts/run-view-types.ts | contracts | rewritten | 97 |
 | packages/contracts/runnable-source.ts | contracts | rewritten | 33 |
 | packages/contracts/studio-types.ts | contracts | verbatim | 761 |
 | packages/contracts/demo-declaration.ts | contracts | rewritten | 140 |
+| packages/contracts/session-anchors.ts | contracts | rewritten | 31 New file (ADR 046 boundary fix, `studio-beyond-contracts` edge 3): pure transfer of `isPseudoProjectAnchor` / `COMMUNITY_REFRESH_PROJECT_ANCHOR` out of `packages/sessions/session-resolution.ts` (461 → 447, -14), so `apps/studio`'s own hand-kept mirror of both (`apps/studio/lib/session-shell-view.ts`) could be deleted and re-exported from here instead of held in step by a parity test. |
 | packages/factory/index.ts | factory | verbatim | 8 |
 | packages/factory/demo.ts | factory | verbatim | 413 |
 | packages/flows/index.ts | flows | verbatim | 128 |

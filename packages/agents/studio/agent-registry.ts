@@ -2,14 +2,8 @@
  * The Agent kind of the studio object model — its predicates, its loader and
  * its roster listing.
  *
- * WHY IT LIVES HERE NOW. §4 M4 gives this lane "registry loaders split from
- * the registry module". `orchestrator/studio/registry.ts` held every kind at
- * once, so thirteen files in THIS package had to reach up into `orchestrator/`
- * to load an agent — a `package-to-legacy` edge per file, and a round trip:
- * `registry.ts` already imported `@forge/agents/skill-path.ts` and
- * `./materials.ts` and re-exported `./skill-md-fidelity.ts`, so the graph ran
- * agents -> orchestrator -> agents. Moving the Agent kind to the package that
- * owns agents removes the hop rather than relocating it.
+ * WHY IT LIVES HERE. The package that owns agents owns the Agent kind, so
+ * nothing in this package reaches outside it to load an agent.
  *
  * WHAT IS GENERIC AND WHAT IS NOT. Reading a frontmatter document is generic
  * and lives in `@forge/kernel`; deciding what a valid one
@@ -17,10 +11,6 @@
  * `runtime`, `library`, `provenance`, `quarantined`, `brainAccess`,
  * `composition`, `budgets`, `fanout`, `materials`. Kernel names none of them,
  * and its own test asserts that against its source.
- *
- * `orchestrator/studio/registry.ts` re-exports everything here for the ~17
- * host and sibling importers that still resolve the Agent kind through it —
- * transitional rows, disclosed, that die with the host carve (ruling 48/58).
  */
 import { join, dirname, basename, resolve } from 'node:path';
 

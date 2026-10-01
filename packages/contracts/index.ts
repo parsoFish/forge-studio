@@ -33,6 +33,10 @@ export * from './run-view-types.ts';
  *  vocabulary (bead forge-mfv5.2.8). */
 export * from './demo-declaration.ts';
 
+/** Pseudo-project session anchors — pure transfer from `packages/sessions`
+ *  (ADR 046 `studio-beyond-contracts` edge 3, ratchet fix). */
+export * from './session-anchors.ts';
+
 // ── Work items ──
 
 export type WorkItemStatus = 'pending' | 'in-progress' | 'complete' | 'failed';

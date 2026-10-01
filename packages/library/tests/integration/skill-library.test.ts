@@ -1542,7 +1542,7 @@ describe('scanSkillPackage — quarantined keys are reported from BOTH top-level
 // are NOT reachable at this surface and are pinned in the bridge/staging suite
 // instead, NOT here:
 //   * d1 "client-named SOURCE root pointing outside both roots" — a bridge
-//     concern (packages/library/tests/integration/bridge-studio-skills.test.ts); installSkillPackage is
+//     concern (apps/forge/tests/integration/bridge-studio-skills.test.ts); installSkillPackage is
 //     CONTRACTUALLY handed a package directory to copy, so it can never be the
 //     refusal point for the source path (post-fix it receives a server-minted,
 //     already-guarded staging realpath).

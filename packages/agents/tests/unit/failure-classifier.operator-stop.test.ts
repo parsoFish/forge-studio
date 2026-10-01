@@ -12,8 +12,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyCycleFailure } from '../../failure-classifier.ts';
-import { OperatorStopError } from '@forge/flows';
+import { OPERATOR_STOP_MESSAGE_PREFIX } from '@forge/contracts';
 import type { EventLogEntry } from '@forge/kernel';
+
+/** `OperatorStopError`'s own message (packages/flows/operator-stop.ts), built
+ *  locally from the SAME `@forge/contracts` prefix constant the real class
+ *  and `failure-classifier.ts`'s own signature match both key on — flows is a
+ *  higher rank than this package (package-layer-order), and the message shape
+ *  is what this test needs, not the class identity. */
+function operatorStopMessage(): string {
+  return (
+    `${OPERATOR_STOP_MESSAGE_PREFIX} the operator requested this run stop — halting at a ` +
+    'clean boundary (resumable; the worktree and branch are kept).'
+  );
+}
 
 function ev(overrides: Partial<EventLogEntry>): EventLogEntry {
   return {
@@ -33,7 +45,7 @@ test(
   'classifyCycleFailure: OperatorStopError message classifies terminal + non-recoverable + ' +
     'non-environment',
   () => {
-  const realError = new OperatorStopError();
+  const realError = { message: operatorStopMessage() };
   const events = [
     ev({
       phase: 'orchestrator',
@@ -97,7 +109,7 @@ test(
       phase: 'orchestrator',
       skill: 'flow-budgets',
       event_type: 'error',
-      message: new OperatorStopError().message,
+      message: operatorStopMessage(),
     }),
   ];
   const c = classifyCycleFailure(events);

@@ -52,6 +52,7 @@ import type {
   SessionShellPayload,
   SessionTurn,
 } from './session-client';
+import { isPseudoProjectAnchor, COMMUNITY_REFRESH_PROJECT_ANCHOR as COMMUNITY_REGISTRY_ANCHOR } from '@forge/contracts';
 
 // ---------------------------------------------------------------------------
 // State shapes — a genuine discriminated union (AT-69: a "no-session" state
@@ -498,16 +499,15 @@ export function shouldPollSessionSummary(state: SessionShellViewState): boolean 
 
 // ---------------------------------------------------------------------------
 // Pseudo-project anchors (W6-B9 reviewer fix) — a project id starting with
-// "." is NEVER a real registered project: `discoverProjects`
-// (`discoverProjects`, `@forge/kernel`) categorically filters every dot-prefixed
-// directory out of the real project list. ".kb-<id>" (KB_SEEDING_ANCHOR_PREFIX,
-// packages/knowledge/bridge-studio-kbs.ts) and ".community-registry" (COMMUNITY_REGISTRY_ANCHOR
-// below, mirroring packages/sessions/bridge-studio-sessions.ts's own
-// COMMUNITY_REFRESH_PROJECT_ANCHOR literal) are the two known anchor shapes;
-// a THIRD, unrecognised dot-prefixed anchor still trips `isPseudoProjectAnchor`
-// (the general leading-"." check), it just has no known destination —
-// `pseudoProjectAnchorDestination` returns `null` for it rather than
-// guessing, and the caller renders NOTHING rather than a dead-ended link.
+// "." is NEVER a real registered project: `discoverProjects` (`@forge/kernel`)
+// categorically filters every dot-prefixed directory out of the real project
+// list. ".kb-<id>" (KB_SEEDING_ANCHOR_PREFIX, packages/knowledge/bridge-studio-kbs.ts)
+// and ".community-registry" (COMMUNITY_REGISTRY_ANCHOR below) are the two
+// known anchor shapes; a THIRD, unrecognised dot-prefixed anchor still trips
+// `isPseudoProjectAnchor` (the general leading-"." check), it just has no
+// known destination — `pseudoProjectAnchorDestination` returns `null` for it
+// rather than guessing, and the caller renders NOTHING rather than a
+// dead-ended link.
 //
 // W8-B5b WI-3: the community-refresh SESSION KIND that used to mint fresh
 // `.community-registry` sessions is retired — nothing anchors a NEW session
@@ -516,24 +516,23 @@ export function shouldPollSessionSummary(state: SessionShellViewState): boolean 
 // a real live route, and `pseudoProjectAnchorDestination` exists precisely so
 // a real destination resolves instead of a silently dropped back-link.
 //
-// forge-ui never imports cli/ at runtime (see this repo's SSOT-parity-test
-// convention, e.g. apps/studio/tests/contract/trigger-kind-parity.test.ts) — this is a
-// small, independently-declared mirror of `isPseudoProjectAnchor` and the
-// two anchor literals (packages/sessions/bridge-studio-sessions.ts), kept honest by a
-// parity test in this file's own .test.ts sibling.
+// `isPseudoProjectAnchor` and `COMMUNITY_REGISTRY_ANCHOR` (imported above as
+// `COMMUNITY_REFRESH_PROJECT_ANCHOR`) are a PURE TRANSFER to `@forge/contracts`
+// (ADR 046 boundary fix, `studio-beyond-contracts` edge 3): this file used to
+// carry its own independently-declared mirror of both, held honest by a
+// parity test in this file's own .test.ts sibling. With one definition in
+// contracts, the mirror and its parity test are both gone — re-exported here
+// under this file's established name so existing importers
+// (apps/studio/app/sessions/[kind]/new/page.tsx) need no change.
 // ---------------------------------------------------------------------------
 
-export function isPseudoProjectAnchor(project: string): boolean {
-  return project.startsWith('.');
-}
+export { isPseudoProjectAnchor, COMMUNITY_REGISTRY_ANCHOR };
 
 export type PseudoProjectDestination = { readonly label: string; readonly href: string };
 
 // W7A2-09: exported so the kickoff page imports the ONE mirror instead of
-// re-spelling the literals (the parity pin in this file's .test.ts sibling
-// keeps them honest against cli/).
+// re-spelling the literal.
 export const KB_SEEDING_ANCHOR_PREFIX = '.kb-';
-export const COMMUNITY_REGISTRY_ANCHOR = '.community-registry';
 
 /** `null` for a project that either isn't a pseudo-anchor at all, or IS one
  *  but of an unrecognised shape (a future anchor this file hasn't been

@@ -5,7 +5,7 @@
  * THE CONSTRAINT THIS ENFORCES. `docs/roadmaps/1.0.md` §0, verbatim:
  *
  *   contracts ← kernel ← { library, knowledge, projects } ← agents ←
- *   sessions ← flows ← factory ← apps/{forge, studio}
+ *   sessions ← flows ← stations ← factory ← apps/{forge, studio}
  *   apps/studio imports contracts only.
  *   packages never import orchestrator/ cli/ loops/.
  *   legacy never imports a package at all.
@@ -13,12 +13,9 @@
  * The spec calls this "enforced by dependency-cruiser; the violation
  * baseline may only shrink". This script is that enforcement.
  *
- * F3 (operator ruling, items 81/83) inserted `stations` between `flows` and
- * `factory` in `PACKAGE_RANK` below: the station executor and every band
- * moved out of the example into `packages/stations`, one rank the example may
- * import and the platform's flows may not. The `docs/roadmaps/1.0.md` §0
- * quote above is the chain as ratified before that move; the roadmap's own
- * update is the lane's, not this pure-transfer's.
+ * `stations` sits between `flows` and `factory` (operator items 81/83): the
+ * station executor and every band live in `packages/stations`, one rank the
+ * example may import and the platform's flows may not.
  *
  * WHY A BASELINE OF VIOLATIONS AND NOT A COUNT. A count lets one violation
  * be swapped for another without the gate noticing. The baseline is the SET
@@ -26,13 +23,12 @@
  * disappears in the same PR, and a disappeared edge fails as a stale entry
  * until the baseline is tightened. There is no `--write-baseline`.
  *
- * WHAT BINDS TODAY. `packages/` and `apps/` do not exist yet (they arrive
- * after H5), so rules 1, 3 and 4 have no population on this tree and are
- * unit-tested directly through the exported `classify()` instead. Rule 2 is
- * live: `forge-ui/` is the tree that becomes `apps/studio`, and its eight
- * edges into `orchestrator/`+`cli/` — all from test files — are the starting
- * baseline. They shrink to zero when the six parity tests repoint to
- * `@forge/contracts`.
+ * WHAT BINDS TODAY. The package-rank, package-to-assembly and
+ * studio-beyond-contracts rules have population, and the baseline set holds
+ * their remaining edges, most of them from test files. The legacy rules have
+ * none — `orchestrator/`, `cli/` and `loops/` no longer exist — and stay as
+ * the §0 constraint that those trees never come back; they are unit-tested
+ * through the exported `classify()`.
  *
  * WHAT IS OUT OF SCOPE, AND WHY. `scripts/` and `tests/` are not cruised.
  * §0's allow-graph names `orchestrator/`, `cli/`, `loops/`, `packages/` and
