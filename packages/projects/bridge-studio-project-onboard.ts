@@ -222,6 +222,11 @@ export function makeOnboardHandlers(deps: OnboardDeps): {
           forgeRoot: ctx.forgeRoot,
           projectsRoot: projectsDir,
           ...(mintRemote ? { remote: { create: true, ...(deps.runGh ? { runGh: deps.runGh } : {}) } } : {}),
+          // Same injected pair this file already threads through
+          // `checkBrainSeedContainment`/`seedBrain` below (OnboardDeps, this
+          // file's header) — `scaffoldGreenfieldProject` now takes the same
+          // port directly instead of importing `@forge/knowledge` itself.
+          brainSeeder: { seed: deps.seedBrain, checkContainment: deps.checkBrainSeedContainment },
         });
       } catch (err) {
         // Validation / unknown-app-type / duplicate-id are operator errors → 400.

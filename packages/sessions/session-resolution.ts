@@ -428,7 +428,7 @@ export function sessionShellHref(kind: string, sessionId: string, project: strin
  * which has no 'onboarding' row at all: onboarding was therefore reported
  * non-terminal at every phase, including its own declared-terminal
  * 'complete'/'failed' rows (`writeSessionTerminalPhase`'s own two literal
- * terminal values, packages/agents/agent-run.ts). Checking `panel` here closes that gap
+ * terminal values, apps/forge/agent-run.ts). Checking `panel` here closes that gap
  * the same way `deriveSessionAffordances` already treats `panel` as a
  * first-class phase-table source.
  */

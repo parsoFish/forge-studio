@@ -1710,7 +1710,7 @@ export async function fetchLatestStandaloneRun(slug: string): Promise<Standalone
  *  (W6-B14): `GET /api/studio/projects/:id/onboarding/active`. The
  *  onboarding session's OWN `status.json` (written by `POST /api/studio/
  *  onboarding/start`, then updated to a terminal phase by
- *  `writeSessionTerminalPhase`, packages/agents/agent-run.ts) already carries the
+ *  `writeSessionTerminalPhase`, apps/forge/agent-run.ts) already carries the
  *  `runId` pollable via {@link getAgentRunStatus} — this finds the most
  *  recent `_onboarding/<sessionId>` for the project and reads it back.
  *  `sessionId: null` means this project has never run onboarding.

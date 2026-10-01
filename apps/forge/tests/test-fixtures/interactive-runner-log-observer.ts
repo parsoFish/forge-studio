@@ -5,7 +5,7 @@
  * package a small helper is duplicated rather than exported, because a
  * `.test.ts` that exports a helper becomes an import target and starts
  * constraining what it may assert. This is the one place that trade goes the
- * other way: `agent-run.test.ts` was 1,226 lines and had to split, and its
+ * other way: `agent-run.test.ts` (historical: long since split apart) was 1,226 lines and had to split, and its
  * shared block is 268 lines used by all four of its clusters — three copies of
  * a 162-line log walker is exactly the signal that a seam is wrong, and one of
  * the clusters (forge-q1z / forge-1im) tests this walker as its SUBJECT. A
@@ -63,27 +63,17 @@ import {
   readFileSync,
   readdirSync,
   statSync,
-  existsSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { cmdAgentRun } from '../../agent-run.ts';
 import type { AgentDispatchDeps } from '../../agent-dispatch-cmd.ts';
+import { writeSessionStatus } from '@forge/sessions';
 
-/** `writeSessionStatus`'s own body (packages/sessions/interactive-session.ts)
- *  duplicated locally rather than imported: sessions is a higher rank than
- *  this package (package-layer-order), and this fixture is also reached by
- *  two consumers that stay in THIS package (agent-run-log-observer.test.ts,
- *  agent-run-promote-queue-wiring.test.ts) — moving the fixture to sessions
- *  would newly cross the boundary for them instead of clearing it. */
-function writeSessionStatusFixture(sessionDir: string, status: Record<string, unknown>): void {
-  if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
-  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ ...status, updated_at: new Date().toISOString() }, null, 2));
-}
 
 // ---------------------------------------------------------------------------
-// cmdAgentRun driver — mirrors packages/agents/tests/integration/agent-run-dispatch.test.ts's own `run()`
+// cmdAgentRun driver — mirrors apps/forge/tests/integration/agent-run-dispatch.test.ts's own `run()`
 // helper exactly (the established house pattern for stubbing process.exit +
 // console in this file's sibling test suite): a sentinel thrown from the
 // process.exit stub returns control immediately without tearing down the
@@ -129,7 +119,7 @@ export async function withCwd<T>(dir: string, fn: () => Promise<T>): Promise<T> 
 // entry) with a single step:noop phase, plus a turnSpec-LESS "architect" row
 // sharing an id with a real AGENT_RUNNERS key (AT-5's fixture). Loaded
 // through the REAL loadSessionKinds parse path (packages/sessions/studio/session-kinds.ts),
-// mirroring orchestrator/interactive-runner.test.ts's own fixture-design
+// mirroring orchestrator/interactive-runner.test.ts's own fixture-design (historical: pre-dates the M4 host carve)
 // precedent, rather than a hand-built descriptor object.
 // ---------------------------------------------------------------------------
 
@@ -206,7 +196,7 @@ export function setupTurnspecFixture(): TurnspecFixture {
   const sessionId = '2026-08-11T00-00-00-wi5fixture';
   const sessionDir = join(projectRoot, KIND_DIR, sessionId);
   mkdirSync(sessionDir, { recursive: true });
-  writeSessionStatusFixture(sessionDir, { session_id: sessionId, phase: 'p1', updated_at: new Date(0).toISOString() });
+  writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'p1', updated_at: new Date(0).toISOString() });
 
   return { forgeRoot, projectArg, projectRoot, sessionId, sessionDir };
 }
@@ -225,7 +215,7 @@ export function setupPromoteQueueFixture(): TurnspecFixture {
   const sessionId = '2026-09-25T00-00-00-promotequeue';
   const sessionDir = join(projectRoot, PROMOTE_QUEUE_KIND_DIR, sessionId);
   mkdirSync(sessionDir, { recursive: true });
-  writeSessionStatusFixture(sessionDir, { session_id: sessionId, phase: 'committing', updated_at: new Date(0).toISOString() });
+  writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'committing', updated_at: new Date(0).toISOString() });
 
   return { forgeRoot, projectArg, projectRoot, sessionId, sessionDir };
 }
@@ -237,7 +227,7 @@ export function setupPromoteQueueFixture(): TurnspecFixture {
  *  + `sessionKind` by CONTENT — `skill: 'interactive-runner'`
  *  (`packages/sessions/interactive-runner.ts`'s `RUNNER_SKILL`, stamped on
  *  every event the spine emits and on NO event any bespoke runner emits: they
- *  stamp 'architect-runner' / 'instructions-runner' / 'demo-builder-runner' /
+ *  stamp 'architect-runner' / 'instructions-runner' / 'demo-builder-runner' / (historical: also once bespoke runner FILE names, now just `skill:` id strings)
  *  'project-brain-builder' — see each one's own `skill:` literal).
  *
  *  Deliberately does NOT assume any directory NAME: the spine's cycleId is

@@ -673,7 +673,7 @@ test('5.48: the two sibling lints share ONE scope — every declared dispatch en
   for (const m of DISPATCH_ENTRY_MODULES) {
     assert.ok(reachable.has(m), `${m} must be reachable from the shared entry seed`);
   }
-  assert.ok(reachable.has('packages/agents/agent-run.ts'), 'bead 5.48\'s named module specifically');
+  assert.ok(reachable.has('apps/forge/agent-run.ts'), 'bead 5.48\'s named module specifically (M7-E: moved from packages/agents/agent-run.ts)');
 });
 
 test('the real repository baseline passes clean (no new or grown request-path sinks)', () => {

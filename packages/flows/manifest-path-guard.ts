@@ -100,7 +100,7 @@ const SAFE_CYCLE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
  * R4-17 round-3 BLOCKER (pin 5, item 2): the ONE resolution of "where do
  * managed projects live" this module uses — `resolveProjectsDir`, the SAME
  * config-aware helper `ctx.projectsRoot` (`apps/forge/ui-bridge.ts`) and
- * `writeSessionTerminalPhase` (`packages/agents/agent-run.ts`) already resolve through,
+ * `writeSessionTerminalPhase` (`apps/forge/agent-run.ts`) already resolve through,
  * fed a FORGE-ROOT-ANCHORED config path (`defaultConfigPath`) rather than
  * `loadConfig`'s cwd-relative default. Before this fix, `isContainedProjectRepoPath`
  * (and `isContainedWorktreePath`'s projects-root fallback branch) hardcoded

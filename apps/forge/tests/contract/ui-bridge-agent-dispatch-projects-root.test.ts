@@ -9,7 +9,7 @@
  *   1. `buildAgentDispatchArgs` includes `--projects-root <value>` when given
  *      one — pure, no execution needed.
  *   2. ROUND-TRIP: `parseAgentDispatchArgs(buildAgentDispatchArgs(...))`
- *      (`packages/agents/agent-run.ts`) — the one test that would have caught "the
+ *      (`apps/forge/agent-run.ts`) — the one test that would have caught "the
  *      bridge builds the flag but the CLI-side parser never reads it".
  *
  * The generic `POST /api/agents/:slug/run` route's call site
@@ -25,7 +25,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildAgentDispatchArgs } from '../../bridge-agent-dispatch.ts';
-import { parseAgentDispatchArgs } from '@forge/agents';
+import { parseAgentDispatchArgs } from '../../agent-dispatch-cmd.ts';
 
 function containsFlagPair(args: string[], flag: string, value: string): boolean {
   for (let i = 0; i < args.length - 1; i++) {

@@ -19,40 +19,18 @@
  * every file read out of a session dir. A second, unguarded read path is how a
  * symlinked file inside a session dir leaks content from outside it.
  */
-import { readFileSync, readdirSync, realpathSync, type Dirent } from 'node:fs';
+import { readdirSync, realpathSync, type Dirent } from 'node:fs';
+import { safeReadFileInSession } from '@forge/kernel';
+
+export { safeReadFileInSession };
 import { isAbsolute, join, resolve, sep } from 'node:path';
 
-import type { SessionStage } from './session-kinds.ts';
 import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from '@forge/library';
 import type { PackageFile } from '@forge/library';
 import type { RoadmapDraftArtifact } from './roadmap-draft.ts';
 
 const AGENTS_DRAFT_FILENAME = 'AGENTS.draft.md';
 const THEMES_DIRNAME = 'themes';
-export function safeReadFileInSession(sessionDir: string, relPath: string): string | null {
-  const abs = join(sessionDir, relPath);
-  let realSessionDir: string;
-  try {
-    realSessionDir = realpathSync(sessionDir);
-  } catch {
-    return null; // sessionDir itself doesn't exist / unreadable
-  }
-  let realAbs: string;
-  try {
-    realAbs = realpathSync(abs);
-  } catch {
-    return null; // missing file, broken symlink, or unreadable path segment
-  }
-  if (realAbs !== realSessionDir && !realAbs.startsWith(realSessionDir + sep)) {
-    return null; // escapes sessionDir via a symlink — treated as absent, never returned
-  }
-  try {
-    return readFileSync(abs, 'utf8');
-  } catch {
-    return null;
-  }
-}
-
 /** Lists a subdirectory's entries filtered by extension, sorted by filename.
  *  A missing directory yields []. Entry CONTENT safety (symlink escape) is
  *  enforced later, per-file, by safeReadFileInSession — that guard alone
@@ -167,41 +145,20 @@ export type GenerationGalleryArtifact = {
 // empty/defaulted artifact (see `deriveSessionArtifact`'s `contract-buildout`
 // case below).
 //
-// `ContractStageRow`/`ContractBuildoutArtifact` are declared HERE, not in
-// `packages/projects/contract-stages.ts`, so the ONE type has ONE canonical owner and
-// `packages/projects/contract-stages.ts` imports it from here — the same direction that
-// file already needs for `safeReadFileInSession` and `SESSION_STAGES`
-// (`session-kinds.ts`), so this adds no new import direction and creates no
-// cycle (verified: `orchestrator/` already imports plain VALUES from `cli/`
-// in ~30 files today, e.g. `packages/flows/manifest.ts` -> `cli/manifest-path-
-// guard.ts`, so a `cli/` -> `orchestrator/` type import here is the
-// established direction, not a reversal).
+// `ContractStage`, `ContractStageRow` and `ContractStageStatus` moved to
+// `@forge/contracts` (pure transfer, forge-8vfn M7-E boundary fix) — the
+// SAME direction `SESSION_STAGES` (`session-kinds.ts`) and
+// `safeReadFileInSession` (this file) already put `packages/projects/
+// contract-stages.ts` in: that file now imports the three types straight
+// from contracts too, rather than through this package. Re-exported here
+// (and from `session-transcript.ts` above it) so this module's public API,
+// and this package's door, are unchanged. `ContractBuildoutArtifact` stays —
+// it is this module's own signature (`deriveSessionArtifact`'s
+// `contract-buildout` case), not a shared cross-package type.
 // ---------------------------------------------------------------------------
 
-/** Presence, never a verdict (D11) — `forge preflight`'s exit code is the
- *  only authoritative contract-green signal; a row says "this artifact is
- *  present/absent, here is its source", never "this clause passes". */
-export type ContractStageStatus = 'present' | 'absent';
-
-/** The five onboarding stages — SESSION_STAGES minus 'brain' (project-brain
- *  owns that stage; D2). */
-export type ContractStage = Exclude<SessionStage, 'brain'>;
-
-export type ContractStageRow = {
-  readonly stage: ContractStage;
-  readonly status: ContractStageStatus;
-  /** Which real on-disk artifact this row's presence answer is about — named
-   *  even when `status` is 'absent' (a dropped row is indistinguishable from
-   *  "we never looked"; naming the source at least says "we looked here"). */
-  readonly source: string;
-  /** Presence facts only (D11) — never verdict language ("pass"/"fail"/
-   *  "clause"/"green"/"red"/"compliant"). */
-  readonly detail: string[];
-  /** The real byte length read from disk for the two prose-file-backed
-   *  stages (`instructions`, `roadmap`); `null` for the three config/lock-
-   *  JSON-backed stages (`contract`, `secrets`, `demo`). */
-  readonly bytes: number | null;
-};
+export { type ContractStage, type ContractStageRow, type ContractStageStatus } from '@forge/contracts';
+import type { ContractStageRow } from '@forge/contracts';
 
 export type ContractBuildoutArtifact = {
   readonly kind: 'contract-buildout';

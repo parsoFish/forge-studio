@@ -63,17 +63,14 @@ import { reqString, reqObject, stringArray, optString, optNumber } from '@forge/
  *  precedent, for the single-stage `community-refresh` session kind. That
  *  kind was retired in W8-B5b (superseded by the deterministic `forge
  *  community refresh` mechanism) and 'community' had no other consumer, so
- *  the vocabulary reverts to the 7 tokens above. */
-export const SESSION_STAGES = Object.freeze([
-  'contract',
-  'instructions',
-  'secrets',
-  'demo',
-  'roadmap',
-  'brain',
-  'authoring',
-] as const);
-export type SessionStage = (typeof SESSION_STAGES)[number];
+ *  the vocabulary reverts to the 7 tokens above.
+ *
+ *  Moved to `@forge/contracts` (pure transfer, forge-8vfn M7-E boundary fix)
+ *  so `packages/projects/contract-stages.ts` (rank 2) can derive its
+ *  onboarding-stage vocabulary without reaching into `packages/sessions`
+ *  (rank 4) for it; re-exported here so this module's public API — and this
+ *  package's door, `packages/sessions/index.ts` — are unchanged. */
+export { SESSION_STAGES, type SessionStage } from '@forge/contracts';
 
 /** One artifact-kind row: `live` has a real renderer (deriveSessionArtifact,
  *  session-transcript.ts); `reserved` is vocabulary-reserved so nobody squats
@@ -417,7 +414,7 @@ export type TurnSpec = {
  *  SAME frozen vocabulary (TURN_STEPS/FINALIZER_IDS) as `turnSpec.phases`,
  *  but carry no `kindDir`/`style`/`schema`: `panel` is consumed ONLY by
  *  `deriveSessionAffordances` (the read half) and is INVISIBLE to dispatch —
- *  `cmdAgentRun`'s turnSpec-fork condition (packages/agents/agent-run.ts) never looks at
+ *  `cmdAgentRun`'s turnSpec-fork condition (apps/forge/agent-run.ts) never looks at
  *  it, so a kind carrying `panel` still dispatches through `AGENT_RUNNERS`
  *  exactly as before this field existed. */
 export type SessionKindPanel = {

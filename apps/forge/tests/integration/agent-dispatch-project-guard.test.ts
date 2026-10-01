@@ -1,14 +1,14 @@
 /**
- * SEC-07 acceptance pins: `cmdAgentDispatch` (`packages/agents/agent-run.ts`) must route an
+ * SEC-07 acceptance pins: `cmdAgentDispatch` (`apps/forge/agent-run.ts`) must route an
  * untrusted `--project` value through the shared containment guard as its OWN
  * segment under the trusted projects root, never fold it into the root before
- * any containment check runs. See `cli/studio-path-guard.ts`'s CONTRACT and the
+ * any containment check runs. See `packages/kernel/path-guard.ts`'s CONTRACT and the
  * already-guarded pattern in `cmdAgentRun` (same file) for the shape this
  * mirrors.
  *
  * The real sink these tests pin: the value `cmdAgentDispatch` builds into
  * `project.repoPath` becomes the spawned agent's working directory downstream
- * (`opts.project?.repoPath` → `workdir` in `orchestrator/agent-dispatch.ts`).
+ * (`opts.project?.repoPath` → `workdir` in `packages/agents/agent-dispatch.ts`).
  * The invariant every escaping case asserts is therefore: the spawned agent's
  * working directory can never resolve outside the projects root — EITHER the
  * guard refused before any dispatch (exit 2 + a containment message, nothing

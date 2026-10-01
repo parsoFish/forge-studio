@@ -1,10 +1,1 @@
-[
-  "package-layer-order|packages/agents/agent-dispatch-cmd.ts|packages/sessions/index.ts",
-  "package-layer-order|packages/agents/agent-dispatch.ts|packages/flows/index.ts",
-  "package-layer-order|packages/agents/agent-run.ts|packages/sessions/index.ts",
-  "package-layer-order|packages/agents/ralph/runner.ts|packages/flows/work-item.ts",
-  "package-layer-order|packages/projects/contract-stages.ts|packages/sessions/studio/session-kinds.ts",
-  "package-layer-order|packages/projects/contract-stages.ts|packages/sessions/studio/session-transcript.ts",
-  "package-layer-order|packages/projects/project-config.ts|packages/flows/trigger-payload.ts",
-  "package-layer-order|packages/projects/project-create.ts|packages/knowledge/index.ts"
-]
+[]

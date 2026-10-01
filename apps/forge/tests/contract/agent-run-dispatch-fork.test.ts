@@ -18,10 +18,10 @@
  * checked-in `studio/session-kinds.yaml`.
  *
  * `contract/`, because AT-2's coverage test and AT-7 both enumerate a live
- * table and assert parity — what the bucket is for (tests/README.md).
+ * table and assert parity — what the bucket is for (packages/agents/tests/README.md).
  *
  * SPLIT FROM a 1,226-line file. Its 268-line shared block became a real
- * fixture module, `packages/agents/tests/test-fixtures/interactive-runner-log-observer.ts`,
+ * fixture module, `apps/forge/tests/test-fixtures/interactive-runner-log-observer.ts`,
  * because all four of its clusters used it and one of them tests the log
  * walker as its subject — three duplicated copies of a 162-line walker is the
  * signal that a seam is wrong, not a smaller file (T1 ruling 94). The three
@@ -38,7 +38,7 @@ import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENT_RUNNERS } from '@forge/agents';
+import { AGENT_RUNNERS } from '../../agent-run.ts';
 import { SESSION_KIND_RUNNERS } from '@forge/sessions';
 import { loadSessionKinds } from '@forge/sessions';
 import { readSessionStatus } from '@forge/sessions';
@@ -51,7 +51,7 @@ import {
   findInteractiveRunnerStartEvent,
   snapshotLogs,
   assertNoInteractiveRunnerSkillEvent,
-} from '../../../agents/tests/test-fixtures/interactive-runner-log-observer.ts';
+} from '../test-fixtures/interactive-runner-log-observer.ts';
 
 const ROOT = FORGE_ROOT;
 

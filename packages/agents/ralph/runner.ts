@@ -14,20 +14,20 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-// Deep path, not the door (bead forge-8vfn.5.31): `@forge/flows`'s door
-// eagerly loads `flow-runner.ts`, which imports `@forge/agents` — and this
-// file is reached from `@forge/agents/_adapters/claude/index.ts` via
-// `ralph/claude-agent.ts`. Going through the bare flows door here closes a
-// live cross-package cycle (claude/index.ts -> claude-agent.ts -> this file
-// -> @forge/flows -> flow-runner.ts -> @forge/agents -> run-agent.ts ->
-// _adapters/registry.ts -> claude/index.ts again, still mid-evaluation) that
-// throws `ReferenceError: Cannot access 'claudeAdapter' before
-// initialization` — a TDZ, not a bundler quirk (reproduces under plain
-// `node --experimental-strip-types`, no test runner involved). `work-item.ts`
-// itself only reaches `@forge/contracts`, so this one import breaks the
-// cycle without touching the (separately baselined, pre-existing)
-// agents-imports-flows rank violation this file's OTHER import is part of.
-import { DEV_WORK_ITEM_ID_PATTERN } from '@forge/flows/work-item.ts';
+// `DEV_WORK_ITEM_ID_PATTERN` is a `@forge/contracts` SSOT (pure transfer,
+// forge-8vfn M7-E boundary fix — it was `@forge/flows/work-item.ts`). This
+// file used to reach it via a deep path into `@forge/flows` rather than that
+// package's door, to dodge a live cross-package TDZ cycle the door's eager
+// `flow-runner.ts` load would otherwise close (claude/index.ts ->
+// claude-agent.ts -> this file -> @forge/flows -> flow-runner.ts ->
+// @forge/agents -> run-agent.ts -> _adapters/registry.ts -> claude/index.ts
+// again, still mid-evaluation, throwing `ReferenceError: Cannot access
+// 'claudeAdapter' before initialization`). That deep path is GONE: this file
+// imports the pattern from `@forge/contracts` (rank 0, below `agents`),
+// which does not load `flow-runner.ts` at all, so neither the cycle nor the
+// (separately baselined, pre-existing) agents-imports-flows rank violation
+// applies to this import any longer.
+import { DEV_WORK_ITEM_ID_PATTERN } from '@forge/contracts';
 import {
   autoCommitWorktreeIfDirty,
   branchHasAllCreates,

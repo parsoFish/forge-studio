@@ -20,6 +20,13 @@ import type { ServerResponse } from 'node:http';
 
 import { type RouteContext } from '@forge/kernel';
 import { makeOnboardHandlers } from '../../bridge-studio-project-onboard.ts';
+import { FAKE_BRAIN_SEEDER } from '../test-fixtures/fake-brain-seeder.ts';
+
+/** `handleProjectsCreate` reaches `scaffoldGreenfieldProject`'s `brainSeeder`
+ *  port (the `package-layer-order` DI split) — supplied here via the shared
+ *  fake for the one test below that reaches a successful scaffold; this
+ *  file's own concern (language resolution) is untouched by it. */
+const BRAIN_SEEDER_DEPS = { seedBrain: FAKE_BRAIN_SEEDER.seed, checkBrainSeedContainment: FAKE_BRAIN_SEEDER.checkContainment };
 
 type Captured = { status: number | null; body: string };
 
@@ -73,7 +80,7 @@ test('6.11.33: a REAL starter that declares no language refuses the create, nami
 test('6.11.33: an explicit caller-supplied language still wins over the starter (unchanged)', async () => {
   const forgeRoot = forgeRootWithUndeclaredStarter('bare-lang');
   try {
-    const { handleProjectsCreate } = makeOnboardHandlers({} as never);
+    const { handleProjectsCreate } = makeOnboardHandlers(BRAIN_SEEDER_DEPS as never);
     const { res, captured } = mockRes();
     await handleProjectsCreate(
       mockReq(), res, ctx(forgeRoot, { name: 'x', appType: 'bare-lang', northStar: 'y', language: 'Go' }),

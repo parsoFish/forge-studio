@@ -13,10 +13,12 @@
  * absent artifact yields a `status: 'absent'` row that still names its
  * source; a dropped row would be indistinguishable from "we never looked".
  *
- * The row TYPE (`ContractStageRow`) is declared in
- * `packages/sessions/studio/session-transcript.ts`, not here, and re-exported —
- * see that module's header for why (one canonical owner; the direction this
- * file already needs for `safeReadFileInSession`/`SESSION_STAGES`).
+ * The row TYPE (`ContractStageRow`), `ContractStage`, `ContractStageStatus`
+ * and `SESSION_STAGES` now live in `@forge/contracts` (pure transfer,
+ * forge-8vfn M7-E boundary fix — `projects`, rank 2, may not import
+ * `sessions`, rank 4). `ContractStageRow` is re-exported here so this file's
+ * API is unchanged. File reads go through kernel's realpath-guarded
+ * `safeReadFileInSession`.
  *
  * D3 (security, load-bearing): secrets are NAMES ONLY. This module NEVER
  * opens `secrets.env` and NEVER reads an env VALUE — the `secrets` stage's
@@ -54,28 +56,13 @@
 import { realpathSync } from 'node:fs';
 import { join, sep } from 'node:path';
 
-// KEPT DEEP (bead forge-8vfn.5.31): repointing these three specifiers to the
-// bare `@forge/sessions` door crashed `node --test packages/sessions/
-// contract.test.ts` with `ReferenceError: Cannot access 'SESSION_STAGES'
-// before initialization` — the door eagerly pulls in sessions' whole module
-// graph, and something reachable from it cycles back here before
-// `packages/sessions/studio/session-kinds.ts`'s module finishes initializing. This edge is
-// already a baselined `package-layer-order` violation (projects, rank 2,
-// reaching sessions, rank 4); going through the door does not fix that
-// violation, it only adds a live TDZ crash on top of it. Kept deep per the
-// brief's own guidance: a repoint that creates a cycle keeps its one deep
-// import, documented, rather than "fixing" the door at the cost of a crash.
-import { SESSION_STAGES } from '@forge/sessions/studio/session-kinds.ts';
-import {
-  safeReadFileInSession,
-  type ContractStage,
-  type ContractStageRow,
-  type ContractStageStatus,
-} from '@forge/sessions/studio/session-transcript.ts';
+import { SESSION_STAGES, type ContractStage, type ContractStageRow, type ContractStageStatus } from '@forge/contracts';
+
+import { safeReadFileInSession } from '@forge/kernel';
 import { loadProjectConfig, AGENT_INSTRUCTION_FILES, type ProjectConfig } from './project-config.ts';
 import { PROJECT_ID_RE, MAX_EXACT_ID_LENGTH, guardedFile } from '@forge/kernel';
 
-export type { ContractStageRow, ContractStageStatus } from '@forge/sessions/studio/session-transcript.ts';
+export type { ContractStageRow, ContractStageStatus } from '@forge/contracts';
 
 /** The D2 five-stage vocabulary, drawn from `SESSION_STAGES` (never a
  *  parallel vocabulary) — 'brain' excluded (project-brain owns it). */

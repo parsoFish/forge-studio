@@ -2,10 +2,10 @@
  * Tests for bead forge-poc (WI-2b, defect 1) — "a runner throw wedges a
  * session at its pre-turn phase forever".
  *
- * `cmdAgentRun` (`packages/agents/agent-run.ts`) used to await a runner's turn (either
+ * `cmdAgentRun` (`apps/forge/agent-run.ts`) used to await a runner's turn (either
  * the ADR-043 §3 turnSpec road's `runInteractiveTurn`, or one of the 4
  * legacy `AGENT_RUNNERS`' own `runTurn`) with NO try/catch anywhere between
- * it and the top-level `orchestrator/cli.ts` catch-all, which only prints to
+ * it and the top-level `apps/forge/cli.ts` catch-all, which only prints to
  * stderr and calls `process.exit(1)` — invisible to `apps/forge/ui-bridge.ts`'s
  * `spawnAgentTurn`, which launches `forge agent run …` as a DETACHED,
  * unref'd child with stdio ignored except stderr→logfile. A throw during a
@@ -32,12 +32,12 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { cmdAgentRun } from '@forge/agents';
+import { cmdAgentRun } from '../../agent-run.ts';
 import { writeSessionStatus, readSessionStatus } from '@forge/sessions';
 
 // ---------------------------------------------------------------------------
 // chdir helper — cmdAgentRun's legacy road resolves `--project` cwd-relative
-// (`resolve('projects', projectArg)`); mirrors cli/agent-run.test.ts's own
+// (`resolve('projects', projectArg)`); mirrors cli/agent-run.test.ts's own (historical: that file was split apart long before the M7-E move)
 // `withCwd` precedent for exactly this reason.
 // ---------------------------------------------------------------------------
 
@@ -60,7 +60,7 @@ function readStatusJson(sessionDir: string): Status {
 
 // ---------------------------------------------------------------------------
 // turnSpec-road fixture — a session-kinds.yaml with a SINGLE known phase
-// (`step: noop`, mirrors cli/agent-run.test.ts's own zero-SDK-calls
+// (`step: noop`, mirrors cli/agent-run.test.ts's own zero-SDK-calls (historical: same file-split as above)
 // precedent). Any status.json phase NOT in this table makes
 // `runInteractiveTurn` throw synchronously: "turnSpec.phases has no row for
 // phase …" — a REAL, deterministic, SDK-free throw from the production spine.
@@ -188,7 +188,7 @@ test('forge-poc AT-3 (turnSpec road, negative control): a successful turn does N
 // same fix, on the `architect` entry — proving the fix is NOT scoped only to
 // the new turnSpec road (the "enumeration miss" failure mode this WI warns
 // about). Uses architect's own real cost-ceiling refusal
-// (orchestrator/architect-runner.ts) as a deterministic, SDK-free throw: a
+// (orchestrator/architect-runner.ts, historical: see packages/sessions/kinds/architect.ts) as a deterministic, SDK-free throw: a
 // status.json declaring a tiny costCeilingUsd, with a pre-seeded event log
 // already over that ceiling, makes runArchitectTurn throw synchronously
 // before any SDK call.
@@ -244,7 +244,7 @@ test('forge-poc AT-4 (legacy AGENT_RUNNERS road, architect): a runArchitectTurn 
 // Enumeration note (not a separate test): architect / instructions /
 // demo-builder / project-brain all share the EXACT SAME cmdAgentRun call
 // site (`const runTurn = await entry.loadRunTurn(); try { result = await
-// runTurn(...) } catch {...}` — packages/agents/agent-run.ts) — there is only ONE
+// runTurn(...) } catch {...}` — apps/forge/agent-run.ts) — there is only ONE
 // try/catch for all four AGENT_RUNNERS entries, not one per runner, so AT-4
 // above (architect) exercises the identical mechanism every other
 // AGENT_RUNNERS entry rides.

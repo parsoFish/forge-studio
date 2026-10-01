@@ -67,7 +67,7 @@ export type DraftManifestRepairResult = {
  * classified `Error` prefixed with `ARCHITECT_DRAFT_MANIFEST_UNRESOLVED_PREFIX`
  * (mirroring `PM_ACCEPTANCE_GATE_UNRESOLVED_PREFIX`, row 157): the same
  * literal lands in BOTH the thrown message (which `writeSessionTerminalPhase`
- * — `packages/agents/agent-dispatch-cmd.ts` — stamps onto `status.json.error`)
+ * — `apps/forge/agent-dispatch-cmd.ts` — stamps onto `status.json.error`)
  * and an `architect`-phase `error` event, so `failure-classifier.ts` can name
  * the failure instead of "could not be classified".
  */

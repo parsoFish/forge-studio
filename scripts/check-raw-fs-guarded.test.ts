@@ -52,7 +52,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  *  dropping the entry for the file the carve moved is exactly the blinding it
  *  exists to catch. */
 const CHARTER_MODULES = [
-  'apps/forge/ui-bridge.ts', 'packages/flows/metrics.ts', 'packages/projects/contract-stages.ts', 'packages/agents/agent-run.ts', 'packages/sessions/kinds/architect-plan.ts',
+  'apps/forge/ui-bridge.ts', 'packages/flows/metrics.ts', 'packages/projects/contract-stages.ts', 'apps/forge/agent-run.ts', 'packages/sessions/kinds/architect-plan.ts',
   'packages/sessions/interactive-session.ts', 'packages/sessions/interactive-finalizers.ts', 'packages/sessions/interactive-runner.ts',
   'packages/sessions/kinds/architect.ts', 'packages/sessions/kinds/instructions.ts',
   'packages/sessions/kinds/project-brain.ts', 'packages/sessions/kinds/demo-builder.ts', 'packages/sessions/kinds/demo-generate.ts',
