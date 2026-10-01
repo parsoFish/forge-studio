@@ -1,13 +1,13 @@
-import { type SessionShellBody, captureResponse } from './test-fixtures/studio-sessions-builders.ts';
-import { F6_DERIVED_PROJECT, F6_LAST_PHASE, F6_NOT_FOUND_SESSION, F6_NO_EVENTS_SESSION, F6_RUN_LEGACY, F6_RUN_NOWHERE, F6_RUN_STATUS_BACKED, F6_SECRET_MARKER, F6_SHAPE_A_SESSION, F6_SHAPE_B_PROJECT, F6_SHAPE_B_SESSION, F6_SYMLINK_ESCAPE_SESSION, KB_CLEANUP_APPLIED_SESSION, KB_CLEANUP_RESOLVABLE_SESSION, KB_CLEANUP_UNRESOLVABLE_SESSION, MISSING_STATUS_SESSION, NO_PHASE_STATUS_SESSION, ONBOARDING_COMPLETE_SESSION, ONBOARDING_FAILED_SESSION, ONBOARDING_SESSION, REAL_ARCHITECT_SESSION, REAL_INSTRUCTIONS_SESSION } from './test-fixtures/studio-sessions-builders.ts';
-import { bridgeUrl, forgeRoot } from './test-fixtures/studio-sessions-bridge.ts';
-import { GITPULSE_SESSION, KB_SEEDING_MIXED_PROJECT, KB_SEEDING_MIXED_SESSION, KB_SEEDING_PROJECT, KB_SEEDING_SESSION } from './test-fixtures/studio-sessions-bridge.ts';
+import { type SessionShellBody, captureResponse } from '../test-fixtures/studio-sessions-builders.ts';
+import { F6_DERIVED_PROJECT, F6_LAST_PHASE, F6_NOT_FOUND_SESSION, F6_NO_EVENTS_SESSION, F6_RUN_LEGACY, F6_RUN_NOWHERE, F6_RUN_STATUS_BACKED, F6_SECRET_MARKER, F6_SHAPE_A_SESSION, F6_SHAPE_B_PROJECT, F6_SHAPE_B_SESSION, F6_SYMLINK_ESCAPE_SESSION, KB_CLEANUP_APPLIED_SESSION, KB_CLEANUP_RESOLVABLE_SESSION, KB_CLEANUP_UNRESOLVABLE_SESSION, MISSING_STATUS_SESSION, NO_PHASE_STATUS_SESSION, ONBOARDING_COMPLETE_SESSION, ONBOARDING_FAILED_SESSION, ONBOARDING_SESSION, REAL_ARCHITECT_SESSION, REAL_INSTRUCTIONS_SESSION } from '../test-fixtures/studio-sessions-builders.ts';
+import { bridgeUrl, forgeRoot } from '../test-fixtures/studio-sessions-bridge.ts';
+import { GITPULSE_SESSION, KB_SEEDING_MIXED_PROJECT, KB_SEEDING_MIXED_SESSION, KB_SEEDING_PROJECT, KB_SEEDING_SESSION } from '../test-fixtures/studio-sessions-bridge.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { handleStudioSessionsRoutes, type SessionsRouteContext } from '../../bridge-studio-sessions.ts';
-import { isPseudoProjectAnchor } from '../../session-resolution.ts';
+import { handleStudioSessionsRoutes, type SessionsRouteContext } from '../../../../packages/sessions/bridge-studio-sessions.ts';
+import { isPseudoProjectAnchor } from '../../../../packages/sessions/session-resolution.ts';
 
 // ---------------------------------------------------------------------------
 // R4-19 WI-2 — the ".kb-" seeding-anchor carve-out. AT-1 is the RED pin that

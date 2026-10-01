@@ -2,37 +2,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
+import { serializeManifest } from '@forge/flows';
 import type { InitiativeManifest } from '@forge/contracts';
-
-/**
- * `serializeManifest`'s own field selection (packages/flows/manifest.ts),
- * reproduced locally rather than imported: flows is a higher rank than this
- * package (package-layer-order). Narrowed to exactly the fields
- * `realManifest`/`writeArchitectSessionWithDeps` below ever populate (no
- * title, claimed_at, worktree_path, quality_gate_cmd, resume_from, etc.) —
- * for those inputs this produces byte-identical frontmatter to the real
- * `serializeManifest`, built with the SAME `gray-matter` `matter.stringify`
- * call the production serializer itself uses, so the on-disk shape this
- * fixture writes stays real, not a divergent hand-rolled format.
- */
-function serializeManifestFixture(m: InitiativeManifest): string {
-  const data: Record<string, unknown> = {
-    initiative_id: m.initiative_id,
-    project: m.project,
-    project_repo_path: m.project_repo_path,
-    created_at: m.created_at,
-    iteration_budget: m.iteration_budget,
-    cost_budget_usd: m.cost_budget_usd,
-    phase: m.phase,
-    origin: m.origin,
-    class: m.class,
-    acceptance_criteria: m.acceptance_criteria.map((c) => ({ given: c.given, when: c.when, then: c.then })),
-  };
-  if (m.depends_on_initiatives && m.depends_on_initiatives.length > 0) {
-    data.depends_on_initiatives = m.depends_on_initiatives;
-  }
-  return matter.stringify('\n' + m.body.replace(/^\n+/, ''), data);
-}
 
 /**
  * Acceptance tests for packages/sessions/bridge-studio-sessions.ts (R2-10, PR1: the
@@ -475,10 +446,10 @@ export function writeArchitectSessionWithDeps(projectsRoot: string, project: str
   writeFileSync(join(dir, 'idea.md'), 'Build a deps fixture thing.\n', 'utf8');
   const manifestsDir = join(dir, 'manifests');
   mkdirSync(manifestsDir, { recursive: true });
-  writeFileSync(join(manifestsDir, 'INIT-2026-01-01-fixture-a.md'), serializeManifestFixture(realManifest({ project })), 'utf8');
+  writeFileSync(join(manifestsDir, 'INIT-2026-01-01-fixture-a.md'), serializeManifest(realManifest({ project })), 'utf8');
   writeFileSync(
     join(manifestsDir, 'INIT-2026-01-02-fixture-b.md'),
-    serializeManifestFixture(
+    serializeManifest(
       realManifest({
         project,
         initiative_id: 'INIT-2026-01-02-fixture-b',

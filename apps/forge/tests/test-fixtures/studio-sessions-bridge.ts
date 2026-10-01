@@ -3,10 +3,10 @@ import { before, after } from 'node:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { startBridge } from '../../../../../apps/forge/ui-bridge.ts';
+import { startBridge } from '../../ui-bridge.ts';
 import { serializeManifest } from '@forge/flows';
-import { guardedWriteSessionStatus } from '../../../session-status-io.ts';
-import type { ProjectBrainStatus } from '../../../kinds/project-brain.ts';
+import { guardedWriteSessionStatus } from '../../../../packages/sessions/session-status-io.ts';
+import type { ProjectBrainStatus } from '../../../../packages/sessions/kinds/project-brain.ts';
 
 /** The bridge's own mutable state. It lives HERE, with the `before()` that
  *  assigns it, because a module cannot assign through an import binding —

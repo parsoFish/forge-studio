@@ -1,11 +1,11 @@
-import { type SessionShellBody, captureResponse } from './test-fixtures/studio-sessions-builders.ts';
-import { BADSTAGE_SESSION, DEPS_SESSION, INVALID_JSON_STATUS_SESSION, MISSING_STATUS_SESSION, MODEL_TIER_SESSION, NON_OBJECT_STATUS_SESSION, NON_STRING_PHASE_STATUS_SESSION, NO_PHASE_STATUS_SESSION, ONBOARDING_BAD_CONFIG_SESSION, ONBOARDING_SESSION, REAL_ARCHITECT_SESSION, REAL_INSTRUCTIONS_SESSION, REAL_PROJECT_BRAIN_SESSION, REASK_SESSION, SECRET_MARKER, STATUS_ESCAPE_SESSION, STATUS_SECRET_MARKER } from './test-fixtures/studio-sessions-builders.ts';
-import { bridgeUrl, forgeRoot } from './test-fixtures/studio-sessions-bridge.ts';
+import { type SessionShellBody, captureResponse } from '../test-fixtures/studio-sessions-builders.ts';
+import { BADSTAGE_SESSION, DEPS_SESSION, INVALID_JSON_STATUS_SESSION, MISSING_STATUS_SESSION, MODEL_TIER_SESSION, NON_OBJECT_STATUS_SESSION, NON_STRING_PHASE_STATUS_SESSION, NO_PHASE_STATUS_SESSION, ONBOARDING_BAD_CONFIG_SESSION, ONBOARDING_SESSION, REAL_ARCHITECT_SESSION, REAL_INSTRUCTIONS_SESSION, REAL_PROJECT_BRAIN_SESSION, REASK_SESSION, SECRET_MARKER, STATUS_ESCAPE_SESSION, STATUS_SECRET_MARKER } from '../test-fixtures/studio-sessions-builders.ts';
+import { bridgeUrl, forgeRoot } from '../test-fixtures/studio-sessions-bridge.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { handleStudioSessionsRoutes, type SessionsRouteContext } from '../../bridge-studio-sessions.ts';
+import { handleStudioSessionsRoutes, type SessionsRouteContext } from '../../../../packages/sessions/bridge-studio-sessions.ts';
 
 // ---------------------------------------------------------------------------
 // 200 happy path — the three real kinds (AT-38, 39, 40)

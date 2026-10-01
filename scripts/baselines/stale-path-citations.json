@@ -6258,31 +6258,31 @@
     "count": 1
   },
   {
-    "file": "packages/sessions/tests/integration/test-fixtures/studio-sessions-builders.ts",
+    "file": "apps/forge/tests/test-fixtures/studio-sessions-builders.ts",
     "kind": "path",
     "cited": "packages/sessions/instructions-runner.ts",
     "count": 1
   },
   {
-    "file": "packages/sessions/tests/integration/test-fixtures/studio-sessions-builders.ts",
+    "file": "apps/forge/tests/test-fixtures/studio-sessions-builders.ts",
     "kind": "path",
     "cited": "packages/sessions/studio/session-kinds.test.ts",
     "count": 2
   },
   {
-    "file": "packages/sessions/tests/integration/test-fixtures/studio-sessions-builders.ts",
+    "file": "apps/forge/tests/test-fixtures/studio-sessions-builders.ts",
     "kind": "path",
     "cited": "packages/sessions/studio/session-transcript.test.ts",
     "count": 1
   },
   {
-    "file": "packages/sessions/tests/integration/test-fixtures/studio-sessions-builders.ts",
+    "file": "apps/forge/tests/test-fixtures/studio-sessions-builders.ts",
     "kind": "stem",
     "cited": "session-kinds.test",
     "count": 2
   },
   {
-    "file": "packages/sessions/tests/integration/test-fixtures/studio-sessions-builders.ts",
+    "file": "apps/forge/tests/test-fixtures/studio-sessions-builders.ts",
     "kind": "stem",
     "cited": "session-transcript.test",
     "count": 4
