@@ -95,14 +95,18 @@ import type { Run, TriggerBuilderFields, ShippedTriggerKind, FlowTrigger, Flow }
 // test types its expectation as `ContractStageRow[]` so a third client-side
 // mirror (a new type, or a hand-rolled row parser) diverges and fails.
 import type { ContractStageRow } from '../../lib/session-client';
-// zyc review finding 1 pin — reads the REAL orchestrator SSOT lint directly
-// (same "read the real thing, not a hand-copied mirror" mechanism
-// flow-header-render.test.ts's pin 2 already established for
-// SHIPPED_TRIGGER_KIND_IDS): proves a pr-merged/issue-raised trigger built
-// via the real client path is one `packages/flows/studio/validate-triggers.ts`
-// actually accepts, not just a shape this test file asserts by eye.
-import { checkFlowTriggers } from '../../../../packages/flows/studio/validate-triggers.ts';
-import type { AgentDefinition, FlowDefinition } from '@forge/contracts';
+// zyc review finding 1 pin — "does a pr-merged/issue-raised trigger built via
+// the real client path pass `packages/flows/studio/validate-triggers.ts`'s
+// real SSOT validator" used to be proved right here, reading that module
+// directly. ADR 046 (`studio-beyond-contracts`) now forbids an apps/studio
+// test importing anything beyond `@forge/contracts`, so that proof moved to
+// `scripts/studio-parity-flow-triggers.test.ts` (plain `node:test`, not
+// cruised by the boundary lint) — it imports the real validator AND
+// reconstructs the exact trigger literal this file's own `toEqual`
+// assertions below pin `buildTriggerDeclaration` to produce, so a future
+// change to either side still fails loudly. This file keeps only the
+// non-parity assertion: that `buildTriggerDeclaration` itself builds the
+// right shape.
 
 // AT-F1-1 fetch harness — matches lib/agent-ledger.test.ts verbatim.
 // `fetchContractStages` calls `resolveBridgeUrl()` (./bridge-client) then
@@ -475,26 +479,6 @@ test('RED (zyc finding 1): buildTriggerDeclaration("pr-merged", {...webhook fiel
   });
 });
 
-test('RED (zyc finding 1): a pr-merged trigger built via the real client path is one validate-triggers.ts actually accepts (webhook.id present, zero lint findings)', () => {
-  const trigger = buildTriggerDeclaration('pr-merged', prMergedWebhookFields());
-  expect(trigger).not.toBeNull();
-  // findWebhookTrigger's ONLY match key — must be present for the delivery
-  // to ever be routable at all.
-  expect(trigger?.webhook?.id).toBe('myproj-pr-merged');
-
-  const flow: FlowDefinition = {
-    id: 'flow-a', name: 'Flow A', version: 1, goal: '', project: 'demo-project', kb: null,
-    costCeilingUsd: 0, origin: 'studio', accepts: ['code'], nodes: [], edges: [],
-    triggers: trigger ? [trigger] : [],
-    path: '/dev/null/flow.yaml',
-  };
-  const findings = checkFlowTriggers(flow, new Map<string, AgentDefinition>(), {
-    flowIds: new Set(['flow-a', 'forge-develop']),
-    flowProjectOf: () => 'demo-project',
-  });
-  expect(findings).toEqual([]);
-});
-
 test('companion (zyc finding 1): issue-raised builds the SAME real webhook shape (the sibling kind, not just pr-merged)', () => {
   const trigger = buildTriggerDeclaration('issue-raised', {
     targetId: 'forge-develop',
@@ -504,17 +488,10 @@ test('companion (zyc finding 1): issue-raised builds the SAME real webhook shape
     webhookSecretEnv: 'MYPROJ_WEBHOOK_SECRET',
     webhookSources: 'parsoFish/myproj',
   });
+  // findWebhookTrigger's ONLY match key — must be present for the delivery
+  // to ever be routable at all. (Whether the SSOT validator actually accepts
+  // this exact trigger is proved in scripts/studio-parity-flow-triggers.test.ts.)
   expect(trigger?.webhook?.id).toBe('myproj-issue-raised');
-  const flow: FlowDefinition = {
-    id: 'flow-a', name: 'Flow A', version: 1, goal: '', project: 'demo-project', kb: null,
-    costCeilingUsd: 0, origin: 'studio', accepts: ['code'], nodes: [], edges: [],
-    triggers: trigger ? [trigger] : [],
-    path: '/dev/null/flow.yaml',
-  };
-  expect(checkFlowTriggers(flow, new Map<string, AgentDefinition>(), {
-    flowIds: new Set(['flow-a', 'forge-develop']),
-    flowProjectOf: () => 'demo-project',
-  })).toEqual([]);
 });
 
 // companion — the un-widened kinds (flow-complete/merged/cron/agent-complete)
