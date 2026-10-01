@@ -101,11 +101,12 @@ import {
   backToProjectLink,
 } from '../../lib/session-shell-view.ts';
 import type { SessionShellPayload, SessionShellFetchResult } from '../../lib/session-client.ts';
-// W6-B9 reviewer fix — the real, on-disk SSOT this file's own
-// `isPseudoProjectAnchor` mirrors (imported directly, not re-typed/
-// re-declared, mirroring trigger-kind-parity.test.ts's precedent — inert at
-// module-load time, no I/O until a function is actually called).
-import { isPseudoProjectAnchor as SSOT_isPseudoProjectAnchor, COMMUNITY_REFRESH_PROJECT_ANCHOR as SSOT_COMMUNITY_REFRESH_PROJECT_ANCHOR } from '../../../../packages/sessions/session-resolution.ts';
+// `isPseudoProjectAnchor` (imported above, from ../../lib/session-shell-view.ts)
+// is itself a re-export of `@forge/contracts`'s own definition (ADR 046
+// boundary fix, `studio-beyond-contracts` edge 3, pure transfer) — there is
+// no separate on-disk SSOT left to compare it against, so the parity tests
+// this file used to carry (AT-104/AT-104b) are gone rather than repointed:
+// one definition cannot drift from itself.
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -727,17 +728,6 @@ test('AT-103: isPseudoProjectAnchor — any leading-"." value IS a pseudo-anchor
   expect(isPseudoProjectAnchor('.kb-forge-dev')).toBe(true);
   expect(isPseudoProjectAnchor('.community-registry')).toBe(true);
   expect(isPseudoProjectAnchor('.some-future-anchor')).toBe(true);
-});
-
-test('AT-104: PARITY — forge-ui\'s isPseudoProjectAnchor mirror agrees with the real cli/bridge-studio-sessions.ts SSOT for every sampled value, both directions', () => {
-  const samples = ['mdtoc', 'my-real-project', '.kb-forge-dev', '.community-registry', '.some-future-anchor', ''];
-  for (const s of samples) {
-    expect(isPseudoProjectAnchor(s), `sample ${JSON.stringify(s)}`).toBe(SSOT_isPseudoProjectAnchor(s));
-  }
-});
-
-test('AT-104b: PARITY — forge-ui\'s hardcoded ".community-registry" literal (COMMUNITY_REGISTRY_ANCHOR) matches the real, exported COMMUNITY_REFRESH_PROJECT_ANCHOR SSOT (cli/bridge-studio-sessions.ts, W6-CR-3) byte-for-byte', () => {
-  expect(pseudoProjectAnchorDestination(SSOT_COMMUNITY_REFRESH_PROJECT_ANCHOR)).toEqual({ label: 'Community', href: '/community' });
 });
 
 test('AT-105: pseudoProjectAnchorDestination — the KB-seeding anchor resolves to Knowledge; the `.community-registry` anchor resolves to Community (it belongs to the SURVIVING registry, not the session kind W8-B5b WI-3 retired); an unrecognised pseudo-anchor resolves to null (never a guessed destination)', () => {

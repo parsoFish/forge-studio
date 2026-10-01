@@ -8,9 +8,5 @@
   "package-layer-order|packages/projects/project-config.ts|packages/flows/trigger-payload.ts",
   "package-layer-order|packages/projects/project-create.ts|packages/knowledge/index.ts",
   "package-layer-order|packages/sessions/tests/integration/test-fixtures/studio-sessions-bridge.ts|packages/flows/index.ts",
-  "package-to-assembly|packages/sessions/tests/integration/test-fixtures/studio-sessions-bridge.ts|apps/forge/ui-bridge.ts",
-  "studio-beyond-contracts|apps/studio/tests/contract/SessionInteractivePanel.test.ts|packages/sessions/studio/session-kinds-affordances.ts",
-  "studio-beyond-contracts|apps/studio/tests/contract/SessionInteractivePanel.test.ts|packages/sessions/studio/session-kinds.ts",
-  "studio-beyond-contracts|apps/studio/tests/contract/session-shell-view.test.ts|packages/sessions/session-resolution.ts",
-  "studio-beyond-contracts|apps/studio/tests/contract/studio-client.test.ts|packages/flows/studio/validate-triggers.ts"
+  "package-to-assembly|packages/sessions/tests/integration/test-fixtures/studio-sessions-bridge.ts|apps/forge/ui-bridge.ts"
 ]
