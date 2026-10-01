@@ -79,7 +79,7 @@ fails a set outright if the agent made zero brain-query calls and the
 orchestrator's own prompt-injected brain context was also empty
 (`packages/stations/phases/project-manager.ts`).
 
-## Architect — the human moment that starts a cycle
+## Architect — the plan gate that starts a cycle
 
 *Interactive; the one station that blocks on a human.* Turns an operator's
 free-form idea into one or more queued initiatives, natively inside Forge
@@ -185,6 +185,19 @@ acceptance criteria to outcome-sized work items in one pass.
   pass before any WI's work lands, which per-WI `quality_gate_cmd` exists to
   rule out on larger initiatives.
 
+## Kickoff — the named operator act that launches develop
+
+*Operator act; not a station and not a gate.* The two flows are separate on
+purpose, and nothing hands one to the other unattended: once the scheduler has
+planned the initiative (its roadmap card reads `planned`), the operator presses
+**Develop** on that card (`data-action="start-development"`,
+`apps/studio/components/studio/InitiativeDetail.tsx`). The press enqueues the
+`forge-develop` run on the same `cycle_id` the architect minted
+(`packages/flows/enqueue-develop-run.ts`); architect → develop is the one
+repoint that needs no confirmation, and any other repoint raises one. This is
+the example factory's choice — a factory you build can chain its flows
+unattended or put its own act between them.
+
 ## Build — the Ralph loop
 
 *Unattended; the fan-out station.* Code identifier: `dev` / `developer-ralph`
@@ -271,7 +284,7 @@ verdict plus a Why/What/How paragraph.
   ([ADR 021](../decisions/021-local-review-and-unified-demo.md): approve
   *is* the merge).
 
-## Verdict — the second human moment
+## Verdict — the gate before merge
 
 *Human-in-the-loop; not an agent.* The `forge-develop` flow's terminal node
 is a gate, not a station that runs code: the operator reads the review

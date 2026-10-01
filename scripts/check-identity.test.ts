@@ -256,3 +256,51 @@ test('THE RATCHET: the real repo scans clean — zero hits, zero tolerance', () 
   assert.ok(scanned > 50, `expected a real scan (> 50 files), got ${scanned}`);
   assert.equal(r.code, 0, `retired vocabulary still present:\n${r.out}`);
 });
+
+// Operator item 86 (M7): forge-studio is a SWE factory BUILDER, not a factory.
+// "Three human interaction points" was the develop factory's shape narrated as
+// the product's; the gates belong to the example factory. The phrasing is
+// retired so a current-state doc cannot claim it for the product again.
+test('the product-level "three human interaction points" claim FAILS the gate', () => {
+  withFixture({ 'CLAUDE.md': 'Forge runs unattended between three human interaction points.\n' }, (r) => {
+    assert.equal(r.code, 1, `expected exit 1, got ${r.code}: ${r.out}`);
+    assert.match(r.out, /CLAUDE\.md:1/, r.out);
+  });
+});
+
+test('"three deliberate human moments" FAILS too — the same claim, reworded', () => {
+  withFixture({ 'README.md': 'Agents work between three deliberate human moments.\n' }, (r) => {
+    assert.equal(r.code, 1, `expected exit 1, got ${r.code}: ${r.out}`);
+    assert.match(r.out, /README\.md:1/, r.out);
+  });
+});
+
+test('the hyphenated "three deliberate human-interaction moments" FAILS too', () => {
+  withFixture({ 'docs/y.md': 'It runs between three deliberate human-interaction moments.\n' }, (r) => {
+    assert.equal(r.code, 1, `expected exit 1, got ${r.code}: ${r.out}`);
+    assert.match(r.out, /docs\/y\.md:1/, r.out);
+  });
+});
+
+test('"idea machine" (singular) is retired alongside "ideas machine"', () => {
+  withFixture({ 'docs/x.md': 'An idea machine for one human.\n' }, (r) => {
+    assert.equal(r.code, 1, `expected exit 1, got ${r.code}: ${r.out}`);
+    assert.match(r.out, /docs\/x\.md:1/, r.out);
+  });
+});
+
+test('PRINCIPLES.md is a current-state doc and is scanned', () => {
+  withFixture({ 'PRINCIPLES.md': 'The unifier gates every decision.\n' }, (r) => {
+    assert.equal(r.code, 1, `expected exit 1, got ${r.code}: ${r.out}`);
+    assert.match(r.out, /PRINCIPLES\.md:1/, r.out);
+  });
+});
+
+test('naming the EXAMPLE factory\'s gates PASSES — the gate is about the product claim', () => {
+  withFixture(
+    { 'README.md': "The example develop factory pauses at three operator gates: plan, verdict and reflection.\n" },
+    (r) => {
+      assert.equal(r.code, 0, `expected exit 0, got ${r.code}: ${r.out}`);
+    },
+  );
+});

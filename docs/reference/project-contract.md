@@ -19,9 +19,10 @@
 
 ## Why the contract exists
 
-Forge runs a project as an **unattended loop**: plan → change → verify → package →
-review → merge, fanning work out across parallel work items between human
-interaction points. There is no human in the inner loop. Every guarantee a human
+A factory runs a project as an **unattended loop** — in the example develop
+factory: plan → change → verify → package → review → merge, fanning work out
+across parallel work items between the gates its flow declares. There is no
+human in the inner loop. Every guarantee a human
 would normally provide — "this change is done," "this PR contains only what I
 meant," "these two tasks won't collide" — must instead be **structurally true of
 the project**. A project that doesn't satisfy the hard clauses doesn't fail
