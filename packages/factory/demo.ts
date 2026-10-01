@@ -248,10 +248,14 @@ export function captureCommandOutput(worktreePath: string, command: string): str
 export async function captureCheckpoints(
   input: CaptureCheckpointsInput,
 ): Promise<CaptureCheckpointsResult> {
-  const { buildTree, startServer } = await import('./demo-runtime.ts');
+  const { buildTree, startServer, sweepStaleServer } = await import('./demo-runtime.ts');
   const { recordTerminal, recordBrowser } = await import('./demo-capture.ts');
 
   const bundleDir = resolve(input.bundleDir);
+  // forge-8vfn.8.5.6: BEFORE anything else — a hard crash on a prior run may
+  // have left a dev-server process group running with nothing to stop it.
+  sweepStaleServer(bundleDir);
+
   const beforeDir = join(bundleDir, 'before');
   const afterDir = join(bundleDir, 'after');
   for (const d of [bundleDir, beforeDir, afterDir]) mkdirSync(d, { recursive: true });
@@ -261,6 +265,9 @@ export async function captureCheckpoints(
   const changedWt: WorktreeAtRef = { path: join(wtRoot, 'after'), repo: input.projectRepoPath };
   cleanupWorktreeAt(baselineWt);
   cleanupWorktreeAt(changedWt);
+  // Recordings' temp video dirs (demo-capture.ts's videoDirRoot) also live
+  // under `_trees` — a crashed run's leftovers there get the same pre-clean.
+  rmSync(join(wtRoot, 'video'), { recursive: true, force: true });
 
   const capturedBefore: string[] = [];
   const capturedAfter: string[] = [];
@@ -312,7 +319,7 @@ export async function captureCheckpoints(
 
       // Screenshot checkpoints (browser) DO need a working build + a live server.
       if (status.ok && input.checkpointLabels.length > 0) {
-        const server = await startServer(wt.path);
+        const server = await startServer(wt.path, bundleDir);
         if (!server) continue;
         try {
           for (const { label, route } of input.checkpointLabels) {

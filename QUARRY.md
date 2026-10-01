@@ -62,12 +62,12 @@ operator-ratified new cap — never a silent raise.
 | `agents` | 44 | 12,433 | **12,433** | **pure transfer to apps/forge (7.1c boundary fix): the agent CLI verbs agent-run.ts + agent-dispatch-cmd.ts moved out, trigger firing moved to cmdAgentDispatch; runner.ts comment trimmed. −953 on 13,386, cap lowered to measured.** |
 | `sessions` | 63 | 20,603 | **20,565** | **pure transfers to contracts (SESSION_STAGES + ContractStage types −25; session anchors −14) and safeReadFileInSession to kernel (7.1c boundary fix); cap lowered to measured.** |
 | `flows` | 87 | 24,942 | **24,742** | **measured 24,742 — §7.3 cost-by-class producer (+99 lines: cost-by-class.ts + its index.ts door line); ruling 666 ≤100-line standing cap-raise authority, cap raised to measured.** |
-| `factory` | 15 | 2,763 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
+| `factory` | 15 | 2,904 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 45 | 12,266 | **12,266** | ratified 12,266 — row 167 (forge-8vfn.8.1.61, ruling 1916): `rebaseForResume` moved out to `packages/flows/cycle-helpers.ts`, −20 on 12,286 (cap lowered to measured); see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 34 | 7,993 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **484** | **130,168** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **484** | **130,309** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -191,8 +191,8 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/merge-boundary.ts | stations | verbatim | 115 |
 | packages/knowledge/cycle-retention.ts | knowledge | verbatim | 204 |
 | packages/factory/demo-overlay.ts | factory | rewritten | 195 |
-| packages/factory/demo-capture.ts | factory | rewritten | 318 |
-| packages/factory/demo-runtime.ts | factory | verbatim | 187 |
+| packages/factory/demo-capture.ts | factory | rewritten | 331 |
+| packages/factory/demo-runtime.ts | factory | verbatim | 308 |
 | packages/stations/demo-types.ts | stations | verbatim | 115 |
 | apps/forge/library-flow-source.ts | apps/forge | rewritten | 15 |
 | apps/forge/library-authoring-session.ts | apps/forge | rewritten | 30 |
@@ -558,7 +558,7 @@ operator-ratified new cap — never a silent raise.
 | packages/contracts/demo-declaration.ts | contracts | rewritten | 140 |
 | packages/contracts/session-anchors.ts | contracts | rewritten | 31 New file (ADR 046 boundary fix, `studio-beyond-contracts` edge 3): pure transfer of `isPseudoProjectAnchor` / `COMMUNITY_REFRESH_PROJECT_ANCHOR` out of `packages/sessions/session-resolution.ts` (461 → 447, -14), so `apps/studio`'s own hand-kept mirror of both (`apps/studio/lib/session-shell-view.ts`) could be deleted and re-exported from here instead of held in step by a parity test. |
 | packages/factory/index.ts | factory | verbatim | 8 |
-| packages/factory/demo.ts | factory | verbatim | 413 |
+| packages/factory/demo.ts | factory | verbatim | 420 |
 | packages/flows/index.ts | flows | verbatim | 129 |
 | packages/flows/demo-paths.ts | flows | verbatim | 75 |
 | packages/flows/phases/orchestrated-capture.ts | flows | verbatim | 420 |

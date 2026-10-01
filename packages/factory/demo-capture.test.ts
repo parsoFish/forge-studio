@@ -20,6 +20,7 @@ import {
   recordTerminal,
   terminalPageHtml,
   terminalFooterText,
+  videoDirRoot,
   DemoRecordError,
 } from './demo-capture.ts';
 import { installForgeOverlay } from './demo-overlay.ts';
@@ -144,6 +145,42 @@ test('terminalPageHtml: the footer text names the .out file its evidence came fr
   assert.equal(terminalFooterText('checkout-flow'), 'rendered from checkout-flow.out');
   const html = terminalPageHtml('before', 'checkout-flow');
   assert.match(html, /rendered from checkout-flow\.out/);
+});
+
+// ── videoDirRoot (forge-8vfn.8.5.6) ─────────────────────────────────────────
+// A hard crash mid-recording must leave its temp video file somewhere the
+// NEXT capture's pre-clean sweeps — under the bundle's own `_trees`, never
+// the OS temp dir (nothing sweeps that). No seam to spy through (the real
+// mkdtempSync call is internal to launchRecording), so this pins the path
+// the function returns/uses directly — the same value launchRecording passes
+// straight to `mkdtempSync(join(videoDirRoot(bundleDir), 'rec-'))`.
+
+test('videoDirRoot: lives under the bundle\'s _trees, never the OS temp dir', () => {
+  const bundleDir = join(tmpdir(), 'forge-demo-bundle-example');
+  const root = videoDirRoot(bundleDir);
+  assert.equal(root, join(bundleDir, '_trees', 'video'));
+  assert.ok(root.startsWith(bundleDir + '/'), 'video root sits inside the bundle dir');
+  assert.ok(root.includes(`${join('_trees', 'video')}`), 'video root sits inside _trees, where the crash sweep looks');
+});
+
+test('recordTerminal: the recorded video actually lands under the bundle, not the OS temp dir (and is cleaned up after)', async () => {
+  const { dir, root } = worktreeShapedTmp();
+  try {
+    await recordTerminal({
+      side: 'before',
+      label: 'video-home',
+      argv: ['node', '-e', "console.log('ok')"],
+      outText: 'line one\n',
+      bundleDir: dir,
+    });
+    // The normal-path cleanup removes the per-recording temp dir again —
+    // proving it was ever under the bundle requires the pre-clean's target
+    // directory to be the one we assert on: videoDirRoot(dir)'s PARENT is
+    // created (mkdirSync) even though the leaf is removed afterwards.
+    assert.equal(existsSync(join(dir, '_trees')), true, '_trees was created under the bundle for the recording');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 // ── assertPathSegment ────────────────────────────────────────────────────────

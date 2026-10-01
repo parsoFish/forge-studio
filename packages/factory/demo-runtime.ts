@@ -11,7 +11,10 @@
 import { execFileSync, spawn } from 'node:child_process';
 import {
   existsSync,
+  mkdirSync,
   readFileSync,
+  rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
 
@@ -135,6 +138,115 @@ async function waitForServer(timeoutMs: number, exclude: Set<string>): Promise<s
   return null;
 }
 
+// ── Stale dev-server record (forge-8vfn.8.5.6) ──────────────────────────────
+//
+// `startServer` spawns the dev/preview server `detached: true` so its stop()
+// can SIGTERM the whole process group. The normal path always reaches that
+// stop(); a HARD crash mid-capture does not, leaving a live process group
+// nothing sweeps. The fix: record the group's pid + its start time (so a
+// later *different* process recycled onto the same pid is never mistaken for
+// it — §6.13 "kill only what you recorded, re-verified by start time") next
+// to the bundle, and sweep it at the start of the NEXT capture.
+
+export type ServerRecord = { pid: number; starttime: string };
+
+export function serverRecordPath(bundleDir: string): string {
+  return join(bundleDir, '_trees', 'server.pid');
+}
+
+/** Persist the spawned group's pid + its current `/proc` start time. Called
+ *  right after spawn, with THIS process's own freshly-read start time — never
+ *  a guess. Exported so tests can write a record through the exact same path
+ *  `startServer` does, rather than duplicating the write. */
+export function writeServerRecord(bundleDir: string, record: ServerRecord): void {
+  const recordPath = serverRecordPath(bundleDir);
+  mkdirSync(join(bundleDir, '_trees'), { recursive: true });
+  writeFileSync(recordPath, JSON.stringify(record));
+}
+
+export type ProcStartTime =
+  | { kind: 'ok'; starttime: string }
+  | { kind: 'gone' }
+  | { kind: 'unknown'; error: unknown };
+
+/**
+ * Field 22 of `/proc/<pid>/stat` (start time, in clock ticks since boot) —
+ * stable across the process's whole lifetime, so an equal value proves it's
+ * the SAME process we recorded, not a recycled pid. `comm` (field 2) is
+ * parenthesised and may itself contain spaces/parens/digits, so this splits
+ * on the LAST `)` rather than counting space-separated tokens from the start.
+ * Exported so tests can independently read a real process's start time to
+ * build a correct (or deliberately wrong) fixture record.
+ */
+export function readProcStartTime(pid: number): ProcStartTime {
+  const statPath = `/proc/${pid}/stat`;
+  if (!existsSync(statPath)) return { kind: 'gone' };
+  try {
+    const raw = readFileSync(statPath, 'utf8');
+    const afterComm = raw.slice(raw.lastIndexOf(')') + 2);
+    const fields = afterComm.trim().split(/\s+/);
+    // fields[0] is overall field 3 (state); field 22 is index (22 - 3) = 19.
+    const starttime = fields[19];
+    if (!starttime) return { kind: 'unknown', error: new Error(`could not parse starttime from ${statPath}`) };
+    return { kind: 'ok', starttime };
+  } catch (err) {
+    return { kind: 'unknown', error: err };
+  }
+}
+
+/**
+ * Run BEFORE anything else in a capture: if a stale server record exists from
+ * a crashed prior run, kill the recorded process group ONLY when `/proc` still
+ * shows a live process at that pid AND its start time still matches the
+ * recorded one. A pid that no longer exists, or whose start time has moved on
+ * (recycled by an unrelated process), is never killed — the record is simply
+ * cleared either way, since the process we recorded is gone regardless. An
+ * UNREADABLE `/proc` read is treated as UNKNOWN, never a safe-looking
+ * default (M7-COMMON §6.15): it is logged and the record is left in place for
+ * the next sweep to re-evaluate.
+ */
+export function sweepStaleServer(bundleDir: string): void {
+  const recordPath = serverRecordPath(bundleDir);
+  if (!existsSync(recordPath)) return;
+
+  let record: ServerRecord;
+  try {
+    record = JSON.parse(readFileSync(recordPath, 'utf8')) as ServerRecord;
+  } catch (err) {
+    process.stderr.write(
+      `[demo] stale server record at ${recordPath} is unreadable — leaving it: ${
+        err instanceof Error ? err.message : String(err)
+      }\n`,
+    );
+    return;
+  }
+
+  const check = readProcStartTime(record.pid);
+  if (check.kind === 'unknown') {
+    process.stderr.write(
+      `[demo] cannot verify stale server record (pid ${record.pid}) via /proc — leaving it: ${
+        check.error instanceof Error ? check.error.message : String(check.error)
+      }\n`,
+    );
+    return;
+  }
+  if (check.kind === 'ok' && check.starttime === record.starttime) {
+    try {
+      process.kill(-record.pid, 'SIGTERM');
+    } catch (err) {
+      process.stderr.write(
+        `[demo] failed to signal stale server group (pid ${record.pid}): ${
+          err instanceof Error ? err.message : String(err)
+        }\n`,
+      );
+    }
+  }
+  // 'gone', or an 'ok' whose starttime no longer matches (a recycled pid) —
+  // either way the process we recorded is not there to kill, so the record
+  // itself is stale and is cleared.
+  rmSync(recordPath, { force: true });
+}
+
 export type ServerHandle = { url: string; stop: () => Promise<void> };
 
 /**
@@ -143,7 +255,7 @@ export type ServerHandle = { url: string; stop: () => Promise<void> };
  * return its URL + an async stop() that signals the process group and waits
  * a short drain so the next sequential run can rebind the same port.
  */
-export async function startServer(treePath: string): Promise<ServerHandle | null> {
+export async function startServer(treePath: string, bundleDir: string): Promise<ServerHandle | null> {
   const pkg = readPackageJson(treePath);
   const hasBuildOutput = ['dist', 'build', '.output', 'out'].some((d) =>
     existsSync(join(treePath, d)),
@@ -166,6 +278,14 @@ export async function startServer(treePath: string): Promise<ServerHandle | null
   });
   child.on('error', () => {});
   child.unref();
+  if (child.pid) {
+    // THIS process's own freshly-read start time, not a guess — if /proc
+    // can't be read right after our own spawn (a race or sandboxing), skip
+    // the record rather than writing one we can't trust; the crash this
+    // guards against is best-effort recovery, not a hard guarantee.
+    const self = readProcStartTime(child.pid);
+    if (self.kind === 'ok') writeServerRecord(bundleDir, { pid: child.pid, starttime: self.starttime });
+  }
   const stop = async (): Promise<void> => {
     try {
       if (child.pid) process.kill(-child.pid, 'SIGTERM');
@@ -176,6 +296,7 @@ export async function startServer(treePath: string): Promise<ServerHandle | null
         /* already dead */
       }
     }
+    rmSync(serverRecordPath(bundleDir), { force: true });
     await new Promise((r) => setTimeout(r, 2500));
   };
   const url = await waitForServer(60_000, exclude);
