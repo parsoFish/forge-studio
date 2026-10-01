@@ -767,7 +767,10 @@ function cmdPreflightConverge(rest: string[]): void {
 
 function cmdPreflight(rest: string[]): void {
   const projectDir = resolvePreflightProjectDir(rest[0]);
-  const report = runPreflight(projectDir, { forgeRoot: FORGE_ROOT });
+  // Row 174: the operator asks this before kickoff, which is claim time, so it
+  // judges what the claim judges (claim-validator.ts) — DEPS included. Without
+  // it CONTRACT MET could print for a ground the scheduler then refuses.
+  const report = runPreflight(projectDir, { forgeRoot: FORGE_ROOT, requireRunnableGate: true });
   console.log(formatPreflightReport(report));
   // CON-5: write the verdict event as JSONL so callers can audit preflight outcomes.
   const verdictLogDir = join(FORGE_ROOT, '_logs', 'preflight');
