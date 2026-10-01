@@ -59,13 +59,7 @@ import {
   type StudioContext,
   type RouteContext,
 } from '@forge/kernel';
-// Legacy `cli/dry-bridge.ts` reach: the same accepted shape as every other
-// carved package (`packages/knowledge/bridge-studio-kb-routes-maintenance.ts`,
-// `packages/flows/bridge-recovery.ts`, `packages/library/bridge-studio-
-// community.ts`, …) — all already baselined `package-to-legacy` rows in
-// `scripts/baselines/boundaries.json`. `dry-bridge.ts` has not moved to
-// kernel; this is a new row of the SAME already-accepted shape, reported for
-// T2's bookkeeping, not a fresh design decision.
+// The dry-bridge guards live in @forge/kernel, which every package may import.
 import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from '@forge/kernel';
 
 import { classifyClause, type ClauseClassification } from './preflight-resolve.ts';
