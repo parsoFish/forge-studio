@@ -425,7 +425,9 @@ export function confirmPrMerged(worktreePath: string): boolean {
   } catch (err) {
     const e = err as { stderr?: Buffer | string };
     const stderr = typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString() ?? '';
-    if (stderr) process.stderr.write(`[confirmPrMerged] ${stderr}\n`);
+    // Row 175: before a PR exists (a planning cycle's ready-for-review), gh's
+    // "no pull requests found" is the expected answer, not an error to echo.
+    if (stderr && !/no pull requests found/i.test(stderr)) process.stderr.write(`[confirmPrMerged] ${stderr}\n`);
     return false;
   }
 }

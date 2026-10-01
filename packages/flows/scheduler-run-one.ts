@@ -563,7 +563,7 @@ export async function runOne(
     // F-09 + F-28: clean up the worktree + scratch branch on terminal states
     // only. `merged` (cycle.ts already deleted the branch via gh pr merge),
     // `failed`, or thrown errors all clean up. `ready-for-review` preserves
-    // the worktree so the human can inspect via `forge review <id>`.
+    // the worktree for the operator's next step in Studio.
     if (wtHandle && !preserveWorktree) {
       try {
         worktree.cleanup(wtHandle);
@@ -573,7 +573,7 @@ export async function runOne(
     }
     if (wtHandle && preserveWorktree && tee) {
       console.log(
-        `[serve] preserved worktree: ${wtHandle.path} (branch ${wtHandle.branch}) — resolve via 'forge review <id>'`,
+        `[serve] preserved worktree: ${wtHandle.path} (branch ${wtHandle.branch}) — the next step is on the initiative's card on the project roadmap in Studio`,
       );
     }
   }

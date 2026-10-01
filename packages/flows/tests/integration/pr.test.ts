@@ -23,6 +23,7 @@ import {
   existsSync,
   mkdtempSync,
   mkdirSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -376,6 +377,51 @@ test('confirmPrMerged: false when gh errors / no PR (partial/unconfirmed is NOT 
     const binDir = withGhShim(root, null);
     process.env.PATH = `${binDir}:${originalPath}`;
     assert.equal(confirmPrMerged(proj), false);
+  } finally {
+    process.env.PATH = originalPath;
+    cleanup();
+  }
+});
+
+// Row 175: before a PR exists (the planning cycle reaches ready-for-review with
+// none), gh's "no pull requests found" is the expected answer. Echoing it into
+// serve.log read to the M7-E stranger as an error; any OTHER gh failure is
+// still echoed, because that one is news.
+function captureStderr(run: () => void): string {
+  const original = process.stderr.write.bind(process.stderr);
+  let captured = '';
+  process.stderr.write = ((chunk: string | Uint8Array) => { captured += String(chunk); return true; }) as typeof process.stderr.write;
+  try { run(); } finally { process.stderr.write = original; }
+  return captured;
+}
+
+test('confirmPrMerged: "no pull requests found" is not echoed to stderr — it is the expected pre-PR answer', () => {
+  const { root, proj, cleanup } = makeRepoWithOrigin();
+  const originalPath = process.env.PATH ?? '';
+  try {
+    __resetGhRunnerCache();
+    pointOriginAtGitHub(proj);
+    process.env.PATH = `${withGhShim(root, null)}:${originalPath}`;
+    const err = captureStderr(() => assert.equal(confirmPrMerged(proj), false));
+    assert.doesNotMatch(err, /no pull requests found/);
+  } finally {
+    process.env.PATH = originalPath;
+    cleanup();
+  }
+});
+
+test('confirmPrMerged: any OTHER gh failure is still echoed', () => {
+  const { root, proj, cleanup } = makeRepoWithOrigin();
+  const originalPath = process.env.PATH ?? '';
+  try {
+    __resetGhRunnerCache();
+    pointOriginAtGitHub(proj);
+    // pr view answers nothing it understands -> the shim's 'unsupported' failure.
+    const binDir = withGhShim(root, '{"state":"MERGED"}');
+    writeFileSync(join(binDir, 'gh'), readFileSync(join(binDir, 'gh'), 'utf8').replace(`a[1] === 'view'`, `a[1] === 'never'`));
+    process.env.PATH = `${binDir}:${originalPath}`;
+    const err = captureStderr(() => assert.equal(confirmPrMerged(proj), false));
+    assert.match(err, /\[confirmPrMerged\] unsupported/);
   } finally {
     process.env.PATH = originalPath;
     cleanup();
