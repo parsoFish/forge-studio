@@ -19,7 +19,10 @@
  * every file read out of a session dir. A second, unguarded read path is how a
  * symlinked file inside a session dir leaks content from outside it.
  */
-import { readFileSync, readdirSync, realpathSync, type Dirent } from 'node:fs';
+import { readdirSync, realpathSync, type Dirent } from 'node:fs';
+import { safeReadFileInSession } from '@forge/kernel';
+
+export { safeReadFileInSession };
 import { isAbsolute, join, resolve, sep } from 'node:path';
 
 import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from '@forge/library';
@@ -28,30 +31,6 @@ import type { RoadmapDraftArtifact } from './roadmap-draft.ts';
 
 const AGENTS_DRAFT_FILENAME = 'AGENTS.draft.md';
 const THEMES_DIRNAME = 'themes';
-export function safeReadFileInSession(sessionDir: string, relPath: string): string | null {
-  const abs = join(sessionDir, relPath);
-  let realSessionDir: string;
-  try {
-    realSessionDir = realpathSync(sessionDir);
-  } catch {
-    return null; // sessionDir itself doesn't exist / unreadable
-  }
-  let realAbs: string;
-  try {
-    realAbs = realpathSync(abs);
-  } catch {
-    return null; // missing file, broken symlink, or unreadable path segment
-  }
-  if (realAbs !== realSessionDir && !realAbs.startsWith(realSessionDir + sep)) {
-    return null; // escapes sessionDir via a symlink — treated as absent, never returned
-  }
-  try {
-    return readFileSync(abs, 'utf8');
-  } catch {
-    return null;
-  }
-}
-
 /** Lists a subdirectory's entries filtered by extension, sorted by filename.
  *  A missing directory yields []. Entry CONTENT safety (symlink escape) is
  *  enforced later, per-file, by safeReadFileInSession — that guard alone

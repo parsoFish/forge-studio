@@ -17,9 +17,8 @@
  * and `SESSION_STAGES` now live in `@forge/contracts` (pure transfer,
  * forge-8vfn M7-E boundary fix — `projects`, rank 2, may not import
  * `sessions`, rank 4). `ContractStageRow` is re-exported here so this file's
- * API is unchanged. `safeReadFileInSession` — fs I/O, which contracts may
- * never hold — is the one remaining reason this module reaches into
- * `@forge/sessions`; see the KEPT DEEP comment at the import site.
+ * API is unchanged. File reads go through kernel's realpath-guarded
+ * `safeReadFileInSession`.
  *
  * D3 (security, load-bearing): secrets are NAMES ONLY. This module NEVER
  * opens `secrets.env` and NEVER reads an env VALUE — the `secrets` stage's
@@ -59,16 +58,7 @@ import { join, sep } from 'node:path';
 
 import { SESSION_STAGES, type ContractStage, type ContractStageRow, type ContractStageStatus } from '@forge/contracts';
 
-// KEPT DEEP (bead forge-8vfn.5.31): repointing this specifier to the bare
-// `@forge/sessions` door previously crashed with a live TDZ (`ReferenceError:
-// Cannot access 'SESSION_STAGES' before initialization` — the door eagerly
-// pulled in sessions' whole module graph, which cycled back here). That value
-// has since moved to `@forge/contracts`, but `safeReadFileInSession` — fs I/O,
-// which contracts may never hold — still routes through sessions, and the
-// door-vs-cycle risk is untested for it alone, so it stays deep. This is the
-// ONE remaining `package-layer-order` edge this file has into `sessions`
-// (rank 4, from `projects`, rank 2) — real, not clearable.
-import { safeReadFileInSession } from '@forge/sessions/studio/session-transcript.ts';
+import { safeReadFileInSession } from '@forge/kernel';
 import { loadProjectConfig, AGENT_INSTRUCTION_FILES, type ProjectConfig } from './project-config.ts';
 import { PROJECT_ID_RE, MAX_EXACT_ID_LENGTH, guardedFile } from '@forge/kernel';
 

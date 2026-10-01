@@ -276,6 +276,8 @@ packages/kernel/claude-cli-path.ts statSync 1
 packages/kernel/config.ts existsSync 2
 packages/kernel/config.ts readdirSync 1
 packages/kernel/config.ts readFileSync 2
+packages/kernel/contained-read.ts readFileSync 1
+packages/kernel/contained-read.ts realpathSync 2
 packages/kernel/discovery-roots.ts readdirSync 1
 packages/kernel/gh-identity.ts execFileSync 1
 packages/kernel/guarded-scan.ts openSync 1
@@ -627,8 +629,7 @@ packages/sessions/session-status-io.ts readFileSync 2
 packages/sessions/session-status-io.ts writeFileSync 2
 packages/sessions/session-write-fence.ts realpathSync 3
 packages/sessions/studio/session-artifact-derivers.ts readdirSync 2
-packages/sessions/studio/session-artifact-derivers.ts readFileSync 1
-packages/sessions/studio/session-artifact-derivers.ts realpathSync 6
+packages/sessions/studio/session-artifact-derivers.ts realpathSync 4
 packages/sessions/studio/session-kinds-validate.ts existsSync 1
 packages/sessions/studio/session-kinds-validate.ts readFileSync 1
 packages/sessions/studio/session-kinds.ts readFileSync 1

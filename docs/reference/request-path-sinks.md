@@ -3113,3 +3113,23 @@ entirely). Accepted via `--write` in the same commit.
 `scripts/request-path-sinks.baseline.txt` accepts the grown counts via
 `--write` in the same commit that adds this section, per this document's own
 rule.
+
+### 7.1c boundary fix — `safeReadFileInSession` relocated to kernel, no new surface
+
+| file | sink | before | after |
+|---|---|---|---|
+| `packages/sessions/studio/session-artifact-derivers.ts` | `readFileSync` | 1 | **row deleted** |
+| `packages/sessions/studio/session-artifact-derivers.ts` | `realpathSync` | 6 | 4 |
+| `packages/kernel/contained-read.ts` | `readFileSync` | — | 1 |
+| `packages/kernel/contained-read.ts` | `realpathSync` | — | 2 |
+
+**PURE MOVE, same function, same taint analysis — guarded `[read]`.**
+`safeReadFileInSession` (already classified guarded where the derivers carried
+it: the leaf is realpath-resolved and must stay under the directory's own
+realpath, so a symlink inside the directory cannot leak content from outside
+it) moved verbatim to `packages/kernel/contained-read.ts`. `projects` (rank 2)
+reads project files through it, and could not import `sessions` (rank 4).
+The derivers import it back from `@forge/kernel` and re-export it, so every
+sessions caller is unchanged. The derivers' `readFileSync` row is deleted, not
+left at zero. Total sink calls are conserved. Accepted via `--write` in the
+same commit.

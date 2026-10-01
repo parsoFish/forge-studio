@@ -30,7 +30,7 @@ file reaches its package at M3:
 
 | disposition | meaning | count |
 |---|---|---|
-| `verbatim` | moves unchanged | 364 |
+| `verbatim` | moves unchanged | 365 |
 | `pruned` | moves, with a part that belongs elsewhere dropped on the way | 4 |
 | `rewritten` | **cannot** move without a behaviour change; stays where it is until rewritten | 109 |
 | `deleted` | not carried forward | 0 |
@@ -55,19 +55,19 @@ operator-ratified new cap — never a silent raise.
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
 | `contracts` | 6 | 1,538 | **1,538** | **pure transfer: REPO_RE, WORK_ITEM_ID_PATTERN, WORK_ITEM_FILE_PATTERN, DEV_WORK_ITEM_ID_PATTERN, devWorkItemIdStem from flows + SESSION_STAGES, ContractStage, ContractStageRow, ContractStageStatus from sessions (+83) — forge-8vfn M7-E boundary fix, lane-ratified (ruling 666, measured).** |
-| `kernel` | 30 | 5,583 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
+| `kernel` | 31 | 5,618 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `projects` | 48 | 11,099 | **9,328** | ratified 9,328 — forge-mfv5.3.6 testProcess.local.perWorkItem gate template, validated at load (one {package}, argv only, no shell metacharacters), +44 on 9,284, lane-ratified under ruling 666; see git history for prior raises. |
+| `projects` | 48 | 11,089 | **9,328** | ratified 9,328 — forge-mfv5.3.6 testProcess.local.perWorkItem gate template, validated at load (one {package}, argv only, no shell metacharacters), +44 on 9,284, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,386 | **13,386** | ratified 13,386 — row 122 (forge-8vfn.8.1.55): `classifyCycleFailure` narrows a DNS/environment PR-open failure to `resumeFrom:'pr-open'`, +31 on 13,355, lane-ratified (ruling 666, measured). |
-| `sessions` | 63 | 20,638 | **20,600** | **pure transfer: SESSION_STAGES, ContractStage, ContractStageRow, ContractStageStatus to contracts (−25) — forge-8vfn M7-E boundary fix; cap lowered to measured.** |
+| `sessions` | 63 | 20,617 | **20,600** | **pure transfer: SESSION_STAGES, ContractStage, ContractStageRow, ContractStageStatus to contracts (−25) — forge-8vfn M7-E boundary fix; cap lowered to measured.** |
 | `flows` | 86 | 24,843 | **24,643** | **pure transfer: REPO_RE, WORK_ITEM_ID_PATTERN, WORK_ITEM_FILE_PATTERN, DEV_WORK_ITEM_ID_PATTERN, devWorkItemIdStem to contracts (−8 net) — forge-8vfn M7-E boundary fix; cap lowered to measured.** |
 | `factory` | 15 | 2,763 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 45 | 12,266 | **12,266** | ratified 12,266 — row 167 (forge-8vfn.8.1.61, ruling 1916): `rebaseForResume` moved out to `packages/flows/cycle-helpers.ts`, −20 on 12,286 (cap lowered to measured); see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,922 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **477** | **129,663** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **478** | **129,667** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -175,7 +175,7 @@ operator-ratified new cap — never a silent raise.
 | packages/library/community-refresh-run.ts | library | verbatim | 621 |
 | packages/library/community-registry-lock.ts | library | verbatim | 126 |
 | packages/projects/contract-compliance-loop.ts | projects | verbatim | 167 |
-| packages/projects/contract-stages.ts | projects | verbatim | 342 |
+| packages/projects/contract-stages.ts | projects | verbatim | 332 |
 | packages/stations/cycle-recap.ts | stations | verbatim | 396 |
 | packages/factory/class-profiles.ts | factory | rewritten | 135 |
 | packages/stations/class-profile-port.ts | stations | rewritten | 133 |
@@ -252,6 +252,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/dry-bridge.ts | kernel | rewritten | 230 |
 | packages/kernel/log-cycles.ts | kernel | rewritten | 70 |
 | packages/kernel/bounded-log.ts | kernel | rewritten | 44 |
+| packages/kernel/contained-read.ts | kernel | verbatim | 34 |
 | packages/kernel/discovery-roots.ts | kernel | verbatim | 148 |
 | packages/knowledge/theme-frontmatter.ts | knowledge | verbatim | 116 |
 | apps/forge/ui-bridge.ts | apps/forge | rewritten | 758 |
@@ -493,7 +494,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/studio/session-kinds-validate.ts | sessions | rewritten | 727 |
 | packages/sessions/studio/session-kinds-affordances.ts | sessions | rewritten | 148 |
 | packages/sessions/studio/session-transcript.ts | sessions | verbatim | 635 **Ceiling re-keyed +9 to 1,368 (M4-sessions s3 3b, T1 ruling 83), and that condition is now DISCHARGED (s4).** The re-key paid for the ruled manifest seam (ruling 81) threading an injected port through this file — three `package-layer-order` rows closed for it — and ruling 83 accepted it *on the condition that row 5's split brought the file back down*. It has: `deriveRoadmapDraft` and its three types moved to `packages/sessions/studio/roadmap-draft.ts`, taking the file to **1,298**, below even the pre-3b ceiling of 1,359, and the exemption was TIGHTENED to 1,298 rather than left as a stale allowance. Earlier payment, before the re-key, is still on the record: the ports contract went to `kinds/architect-ports.ts` (returning `kinds/architect.ts` to exactly 1,584, no raise), comments tightened, stale runner paths corrected. Not a licence — the next edit measures against 1,298. |
-| packages/sessions/studio/session-artifact-derivers.ts | sessions | rewritten | 717 |
+| packages/sessions/studio/session-artifact-derivers.ts | sessions | rewritten | 696 |
 | packages/sessions/studio/roadmap-draft.ts | sessions | rewritten | 111 |
 | packages/library/studio/skill-install-ledger.ts | library | verbatim | 166 |
 | packages/library/studio/skill-install.ts | library | verbatim | 351 |
@@ -565,7 +566,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/gh-identity.ts | kernel | verbatim | 107 |
 | packages/kernel/ids.ts | kernel | verbatim | 136 |
 | packages/kernel/event-cost.ts | kernel | verbatim | 143 |
-| packages/kernel/index.ts | kernel | verbatim | 90 |
+| packages/kernel/index.ts | kernel | verbatim | 91 |
 | packages/kernel/init.ts | kernel | verbatim | 171 |
 | packages/kernel/logging.ts | kernel | verbatim | 285 |
 | packages/kernel/tool-fence.ts | kernel | rewritten | 94 **Written for bead `forge-a9o9` (T1 rulings 670/691) — deny-by-default tool access, with no enumeration anywhere. Here rather than beside `makeToolEventSink` in `agents` because the spawn paths that need it span `sessions`, `agents` and `factory`, and the kernel is the only layer all three already stand on; `spawn-env.ts` next door settled the same class for env vars.** |
