@@ -36,8 +36,7 @@
  * split kept them together rather than trading the edge for a same-count
  * rename. That edge is now GONE: M4's layout PR moved `projectBrainDir` and
  * `projectThemesDir` into `@forge/kernel` (ruling 18 — a symbol two rank-2
- * siblings need goes to kernel, it never travels sideways) and deleted the
- * row from `scripts/baselines/boundaries.json`. The grouping stays because
+ * siblings need goes to kernel, it never travels sideways). The grouping stays because
  * it is the right grouping, not because a boundary row forces it. See
  * `preflight-repo.ts`'s header for the rest of the reasoning.
  */

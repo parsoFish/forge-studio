@@ -8,7 +8,7 @@
 # happen inside the gate wrapper and write its own line, so this script is
 # never invoked by a lane; `gate.sh` calls it, once, right after its own step
 # loop, and this script's stdout lands in the same captured gate log — the
-# same relationship `prod-lines.mjs` and `boundary-share.mjs` already have to
+# same relationship `prod-lines.mjs` already has to
 # that log, four steps below in the same file.
 #
 # gate.sh passes its OWN count of FAILED (never REFUSED) steps and the one
