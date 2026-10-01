@@ -5424,12 +5424,6 @@
     "count": 2
   },
   {
-    "file": "packages/projects/bridge-studio-project-preflight-write.ts",
-    "kind": "path",
-    "cited": "cli/dry-bridge.ts",
-    "count": 1
-  },
-  {
     "file": "packages/projects/bridge-studio-project-reset.ts",
     "kind": "path",
     "cited": "cli/dry-bridge.ts",

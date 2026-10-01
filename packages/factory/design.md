@@ -51,13 +51,9 @@ discovery** — which is the whole reason this file exists.
 
 ## Residue
 
-`boundary-share.mjs factory` reports **5 rows**, and every one is a TEST reaching
-out of the package: three spawn-capture tests importing the shared
-`packages/kernel/tests/test-fixtures/spawn-capture/normalize.ts`, and two demo-builder
-tests importing `apps/forge/ui-bridge.ts`. No production module here crosses the
-boundary. The three `normalize.ts` importers go with the fixtures when
-`orchestrator/` retires in M6; the two `ui-bridge.ts` importers are route tests
-that belong beside the route.
+Nothing in this package crosses the allow-graph: `check-boundaries` tolerates no
+edge. The two demo-builder route tests that started the bridge live in
+`apps/forge/tests/regression/`, beside the route.
 
 ## What the package must keep being able to say
 

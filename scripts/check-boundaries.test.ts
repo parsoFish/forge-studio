@@ -1,31 +1,27 @@
 /**
  * Proof that the §0 allow-graph ratchet BITES.
  *
- * Two halves, because the tree it guards does not exist yet:
+ * Two halves:
  *
  *   1. `classify()` is pure, so every rule in the chain is unit-tested
- *      directly — including the three (`package-to-legacy`,
- *      `legacy-to-package-not-via-shim`, `package-layer-order`) that have no
- *      population until `packages/` lands after H5. A rule with no test and
- *      no population is decoration.
- *   2. The live rule, `studio-beyond-contracts`, is exercised end-to-end
- *      against the real tree: at its baseline it passes, with a fabricated
- *      `forge-ui` file importing `orchestrator/` it fails, and against a
- *      doctored baseline it fails as stale.
+ *      directly — including the legacy rules, which have no population now
+ *      that `orchestrator/`, `cli/` and `loops/` are gone. A rule with no
+ *      test and no population is decoration.
+ *   2. The checker is exercised end-to-end: the real tree passes with zero
+ *      violations, and fixture trees with a planted edge fail, naming it.
  *
  * RUN: node --test --experimental-strip-types scripts/check-boundaries.test.ts
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { writeFileSync, rmSync, mkdtempSync, mkdirSync, readFileSync } from 'node:fs';
+import { writeFileSync, rmSync, mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CHECKER = join(ROOT, 'scripts/check-boundaries.mjs');
-const BASELINE = join(ROOT, 'scripts/baselines/boundaries.json');
 
 const { classify, PACKAGE_RANK, normalizeTarget } = (await import(
   new URL('./check-boundaries.mjs', import.meta.url).href
@@ -128,13 +124,9 @@ test('an unknown package name is a failure, not a free pass', () => {
   assert.equal(classify('packages/typo/x.ts', 'packages/kernel/y.ts'), 'unknown-package');
 });
 
-test('the baseline names only rule kinds the checker can actually produce', () => {
-  // Anti-blinding, and deliberately NOT a floor on any kind's COUNT: bead 5.49
-  // removed the `violations >= 1` floor precisely because a floor on debt goes
-  // red at the moment the campaign succeeds. What must never happen instead is
-  // a baseline row keyed to a rule name `classify()` cannot return — a typo, or
-  // a kind renamed on one side only. Such a row matches nothing forever: it is
-  // reported as stale if you are lucky and silently carried if you are not.
+test('every rule kind is producible by classify(), and nothing else is', () => {
+  // A rule name nothing can produce is dead code in the checker's vocabulary,
+  // and a kind classify() returns that is not listed here is an unreviewed rule.
   const KINDS = new Set([
     'package-to-legacy',
     'package-to-assembly',
@@ -144,9 +136,8 @@ test('the baseline names only rule kinds the checker can actually produce', () =
     'package-layer-order',
     'unknown-package',
   ]);
-  // Every kind in the set is REACHABLE — a name nothing can produce is as dead
-  // as a baseline row nothing can match, so the vocabulary is proven, not
-  // asserted. `unknown-package` and the two new kinds included.
+  // Every kind in the set is REACHABLE, so the vocabulary is proven, not
+  // asserted — `unknown-package` included.
   const produced = new Set([
     classify('packages/flows/x.ts', 'cli/y.ts'),
     classify('packages/flows/x.ts', 'apps/forge/y.ts'),
@@ -157,14 +148,10 @@ test('the baseline names only rule kinds the checker can actually produce', () =
     classify('packages/nosuchpkg/x.ts', 'packages/kernel/y.ts'),
   ]);
   assert.deepEqual([...produced].sort(), [...KINDS].sort(),
-    'every rule kind the baseline may use must be producible by classify(), and vice versa');
-
-  const rows = JSON.parse(readFileSync(BASELINE, 'utf8')) as string[];
-  const unknown = [...new Set(rows.map((r) => r.split('|')[0]!))].filter((k) => !KINDS.has(k));
-  assert.deepEqual(unknown, [], `baseline rows keyed to a rule the checker cannot produce: ${unknown.join(', ')}`);
+    'every rule kind must be producible by classify(), and vice versa');
 });
 
-test('the real tree is at its baseline', () => {
+test('the real tree has zero allow-graph violations', () => {
   const { code, out } = run();
   assert.equal(code, 0, out);
   assert.match(out, /check-boundaries: PASS/);
@@ -173,24 +160,8 @@ test('the real tree is at its baseline', () => {
 test('it inspects a real dependency graph, not an empty one', () => {
   const json = JSON.parse(execFileSync('node', [CHECKER, '--json'], { cwd: ROOT, encoding: 'utf8' }));
   assert.ok(json.edges >= 3000, `expected the real graph, got ${json.edges} edges`);
-  // Bead forge-8vfn.5.49. This used to also assert `json.violations >= 1`,
-  // "the live rule has a real population to ratchet down" — a FLOOR on the very
-  // debt the ratchet exists to remove, so it goes red at the moment the
-  // campaign succeeds and `violations` reaches 0.
-  //
-  // It is removed rather than replaced, because everything it protected is
-  // already asserted here and nothing was left uncovered:
-  //   - "the graph is real, not empty" is `edges >= 3000`, above;
-  //   - "the baseline was actually applied" is `stale === []` — a checker that
-  //     stopped finding violations leaves every on-disk row unmatched, so
-  //     `stale` becomes the whole baseline and this test fails loudly;
-  //   - "nothing new slipped in" is `introduced === []`.
-  // A derived restatement (`baselined === <rows on disk>`) was considered and
-  // rejected as tautological: the checker reports `baselined` AS the on-disk
-  // set's size (`check-boundaries.mjs:199`), so such an assertion compares the
-  // baseline file to itself.
-  assert.deepEqual(json.introduced, []);
-  assert.deepEqual(json.stale, []);
+  // Zero, not a floor: the baseline is gone, so any violation is a failure.
+  assert.deepEqual(json.violations, []);
 });
 
 /**
@@ -253,8 +224,7 @@ test('it inspects a real dependency graph, not an empty one', () => {
  * `finally` had already removed it, and REFUSED rather than passing or failing
  * (CI run 36024767395). `boundaryFixture()`, below, plants BOTH ends of the
  * edge in a `mkdtempSync` root of their own and drives `check-boundaries.mjs`'s
- * new `--root` flag — `audit(root, baseline)` already took its root as a
- * parameter, so this fixes the CLI's wiring, not the checker's shape.
+ * new `--root` flag.
  */
 const NON_CONTRACTS_PACKAGE = 'packages/kernel/config.ts';
 
@@ -267,10 +237,8 @@ const NON_CONTRACTS_PACKAGE = 'packages/kernel/config.ts';
  * scanner reading the live tree at that moment (`check-package-caps.mjs`
  * listed `check-boundaries.test.ts`'s own probe on CI run 36024767395, then
  * it was gone before the read, and REFUSED rc 75 rather than passing or
- * failing). `check-boundaries.mjs`'s `audit(root, baseline)` already took
- * its root as a parameter (only the CLI didn't forward one) — the fixture
- * below drives that parameter through the CLI's new `--root` flag, so every
- * assertion keeps reading the checker's own text output unchanged.
+ * failing). The fixture below drives `audit(root)` through the CLI's `--root`
+ * flag, so every assertion reads the checker's own text output.
  */
 function boundaryFixture(files: Record<string, string>): { root: string; cleanup: () => void } {
   const root = mkdtempSync(join(tmpdir(), 'boundaries-fixture-'));
@@ -279,8 +247,6 @@ function boundaryFixture(files: Record<string, string>): { root: string; cleanup
     mkdirSync(dirname(abs), { recursive: true });
     writeFileSync(abs, body);
   }
-  const baseline = join(root, 'empty-baseline.json');
-  writeFileSync(baseline, '[]\n');
   return {
     root,
     cleanup: () => rmSync(root, { recursive: true, force: true }),
@@ -293,7 +259,7 @@ test('it FAILS on a NEW studio → beyond-contracts import (the defect it exists
     'apps/studio/lib/__boundary_probe__.ts': `import '../../../${NON_CONTRACTS_PACKAGE}';\nexport const probe = 1;\n`,
   });
   try {
-    const { code, out } = run(['--root', root, '--baseline', join(root, 'empty-baseline.json')]);
+    const { code, out } = run(['--root', root]);
     assert.equal(code, 1, `a new apps/studio -> non-contracts package import must fail — got exit 0:\n${out}`);
     assert.match(out, /studio-beyond-contracts/);
     assert.match(out, /__boundary_probe__\.ts/);
@@ -316,26 +282,12 @@ test('it FAILS on a NEW package -> assembly import (ruling 116, driven through t
     'packages/kernel/__assembly_probe__.ts': "import '../../apps/forge/routes.ts';\nexport const probe = 1;\n",
   });
   try {
-    const { code, out } = run(['--root', root, '--baseline', join(root, 'empty-baseline.json')]);
+    const { code, out } = run(['--root', root]);
     assert.equal(code, 1, `a new packages/kernel -> apps/forge import must fail — got exit 0:\n${out}`);
     assert.match(out, /package-to-assembly/);
     assert.match(out, /__assembly_probe__\.ts/);
   } finally {
     cleanup();
-  }
-});
-
-test('it FAILS on a stale baseline entry — the ratchet must be tightened when an edge goes', () => {
-  const real = JSON.parse(readFileSync(BASELINE, 'utf8')) as string[];
-  const dir = mkdtempSync(join(tmpdir(), 'boundaries-baseline-'));
-  const path = join(dir, 'boundaries.json');
-  writeFileSync(path, `${JSON.stringify([...real, 'studio-beyond-contracts|apps/studio/lib/gone.ts|orchestrator/gone.ts'], null, 2)}\n`);
-  try {
-    const { code, out } = run(['--baseline', path]);
-    assert.equal(code, 1, `an entry with no matching edge must fail as stale — got exit 0:\n${out}`);
-    assert.match(out, /stale baseline entry/);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
   }
 });
 
@@ -374,7 +326,7 @@ test('it FAILS on an ALIASED studio -> legacy import — the shape a relative-pa
     'apps/studio/lib/__alias_probe__.ts': "import { MAX_KICKOFF_COST_CEILING_USD } from '@/../../orchestrator/config';\nexport const probe = MAX_KICKOFF_COST_CEILING_USD;\n",
   });
   try {
-    const { code, out } = run(['--root', root, '--baseline', join(root, 'empty-baseline.json')]);
+    const { code, out } = run(['--root', root]);
     assert.equal(code, 1, `an aliased forge-ui -> orchestrator import must fail — got exit 0:\n${out}`);
     assert.match(out, /studio-beyond-contracts/);
     assert.match(out, /__alias_probe__\.ts -> orchestrator\/config/);
@@ -388,7 +340,7 @@ test('it FAILS on a workspace-specifier import from the studio tree', () => {
     'apps/studio/lib/__ws_probe__.ts': "import { x } from '@forge/kernel';\nexport const probe = x;\n",
   });
   try {
-    const { code, out } = run(['--root', root, '--baseline', join(root, 'empty-baseline.json')]);
+    const { code, out } = run(['--root', root]);
     assert.equal(code, 1, `apps/studio may import contracts only — got exit 0:\n${out}`);
     assert.match(out, /studio-beyond-contracts/);
     assert.match(out, /packages\/kernel/);

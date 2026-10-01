@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * check-boundaries — the §0 allow-graph, as a shrinking ratchet.
+ * check-boundaries — the §0 allow-graph, with zero violations allowed.
  *
  * THE CONSTRAINT THIS ENFORCES. `docs/roadmaps/1.0.md` §0, verbatim:
  *
@@ -11,24 +11,18 @@
  *   legacy never imports a package at all.
  *
  * The spec calls this "enforced by dependency-cruiser; the violation
- * baseline may only shrink". This script is that enforcement.
+ * baseline may only shrink". The baseline shrank to nothing, so it is gone:
+ * every violation fails, with no list of tolerated edges to hide one in.
  *
  * `stations` sits between `flows` and `factory` (operator items 81/83): the
  * station executor and every band live in `packages/stations`, one rank the
  * example may import and the platform's flows may not.
  *
- * WHY A BASELINE OF VIOLATIONS AND NOT A COUNT. A count lets one violation
- * be swapped for another without the gate noticing. The baseline is the SET
- * of `<rule>|<from>|<to>` triples, so a new edge fails even when an old one
- * disappears in the same PR, and a disappeared edge fails as a stale entry
- * until the baseline is tightened. There is no `--write-baseline`.
- *
- * WHAT BINDS TODAY. The package-rank, package-to-assembly and
- * studio-beyond-contracts rules have population, and the baseline set holds
- * their remaining edges, most of them from test files. The legacy rules have
- * none — `orchestrator/`, `cli/` and `loops/` no longer exist — and stay as
- * the §0 constraint that those trees never come back; they are unit-tested
- * through the exported `classify()`.
+ * WHAT BINDS TODAY. Every rule binds on every file under `packages/` and
+ * `apps/`, tests included, and none has a tolerated edge. The legacy rules
+ * have no population — `orchestrator/`, `cli/` and `loops/` no longer exist —
+ * and stay as the §0 constraint that those trees never come back; they are
+ * unit-tested through the exported `classify()`.
  *
  * WHAT IS OUT OF SCOPE, AND WHY. `scripts/` and `tests/` are not cruised.
  * §0's allow-graph names `orchestrator/`, `cli/`, `loops/`, `packages/` and
@@ -37,9 +31,9 @@
  * apply to it. It IS subject to the 800-line cap, which is a property of a
  * file rather than of the graph.
  *
- * RUN: node scripts/check-boundaries.mjs [--json] [--baseline <path>]
+ * RUN: node scripts/check-boundaries.mjs [--json] [--root <dir>]
  */
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cruise } from 'dependency-cruiser';
@@ -209,15 +203,8 @@ async function edges(root) {
   return out;
 }
 
-function readBaseline(path) {
-  if (!existsSync(path)) return [];
-  const parsed = JSON.parse(readFileSync(path, 'utf8'));
-  if (!Array.isArray(parsed)) throw new Error(`${path}: expected an array of "<rule>|<from>|<to>" strings`);
-  return parsed;
-}
-
-/** Compares the tree's violation SET against the baseline SET. */
-export async function audit(root, baseline) {
+/** Every allow-graph violation in the tree, as sorted `<rule>|<from>|<to>` triples. */
+export async function audit(root) {
   const all = await edges(root);
   const current = new Set();
   for (const { from, to, raw } of all) {
@@ -228,20 +215,11 @@ export async function audit(root, baseline) {
     const rule = classify(from, to);
     if (rule) current.add(`${rule}|${from}|${to}`);
   }
-  const allowed = new Set(baseline);
-  return {
-    edges: all.length,
-    violations: current.size,
-    baselined: allowed.size,
-    introduced: [...current].filter((v) => !allowed.has(v)).sort(),
-    stale: [...allowed].filter((v) => !current.has(v)).sort(),
-  };
+  return { edges: all.length, violations: [...current].sort() };
 }
 
 async function main(argv) {
   const json = argv.includes('--json');
-  const at = argv.indexOf('--baseline');
-  const baselinePath = at === -1 ? join(ROOT, 'scripts/baselines/boundaries.json') : resolve(argv[at + 1]);
   // `--root` — lets a test drive the CLI (and its text output) against a
   // `mkdtempSync` fixture instead of the live tree. `audit(root, …)` already
   // took its root as a parameter; this only wires the flag through to it.
@@ -252,28 +230,20 @@ async function main(argv) {
   const rootAt = argv.indexOf('--root');
   const root = rootAt === -1 ? ROOT : resolve(argv[rootAt + 1]);
 
-  const result = await audit(root, readBaseline(baselinePath));
+  const result = await audit(root);
   if (json) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 
-  const failed = result.introduced.length + result.stale.length;
-  if (failed === 0) {
-    if (!json) {
-      process.stdout.write(
-        `check-boundaries: PASS — ${result.edges} edges, ${result.violations} baselined allow-graph violation(s)\n`,
-      );
-    }
+  if (result.violations.length === 0) {
+    if (!json) process.stdout.write(`check-boundaries: PASS — ${result.edges} edges, 0 allow-graph violations\n`);
     return 0;
   }
 
   if (!json) {
-    for (const v of result.introduced) {
+    for (const v of result.violations) {
       const [rule, from, to] = v.split('|');
-      process.stdout.write(`  ${rule}: ${from} -> ${to} — a NEW allow-graph violation (1.0.md §0). Route it through the package that owns it.\n`);
+      process.stdout.write(`  ${rule}: ${from} -> ${to} — an allow-graph violation (1.0.md §0). Route it through the package that owns it.\n`);
     }
-    for (const v of result.stale) {
-      process.stdout.write(`  stale baseline entry: ${v} — the edge is gone; remove it from the baseline to tighten the ratchet.\n`);
-    }
-    process.stdout.write(`check-boundaries: FAIL — ${failed} allow-graph violation(s) off the baseline\n`);
+    process.stdout.write(`check-boundaries: FAIL — ${result.violations.length} allow-graph violation(s)\n`);
   }
   return 1;
 }
