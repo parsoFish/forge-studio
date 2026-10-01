@@ -100,7 +100,7 @@ The platform prescribes no fixed human moments: a factory declares its own gates
 | Act | What you do in Studio | The factory produces |
 |---|---|---|
 | **Plan gate** | drop an idea → interview → approve the PLAN | a queued initiative on the project's roadmap |
-| **Kickoff** | on the project's roadmap, start the scheduler (it plans the initiative into work items), then press Develop on the initiative's card | the build → integrate → review run |
+| **Kickoff** | on the project's roadmap, start the scheduler (it plans the initiative into work items), then press **Start development** on the initiative's card | the build → integrate → review run |
 | **Verdict gate** | inspect the demo-embedded PR → approve (merge) or send back | a self-contained PR; merge fires reflection |
 | **Reflection** | answer the reflector's questions | brain themes + retro + cycle archive |
 
