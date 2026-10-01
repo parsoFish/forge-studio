@@ -2024,12 +2024,6 @@
   {
     "file": "docs/roadmaps/1.0-kickoffs.md",
     "kind": "path",
-    "cited": "packages/kernel/README.md",
-    "count": 1
-  },
-  {
-    "file": "docs/roadmaps/1.0-kickoffs.md",
-    "kind": "path",
     "cited": "scripts/e2e-deadpaths.mjs",
     "count": 1
   },
@@ -6633,12 +6627,6 @@
     "file": "skills/reflector/SKILL.md",
     "kind": "path",
     "cited": "cli/brain-lint.ts",
-    "count": 1
-  },
-  {
-    "file": "SPEC.md",
-    "kind": "path",
-    "cited": "packages/kernel/contract.test.ts",
     "count": 1
   },
   {
