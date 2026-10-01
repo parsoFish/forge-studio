@@ -449,7 +449,8 @@ packages/library/studio/community-index.ts readFileSync 1
 packages/library/studio/community-index.ts realpathSync 1
 packages/library/studio/community-install.ts existsSync 4
 packages/library/studio/community-install.ts mkdirSync 2
-packages/library/studio/community-install.ts writeFileSync 1
+packages/library/studio/community-install.ts renameSync 1
+packages/library/studio/community-install.ts rmSync 1
 packages/library/studio/community-registry.ts existsSync 1
 packages/library/studio/connection-probe.ts existsSync 3
 packages/library/studio/connection-probe.ts readFileSync 1
@@ -478,8 +479,10 @@ packages/library/studio/skill-install.ts mkdirSync 2
 packages/library/studio/skill-install.ts readdirSync 1
 packages/library/studio/skill-install.ts readFileSync 4
 packages/library/studio/skill-install.ts realpathSync 1
+packages/library/studio/skill-install.ts renameSync 1
+packages/library/studio/skill-install.ts rmSync 1
 packages/library/studio/skill-install.ts statSync 1
-packages/library/studio/skill-install.ts writeFileSync 4
+packages/library/studio/skill-install.ts writeFileSync 2
 packages/library/studio/skill-package.ts readdirSync 1
 packages/library/studio/skill-package.ts readFileSync 1
 packages/library/studio/skill-package.ts realpathSync 1
