@@ -96,6 +96,52 @@ tripwire keeping ADR-043 §3's dispatch fork from re-opening the per-runner cap
 park — and because `knownAgentIds` derives the operator's usage line from the
 union of both tables, so a ported kind cannot go invisible while still working.
 
+## Crash and recovery
+
+A run's durable record is its `_logs/<runId>/` directory: `events.jsonl`,
+`stderr.log`, `turn.pid`, and — for anything spawned through `runAgent` — an
+appended `agent-run.marker` (`spawn-marker.ts:95-168`) carrying one
+`<runId>:<uuid>` token per line, idempotent to re-record. A dispatch that
+returns or throws normally gets its terminus written by
+`recordDispatchTerminal` (`dispatch-terminal.ts:97-120`) — best-effort but
+never silent: an unwritable log is reported to stderr, not swallowed,
+because the alternative is a perpetually "running" record.
+`installDispatchSignalGuard` (`dispatch-terminal.ts:158-…`) catches
+`SIGTERM`/`SIGINT`/`SIGHUP` and writes the same terminus before exiting
+`128+signo`, idempotent (first signal wins, later ones exit without
+writing) and always uninstalled in the caller's `finally`. `SIGKILL` cannot
+be caught, so a `-9`'d run genuinely ends with no terminus — stated as a
+reader-side residual this seam cannot close (`dispatch-terminal.ts:45-48`):
+a dead pid plus no terminal event has to be read as finished, not written
+around.
+
+A standalone run's live/crashed/stalled state is never stored either — it
+is re-derived each read from `events.jsonl`/`stderr.log`/`turn.pid` mtimes
+(`readStandaloneLivenessFacts`, `bridge-agents-run-state.ts:256-291`), with
+a terminal marker (`done`/`failed`/`cancelled`) never overridden by a later
+stale-looking poll (`bridge-agents-run-state.ts:293-306`). Liveness is the
+same `/proc/<pid>/cmdline` ownership proof sessions uses (`isTurnAlive`,
+injected via `AgentRunStateDeps` from `@forge/sessions` since this package
+is rank 3), never a bare pid check. Orphaned agent processes are reaped by
+`scripts/stories/reap.mjs` walking ppid/pgid links; the marker file is the
+third rung, for a process that escapes both (a `setsid`'d grandchild that
+also re-parents before the snapshot) — `processesCarryingMarker`
+(`spawn-marker.ts:245-276`) never throws and matches by uid plus a *whole*
+`FORGE_AGENT_RUN_MARKER=<token>` environ entry, never a name/argv pattern,
+and it is cooperative, not enforced: a process that deliberately scrubs its
+env before re-exec is invisible to it. A cost-ceiling halt classifies
+`terminal`/non-recoverable, never auto-retried
+(`failure-classifier.ts:558-567`): "resumable" there means an operator can
+raise the ceiling and requeue from that phase boundary, not that the
+scheduler retries it unattended.
+
+Tests: `tests/regression/dispatch-terminal.test.ts` (SIGTERM terminus,
+idempotence, unwritable-log reporting), `tests/regression/spawn-marker.test.ts`
+(token binding + sweep), `tests/unit/failure-classifier.test.ts`
+(cost-ceiling classification). Standalone crashed/stalled derivation is
+proven in `apps/forge/tests/regression/ui-bridge-standalone-stalled.test.ts`,
+outside this package because `AgentRunStateDeps` is bound at `apps/forge`.
+
 ## Layout
 
 `run-agent.ts` is the spawn primitive; `agent-dispatch.ts` and
