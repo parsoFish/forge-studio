@@ -15,7 +15,7 @@
  *   POST /api/studio/hooks/:id/override  → distinct recorded override
  *
  * Style: real bridge (startBridge) + fetch, mirroring
- * packages/library/tests/integration/bridge-studio-skills.test.ts, over the ALREADY-SHIPPED core
+ * apps/forge/tests/integration/bridge-studio-skills.test.ts, over the ALREADY-SHIPPED core
  * (packages/library/studio/hook-library.ts F1, hook-scan.ts F2/F3 — read in full
  * before writing this file; every fixture script below reuses the exact
  * bodies pinned in hook-scan.test.ts's own `EXFIL_SCRIPT`/`BENIGN_SCRIPT` so
@@ -71,8 +71,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
-import { startBridge } from '../../../../apps/forge/ui-bridge.ts';
-import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from '../../routes.ts'; import { fixtureAgentFacts } from '../test-fixtures/agent-fixture.ts'; import { fixtureFlowSource } from '../test-fixtures/flow-fixture.ts'; import { inertAuthoringSession } from '../test-fixtures/authoring-session-fixture.ts';
+import { startBridge } from '../../ui-bridge.ts';
+import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from '../../../../packages/library/routes.ts'; import { fixtureAgentFacts } from '../../../../packages/library/tests/test-fixtures/agent-fixture.ts'; import { fixtureFlowSource } from '../../../../packages/library/tests/test-fixtures/flow-fixture.ts'; import { inertAuthoringSession } from '../../../../packages/library/tests/test-fixtures/authoring-session-fixture.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

@@ -1,7 +1,7 @@
 /**
  * Structural teeth for R3-04's negative acceptance criterion ("no
  * create/edit UI for this category anywhere", D1 of `_wave5/specs/R3-04.md`)
- * — T2-mandated (round 2, item 6). `packages/library/tests/integration/bridge-studio-connections.test.ts`'s
+ * — T2-mandated (round 2, item 6). `apps/forge/tests/integration/bridge-studio-connections.test.ts`'s
  * bridge-refusal tests prove the ROUTE never accepts a mutating request;
  * that is necessary but not sufficient — nothing stopped a future PR from
  * adding a `apps/studio/app/connections/new/page.tsx` that POSTs somewhere

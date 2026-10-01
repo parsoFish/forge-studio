@@ -27,8 +27,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../../../apps/forge/ui-bridge.ts';
-import { cmdCommunity } from '../../community-refresh-cmd.ts';
+import { startBridge } from '../../ui-bridge.ts';
+import { cmdCommunity } from '../../../../packages/library/community-refresh-cmd.ts';
 
 const FAKE_TOKEN = 'ghp_ROUTETESTTOKENneverRendered0000000000';
 

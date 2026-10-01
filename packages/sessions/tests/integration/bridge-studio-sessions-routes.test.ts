@@ -203,7 +203,7 @@ test('AT-43: GET /api/studio/sessions/architect/<unknown-id>?project=<p> returns
 // required"): `?project=` is now OPTIONAL — a deep link that omits it
 // resolves the anchor project server-side (`findSessionProject`) and
 // returns the SAME 200 payload, `project` filled in. The unresolvable /
-// ambiguous cases are pinned in packages/sessions/tests/integration/bridge-studio-lifecycle.test.ts.
+// ambiguous cases are pinned in apps/forge/tests/integration/bridge-studio-lifecycle.test.ts.
 test('AT-44 (W7-A2): GET /api/studio/sessions/architect/<id> with NO project query param resolves the project server-side and returns 200 with it filled in', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${REAL_ARCHITECT_SESSION}`);
   assert.equal(res.status, 200);

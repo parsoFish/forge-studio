@@ -4278,25 +4278,25 @@
     "count": 1
   },
   {
-    "file": "packages/agents/tests/regression/legacy-dispatch-project-guard.test.ts",
+    "file": "apps/forge/tests/regression/legacy-dispatch-project-guard.test.ts",
     "kind": "path",
     "cited": "cli/agent-run.test.ts",
     "count": 2
   },
   {
-    "file": "packages/agents/tests/regression/legacy-dispatch-project-guard.test.ts",
+    "file": "apps/forge/tests/regression/legacy-dispatch-project-guard.test.ts",
     "kind": "path",
     "cited": "cli/studio-path-guard.ts",
     "count": 2
   },
   {
-    "file": "packages/agents/tests/regression/legacy-dispatch-project-guard.test.ts",
+    "file": "apps/forge/tests/regression/legacy-dispatch-project-guard.test.ts",
     "kind": "path",
     "cited": "orchestrator/cli.ts",
     "count": 1
   },
   {
-    "file": "packages/agents/tests/regression/legacy-dispatch-project-guard.test.ts",
+    "file": "apps/forge/tests/regression/legacy-dispatch-project-guard.test.ts",
     "kind": "stem",
     "cited": "studio-path-guard",
     "count": 1
@@ -4374,7 +4374,7 @@
     "count": 1
   },
   {
-    "file": "packages/factory/tests/regression/demo-builder-start-nonstring-project.test.ts",
+    "file": "apps/forge/tests/regression/demo-builder-start-nonstring-project.test.ts",
     "kind": "path",
     "cited": "cli/studio-path-guard.ts",
     "count": 1
@@ -5400,37 +5400,37 @@
     "count": 1
   },
   {
-    "file": "packages/library/tests/integration/bridge-studio-authoring-finalize.test.ts",
+    "file": "apps/forge/tests/integration/bridge-studio-authoring-finalize.test.ts",
     "kind": "path",
     "cited": "orchestrator/studio/skill-library.ts",
     "count": 1
   },
   {
-    "file": "packages/library/tests/integration/bridge-studio-authoring-finalize.test.ts",
+    "file": "apps/forge/tests/integration/bridge-studio-authoring-finalize.test.ts",
     "kind": "path",
     "cited": "skills/authored-skill/SKILL.md",
     "count": 1
   },
   {
-    "file": "packages/library/tests/integration/bridge-studio-hooks.test.ts",
+    "file": "apps/forge/tests/integration/bridge-studio-hooks.test.ts",
     "kind": "stem",
     "cited": "skill-library",
     "count": 1
   },
   {
-    "file": "packages/library/tests/integration/bridge-studio-skills.test.ts",
+    "file": "apps/forge/tests/integration/bridge-studio-skills.test.ts",
     "kind": "path",
     "cited": "cli/skill-md-path-guard.ts",
     "count": 1
   },
   {
-    "file": "packages/library/tests/integration/bridge-studio-skills.test.ts",
+    "file": "apps/forge/tests/integration/bridge-studio-skills.test.ts",
     "kind": "path",
     "cited": "orchestrator/studio/skill-library.ts",
     "count": 1
   },
   {
-    "file": "packages/library/tests/integration/bridge-studio-skills.test.ts",
+    "file": "apps/forge/tests/integration/bridge-studio-skills.test.ts",
     "kind": "stem",
     "cited": "bridge-studio-kbs.test",
     "count": 1
@@ -5454,7 +5454,7 @@
     "count": 2
   },
   {
-    "file": "packages/library/tests/integration/connection-validate.test.ts",
+    "file": "apps/forge/tests/integration/connection-validate.test.ts",
     "kind": "path",
     "cited": "orchestrator/studio/validate.ts",
     "count": 1

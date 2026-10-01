@@ -53,7 +53,7 @@
  * host-supplied reader `RouteContext` carries) instead.
  *
  * ---------------------------------------------------------------------------
- * CONTRACT DECISIONS (mirrored from packages/library/tests/integration/bridge-studio-hooks.test.ts's own
+ * CONTRACT DECISIONS (mirrored from apps/forge/tests/integration/bridge-studio-hooks.test.ts's own
  * header — that file is this module's spec, covering EVERY file in the
  * category, not just this one):
  *

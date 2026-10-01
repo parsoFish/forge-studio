@@ -5,7 +5,7 @@
  * (ERR_MODULE_NOT_FOUND on the `./bridge-studio-skills.ts` import is the
  * expected red). See _wave5/specs/R3-01-F3F4.md for the full design; AT
  * numbers below map 1:1 onto that spec's
- * "AT set — packages/library/tests/integration/bridge-studio-skills.test.ts".
+ * "AT set — apps/forge/tests/integration/bridge-studio-skills.test.ts".
  *
  * Style: real bridge (startBridge) + fetch, mirroring bridge-studio-kbs.test.ts
  * and bridge-studio-write.test.ts — plus one direct handler-invocation test
@@ -34,9 +34,9 @@ import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
-import { startBridge } from '../../../../apps/forge/ui-bridge.ts';
-import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from '../../routes.ts';
-import { fixtureAgentFacts } from '../test-fixtures/agent-fixture.ts'; import { fixtureFlowSource } from '../test-fixtures/flow-fixture.ts'; import { inertAuthoringSession } from '../test-fixtures/authoring-session-fixture.ts';
+import { startBridge } from '../../ui-bridge.ts';
+import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from '../../../../packages/library/routes.ts';
+import { fixtureAgentFacts } from '../../../../packages/library/tests/test-fixtures/agent-fixture.ts'; import { fixtureFlowSource } from '../../../../packages/library/tests/test-fixtures/flow-fixture.ts'; import { inertAuthoringSession } from '../../../../packages/library/tests/test-fixtures/authoring-session-fixture.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

@@ -6,7 +6,7 @@
  * test coverage") applied to this route, T2 round 5 AT GROUP 1.
  *
  * SEPARATE FILE, DELIBERATELY (T2's own instruction): the main
- * `packages/library/tests/integration/bridge-studio-community.test.ts` sets `FORGE_ARCHITECT_NO_SPAWN=1`
+ * `apps/forge/tests/integration/bridge-studio-community.test.ts` sets `FORGE_ARCHITECT_NO_SPAWN=1`
  * globally in its `before()` to keep every OTHER test in that file
  * hermetic — every test there that reaches `routedTo:'connection-install'`
  * therefore only ever exercises the SUPPRESSED branch
@@ -20,13 +20,13 @@
  * `FORGE_ARCHITECT_NO_SPAWN` at all, and each test explicitly manages
  * `FORGE_ARCHITECT_NO_SPAWN`/`FORGE_DRY_BRIDGE` itself (save/delete/restore
  * in a `finally`) — the same per-test env discipline
- * `packages/library/tests/integration/bridge-studio-connections.test.ts`'s own "REAL, non-suppressed"
+ * `apps/forge/tests/integration/bridge-studio-connections.test.ts`'s own "REAL, non-suppressed"
  * env-leak test already uses for exactly this reason.
  *
  * NO NETWORK INSTALL, ever (R3-04 D7 is binding — no test may depend on the
  * npm registry): the route spawns `npm` by argv, so every test here SHADOWS
  * `npm` on `PATH` with a temp script the test fully controls — the same
- * technique `packages/library/tests/integration/bridge-studio-connections.test.ts`'s reviewer-authored
+ * technique `apps/forge/tests/integration/bridge-studio-connections.test.ts`'s reviewer-authored
  * env-leak repro already uses (a fake `npm` on a scratch dir prepended to
  * PATH, so it resolves before the real one). The fake `npm` performs no
  * real install; it only records that it ran and exits with the code the
@@ -47,7 +47,7 @@ import { join, delimiter } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
-import { startBridge } from '../../../../apps/forge/ui-bridge.ts';
+import { startBridge } from '../../ui-bridge.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -103,7 +103,7 @@ async function postJson(url: string, body: unknown): Promise<Response> {
 }
 
 /** Plants a real, executable fake `npm` on a scratch dir and prepends it to
- *  PATH — mirrors packages/library/tests/integration/bridge-studio-connections.test.ts's own env-leak repro
+ *  PATH — mirrors apps/forge/tests/integration/bridge-studio-connections.test.ts's own env-leak repro
  *  technique. Performs NO real install; it only exits with the given code. */
 function shadowFakeNpm(exitCode: number): { scratchRoot: string; restore: () => void } {
   const scratchRoot = mkdtempSync(join(tmpdir(), 'fake-npm-community-'));

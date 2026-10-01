@@ -55,7 +55,7 @@ import { readFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, readdirSyn
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../../../apps/forge/ui-bridge.ts';
+import { startBridge } from '../../ui-bridge.ts';
 
 // ===========================================================================
 // Part 1 — source-ordering pin (RED at base).
@@ -66,7 +66,7 @@ import { startBridge } from '../../../../apps/forge/ui-bridge.ts';
 // has to read the file the handler now lives in — left pointing at the host it
 // would pass vacuously against a file the code is no longer in.
 const SRC = readFileSync(
-  join(import.meta.dirname, '..', '..', '..', 'sessions', 'bridge-studio-demo.ts'),
+  join(import.meta.dirname, '..', '..', '..', '..', 'packages', 'sessions', 'bridge-studio-demo.ts'),
   'utf8',
 );
 

@@ -20,7 +20,7 @@
  *   flows-11    flows DELETE (seed ⇒ 403, active run ⇒ 423, authored ⇒ 200)
  *
  * Style: real bridge (startBridge) + fetch, mirroring
- * packages/library/tests/integration/bridge-studio-skills.test.ts exactly.
+ * apps/forge/tests/integration/bridge-studio-skills.test.ts exactly.
  */
 
 import { test, before, after } from 'node:test';
@@ -39,7 +39,7 @@ import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 import { FORGE_ROOT } from '@forge/kernel';
-import { startBridge } from '../../../../apps/forge/ui-bridge.ts';
+import { startBridge } from '../../ui-bridge.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture root

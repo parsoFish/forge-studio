@@ -3,7 +3,7 @@
  *
  * The module under test does not exist yet — this file is RED at branch base
  * (ERR_MODULE_NOT_FOUND on the `./bridge-studio-templates.ts` import is the
- * expected red). Mirrors packages/library/tests/integration/bridge-studio-skills.test.ts's idiom: a real
+ * expected red). Mirrors apps/forge/tests/integration/bridge-studio-skills.test.ts's idiom: a real
  * bridge (startBridge) + fetch, plus one direct handler-invocation test for
  * the "returns false when unhandled" passthrough contract.
  *
@@ -18,9 +18,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 
-import { startBridge } from '../../../../apps/forge/ui-bridge.ts';
-import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from '../../routes.ts';
-import { fixtureAgentFacts } from '../test-fixtures/agent-fixture.ts'; import { fixtureFlowSource } from '../test-fixtures/flow-fixture.ts'; import { inertAuthoringSession } from '../test-fixtures/authoring-session-fixture.ts';
+import { startBridge } from '../../ui-bridge.ts';
+import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from '../../../../packages/library/routes.ts';
+import { fixtureAgentFacts } from '../../../../packages/library/tests/test-fixtures/agent-fixture.ts'; import { fixtureFlowSource } from '../../../../packages/library/tests/test-fixtures/flow-fixture.ts'; import { inertAuthoringSession } from '../../../../packages/library/tests/test-fixtures/authoring-session-fixture.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

@@ -18,8 +18,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { recoverInitiativeId } from '../../bridge-studio-runs.ts';
-import { startBridge } from '../../../../apps/forge/ui-bridge.ts';
+import { recoverInitiativeId } from '../../../../packages/flows/bridge-studio-runs.ts';
+import { startBridge } from '../../ui-bridge.ts';
 
 // ---------------------------------------------------------------------------
 // Pure recovery rule

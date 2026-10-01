@@ -23,8 +23,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 
-import { loadSessionKinds } from '../../studio/session-kinds.ts';
-import { SPAWN_AGENT_SPECS, type SpawnableAgentId } from '../../../../apps/forge/bridge-agent-dispatch.ts';
+import { loadSessionKinds } from '@forge/sessions/studio/session-kinds.ts';
+import { SPAWN_AGENT_SPECS, type SpawnableAgentId } from '../../bridge-agent-dispatch.ts';
 
 const REPO_ROOT = resolve(import.meta.dirname, '..', '..', '..', '..');
 

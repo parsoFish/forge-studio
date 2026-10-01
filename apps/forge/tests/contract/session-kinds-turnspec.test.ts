@@ -1,13 +1,13 @@
-import { wellFormedTurnSpec, turnSpecDescriptor } from './test-fixtures/session-kinds-turnspec.ts';
+import { wellFormedTurnSpec, turnSpecDescriptor } from '../../../../packages/sessions/tests/contract/test-fixtures/session-kinds-turnspec.ts';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadSessionKinds, type SessionKindDescriptor } from '../../studio/session-kinds.ts';
-import { validateSessionKinds } from '../../studio/session-kinds-validate.ts';
+import { loadSessionKinds, type SessionKindDescriptor } from '@forge/sessions/studio/session-kinds.ts';
+import { validateSessionKinds } from '../../../../packages/sessions/studio/session-kinds-validate.ts';
 import type { Finding } from '@forge/kernel';
-import { runStudioLint } from '../../../../apps/forge/studio-lint.ts';
+import { runStudioLint } from '../../studio-lint.ts';
 import { SLUG_RE } from '@forge/kernel';
 
-import { REPO_ROOT, byId, makeForgeRoot, writeAgentSkill, writeSessionKindsYaml } from './test-fixtures/session-kinds-core.ts';
+import { REPO_ROOT, byId, makeForgeRoot, writeAgentSkill, writeSessionKindsYaml } from '../../../../packages/sessions/tests/contract/test-fixtures/session-kinds-core.ts';
 
 // ===========================================================================
 // AT-R422-1 .. AT-R422-10 — R4-22 WI-1, ADR-043: the additive-optional
@@ -27,7 +27,7 @@ function turnspecFindings(findings: Finding[]): Finding[] {
 
 describe('validateSessionKinds — turnSpec (AT-R422-1..4): unknown value in a closed sub-vocabulary → error naming value + allowed set', () => {
   it('AT-R422-1: turnSpec.style outside TURN_STYLES → error naming the offending value AND every id in TURN_STYLES (kills an implementation that never validates style at all, or that validates it but hardcodes a stale/incomplete allowed-set string instead of deriving it from TURN_STYLES)', async () => {
-    const mod = await import('../../studio/session-kinds.ts');
+    const mod = await import('@forge/sessions/studio/session-kinds.ts');
     const root = makeForgeRoot();
     writeAgentSkill(root, 'fixture-agent');
     const bogus = 'not-a-real-turn-style-at-all';
@@ -46,7 +46,7 @@ describe('validateSessionKinds — turnSpec (AT-R422-1..4): unknown value in a c
   });
 
   it('AT-R422-2: a phase.step outside TURN_STEPS → error naming the offending value AND every id in TURN_STEPS (kills an implementation that validates style but forgets per-phase step validation — a distinct field, distinct check)', async () => {
-    const mod = await import('../../studio/session-kinds.ts');
+    const mod = await import('@forge/sessions/studio/session-kinds.ts');
     const root = makeForgeRoot();
     writeAgentSkill(root, 'fixture-agent');
     const bogus = 'not-a-real-step-at-all';
@@ -69,7 +69,7 @@ describe('validateSessionKinds — turnSpec (AT-R422-1..4): unknown value in a c
   it('AT-R422-3 (updated W6-B3 post-merge review): a phase.finalizer outside the DISPATCHABLE finalizer set (on an otherwise-valid step:finalize phase) → error naming the offending value AND every id `packages/sessions/interactive-finalizers.ts`\'s FINALIZERS registry actually implements — turnSpec.phases validates against the set dispatch will resolve, NOT the wider descriptive FINALIZER_IDS (kills an implementation that validates step but never resolves the finalizer id it names — a dangling reference would otherwise only fail at RUNTIME, mid-cycle, not at lint time; also kills an implementation that lint-approves a merely DESCRIPTIVE finalizer id turnSpec dispatch would throw on)', async () => {
     // Parity import (reviewer-preferred over a hand-maintained mirror): the
     // REAL registry a turnSpec finalize step actually dispatches through.
-    const { FINALIZERS } = await import('../../interactive-finalizers.ts');
+    const { FINALIZERS } = await import('../../../../packages/sessions/interactive-finalizers.ts');
     const root = makeForgeRoot();
     writeAgentSkill(root, 'fixture-agent');
     const bogus = 'notARealFinalizerAtAll';
@@ -104,7 +104,7 @@ describe('validateSessionKinds — turnSpec (AT-R422-1..4): unknown value in a c
   });
 
   it('AT-R422-4: turnSpec.schema outside SCHEMA_IDS → error naming the offending value AND every id in SCHEMA_IDS (kills an implementation that resolves style/step/finalizer but skips schema — the 4th vocabulary the ADR names explicitly; if SCHEMA_IDS is seeded EMPTY for WI-1 this allowed-set loop is vacuously true — see the T3 report\'s flagged ambiguity, this assertion alone cannot distinguish "seeded empty" from "seeded correctly" and the offending-value assertion above it is what actually carries the pin)', async () => {
-    const mod = await import('../../studio/session-kinds.ts');
+    const mod = await import('@forge/sessions/studio/session-kinds.ts');
     const root = makeForgeRoot();
     writeAgentSkill(root, 'fixture-agent');
     const bogus = 'not-a-real-schema-id-at-all';
@@ -263,7 +263,7 @@ describe('loadSessionKinds — turnSpec is STRUCTURAL ONLY (AT-R422-6, mirrors A
 
 describe('turnSpec vocabularies — deep-frozen registries + total lookup fns (AT-R422-7, AT-R422-8)', () => {
   it('AT-R422-7 (widened by bead 8vfn.6.6 item 1 — the gap-pin\'s own disclosed expiry): TURN_STYLES, TURN_STEPS, FINALIZER_IDS, SCHEMA_IDS are each seeded (length > 0) and DEEP-frozen — the outer array AND every row are frozen, and an in-place mutation on a row never takes effect (kills an implementation that does `Object.freeze(array)` alone without freezing each row first — the exact shallow-freeze regression SESSION_ARTIFACT_KINDS\'s own header comment warns against, reproduced here). SCHEMA_IDS moved from the deliberately-empty R4-22 WI-1 state into this SAME shared-coverage loop the instant its first real schema id (interview-qa, reusing kinds/instructions.ts\'s own INTERVIEW_SCHEMA) was seeded — exactly the widening this test\'s own prior text said it must consciously get.', async () => {
-    const mod = await import('../../studio/session-kinds.ts');
+    const mod = await import('@forge/sessions/studio/session-kinds.ts');
 
     const seededRegistries: Record<string, readonly { readonly id: string }[]> = {
       TURN_STYLES: mod.TURN_STYLES,
@@ -301,7 +301,7 @@ describe('turnSpec vocabularies — deep-frozen registries + total lookup fns (A
   });
 
   it('AT-R422-8: turnStyleState/turnStepState/finalizerIdState/schemaIdState are TOTAL — undefined for an unrecognised id, NEVER throw (kills an implementation using a non-total lookup like array indexing or a bang-asserted .find()! that throws or returns null instead of undefined for an unknown id)', async () => {
-    const mod = await import('../../studio/session-kinds.ts');
+    const mod = await import('@forge/sessions/studio/session-kinds.ts');
     const lookups: [string, (id: string) => unknown][] = [
       ['turnStyleState', mod.turnStyleState],
       ['turnStepState', mod.turnStepState],

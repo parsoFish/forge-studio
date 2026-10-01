@@ -29,7 +29,7 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from '../../../../apps/forge/ui-bridge.ts';
+import { startBridge } from '../../ui-bridge.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

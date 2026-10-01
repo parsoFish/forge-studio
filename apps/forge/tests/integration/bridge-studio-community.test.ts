@@ -24,7 +24,7 @@
  * campaign's own recurring defect class, "an optional param the production
  * caller forgets").
  *
- * Style mirrors packages/library/tests/integration/bridge-studio-connections.test.ts exactly: a single
+ * Style mirrors apps/forge/tests/integration/bridge-studio-connections.test.ts exactly: a single
  * bridge instance for the whole file (`before`/`after`), each test writing
  * its own catalog/vendored fixtures so nothing leaks across tests.
  *
@@ -62,7 +62,7 @@
  * real invocation) — the same technique the reviewer used to reproduce it.
  * AT GROUP 1 (the connection-install `ok` field lying about a real failure)
  * is covered in the SEPARATE file
- * `packages/library/tests/regression/bridge-studio-community-connection-install.test.ts` — see that
+ * `apps/forge/tests/regression/bridge-studio-community-connection-install.test.ts` — see that
  * file's own header for why it needs its own environment.
  *
  * ---------------------------------------------------------------------------
@@ -93,14 +93,14 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
-import { communitySourceKey } from '../../studio/community-source-url.ts';
-import { startBridge } from '../../../../apps/forge/ui-bridge.ts';
-import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from '../../routes.ts'; import { fixtureAgentFacts } from '../test-fixtures/agent-fixture.ts'; import { fixtureFlowSource } from '../test-fixtures/flow-fixture.ts'; import { inertAuthoringSession } from '../test-fixtures/authoring-session-fixture.ts';
-import { skillPath } from '../../skill-path.ts';
-import { listSkillLibrary, skillTrustState } from '../../studio/skill-trust.ts';
-import { hookYamlPath } from '../../studio/hook-library.ts';
-import { scanHookPackage } from '../../studio/hook-scan.ts';
-import { isHookRunnable, hookRunState, readHookApprovalLedger } from '../../studio/hook-approval-ledger.ts';
+import { communitySourceKey } from '../../../../packages/library/studio/community-source-url.ts';
+import { startBridge } from '../../ui-bridge.ts';
+import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from '../../../../packages/library/routes.ts'; import { fixtureAgentFacts } from '../../../../packages/library/tests/test-fixtures/agent-fixture.ts'; import { fixtureFlowSource } from '../../../../packages/library/tests/test-fixtures/flow-fixture.ts'; import { inertAuthoringSession } from '../../../../packages/library/tests/test-fixtures/authoring-session-fixture.ts';
+import { skillPath } from '../../../../packages/library/skill-path.ts';
+import { listSkillLibrary, skillTrustState } from '../../../../packages/library/studio/skill-trust.ts';
+import { hookYamlPath } from '../../../../packages/library/studio/hook-library.ts';
+import { scanHookPackage } from '../../../../packages/library/studio/hook-scan.ts';
+import { isHookRunnable, hookRunState, readHookApprovalLedger } from '../../../../packages/library/studio/hook-approval-ledger.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

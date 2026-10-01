@@ -11,7 +11,7 @@ import type { InitiativeManifest } from '@forge/contracts';
  *
  * The module under test does not exist yet — this file is RED at branch base
  * (ERR_MODULE_NOT_FOUND on the `./bridge-studio-sessions.ts` import is the
- * expected red). Mirrors packages/library/tests/integration/bridge-studio-templates.test.ts's idiom: a real
+ * expected red). Mirrors apps/forge/tests/integration/bridge-studio-templates.test.ts's idiom: a real
  * bridge (startBridge) + fetch for the "happy" behavioral tests, plus direct
  * handler invocation for the passthrough contract AND the slug-validation
  * sweep (see the design-decision note below on why the sweep needs direct

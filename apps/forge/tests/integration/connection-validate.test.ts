@@ -64,8 +64,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { Catalog } from '@forge/contracts';
-import { validateConnections } from '../../studio/connection-validate.ts';
-import { runStudioLint } from '../../../../apps/forge/studio-lint.ts';
+import { validateConnections } from '../../../../packages/library/studio/connection-validate.ts';
+import { runStudioLint } from '../../studio-lint.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers (a small local makeCatalog — the shared one in

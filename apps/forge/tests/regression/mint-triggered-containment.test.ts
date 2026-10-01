@@ -69,11 +69,11 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { mintTriggeredInitiative } from '../../mint-triggered-initiative.ts';
-import { parseManifest, type InitiativeManifest } from '../../manifest.ts';
-import { stageFlowRunRequest, drainFlowRunRequests } from '../../flow-run-requests.ts';
-import { isContainedProjectRepoPath } from '../../manifest-path-guard.ts';
-import { startBridge } from '../../../../apps/forge/ui-bridge.ts';
+import { mintTriggeredInitiative } from '../../../../packages/flows/mint-triggered-initiative.ts';
+import { parseManifest, type InitiativeManifest } from '../../../../packages/flows/manifest.ts';
+import { stageFlowRunRequest, drainFlowRunRequests } from '../../../../packages/flows/flow-run-requests.ts';
+import { isContainedProjectRepoPath } from '../../../../packages/flows/manifest-path-guard.ts';
+import { startBridge } from '../../ui-bridge.ts';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));

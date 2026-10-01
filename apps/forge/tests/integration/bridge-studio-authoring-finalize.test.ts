@@ -1,7 +1,7 @@
 /**
  * W7-B4 review finding 2 — RESTORED SUITE. This file is the R4-21 finalize
  * acceptance suite, recovered verbatim from `d85f462c^`. W7-B4's own
- * library-authoring tests were written OVER packages/library/tests/integration/bridge-studio-authoring.test.ts
+ * library-authoring tests were written OVER apps/forge/tests/integration/bridge-studio-authoring.test.ts
  * rather than beside it, deleting every pin below: for one wave,
  * `git grep 'authoring/finalize' -- '*.test.ts'` matched NOTHING while the
  * live POST /api/studio/authoring/finalize route still shipped. The route was
@@ -91,7 +91,7 @@
  *      module's source, not guessed).
  *
  * Style: real bridge (startBridge) + fetch, mirroring
- * packages/library/tests/integration/bridge-studio-skills.test.ts / packages/library/tests/integration/bridge-studio-hooks.test.ts's
+ * apps/forge/tests/integration/bridge-studio-skills.test.ts / apps/forge/tests/integration/bridge-studio-hooks.test.ts's
  * tmp-forge-root harness exactly (unchanged from round 1).
  */
 
@@ -113,16 +113,16 @@ import { fileURLToPath } from 'node:url';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
-import { startBridge } from '../../../../apps/forge/ui-bridge.ts';
+import { startBridge } from '../../ui-bridge.ts';
 // Does not exist in the NEW shape yet — the current packages/library/bridge-studio-authoring.ts
 // still implements the phase-1 {kind,id,entries,upstream} contract (round 1
 // already proved this RED; this amendment additionally proves the NARROWER
 // {project,sessionId,kind,id}-only contract RED for a DIFFERENT reason on the
 // happy paths — see the T3 report for the exact captured failure per test).
-import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from '../../routes.ts'; import { fixtureAgentFacts } from '../test-fixtures/agent-fixture.ts'; import { fixtureFlowSource } from '../test-fixtures/flow-fixture.ts'; import { inertAuthoringSession } from '../test-fixtures/authoring-session-fixture.ts';
-import { FORBIDDEN_HOOK_BINDING_KEYS, HOOK_LIFECYCLE_EVENTS } from '../../studio/hook-library.ts';
-import { listTemplateLibrary } from '../../studio/template-library.ts';
-import { SCAFFOLD_READONLY } from '../../bridge-studio-templates.ts';
+import { dispatchRoute } from '@forge/kernel'; import { libraryRoutes } from '../../../../packages/library/routes.ts'; import { fixtureAgentFacts } from '../../../../packages/library/tests/test-fixtures/agent-fixture.ts'; import { fixtureFlowSource } from '../../../../packages/library/tests/test-fixtures/flow-fixture.ts'; import { inertAuthoringSession } from '../../../../packages/library/tests/test-fixtures/authoring-session-fixture.ts';
+import { FORBIDDEN_HOOK_BINDING_KEYS, HOOK_LIFECYCLE_EVENTS } from '../../../../packages/library/studio/hook-library.ts';
+import { listTemplateLibrary } from '../../../../packages/library/studio/template-library.ts';
+import { SCAFFOLD_READONLY } from '../../../../packages/library/bridge-studio-templates.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers

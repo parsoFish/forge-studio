@@ -34,9 +34,9 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { cmdAgentRun } from '../../agent-run.ts';
+import { cmdAgentRun } from '../../../../packages/agents/agent-run.ts';
 import { SESSION_KIND_RUNNERS } from '@forge/sessions';
-import { startBridge } from '../../../../apps/forge/ui-bridge.ts';
+import { startBridge } from '../../ui-bridge.ts';
 
 process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
 
