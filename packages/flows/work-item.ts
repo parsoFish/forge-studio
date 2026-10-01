@@ -92,35 +92,23 @@ export type FixWiOrigin = NonNullable<WorkItem['origin']>;
 // machinery (parse/serialize/validate/topo/read/write) — only the id prefix and
 // the directory (.forge/unifier-items/) differ.
 //
-// The trailing `[a-z]?` is the SPLIT SUFFIX (ADR 015, 2026-08-23 amendment /
-// ON-7): the plan agent names the halves of a split work item `WI-4a` / `WI-4b`
-// unprompted, and the contract now admits exactly that — ONE optional lowercase
-// letter. `WI-4a1`, `WI-4-a`, `wi-4a`, `WI-4A` and `WI-4ab` stay invalid.
-//
-// THESE ARE THE SINGLE SOURCE OF TRUTH. Six narrower hand-rolled copies of this
-// regex existed across orchestrator/, cli/ and loops/ and every one of them
-// broke on a split id; they all import from here now. A second copy of this
-// regex is a defect, not a style choice.
-export const WORK_ITEM_ID_PATTERN = /^U?WI-\d+[a-z]?$/;
-
-/** The same id as it appears in a spec FILENAME (`WI-4a.md`). */
-export const WORK_ITEM_FILE_PATTERN = /^U?WI-\d+[a-z]?\.md$/;
-
-/** Dev work items only (never the `UWI-` unifier queue). */
-export const DEV_WORK_ITEM_ID_PATTERN = /^WI-\d+[a-z]?$/;
-
-/**
- * The NUMERIC STEM of a dev work-item id — `WI-4a` and `WI-4b` both stem 4 —
- * or null when the id is not a dev work item. This is the ordering primitive
- * ADR 037's hidden-coupling reject->compile derives its `depends_on` direction
- * from, and the one `nextDevWorkItemId` counts from; a split sibling must not be
- * invisible to either (an ignored `WI-4a` would let the next-free-id allocator
- * hand out a confusing `WI-4` beside it).
- */
-export function devWorkItemIdStem(id: string): number | null {
-  const m = /^WI-(\d+)[a-z]?$/.exec(id);
-  return m ? Number(m[1]) : null;
-}
+// THESE ARE THE SINGLE SOURCE OF TRUTH — `WORK_ITEM_ID_PATTERN`,
+// `WORK_ITEM_FILE_PATTERN`, `DEV_WORK_ITEM_ID_PATTERN` and
+// `devWorkItemIdStem` are moved to `@forge/contracts` (pure transfer,
+// forge-8vfn M7-E boundary fix) so `packages/agents/ralph/runner.ts` (rank 3)
+// can use the dev-only pattern without reaching into `packages/flows`
+// (rank 5); this door re-exports them so this module's public API is
+// unchanged. See `@forge/contracts` for the full provenance note (the SPLIT
+// SUFFIX rationale, ADR 015 2026-08-23 amendment / ON-7, and the six
+// narrower hand-rolled copies this SSOT replaced across orchestrator/, cli/
+// and loops/).
+export {
+  WORK_ITEM_ID_PATTERN,
+  WORK_ITEM_FILE_PATTERN,
+  DEV_WORK_ITEM_ID_PATTERN,
+  devWorkItemIdStem,
+} from '@forge/contracts';
+import { WORK_ITEM_ID_PATTERN } from '@forge/contracts';
 const INITIATIVE_ID_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
 /**
  * Exported (W6-RV-1) so forge-ui's hand-kept `WorkItemStatus` mirror

@@ -54,20 +54,20 @@ operator-ratified new cap — never a silent raise.
 
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
-| `contracts` | 6 | 1,455 | **1,455** | ratified 1,455 — row 122 (forge-8vfn.8.1.55): the `resume_from` union grows a `'pr-open'` member (ADR 019 amendment), +9 on 1,446, lane-ratified (ruling 666, measured). |
+| `contracts` | 6 | 1,538 | **1,538** | **pure transfer: REPO_RE, WORK_ITEM_ID_PATTERN, WORK_ITEM_FILE_PATTERN, DEV_WORK_ITEM_ID_PATTERN, devWorkItemIdStem from flows + SESSION_STAGES, ContractStage, ContractStageRow, ContractStageStatus from sessions (+83) — forge-8vfn M7-E boundary fix, lane-ratified (ruling 666, measured).** |
 | `kernel` | 30 | 5,583 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,044 | **16,927** | ratified 16,927 — M7-C door re-exports OD round E (forge-8vfn.5.31), lane-ratified under ruling 666; see git history for prior raises. |
-| `projects` | 48 | 11,103 | **9,328** | ratified 9,328 — forge-mfv5.3.6 testProcess.local.perWorkItem gate template, validated at load (one {package}, argv only, no shell metacharacters), +44 on 9,284, lane-ratified under ruling 666; see git history for prior raises. |
+| `projects` | 48 | 11,099 | **9,328** | ratified 9,328 — forge-mfv5.3.6 testProcess.local.perWorkItem gate template, validated at load (one {package}, argv only, no shell metacharacters), +44 on 9,284, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,229 | **12,651** | ratified 12,651 — row 117 a live holder's brain-write lease is never reclaimed on mtime alone (forge-8vfn.8.1.21), +73 lane-ratified under ruling 666; see git history for prior raises. |
 | `agents` | 46 | 13,386 | **13,386** | ratified 13,386 — row 122 (forge-8vfn.8.1.55): `classifyCycleFailure` narrows a DNS/environment PR-open failure to `resumeFrom:'pr-open'`, +31 on 13,355, lane-ratified (ruling 666, measured). |
-| `sessions` | 63 | 20,663 | **20,625** | ratified 20,625 — row 129 (forge-8vfn.8.1.56): idempotent initiative-id minting (`mintInitiativeId`, `architect-manifest.ts`), +25 on 20,600, lane-ratified (ruling 666, measured); see git history for prior raises. |
-| `flows` | 86 | 24,851 | **24,651** | ratified 24,651 — row 167 (forge-8vfn.8.1.61): a resume re-entering the develop flow rebases once at re-entry, +104 on 24,547, T1-ratified (ruling 1928, >100); see git history for prior raises. |
+| `sessions` | 63 | 20,638 | **20,600** | **pure transfer: SESSION_STAGES, ContractStage, ContractStageRow, ContractStageStatus to contracts (−25) — forge-8vfn M7-E boundary fix; cap lowered to measured.** |
+| `flows` | 86 | 24,843 | **24,643** | **pure transfer: REPO_RE, WORK_ITEM_ID_PATTERN, WORK_ITEM_FILE_PATTERN, DEV_WORK_ITEM_ID_PATTERN, devWorkItemIdStem to contracts (−8 net) — forge-8vfn M7-E boundary fix; cap lowered to measured.** |
 | `factory` | 15 | 2,763 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 45 | 12,266 | **12,266** | ratified 12,266 — row 167 (forge-8vfn.8.1.61, ruling 1916): `rebaseForResume` moved out to `packages/flows/cycle-helpers.ts`, −20 on 12,286 (cap lowered to measured); see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 28 | 6,922 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **477** | **129,617** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **477** | **129,663** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -175,7 +175,7 @@ operator-ratified new cap — never a silent raise.
 | packages/library/community-refresh-run.ts | library | verbatim | 621 |
 | packages/library/community-registry-lock.ts | library | verbatim | 126 |
 | packages/projects/contract-compliance-loop.ts | projects | verbatim | 167 |
-| packages/projects/contract-stages.ts | projects | verbatim | 345 |
+| packages/projects/contract-stages.ts | projects | verbatim | 342 |
 | packages/stations/cycle-recap.ts | stations | verbatim | 396 |
 | packages/factory/class-profiles.ts | factory | rewritten | 135 |
 | packages/stations/class-profile-port.ts | stations | rewritten | 133 |
@@ -411,7 +411,7 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/project-brain-build.ts | knowledge | rewritten | 219 |
 | packages/knowledge/project-brain-seed.ts | knowledge | verbatim | 353 |
 | packages/knowledge/testing.ts | knowledge | verbatim | 13 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `resolveKbProcesses` has no production consumer outside this package, only two `apps/forge` tests reach for it, so it stays off the main door and behind `@forge/knowledge/testing` instead.** |
-| packages/projects/project-config.ts | projects | verbatim | 323 |
+| packages/projects/project-config.ts | projects | verbatim | 322 |
 | packages/projects/project-config-write.ts | projects | verbatim | 74 |
 | packages/projects/project-config-sidecar.ts | projects | verbatim | 73 |
 | packages/projects/project-config-types.ts | projects | verbatim | 205 |
@@ -489,11 +489,11 @@ operator-ratified new cap — never a silent raise.
 | packages/knowledge/studio/kb-descriptor.ts | knowledge | verbatim | 210 |
 | packages/knowledge/studio/validate-kb.ts | knowledge | rewritten | 42 |
 | packages/agents/studio/materials.ts | agents | verbatim | 194 |
-| packages/sessions/studio/session-kinds.ts | sessions | verbatim | 613 |
+| packages/sessions/studio/session-kinds.ts | sessions | verbatim | 610 |
 | packages/sessions/studio/session-kinds-validate.ts | sessions | rewritten | 727 |
 | packages/sessions/studio/session-kinds-affordances.ts | sessions | rewritten | 148 |
 | packages/sessions/studio/session-transcript.ts | sessions | verbatim | 635 **Ceiling re-keyed +9 to 1,368 (M4-sessions s3 3b, T1 ruling 83), and that condition is now DISCHARGED (s4).** The re-key paid for the ruled manifest seam (ruling 81) threading an injected port through this file — three `package-layer-order` rows closed for it — and ruling 83 accepted it *on the condition that row 5's split brought the file back down*. It has: `deriveRoadmapDraft` and its three types moved to `packages/sessions/studio/roadmap-draft.ts`, taking the file to **1,298**, below even the pre-3b ceiling of 1,359, and the exemption was TIGHTENED to 1,298 rather than left as a stale allowance. Earlier payment, before the re-key, is still on the record: the ports contract went to `kinds/architect-ports.ts` (returning `kinds/architect.ts` to exactly 1,584, no raise), comments tightened, stale runner paths corrected. Not a licence — the next edit measures against 1,298. |
-| packages/sessions/studio/session-artifact-derivers.ts | sessions | rewritten | 739 |
+| packages/sessions/studio/session-artifact-derivers.ts | sessions | rewritten | 717 |
 | packages/sessions/studio/roadmap-draft.ts | sessions | rewritten | 111 |
 | packages/library/studio/skill-install-ledger.ts | library | verbatim | 166 |
 | packages/library/studio/skill-install.ts | library | verbatim | 351 |
@@ -510,12 +510,12 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/studio/yaml-fields.ts | kernel | verbatim | 105 |
 | packages/agents/tool-event-emit.ts | agents | verbatim | 259 |
 | packages/agents/project-skills.ts | agents | verbatim | 79 |
-| packages/flows/trigger-payload.ts | flows | verbatim | 294 |
+| packages/flows/trigger-payload.ts | flows | verbatim | 298 |
 | packages/flows/webhook-verify.ts | flows | verbatim | 114 |
 | packages/flows/wi-dispatch-scheduler.ts | flows | verbatim | 151 |
 | packages/flows/wi-merge-back.ts | flows | verbatim | 464 |
 | packages/flows/wi-worktree.ts | flows | verbatim | 330 |
-| packages/flows/work-item.ts | flows | verbatim | 740 |
+| packages/flows/work-item.ts | flows | verbatim | 728 |
 | packages/flows/worktree.ts | flows | verbatim | 201 |
 | packages/flows/testing.ts | flows | verbatim | 13 **M7-C 2026-09-25 (bead forge-8vfn.5.31) — the one test-only subpath: `hasMergeGateConfigErrorMarker`/`mergeGateConfigErrorPath` (fix-work-items.ts), `CostTracker` (flow-budgets.ts) and `validateCompiledWorkItemSet` (phases/wi-spec-compile.ts) have no production consumer outside this package, only `apps/forge`/`packages/factory` tests reach for them.** |
 | skills/adversarial-review/SKILL.md | factory | verbatim | 249 |
@@ -549,7 +549,7 @@ operator-ratified new cap — never a silent raise.
 | skills/release-finalizer/SKILL.md | flows | verbatim | 92 |
 | apps/forge/index.ts | apps/forge | verbatim | 8 |
 | packages/agents/index.ts | agents | verbatim | 137 |
-| packages/contracts/index.ts | contracts | verbatim | 181 |
+| packages/contracts/index.ts | contracts | verbatim | 264 |
 | packages/contracts/run-view-types.ts | contracts | rewritten | 97 |
 | packages/contracts/runnable-source.ts | contracts | rewritten | 33 |
 | packages/contracts/studio-types.ts | contracts | verbatim | 761 |

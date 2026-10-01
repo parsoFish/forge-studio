@@ -96,8 +96,12 @@ export type TriggerPayload =
   | WebhookPullRequestPayload
   | WebhookIssuePayload;
 
-/** Strict-charset validators for the structured fields (extraction boundary). */
-export const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
+/** Strict-charset validators for the structured fields (extraction boundary).
+ *  `REPO_RE` is the SSOT in `@forge/contracts` (pure transfer, forge-8vfn
+ *  M7-E boundary fix) — re-exported here so this door's public API is
+ *  unchanged. */
+export { REPO_RE } from '@forge/contracts';
+import { REPO_RE } from '@forge/contracts';
 const SHA_RE = /^[0-9a-f]{7,40}$/;
 const GIT_REF_RE = /^[\w./+-]{1,255}$/;
 const LOGIN_RE = /^[\w.-]{1,80}$/;

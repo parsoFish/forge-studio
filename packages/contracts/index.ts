@@ -38,6 +38,89 @@ export * from './demo-declaration.ts';
 export type WorkItemStatus = 'pending' | 'in-progress' | 'complete' | 'failed';
 export const WORK_ITEM_STATUSES: readonly WorkItemStatus[] = ['pending', 'in-progress', 'complete', 'failed'];
 
+/**
+ * `WI-<n>` are dev work items (PM-emitted); `UWI-<n>` are unifier work items
+ * (ADR 026). The trailing `[a-z]?` is the SPLIT SUFFIX (ADR 015, 2026-08-23
+ * amendment / ON-7): the plan agent names the halves of a split work item
+ * `WI-4a` / `WI-4b` unprompted, and the pattern admits exactly that — ONE
+ * optional lowercase letter. `WI-4a1`, `WI-4-a`, `wi-4a`, `WI-4A` and
+ * `WI-4ab` stay invalid. THIS IS THE SINGLE SOURCE OF TRUTH — moved here
+ * (pure transfer, `packages/flows/work-item.ts`) so `packages/agents/ralph/
+ * runner.ts` (rank 3) can use the dev-only pattern without reaching into
+ * `packages/flows` (rank 5).
+ */
+export const WORK_ITEM_ID_PATTERN = /^U?WI-\d+[a-z]?$/;
+/** The same id as it appears in a spec FILENAME (`WI-4a.md`). */
+export const WORK_ITEM_FILE_PATTERN = /^U?WI-\d+[a-z]?\.md$/;
+/** Dev work items only (never the `UWI-` unifier queue). */
+export const DEV_WORK_ITEM_ID_PATTERN = /^WI-\d+[a-z]?$/;
+
+/**
+ * The NUMERIC STEM of a dev work-item id — `WI-4a` and `WI-4b` both stem 4 —
+ * or null when the id is not a dev work item. This is the ordering primitive
+ * ADR 037's hidden-coupling reject->compile derives its `depends_on`
+ * direction from, and the one `nextDevWorkItemId` counts from; a split
+ * sibling must not be invisible to either.
+ */
+export function devWorkItemIdStem(id: string): number | null {
+  const m = /^WI-(\d+)[a-z]?$/.exec(id);
+  return m ? Number(m[1]) : null;
+}
+
+// ── Trigger payloads (ADR 041) ──
+
+/** The owner/repo regex — strict-charset validator for a GitHub-shaped
+ *  `"owner/name"` full name. The SAME object every repo-shaped field is
+ *  validated against, never a hand-copied equivalent (`packages/flows/
+ *  trigger-payload.ts`'s webhook extraction, `packages/projects/
+ *  project-config.ts`'s declared-repo field). */
+export const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
+
+// ── Session stages ──
+
+/**
+ * The onboarding session-kind stage vocabulary (R4-17 / R4-21 / W6-CR-3
+ * history — see `packages/sessions/studio/session-kinds.ts` for the full
+ * per-token provenance). Moved here (pure transfer) so `packages/projects/
+ * contract-stages.ts` (rank 2) can derive its five-stage contract-order
+ * vocabulary without reaching into `packages/sessions` (rank 4) for it.
+ */
+export const SESSION_STAGES = Object.freeze([
+  'contract',
+  'instructions',
+  'secrets',
+  'demo',
+  'roadmap',
+  'brain',
+  'authoring',
+] as const);
+export type SessionStage = (typeof SESSION_STAGES)[number];
+
+/** Presence, never a verdict (D11) — `forge preflight`'s exit code is the
+ *  only authoritative contract-green signal; a row says "this artifact is
+ *  present/absent, here is its source", never "this clause passes". */
+export type ContractStageStatus = 'present' | 'absent';
+
+/** The five onboarding stages — `SESSION_STAGES` minus 'brain' (project-brain
+ *  owns that stage; D2). */
+export type ContractStage = Exclude<SessionStage, 'brain'>;
+
+export type ContractStageRow = {
+  readonly stage: ContractStage;
+  readonly status: ContractStageStatus;
+  /** Which real on-disk artifact this row's presence answer is about — named
+   *  even when `status` is 'absent' (a dropped row is indistinguishable from
+   *  "we never looked"; naming the source at least says "we looked here"). */
+  readonly source: string;
+  /** Presence facts only (D11) — never verdict language ("pass"/"fail"/
+   *  "clause"/"green"/"red"/"compliant"). */
+  readonly detail: string[];
+  /** The real byte length read from disk for the two prose-file-backed
+   *  stages (`instructions`, `roadmap`); `null` for the three config/lock-
+   *  JSON-backed stages (`contract`, `secrets`, `demo`). */
+  readonly bytes: number | null;
+};
+
 // ── Trigger kinds (ADR 041) ──
 
 /**
