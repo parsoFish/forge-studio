@@ -15,10 +15,13 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
+import { randomBytes } from 'node:crypto';
 import matter from 'gray-matter';
 
 // Every matter() call below passes a (possibly empty) options object — the
@@ -47,6 +50,11 @@ export interface InstallInput {
   id: string;
   packageDir: string;
   upstream: { source: string; ref?: string };
+  /** TEST-ONLY seam (forge-8vfn.8.5.2) — lets a test inject a failure partway
+   *  through the staged writes below, to prove the crash-safety contract
+   *  without actually crashing the process. NOT a fallback path: production
+   *  never passes this and always gets node:fs's own `writeFileSync`. */
+  writeFile?: (path: string, data: string, encoding: 'utf8') => void;
 }
 
 export interface InstallResult {
@@ -116,7 +124,7 @@ function walkPackageDir(packageDir: string): RawPackageEntry[] {
 }
 
 export function installSkillPackage(input: InstallInput): InstallResult {
-  const { forgeRoot, id, packageDir, upstream } = input;
+  const { forgeRoot, id, packageDir, upstream, writeFile = writeFileSync } = input;
 
   if (!upstream || typeof upstream.source !== 'string' || upstream.source.trim() === '') {
     throw new Error(`installSkillPackage: upstream.source is required and must be a non-empty string (installing "${id}")`);
@@ -223,17 +231,26 @@ export function installSkillPackage(input: InstallInput): InstallResult {
 
   // PHASE 1 — pre-validate EVERY destination through the SEC-04 containment
   // guard BEFORE any write (AT-21: a failure here must leave skills/<id>/ absent
-  // entirely). guardedFile routes the WHOLE path — the `id` segment, every
-  // nested tail segment, AND the leaf filename — through resolveGuardedPath's
-  // per-segment realpath identity walk, so a symlinked skills/<id>, a symlinked
-  // NESTED subdir, a symlinked LEAF, and a cross-object same-root alias are all
-  // refused; a lexical resolve().startsWith(skillsDir + sep) could not tell any
-  // of them apart (SEC-05 q80). `id` is a SEGMENT to the fixed
-  // skillsDir(forgeRoot) root, never concatenated into it.
+  // entirely). guardedFile routes the WHOLE path — every tail segment AND the
+  // leaf filename — through resolveGuardedPath's per-segment realpath identity
+  // walk, so a symlinked NESTED subdir, a symlinked LEAF, and a cross-object
+  // same-root alias are all refused; a lexical resolve().startsWith(skillsDir
+  // + sep) could not tell any of them apart (SEC-05 q80).
+  //
+  // forge-8vfn.8.5.2 — STAGE THEN RENAME, `vendorFetchedPackage`'s discipline
+  // (community-fetch-package.ts) reused here rather than retyped. Every
+  // destination below is blessed under a sibling STAGING segment
+  // (`<id>.staging-<random>`, same parent as the real destination so the
+  // final rename stays on one filesystem) — never under `id` itself — so a
+  // crash or thrown error anywhere in PHASE 2 never touches skills/<id>/ at
+  // all; only the closing `renameSync` does, in one atomic step. `id`/
+  // `stagingId` are both SEGMENTS to the fixed skillsDir(forgeRoot) root,
+  // never concatenated into it.
+  const stagingId = `${id}.staging-${randomBytes(6).toString('hex')}`;
   const dests = files.map((f) => {
-    const realPath = guardedFile(skillsDir(forgeRoot), [id, ...f.path.split('/')], 'write');
+    const realPath = guardedFile(skillsDir(forgeRoot), [stagingId, ...f.path.split('/')], 'write');
     if (realPath === null) {
-      throw new Error(`installSkillPackage: destination for "${f.path}" escapes skills/ — refusing`);
+      throw new Error(`installSkillPackage: staging destination for "${f.path}" escapes skills/ — refusing`);
     }
     return { realPath, file: f };
   });
@@ -247,17 +264,32 @@ export function installSkillPackage(input: InstallInput): InstallResult {
     }
     seenRealPaths.add(realPath);
   }
+  const stagingDir = guardedFile(skillsDir(forgeRoot), [stagingId], 'write');
+  const finalDir = guardedFile(skillsDir(forgeRoot), [id], 'write');
+  if (stagingDir === null || finalDir === null) {
+    throw new Error(`installSkillPackage: destination for "skills/${id}" escapes skills/ — refusing`);
+  }
 
-  // PHASE 2 — every destination passed PHASE 1's guard, so no partial write can
-  // land on a mid-loop throw. No standalone mkdirSync(skillDir(id)): `id` is a
-  // guarded segment, so each entry mkdir's its OWN already-blessed parent.
-  for (const { realPath, file } of dests) {
-    mkdirSync(dirname(realPath), { recursive: true });
-    if (file.path === 'SKILL.md') {
-      writeFileSync(realPath, matter.stringify('\n' + cleanContent, newData), 'utf8');
-    } else {
-      writeFileSync(realPath, file.body, 'utf8');
+  // PHASE 2 — every destination (staging AND the final rename target) passed
+  // PHASE 1's guard, so no partial write can ever land at skills/<id>/: each
+  // file is written into the STAGING directory, then the whole staging
+  // directory is renamed into place in ONE atomic step. A failure anywhere in
+  // the loop removes the staging directory and rethrows, leaving skills/<id>/
+  // untouched. No standalone mkdirSync(skillDir(id)): `id`/`stagingId` are
+  // guarded segments, so each entry mkdir's its OWN already-blessed parent.
+  try {
+    for (const { realPath, file } of dests) {
+      mkdirSync(dirname(realPath), { recursive: true });
+      if (file.path === 'SKILL.md') {
+        writeFile(realPath, matter.stringify('\n' + cleanContent, newData), 'utf8');
+      } else {
+        writeFile(realPath, file.body, 'utf8');
+      }
     }
+    renameSync(stagingDir, finalDir);
+  } catch (err) {
+    rmSync(stagingDir, { recursive: true, force: true });
+    throw err;
   }
 
   // Blocker 2 fix — register the install in the central ledger, the second

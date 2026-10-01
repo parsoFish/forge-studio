@@ -161,6 +161,9 @@ export type ProjectsRouteDeps = {
   readArtifactRoot: (projectRoot: string) => string;
   /** `@forge/flows`'s `isContainedProjectRepoPath`. */
   isContainedProjectRepoPath: (p: string, opts: { forgeRoot: string; projectsRoot?: string }) => boolean;
+  /** `@forge/knowledge`'s `isUntouchedBrainSeedStub` (G3, forge-8vfn.8.5.3) —
+   *  OPTIONAL, see `OnboardDeps`'s own field doc. */
+  isUntouchedBrainSeedStub?: (forgeRoot: string, projectId: string, dirName?: string) => boolean;
   /** `apps/forge/bridge-studio-writes.ts`'s `spawnPreflightFix` — sessions-owned
    *  (M4-projects routes budget row 12b), kept in its legacy home until the
    *  sessions lane carves its own routes. */
@@ -233,6 +236,7 @@ export function projectsRoutes(deps: ProjectsRouteDeps): RouteTable<RouteContext
     checkBrainSeedContainment: deps.checkBrainSeedContainment,
     readArtifactRoot: deps.readArtifactRoot,
     isContainedProjectRepoPath: deps.isContainedProjectRepoPath,
+    isUntouchedBrainSeedStub: deps.isUntouchedBrainSeedStub,
   });
   const { handleProjectSaveRepo, handleProjectPreflightFixAuto, handleProjectPreflightFixAgent } =
     makePreflightWriteHandlers({ spawnPreflightFix: deps.spawnPreflightFix });
