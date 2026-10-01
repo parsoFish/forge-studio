@@ -138,10 +138,11 @@ pick the project, drop an idea, answer the interview, and approve the **PLAN** a
 
 **Where a budget is set.** The same form's **Cost ceiling (USD, optional)**
 field caps the architect session: the runner checks it at the start of every
-turn. Each initiative in the plan carries a `cost_budget_usd`, which the PLAN
-shows as an informational footprint: it sizes the develop run, and forge does
-not halt the run at that number. Whether the footprint is acceptable is your
-call at the plan gate.
+turn. The develop run has its own ceiling, and forge stops dispatching work
+once the run's spend reaches it. Set it in the ceiling field beside **Start
+development** on the project's roadmap card; left untouched, the ceiling is the
+initiative's `cost_ceiling_usd`, or else its `cost_budget_usd` plus 50%. Both
+fields are in the initiative's manifest, which the PLAN shows at the plan gate.
 
 **The interview is optional.** A precise idea can go straight to a PLAN with no
 interview rounds. The PLAN may arrive with findings from the advisory
