@@ -100,6 +100,9 @@ packages/flows/bridge-studio-runs.ts spawn 1
 packages/flows/bridge-studio-runs.ts writeFileSync 1
 packages/flows/ci-gate.ts execFileSync 1
 packages/flows/claim-validator.ts existsSync 1
+packages/flows/cost-by-class.ts existsSync 2
+packages/flows/cost-by-class.ts readdirSync 1
+packages/flows/cost-by-class.ts readFileSync 2
 packages/flows/cycle-context.ts existsSync 1
 packages/flows/cycle-context.ts readFileSync 1
 packages/flows/cycle-helpers.ts cpSync 2
