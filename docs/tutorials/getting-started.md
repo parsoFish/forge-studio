@@ -153,6 +153,7 @@ fields are in the initiative's manifest, which the PLAN shows at the plan gate.
 interview rounds. The PLAN may arrive with findings from the advisory
 completeness critic ([the example factory](../explanation/example-factory.md));
 approve the plan as it stands, or revise it with feedback that addresses them.
+
 Approving queues an initiative. Then **kick off** from the project's roadmap in
 Studio: start the scheduler, which plans the initiative into work items, and
 press **Start development** on the initiative's card. The develop run then goes
