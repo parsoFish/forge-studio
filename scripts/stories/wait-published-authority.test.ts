@@ -460,3 +460,137 @@ test('row 184 follow-up (control): a beat that genuinely declares `for: "agent"`
   assert.match((stall as { why: string }).why, /REAPED/, `Got: ${JSON.stringify(stall)}`);
   assert.ok(took < 1_000, `took ${took} ms`);
 });
+
+// ──────── ROW 184b (forge-8vfn.8.5.21, regression from #1058) — EARLY DEATH
+// JUDGES ONLY A TURN BORN AT OR AFTER THIS WAIT'S OWN ANCHOR ────────
+
+/**
+ * S1 beat 11's exact shape ("Open the session, read the plan and press
+ * Approve"), green in three earlier recorded runs, red right after #1058:
+ * pressing approve-plan makes the bridge spawn a NEW finalize turn for the
+ * SAME session dir the draft turn already used, and until it does, the
+ * session's `turn.pid` still names the PREVIOUS (draft) turn — already dead.
+ *
+ * `stallDoor` is built ONCE per STORY and shared across every beat
+ * (`run-story.mjs`), so an EARLIER beat's own wait on the draft turn can
+ * leave `death`'s cache for this exact dir already `graced: true` by the
+ * time THIS beat's press takes its own, brand-new anchor. Before the fix
+ * that stale grace fired on the very first poll — 0 s in — for a finalize
+ * turn that had not even started yet.
+ */
+function agingTurnDir(root: string, runId: string) {
+  const dir = join(root, '_logs', runId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'turn.pid'), '999999\n'); // the draft turn, already dead
+  writeFileSync(join(dir, 'events.jsonl'), '{"event_type":"start"}\n{"event_type":"draft"}\n');
+  return dir;
+}
+
+/** The architect session: `awaiting-verdict` until `committedAfterMs` after
+ *  this page was built, then `committed` — the approve press's consequence. */
+function architectApprovePage({ runId, committedAfterMs }: { runId: string; committedAfterMs: number }) {
+  const startedAt = Date.now();
+  const node = { getAttribute: (k: string) => (k === 'data-run' ? runId : null) };
+  return {
+    url: () => `http://localhost:4124${SESSION}`,
+    goto: async () => {},
+    locator: () => ({
+      first: () => ({ evaluate: async (fn: (n: unknown) => unknown) => fn(node) }),
+      count: async () => 0,
+      evaluateAll: async (fn: any, arg: any) => fn([], arg),
+    }),
+    waitForURL: async () => {},
+    waitForSelector: async () => {},
+    evaluate: async () => {
+      const phase = Date.now() - startedAt >= committedAfterMs ? 'committed' : 'awaiting-verdict';
+      return {
+        data: { page: 'session', 'page-ready': 'true', 'architect-phase': phase },
+        nested: [], lifecycle: null, lifecycleError: null, sessionPhase: phase,
+      };
+    },
+  };
+}
+
+test('row 184b (RED before the fix): approving a plan must not inherit an earlier wait\'s grace on the SAME dispatch dir', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'wait-authority-'));
+  const runId = '_architect-s1';
+  const dir = agingTurnDir(root, runId);
+  const stallDoor = makeAgentChannelDoor(root);
+  assert.notEqual(stallDoor, null);
+
+  // THE EARLIER BEAT'S OWN WAIT on the draft turn, reduced to its last two
+  // polls: the SAME dead pid, sighted and graced once already — `death`'s
+  // cache state exactly as S1 beat 11 found it.
+  const earlierAnchor = Date.now() - 1_000;
+  (stallDoor as any).earlyDeath(runId, earlierAnchor);
+  (stallDoor as any).earlyDeath(runId, earlierAnchor);
+
+  // Real wall-clock time, well past `FS_CLOCK_SLACK_MS` (250 ms), so the
+  // draft turn's `turn.pid` is UNAMBIGUOUSLY born before the approve press
+  // that follows — never a photo finish between birth and anchor.
+  await new Promise((resolve) => setTimeout(resolve, 400));
+
+  // The approve press — a brand-new anchor. Before the fix, `death`'s cache
+  // already reads `graced: true` for this dir and fires on the very FIRST
+  // poll, 0 s in, for a finalize turn that has not even started.
+  const anchorMs = Date.now();
+  // The bridge spawns the finalize turn 150 ms after the press — well inside
+  // the declared bound, and "one free grace poll" must still apply to IT.
+  setTimeout(() => {
+    writeFileSync(join(dir, 'turn.pid'), String(process.pid)); // this test's own pid — unquestionably alive
+    writeFileSync(join(dir, 'events.jsonl'), '{"event_type":"start"}\n{"event_type":"draft"}\n{"event_type":"finalize"}\n');
+  }, 150);
+
+  const page = architectApprovePage({ runId, committedAfterMs: 400 });
+  const beat = {
+    act: 'Open the session, read the plan and press Approve',
+    wait: { for: 'agent', upTo: 5_000 },
+    expect: { route: SESSION, data: { page: 'session', 'architect-phase': 'committed' } },
+  };
+
+  const began = Date.now();
+  const stall = await waitForConsequence(page as never, beat as never, 5_000, null, null, null, stallDoor as never, anchorMs);
+  const took = Date.now() - began;
+
+  assert.equal(stall, null, `the finalize turn must be allowed to run. Got: ${JSON.stringify(stall)}`);
+  assert.ok(took >= 380, `must actually wait for the page to commit, not die on a stale grace — took ${took} ms`);
+});
+
+test('row 184b (positive control): a FRESH turn born after the anchor is still judged — reaped is reaped, once it is genuinely new', async () => {
+  // The fix must not swing to "nothing on this dir ever ends a wait again":
+  // a finalize turn that spawns and ALSO dies, writing no new events, still
+  // gets caught — after ITS OWN one free poll, never the stale zero-grace
+  // and never a free pass forever.
+  const root = mkdtempSync(join(tmpdir(), 'wait-authority-'));
+  const runId = '_architect-s2';
+  const dir = agingTurnDir(root, runId);
+  const stallDoor = makeAgentChannelDoor(root);
+
+  const earlierAnchor = Date.now() - 1_000;
+  (stallDoor as any).earlyDeath(runId, earlierAnchor);
+  (stallDoor as any).earlyDeath(runId, earlierAnchor);
+
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  const anchorMs = Date.now();
+  // The finalize turn spawns 150 ms after the press, and is ALSO already
+  // dead — no new events, a second, equally gone pid.
+  setTimeout(() => {
+    writeFileSync(join(dir, 'turn.pid'), '999998\n');
+  }, 150);
+
+  const page = architectApprovePage({ runId, committedAfterMs: Number.POSITIVE_INFINITY });
+  const beat = {
+    act: 'Open the session, read the plan and press Approve',
+    wait: { for: 'agent', upTo: 2_000 },
+    expect: { route: SESSION, data: { page: 'session', 'architect-phase': 'committed' } },
+  };
+
+  const began = Date.now();
+  const stall = await waitForConsequence(page as never, beat as never, 2_000, null, null, null, stallDoor as never, anchorMs);
+  const took = Date.now() - began;
+
+  assert.notEqual(stall, null, 'a genuinely new turn that also dies must still be caught');
+  assert.match((stall as { why: string }).why, /REAPED/, `Got: ${JSON.stringify(stall)}`);
+  assert.ok(took >= 240, `must wait for the NEW turn to appear, then give IT its own free poll — took ${took} ms`);
+  assert.ok(took < 2_000, `took ${took} ms`);
+});

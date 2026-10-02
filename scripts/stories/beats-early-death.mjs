@@ -30,7 +30,7 @@
  * bound (664(i)). This costs at most one extra `CONSEQUENCE_POLL_MS`, never
  * enough to need the same guard.
  */
-import { channelTerminalState } from './beats-queue-terminal.mjs';
+import { channelTerminalState, FS_CLOCK_SLACK_MS } from './beats-queue-terminal.mjs';
 // The SAME pid/event-growth reading the spend diagnosis already trusts to
 // tell a reaped dispatch from a healthy one that simply has not priced
 // itself yet — reused rather than a second pid probe invented here.
@@ -56,8 +56,42 @@ export function makeEarlyDeathDoor(forgeRoot, resolveDir) {
   return (runId, sinceMs, boundRunId = null) => {
     const dir = resolveDir(runId, sinceMs, boundRunId);
     if (dir === null) return null; // nothing to watch yet — the ordinary doors answer this
-    const previous = death.get(dir);
     const snapshot = readDispatchSnapshot(dir);
+    // ROW 184b (forge-8vfn.8.5.21), regression from PR #1058. THE DIR IS NOT
+    // THE TURN. Pressing approve-plan makes the bridge spawn a NEW finalize
+    // turn for the SAME session — `_architect-<sid>` is identical before and
+    // after the press — so `resolveDir` above keeps returning the one dir it
+    // always has, and only `turn.pid` INSIDE it says which turn this reading
+    // is actually about. Before this fix nothing asked that question: S1
+    // beat 11 read the draft turn's own pid, already dead and already
+    // GRACED by an EARLIER beat's wait on the identical dir (`stallDoor` is
+    // built once per STORY and shared across every beat, `run-story.mjs`),
+    // and fired `channel-quiet` 0 s into its OWN bound — zero grace, for a
+    // finalize turn that had not even started yet.
+    //
+    // `turn.pid`'s own mtime (`readDispatchSnapshot`'s `birthMs`) is the one
+    // birth signal that survives the pid it names dying — no `/proc` entry
+    // outlives the process. Born strictly before THIS wait's own anchor
+    // (`sinceMs`, the beat's action press), past the same fs/JS clock skew
+    // `FS_CLOCK_SLACK_MS` already covers elsewhere (`sweep-post-stop-logs.mjs`),
+    // names the PREVIOUS turn — dead or alive, it can never end THIS wait.
+    // Treated exactly like "nothing to watch yet": the ordinary rules keep
+    // governing until a turn.pid born at or after the anchor appears. A
+    // missing `turn.pid` (`birthMs === null`) has no birth to compare, so it
+    // falls through unchanged — there is no fresher reading to prefer.
+    if (snapshot.birthMs !== null && snapshot.birthMs < sinceMs - FS_CLOCK_SLACK_MS) return null;
+    // A CACHED previous read is this wait's own history only when it ALSO
+    // names a turn born at or after the anchor. Otherwise it is a stale
+    // grace an EARLIER wait on this same dir already earned about the turn
+    // THAT press ended — reusing it here is the exact mechanism measured
+    // above, one layer along: never on the CURRENT reading, but just as
+    // wrongly on a cache built from a PREVIOUS one.
+    const cached = death.get(dir);
+    const previous = cached !== undefined
+      && cached.snapshot.birthMs !== null
+      && cached.snapshot.birthMs < sinceMs - FS_CLOCK_SLACK_MS
+      ? undefined
+      : cached;
     const { arm } = classifyUnmeasuredDispatch(snapshot, previous?.snapshot);
     if (arm !== 'reaped') {
       death.set(dir, { snapshot, graced: false });

@@ -138,6 +138,44 @@ export function bridgeSpawnOptions(root, { readToken = bridgeGhToken, ceilingUsd
 const BOOT_TIMEOUT_MS = 120_000;
 
 /**
+ * Kill the WHOLE process group a bridge this module booted leads —
+ * `detached: true` (`bridgeSpawnOptions`) makes it its own group leader, so
+ * `next-server` (its own CHILD, not a sibling) dies with it rather than
+ * surviving as an orphan still holding 4123/4124.
+ *
+ * ONE MECHANISM, THREE CALL SITES — forge-8vfn.8.5.21 (Defect B fold, row
+ * 184b). The boot-timeout path below already had this exactly once; `run.mjs`
+ * carried a SECOND, duplicate copy of it in its own `finally` block, and its
+ * SIGINT/SIGTERM handler (`onStopSignal`) had neither — a story killed mid-run
+ * left the bridge it booted, and `next-server` with it, bound to 4123/4124
+ * for as long as ten minutes until an operator stopped it by hand. All three
+ * now call this.
+ *
+ * Falls back to signalling the ONE pid directly when the group kill itself
+ * fails (ESRCH on a session leader already gone, or a platform with no
+ * process groups) — the exact fallback the boot-timeout path already used.
+ *
+ * NEVER THROWS, and a `null` or already-dead `proc` is a silent no-op: every
+ * caller is tearing a run down, and a process that beat it to the exit is
+ * not a failure to report.
+ *
+ * @param {{pid: number}|null} proc
+ * @param {NodeJS.Signals} [signal]
+ */
+export function killBridgeProcessGroup(proc, signal = 'SIGTERM') {
+  if (proc === null || typeof proc !== 'object' || !Number.isInteger(proc.pid)) return;
+  try {
+    process.kill(-proc.pid, signal);
+  } catch {
+    try {
+      proc.kill?.(signal);
+    } catch {
+      /* already gone */
+    }
+  }
+}
+
+/**
  * @param {{service: string, pid: number, startedAt: string} | null} identity
  *        the result of `probeBridgeIdentity` on the bridge health URL
  * @param {{ownRoot: string, cwdOf: (pid: number) => string | null}} opts
@@ -217,18 +255,9 @@ export function bootOwnBridge(root, opts = bridgeSpawnOptions(root)) {
     proc.on('error', reject);
     setTimeout(() => {
       if (settled) return;
-      // Kill the whole process group — `detached: true` made it its own group
-      // leader. Without this a boot-timeout leaves a half-started studio
-      // holding 4123/4124 with nothing to reap it.
-      try {
-        process.kill(-proc.pid, 'SIGKILL');
-      } catch {
-        try {
-          proc.kill('SIGKILL');
-        } catch {
-          /* already dead */
-        }
-      }
+      // Without this a boot-timeout leaves a half-started studio holding
+      // 4123/4124 with nothing to reap it.
+      killBridgeProcessGroup(proc, 'SIGKILL');
       reject(new Error(`forge studio not ready in ${BOOT_TIMEOUT_MS}ms; spawned bridge killed`));
     }, BOOT_TIMEOUT_MS);
   });
