@@ -63,6 +63,33 @@ export function generateCaptureNonce(): string {
 
 export type DemoCommandPreflight = { ok: boolean; problems: string[] };
 
+/** One checkpoint's label + the bare-argv command it would spawn — the shape
+ *  `preflightDemoCommands` checks, whether it came from a parsed demo.json
+ *  (this module) or from a work item's acceptance criterion read before any
+ *  demo.json exists (`@forge/flows`'s `demo-checkpoint-preflight.ts`, bead
+ *  forge-8vfn.8.5.18). */
+export type DemoCheckpointCommand = { label: string; command: string };
+
+/**
+ * N2 producibility preflight — THE predicate, over an already-extracted list
+ * of checkpoint commands. `preflightDemoCaptureCommands` (below) is the
+ * demo.json-reading convenience over this; `demo-checkpoint-preflight.ts`
+ * calls this directly with commands read straight off work items, BEFORE a
+ * demo.json is ever written, so the two call sites can never judge the same
+ * command differently.
+ */
+export function preflightDemoCommands(
+  checkpoints: readonly DemoCheckpointCommand[],
+  worktreePath: string,
+): DemoCommandPreflight {
+  const problems: string[] = [];
+  for (const cp of checkpoints) {
+    const problem = checkCommandProducible(cp.command, worktreePath);
+    if (problem) problems.push(`checkpoint "${cp.label}": ${problem}`);
+  }
+  return { ok: problems.length === 0, problems };
+}
+
 /**
  * N2 producibility preflight: every checkpoint `command` in demo.json must be
  * EXECUTABLE in the project before the orchestrator spawns the capture run —
@@ -94,14 +121,13 @@ export function preflightDemoCaptureCommands(
   } catch {
     return { ok: true, problems: [] };
   }
-  const problems: string[] = [];
+  const commands: DemoCheckpointCommand[] = [];
   for (const cp of checkpoints) {
     if (typeof cp?.command !== 'string' || cp.command.trim() === '') continue;
     const label = typeof cp.label === 'string' && cp.label.trim() ? cp.label : '(unlabelled)';
-    const problem = checkCommandProducible(cp.command.trim(), worktreePath);
-    if (problem) problems.push(`checkpoint "${label}": ${problem}`);
+    commands.push({ label, command: cp.command.trim() });
   }
-  return { ok: problems.length === 0, problems };
+  return preflightDemoCommands(commands, worktreePath);
 }
 
 function checkCommandProducible(command: string, worktreePath: string): string | null {

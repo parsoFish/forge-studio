@@ -34,6 +34,7 @@ import { flowAcceptsClass, flowClassRefusalMessage } from './flow-accepts-class.
 import type { ManifestClass } from '@forge/contracts';
 import { skillRoots } from '@forge/kernel';
 import type { AgentDefinition } from '@forge/contracts';
+import { demoCheckpointPreflightRefusal } from './demo-checkpoint-preflight.ts';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -114,6 +115,12 @@ function loadAgentMap(forgeRoot: string): ReadonlyMap<string, AgentDefinition> {
  *                           `flow_id` resolves to. REQUIRED: S8/DEC-3 retired the
  *                           forge-cycle default, so a manifest that names no flow
  *                           is unclaimable (refused, terminal).
+ * @param worktreePath     - the worktree `forge-develop` will claim into (S9/DEC-3
+ *                           hand-off: the architect cycle's `pm` node may already
+ *                           have preserved `.forge/work-items/` there). Optional —
+ *                           absent skips the demo-checkpoint-producibility check
+ *                           below (bead forge-8vfn.8.5.18), same best-effort shape
+ *                           as the project-existence guard in check 2.
  */
 export function validateClaimable(
   initiativeId: string,
@@ -121,6 +128,7 @@ export function validateClaimable(
   forgeRoot: string,
   manifestClass: ManifestClass,
   flowYamlPath?: string,
+  worktreePath?: string,
 ): ClaimValidationResult {
   // -------------------------------------------------------------------
   // 1. Flow validity (terminal) — structural, needs code/config change
@@ -253,6 +261,28 @@ export function validateClaimable(
         // can name the blocker; the prose stays for the log.
         blockedClauses: failingClauses,
         terminal: false, // leave in pending — operator can fix the project
+      };
+    }
+  }
+
+  // -------------------------------------------------------------------
+  // 3. Demo-checkpoint producibility (non-terminal, leave in pending)
+  //    bead forge-8vfn.8.5.18 / T1 ruling 1973cf (row 182). See
+  //    demo-checkpoint-preflight.ts for why THIS claim is the earliest point
+  //    that has both the checkpoint commands (the architect cycle's `pm` node
+  //    already wrote them to `worktreePath`'s `.forge/work-items/`, S9/DEC-3
+  //    hand-off) and the ground to resolve them against — catching the "late
+  //    refusal after dev-loop spend" defect before any worktree is claimed.
+  // -------------------------------------------------------------------
+  if (worktreePath !== undefined) {
+    const refusal = demoCheckpointPreflightRefusal(worktreePath, manifestClass);
+    if (refusal !== null) {
+      _loggedPendingRefusals.add(`${initiativeId}:preflight`);
+      return {
+        ok: false,
+        reason: refusal,
+        blockedClauses: 'demo-checkpoint-producibility',
+        terminal: false,
       };
     }
   }

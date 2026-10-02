@@ -248,6 +248,11 @@ export async function runOne(
     const manifest = parseManifest(manifestPath);
     if (tee) console.log(`[serve] claimed: ${manifest.initiativeId} (${manifest.project})`);
 
+    // Hoisted above the worktree-strategy block below (which also needs it):
+    // validateClaimable reads any work items the architect cycle's `pm` node
+    // already preserved here (S9/DEC-3 hand-off) — forge-8vfn.8.5.18.
+    const expectedWtPath = resolve(cfg.worktreesRoot, manifest.initiativeId);
+
     // ADR-028 §8 (M3-6): claim-time validation — refuse before worktree/cycle.
     // S8/DEC-3: pass the flow the manifest names (forge-cycle default retired);
     // a manifest with no flow_id is refused by validateClaimable.
@@ -257,6 +262,7 @@ export async function runOne(
       forgeRoot,
       manifest.changeClass,
       manifest.flowId ? flowPathForId(manifest.flowId) : undefined,
+      expectedWtPath,
     );
     if (!claimCheck.ok) {
       emitOrchestratorEvent(logsRoot, manifest.initiativeId, 'error', 'claim.refused', {
@@ -297,7 +303,6 @@ export async function runOne(
     annotateManifest(manifestPath, { flow_version: String(claimCheck.flowVersion), claim_blocked_clauses: '' });
 
     const branch = `forge/${manifest.initiativeId}`;
-    const expectedWtPath = resolve(cfg.worktreesRoot, manifest.initiativeId);
     // ADR 019 + S9: reuse a PRESERVED worktree rather than `worktree.add`, which
     // self-heals by rm-rf'ing the path — wiping the gitignored `.forge/work-items/`
     // + `.forge/unifier-items/` + per-WI commits that live untracked there. Two
