@@ -152,7 +152,15 @@ export default {
       // `with` (above) is ALSO substituted per case — `'story-S2'` becomes
       // `'story-s2-api'`/`-cli`/`-webapp` — and beats 4-13 (which assert the
       // project literally) run again for each case, on its own ground.
-      fork: { over: 'create-app-type', cases: STARTERS },
+      //
+      // `from: 1` (forge-8vfn.8.5.14) — MEASURED, not theoretical: a real run
+      // reded because case 2 ("cli") never re-opened beats 1-2 (open the
+      // Projects pillar, press "new project") and started on case 1's ("api")
+      // plan gate instead, where `[data-field="create-name"]` does not exist.
+      // Beat 3 is reached only through beats 1-2, so every case after the
+      // first must replay them to land back on `/projects/new` before filling
+      // this one in again.
+      fork: { over: 'create-app-type', cases: STARTERS, from: 1 },
       expect: {
         route: '/projects/story-s2',
         data: { page: 'projects', 'project-id': 'story-s2', 'page-ready': 'true' },

@@ -17,6 +17,7 @@ import { trackedProjectIds } from './tracked-projects.mjs';
 import { storyFixtureNames } from './sweep.mjs';
 import { FIXTURE_NAME } from './fixture-ground.mjs';
 import { fail, warn, requireNonEmptyString } from './story-schema-fail.mjs';
+import { isFillFork } from './beats-fork.mjs';
 import {
   MAX_DECLARED_WAIT_MS,
   PROGRESS_KEY_SHAPE,
@@ -84,16 +85,34 @@ function validateAmong(among, data, at) {
  * `authoring-door`, which no `fill` step fills — makes it a DOOR fork:
  * declared and carried through, but performed ONCE, unexpanded.
  *
- * THE CLASSIFICATION IS NOT CHECKED HERE, on purpose. `over`'s relationship to
- * `do` used to be a LOAD-TIME refusal ("a fork over a field nothing fills
- * would run every case identically and silently"), which is why S7's real
- * door fork could not load on this branch. That hazard no longer applies: a
- * door fork is never expanded per case, so it cannot run N cases identically.
- * `steps` (this beat's already-validated `do`) is accepted for the same
- * signature every other per-beat validator here uses, not because this
- * function still consults it.
+ * THE CLASSIFICATION IS NOT CHECKED HERE, on purpose — EXCEPT for `from`
+ * (forge-8vfn.8.5.14) below, which needs it. `over`'s relationship to `do`
+ * used to be a LOAD-TIME refusal ("a fork over a field nothing fills would
+ * run every case identically and silently"), which is why S7's real door
+ * fork could not load on this branch. That hazard no longer applies: a door
+ * fork is never expanded per case, so it cannot run N cases identically.
+ * `steps` (this beat's already-validated `do`) used to be accepted for the
+ * same signature every other per-beat validator here uses, not because this
+ * function consulted it — it now does, to tell a fill fork from a door fork
+ * for the `from` rule.
+ *
+ * `number` is this beat's own 1-indexed position in `story.beats` (the same
+ * number `expandForkedBeats` carries through) — needed to bound `from` and
+ * to say, in a beat-3 refusal, which beats a later case must re-run.
+ *
+ * `from` (forge-8vfn.8.5.14, T1 ruling 1350's gap-close). A FILL fork whose
+ * own beat number is above 1 is reached by the beats before it; only the
+ * FIRST case's walk runs them (`expandForkedBeats`'s plain walk, before it
+ * ever reaches the fork). Every LATER case must re-run beats `from..number-1`
+ * to reach the fork's own page, or it lands on whatever page the PREVIOUS
+ * case's last beat left behind — measured on S2: case 2 ("cli") began on case
+ * 1's ("api") plan gate, `[data-field="create-name"]` absent, every later
+ * beat of that case cascading red. So a fill fork above beat 1 with no
+ * `from` is refused at LOAD, naming the beat, rather than discovered by a
+ * funded run. A DOOR fork runs exactly one case, once — there is nothing to
+ * replay — so `from` on one is refused too, rather than silently ignored.
  */
-function validateFork(raw, steps, at) {
+function validateFork(raw, steps, at, number) {
   if (raw === undefined) return undefined;
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
     fail(`${at}.fork`, `expected an object { over, cases }, got ${JSON.stringify(raw)}`);
@@ -110,7 +129,32 @@ function validateFork(raw, steps, at) {
       'twice under two different labels, silently doubling the cost of a real-spawn beat',
     );
   }
-  return Object.freeze({ over: raw.over, cases: Object.freeze([...raw.cases]) });
+
+  const fillFork = isFillFork({ fork: raw, do: steps });
+  if (raw.from !== undefined) {
+    if (!Number.isInteger(raw.from) || raw.from < 1 || raw.from > number) {
+      fail(
+        `${at}.fork.from`,
+        `expected an integer 1..${number} (this beat's own number), got ${JSON.stringify(raw.from)}`,
+      );
+    }
+    if (!fillFork) {
+      fail(`${at}.fork.from`, 'a door fork runs one case; from has nothing to replay');
+    }
+  } else if (fillFork && number > 1) {
+    fail(
+      `${at}.fork`,
+      `beat ${number} is a fill fork and declares no 'from' — each case after the first must re-run the ` +
+      `beats that reach this beat's own page (beats 1..${number - 1}), or it lands on whatever page the ` +
+      "previous case's last beat left behind. Declare `fork: { …, from: <beat number> }`.",
+    );
+  }
+
+  return Object.freeze({
+    over: raw.over,
+    cases: Object.freeze([...raw.cases]),
+    ...(raw.from === undefined ? {} : { from: raw.from }),
+  });
 }
 
 /**
@@ -293,7 +337,7 @@ export function validateStory(raw) {
     // would read as N green cases proving nothing. `cases` must be distinct —
     // a duplicate would run the same case twice under two different labels,
     // silently doubling a real-spawn beat's cost for no added coverage.
-    const fork = validateFork(b.fork, steps, at);
+    const fork = validateFork(b.fork, steps, at, i + 1);
     // `forge-8vfn.7.6.143` (b1), T1 ruling 1147 — AN AGENT WAIT THAT NO CODE
     // PATH CAN CONSUME IS REFUSED HERE, before selection and before spend.
     //

@@ -33,6 +33,21 @@
  *   `story-file.mjs` used to refuse at load, now made structurally impossible
  *   instead: a door fork is never run more than once.
  *
+ *   `fork.from` (forge-8vfn.8.5.14) — FILL FORK ONLY. A fork beat numbered
+ *   above 1 is reached by the ENTRY BEATS before it (S2 beats 1-2: open the
+ *   Projects pillar, press "new project"). Only the FIRST case walks those
+ *   plainly, because the plain walk already ran them once before reaching the
+ *   fork; every LATER case would otherwise land on whatever page the
+ *   PREVIOUS case's last beat left behind — S2 run measured case 2 ("cli")
+ *   starting on case 1's ("api") plan gate, `[data-field="create-name"]`
+ *   absent, every later beat cascading red. `from: <beat number>` declares
+ *   where the entry beats begin, and `expandForkedBeats` re-emits beats
+ *   `from..forkBeat-1` before EVERY case after the first — unchanged beats,
+ *   ground-substituted exactly like the remainder beats are, labelled
+ *   `${n}[${case}]` under their own original numbers. `story-file.mjs`
+ *   refuses a fill fork above beat 1 with no `from`, and refuses `from` on a
+ *   door fork (it runs one case; nothing to replay).
+ *
  * PER-CASE GROUND RESET remains this module's alone to provide. Nothing else
  * in this harness resets a ground BETWEEN cases (`sweepProductFixtures` runs
  * ONCE, at the end of the whole run), so a fill fork's own per-case naming is
@@ -171,6 +186,14 @@ export function frameLabelSuffix(beatLabel, slug) {
  * `label` is what a reader sees: `"3"` for an ordinary beat, `"3[api]"` for a
  * case — the shape the brief's own example names (`3` -> `3[typescript-api]`).
  *
+ * `fork.from` (forge-8vfn.8.5.14): for every case AFTER THE FIRST, the beats
+ * numbered `from..forkBeat-1` (the entry beats that reach the fork's own
+ * page) are re-emitted, unchanged but ground-substituted, immediately before
+ * that case's own fork-beat-and-remainder. The FIRST case never re-emits
+ * them — the plain walk above already ran beats `1..forkBeat-1` once before
+ * this loop reached the fork. Absent `fork.from` means nothing is replayed
+ * (a fork on beat 1, where nothing precedes it).
+ *
  * @param {ReadonlyArray<object>} beats `story.beats`, already validated
  * @param {string|null} [groundProject] `story.ground.project`; omit (or pass
  *   `null`) for the ungrounded shape — every case of a fill fork substitutes
@@ -193,8 +216,23 @@ export function expandForkedBeats(beats, groundProject = null) {
     const laterBeats = beats.slice(i + 1);
     const wholeRemainder = groundProject !== null && fillForkNeedsWholeRemainder(laterBeats, groundProject);
     const tailBeats = wholeRemainder ? [beat, ...laterBeats] : [beat];
-    for (const c of beat.fork.cases) {
+    // `from` — the entry beats (`from..number-1`) that reach this fork's own
+    // page. Re-emitted before every case AFTER THE FIRST (the plain walk
+    // above already ran them once, for the first case, before this loop
+    // reached the fork); absent means nothing precedes the fork (beat 1) or
+    // the story's plain walk already covers it.
+    const replayBeats = beat.fork.from !== undefined ? beats.slice(beat.fork.from - 1, i) : [];
+    beat.fork.cases.forEach((c, caseIndex) => {
       const toProject = groundProject !== null ? `${groundProject}-${c}` : null;
+      if (caseIndex > 0) {
+        replayBeats.forEach((replayBeat, k) => {
+          const replayNumber = beat.fork.from + k;
+          const grounded = toProject !== null
+            ? substituteGroundProject(replayBeat, groundProject, toProject)
+            : replayBeat;
+          out.push({ beat: grounded, number: replayNumber, label: `${replayNumber}[${c}]` });
+        });
+      }
       tailBeats.forEach((tailBeat, j) => {
         // Only the fork's OWN beat (j === 0) carries `fork.over`'s substitution
         // — a later remainder beat has no `fork` field to consult.
@@ -202,7 +240,7 @@ export function expandForkedBeats(beats, groundProject = null) {
         const grounded = toProject !== null ? substituteGroundProject(cased, groundProject, toProject) : cased;
         out.push({ beat: grounded, number: number + j, label: `${number + j}[${c}]` });
       });
-    }
+    });
     if (wholeRemainder) i += laterBeats.length; // already consumed above — never re-walked plainly
   }
   return out;
