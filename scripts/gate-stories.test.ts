@@ -151,11 +151,19 @@ describe('gate.sh --list — the stories job\'s own costless stories are RUN, no
 });
 
 describe('gate.sh — running the derived stories step', () => {
+  // None of these fixture trees are real git repos with a demos/stories —
+  // item 76's follow-up (gate-stories-restore.test.ts) made the generated-
+  // tree restore unconditional by default, so without this seam every test
+  // here would hit `git status` against a tree that is not a git repo at
+  // all and get refused for a reason that has nothing to do with what it is
+  // actually testing.
+  const NO_RESTORE_SCOPE = { FORGE_STORIES_GENERATED_TREES: '' };
+
   test('a failing stub story is FAIL, with a log, and feeds a nonzero gate exit', () => {
     const d = tree(CI_FAILING);
     installedInPlace(d);
     try {
-      const r = gate([d], { FORGE_CHROMIUM_EXECUTABLE: '/bin/true' });
+      const r = gate([d], { FORGE_CHROMIUM_EXECUTABLE: '/bin/true', ...NO_RESTORE_SCOPE });
       assert.match(r.out, /^FAIL .*gate-stories\.sh.*→ /m, `expected a FAIL row with a log path; got:\n${r.out}`);
       assert.notEqual(r.status, 0);
     } finally {
@@ -168,7 +176,7 @@ describe('gate.sh — running the derived stories step', () => {
     installedInPlace(d);
     const campaign = mkdtempSync(join(tmpdir(), 'gate-stories-camp-'));
     try {
-      const r = gate([d, campaign], { FORGE_CHROMIUM_EXECUTABLE: '/bin/true' });
+      const r = gate([d, campaign], { FORGE_CHROMIUM_EXECUTABLE: '/bin/true', ...NO_RESTORE_SCOPE });
       assert.match(r.out, /^PASS .*gate-stories\.sh/m, `expected a PASS row; got:\n${r.out}`);
       const logs = readdirSync(join(campaign, 'reports')).filter((f) => f.includes(basename(d)));
       const body = logs.map((f) => readFileSync(join(campaign, 'reports', f), 'utf8')).join('\n');
@@ -187,7 +195,7 @@ describe('gate.sh — running the derived stories step', () => {
     try {
       // No FORGE_CHROMIUM_EXECUTABLE override, and this throwaway tree has no
       // real node_modules/playwright-core — chromium_path() resolves nothing.
-      const r = gate([d, campaign], { FORGE_CHROMIUM_EXECUTABLE: '/no/such/chromium-binary' });
+      const r = gate([d, campaign], { FORGE_CHROMIUM_EXECUTABLE: '/no/such/chromium-binary', ...NO_RESTORE_SCOPE });
       assert.match(r.out, /^REFUSED .*gate-stories\.sh.*chromium is not installed/m, `expected a named REFUSED row; got:\n${r.out}`);
       // The step's OWN log — never gate.sh's summary line, which echoes the
       // command text (containing the story names) on every row regardless of
@@ -211,7 +219,7 @@ describe('gate.sh — running the derived stories step', () => {
     installedInPlace(d);
     const campaign = mkdtempSync(join(tmpdir(), 'gate-stories-camp-'));
     try {
-      const r = gate([d, campaign], { FORGE_CHROMIUM_EXECUTABLE: '/bin/true' });
+      const r = gate([d, campaign], { FORGE_CHROMIUM_EXECUTABLE: '/bin/true', ...NO_RESTORE_SCOPE });
       assert.match(r.out, /^PASS .*gate-stories\.sh/m, `expected the stories step to pass; got:\n${r.out}`);
       const logs = readdirSync(join(campaign, 'reports')).filter((f) => f.includes(basename(d)));
       const body = logs.map((f) => readFileSync(join(campaign, 'reports', f), 'utf8')).join('\n');
@@ -243,7 +251,7 @@ describe('gate.sh — running the derived stories step', () => {
         `bash ${argv} 8>&-`;
       const r = spawnSync('bash', ['-c', cmd], {
         encoding: 'utf8',
-        env: strippedEnv({ FORGE_CHROMIUM_EXECUTABLE: '/bin/true' }),
+        env: strippedEnv({ FORGE_CHROMIUM_EXECUTABLE: '/bin/true', ...NO_RESTORE_SCOPE }),
         timeout: 20_000,
       });
       assert.notEqual(r.status, null, `the gate under ancestor hold timed out: ${r.stdout}${r.stderr}`);
@@ -256,8 +264,18 @@ describe('gate.sh — running the derived stories step', () => {
 });
 
 describe('gate-stories.sh — called directly', () => {
+  // None of these tests are about the restore scope — but with no `cwd`
+  // override, `generated_trees()` would otherwise fall through to the REAL
+  // `scripts/stories/gallery.mjs` (process.cwd() here is this repo's own
+  // root), scoping these at the real `demos/stories`/`docs/*` and making
+  // them depend on whatever this checkout's own working tree happens to
+  // hold. `FORGE_STORIES_GENERATED_TREES=''` (the test seam) makes the scope
+  // explicitly empty unless a test below overrides it.
   function runIt(cmd: string, env: Record<string, string> = {}) {
-    const r = spawnSync('bash', [GATE_STORIES, cmd], { encoding: 'utf8', env: strippedEnv(env) });
+    const r = spawnSync('bash', [GATE_STORIES, cmd], {
+      encoding: 'utf8',
+      env: strippedEnv({ FORGE_STORIES_GENERATED_TREES: '', ...env }),
+    });
     return { status: r.status, out: r.stdout ?? '', err: r.stderr ?? '' };
   }
 
