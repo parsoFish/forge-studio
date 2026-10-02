@@ -65,7 +65,9 @@ import { captureBeatDom, captureFrame, captureRedEvidence, describeRedEvidence }
 import { captureAndClearMintedSessions, describeGroundClear, captureAndClearMintedLogs, describeLogsClear } from './ground-clear.mjs';
 import { loadRegisteredSessionKindIds } from './session-kind-registry.mjs'; // review finding 1 — groundMintedSessionPaths' required registry
 import { driveBeat } from './beats-drive.mjs';
-import { expandForkedBeats, describeDoorFork, frameLabelSuffix } from './beats-fork.mjs';
+import {
+  expandForkedBeats, describeDoorFork, frameLabelSuffix, emptyBindingsStore, clearForCase, recordBindings,
+} from './beats-fork.mjs';
 import { snapshotForkGrounds, judgeForkGrounds } from './fork-grounds.mjs';
 import {
   captureGroundPin, applyMergeAccounting, findMergeAlignmentSince,
@@ -190,7 +192,10 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     : makeCycleTerminalWatch(ROOT, wantState, cycleOf === null ? null : { cycleOf }));
   // What earlier beats bound, for the routes later beats build from it. Rebuilt
   // per beat rather than mutated — a beat's verdict states what IT learned.
-  let bindings = {};
+  // `{ values, boundAt }` rather than a bare map (forge-8vfn.8.5.16, T1 ruling
+  // 1973bq): a fork's later case must not compare its own mint against the
+  // PREVIOUS case's — see `clearForCase`'s own header for the measured leak.
+  let bindingsStore = emptyBindingsStore();
   // 7.6.51/7.6.71: set when a beat boundary ends the run on money — breached, or
   // gone blind — and the verdict below is RED in the halt's own words, not a beat's.
   let spendHalt = null;
@@ -225,7 +230,13 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
     const pressedAt = new Map();
     // `forge-8vfn.2.22`, T1 ruling 1350 — the EXPANDED sequence (`beats-fork.mjs`):
     // a FILL fork runs once per case on its own ground; a DOOR fork stays ONE entry.
-    for (const [i, { beat, number, label: beatLabel, doorFork }] of expandForkedBeats(story.beats, story.ground?.project ?? null).entries()) {
+    for (const [i, { beat, number, label: beatLabel, doorFork, caseStart, from }] of expandForkedBeats(story.beats, story.ground?.project ?? null).entries()) {
+      // forge-8vfn.8.5.16, T1 ruling 1973bq — a later fork case's own first
+      // entry resets whatever binding its PREVIOUS case made at or after
+      // `from`, before this beat (or anything after it, in this case) ever
+      // runs against the store. See `clearForCase`'s own header for the
+      // measured leak this closes.
+      bindingsStore = clearForCase(bindingsStore, { caseStart, from });
       // `forge-8vfn.7.6.140` — THE BOUNDARY WHERE A BEAT-SCOPED LICENCE OPENS,
       // captured before anything in this beat can run — never taken twice for
       // the same NUMBER, so a fork's later cases do not re-date a licence an
@@ -236,10 +247,10 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
       // Bead `forge-8vfn.6.11.22` / row 61 (`costlessGuardFor`, `costless-beat.mjs`) —
       // the agent-scale probe, and `costless: true`'s whole enforcement, built per beat.
       const costlessGuard = costlessGuardFor(beat, ROOT, startedMs, story.ground?.realSpawn === true);
-      const probe = costlessGuard.active ? null : makeAgentProcProbe(ROOT, resolveBeatRoute(beat, bindings).route);
-      let verdict = await driveBeat(page, beat, i, uiUrl, bindings, undefined, probe, costlessGuard.active ? null : stallDoor, pressedAt, cycleWatchFor, waitSpendGuard, costlessGuard.active ? null : ROOT, startedMs);
+      const probe = costlessGuard.active ? null : makeAgentProcProbe(ROOT, resolveBeatRoute(beat, bindingsStore.values).route);
+      let verdict = await driveBeat(page, beat, i, uiUrl, bindingsStore.values, undefined, probe, costlessGuard.active ? null : stallDoor, pressedAt, cycleWatchFor, waitSpendGuard, costlessGuard.active ? null : ROOT, startedMs);
       verdict = costlessGuard.apply(verdict);
-      bindings = { ...bindings, ...verdict.bindings };
+      bindingsStore = recordBindings(bindingsStore, number, verdict.bindings);
       const frame = `frames/${String(i + 1).padStart(2, '0')}-${slug(beat.act)}${frameLabelSuffix(beatLabel, slug)}.png`;
       const capture = await captureFrame(page, join(outDir, frame), { log: console.error }); // row 90 — evidence, never a verdict input
       beats.push({ ...verdict, ...(capture.ok ? { frame } : { frame: null, frameNote: 'capture failed after retries — evidence only, see the log line above' }) });

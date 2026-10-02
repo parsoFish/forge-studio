@@ -194,11 +194,22 @@ export function frameLabelSuffix(beatLabel, slug) {
  * this loop reached the fork. Absent `fork.from` means nothing is replayed
  * (a fork on beat 1, where nothing precedes it).
  *
+ * `caseStart`/`from` on the ENTRY (forge-8vfn.8.5.16, T1 ruling 1973bq, row
+ * 180). The FIRST entry this call contributes for a case AFTER THE FIRST —
+ * the first re-emitted entry beat, or (`fork.from` absent) the fork's own
+ * beat — carries `caseStart: true` and `from` (`fork.from ?? number`): the
+ * beat NUMBER a binding must have been made STRICTLY BEFORE to survive into
+ * this case. This is the one signal the binding store (`clearForCase` below)
+ * needs to clear a PREVIOUS case's own bindings before a later case's beats
+ * run — MEASURED without it: S2 run case 2 ("cli") compared its own minted
+ * `<architectSessionId>` against case 1's ("api"), because nothing told the
+ * store that a fresh case had started.
+ *
  * @param {ReadonlyArray<object>} beats `story.beats`, already validated
  * @param {string|null} [groundProject] `story.ground.project`; omit (or pass
  *   `null`) for the ungrounded shape — every case of a fill fork substitutes
  *   nothing beyond `fork.over`'s own field, exactly as before this ruling.
- * @returns {ReadonlyArray<{beat: object, number: number, label: string, doorFork?: object}>}
+ * @returns {ReadonlyArray<{beat: object, number: number, label: string, doorFork?: object, caseStart?: true, from?: number}>}
  */
 export function expandForkedBeats(beats, groundProject = null) {
   const out = [];
@@ -222,15 +233,25 @@ export function expandForkedBeats(beats, groundProject = null) {
     // reached the fork); absent means nothing precedes the fork (beat 1) or
     // the story's plain walk already covers it.
     const replayBeats = beat.fork.from !== undefined ? beats.slice(beat.fork.from - 1, i) : [];
+    // The beat number a binding must predate to survive a later case's own
+    // reset — the fork's declared `from`, or (nothing to replay) the fork's
+    // own number, since beats before THAT ran only once regardless.
+    const resetFrom = beat.fork.from ?? number;
     beat.fork.cases.forEach((c, caseIndex) => {
       const toProject = groundProject !== null ? `${groundProject}-${c}` : null;
+      // The first case needs no reset — the plain walk above ran its earlier
+      // beats once, for it, and nothing has run for any case yet. Every push
+      // below for a LATER case marks exactly its first one `caseStart`.
+      let caseStarted = caseIndex === 0;
+      const caseMark = () => (caseStarted ? {} : { caseStart: true, from: resetFrom });
       if (caseIndex > 0) {
         replayBeats.forEach((replayBeat, k) => {
           const replayNumber = beat.fork.from + k;
           const grounded = toProject !== null
             ? substituteGroundProject(replayBeat, groundProject, toProject)
             : replayBeat;
-          out.push({ beat: grounded, number: replayNumber, label: `${replayNumber}[${c}]` });
+          out.push({ beat: grounded, number: replayNumber, label: `${replayNumber}[${c}]`, ...caseMark() });
+          caseStarted = true;
         });
       }
       tailBeats.forEach((tailBeat, j) => {
@@ -238,10 +259,78 @@ export function expandForkedBeats(beats, groundProject = null) {
         // — a later remainder beat has no `fork` field to consult.
         const cased = j === 0 ? substituteForkCase(tailBeat, c) : tailBeat;
         const grounded = toProject !== null ? substituteGroundProject(cased, groundProject, toProject) : cased;
-        out.push({ beat: grounded, number: number + j, label: `${number + j}[${c}]` });
+        out.push({ beat: grounded, number: number + j, label: `${number + j}[${c}]`, ...caseMark() });
+        caseStarted = true;
       });
     });
     if (wholeRemainder) i += laterBeats.length; // already consumed above — never re-walked plainly
   }
   return out;
+}
+
+/**
+ * An empty per-case BINDING STORE — `{ values, boundAt }`. `values` is the
+ * flat `{name: value}` map every caller already threads through as a beat's
+ * `bindings`; `boundAt` carries the SAME keys mapped to the ORIGINAL beat
+ * NUMBER (`expandForkedBeats`'s own, shared by every case of a fork) that
+ * bound them — the one fact `clearForCase` below needs to decide "made at or
+ * after `from`" when a later case starts.
+ */
+export function emptyBindingsStore() {
+  return Object.freeze({ values: Object.freeze({}), boundAt: Object.freeze({}) });
+}
+
+/**
+ * The store a beat should actually run against — forge-8vfn.8.5.16, T1
+ * ruling 1973bq, the fix for row 180's measured leak. A no-op for every
+ * entry but the one `expandForkedBeats` marks `caseStart` (the first entry
+ * of a fork case AFTER THE FIRST): there, every binding made at or after
+ * beat `entry.from` is dropped — it belongs to the PREVIOUS case, which ran
+ * those same beat numbers on its own ground — and every binding made
+ * STRICTLY BEFORE `entry.from` survives, because the beat that made it ran
+ * exactly once, for every case alike (the plain walk, or an un-replayed
+ * entry beat).
+ *
+ * MEASURED: S2's case 2 ("cli") inherited case 1's ("api")
+ * `<architectSessionId>` binding and compared its OWN agent run's id against
+ * it, reporting a mismatch between two different sessions as though one beat
+ * had contradicted itself — "✗ 10[cli] … bound as <architectSessionId> by an
+ * earlier beat … got …". Clearing here, before case 2's own beat 10 ever
+ * runs, is what stops that: the placeholder is simply unbound again, exactly
+ * as it was the first time case 1 reached it.
+ *
+ * @param {Readonly<{values: object, boundAt: object}>} store
+ * @param {{caseStart?: true, from?: number}} entry one `expandForkedBeats` result
+ * @returns {Readonly<{values: object, boundAt: object}>}
+ */
+export function clearForCase(store, entry) {
+  if (!entry.caseStart) return store;
+  const boundAt = Object.fromEntries(
+    Object.entries(store.boundAt).filter(([, at]) => at < entry.from),
+  );
+  const values = Object.fromEntries(Object.keys(boundAt).map((name) => [name, store.values[name]]));
+  return Object.freeze({ values: Object.freeze(values), boundAt: Object.freeze(boundAt) });
+}
+
+/**
+ * Fold one beat's own verdict `bindings` into the store, against the beat's
+ * ORIGINAL number (shared by every case) — so a LATER case's own
+ * `clearForCase` can tell "a binding this run's CURRENT case made" from "a
+ * binding made before the fork ever started replaying". A no-op when the
+ * beat bound nothing, so a story with no fork at all pays nothing beyond an
+ * unchanged `values` merge.
+ *
+ * @param {Readonly<{values: object, boundAt: object}>} store
+ * @param {number} number the beat's ORIGINAL 1-indexed position
+ * @param {Readonly<Record<string,string>>} verdictBindings a beat verdict's own `bindings`
+ * @returns {Readonly<{values: object, boundAt: object}>}
+ */
+export function recordBindings(store, number, verdictBindings) {
+  if (Object.keys(verdictBindings).length === 0) return store;
+  const boundAt = { ...store.boundAt };
+  for (const name of Object.keys(verdictBindings)) boundAt[name] = number;
+  return Object.freeze({
+    values: Object.freeze({ ...store.values, ...verdictBindings }),
+    boundAt: Object.freeze(boundAt),
+  });
 }
