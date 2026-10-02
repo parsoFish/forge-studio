@@ -60,6 +60,28 @@ test('row 188 (the defect, reproduced): the porcelain fence calls a COMMITTED es
   assert.deepEqual(describeFence(fence), ['[stories] fence: clean — the run wrote nothing outside its own artifacts']);
 });
 
+// T1 1973ef — the S1 run-6 verification's own shape, in run-story.mjs's own
+// order: fence (`applyFence`) → HEAD judge (`judgeHostHead`) → trailing sweep.
+// The fence ran while the committed profile still sat in the tree, so
+// porcelain was clean and it printed `fence: clean` — it compares the WORKING
+// TREE only, never HEAD; the trailing sweep removed the file only afterwards.
+// HEAD reds at the judge, and the sweep then finds nothing left to remove.
+test('row 188 (the defect, reproduced in run order): committed, fenced clean, then swept — HEAD reds before the sweep', () => {
+  const root = hostTree();
+  const before = readGitPorcelain(root);
+  const recorded = recordHostHead(root);
+  agentCommits(root, { [PROFILE]: '# profile\n' });
+  const breaches = fenceBreaches(before, readGitPorcelain(root), 'S1', 'story-s1', { root });
+  const fence = { ...breaches, restored: [], removed: [], failed: [], escapes: [] };
+  assert.deepEqual(describeFence(fence), ['[stories] fence: clean — the run wrote nothing outside its own artifacts']);
+  const judged = judgeHostHead({ root, recorded, storyId: 'S1', groundProject: 'story-s1', evidenceDir: join(evidenceRoot(), 'ev') });
+  assert.equal(judged.red, true, 'HEAD moved is RED even when the working-tree fence reads clean');
+  assert.ok(judged.lines.some((l) => /^\[stories\] fence: HEAD MOVED /.test(l)), judged.lines.join('\n'));
+  rmSync(join(root, 'brain'), { recursive: true, force: true }); // the trailing sweep, last
+  assert.equal(git(root, 'rev-parse', 'HEAD'), recorded.sha);
+  assert.deepEqual(readGitPorcelain(root), [], 'nothing of the commit survives the sweep, in HEAD or the tree');
+});
+
 test('row 188: a story-owned commit reds the fence, is soft-reset to the recorded HEAD, cleared, and its diff kept', () => {
   const root = hostTree();
   const recorded = recordHostHead(root);
