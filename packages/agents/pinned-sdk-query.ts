@@ -31,7 +31,7 @@
  * a value (not a type) from '@anthropic-ai/claude-agent-sdk' fails that test.
  */
 
-import { query as rawSdkQuery, type Options, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { query as rawSdkQuery, type Options, type Query, type SDKUserMessage, type Settings } from '@anthropic-ai/claude-agent-sdk';
 import { buildChildEnv, sdkStderrSink } from '@forge/kernel';
 import { markerEnvOverlay } from './spawn-marker.ts';
 import { resolveClaudeCliPath } from '@forge/kernel';
@@ -52,6 +52,21 @@ export type StreamQueryFn = (params: {
   options: Record<string, unknown>;
 }) => AsyncIterable<unknown>;
 
+
+/**
+ * Row 189, bead `forge-8vfn.8.5.26` — no AI attribution on a forge-made commit.
+ * Measured: 72ed93fa2 (onboarding agent, story run) ends with `Co-Authored-By:
+ * Claude Sonnet 4.6` twice; no forge code writes it — it is the Claude Code
+ * child's built-in commit guidance. SDK 0.3.281 `sdk.d.ts:6535` `Settings.attribution`
+ * ("Empty string hides attribution"), passed via `Options.settings` (`:2148`, the
+ * highest user-controlled `--settings` layer). Object form, not `false`: older
+ * CLIs reject the boolean. A settings FILE path is refused, not dropped — this
+ * seam cannot merge into a file it does not read (no production caller passes one).
+ */
+function settingsWithoutAttribution(settings: Options['settings']): Settings {
+  if (typeof settings === 'string') throw new Error(`pinned-sdk-query: options.settings must be inline, not a file path (${settings}) — forge-8vfn.8.5.26`);
+  return { ...settings, attribution: { commit: '', pr: '', sessionUrl: false } };
+}
 
 /**
  * Build a `query`-compatible function that pins `options.env` via
@@ -88,6 +103,8 @@ export function createPinnedSdkQuery(
         ...params.options,
         env: buildChildEnv(process.env, params.options?.env ?? {}),
         stderr: sdkStderrSink(params.options),
+        // `forge-8vfn.8.5.26` — no Co-Authored-By trailer on any agent commit.
+        settings: settingsWithoutAttribution(params.options?.settings),
         // `forge-8vfn.7.6.116` — NAME THE BINARY; never let the SDK pick its
         // bundled one. `claude-cli-path.ts`'s header carries the why, including
         // why there is no fallback and why the key is safe to pass undeclared.

@@ -194,3 +194,48 @@ test('6.11.40: a sink that throws never takes the turn down — diagnosis is not
 
   assert.doesNotThrow(() => captureStderr(() => sink('still logged')));
 });
+
+// ---------------------------------------------------------------------------
+// Row 189, bead `forge-8vfn.8.5.26` — a forge-made commit must carry no AI
+// attribution trailer.
+//
+// Measured: commit 72ed93fa2 in this repo, made by forge's onboarding agent
+// during a story run, ends with `Co-Authored-By: Claude Sonnet 4.6
+// <noreply@anthropic.com>` (twice). No forge code writes that line — every
+// orchestrator-issued `git commit -m` builds its own message — so the trailer
+// is the spawned Claude Code child's OWN built-in commit guidance, which
+// appends it unless the `attribution` setting says otherwise. The project rule
+// ("no AI attribution lines") covers every commit forge's agents make, so the
+// setting is pinned HERE, at the one seam every production `query()` crosses,
+// for the same reason `env` and `stderr` are: a per-kind setting is a setting
+// some kind will be missing on the day it commits.
+// ---------------------------------------------------------------------------
+
+test('8.5.26: every query carries `settings.attribution` with an empty commit and PR text — the child appends no Co-Authored-By trailer', () => {
+  const { fakeQuery, calls } = makeFakeQuery();
+  createPinnedSdkQuery(fakeQuery as never, STUB_CLI)({ prompt: 'p' } as never);
+
+  const settings = calls[0]!.options?.['settings'] as { attribution?: Record<string, unknown> } | undefined;
+  assert.ok(settings && typeof settings === 'object', 'an inline settings object reaches the SDK (its `--settings` flag layer)');
+  assert.deepEqual(settings.attribution, { commit: '', pr: '', sessionUrl: false });
+});
+
+test('8.5.26: a caller\'s own inline settings are kept, and cannot re-enable attribution', () => {
+  const { fakeQuery, calls } = makeFakeQuery();
+  createPinnedSdkQuery(fakeQuery as never, STUB_CLI)({
+    prompt: 'p',
+    options: { settings: { model: 'claude-sonnet-4-6', attribution: { commit: 'Co-Authored-By: x' } } },
+  } as never);
+
+  const settings = calls[0]!.options?.['settings'] as Record<string, unknown>;
+  assert.equal(settings['model'], 'claude-sonnet-4-6', 'unrelated caller settings pass through');
+  assert.deepEqual(settings['attribution'], { commit: '', pr: '', sessionUrl: false }, 'the seam wins on attribution');
+});
+
+test('8.5.26: a settings FILE path is refused — the seam cannot merge into a file it does not read, and must not drop it silently', () => {
+  const { fakeQuery } = makeFakeQuery();
+  assert.throws(
+    () => createPinnedSdkQuery(fakeQuery as never, STUB_CLI)({ prompt: 'p', options: { settings: '/x/settings.json' } } as never),
+    /settings/,
+  );
+});
