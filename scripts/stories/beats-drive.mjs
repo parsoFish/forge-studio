@@ -368,8 +368,15 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   for (const step of runSteps) {
     if (typeof step?.press === 'string') pressedAt.set(step.press, pressStartedMs);
   }
+  // Row 192 (bead `forge-8vfn.8.5.30`) — the SAME `readAgentLivenessNow` and
+  // `boundRunId` already built above for `waitForConsequence`, reused rather
+  // than a second reader: `beat.wait?.for === 'agent'` is `performSteps`'s
+  // own `agentScaleWait` gate, never `'settle'` (liveness would defeat the
+  // sharpness a settle wait exists for — the same exclusion `waitForConsequence`
+  // already makes).
   const steps_ = await performSteps(page, runSteps, bound.ms, sessionScope, agentProcProbe, matchesData, null, target, stallDoor,
-    declaredProgress, readProgressNow, readSessionEventsNow, readSessionLivenessNow);
+    declaredProgress, readProgressNow, readSessionEventsNow, readSessionLivenessNow,
+    beat.wait?.for === 'agent', readAgentLivenessNow, boundRunId);
   const stepError = steps_.error;
   // `forge-8vfn.8.1.16` / T1 ruling 1561 — the LAST `pressWithin` TEXT scope
   // this beat resolved, carried onto the beat's own record for `story.json`.

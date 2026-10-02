@@ -186,13 +186,33 @@ describe('forge-8vfn.8.5.17 — wiring: run.mjs and run-story.mjs actually share
     assert.match(call, /writtenThisRun/, 'runStory must be called WITH the batch\'s shared array, not a fresh one');
   });
 
-  test('run-story.mjs prints this story\'s own verdict line BEFORE calling regenerateGalleryForRun', () => {
+  // Row 191 (bead `forge-8vfn.8.5.29`) SUPERSEDES this door's old shape. It
+  // used to assert `run-story.mjs` printed `${row.status} — N/M beats green`
+  // BEFORE the gallery regen, so a regen throw could never suppress this
+  // story's own verdict — necessary back when `regenerateGallery` could
+  // throw. It no longer can (the test two below still proves that), and row
+  // 191 found the cost of printing that line early instead: it can say GREEN
+  // and the run still goes red on containment further down, which is exactly
+  // what happened on a real S1 run. So `run-story.mjs` prints no verdict line
+  // of its own any more — `containmentVerdict` (`run-story-verdict.mjs`)
+  // prints the one true verdict line now, as the LAST thing on every path
+  // out of it, which is necessarily AFTER the regen call.
+  test('row 191: run-story.mjs prints no verdict line of its own — containmentVerdict owns the final one, printed after the gallery regen', () => {
     const s = runStorySrc();
-    const printAt = s.indexOf('row.status');
+    assert.doesNotMatch(
+      s, /row\.status/,
+      'run-story.mjs must not print a beats-only verdict line any more — that line can go stale before containment is judged (row 191)',
+    );
     const regenAt = s.indexOf('regenerateGalleryForRun(');
-    assert.notEqual(printAt, -1, 'the verdict print must still exist');
+    const handoffAt = s.indexOf('return containmentVerdict({');
     assert.notEqual(regenAt, -1, 'run-story.mjs must call regenerateGalleryForRun — never a bare regenerateGallery( for this purpose');
-    assert.ok(printAt < regenAt, 'the verdict line must print before the gallery regen runs, so a regen failure can never suppress it');
+    assert.notEqual(handoffAt, -1, 'run-story.mjs must still hand off to containmentVerdict');
+    assert.ok(regenAt < handoffAt, 'the gallery regen must run before containmentVerdict, which now prints the final verdict line itself');
+    const v = verdictSrc();
+    assert.match(
+      v, /const printFinal = \(status\) => console\.log\(/,
+      'containmentVerdict must declare the printFinal helper that prints the one true verdict line',
+    );
   });
 
   test('run-story.mjs no longer calls the bare one-story regenerateGallery( directly', () => {

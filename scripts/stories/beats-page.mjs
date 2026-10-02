@@ -170,14 +170,25 @@ export async function stopNow(page, sessionScope) {
  * Returns a stall record, or null (found, or the bound expired — the act below
  * then throws its own honest failure, exactly as before).
  */
-export async function waitForHandleOrStall(page, handle, timeoutMs, sessionScope, probe = null, stallDoor = null) {
+export async function waitForHandleOrStall(
+  page, handle, timeoutMs, sessionScope, probe = null, stallDoor = null,
+  agentScaleWait = false, readLivenessNow = null, boundRunId = null,
+) {
   // `sessionScope` replaces the old `watchLifecycle` boolean rather than
   // joining it (`6.11.47`): the flag always stood for "this beat waits on a
   // session", and saying WHICH session is the whole fix. One value, and the
   // predicate cannot be armed without naming what it is armed about.
-  if (sessionScope === null) return waitOffSession(page, handle, timeoutMs, stallDoor);
+  if (sessionScope === null) return waitOffSession(page, handle, timeoutMs, stallDoor, agentScaleWait, readLivenessNow, boundRunId);
   const startedAt = Date.now();
   const deadline = startedAt + timeoutMs;
+  // Row 192 (bead `forge-8vfn.8.5.30`) — the SAME inactivity window row 179b
+  // gave the consequence wait below (`waitForConsequence`) now reaches this
+  // PRE-act wait too, for a declared `for: 'agent'` beat only: `agentScaleWait`
+  // and `readLivenessNow` are both `null`/`false` for every other beat and
+  // every door test that passes neither, so this is a pure addition.
+  const liveWindow = agentScaleWait && readLivenessNow !== null
+    ? makeLivenessWindow({ startedAt, timeoutMs })
+    : null;
   // `forge-8vfn.8.1.34` — see the import comment: reports the control's own
   // state at the first poll and on every change, for exactly as long as this
   // wait runs, whatever ends it.
@@ -191,7 +202,15 @@ export async function waitForHandleOrStall(page, handle, timeoutMs, sessionScope
       if (probe !== null) { try { probe(); } catch { /* a probe is never load-bearing */ } }
       const why = await stopNow(page, sessionScope);
       if (why !== null) return Object.freeze({ afterMs: Date.now() - startedAt, why });
-      if (Date.now() >= deadline) return null;
+      let effectiveDeadline = deadline;
+      if (liveWindow !== null) {
+        const pollNow = Date.now();
+        // The route is `sessionScope` itself, baked into `readLivenessNow`'s own
+        // closure (`beats-drive.mjs`'s `readAgentLivenessNow`) — no `runId`
+        // needed on this branch, unlike `waitOffSession` below.
+        effectiveDeadline = liveWindow.observe(pollNow, readLivenessNow(null, boundRunId, pollNow)).deadline;
+      }
+      if (Date.now() >= effectiveDeadline) return null;
       await new Promise((resolve) => setTimeout(resolve, CONSEQUENCE_POLL_MS));
     }
   } finally {
@@ -216,18 +235,28 @@ export async function waitForHandleOrStall(page, handle, timeoutMs, sessionScope
  * runner's log sat silent 2 m 31 s while the architect's `events.jsonl` grew
  * 33 822 → 48 409 bytes.
  *
- * THE DECLARED BOUND STAYS A HARD MAXIMUM. Nothing runs longer than `timeoutMs`;
- * the only new exit is earlier. A page that names no run, or a run with no
- * channel, keeps exactly today's behaviour — no channel is "nothing to judge",
- * never "it has been quiet".
+ * THE DECLARED BOUND STAYS A HARD MAXIMUM FOR EVERY BEAT THAT DID NOT DECLARE
+ * `for: 'agent'`. Row 192 (bead `forge-8vfn.8.5.30`) narrowly lifts that for
+ * the ones that did, the same way row 179b already did for the consequence
+ * wait: `timeoutMs` becomes an inactivity window the agent's own liveness can
+ * push out, under the absolute `CYCLE_WAIT_WALL_CEILING_MS` — never later than
+ * that, and never for a beat that declared no agent wait at all. A page that
+ * names no run, or a run with no channel, keeps exactly today's behaviour —
+ * no channel is "nothing to judge", never "it has been quiet".
  */
-async function waitOffSession(page, handle, timeoutMs, stallDoor) {
+async function waitOffSession(page, handle, timeoutMs, stallDoor, agentScaleWait = false, readLivenessNow = null, boundRunId = null) {
   const startedAt = Date.now();
   const deadline = startedAt + timeoutMs;
   // 664(i), same rule as the consequence wait: a bound within twice the ceiling
   // would be consumed rather than cut short, so the door does not run at all.
   const doored = stallDoor !== null && doorWorthRunning(timeoutMs, STALL_CEILING_MS);
-  const runId = doored ? await readRunId(page) : null;
+  // Row 192 — see `waitForHandleOrStall`'s own comment above. This branch has
+  // no DOM route to stand on (off-session), so the liveness reader needs
+  // `runId` itself, same as the stall door right below.
+  const liveWindow = agentScaleWait && readLivenessNow !== null
+    ? makeLivenessWindow({ startedAt, timeoutMs })
+    : null;
+  const runId = (doored || liveWindow !== null) ? await readRunId(page) : null;
   // `forge-8vfn.8.1.34` — see the import comment. This is the wait S10 proof run
   // 36's beat 21 spent its whole 504 s bound inside, silently: the
   // control was absent throughout and nothing said so until the final verdict.
@@ -249,7 +278,12 @@ async function waitOffSession(page, handle, timeoutMs, stallDoor) {
           });
         }
       }
-      if (Date.now() >= deadline) return null;
+      let effectiveDeadline = deadline;
+      if (liveWindow !== null) {
+        const pollNow = Date.now();
+        effectiveDeadline = liveWindow.observe(pollNow, readLivenessNow(runId, boundRunId, pollNow)).deadline;
+      }
+      if (Date.now() >= effectiveDeadline) return null;
       await new Promise((resolve) => setTimeout(resolve, CONSEQUENCE_POLL_MS));
     }
   } finally {
