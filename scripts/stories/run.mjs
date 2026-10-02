@@ -57,9 +57,18 @@ import {
   refusalError,
   bootOwnBridge,
   bridgeSpawnOptions,
+  killBridgeProcessGroup,
 } from './bridge.mjs';
 import { collectAgentRuns, reapAgentRuns, describeReap } from './reap.mjs';
 import { recordReapedCancellations } from './reap-cancel.mjs';
+// Defect B fold, row 184b (forge-8vfn.8.5.21) — the SIGINT/SIGTERM path's own
+// version of the own-ground clear `run-story.mjs` already runs at the end of
+// every story IT reaches; see that module's header for why a signal needs a
+// second copy rather than reusing `runStory`'s internal one.
+import { captureAndClearMintedSessionsSince } from './ground-abort-clear.mjs';
+import { mintedSessionDirNames } from './ground-minted.mjs';
+import { captureAndClearMintedLogs, describeLogsClear, describeGroundClear } from './ground-clear.mjs';
+import { loadRegisteredSessionKindIds } from './session-kind-registry.mjs';
 // The beat loop and everything one story needs lives in `run-story.mjs`
 // (forge-0fli). This file keeps argument parsing, the preflight fence, the
 // bridge decision and the per-story loop; the call below is the only seam.
@@ -152,6 +161,19 @@ async function main() {
   // live writer to defer to. Claiming what it left behind IS this sweep's
   // job, not a race with it.
   let stopping = false;
+  // Declared here, ahead of the listener below, rather than at their natural
+  // call sites further down the function: a SIGTERM/SIGINT can in principle
+  // arrive before `main()` reaches those lines, and a `let` the closure below
+  // reads before ITS OWN declaration has run throws (TDZ) instead of the
+  // handler actually running.
+  let bridgeProc = null;
+  // The in-progress story's own ground snapshot, so a signal mid-story can
+  // still capture + clear what it minted before exit — Defect B, row 184b
+  // fold (forge-8vfn.8.5.21). `null` whenever no story has started yet, the
+  // started story declares no ground project, or its OWN `runStory` already
+  // reached its own teardown (every path through that function clears this
+  // the instant it starts, exactly where the per-story loop below sets it).
+  let inProgressGround = null;
   const onStopSignal = (signal) => {
     if (stopping) return;
     stopping = true;
@@ -175,6 +197,61 @@ async function main() {
       }
     } catch (err) {
       console.error(`[stories] post-stop sweep (agent/authoring logs) failed: ${err?.message ?? err}`);
+    }
+    // Defect B fold, row 184b (forge-8vfn.8.5.21) — the bridge THIS run
+    // booted, and its WHOLE process group (`next-server` included), signalled
+    // here too. Before this fix only the ordinary `finally` block at the
+    // bottom of `main()` ever touched `bridgeProc`, and a signal skips that
+    // block entirely — measured: a bridge this path never reached held
+    // 4123/4124 for as long as ten minutes after its own run was gone,
+    // refusing the NEXT run's boot ("foreign bridge on 4123"). Signalled
+    // BEFORE the ground clear below, so nothing it (or a scheduler it
+    // started) is still writing races the snapshot that clear reads.
+    if (bridgeProc !== null) {
+      console.log(`[stories] post-stop sweep: signalling this run's own bridge (pid ${bridgeProc.pid}) and its process group`);
+      killBridgeProcessGroup(bridgeProc, 'SIGTERM');
+    }
+    // Defect B fold, row 184b — the IN-PROGRESS story's own minted sessions,
+    // captured and cleared exactly as `run-story.mjs` already does at the end
+    // of every story it reaches ("own ground: CAPTURED … CLEARED …"). A
+    // signal skips that function entirely, so without this a minted session
+    // (an architect's `_architect/<sid>/…`) survived in the REAL ground,
+    // moving its method-C hash off the pin the next run's launcher checks.
+    if (inProgressGround !== null) {
+      try {
+        const logsDir = join(ROOT, '_logs');
+        const groundAfter = ownGroundManifest(ROOT, inProgressGround.project);
+        let logsAfter = [];
+        try {
+          logsAfter = readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name);
+        } catch (err) {
+          console.error(`[stories] post-stop sweep (own ground) could not read ${logsDir}: ${err?.message ?? err}`);
+        }
+        const clear = captureAndClearMintedSessionsSince({
+          root: ROOT,
+          project: inProgressGround.project,
+          storyId: inProgressGround.storyId,
+          runStamp,
+          groundBefore: inProgressGround.groundBefore,
+          groundAfter,
+          logsBefore: inProgressGround.logsBefore,
+          logsAfter,
+          logsDir,
+          registeredKindIds: loadRegisteredSessionKindIds(ROOT),
+        });
+        for (const line of describeGroundClear(clear, inProgressGround.project)) {
+          console.log(`[stories] post-stop sweep: ${line}`);
+        }
+        const mintedLogNames = mintedSessionDirNames(inProgressGround.logsBefore, logsAfter, logsDir);
+        const logsClear = captureAndClearMintedLogs({
+          root: ROOT, storyId: inProgressGround.storyId, runStamp, mintedNames: mintedLogNames,
+        });
+        for (const line of describeLogsClear(logsClear)) {
+          console.log(`[stories] post-stop sweep: ${line}`);
+        }
+      } catch (err) {
+        console.error(`[stories] post-stop sweep (own ground) failed: ${err?.message ?? err}`);
+      }
     }
     process.exit(signal === 'SIGINT' ? 130 : 143); // 128+signum, the conventional signal exit code
   };
@@ -382,7 +459,7 @@ async function main() {
   // 3. Host lock — 4123/4124 are host-global.
   const release = await acquireHostLock();
 
-  let bridgeProc = null;
+  // `bridgeProc` is declared ahead of the SIGINT/SIGTERM listener, above.
   let exitCode = 0;
   // What the leading sweep removed, so the teardown can put back anything the
   // run never regenerated (T1 ruling 594, half 2).
@@ -534,11 +611,29 @@ async function main() {
       }
 
       for (const story of stories) {
+        // Defect B fold, row 184b (forge-8vfn.8.5.21) — the ground snapshot
+        // `onStopSignal` needs to capture + clear whatever THIS story mints,
+        // taken here because `runStory` owns its own before-snapshot
+        // internally and never exposes it. Set IMMEDIATELY before the same
+        // await `startedStoryIds` already anchors to, for the same reason:
+        // no code must run between this and the story actually starting.
+        const project = story.ground?.project ?? null;
+        inProgressGround = project === null ? null : {
+          storyId: story.id,
+          project,
+          groundBefore: ownGroundManifest(ROOT, project),
+          logsBefore: readdirSync(join(ROOT, '_logs'), { withFileTypes: true }).map((e) => e.name),
+        };
         // Marked IMMEDIATELY before the await — no code runs between this and
         // `runStory` actually starting, so a crash inside it can never leave
         // a gap where the story still reads as unstarted.
         startedStoryIds.add(story.id);
         exitCode = (await runStory(story, uiUrl, startedMs, args.ceilingUsd, writtenThisRun)) || exitCode;
+        // `runStory` already cleared its OWN minted sessions on every path it
+        // reached (every return, every throw past its own try/finally) — so
+        // by the time control returns here, `onStopSignal` must stop treating
+        // this story as still in progress.
+        inProgressGround = null;
       }
     }
   } finally {
@@ -644,13 +739,10 @@ async function main() {
     } catch (err) {
       console.warn(`[stories] fixture-ground backstop failed: ${err?.message ?? err}`);
     }
-    if (bridgeProc !== null) {
-      try {
-        process.kill(-bridgeProc.pid, 'SIGTERM');
-      } catch {
-        /* already gone */
-      }
-    }
+    // Shared with the boot-timeout path (`bridge.mjs`) and `onStopSignal`
+    // above — ONE mechanism for killing a bridge this run booted, row 184b
+    // (forge-8vfn.8.5.21).
+    killBridgeProcessGroup(bridgeProc, 'SIGTERM');
     await release();
   }
   return exitCode;

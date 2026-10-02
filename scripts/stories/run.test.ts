@@ -135,3 +135,94 @@ test('row 146: the handler also clears _agent-*/_authoring-* dirs residue.sh gat
   );
   assert.match(s.slice(callAt, sinceAt), /_agent-.*_authoring-|_authoring-.*_agent-/s);
 });
+
+/**
+ * Row 184b (forge-8vfn.8.5.21), Defect B fold — the SAME `onStopSignal` gap,
+ * two more ways. A story run killed by SIGINT mid-story left (a) its own
+ * minted architect session standing in the REAL ground, moving its method-C
+ * hash off the pin the next run's launcher checks, and (b) its own `forge
+ * studio` bridge — and `next-server`, the bridge's own child — bound to
+ * 4123/4124 for as long as ten minutes, refusing the next run's boot. Both
+ * SOURCE-TEXT doors for the same reason row 146's own doors are: `main()`
+ * cannot be exercised as a unit.
+ */
+test('row 184b: bridgeProc and inProgressGround are declared BEFORE the signal listeners, never after', () => {
+  // A `let` a closure reads before its OWN declaration line has run throws
+  // (TDZ) rather than running the handler — and `onStopSignal` is wired to
+  // the listener well before either variable's natural call site further
+  // down `main()`. Declaring them here, ahead of `process.once`, is what
+  // keeps a SIGINT arriving early in the run from crashing the handler
+  // instead of running it.
+  const s = src();
+  const bridgeDeclAt = s.indexOf('let bridgeProc = null;');
+  const groundDeclAt = s.indexOf('let inProgressGround = null;');
+  const listenAt = s.indexOf("process.once('SIGTERM'");
+  assert.notEqual(bridgeDeclAt, -1, 'bridgeProc must still be declared somewhere');
+  assert.notEqual(groundDeclAt, -1, 'inProgressGround must be declared');
+  assert.notEqual(listenAt, -1);
+  assert.ok(bridgeDeclAt < listenAt, 'bridgeProc must be declared before the SIGTERM/SIGINT listeners are wired');
+  assert.ok(groundDeclAt < listenAt, 'inProgressGround must be declared before the SIGTERM/SIGINT listeners are wired');
+});
+
+test('row 184b: the handler kills THIS run\'s own bridge process group, not only the ordinary finally block', () => {
+  const s = src();
+  assert.match(
+    s,
+    /import\s*\{[^}]*\bkillBridgeProcessGroup\b[^}]*\}\s*from\s*'\.\/bridge\.mjs';/,
+    'killBridgeProcessGroup must be imported alongside the other bridge helpers',
+  );
+  const handlerAt = s.indexOf('const onStopSignal =');
+  const exitAt = s.indexOf('process.exit(signal ===', handlerAt);
+  assert.notEqual(handlerAt, -1);
+  assert.notEqual(exitAt, -1, 'the handler must still end in process.exit');
+  const killAt = s.indexOf('killBridgeProcessGroup(bridgeProc', handlerAt);
+  assert.notEqual(killAt, -1, 'the handler must call killBridgeProcessGroup(bridgeProc, …) — a bridge this run booted must not survive a SIGINT/SIGTERM');
+  assert.ok(killAt < exitAt, 'the kill must run BEFORE process.exit, or the signal to the bridge never gets sent');
+});
+
+test('row 184b: the finally block\'s OWN bridge teardown reuses the SAME helper, never a second copy of the kill', () => {
+  const s = src();
+  const finallyAt = s.indexOf('} finally {');
+  const handlerAt = s.indexOf('const onStopSignal =');
+  const killCalls = [...s.matchAll(/killBridgeProcessGroup\(/g)].map((m) => m.index);
+  assert.ok(killCalls.length >= 2, `expected at least 2 call sites (onStopSignal + finally), found ${killCalls.length}`);
+  assert.ok(killCalls.some((i) => i > handlerAt && i < finallyAt), 'one call must be inside onStopSignal');
+  assert.ok(killCalls.some((i) => i > finallyAt), 'one call must be inside the ordinary finally block');
+  // The raw `process.kill(-bridgeProc.pid` this used to be, inline, must be
+  // gone — a second copy of the same kill is exactly how the two drift.
+  assert.doesNotMatch(s, /process\.kill\(-bridgeProc\.pid/, 'the finally block must no longer inline its own process-group kill');
+});
+
+test('row 184b: the handler captures + clears the IN-PROGRESS story\'s own minted ground sessions', () => {
+  const s = src();
+  assert.match(
+    s,
+    /import\s*\{[^}]*\bcaptureAndClearMintedSessionsSince\b[^}]*\}\s*from\s*'\.\/ground-abort-clear\.mjs';/,
+    'captureAndClearMintedSessionsSince must be imported from the abort-path module',
+  );
+  const handlerAt = s.indexOf('const onStopSignal =');
+  const exitAt = s.indexOf('process.exit(signal ===', handlerAt);
+  const gateAt = s.indexOf('if (inProgressGround !== null)', handlerAt);
+  assert.notEqual(gateAt, -1, 'the clear must be gated on a story actually being in progress');
+  assert.ok(gateAt < exitAt, 'the gate must run before process.exit');
+  const callAt = s.indexOf('captureAndClearMintedSessionsSince(', gateAt);
+  assert.notEqual(callAt, -1, 'the handler must actually call the clear inside that gate');
+  assert.ok(callAt < exitAt, 'the call must run before process.exit');
+});
+
+test('row 184b: the per-story loop snapshots the project\'s ground BEFORE marking the story started', () => {
+  const s = src();
+  const loopAt = s.indexOf('for (const story of stories) {');
+  const setAt = s.indexOf('inProgressGround = project === null ? null :', loopAt);
+  const startedAt = s.indexOf('startedStoryIds.add(story.id);', loopAt);
+  const runStoryAt = s.indexOf('await runStory(story,', loopAt);
+  const resetAt = s.indexOf('inProgressGround = null;', runStoryAt);
+  assert.notEqual(loopAt, -1);
+  assert.notEqual(setAt, -1, 'the per-story ground snapshot must be set inside the story loop');
+  assert.notEqual(startedAt, -1);
+  assert.notEqual(runStoryAt, -1);
+  assert.notEqual(resetAt, -1, 'inProgressGround must be reset once runStory returns — its OWN teardown already cleared what it minted');
+  assert.ok(setAt < startedAt, 'the snapshot must be taken before the story is marked started, same as startedStoryIds itself');
+  assert.ok(startedAt < runStoryAt, 'started must be marked before runStory is awaited');
+  assert.ok(runStoryAt < resetAt, 'the reset must happen only AFTER runStory returns, never before');
+});
