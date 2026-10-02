@@ -693,6 +693,7 @@ export async function runDraftRounds(
     writeStatus({ ...status, phase: 'critiquing' });
     const record = await runCompletenessCriticStep({
       input, paths, status, logger, queryFn: plumbing.queryFn, round,
+      onToolUse: plumbing.onToolUse, onHeartbeat: plumbing.onHeartbeat, onText: plumbing.onText,
     });
     // Durable BEFORE the next round: the flag records that THIS round was
     // checked (never "the session was checked once"), so a re-drafted plan can
