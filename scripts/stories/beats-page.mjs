@@ -132,8 +132,17 @@ export function stopReasonFor(observed, sessionScope = null) {
   return null;
 }
 
-/** The same question, against a live read. */
-async function stopNow(page, sessionScope) {
+/**
+ * The same question, against a live read.
+ *
+ * Exported (row 184, forge-8vfn.8.5.20) so `runRepeatStep`
+ * (`beats-repeat.mjs`) can ask it too: that loop's own governing bound can be
+ * EXTENDED by the session's liveness (its `.heartbeat`/`events.jsonl`, T1
+ * 1973bq), and liveness must never be read as a reason to sit past a stop the
+ * product has already published. This is the SAME reader `waitForHandleOrStall`
+ * and `waitForConsequence` already trust for that question — never a second one.
+ */
+export async function stopNow(page, sessionScope) {
   // Reuses `readObserved` rather than minting a second notion of "the page's
   // state" — an empty `expect.data` collects only the error sentinels, and the
   // bar and the phase ride along beside them. §15.161's rule, one layer down.
@@ -401,6 +410,45 @@ export async function waitForConsequence(
       const got = seen[settle.key] ?? observed.data?.[settle.key];
       if (got !== undefined && got !== settle.while) return null;
     }
+    // ROW 184 (forge-8vfn.8.5.20) — ZOMBIE EXTENDS. THE SESSION'S OWN PUBLISHED
+    // STATE IS THE AUTHORITY, and a published OPERATOR GATE ends a wait on sight.
+    //
+    // This wait runs AFTER the beat's `do` block has already finished — there is
+    // no step left here that could answer a question — so a session that has
+    // settled at the operator gate `awaiting-answers` is a dead end for THIS
+    // wait specifically: the architect has turned its turn over, and nothing
+    // below will take it. Measured: a beat waiting for `awaiting-verdict` sat
+    // out its WHOLE declared bound (~13 minutes) with the architect's own
+    // `/proc` trend showing continuous work the entire time — `parent state=S`,
+    // `SDK child utime 45→238` — right up until the process was reaped. The
+    // trend was real; it was also the wrong question. The RIGHT one is what
+    // `status.json` already says, and it said `awaiting-answers` 39 s in.
+    //
+    // Pid/heartbeat liveness (the probe above, a channel's own idle time) may
+    // only EXTEND a wait while the product has published nothing conclusive
+    // yet; it must never be read as a reason to keep sitting past a gate that
+    // already has. This check runs UNCONDITIONALLY — not gated on `probe` or
+    // on any liveness reading — because the gate itself, not a liveness
+    // reading, is what proves there is nothing left to wait for.
+    //
+    // SCOPED TO EXACTLY THIS ONE PHASE. Not `TERMINAL_STOPPED_PHASES`' failure
+    // set, which already ends this same wait via `stopReasonFor` below. And
+    // never a DONE phase (`committed`/`applying`/`complete`/…), which a beat
+    // may legitimately be waiting to ARRIVE at — ending early on one of those
+    // would invent a failure out of a success, the exact mistake
+    // `TERMINAL_STOPPED_PHASES`'s own header already refuses to make. If the
+    // wanted expectation IS `awaiting-answers`, the green check above already
+    // returned before this line is ever reached.
+    if (observed.sessionPhase === 'awaiting-answers') {
+      return Object.freeze({
+        afterMs: Date.now() - startedAt,
+        why:
+          'the session\'s own phase reached the operator gate "awaiting-answers" — the product has turned its ' +
+          'turn over, and this wait\'s `do` block has already finished, so nothing here will answer it. The ' +
+          'rest of the declared bound would be spent watching a turn only a separate, later beat can take.',
+        stoppedBy: 'runner',
+      });
+    }
     // Ruling 241 step 2. Only for a beat that DECLARED an agent wait: those are
     // the beats that stand on a session, and scoping it there means no other
     // beat gains a new way to fail. The product is believed rather than
@@ -470,6 +518,27 @@ export async function waitForConsequence(
     // `cycleDirForInitiative` a SECOND time here, inside this door, would be a
     // second resolver for one question; not consulting this door at all keeps
     // there being exactly one.
+    // ROW 184 (forge-8vfn.8.5.20) — EARLY DEATH gets exactly one grace poll,
+    // never zero and never the whole bound. UNGATED by `doorWorthRunning`,
+    // unlike the idle-ceiling door right below: that one fires at a fixed
+    // 180 s and would BE the verdict on a short bound (664(i)'s own reasoning,
+    // two comments up), while this one costs at most ONE extra
+    // `CONSEQUENCE_POLL_MS` — never enough to need the same guard. A one-shot
+    // dispatch can be reaped in under a second, long before `idle >
+    // STALL_CEILING_MS` would even let the door below look, and "process
+    // death never ends a wait on its own" means giving the page's NEXT poll a
+    // chance to show what the dispatch already wrote before trusting a
+    // verdict about it.
+    if (!watching && stallDoor !== null && sessionScope === null && typeof stallDoor.earlyDeath === 'function') {
+      const stop = stallDoor.earlyDeath(runId, anchorMs ?? startedAt, boundRunId);
+      if (stop !== null) {
+        return Object.freeze({
+          afterMs: Date.now() - startedAt,
+          why: `${stop.reason}: ${stop.detail} The beat's expectations never held.`,
+          stoppedBy: 'runner',
+        });
+      }
+    }
     if (!watching && stallDoor !== null && sessionScope === null && doorWorthRunning(timeoutMs, STALL_CEILING_MS)) {
       // 718(1): the search window opens at the beat's declared ANCHOR when it
       // has one — the press whose work this beat is watching — and at this

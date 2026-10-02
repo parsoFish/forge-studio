@@ -31,6 +31,9 @@ import { isDispatchDir, newestChannelSince, scanSummary, cycleDirForInitiative }
 // ROW 162 — `channelProvenSince` (below) reuses this reader rather than a
 // second parser, the same reader the reflection door already trusts.
 import { readRunEvents } from './run-observe.mjs';
+// Split out at the 800-line cap (row 184, forge-8vfn.8.5.20) — see that
+// file's own header for what moved and why.
+import { makeEarlyDeathDoor } from './beats-early-death.mjs';
 // T1 ruling 1471 — re-exported so `beats-page.mjs` names the wall ceiling
 // beside `STALL_CEILING_MS`/`TERMINAL_UI_GRACE_MS`, its two siblings that
 // already live in THIS file rather than in the schema that only validates what
@@ -616,7 +619,7 @@ function channelProvenSince(dir, sinceMs) {
 export function makeAgentChannelDoor(forgeRoot) {
   if (typeof forgeRoot !== 'string' || forgeRoot === '') return null;
   const logsDir = join(forgeRoot, '_logs');
-  return (runId, sinceMs, boundRunId = null) => {
+  const door = (runId, sinceMs, boundRunId = null) => {
     const named = runLogDir(forgeRoot, runId);
     // Rows 28/29 of the guard-catch-on-UNKNOWN audit. Unlike
     // `makeCycleTerminalDoor` above — whose contract is that an unreadable
@@ -743,4 +746,36 @@ export function makeAgentChannelDoor(forgeRoot) {
           : `. ${terminal.detail}, so "stalled" is this door's best reading and not a verdict the product published.`),
     };
   };
+
+  // ROW 184 (forge-8vfn.8.5.20) — EARLY DEATH, split out to
+  // `beats-early-death.mjs` at the 800-line cap (T1 ruling 492: SPLIT, NEVER
+  // BASELINE). `resolveAgentChannelDirForDeath` below stays here because it
+  // needs `runLogDir`/`runLogIdleMs`/`channelProvenSince`, all local to this
+  // file; handed to the split-out factory as a plain callback rather than
+  // exporting three more names, which would have widened this file's public
+  // surface for a dependency only one caller needs.
+  door.earlyDeath = makeEarlyDeathDoor(forgeRoot, (runId, sinceMs, boundRunId) =>
+    resolveAgentChannelDirForDeath(forgeRoot, logsDir, runId, sinceMs, boundRunId));
+
+  return door;
+}
+
+/**
+ * The channel dir `door.earlyDeath` looks at — the SAME three-way resolution
+ * `door` itself uses (named / bound / born-after-the-anchor scan), kept as
+ * its OWN small copy rather than threaded out of that closure: `door`'s
+ * version carries reporting for the "unknown scan" / "unreadable channel"
+ * cases that `earlyDeath` has no use for (an unresolved dir there is simply
+ * "nothing to watch yet", deferred to `door`'s own, better-worded finding).
+ */
+function resolveAgentChannelDirForDeath(forgeRoot, logsDir, runId, sinceMs, boundRunId) {
+  const named = runLogDir(forgeRoot, runId);
+  if (named !== null && runLogIdleMs(named) !== null) return named;
+  const bound = typeof boundRunId === 'string' && boundRunId !== '' ? boundRunId : null;
+  if (bound !== null) {
+    const resolved = runLogDir(forgeRoot, bound);
+    return resolved !== null && channelProvenSince(resolved, sinceMs) === true ? resolved : null;
+  }
+  const scanned = newestChannelSince(logsDir, sinceMs);
+  return typeof scanned === 'string' ? scanned : null;
 }

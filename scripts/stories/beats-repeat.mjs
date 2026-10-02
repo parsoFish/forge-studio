@@ -59,6 +59,10 @@ import { cycleWaitDeadline } from './beats-cycle-progress.mjs';
 // — that file's whole channel-scanning apparatus is not a dependency this
 // module needs for one constant.
 import { CYCLE_WAIT_WALL_CEILING_MS } from './story-wait-schema.mjs';
+// Row 184 (forge-8vfn.8.5.20) — the SAME product-stop reader
+// `waitForHandleOrStall`/`waitForConsequence` already trust, never a second
+// one. See the call site below for why this loop needed it at all.
+import { stopNow } from './beats-page.mjs';
 
 const POLL_MS = 500;
 
@@ -122,7 +126,7 @@ const PAGE_MOVED_RE = /detach|no element carries that handle/i;
  */
 export async function runRepeatStep({
   page, step, left, matches, timeoutMs, run, progress = null, readProgressNow = null, readSessionEventsNow = null,
-  readSessionLivenessNow = null, wallCeilingMs = CYCLE_WAIT_WALL_CEILING_MS,
+  readSessionLivenessNow = null, wallCeilingMs = CYCLE_WAIT_WALL_CEILING_MS, sessionScope = null,
 }) {
   let waitedForHandle = false;
   // 7.6.77's REPEAT HALF, and the half that matters for S1 beat 11.
@@ -237,6 +241,26 @@ export async function runRepeatStep({
 
   while (boundLeft() > 0) {
     if (await isSatisfied()) break;
+    // ROW 184 (forge-8vfn.8.5.20) — ZOMBIE EXTENDS, the gap `boundLeft()`
+    // opened above it. T1 1973bq made this loop's own bound an INACTIVITY
+    // window, reset by the session's liveness once a round has been seen —
+    // and that liveness reading can keep looking fresh for a while AFTER the
+    // session has already published a stop (trailing writes on the way down:
+    // a parent lingering with a zombie child). `waitForConsequence` already
+    // asks `stopReasonFor` on every poll of ITS loop; this one never did, so
+    // a session that crashed, was rejected, or stalled while `until` names a
+    // DIFFERENT phase sat out the WHOLE liveness-governed bound — liveness
+    // extending a wait past a gate the product had already turned over,
+    // exactly backwards from the rule: liveness may extend only while
+    // NOTHING has been published, never override a publication that has.
+    //
+    // Checked BEFORE the gate test too, same reasoning: a crashed session's
+    // gate control is gone, and "nothing to act on yet, poll" would read a
+    // terminal failure as an ordinary gap between rounds.
+    if (sessionScope !== null) {
+      const why = await stopNow(page, sessionScope);
+      if (why !== null) return { waitedForHandle, error: `${why} — the repeat stops, rather than sitting out a bound liveness alone kept extending.` };
+    }
     // Checked BEFORE the gate test, unlike the consequence wait's, and for the
     // opposite reason: there the product's own verdict is a better explanation
     // than silence, while here the two branches below (poll and round) each
