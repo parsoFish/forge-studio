@@ -884,18 +884,9 @@ test('W6-B1: runner forwards thinking + coalesced redacted_thinking to the event
       }
       return gen();
     }
-    if (prompt.includes('the exploration step')) {
+    if (prompt.includes('the exploration step') || prompt.includes('## Session context to review')) { // row 176: the critic answers plainly too, or its forwarded tool uses double the counts below
       async function* gen(): AsyncGenerator<unknown> {
         yield { type: 'result', total_cost_usd: 0, structured_output: null };
-      }
-      return gen();
-    }
-    // The completeness critic answers as a critic. Row 176 forwards the
-    // critic's own tool uses to the event log, so a critic answered with the
-    // draft's blocks would double every count below.
-    if (prompt.includes('## Session context to review')) {
-      async function* gen(): AsyncGenerator<unknown> {
-        yield { type: 'result', total_cost_usd: 0, structured_output: { findings: [] } };
       }
       return gen();
     }
