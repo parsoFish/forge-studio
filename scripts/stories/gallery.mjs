@@ -610,3 +610,44 @@ export function regenerateGallery(root, wroteThisRun = []) {
   writeFileSync(join(base, 'index.html'), html);
   return { rows, html };
 }
+
+/**
+ * The per-RUN exemption bookkeeping `regenerateGallery` needs when ONE
+ * invocation of `npm run stories` runs several stories — `forge-8vfn.8.5.17`
+ * (row 181, measured twice).
+ *
+ * WHY: `run.mjs`'s loop calls `runStory` once per story, and each call used
+ * to build its OWN one-element exempt set from nothing but the id it had just
+ * written (`[writeStoryJson(result, ROOT)]`). A story's own `story.json` and
+ * frames are untracked the instant they are written — exactly what the
+ * exemption exists to tolerate — so the SECOND story to finish in a
+ * multi-story run saw the FIRST story's still-untracked artefacts as foreign
+ * and `regenerateGallery` THREW, before that second story's own verdict could
+ * even print. The throw propagated out of `runStory` into `run.mjs`'s `for`
+ * loop, which has no try/catch around the call — so every story still queued
+ * after the one that threw never ran at all.
+ *
+ * `writtenThisRun` is ONE array for the WHOLE invocation, owned by `run.mjs`
+ * and threaded through every story's own call, MUTATED here rather than
+ * replaced — `wroteId` is pushed onto the very array the caller already
+ * holds, so the next story's call sees every id written so far, including
+ * this one, with no extra return plumbing.
+ *
+ * NEVER THROWS. `regenerateGallery`'s own refusal — the genuinely foreign
+ * untracked target #703 exists to catch, never this run's own artefacts —
+ * is caught here and returned as a reason string instead of propagating, so
+ * the caller folds it into THIS story's own containment verdict (the same
+ * shape every other post-beat containment gate already uses) rather than
+ * letting it take the rest of the batch down with it.
+ *
+ * @returns {string | null} the regen failure's message, or `null` on success.
+ */
+export function regenerateGalleryForRun(root, writtenThisRun, wroteId) {
+  if (!writtenThisRun.includes(wroteId)) writtenThisRun.push(wroteId);
+  try {
+    regenerateGallery(root, writtenThisRun);
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+}

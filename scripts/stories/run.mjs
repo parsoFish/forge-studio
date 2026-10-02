@@ -401,6 +401,16 @@ async function main() {
   // `runStory` is awaited (see the loop below) so there is no gap between
   // "marked started" and "actually starting" a crash could hide inside.
   const startedStoryIds = new Set();
+  // The ids every story in THIS INVOCATION has written so far —
+  // `forge-8vfn.8.5.17` (row 181, measured twice). ONE array for the whole
+  // batch: `runStory` mutates it (push, never replace) as each story writes
+  // its own `story.json`, so the NEXT story's own gallery regen
+  // (`regenerateGalleryForRun`, gallery.mjs) recognises every earlier
+  // story's still-untracked artefacts as something THIS RUN produced,
+  // rather than reading them as a foreign leftover and refusing — the shape
+  // that used to throw out of `runStory` and abort every story still queued
+  // in the loop below.
+  const writtenThisRun = [];
   try {
     // 4. Leading sweep, before the bridge, so a run cannot inherit dead state.
     for (const s of stories) {
@@ -528,7 +538,7 @@ async function main() {
         // `runStory` actually starting, so a crash inside it can never leave
         // a gap where the story still reads as unstarted.
         startedStoryIds.add(story.id);
-        exitCode = (await runStory(story, uiUrl, startedMs, args.ceilingUsd)) || exitCode;
+        exitCode = (await runStory(story, uiUrl, startedMs, args.ceilingUsd, writtenThisRun)) || exitCode;
       }
     }
   } finally {
