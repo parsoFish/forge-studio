@@ -350,8 +350,14 @@ export async function runCompletenessCriticStep(args: {
   queryFn: QueryFn;
   /** The draft round this record checked — see `CompletenessCriticStatus`. */
   round: number;
+  /** Row 176: the session's live-view and liveness callbacks, forwarded to the
+   *  critic's own SDK call like every other architect call's. Without
+   *  `onHeartbeat`, a long critic pass reads `stalled` while it is working. */
+  onToolUse?: (d: ToolUseLiveDetail) => void;
+  onHeartbeat?: () => void;
+  onText?: (text: string) => void;
 }): Promise<CompletenessCriticStatus> {
-  const { input, paths, status, logger, queryFn, round } = args;
+  const { input, paths, status, logger, queryFn, round, onToolUse, onHeartbeat, onText } = args;
   const initiativeId = `architect-session-${input.sessionId}`;
 
   const critStart = logger.emit({
@@ -383,6 +389,9 @@ export async function runCompletenessCriticStep(args: {
     queryFn,
     logger,
     initiativeId,
+    onToolUse,
+    onHeartbeat,
+    onText,
   });
 
   // One emit shape for all three outcomes — the three call sites below differed
