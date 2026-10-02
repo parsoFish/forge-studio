@@ -236,6 +236,95 @@ test('718(5): a green run still says nothing', () => {
 });
 
 /**
+ * Row 186 (forge-8vfn.8.5.20), fold-in. `captureAndClearMintedLogs`
+ * (`ground-clear.mjs`) removes a run's own `_logs/_<kind>-<id>` dispatch
+ * dir — `status.json`, `questions.json`, `events.jsonl`, `.heartbeat`,
+ * `turn.pid` — a few lines after `captureRedEvidence` runs in
+ * `run-story.mjs`. Before this, that removal was never the ordering bug it
+ * looked like: this function simply never looked at `_logs/` at all, so the
+ * one directory `describeRedEvidence` tells an operator to read never held
+ * the session's own dispatch dir, only the ground's separate mirror of it.
+ */
+function mintedSessionLogDir(root: string, name: string): string {
+  const dir = join(root, '_logs', name);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({ phase: 'awaiting-answers', round: 2 }));
+  writeFileSync(join(dir, 'questions.json'), JSON.stringify([{ id: 'q1', text: 'which gate?' }]));
+  writeFileSync(join(dir, 'events.jsonl'), '{"event_type":"start"}\n');
+  writeFileSync(join(dir, '.heartbeat'), 'x');
+  writeFileSync(join(dir, 'turn.pid'), '999999\n');
+  return dir;
+}
+
+test('row 186 (RED before the fix): a red run captures the session\'s OWN _logs/ dispatch dir, not only the ground\'s mirror of it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'red-evidence-logs-'));
+  mintedSessionLogDir(root, '_architect-2026-09-06T21-10-48-ec4ede4c');
+
+  const out = captureRedEvidence({
+    root, storyId: 'S2', red: true, runStamp: STAMP,
+    mintedLogNames: ['_architect-2026-09-06T21-10-48-ec4ede4c'],
+  });
+
+  assert.notEqual(out, null, 'a red run with a minted _logs/ session must still capture');
+  const dest = join(redEvidenceDir(root, 'S2', STAMP), '_logs', '_architect-2026-09-06T21-10-48-ec4ede4c');
+  for (const f of ['status.json', 'questions.json', 'events.jsonl', '.heartbeat', 'turn.pid']) {
+    assert.ok(existsSync(join(dest, f)), `${f} must survive the own-logs clear at ${join(dest, f)}`);
+  }
+  assert.deepEqual(JSON.parse(readFileSync(join(dest, 'status.json'), 'utf8')), { phase: 'awaiting-answers', round: 2 });
+});
+
+test('row 186: the _logs/ capture and the ground mirror stand side by side — neither replaces the other', () => {
+  const { root, project } = ground();
+  mintedSessionLogDir(root, '_architect-2026-09-06T21-10-48-ec4ede4c');
+
+  captureRedEvidence({
+    root, storyId: 'S2', red: true, runStamp: STAMP,
+    mintedLogNames: ['_architect-2026-09-06T21-10-48-ec4ede4c'],
+  });
+
+  const dir = redEvidenceDir(root, 'S2', STAMP);
+  assert.ok(
+    existsSync(join(dir, 'story-S2', '_architect', '2026-09-06T21-10-48-ec4ede4c', 'questions.json')),
+    'the ground\'s own mirror must still be captured — this is additive, not a replacement',
+  );
+  assert.ok(
+    existsSync(join(dir, '_logs', '_architect-2026-09-06T21-10-48-ec4ede4c', 'turn.pid')),
+    'and the session\'s own dispatch dir must be captured beside it',
+  );
+});
+
+test('row 186: a _logs/ dir named but already gone by capture time is skipped, never an error', () => {
+  const root = mkdtempSync(join(tmpdir(), 'red-evidence-logs-gone-'));
+  assert.doesNotThrow(() => captureRedEvidence({
+    root, storyId: 'S2', red: true, runStamp: STAMP,
+    mintedLogNames: ['_architect-never-existed'],
+  }));
+  assert.equal(
+    captureRedEvidence({ root, storyId: 'S2', red: true, runStamp: STAMP, mintedLogNames: ['_architect-never-existed'] }),
+    null,
+    'nothing was there to capture and nothing else qualifies, so this run captures nothing',
+  );
+});
+
+test('row 186 POSITIVE CONTROL: a GREEN run with a minted _logs/ session still captures nothing', () => {
+  const root = mkdtempSync(join(tmpdir(), 'red-evidence-logs-green-'));
+  mintedSessionLogDir(root, '_architect-2026-09-06T21-10-48-ec4ede4c');
+
+  const out = captureRedEvidence({
+    root, storyId: 'S2', red: false, runStamp: STAMP,
+    mintedLogNames: ['_architect-2026-09-06T21-10-48-ec4ede4c'],
+  });
+  assert.equal(out, null, 'a green run must capture nothing, even with a minted session to hold');
+});
+
+test('row 186 (positive control): no `mintedLogNames` at all is unchanged — the ground-only capture this bead did not touch', () => {
+  const { root, project } = ground();
+  const out = captureRedEvidence({ root, storyId: 'S2', red: true, runStamp: STAMP });
+  assert.notEqual(out, null);
+  assert.ok(!existsSync(join(redEvidenceDir(root, 'S2', STAMP), '_logs')), 'no _logs/ copy was asked for, so none exists');
+});
+
+/**
  * Row 90 (T1 1448) — a single `page.screenshot` timeout aborted a funded run
  * before beat 1. A frame is EVIDENCE, never a verdict input: `captureFrame`
  * retries under a bound and, on final failure, logs one named line and

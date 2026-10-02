@@ -92,9 +92,29 @@ function mtimeRows(dir, root, out = []) {
  * `null` when there was nothing to do (a green run, a story with no ground, a
  * ground already gone) — none of which is an error.
  *
- * @param {{root: string, storyId: string, project: string|null, red: boolean}} input
+ * `mintedLogNames` — row 186 (forge-8vfn.8.5.20), measured twice, same bead.
+ * The copies built above (`groundsAboutToBeSwept`/`sessionKindDirs`) are the
+ * GROUND's own mirror of a session — `projects/story-<id>/_<kind>/<id>/
+ * questions.json`, written by the product into the project it was working
+ * on. The session's OWN dispatch dir — `status.json`, `events.jsonl`,
+ * `.heartbeat`, `turn.pid`, the files that say what the DAEMON said rather
+ * than what the ground holds — lives at `_logs/_<kind>-<id>` instead, and
+ * `captureAndClearMintedLogs` (`ground-clear.mjs`) removes it from there a
+ * few lines after this capture runs in `run-story.mjs`. Before this, that gap
+ * was not an ORDERING bug — this function simply never looked at `_logs/` at
+ * all, so the one directory `describeRedEvidence`'s own line tells an
+ * operator to read never carried the half of the evidence a product crash
+ * (no ground write at all, only a dead session dir) depends on entirely.
+ *
+ * `mintedLogNames` is the SAME list `captureAndClearMintedLogs` is about to
+ * clear with (`mintedSessionDirNames`, computed once in `run-story.mjs` and
+ * handed to both), never re-derived here — two independent derivations of
+ * "which `_logs/` dirs are this run's own" could disagree about which ones
+ * to keep.
+ *
+ * @param {{root: string, storyId: string, project: string|null, red: boolean, mintedLogNames?: string[]}} input
  */
-export function captureRedEvidence({ root, storyId, red, runStamp }) {
+export function captureRedEvidence({ root, storyId, red, runStamp, mintedLogNames = [] }) {
   if (!red) return null;
   const grounds = groundsAboutToBeSwept(storyId, root);
   const rows = [];
@@ -105,6 +125,13 @@ export function captureRedEvidence({ root, storyId, red, runStamp }) {
       rows.push(...mtimeRows(from, root));
       copies.push([from, join(basename(groundDir), kind)]);
     }
+  }
+  const logsDir = join(root, '_logs');
+  for (const name of mintedLogNames) {
+    const from = join(logsDir, name);
+    if (!existsSync(from)) continue; // gone already — nothing this capture can preserve
+    rows.push(...mtimeRows(from, root));
+    copies.push([from, join('_logs', name)]);
   }
   if (copies.length === 0) return null;
 
@@ -140,7 +167,8 @@ export function captureRedEvidence({ root, storyId, red, runStamp }) {
     if (existsSync(serveLog)) cpSync(serveLog, join(dest, 'serve.log'), { preserveTimestamps: true });
   } catch { /* the daemon may never have started; its absence is itself a fact the log carries */ }
   try {
-    const logsDir = join(root, '_logs');
+    // `logsDir` is the SAME binding captured above, for the `mintedLogNames`
+    // loop — not re-declared, so the two can never resolve to different paths.
     const births = readdirSync(logsDir, { withFileTypes: true })
       .filter((e) => e.isDirectory())
       .map((e) => {

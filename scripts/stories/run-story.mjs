@@ -387,11 +387,31 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
   // could not be told apart, and the answer would have cost a third funded run.
   // The sweep below is unchanged; it simply no longer runs first. A GREEN run
   // reads nothing and sweeps exactly as before.
+  //
+  // Row 186 (forge-8vfn.8.5.20), fold-in. `mintedLogNames` is computed HERE,
+  // before `captureRedEvidence` runs, and handed to it so a red run's own
+  // `_logs/_<kind>-<id>` dirs — `status.json`, `questions.json`,
+  // `events.jsonl`, `.heartbeat`, `turn.pid` — are copied into the evidence
+  // BEFORE `captureAndClearMintedLogs` removes them from the tree, further
+  // down this same function. It used to be computed only there, AFTER this
+  // capture had already run and already decided it had nothing of this run's
+  // own `_logs/` sessions to hold — so the capture `describeRedEvidence`
+  // tells the operator to read never carried the one thing that says what the
+  // DAEMON said, only what the GROUND's own mirror held. Computed ONCE and
+  // reused below: `mintedSessionDirNames` is a pure before/after diff, and
+  // nothing between here and there removes a `_logs/` entry, so a second call
+  // would answer the identical question a second time.
+  const mintedLogNames = mintedSessionDirNames(
+    logsBefore,
+    readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name),
+    logsDir,
+  );
   const redEvidence = captureRedEvidence({
     root: ROOT,
     storyId: story.id,
     red: beats.some((b) => b.status !== 'green'),
     runStamp,
+    mintedLogNames,
   });
   for (const line of describeRedEvidence(redEvidence, ROOT)) console.log(line);
 
@@ -727,11 +747,10 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
   // Measured cost of not doing this: S9 run 7's `_agent-*` blocked run 8, and
   // run 8's blocked S3 run 3. Both refusals were correct and cost $0 — and both
   // were paid off by a hand capture-then-clear the product never did.
-  const mintedLogNames = mintedSessionDirNames(
-    logsBefore,
-    readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name),
-    logsDir,
-  );
+  //
+  // Row 186 — `mintedLogNames` is computed ONCE, above, where the red-
+  // evidence capture needs it first; reused here unchanged rather than asked
+  // a second time.
   const logsClear = captureAndClearMintedLogs({ root: ROOT, storyId: story.id, runStamp, mintedNames: mintedLogNames });
   for (const line of describeLogsClear(logsClear)) console.log(`[stories] ${line}`);
 

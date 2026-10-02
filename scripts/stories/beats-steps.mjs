@@ -34,7 +34,16 @@ const WRONG_PAGE_GRACE_MS = 2_000;
 const WRONG_PAGE_POLL_MS = 25;
 
 export async function performStepsForTest(page, steps, timeoutMs, matches) {
-  return performSteps(page, steps, timeoutMs, false, null, matches);
+  // Row 184 (forge-8vfn.8.5.20) — `null`, not `false`. Every real consumer of
+  // `sessionScope` in this file and `beats-page.mjs` tests it with
+  // `=== null`, so `false` (truthy-distinct-from-null, but neither a string
+  // nor null) was a silent third value nothing had ever acted on: it fell
+  // through every `sessionScope === null` check exactly like a real route
+  // would, and was never handed to anything that could tell the difference
+  // until `runRepeatStep` started asking `stopNow` on every poll, which calls
+  // `readObserved` on a fake page these tests never had to model `evaluate`
+  // for. One value for "no session", matching the convention everywhere else.
+  return performSteps(page, steps, timeoutMs, null, null, matches);
 }
 
 export async function performSteps(page, steps, timeoutMs, sessionScope = null, probe = null, matches = null, actBoundMs = null, declaredRoute = null, stallDoor = null, progress = null, readProgressNow = null, readSessionEventsNow = null, readSessionLivenessNow = null) {
