@@ -535,6 +535,9 @@ export async function runKbDrain(
             fixHint: f.fixHint,
             message: f.message,
             forgeRoot,
+            // Row 199 — positive by construction: the post-turn check below
+            // stops dispatching once `costUsd >= maxCostUsd`.
+            costCeilingUsd: maxCostUsd - costUsd,
           });
           costUsd += result.costUsd;
           turnAudit = result.editAudit ?? null;

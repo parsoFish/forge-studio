@@ -447,6 +447,11 @@ export type KbDrainFixTurnInput = {
   fixHint?: string;
   /** The finding's human-readable message. */
   message: string;
+  /** Row 199 (T1 ruling 1973gt) — what is LEFT of the run's `maxCostUsd` when
+   *  this turn is dispatched. The turn runs under it as the SDK's
+   *  `maxBudgetUsd`, so one turn cannot overshoot a ceiling the drain only
+   *  checks after the turn returns. */
+  costCeilingUsd?: number;
 };
 
 /** What the drain needs back. `editAudit` is OUR `KbEditGateResult` — the gate

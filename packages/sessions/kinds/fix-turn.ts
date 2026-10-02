@@ -46,8 +46,10 @@ import {
   isProgressMessage,
   makeReasoningSink,
   makeThinkingSink,
+  unpricedReason,
 } from '../interactive-session.ts';
 import { makeHeartbeatTick, makeHeartbeatWriter, startHeartbeatTicker } from '../heartbeat.ts';
+import { budgetedResultCostUsd, turnBudgetUsd } from '../turn-budget.ts';
 
 /**
  * The query seam, declared HERE with `options` REQUIRED because that is what
@@ -72,6 +74,13 @@ export type FixTurnInput = {
   logsRoot?: string;
   /** Injectable query function for tests; defaults to the real SDK. */
   queryFn?: QueryFn;
+  /**
+   * Row 199 (T1 ruling 1973gt) — the caller's own ceiling for THIS turn, in
+   * the slot `turn-budget.ts` calls the declared ceiling. The KB drain passes
+   * what is left of its run ceiling (`maxCostUsd − costUsd`); the CLI passes
+   * nothing, and the bridge's `FORGE_COST_CEILING_USD` is the fallback.
+   */
+  costCeilingUsd?: number;
 };
 
 /** Every fix turn reports whether the thing it was asked to clear cleared. */
@@ -214,16 +223,40 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
   // enumeration ratchet (`packages/agents/tests/contract/hook-dispatch-coverage.test.ts`)
   // sees. A kind that forgot the wiring would spawn hook-blind with nothing
   // red.
+  //
+  // Row 199 (bead forge-8vfn.8.5.39, T1 ruling 1973gt) — the cap, by the SAME
+  // resolution every session turn uses since row 193b (`turn-budget.ts`):
+  // the declared ceiling (`input.costCeilingUsd`) first, else the bridge's
+  // `FORGE_COST_CEILING_USD` from this process's env, else none. REMAINING is
+  // the ceiling itself — `spentUsd` is 0 — because a fix turn has no session to
+  // have spent anything: it is ONE SDK call keyed by a fresh `runId`, and a
+  // caller that HAS spent (the drain) subtracts that before it declares. Before
+  // this the bag carried no `maxBudgetUsd` and nothing bounded the turn.
+  const capUsd = turnBudgetUsd({
+    declaredCeilingUsd: input.costCeilingUsd,
+    env: process.env,
+    spentUsd: () => 0,
+    logger,
+    identity: { initiativeId: cycleId, phase: variant.eventPhase, skill: variant.eventSkill, sessionId: input.runId },
+  });
+  /** The unpriced markers `spend.mjs` and `turn-budget.ts` read — ONLY when a
+   *  cap existed: "unpriced" is honest only when no bound exists, and an
+   *  unbounded turn keeps the row it always wrote. */
+  const boundedUnpriced = (reason: string): Record<string, unknown> =>
+    capUsd === undefined ? {} : { priced: false, unpriced_reason: reason, upper_bound_usd: capUsd };
   const abortController = new AbortController();
   const options: Record<string, unknown> = {
     ...spawn.options,
     ...hooksSpreadForAgent({ skill: variant.eventSkill, logger, initiativeId: cycleId }),
+    ...(capUsd !== undefined ? { maxBudgetUsd: capUsd } : {}),
     abortController,
   };
 
   const queryImpl: QueryFn = input.queryFn ?? (sdkQuery as unknown as QueryFn);
 
-  let costUsd = 0;
+  // `null` until a `result` prices the turn (row 199): a resultless turn under
+  // a cap is unpriced-with-bound, not `cost_usd: 0`.
+  let costUsd: number | null = null;
   let toolSeq = 0;
 
   // Row 164 (bead forge-8vfn.8.1.51, S10 run 43) — started before the SDK
@@ -240,6 +273,7 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
       if (typeof msg !== 'object' || msg === null) continue;
       const m = msg as {
         type?: string;
+        subtype?: string;
         total_cost_usd?: number;
         message?: {
           content?: Array<{ type?: string; name?: string; input?: unknown; text?: string; thinking?: string }>;
@@ -268,7 +302,8 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
       }
       if (m.type !== 'result') continue;
       tickHeartbeat();
-      if (typeof m.total_cost_usd === 'number') costUsd = m.total_cost_usd;
+      // `error_max_budget_usd` is priced AT LEAST at the cap (#1067's rule).
+      costUsd = budgetedResultCostUsd(m, capUsd);
       break;
     }
   } catch (err) {
@@ -281,20 +316,23 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
       input_refs: inputRefs,
       output_refs: [],
       message: `${variant.eventSkill}.crashed`,
-      metadata: { error: err instanceof Error ? err.message : String(err) },
+      metadata: { error: err instanceof Error ? err.message : String(err), ...boundedUnpriced(unpricedReason(err)) },
     });
     sink.flushIteration(1);
     // No `end` event on this path — both runners returned from the catch, and
     // a crashed turn must not appear to have completed. `finish` still runs:
     // a crashed turn's writes are on disk and brain-fix audits them.
-    return variant.finish({ input, pre, costUsd, crashed: true }).result;
+    return variant.finish({ input, pre, costUsd: costUsd ?? 0, crashed: true }).result;
   } finally {
     // Row 164 — the call is no longer in flight, however it ended.
     stopHeartbeatTicker();
   }
 
   sink.flushIteration(1);
-  const { result, endMetadata } = variant.finish({ input, pre, costUsd, crashed: false });
+  const { result, endMetadata } = variant.finish({ input, pre, costUsd: costUsd ?? 0, crashed: false });
+  // An unbounded resultless turn keeps its historical `cost_usd: 0`; a bounded
+  // one OMITS it (ruling 849: never zeroed) and carries its bound instead.
+  const unpricedBound = costUsd === null ? boundedUnpriced('no-result') : {};
 
   logger.emit({
     initiative_id: cycleId,
@@ -304,9 +342,9 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
     event_type: 'end',
     input_refs: inputRefs,
     output_refs: [],
-    cost_usd: costUsd,
+    ...('upper_bound_usd' in unpricedBound ? {} : { cost_usd: costUsd ?? 0 }),
     message: `${variant.eventSkill}.end (cleared=${result.cleared})`,
-    metadata: endMetadata,
+    metadata: { ...endMetadata, ...unpricedBound },
   });
 
   return result;

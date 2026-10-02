@@ -46,8 +46,14 @@ import type { KbDrainRunFixTurnFn } from '@forge/knowledge';
  * state. Returns 0 on any read/parse failure or a crashed turn: a failed turn
  * accrues zero cost toward the ceiling, matching the turn's own crash path,
  * which never reaches the cost-bearing `end` event.
+ *
+ * Row 199 (T1 ruling 1973gt) — EXCEPT a turn that ran under a cap: its crash
+ * row, and a resultless `end` row, carry `upper_bound_usd` and no `cost_usd`
+ * (`kinds/fix-turn.ts`), and that bound is what it is charged. Reading 0 there
+ * would let the drain's COST-CEILING under-count exactly the turns it could not
+ * price. Exported for `tests/unit/brain-fix-turn-cost.test.ts`.
  */
-function readBrainFixTurnCostUsd(forgeRoot: string, subRunId: string): number {
+export function readBrainFixTurnCostUsd(forgeRoot: string, subRunId: string): number {
   const evPath = join(forgeRoot, '_logs', `_brainfix-${subRunId}`, 'events.jsonl');
   if (!existsSync(evPath)) return 0;
   let raw: string;
@@ -58,16 +64,18 @@ function readBrainFixTurnCostUsd(forgeRoot: string, subRunId: string): number {
   }
   for (const line of raw.split('\n').reverse()) {
     if (!line.trim()) continue;
-    let ev: { event_type?: string; message?: string; cost_usd?: number };
+    let ev: { event_type?: string; message?: string; cost_usd?: number; metadata?: { upper_bound_usd?: unknown } };
     try {
       ev = JSON.parse(line);
     } catch {
       continue;
     }
+    const bound = ev.metadata?.upper_bound_usd;
+    const boundUsd = typeof bound === 'number' && Number.isFinite(bound) && bound > 0 ? bound : 0;
     if (ev.event_type === 'end' || ev.message?.startsWith('brain-fix.end')) {
-      return typeof ev.cost_usd === 'number' ? ev.cost_usd : 0;
+      return typeof ev.cost_usd === 'number' ? ev.cost_usd : boundUsd;
     }
-    if (ev.event_type === 'error' || ev.message === 'brain-fix.crashed') return 0;
+    if (ev.event_type === 'error' || ev.message === 'brain-fix.crashed') return boundUsd;
   }
   return 0;
 }
