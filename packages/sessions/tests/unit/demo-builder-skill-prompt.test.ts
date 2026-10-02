@@ -428,7 +428,11 @@ test('AT-10 (Round-2, Part D): a throw inside runGenerateStep after the agent al
       logger: loggerFor(logsRoot, sessionId),
       logsRoot,
     }),
-    /demo-builder runner: the agent turn ended without producing/,
+    // AMENDED by row 190 (forge-8vfn.8.5.28): the root write is a ground
+    // breach, and the ground fence after passes 1+2 names it before the
+    // missing-deliverable check runs. Still a throw after the write landed,
+    // which is all the commit-scope assertions below need.
+    /demo-builder runner: the read\+write pass changed the project ground outside \.forge\/demo: AGENT-PARTIAL-WORK-9c21\.txt/,
   );
 
   // ensureStudioBranch runs BEFORE the dispatch — that part already happens
