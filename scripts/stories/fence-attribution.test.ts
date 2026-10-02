@@ -291,7 +291,13 @@ test('startDescendantSampler: continuous /proc-listing failure for longer than t
 });
 
 
-test('startDescendantSampler: an exception from pidsDescendedFrom (or a per-pid read) inside one sample is contained — the interval keeps running and later samples still succeed', async () => {
+test('startDescendantSampler: an exception from pidsDescendedFrom (or a per-pid read) inside one sample is contained — the interval keeps running and later samples still succeed', (t) => {
+  // Row 200 (forge-8vfn.8.5.40, T1 1973gw/1973ha): the ticks are DRIVEN on a
+  // mocked interval, never counted off a real 60 ms sleep — a sleep that
+  // assumes the sampler ticked N times is the timing-dependent shape this row
+  // removes. Three explicit ticks after the poisoned constructor sample are
+  // exactly three more samples, however loaded the host is.
+  t.mock.timers.enable({ apis: ['setInterval', 'Date'], now: 1_000_000 });
   let calls = 0;
   // A pid whose OWN stringification throws — `pidsDescendedFrom` calls
   // `String(startPid)` with no try/catch around that specific line, so this
@@ -307,14 +313,23 @@ test('startDescendantSampler: an exception from pidsDescendedFrom (or a per-pid 
       return calls === 1 ? [poisonPid] : []; // poison ONLY the very first sample
     },
   });
-  await new Promise((r) => setTimeout(r, 60)); // several real ticks beyond the poisoned one
+  for (let tick = 0; tick < 3; tick += 1) t.mock.timers.tick(10);
   const { samples, erroredSamples, touchedRoots } = sampler.stop();
-  assert.ok(samples >= 3, `the interval must have kept firing after the poisoned sample, got ${samples}`);
-  assert.ok(erroredSamples >= 1, 'the poisoned sample is counted as errored, never silently read as clean');
+  assert.equal(samples, 4, 'the constructor\'s poisoned sample + three driven ticks — the interval kept firing after it');
+  assert.equal(erroredSamples, 1, 'the poisoned sample is counted as errored, never silently read as clean — and only it');
   assert.equal(touchedRoots.size, 0);
 });
 
-test('startDescendantSampler (real /proc, real rootPid): a listing that throws once mid-run then reads real /proc stays SIGHTED — attributeEscapes never fail-closes a sibling growth it never saw', async () => {
+test('startDescendantSampler (real /proc, real rootPid): a listing that throws once mid-run then reads real /proc stays SIGHTED — attributeEscapes never fail-closes a sibling growth it never saw', (t) => {
+  // Row 200 (forge-8vfn.8.5.40, T1 1973gw/1973ha). Failed once in a loaded
+  // full `npm test`, 29/29 ×3 alone: the sampler's ticks AND the clock its
+  // `longestGapMs` is read on were both real, so how many samples landed and
+  // how wide any gap between them read were the host's scheduling, not the
+  // sampler's behaviour (PR #954 already traded an 80 ms sleep for a calls-
+  // poll on the same real clock). Now the interval and `Date` are mocked
+  // and every tick is DRIVEN — the listing is still real `/proc` and the root
+  // still this process's own pid; only WHEN a sample runs is the test's.
+  t.mock.timers.enable({ apis: ['setInterval', 'Date'], now: 1_000_000 });
   let calls = 0;
   const realListPids = () =>
     readdirSync('/proc', { withFileTypes: true }).filter((e) => /^[0-9]+$/.test(e.name)).map((e) => e.name);
@@ -327,21 +342,20 @@ test('startDescendantSampler (real /proc, real rootPid): a listing that throws o
       return realListPids();
     },
   });
-  // Wait for the sampler's OWN progress, never a fixed sleep: under a loaded
-  // gate each real /proc listing is slow, and 80 ms fitted fewer than 4 ticks
-  // (PR #954 gate, 2026-09-26). 5 calls = 4 successful samples + the injected
-  // failure; the deadline only bounds a hang.
-  const deadline = Date.now() + 10_000;
-  while (calls < 5 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 10));
+  assert.equal(calls, 1, 'the constructor\'s own sample, and nothing else yet — no tick has been driven');
+  // Sample 2 is the hiccup: call 2 throws, call 3 is its in-sample retry.
+  // Then three more clean samples — 4 driven ticks, 5 samples, 6 listings.
+  for (let tick = 0; tick < 4; tick += 1) t.mock.timers.tick(10);
   const result = sampler.stop();
-  assert.ok(result.samples >= 4);
+  assert.equal(calls, 6, 'one listing per sample plus exactly one retry, for the one injected failure');
+  assert.equal(result.samples, 5);
   assert.ok(result.erroredSamples <= 1, 'a single transient failure, retried, costs at most one errored sample');
-  assert.ok(result.errnos.EIO >= 1, 'the transient failure\'s errno is still recorded, whether or not the retry saved the sample');
+  assert.equal(result.errnos.EIO, 1, 'the transient failure\'s errno is still recorded, whether or not the retry saved the sample');
   const [got] = attributeEscapes(
     [{ root: '/definitely/not/a/real/descendants/tree', paths: ['a.txt'] }],
     { ...result, mainRoot: null },
   );
-  assert.equal(got.owner, 'unattributable', 'one retried hiccup on a real kernel must never fail-close a real run');
+  assert.equal(got.owner, 'unattributable', `one retried hiccup on a real kernel must never fail-close a real run: ${got.reason}`);
 });
 
 test('startDescendantSampler: an open file inside a tree is also evidence, not only cwd', () => {
