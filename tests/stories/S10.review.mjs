@@ -138,25 +138,33 @@ export const REVIEW_LOOP = [
       // carries its full criterion text). Every OTHER key here remains
       // source-only and must be confirmed at the sitting.
       //
-      // COLLAPSE + TEXT SCOPE + FALLBACK (`forge-8vfn.8.1.16`, T1 ruling
-      // 1561). S10 has 25 acceptance criteria (`S10.constants.mjs`'s `IDEA`
-      // decomposes into more than `REGION_COLLAPSE_THRESHOLD` = 12), so every
-      // AC region starts COLLAPSED (`lib/demo-review-view.ts`) — there is no
-      // `comment-region` button anywhere until its own region is toggled open
-      // first. Which criterion NAMES the precedence rule is decided by the
-      // LLM that decomposed the initiative, at run time, so no beat can
-      // hardcode "AC 7" — a `bind` scope has nothing earlier to bind from
-      // either. `pressWithin`'s TEXT scope resolves this live, against
-      // whichever AC header's own DOM text (PART 1's fix — the criterion sits
-      // in the header even collapsed) contains "precedence": the FIRST such
-      // region in document order, case-insensitive. `fallback: 'first'`
-      // covers the case where the LLM's own wording never says "precedence"
-      // verbatim — the run still anchors somewhere and the runner's log names
-      // that it fell back, rather than stalling a funded run over phrasing.
-      // Both `toggle-region` and `comment-region` below name the SAME scope
-      // and re-resolve it independently (never cached between the two
-      // presses), which is why the picker's re-resolution stability is its
-      // own pinned case (`beats-press-within-text.test.ts`).
+      // COLLAPSE + TEXT SCOPE + FALLBACK + ONLYIF (`forge-8vfn.8.1.16`, T1
+      // ruling 1561; `forge-8vfn.8.5.13`, row 177). The criterion count S10's
+      // `IDEA` decomposes into is the PLANNER'S CHOICE PER RUN, minted at run
+      // time by the LLM — not a fixed 25. Above
+      // `REGION_COLLAPSE_THRESHOLD` = 12 criteria every AC region starts
+      // COLLAPSED (`lib/demo-review-view.ts`'s `regionDefaultOpen`) and
+      // `comment-region` mounts only once its own region is toggled open; AT
+      // OR BELOW 12 — a measured run decomposed into 11 — every region starts
+      // OPEN instead, and toggling one shut would be the mistake, not the
+      // fix. `onlyIf: { 'region-collapsed': 'true' }` on `toggle-region`
+      // alone makes the press conditional: it fires only when the product's
+      // own default actually left the region collapsed, and is skipped
+      // (logged, never a red) when an 11-criterion run already opened it.
+      // Which criterion NAMES the precedence rule is decided by the LLM
+      // either way, at run time, so no beat can hardcode "AC 7" — a `bind`
+      // scope has nothing earlier to bind from either. `pressWithin`'s TEXT
+      // scope resolves this live, against whichever AC header's own DOM text
+      // (PART 1's fix — the criterion sits in the header whether collapsed or
+      // open) contains "precedence": the FIRST such region in document
+      // order, case-insensitive. `fallback: 'first'` covers the case where
+      // the LLM's own wording never says "precedence" verbatim — the run
+      // still anchors somewhere and the runner's log names that it fell
+      // back, rather than stalling a funded run over phrasing. Both
+      // `toggle-region` and `comment-region` below name the SAME scope and
+      // re-resolve it independently (never cached between the two presses),
+      // which is why the picker's re-resolution stability is its own pinned
+      // case (`beats-press-within-text.test.ts`).
       act: 'Anchor one blocking comment to the precedence criterion (the first criterion, said so in the log, when none names precedence) and send it back',
       // 7.6.143: beat 16's agent wait lives HERE, on the beat whose
       // `send-back` press starts the work it waits for. That much was already
@@ -211,6 +219,9 @@ export const REVIEW_LOOP = [
           pressWithin: {
             scope: { attr: 'demo-region', text: 'precedence', fallback: 'first' },
             action: 'toggle-region',
+            // `forge-8vfn.8.5.13`, row 177 — open it only if it is not
+            // already open. See this beat's own comment above.
+            onlyIf: { 'region-collapsed': 'true' },
           },
         },
         {

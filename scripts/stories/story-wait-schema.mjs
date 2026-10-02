@@ -221,6 +221,45 @@ function validateDoSteps(raw, at) {
               JSON.stringify(scope.attr),
           );
         }
+        // `onlyIf` — row 177 (`forge-8vfn.8.5.13`). An OPTIONAL precondition on
+        // the SCOPE element itself: `{ '<data-key>': '<value>' }`, exactly one
+        // key, drawn from the SAME `SAFE_KEY` allowlist `scope.attr` is bound
+        // to just above — it is interpolated into the same kind of selector,
+        // by `beats-steps.mjs`'s `readOnlyIfAttr` — and a string value.
+        // Refused here, at the boundary, rather than half-honoured at run
+        // time, the rule every other field in this validator already follows.
+        const onlyIfRaw = Object.hasOwn(pw, 'onlyIf') ? pw.onlyIf : undefined;
+        let onlyIf;
+        if (onlyIfRaw !== undefined) {
+          if (onlyIfRaw === null || typeof onlyIfRaw !== 'object' || Array.isArray(onlyIfRaw)) {
+            fail(
+              `${where}.pressWithin.onlyIf`,
+              `expected an object { <data-key>: <value> }, got ${JSON.stringify(onlyIfRaw)}`,
+            );
+          }
+          const onlyIfKeys = Object.keys(onlyIfRaw);
+          if (onlyIfKeys.length !== 1) {
+            fail(
+              `${where}.pressWithin.onlyIf`,
+              `expected exactly one key, got ${onlyIfKeys.length} (${JSON.stringify(onlyIfRaw)})`,
+            );
+          }
+          const [onlyIfKey] = onlyIfKeys;
+          if (!SAFE_KEY.test(onlyIfKey)) {
+            fail(
+              `${where}.pressWithin.onlyIf`,
+              'expected a plain data-* key (letter, then letters/digits/hyphens), got ' +
+                JSON.stringify(onlyIfKey),
+            );
+          }
+          if (typeof onlyIfRaw[onlyIfKey] !== 'string') {
+            fail(
+              `${where}.pressWithin.onlyIf.${onlyIfKey}`,
+              `expected a string value, got ${JSON.stringify(onlyIfRaw[onlyIfKey])}`,
+            );
+          }
+          onlyIf = Object.freeze({ [onlyIfKey]: onlyIfRaw[onlyIfKey] });
+        }
         const hasBind = Object.hasOwn(scope, 'bind');
         const hasText = Object.hasOwn(scope, 'text');
         if (hasBind === hasText) {
@@ -241,6 +280,10 @@ function validateDoSteps(raw, at) {
             pressWithin: Object.freeze({
               scope: Object.freeze({ attr: scope.attr, bind: scope.bind }),
               action: pw.action,
+              // Named here too, for the 7.6.82 reason every other optional
+              // field in this rebuild is: validated above and not carried
+              // through would be validated-and-discarded.
+              ...(onlyIf !== undefined ? { onlyIf } : {}),
             }),
           });
         }
@@ -267,6 +310,8 @@ function validateDoSteps(raw, at) {
               ...(scope.fallback !== undefined ? { fallback: scope.fallback } : {}),
             }),
             action: pw.action,
+            // Same 7.6.82 reason as the `bind` form above.
+            ...(onlyIf !== undefined ? { onlyIf } : {}),
           }),
         });
       }
