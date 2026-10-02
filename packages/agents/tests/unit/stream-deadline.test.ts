@@ -152,3 +152,17 @@ test('withIdleDeadline: isProgress — an assistant/result message interleaved a
   })();
   assert.deepEqual(seen, messages, 'every message — progress and non-progress alike — still reaches the consumer');
 });
+
+// Row 193 (T1 ruling 1973fy) — the message said "routes to auto-retry" on every
+// path, and S10 beat 30's architect session was routed nowhere. The stall IS
+// transient (`classifyCrash`'s `'stream-deadline'` signature); whether it is
+// retried is the CALLER's — the architect turn and the cycle paths do, a
+// `runAgentTurn` / `fix-turn` session kind does not. The text may name the
+// classification; it must not promise the routing.
+test('row 193: StreamDeadlineError names the stall transient without promising a retry its caller may not take', () => {
+  for (const err of [new StreamDeadlineError('architect-structured', 360_000, 'system×12, rate_limit_event×1'), new StreamDeadlineError('x', 1000)]) {
+    assert.match(err.message, /stream-deadline/, 'classifyCrash keys on this signature');
+    assert.match(err.message, /transient/);
+    assert.doesNotMatch(err.message, /routes to auto-retry/, err.message);
+  }
+});

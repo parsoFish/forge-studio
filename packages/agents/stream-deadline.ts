@@ -7,8 +7,9 @@
  * stranding a cycle with no escalation. `withIdleDeadline` wraps the stream so
  * that if no message arrives within `idleMs`, it ABORTS the underlying query
  * (the SDK's `AbortController`, which kills the CLI subprocess) and THROWS
- * `StreamDeadlineError` — routing the stall into `failure-classifier`
- * (transient) → auto-retry instead of an infinite hang.
+ * `StreamDeadlineError` — classified transient by `failure-classifier`,
+ * which a retrying caller (the cycle paths, the architect structured turn —
+ * row 193) re-runs, instead of an infinite hang.
  *
  * It is an IDLE gap, not a wall clock: every message resets the window — which
  * is ALSO A BUG (forge-8vfn.8.1.9): non-progress SDK messages (`tool_progress`,
@@ -30,7 +31,12 @@ export class StreamDeadlineError extends Error {
   readonly nonProgressSummary?: string;
   constructor(label: string, idleMs: number, nonProgressSummary?: string) {
     const seconds = Math.round(idleMs / 1000);
-    const tail = 'aborted as a likely usage-limit / network stall (transient; routes to auto-retry).';
+    // Row 193 (T1 ruling 1973fy): this text said "routes to auto-retry" on
+    // every path, and S10 beat 30's architect session was routed nowhere. It
+    // names the CLASSIFICATION (`classifyCrash`'s 'stream-deadline' signature
+    // is transient); the retry is the caller's — the architect structured turn
+    // and the cycle paths take one, a `runAgentTurn`/`fix-turn` kind does not.
+    const tail = 'aborted as a likely usage-limit / network stall (transient; retried only where the caller retries).';
     super(
       nonProgressSummary
         ? `stream-deadline: SDK stream '${label}' saw only non-progress messages for ${seconds}s: ${nonProgressSummary} — ${tail}`

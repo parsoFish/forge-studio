@@ -109,9 +109,14 @@ test('AT-6.11.17-1 a silent SDK stream on the ARCHITECT path throws StreamDeadli
     for (let i = 0; i < 20; i += 1) await Promise.resolve();
     await new Promise((r) => setImmediate(r));
 
-    t.mock.timers.tick(SIX_MINUTES_MS + 1_000);
-    for (let i = 0; i < 20; i += 1) await Promise.resolve();
-    await new Promise((r) => setImmediate(r));
+    // Row 193: the first stall is re-run ONCE (`architect-structured-turn.ts`,
+    // pinned in architect-stall-retry.test.ts), so the throw this pin measures
+    // arrives after the SECOND window — this stream stalls on every attempt.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      t.mock.timers.tick(SIX_MINUTES_MS + 1_000);
+      for (let i = 0; i < 20; i += 1) await Promise.resolve();
+      await new Promise((r) => setImmediate(r));
+    }
 
     assert.equal(settled.resolved, undefined, 'the turn must not resolve on a stream that never produced a result');
     assert.ok(settled.rejected, `the idle deadline must reject the architect turn — nothing was thrown after ${SIX_MINUTES_MS} ms of silence`);
