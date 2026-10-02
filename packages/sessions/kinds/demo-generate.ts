@@ -5,7 +5,6 @@
  * here, why the DAG is one-way, and why the agent spec arrives as a parameter:
  * `packages/sessions/design.md` §"The demo kind is three modules".
  */
-import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -266,6 +265,13 @@ export async function runGenerateStep(args: {
   });
 }
 
+/** Ruling 1973fa — forge's own prefixes in a ground: its config + this pass's
+ *  root (`.forge/`), the session kinds' dirs (`_demo/`, `_onboarding/`),
+ *  forge's logs (`_logs/`) and its history (`forge/history/`). Not
+ *  `project-repo-tx.ts`'s `SCRATCH_EXCLUDES`: that set names what forge
+ *  never COMMITS and lacks `.forge/`, `_onboarding/`, `_logs/`, `forge/history/`. */
+const FORGE_OWNED_GROUND_PREFIXES: readonly string[] = [`.forge/`, `${DEMO_KIND_DIR}/`, '_onboarding/', '_logs/', 'forge/history/'];
+
 /**
  * Row 190 (forge-8vfn.8.5.28, T1 ruling 1973en) — the GROUND fence. Measured on
  * a costed S1 run: the grounding pass, the one holding Bash, ran `python3 …
@@ -276,12 +282,21 @@ export async function runGenerateStep(args: {
  * cannot leave the pass (no Bash, no REAL output), so the ground is diffed.
  * Snapshot = `takeScopeSnapshot` + a content hash of every porcelain path (an
  * already-dirty file edited further still shows: the pre-turn tree is the
- * baseline) + `HEAD` (a Bash `git commit` is not a clean tree). Allowed:
- * `.forge/demo/` and `_demo/` (forge's session scratch, `SCRATCH_EXCLUDES`; S1
- * held `_demo/<sid>/` in the repo). A breach is an `error` event naming the
- * paths, then a throw `agent-run` turns into `failed`, the missing-deliverable
- * road. NOT reverted — naming and failing is the ruling. `null` off a git root: no baseline, and a nested
- * project's porcelain is its ANCESTOR's tree. A failing snapshot throws.
+ * baseline). A breach is an `error` event naming the paths, then a throw
+ * `agent-run` turns into `failed`, the missing-deliverable road. NOT reverted —
+ * naming and failing is the ruling. `null` off a git root: no baseline, and a
+ * nested project's porcelain is its ANCESTOR's tree. A failing snapshot throws.
+ *
+ * Row 190b (forge-8vfn.8.5.31, T1 ruling 1973fa) — the fence judges PROJECT
+ * SOURCE only. r9 false-redded on `.forge/contract-compliance-report.json`,
+ * `HEAD (commit)` and `_onboarding/<sid>/status.json`: the onboarding session
+ * finishing (17:50:42, MTIMES.txt) inside the demo's ground pass — other forge
+ * actors, not this pass. So `FORGE_OWNED_GROUND_PREFIXES` are skipped (a
+ * superset of `.forge/demo/` + `_demo/`, which it replaces), and HEAD left this
+ * fence: row 188's host fence owns HEAD, and a ground's own commits are the
+ * product's. Cull note (T1): an end-of-pass diff cannot see a transient edit
+ * the builder restored before the check (r8/r9's BEFORE-pass schema removal) —
+ * accepted, not fixed here.
  */
 type GroundSnapshot = Extract<ScopeSnapshot, { ok: true }>;
 function snapshotGround(repo: string): GroundSnapshot | null {
@@ -290,15 +305,7 @@ function snapshotGround(repo: string): GroundSnapshot | null {
   if (!snap.ok) throw new Error(`demo-builder runner: cannot snapshot the ground ${repo} — ${snap.error}`);
   const entries = new Map(snap.entries);
   for (const [p, stamp] of snap.entries) if (stamp.startsWith('git:')) entries.set(p, `${stamp}:${contentStamp(repo, p)}`);
-  return { ok: true, entries: entries.set('HEAD (commit)', headStamp(repo)) };
-}
-
-/** `--verify -q` exits 1 SILENTLY only for an unborn HEAD; anything else propagates. */
-function headStamp(repo: string): string {
-  try { return execFileSync('git', ['rev-parse', '--verify', '-q', 'HEAD^{commit}'], { cwd: repo, encoding: 'utf8', stdio: 'pipe' }).trim(); } catch (err) {
-    if ((err as { status?: number }).status === 1 && !(err as { stderr?: string }).stderr) return 'unborn';
-    throw err;
-  }
+  return { ok: true, entries };
 }
 
 /** Through the guard, base64 = lossless; `null` (deleted, submodule, refused symlink) is a stamp. */
@@ -311,10 +318,9 @@ function assertGroundUnchanged(a: { ground: GroundSnapshot | null; repo: string;
   if (a.ground === null) return;
   const after = snapshotGround(a.repo);
   if (after === null) throw new Error(`demo-builder runner: the ground ${a.repo} stopped being a git repo during the ${a.pass} pass`);
-  const own = [...DEMO_PASS_ROOTS, DEMO_KIND_DIR].map((r) => `${r}/`);
-  const paths = scopeViolations(a.ground, after, (p) => own.some((r) => p.startsWith(r)));
+  const paths = scopeViolations(a.ground, after, (p) => FORGE_OWNED_GROUND_PREFIXES.some((r) => p.startsWith(r)));
   if (paths.length === 0) return;
-  const message = `demo-builder runner: the ${a.pass} pass changed the project ground outside ${DEMO_PASS_ROOTS.join(', ')}: ${paths.join(', ')} — the demo builder may write .forge/demo/ only; the edits are left in place for the operator to inspect.`;
+  const message = `demo-builder runner: the ${a.pass} pass changed the project's source (outside ${FORGE_OWNED_GROUND_PREFIXES.join(', ')}): ${paths.join(', ')} — the demo builder may write .forge/demo/ only; the edits are left in place for the operator to inspect.`;
   a.logger.emit({
     initiative_id: a.initiativeId, phase: 'demo', skill: 'demo-builder-runner', event_type: 'error', input_refs: [], output_refs: paths,
     message, metadata: { session_id: a.sessionId, pass: a.pass, paths, rule: 'demo-ground-fence' },
