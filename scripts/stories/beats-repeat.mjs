@@ -47,6 +47,18 @@ export function handleFor(step) {
 
 /** How long to wait between polls while the agent turn between rounds runs. */
 import { progressTracker } from './beats-progress.mjs';
+// T1 1973bq (bead `forge-8vfn.8.5.15`, row 179) — the SAME deadline arithmetic
+// a `cycleOf` agent wait already uses (`beats-cycle-progress.mjs`'s own
+// header: S10 run 26, $14.61 lost to a wall clock that fired while a review
+// chunk had landed four minutes earlier). `cycleWaitDeadline` is pure and
+// generic — nothing in it names a cycle — so this reuses it rather than
+// re-deriving the same min(inactivity, wall) arithmetic a second time.
+import { cycleWaitDeadline } from './beats-cycle-progress.mjs';
+// The SAME absolute backstop a `cycleOf` wait is bounded by, imported from its
+// point of definition rather than through `beats-agent-proc.mjs`'s re-export
+// — that file's whole channel-scanning apparatus is not a dependency this
+// module needs for one constant.
+import { CYCLE_WAIT_WALL_CEILING_MS } from './story-wait-schema.mjs';
 
 const POLL_MS = 500;
 
@@ -103,11 +115,14 @@ const PAGE_MOVED_RE = /detach|no element carries that handle/i;
  * @param {{perTransition: number, progressKey: string}|null} input.progress  the beat's progress bound, if it declared one
  * @param {(() => Promise<{value: string|undefined, source: string, carriers: number}>)|null} input.readProgressNow  reads `progressKey` from the live page, by SOURCE
  * @param {(() => Promise<number|null>)|null} input.readSessionEventsNow  T1 1545 — line count of the session this repeat is standing on RIGHT NOW, or `null` when the live route is not a session; growth resets the same clock `readProgressNow` does
+ * @param {(() => (number|null|{unknown: true, detail: string}))|null} input.readSessionLivenessNow  T1 1973bq — idle ms since the bound session's `.heartbeat`/`events.jsonl` last moved (the same reading `runLogIdleMs` gives a session's stall door), read off the LIVE page; `null` when no session can be identified. Governs the loop's OWN bound (see below) — distinct from `readSessionEventsNow`, which only resets `readProgressNow`'s per-transition clock.
+ * @param {number} [input.wallCeilingMs]  TEST SEAM ONLY, never a real-run override (the same shape `makeWaitSpendGuard`'s `pollMs` already is) — defaults to the real `CYCLE_WAIT_WALL_CEILING_MS`.
  * @param {(steps: object[], ms: number) => Promise<{waitedForHandle: boolean, error: string|null}>} input.run
  * @returns {Promise<{waitedForHandle: boolean, error: string|null}>}
  */
 export async function runRepeatStep({
   page, step, left, matches, timeoutMs, run, progress = null, readProgressNow = null, readSessionEventsNow = null,
+  readSessionLivenessNow = null, wallCeilingMs = CYCLE_WAIT_WALL_CEILING_MS,
 }) {
   let waitedForHandle = false;
   // 7.6.77's REPEAT HALF, and the half that matters for S1 beat 11.
@@ -148,7 +163,79 @@ export async function runRepeatStep({
   // of them (T1 ruling 569 follow-up, bought by A's S9 run 3 beat 13).
   let sawGate = false;
 
-  while (left() > 0) {
+  // T1 1973bq, bead `forge-8vfn.8.5.15`, row 179 — THE REPEAT'S OWN GOVERNING
+  // BOUND, SESSION-LIVENESS-AWARE ONCE NOTHING ELSE ALREADY IS.
+  //
+  // MEASURED. S2 beat 12 declares `until` and a plain `wait: { for: 'agent',
+  // upTo: 780_000 }` — no `perTransition`, so `tracker` above is `null` and
+  // this loop had ZERO inactivity-awareness: `left()` alone, a pure
+  // wall-clock countdown from the moment this beat's `do` started. A real run
+  // answered one interview round at 06:28:28Z, the architect session then
+  // WORKED CONTINUOUSLY — a draft turn writing tool events to 06:39:21, a
+  // completeness critic 06:39:21–06:40:54, `.heartbeat` warm throughout — and
+  // wrote `awaiting-verdict` at 06:40:54Z, 14s AFTER `left()` hit zero at
+  // 06:40:40Z. A wall-clock bound red-flagged a live agent.
+  //
+  // RAISING 780_000 IS NOT THE FIX. The declared bound instead becomes an
+  // INACTIVITY window — reset by the bound session's own liveness, its
+  // `.heartbeat`/`events.jsonl` (the SAME channel `runLogIdleMs` already
+  // reads for a session's stall door, `beats-agent-proc.mjs`) — backstopped
+  // by the absolute wall ceiling every `cycleOf` agent wait already answers
+  // to, so a session that never stops ticking still cannot sit a host
+  // forever.
+  //
+  // SCOPED TO EXACTLY THE SHAPE THAT HAS NOTHING ELSE WATCHING LIVENESS, and
+  // only ONCE THE GATE HAS BEEN SEEN AT LEAST ONCE (`sawGate`, read below —
+  // never at the point this is declared, since that is always `false` here):
+  //
+  //   `tracker !== null` is excluded. A repeat that already declares
+  //   `perTransition`/`progressKey` (S1 beat 11, 7.6.77/1545) has its own
+  //   inactivity-aware early-stall detector UNDER the beat's wall-clock
+  //   backstop already, and that beat's TRAILING `do` steps (`open-plan`,
+  //   `approve-plan`) depend on the outer bound staying the beat's one,
+  //   shared deadline. Extending it too would be a second, uncoordinated
+  //   change riding along on this bead.
+  //
+  //   `!sawGate` keeps today's plain `left()` exactly, even when a session
+  //   reader is wired. Ruling 569's own protection — a page that simply does
+  //   not carry the repeat's act must still exhaust at the PLAIN declared
+  //   bound, not be rescued into a 90-minute wait by an unrelated channel
+  //   ticking somewhere else. Only once a round has genuinely been reached
+  //   does this repeat have POSITIVE evidence it is standing on the right
+  //   page at all.
+  const livenessGoverned = tracker === null && readSessionLivenessNow !== null;
+  const startedAt = Date.now();
+  // Which deadline actually governed the last poll, and what the liveness
+  // read said — carried for the exhaustion message alone (§664(ii): a verdict
+  // a reader cannot check is a defect on its own terms).
+  let firedBy = null;
+  let unreadableDetail = null;
+  let loggedNoSession = false;
+  const boundLeft = () => {
+    if (!livenessGoverned || !sawGate) return left();
+    const now = Date.now();
+    const idle = readSessionLivenessNow();
+    let lastActivityAt = null;
+    if (typeof idle === 'number') {
+      lastActivityAt = now - idle;
+    } else if (idle !== null && idle.unknown === true) {
+      // An unreadable channel is not "not stalled" (§15.504's rule, applied
+      // here): it fails CLOSED to "no evidence", exactly like an absent one,
+      // rather than being read as either fresh progress or proof of silence.
+      unreadableDetail = idle.detail;
+    } else if (idle === null && !loggedNoSession) {
+      loggedNoSession = true;
+      console.log(
+        '[stories] repeat: no session channel could be identified for the live page — keeping this beat\'s ' +
+          'plain declared bound (today\'s behaviour) rather than an inactivity window.',
+      );
+    }
+    const d = cycleWaitDeadline({ startedAt, timeoutMs, lastActivityAt, wallCeilingMs });
+    firedBy = d.firedBy;
+    return Math.max(0, d.deadline - now);
+  };
+
+  while (boundLeft() > 0) {
     if (await isSatisfied()) break;
     // Checked BEFORE the gate test, unlike the consequence wait's, and for the
     // opposite reason: there the product's own verdict is a better explanation
@@ -170,7 +257,7 @@ export async function runRepeatStep({
     // Poll rather than spend the bound inside a handle wait, which cannot tell
     // "another round is coming" from "it drafted instead".
     if ((await page.locator(gate).count()) === 0) {
-      await new Promise((r) => setTimeout(r, Math.min(POLL_MS, left())));
+      await new Promise((r) => setTimeout(r, Math.min(POLL_MS, boundLeft())));
       continue;
     }
     sawGate = true;
@@ -185,7 +272,7 @@ export async function runRepeatStep({
     let interrupted = false;
     for (const one of step.repeat) {
       if (await isSatisfied()) { interrupted = true; break; }
-      const inner = await run([one], left(), ACT_BOUND_MS);
+      const inner = await run([one], boundLeft(), ACT_BOUND_MS);
       if (inner.waitedForHandle) waitedForHandle = true;
       if (inner.error === null) continue;
       // The product may have moved on mid-round — a control vanishing BECAUSE
@@ -200,7 +287,7 @@ export async function runRepeatStep({
       if (!PAGE_MOVED_RE.test(inner.error)) {
         return { waitedForHandle, error: `repeat, round ${rounds + 1}: ${inner.error}` };
       }
-      await new Promise((r) => setTimeout(r, Math.min(POLL_MS, left())));
+      await new Promise((r) => setTimeout(r, Math.min(POLL_MS, boundLeft())));
       interrupted = true;
       break;
     }
@@ -234,6 +321,31 @@ export async function runRepeatStep({
     // page at the instant the bound expired is NOT — the loop reaches here
     // from the poll branch as often as from a finished round — so it is no
     // longer asserted.
+    //
+    // T1 1973bq — TWO NAMED REASONS when this repeat was liveness-governed,
+    // because they are different findings and the red message must say
+    // which: the session genuinely went quiet (`inactivity`), or it never
+    // stopped advancing and the absolute backstop is what ended it (`wall`).
+    // Neither replaces the plain wall-clock line below, which is exactly
+    // today's wording for every beat this fix does not touch (no session
+    // identified, or a progress bound already declared).
+    if (livenessGoverned) {
+      return {
+        waitedForHandle,
+        error: firedBy === 'wall'
+          ? `repeat: answered ${rounds} round(s) and the WALL CEILING (${wallCeilingMs} ms) ran out before its ` +
+            `\`until\` (${JSON.stringify(until)}) was met. This beat's declared bound (${timeoutMs} ms) became ` +
+            "an INACTIVITY window the session's own liveness kept resetting — it never went quiet — but a " +
+            'wait cannot reset forever, so the absolute ceiling is what stopped this one.'
+          : `repeat: answered ${rounds} round(s) and the session showed no liveness advance (its own ` +
+            `\`.heartbeat\`/\`events.jsonl\`) for a full ${timeoutMs} ms before its \`until\` ` +
+            `(${JSON.stringify(until)}) was met. This beat's declared bound is an INACTIVITY window, not a ` +
+            'wall clock — it only expires when the session itself goes quiet, and it did.' +
+            (unreadableDetail !== null
+              ? ` (the session's channel could not be read at least once while this ran: ${unreadableDetail})`
+              : ''),
+      };
+    }
     return {
       waitedForHandle,
       error:
