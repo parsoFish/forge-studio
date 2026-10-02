@@ -7,8 +7,8 @@
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { guardedReadFile, resolveGuardedPath } from '@forge/kernel';
 import { runAgentTurn } from '../interactive-session.ts';
@@ -140,7 +140,7 @@ export async function runGenerateStep(args: {
   // the write pass loses Read, Glob, Grep and TodoWrite as well, and the
   // reading it needs happens first, bounded, with its findings injected.
   const ground = snapshotGround(status.project_repo_path);
-  const fenceGround = (pass: string): void => assertGroundUnchanged({ ground, repo: status.project_repo_path, sessionDir: plumbing.sessionDir, pass, logger, initiativeId, sessionId: input.sessionId });
+  const fenceGround = (pass: string): void => assertGroundUnchanged({ ground, repo: status.project_repo_path, pass, logger, initiativeId, sessionId: input.sessionId });
   let findings = '';
   await runPass(
     [prompt, '', '## This turn: READ ONLY', 'Gather what you need to author the demo. Write nothing; your notes are carried to the next turn.'].join('\n'),
@@ -277,19 +277,18 @@ export async function runGenerateStep(args: {
  * Snapshot = `takeScopeSnapshot` + a content hash of every porcelain path (an
  * already-dirty file edited further still shows: the pre-turn tree is the
  * baseline) + `HEAD` (a Bash `git commit` is not a clean tree). Allowed:
- * `.forge/demo/` and the in-repo session dir (S1 held `_demo/<sid>/` there).
- * A breach is an `error` event naming the paths, then a throw that `agent-run`
- * turns into `failed`, the missing-deliverable road. NOT reverted — naming and
+ * `.forge/demo/` and `_demo/` (forge's session scratch, `SCRATCH_EXCLUDES`; S1
+ * held `_demo/<sid>/` in the repo). A breach is an `error` event naming the
+ * paths, then a throw `agent-run` turns into `failed`. NOT reverted — naming and
  * failing is the ruling. `null` off a git root: no baseline, and a nested
  * project's porcelain is its ANCESTOR's tree. A failing snapshot throws.
  */
-type GroundSnapshot = Extract<ScopeSnapshot, { ok: true }>;
-function snapshotGround(repo: string): GroundSnapshot | null {
+type GroundSnapshot = Extract<ScopeSnapshot, { ok: true }>; function snapshotGround(repo: string): GroundSnapshot | null {
   if (!isGitRepo(repo)) return null;
   const snap = takeScopeSnapshot(repo);
   if (!snap.ok) throw new Error(`demo-builder runner: cannot snapshot the ground ${repo} — ${snap.error}`);
   const entries = new Map(snap.entries);
-  for (const [p, stamp] of snap.entries) if (stamp.startsWith('git:')) entries.set(p, `${stamp}:${contentStamp(join(repo, p))}`);
+  for (const [p, stamp] of snap.entries) if (stamp.startsWith('git:')) entries.set(p, `${stamp}:${contentStamp(repo, p)}`);
   return { ok: true, entries: entries.set('HEAD (commit)', headStamp(repo)) };
 }
 
@@ -301,16 +300,17 @@ function headStamp(repo: string): string {
   }
 }
 
-function contentStamp(abs: string): string { // ENOENT = deleted, EISDIR = a submodule: each a stamp
-  try { return createHash('sha256').update(readFileSync(abs)).digest('hex'); } catch (err) { return `unreadable:${(err as NodeJS.ErrnoException).code}`; }
+/** Through the guard, base64 = lossless; `null` (deleted, submodule, refused symlink) is a stamp. */
+function contentStamp(repo: string, rel: string): string {
+  const bytes = guardedReadFile(repo, rel.split('/'), 'base64');
+  return bytes === null ? 'unreadable' : createHash('sha256').update(bytes).digest('hex');
 }
 
-function assertGroundUnchanged(a: { ground: GroundSnapshot | null; repo: string; sessionDir: string; pass: string; logger: KindTurnPlumbing['logger']; initiativeId: string; sessionId: string }): void {
+function assertGroundUnchanged(a: { ground: GroundSnapshot | null; repo: string; pass: string; logger: KindTurnPlumbing['logger']; initiativeId: string; sessionId: string }): void {
   if (a.ground === null) return;
   const after = snapshotGround(a.repo);
   if (after === null) throw new Error(`demo-builder runner: the ground ${a.repo} stopped being a git repo during the ${a.pass} pass`);
-  const sessionRel = relative(realpathSync(a.repo), realpathSync(a.sessionDir)).split(sep).join('/');
-  const own = [...DEMO_PASS_ROOTS, ...(sessionRel.startsWith('..') ? [] : [sessionRel])].map((r) => `${r}/`);
+  const own = [...DEMO_PASS_ROOTS, DEMO_KIND_DIR].map((r) => `${r}/`);
   const paths = scopeViolations(a.ground, after, (p) => own.some((r) => p.startsWith(r)));
   if (paths.length === 0) return;
   const message = `demo-builder runner: the ${a.pass} pass changed the project ground outside ${DEMO_PASS_ROOTS.join(', ')}: ${paths.join(', ')} — the demo builder may write .forge/demo/ only; the edits are left in place for the operator to inspect.`;

@@ -615,6 +615,7 @@ packages/sessions/kinds/demo-builder.ts existsSync 1
 packages/sessions/kinds/demo-builder.ts mkdirSync 2
 packages/sessions/kinds/demo-builder.ts readFileSync 2
 packages/sessions/kinds/demo-builder.ts writeFileSync 4
+packages/sessions/kinds/demo-generate.ts execFileSync 1
 packages/sessions/kinds/demo-generate.ts existsSync 2
 packages/sessions/kinds/demo-generate.ts mkdirSync 1
 packages/sessions/kinds/demo-generate.ts readFileSync 3

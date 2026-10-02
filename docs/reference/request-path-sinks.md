@@ -3167,3 +3167,27 @@ document's own rule.
 
 `scripts/request-path-sinks.baseline.txt` accepts the new rows via `--write`
 in the same commit that adds this section, per this document's own rule.
+
+### Row 190 (bead `forge-8vfn.8.5.28`, T1 ruling 1973en) — the demo generate turn's ground fence
+
+| file (function) | sink (delta) | input | classification | why |
+|---|---|---|---|---|
+| `packages/sessions/kinds/demo-generate.ts` (`headStamp`, via `snapshotGround`) | `execFileSync` (0 → 1) | `status.project_repo_path` — as the `cwd` only | guarded `[read]` | `git rev-parse --verify -q HEAD^{commit}`: every argv element is a fixed literal, and no path is composed — the repo path is the child's `cwd`, nothing else. That path is the one `POST /api/demo-builder/start` persisted after `invalidProjectRepoPath` → `isContainedProjectRepoPath` (the R4-16 row above), the same value every other sink in this turn already trusts (the agent's own `cwd`, `ensureStudioBranch`, the `rmSync` row in the forge-mfv5.2.8 section). It runs only after `isGitRepo(repo)` has passed, which requires `realpath(git rev-parse --show-toplevel) === realpath(repo)` — so a symlinked or nested path is not a repo root and the whole check is skipped before this call. No existing exported git helper returns HEAD (`packages/projects/project-repo-tx.ts`'s `git()` is module-private), so reusing one was not available without widening a door for a single call. No escape shape was planted, hence `[read]`: there is no untrusted segment to plant one in. |
+
+**Two sinks the first cut added and this one removed rather than classified.**
+`contentStamp` hashed each porcelain-reported path with a raw `readFileSync(join(repo, p))`;
+it now reads through `guardedReadFile(repo, p.split('/'), 'base64')` (`readFileSync` 4 → 3,
+i.e. back to its pre-row-190 count), so a symlinked leaf is refused rather than followed
+— a refusal stamps `unreadable`, which still compares. And the allow-list computed the
+session dir's repo-relative prefix with two `realpathSync` calls; it now allows the fixed
+literal `_demo/` (`DEMO_KIND_DIR`, forge's own session scratch — the same name
+`project-repo-tx.ts`'s `SCRATCH_EXCLUDES` already treats as never-project), so
+`realpathSync` stays at 0. **Newly reachable, not newly counted:** `takeScopeSnapshot`
+(`packages/agents/phases/agent-scope-guard.ts`, baseline `execFileSync` 1 /
+`readdirSync` 1 / `statSync` 1, unchanged) is now also reached from the demo session's
+turn with the same `status.project_repo_path` as `cwd` and walk root — fixed argv
+(`git status --porcelain -uall`), fixed `.forge` walk, `statSync` only; nothing is read
+or written through it.
+
+`scripts/request-path-sinks.baseline.txt` accepts the `execFileSync` row via `--write` in
+the same commit that adds this section, per this document's own rule.

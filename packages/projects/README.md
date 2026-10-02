@@ -26,7 +26,7 @@ both directions, and is required to FAIL against an empty index.
 | preflight | `runPreflight` · `formatPreflightReport` · `buildVerdictEvent` · `SCRATCH_PATHS` · `TRACKED_CONFIG_PATHS` · `SCAFFOLD_BUILD_OUTPUT_IGNORES` · `runContractComplianceLoop` · `formatComplianceReport` · `clauseTarget` · `loadDeclaredSkills` |
 | contract stages | `deriveContractStages` · `resolveContainedProjectDir` |
 | create | `scaffoldGreenfieldProject` · `listProjectStarters` · `projectStartersDir` |
-| repo transactions | `ensureStudioBranch` · `commitStudioChange` · `withStudioWrite` · `dirtyPaths` |
+| repo transactions | `ensureStudioBranch` · `commitStudioChange` · `withStudioWrite` · `dirtyPaths` · `isGitRepo` |
 | the reset | `cmdProjectReset` · `computeContractDrift` · `applyContractReset` · `AppTypeUnresolvedError` |
 | constraint blocks | `authorConstraintBlocks` · `globToRegExp` · `loadProjectConstraintBlocks` · `selectorMatches` |
 | gate recipes | `deriveGateRecipe` · `renderGateRecipeBlock` |
