@@ -477,7 +477,12 @@ export function endedUnpricedTurns(eventLists) {
         reason: typeof meta['unpriced_reason'] === 'string' ? meta['unpriced_reason'] : 'unstated',
         tokensIn: typeof r?.tokens_in === 'number' ? r.tokens_in : null,
         tokensOut: typeof r?.tokens_out === 'number' ? r.tokens_out : null,
-        sessionId: typeof meta['session_id'] === 'string' ? meta['session_id'] : 'unknown',
+        // Row 193 — the architect's unpriced row carries no `session_id` (S10
+        // beat 30 printed `session=unknown`) while its `cycle_id` already
+        // names the session's log dir; name what the row can see.
+        sessionId: typeof meta['session_id'] === 'string'
+          ? meta['session_id']
+          : typeof r?.cycle_id === 'string' ? r.cycle_id : 'unknown',
       }));
     }
   }
@@ -608,11 +613,21 @@ export function ceilingHaltVerdict({ spend, ceilingUsd, unpriced, emitFailures, 
       t.tokensOut === null ? 'tokens_out=unrecorded' : `tokens_out=${t.tokensOut}`,
       t.tokensIn === null ? 'tokens_in=unrecorded' : `tokens_in=${t.tokensIn}`,
     ].join(', ');
+    // Row 193 (T1 ruling 1973fy), ruled against row 184 / item 76: an abort
+    // with NO tokens is forge's own stream-deadline firing before any
+    // assistant message arrived (S10 beat 30: `system×12, rate_limit_event×1`
+    // for 360s). It is NOT priced at $0: the SDK reports usage only on
+    // completed blocks and the `result` an abort never gets, so a request in
+    // flight at the abort bills with nothing recorded. Kept red; named.
+    const cause = t.reason === 'abort' && t.tokensIn === null && t.tokensOut === null
+      ? '; aborted by forge\'s own stream-deadline before ANY assistant message — no usage was reported, ' +
+        'which is NOT proof of zero spend (a request in flight at the abort bills without one)'
+      : '';
     return Object.freeze({
       halt: true, kind: 'unenforceable', headline: 'CEILING UNENFORCEABLE',
       reason:
         `ceiling $${ceilingUsd.toFixed(2)} UNENFORCEABLE: ${ended.length} turn(s) ended unpriced ` +
-        `(first: reason=${t.reason}, ${tokens}, session=${t.sessionId}) — no figure is coming for ` +
+        `(first: reason=${t.reason}, ${tokens}, session=${t.sessionId}${cause}) — no figure is coming for ` +
         'them, so nothing below this ceiling can be compared to it again',
       note: 'The run was stopped because its ceiling went blind, NOT because a limit was exceeded — the beat score above is a partial run and the spend total is a lower bound.',
     });
