@@ -1,0 +1,14 @@
+# _logs mtimes, verbatim from the S3 run-6 capture (m7-e-run6-captures/S3-logs, cp -p)
+2026-10-02T21:19:02.473Z  _logs/_agent-onboarding-agent-2026-10-02T21-17-58-286-h1t6/events.jsonl
+2026-10-02T21:17:58.335Z  _logs/_agent-onboarding-agent-2026-10-02T21-17-58-286-h1t6/turn.pid
+2026-10-02T21:18:30.317Z  _logs/_bridge-2026-10-02T21-18-30-318-oybwrf2q/events.jsonl
+2026-10-02T21:18:40.228Z  _logs/_bridge-2026-10-02T21-18-40-230-hzekbxqt/events.jsonl
+2026-10-02T21:17:58.335Z  _logs/_onboarding-2026-10-02T21-17-58-643c37aa/turn.pid
+# GROUND mtimes — RECONSTRUCTED, not measured: the runner tore projects/story-s3
+# down at 21:19:26.066Z and stats no ground file before that. Each is the event
+# that last wrote the path, plus the Bash call's own run time.
+2026-10-02T21:17:58.861Z  ground/.forge/agent-run/PROMPT.md
+2026-10-02T21:18:40.232Z  ground/.forge/contract-compliance-report.json
+2026-10-02T21:18:48.660Z  ground/CHANGELOG.md
+2026-10-02T21:18:47.600Z  ground/PROVIDER_VERSION.txt
+2026-10-02T21:18:50.000Z  ground/docs/.gitkeep
