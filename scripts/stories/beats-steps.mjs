@@ -37,7 +37,7 @@ export async function performStepsForTest(page, steps, timeoutMs, matches) {
   return performSteps(page, steps, timeoutMs, false, null, matches);
 }
 
-export async function performSteps(page, steps, timeoutMs, sessionScope = null, probe = null, matches = null, actBoundMs = null, declaredRoute = null, stallDoor = null, progress = null, readProgressNow = null, readSessionEventsNow = null) {
+export async function performSteps(page, steps, timeoutMs, sessionScope = null, probe = null, matches = null, actBoundMs = null, declaredRoute = null, stallDoor = null, progress = null, readProgressNow = null, readSessionEventsNow = null, readSessionLivenessNow = null) {
   // Bead `forge-8vfn.6.11.22` (ruling 267). ONE declared bound is ONE spend. The
   // handle wait SWALLOWS its timeout and the act that follows was then handed
   // `timeoutMs` afresh, so a beat whose handle never appears paid the bound
@@ -99,7 +99,10 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
         // (T1 ruling 930) — not the consequence wait the first half shipped on.
         // `readSessionEventsNow` is T1 1545's addition beside it: the session
         // this repeat is standing on resets the SAME clock on its own growth.
-        progress, readProgressNow, readSessionEventsNow,
+        // `readSessionLivenessNow` is T1 1973bq's: UNCONDITIONAL on whether a
+        // progress bound is declared at all — see `beats-repeat.mjs`'s own
+        // header for why the two coexist without conflicting.
+        progress, readProgressNow, readSessionEventsNow, readSessionLivenessNow,
         // `declaredRoute` is NOT passed down — T1 ruling 569, P1, bought by
         // A's S1 run 2. A beat's declared route is where the beat ENDS; a
         // repeat runs where the beat PUT it. S1 beat 11 is declared at

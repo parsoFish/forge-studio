@@ -41,7 +41,7 @@ import {
 // why the split went this way round and not the other.
 import { performSteps } from './beats-steps.mjs';
 import { readProgress, sessionEventLines } from './beats-progress.mjs';
-import { STALL_CEILING_MS, doorWorthRunning, sessionLogDir } from './beats-agent-proc.mjs';
+import { STALL_CEILING_MS, doorWorthRunning, sessionLogDir, runLogIdleMs } from './beats-agent-proc.mjs';
 // Split out of `beats-agent-proc.mjs` at the 800-line cap (bead `forge-8vfn.8.1.31`, T1 1693).
 import { waitForPricedEvent } from './beats-priced-wait.mjs';
 
@@ -289,6 +289,23 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     const dir = sessionLogDir(forgeRoot, new URL(page.url(), 'http://forge.invalid').pathname);
     return sessionEventLines(dir);
   };
+  // T1 1973bq (bead `forge-8vfn.8.5.15`, row 179) — the SESSION'S OWN
+  // LIVENESS, beside both halves above and gated UNCONDITIONALLY on
+  // `forgeRoot` alone, never on `declaredProgress`. A repeat that declares no
+  // `perTransition`/`progressKey` at all (S2 beat 12, S10 beat 4) had ZERO
+  // inactivity-awareness before this — `readSessionEventsNow` above is itself
+  // gated on a progress bound existing, so it never ran for exactly the beats
+  // this fix is for. `runLogIdleMs` is the SAME `.heartbeat`/`events.jsonl`
+  // reading a session's own stall door already trusts (`beats-agent-proc.mjs`),
+  // read off the LIVE page route for the same reason `readSessionEventsNow`
+  // is: a repeat runs where it PUT the page, not where the beat ends.
+  // `runRepeatStep` (`beats-repeat.mjs`) is what actually governs on it, and
+  // only when nothing else already does (`tracker === null`) — this is a pure
+  // addition for every other beat, which never reads this reader at all.
+  const readSessionLivenessNow = forgeRoot === null ? null : () => {
+    const dir = sessionLogDir(forgeRoot, new URL(page.url(), 'http://forge.invalid').pathname);
+    return dir === null ? null : runLogIdleMs(dir);
+  };
 
   const matchesData = async (spec) => {
     // `readObserved` runs `page.evaluate`, which THROWS when the page navigates
@@ -341,7 +358,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     if (typeof step?.press === 'string') pressedAt.set(step.press, pressStartedMs);
   }
   const steps_ = await performSteps(page, runSteps, bound.ms, sessionScope, agentProcProbe, matchesData, null, target, stallDoor,
-    declaredProgress, readProgressNow, readSessionEventsNow);
+    declaredProgress, readProgressNow, readSessionEventsNow, readSessionLivenessNow);
   const stepError = steps_.error;
   // `forge-8vfn.8.1.16` / T1 ruling 1561 — the LAST `pressWithin` TEXT scope
   // this beat resolved, carried onto the beat's own record for `story.json`.
