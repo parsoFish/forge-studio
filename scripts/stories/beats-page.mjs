@@ -529,7 +529,27 @@ export async function waitForConsequence(
     // death never ends a wait on its own" means giving the page's NEXT poll a
     // chance to show what the dispatch already wrote before trusting a
     // verdict about it.
-    if (!watching && stallDoor !== null && sessionScope === null && typeof stallDoor.earlyDeath === 'function') {
+    //
+    // SCOPED TO A DECLARED AGENT-SCALE WAIT (follow-up to row 184, PR #1058's
+    // own CI red). `doorWorthRunning`'s size gate above happens to protect
+    // the idle-ceiling door from ever running on a plain, undeclared-wait
+    // beat (that beat's bound is the small DOM default, nowhere near
+    // `2 * STALL_CEILING_MS`) — but this door has no size gate at all, so it
+    // was consulted for EVERY off-session beat regardless of whether anything
+    // it watches was ever dispatched. Measured: `proof` beat 5 is a plain
+    // `do`-only press/fill beat with NO `wait` field — `beat.wait` is
+    // `undefined`, the same field `beatBound` (`beats.mjs`) reads to decide
+    // whether this beat declared a wait at all — and the born-after-the-
+    // anchor scan (`resolveAgentChannelDirForDeath`, no page-named run and no
+    // bound run id to go on) picked up the Studio bridge's own
+    // `_bridge-<ts>-<id>` log, which `classifyUnmeasuredDispatch` read as
+    // REAPED. Nothing about that beat was ever waiting on an agent dispatch,
+    // so nothing here should have been consulted on its behalf. `beat.wait`
+    // is read directly — never threaded as a new parameter — because `beat`
+    // is already this function's own argument, exactly like `beat.expect.data`
+    // a few lines up.
+    const agentScaleWait = beat.wait?.for === 'agent' || beat.wait?.for === 'settle';
+    if (agentScaleWait && !watching && stallDoor !== null && sessionScope === null && typeof stallDoor.earlyDeath === 'function') {
       const stop = stallDoor.earlyDeath(runId, anchorMs ?? startedAt, boundRunId);
       if (stop !== null) {
         return Object.freeze({

@@ -263,6 +263,9 @@ test('row 184 DOOR 2: a dispatch reaped before the page catches up still goes GR
   const page = drainPage({ runId, greenAfterMs: 50 }); // inside the one free poll (CONSEQUENCE_POLL_MS = 100 ms)
   const beat = {
     act: "Open the knowledge base's Health tab and drain it to green",
+    // Early death is scoped to a DECLARED agent-scale wait (PR #1058 follow-up) —
+    // this models the real shape a drain beat would declare.
+    wait: { for: 'settle', key: 'drain-state', while: 'running', upTo: 5_000 },
     expect: { route: '/knowledge', data: { page: 'knowledge', 'drain-state': 'green' } },
   };
 
@@ -286,6 +289,9 @@ test('row 184 DOOR 2 (RED before the fix): a dispatch that stays reaped with not
   const page = drainPage({ runId, greenAfterMs: Number.POSITIVE_INFINITY });
   const beat = {
     act: "Open the knowledge base's Health tab and drain it to green",
+    // Early death is scoped to a DECLARED agent-scale wait (PR #1058 follow-up) —
+    // this models the real shape a drain beat would declare.
+    wait: { for: 'settle', key: 'drain-state', while: 'running', upTo: 5_000 },
     expect: { route: '/knowledge', data: { page: 'knowledge', 'drain-state': 'green' } },
   };
 
@@ -313,9 +319,144 @@ test('row 184 DOOR 2 (positive control): a channel that is genuinely still writi
   const page = drainPage({ runId, greenAfterMs: 150 });
   const beat = {
     act: "Open the knowledge base's Health tab and drain it to green",
+    // Early death is scoped to a DECLARED agent-scale wait (PR #1058 follow-up) —
+    // this models the real shape a drain beat would declare.
+    wait: { for: 'settle', key: 'drain-state', while: 'running', upTo: 5_000 },
     expect: { route: '/knowledge', data: { page: 'knowledge', 'drain-state': 'green' } },
   };
 
   const stall = await waitForConsequence(page as never, beat as never, 5_000, null, null, null, stallDoor as never);
   assert.equal(stall, null, 'a live dispatch must reach its own green exactly as before');
+});
+
+// ──────────── PR #1058 FOLLOW-UP — EARLY DEATH IS SCOPED TO AN AGENT WAIT ────────────
+
+/**
+ * CI's own costless `stories` job reded `proof` beat 5 ("Fill in the name,
+ * the quality gate and the north star … then press 'Onboard project →'") —
+ * a plain press/fill beat (`tests/stories/proof.story.mjs`) that declares NO
+ * `wait` field at all. `waitForConsequence`'s ungated `earlyDeath` check had
+ * no way to tell that apart from a genuine agent wait, scanned `_logs/` for
+ * the newest dispatch born since the press, found the Studio bridge's own
+ * `_bridge-<ts>-<id>` log, read it as REAPED, and ended the wait before the
+ * page's own `project-id` read ever got a second poll. On main the same beat
+ * is green.
+ */
+function bridgeLogDir(root: string, runId: string) {
+  const dir = join(root, '_logs', runId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'turn.pid'), '999999\n'); // dead — the bridge's own pid bookkeeping differs, but REAPED either way
+  writeFileSync(join(dir, 'events.jsonl'), '{"event_type":"start"}\n{"event_type":"health"}\n');
+  return dir;
+}
+
+/** `proof` beat 5's shape: no `data-run`, no `wait`, a press that navigates
+ *  and an expectation that the resulting page answers a moment later. */
+function onboardPage({ readyAfterMs }: { readyAfterMs: number }) {
+  const startedAt = Date.now();
+  const node = { getAttribute: () => null }; // the page names no run at all
+  return {
+    url: () => 'http://localhost:4124/projects/story-proof',
+    locator: () => ({
+      first: () => ({ evaluate: async (fn: (n: unknown) => unknown) => fn(node) }),
+      count: async () => 0,
+      evaluateAll: async (fn: any, arg: any) => fn([], arg),
+    }),
+    evaluate: async () => ({
+      data: {
+        page: 'projects', 'page-ready': 'true',
+        'project-id': Date.now() - startedAt >= readyAfterMs ? 'story-proof' : '',
+      },
+      nested: [], lifecycle: null, lifecycleError: null, sessionPhase: null,
+    }),
+  };
+}
+
+test('row 184 follow-up (RED before this fix): a plain press/fill beat with NO declared wait is never doored by a reaped _bridge-* log — proof beat 5\'s exact shape', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'wait-authority-'));
+  // The anchor sits a full second BEFORE the bridge log is born — the same
+  // margin `beats-offsession-stall.test.ts`'s own fixtures use (`626`'s "a
+  // dispatch is allowed to take a moment to create its directory"), and
+  // needed here for the identical reason: the filesystem's clock and
+  // `Date.now()` can disagree by a few ms (`FS_CLOCK_SLACK_MS`,
+  // `beats-queue-terminal.mjs`), so an anchor taken an instant before
+  // `mkdirSync` can register as born AFTER it. Without the margin this
+  // fixture would exercise nothing: `newestChannelSince` finds nothing,
+  // `earlyDeath` reports nothing, and the test would pass whether or not the
+  // bridge-exclusion exists.
+  const anchorMs = Date.now() - 1_000;
+  bridgeLogDir(root, '_bridge-2026-10-02T10-58-32-653-2wg7t63g');
+  const stallDoor = makeAgentChannelDoor(root);
+  assert.notEqual(stallDoor, null);
+
+  // The page's own read lands well AFTER earlyDeath's two-poll decision
+  // cycle (~100-200 ms) — the ordinary lag a real browser has rendering a
+  // fetch response, and exactly why this fires before the page ever gets a
+  // fair second look. Nothing here ever dispatched an agent; the bridge log
+  // is pure coincidence, born in the same window as the press.
+  const page = onboardPage({ readyAfterMs: 500 });
+  const beat = {
+    act: 'Fill in the name, the quality gate and the north star — and under Advanced, the repo path — then press "Onboard project →"',
+    // NO `wait` field — proof.story.mjs's own beat 5, verbatim.
+    expect: { route: '/projects/story-proof', data: { page: 'projects', 'project-id': 'story-proof', 'page-ready': 'true' } },
+  };
+
+  const began = Date.now();
+  const stall = await waitForConsequence(page as never, beat as never, 15_000, null, null, null, stallDoor as never, anchorMs);
+  const took = Date.now() - began;
+
+  assert.equal(stall, null, `a beat with no declared wait must never be ended by the agent-channel door. Got: ${JSON.stringify(stall)}`);
+  assert.ok(took >= 450, `must actually wait for the page, not pass by luck — took ${took} ms`);
+  assert.ok(took < 2_000, `the page's own catch-up must win, well short of the 15000 ms bound — took ${took} ms`);
+});
+
+test('row 184 follow-up (positive control): a GENUINE agent wait is still protected from a bridge log born in the same window', async () => {
+  // The gate closes the hole for a beat with no wait at all; this proves the
+  // narrower bridge-exclusion ALSO holds for a beat that legitimately
+  // declares one, names no run, and has nothing else in `_logs/` for the
+  // scan to find except the bridge's own log.
+  const root = mkdtempSync(join(tmpdir(), 'wait-authority-'));
+  const anchorMs = Date.now() - 1_000; // the same fs/JS clock margin as the test above
+  bridgeLogDir(root, '_bridge-2026-10-02T10-58-32-653-2wg7t63g');
+  const stallDoor = makeAgentChannelDoor(root);
+
+  const page = onboardPage({ readyAfterMs: 500 });
+  const beat = {
+    act: 'Watch a dispatched agent finish, off-session',
+    wait: { for: 'agent', upTo: 15_000 },
+    expect: { route: '/projects/story-proof', data: { page: 'projects', 'project-id': 'story-proof', 'page-ready': 'true' } },
+  };
+
+  const began = Date.now();
+  const stall = await waitForConsequence(page as never, beat as never, 15_000, null, null, null, stallDoor as never, anchorMs);
+  const took = Date.now() - began;
+
+  assert.equal(stall, null, `a _bridge-* log must never stand in for this beat's own dispatch. Got: ${JSON.stringify(stall)}`);
+  assert.ok(took >= 450, `took ${took} ms`);
+  assert.ok(took < 2_000, `took ${took} ms`);
+});
+
+test('row 184 follow-up (control): a beat that genuinely declares `for: "agent"` still gets the early-death door for a REAL dispatch', async () => {
+  // The gate must not throw the baby out with the bathwater: DOOR 2's own
+  // scenario (a declared wait, a reaped dispatch that is NOT a bridge log)
+  // must still be caught.
+  const root = mkdtempSync(join(tmpdir(), 'wait-authority-'));
+  const runId = '_kbdrain-4';
+  reapedDispatchDir(root, runId);
+  const stallDoor = makeAgentChannelDoor(root);
+
+  const page = drainPage({ runId, greenAfterMs: Number.POSITIVE_INFINITY });
+  const beat = {
+    act: "Open the knowledge base's Health tab and drain it to green",
+    wait: { for: 'agent', upTo: 5_000 },
+    expect: { route: '/knowledge', data: { page: 'knowledge', 'drain-state': 'green' } },
+  };
+
+  const began = Date.now();
+  const stall = await waitForConsequence(page as never, beat as never, 5_000, null, null, null, stallDoor as never);
+  const took = Date.now() - began;
+
+  assert.notEqual(stall, null, 'a genuinely reaped, non-bridge dispatch on a DECLARED wait must still red');
+  assert.match((stall as { why: string }).why, /REAPED/, `Got: ${JSON.stringify(stall)}`);
+  assert.ok(took < 1_000, `took ${took} ms`);
 });

@@ -22,7 +22,7 @@
  * otherwise pass.
  */
 import { readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import { cycleProgressIdleMs } from './beats-cycle-progress.mjs';
 import { queueManifestTerminal, FS_CLOCK_SLACK_MS, channelTerminalState } from './beats-queue-terminal.mjs';
 // Split out at the 800-line cap (T1 ruling 492: SPLIT, NEVER BASELINE) —
@@ -767,6 +767,18 @@ export function makeAgentChannelDoor(forgeRoot) {
  * version carries reporting for the "unknown scan" / "unreadable channel"
  * cases that `earlyDeath` has no use for (an unresolved dir there is simply
  * "nothing to watch yet", deferred to `door`'s own, better-worded finding).
+ *
+ * THE SCAN BRANCH ALONE EXCLUDES `_bridge-*` — follow-up to row 184 (PR
+ * #1058's own CI red). `isDispatchDir`'s own header names `_bridge-<ts>-<id>`
+ * as a real dispatch SHAPE (`beats-channel-scan.mjs`), because it is one —
+ * the Studio bridge's own process log — just never one a BEAT'S wait is
+ * watching FOR, and the bridge can legitimately start or restart inside the
+ * very window a press's anchor opens. The `named`/`bound` branches above are
+ * never touched by this: a page or a beat that explicitly identifies a
+ * `_bridge-*` run is trusted exactly as any other identity is (row 162's own
+ * rule). Only the FALLBACK scan has no identity to go on at all, so a bridge
+ * log born in the same window as the press is the one false positive this
+ * resolution cannot otherwise tell apart from a real dispatch.
  */
 function resolveAgentChannelDirForDeath(forgeRoot, logsDir, runId, sinceMs, boundRunId) {
   const named = runLogDir(forgeRoot, runId);
@@ -777,5 +789,6 @@ function resolveAgentChannelDirForDeath(forgeRoot, logsDir, runId, sinceMs, boun
     return resolved !== null && channelProvenSince(resolved, sinceMs) === true ? resolved : null;
   }
   const scanned = newestChannelSince(logsDir, sinceMs);
-  return typeof scanned === 'string' ? scanned : null;
+  if (typeof scanned !== 'string') return null;
+  return basename(scanned).startsWith('_bridge-') ? null : scanned;
 }
