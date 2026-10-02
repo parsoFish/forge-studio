@@ -1,0 +1,22 @@
+# run5.log lines 121-141 (beat 10 end through beat 11 red), verbatim
+[2026-10-02T13:42:51.972Z] [stories] spend after beat 10: $2.5499 of $25.00
+[2026-10-02T13:42:51.972Z] [stories] host after beat 10: loadavg 4.52 4.47 4.61  MemAvailable 7.5GiB
+[2026-10-02T13:42:51.972Z]   ✓ 10. Press "Plan with Architect" and describe the first piece of work
+[2026-10-02T13:42:51.979Z] [stories] while waiting on [data-action="view-architect-session"]: present and enabled
+[2026-10-02T13:43:53.521Z] [stories] while waiting on [data-field="question-freetext"]: present and enabled
+[2026-10-02T13:43:53.546Z] [stories] while waiting on [data-action="submit-answers"]: present and enabled
+[2026-10-02T13:43:53.642Z] [stories] while waiting on [data-field="question-freetext"]: present and enabled
+[2026-10-02T13:43:53.652Z] [stories] while waiting on [data-action="submit-answers"]: present but DISABLED
+[2026-10-02T13:45:32.541Z] [stories] while waiting on [data-action="submit-answers"]: present and enabled
+[2026-10-02T13:45:32.622Z] [stories] while waiting on [data-action="submit-answers"]: present but DISABLED
+[2026-10-02T13:55:25.369Z] [stories] while waiting on [data-action="open-plan"]: present and enabled
+[2026-10-02T13:55:27.586Z] [stories] while waiting on [data-action="approve-plan"]: [data-action="approve-plan"]: no element carries that handle yet
+[2026-10-02T13:55:27.695Z] [stories] while waiting on [data-action="approve-plan"]: present and enabled
+[2026-10-02T13:55:28.129Z] [stories] spend after beat 11: $5.9933 of $25.00
+[2026-10-02T13:55:28.129Z] [stories] host after beat 11: loadavg 6.10 5.92 5.48  MemAvailable 6.9GiB
+[2026-10-02T13:55:28.129Z]   ✗ 11. Open the session, read the plan and press Approve
+[2026-10-02T13:55:28.129Z]       data-architect-phase: expected "committed", got "awaiting-verdict"
+[2026-10-02T13:55:28.129Z]       data-gate-armed: expected "false", got "true"
+[2026-10-02T13:55:28.129Z]       data-plan-mode: expected "view", got "gate"
+[2026-10-02T13:55:28.129Z]       channel-quiet: the agent channel _architect-2026-10-02T13-42-51-e20207b9's own process has been REAPED and, one poll later, it still carries no terminal state — nothing published, and nothing left running to publish one. The beat's expectations never held. 0s into the agent wait (declared 1200000 ms) — the beat stopped there rather than sitting out its declared bound
+[2026-10-02T13:55:28.693Z] [stories] NOT reaped: pid 2625236: SIGTERM failed: kill ESRCH — the process was already gone, so there was nothing to reap

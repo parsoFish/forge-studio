@@ -1,0 +1,4 @@
+2026-10-02T13:52:08.197Z  _logs/_architect-2026-10-02T13-42-51-e20207b9/stderr.log
+2026-10-02T13:55:24.735Z  _logs/_architect-2026-10-02T13-42-51-e20207b9/.heartbeat
+2026-10-02T13:55:27.774Z  _logs/_architect-2026-10-02T13-42-51-e20207b9/turn.pid
+2026-10-02T13:55:28.305Z  _logs/_architect-2026-10-02T13-42-51-e20207b9/events.jsonl

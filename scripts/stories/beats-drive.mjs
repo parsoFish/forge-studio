@@ -512,6 +512,9 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
           // page names none and the scan's born-after-the-anchor filter would
           // reject a dir the resume is continuing rather than minting.
           boundRunId,
+          // Row 184c (T1 1973dv) — the beat's LAST act, the early-death
+          // door's own anchor; the beat's start when it acted on nothing.
+          steps_.lastActMs ?? pressStartedMs,
         );
         // 7.6.143 (b2). A `terminal:` declaration counts as consumed only when
         // the watch actually RESOLVED a cycle — not merely when it was called.

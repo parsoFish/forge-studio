@@ -313,6 +313,7 @@ export async function waitForConsequence(
   cycleWatch = null,
   spendGuard = null,
   boundRunId = null,
+  pressMs = null,
 ) {
   const wanted = Object.entries(beat.expect.data);
   if (wanted.length === 0) return null;
@@ -550,7 +551,8 @@ export async function waitForConsequence(
     // a few lines up.
     const agentScaleWait = beat.wait?.for === 'agent' || beat.wait?.for === 'settle';
     if (agentScaleWait && !watching && stallDoor !== null && sessionScope === null && typeof stallDoor.earlyDeath === 'function') {
-      const stop = stallDoor.earlyDeath(runId, anchorMs ?? startedAt, boundRunId);
+      // Row 184c: death is judged from the beat's LAST press (`pressMs`).
+      const stop = stallDoor.earlyDeath(runId, anchorMs ?? startedAt, boundRunId, pressMs ?? anchorMs ?? startedAt);
       if (stop !== null) {
         return Object.freeze({
           afterMs: Date.now() - startedAt,

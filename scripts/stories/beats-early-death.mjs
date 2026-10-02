@@ -37,6 +37,17 @@ import { channelTerminalState, FS_CLOCK_SLACK_MS } from './beats-queue-terminal.
 import { readDispatchSnapshot } from './run-observe.mjs';
 // The pure judgement over two `readDispatchSnapshot` reads.
 import { classifyUnmeasuredDispatch } from './spend.mjs';
+import { CONSEQUENCE_POLL_MS } from './beats-page-read.mjs';
+
+/**
+ * ROW 184c (forge-8vfn.8.5.22), T1 ruling 1973dv — how long after the beat's
+ * LAST press this door stays shut: two page polls. Replayed on S1 run 5's
+ * real capture (`early-death-real-capture.test.ts`), the finalize turn the
+ * approve press started was spawned 79 ms after the press and wrote its
+ * first event 529 ms after THAT; the door must give the press's own turn
+ * room to appear before it may judge anything at all.
+ */
+export const PRESS_GRACE_MS = 2 * CONSEQUENCE_POLL_MS;
 
 /**
  * @param {string} forgeRoot
@@ -45,7 +56,10 @@ import { classifyUnmeasuredDispatch } from './spend.mjs';
  *   (named / bound / born-after-the-anchor scan) — injected rather than
  *   imported, so this file never needs `runLogDir`/`runLogIdleMs`/
  *   `channelProvenSince`, all local to `beats-agent-proc.mjs`.
- * @returns {(runId: string|null, sinceMs: number, boundRunId?: string|null) => {reason: string, detail: string}|null}
+ * @returns {(runId: string|null, sinceMs: number, boundRunId?: string|null, pressMs?: number, nowMs?: number) => {reason: string, detail: string}|null}
+ *   `pressMs` is the beat's LAST press (row 184c; defaults to `sinceMs`),
+ *   `nowMs` the poll's own clock (defaults to `Date.now()`; a seam for the
+ *   real-capture replay, `early-death-real-capture.test.ts`).
  */
 export function makeEarlyDeathDoor(forgeRoot, resolveDir) {
   // One entry per channel dir this door has looked at: `snapshot` is the
@@ -53,47 +67,48 @@ export function makeEarlyDeathDoor(forgeRoot, resolveDir) {
   // from one that simply has not priced itself yet, and `graced` is whether
   // this dir has ALREADY been given its one free poll.
   const death = new Map();
-  return (runId, sinceMs, boundRunId = null) => {
+  return (runId, sinceMs, boundRunId = null, pressMs = sinceMs, nowMs = Date.now()) => {
     const dir = resolveDir(runId, sinceMs, boundRunId);
     if (dir === null) return null; // nothing to watch yet — the ordinary doors answer this
+    // ROW 184c (forge-8vfn.8.5.22), T1 ruling 1973dv — THE ANCHOR FOR DEATH
+    // IS THE BEAT'S LAST PRESS, not `sinceMs`. `sinceMs` is where EVIDENCE
+    // begins (718(1)): for S1 beat 11 that is the beat's START, twelve
+    // minutes before its approve press, so every turn the interview spawned
+    // in between — the draft turn included — counted as "born after the
+    // anchor" and #1060's birth rule excluded none of them. `pressMs` is the
+    // instant this beat's own last act ran (`performSteps`' `lastActMs`).
+    const sincePress = nowMs - pressMs;
+    if (sincePress < PRESS_GRACE_MS) return null; // the press's own turn has not had two polls to appear
     const snapshot = readDispatchSnapshot(dir);
-    // ROW 184b (forge-8vfn.8.5.21), regression from PR #1058. THE DIR IS NOT
-    // THE TURN. Pressing approve-plan makes the bridge spawn a NEW finalize
-    // turn for the SAME session — `_architect-<sid>` is identical before and
-    // after the press — so `resolveDir` above keeps returning the one dir it
-    // always has, and only `turn.pid` INSIDE it says which turn this reading
-    // is actually about. Before this fix nothing asked that question: S1
-    // beat 11 read the draft turn's own pid, already dead and already
-    // GRACED by an EARLIER beat's wait on the identical dir (`stallDoor` is
-    // built once per STORY and shared across every beat, `run-story.mjs`),
-    // and fired `channel-quiet` 0 s into its OWN bound — zero grace, for a
-    // finalize turn that had not even started yet.
-    //
-    // `turn.pid`'s own mtime (`readDispatchSnapshot`'s `birthMs`) is the one
-    // birth signal that survives the pid it names dying — no `/proc` entry
-    // outlives the process. Born strictly before THIS wait's own anchor
-    // (`sinceMs`, the beat's action press), past the same fs/JS clock skew
-    // `FS_CLOCK_SLACK_MS` already covers elsewhere (`sweep-post-stop-logs.mjs`),
-    // names the PREVIOUS turn — dead or alive, it can never end THIS wait.
-    // Treated exactly like "nothing to watch yet": the ordinary rules keep
-    // governing until a turn.pid born at or after the anchor appears. A
-    // missing `turn.pid` (`birthMs === null`) has no birth to compare, so it
-    // falls through unchanged — there is no fresher reading to prefer.
-    if (snapshot.birthMs !== null && snapshot.birthMs < sinceMs - FS_CLOCK_SLACK_MS) return null;
+    // ROW 184b (forge-8vfn.8.5.21). THE DIR IS NOT THE TURN: pressing
+    // approve-plan spawns a NEW finalize turn into the SAME `_architect-<sid>`
+    // dir, and only `turn.pid`'s own mtime (`birthMs`, the one birth signal
+    // that survives its pid dying) says which turn a reading is about. A
+    // turn.pid born before the press (past `FS_CLOCK_SLACK_MS` of fs/JS clock
+    // skew) names the PREVIOUS turn — dead or alive, it never ends THIS wait.
+    if (snapshot.birthMs !== null && snapshot.birthMs < pressMs - FS_CLOCK_SLACK_MS) return null;
+    // No turn.pid at all: nothing written after the press either, so the
+    // two-poll grace must elapse AGAIN before the dir alone is judged.
+    if (snapshot.birthMs === null && sincePress < 2 * PRESS_GRACE_MS) return null;
     // A CACHED previous read is this wait's own history only when it ALSO
-    // names a turn born at or after the anchor. Otherwise it is a stale
-    // grace an EARLIER wait on this same dir already earned about the turn
-    // THAT press ended — reusing it here is the exact mechanism measured
-    // above, one layer along: never on the CURRENT reading, but just as
-    // wrongly on a cache built from a PREVIOUS one.
+    // names a turn born at or after the press — otherwise it is a stale grace
+    // an EARLIER wait on this same dir earned about the turn THAT press ended
+    // (`stallDoor` is built once per STORY, `run-story.mjs`).
     const cached = death.get(dir);
     const previous = cached !== undefined
       && cached.snapshot.birthMs !== null
-      && cached.snapshot.birthMs < sinceMs - FS_CLOCK_SLACK_MS
+      && cached.snapshot.birthMs < pressMs - FS_CLOCK_SLACK_MS
       ? undefined
       : cached;
     const { arm } = classifyUnmeasuredDispatch(snapshot, previous?.snapshot);
-    if (arm !== 'reaped') {
+    // ROW 184c — DEATH MEANS THE PID IS GONE. `classifyUnmeasuredDispatch`
+    // also calls an ALIVE pid over a static log `reaped` (a stuck shape, for
+    // the spend diagnosis), and that is exactly what S1 run 5 beat 11 read:
+    // pid 2777163, the finalize turn, alive and between spawn and its first
+    // event — it wrote `phase=committed` 180 ms after this door called it
+    // REAPED. A live process that is quiet is the idle-ceiling door's
+    // question (`STALL_CEILING_MS`), never this one's.
+    if (arm !== 'reaped' || snapshot.alive) {
       death.set(dir, { snapshot, graced: false });
       return null;
     }
