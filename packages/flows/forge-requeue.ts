@@ -105,7 +105,7 @@ export function runRequeue(
 
   const resolved = resolveInitiativeId(initInput, { queueRoot: queuePaths.root });
   if (resolved.kind !== 'ok') {
-    throw new Error(`forge requeue: no initiative resolves "${initInput}" (${resolved.kind}). Check the queue with \`forge status\`.`);
+    throw new Error(`requeue: no initiative resolves "${initInput}" (${resolved.kind}). Check the queue on Studio's Recovery screen.`);
   }
   const initiativeId = resolved.canonical;
   const filename = `${initiativeId}.md`;
@@ -125,7 +125,7 @@ export function runRequeue(
   ];
   const fromCandidate = candidates.find((c) => existsSync(join(c.dir, filename)));
   if (!fromCandidate) {
-    throw new Error(`forge requeue: no manifest ${filename} found in any _queue/ dir.`);
+    throw new Error(`requeue: no manifest ${filename} found in any _queue/ dir.`);
   }
   const fromPath = join(fromCandidate.dir, filename);
   const fromQueueDir = fromCandidate.label;

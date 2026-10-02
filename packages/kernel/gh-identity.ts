@@ -37,8 +37,12 @@ import { execFileSync } from 'node:child_process';
 /** How a `gh` invocation actually runs. Injected in tests, so they never read a real keyring. */
 export type GhExec = (args: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv }) => string;
 
+// stderr is PIPED, never inherited: it reaches the caller on the thrown error,
+// and the caller decides whether it is news (row 175 — gh's "no pull requests
+// found" is the expected pre-PR answer, and inherited it read as an error in
+// serve.log).
 const defaultExec: GhExec = (args, opts) =>
-  execFileSync('gh', args, { cwd: opts.cwd, env: opts.env, encoding: 'utf8' }).toString();
+  execFileSync('gh', args, { cwd: opts.cwd, env: opts.env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).toString();
 
 /**
  * The token `gh` holds for `owner`, from the local keyring.

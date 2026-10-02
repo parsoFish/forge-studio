@@ -55,19 +55,19 @@ operator-ratified new cap — never a silent raise.
 | package | files | quarried LOC | cap | note |
 |---|---|---|---|---|
 | `contracts` | 7 | 1,573 | **1,573** | **pure transfers (7.1c boundary fix): REPO_RE, the work-item id patterns, SESSION_STAGES + ContractStage types from flows/sessions (+83); the session anchors from sessions (+35). Shared vocabulary only, no logic.** |
-| `kernel` | 31 | 5,618 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
+| `kernel` | 31 | 5,622 | **5,500** | quarried lines only. The spec's separate "~3k of new logic" cap governs anything WRITTEN into kernel rather than moved; the two are counted apart. |
 | `library` | 63 | 17,109 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
 | `projects` | 48 | 11,185 | **9,412** | ratified 9,412 — row 174 (forge-8vfn.8.5.9): the preflight read returns the claim's DEPS verdict as `runnableGate`, +8 on 9,404, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,346 | **12,768** | ratified 12,768 — G1 boot-time release of a kb-cleanup apply stuck at applying (+74, forge-8vfn.8.5.1) and G3 isUntouchedBrainSeedStub crash-orphan check (+43, 8.5.3): +117 on 12,651, T1-ratified (>100). |
 | `agents` | 44 | 12,433 | **12,433** | **pure transfer to apps/forge (7.1c boundary fix): the agent CLI verbs agent-run.ts + agent-dispatch-cmd.ts moved out, trigger firing moved to cmdAgentDispatch; runner.ts comment trimmed. −953 on 13,386, cap lowered to measured.** |
 | `sessions` | 63 | 20,605 | **20,567** | ratified 20,567 — row 173 (forge-8vfn.8.5.8): the PLAN footprint states each develop run's own spend ceiling, +2 on 20,565, lane-ratified under ruling 666; see git history for prior changes. |
-| `flows` | 87 | 24,942 | **24,742** | **measured 24,742 — §7.3 cost-by-class producer (+99 lines: cost-by-class.ts + its index.ts door line); ruling 666 ≤100-line standing cap-raise authority, cap raised to measured.** |
+| `flows` | 87 | 24,944 | **24,744** | ratified 24,744 — row 175 (forge-8vfn.8.5.11): confirmPrMerged stays quiet on gh's expected no-PR answer, +2 on 24,742, lane-ratified under ruling 666; see git history for prior raises. |
 | `factory` | 15 | 2,904 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 45 | 12,266 | **12,266** | ratified 12,266 — row 167 (forge-8vfn.8.1.61, ruling 1916): `rebaseForResume` moved out to `packages/flows/cycle-helpers.ts`, −20 on 12,286 (cap lowered to measured); see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 34 | 7,996 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **484** | **130,329** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **484** | **130,335** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -398,7 +398,7 @@ operator-ratified new cap — never a silent raise.
 | packages/agents/pinned-sdk-query.ts | agents | verbatim | 163 |
 | packages/flows/planned-initiatives.ts | flows | verbatim | 96 |
 | packages/flows/gh-pinned.ts | flows | rewritten | 205 |
-| packages/flows/pr-branch-sync.ts | flows | verbatim | 595 |
+| packages/flows/pr-branch-sync.ts | flows | verbatim | 597 |
 | packages/flows/pr-ci-watch.ts | flows | verbatim | 187 |
 | packages/sessions/kinds/preflight-fix.ts | sessions | rewritten | 171 |
 | packages/sessions/kinds/kind-turn.ts | sessions | rewritten | 432 `makeHeartbeatWriter` now imported from the new `heartbeat.ts` (pure move, forge-8vfn.8.1.51 prep). |
@@ -565,7 +565,7 @@ operator-ratified new cap — never a silent raise.
 | packages/flows/pr.ts | flows | verbatim | 420 |
 | packages/flows/pr-media.ts | flows | rewritten | 157 |
 | packages/kernel/config.ts | kernel | verbatim | 600 |
-| packages/kernel/gh-identity.ts | kernel | verbatim | 107 |
+| packages/kernel/gh-identity.ts | kernel | verbatim | 111 |
 | packages/kernel/ids.ts | kernel | verbatim | 136 |
 | packages/kernel/event-cost.ts | kernel | verbatim | 143 |
 | packages/kernel/index.ts | kernel | verbatim | 91 |
