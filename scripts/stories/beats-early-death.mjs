@@ -109,9 +109,11 @@ export function makeEarlyDeathDoor(forgeRoot, resolveDir) {
     // turn.pid born before the press (past `FS_CLOCK_SLACK_MS` of fs/JS clock
     // skew) names the PREVIOUS turn — dead or alive, it never ends THIS wait.
     if (snapshot.birthMs !== null && snapshot.birthMs < pressMs - FS_CLOCK_SLACK_MS) return null;
-    // No turn.pid at all: nothing written after the press either, so the
-    // two-poll grace must elapse AGAIN before the dir alone is judged.
-    if (snapshot.birthMs === null && sincePress < 2 * PRESS_GRACE_MS) return null;
+    // No turn.pid at all (a `_kb-drain-<run>` dir, by design): row 196 (bead
+    // `forge-8vfn.8.5.34`) — `classifyUnmeasuredDispatch` answers UNKNOWN,
+    // never `reaped`, so the arm check below returns null and this door never
+    // judges a dir with no process in it. M7-E run 6 S6 beat 14's drain dir
+    // would otherwise have reded the beat at ~0.5 s, 0.6 s before its green.
     // A CACHED previous read is this wait's own history only when it ALSO
     // names a turn born at or after the press — otherwise it is a stale grace
     // an EARLIER wait on this same dir earned about the turn THAT press ended
