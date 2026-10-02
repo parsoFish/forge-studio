@@ -46,7 +46,16 @@ export async function performStepsForTest(page, steps, timeoutMs, matches) {
   return performSteps(page, steps, timeoutMs, null, null, matches);
 }
 
-export async function performSteps(page, steps, timeoutMs, sessionScope = null, probe = null, matches = null, actBoundMs = null, declaredRoute = null, stallDoor = null, progress = null, readProgressNow = null, readSessionEventsNow = null, readSessionLivenessNow = null) {
+export async function performSteps(
+  page, steps, timeoutMs, sessionScope = null, probe = null, matches = null, actBoundMs = null, declaredRoute = null,
+  stallDoor = null, progress = null, readProgressNow = null, readSessionEventsNow = null, readSessionLivenessNow = null,
+  // Row 192 (bead `forge-8vfn.8.5.30`) — the handle wait's OWN liveness
+  // reader, distinct from `readSessionLivenessNow` above (the repeat's):
+  // `waitForHandleOrStall` needs the fuller `(runId, boundRunId, now)` reader
+  // `beats-drive.mjs` already builds for the consequence wait, never this
+  // no-arg one. `null`/`false` for every door test and every non-agent beat.
+  agentScaleWait = false, readHandleLivenessNow = null, boundRunId = null,
+) {
   // Bead `forge-8vfn.6.11.22` (ruling 267). ONE declared bound is ONE spend. The
   // handle wait SWALLOWS its timeout and the act that follows was then handed
   // `timeoutMs` afresh, so a beat whose handle never appears paid the bound
@@ -326,7 +335,11 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
       }
       // Locate THIS step's handle with its own bounded wait rather than a
       // same-tick lookup — the page it lives on may only just have mounted.
-      const stall = await waitForHandleOrStall(page, handle, actLeft(), sessionScope, probe, stallDoor);
+      // Row 192: `agentScaleWait`/`readHandleLivenessNow`/`boundRunId` ride
+      // along unchanged — see `waitForHandleOrStall`'s own header.
+      const stall = await waitForHandleOrStall(
+        page, handle, actLeft(), sessionScope, probe, stallDoor, agentScaleWait, readHandleLivenessNow, boundRunId,
+      );
       waitedForHandle = true;
       if (stall !== null) {
         return finish(

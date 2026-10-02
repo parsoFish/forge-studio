@@ -25,9 +25,12 @@
  * artifact page already publishes the id — `data-run={runId}` — which IS the
  * directory name under `_logs/`.
  *
- * THE DECLARED BOUND REMAINS A HARD MAXIMUM. No floor, no extension, nothing
- * runs longer than `upTo`; `MAX_DECLARED_WAIT_MS` is untouched. The only new
- * exit is earlier.
+ * THE DECLARED BOUND REMAINS A HARD MAXIMUM for every beat below, none of
+ * which declares `for: 'agent'` or passes a liveness reader — `MAX_DECLARED_
+ * WAIT_MS` is untouched, and the only new exit is earlier. Row 192 (bead
+ * `forge-8vfn.8.5.30`) narrowly lifts that for a beat that DOES declare one
+ * (`agent-wait-liveness-handle.test.ts`); every call in this file omits the
+ * new trailing args, so it still exercises the exact unlifted behaviour.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
