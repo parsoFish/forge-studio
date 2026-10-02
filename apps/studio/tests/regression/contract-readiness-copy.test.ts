@@ -47,9 +47,10 @@ function clause(id: string, pass: boolean, resolution?: PreflightClause['resolut
   return { id, title: id, hard: false, pass, detail: '', ...(resolution ? { resolution } : {}) };
 }
 
-function render(preflight: PreflightResult | null): string {
+function render(preflight: Omit<PreflightResult, 'runnableGate'> | null): string {
+  const full: PreflightResult | null = preflight === null ? null : { ...preflight, runnableGate: { pass: true, detail: '' } };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return renderToStaticMarkup(React.createElement(ContractReadiness as any, { ...FILLED, preflight }));
+  return renderToStaticMarkup(React.createElement(ContractReadiness as any, { ...FILLED, preflight: full }));
 }
 
 test('ruling 169: the panel names both numbers while clauses are open, and says which an agent owes', () => {

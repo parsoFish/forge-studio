@@ -109,6 +109,34 @@ test('handleProjectPreflight: a real project fixture → 200 {clauses, ready}', 
   }
 });
 
+// Row 174 (forge-8vfn.8.5.9): the birth verdict (`ready`) stays as it is — a
+// project is born contract-green before anything is installed — and the claim's
+// DEPS verdict rides beside it, so Studio can say "not claimable" before the
+// operator presses Start development and the scheduler refuses the claim.
+test('handleProjectPreflight: an unprovisioned ground reports runnableGate.pass=false beside the birth verdict', async () => {
+  const forgeRoot = makeForgeRoot();
+  try {
+    const dir = writePreflightableProject(forgeRoot, 'unprovisioned');
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'unprovisioned', scripts: { test: 'vitest run' } }));
+    mkdirSync(join(dir, '.forge'), { recursive: true });
+    writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({ testProcess: { local: { cmd: ['vitest', 'run'] } } }));
+    const { res, captured } = mockRes();
+    await handleProjectPreflight(mockReq(), res, ctxFor(forgeRoot), '/api/studio/projects/unprovisioned/preflight', 'GET');
+    assert.equal(captured.status, 200, captured.body);
+    const body = JSON.parse(captured.body) as { clauses: { id: string }[]; runnableGate?: { pass: boolean; detail: string } };
+    assert.equal(body.runnableGate?.pass, false, `no node_modules: the claim would refuse this ground:\n${captured.body}`);
+    assert.match(body.runnableGate!.detail, /npm ci/);
+    assert.equal(body.clauses.some((c) => c.id === 'DEPS'), false, 'the birth clause list is untouched');
+
+    mkdirSync(join(dir, 'node_modules'));
+    const again = mockRes();
+    await handleProjectPreflight(mockReq(), again.res, ctxFor(forgeRoot), '/api/studio/projects/unprovisioned/preflight', 'GET');
+    assert.equal((JSON.parse(again.captured.body) as { runnableGate: { pass: boolean } }).runnableGate.pass, true);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
 test('handleProjectPreflight: a non-matching url/method declines', async () => {
   const forgeRoot = makeForgeRoot();
   try {

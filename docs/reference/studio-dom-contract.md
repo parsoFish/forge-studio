@@ -3058,6 +3058,15 @@ is what this contract reads — but it cannot be the only distinguisher.
   `[data-skill-id][data-skill-source="forge|project"]`; chips carry
   `[data-skill-id][data-resolved="ok|missing"][data-skill-source="forge|project|missing"]`
   and a missing one renders the word MISSING plus a `title` saying why.
+- **`/projects/[id]` roadmap — not claimable (row 174, bead `forge-8vfn.8.5.9`).**
+  Under the roadmap's `strip` SchedulerCard,
+  `[data-section="not-claimable"][data-clause="DEPS"]`
+  (`components/studio/NotClaimableNotice.tsx`) renders when the bridge's
+  preflight read (`GET /api/studio/projects/:id/preflight`) returns
+  `runnableGate.pass === false`: the declared gate needs `node_modules` the
+  ground does not have, so the scheduler would refuse the claim. It is absent
+  otherwise. The read's `ready` stays the BIRTH verdict (DEPS off), so a
+  project is still born contract-green before anything is installed.
 - **`/projects/[id]` — editor + roadmap.** The project page is
   `[data-page="projects"][data-project-id][data-dirty][data-page-ready][data-demo-declaration-state="idle"|"changed"]`
   — `changed` once a save in this visit changed `demoProcess`, which also renders

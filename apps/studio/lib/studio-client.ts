@@ -1866,25 +1866,8 @@ export async function deleteFlow(id: string): Promise<{ ok: boolean; error?: str
   return { ok: r.ok, error: r.error };
 }
 
-export type ClauseResolution = 'auto' | 'agent' | 'user';
-export type ClauseRoute = 'instructions' | 'demo-builder' | 'brain-fix' | 'preflight-fix';
-
-export type PreflightClause = {
-  id: string;
-  title: string;
-  hard: boolean;
-  pass: boolean;
-  detail: string;
-  /** Stage D — resolution tier + (agent-tier) route + hint, from the server classifier. */
-  resolution?: ClauseResolution;
-  route?: ClauseRoute;
-  fixHint?: string;
-};
-
-export type PreflightResult = {
-  clauses: PreflightClause[];
-  ready: boolean;
-};
+export type { ClauseResolution, ClauseRoute, PreflightClause, PreflightResult } from './studio-preflight-types';
+import type { ClauseResolution, ClauseRoute, PreflightClause, PreflightResult } from './studio-preflight-types';
 
 export async function fetchPreflight(projectId: string): Promise<PreflightResult | null> {
   return studioReadOr404<PreflightResult>(

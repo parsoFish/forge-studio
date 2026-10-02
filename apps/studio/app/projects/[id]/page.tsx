@@ -50,7 +50,7 @@ import { ContractResolutionPanel } from '@/components/studio/project-builder/Con
 import { RebuildContractPanel } from '@/components/studio/project-builder/RebuildContractPanel';
 import { OnboardWithAgent } from '@/components/studio/project-builder/OnboardWithAgent';
 import { OpenSessionsPanel } from '@/components/studio/project-builder/OpenSessionsPanel';
-import { ProjectContractPanel } from '@/components/studio/project-builder/ProjectContractPanel';
+import { ContractPanelMount } from '@/components/studio/ContractPanelMount';
 import { ProjectCycleLedger } from '@/components/studio/project-builder/ProjectCycleLedger';
 import { KbBind } from '@/components/studio/project-builder/KbBind';
 import { buildProjectSavePayload } from '@/lib/project-save-payload';
@@ -59,6 +59,7 @@ import { planCycleCostFetch } from '@/lib/cycle-cost-cache';
 import { ProjectArchitectEntry } from '@/components/studio/ProjectArchitectEntry';
 import { ProjectTabs, type ProjectTab } from '@/components/studio/project-builder/ProjectTabs';
 import { SchedulerCard } from '@/components/SchedulerCard';
+import { NotClaimableNotice } from '@/components/studio/NotClaimableNotice';
 import { MAIN_CONTENT_ID } from '@/lib/main-landmark';
 import { disabledAttrs } from '@/lib/disabled-reason';
 
@@ -676,6 +677,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
       {tab === 'roadmap' && (
         <RoadmapView
           projectId={id}
+          runnableGate={preflight?.runnableGate ?? null}
           roadmap={roadmap}
           cycleGroups={cycleGroups}
           onRefresh={refreshRoadmap}
@@ -692,33 +694,7 @@ export default function ProjectBuilderPage({ params }: { params: { id: string } 
 // component this task needs a standalone render-pin test for has to live
 // outside this file (mirrors RunPanel.tsx's own D12 extraction).
 
-// ---------------------------------------------------------------------------
-// ContractPanelMount (R4-12-F1) — the client-side seam that mounts the ASYNC
-// server component <ProjectContractPanel> inside this 'use client' page. React
-// 18 can't render an async component directly in a client tree (and has no
-// `use()` for its returned promise), so this resolves the panel's element in an
-// effect and renders it. The panel still owns its OWN fetch
-// (fetchContractStages) exactly as its render-test contract pins — this seam
-// only threads the props + awaits the returned markup.
-// ---------------------------------------------------------------------------
-
-function ContractPanelMount(props: {
-  projectId: string;
-  northStar?: string | null;
-  instructions?: string | null;
-  instructionsSource?: string | null;
-}) {
-  const { projectId, northStar, instructions, instructionsSource } = props;
-  const [el, setEl] = useState<JSX.Element | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void ProjectContractPanel({ projectId, northStar, instructions, instructionsSource })
-      .then((resolved) => { if (!cancelled) setEl(resolved); })
-      .catch(() => { if (!cancelled) setEl(null); });
-    return () => { cancelled = true; };
-  }, [projectId, northStar, instructions, instructionsSource]);
-  return el;
-}
+// ContractPanelMount (R4-12-F1) moved to components/studio/ContractPanelMount.tsx (row 174).
 
 // ---------------------------------------------------------------------------
 // NewProjectSurface — `/projects/new`. ONE `main[data-page]` over BOTH doors,
@@ -965,12 +941,15 @@ function ProjectOnboardForm() {
  */
 function RoadmapView({
   projectId,
+  runnableGate,
   roadmap,
   cycleGroups,
   onRefresh,
   onOpenDemo,
 }: {
   projectId: string;
+  /** Row 174: the claim's DEPS verdict from the preflight read; null until it loads. */
+  runnableGate: { pass: boolean; detail: string } | null;
   roadmap: ProjectRoadmap | null;
   cycleGroups: InitiativeGroup[];
   onRefresh: () => Promise<void>;
@@ -1153,6 +1132,7 @@ function RoadmapView({
           control below is a queue write — the scheduler daemon does the
           running. Its real state + Start/Pause/Stop sit right above them. */}
       <SchedulerCard variant="strip" queuedCount={initiatives.filter((i) => i.status === 'pending').length} />
+      <NotClaimableNotice projectId={projectId} runnableGate={runnableGate} />
 
       {/* W7-B6 (projects-18): "what needs me now" — the actionable buckets as
           a LIST beside the canvas, with the same actions the per-node drawer
