@@ -13,8 +13,13 @@
 # What it does not run, it NAMES (§15.92 — a check whose negative result is indistinguishable
 # from "nothing to report" is not a check):
 #   SKIP        `npm ci` (a worktree has its own install) and any multi-line `run: |` block
-#   OTHER JOB   every step of every other job — the run-lock jobs (stories, ui-walkthrough,
-#               deadpaths) which need a free 4123/4124 and are run by the lane under its own lock
+#               outside the `stories` job
+#   RUN         (item 76) the `stories` job's OWN multi-line block — CI's costless harness proof
+#               stories — derived from that block itself, never a hard-coded `smoke`/`proof` pair,
+#               and wrapped by `gate-stories.sh` for the chromium precondition and the run-lock
+#   OTHER JOB   every OTHER step of every other job — stories' own install/cache/upload steps,
+#               plus any further run-lock job (ui-walkthrough, deadpaths), which need a free
+#               4123/4124 and are run by the lane under its own lock
 #
 # Every path is an argument: `gate-M4.sh`, which this generalises, hard-coded a repo root for its
 # helper tools and one session's scratchpad for its logs, so it answered a different question in
@@ -257,22 +262,49 @@ CI="$R/.github/workflows/ci.yml"
 # --- read the step list out of the tree's own ci.yml ----------------------------------------
 # One awk pass: track the job whose steps we are in, and the `- name:` of the current step, so a
 # skipped step can be reported by the name its author gave it.
+#
+# ONE EXCEPTION (item 76): the `stories` job's own multi-line block is `&&`-joined into a `RUN`
+# row instead of skipped — never a hard-coded `smoke`/`proof` pair. Scoped to `job == "stories"`
+# alone; every other multi-line block is still the named SKIP it always was. Indentation is read
+# relative to the step's own `- name:` line, never a hard-coded column.
 steps() {
   awk '
+    function flush_stories() {
+      if (storylines != "") print "RUN\t" job "\t" storyname "\t" storylines
+      storylines = ""; in_stories_block = 0
+    }
+    in_stories_block && match($0, /[^ ]/) > name_indent {
+      line = $0; sub(/^ +/, "", line)
+      storylines = (storylines == "" ? line : storylines " && " line)
+      next
+    }
+    in_stories_block { flush_stories() }
     /^  [A-Za-z0-9_-]+:[[:space:]]*$/ { job = $1; sub(/:$/, "", job); next }
-    /^[[:space:]]*- name:[[:space:]]*/ { name = $0; sub(/^[[:space:]]*- name:[[:space:]]*/, "", name); next }
-    /^[[:space:]]*run:[[:space:]]*\|[[:space:]]*$/ { print "SKIP\t" job "\t" name "\t(multi-line run: block)"; next }
+    /^[[:space:]]*- name:[[:space:]]*/ {
+      name_indent = match($0, /[^ ]/)
+      name = $0; sub(/^[[:space:]]*- name:[[:space:]]*/, "", name); next
+    }
+    /^[[:space:]]*run:[[:space:]]*\|[[:space:]]*$/ {
+      if (job == "stories") { in_stories_block = 1; storyname = name; storylines = ""; next }
+      print "SKIP\t" job "\t" name "\t(multi-line run: block)"; next
+    }
     /^[[:space:]]*run:[[:space:]]*/ {
       cmd = $0; sub(/^[[:space:]]*run:[[:space:]]*/, "", cmd)
       print "STEP\t" job "\t" name "\t" cmd
     }
+    END { flush_stories() }
   ' "$CI"
 }
 
 MAIN_JOB="${LANES_GATE_JOB:-build-and-test}"
 if [ "$LIST" = 1 ]; then
   steps | while IFS=$'\t' read -r kind job name cmd; do
-    if [ "$job" != "$MAIN_JOB" ]; then
+    if [ "$kind" = "RUN" ]; then
+      # item 76: wrapped so the step owns its chromium precondition and the
+      # run-lock itself, never a bare `eval` (gate-stories.sh's own header).
+      # `%q` survives this file's later `eval "$cmd"` as ONE argument.
+      printf 'RUN %s %q\n' "$HERE/gate-stories.sh" "$cmd"
+    elif [ "$job" != "$MAIN_JOB" ]; then
       echo "OTHER JOB $job: ${cmd:-$name} — a separate CI job; run it under the campaign run-lock, not here"
     elif [ "$kind" = "SKIP" ]; then
       echo "SKIP $name $cmd — not run here"
