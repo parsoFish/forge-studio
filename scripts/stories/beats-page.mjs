@@ -26,7 +26,10 @@
 // runner's other agent-evidence reads and bound to the TypeScript constant by
 // `beats-offsession-stall.test.ts` (T1 ruling 580).
 import { STALL_CEILING_MS, doorWorthRunning, CYCLE_WAIT_WALL_CEILING_MS } from './beats-agent-proc.mjs';
-import { cycleWaitDeadline } from './beats-cycle-progress.mjs';
+// Row 179b (T1 1973ei) — the ONE inactivity window both liveness-governed
+// branches below fold their readings into (`beats-agent-liveness.mjs`), which
+// wraps the same pure `cycleWaitDeadline` the `cycleOf` branch used inline.
+import { makeLivenessWindow } from './beats-agent-liveness.mjs';
 import { readProgress, progressTracker } from './beats-progress.mjs';
 // Bead `forge-8vfn.8.1.34` / ruling 1736 — the SAME "first poll + on change"
 // reporter `performSteps` already wraps around the ACT (bead `6.11.30`), now
@@ -313,6 +316,8 @@ export async function waitForConsequence(
   cycleWatch = null,
   spendGuard = null,
   boundRunId = null,
+  pressMs = null,
+  readLivenessNow = null,
 ) {
   const wanted = Object.entries(beat.expect.data);
   if (wanted.length === 0) return null;
@@ -325,8 +330,14 @@ export async function waitForConsequence(
   // progress. `progressExtensions` is reported in the red, in the spirit of
   // `wait-bound.mjs`'s "THE CLAMP IS NEVER HIDDEN" — nothing about why a wait
   // outlived its declared `upTo` is left for a reader to reconstruct.
-  let lastActivityAt = null;
-  let progressExtensions = 0;
+  //
+  // Row 179b (T1 1973ei) — that state now lives in ONE `makeLivenessWindow`,
+  // shared with the agent-liveness branch below, so the reset the mutation
+  // pass already proved deletable is written once, not twice.
+  const liveWindow = makeLivenessWindow({ startedAt, timeoutMs, wallCeilingMs: CYCLE_WAIT_WALL_CEILING_MS });
+  // Row 179b — what the agent-liveness read said when it could not be read,
+  // carried for the log line alone (§664(ii)), exactly as 179's repeat does.
+  let unreadableDetail = null;
   // THE KEYS THIS WAIT NEEDS COLLECTED, DECLARED — bead `forge-8vfn.6.11.45`'s
   // rule, applied to the two waits that read a key the BEAT need not mention.
   //
@@ -550,7 +561,8 @@ export async function waitForConsequence(
     // a few lines up.
     const agentScaleWait = beat.wait?.for === 'agent' || beat.wait?.for === 'settle';
     if (agentScaleWait && !watching && stallDoor !== null && sessionScope === null && typeof stallDoor.earlyDeath === 'function') {
-      const stop = stallDoor.earlyDeath(runId, anchorMs ?? startedAt, boundRunId);
+      // Row 184c: death is judged from the beat's LAST press (`pressMs`).
+      const stop = stallDoor.earlyDeath(runId, anchorMs ?? startedAt, boundRunId, pressMs ?? anchorMs ?? startedAt);
       if (stop !== null) {
         return Object.freeze({
           afterMs: Date.now() - startedAt,
@@ -650,13 +662,6 @@ export async function waitForConsequence(
       // seen a write at all is `null`, and `inactivityDeadline` below then
       // falls back to the plain, unreset `deadline`. The permissive misreading
       // this guards against is treating "no reading" as "just wrote".
-      if (idle !== null) {
-        const activityAt = pollNow - idle;
-        if (lastActivityAt === null || activityAt > lastActivityAt) {
-          if (lastActivityAt !== null) progressExtensions += 1;
-          lastActivityAt = activityAt;
-        }
-      }
       // PURE from here — `cycleWaitDeadline` (`beats-cycle-progress.mjs`) composes
       // the inactivity bound against the ABSOLUTE WALL CEILING, counted from
       // THIS WAIT'S OWN START and never reset by progress: a cycle that resets
@@ -664,16 +669,67 @@ export async function waitForConsequence(
       // becomes a new way to hang a host. `CYCLE_WAIT_WALL_CEILING_MS` lives
       // beside `MAX_DECLARED_WAIT_MS` (`story-wait-schema.mjs`) and is never a
       // field a story can declare.
-      const { deadline: cycleDeadline, firedBy } = cycleWaitDeadline({
-        startedAt, timeoutMs, lastActivityAt, wallCeilingMs: CYCLE_WAIT_WALL_CEILING_MS,
-      });
+      const { deadline: cycleDeadline, firedBy } = liveWindow.observe(pollNow, idle);
       effectiveDeadline = cycleDeadline;
+      const { lastActivityAt, extensions: progressExtensions } = liveWindow;
       // SAY WHY IT ENDED — in the spirit of `wait-bound.mjs`'s "THE CLAMP IS
       // NEVER HIDDEN": which bound actually fired, how many times progress
       // pushed it out, and when the cycle was last seen writing.
       progressNote = firedBy === 'wall'
         ? `the absolute wall ceiling of ${CYCLE_WAIT_WALL_CEILING_MS} ms fired regardless of progress (progress-extended ${progressExtensions} time(s))`
         : `no cycle progress for ${timeoutMs} ms (last write ${lastActivityAt === null ? 'never seen' : new Date(lastActivityAt).toISOString()}), progress-extended ${progressExtensions} time(s)`;
+    } else if (beat.wait?.for === 'agent' && readLivenessNow !== null) {
+      // ROW 179b (bead `forge-8vfn.8.5.27`, T1 ruling 1973ei) — EVERY OTHER
+      // AGENT WAIT GETS 179'S SHAPE: the declared bound is an INACTIVITY window
+      // reset by the watched agent's own liveness, under the same absolute
+      // ceiling, and no longer a wall clock.
+      //
+      // MEASURED. S1 beat 6 (`wait: { for: 'agent', upTo: 420_000 }`, no `do`,
+      // no `cycleOf`) reached this line with `effectiveDeadline` still the
+      // plain `startedAt + timeoutMs` above — the ONLY branch that ever moved
+      // it was `cycleOf`'s — and gave up at 15:21:02.993Z on `running` while
+      // its own probe printed `SDK child utime 12→622 — it was WORKING`. The
+      // dispatched run had written 150 lines with no gap over 15 s, and the
+      // session published `complete` 2 m 47 s later
+      // (`agent-wait-liveness-run7-capture.test.ts`, the real capture).
+      //
+      // THE ENDINGS ARE UNCHANGED, only the patience is: green the poll the
+      // page shows the expectation (above); red early on the session's OWN
+      // published state — `awaiting-answers`, crashed/stalled/terminal via
+      // `stopReasonFor` — every poll, ahead of this (row 184: the published
+      // state is the authority in both directions, so liveness can never sit
+      // past it); red on REAL inactivity, one declared window after the
+      // agent's last write; and the ceiling for a channel that never stops.
+      //
+      // `readLivenessNow` reads BY IDENTITY ONLY (`makeAgentLivenessReader`):
+      // the session the page stands on — its own channel, or for a
+      // turn.pid-only kind like onboarding the run the product's dual
+      // `turn.pid` write pairs it with — or the run the page names / the beat
+      // bound. No identity, no reading, and the plain declared bound stands.
+      // `for: 'settle'` is excluded on purpose: its job is SHARPNESS (621(ii),
+      // above), and a settle wait stretched by liveness would sit out the very
+      // wrong value it exists to fail on.
+      const pollNow = Date.now();
+      const idle = readLivenessNow(runId, boundRunId, pollNow);
+      if (idle !== null && typeof idle === 'object' && idle.unknown === true) unreadableDetail = idle.detail;
+      const { deadline: liveDeadline, firedBy } = liveWindow.observe(pollNow, idle);
+      effectiveDeadline = liveDeadline;
+      if (pollNow >= effectiveDeadline && (liveWindow.extensions > 0 || firedBy === 'wall')) {
+        // SAY WHICH BOUND ENDED IT (§664(ii), 179's two named reasons): the
+        // verdict still prints `gave up at the agent wait`, and a reader must
+        // be able to tell "the agent went quiet" from "it never did and the
+        // ceiling stopped it" without reconstructing either from `_logs/`.
+        const last = liveWindow.lastActivityAt;
+        console.log(
+          firedBy === 'wall'
+            ? `[stories] agent wait: the WALL CEILING (${liveWindow.wallCeilingMs} ms) ended this wait — the agent never ` +
+              `went quiet (liveness-extended ${liveWindow.extensions} time(s)).`
+            : `[stories] agent wait: no agent liveness for ${timeoutMs} ms (last write ` +
+              `${last === null ? 'never seen' : new Date(last).toISOString()}, liveness-extended ` +
+              `${liveWindow.extensions} time(s)) — the declared bound is an INACTIVITY window, and it expired.` +
+              (unreadableDetail === null ? '' : ` (the channel could not be read at least once: ${unreadableDetail})`),
+        );
+      }
     }
     if (Date.now() >= effectiveDeadline) {
       // Never null for an unreached terminal: the caller judges null on the LIVE

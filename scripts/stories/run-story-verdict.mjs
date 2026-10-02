@@ -11,7 +11,7 @@
  * this repo.
  */
 export function containmentVerdict({
-  story, ownGroundDrift, trailing, fence, realFence, forkGrounds, row, spendHalt, galleryRegenFailure,
+  story, ownGroundDrift, trailing, fence, realFence, forkGrounds, row, spendHalt, galleryRegenFailure, hostHead,
 }) {
   // Ruling 309(b) — an escape into a tree this run does not own reds the run
   // even when every beat is green. S1 run 5 was the reverse of this: a run that
@@ -114,6 +114,19 @@ export function containmentVerdict({
       `[stories] ${story.id}: CONTAINMENT FAILURE — ${fence.reappeared.length} path(s) this run removed ` +
       `reappeared when re-read (${fence.reappeared.join(', ')}, named above). The run is RED regardless of ` +
       'its beats.',
+    );
+    return 1;
+  }
+  // Row 188 (bead forge-8vfn.8.5.25), T1 ruling 1973dz — HEAD moved on the
+  // tree running this story: a COMMITTED escape, which the porcelain fence
+  // above cannot see by construction (S1's onboarding agent committed
+  // 72ed93fa2 onto the lane's own branch and the fence printed `clean`). Red
+  // whether or not the clear could undo it — it ran, named above, in
+  // `host-head.mjs`.
+  if (hostHead.red) {
+    console.error(
+      `[stories] ${story.id}: CONTAINMENT FAILURE — ${hostHead.summary} (named above). ` +
+      'The run is RED regardless of its beats.',
     );
     return 1;
   }

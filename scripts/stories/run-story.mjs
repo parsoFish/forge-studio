@@ -61,7 +61,8 @@ import {
   snapshotRealGrounds,
   realGroundFenceVerdict,
 } from './fixture-ground.mjs';
-import { captureBeatDom, captureFrame, captureRedEvidence, describeRedEvidence } from './red-evidence.mjs';
+import { captureBeatDom, captureFrame, captureRedEvidence, describeRedEvidence, redEvidenceDir } from './red-evidence.mjs';
+import { recordHostHead, judgeHostHead } from './host-head.mjs';
 import { captureAndClearMintedSessions, describeGroundClear, captureAndClearMintedLogs, describeLogsClear } from './ground-clear.mjs';
 import { loadRegisteredSessionKindIds } from './session-kind-registry.mjs'; // review finding 1 — groundMintedSessionPaths' required registry
 import { driveBeat } from './beats-drive.mjs';
@@ -101,6 +102,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
   // the leading sweep, so a previous run's residue is never charged to this one
   // and an operator's work-in-progress is never charged to it either.
   const treeBefore = readGitPorcelain(ROOT);
+  const headBefore = recordHostHead(ROOT); // row 188 — a COMMITTED write leaves porcelain clean (host-head.mjs)
   // Ruling 309(b) — the fence used to read ONLY this tree, so S1 run 5 printed
   // `fence: clean` in the same run that wrote into the main checkout. Every
   // OTHER worktree of this repo is snapshotted too; what grows in one is an
@@ -487,6 +489,12 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
   // still removing them; anything else is still an escape.
   for (const line of [...describeFence(fence, starterAgentSlugs(ROOT)), ...describeAttribution(fence.escapes)]) console.log(line);
   for (const line of describeGroundEscapes(story.ground?.project ?? null, fence.groundEscapes)) console.log(line);
+  // Row 188 — AFTER the porcelain fence, so foreign paths the soft reset leaves staged stay (host-head.mjs).
+  const hostHead = judgeHostHead({
+    root: ROOT, recorded: headBefore, storyId: story.id,
+    groundProject: story.ground?.project ?? null, evidenceDir: redEvidenceDir(ROOT, story.id, runStamp),
+  });
+  for (const line of hostHead.lines) console[hostHead.red ? 'error' : 'log'](line);
 
   // The run's own ground, judged against what the run demonstrably MINTED.
   // A run's own ground drift is the product WORKING — S10 run 5 ended
@@ -763,7 +771,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
   // decision reads them, prints, and returns the exit code with no further
   // work of its own. See that module for the reasoning behind each check.
   return containmentVerdict({
-    story, ownGroundDrift, trailing, fence, realFence, forkGrounds, row, spendHalt, galleryRegenFailure,
+    story, ownGroundDrift, trailing, fence, realFence, forkGrounds, row, spendHalt, galleryRegenFailure, hostHead,
   });
 }
 

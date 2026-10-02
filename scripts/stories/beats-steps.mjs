@@ -73,8 +73,12 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
   // up only as "which region got pressed" is a fallback nobody notices
   // happened.
   const textAnchors = [];
+  // Row 184c (forge-8vfn.8.5.22) — when this block's LAST act ran, `null` if
+  // it ran none. The early-death door anchors on it (T1 1973dv): the turn a
+  // press starts is born after the PRESS, not after the beat began.
+  let lastActMs = null;
   const finish = (error) =>
-    Object.freeze({ waitedForHandle, error, textAnchors: Object.freeze([...textAnchors]) });
+    Object.freeze({ waitedForHandle, error, textAnchors: Object.freeze([...textAnchors]), lastActMs });
   // Where this `do` STARTED — the page the previous BEAT left us on. The
   // wrong-page check below applies only while we are still standing there
   // (ruling 569, the multi-surface half). Once one of our own steps has
@@ -131,6 +135,7 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
         run: (inner, ms, actMs = null) => performSteps(page, inner, ms, sessionScope, probe, matches, actMs, null, stallDoor),
       });
       if (r.waitedForHandle) waitedForHandle = true;
+      if (typeof r.lastActMs === 'number') lastActMs = r.lastActMs;
       if (r.error !== null) return finish(r.error);
       continue;
     }
@@ -497,6 +502,7 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
       );
     } finally {
       stopWatch();
+      lastActMs = Date.now();
     }
   }
   return finish(null);

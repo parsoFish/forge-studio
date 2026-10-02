@@ -129,6 +129,8 @@ export async function runRepeatStep({
   readSessionLivenessNow = null, wallCeilingMs = CYCLE_WAIT_WALL_CEILING_MS, sessionScope = null,
 }) {
   let waitedForHandle = false;
+  // Row 184c — the last act any round ran, carried out like `waitedForHandle`.
+  let lastActMs = null;
   // 7.6.77's REPEAT HALF, and the half that matters for S1 beat 11.
   //
   // `perTransition` shipped first on the CONSEQUENCE wait, which beat 11 barely
@@ -151,6 +153,7 @@ export async function runRepeatStep({
   if (until === null || matches === null) {
     return {
       waitedForHandle,
+      lastActMs,
       error:
         'a `repeat` step needs an `until`: the condition that ends the loop, named by the repeat ' +
         'itself. Without it the loop would be bounded only by the wait. (T1 ruling 320 — the ' +
@@ -259,7 +262,7 @@ export async function runRepeatStep({
     // terminal failure as an ordinary gap between rounds.
     if (sessionScope !== null) {
       const why = await stopNow(page, sessionScope);
-      if (why !== null) return { waitedForHandle, error: `${why} — the repeat stops, rather than sitting out a bound liveness alone kept extending.` };
+      if (why !== null) return { waitedForHandle, lastActMs, error: `${why} — the repeat stops, rather than sitting out a bound liveness alone kept extending.` };
     }
     // Checked BEFORE the gate test, unlike the consequence wait's, and for the
     // opposite reason: there the product's own verdict is a better explanation
@@ -274,7 +277,7 @@ export async function runRepeatStep({
       // a reset (§6.15).
       const eventLines = readSessionEventsNow === null ? null : await readSessionEventsNow();
       const why = tracker.observe(await readProgressNow(), eventLines);
-      if (why !== null) return { waitedForHandle, error: why };
+      if (why !== null) return { waitedForHandle, lastActMs, error: why };
     }
 
     // Nothing to act on yet — the agent turn between rounds is still running.
@@ -298,6 +301,7 @@ export async function runRepeatStep({
       if (await isSatisfied()) { interrupted = true; break; }
       const inner = await run([one], boundLeft(), ACT_BOUND_MS);
       if (inner.waitedForHandle) waitedForHandle = true;
+      if (typeof inner.lastActMs === 'number') lastActMs = inner.lastActMs;
       if (inner.error === null) continue;
       // The product may have moved on mid-round — a control vanishing BECAUSE
       // the expectation is now met is a success, not a failure.
@@ -309,7 +313,7 @@ export async function runRepeatStep({
       // symptom. Bounded by the beat's own declared wait, which the positive
       // control below still reds on.
       if (!PAGE_MOVED_RE.test(inner.error)) {
-        return { waitedForHandle, error: `repeat, round ${rounds + 1}: ${inner.error}` };
+        return { waitedForHandle, lastActMs, error: `repeat, round ${rounds + 1}: ${inner.error}` };
       }
       await new Promise((r) => setTimeout(r, Math.min(POLL_MS, boundLeft())));
       interrupted = true;
@@ -334,6 +338,7 @@ export async function runRepeatStep({
     if (!sawGate) {
       return {
         waitedForHandle,
+        lastActMs,
         error:
           `repeat: the act ${gate} never became available on "${new URL(page.url()).pathname}" in ` +
           `this beat's declared bound (${timeoutMs} ms), so no round was ever answered. Either this ` +
@@ -356,6 +361,7 @@ export async function runRepeatStep({
     if (livenessGoverned) {
       return {
         waitedForHandle,
+        lastActMs,
         error: firedBy === 'wall'
           ? `repeat: answered ${rounds} round(s) and the WALL CEILING (${wallCeilingMs} ms) ran out before its ` +
             `\`until\` (${JSON.stringify(until)}) was met. This beat's declared bound (${timeoutMs} ms) became ` +
@@ -372,11 +378,12 @@ export async function runRepeatStep({
     }
     return {
       waitedForHandle,
+      lastActMs,
       error:
         `repeat: answered ${rounds} round(s) and this beat's declared bound (${timeoutMs} ms) ran ` +
         `out before its \`until\` (${JSON.stringify(until)}) was met.`,
     };
   }
 
-  return { waitedForHandle, error: null };
+  return { waitedForHandle, lastActMs, error: null };
 }

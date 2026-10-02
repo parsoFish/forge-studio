@@ -93,6 +93,8 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { TERMINAL_STOPPED_PHASES } from './beats-page-read.mjs';
+
 /**
  * How far a file timestamp may trail `Date.now()` and still be "at or after"
  * an anchor. The kernel stamps mtime/ctime from its COARSE clock, which runs
@@ -270,6 +272,8 @@ export function channelTerminalState(forgeRoot, dir) {
   }
 
   let lastEvent = null;
+  let lastEventAtMs = null;
+  let published = null;
   let eventsReadable = false;
   let eventsRealError = null;
   try {
@@ -277,8 +281,17 @@ export function channelTerminalState(forgeRoot, dir) {
     eventsReadable = true;
     const rows = raw.split('\n').filter((l) => l.trim() !== '');
     for (let i = rows.length - 1; i >= 0; i -= 1) {
-      try { const ev = JSON.parse(rows[i]); if (typeof ev?.event_type === 'string') { lastEvent = ev.event_type; break; } } catch { /* a torn row is not a verdict */ }
+      try {
+        const ev = JSON.parse(rows[i]);
+        if (typeof ev?.event_type === 'string') {
+          lastEvent = ev.event_type;
+          const parsed = Date.parse(ev.started_at);
+          lastEventAtMs = Number.isNaN(parsed) ? null : parsed;
+          break;
+        }
+      } catch { /* a torn row is not a verdict */ }
     }
+    published = turnPublishedPhase(rows);
   } catch (err) {
     if (err?.code !== 'ENOENT') eventsRealError = `could not read ${join(dir, 'events.jsonl')}: ${err?.code ?? err?.message}`;
   }
@@ -296,7 +309,17 @@ export function channelTerminalState(forgeRoot, dir) {
     };
   }
   if (lastEvent === 'error') {
-    return { state: 'error', detail: `its last events.jsonl row is event_type=error` };
+    return { state: 'error', detail: `its last events.jsonl row is event_type=error`, ...(lastEventAtMs === null ? {} : { atMs: lastEventAtMs }) };
+  }
+  // ROW 184d (forge-8vfn.8.5.24) — THE SESSION'S OWN PUBLISHED PHASE. See
+  // `turnPublishedPhase` below; `atMs` is the event's own fine timestamp, so
+  // a caller can tell this press's word from the previous turn's.
+  if (published !== null && isSettledTurnPhase(published.phase)) {
+    return {
+      state: `phase=${published.phase}`,
+      atMs: published.atMs,
+      detail: `its turn's own end event published phase=${published.phase} at ${new Date(published.atMs).toISOString()}`,
+    };
   }
   // NOTHING CONCLUSIVE. THE GATE, WIDENED (T1 1507): unknown when EITHER side
   // hit a REAL error, not only when BOTH gave up — before this, a one-sided
@@ -313,3 +336,52 @@ export function channelTerminalState(forgeRoot, dir) {
   }
   return null;
 }
+
+/**
+ * ROW 184d (forge-8vfn.8.5.24), T1 ruling 1973dz — a SESSION channel's own
+ * published phase, read off the turn's `end` event.
+ *
+ * MEASURED on S1 run 6 beat 11. The finalize turn the approve press started
+ * wrote `architect turn end (phase=committed)` at 14:38:41.641 — the same
+ * instant `status.json` went `committed` — and exited. `channelTerminalState`
+ * knew only `_queue/` states and `event_type=error`, so early death read a
+ * COMMITTED session as "no terminal state — nothing published" and reded
+ * `channel-quiet` at 41.958. A session's turn publishes its phase on its own
+ * `end` row: `metadata.phase` is set by `kind-turn.ts` (every kind turn,
+ * architect included) and `interactive-runner.ts` alike, from the same
+ * `result.phase` the turn writes into `status.json` — the product's own
+ * field, not one invented here.
+ *
+ * ONLY THE CURRENT TURN'S END COUNTS. Read backwards, a `start` row before any
+ * phased `end` means a newer turn began and has not ended — its predecessor's
+ * phase is not its word. Priced cost rows are `end` rows too
+ * (`turn-cost-rows.ts`) but carry no `phase`, so they are stepped over.
+ *
+ * @returns {null | {phase: string, atMs: number}}
+ */
+function turnPublishedPhase(rows) {
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    let ev;
+    try { ev = JSON.parse(rows[i]); } catch { continue; } // a torn row is not a verdict
+    if (ev?.event_type === 'start') return null;
+    if (ev?.event_type !== 'end' || typeof ev?.metadata?.phase !== 'string') continue;
+    const atMs = Date.parse(ev.started_at);
+    return Number.isNaN(atMs) ? null : { phase: ev.metadata.phase, atMs };
+  }
+  return null;
+}
+
+/**
+ * Which published phases SETTLE a channel — nothing more will be written
+ * until someone acts. T1 1973dz named `committed` and the operator gates
+ * `awaiting-*`; the DONE half of the session vocabulary (`committed | locked |
+ * applied | complete`, `beats-page-read.mjs`'s own list less `applying`, which
+ * is still WORKING) and `TERMINAL_STOPPED_PHASES`' failure set are the same
+ * kind of word. A mid-turn phase (`drafting`, `exploring`, `finalizing`, …)
+ * left by a dead process settles nothing — that is exactly what a death looks
+ * like, and stays `channel-quiet`.
+ */
+function isSettledTurnPhase(phase) {
+  return phase.startsWith('awaiting-') || DONE_TURN_PHASES.has(phase) || TERMINAL_STOPPED_PHASES.has(phase);
+}
+const DONE_TURN_PHASES = new Set(['committed', 'locked', 'applied', 'complete']);
