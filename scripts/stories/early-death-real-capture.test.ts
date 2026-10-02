@@ -41,6 +41,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { makeAgentChannelDoor } from './beats-agent-proc.mjs';
+import { PUBLISHED_TERMINAL_GRACE_MS } from './beats-early-death.mjs';
 
 const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), 'test-fixtures', 'run5-s1-beat11');
 const CHANNEL = '_architect-2026-10-02T13-42-51-e20207b9';
@@ -126,8 +127,16 @@ test('row 184c (positive control, REAL capture): once that turn has genuinely ex
   const after = [];
   for (let i = 0; i < 3; i += 1, now += 100) after.push(door.earlyDeath(CHANNEL, BEAT_ANCHOR, null, LAST_PRESS, now));
   assert.equal(after[0], null, 'one dead reading proves nothing — the first gets its free poll');
-  assert.notEqual(after[1], null, 'graced once and still dead: the door reports');
-  assert.match(after[1].detail, /REAPED/);
+  // Row 184d (forge-8vfn.8.5.24): that turn's last line is `phase=committed`,
+  // the product's own word, so the page gets two of ITS polls from 28.309
+  // before the door reports — and reports it as `channel-ended`, not a stall.
+  assert.equal(after[1], null, 'a published terminal gives the page its full grace before the door judges');
+  const committedAt = at('2026-10-02T13:55:28.309Z');
+  assert.equal(door.earlyDeath(CHANNEL, BEAT_ANCHOR, null, LAST_PRESS, committedAt + PUBLISHED_TERMINAL_GRACE_MS - 1), null);
+  const ended = door.earlyDeath(CHANNEL, BEAT_ANCHOR, null, LAST_PRESS, committedAt + PUBLISHED_TERMINAL_GRACE_MS);
+  assert.notEqual(ended, null, 'grace spent and still dead: the door reports');
+  assert.equal(ended.reason, 'channel-ended');
+  assert.match(ended.detail, /REAPED.*phase=committed/);
 });
 
 test('row 184c (T1 1973dv): early death never fires inside two poll intervals of the beat\'s last press, nor on a turn born before it', async (t) => {

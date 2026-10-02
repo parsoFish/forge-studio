@@ -1,0 +1,5 @@
+# MTIMES.txt lines for the _architect channel, verbatim from the run-6 red evidence
+2026-10-02T14:36:36.864Z  _logs/_architect-2026-10-02T14-26-53-f3f34b96/stderr.log
+2026-10-02T14:38:38.653Z  _logs/_architect-2026-10-02T14-26-53-f3f34b96/.heartbeat
+2026-10-02T14:38:41.186Z  _logs/_architect-2026-10-02T14-26-53-f3f34b96/turn.pid
+2026-10-02T14:38:41.638Z  _logs/_architect-2026-10-02T14-26-53-f3f34b96/events.jsonl

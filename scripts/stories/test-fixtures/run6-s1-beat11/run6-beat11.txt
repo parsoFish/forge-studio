@@ -1,0 +1,12 @@
+# run6.log lines 96-106 (beat 11's last presses through its red), verbatim
+[2026-10-02T14:29:40.063Z] [stories] while waiting on [data-action="submit-answers"]: [data-action="submit-answers"]: no element carries that handle yet
+[2026-10-02T14:38:38.743Z] [stories] while waiting on [data-action="open-plan"]: present and enabled
+[2026-10-02T14:38:40.995Z] [stories] while waiting on [data-action="approve-plan"]: [data-action="approve-plan"]: no element carries that handle yet
+[2026-10-02T14:38:41.103Z] [stories] while waiting on [data-action="approve-plan"]: present and enabled
+[2026-10-02T14:38:41.958Z] [stories] spend after beat 11: $5.4828 of $25.00
+[2026-10-02T14:38:41.958Z] [stories] host after beat 11: loadavg 6.92 5.99 4.96  MemAvailable 6.5GiB
+[2026-10-02T14:38:41.958Z]   ✗ 11. Open the session, read the plan and press Approve
+[2026-10-02T14:38:41.958Z]       data-architect-phase: expected "committed", got "awaiting-verdict"
+[2026-10-02T14:38:41.958Z]       data-gate-armed: expected "false", got "true"
+[2026-10-02T14:38:41.958Z]       data-plan-mode: expected "view", got "gate"
+[2026-10-02T14:38:41.958Z]       channel-quiet: the agent channel _architect-2026-10-02T14-26-53-f3f34b96's own process has been REAPED and, one poll later, it still carries no terminal state — nothing published, and nothing left running to publish one. The beat's expectations never held. 1s into the agent wait (declared 1200000 ms) — the beat stopped there rather than sitting out its declared bound

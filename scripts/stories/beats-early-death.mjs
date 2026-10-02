@@ -50,6 +50,28 @@ import { CONSEQUENCE_POLL_MS } from './beats-page-read.mjs';
 export const PRESS_GRACE_MS = 2 * CONSEQUENCE_POLL_MS;
 
 /**
+ * ROW 184d (forge-8vfn.8.5.24), T1 ruling 1973dz — the PAGE's own poll of the
+ * session it renders: `useArchitectSessionPoll`'s default `intervalMs`
+ * (`apps/studio/lib/use-architect-session.ts`), which is what `/artifact`'s
+ * plan gate re-reads `phase` on. Copied, not imported (this harness is plain
+ * `.mjs` with no type stripping, `TERMINAL_STOPPED_PHASES`' own reason);
+ * `early-death-run6-capture.test.ts` asserts the two never drift apart.
+ */
+export const STUDIO_SESSION_POLL_MS = 2_000;
+
+/**
+ * How long after a turn's OWN published terminal (its `end` event's
+ * `metadata.phase`, `kind-turn.ts`) this door stays shut: two of the PAGE's
+ * polls, measured from the terminal's own timestamp. S1 run 6 beat 11 reded
+ * 317 ms after `phase=committed` with the page still on `awaiting-verdict` —
+ * a page that re-reads every 2 s had simply not looked yet. Two runner polls
+ * (`PRESS_GRACE_MS`, 200 ms) would not have been enough on that capture; two
+ * page polls are the shortest grace in which a page that is going to catch up
+ * provably has.
+ */
+export const PUBLISHED_TERMINAL_GRACE_MS = 2 * STUDIO_SESSION_POLL_MS;
+
+/**
  * @param {string} forgeRoot
  * @param {(runId: string|null, sinceMs: number, boundRunId?: string|null) => string|null} resolveDir
  *   the SAME channel-dir resolution `makeAgentChannelDoor`'s own `door` uses
@@ -120,9 +142,26 @@ export function makeEarlyDeathDoor(forgeRoot, resolveDir) {
     // product's own terminal word, read now rather than after
     // `STALL_CEILING_MS` of silence nobody needed to sit through for a
     // dispatch that has been gone since before this door ever looked.
-    const terminal = channelTerminalState(forgeRoot, dir);
+    const read = channelTerminalState(forgeRoot, dir);
     const chan = dir.slice(dir.lastIndexOf('/') + 1);
+    // ROW 184d (forge-8vfn.8.5.24), T1 ruling 1973dz. A terminal carrying its
+    // own timestamp (`atMs` — the turn's `end` event, or an `error` row) that
+    // PREDATES this beat's press is the previous turn's word, not this one's:
+    // S1 run 6's draft turn left `phase=awaiting-verdict` three seconds before
+    // the approve press, and a finalize turn that died without writing must
+    // still read as quiet. Fine event clocks on both sides, so no fs slack.
+    const stale = read !== null && read.unknown !== true && typeof read.atMs === 'number' && read.atMs < pressMs;
+    const terminal = stale ? null : read;
     if (terminal !== null && terminal.unknown !== true) {
+      // THE PAGE GETS ITS FULL GRACE FROM THE TERMINAL'S OWN TIMESTAMP. S1
+      // run 6 beat 11 reded 317 ms after `phase=committed` with the page still
+      // rendering `awaiting-verdict`: the page re-reads the session every
+      // `STUDIO_SESSION_POLL_MS` and had not looked yet. Returning null here
+      // lets `waitForConsequence`'s own green check (`beats-page.mjs`, ahead
+      // of this door on every poll) pass the beat the moment the page catches
+      // up; only a page still behind after two of its own polls is told so.
+      // A terminal with no timestamp (a `_queue/` move) keeps the old rule.
+      if (typeof terminal.atMs === 'number' && nowMs - terminal.atMs < PUBLISHED_TERMINAL_GRACE_MS) return null;
       return {
         reason: 'channel-ended',
         detail:
@@ -134,7 +173,8 @@ export function makeEarlyDeathDoor(forgeRoot, resolveDir) {
       reason: 'channel-quiet',
       detail:
         `the agent channel ${chan}'s own process has been REAPED and, one poll later, it still carries no ` +
-        'terminal state — nothing published, and nothing left running to publish one.',
+        'terminal state — nothing published, and nothing left running to publish one.' +
+        (stale ? ` (Its last published word, ${read.state}, predates this beat's press.)` : ''),
     };
   };
 }
