@@ -35,6 +35,7 @@ import { join } from 'node:path';
 
 const SRC_PATH = join(import.meta.dirname, 'run.mjs');
 const src = () => readFileSync(SRC_PATH, 'utf8');
+const stopSrc = () => readFileSync(join(import.meta.dirname, 'stop-path.mjs'), 'utf8');
 const STOP_CALL = 'const stop = await stopSchedulerCensusAndRelease(ROOT, { sinceMs: startedMs });';
 
 test('MUST 1: teardownExitCode is imported from sweep-teardown.mjs', () => {
@@ -166,31 +167,31 @@ test('row 184b: bridgeProc and inProgressGround are declared BEFORE the signal l
 
 test('row 184b: the handler kills THIS run\'s own bridge process group, not only the ordinary finally block', () => {
   const s = src();
-  assert.match(
-    s,
-    /import\s*\{[^}]*\bkillBridgeProcessGroup\b[^}]*\}\s*from\s*'\.\/bridge\.mjs';/,
-    'killBridgeProcessGroup must be imported alongside the other bridge helpers',
-  );
+  // Row 187 (forge-8vfn.8.5.23): the kill moved into `runStopPath`
+  // (`stop-path.mjs`), which also reaps the run's detached turns and waits
+  // for the bridge group to exit before the clear — so the handler must hand
+  // it `bridgeProc` and await it before `process.exit`.
   const handlerAt = s.indexOf('const onStopSignal =');
   const exitAt = s.indexOf('process.exit(signal ===', handlerAt);
   assert.notEqual(handlerAt, -1);
   assert.notEqual(exitAt, -1, 'the handler must still end in process.exit');
-  const killAt = s.indexOf('killBridgeProcessGroup(bridgeProc', handlerAt);
-  assert.notEqual(killAt, -1, 'the handler must call killBridgeProcessGroup(bridgeProc, …) — a bridge this run booted must not survive a SIGINT/SIGTERM');
-  assert.ok(killAt < exitAt, 'the kill must run BEFORE process.exit, or the signal to the bridge never gets sent');
+  const callAt = s.indexOf('runStopPath({', handlerAt);
+  assert.notEqual(callAt, -1, 'the handler must run runStopPath');
+  assert.ok(callAt < exitAt, 'runStopPath must run BEFORE process.exit');
+  assert.match(s.slice(callAt, exitAt), /\bbridgeProc\b/, 'runStopPath must be handed this run\'s own bridgeProc');
+  assert.match(stopSrc(), /killBridgeProcessGroup\(bridgeProc, 'SIGTERM'\)/, 'stop-path.mjs must signal the bridge group');
 });
 
 test('row 184b: the finally block\'s OWN bridge teardown reuses the SAME helper, never a second copy of the kill', () => {
   const s = src();
   const finallyAt = s.indexOf('} finally {');
-  const handlerAt = s.indexOf('const onStopSignal =');
   const killCalls = [...s.matchAll(/killBridgeProcessGroup\(/g)].map((m) => m.index);
-  assert.ok(killCalls.length >= 2, `expected at least 2 call sites (onStopSignal + finally), found ${killCalls.length}`);
-  assert.ok(killCalls.some((i) => i > handlerAt && i < finallyAt), 'one call must be inside onStopSignal');
   assert.ok(killCalls.some((i) => i > finallyAt), 'one call must be inside the ordinary finally block');
+  assert.match(stopSrc(), /import \{ killBridgeProcessGroup \} from '\.\/bridge\.mjs';/, 'the stop path reuses the SAME helper');
   // The raw `process.kill(-bridgeProc.pid` this used to be, inline, must be
   // gone — a second copy of the same kill is exactly how the two drift.
   assert.doesNotMatch(s, /process\.kill\(-bridgeProc\.pid/, 'the finally block must no longer inline its own process-group kill');
+  assert.doesNotMatch(stopSrc(), /process\.kill\(-/, 'nor may the stop path');
 });
 
 test('row 184b: the handler captures + clears the IN-PROGRESS story\'s own minted ground sessions', () => {

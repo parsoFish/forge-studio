@@ -66,6 +66,7 @@ import { recordReapedCancellations } from './reap-cancel.mjs';
 // every story IT reaches; see that module's header for why a signal needs a
 // second copy rather than reusing `runStory`'s internal one.
 import { captureAndClearMintedSessionsSince } from './ground-abort-clear.mjs';
+import { runStopPath } from './stop-path.mjs';
 import { mintedSessionDirNames } from './ground-minted.mjs';
 import { captureAndClearMintedLogs, describeLogsClear, describeGroundClear } from './ground-clear.mjs';
 import { loadRegisteredSessionKindIds } from './session-kind-registry.mjs';
@@ -180,80 +181,76 @@ async function main() {
     const runStamp = new Date(startedMs).toISOString().replace(/[:.]/g, '-');
     const evidenceDir = join(ROOT, '_logs', '_story-post-stop-sweep', 'stopped-run', runStamp);
     console.log(`[stories] received ${signal} — running the post-stop sweep before exit`);
-    try {
-      const swept = sweepCycleArtefacts('stopped-run', ROOT, {
-        sinceMs: startedMs, evidenceDir, schedulerAlive: false,
-      });
-      for (const line of swept.lines) console.log(`[stories] post-stop sweep: ${line}`);
-    } catch (err) {
-      console.error(`[stories] post-stop sweep failed: ${err?.message ?? err}`);
-    }
-    try {
-      const bornLogs = captureAndClearBornLogDirs(ROOT, {
-        prefixes: ['_agent-', '_authoring-'], sinceMs: startedMs, evidenceDir,
-      });
-      for (const line of describeBornLogDirsClear(bornLogs)) {
-        console.log(`[stories] post-stop sweep: ${line}`);
-      }
-    } catch (err) {
-      console.error(`[stories] post-stop sweep (agent/authoring logs) failed: ${err?.message ?? err}`);
-    }
-    // Defect B fold, row 184b (forge-8vfn.8.5.21) — the bridge THIS run
-    // booted, and its WHOLE process group (`next-server` included), signalled
-    // here too. Before this fix only the ordinary `finally` block at the
-    // bottom of `main()` ever touched `bridgeProc`, and a signal skips that
-    // block entirely — measured: a bridge this path never reached held
-    // 4123/4124 for as long as ten minutes after its own run was gone,
-    // refusing the NEXT run's boot ("foreign bridge on 4123"). Signalled
-    // BEFORE the ground clear below, so nothing it (or a scheduler it
-    // started) is still writing races the snapshot that clear reads.
-    if (bridgeProc !== null) {
-      console.log(`[stories] post-stop sweep: signalling this run's own bridge (pid ${bridgeProc.pid}) and its process group`);
-      killBridgeProcessGroup(bridgeProc, 'SIGTERM');
-    }
-    // Defect B fold, row 184b — the IN-PROGRESS story's own minted sessions,
-    // captured and cleared exactly as `run-story.mjs` already does at the end
-    // of every story it reaches ("own ground: CAPTURED … CLEARED …"). A
-    // signal skips that function entirely, so without this a minted session
-    // (an architect's `_architect/<sid>/…`) survived in the REAL ground,
-    // moving its method-C hash off the pin the next run's launcher checks.
-    if (inProgressGround !== null) {
+    // Row 187 (forge-8vfn.8.5.23) — `runStopPath` (`stop-path.mjs`) signals
+    // the bridge's group, REAPS this run's detached agent turns, and waits
+    // (bounded) for the bridge to exit, all BEFORE `clear` below captures and
+    // clears anything: a turn left running wrote into the real ground minutes
+    // after this path had finished. `clear` is the post-stop sweep as before.
+    const clear = () => {
       try {
-        const logsDir = join(ROOT, '_logs');
-        const groundAfter = ownGroundManifest(ROOT, inProgressGround.project);
-        let logsAfter = [];
-        try {
-          logsAfter = readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name);
-        } catch (err) {
-          console.error(`[stories] post-stop sweep (own ground) could not read ${logsDir}: ${err?.message ?? err}`);
-        }
-        const clear = captureAndClearMintedSessionsSince({
-          root: ROOT,
-          project: inProgressGround.project,
-          storyId: inProgressGround.storyId,
-          runStamp,
-          groundBefore: inProgressGround.groundBefore,
-          groundAfter,
-          logsBefore: inProgressGround.logsBefore,
-          logsAfter,
-          logsDir,
-          registeredKindIds: loadRegisteredSessionKindIds(ROOT),
+        const swept = sweepCycleArtefacts('stopped-run', ROOT, {
+          sinceMs: startedMs, evidenceDir, schedulerAlive: false,
         });
-        for (const line of describeGroundClear(clear, inProgressGround.project)) {
-          console.log(`[stories] post-stop sweep: ${line}`);
-        }
-        const mintedLogNames = mintedSessionDirNames(inProgressGround.logsBefore, logsAfter, logsDir);
-        const logsClear = captureAndClearMintedLogs({
-          root: ROOT, storyId: inProgressGround.storyId, runStamp, mintedNames: mintedLogNames,
+        for (const line of swept.lines) console.log(`[stories] post-stop sweep: ${line}`);
+      } catch (err) {
+        console.error(`[stories] post-stop sweep failed: ${err?.message ?? err}`);
+      }
+      try {
+        const bornLogs = captureAndClearBornLogDirs(ROOT, {
+          prefixes: ['_agent-', '_authoring-'], sinceMs: startedMs, evidenceDir,
         });
-        for (const line of describeLogsClear(logsClear)) {
+        for (const line of describeBornLogDirsClear(bornLogs)) {
           console.log(`[stories] post-stop sweep: ${line}`);
         }
       } catch (err) {
-        console.error(`[stories] post-stop sweep (own ground) failed: ${err?.message ?? err}`);
+        console.error(`[stories] post-stop sweep (agent/authoring logs) failed: ${err?.message ?? err}`);
       }
-    }
-    process.exit(signal === 'SIGINT' ? 130 : 143); // 128+signum, the conventional signal exit code
+      // Defect B fold, row 184b — the IN-PROGRESS story's own minted sessions,
+      // captured and cleared exactly as `run-story.mjs` already does at the end
+      // of every story it reaches ("own ground: CAPTURED … CLEARED …"). A
+      // signal skips that function entirely, so without this a minted session
+      // (an architect's `_architect/<sid>/…`) survived in the REAL ground,
+      // moving its method-C hash off the pin the next run's launcher checks.
+      if (inProgressGround !== null) {
+        try {
+          const logsDir = join(ROOT, '_logs');
+          const groundAfter = ownGroundManifest(ROOT, inProgressGround.project);
+          let logsAfter = [];
+          try {
+            logsAfter = readdirSync(logsDir, { withFileTypes: true }).map((e) => e.name);
+          } catch (err) {
+            console.error(`[stories] post-stop sweep (own ground) could not read ${logsDir}: ${err?.message ?? err}`);
+          }
+          const groundClear = captureAndClearMintedSessionsSince({
+            root: ROOT,
+            project: inProgressGround.project,
+            storyId: inProgressGround.storyId,
+            runStamp,
+            groundBefore: inProgressGround.groundBefore,
+            groundAfter,
+            logsBefore: inProgressGround.logsBefore,
+            logsAfter,
+            logsDir,
+            registeredKindIds: loadRegisteredSessionKindIds(ROOT),
+          });
+          for (const line of describeGroundClear(groundClear, inProgressGround.project)) {
+            console.log(`[stories] post-stop sweep: ${line}`);
+          }
+          const mintedLogNames = mintedSessionDirNames(inProgressGround.logsBefore, logsAfter, logsDir);
+          const logsClear = captureAndClearMintedLogs({
+            root: ROOT, storyId: inProgressGround.storyId, runStamp, mintedNames: mintedLogNames,
+          });
+          for (const line of describeLogsClear(logsClear)) {
+            console.log(`[stories] post-stop sweep: ${line}`);
+          }
+        } catch (err) {
+          console.error(`[stories] post-stop sweep (own ground) failed: ${err?.message ?? err}`);
+        }
+      }
+    };
+    runStopPath({ root: ROOT, startedMs, bridgeProc, clear })
+      .catch((err) => console.error(`[stories] post-stop path failed: ${err?.message ?? err}`))
+      .finally(() => process.exit(signal === 'SIGINT' ? 130 : 143)); // 128+signum, the conventional signal exit code
   };
   process.once('SIGTERM', () => onStopSignal('SIGTERM'));
   process.once('SIGINT', () => onStopSignal('SIGINT'));
