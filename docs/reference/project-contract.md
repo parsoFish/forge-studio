@@ -689,6 +689,21 @@ paths that no longer exist in the project tree. A stale theme silently misleads
 the PM/architect. WARN-only: themes legitimately reference history; the operator
 judges.
 
+### DEPS — The declared gate is runnable in the ground *(HARD at claim time only)*
+
+The project's declared `testProcess.local.cmd` must be runnable at HEAD in the
+checkout under `projects/<id>`, which for a Node project means its dependencies
+are installed there (`npm ci`). Initiative worktrees link the ground's
+`node_modules`, so a ground that was cloned and never installed cannot run its
+own gate. The scheduler checks this clause when it claims an initiative and
+refuses the claim, leaving the initiative pending, with the reason in
+`_logs/daemon/serve.log`. **`forge preflight` does not run this clause**, so a
+preflight that reads CONTRACT MET does not prove the claim will pass: install
+the project's dependencies after cloning it. A running scheduler does not
+retry a claim it refused for this reason (`packages/flows/claim-validator.ts`
+records the refusal for the life of the process), so after fixing the ground,
+stop and start the scheduler to have it claim the initiative again.
+
 ---
 
 ## Artifact layout
