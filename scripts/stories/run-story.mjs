@@ -75,7 +75,7 @@ import {
 import { containmentVerdict } from './run-story-verdict.mjs';
 import { resolveBeatRoute } from './beats.mjs';
 import { renderDocFragment, docPathFor } from './docs-fragment.mjs';
-import { writeStoryJson, regenerateGallery, storyRowFrom, artifactSpend } from './gallery.mjs';
+import { writeStoryJson, regenerateGalleryForRun, storyRowFrom, artifactSpend } from './gallery.mjs';
 import { collectAgentRuns, reapAgentRuns, describeReap, withPricedTerminationLabel } from './reap.mjs';
 import { reappeared } from './quiesce.mjs';
 import { reapCensusAndSweep } from './sweep-teardown.mjs';
@@ -91,7 +91,7 @@ const VIEWPORT = { width: 1600, height: 1000 };
 const slug = (s) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
 
-export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null) {
+export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null, writtenThisRun) {
   // This run's own stamp for its red evidence (`6.11.50`) — one value for the
   // whole run, so the DOM captured at a beat and the ground read before the
   // sweep land in the SAME directory and no previous run's files sit beside
@@ -670,7 +670,6 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
 
   // Row 56 (`artifactSpend`, gallery.mjs) narrows `spend` to what #890's `spendFieldFor` reads; `realGrounds` is fixture-only.
   const result = { story, beats, reap, sweep, fence, spend: artifactSpend(spend), ...(realGrounds !== null ? { realGrounds } : {}) };
-  const wroteThisRun = [writeStoryJson(result, ROOT)];
 
   // Ruling 308's second half — the ground's Brain 3 was HELD through the fence
   // so preflight clause C4 can pass while the verdict is being read (removing
@@ -686,11 +685,32 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   mkdirSync(dirname(docPath), { recursive: true });
   writeFileSync(docPath, renderDocFragment(result));
 
-  // 7.6.81 — exempt set = what writeStoryJson RETURNED (see its doc for why).
-  regenerateGallery(ROOT, wroteThisRun);
-
   const row = storyRowFrom(result);
+  // Row 181 (`forge-8vfn.8.5.17`, measured twice) — THIS LINE PRINTS BEFORE
+  // the gallery regen below, unconditionally. It used to run only AFTER a
+  // successful `regenerateGallery`, so a regen that threw — on an artefact
+  // belonging to a story that had already run earlier in THIS SAME
+  // invocation — skipped this story's own verdict line entirely, and the
+  // throw propagated out of `runStory` into `run.mjs`'s loop, aborting every
+  // story still queued after it. This story's verdict is its own fact,
+  // independent of what the shared gallery index does with it afterwards.
   console.log(`[stories] ${story.id}: ${row.status} — ${row.greenBeats}/${row.beats} beats green`);
+
+  // 7.6.81 / 8.5.17 — the exempt set is the WHOLE INVOCATION's, never only
+  // this story's own id: `writtenThisRun` is ONE array for the whole batch,
+  // owned by `run.mjs`'s loop and threaded in here, mutated (never replaced)
+  // so the next story's own call sees every id written so far.
+  // `regenerateGalleryForRun` never throws — a refusal (always a GENUINELY
+  // foreign untracked target; this story's own artefacts are always exempt)
+  // is returned as a reason string and folded into THIS story's own
+  // containment verdict below, the same shape every other post-beat
+  // containment gate already uses, rather than aborting `run.mjs`'s loop and
+  // silently cancelling every story still queued after this one.
+  const wroteId = writeStoryJson(result, ROOT);
+  const galleryRegenFailure = regenerateGalleryForRun(ROOT, writtenThisRun, wroteId);
+  if (galleryRegenFailure !== null) {
+    console.error(`[stories] ${story.id}: GALLERY REGEN FAILED — ${galleryRegenFailure}`);
+  }
   // 7.6.51: a breach is RED on its own terms and must not be read off the beat
   // score. A run stopped at beat 8 of 23 for spending its ceiling has a beat
   // count that looks like an ordinary red, and the two are different facts —
@@ -724,7 +744,7 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null)
   // decision reads them, prints, and returns the exit code with no further
   // work of its own. See that module for the reasoning behind each check.
   return containmentVerdict({
-    story, ownGroundDrift, trailing, fence, realFence, forkGrounds, row, spendHalt,
+    story, ownGroundDrift, trailing, fence, realFence, forkGrounds, row, spendHalt, galleryRegenFailure,
   });
 }
 

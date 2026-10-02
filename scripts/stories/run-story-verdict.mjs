@@ -5,11 +5,14 @@
  *
  * PURE MOVE out of `run-story.mjs` (bead `forge-8vfn.8.1.32`) — the block is
  * a natural seam: every input below (`ownGroundDrift`, `trailing`, `fence`,
- * `realFence`, `forkGrounds`, `row`, `spendHalt`) is fully computed by the
- * time it runs, and this does nothing but read them, print, and decide the
- * exit code. It needs no import from anywhere else in this repo.
+ * `realFence`, `forkGrounds`, `row`, `spendHalt`, `galleryRegenFailure`) is
+ * fully computed by the time it runs, and this does nothing but read them,
+ * print, and decide the exit code. It needs no import from anywhere else in
+ * this repo.
  */
-export function containmentVerdict({ story, ownGroundDrift, trailing, fence, realFence, forkGrounds, row, spendHalt }) {
+export function containmentVerdict({
+  story, ownGroundDrift, trailing, fence, realFence, forkGrounds, row, spendHalt, galleryRegenFailure,
+}) {
   // Ruling 309(b) — an escape into a tree this run does not own reds the run
   // even when every beat is green. S1 run 5 was the reverse of this: a run that
   // wrote into the main checkout and reported `fence: clean`, because nothing
@@ -145,6 +148,20 @@ export function containmentVerdict({ story, ownGroundDrift, trailing, fence, rea
   }
   // T1 ruling 1350 — a fork case's own ground, judged like the base ground above.
   if (forkGrounds.redReason !== null) { console.error(`[stories] ${story.id}: ${forkGrounds.redReason}`); return 1; }
+
+  // `forge-8vfn.8.5.17` (row 181) — a gallery-regen failure is folded in
+  // here rather than thrown from inside `runStory`: `regenerateGalleryForRun`
+  // never throws (see its header, gallery.mjs), so without this gate a
+  // genuinely foreign untracked target would silently stop aborting the
+  // batch AND stop reddening the run that hit it. Never this story's own
+  // artefacts — those are always exempt — only a leftover no story in this
+  // invocation produced.
+  if (galleryRegenFailure !== null) {
+    console.error(
+      `[stories] ${story.id}: GALLERY REGEN FAILED — ${galleryRegenFailure}. The run is RED regardless of its beats.`,
+    );
+    return 1;
+  }
 
   return (row.status === 'green' && spendHalt === null) ? 0 : 1;
 }
