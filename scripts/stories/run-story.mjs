@@ -714,15 +714,17 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
   writeFileSync(docPath, renderDocFragment(result));
 
   const row = storyRowFrom(result);
-  // Row 181 (`forge-8vfn.8.5.17`, measured twice) — THIS LINE PRINTS BEFORE
-  // the gallery regen below, unconditionally. It used to run only AFTER a
-  // successful `regenerateGallery`, so a regen that threw — on an artefact
-  // belonging to a story that had already run earlier in THIS SAME
-  // invocation — skipped this story's own verdict line entirely, and the
-  // throw propagated out of `runStory` into `run.mjs`'s loop, aborting every
-  // story still queued after it. This story's verdict is its own fact,
-  // independent of what the shared gallery index does with it afterwards.
-  console.log(`[stories] ${story.id}: ${row.status} — ${row.greenBeats}/${row.beats} beats green`);
+  // Row 181 (`forge-8vfn.8.5.17`) used to print this story's own
+  // `${status} — N/M beats green` line HERE, unconditionally, because
+  // `regenerateGallery` used to throw and a throw would otherwise abort
+  // `run.mjs`'s loop before this story's verdict ever printed. That hazard
+  // is gone now — `regenerateGalleryForRun` never throws (below) — and row
+  // 191 (bead `forge-8vfn.8.5.29`, T1 ruling 1973en) found the cost of
+  // printing it early instead: a run can print this exact line GREEN and
+  // still go red on containment further down, and a reader who stops at the
+  // first line shaped like a verdict reads the wrong one. So the print
+  // moved into `containmentVerdict` itself (`run-story-verdict.mjs`), as the
+  // LAST thing printed on every path out of it — see that module's header.
 
   // 7.6.81 / 8.5.17 — the exempt set is the WHOLE INVOCATION's, never only
   // this story's own id: `writtenThisRun` is ONE array for the whole batch,
@@ -769,7 +771,10 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
   // its beats — is a PURE MOVE into `run-story-verdict.mjs` (bead
   // `forge-8vfn.8.1.32`): every input below is already computed, so the
   // decision reads them, prints, and returns the exit code with no further
-  // work of its own. See that module for the reasoning behind each check.
+  // work of its own. Row 191 (`forge-8vfn.8.5.29`) added one more duty: it
+  // also prints this story's own `${status} — N/M beats green` line, as the
+  // LAST line on every path out, so the one line shaped like a verdict a
+  // reader finds last is always the one that matches the exit code.
   return containmentVerdict({
     story, ownGroundDrift, trailing, fence, realFence, forkGrounds, row, spendHalt, galleryRegenFailure, hostHead,
   });
