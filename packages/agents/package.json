@@ -14,7 +14,8 @@
     "./studio/hook-dispatch.ts": "./studio/hook-dispatch.ts",
     "./tool-event-emit.ts": "./tool-event-emit.ts",
     "./stream-deadline.ts": "./stream-deadline.ts",
-    "./studio/agent-registry.ts": "./studio/agent-registry.ts"
+    "./studio/agent-registry.ts": "./studio/agent-registry.ts",
+    "./phases/agent-scope-guard.ts": "./phases/agent-scope-guard.ts"
   },
   "scripts": {
     "test": "node --test --experimental-strip-types \"**/*.test.ts\""

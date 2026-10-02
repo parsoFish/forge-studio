@@ -5,6 +5,8 @@
  * here, why the DAG is one-way, and why the agent spec arrives as a parameter:
  * `packages/sessions/design.md` §"The demo kind is three modules".
  */
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -14,7 +16,8 @@ import type { KindTurnInput, KindTurnPlumbing } from './kind-turn.ts';
 // Deep paths, not the door (bead forge-8vfn.5.31, same cycle as
 // packages/sessions/kinds/architect-session.ts's own module doc).
 import { resolveSessionModel, type PhaseAgentSpec } from '@forge/agents/phase-agent.ts';
-import { loadProjectConfig } from '@forge/projects';
+import { takeScopeSnapshot, scopeViolations, type ScopeSnapshot } from '@forge/agents/phases/agent-scope-guard.ts';
+import { isGitRepo, loadProjectConfig } from '@forge/projects';
 import { listDemoElements } from '@forge/library';
 import type { DemoStep, DemoElementDefinition } from '@forge/contracts';
 import { loadSkillTurnPrompt } from '@forge/agents/skill-path.ts';
@@ -136,6 +139,8 @@ export async function runGenerateStep(args: {
   // wide open. A deny list that leaves ANY read door open is #558 again, so
   // the write pass loses Read, Glob, Grep and TodoWrite as well, and the
   // reading it needs happens first, bounded, with its findings injected.
+  const ground = snapshotGround(status.project_repo_path);
+  const fenceGround = (pass: string): void => assertGroundUnchanged({ ground, repo: status.project_repo_path, pass, logger, initiativeId, sessionId: input.sessionId });
   let findings = '';
   await runPass(
     [prompt, '', '## This turn: READ ONLY', 'Gather what you need to author the demo. Write nothing; your notes are carried to the next turn.'].join('\n'),
@@ -181,6 +186,7 @@ export async function runGenerateStep(args: {
     agentSpec.allowedTools.filter((t) => !DEMO_WRITE_PASS_DENIED.includes(t)),
     DEMO_WRITE_PASS_MAX_TURNS, DEMO_WRITE_PASS_DENIED, undefined, passRoots,
   );
+  fenceGround('read+write');
 
   // The declaration draft and the sample it renders are the two deliverables.
   const demoPath = join(status.project_repo_path, DEMO_HTML_REL_PATH);
@@ -207,6 +213,7 @@ export async function runGenerateStep(args: {
     agentSpec.allowedTools,
     DEMO_GROUND_PASS_MAX_TURNS,
   );
+  fenceGround('ground');
   // `null` only when NEITHER pass was priced (the omitted-never-zeroed rule).
   const costUsd = writePass.costUsd === null && groundPass.costUsd === null
     ? null
@@ -257,6 +264,62 @@ export async function runGenerateStep(args: {
 
   return { phase: 'awaiting-review', wrote: [declarationSnapPath, demoPath], demoPath };
   });
+}
+
+/**
+ * Row 190 (forge-8vfn.8.5.28, T1 ruling 1973en) — the GROUND fence. Measured on
+ * a costed S1 run: the grounding pass, the one holding Bash, ran `python3 …
+ * json.dump` into `schemas/overlay.schema.json` (16:12:20), `cp`'d a backup over
+ * it (16:12:31) and `del`'d a key again (16:12:55) — project source, left
+ * edited; the demo locked on it and only the story's own-ground sweep saw it
+ * (`UNDECLARED M`). A Bash write is invisible to the write-root fence, and Bash
+ * cannot leave the pass (no Bash, no REAL output), so the ground is diffed.
+ * Snapshot = `takeScopeSnapshot` + a content hash of every porcelain path (an
+ * already-dirty file edited further still shows: the pre-turn tree is the
+ * baseline) + `HEAD` (a Bash `git commit` is not a clean tree). Allowed:
+ * `.forge/demo/` and `_demo/` (forge's session scratch, `SCRATCH_EXCLUDES`; S1
+ * held `_demo/<sid>/` in the repo). A breach is an `error` event naming the
+ * paths, then a throw `agent-run` turns into `failed`, the missing-deliverable
+ * road. NOT reverted — naming and failing is the ruling. `null` off a git root: no baseline, and a nested
+ * project's porcelain is its ANCESTOR's tree. A failing snapshot throws.
+ */
+type GroundSnapshot = Extract<ScopeSnapshot, { ok: true }>;
+function snapshotGround(repo: string): GroundSnapshot | null {
+  if (!isGitRepo(repo)) return null;
+  const snap = takeScopeSnapshot(repo);
+  if (!snap.ok) throw new Error(`demo-builder runner: cannot snapshot the ground ${repo} — ${snap.error}`);
+  const entries = new Map(snap.entries);
+  for (const [p, stamp] of snap.entries) if (stamp.startsWith('git:')) entries.set(p, `${stamp}:${contentStamp(repo, p)}`);
+  return { ok: true, entries: entries.set('HEAD (commit)', headStamp(repo)) };
+}
+
+/** `--verify -q` exits 1 SILENTLY only for an unborn HEAD; anything else propagates. */
+function headStamp(repo: string): string {
+  try { return execFileSync('git', ['rev-parse', '--verify', '-q', 'HEAD^{commit}'], { cwd: repo, encoding: 'utf8', stdio: 'pipe' }).trim(); } catch (err) {
+    if ((err as { status?: number }).status === 1 && !(err as { stderr?: string }).stderr) return 'unborn';
+    throw err;
+  }
+}
+
+/** Through the guard, base64 = lossless; `null` (deleted, submodule, refused symlink) is a stamp. */
+function contentStamp(repo: string, rel: string): string {
+  const bytes = guardedReadFile(repo, rel.split('/'), 'base64');
+  return bytes === null ? 'unreadable' : createHash('sha256').update(bytes).digest('hex');
+}
+
+function assertGroundUnchanged(a: { ground: GroundSnapshot | null; repo: string; pass: string; logger: KindTurnPlumbing['logger']; initiativeId: string; sessionId: string }): void {
+  if (a.ground === null) return;
+  const after = snapshotGround(a.repo);
+  if (after === null) throw new Error(`demo-builder runner: the ground ${a.repo} stopped being a git repo during the ${a.pass} pass`);
+  const own = [...DEMO_PASS_ROOTS, DEMO_KIND_DIR].map((r) => `${r}/`);
+  const paths = scopeViolations(a.ground, after, (p) => own.some((r) => p.startsWith(r)));
+  if (paths.length === 0) return;
+  const message = `demo-builder runner: the ${a.pass} pass changed the project ground outside ${DEMO_PASS_ROOTS.join(', ')}: ${paths.join(', ')} — the demo builder may write .forge/demo/ only; the edits are left in place for the operator to inspect.`;
+  a.logger.emit({
+    initiative_id: a.initiativeId, phase: 'demo', skill: 'demo-builder-runner', event_type: 'error', input_refs: [], output_refs: paths,
+    message, metadata: { session_id: a.sessionId, pass: a.pass, paths, rule: 'demo-ground-fence' },
+  });
+  throw new Error(message);
 }
 
 /**
