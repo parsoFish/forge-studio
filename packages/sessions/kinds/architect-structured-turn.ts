@@ -10,7 +10,8 @@ import { runStructuredTurn, type QueryFn } from '../interactive-session.ts';
 import { hooksSpreadForAgent } from './kind-turn.ts';
 import { emitTurnCostRow, emitTurnEndedUnpricedRow } from '../turn-cost-rows.ts';
 import { resolveSessionModel, type ModelTier } from '@forge/agents/phase-agent.ts';
-import type { ToolUseLiveDetail } from '@forge/agents';
+import { classifyCrash, type ToolUseLiveDetail } from '@forge/agents';
+import { StreamDeadlineError } from '@forge/agents/stream-deadline.ts';
 import type { EventLogger } from '@forge/kernel';
 import { architectAgentSpec } from './architect-session.ts';
 
@@ -56,7 +57,7 @@ export async function runStructured<T>(args: {
   onText?: (text: string) => void;
   onThinking?: (text: string) => void;
 }): Promise<StructuredResult<T>> {
-  const { output, reads, costUsd } = await runStructuredTurn<T>({
+  const runOnce = () => runStructuredTurn<T>({
     queryFn: args.queryFn,
     prompt: args.prompt,
     schema: args.schema,
@@ -79,6 +80,45 @@ export async function runStructured<T>(args: {
       message: 'architect.turn-ended-unpriced',
     }, info),
   });
+  // Row 193 (T1 ruling 1973fy) — S10 beat 30, row 6 run 6: this turn's stream
+  // saw `system×12, rate_limit_event×1` and no assistant message for 360s, and
+  // `StreamDeadlineError` — whose own text says "transient; routes to auto-
+  // retry" — failed the whole session. The retry it promises existed only on
+  // the CYCLE paths (`developer-loop.ts` F-44/G3, `scheduler-dispatch.ts` F-27)
+  // and in `verify-cycle.mjs`'s harness (`scripts/lib/architect-retry.mjs`);
+  // an interactive session is upstream of all of them and was never retried.
+  //
+  // ONE re-run of the SAME turn, the bound `architect-draft-repair.ts` (row
+  // 159) and the harness retry already use: a second stall rethrows and the
+  // session fails as before. SCOPED to the stall by type, not by
+  // `classifyCrash`'s broader transient list — a thrown 429 or network reset
+  // is a different ruling (the harness retry draws the same line). The
+  // classifier's verdict is still recorded, so the row reads like dev-loop's
+  // `agent-crash-retry`. NO BACKOFF SLEEP: the stall already waited the whole
+  // idle window, and between attempts no heartbeat ticks (row 164's ticker
+  // lives inside `runStructuredTurn`), so a sleep would only look like a hang.
+  //
+  // The stalled attempt KEEPS its `turn-ended-unpriced` row (emitted inside
+  // `runStructuredTurn` before the throw): nothing priced it, and a retry that
+  // succeeds does not change what the first attempt cost (row 184 / item 76).
+  let result: Awaited<ReturnType<typeof runOnce>>;
+  try {
+    result = await runOnce();
+  } catch (err) {
+    if (!(err instanceof StreamDeadlineError)) throw err;
+    const crash = classifyCrash(err.message, null);
+    args.logger.emit({
+      initiative_id: args.initiativeId, phase: 'architect', skill: 'architect', event_type: 'log',
+      input_refs: [], output_refs: [], message: 'architect.turn-stall-retry',
+      metadata: {
+        crash_class: crash.kind, crash_reason: crash.reason, label: err.label, idle_ms: err.idleMs,
+        ...(err.nonProgressSummary !== undefined ? { non_progress: err.nonProgressSummary } : {}),
+        max_attempts: 2,
+      },
+    });
+    result = await runOnce();
+  }
+  const { output, reads, costUsd } = result;
   // bead forge-8vfn.18 — emit the turn's spend so the ceiling can bound stage 1.
   // Authoritative because this phase emits no `iteration` events (trap pinned in
   // architect-turn-cost-event.test.ts). Best-effort: never fail a completed turn.
