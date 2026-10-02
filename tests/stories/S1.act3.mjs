@@ -130,6 +130,10 @@ export const ACT_3 = [
           perTransition: 480_000,
           progressKey: 'session-phase',
           // Row 108: `critiquing`/`revising` are further values of this key, so each stage change resets the per-transition clock.
+          // Row 194 follow-up (T1 1973gn): this beat ends on `/artifact`, so it
+          // has no session scope of its own — `on` names the session `until` is
+          // read off, so no other session's `data-session-phase` can answer it.
+          on: '/sessions/architect/<architectSessionId>',
         },
         { press: 'open-plan' },
         { press: 'approve-plan' },

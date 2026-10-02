@@ -318,7 +318,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   const readAgentLivenessNow = livenessOf === null ? null : (runId, boundRunId_, now) =>
     livenessOf(livePath(), runId, boundRunId_, now);
 
-  const matchesData = async (spec) => {
+  const matchesData = async (spec, on = null) => {
     // `readObserved` runs `page.evaluate`, which THROWS when the page navigates
     // under it ("Execution context was destroyed"). A repeat polls this between
     // acts that submit and re-render, so it will meet that race — and an
@@ -336,7 +336,9 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
       // per-session cards let the together-rule answer with 12[api]'s card at
       // `awaiting-verdict`: zero rounds answered, then the consequence wait's
       // row-184 gate stop 210 ms after the session's own `awaiting-answers`.
-      if (sessionScope !== null && !routeMatches(observed.route, sessionScope)) return false;
+      // A repeat's own `on` (T1 1973gn) scopes it where the beat names no session.
+      const scope = on ?? sessionScope;
+      if (scope !== null && !routeMatches(observed.route, scope)) return false;
       const seen = resolveExpectations(spec, observed);
       return Object.entries(spec).every(
         ([attr, want]) => Object.hasOwn(seen, attr) && answers(seen[attr], want),

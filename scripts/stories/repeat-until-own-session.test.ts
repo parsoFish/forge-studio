@@ -37,7 +37,11 @@ import assert from 'node:assert/strict';
 import { driveBeat } from './beats-drive.mjs';
 import { runRepeatStep } from './beats-repeat.mjs';
 import { validateStory } from './story-file.mjs';
+import S1 from '../../tests/stories/S1.story.mjs';
 import S2 from '../../tests/stories/S2.story.mjs';
+import S4 from '../../tests/stories/S4.story.mjs';
+import S9 from '../../tests/stories/S9.story.mjs';
+import S10 from '../../tests/stories/S10.story.mjs';
 
 const OWN = '2026-10-02T21-15-21-6272d299';        // 12[cli]'s own session (run 6)
 const NEIGHBOUR = '2026-10-02T21-03-08-40b8f299';  // 12[api]'s, at awaiting-verdict by then
@@ -195,4 +199,121 @@ test('row 194 DOOR 4 (pin): a terminal phase inside the repeat still stops it', 
     run: async () => { throw new Error('a failed session must never be acted on'); },
   });
   assert.match(String(r.error), /terminal "failed".*the repeat stops/);
+});
+
+// ─────────── FOLLOW-UP (T1 1973gn) — a repeat the beat's route cannot scope ───────────
+//
+// S1 beat 11 ends on `/artifact` and S1 beat 9 on `/projects/story-s1`, so
+// neither has a SESSION scope — the gate above never armed for them. Both now
+// declare the page their `until` is read on (`on`), resolved like a route.
+
+/** S1's REAL beat 11 (the approve beat), validated in place, wait scaled. */
+function realS1Beat11() {
+  const story = S1 as unknown as { beats: Record<string, unknown>[] };
+  const i = story.beats.length - 1;
+  assert.match(String(story.beats[i]!['act']), /Approve/, 'fixture check: S1\'s last beat is still the approve beat');
+  const v = validateStory({
+    ...story, beats: story.beats.map((b, k) => (k === i ? { ...b, wait: { for: 'agent', upTo: 4_000 } } : b)),
+  }) as { beats: Record<string, unknown>[] };
+  return v.beats[i]!;
+}
+
+/**
+ * Standing on the project page, which here also carries ANOTHER session's
+ * card at `awaiting-verdict` — the hazard S2 b12 met on Monitor. The press
+ * commits to the beat's own session after a window; the architect asks; a
+ * submitted round drafts; `open-plan` goes to `/artifact`; `approve-plan` commits.
+ */
+function s1Beat11Page() {
+  const s = { route: '/projects/story-s1', phase: 'interviewing', gate: false, committed: false, submits: 0 };
+  const onSession = () => s.route.startsWith('/sessions/');
+  const count = (sel: string): number => {
+    if (sel.includes('view-architect-session')) return s.route === '/projects/story-s1' ? 1 : 0;
+    if (sel.startsWith(GATE.field) || sel.startsWith(GATE.submit)) return onSession() && s.gate ? 1 : 0;
+    if (sel.includes('open-plan')) return onSession() && s.phase === 'awaiting-verdict' ? 1 : 0;
+    if (sel.includes('approve-plan')) return s.route === '/artifact' && !s.committed ? 1 : 0;
+    return 0;
+  };
+  const click = async (sel: string) => {
+    if (sel.includes('view-architect-session')) {
+      setTimeout(() => { s.route = `/sessions/architect/${OWN}`; }, 150);
+      setTimeout(() => { s.phase = 'awaiting-answers'; s.gate = true; }, 400);
+    } else if (sel.startsWith(GATE.submit)) {
+      s.submits += 1; s.gate = false; s.phase = 'awaiting-verdict';
+    } else if (sel.includes('open-plan')) {
+      s.route = '/artifact';
+    } else if (sel.includes('approve-plan')) {
+      s.committed = true;
+    }
+  };
+  const base = run6CliPage();
+  const locator = (sel: string): any => ({
+    ...base.locator(sel), count: async () => count(sel), click: async () => click(sel),
+    first: () => locator(sel), nth: () => locator(sel),
+  });
+  const pick = (rec: Record<string, string>, wanted: string[]) =>
+    Object.fromEntries(Object.entries(rec).filter(([k]) => wanted.includes(k)));
+  return {
+    ...base, state: s, locator,
+    url: () => `http://localhost:4124${s.route}`,
+    waitForURL: async (ok: (u: URL) => boolean, { timeout }: { timeout: number }) => {
+      for (const until = Date.now() + timeout; Date.now() < until; await new Promise((r) => setTimeout(r, 10))) {
+        if (ok(new URL(`http://localhost:4124${s.route}`))) return;
+      }
+      throw new Error('waitForURL timed out');
+    },
+    evaluate: async (_fn: unknown, { wanted }: { wanted: string[] }) => {
+      const none = { lifecycle: null, lifecycleError: null };
+      if (s.route === '/projects/story-s1') {
+        return { ...none, sessionPhase: null, data: pick({ page: 'projects', 'project-id': 'story-s1' }, wanted),
+          nested: [pick({ 'session-kind': 'architect', 'session-id': NEIGHBOUR, 'session-phase': 'awaiting-verdict' }, wanted)] };
+      }
+      if (onSession()) {
+        return { ...none, sessionPhase: s.phase, nested: [],
+          data: pick({ page: 'session', 'page-ready': 'true', 'session-kind': 'architect', 'session-phase': s.phase }, wanted) };
+      }
+      return { ...none, sessionPhase: null, nested: [], data: pick({
+        section: 'architect-plan', 'architect-phase': s.committed ? 'committed' : 'awaiting-verdict',
+        'gate-armed': s.committed ? 'false' : 'true', 'plan-mode': 'view' }, wanted) };
+    },
+  };
+}
+
+test('row 194 DOOR 5 (RED before `on`): S1 beat 11 — another session\'s card on the page being left never satisfies `until`', async () => {
+  const page = s1Beat11Page();
+  const v = await driveBeat(page as never, realS1Beat11() as never, 1, 'http://localhost:4124',
+    { architectSessionId: OWN }) as { status: string; failures: string[] };
+  const said = v.failures.join(' | ');
+  assert.equal(page.state.submits, 1, `the repeat must answer the round, not take a foreign card for its end: ${said}`);
+  assert.equal(v.status, 'green', said);
+});
+
+test('row 194 RATCHET: every repeat in tests/stories/ is scoped — a session route + agent wait, or its own `on`', () => {
+  const stories = [S1, S2, S4, S9, S10] as unknown as { id?: string; beats: Record<string, unknown>[] }[];
+  const unscoped: string[] = [];
+  let seen = 0;
+  for (const story of stories) {
+    const v = validateStory(story as never) as { beats: Record<string, unknown>[] };
+    v.beats.forEach((b, i) => {
+      const route = String((b['expect'] as { route: string }).route);
+      const sessionScoped = b['wait'] !== undefined && route.startsWith('/sessions/');
+      for (const st of (b['do'] as Record<string, unknown>[] | undefined) ?? []) {
+        if (st['repeat'] === undefined) continue;
+        seen += 1;
+        if (!sessionScoped && st['on'] === undefined) unscoped.push(`${String(story.id)} beat ${i + 1}: ${String(b['act'])}`);
+      }
+    });
+  }
+  assert.ok(seen >= 7, `fixture check: the seven measured repeats are still found (got ${seen})`);
+  assert.deepEqual(unscoped, [], 'a repeat whose `until` a page being left could answer');
+});
+
+test('row 194: `on` is refused at LOAD when malformed or naming a binding no earlier beat makes', () => {
+  const beat = (on: unknown) => ({
+    act: 'a', say: 's', expect: { route: '/projects', data: { page: 'projects' } },
+    do: [{ repeat: [{ press: 'x' }], until: { 'page': 'projects' }, on }],
+  });
+  assert.throws(() => validateStory({ ...(S2 as object), beats: [beat('sessions/x')] } as never), /\.on/);
+  assert.throws(() => validateStory({ ...(S2 as object), beats: [beat('/sessions/architect/<nope>')] } as never),
+    /repeat\.on names <nope>/);
 });
