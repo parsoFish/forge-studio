@@ -422,6 +422,8 @@ export async function runKbDrain(
     const lintKb = (): Finding[] => collectKbFindings(forgeRoot, kbId, lint(forgeRoot).findings);
 
     let costUsd = 0;
+    // T1 ruling 1973gx — a turn whose spend came back UNKNOWN (`null`).
+    let spendUnknown = false;
     let round = 0;
     // Cumulative union of every PRIOR round's post-fix scoped auto+agent
     // finding-KEY set (reviewer MEDIUM finding). Catches a bounded
@@ -539,7 +541,8 @@ export async function runKbDrain(
             // stops dispatching once `costUsd >= maxCostUsd`.
             costCeilingUsd: maxCostUsd - costUsd,
           });
-          costUsd += result.costUsd;
+          if (result.costUsd === null) spendUnknown = true;
+          else costUsd += result.costUsd;
           turnAudit = result.editAudit ?? null;
         } catch (err) {
           // One turn failing must not abort the rest of the round's queue —
@@ -662,7 +665,9 @@ export async function runKbDrain(
         // re-showing the round's PRE-auto-fix (or previous-round) number for
         // every turn in between.
         status = persist({ ...base, state: 'running', round, counts: inProgressCounts, perFinding: [...completed, ...pendingRows(roundRows)], costUsd, updatedAt: now() });
-        if (costUsd >= maxCostUsd) {
+        // An unknown spend cannot be compared with the ceiling, so it cannot
+        // be under it: stop dispatching (1973gx) rather than count it as $0.
+        if (costUsd >= maxCostUsd || spendUnknown) {
           costCeilingHit = true;
           break;
         }
@@ -697,7 +702,7 @@ export async function runKbDrain(
       }
 
       if (costCeilingHit) {
-        status = persist({ ...base, state: 'cost-ceiling', round, counts, perFinding: withUserRows(), costUsd, updatedAt: now() });
+        status = persist({ ...base, state: 'cost-ceiling', round, counts, perFinding: withUserRows(), costUsd, ...(spendUnknown ? { spendUnknown: true as const } : {}), updatedAt: now() });
         break;
       }
 

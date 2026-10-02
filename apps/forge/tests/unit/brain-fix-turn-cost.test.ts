@@ -7,7 +7,7 @@
  * row with `priced: false` + `upper_bound_usd` and no `cost_usd`. The read-back
  * returned 0 for both shapes, so the drain's running sum — the figure its
  * COST-CEILING compares — under-counted exactly the turns it could not price.
- * A turn with no bound still reads 0, as before: nothing bounds it.
+ * A turn with NO bound reads null — unknown — per T1 ruling 1973gx.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -46,7 +46,23 @@ test('a bounded resultless end row reads its upper_bound_usd, not 0', () => {
     assert.equal(readBrainFixTurnCostUsd(root, 'r1'), 0.5));
 });
 
-test('an unbounded crash still reads 0 — no bound is invented', () => {
-  withLog([start, { event_type: 'error', message: 'brain-fix.crashed', metadata: { error: 'boom' } }], (root) =>
+// T1 ruling 1973gx — an unpriced turn with NO bound is UNKNOWN (null), never
+// free: reading 0 let the drain's ceiling count it as $0 and keep dispatching.
+test('an unbounded unpriced crash reads UNKNOWN (null), not 0', () => {
+  withLog([start, { event_type: 'error', message: 'brain-fix.crashed', metadata: { error: 'boom', priced: false, unpriced_reason: 'died' } }], (root) =>
+    assert.equal(readBrainFixTurnCostUsd(root, 'r1'), null));
+});
+
+test('an unbounded unpriced resultless end reads UNKNOWN (null), not 0', () => {
+  withLog([start, { event_type: 'end', message: 'brain-fix.end (cleared=false)', metadata: { priced: false, unpriced_reason: 'no-result' } }], (root) =>
+    assert.equal(readBrainFixTurnCostUsd(root, 'r1'), null));
+});
+
+test('a log with no terminal row reads UNKNOWN (null) — the turn returned, so its spend went unrecorded', () => {
+  withLog([start], (root) => assert.equal(readBrainFixTurnCostUsd(root, 'r1'), null));
+});
+
+test('an error row with no unpriced marker (a refusal before the SDK call) reads 0 — nothing was spent', () => {
+  withLog([start, { event_type: 'error', message: 'session turn budget exhausted', metadata: {} }], (root) =>
     assert.equal(readBrainFixTurnCostUsd(root, 'r1'), 0));
 });

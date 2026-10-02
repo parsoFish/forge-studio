@@ -57,7 +57,9 @@
       ],
       "message": "brain-fix.crashed",
       "metadata": {
-        "error": "pinned stream failure"
+        "error": "pinned stream failure",
+        "priced": false,
+        "unpriced_reason": "died"
       },
       "output_refs": [],
       "parent_event_id": "<parent_event_id>",

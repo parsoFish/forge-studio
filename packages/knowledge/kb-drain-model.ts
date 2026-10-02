@@ -154,6 +154,12 @@ export type KbDrainStatus = {
    *  the ceiling actually is instead of a hardcoded display constant. */
   maxRounds: number;
   maxCostUsd: number;
+  /** T1 ruling 1973gx — set on the `cost-ceiling` terminal when a fix turn
+   *  ended UNPRICED and UNBOUNDED (its `costUsd` came back `null`): the run's
+   *  real spend is unknown, so `maxCostUsd` could no longer be enforced and
+   *  the drain stopped dispatching. `costUsd` then holds only what WAS priced
+   *  — a floor, not the spend. Absent on every other run. */
+  spendUnknown?: true;
 };
 
 /** Same fresh-lint shape `runBrainLintFullFresh` (packages/knowledge/kb-lint-summary.ts)
@@ -468,10 +474,12 @@ export type KbDrainFixTurnResult = {
  *  after every turn; that read-back moved to the injection point with ruling
  *  86, because it is knowledge of the turn's log layout, not of the drain.
  *  Injectable so termination-matrix tests (esp. the cost-ceiling case) can
- *  hand back a precise, deterministic cost per call without a real SDK turn. */
+ *  hand back a precise, deterministic cost per call without a real SDK turn.
+ *  `null` (T1 ruling 1973gx) = the turn ended unpriced with NO bound: its
+ *  spend is UNKNOWN, never $0, and the drain stops on it (`spendUnknown`). */
 export type KbDrainRunFixTurnFn = (
   input: KbDrainFixTurnInput,
-) => Promise<KbDrainFixTurnResult & { costUsd: number }>;
+) => Promise<KbDrainFixTurnResult & { costUsd: number | null }>;
 
 /**
  * The guarded session-status IO this package needs but may not import

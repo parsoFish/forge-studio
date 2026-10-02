@@ -43,41 +43,47 @@ import type { KbDrainRunFixTurnFn } from '@forge/knowledge';
  * `` `${runId}__r${round}__${i}` ``, never the route's own `runId` — so no
  * curated taint-list name reaches this sink. Mirrors `readBrainFixState`'s
  * scan-backward shape but extracts `cost_usd` instead of the cleared/failed
- * state. Returns 0 on any read/parse failure or a crashed turn: a failed turn
- * accrues zero cost toward the ceiling, matching the turn's own crash path,
- * which never reaches the cost-bearing `end` event.
+ * state.
  *
- * Row 199 (T1 ruling 1973gt) — EXCEPT a turn that ran under a cap: its crash
- * row, and a resultless `end` row, carry `upper_bound_usd` and no `cost_usd`
- * (`kinds/fix-turn.ts`), and that bound is what it is charged. Reading 0 there
- * would let the drain's COST-CEILING under-count exactly the turns it could not
- * price. Exported for `tests/unit/brain-fix-turn-cost.test.ts`.
+ * Row 199 (T1 rulings 1973gt + 1973gx) — what a turn is charged:
+ *   - a priced row: its `cost_usd`;
+ *   - an UNPRICED row (`priced: false`, no `cost_usd` — `kinds/fix-turn.ts`
+ *     writes one on a crash or a resultless end) with `upper_bound_usd`: that
+ *     bound, the cap the SDK ran it under;
+ *   - an unpriced row with NO bound, or no readable terminal row at all:
+ *     `null`, UNKNOWN. This used to read 0, which let the drain's COST-CEILING
+ *     count exactly the turns it could not price as free; the drain now stops
+ *     on `null` instead (`bridge-studio-kb-drain.ts`);
+ *   - an `error` row with no unpriced marker — a refusal before the SDK call,
+ *     e.g. `TurnBudgetExhaustedError` — 0: nothing was spent.
+ * Exported for `tests/unit/brain-fix-turn-cost.test.ts`.
  */
-export function readBrainFixTurnCostUsd(forgeRoot: string, subRunId: string): number {
+export function readBrainFixTurnCostUsd(forgeRoot: string, subRunId: string): number | null {
   const evPath = join(forgeRoot, '_logs', `_brainfix-${subRunId}`, 'events.jsonl');
-  if (!existsSync(evPath)) return 0;
+  if (!existsSync(evPath)) return null;
   let raw: string;
   try {
     raw = readFileSync(evPath, 'utf8');
   } catch {
-    return 0;
+    return null;
   }
   for (const line of raw.split('\n').reverse()) {
     if (!line.trim()) continue;
-    let ev: { event_type?: string; message?: string; cost_usd?: number; metadata?: { upper_bound_usd?: unknown } };
+    let ev: { event_type?: string; message?: string; cost_usd?: number; metadata?: { priced?: unknown; upper_bound_usd?: unknown } };
     try {
       ev = JSON.parse(line);
     } catch {
       continue;
     }
     const bound = ev.metadata?.upper_bound_usd;
-    const boundUsd = typeof bound === 'number' && Number.isFinite(bound) && bound > 0 ? bound : 0;
-    if (ev.event_type === 'end' || ev.message?.startsWith('brain-fix.end')) {
-      return typeof ev.cost_usd === 'number' ? ev.cost_usd : boundUsd;
-    }
-    if (ev.event_type === 'error' || ev.message === 'brain-fix.crashed') return boundUsd;
+    const unpricedUsd = typeof bound === 'number' && Number.isFinite(bound) && bound > 0 ? bound : null;
+    const terminal = ev.event_type === 'end' || ev.message?.startsWith('brain-fix.end')
+      || ev.event_type === 'error' || ev.message === 'brain-fix.crashed';
+    if (!terminal) continue;
+    if (typeof ev.cost_usd === 'number') return ev.cost_usd;
+    return ev.metadata?.priced === false ? unpricedUsd : 0;
   }
-  return 0;
+  return null;
 }
 
 /**

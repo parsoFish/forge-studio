@@ -239,11 +239,15 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
     logger,
     identity: { initiativeId: cycleId, phase: variant.eventPhase, skill: variant.eventSkill, sessionId: input.runId },
   });
-  /** The unpriced markers `spend.mjs` and `turn-budget.ts` read — ONLY when a
-   *  cap existed: "unpriced" is honest only when no bound exists, and an
-   *  unbounded turn keeps the row it always wrote. */
-  const boundedUnpriced = (reason: string): Record<string, unknown> =>
-    capUsd === undefined ? {} : { priced: false, unpriced_reason: reason, upper_bound_usd: capUsd };
+  /** The unpriced markers `spend.mjs`, `turn-budget.ts` and the KB drain's
+   *  read-back key on — the same shape `emitTurnEndedUnpricedRow` writes for
+   *  every session turn. `upper_bound_usd` ONLY when a cap existed; without
+   *  one the row is unpriced AND unbounded, which every reader takes as
+   *  UNKNOWN spend, never as free (T1 ruling 1973gx — before it, the
+   *  unbounded resultless turn wrote `cost_usd: 0`, the shape 849 rejects,
+   *  and the crash row carried no marker at all). */
+  const unpriced = (reason: string): Record<string, unknown> =>
+    ({ priced: false, unpriced_reason: reason, ...(capUsd !== undefined ? { upper_bound_usd: capUsd } : {}) });
   const abortController = new AbortController();
   const options: Record<string, unknown> = {
     ...spawn.options,
@@ -316,7 +320,7 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
       input_refs: inputRefs,
       output_refs: [],
       message: `${variant.eventSkill}.crashed`,
-      metadata: { error: err instanceof Error ? err.message : String(err), ...boundedUnpriced(unpricedReason(err)) },
+      metadata: { error: err instanceof Error ? err.message : String(err), ...unpriced(unpricedReason(err)) },
     });
     sink.flushIteration(1);
     // No `end` event on this path — both runners returned from the catch, and
@@ -330,9 +334,9 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
 
   sink.flushIteration(1);
   const { result, endMetadata } = variant.finish({ input, pre, costUsd: costUsd ?? 0, crashed: false });
-  // An unbounded resultless turn keeps its historical `cost_usd: 0`; a bounded
-  // one OMITS it (ruling 849: never zeroed) and carries its bound instead.
-  const unpricedBound = costUsd === null ? boundedUnpriced('no-result') : {};
+  // A resultless turn OMITS `cost_usd` (ruling 849: never zeroed) and carries
+  // the unpriced markers, with its bound when it had one.
+  const unpricedMeta = costUsd === null ? unpriced('no-result') : {};
 
   logger.emit({
     initiative_id: cycleId,
@@ -342,9 +346,9 @@ export async function runFixTurn<I extends FixTurnInput, R extends FixTurnResult
     event_type: 'end',
     input_refs: inputRefs,
     output_refs: [],
-    ...('upper_bound_usd' in unpricedBound ? {} : { cost_usd: costUsd ?? 0 }),
+    ...(costUsd === null ? {} : { cost_usd: costUsd }),
     message: `${variant.eventSkill}.end (cleared=${result.cleared})`,
-    metadata: { ...endMetadata, ...unpricedBound },
+    metadata: { ...endMetadata, ...unpricedMeta },
   });
 
   return result;

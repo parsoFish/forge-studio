@@ -6,7 +6,8 @@
  *
  * Before this, `kinds/fix-turn.ts` (brain-fix, preflight-fix) handed the SDK no
  * `maxBudgetUsd` at all, a crashed turn left an `error` row with no figure, and
- * a resultless one wrote `cost_usd: 0`. Each arm below is red on that code.
+ * a resultless one wrote `cost_usd: 0`. Each arm below is red on that code
+ * except the no-ceiling bag and priced-row control.
  *
  * Driven through a minimal variant rather than either real kind, so the cap
  * arithmetic is judged on its own; the real kinds' bags stay pinned
@@ -111,11 +112,25 @@ describe('fix-turn runs under the cost ceiling (row 199)', () => {
     assert.equal(err?.metadata?.['upper_bound_usd'], 2);
   });
 
-  test('a crashed turn with NO cap stays as it was — no bound invented', async () => {
+  // T1 ruling 1973gx — with NO cap the turn is still unpriced, and says so:
+  // `priced: false` with no bound, which every reader must take as UNKNOWN
+  // (spend.mjs halts UNENFORCEABLE; the KB drain stops), never as free.
+  test('a crashed turn with NO cap is unpriced and unbounded — no bound invented', async () => {
     await run('crash-free', stub({}, [], new Error('boom')));
     const err = rows(join(root, '_logs'), 'crash-free').find((r) => r.event_type === 'error');
-    assert.equal(err?.metadata?.['upper_bound_usd'], undefined);
-    assert.equal(err?.metadata?.['priced'], undefined);
+    assert.equal(err?.cost_usd, undefined);
+    assert.equal(err?.metadata?.['priced'], false);
+    assert.equal(err?.metadata?.['unpriced_reason'], 'died');
+    assert.equal('upper_bound_usd' in (err?.metadata ?? {}), false);
+  });
+
+  test('a resultless turn with NO cap is unpriced and unbounded, not cost_usd 0 (ruling 849)', async () => {
+    await run('noresult-free', stub({}, []));
+    const end = rows(join(root, '_logs'), 'noresult-free').find((r) => r.event_type === 'end');
+    assert.equal('cost_usd' in (end ?? {}), false);
+    assert.equal(end?.metadata?.['priced'], false);
+    assert.equal(end?.metadata?.['unpriced_reason'], 'no-result');
+    assert.equal('upper_bound_usd' in (end?.metadata ?? {}), false);
   });
 
   test('a resultless turn under a cap is unpriced-with-bound, not cost_usd 0', async () => {
