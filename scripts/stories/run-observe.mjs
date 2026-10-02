@@ -9,7 +9,7 @@
  */
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { EMIT_FAILED_SIDECAR } from '@forge/sessions';
-import { summariseRunSpend, spendCeilingVerdict, endedUnpricedTurns, ceilingHaltVerdict, classifyUnmeasuredDispatch } from './spend.mjs';
+import { summariseRunSpend, spendCeilingVerdict, endedUnpricedTurns, ceilingHaltVerdict, classifyUnmeasuredDispatch, chargeBoundedTurns } from './spend.mjs';
 import { FS_CLOCK_SLACK_MS } from './beats-queue-terminal.mjs';
 import { join, basename } from 'node:path';
 
@@ -351,8 +351,11 @@ export function spendSoFar({ root, startedMs, realSpawn, ceilingUsd, label, unme
   const dirs = collectSpendDirs(root, startedMs);
   const events = dirs.map(readRunEvents);
   const spend = summariseRunSpend({ realSpawn, events });
-  const v = spendCeilingVerdict(spend, ceilingUsd);
   const unpriced = endedUnpricedTurns(events);
+  // Row 193b — the beat's spend line reads the SAME charged figure the halt
+  // judges (`ceilingHaltVerdict` charges every bounded unpriced turn its cap),
+  // so the transcript never prints a lower number than the one enforced.
+  const v = spendCeilingVerdict(chargeBoundedTurns(spend, unpriced), ceilingUsd);
   // 7.6.103 — read from the SAME dirs as the rows, so a run cannot have its
   // spend read from one place and its emit failures from another.
   const emitFailures = dirs.map(readEmitFailures).reduce(
@@ -386,7 +389,8 @@ export function spendSoFar({ root, startedMs, realSpawn, ceilingUsd, label, unme
   // went blind should say so in the transcript at the beat it happened, and a
   // guard that speaks only when it fires reads like one that never ran.
   for (const t of unpriced) {
-    lines.push(`[stories] spend ${label}: a turn ENDED UNPRICED — reason=${t.reason}, tokens_out=${t.tokensOut ?? 'unrecorded'}, tokens_in=${t.tokensIn ?? 'unrecorded'}, session=${t.sessionId}`);
+    const bound = t.upperBoundUsd === null ? '' : ` — BOUNDED: ran under a $${t.upperBoundUsd.toFixed(2)} cap, charged at that bound`;
+    lines.push(`[stories] spend ${label}: a turn ENDED UNPRICED — reason=${t.reason}, tokens_out=${t.tokensOut ?? 'unrecorded'}, tokens_in=${t.tokensIn ?? 'unrecorded'}, session=${t.sessionId}${bound}`);
   }
   for (const f of emitFailures.failures) {
     lines.push(`[stories] spend ${label}: a ledger row FAILED TO WRITE — message=${f.message ?? 'unrecorded'}, error=${f.error ?? 'unrecorded'}`);
