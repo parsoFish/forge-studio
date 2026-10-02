@@ -1,0 +1,7 @@
+# MTIMES.txt lines for the beat-6 onboarding session and its dispatched run, verbatim from the run-7 S1 capture
+2026-10-02T15:14:01.786Z  _logs/_agent-onboarding-agent-2026-10-02T15-14-01-785-6fxw/stderr.log
+2026-10-02T15:14:01.821Z  _logs/_agent-onboarding-agent-2026-10-02T15-14-01-785-6fxw/turn.pid
+2026-10-02T15:14:01.821Z  _logs/_onboarding-2026-10-02T15-14-01-57656b47/turn.pid
+2026-10-02T15:14:02.403Z  _logs/_agent-onboarding-agent-2026-10-02T15-14-01-785-6fxw/agent-run.marker
+2026-10-02T15:23:49.770Z  _logs/_agent-onboarding-agent-2026-10-02T15-14-01-785-6fxw/events.jsonl
+2026-10-02T15:23:49.773Z  projects/story-s1/_onboarding/2026-10-02T15-14-01-57656b47/status.json

@@ -41,9 +41,10 @@ import {
 // why the split went this way round and not the other.
 import { performSteps } from './beats-steps.mjs';
 import { readProgress, sessionEventLines } from './beats-progress.mjs';
-import { STALL_CEILING_MS, doorWorthRunning, sessionLogDir, runLogIdleMs } from './beats-agent-proc.mjs';
+import { STALL_CEILING_MS, doorWorthRunning, sessionLogDir } from './beats-agent-proc.mjs';
 // Split out of `beats-agent-proc.mjs` at the 800-line cap (bead `forge-8vfn.8.1.31`, T1 1693).
 import { waitForPricedEvent } from './beats-priced-wait.mjs';
+import { makeAgentLivenessReader } from './beats-agent-liveness.mjs';
 
 
 
@@ -302,10 +303,20 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   // `runRepeatStep` (`beats-repeat.mjs`) is what actually governs on it, and
   // only when nothing else already does (`tracker === null`) — this is a pure
   // addition for every other beat, which never reads this reader at all.
-  const readSessionLivenessNow = forgeRoot === null ? null : () => {
-    const dir = sessionLogDir(forgeRoot, new URL(page.url(), 'http://forge.invalid').pathname);
-    return dir === null ? null : runLogIdleMs(dir);
-  };
+  //
+  // Row 179b (bead `forge-8vfn.8.5.27`, T1 1973ei) — ONE reader for every
+  // agent wait, the repeat's and the consequence wait's alike, still off the
+  // LIVE route. It is 179's `runLogIdleMs` reading first and unchanged; what
+  // it adds is the turn.pid-only session (onboarding), whose own log dir has
+  // no channel at all and whose agent writes under the run the product's dual
+  // `turn.pid` write pairs it with (`beats-agent-liveness.mjs`). S1 beat 6
+  // reded a working agent because that reading was `null`.
+  const livenessOf = forgeRoot === null ? null : makeAgentLivenessReader(forgeRoot);
+  const livePath = () => new URL(page.url(), 'http://forge.invalid').pathname;
+  const readSessionLivenessNow = livenessOf === null ? null : () =>
+    (sessionLogDir(forgeRoot, livePath()) === null ? null : livenessOf(livePath()));
+  const readAgentLivenessNow = livenessOf === null ? null : (runId, boundRunId_, now) =>
+    livenessOf(livePath(), runId, boundRunId_, now);
 
   const matchesData = async (spec) => {
     // `readObserved` runs `page.evaluate`, which THROWS when the page navigates
@@ -515,6 +526,9 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
           // Row 184c (T1 1973dv) — the beat's LAST act, the early-death
           // door's own anchor; the beat's start when it acted on nothing.
           steps_.lastActMs ?? pressStartedMs,
+          // Row 179b — the watched agent's own liveness, so the declared bound
+          // is an inactivity window and not a wall clock (`waitForConsequence`).
+          readAgentLivenessNow,
         );
         // 7.6.143 (b2). A `terminal:` declaration counts as consumed only when
         // the watch actually RESOLVED a cycle — not merely when it was called.
