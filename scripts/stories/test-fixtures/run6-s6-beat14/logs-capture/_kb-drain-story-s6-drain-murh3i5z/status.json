@@ -1,0 +1,74 @@
+{
+  "kbId": "story-s6",
+  "startedAt": "2026-10-02T21:26:23.983Z",
+  "maxRounds": 5,
+  "maxCostUsd": 2,
+  "state": "green",
+  "round": 1,
+  "counts": {
+    "auto": 0,
+    "agent": 0,
+    "user": 0
+  },
+  "perFinding": [
+    {
+      "key": "orphan::/home/parso/forge-clean-m7e/brain/story-s6/themes/live-evidence-must-be-bound.md",
+      "check": "orphan",
+      "kind": "orphan",
+      "file": "/home/parso/forge-clean-m7e/brain/story-s6/themes/live-evidence-must-be-bound.md",
+      "message": "linked into brain/story-s6/antipatterns.md",
+      "tier": "auto",
+      "round": 1,
+      "proposedChanges": [
+        {
+          "file": "brain/story-s6/antipatterns.md",
+          "diff": "--- a/brain/story-s6/antipatterns.md\n+++ b/brain/story-s6/antipatterns.md\n+# Antipattern index\n \n+> Category index. Lists the theme pages in this knowledge base with `category: antipattern`.\n+\n+## Theme pages\n+\n+### Auto-linked (re-file under a curated heading when convenient)\n+\n+- [`live-evidence-must-be-bound`](./themes/live-evidence-must-be-bound.md) — A label-grep evidence gate can be satisfied by relabeling old captures from other projects; bind acceptance to a fresh timestamp and the specific project ID.\n+",
+          "diffTruncated": false,
+          "disposition": "applied",
+          "reasons": []
+        }
+      ],
+      "outcome": "cleared"
+    },
+    {
+      "key": "orphan::/home/parso/forge-clean-m7e/brain/story-s6/themes/repro-before-verdict.md",
+      "check": "orphan",
+      "kind": "orphan",
+      "file": "/home/parso/forge-clean-m7e/brain/story-s6/themes/repro-before-verdict.md",
+      "message": "linked into brain/story-s6/patterns.md",
+      "tier": "auto",
+      "round": 1,
+      "proposedChanges": [
+        {
+          "file": "brain/story-s6/patterns.md",
+          "diff": "--- a/brain/story-s6/patterns.md\n+++ b/brain/story-s6/patterns.md\n+# Pattern index\n \n+> Category index. Lists the theme pages in this knowledge base with `category: pattern`.\n+\n+## Theme pages\n+\n+### Auto-linked (re-file under a curated heading when convenient)\n+\n+- [`unifier-cost-ratio-signals-ac-gaps`](./themes/unifier-cost-ratio-signals-ac-gaps.md) — When unifier spend > dev-loop spend, checklist items not enforced by per-WI acceptance criteria were deferred to the unifier — a structural PM failure, not an integration problem.\n+\n+- [`repro-before-verdict`](./themes/repro-before-verdict.md) — Watch the refute rate — a pass that refutes almost nothing has agreed, not verified; the brief must make the artifact the gate and require a runnable repro.\n+",
+          "diffTruncated": false,
+          "disposition": "applied",
+          "reasons": []
+        }
+      ],
+      "outcome": "cleared"
+    },
+    {
+      "key": "orphan::/home/parso/forge-clean-m7e/brain/story-s6/themes/unifier-cost-ratio-signals-ac-gaps.md",
+      "check": "orphan",
+      "kind": "orphan",
+      "file": "/home/parso/forge-clean-m7e/brain/story-s6/themes/unifier-cost-ratio-signals-ac-gaps.md",
+      "message": "linked into brain/story-s6/patterns.md",
+      "tier": "auto",
+      "round": 1,
+      "proposedChanges": [
+        {
+          "file": "brain/story-s6/patterns.md",
+          "diff": "--- a/brain/story-s6/patterns.md\n+++ b/brain/story-s6/patterns.md\n+# Pattern index\n \n+> Category index. Lists the theme pages in this knowledge base with `category: pattern`.\n+\n+## Theme pages\n+\n+### Auto-linked (re-file under a curated heading when convenient)\n+\n+- [`unifier-cost-ratio-signals-ac-gaps`](./themes/unifier-cost-ratio-signals-ac-gaps.md) — When unifier spend > dev-loop spend, checklist items not enforced by per-WI acceptance criteria were deferred to the unifier — a structural PM failure, not an integration problem.\n+\n+- [`repro-before-verdict`](./themes/repro-before-verdict.md) — Watch the refute rate — a pass that refutes almost nothing has agreed, not verified; the brief must make the artifact the gate and require a runnable repro.\n+",
+          "diffTruncated": false,
+          "disposition": "applied",
+          "reasons": []
+        }
+      ],
+      "outcome": "cleared"
+    }
+  ],
+  "costUsd": 0,
+  "updatedAt": "2026-10-02T21:26:25.018Z"
+}

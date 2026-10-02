@@ -1,0 +1,4 @@
+# MTIMES.txt + LOGS-BIRTH.txt lines for the kb-drain channel, verbatim from the run-6 S6 red evidence
+2026-10-02T21:26:25.014Z  _logs/_kb-drain-story-s6-drain-murh3i5z/events.jsonl
+2026-10-02T21:26:25.014Z  _logs/_kb-drain-story-s6-drain-murh3i5z/status.json
+2026-10-02T21:26:23.928Z  _kb-drain-story-s6-drain-murh3i5z

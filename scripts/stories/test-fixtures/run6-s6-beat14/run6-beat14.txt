@@ -1,0 +1,13 @@
+# run6.log lines for S6 beat 14 (plus the bridge dir's first two spend reads), verbatim from M7-E run 6's own transcript
+[2026-10-02T21:26:23.828Z]   ✓ 13. Go back to the knowledge base and see that the planner actually read it — the brain-index event, naming this KB and what it took   [no-do: navigated and asserted; nothing was pressed]
+[2026-10-02T21:26:23.839Z] [stories] while waiting on [data-action="open-kb-tab-health"]: present and enabled
+[2026-10-02T21:26:23.897Z] [stories] while waiting on [data-action="drain-to-green"]: present and enabled
+[2026-10-02T21:26:24.101Z] [stories] spend after beat 14: UNMEASURED _bridge-2026-10-02T18-53-04-785-knov2l1s — REAPED/DIED — pid is gone (events.jsonl 1962→1962 lines); stderr tail: (empty)
+[2026-10-02T21:26:24.101Z] [stories] spend after beat 14: UNMEASURED _kb-drain-story-s6-drain-murh3i5z — REAPED/DIED — pid is gone (events.jsonl 0→3 lines); stderr tail: (empty)
+[2026-10-02T21:26:24.101Z]   ✗ 14. Open the knowledge base’s Health tab and drain it to green
+[2026-10-02T21:26:24.101Z]       data-drain-state: expected "green", got "running"
+[2026-10-02T21:26:24.101Z]       gave up at the settle wait (declared 180000 ms)
+[2026-10-02T21:26:24.101Z]       the agent-channel door did NOT run: this beat declared 180000 ms, within twice the 180000 ms stall ceiling, and a door that would consume most of a declared bound is the verdict rather than an early exit. The bound above is the whole story here.
+[2026-10-02T21:26:26.219Z]   ✓ 15. Read the diff the drain proposes, file by file, before accepting it   [no-do: navigated and asserted; nothing was pressed]
+[2026-10-02T18:54:07.297Z] [stories] spend after beat 4: UNMEASURED _bridge-2026-10-02T18-53-04-785-knov2l1s — NEVER STARTED — events.jsonl carries 1 line(s) (start-and-nothing) and exit code unrecorded
+[2026-10-02T18:54:07.929Z] [stories] spend after beat 5: UNMEASURED _bridge-2026-10-02T18-53-04-785-knov2l1s — REAPED/DIED — pid is gone (events.jsonl 1→5 lines); stderr tail: (empty)

@@ -221,9 +221,28 @@ export function summariseRunSpend({ realSpawn, events = [] }) {
  *
  * @param {{pid: number|null, alive: boolean, eventLines: number, stderrTail?: string, exitCode?: number|null}} current
  * @param {{pid: number|null, alive: boolean, eventLines: number}} [previous]
- * @returns {Readonly<{arm: 'in-flight'|'reaped'|'never-started', detail: string}>}
+ * NO turn.pid IS UNKNOWN, NEVER DEAD — row 196 (bead `forge-8vfn.8.5.34`, T1
+ * 1973gg). `alive` is `pid !== null && isAlive(pid)` (`readDispatchSnapshot`),
+ * so a dir that never carried a pid read `alive: false` and printed "pid is
+ * gone" about a pid nobody ever wrote. Two dirs carry none BY DESIGN: the
+ * Studio bridge's own `_bridge-<ts>-<id>` (M7-E run 6 called
+ * `_bridge-…-knov2l1s` REAPED/DIED on every spend line while `/api/health`
+ * answered from it) and a KB drain's `_kb-drain-<run>` (S6 beat 14, which the
+ * early-death door then read as a dead dispatch). Death is a pid that was
+ * WRITTEN and is gone — 184c's "death means the pid is gone" — and a dir with
+ * no pid has no process this reader can observe either way.
+ *
+ * @returns {Readonly<{arm: 'in-flight'|'reaped'|'never-started'|'unknown', detail: string}>}
  */
 export function classifyUnmeasuredDispatch(current, previous = { pid: null, alive: false, eventLines: 0 }) {
+  if (current.pid === null) {
+    return Object.freeze({
+      arm: 'unknown',
+      detail:
+        `UNKNOWN — no turn.pid here, so no process to call alive or dead (events.jsonl ` +
+        `${previous.eventLines}→${current.eventLines} lines)`,
+    });
+  }
   // NEVER STARTED — the SDK child exited within seconds, leaving ONE `start`
   // line and nothing more coming; `alive` false is what makes this terminal
   // rather than merely "just began", which a still-alive one-liner is (it

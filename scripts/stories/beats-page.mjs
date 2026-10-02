@@ -30,6 +30,7 @@ import { STALL_CEILING_MS, doorWorthRunning, CYCLE_WAIT_WALL_CEILING_MS } from '
 // branches below fold their readings into (`beats-agent-liveness.mjs`), which
 // wraps the same pure `cycleWaitDeadline` the `cycleOf` branch used inline.
 import { makeLivenessWindow } from './beats-agent-liveness.mjs';
+import { makeSettleGate } from './beats-settle.mjs';
 import { readProgress, progressTracker } from './beats-progress.mjs';
 // Bead `forge-8vfn.8.1.34` / ruling 1736 — the SAME "first poll + on change"
 // reporter `performSteps` already wraps around the ACT (bead `6.11.30`), now
@@ -385,6 +386,7 @@ export async function waitForConsequence(
   // arrive with the same hole and a worse failure: an uncollected progress key
   // reads as ABSENT forever, so the per-transition bound below would report
   // "the key never appeared" on a perfectly healthy run.
+  const settleGate = makeSettleGate(settle, Array.isArray(beat.do) && beat.do.length > 0);
   const alsoWanted = [settle?.key, progress?.progressKey].filter((k) => typeof k === 'string' && k !== '');
   // 7.6.77's state, now the SHARED tracker: the repeat wait needs the identical
   // rule, and two copies of a budget-reset are two places for the reset to be
@@ -437,24 +439,10 @@ export async function waitForConsequence(
     const stop = watching ? cycleWatch(runId, anchorMs ?? startedAt) : null;
     const terminalHeld = !watching || cycleWatch.reached !== false;
     if (terminalHeld && wanted.every(([attr, want]) => Object.hasOwn(seen, attr) && answers(seen[attr], want))) return null;
-    // `wait: { for: 'settle', key, while }` — T1 ruling 621(ii), bought by A's
-    // S1 beat 3.
-    //
-    // THE WAITING HALF ALREADY EXISTED, and measuring that is what shaped this:
-    // a plain `for: 'agent'` wait already carries A's beat past its transient
-    // (green in 1208 ms on the fixture). What it does NOT do is stop — a wrong
-    // value is waited out exactly as patiently as a transient one, to the full
-    // declared bound, and the verdict then reports a timeout where it could
-    // have reported the mismatch.
-    //
-    // So `settle` adds SHARPNESS, not patience. The story names the one value
-    // it is willing to sit through; the moment the key holds anything else,
-    // this stops and lets the verdict say what it actually saw. A beat can
-    // never silently wait out a value it should have failed on.
-    if (terminalHeld && settle !== null) {
-      const got = seen[settle.key] ?? observed.data?.[settle.key];
-      if (got !== undefined && got !== settle.while) return null;
-    }
+    // `wait: { for: 'settle', key, while }` — T1 ruling 621(ii): SHARPNESS, not
+    // patience. Row 196: a press's consequence has not settled before it has
+    // visibly begun (`beats-settle.mjs`).
+    if (terminalHeld && settleGate !== null && settleGate.settled(seen[settle.key] ?? observed.data?.[settle.key])) return null;
     // ROW 184 (forge-8vfn.8.5.20) — ZOMBIE EXTENDS. THE SESSION'S OWN PUBLISHED
     // STATE IS THE AUTHORITY, and a published OPERATOR GATE ends a wait on sight.
     //
