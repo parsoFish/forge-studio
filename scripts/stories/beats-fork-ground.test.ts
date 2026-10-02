@@ -196,34 +196,46 @@ test('describeDoorFork names the field and every case, and says ONCE that it is 
 
 // ───────────────────────────────────────────────────────── real S2 / S7 end to end
 
-test('S2: the pinned fill fork (beat 3) expands its WHOLE remainder once per starter, on its own ground', () => {
+test('S2: the pinned fill fork (beat 3) expands its WHOLE remainder once per starter, on its own ground, re-running its entry beats for every case after the first', () => {
+  // forge-8vfn.8.5.14 — UPDATED CONTRACT. S2's own run measured case 2
+  // landing on case 1's leftover plan gate because the fork's entry beats
+  // (1-2: open the Projects pillar, press "new project") were never re-run
+  // for any case after the first. Beat 3 now declares `fork.from: 1`, so
+  // every case AFTER THE FIRST re-emits beats 1-2 before its own fork beat
+  // and remainder; the first case does not (the plain walk already ran them).
   const story = validateStory(S2);
   const out = expandForkedBeats(story.beats, story.ground.project);
   // 13 beats; the fork sits at beat 3 (index 2) and its remainder is beats
-  // 3-13 (11 beats), run 3 times — one per STARTER — plus beats 1-2 run once.
+  // 3-13 (11 beats). Case 1 (api) runs beats 1-2 once (the plain walk) plus
+  // its own 11-beat tail; cases 2-3 (cli, webapp) each re-run beats 1-2 AND
+  // the 11-beat tail — 2 + 11*3 + 2*2 (the two replays) = 39.
   assert.equal(story.beats.length, 13);
-  assert.equal(out.length, 2 + 11 * 3, `expected 2 + 11*3 = 35 expanded entries, got ${out.length}`);
+  assert.equal(out.length, 39, `expected 2 + 11 + 2*(2+11) = 39 expanded entries, got ${out.length}`);
   const labels = out.map((e) => e.label);
-  assert.deepEqual(labels.slice(0, 2), ['1', '2']);
+  assert.deepEqual(labels.slice(0, 2), ['1', '2'], 'the plain walk runs beats 1-2 once, for the FIRST case');
   assert.deepEqual(
     labels.slice(2, 13),
     ['3[api]', '4[api]', '5[api]', '6[api]', '7[api]', '8[api]', '9[api]', '10[api]', '11[api]', '12[api]', '13[api]'],
   );
   assert.deepEqual(
-    labels.slice(13, 24).map((l) => l.split('[')[0]),
-    ['3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13'],
-    'the SECOND case (cli) repeats the same original beat numbers',
+    labels.slice(13, 26),
+    ['1[cli]', '2[cli]', '3[cli]', '4[cli]', '5[cli]', '6[cli]', '7[cli]', '8[cli]', '9[cli]', '10[cli]', '11[cli]', '12[cli]', '13[cli]'],
+    'the SECOND case (cli) re-runs entry beats 1-2 THEN its own 3-13 tail, all numbered as themselves',
   );
-  assert.ok(labels.slice(13, 24).every((l) => l.endsWith('[cli]')));
-  assert.ok(labels.slice(24, 35).every((l) => l.endsWith('[webapp]')));
+  assert.deepEqual(
+    labels.slice(26, 39),
+    ['1[webapp]', '2[webapp]', '3[webapp]', '4[webapp]', '5[webapp]', '6[webapp]', '7[webapp]', '8[webapp]', '9[webapp]', '10[webapp]', '11[webapp]', '12[webapp]', '13[webapp]'],
+  );
   // Every case's own ground is per-case, and every later beat's literal
   // reference to it moved too.
   const apiEntries = out.slice(2, 13);
   assert.equal(apiEntries[0].beat.expect.route, '/projects/story-s2-api');
   assert.equal(apiEntries[1].beat.expect.data['project-id'], 'story-s2-api', 'beat 4 (readiness) follows the fork\'s own case');
-  const cliEntries = out.slice(13, 24);
-  assert.equal(cliEntries[0].beat.expect.route, '/projects/story-s2-cli');
-  assert.equal(cliEntries[1].beat.expect.data['project-id'], 'story-s2-cli');
+  const cliEntries = out.slice(13, 26);
+  assert.equal(cliEntries[0].beat.expect.route, '/projects', 're-emitted entry beat 1 is the plain beat, unsubstituted (S2 never names the project in it)');
+  assert.equal(cliEntries[1].beat.expect.route, '/projects/new', 're-emitted entry beat 2, also unsubstituted');
+  assert.equal(cliEntries[2].beat.expect.route, '/projects/story-s2-cli', 'the fork beat itself (3rd entry of this case) is on the CLI ground');
+  assert.equal(cliEntries[3].beat.expect.data['project-id'], 'story-s2-cli');
 });
 
 test('S7: the pinned door fork (beat 3) loads and drives exactly like an unforked story — one entry per beat', () => {

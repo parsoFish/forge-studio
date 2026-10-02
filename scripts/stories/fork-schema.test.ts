@@ -37,17 +37,22 @@ const ok = {
   ],
 };
 
+// `from: 1` — forge-8vfn.8.5.14. This beat is number 2 (one beat precedes
+// it), so a FILL fork over `create-app-type` must declare where its own
+// entry beats begin; `beats-fork-from.test.ts` is the dedicated door for the
+// rule itself (the refusal, the bounds, the door-fork exemption). This file
+// stays about the plain shape surviving the rebuild.
 const forkBeat = {
   act: 'Pick a starter',
   do: [{ fill: 'create-app-type', with: 'cli' }],
   expect: { route: '/projects/new', data: { 'page-ready': 'true' } },
   say: 's',
-  fork: { over: 'create-app-type', cases: ['api', 'cli', 'webapp'] },
+  fork: { over: 'create-app-type', cases: ['api', 'cli', 'webapp'], from: 1 },
 };
 
 test('a well-formed fork validates and SURVIVES the rebuild', () => {
   const s = validateStory({ ...ok, beats: [ok.beats[0], forkBeat] });
-  assert.deepEqual(s.beats[1].fork, { over: 'create-app-type', cases: ['api', 'cli', 'webapp'] });
+  assert.deepEqual(s.beats[1].fork, { over: 'create-app-type', cases: ['api', 'cli', 'webapp'], from: 1 });
   assert.ok(Object.isFrozen(s.beats[1].fork));
   assert.ok(Object.isFrozen(s.beats[1].fork.cases));
 });
