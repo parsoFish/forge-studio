@@ -60,14 +60,14 @@ operator-ratified new cap — never a silent raise.
 | `projects` | 48 | 11,185 | **9,412** | ratified 9,412 — row 174 (forge-8vfn.8.5.9): the preflight read returns the claim's DEPS verdict as `runnableGate`, +8 on 9,404, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,346 | **12,768** | ratified 12,768 — G1 boot-time release of a kb-cleanup apply stuck at applying (+74, forge-8vfn.8.5.1) and G3 isUntouchedBrainSeedStub crash-orphan check (+43, 8.5.3): +117 on 12,651, T1-ratified (>100). |
 | `agents` | 44 | 12,450 | **12,450** | ratified 12,450 — row 189 (forge-8vfn.8.5.26): the pinned SDK seam forces `settings.attribution` off so no agent commit carries a Co-Authored-By trailer, +17 on 12,433, lane-ratified under ruling 666; see git history for prior changes. |
-| `sessions` | 63 | 20,615 | **20,577** | ratified 20,577 — row 176 (forge-8vfn.8.5.12): the completeness critic's SDK call gets the session's heartbeat and live-view callbacks, +10 on 20,567, lane-ratified under ruling 666; see git history for prior changes. |
+| `sessions` | 63 | 20,677 | **20,639** | ratified 20,639 — row 190 (forge-8vfn.8.5.28): the demo generate turn diff-checks its ground and fails naming any path changed outside .forge/demo/ (the grounding pass holds Bash), +62 on 20,577, lane-ratified under ruling 666; see git history for prior changes. |
 | `flows` | 88 | 25,097 | **24,897** | ratified 24,897 — row 182 (forge-8vfn.8.5.18): the develop claim refuses an unproducible demo checkpoint through the integrate band's own predicate, +153 on 24,744, T1-ratified (1973ct, >100); see git history for prior raises. |
 | `factory` | 15 | 2,904 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 45 | 12,266 | **12,266** | ratified 12,266 — row 167 (forge-8vfn.8.1.61, ruling 1916): `rebaseForResume` moved out to `packages/flows/cycle-helpers.ts`, −20 on 12,286 (cap lowered to measured); see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 34 | 7,996 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **485** | **130,515** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **485** | **130,577** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -322,7 +322,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/demo-builder.ts | sessions | verbatim | 411 |
 | packages/sessions/kinds/authoring.ts | sessions | rewritten | 141 |
 | packages/sessions/kinds/demo-session-store.ts | sessions | rewritten | 152 |
-| packages/sessions/kinds/demo-generate.ts | sessions | rewritten | 321 **Split from `kinds/demo-builder.ts` (M6-A s3, row 5 / bead `forge-8vfn.6.11.49`)** — the generate step and its six private prompt helpers, taken out when the write-then-run fix put the parent at 802 against the 800-line cap. `rewritten` rather than `verbatim`: the step's signature gains `agentSpec`, because `demoBuilderAgentSpec` is the kind's ADR-024 identity and stays in the parent rather than being imported back as a cycle. |
+| packages/sessions/kinds/demo-generate.ts | sessions | rewritten | 383 **Split from `kinds/demo-builder.ts` (M6-A s3, row 5 / bead `forge-8vfn.6.11.49`)** — the generate step and its six private prompt helpers, taken out when the write-then-run fix put the parent at 802 against the 800-line cap. `rewritten` rather than `verbatim`: the step's signature gains `agentSpec`, because `demoBuilderAgentSpec` is the kind's ADR-024 identity and stays in the parent rather than being imported back as a cycle. |
 | packages/sessions/kinds/kb-cleanup.ts | sessions | rewritten | 77 |
 | packages/flows/drain-fix-loop.ts | flows | verbatim | 290 |
 | packages/flows/enqueue-develop-run.ts | flows | verbatim | 80 |
