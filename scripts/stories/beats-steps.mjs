@@ -182,6 +182,37 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
         : fillAllMatchingAttr !== null ? `[data-${fillAllMatchingAttr}]`
           : handleFor(step);
 
+    // `onlyIf` — row 177 (`forge-8vfn.8.5.13`). An OPTIONAL precondition on a
+    // `pressWithin` step: press only when the SCOPE element (never the action
+    // control inside it) already carries the declared `data-<key>` value.
+    //
+    // THE MEASURED DEFECT. S10 beat 16's `toggle-region` assumed every AC
+    // region starts COLLAPSED — true only when the review decomposes into
+    // MORE than `REGION_COLLAPSE_THRESHOLD` criteria
+    // (`apps/studio/lib/demo-review-view.ts`'s `regionDefaultOpen`); the
+    // criterion count is minted at run time by the LLM that decomposes the
+    // initiative, and a measured run produced 11, so every region rendered
+    // OPEN. The unconditional toggle then COLLAPSED the one region the next
+    // step needed `comment-region` on, which mounts only while its region is
+    // expanded (`DemoReviewSurface.tsx:387,485`) — so the next step waited its
+    // full declared bound for a control the beat had just made disappear (a
+    // 30-minute timeout). `onlyIf` lets the step name the state it actually
+    // requires, so the toggle presses only when the product's own default
+    // disagrees with it, in either direction.
+    //
+    // `null` means this step carries none — every OTHER step form, and a
+    // `pressWithin` that declares no `onlyIf`, are unaffected by this and by
+    // the check further down that reads it.
+    const onlyIf = pw !== null && pw.onlyIf !== undefined ? pw.onlyIf : null;
+    // The SCOPE element's own selector — `[data-<attr>="<value>"]`, never the
+    // action-scoped `handle` above — because `onlyIf` is a fact about the
+    // element a press is scoped WITHIN, not about the control it presses. A
+    // `bind` scope already knows its value here (resolved by
+    // `resolveBoundPresses` before this ever runs, exactly like `handle`'s own
+    // scoped form two lines up); a `text` scope only learns it once
+    // `resolveTextScopePress` has picked, so this is re-pointed there, below.
+    let onlyIfScopeHandle = pw !== null && !isTextScope ? `[data-${pw.scope.attr}="${pw.scope.value}"]` : null;
+
     // T1 ruling 531(3) — STANDING ON THE WRONG PAGE, answered at t+0.
     //
     // S10 run 2 beat 4 spent its full declared 600 000 ms pressing
@@ -303,6 +334,36 @@ export async function performSteps(page, steps, timeoutMs, sessionScope = null, 
       if (resolved.error !== null) return finish(resolved.error);
       textAnchors.push(resolved.anchor);
       handle = resolved.handle;
+      // Re-pointed to the picked region — see `onlyIfScopeHandle`'s own
+      // comment above. `resolved.anchor.region` already passed
+      // `SAFE_SCOPE_VALUE` inside `resolveTextScopePress`, the same value
+      // `resolved.handle` itself was just built from.
+      onlyIfScopeHandle = `[data-${pw.scope.attr}="${resolved.anchor.region}"]`;
+    }
+
+    // `onlyIf` ITSELF — row 177 (`forge-8vfn.8.5.13`). Runs once the scope's
+    // value is known either way (a bind scope resolved it before this
+    // function was even called; a text scope just resolved it above), which
+    // is the first point this check CAN run, and it runs before the act below
+    // ever touches the control. A step with no `onlyIf` at all (the
+    // overwhelmingly common case) skips straight through.
+    if (onlyIf !== null) {
+      const [onlyIfKey, onlyIfWant] = Object.entries(onlyIf)[0];
+      const got = await readOnlyIfAttr(page, onlyIfScopeHandle, onlyIfKey, actLeft());
+      if (got !== onlyIfWant) {
+        // SKIPPED, never an error — row 177's own contract: nothing is
+        // pressed, nothing reds, and the run's own transcript says why, in
+        // the runner's established `[stories]` line style. An ABSENT
+        // attribute prints as absent rather than as a bare `null`, because
+        // "the key is not there" and "the key says something else" are two
+        // different facts a reader of the log should not have to infer apart.
+        console.log(
+          `[stories] pressWithin: skipped ${pw.action} — ${onlyIfScopeHandle} has ` +
+            `${got === null ? `no data-${onlyIfKey} attribute (absent)` : `data-${onlyIfKey}=${JSON.stringify(got)}`}` +
+            `; onlyIf wants ${JSON.stringify(onlyIfWant)}`,
+        );
+        continue;
+      }
     }
 
     // The bound is spent. Say so in the beat's own terms rather than letting the
@@ -445,6 +506,25 @@ async function readTextScopeEntries(page, attr) {
     (els, name) =>
       els.map((el) => ({ value: el.getAttribute(name) ?? '', text: (el.textContent ?? '').trim() })),
     dataAttr,
+  );
+}
+
+/**
+ * Read one `data-<key>` attribute off the element a `pressWithin` step's
+ * `onlyIf` names — the SCOPE element itself (`scopeHandle`, built by the
+ * caller as `[data-<attr>="<value>"]`), never the action control the press
+ * targets. Row 177 (`forge-8vfn.8.5.13`).
+ *
+ * `null` means the attribute is ABSENT, and the caller treats that as "not
+ * equal" to whatever value `onlyIf` declared — never a vacuous match. Never
+ * "no such element" either: `onlyIf` only runs once the unscoped handle wait
+ * above has already proven the scope exists somewhere on the page.
+ */
+async function readOnlyIfAttr(page, scopeHandle, key, timeoutMs) {
+  return page.locator(scopeHandle).first().evaluate(
+    (n, name) => n.getAttribute(name),
+    `data-${key}`,
+    { timeout: timeoutMs },
   );
 }
 

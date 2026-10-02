@@ -317,19 +317,33 @@ export function resolveBoundPresses(steps, bindings) {
       return { ...rest, press: `${action}${bindings[bind]}` };
     }
     if (step?.pressWithin !== undefined) {
-      const { scope, action } = step.pressWithin;
+      const { scope, action, onlyIf } = step.pressWithin;
       // `forge-8vfn.8.1.16` / T1 ruling 1561 — a TEXT scope resolves at PRESS
       // time against the live page (`beats-steps.mjs`'s `resolveTextScopePress`),
       // never here: the criterion index is minted at run time by the LLM that
       // decomposed the initiative, so there is no earlier binding to
-      // substitute. Left byte-identical for the caller to act on unchanged.
+      // substitute. Left byte-identical for the caller to act on unchanged —
+      // `onlyIf` travels with it untouched, same as everything else on the step.
       if (scope.text !== undefined) return step;
       if (!Object.hasOwn(bindings ?? {}, scope.bind)) {
         unbound ??= scope.bind;
         return step;
       }
       const { pressWithin, ...rest } = step;
-      return { ...rest, pressWithin: { scope: { attr: scope.attr, value: bindings[scope.bind] }, action } };
+      // `onlyIf` — row 177 (`forge-8vfn.8.5.13`). CARRIED THROUGH explicitly:
+      // this rebuilds `pressWithin` from a fixed field list exactly like
+      // `story-wait-schema.mjs` does, and a field validated but not named in a
+      // rebuild is dropped SILENTLY (the 7.6.82 class) — here that would mean a
+      // bind-scope `onlyIf` surviving the schema and then vanishing the moment
+      // the beat's own bind resolves.
+      return {
+        ...rest,
+        pressWithin: {
+          scope: { attr: scope.attr, value: bindings[scope.bind] },
+          action,
+          ...(onlyIf !== undefined ? { onlyIf } : {}),
+        },
+      };
     }
     return step;
   });

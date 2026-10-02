@@ -177,10 +177,16 @@ export function fakeStudio(spec: {
       }
     },
     waitFor: ({ timeout }: { timeout: number }) => until(() => find(sel) !== null, timeout, sel),
-    async evaluate(fn: (n: any) => unknown) {
+    // `arg` is forwarded, same as real playwright's `locator.evaluate(fn,
+    // arg)` — `forge-8vfn.8.5.13`'s `readOnlyIfAttr` needs it (the attribute
+    // NAME travels as `arg`, never closed over, for the same cross-context
+    // reason `readTextScopeEntries`' `evaluateAll` already passes one
+    // through below). Every existing caller passes `undefined` and ignores
+    // the second parameter, so this is additive.
+    async evaluate(fn: (n: any, arg?: any) => unknown, arg?: any) {
       const node = findAll(sel)[index] ?? null;
       if (node === null) throw new Error(`locator.evaluate: Timeout 5000ms exceeded waiting for ${sel}`);
-      return fn(domish(node));
+      return fn(domish(node), arg);
     },
     /** playwright's `evaluateAll` — every match, not the indexed one. */
     async evaluateAll(fn: (ns: any[], arg: any) => unknown, arg: any) {
