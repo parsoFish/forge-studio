@@ -164,14 +164,72 @@ test('row 190: a further edit to an ALREADY-dirty file is still caught — the b
   );
 });
 
-test('row 190: a grounding pass that COMMITS its edit is caught too — HEAD is part of the ground', async () => {
+test('row 190b: a ground COMMIT does not red this fence — HEAD is the host fence\'s (row 188), a ground\'s own commits are the product\'s (T1 ruling 1973fa)', async () => {
+  // Was row 190's "a grounding pass that COMMITS its edit is caught too —
+  // HEAD is part of the ground". r9 measured that HEAD stamp false-redding on
+  // a commit ANOTHER forge actor made mid-pass (the 190b test below), and
+  // ruling 1973fa dropped HEAD from this fence. The trade is recorded, not
+  // hidden: an edit the pass commits leaves no porcelain entry, so this fence
+  // no longer names it.
+  const { repoPath, logsRoot, sessionId } = setupGround();
+  const result = await runDemoBuilderTurn({
+    sessionId, projectRoot: repoPath, forgeRoot: FORGE_ROOT, logsRoot,
+    queryFn: groundingQueryFn((cwd) => { capturedSchemaEdit(cwd); git(cwd, 'commit', '-q', '-am', 'tweak'); }),
+    logger: logger(logsRoot, sessionId),
+  });
+  assert.equal(result.phase, 'awaiting-review');
+});
+
+/**
+ * Row 190b (bead `forge-8vfn.8.5.31`, T1 ruling 1973fa) — the r9 false red.
+ * Capture `_1.0/evidence/m7-e-r9-s1-capture/`: the demo session's `error`
+ * event at 17:50:48.889Z named `.forge/contract-compliance-report.json`,
+ * `HEAD (commit)` and `_onboarding/2026-10-02T17-42-10-91476d29/status.json`.
+ * MTIMES.txt puts the onboarding session's finish at 17:50:42.866–.869Z —
+ * INSIDE the demo's ground pass (session born 17:47:33.649Z): the onboarding
+ * agent wrote its status, its compliance report and its commit between this
+ * fence's snapshot and its check. Forge's own actors, not project source.
+ */
+const R9_ONBOARDING_STATUS = '_onboarding/2026-10-02T17-42-10-91476d29/status.json';
+const R9_COMPLIANCE = '.forge/contract-compliance-report.json';
+
+test('row 190b: forge\'s own actors writing the ground mid-pass (the r9 capture) do NOT red the fence', async () => {
+  const { repoPath, logsRoot, sessionId } = setupGround();
+  // Before the demo turn: the onboarding session (born 17:42:10) already holds its dir.
+  mkdirSync(join(repoPath, '_onboarding', '2026-10-02T17-42-10-91476d29'), { recursive: true });
+  writeFileSync(join(repoPath, R9_ONBOARDING_STATUS), '{"phase":"running"}\n');
+  writeFileSync(join(repoPath, R9_COMPLIANCE), '{"ok":false}\n');
+  const result = await runDemoBuilderTurn({
+    sessionId, projectRoot: repoPath, forgeRoot: FORGE_ROOT, logsRoot,
+    queryFn: groundingQueryFn(() => {
+      // 17:50:42 — the onboarding session finishes while the demo grounds.
+      writeFileSync(join(repoPath, R9_ONBOARDING_STATUS), '{"phase":"done"}\n');
+      writeFileSync(join(repoPath, R9_COMPLIANCE), '{"ok":true}\n');
+      writeFileSync(join(repoPath, 'AGENTS.md'), '# story-s1\n');
+      git(repoPath, 'add', 'AGENTS.md');
+      git(repoPath, 'commit', '-q', '-m', 'chore: onboard');
+    }),
+    logger: logger(logsRoot, sessionId),
+  });
+  assert.equal(result.phase, 'awaiting-review');
+  assert.ok(!events(logsRoot, sessionId).some((e) => e.metadata?.rule === 'demo-ground-fence'), 'no ground-fence error event');
+});
+
+test('row 190b: forge-owned writes beside a real source edit — the fence names ONLY the source path', async () => {
   const { repoPath, logsRoot, sessionId } = setupGround();
   await assert.rejects(
     () => runDemoBuilderTurn({
       sessionId, projectRoot: repoPath, forgeRoot: FORGE_ROOT, logsRoot,
-      queryFn: groundingQueryFn((cwd) => { capturedSchemaEdit(cwd); git(cwd, 'commit', '-q', '-am', 'tweak'); }),
+      queryFn: groundingQueryFn((cwd) => {
+        mkdirSync(join(repoPath, '_onboarding', '2026-10-02T17-42-10-91476d29'), { recursive: true });
+        writeFileSync(join(repoPath, R9_ONBOARDING_STATUS), '{"phase":"done"}\n');
+        writeFileSync(join(repoPath, R9_COMPLIANCE), '{"ok":true}\n');
+        capturedSchemaEdit(cwd);
+      }),
       logger: logger(logsRoot, sessionId),
     }),
-    /HEAD/,
+    /schemas\/overlay\.schema\.json/,
   );
+  const fenced = events(logsRoot, sessionId).find((e) => e.metadata?.rule === 'demo-ground-fence');
+  assert.deepEqual(fenced?.metadata?.paths, [SCHEMA_REL]);
 });

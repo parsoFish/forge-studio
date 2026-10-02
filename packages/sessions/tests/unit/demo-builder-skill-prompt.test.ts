@@ -431,8 +431,9 @@ test('AT-10 (Round-2, Part D): a throw inside runGenerateStep after the agent al
     // AMENDED by row 190 (forge-8vfn.8.5.28): the root write is a ground
     // breach, and the ground fence after passes 1+2 names it before the
     // missing-deliverable check runs. Still a throw after the write landed,
-    // which is all the commit-scope assertions below need.
-    /demo-builder runner: the read\+write pass changed the project ground outside \.forge\/demo: AGENT-PARTIAL-WORK-9c21\.txt/,
+    // which is all the commit-scope assertions below need. Row 190b (ruling
+    // 1973fa) reworded it: the fence judges project source only.
+    /demo-builder runner: the read\+write pass changed the project's source \(outside [^)]*\): AGENT-PARTIAL-WORK-9c21\.txt/,
   );
 
   // ensureStudioBranch runs BEFORE the dispatch — that part already happens
