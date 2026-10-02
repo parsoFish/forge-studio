@@ -1,0 +1,10 @@
+[2026-10-02T21:28:13.711Z] [stories] while waiting on [data-action="run-agent"]: present and enabled
+[2026-10-02T21:28:13.989Z] [stories] spend after beat 23: $0.2168 of $25.00
+[2026-10-02T21:28:13.989Z] [stories] host after beat 23: loadavg 8.85 8.36 7.36  MemAvailable 8.4GiB
+[2026-10-02T21:28:13.990Z]   ✓ 23. Run the agent
+[2026-10-02T21:28:23.536Z] [stories] spend after beat 24: $0.2749 of $25.00
+[2026-10-02T21:28:23.537Z] [stories] host after beat 24: loadavg 8.36 8.27 7.34  MemAvailable 8.3GiB
+[2026-10-02T21:28:23.537Z]   ✗ 24. Wait for the run to end   [no-do: navigated and asserted; nothing was pressed]
+[2026-10-02T21:28:23.537Z]       data-run-status: expected "done", got "running"
+[2026-10-02T21:28:23.537Z]       channel-quiet: the agent channel _agent-brain-ingest-2026-10-02T21-28-13-741-tjs6's own process has been REAPED and, one poll later, it still carries no terminal state — nothing published, and nothing left running to publish one. The beat's expectations never held. 9s into the agent wait (declared 300000 ms) — the beat stopped there rather than sitting out its declared bound
+[2026-10-02T21:28:23.537Z]       the agent-channel door did NOT run: this beat declared 300000 ms, within twice the 180000 ms stall ceiling, and a door that would consume most of a declared bound is the verdict rather than an early exit. The bound above is the whole story here.

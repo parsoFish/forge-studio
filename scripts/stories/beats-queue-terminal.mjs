@@ -274,6 +274,7 @@ export function channelTerminalState(forgeRoot, dir) {
   let lastEvent = null;
   let lastEventAtMs = null;
   let published = null;
+  let runEnd = null;
   let eventsReadable = false;
   let eventsRealError = null;
   try {
@@ -292,6 +293,7 @@ export function channelTerminalState(forgeRoot, dir) {
       } catch { /* a torn row is not a verdict */ }
     }
     published = turnPublishedPhase(rows);
+    runEnd = runOwnEnd(rows, name);
   } catch (err) {
     if (err?.code !== 'ENOENT') eventsRealError = `could not read ${join(dir, 'events.jsonl')}: ${err?.code ?? err?.message}`;
   }
@@ -319,6 +321,15 @@ export function channelTerminalState(forgeRoot, dir) {
       state: `phase=${published.phase}`,
       atMs: published.atMs,
       detail: `its turn's own end event published phase=${published.phase} at ${new Date(published.atMs).toISOString()}`,
+    };
+  }
+  // ROW 197 (forge-8vfn.8.5.35) — THE RUN'S OWN `end`. See `runOwnEnd` below;
+  // `atMs` again lets the caller tell this press's run from the previous one.
+  if (runEnd !== null) {
+    return {
+      state: 'end',
+      atMs: runEnd.atMs,
+      detail: `its run's own ${runEnd.skill} end event at ${new Date(runEnd.atMs).toISOString()}`,
     };
   }
   // NOTHING CONCLUSIVE. THE GATE, WIDENED (T1 1507): unknown when EITHER side
@@ -367,6 +378,49 @@ function turnPublishedPhase(rows) {
     if (ev?.event_type !== 'end' || typeof ev?.metadata?.phase !== 'string') continue;
     const atMs = Date.parse(ev.started_at);
     return Number.isNaN(atMs) ? null : { phase: ev.metadata.phase, atMs };
+  }
+  return null;
+}
+
+/**
+ * ROW 197 (forge-8vfn.8.5.35), T1 rulings 1973gh/gj — a dispatched RUN's own
+ * run-level `end`, the off-session twin of `turnPublishedPhase`.
+ *
+ * MEASURED on S7 run 6 beat 24. The brain-ingest run wrote `brain-ingest end`
+ * (priced) at 21:28:23.167 and exited; early death reded `channel-quiet` at
+ * 23.537 with the page still on `running` (`early-death-run6-s7-capture.test.ts`).
+ * `runAgent` emits that `end` with `skill: def.slug` and NO `metadata.phase`
+ * (`packages/agents/run-agent.ts`), so row 184d's phased read stepped over it —
+ * and reading backwards it met the SessionEnd hook's own `start` first.
+ *
+ * THE RUN, NOT ITS HOOKS. A hook fired inside the run stamps the SAME
+ * `initiative_id` (`hook:<id>` skill, `packages/agents/studio/hook-dispatch.ts`)
+ * and writes its OWN `start`/`end` pair, 1 ms before the run's end on that
+ * capture. So the run is named by skill: the first non-`hook:` `start`
+ * stamped with the channel's own id (the dir name — a session's turns carry
+ * their session id instead, so this never reads an architect channel), and
+ * only an `end` of that same skill and id counts. A later `start` of the run's
+ * skill means a newer run has not ended — its predecessor's end is not its
+ * word. Whether an end predates THIS press stays the caller's question
+ * (`atMs`, `beats-early-death.mjs`).
+ *
+ * @returns {null | {skill: string, atMs: number}}
+ */
+function runOwnEnd(rows, channel) {
+  const parsed = [];
+  for (const row of rows) {
+    try { parsed.push(JSON.parse(row)); } catch { /* a torn row is not a verdict */ }
+  }
+  const own = (ev) => ev?.initiative_id === channel && typeof ev?.skill === 'string' && !ev.skill.startsWith('hook:');
+  const skill = parsed.find((ev) => own(ev) && ev.event_type === 'start')?.skill;
+  if (skill === undefined) return null;
+  for (let i = parsed.length - 1; i >= 0; i -= 1) {
+    const ev = parsed[i];
+    if (!own(ev) || ev.skill !== skill) continue;
+    if (ev.event_type === 'start') return null;
+    if (ev.event_type !== 'end') continue;
+    const atMs = Date.parse(ev.started_at);
+    return Number.isNaN(atMs) ? null : { skill, atMs };
   }
   return null;
 }
