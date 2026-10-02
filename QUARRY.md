@@ -60,14 +60,14 @@ operator-ratified new cap — never a silent raise.
 | `projects` | 48 | 11,170 | **9,404** | ratified 9,404 — G3/G4 crash-safe create + onboard (forge-8vfn.8.5.3/.4); +51 net on 9,353, lane-ratified under ruling 666. |
 | `knowledge` | 44 | 13,346 | **12,768** | ratified 12,768 — G1 boot-time release of a kb-cleanup apply stuck at applying (+74, forge-8vfn.8.5.1) and G3 isUntouchedBrainSeedStub crash-orphan check (+43, 8.5.3): +117 on 12,651, T1-ratified (>100). |
 | `agents` | 44 | 12,433 | **12,433** | **pure transfer to apps/forge (7.1c boundary fix): the agent CLI verbs agent-run.ts + agent-dispatch-cmd.ts moved out, trigger firing moved to cmdAgentDispatch; runner.ts comment trimmed. −953 on 13,386, cap lowered to measured.** |
-| `sessions` | 63 | 20,603 | **20,565** | **pure transfers to contracts (SESSION_STAGES + ContractStage types −25; session anchors −14) and safeReadFileInSession to kernel (7.1c boundary fix); cap lowered to measured.** |
+| `sessions` | 63 | 20,605 | **20,567** | ratified 20,567 — row 173 (forge-8vfn.8.5.8): the PLAN footprint states each develop run's own spend ceiling, +2 on 20,565, lane-ratified under ruling 666; see git history for prior changes. |
 | `flows` | 87 | 24,942 | **24,742** | **measured 24,742 — §7.3 cost-by-class producer (+99 lines: cost-by-class.ts + its index.ts door line); ruling 666 ≤100-line standing cap-raise authority, cap raised to measured.** |
 | `factory` | 15 | 2,904 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 45 | 12,266 | **12,266** | ratified 12,266 — row 167 (forge-8vfn.8.1.61, ruling 1916): `rebaseForResume` moved out to `packages/flows/cycle-helpers.ts`, −20 on 12,286 (cap lowered to measured); see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 34 | 7,993 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **484** | **130,309** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **484** | **130,311** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -121,7 +121,7 @@ operator-ratified new cap — never a silent raise.
 | path | owner | disposition | loc |
 |---|---|---|---|
 | apps/forge/agent-run.ts | apps/forge | verbatim | 386 |
-| packages/sessions/kinds/architect-plan.ts | sessions | verbatim | 399 |
+| packages/sessions/kinds/architect-plan.ts | sessions | verbatim | 401 |
 | packages/sessions/kinds/architect-plan-html.ts | sessions | rewritten | 356 |
 | packages/knowledge/brain-fix-auto.ts | knowledge | verbatim | 270 |
 | packages/knowledge/brain-index.ts | knowledge | verbatim | 369 |
