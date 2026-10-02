@@ -86,6 +86,7 @@ import { writeRootFenceOptions, type BashFenceMode } from './session-write-fence
 // The `.heartbeat` liveness primitives live in their own module (file-size
 // budget, 1.0.md §0) — imported directly, never re-exported from here.
 import { makeHeartbeatTick, startHeartbeatTicker } from './heartbeat.ts';
+import { budgetedResultCostUsd } from './turn-budget.ts';
 
 /** PROGRESS predicate shared by every turn loop (forge-8vfn.8.1.9, incl.
  *  `kinds/fix-turn.ts`): an `assistant` message or the terminal `result` is
@@ -371,6 +372,9 @@ export async function runStructuredTurn<T>(args: {
    *  same contract `runAgentTurn` has carried since 7.6.55; the structured
    *  primitive never had it, and its callers are the ones spending. */
   onTurnEndedUnpriced?: (info: UnpricedTurnInfo) => void;
+  /** Row 193b (ruling 1973gq) — the SDK's `maxBudgetUsd`, computed by the
+   *  caller at dispatch (`turn-budget.ts`). Honest-absent: no key when none. */
+  maxBudgetUsd?: number;
 }): Promise<StructuredResult<T>> {
   const options: Record<string, unknown> = {
     model: args.model,
@@ -381,6 +385,7 @@ export async function runStructuredTurn<T>(args: {
     outputFormat: { type: 'json_schema', schema: args.schema },
     ...(args.hooks !== undefined ? { hooks: args.hooks } : {}),
     ...(args.cwd !== undefined ? { cwd: args.cwd } : {}),
+    ...(args.maxBudgetUsd !== undefined ? { maxBudgetUsd: args.maxBudgetUsd } : {}),
   };
   if (args.disallowedTools !== undefined && args.disallowedTools.length > 0) {
     options.disallowedTools = args.disallowedTools;
@@ -450,8 +455,7 @@ export async function runStructuredTurn<T>(args: {
     if (m.structured_output && typeof m.structured_output === 'object') {
       structured = m.structured_output as T;
     }
-    const c = (m as { total_cost_usd?: unknown }).total_cost_usd;
-    if (typeof c === 'number') turnCostUsd = c;
+    turnCostUsd = budgetedResultCostUsd(m as { subtype?: unknown; total_cost_usd?: unknown }, args.maxBudgetUsd);
     break;
   }
   } catch (err) {
@@ -460,7 +464,7 @@ export async function runStructuredTurn<T>(args: {
     // load-bearing — it CATCHES every error and returns `{crashed: true}` as
     // advisory infra, so this callback is the only way a died critic turn's
     // consumed tokens can ever be reported.
-    reportUnpriced(args.onTurnEndedUnpriced, unpricedReason(err), seen);
+    reportUnpriced(args.onTurnEndedUnpriced, unpricedReason(err), seen, args.maxBudgetUsd);
     throw err;
   } finally {
     // Row 164 — the call is no longer in flight, however it ended.
@@ -473,7 +477,7 @@ export async function runStructuredTurn<T>(args: {
   // here rather than left to the caller's null check, because a caller that
   // simply omits the row leaves the log with no terminal event at all, which
   // is the state 849 ruled against.
-  if (turnCostUsd === null) reportUnpriced(args.onTurnEndedUnpriced, 'no-result', seen);
+  if (turnCostUsd === null) reportUnpriced(args.onTurnEndedUnpriced, 'no-result', seen, args.maxBudgetUsd);
 
   const output = structured ?? parseFencedJson<T>(rawText);
   return { output, reads, costUsd: turnCostUsd };
@@ -535,6 +539,8 @@ function recordUsage(seen: SeenUsage, usage: unknown): void {
  */
 export type UnpricedTurnInfo = {
   reason: 'abort' | 'died' | 'no-result';
+  /** Row 193b — the `maxBudgetUsd` the turn ran under; absent when none. */
+  upperBoundUsd?: number;
   tokensIn?: number;
   tokensOut?: number;
   cacheReadTokens?: number;
@@ -559,11 +565,13 @@ function reportUnpriced(
   cb: ((info: UnpricedTurnInfo) => void) | undefined,
   reason: UnpricedTurnInfo['reason'],
   seen: SeenUsage,
+  upperBoundUsd: number | undefined,
 ): void {
   if (!cb) return;
   try {
     cb({
       reason,
+      ...(upperBoundUsd !== undefined ? { upperBoundUsd } : {}),
       ...(seen.sawAny
         ? {
             tokensIn: seen.tokensInLast,
@@ -624,6 +632,8 @@ export async function runAgentTurn(args: {
    *  nothing, so the throw path never saw it and the caller emitted no row at
    *  all. Same contract on `runStructuredTurn`. */
   onTurnEndedUnpriced?: (info: UnpricedTurnInfo) => void;
+  /** Row 193b — the SDK's `maxBudgetUsd` (see `runStructuredTurn`'s field). */
+  maxBudgetUsd?: number;
 }): Promise<{ costUsd: number | null }> {
   const abortController = new AbortController();
   const fenced = args.writeRoots !== undefined && args.writeRoots.length > 0;
@@ -661,6 +671,7 @@ export async function runAgentTurn(args: {
     maxTurns: args.maxTurns ?? 16,
     abortController,
     ...(args.hooks !== undefined ? { hooks: args.hooks } : {}),
+    ...(args.maxBudgetUsd !== undefined ? { maxBudgetUsd: args.maxBudgetUsd } : {}),
     // `forge-a9o9` — DENY BY DEFAULT. Every turn is fenced to the tools its
     // kind declared, because `allowedTools` is advisory and a deny list can
     // only name tools its authors have heard of (S1 run 5: `LSP`, `TaskOutput`
@@ -742,13 +753,13 @@ export async function runAgentTurn(args: {
     }
     if (m.type !== 'result') continue;
     tickHeartbeat();
-    if (typeof m.total_cost_usd === 'number') costUsd = m.total_cost_usd;
+    costUsd = budgetedResultCostUsd(m, args.maxBudgetUsd);
     break;
   }
   } catch (err) {
     // Before the rethrow, never instead of it: the turn still fails and every
     // caller's error handling is unchanged.
-    reportUnpriced(args.onTurnEndedUnpriced, unpricedReason(err), seen);
+    reportUnpriced(args.onTurnEndedUnpriced, unpricedReason(err), seen, args.maxBudgetUsd);
     throw err;
   } finally {
     // Row 164 — the call is no longer in flight, however it ended.
@@ -760,7 +771,7 @@ export async function runAgentTurn(args: {
   // resultless without throwing left the log with NO terminal row: not priced,
   // not marked unpriced, invisible to `endedUnpricedTurns` and therefore to
   // 7.6.71's halt. The throw path could never cover it, because nothing threw.
-  if (costUsd === null) reportUnpriced(args.onTurnEndedUnpriced, 'no-result', seen);
+  if (costUsd === null) reportUnpriced(args.onTurnEndedUnpriced, 'no-result', seen, args.maxBudgetUsd);
 
   return { costUsd };
 }

@@ -125,6 +125,7 @@ export const projectBrainKind: SessionKindVariant<ProjectBrainStatus, RunProject
 
       await runAgentTurn({
         queryFn: plumbing.queryFn,
+        maxBudgetUsd: plumbing.turnBudgetUsd(), // row 193b — the session's remaining, at dispatch
         prompt,
         cwd,
         model: resolveSessionModel(projectBrainAgentSpec, status.modelTier),

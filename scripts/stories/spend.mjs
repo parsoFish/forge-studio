@@ -431,7 +431,7 @@ export function costlessBeatVerdict(beforeUsd, afterUsd) {
  * re-logs a session's own terminal row and one turn must not read as two.
  *
  * @param {{event_id?: unknown, message?: unknown, cost_usd?: unknown, tokens_in?: unknown, tokens_out?: unknown, metadata?: Record<string, unknown>}[][]} eventLists
- * @returns {ReadonlyArray<{reason: string, tokensIn: number|null, tokensOut: number|null, sessionId: string}>}
+ * @returns {ReadonlyArray<{reason: string, tokensIn: number|null, tokensOut: number|null, sessionId: string, upperBoundUsd: number|null}>}
  */
 export function endedUnpricedTurns(eventLists) {
   const seen = new Set();
@@ -483,10 +483,48 @@ export function endedUnpricedTurns(eventLists) {
         sessionId: typeof meta['session_id'] === 'string'
           ? meta['session_id']
           : typeof r?.cycle_id === 'string' ? r.cycle_id : 'unknown',
+        // Row 193b (T1 ruling 1973gq) — the cap the turn ran under, when the
+        // product had one (`metadata.upper_bound_usd`, written by
+        // `emitTurnEndedUnpricedRow`). Only a finite POSITIVE number is a
+        // bound: the product never starts a turn at a cap <= 0, so a zero here
+        // is a malformed row, and a malformed bound must stay blind rather than
+        // be charged as if it bounded something.
+        upperBoundUsd: typeof meta['upper_bound_usd'] === 'number'
+          && Number.isFinite(meta['upper_bound_usd']) && meta['upper_bound_usd'] > 0
+          ? meta['upper_bound_usd']
+          : null,
       }));
     }
   }
   return Object.freeze(out);
+}
+
+/**
+ * The spend the ceiling compares, once every BOUNDED unpriced turn is charged
+ * its bound — row 193b, bead `forge-8vfn.8.5.38`, T1 ruling 1973gq.
+ *
+ * "Unpriced" was honest only while nothing bounded the turn. A session turn now
+ * runs under the SDK's `maxBudgetUsd` whenever a ceiling exists, so a turn that
+ * stalls and is aborted (S10 beat 30, row 6 run 6) still has a figure: it cannot
+ * have spent more than the cap it ran under. Charging the CAP over-reports
+ * whatever the turn really spent, which is the direction a ceiling must fail in
+ * (`summariseRunSpend`'s own rule: over-report before under-report).
+ *
+ * A turn with NO bound is not charged anything here: it stays in the list
+ * `ceilingHaltVerdict` halts on as UNENFORCEABLE, exactly as #1066 merged it.
+ * With nothing priced at all and a bound charged, the spend becomes MEASURED —
+ * the bound is a number, and a number is what `spendCeilingVerdict` compares.
+ *
+ * @param {ReturnType<typeof summariseRunSpend>} spend
+ * @param {ReturnType<typeof endedUnpricedTurns>} unpriced
+ * @returns {ReturnType<typeof summariseRunSpend> & {chargedUsd: number, chargedTurns: number}}
+ */
+export function chargeBoundedTurns(spend, unpriced) {
+  const bounded = (unpriced ?? []).filter((t) => t.upperBoundUsd !== null);
+  const chargedUsd = bounded.reduce((sum, t) => sum + t.upperBoundUsd, 0);
+  if (bounded.length === 0) return Object.freeze({ ...spend, chargedUsd: 0, chargedTurns: 0 });
+  const priced = spend?.measured === true && typeof spend.usd === 'number' ? spend.usd : 0;
+  return Object.freeze({ ...spend, measured: true, usd: priced + chargedUsd, chargedUsd, chargedTurns: bounded.length });
 }
 
 /**
@@ -552,7 +590,10 @@ export function endedUnpricedTurns(eventLists) {
  * @returns {Readonly<{halt: boolean, kind: 'breach'|'row-write-failed'|'unenforceable'|null, headline: string|null, reason: string, note: string}>}
  */
 export function ceilingHaltVerdict({ spend, ceilingUsd, unpriced, emitFailures, spendUnknown }) {
-  const v = spendCeilingVerdict(spend, ceilingUsd);
+  // Row 193b — the breach is judged on the spend WITH every bounded unpriced
+  // turn charged its cap; only the unbounded ones reach the blind arm below.
+  const charged = chargeBoundedTurns(spend, unpriced);
+  const v = spendCeilingVerdict(charged, ceilingUsd);
   if (v.breached) {
     return Object.freeze({
       halt: true, kind: 'breach', headline: 'CEILING BREACHED', reason: v.reason,
@@ -606,7 +647,7 @@ export function ceilingHaltVerdict({ spend, ceilingUsd, unpriced, emitFailures, 
     });
   }
 
-  const ended = unpriced ?? [];
+  const ended = (unpriced ?? []).filter((t) => t.upperBoundUsd === null);
   if (enforceable && ended.length > 0) {
     const t = ended[0];
     const tokens = [
@@ -632,5 +673,8 @@ export function ceilingHaltVerdict({ spend, ceilingUsd, unpriced, emitFailures, 
       note: 'The run was stopped because its ceiling went blind, NOT because a limit was exceeded — the beat score above is a partial run and the spend total is a lower bound.',
     });
   }
-  return Object.freeze({ halt: false, kind: null, headline: null, reason: v.reason, note: '' });
+  const bounded = charged.chargedTurns > 0
+    ? `; ${charged.chargedTurns} turn(s) ended unpriced UNDER A CAP and were charged $${charged.chargedUsd.toFixed(2)} at their bound`
+    : '';
+  return Object.freeze({ halt: false, kind: null, headline: null, reason: `${v.reason}${bounded}`, note: '' });
 }

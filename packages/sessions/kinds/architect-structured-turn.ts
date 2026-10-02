@@ -56,8 +56,13 @@ export async function runStructured<T>(args: {
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
   onThinking?: (text: string) => void;
+  /** Row 193b (T1 ruling 1973gq) — `plumbing.turnBudgetUsd`, evaluated per
+   *  ATTEMPT below: the stall retry runs after the stalled attempt's bounded
+   *  unpriced row is written, so the retry is capped against what is left. */
+  turnBudgetUsd?: () => number | undefined;
 }): Promise<StructuredResult<T>> {
   const runOnce = () => runStructuredTurn<T>({
+    maxBudgetUsd: args.turnBudgetUsd?.(),
     queryFn: args.queryFn,
     prompt: args.prompt,
     schema: args.schema,

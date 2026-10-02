@@ -327,7 +327,7 @@ async function runInterviewStep(args: {
 
   const { output, costUsd } = await runStructuredTurn<{ done?: boolean; questions?: InterviewQuestion[] }>({
     ...instructionsTurnRows(plumbing, 'interview'),
-    queryFn: plumbing.queryFn, prompt, schema: INTERVIEW_SCHEMA,
+    queryFn: plumbing.queryFn, prompt, schema: INTERVIEW_SCHEMA, maxBudgetUsd: plumbing.turnBudgetUsd(),
     model: resolveSessionModel(instructionsAgentSpec, status.modelTier), allowedTools: instructionsAgentSpec.allowedTools,
     disallowedTools: instructionsAgentSpec.disallowedTools,
     // W8-B6 — hook dispatch comes from the driver already bound to this turn's
@@ -425,7 +425,7 @@ async function runDraftStep(args: {
 
   const { output, costUsd } = await runStructuredTurn<{ agents_md?: string; composed_seed_ids?: string[] }>({
     ...instructionsTurnRows(plumbing, 'draft'),
-    queryFn: plumbing.queryFn, prompt, schema: DRAFT_SCHEMA,
+    queryFn: plumbing.queryFn, prompt, schema: DRAFT_SCHEMA, maxBudgetUsd: plumbing.turnBudgetUsd(),
     model: resolveSessionModel(instructionsAgentSpec, status.modelTier), allowedTools: instructionsAgentSpec.allowedTools,
     disallowedTools: instructionsAgentSpec.disallowedTools,
     ...plumbing.hooksForSkill(instructionsAgentSpec.skill),

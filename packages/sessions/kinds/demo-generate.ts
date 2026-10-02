@@ -117,6 +117,7 @@ export async function runGenerateStep(args: {
   const runPass = (turnPrompt: string, allowedTools: readonly string[], maxTurns: number, denied: readonly string[] = [], onText?: (t: string) => void, roots: readonly string[] = []) => runAgentTurn({
     ...(roots.length > 0 ? { writeRoots: roots, readRoots: roots } : {}),
     queryFn: plumbing.queryFn,
+    maxBudgetUsd: plumbing.turnBudgetUsd(), // row 193b — per pass, against what is left
     prompt: turnPrompt,
     cwd: status.project_repo_path,
     model: resolveSessionModel(agentSpec, status.modelTier),

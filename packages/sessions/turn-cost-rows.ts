@@ -150,7 +150,14 @@ export function emitTurnEndedUnpricedRow(
       ...(info.cacheReadTokens !== undefined ? { cache_read_tokens: info.cacheReadTokens } : {}),
       ...(info.cacheCreationTokens !== undefined ? { cache_creation_tokens: info.cacheCreationTokens } : {}),
       message: id.message,
-      metadata: { ...(id.metadata ?? {}), unpriced_reason: info.reason, priced: false },
+      // Row 193b (T1 ruling 1973gq) — the cap the turn ran under, when it had
+      // one. `spend.mjs`'s `chargeBoundedTurns` charges the ceiling this bound
+      // instead of halting UNENFORCEABLE, and `turn-budget.ts` subtracts it
+      // from the session's remaining; absent means unbounded, as before.
+      metadata: {
+        ...(id.metadata ?? {}), unpriced_reason: info.reason, priced: false,
+        ...(info.upperBoundUsd !== undefined ? { upper_bound_usd: info.upperBoundUsd } : {}),
+      },
     });
   } catch (err) {
     // The row that says "this turn was never priced" is itself the row that

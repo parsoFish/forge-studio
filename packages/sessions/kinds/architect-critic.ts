@@ -93,6 +93,10 @@ export type RunCompletenessCriticInput = {
    *  production caller is `architect-runner.ts`, which holds both. */
   logger: EventLogger;
   initiativeId: string;
+  /** Row 193b — the cap for this call (`plumbing.turnBudgetUsd()`), evaluated
+   *  by the caller OUTSIDE this function's catch-all: an exhausted budget is a
+   *  refusal of the session's turn, never an advisory critic crash. */
+  maxBudgetUsd?: number;
 };
 
 export type RunCompletenessCriticResult = {
@@ -285,6 +289,7 @@ export async function runCompletenessCritic(
       onHeartbeat: input.onHeartbeat,
       onText: input.onText,
       label: 'architect-completeness-critic',
+      maxBudgetUsd: input.maxBudgetUsd,
       onTurnEndedUnpriced: (info) => emitTurnEndedUnpricedRow(input.logger, {
         ...rowIdentity, message: 'architect.completeness-critic.turn-ended-unpriced',
       }, info),
@@ -348,6 +353,8 @@ export async function runCompletenessCriticStep(args: {
   status: ArchitectStatus;
   logger: EventLogger;
   queryFn: QueryFn;
+  /** Row 193b — `plumbing.turnBudgetUsd`; see `RunCompletenessCriticInput`. */
+  turnBudgetUsd?: () => number | undefined;
   /** The draft round this record checked — see `CompletenessCriticStatus`. */
   round: number;
   /** Row 176: the session's live-view and liveness callbacks, forwarded to the
@@ -357,7 +364,7 @@ export async function runCompletenessCriticStep(args: {
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
 }): Promise<CompletenessCriticStatus> {
-  const { input, paths, status, logger, queryFn, round, onToolUse, onHeartbeat, onText } = args;
+  const { input, paths, status, logger, queryFn, turnBudgetUsd, round, onToolUse, onHeartbeat, onText } = args;
   const initiativeId = `architect-session-${input.sessionId}`;
 
   const critStart = logger.emit({
@@ -389,6 +396,7 @@ export async function runCompletenessCriticStep(args: {
     queryFn,
     logger,
     initiativeId,
+    maxBudgetUsd: turnBudgetUsd?.(),
     onToolUse,
     onHeartbeat,
     onText,

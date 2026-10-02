@@ -203,7 +203,7 @@ export async function runInterviewStep(
 
   const { output: out } = await runStructured<{ done?: boolean; questions?: ArchitectQuestion[] }>({
     logger, initiativeId, cwd: status.project_repo_path,
-    queryFn,
+    queryFn, turnBudgetUsd: plumbing.turnBudgetUsd,
     prompt,
     schema: INTERVIEW_SCHEMA,
     modelTier: status.modelTier,
@@ -325,7 +325,7 @@ async function runExploreStep(args: ArchitectStepArgs): Promise<ExploreFindings 
 
   const { output } = await runStructured<ExploreFindings>({
     logger, initiativeId, cwd: status.project_repo_path,
-    queryFn,
+    queryFn, turnBudgetUsd: plumbing.turnBudgetUsd,
     prompt,
     schema: EXPLORE_SCHEMA,
     modelTier: status.modelTier,
@@ -502,7 +502,7 @@ export async function runDraftStep(
   // second copy of these ten arguments, which is where the two turns start to
   // disagree about the model, the ground or the hooks.
   const draftOnce = (text: string) => runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
-    logger, initiativeId, cwd: status.project_repo_path, queryFn, prompt: text,
+    logger, initiativeId, cwd: status.project_repo_path, queryFn, turnBudgetUsd: plumbing.turnBudgetUsd, prompt: text,
     schema: DRAFT_SCHEMA, modelTier: status.modelTier, onToolUse, onHeartbeat, onText, onThinking,
   });
   let { output: draft, brainReads } = await draftOnce(prompt);
@@ -570,7 +570,7 @@ export async function runDraftStep(
     if (!(err instanceof Error)) throw err;
     const repaired = await repairDraftManifest({
       logger, initiativeId, sessionId: input.sessionId, cwd: status.project_repo_path, queryFn,
-      modelTier: status.modelTier, onToolUse, onHeartbeat, onText, onThinking,
+      turnBudgetUsd: plumbing.turnBudgetUsd, modelTier: status.modelTier, onToolUse, onHeartbeat, onText, onThinking,
       draftPrompt: prompt, schema: DRAFT_SCHEMA, validationError: err, unwrap: unwrapInitiatives, buildAll,
     });
     manifests = repaired.manifests;
@@ -692,7 +692,7 @@ export async function runDraftRounds(
     // own `architect.completeness-critic.start` around that call.
     writeStatus({ ...status, phase: 'critiquing' });
     const record = await runCompletenessCriticStep({
-      input, paths, status, logger, queryFn: plumbing.queryFn, round,
+      input, paths, status, logger, queryFn: plumbing.queryFn, turnBudgetUsd: plumbing.turnBudgetUsd, round,
       onToolUse: plumbing.onToolUse, onHeartbeat: plumbing.onHeartbeat, onText: plumbing.onText,
     });
     // Durable BEFORE the next round: the flag records that THIS round was
