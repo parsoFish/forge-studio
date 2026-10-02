@@ -145,6 +145,9 @@ test('renderPlanDoc: aggregate footprint is informational only (C19 — no gate 
   assert.ok(!/\bthreshold\b/i.test(footprintBlock), `footprint block must not say "threshold":\n${footprintBlock}`);
   assert.ok(!/auto-?escalat/i.test(footprintBlock), `footprint block must not propose auto-escalation:\n${footprintBlock}`);
   assert.ok(!/aggregate_budget_declared/.test(footprintBlock), `footprint block must not reference the removed bench criterion:\n${footprintBlock}`);
+  // Row 173: the per-run ceiling is real and stated; the total is not limited.
+  assert.doesNotMatch(footprintBlock, /does not enforce a budget/);
+  assert.match(footprintBlock, /stops dispatching work when its spend reaches its own ceiling/);
 });
 
 // ---------------------------------------------------------------------------
@@ -408,9 +411,16 @@ test('renderPlanHtml: aggregate footprint renders a stacked bar with one segment
   // S2A-DECISIONS §11: avoids the words "gate", "threshold",
   // "auto-escalate/auto-escalation", and "aggregate_budget_declared" — even
   // in plain prose).
-  assert.match(html, /Informational only\./);
-  assert.match(html, /Forge does not enforce a budget or block at any number/);
+  assert.match(html, /Informational only/);
   assert.match(html, /the operator decides/);
+  // Row 173: the TOTAL is informational, but each develop run IS stopped at its
+  // own ceiling (manifest.ts readManifestCostCeiling + flow-budgets.ts
+  // stopReasonBeforeNextWorkItem). The old "forge does not enforce a budget or
+  // block at any number" told a stranger the opposite of what the run does.
+  assert.doesNotMatch(html, /does not enforce a budget/);
+  assert.match(html, /stops dispatching work when its spend reaches its own ceiling/);
+  assert.match(html, /cost_ceiling_usd/);
+  assert.match(html, /cost_budget_usd<\/code> plus 50%/);
 });
 
 test('renderPlanHtml: C19 — aggregate footprint section uses none of the forbidden vocabulary', () => {

@@ -331,7 +331,7 @@ ${session.initiatives.map((i, idx) => {
       return `      <div class="seg" style="flex: ${i.iteration_budget}; background: hsl(${hue}, 55%, 50%);" title="${esc(i.initiative_id)} — ${i.iteration_budget} iterations">${pct >= 8 ? esc(i.initiative_id.replace(/^INIT-\d{4}-\d{2}-\d{2}-/, '')) : ''}</div>`;
     }).join('\n')}
     </div>
-    <div class="info">Informational only. Forge does not enforce a budget or block at any number; the operator decides.</div>
+    <div class="info">Informational only: forge sets no limit on this total, and the operator decides whether it is acceptable. Each initiative's develop run stops dispatching work when its spend reaches its own ceiling: its <code>cost_ceiling_usd</code>, else <code>cost_budget_usd</code> plus 50%, unless an operator sets one at Start development.</div>
   </div>
 
   <!-- ── 5. OPERATOR BRIEF + INTERVIEW ── -->
