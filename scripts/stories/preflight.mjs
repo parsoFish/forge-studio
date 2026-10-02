@@ -20,6 +20,7 @@
 import { readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
 import { METHOD_C_CMD } from './ground-hash.mjs';
 import { FIXTURE_ROOT } from './fixture-ground.mjs';
+import { storyFixtureNames } from './sweep.mjs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import lockfile from 'proper-lockfile';
@@ -311,8 +312,21 @@ export function declaredCommitsVerdict(commits, isAncestor) {
   return { ok: true, reason: `every declared commit is in this tree: ${commits.join(', ')}` };
 }
 
-/** The variable a caller declares a costed story's ground pin in. */
+/**
+ * The BARE variable — one pin for one costed story. Row 171 (forge-8vfn.8.5.7):
+ * a single value cannot describe two grounds, so a run selecting more than one
+ * costed story declares each real ground's pin under `groundPinEnvName`.
+ */
 export const GROUND_PIN_ENV = 'FORGE_GROUND_PIN';
+
+/**
+ * `FORGE_GROUND_PIN_<project>` — the pin keyed by the ground it describes. A
+ * character a shell identifier cannot hold becomes `_`, so a ground like
+ * `terraform-provider-betterado` can still be `export`ed.
+ */
+export function groundPinEnvName(project) {
+  return `${GROUND_PIN_ENV}_${String(project).replace(/[^A-Za-z0-9_]/g, '_')}`;
+}
 
 /**
  * The ground is at the hash the caller declared — `forge-8vfn.7.6.139`.
@@ -336,7 +350,7 @@ export const GROUND_PIN_ENV = 'FORGE_GROUND_PIN';
  * Scoped to costed stories on `run.mjs`'s own stated rule: "only for a run that
  * spends, so a costless story never gains a new way to be blocked."
  */
-export function groundPinVerdict(ground, { declaredPin, measured } = {}) {
+export function groundPinVerdict(ground, { declaredPin, measured, storyId, envName = GROUND_PIN_ENV } = {}) {
   const costs = ground?.realSpawn === true || (ground?.budget_usd ?? 0) > 0;
   if (!costs) {
     return Object.freeze({ ok: true, reason: 'costless story — no ground pin required' });
@@ -361,11 +375,23 @@ export function groundPinVerdict(ground, { declaredPin, measured } = {}) {
         `${FIXTURE_ROOT}/${ground.fixture}/seed each run, so the seed is the pin, checked at provisioning`,
     });
   }
+  // Row 171 — a ground in the story's OWN `story-<id>` namespace is one the
+  // story mints (S2 creates `story-s2` at beat 3) and `sweep.mjs` removes. It
+  // does not exist before the run, so there is no state to pin: measuring it
+  // reads null and the refusal below would fire on every run, which is what
+  // made a nine-story run unlaunchable. Bounded to the story's own names, so a
+  // story borrowing another story's ground is still held to a pin.
+  if (typeof storyId === 'string' && storyFixtureNames(storyId).includes(ground.project)) {
+    return Object.freeze({
+      ok: true,
+      reason: `story-minted ground "${ground.project}" — created by ${storyId} and swept after, so nothing exists to pin`,
+    });
+  }
   if (typeof declaredPin !== 'string' || declaredPin.length === 0) {
     return Object.freeze({
       ok: false,
       reason:
-        `this story spends and declares the ground "${ground.project}", but no ${GROUND_PIN_ENV} was given. ` +
+        `this story spends and declares the ground "${ground.project}", but no ${envName} was given. ` +
         'Without it, a run that starts on an already-changed ground cannot be told from one whose product ' +
         'stopped working.\n' +
         `  PASS THE RATIFIED PIN this run was declared against — NOT a fresh measurement of the ground.\n` +
@@ -381,7 +407,7 @@ export function groundPinVerdict(ground, { declaredPin, measured } = {}) {
       ok: false,
       reason:
         `the ground "${ground.project}" could not be measured, so it cannot be compared with the declared ` +
-        `${GROUND_PIN_ENV} ${declaredPin}. An unreadable precondition is not a satisfied one.`,
+        `${envName} ${declaredPin}. An unreadable precondition is not a satisfied one.`,
     });
   }
   if (measured !== declaredPin) {
@@ -389,7 +415,7 @@ export function groundPinVerdict(ground, { declaredPin, measured } = {}) {
       ok: false,
       reason:
         `the ground "${ground.project}" is NOT at its declared pin.\n` +
-        `  declared ${GROUND_PIN_ENV}: ${declaredPin}\n` +
+        `  declared ${envName}: ${declaredPin}\n` +
         `  measured now:              ${measured}\n` +
         'The story\'s premise is a ground in the state it describes; this one is in a different state, so ' +
         'every verdict below would be about a different question. Re-provision the ground, or declare the ' +
@@ -397,4 +423,71 @@ export function groundPinVerdict(ground, { declaredPin, measured } = {}) {
     });
   }
   return Object.freeze({ ok: true, reason: `ground "${ground.project}" is at its declared pin ${declaredPin}` });
+}
+
+/** A story that spends — the same predicate run.mjs gates every costed precondition on. */
+const isCosted = (ground) => ground?.realSpawn === true || (ground?.budget_usd ?? 0) > 0;
+
+/** A costed story on a REAL ground — the only kind `groundPinVerdict` compares against a pin. */
+const consultsPin = (s) =>
+  isCosted(s.ground) &&
+  typeof s.ground.project === 'string' &&
+  typeof s.ground.fixture !== 'string' &&
+  !storyFixtureNames(s.id).includes(s.ground.project);
+
+/**
+ * Every selected story's ground pin, resolved from `env` — row 171
+ * (forge-8vfn.8.5.7). Returns `{ ok: true, verdicts }` or the FIRST refusal as
+ * `{ ok: false, reason }`, prefixed with the story it refused.
+ *
+ * Each ground reads its own `FORGE_GROUND_PIN_<project>`. The bare
+ * `FORGE_GROUND_PIN` is accepted only when exactly one costed story is
+ * selected: with more, it would be applied to every ground at once, which is
+ * the one-number-for-two-grounds defect, so it is refused outright rather than
+ * guessed onto one of them. Bare and keyed both set and disagreeing is refused
+ * too — neither silently wins.
+ *
+ * `measure(project)` returns the ground's digest, or null when it cannot be read.
+ */
+export function groundPinVerdicts(stories, { env, measure }) {
+  const bare = env[GROUND_PIN_ENV];
+  const hasBare = typeof bare === 'string' && bare.length > 0;
+  const costed = stories.filter((s) => isCosted(s.ground));
+  if (hasBare && costed.length > 1) {
+    const keyed = [...new Set(costed.filter(consultsPin).map((s) => s.ground.project))].map(groundPinEnvName);
+    return Object.freeze({
+      ok: false,
+      reason:
+        `${GROUND_PIN_ENV} is one value, and this run selects ${costed.length} costed stories ` +
+        `(${costed.map((s) => s.id).join(', ')}) — it cannot describe each one's ground. Unset it and declare ` +
+        `each real ground's ratified pin under its own name (${keyed.join(', ') || 'none of these grounds needs one'}). Fixture and ` +
+        'story-minted grounds need none. Nothing has been spent.',
+    });
+  }
+  const verdicts = [];
+  for (const s of stories) {
+    const project = s.ground?.project;
+    const envName = typeof project === 'string' ? groundPinEnvName(project) : GROUND_PIN_ENV;
+    const keyedPin = typeof project === 'string' ? env[envName] : undefined;
+    const hasKeyed = typeof keyedPin === 'string' && keyedPin.length > 0;
+    if (consultsPin(s) && hasBare && hasKeyed && bare !== keyedPin) {
+      return Object.freeze({
+        ok: false,
+        reason:
+          `${s.id}: ${GROUND_PIN_ENV}=${bare} and ${envName}=${keyedPin} both describe the ground ` +
+          `"${project}" and disagree. Declare one. Nothing has been spent.`,
+      });
+    }
+    const declaredPin = hasKeyed ? keyedPin : hasBare && isCosted(s.ground) ? bare : undefined;
+    const usedName = hasKeyed || !hasBare ? envName : GROUND_PIN_ENV;
+    const v = groundPinVerdict(s.ground, {
+      declaredPin,
+      storyId: s.id,
+      envName: usedName,
+      measured: typeof project === 'string' ? measure(project) : null,
+    });
+    if (!v.ok) return Object.freeze({ ok: false, reason: `${s.id}: ${v.reason}` });
+    verdicts.push(Object.freeze({ id: s.id, reason: v.reason }));
+  }
+  return Object.freeze({ ok: true, verdicts: Object.freeze(verdicts) });
 }
