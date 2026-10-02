@@ -653,6 +653,9 @@ export default {
         {
           repeat: [{ fill: 'clause-decision-C1b', with: C1B_DECISION }, { press: 'apply-clause-decision-C1b' }],
           until: { 'preflight-status': 'ok', 'flow-ready': 'true' },
+          // Row 194 follow-up (T1 1973gn): judged on this project's page only,
+          // never on the demo session `back-to-project` is leaving.
+          on: '/projects/story-s1',
         },
       ],
       // AMENDED 2026-09-05 (T1 ruling 230; ruling 200's mechanical class as

@@ -172,10 +172,18 @@ function validateDoSteps(raw, at) {
             );
           }
         }
+        // `on` — row 194 follow-up (T1 1973gn). The route the repeat's `until`
+        // is judged on, for a beat whose own route is not that page (S1 beat
+        // 11 ends on `/artifact`, answers on the session). `<name>` resolves
+        // like a route; its binding is checked at load by `story-file.mjs`.
+        if (step.on !== undefined && (typeof step.on !== 'string' || !step.on.startsWith('/'))) {
+          fail(`${where}.on`, `expected a route starting with "/", got ${JSON.stringify(step.on)}`);
+        }
         return Object.freeze({
           repeat: validateDoSteps(step.repeat, where),
           until: Object.freeze({ ...step.until }),
           ...(hasPer ? { perTransition: step.perTransition, progressKey: step.progressKey } : {}),
+          ...(step.on !== undefined ? { on: step.on } : {}),
         });
       }
       // 7.6.54 (ruling 795): `pressBound` names a handle whose id is minted at

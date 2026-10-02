@@ -318,7 +318,7 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
   const readAgentLivenessNow = livenessOf === null ? null : (runId, boundRunId_, now) =>
     livenessOf(livePath(), runId, boundRunId_, now);
 
-  const matchesData = async (spec) => {
+  const matchesData = async (spec, on = null) => {
     // `readObserved` runs `page.evaluate`, which THROWS when the page navigates
     // under it ("Execution context was destroyed"). A repeat polls this between
     // acts that submit and re-render, so it will meet that race — and an
@@ -329,7 +329,17 @@ export async function driveBeat(page, rawBeat, index, baseUrl, bindings = {}, ti
     try {
       // The matcher DECLARES the keys it needs (`6.11.45`). `spec` is the
       // repeat's `until`, whose keys the beat need not mention at all.
-      const seen = resolveExpectations(spec, await readObserved(page, beat, Object.keys(spec)));
+      const observed = await readObserved(page, beat, Object.keys(spec));
+      // Row 194 (forge-8vfn.8.5.32, T1 1973ga) — `until` belongs to the beat's
+      // OWN session, ruling 366's scope one wait over. S2 run 6's 12[cli]/
+      // 12[webapp] read it in `open-session`'s commit window, off MONITOR, whose
+      // per-session cards let the together-rule answer with 12[api]'s card at
+      // `awaiting-verdict`: zero rounds answered, then the consequence wait's
+      // row-184 gate stop 210 ms after the session's own `awaiting-answers`.
+      // A repeat's own `on` (T1 1973gn) scopes it where the beat names no session.
+      const scope = on ?? sessionScope;
+      if (scope !== null && !routeMatches(observed.route, scope)) return false;
+      const seen = resolveExpectations(spec, observed);
       return Object.entries(spec).every(
         ([attr, want]) => Object.hasOwn(seen, attr) && answers(seen[attr], want),
       );

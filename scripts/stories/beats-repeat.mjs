@@ -161,7 +161,9 @@ export async function runRepeatStep({
         'the last step.)',
     };
   }
-  const isSatisfied = () => matches(until);
+  // Row 194 — `on` names the page `until` is judged on (the beat's own
+  // session when absent); a page the `do` block is leaving never answers it.
+  const isSatisfied = () => matches(until, step.on ?? null);
 
   const gate = handleFor(step.repeat[0]);
   let rounds = 0;

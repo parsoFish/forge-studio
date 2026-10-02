@@ -481,7 +481,9 @@ export function validateStory(raw) {
       Object.hasOwn(st, 'pressBound') ? [{ form: 'pressBound', bind: st.pressBound.bind }]
         : Object.hasOwn(st, 'pressWithin') && st.pressWithin.scope.bind !== undefined
           ? [{ form: 'pressWithin', bind: st.pressWithin.scope.bind }]
-          : Object.hasOwn(st, 'repeat') ? pressBindsIn(st.repeat) : []);
+          : Object.hasOwn(st, 'repeat')
+            ? [...pressBindsIn(st.repeat), ...(st.on === undefined ? [] : namesIn(st.on).map((bind) => ({ form: 'repeat.on', bind })))]
+            : []);
     for (const { form, bind } of pressBindsIn(b.do)) {
       if (!boundNames.has(bind)) {
         fail(

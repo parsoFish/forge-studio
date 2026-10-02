@@ -345,6 +345,15 @@ export function resolveBoundPresses(steps, bindings) {
         },
       };
     }
+    // Row 194 follow-up (T1 1973gn) — a repeat's `on` resolves like a route.
+    if (step?.repeat !== undefined && step.on !== undefined) {
+      const on = step.on.replace(/<([A-Za-z][A-Za-z0-9_]*)>/g, (whole, name) => {
+        if (Object.hasOwn(bindings ?? {}, name)) return bindings[name];
+        unbound ??= name;
+        return whole;
+      });
+      return { ...step, on };
+    }
     return step;
   });
   return { steps: out, unbound };

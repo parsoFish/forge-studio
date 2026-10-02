@@ -60,8 +60,15 @@ function realBeat11(wait: Record<string, unknown> = AMEND_WAIT, stepExtra: Recor
   const last = story.beats[story.beats.length - 1]!;
   assert.match(String(last['act']), /Approve/,
     'fixture check: S1\'s last beat must still be the approve beat, or this door is testing something else');
-  const rawDo = ((last['do'] as Record<string, unknown>[]) ?? []).map((st) =>
-    st !== null && typeof st === 'object' && st['repeat'] !== undefined ? { ...st, ...stepExtra } : st);
+  // The repeat's `on` (row 194) is dropped: validated alone, this beat has no
+  // earlier beat to bind `<architectSessionId>`, and these fakes stand on
+  // `/artifact` — their subject is the progress bound, never the scope
+  // (`repeat-until-own-session.test.ts` owns that).
+  const rawDo = ((last['do'] as Record<string, unknown>[]) ?? []).map((st) => {
+    if (st === null || typeof st !== 'object' || st['repeat'] === undefined) return st;
+    const { on: _scope, ...rest } = st;
+    return { ...rest, ...stepExtra };
+  });
   const validated = validateStory({ ...story, beats: [{ ...last, do: rawDo, wait }] }) as {
     beats: { do: Record<string, unknown>[]; wait: Record<string, unknown> }[];
   };
@@ -176,10 +183,10 @@ describe('7.6.77 repeat half — S1 beat 11\'s own repeat meets the progress bou
     // for it.
     const story = S1 as unknown as { beats: Record<string, unknown>[] };
     const last = story.beats[story.beats.length - 1]!;
-    const v = validateStory({ ...story, beats: [last] }) as {
+    const v = validateStory(story) as {
       beats: { do: Record<string, unknown>[]; wait: Record<string, unknown> }[];
     };
-    const beat = v.beats[0]!;
+    const beat = v.beats[v.beats.length - 1]!;
     const step = beat.do.find((x) => x['repeat'] !== undefined)!;
 
     assert.equal(step['perTransition'], 480_000, 'the repeat carries the live bound');
