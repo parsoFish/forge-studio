@@ -79,7 +79,7 @@ export function spawnBrainFix(
 export function readBrainFixState(
   forgeRoot: string,
   runId: string,
-): { state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean; total?: number; clearedCount?: number } {
+): { state: 'running' | 'cleared' | 'not-cleared' | 'failed'; cleared: boolean; total?: number; clearedCount?: number; ceilingHit?: true; spendUnknown?: true } {
   // Containment (forge-2zz): `runId` reaching here is only EXACT_ID_RE-gated
   // (charset only, never realpath) at the calling routes — route it through
   // the shared resolveGuardedPath so a symlinked `_logs/_brainfix-<runId>`
@@ -100,7 +100,7 @@ export function readBrainFixState(
   try { raw = readFileSync(evPath, 'utf8'); } catch { return { state: 'running', cleared: false }; }
   for (const line of raw.split('\n').reverse()) {
     if (!line.trim()) continue;
-    let ev: { event_type?: string; message?: string; metadata?: { cleared?: boolean; total?: number; clearedCount?: number } };
+    let ev: { event_type?: string; message?: string; metadata?: { cleared?: boolean; total?: number; clearedCount?: number; ceilingHit?: unknown; spendUnknown?: unknown } };
     try { ev = JSON.parse(line); } catch { continue; }
     if (ev.event_type === 'end' || ev.message?.startsWith('brain-fix.end')) {
       const cleared = ev.metadata?.cleared === true;
@@ -111,6 +111,11 @@ export function readBrainFixState(
         cleared,
         ...(typeof total === 'number' ? { total } : {}),
         ...(typeof clearedCount === 'number' ? { clearedCount } : {}),
+        // Row 199 (T1 1973gz) — a consolidate batch that stopped on its budget,
+        // or on a turn whose spend is UNKNOWN, says so on the wire; absent
+        // otherwise. Studio copy for it is row 201.
+        ...(ev.metadata?.ceilingHit === true ? { ceilingHit: true as const } : {}),
+        ...(ev.metadata?.spendUnknown === true ? { spendUnknown: true as const } : {}),
       };
     }
     if (ev.event_type === 'error' || ev.message === 'brain-fix.crashed') {
