@@ -34,6 +34,7 @@ import { isFillFork } from './beats-fork.mjs';
 import { storyFixtureNames } from './sweep.mjs';
 import { ownGroundManifest, groundChanges, groundIgnoreFromGit, classifyOwnGroundDrift } from './ground-hash.mjs';
 import { mintedSessionPaths, mintedSessionWrites } from './ground-minted.mjs';
+import { mintedSessionWindowWrites, groundMtimeOf } from './ground-turn-window.mjs';
 import { captureAndClearMintedSessions, describeGroundClear } from './ground-clear.mjs';
 
 /**
@@ -104,13 +105,15 @@ export function snapshotForkGrounds(root, story) {
 export function judgeCaseGround({ root, project, before, mintedPaths, logsDir, expectedChanges, beatWindowChanges, storyId, runStamp }) {
   const groundDir = join(root, 'projects', project);
   const after = ownGroundManifest(root, project);
+  const changes = groundChanges(before, after);
   const split = classifyOwnGroundDrift(
-    groundChanges(before, after),
+    changes,
     mintedPaths,
     mintedSessionWrites(mintedPaths, logsDir, groundDir),
     groundIgnoreFromGit(groundDir),
     expectedChanges,
     beatWindowChanges,
+    mintedSessionWindowWrites(mintedPaths, logsDir, groundDir, changes, groundMtimeOf(groundDir)), // row 195
   );
   const clear = captureAndClearMintedSessions({ root, project, storyId, runStamp, producedPaths: split.producedPaths });
   return { project, before, after, split, clear };

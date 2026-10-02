@@ -456,7 +456,11 @@ export function beatWindowChangesFrom(beatBoundaryManifests, after) {
   return out;
 }
 
-export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, groundIgnore, declaredChanges = [], beatWindowChanges = new Map()) {
+// `windowWritesBySession` — row 195 (`forge-8vfn.8.5.33`): `mintedSessionWindowWrites`
+// (`ground-turn-window.mjs`), the Bash-born fallback consulted LAST. Defaulting
+// it empty fails SAFE: a caller that omits it reds a Bash-born write, never
+// licenses one.
+export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, groundIgnore, declaredChanges = [], beatWindowChanges = new Map(), windowWritesBySession = new Map()) {
   if (groundIgnore === undefined || typeof groundIgnore.isIgnored !== 'function') {
     throw new Error(
       'classifyOwnGroundDrift: a ground-ignore classifier is REQUIRED — pass ' +
@@ -469,6 +473,8 @@ export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, gr
   const homeOf = (p) => mintedPaths.find((m) => p === m || p.startsWith(`${m}/`)) ?? null;
   const writersOf = (p) =>
     [...writesBySession].filter(([, paths]) => paths.includes(p)).map(([s]) => s).sort();
+  const windowWritersOf = (p) =>
+    [...windowWritesBySession].filter(([, paths]) => paths.includes(p)).map(([s]) => s).sort();
   const produced = [];
   // THE SAME FACTS, UNRENDERED — `forge-8vfn.7.6.123`. The `produced` lines
   // above are for an operator; a CONSUMER needs the path and the minted dir it
@@ -565,6 +571,20 @@ export function classifyOwnGroundDrift(changes, mintedPaths, writesBySession, gr
       // Only the UNATTRIBUTED, UNDECLARED remainder reaches the ignore rules.
       if (groundIgnore.isIgnored(p)) {
         ignored.push(`${k} — ignored by the ground (${groundIgnore.source})`);
+        continue;
+      }
+      // ROW 195 — THE TURN WINDOW, LAST AND WEAKEST. A path no tool call names,
+      // no declaration covers and no ignore rule claims, whose mtime falls
+      // inside a ground-bound agent's lifetime, is that agent's Bash-born
+      // product (S3 run 6: `PROVIDER_VERSION.txt`, `docs/.gitkeep`). Every
+      // agent whose window covers it is named — overlap is said, not resolved.
+      const windowWriters = windowWritersOf(p);
+      if (windowWriters.length > 0) {
+        produced.push(
+          `${k} — written inside the turn window of ${windowWriters.join(', ')} ` +
+          '(cwd is this ground; no tool call names it — Bash-born)',
+        );
+        producedPaths.push({ kind, path: p, home: null, writers: windowWriters });
         continue;
       }
       undeclared.push(`${k} — nothing this run minted accounts for it`);

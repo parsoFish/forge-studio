@@ -1,0 +1,10 @@
+[2026-10-02T21:19:18.972Z] [stories] own ground: PRODUCED A .forge/agent-run/PROMPT.md — written by _agent/onboarding-agent-2026-10-02T21-17-58-286-h1t6
+[2026-10-02T21:19:18.972Z] [stories] own ground: PRODUCED A .forge/contract-compliance-report.json — written by _bridge/2026-10-02T21-18-30-318-oybwrf2q, _bridge/2026-10-02T21-18-40-230-hzekbxqt
+[2026-10-02T21:19:18.972Z] [stories] own ground: PRODUCED A CHANGELOG.md — written by _agent/onboarding-agent-2026-10-02T21-17-58-286-h1t6
+[2026-10-02T21:19:18.972Z] [stories] own ground: PRODUCED A _onboarding/2026-10-02T21-17-58-643c37aa/prompt.md — inside _onboarding/2026-10-02T21-17-58-643c37aa, a session this run minted
+[2026-10-02T21:19:18.972Z] [stories] own ground: PRODUCED A _onboarding/2026-10-02T21-17-58-643c37aa/questions.json — inside _onboarding/2026-10-02T21-17-58-643c37aa, a session this run minted
+[2026-10-02T21:19:18.972Z] [stories] own ground: PRODUCED A _onboarding/2026-10-02T21-17-58-643c37aa/status.json — inside _onboarding/2026-10-02T21-17-58-643c37aa, a session this run minted
+[2026-10-02T21:19:18.973Z] [stories] own ground: UNDECLARED A PROVIDER_VERSION.txt — nothing this run minted accounts for it
+[2026-10-02T21:19:18.973Z] [stories] own ground: UNDECLARED A docs/.gitkeep — nothing this run minted accounts for it
+[2026-10-02T21:19:26.159Z] [stories] S3: CONTAINMENT FAILURE — 2 change(s) in projects/story-s3 that nothing this run minted accounts for (named above). The run is RED regardless of its beats.
+[2026-10-02T21:19:26.159Z] [stories] S3: red — 13/13 beats green

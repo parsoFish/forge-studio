@@ -64,6 +64,7 @@ import {
 import { captureBeatDom, captureFrame, captureRedEvidence, describeRedEvidence, redEvidenceDir } from './red-evidence.mjs';
 import { recordHostHead, judgeHostHead } from './host-head.mjs';
 import { captureAndClearMintedSessions, describeGroundClear, captureAndClearMintedLogs, describeLogsClear } from './ground-clear.mjs';
+import { mintedSessionWindowWrites, groundMtimeOf } from './ground-turn-window.mjs'; // row 195
 import { loadRegisteredSessionKindIds } from './session-kind-registry.mjs'; // review finding 1 — groundMintedSessionPaths' required registry
 import { driveBeat } from './beats-drive.mjs';
 import {
@@ -543,8 +544,9 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
     });
     for (const line of merge.lines) console.log(`[stories] ${line}`);
     ownGroundDrift.mergeAlignmentFailure = merge.failureReason;
+    const ownChanges = groundChanges(ownGroundBefore, ownGroundAfter);
     const split = classifyOwnGroundDrift(
-      groundChanges(ownGroundBefore, ownGroundAfter),
+      ownChanges,
       minted,
       mintedSessionWrites(minted, logsDir, groundDir),
       groundIgnoreFromGit(groundDir),
@@ -556,6 +558,8 @@ export async function runStory(story, uiUrl, startedMs, fundedCeilingUsd = null,
       // 7.6.140 — narrows a declaration that named `beat: <n>` to the window
       // from that beat's own boundary (captured live, above) to this manifest.
       beatWindowChangesFrom(groundBeatBoundaries, ownGroundAfter),
+      // Row 195 — Bash-born writes, by a ground-bound agent's turn window.
+      mintedSessionWindowWrites(minted, logsDir, groundDir, ownChanges, groundMtimeOf(groundDir)),
     );
     ownGroundDrift.produced = split.produced;
     ownGroundDrift.undeclared = split.undeclared;
