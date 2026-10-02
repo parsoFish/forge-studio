@@ -59,7 +59,7 @@ operator-ratified new cap — never a silent raise.
 | `library` | 63 | 17,109 | **16,992** | ratified 16,992 — +65: installCommunityHookPackage/installSkillPackage adopt stage-then-rename, G2 staged community install (forge-8vfn.8.5.2); see git history for prior raises. |
 | `projects` | 48 | 11,185 | **9,412** | ratified 9,412 — row 174 (forge-8vfn.8.5.9): the preflight read returns the claim's DEPS verdict as `runnableGate`, +8 on 9,404, lane-ratified under ruling 666; see git history for prior raises. |
 | `knowledge` | 44 | 13,346 | **12,768** | ratified 12,768 — G1 boot-time release of a kb-cleanup apply stuck at applying (+74, forge-8vfn.8.5.1) and G3 isUntouchedBrainSeedStub crash-orphan check (+43, 8.5.3): +117 on 12,651, T1-ratified (>100). |
-| `agents` | 44 | 12,433 | **12,433** | **pure transfer to apps/forge (7.1c boundary fix): the agent CLI verbs agent-run.ts + agent-dispatch-cmd.ts moved out, trigger firing moved to cmdAgentDispatch; runner.ts comment trimmed. −953 on 13,386, cap lowered to measured.** |
+| `agents` | 44 | 12,450 | **12,450** | ratified 12,450 — row 189 (forge-8vfn.8.5.26): the pinned SDK seam forces `settings.attribution` off so no agent commit carries a Co-Authored-By trailer, +17 on 12,433, lane-ratified under ruling 666; see git history for prior changes. |
 | `sessions` | 63 | 20,615 | **20,577** | ratified 20,577 — row 176 (forge-8vfn.8.5.12): the completeness critic's SDK call gets the session's heartbeat and live-view callbacks, +10 on 20,567, lane-ratified under ruling 666; see git history for prior changes. |
 | `flows` | 88 | 25,097 | **24,897** | ratified 24,897 — row 182 (forge-8vfn.8.5.18): the develop claim refuses an unproducible demo checkpoint through the integrate band's own predicate, +153 on 24,744, T1-ratified (1973ct, >100); see git history for prior raises. |
 | `factory` | 15 | 2,904 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
@@ -67,7 +67,7 @@ operator-ratified new cap — never a silent raise.
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
 | `apps/forge` | 34 | 7,996 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **485** | **130,498** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **485** | **130,515** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -396,7 +396,7 @@ operator-ratified new cap — never a silent raise.
 | packages/stations/phases/reflector-brain-writes.ts | stations | verbatim | 394 |
 | packages/stations/phases/release-finalize.ts | stations | verbatim | 299 |
 | packages/flows/phases/wi-spec-compile.ts | flows | verbatim | 532 |
-| packages/agents/pinned-sdk-query.ts | agents | verbatim | 163 |
+| packages/agents/pinned-sdk-query.ts | agents | verbatim | 180 |
 | packages/flows/planned-initiatives.ts | flows | verbatim | 96 |
 | packages/flows/gh-pinned.ts | flows | rewritten | 205 |
 | packages/flows/pr-branch-sync.ts | flows | verbatim | 597 |
