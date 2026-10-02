@@ -40,7 +40,7 @@ A standing conformance suite (`packages/agents/tests/contract/conformance.test.t
 
 This README and the pages it links to are the documentation. Files an AI coding assistant may load on its own, such as `CLAUDE.md`, are instructions for agents working on forge itself, not a setup guide.
 
-**Studio is a browser UI.** On WSL2, open http://localhost:4124 in your Windows browser once `forge studio` is up.
+**Studio is a browser UI.** On WSL2, open <http://localhost:4124> in your Windows browser once `forge studio` is up.
 
 ```bash
 # Prerequisites

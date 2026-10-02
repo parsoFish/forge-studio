@@ -3,7 +3,7 @@
 This is the end-to-end path from a fresh checkout to the example develop
 factory shipping a merged PR against one of your projects. It assumes you have already followed the
 README quickstart: forge is built and linked, `forge init` has run, `FORGE_CLAUDE_CLI` is exported,
-and `forge studio` is up with Studio open in a browser at http://localhost:4124.
+and `forge studio` is up with Studio open in a browser at <http://localhost:4124>.
 
 The five steps:
 
