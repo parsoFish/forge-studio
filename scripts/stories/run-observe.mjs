@@ -104,6 +104,20 @@ const DEFAULT_SNAPSHOT_SEAMS = {
   readExitCode() {
     return null;
   },
+  // ROW 184b (forge-8vfn.8.5.21) — the one birth signal that survives the
+  // pid it names dying: `turn.pid`'s own mtime, rewritten every time a NEW
+  // turn starts (the bridge spawns one finalize turn for the same session
+  // dir the draft turn already used), read once as its own file touch
+  // predates `/proc/<pid>` existing at all. `null` when the file is missing
+  // or unreadable — never a 0/epoch fallback, which `makeEarlyDeathDoor`
+  // would misread as "ancient", the opposite of "unknown".
+  readBirthMs(dir) {
+    try {
+      return statSync(join(dir, 'turn.pid')).mtimeMs;
+    } catch {
+      return null;
+    }
+  },
 };
 
 /**
@@ -115,9 +129,13 @@ const DEFAULT_SNAPSHOT_SEAMS = {
  * `eventLines` reuses `readRunEvents` rather than a second parse, so "many
  * lines" always means what the spend accounting already means by it.
  *
+ * `birthMs` (row 184b, forge-8vfn.8.5.21) is `turn.pid`'s own mtime — the
+ * one thing that still names WHICH turn this snapshot is about once that
+ * turn's pid is gone. `null` when the file could not be read.
+ *
  * @param {string} dir
  * @param {Partial<typeof DEFAULT_SNAPSHOT_SEAMS>} [seams]
- * @returns {{pid: number|null, alive: boolean, eventLines: number, stderrTail: string, exitCode: number|null}}
+ * @returns {{pid: number|null, alive: boolean, eventLines: number, stderrTail: string, exitCode: number|null, birthMs: number|null}}
  */
 export function readDispatchSnapshot(dir, seams = {}) {
   const s = { ...DEFAULT_SNAPSHOT_SEAMS, ...seams };
@@ -128,6 +146,7 @@ export function readDispatchSnapshot(dir, seams = {}) {
     eventLines: readRunEvents(dir).length,
     stderrTail: s.readStderrTail(dir),
     exitCode: s.readExitCode(dir),
+    birthMs: s.readBirthMs(dir),
   };
 }
 
