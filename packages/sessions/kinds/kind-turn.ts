@@ -57,6 +57,7 @@ import { createLogger, guardedReadFile, resolveGuardedPath, type EventLogger, ty
 
 import { makeReasoningSink, makeThinkingSink, runAgentTurn, type QueryFn } from '../interactive-session.ts';
 import { makeHeartbeatWriter } from '../heartbeat.ts';
+import { sessionSpentUsd, turnBudgetUsd } from '../turn-budget.ts';
 
 /**
  * The ONE "hooks, or nothing" spread. `sdkHooksForAgent` returns undefined when
@@ -166,6 +167,15 @@ export type KindTurnPlumbing = {
    * to the per-kind form it replaces.
    */
   hooksForSkill: (skill: string) => Record<string, unknown>;
+  /**
+   * Row 193b (T1 ruling 1973gq) — the `maxBudgetUsd` for the NEXT SDK call this
+   * turn makes: the session's ceiling (`status.costCeilingUsd`, else the
+   * bridge's `FORGE_COST_CEILING_USD`) minus what the session has spent so far.
+   * `undefined` when no ceiling exists; THROWS `TurnBudgetExhaustedError` when
+   * nothing remains. A getter, not a number, because one turn makes several
+   * calls and each must be capped against what is left (`turn-budget.ts`).
+   */
+  turnBudgetUsd: () => number | undefined;
 };
 
 export type KindStepHandler<
@@ -371,6 +381,13 @@ export async function runKindTurn<
     onText,
     withOperatorFeedback,
     hooksForSkill,
+    turnBudgetUsd: () => turnBudgetUsd({
+      declaredCeilingUsd: (status as { costCeilingUsd?: unknown }).costCeilingUsd,
+      env: process.env,
+      spentUsd: () => sessionSpentUsd(logsRoot, cycleId),
+      logger,
+      identity: { initiativeId, phase: variant.eventPhase, skill: variant.eventSkill, sessionId: input.sessionId },
+    }),
   };
 
   const writeStatus = (next: S): void => {

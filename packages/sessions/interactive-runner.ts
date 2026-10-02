@@ -90,6 +90,7 @@ import { makeReasoningSink, makeThinkingSink } from './interactive-session.ts';
 import { makeHeartbeatWriter } from './heartbeat.ts';
 import { guardedReadSessionStatus } from './session-status-io.ts';
 import { emitTurnCostRow, emitTurnEndedUnpricedRow } from './turn-cost-rows.ts';
+import { sessionSpentUsd, turnBudgetUsd } from './turn-budget.ts';
 import { createLogger, resolveGuardedPath } from '@forge/kernel';
 import { makeToolEventSink } from '@forge/agents';
 import type { SessionKindDescriptor, TurnSpecPhase } from './studio/session-kinds.ts';
@@ -239,6 +240,12 @@ export async function runInteractiveTurn(
       const runAgentPhase = (row: TurnSpecPhase, st: InteractiveTurnStatus) => runAgentStyleStep({
         descriptor, turnSpec, phaseRow: row, ctx, sessionDir, dirSegments, status: st,
         queryFn: ctx.queryFn, logger, onToolUse: sink.onToolUse, onHeartbeat, onText, onThinking,
+        // Row 193b — the same per-call cap every `runKindTurn` kind gets (`turn-budget.ts`).
+        turnBudgetUsd: () => turnBudgetUsd({
+          declaredCeilingUsd: (st as { costCeilingUsd?: unknown }).costCeilingUsd, env: process.env,
+          spentUsd: () => sessionSpentUsd(logsRoot, cycleId), logger,
+          identity: { initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL, sessionId: ctx.sessionId },
+        }),
         onTurnCost: (costUsd, modelTier, modelId) => emitTurnCostRow(logger, { // forge-8vfn.22 — the tier/model the turn actually ran on.
           initiativeId, phase: RUNNER_PHASE, skill: RUNNER_SKILL, message: 'interactive.turn-cost',
           metadata: { session_id: ctx.sessionId, session_kind: descriptor.id, model_tier: modelTier, model: modelId },

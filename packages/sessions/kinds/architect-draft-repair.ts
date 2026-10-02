@@ -32,6 +32,8 @@ export type DraftManifestRepairArgs = {
   /** The project ground this turn runs on (`status.project_repo_path`). */
   cwd: string;
   queryFn: QueryFn;
+  /** Row 193b — `plumbing.turnBudgetUsd`, forwarded to `runStructured`. */
+  turnBudgetUsd?: () => number | undefined;
   modelTier?: ModelTier;
   onToolUse?: (d: ToolUseLiveDetail) => void;
   onHeartbeat?: () => void;
@@ -73,7 +75,7 @@ export type DraftManifestRepairResult = {
  */
 export async function repairDraftManifest(args: DraftManifestRepairArgs): Promise<DraftManifestRepairResult> {
   const {
-    logger, initiativeId, sessionId, cwd, queryFn, modelTier,
+    logger, initiativeId, sessionId, cwd, queryFn, turnBudgetUsd, modelTier,
     onToolUse, onHeartbeat, onText, onThinking, draftPrompt, schema, validationError, unwrap, buildAll,
   } = args;
   const emit = (message: string, eventType: 'log' | 'error', metadata: Record<string, unknown>): void => {
@@ -95,7 +97,7 @@ export async function repairDraftManifest(args: DraftManifestRepairArgs): Promis
       'failing field corrected. Do not otherwise change the initiatives.',
   ].join('\n');
   const { output, brainReads } = await runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
-    logger, initiativeId, cwd, queryFn, prompt: repairPrompt, schema, modelTier,
+    logger, initiativeId, cwd, queryFn, turnBudgetUsd, prompt: repairPrompt, schema, modelTier,
     onToolUse, onHeartbeat, onText, onThinking,
   });
   const repairedInitiatives = Array.isArray(output?.initiatives) ? unwrap(output.initiatives) : [];

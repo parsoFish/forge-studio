@@ -225,6 +225,9 @@ export async function runAgentStyleStep(args: {
    *  `'abort' | 'died'`, so the primitive gaining a third reason would have
    *  been a type error here instead of a silently narrower relay. */
   onTurnEndedUnpriced?: (info: UnpricedTurnInfo) => void;
+  /** Row 193b (T1 ruling 1973gq) — the runner's per-call cap getter
+   *  (`turn-budget.ts`); evaluated right before the SDK call it bounds. */
+  turnBudgetUsd?: () => number | undefined;
 }): Promise<RunInteractiveTurnResult> {
   const { descriptor, turnSpec, phaseRow, ctx, sessionDir, dirSegments, status, onToolUse, onHeartbeat, onText, onThinking } = args;
   // The pinned SDK default lives with the code that SPAWNS, not with the
@@ -276,6 +279,7 @@ export async function runAgentStyleStep(args: {
     const maxTurns = loadAgentDefinition(skillPath(descriptor.agent)).budgets.maxTurns;
     await runAgentTurn({
       queryFn,
+      maxBudgetUsd: args.turnBudgetUsd?.(),
       prompt,
       cwd: sessionDir,
       model,
@@ -325,7 +329,7 @@ export async function runAgentStyleStep(args: {
     const operatorFeedback = readOperatorFeedback(sessionDir);
     const prompt = buildTurnPrompt(descriptor, phaseRow, status, skill, writeRoots, operatorFeedback, extraContext);
     const { output, costUsd } = await runStructuredTurn({
-      queryFn, prompt, schema, model,
+      queryFn, prompt, schema, model, maxBudgetUsd: args.turnBudgetUsd?.(),
       allowedTools: agentSpec.allowedTools, disallowedTools: agentSpec.disallowedTools,
       ...hooksSpreadForAgent({ skill: agentSpec.skill, logger: args.logger, initiativeId: ctx.sessionId }),
       cwd: sessionDir, onToolUse, onHeartbeat, onText, onThinking,
