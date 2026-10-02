@@ -279,11 +279,12 @@ export async function runGenerateStep(args: {
  * baseline) + `HEAD` (a Bash `git commit` is not a clean tree). Allowed:
  * `.forge/demo/` and `_demo/` (forge's session scratch, `SCRATCH_EXCLUDES`; S1
  * held `_demo/<sid>/` in the repo). A breach is an `error` event naming the
- * paths, then a throw `agent-run` turns into `failed`. NOT reverted — naming and
- * failing is the ruling. `null` off a git root: no baseline, and a nested
+ * paths, then a throw `agent-run` turns into `failed`, the missing-deliverable
+ * road. NOT reverted — naming and failing is the ruling. `null` off a git root: no baseline, and a nested
  * project's porcelain is its ANCESTOR's tree. A failing snapshot throws.
  */
-type GroundSnapshot = Extract<ScopeSnapshot, { ok: true }>; function snapshotGround(repo: string): GroundSnapshot | null {
+type GroundSnapshot = Extract<ScopeSnapshot, { ok: true }>;
+function snapshotGround(repo: string): GroundSnapshot | null {
   if (!isGitRepo(repo)) return null;
   const snap = takeScopeSnapshot(repo);
   if (!snap.ok) throw new Error(`demo-builder runner: cannot snapshot the ground ${repo} — ${snap.error}`);
