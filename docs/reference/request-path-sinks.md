@@ -605,8 +605,10 @@ uses.
 
 **The boundary is `projectsRoot`, matching the route's own — and the history
 of that choice is worth recording, because it got it wrong THREE times, each time
-instructively.** `POST /api/studio/onboarding/start` is the only real sender of
-`--session-dir` and always creates `sessionDir` under
+instructively.** The onboarding session is the only real sender of
+`--session-dir` (since ruling 441 and row 202 the dispatch is its brief's
+question-form write, `handleOnboardingBrief`; `POST /api/studio/onboarding/start`
+mints the dir and spawns nothing) and always creates `sessionDir` under
 `<projectsRoot>/<project>/_onboarding/<sessionId>`, so a `projectsRoot` guard is
 a no-op for every legitimate caller. **A previous revision of this row said that
 was "provably a no-op … (measured, not assumed)". It was assumed, and round-2

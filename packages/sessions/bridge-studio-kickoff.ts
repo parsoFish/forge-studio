@@ -98,11 +98,16 @@ export async function handleKickoffRoutes(
   // `_onboarding/<sessionId>` join onto the now-verified real directory
   // cannot itself introduce a further escape.
   //
-  // D6: spawns the IDENTICAL `ctx.spawnAgentDispatch(forgeRoot, 'onboarding-agent',
-  // runId, project, inputs)` the generic `POST /api/agents/:slug/run` route
-  // spawns, with `--session-dir` additionally threaded through (D7) so
-  // `forge agent dispatch` can write the terminal phase into this session's
-  // status.json when the run ends.
+  // Ruling 441 + row 202 (bead forge-8vfn.8.5.42): this route MINTS — session
+  // dir, status.json at `briefing`, prompt.md, questions.json, and the runId —
+  // and spawns NOTHING. The ONE dispatch is `handleOnboardingBrief` below
+  // (D6's identical `ctx.spawnAgentDispatch`, D7's `--session-dir`). 441 moved
+  // the dispatch there but left this route's spawn behind, so the project
+  // page's one press (start, then the brief) ran TWO agents on one run id —
+  // measured on the costed gate's S1 run: two `start` rows 37 ms apart, two
+  // run-level `end`s ($0.80, $1.37), run state `done` at the first while the
+  // second was still committing to the ground (row 202's capture; pinned by
+  // apps/forge/tests/regression/ui-bridge-onboarding-spawn-pid.test.ts).
   if (method === 'POST' && url === '/api/studio/onboarding/start') {
     try {
       const body = (await ctx.readBody()) as { project?: unknown; inputs?: unknown; modelTier?: unknown; sdk?: unknown };
@@ -196,42 +201,21 @@ export async function handleKickoffRoutes(
       // sessionId entropy). A guessable, colliding sessionId directory could
       // otherwise be pre-planted with symlinked leaves that both writes
       // below would silently follow.
-      const { sessionDir } = writeOnboardingSession(realOnboardingParent, sessionId, project, runId, inputs, modelTier);
+      writeOnboardingSession(realOnboardingParent, sessionId, project, runId, inputs, modelTier);
 
-      // W7-B5 (agents-20/31 + projects-31): the SAME t0 `agent-run.dispatched`
-      // marker the generic `POST /api/agents/:slug/run` host emits. This route
-      // mints a runId on the SAME shared run identity space, so it must reach
-      // the SAME state on the shared surfaces at t0 — without this event
-      // `GET /api/agents/runs/<runId>` 404s here while the generic route's
-      // runId already 200s (the AT-6 status-equivalence pin in
-      // apps/forge/tests/integration/ui-bridge-onboarding-start.test.ts is exactly that check), the
-      // onboarding panel's first poll reads "no such run" for a run it just
-      // started, and the drawer's `GET /api/events/<runId>` 404s at t0.
-      // Guard symmetry with the generic host: the server-minted id is checked
-      // before this, its FIRST write.
+      // W7-B5 (agents-20/31 + projects-31): the t0 `agent-run.dispatched`
+      // marker this route used to emit moved WITH the dispatch to
+      // `handleOnboardingBrief` (441) — t0 for a run is the moment it starts.
+      // The server-minted id is still checked here, so start never publishes a
+      // runId the brief would refuse to dispatch.
       if (!isSafeRunId(runId)) {
         throw new Error('refused to mint — unsafe server-minted run id');
       }
-      // Bead forge-c6h: THIS is the route that actually produces a --session-dir,
-      // so it is the one the projects-root snapshot has to reach. The session dir
-      // was created under ctx.projectsRoot (resolved once at startBridge); handing
-      // the same snapshot down means the subprocess's containment guard checks the
-      // root the dir was created under, instead of re-deriving one from a config
-      // file that may have changed inside this run's window.
-      ctx.spawnAgentDispatch(ctx.forgeRoot, 'onboarding-agent', runId, project, inputs, sessionDir, undefined, ctx.projectsRoot);
-      // R4-17 round-3 MAJOR pin 5, item 3: the dry-bridge classification row
-      // for this route (cli/dry-bridge.ts) claims the agent dispatch is
-      // "skipped with marker + event, exactly as the generic run host" — this
-      // is the call that makes that claim true. spawnAgentDispatch already
-      // no-ops under FORGE_DRY_BRIDGE=1 (and FORGE_ARCHITECT_NO_SPAWN=1); this
-      // adds the explicit response marker + JSONL event the OTHER four
-      // spawn-helper families already carry, so dry-bridge suppression is
-      // never silent here either.
-      sendJson(
-        res, 200,
-        { ok: true, sessionId, runId, project, ...ctx.dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/onboarding/start', sessionId) },
-        origin,
-      );
+      // No dry-bridge marker either: R4-17 pin 5 item 3's marker said "the
+      // agent dispatch was skipped", and this route no longer has one to skip
+      // (row 202). The brief's write carries the marker with the dispatch, and
+      // apps/forge/dry-bridge.ts classifies this route `exempt-local`.
+      sendJson(res, 200, { ok: true, sessionId, runId, project }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

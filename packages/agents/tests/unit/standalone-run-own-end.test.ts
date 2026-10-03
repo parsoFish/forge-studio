@@ -142,3 +142,50 @@ test('no skill field anywhere falls back to the pre-row-198 behaviour', () => {
   assert.equal(state.state, 'done');
   assert.equal(state.costUsd, 0.5);
 });
+
+// Row 202 (bead forge-8vfn.8.5.42), T1 ruling 1973hq — the S1 capture
+// (`_1.0/evidence/m7-e-gate1-s1-capture/_story-logs-clear/_agent-onboarding-agent-2026-10-03T01-23-10-524-pyvr/events.jsonl`,
+// 164 rows; the start/end/heartbeat rows below copied with their real ids,
+// times and costs). Its signature is TWO own-skill `start` rows 37 ms apart,
+// each with heartbeats parented to its own event_id — two `runAgent` calls,
+// i.e. two dispatch children on one run id (the onboarding start route AND
+// its brief both spawned; see
+// apps/forge/tests/regression/ui-bridge-onboarding-spawn-pid.test.ts), not a
+// second pass of one agent. The reader is right to read the run's own skill's
+// first `end` as `done` — `runAgent` writes exactly one end per call — and
+// that is exactly what let S1 beat 6 go green while the second agent was
+// still editing `.gitignore`. The fix is one dispatch per run id, upstream of
+// this reader; this test pins the shape the writer produced so the cause
+// stays legible.
+const S1_RUN = '_agent-onboarding-agent-2026-10-03T01-23-10-524-pyvr';
+const S1 = (row: Record<string, unknown>): Record<string, unknown> => ({ cycle_id: S1_RUN, initiative_id: S1_RUN, phase: 'orchestrator', ...row });
+const S1_META = { agent_phase: 'onboarding', agent_slug: 'onboarding-agent', effective_ceiling_usd: 5 };
+const S1_CAPTURE: Record<string, unknown>[] = [
+  S1({ event_id: 'EV_murpk02z_z8t7ab4a', started_at: '2026-10-03T01:23:10.571Z', skill: 'onboarding-agent', event_type: 'log', message: 'agent-run.dispatched' }),
+  S1({ event_id: 'EV_murpk0kk_yw2rdk4i', started_at: '2026-10-03T01:23:11.204Z', skill: 'onboarding-agent', event_type: 'start', metadata: S1_META }),
+  S1({ event_id: 'EV_murpk0ll_9owbn3t5', started_at: '2026-10-03T01:23:11.241Z', skill: 'onboarding-agent', event_type: 'start', metadata: S1_META }),
+  S1({ event_id: 'EV_murpkc5e_3gb95maj', started_at: '2026-10-03T01:23:26.210Z', parent_event_id: 'EV_murpk0kk_yw2rdk4i', skill: 'onboarding-agent', event_type: 'agent_heartbeat', message: 'agent.heartbeat' }),
+  S1({ event_id: 'EV_murpkc6e_33zc9bd1', started_at: '2026-10-03T01:23:26.246Z', parent_event_id: 'EV_murpk0ll_9owbn3t5', skill: 'onboarding-agent', event_type: 'agent_heartbeat', message: 'agent.heartbeat' }),
+  S1({ event_id: 'EV_murpqy0z_wxu2j2vs', started_at: '2026-10-03T01:28:34.499Z', skill: 'onboarding-agent', event_type: 'end', cost_usd: 0.7996867999999998, duration_ms: 355776, metadata: S1_META,
+    output_refs: ['/home/parso/forge-m7-e-docs/projects/story-s1/.gitignore', '/home/parso/forge-m7-e-docs/projects/story-s1/.forge/project.json', '/home/parso/forge-m7-e-docs/projects/story-s1/CLAUDE.md'] }),
+  S1({ started_at: '2026-10-03T01:30:18.638Z', skill: 'onboarding-agent', event_type: 'file_change', message: 'file.modify', metadata: { path: '/home/parso/forge-m7-e-docs/projects/story-s1/.gitignore', op: 'modify' } }),
+  S1({ started_at: '2026-10-03T01:32:28.042Z', skill: 'onboarding-agent', event_type: 'end', cost_usd: 1.3711322999999997, duration_ms: 610043, metadata: S1_META, output_refs: [] }),
+];
+
+test('row 202: the S1 capture is two agents on one run id — two own-skill starts, each with its own heartbeats', () => {
+  const starts = S1_CAPTURE.filter((e) => e['event_type'] === 'start' && e['skill'] === 'onboarding-agent');
+  assert.equal(starts.length, 2, 'one dispatch writes one start; the capture carries two');
+  const parents = new Set(S1_CAPTURE.filter((e) => e['event_type'] === 'agent_heartbeat').map((e) => e['parent_event_id']));
+  assert.deepEqual([...parents].sort(), starts.map((e) => e['event_id']).sort(), 'both starts were live at once — concurrent agents, not sequential passes');
+});
+
+test('row 202: on the S1 shape the reader reads `done` at the FIRST agent\'s end while the second still edits the ground', () => {
+  const cutAfterFirstEnd = S1_CAPTURE.slice(0, S1_CAPTURE.findIndex((e) => e['event_type'] === 'end') + 2);
+  const state = deriveStandaloneStateFromEvents(cutAfterFirstEnd);
+  assert.equal(state.state, 'done', 'what S1 beat 6 read, 174 ms after 01:28:34.499Z');
+  assert.ok(cutAfterFirstEnd.at(-1)!['message'] === 'file.modify', 'and the second agent was still writing .gitignore after it');
+  // Spend is not lost either way: the one cost rule sums every end, so the
+  // full capture reads both agents ($0.80 + $1.37) — the over-spend was real.
+  const full = deriveStandaloneStateFromEvents(S1_CAPTURE);
+  assert.ok(full.costUsd !== null && Math.abs(full.costUsd - (0.7996867999999998 + 1.3711322999999997)) < 1e-9);
+});

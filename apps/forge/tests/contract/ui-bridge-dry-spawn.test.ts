@@ -28,12 +28,14 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { startBridge } from '../../ui-bridge.ts';
 import { DRY_BRIDGE_LOG_BUCKET } from '../../dry-bridge.ts';
 
 const PROJECT = 'demoproj';
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 
 let forgeRoot: string;
 let bridgeUrl: string;
@@ -134,6 +136,15 @@ before(async () => {
   writeFileSync(join(projectDir, 'package.json'), `{"name":"${PROJECT}"}`);
   writeFileSync(join(projectDir, 'tsconfig.json'), '{}');
   writeFileSync(join(projectDir, '.gitignore'), 'node_modules\n');
+  // The onboarding brief resolves its kind from the REAL, checked-in
+  // `studio/session-kinds.yaml` — copied byte-for-byte, as
+  // apps/forge/tests/integration/ui-bridge-onboarding-briefing.test.ts does.
+  mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), readFileSync(join(REPO_ROOT, 'studio', 'session-kinds.yaml'), 'utf8'));
+  writeFileSync(
+    join(forgeRoot, 'studio', 'catalog.yaml'),
+    ['sdks: []', 'models: []', 'tools: []', 'mcps: []', 'guards: []', 'community-skills: []', ''].join('\n'),
+  );
 
   ({ url: bridgeUrl, close: closeServer } = await startBridge({ forgeRoot, port: 0 }));
 });
@@ -225,28 +236,32 @@ const FAMILIES: Array<{
       return { status, json, logDirName: `_preflight-fix-${json.runId}` };
     },
   },
-  // R4-17 pin 5, item 3 (MAJOR): cli/dry-bridge.ts:153 classifies
-  // POST /api/studio/onboarding/start as stub-actions/spawn-helper, claiming
-  // "...skipped with marker + event, exactly as the generic run host" — but
-  // the route (apps/forge/ui-bridge.ts, POST /api/studio/onboarding/start) never
-  // calls dryBridgeAgentTurnMarker at all. RED now: json.dryBridge is
-  // undefined and no _dry-bridge/events.jsonl entry is written. Reuses
-  // spawnAgentDispatch (D6, same as the generic /api/agents/:slug/run
-  // dispatch), so its log dir is exactly `_logs/<runId>` — not the
-  // `_<family>-<sessionId>` shape the other five families use.
+  // R4-17 pin 5, item 3 (MAJOR): the onboarding dispatch must carry the same
+  // marker + event as the generic run host. Reuses spawnAgentDispatch (D6,
+  // same as the generic /api/agents/:slug/run dispatch), so its log dir is
+  // exactly `_logs/<runId>` — not the `_<family>-<sessionId>` shape the other
+  // five families use. Row 202 (bead forge-8vfn.8.5.42): the ONE dispatch is
+  // the brief's question-form write (ruling 441); `start` only mints and is
+  // `exempt-local`, so the family is driven as the project page presses it —
+  // start, then the brief — and the marker is the brief's.
   {
-    family: 'onboarding (spawnAgentDispatch via /api/studio/onboarding/start)',
-    eventRoute: '/api/studio/onboarding/start',
+    family: 'onboarding (spawnAgentDispatch via the brief\'s question-form write)',
+    eventRoute: '/api/studio/sessions/onboarding/question-form',
     drive: async () => {
-      const { status, json } = await post('/api/studio/onboarding/start', {
+      const start = await post('/api/studio/onboarding/start', {
         project: PROJECT, inputs: { northStar: 'dry-bridge onboarding marker probe' },
       });
-      return { status, json, logDirName: json.runId as string };
+      assert.equal(start.status, 200, JSON.stringify(start.json));
+      assert.equal(start.json.dryBridge, undefined, 'start dispatches nothing, so it has no skipped dispatch to mark (row 202)');
+      const { status, json } = await post(`/api/studio/sessions/onboarding/${start.json.sessionId as string}/briefing-question-form`, {
+        project: PROJECT, answers: [{ question: 'brief', answer: 'dry-bridge onboarding marker probe' }],
+      });
+      return { status, json, logDirName: start.json.runId as string };
     },
-    // W7-B5 (agents-20/31): this route emits the run's t0
+    // W7-B5 (agents-20/31): the brief emits the run's t0
     // `agent-run.dispatched` marker into `_logs/<runId>` before it calls
     // spawnAgentDispatch, so the dir legitimately exists under dry-bridge.
-    logDirPreCreatedBy: 'the route\'s own t0 agent-run.dispatched marker',
+    logDirPreCreatedBy: 'the brief\'s own t0 agent-run.dispatched marker',
   },
 ];
 
@@ -260,13 +275,10 @@ for (const f of FAMILIES) {
 }
 
 // R4-17 pin 5, item 3 (MAJOR, part (c) of the classification row's claim):
-// the row's own reason string says "the session dir, status.json and
-// prompt.md are REAL bookkeeping and still land; only the agent dispatch is
-// skipped" — this is the half of the claim that is ALREADY true today (the
-// route never even checks dry-bridge, so it always writes) and must STAY
-// true once the marker fix above lands. Not RED today by itself; it is the
-// control half of the item-3 fix, proven alongside the RED marker assertion
-// in the FAMILIES loop above.
+// the session dir, status.json and prompt.md are REAL bookkeeping and still
+// land under dry-bridge. Row 202 made that the WHOLE of the start route — it
+// dispatches nothing, so apps/forge/dry-bridge.ts now classifies it
+// `exempt-local` — and this is the pin that its bookkeeping keeps landing.
 test('R4-17 pin 5, item 3: POST /api/studio/onboarding/start still performs its REAL bookkeeping under dry-bridge — session dir + status.json + prompt.md land', async () => {
   const { status, json } = await post('/api/studio/onboarding/start', {
     project: PROJECT, inputs: { northStar: 'dry-bridge bookkeeping probe 7f3c91' },
