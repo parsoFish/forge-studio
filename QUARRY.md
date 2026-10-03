@@ -65,9 +65,9 @@ operator-ratified new cap — never a silent raise.
 | `factory` | 15 | 2,904 | **2,297** | ratified 2,297 — F3 re-attribution of the station executor to `stations` (operator ruling items 81/83); see git history for prior raises. |
 | `stations` | 45 | 12,266 | **12,266** | ratified 12,266 — row 167 (forge-8vfn.8.1.61, ruling 1916): `rebaseForResume` moved out to `packages/flows/cycle-helpers.ts`, −20 on 12,286 (cap lowered to measured); see git history for prior raises. |
 | `forge-docs` | 3 | 352 | **352** | ratified 352 — introduced as a NEW ROW at G3 (the second factory; operator items 73/81), exact measured total, no headroom; see git history for detail. |
-| `apps/forge` | 34 | 8,034 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
+| `apps/forge` | 34 | 8,027 | **800** | the spec states "CLI router + bridge host (≤800 lines)". The quarried total is 10,089 — a 9,289-line debt, all four files marked pruned or rewritten. This cap is a TARGET the move must reach, not a baseline. |
 | `apps/studio` | 0 | 0 | — | the `git mv` of `forge-ui`; it quarries nothing from these four trees. |
-| **total** | **487** | **131,270** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
+| **total** | **487** | **131,263** |  | F3 (operator ruling, items 81/83): +2 files / +150 lines — `class-profile-port.ts` and `stations/index.ts`, the only genuinely new content in an otherwise pure `factory → stations` transfer (10,905 lines moved, re-attributed, no change to this total). |
 
 ## Three numbers that are findings, not targets
 
@@ -257,7 +257,7 @@ operator-ratified new cap — never a silent raise.
 | packages/kernel/contained-read.ts | kernel | verbatim | 34 |
 | packages/kernel/discovery-roots.ts | kernel | verbatim | 148 |
 | packages/knowledge/theme-frontmatter.ts | knowledge | verbatim | 116 |
-| apps/forge/ui-bridge.ts | apps/forge | rewritten | 783 |
+| apps/forge/ui-bridge.ts | apps/forge | rewritten | 780 |
 | apps/forge/bridge-cycle-data.ts | apps/forge | rewritten | 381 |
 | apps/forge/bridge-scheduler.ts | apps/forge | rewritten | 146 |
 | apps/forge/bridge-run-triggers.ts | apps/forge | rewritten | 285 |
@@ -306,7 +306,7 @@ operator-ratified new cap — never a silent raise.
 | packages/sessions/kinds/fix-registry.ts | sessions | rewritten | 76 |
 | packages/knowledge/brain-paths.ts | knowledge | pruned | 198 |
 | packages/flows/claim-validator.ts | flows | verbatim | 294 |
-| apps/forge/cli.ts | apps/forge | pruned | 793 **Ceiling re-keyed +1 (M4-sessions s3 3b, T1 ruling 83):** the ruled manifest seam (ruling 81) threads an injected port through this file — three `package-layer-order` rows closed for it. Paid down as far as the file allows before the re-key: the ports contract was extracted to `kinds/architect-ports.ts` (which returned `kinds/architect.ts` to exactly 1,584, no raise), every added comment tightened, and stale runner paths corrected. Not a licence — the next edit measures against the new number. |
+| apps/forge/cli.ts | apps/forge | pruned | 789 **Ceiling re-keyed +1 (M4-sessions s3 3b, T1 ruling 83):** the ruled manifest seam (ruling 81) threads an injected port through this file — three `package-layer-order` rows closed for it. Paid down as far as the file allows before the re-key: the ports contract was extracted to `kinds/architect-ports.ts` (which returned `kinds/architect.ts` to exactly 1,584, no raise), every added comment tightened, and stale runner paths corrected. Not a licence — the next edit measures against the new number. |
 | apps/forge/routes.ts | apps/forge | verbatim | 243 |
 | packages/sessions/kinds/architect-critic.ts | sessions | verbatim | 447 |
 | packages/projects/constraint-author.ts | projects | verbatim | 99 |
