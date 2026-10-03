@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { consolidateResultLabel } from '../../lib/kb-consolidate';
+import { consolidateResultLabel, consolidateSpendToken } from '../../lib/kb-consolidate';
 import type { PolledAgentFixStatus } from '../../lib/agent-dispatch';
 
 // ---------------------------------------------------------------------------
@@ -87,5 +87,31 @@ describe('W8-F1 (knowledge-42): a consolidate over zero findings', () => {
   it('falls back to the bare wording when a run carries no counters (a per-finding fix-agent run)', () => {
     expect(consolidateResultLabel({ ok: true, state: 'not-cleared', cleared: false }))
       .toBe('consolidate: some findings remain');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Row 201 (forge-8vfn.8.5.41) — a consolidate batch that stopped on its cost
+// ceiling, or on a fix turn whose spend could not be priced, says so; the
+// bare "some findings remain" hid WHY the batch stopped.
+// ---------------------------------------------------------------------------
+
+describe('row 201: a consolidate batch stopped by its spend', () => {
+  it('ceilingHit names the cost ceiling as the reason the batch stopped', () => {
+    const label = consolidateResultLabel({ ok: true, state: 'not-cleared', cleared: false, total: 3, clearedCount: 1, ceilingHit: true });
+    expect(label).toBe('consolidate: stopped at the cost ceiling — cleared 1/3, some findings remain');
+  });
+
+  it('spendUnknown says the spend could not be priced — never that the ceiling was hit', () => {
+    const label = consolidateResultLabel({ ok: true, state: 'not-cleared', cleared: false, total: 3, clearedCount: 1, ceilingHit: true, spendUnknown: true }) ?? '';
+    expect(label).not.toContain('at the cost ceiling');
+    expect(label).toBe("consolidate: stopped — a fix turn's spend could not be priced, so the cost ceiling can't be enforced past it — cleared 1/3");
+  });
+
+  it('consolidateSpendToken: unknown wins over ceiling-hit; absent flags derive null', () => {
+    expect(consolidateSpendToken({ ok: true, state: 'not-cleared', cleared: false, ceilingHit: true, spendUnknown: true })).toBe('unknown');
+    expect(consolidateSpendToken({ ok: true, state: 'not-cleared', cleared: false, ceilingHit: true })).toBe('ceiling-hit');
+    expect(consolidateSpendToken({ ok: true, state: 'cleared', cleared: true })).toBeNull();
+    expect(consolidateSpendToken(null)).toBeNull();
   });
 });

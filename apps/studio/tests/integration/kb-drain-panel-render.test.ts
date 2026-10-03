@@ -141,6 +141,23 @@ test('elapsed ticker renders while running when startedAt is known — never fab
   expect(withoutStart).not.toContain('data-component="drain-elapsed"');
 });
 
+// Row 201 (forge-8vfn.8.5.41) — spend became UNKNOWN: load-bearing DOM state,
+// and the copy shown never claims the ceiling was hit.
+test('a cost-ceiling run with spendUnknown carries data-drain-spend="unknown" and reads as a floor, never "hit the cost ceiling"', () => {
+  const html = render({ displayState: 'cost-ceiling', round: 1, runId: 'r1', costUsd: 0.4, maxCostUsd: 2, spendUnknown: true });
+  const root = tagContaining(html, 'data-component="kb-drain-panel"');
+  expect(root).toContain('data-drain-state="cost-ceiling"');
+  expect(root).toContain('data-drain-spend="unknown"');
+  expect(html).not.toMatch(/Hit this run(&#x27;|')s cost ceiling/);
+  expect(html).toContain('at least $0.40');
+  expect(html).toContain('≥ $0.40 of $2.00');
+});
+
+test('data-drain-spend is ABSENT on every run whose spend is known — never a fabricated "known" value', () => {
+  for (const s of ALL_DISPLAY_STATES) expect(render({ displayState: s, costUsd: 1 })).not.toContain('data-drain-spend');
+  expect(render({ displayState: 'cost-ceiling', costUsd: 2, maxCostUsd: 2, spendUnknown: false })).not.toContain('data-drain-spend');
+});
+
 test('the cost line names the run\'s REAL ceiling when the status carries one (knowledge-14)', () => {
   const html = render({ displayState: 'running', costUsd: 0.31, maxCostUsd: 2 });
   expect(html).toContain('$0.31 of $2.00');

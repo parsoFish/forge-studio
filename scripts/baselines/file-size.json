@@ -25,7 +25,7 @@
   "apps/studio/components/studio/PhaseDrawer.tsx": 916,
   "apps/studio/components/studio/RoadmapCanvas.tsx": 870,
   "apps/studio/lib/session-client.ts": 1209,
-  "apps/studio/lib/studio-client.ts": 2189,
+  "apps/studio/lib/studio-client.ts": 2164,
   "apps/studio/tests/contract/session-shell-view.test.ts": 802,
   "apps/studio/tests/contract/studio-client.test.ts": 1350,
   "apps/studio/tests/integration/agent-ledger.test.ts": 1205,

@@ -34,6 +34,16 @@ export function consolidateResultLabel(status: PolledAgentFixStatus | null): str
     case 'cleared':
       return 'consolidate: cleared ✓';
     case 'not-cleared':
+      // Row 201 (forge-8vfn.8.5.41): a batch the server stopped on its spend
+      // says WHY. `spendUnknown` first — the server also marks it
+      // `ceilingHit`, but the ceiling was never provably hit: a fix turn's
+      // spend could not be priced.
+      if (status.spendUnknown === true) {
+        return `consolidate: stopped — a fix turn's spend could not be priced, so the cost ceiling can't be enforced past it${clearedSuffix(status, ' — cleared ')}`;
+      }
+      if (status.ceilingHit === true) {
+        return `consolidate: stopped at the cost ceiling${clearedSuffix(status, ' — cleared ')}, some findings remain`;
+      }
       // W8-F1 (knowledge-42): a run with nothing to clear (`total === 0`) is
       // neither "cleared ✓" (it fixed nothing) nor "some findings remain"
       // (there are none) — derived from the run's OWN counters, never a new
@@ -66,4 +76,22 @@ export function consolidateResultLabel(status: PolledAgentFixStatus | null): str
     default:
       return 'consolidate: running…';
   }
+}
+
+/** `" — cleared 1/3"`-style counter suffix, or `''` when the run carries no
+ *  counters (a per-finding fix-agent run never writes them). */
+function clearedSuffix(status: PolledAgentFixStatus, lead: string): string {
+  return typeof status.clearedCount === 'number' && typeof status.total === 'number'
+    ? `${lead}${status.clearedCount}/${status.total}`
+    : '';
+}
+
+/** Row 201 (forge-8vfn.8.5.41) — the `data-consolidate-spend` token for a
+ *  consolidate status: `'unknown'` when a fix turn's spend could not be priced
+ *  (wins over `ceilingHit`, which the server also sets then), `'ceiling-hit'`
+ *  when the batch stopped on its cost ceiling, else `null` (attribute absent). */
+export function consolidateSpendToken(status: PolledAgentFixStatus | null): 'unknown' | 'ceiling-hit' | null {
+  if (status?.spendUnknown === true) return 'unknown';
+  if (status?.ceilingHit === true) return 'ceiling-hit';
+  return null;
 }

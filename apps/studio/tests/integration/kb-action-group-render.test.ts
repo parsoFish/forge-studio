@@ -101,6 +101,14 @@ test('consolidate outcome STAYS on screen (no 6-second pill — knowledge-19) wi
   expect(html).toContain('consolidate: cleared 3/3 ✓');
 });
 
+test('row 201: a consolidate stopped by its spend carries data-consolidate-spend on the result; absent otherwise', () => {
+  const unknown = render({ actionResult: 'consolidate: stopped', consolidatePollState: 'terminal', consolidateState: 'not-cleared', consolidateSpend: 'unknown' });
+  expect(tagContaining(unknown, 'data-component="kb-action-result"')).toContain('data-consolidate-spend="unknown"');
+  const hidden = render({ consolidatePollState: 'terminal', consolidateState: 'not-cleared', consolidateSpend: 'ceiling-hit' });
+  expect(tagContaining(hidden, 'data-component="kb-action-consolidate-state"')).toContain('data-consolidate-spend="ceiling-hit"');
+  expect(render({ actionResult: 'consolidate: cleared ✓', consolidatePollState: 'terminal', consolidateState: 'cleared' })).not.toContain('data-consolidate-spend');
+});
+
 test('delete is a typed-id confirm: input + confirm disabled until the EXACT kb id is typed (knowledge-24)', () => {
   const armedWrong = render({ deleteArmed: true, deleteText: 'forge-de' });
   expect(armedWrong).toContain('data-field="kb-delete-confirm"');
